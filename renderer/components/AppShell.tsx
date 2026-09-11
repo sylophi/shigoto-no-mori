@@ -8,7 +8,7 @@
 // its own (ForestPage), and the worktree pages stacked over it behind
 // a slim back bar. Built in v1 vocabulary (theme tokens only), per the
 // theming contract.
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { AddProjectModal } from "@/components/AddProjectModal";
 import { ProjectLauncher } from "@/components/launcher/ProjectLauncher";
@@ -22,22 +22,14 @@ import { BackButton } from "@/components/ui/back-button";
 import { useWatchAccountChanges } from "@/hooks/account/useAccount";
 import { useSidebarView } from "@/hooks/projects/useSidebarView";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
+import { useResizableWidth } from "@/hooks/ui/useResizableWidth";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { hasLocalHost } from "@/lib/localHost";
-import { readStored, writeStored } from "@/lib/localStorage";
 import { cn, dragRegion } from "@/lib/utils";
 
-const SIDEBAR_KEY = "sidebar.width";
 const SIDEBAR_MIN = 200;
 const SIDEBAR_MAX = 400;
 const SIDEBAR_DEFAULT = 240;
-
-function readStoredWidth(): number {
-  const raw = readStored(SIDEBAR_KEY);
-  const n = raw ? Number.parseInt(raw, 10) : NaN;
-  if (!Number.isFinite(n)) return SIDEBAR_DEFAULT;
-  return Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, n));
-}
 
 export function AppShell() {
   // The always-mounted account watch, keeping every staleTime-Infinity
@@ -48,7 +40,13 @@ export function AppShell() {
   const navigate = useNavigate();
   // The forest tab a stacked page returns to on a phone.
   const forestTab = forestTabFor(useSidebarView());
-  const [sidebarWidth, setSidebarWidth] = useState<number>(readStoredWidth);
+  const sidebar = useResizableWidth({
+    storageKey: "sidebar.width",
+    min: SIDEBAR_MIN,
+    max: SIDEBAR_MAX,
+    fallback: SIDEBAR_DEFAULT,
+    leftEdge: () => 0,
+  });
 
   // The layout rides <html> as a data attribute, like the theme
   // classes, so the `phone:` variant (index.css) reaches every element
@@ -69,30 +67,6 @@ export function AppShell() {
     [navigate],
   );
 
-  const startResize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    Object.assign(document.body.style, {
-      cursor: "col-resize",
-      userSelect: "none",
-    });
-    let last = sidebarWidth;
-    const onMove = (ev: MouseEvent) => {
-      last = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, ev.clientX));
-      setSidebarWidth(last);
-    };
-    const onUp = () => {
-      Object.assign(document.body.style, {
-        cursor: "",
-        userSelect: "",
-      });
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      writeStored(SIDEBAR_KEY, String(Math.round(last)));
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
-  };
-
   return (
     <div
       className={cn(
@@ -108,11 +82,11 @@ export function AppShell() {
     >
       {!phone && (
         <>
-          <div style={{ width: sidebarWidth }} className="shrink-0">
+          <div style={{ width: sidebar.width }} className="shrink-0">
             <Sidebar />
           </div>
           <div
-            onMouseDown={startResize}
+            onMouseDown={sidebar.onMouseDown}
             role="separator"
             aria-orientation="vertical"
             aria-label="Resize sidebar"

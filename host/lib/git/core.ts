@@ -89,48 +89,86 @@ function mutatesRepo(args: string[]): boolean {
   return true;
 }
 
+export interface RunOptions {
+  // Extra variables layered over the inherited environment for this
+  // one spawn. The mirror's index snapshot and the discard snapshot
+  // both point GIT_INDEX_FILE at a copy, so they never touch the
+  // worktree's real one.
+  env?: NodeJS.ProcessEnv;
+  // Output cap for this run, over DEFAULT_MAX_BUFFER. Only the patch
+  // reads raise it -- see PATCH_MAX_BUFFER.
+  maxBuffer?: number;
+}
+
+// Every run is buffered, so a command that never stops printing can't
+// take the host process with it. This covers any status, log or ref
+// output the app asks for by a wide margin.
+const DEFAULT_MAX_BUFFER = 10 * 1024 * 1024;
+
+// A patch is the one output whose size the user decides rather than the
+// app: one regenerated lockfile or checked-in bundle in the working
+// tree runs to tens of megabytes on its own. Sized to swallow that,
+// because the alternative isn't a smaller patch -- it's a wrong one
+// (see below).
+export const PATCH_MAX_BUFFER = 64 * 1024 * 1024;
+
+// Node kills the child once its output passes maxBuffer and reports the
+// truncated stdout alongside the error. That is not a git failure and
+// must never be treated as one: the output is a prefix of the real
+// thing, which for a patch means whole files silently missing from the
+// end of it.
+function isTruncated(err: unknown): boolean {
+  return (
+    (err as { code?: string }).code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
+  );
+}
+
 async function exec(
   args: string[],
-  options: { cwd: string; maxBuffer?: number; env?: NodeJS.ProcessEnv },
+  options: { cwd: string } & RunOptions,
 ): Promise<{ stdout: string }> {
-  const start = performance.now();
   // In flight for the command's whole run, then an echo window after
   // it: the git-directory watcher checks at event time.
   const endSelfWrite = mutatesRepo(args)
     ? beginGitSelfWrite(options.cwd)
     : null;
+  const { env: overlay, ...execOptions } = options;
   try {
     // LC_ALL=C pins git's messages to English: deleteAnyLocalBranch and
     // removeWorktreeForce match on stderr text, which gettext would
     // otherwise translate.
-    const { env: overlay, ...rest } = options;
     const result = await execFileP("git", args, {
       env: { ...process.env, ...overlay, LC_ALL: "C" },
-      ...rest,
+      ...execOptions,
     });
-    const elapsed = Math.round(performance.now() - start);
-    console.log(`[git] ${args.join(" ")} (${elapsed}ms)`);
     return { stdout: result.stdout };
   } catch (err) {
-    const elapsed = Math.round(performance.now() - start);
-    console.warn(`[git] ${args.join(" ")} FAIL (${elapsed}ms)`);
-    throw err;
+    // execFile's message is "Command failed: git <argv>\n<stderr>". The
+    // argv repeats whatever was passed (a commit message, a path list)
+    // and says nothing a user can act on. Git's own words do. Keep the
+    // stdout the lenient callers read, and the rest of the error.
+    const failure = err as Error & { stdout?: string; stderr?: string };
+    if (isTruncated(err)) {
+      failure.message = "git produced more output than the app can hold.";
+      throw failure;
+    }
+    const stderr = failure.stderr?.trim();
+    if (stderr) failure.message = stderr;
+    throw failure;
   } finally {
     endSelfWrite?.();
   }
 }
 
-// `env` overlays the inherited environment for this one spawn (the
-// mirror's index snapshot points GIT_INDEX_FILE at a copy).
 export async function run(
   cwd: string,
   args: string[],
-  opts: { env?: NodeJS.ProcessEnv } = {},
+  options?: RunOptions,
 ): Promise<string> {
   const { stdout } = await exec(args, {
     cwd,
-    maxBuffer: 10 * 1024 * 1024,
-    env: opts.env,
+    maxBuffer: DEFAULT_MAX_BUFFER,
+    ...options,
   });
   return stdout;
 }
@@ -138,12 +176,36 @@ export async function run(
 // Like `run`, but tolerates non-zero exit (e.g. `git diff --no-index`,
 // which exits 1 whenever there's a diff to print). Returns whatever
 // stdout was produced before exit, falling back to empty.
-export async function runLenient(cwd: string, args: string[]): Promise<string> {
+//
+// Truncation is the one failure it won't swallow. Git's exit code says
+// nothing about whether the output is complete, so a run killed at
+// maxBuffer looks exactly like a diff that exited 1 -- and answering
+// with the prefix hands the caller a patch that parses cleanly and is
+// missing every file past the cut. Loudly wrong beats quietly wrong.
+export async function runLenient(
+  cwd: string,
+  args: string[],
+  options?: RunOptions,
+): Promise<string> {
   try {
-    return await run(cwd, args);
+    return await run(cwd, args, options);
   } catch (err) {
+    if (isTruncated(err)) throw err;
     return (err as { stdout?: string }).stdout ?? "";
   }
+}
+
+// Pathspecs travel as argv, and a big refactor can carry enough paths
+// to brush the OS arg-length limit. Callers run one git process per
+// chunk.
+export const PATHSPEC_CHUNK = 500;
+
+export function chunked<T>(items: readonly T[]): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += PATHSPEC_CHUNK) {
+    chunks.push(items.slice(i, i + PATHSPEC_CHUNK));
+  }
+  return chunks;
 }
 
 // For `-z` output: NUL-separated records, with a trailing NUL that

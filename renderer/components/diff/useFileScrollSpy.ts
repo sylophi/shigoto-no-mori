@@ -17,22 +17,24 @@ import { useEffect, useState } from "react";
 // the observer has to be re-armed.
 const SPY_BAND = "0px 0px -72% 0px";
 
-// The file wrappers in scroll order. This module owns the marker, so the
-// jump and step paths in DiffView read it through here rather than
-// spelling the selector out again.
-export function fileTargets(container: HTMLElement): HTMLElement[] {
+// The file wrappers in scroll order. This module owns the `data-diff-file`
+// marker, so the selector is spelled out here and nowhere else.
+function fileTargets(container: HTMLElement): HTMLElement[] {
   return [...container.querySelectorAll<HTMLElement>("[data-diff-file]")];
 }
 
 export function useFileScrollSpy(
   containerRef: React.RefObject<HTMLElement | null>,
   filesKey: string,
+  // Off for a pane that holds the one file it was asked for: there is
+  // nothing to spy on, and the caller already knows which file it is.
+  enabled: boolean,
 ): [string | null, (key: string) => void] {
   const [activeKey, setActiveKey] = useState<string | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!enabled || !container) return;
     const targets = fileTargets(container);
     if (targets.length === 0) return;
 
@@ -52,7 +54,7 @@ export function useFileScrollSpy(
     );
     for (const target of targets) observer.observe(target);
     return () => observer.disconnect();
-  }, [containerRef, filesKey]);
+  }, [containerRef, filesKey, enabled]);
 
   return [activeKey, setActiveKey];
 }

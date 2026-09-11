@@ -1,35 +1,42 @@
-import { runLenient, splitZ } from "./core";
+import { PATCH_MAX_BUFFER, runLenient } from "./core";
 
-// Unified patch of every uncommitted change in the worktree. Combines
-// `git diff HEAD` (covers staged + unstaged tracked edits) with a
-// /dev/null diff per untracked file so additions render alongside
-// modifications in @pierre/diffs. `runLenient` swallows the non-zero
-// exits `git diff --no-index` always emits when there's a diff.
-export async function getWorktreeDiff(worktreePath: string): Promise<string> {
-  const [tracked, lsOutput] = await Promise.all([
-    runLenient(worktreePath, ["diff", "HEAD", "--no-color"]),
-    runLenient(worktreePath, [
-      "ls-files",
-      "--others",
-      "--exclude-standard",
-      "-z",
-    ]),
-  ]);
-  const untracked = splitZ(lsOutput);
-  const additions = await Promise.all(
-    untracked.map((file) =>
-      // `--` keeps a filename like `-weird.txt` from being parsed as flags.
-      runLenient(worktreePath, [
-        "diff",
-        "--no-index",
-        "--no-color",
-        "--",
-        "/dev/null",
-        file,
-      ]),
-    ),
+// The diff of one file in the working tree: what the changes page asks
+// for as you pick files, instead of reading the whole tree and slicing.
+// Nothing here can go stale against a list built somewhere else -- the
+// answer is whatever git says about this path right now.
+//
+// Which comparison to make is the caller's to say, from the status row
+// it drew the file from. `diff HEAD` covers a tracked file whether its
+// edits are staged, not staged, or both. A file git has never seen is
+// in neither HEAD nor the index, and only compares against /dev/null.
+// Asking git instead -- running the first and reading empty output as
+// "must be the other kind" -- gets a staged edit that was reverted in
+// the working tree wrong, and renders it as a new file.
+//
+// `paths` is the file, and its old name first when git records a
+// rename -- handing over both is what makes the pair one entry rather
+// than an unexplained addition.
+export function getFileDiff(
+  worktreePath: string,
+  paths: readonly string[],
+  untracked: boolean,
+): Promise<string> {
+  const file = paths[paths.length - 1];
+  if (file === undefined) return Promise.resolve("");
+  // `--` keeps a filename like `-weird.txt` from being parsed as flags,
+  // and `runLenient` swallows the non-zero exit `--no-index` makes
+  // whenever it has a diff to print.
+  const args = untracked
+    ? ["diff", "--no-index", "--no-color", "--", "/dev/null", file]
+    : ["diff", "HEAD", "--no-color", "--", ...paths];
+  return runLenient(
+    worktreePath,
+    // Every path here came out of `git status`, so it is a filename and
+    // never a pattern. Without this a file called `a[1].txt` is a glob,
+    // and the pane for one file quietly answers with another's hunks.
+    ["-c", "core.quotePath=false", "--literal-pathspecs", ...args],
+    { maxBuffer: PATCH_MAX_BUFFER },
   );
-  return [tracked, ...additions].filter((s) => s.length > 0).join("");
 }
 
 // Unified patch of a single commit, with the commit metadata stripped
@@ -44,12 +51,9 @@ export async function getCommitDiff(
   // A trailing `--` only bounds the pathspec list, so on its own it would
   // still let a hash like `--output=FILE` be parsed as a flag and hand a
   // malicious repo an arbitrary file write.
-  return runLenient(worktreePath, [
-    "show",
-    "--format=",
-    "--no-color",
-    "--end-of-options",
-    hash,
-    "--",
-  ]);
+  return runLenient(
+    worktreePath,
+    ["show", "--format=", "--no-color", "--end-of-options", hash, "--"],
+    { maxBuffer: PATCH_MAX_BUFFER },
+  );
 }

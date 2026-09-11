@@ -1,18 +1,29 @@
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
+  ChangedFileSchema,
   CheckoutBranchPayloadSchema,
+  CommitChangesPayloadSchema,
+  CommitChangesResultSchema,
   CommitDiffPayloadSchema,
+  CommitMessageSchema,
   CommitSummarySchema,
   CreateWorktreePayloadSchema,
   CreateWorktreeResultSchema,
   DeleteWorktreePayloadSchema,
   DeleteWorktreeResultSchema,
+  DiscardChangesPayloadSchema,
+  DiscardChangesResultSchema,
+  FileDiffPayloadSchema,
   ListCommitsPayloadSchema,
   ProjectScopedPayloadSchema,
   RelocateWorktreePayloadSchema,
   RenameBranchPayloadSchema,
+  ResetSoftPayloadSchema,
+  ResetSoftResultSchema,
+  RestoreDiscardPayloadSchema,
   SetShelvedPayloadSchema,
+  SetStagedPayloadSchema,
   WorktreeCarryOverCompleteSchema,
   WorktreeLifecyclePhaseSchema,
   WorktreeSchema,
@@ -77,10 +88,59 @@ export const worktreesContract = defineContract("host", {
     WorktreeSchema,
     { tracksProjectUsage: true, remote: true, mutating: true },
   ),
-  diff: invoke("worktrees:diff", WorktreeScopedPayloadSchema, z.string(), {
+  // One file's working-tree diff, which is what the changes page reads
+  // as you pick files. Per file rather than per worktree so the pane
+  // can't be describing a different moment than the list beside it.
+  fileDiff: invoke("worktrees:fileDiff", FileDiffPayloadSchema, z.string(), {
     remote: true,
     mutating: false,
   }),
+  // The changes page's list: every changed file, its index state and
+  // its counts. The one read the page needs to draw the rail, and the
+  // one a tick refetches.
+  changeStatus: invoke(
+    "worktrees:changeStatus",
+    WorktreeScopedPayloadSchema,
+    z.array(ChangedFileSchema),
+    { remote: true, mutating: false },
+  ),
+  // Answers with the fresh status so a tick settles in one round trip.
+  setStaged: invoke(
+    "worktrees:setStaged",
+    SetStagedPayloadSchema,
+    z.array(ChangedFileSchema),
+    { remote: true, mutating: true },
+  ),
+  commit: invoke(
+    "worktrees:commit",
+    CommitChangesPayloadSchema,
+    CommitChangesResultSchema,
+    { tracksProjectUsage: true, remote: true, mutating: true },
+  ),
+  discardChanges: invoke(
+    "worktrees:discardChanges",
+    DiscardChangesPayloadSchema,
+    DiscardChangesResultSchema,
+    { tracksProjectUsage: true, remote: true, mutating: true },
+  ),
+  restoreDiscard: invoke(
+    "worktrees:restoreDiscard",
+    RestoreDiscardPayloadSchema,
+    WorktreeSchema,
+    { remote: true, mutating: true },
+  ),
+  commitMessage: invoke(
+    "worktrees:commitMessage",
+    CommitDiffPayloadSchema,
+    CommitMessageSchema,
+    { remote: true, mutating: false },
+  ),
+  resetSoft: invoke(
+    "worktrees:resetSoft",
+    ResetSoftPayloadSchema,
+    ResetSoftResultSchema,
+    { tracksProjectUsage: true, remote: true, mutating: true },
+  ),
   commitDiff: invoke(
     "worktrees:commitDiff",
     CommitDiffPayloadSchema,

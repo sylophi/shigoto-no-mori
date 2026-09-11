@@ -1,46 +1,90 @@
-import { useEffect, useRef, useState } from "react";
-import type { FileDiffMetadata } from "@pierre/diffs";
-import { ChevronsDownUp, ChevronsUpDown, Search } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  ChevronsDownUp,
+  ChevronsUpDown,
+  Ellipsis,
+  Search,
+  Undo2,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DiffStats } from "@/components/ui/diff-stats";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useShortPath } from "@/hooks/ui/useShortPath";
+import {
+  CONFIRM_QUICK_MS,
+  useConfirmTwiceKeyed,
+} from "@/hooks/ui/useConfirmTwice";
+import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
-import { CHANGE_MARKS, fileKey, fileStats } from "./patchFiles";
+import type { ChangedFile } from "@shared/schemas";
+import {
+  changedFilePaths,
+  includedFiles,
+  type DiffChangesControls,
+} from "./changesControls";
+import type { IndexEntry } from "./patchFiles";
 
 // The navigation rail for a multi-file patch: every file in the order it
 // appears in the scroll area, with its change marker and +/- counts.
 // Order is never re-ranked (that's why the filter is a plain substring
 // match and not lib/fuzzyMatch). The rail is a map of the scroll area,
 // so it has to keep the scroll area's order to stay readable.
+//
+// With `changes` it is also the changes list: a checkbox per row (the
+// file's index state), a discard control that shows on hover, a
+// select-all box and a discard menu in the header, and the commit
+// composer as its footer. Bulk discards confirm in a strip that takes
+// the footer's place. Per-file discards arm on the row itself.
+//
+// Rows arrive built (patchFiles.ts): the caller decides whether they
+// come from the patch or from git status, and the rail just draws them.
 export function DiffFileIndex({
-  files,
+  entries,
   activeKey,
   collapsedKeys,
-  allCollapsed,
   onSelect,
+  allCollapsed,
   onToggleAll,
+  changes,
+  footer,
+  width,
   className,
 }: {
-  files: FileDiffMetadata[];
+  entries: IndexEntry[];
   activeKey: string | null;
   collapsedKeys: ReadonlySet<string>;
-  allCollapsed: boolean;
   onSelect: (key: string) => void;
-  onToggleAll: () => void;
-  // The box is the caller's, as is the "is there room for it" question:
-  // beside the diff it is a fixed-width rail with an edge, in the
-  // phone layout's bottom sheet it fills the width.
+  allCollapsed: boolean;
+  // Absent when the pane shows one file at a time: there is no combined
+  // scroll to fold, so the header drops the control.
+  onToggleAll?: () => void;
+  // Visibility only. The caller owns the "is there room for a rail"
+  // question because it owns the pane.
+  changes?: DiffChangesControls;
+  footer?: ReactNode;
+  // The box is the caller's too. Beside the diff it is a rail dragged
+  // by the caller's separator (`width`, which the rail only draws); in
+  // the phone layout's bottom sheet it fills the width and takes its
+  // height from `className` instead.
+  width?: number;
   className?: string;
 }) {
   const [query, setQuery] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
   const needle = query.trim().toLowerCase();
   const matches = needle
-    ? files.filter(
-        (file) =>
-          file.name.toLowerCase().includes(needle) ||
-          file.prevName?.toLowerCase().includes(needle),
+    ? entries.filter(
+        (entry) =>
+          entry.path.toLowerCase().includes(needle) ||
+          entry.prevPath?.toLowerCase().includes(needle),
       )
-    : files;
+    : entries;
 
   // Keep the highlighted row on screen. Past ~24 files the rail is taller
   // than its own viewport, and a scroll-spy marker you can't see is no
@@ -53,13 +97,30 @@ export function DiffFileIndex({
       ?.scrollIntoView({ block: "nearest" });
   }, [activeKey]);
 
+  const discardArm = useConfirmTwiceKeyed(CONFIRM_QUICK_MS);
+  // Which bulk discard is up for confirmation. The paths are worked out
+  // when it is confirmed, from the rows as they are then: the ticks stay
+  // live while the strip is open, and a file ticked to keep it must not
+  // go because the menu was opened a moment earlier.
+  const [pendingDiscard, setPendingDiscard] = useState<BulkDiscard | null>(
+    null,
+  );
+
   return (
-    <div data-slot="diff-index" className={cn("flex flex-col", className)}>
+    <div
+      data-slot="diff-index"
+      style={width === undefined ? undefined : { width }}
+      className={cn("flex shrink-0 flex-col", className)}
+    >
       <div className="flex items-center gap-1.5 border-b border-border px-2.5 py-1.5">
-        <Search
-          aria-hidden
-          className="size-3.5 shrink-0 text-muted-foreground/60"
-        />
+        {changes ? (
+          <SelectAllCheckbox changes={changes} />
+        ) : (
+          <Search
+            aria-hidden
+            className="size-3.5 shrink-0 text-muted-foreground/60"
+          />
+        )}
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -76,110 +137,365 @@ export function DiffFileIndex({
           spellCheck={false}
           className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/70"
         />
-        <button
-          type="button"
-          onClick={onToggleAll}
-          title={allCollapsed ? "Expand all files" : "Collapse all files"}
-          aria-label={allCollapsed ? "Expand all files" : "Collapse all files"}
-          className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          {allCollapsed ? (
-            <ChevronsUpDown aria-hidden className="size-3.5" />
-          ) : (
-            <ChevronsDownUp aria-hidden className="size-3.5" />
-          )}
-        </button>
+        {changes && (
+          <DiscardMenu
+            changes={changes}
+            onPick={(kind) => {
+              discardArm.reset();
+              setPendingDiscard(kind);
+            }}
+          />
+        )}
+        {onToggleAll && (
+          <button
+            type="button"
+            onClick={onToggleAll}
+            title={allCollapsed ? "Expand all files" : "Collapse all files"}
+            aria-label={
+              allCollapsed ? "Expand all files" : "Collapse all files"
+            }
+            className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            {allCollapsed ? (
+              <ChevronsUpDown aria-hidden className="size-3.5" />
+            ) : (
+              <ChevronsDownUp aria-hidden className="size-3.5" />
+            )}
+          </button>
+        )}
       </div>
 
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto p-1">
         {matches.length === 0 ? (
           <p className="px-2 py-3 text-xs text-muted-foreground">
-            No files match that filter.
+            {entries.length === 0
+              ? "No changed files."
+              : "No files match that filter."}
           </p>
         ) : (
-          matches.map((file) => {
-            const key = fileKey(file);
-            return (
-              <IndexRow
-                key={key}
-                file={file}
-                active={key === activeKey}
-                collapsed={collapsedKeys.has(key)}
-                onSelect={onSelect}
-              />
-            );
-          })
+          matches.map((entry) => (
+            <IndexRow
+              key={entry.key}
+              entry={entry}
+              active={entry.key === activeKey}
+              collapsed={collapsedKeys.has(entry.key)}
+              onSelect={onSelect}
+              busy={changes?.busy ?? false}
+              onSetStaged={changes?.onSetStaged}
+              discardArmed={discardArm.armedKey === entry.key}
+              onDiscard={() =>
+                discardArm.trigger(entry.key, () => {
+                  if (entry.row)
+                    changes?.onDiscard(changedFilePaths(entry.row));
+                })
+              }
+            />
+          ))
         )}
       </div>
 
       {needle && matches.length > 0 && (
         <p className="border-t border-border px-2.5 py-1 text-[11px] text-muted-foreground">
-          {matches.length} of {files.length} files
+          {matches.length} of {entries.length} files
         </p>
       )}
+
+      {changes &&
+        (pendingDiscard ? (
+          <DiscardConfirmStrip
+            label={`Discard ${describeBulk(pendingDiscard, changes.files)}?`}
+            busy={changes.busy}
+            onCancel={() => setPendingDiscard(null)}
+            onConfirm={() => {
+              changes.onDiscard(bulkPaths(pendingDiscard, changes.files));
+              setPendingDiscard(null);
+            }}
+          />
+        ) : (
+          footer
+        ))}
+    </div>
+  );
+}
+
+// Tri-state "everything" box. Reads from the status list rather than
+// the patch, since that is what a commit takes. Ticking it stages every
+// changed path, unticking clears the index.
+function SelectAllCheckbox({ changes }: { changes: DiffChangesControls }) {
+  const total = changes.files.length;
+  const all = changes.files.filter((file) => file.staged === "all").length;
+  const some = includedFiles(changes.files).length > 0;
+  const checked = total > 0 && all === total;
+  return (
+    <Checkbox
+      checked={checked}
+      indeterminate={!checked && some}
+      disabled={changes.busy || total === 0}
+      onCheckedChange={(next) =>
+        changes.onSetStaged(changes.files.flatMap(changedFilePaths), next)
+      }
+      aria-label={checked ? "Leave every file out" : "Include every file"}
+      title={checked ? "Leave every file out" : "Include every file"}
+      className="shrink-0"
+    />
+  );
+}
+
+// The two bulk discards. "Unticked" is the one the checkbox model
+// earns: tick what you're keeping, throw away the rest.
+type BulkDiscard = "unticked" | "all";
+
+function bulkFiles(
+  kind: BulkDiscard,
+  files: readonly ChangedFile[],
+): ChangedFile[] {
+  return kind === "all"
+    ? [...files]
+    : files.filter((file) => file.staged === "none");
+}
+
+function bulkPaths(kind: BulkDiscard, files: readonly ChangedFile[]): string[] {
+  return bulkFiles(kind, files).flatMap(changedFilePaths);
+}
+
+function describeBulk(
+  kind: BulkDiscard,
+  files: readonly ChangedFile[],
+): string {
+  const count = bulkFiles(kind, files).length;
+  return kind === "all"
+    ? `all ${pluralize(count, "file")}`
+    : `the ${pluralize(count, "unticked file")}`;
+}
+
+// "Unticked" is disabled while nothing is ticked, since "the rest" would
+// then be all of it and the item below already says so.
+function DiscardMenu({
+  changes,
+  onPick,
+}: {
+  changes: DiffChangesControls;
+  onPick: (kind: BulkDiscard) => void;
+}) {
+  const total = changes.files.length;
+  const unticked = bulkFiles("unticked", changes.files).length;
+  const canDiscardUnticked = unticked > 0 && unticked < total && !changes.busy;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        aria-label="Discard changes"
+        title="Discard changes"
+        disabled={total === 0}
+        className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 data-popup-open:bg-accent data-popup-open:text-foreground"
+      >
+        <Ellipsis aria-hidden className="size-3.5" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" sideOffset={4} className="min-w-48">
+        <DropdownMenuItem
+          variant="destructive"
+          disabled={!canDiscardUnticked}
+          onClick={() => onPick("unticked")}
+        >
+          <Undo2 />
+          Discard unticked files
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          variant="destructive"
+          disabled={changes.busy}
+          onClick={() => onPick("all")}
+        >
+          <Undo2 />
+          Discard all changes
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function DiscardConfirmStrip({
+  label,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  label: string;
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 border-t border-border p-3">
+      <p className="text-xs font-medium">{label}</p>
+      <p className="text-[11px] text-muted-foreground">
+        The contents are snapshotted first, and the notification that follows
+        has Undo.
+      </p>
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" size="xs" onClick={onCancel} disabled={busy}>
+          Cancel
+        </Button>
+        <Button
+          variant="destructive"
+          size="xs"
+          onClick={onConfirm}
+          disabled={busy}
+        >
+          {busy ? "Discarding…" : "Discard"}
+        </Button>
+      </div>
     </div>
   );
 }
 
 // Split out so the highlight moving re-renders two rows' worth of work
 // rather than the whole rail: `onSelect` is the caller's own handler
-// (the key comes from the row), so an untouched row's props are
+// (the entry carries what to jump to), so an untouched row's props are
 // unchanged and its markup stays cached.
 function IndexRow({
-  file,
+  entry,
   active,
   collapsed,
   onSelect,
+  busy,
+  onSetStaged,
+  discardArmed,
+  onDiscard,
 }: {
-  file: FileDiffMetadata;
+  entry: IndexEntry;
   active: boolean;
   collapsed: boolean;
   onSelect: (key: string) => void;
+  busy: boolean;
+  onSetStaged: ((paths: string[], staged: boolean) => void) | undefined;
+  discardArmed: boolean;
+  onDiscard: () => void;
 }) {
   // No home to tildify against: these are repo-relative paths, so the
   // helper only does the middle-segment abbreviation ("r/c/diff/x.tsx")
   // against the measured width of this row's path column.
-  const [pathRef, display] = useShortPath(file.name, null);
+  const [pathRef, display] = useShortPath(entry.path, null);
   const cut = display.lastIndexOf("/");
-  const { mark, label, className } = CHANGE_MARKS[file.type];
-  const { additions, deletions } = fileStats(file);
+  const { mark, label, className } = entry.mark;
+  const { row } = entry;
+  const select = () => onSelect(entry.key);
+  const title = entry.prevPath
+    ? `${label}: ${entry.prevPath} → ${entry.path}`
+    : `${label}: ${entry.path}`;
 
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(fileKey(file))}
+    // A row is three controls side by side (tick, jump, discard), so it
+    // can't be one button. The wrapper still takes the click, so the
+    // whole pill lands on the file the way the old single button did;
+    // the tick and the discard stop it from bubbling. The inner button
+    // is what the keyboard reaches. The wrapper also carries the active
+    // marker the scroll-into-view above looks for.
+    //
+    // The two slots are the row's hover unit: doubutsu paints its hover
+    // treatment on the row and holds it off the jump button, which
+    // covers only the middle of the row and would otherwise light a
+    // band inside a pill that is hovered as one thing.
+    <div
+      role="presentation"
+      data-slot="diff-index-row"
+      onClick={select}
       data-active={active || undefined}
-      title={
-        file.prevName
-          ? `${label}: ${file.prevName} → ${file.name}`
-          : `${label}: ${file.name}`
-      }
       className={cn(
-        "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left transition-colors",
+        "group/row flex w-full items-center gap-1.5 rounded-md pr-1 pl-2 transition-colors",
         active
           ? "bg-accent text-accent-foreground"
           : "hover:bg-accent/50 hover:text-foreground",
         collapsed && "opacity-55",
       )}
     >
-      <span
-        aria-hidden
-        className={cn("w-2 shrink-0 font-mono text-[10px]", className)}
-      >
-        {mark}
-      </span>
-      <span
-        ref={pathRef}
-        className="min-w-0 flex-1 truncate font-mono text-[11px]"
-      >
-        {cut >= 0 && (
-          <span className="text-muted-foreground">
-            {display.slice(0, cut + 1)}
+      {row &&
+        onSetStaged && (
+          // The tick is the row's own control, not a way into the file:
+          // its click stops here rather than selecting.
+          <span
+            role="presentation"
+            onClick={(e) => e.stopPropagation()}
+            className="flex shrink-0"
+          >
+            <Checkbox
+              checked={row.staged === "all"}
+              indeterminate={row.staged === "partial"}
+              disabled={busy}
+              onCheckedChange={(next) =>
+                onSetStaged(changedFilePaths(row), next)
+              }
+              aria-label={
+                row.staged === "all"
+                  ? `Leave ${row.path} out of the commit`
+                  : `Include ${row.path} in the commit`
+              }
+              title={
+                row.staged === "partial"
+                  ? "Partly staged: tick to include the whole file"
+                  : row.staged === "all"
+                    ? "Included in the commit"
+                    : "Not included in the commit"
+              }
+            />
           </span>
         )}
-        {display.slice(cut + 1)}
-      </span>
-      <DiffStats additions={additions} deletions={deletions} />
-    </button>
+      <button
+        type="button"
+        data-slot="diff-index-jump"
+        onClick={select}
+        title={title}
+        className="flex min-w-0 flex-1 items-center gap-2 py-1 text-left"
+      >
+        <span
+          aria-hidden
+          className={cn("w-2 shrink-0 font-mono text-[10px]", className)}
+        >
+          {mark}
+        </span>
+        <span
+          ref={pathRef}
+          className="min-w-0 flex-1 truncate font-mono text-[11px]"
+        >
+          {cut >= 0 && (
+            <span className="text-muted-foreground">
+              {display.slice(0, cut + 1)}
+            </span>
+          )}
+          {display.slice(cut + 1)}
+        </span>
+        {entry.stats && !discardArmed && (
+          <DiffStats
+            additions={entry.stats.additions}
+            deletions={entry.stats.deletions}
+          />
+        )}
+      </button>
+      {row && (
+        <Button
+          variant="ghost-destructive"
+          size="xs"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDiscard();
+          }}
+          disabled={busy}
+          aria-pressed={discardArmed}
+          aria-label={
+            discardArmed
+              ? `Confirm discarding ${entry.path}`
+              : `Discard changes to ${entry.path}`
+          }
+          title={discardArmed ? "Click again to discard" : "Discard changes"}
+          className={cn(
+            "h-5 shrink-0 transition-opacity",
+            discardArmed
+              ? "px-1.5 text-[11px] opacity-100"
+              : "w-5 px-0 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100",
+          )}
+        >
+          <Undo2 aria-hidden />
+          {discardArmed && "Discard?"}
+        </Button>
+      )}
+    </div>
   );
 }

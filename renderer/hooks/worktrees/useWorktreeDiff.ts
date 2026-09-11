@@ -1,26 +1,35 @@
 import { useQuery } from "@tanstack/react-query";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
-export function useWorktreeDiff(
+// One file's working-tree diff, read when the changes page picks it.
+// Keyed by the paths asked for, so switching back to a file already
+// looked at is instant and the query cache is the only place a patch
+// lives. Refetched like everything else derived from the tree: on
+// mount, on focus, and when a commit or discard invalidates it.
+export function useFileDiff(
   projectId: string,
   worktreeId: string | undefined,
-  // A preview (the transplant review's file list) reads the diff once;
-  // the diff page itself keeps the default focus refetch so it tracks
-  // the working tree.
-  options: { refetchOnWindowFocus?: boolean } = {},
+  paths: readonly string[],
+  untracked: boolean,
 ) {
   const { api, keys } = useHostScope();
   return useQuery<string>({
-    queryKey: keys.worktreeDiff(projectId, worktreeId),
+    queryKey: keys.worktreeFileDiff(projectId, worktreeId, paths, untracked),
     queryFn: () => {
-      if (!worktreeId) return "";
-      return api.worktrees.diff({ projectId, worktreeId });
+      if (!worktreeId || paths.length === 0) return "";
+      return api.worktrees.fileDiff({
+        projectId,
+        worktreeId,
+        paths: [...paths],
+        untracked,
+      });
     },
-    enabled: !!worktreeId,
-    refetchOnWindowFocus: options.refetchOnWindowFocus,
-    // Diff reflects working-tree state, which mutates outside our control;
-    // always refetch on mount so re-entering the page shows current state.
+    enabled: !!worktreeId && paths.length > 0,
     staleTime: 0,
+    // Every file looked at leaves a patch behind, and a long review
+    // looks at a lot of them. The data is stale on arrival anyway, so
+    // holding it only buys an instant second look at the same file.
+    gcTime: 60_000,
     meta: { errorTitle: "Couldn't compute diff" },
   });
 }

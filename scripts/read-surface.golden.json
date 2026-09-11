@@ -33,8 +33,10 @@
   "terrier:readiness",
   "updater:get",
   "worktreeData:read",
+  "worktrees:changeStatus",
   "worktrees:commitDiff",
-  "worktrees:diff",
+  "worktrees:commitMessage",
+  "worktrees:fileDiff",
   "worktrees:list",
   "worktrees:listCommits"
 ]

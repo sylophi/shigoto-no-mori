@@ -1,4 +1,4 @@
-import { readStored, writeStored } from "@/lib/localStorage";
+import { readStoredJson, writeStored } from "@/lib/localStorage";
 // Per-project most-recently-used worktree, so the project launcher can jump
 // straight to where the user last was. localStorage-only: worktree usage is
 // not tracked in the main process (project usage stats are per-project), and
@@ -6,15 +6,7 @@ import { readStored, writeStored } from "@/lib/localStorage";
 const KEY = "recentWorktree.byProject";
 
 function readMap(): Record<string, string> {
-  const raw = readStored(KEY);
-  if (!raw) return {};
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null) return {};
-    return parsed as Record<string, string>;
-  } catch {
-    return {};
-  }
+  return readStoredJson<Record<string, string>>(KEY, {});
 }
 
 export function recordRecentWorktree(

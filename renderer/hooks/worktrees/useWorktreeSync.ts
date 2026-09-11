@@ -22,6 +22,14 @@ function useSyncMutation(
       void queryClient.invalidateQueries({
         queryKey: keys.worktrees(vars.projectId),
       });
+      // Pull, overwrite and sync rewrite the working tree, so an open
+      // changes page has to re-read its patch and its checkbox states.
+      void queryClient.invalidateQueries({
+        queryKey: keys.worktreeDiff(vars.projectId, vars.worktreeId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: keys.worktreeChanges(vars.projectId, vars.worktreeId),
+      });
       // PR queries refresh via the refs-changed broadcast that the push
       // itself triggers, so no PR invalidation is needed here.
     },

@@ -73,13 +73,31 @@ function buildQueryKeys(deviceId: string) {
     worktrees: (projectId: string | null) => host("worktrees", projectId),
     worktreeData: (projectId: string | null, worktreeId: string | null) =>
       host("worktreeData", projectId, worktreeId),
+    // Every file diff of one worktree sits under this prefix, so the
+    // working-tree invalidation can drop them all with one key.
     worktreeDiff: (projectId: string, worktreeId: string | undefined) =>
       host("worktreeDiff", projectId, worktreeId),
+    // `untracked` belongs in the key, not just in the request: one path
+    // can be two rows (a staged deletion and an untracked file of the
+    // same name), and they have different diffs to show.
+    worktreeFileDiff: (
+      projectId: string,
+      worktreeId: string | undefined,
+      paths: readonly string[],
+      untracked: boolean,
+    ) => host("worktreeDiff", projectId, worktreeId, [...paths], untracked),
+    worktreeChanges: (projectId: string, worktreeId: string | undefined) =>
+      host("worktreeChanges", projectId, worktreeId),
     commitDiff: (
       projectId: string,
       worktreeId: string | undefined,
       hash: string,
     ) => host("commitDiff", projectId, worktreeId, hash),
+    commitMessage: (
+      projectId: string,
+      worktreeId: string | undefined,
+      hash: string | undefined,
+    ) => host("commitMessage", projectId, worktreeId, hash),
     pickedWorktreeName: (projectId: string | null) =>
       host("pickedWorktreeName", projectId),
 

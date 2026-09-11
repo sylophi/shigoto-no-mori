@@ -108,6 +108,7 @@ export function worktree(
     hasRemote: true,
     divergedClean: false,
     behindPrimary: 0,
+    unpushedCount: 0,
     mergedIntoPrimary: false,
     changedCount: 0,
     recentCommits: [],

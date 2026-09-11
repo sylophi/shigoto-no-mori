@@ -16,6 +16,18 @@ blockExoticSubdeps: false
 # whose trust signals (provenance, signatures) weaken.
 minimumReleaseAge: 10080
 trustPolicy: no-downgrade
+# trustPolicy waivers: transitive pins published before their projects
+# adopted npm provenance. Every integrity hash was verified against the
+# registry. Each waiver names an exact version, so it stops applying once
+# the pin moves. semver 5.x/6.x are frozen lines reached through ^5/^6
+# ranges, so re-resolving cannot clear them.
+trustPolicyExclude:
+  - semver@5.7.2
+  - semver@6.3.1
+  - undici-types@6.21.0
+  - "@octokit/endpoint@9.0.6"
+  - "@pierre/theme@1.1.0"
+  - material-icon-theme@5.36.1
 # Per-package build-script trust. pnpm 11 uses this map (not the older
 # `onlyBuiltDependencies` / `ignoredBuiltDependencies` arrays) to gate
 # which dependencies are allowed to run install scripts.

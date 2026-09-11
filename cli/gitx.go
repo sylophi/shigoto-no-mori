@@ -377,6 +377,25 @@ func getRemoteSync(worktreePath string) remoteSync {
 	return rs
 }
 
+// How many of HEAD's newest commits no remote has: what amend and undo
+// may touch (the TS twin is getUnpushedCount in host/lib/git/worktrees.ts).
+// Measured against every remote-tracking ref, not just the upstream, so
+// a commit pushed under another name counts as shared too. A repo with
+// no remotes has nothing shared, so all of HEAD is its own. Capped: past
+// the cap the exact number stops mattering and the walk stops paying
+// for it.
+const unpushedScanLimit = 1000
+
+func getUnpushedCount(worktreePath string) int {
+	stdout, err := runGit(worktreePath, "rev-list", "--count", fmt.Sprintf("--max-count=%d", unpushedScanLimit), "HEAD", "--not", "--remotes")
+	if err != nil {
+		// An unborn branch has no HEAD to count from.
+		return 0
+	}
+	n, _ := strconv.Atoi(strings.TrimSpace(stdout))
+	return n
+}
+
 type commitSummary struct {
 	Hash      string `json:"hash"`
 	Subject   string `json:"subject"`

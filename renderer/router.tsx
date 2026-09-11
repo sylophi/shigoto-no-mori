@@ -106,6 +106,13 @@ const scriptConsoleComponent = lazyRouteComponent(
   "ScriptConsole",
 );
 
+// `amend` opens the changes page already set to rewrite the last
+// commit (a commit row's "Amend" lands here). Shared by both trees so
+// the twin reads the same search the local page does.
+function validateDiffSearch(search: Record<string, unknown>): { amend?: true } {
+  return search["amend"] === true ? { amend: true } : {};
+}
+
 // Device-scoped twins of the worktree pages (v2: remote feels local).
 // The SAME components serve both trees: withRemoteScope resolves the
 // device, mounts HostScopeProvider and the push-refresh watcher, and
@@ -122,6 +129,7 @@ const remoteWorktreeDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: WORKTREE_ROUTE_PATHS.diff.remote,
   component: withRemoteScope(WorktreeDiff),
+  validateSearch: validateDiffSearch,
 });
 
 const remotePullRequestDiffRoute = createRoute({
@@ -230,6 +238,7 @@ const worktreeDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: WORKTREE_ROUTE_PATHS.diff.local,
   component: WorktreeDiff,
+  validateSearch: validateDiffSearch,
 });
 
 const pullRequestDiffRoute = createRoute({

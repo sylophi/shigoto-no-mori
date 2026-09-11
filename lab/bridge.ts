@@ -141,7 +141,8 @@ function hostHandlersFor(
     },
     "worktrees:listCommits": ({ worktreeId, skip }) =>
       skip > 0 ? [] : (findWorktree(worktreeId)?.recentCommits ?? []),
-    "worktrees:diff": () => LAB_DIFF,
+    "worktrees:fileDiff": () => LAB_DIFF,
+    "worktrees:changeStatus": () => [],
     "worktrees:commitDiff": () => LAB_DIFF,
     "worktreeData:read": ({ worktreeId }) =>
       worktreeData.get(worktreeId) ?? null,

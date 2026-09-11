@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { ChevronRight, FileDiff, History } from "lucide-react";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
+import { commitRewriteAt } from "@/lib/commitRewrite";
 import type { Worktree } from "@shared/schemas";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { WorktreePrimarySyncPill } from "../WorktreePrimarySyncPill";
@@ -24,6 +26,7 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
     worktree.changedCount === 0 &&
     worktree.behindPrimary > 0;
   const [historyOpen, setHistoryOpen] = useState(false);
+  const undo = useUndoCommits(worktree);
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -32,7 +35,7 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
           <button
             type="button"
             onClick={() => nav.toDiff(worktree.projectId, worktree.id)}
-            title="View uncommitted changes"
+            title="Review, commit or discard the uncommitted changes"
             className="tabular inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-amber-500 transition-colors hover:bg-amber-500/10 focus-visible:outline-2 focus-visible:outline-amber-500"
           >
             <FileDiff aria-hidden className="size-3.5" />
@@ -48,9 +51,19 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
         <div className="text-sm text-muted-foreground">No commits yet.</div>
       ) : (
         <ul className="space-y-2">
-          {commits.map((commit) => (
+          {commits.map((commit, index) => (
             <li key={commit.hash}>
-              <CommitRow worktree={worktree} commit={commit} />
+              <CommitRow
+                worktree={worktree}
+                commit={commit}
+                rewrite={commitRewriteAt(
+                  worktree,
+                  worktree.recentCommits,
+                  index,
+                )}
+                onUndo={undo.undoTo}
+                undoPending={undo.pending}
+              />
             </li>
           ))}
         </ul>

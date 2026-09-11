@@ -24,6 +24,7 @@ type worktreeJSON struct {
 	HasRemote         bool            `json:"hasRemote"`
 	DivergedClean     bool            `json:"divergedClean"`
 	BehindPrimary     int             `json:"behindPrimary"`
+	UnpushedCount     int             `json:"unpushedCount"`
 	PrimaryRef        string          `json:"primaryRef,omitempty"`
 	MergedIntoPrimary bool            `json:"mergedIntoPrimary"`
 	ChangedCount      int             `json:"changedCount"`
@@ -97,18 +98,20 @@ func identityOf(w worktreeJSON) worktreeIdentity {
 
 func buildWorktree(proj project, id worktreeIdentity, ctx buildContext) worktreeJSON {
 	var (
-		changes workingTreeChanges
-		commits []commitSummary
-		rs      remoteSync
-		primary primaryRelation
-		wg      sync.WaitGroup
+		changes  workingTreeChanges
+		commits  []commitSummary
+		rs       remoteSync
+		primary  primaryRelation
+		unpushed int
+		wg       sync.WaitGroup
 	)
-	wg.Add(4)
+	wg.Add(5)
 	// Display probe: an unreadable status just shows as 0 changes.
 	go func() { defer wg.Done(); changes, _ = getWorkingTreeChanges(id.Path) }()
 	go func() { defer wg.Done(); commits = listCommits(id.Path, 0, recentCommitsCount) }()
 	go func() { defer wg.Done(); rs = getRemoteSync(id.Path) }()
 	go func() { defer wg.Done(); primary = getPrimaryRelation(id, ctx) }()
+	go func() { defer wg.Done(); unpushed = getUnpushedCount(id.Path) }()
 	wg.Wait()
 	return worktreeJSON{
 		ID:                id.ID,
@@ -122,6 +125,7 @@ func buildWorktree(proj project, id worktreeIdentity, ctx buildContext) worktree
 		HasRemote:         ctx.hasRemote,
 		DivergedClean:     rs.divergedClean,
 		BehindPrimary:     primary.behindPrimary,
+		UnpushedCount:     unpushed,
 		PrimaryRef:        ctx.primaryRef,
 		MergedIntoPrimary: primary.mergedIntoPrimary,
 		ChangedCount:      changes.count,

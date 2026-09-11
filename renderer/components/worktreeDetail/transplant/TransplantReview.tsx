@@ -3,7 +3,6 @@
 // its PR). The destination half re-pins to this machine (LocalHostScope),
 // because carry-over and the folder come from the LOCAL project's
 // config, not the source's.
-import { parsePatchFiles } from "@pierre/diffs";
 import {
   ArrowDown,
   ArrowRight,
@@ -22,14 +21,14 @@ import { RowTag } from "@/components/ui/row-tag";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusDot } from "@/components/ui/status-dot";
-import { CHANGE_MARKS, fileKey, fileStats } from "@/components/diff/patchFiles";
+import { changeEntries } from "@/components/diff/patchFiles";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { worktreeIncludeExtras } from "@/hooks/projects/carryOverPaths";
 import { useWorktreeIncludeStatus } from "@/hooks/projects/useWorktreeIncludeStatus";
 import { LocalHostScope, useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { useWorktreeDiff } from "@/hooks/worktrees/useWorktreeDiff";
+import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import { tildify } from "@/lib/projectPaths";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
@@ -257,13 +256,16 @@ function ChangedFiles({
   worktree: Worktree;
   project: Project;
 }) {
-  // A one-shot preview: the whole patch crosses the device link, so it
-  // is not re-pulled on every focus the way the diff page's is.
+  // A one-shot preview: the list crosses the device link, so it is not
+  // re-pulled on every focus the way the changes page's is. It is git
+  // status rather than a patch, so untracked files are listed too.
   const {
-    data: patch,
+    data: changed,
     isPending,
     isError,
-  } = useWorktreeDiff(project.id, worktree.id, { refetchOnWindowFocus: false });
+  } = useWorktreeChanges(project.id, worktree.id, {
+    refetchOnWindowFocus: false,
+  });
   if (isPending) {
     return (
       <div className="space-y-1.5 rounded-lg border border-border bg-card p-3">
@@ -279,35 +281,36 @@ function ChangedFiles({
       </p>
     );
   }
-  const files = patch ? parsePatchFiles(patch).flatMap((p) => p.files) : [];
+  const files = changeEntries(changed ?? []);
   if (files.length === 0) {
     return (
       <p className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
-        Untracked files only. They travel too, a diff just cannot list them.
+        No uncommitted changes to list.
       </p>
     );
   }
   const shown = files.slice(0, MAX_ROWS);
   return (
     <ul className="space-y-1 rounded-lg border border-border bg-card p-3 font-mono text-xs">
-      {shown.map((file) => {
-        const mark = CHANGE_MARKS[file.type];
-        const stats = fileStats(file);
+      {shown.map((entry) => {
+        const { mark, stats } = entry;
         return (
-          <li key={fileKey(file)} className="flex items-center gap-2">
+          <li key={entry.key} className="flex items-center gap-2">
             <span
               aria-label={mark.label}
               className={cn("w-3 shrink-0 font-semibold", mark.className)}
             >
               {mark.mark}
             </span>
-            <span className="min-w-0 flex-1 truncate" title={file.name}>
-              {file.name}
+            <span className="min-w-0 flex-1 truncate" title={entry.path}>
+              {entry.path}
             </span>
-            <DiffStats
-              additions={stats.additions}
-              deletions={stats.deletions}
-            />
+            {stats && (
+              <DiffStats
+                additions={stats.additions}
+                deletions={stats.deletions}
+              />
+            )}
           </li>
         );
       })}

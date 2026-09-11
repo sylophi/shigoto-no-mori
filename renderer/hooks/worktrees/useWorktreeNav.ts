@@ -45,11 +45,13 @@ export function useWorktreeNav() {
       scriptKey?: string;
     },
     replace = false,
+    search?: Record<string, unknown>,
   ) => {
     const paths = WORKTREE_ROUTE_PATHS[page];
     void navigate({
       to: remote ? paths.remote : paths.local,
       params: remote ? { ...params, deviceId } : params,
+      ...(search === undefined ? {} : { search }),
       replace,
     } as never);
   };
@@ -64,8 +66,20 @@ export function useWorktreeNav() {
       go("detail", { projectId, worktreeId }, replace);
     },
 
-    toDiff(projectId: string, worktreeId: string) {
-      go("diff", { projectId, worktreeId });
+    // `amend` opens the changes page already set to rewrite the last
+    // commit; it lives in the route's search so the page and the row
+    // menu that opens it agree on one source of truth.
+    toDiff(
+      projectId: string,
+      worktreeId: string,
+      opts: { amend?: boolean; replace?: boolean } = {},
+    ) {
+      go(
+        "diff",
+        { projectId, worktreeId },
+        opts.replace ?? false,
+        opts.amend ? { amend: true } : {},
+      );
     },
 
     toCommit(projectId: string, worktreeId: string, hash: string) {

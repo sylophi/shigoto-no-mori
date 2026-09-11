@@ -10,7 +10,20 @@ export const CONFIRM_DESTRUCTIVE_MS = 5_000;
 // invokes the action. The armed flag auto-clears after the timeout, or
 // when the caller invokes `reset` (e.g. when the host menu closes).
 export function useConfirmTwice(timeoutMs = 2_500) {
-  const [armed, setArmed] = useState(false);
+  const keyed = useConfirmTwiceKeyed(timeoutMs);
+  return {
+    armed: keyed.armedKey !== null,
+    trigger: (action: () => void) => keyed.trigger("", action),
+    reset: keyed.reset,
+  };
+}
+
+// The same two-step confirm over a list: one item at a time is armed,
+// named by key. Arming another item moves the arm rather than adding a
+// second, so a list can never hold two half-confirmed actions. The
+// single-button form above is this with one key.
+export function useConfirmTwiceKeyed(timeoutMs = 2_500) {
+  const [armedKey, setArmedKey] = useState<string | null>(null);
   const timerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -24,19 +37,19 @@ export function useConfirmTwice(timeoutMs = 2_500) {
       window.clearTimeout(timerRef.current);
       timerRef.current = null;
     }
-    setArmed(false);
+    setArmedKey(null);
   };
 
-  const trigger = (action: () => void) => {
+  const trigger = (key: string, action: () => void) => {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    if (armed) {
-      setArmed(false);
+    if (armedKey === key) {
+      setArmedKey(null);
       action();
       return;
     }
-    setArmed(true);
-    timerRef.current = window.setTimeout(() => setArmed(false), timeoutMs);
+    setArmedKey(key);
+    timerRef.current = window.setTimeout(() => setArmedKey(null), timeoutMs);
   };
 
-  return { armed, trigger, reset };
+  return { armedKey, trigger, reset };
 }
