@@ -1,22 +1,17 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { getRouteApi, useNavigate } from "@tanstack/react-router";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useFileDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import {
-  commitMessageQueryOptions,
   useCommitChanges,
   useDiscardChanges,
   useRestoreDiscard,
   useSetStaged,
   useWorktreeChanges,
 } from "@/hooks/worktrees/useWorktreeChanges";
+import { useAmendDraft } from "@/hooks/worktrees/useAmendDraft";
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
-import {
-  EMPTY_DRAFT,
-  useCommitDraft,
-  type CommitDraft,
-} from "@/lib/commitDraft";
+import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
 import { pluralize } from "@/lib/pluralize";
 import { toast, UNDO_TOAST_MS } from "@/lib/toast";
 import { commitRewriteAt } from "@/lib/commitRewrite";
@@ -97,8 +92,7 @@ function ChangesView({
   const navigate = useNavigate();
   const { projectId, id: worktreeId } = worktree;
   const { data: files } = useWorktreeChanges(projectId, worktreeId);
-  // The list is the page's, so the pick is too -- and the pick decides
-  // what to fetch. Held as the row's key and resolved against the live
+  // The pick is held as the row's key and resolved against the live
   // list, so a file that stops being changed (discarded, committed,
   // reverted in an editor) falls back to the first row instead of
   // leaving the pane pointing at nothing.
@@ -115,9 +109,8 @@ function ChangesView({
     picked ? changedFilePaths(picked) : [],
     picked ? isUntracked(picked) : false,
   );
-  // The stable `mutate`s, not the result objects: those are rebuilt
-  // every render and would reach every diff file header as a new
-  // callback, re-rendering all of pierre's rows on each tick.
+  // `mutate` is stable across renders. The result object is not, and it
+  // would reach every rail row as a new callback.
   const { mutate: stage } = useSetStaged();
   const commit = useCommitChanges();
   const { mutate: discardPaths, isPending: discarding } = useDiscardChanges();
@@ -125,40 +118,21 @@ function ChangesView({
   const undo = useUndoCommits(worktree);
   const [draft, setDraft] = useCommitDraft(projectId, worktreeId);
 
-  // The last commit is only up for rewriting while it exists nowhere
-  // but here. A requested amend only takes effect while that holds (a
-  // push in another window ends it).
+  // The last commit is only up for rewriting while no remote has it. A
+  // requested amend only takes effect while that holds (a push from
+  // another window ends it).
   const lastCommit = worktree.recentCommits[0];
   const rewrite = commitRewriteAt(worktree, worktree.recentCommits, 0);
   const amending = amendRequested && rewrite.canAmend;
   const busy = commit.isPending || discarding || restoring || undo.pending;
-
-  // Amend mode prefills the last commit's message unless something is
-  // already typed, and leaving it puts the earlier draft back. Seeded
-  // during render once the message arrives (the way DiffView resets its
-  // fold state), so both ways in -- the strip's button and a commit
-  // row's menu, which lands here with the search param already set --
-  // behave the same.
-  const { data: amendMessage } = useQuery({
-    ...commitMessageQueryOptions(projectId, worktreeId, lastCommit?.hash ?? ""),
-    enabled: amending && lastCommit !== undefined,
+  const amendDraft = useAmendDraft({
+    projectId,
+    worktreeId,
+    amending,
+    commit: lastCommit,
+    draft,
+    setDraft,
   });
-  const [amendSeed, setAmendSeed] = useState<{
-    hash: string;
-    before: CommitDraft;
-  } | null>(null);
-  if (
-    amending &&
-    lastCommit &&
-    amendMessage &&
-    amendSeed?.hash !== lastCommit.hash
-  ) {
-    setAmendSeed({ hash: lastCommit.hash, before: draft });
-    if (!draft.summary && !draft.description) setDraft(amendMessage);
-  } else if (!amending && amendSeed) {
-    setAmendSeed(null);
-    setDraft(amendSeed.before);
-  }
 
   const onCommit = () => {
     const list = files ?? [];
@@ -177,8 +151,7 @@ function ChangesView({
       },
       {
         onSuccess: ({ hash }) => {
-          // The seed's "before" draft is gone with the commit too.
-          setAmendSeed(null);
+          amendDraft.reset();
           setDraft(EMPTY_DRAFT);
           if (wasAmend) setAmending(false);
           toast.success(

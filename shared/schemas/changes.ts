@@ -22,8 +22,8 @@ export const ChangeKindSchema = z.enum([
 ]);
 export type ChangeKind = z.infer<typeof ChangeKindSchema>;
 
-// Lines added and removed against HEAD. Absent when git won't say --
-// a binary file -- and the row then shows no counts rather than zeros.
+// Lines added and removed against HEAD. Absent for a binary file, where
+// git won't say, so the row shows no counts rather than zeros.
 export const ChangeCountsSchema = z.object({
   additions: z.number().int().nonnegative(),
   deletions: z.number().int().nonnegative(),
@@ -55,10 +55,9 @@ export function changeKey(file: ChangedFile): string {
 }
 
 // Git knows nothing about this file yet: it is in neither HEAD nor the
-// index, so its diff is a comparison against /dev/null and its counts
-// can't come from `diff HEAD`. A tracked file can't reach this state --
-// an unstaged addition is what "untracked" means -- so the two status
-// letters say it on their own.
+// index, so its diff compares against /dev/null and its counts can't
+// come from `diff HEAD`. An unstaged addition is exactly what
+// "untracked" means, so the two status letters say it on their own.
 export function isUntracked(file: ChangedFile): boolean {
   return file.kind === "added" && file.staged === "none";
 }
@@ -75,11 +74,10 @@ const PathListSchema = z
   .min(1);
 
 // The file whose diff to read: its path, with the old one first when
-// git records it as a rename, and which of the two comparisons answers
-// for it. The caller has the status row in hand and git does not answer
-// "is this tracked" from an empty diff -- a staged edit reverted in the
-// working tree is empty too, and reading that as a new file would show
-// every line as an addition.
+// git records a rename, and whether it is untracked. The caller has the
+// status row in hand, and an empty diff can't answer "is this tracked":
+// a staged edit reverted in the working tree is empty too, and reading
+// that as a new file would show every line as an addition.
 export const FileDiffPayloadSchema = WorktreeScopedPayloadSchema.extend({
   paths: PathListSchema,
   untracked: z.boolean(),
@@ -93,10 +91,9 @@ export const SetStagedPayloadSchema = WorktreeScopedPayloadSchema.extend({
 export const CommitChangesPayloadSchema = WorktreeScopedPayloadSchema.extend({
   summary: z.string().trim().min(1),
   description: z.string().optional(),
-  // Staged before the commit. The page sends every path it listed when
-  // nothing is ticked: an empty selection means "all of it", the way a
-  // fresh commit usually does -- and exactly the "it" that was on
-  // screen, not whatever landed in the tree since.
+  // Staged before the commit. When nothing is ticked the page sends
+  // every path it listed, so "all of it" means what was on screen and
+  // not whatever landed in the tree since.
   stagePaths: z.array(z.string().min(1)).optional(),
   // Rewrite HEAD instead of adding a commit on top of it.
   amend: z.boolean().optional(),

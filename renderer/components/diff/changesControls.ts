@@ -1,12 +1,10 @@
 import type { ChangedFile } from "@shared/schemas";
 
 // What turns the read-only diff view into the changes page: the status
-// rows the rail draws, which file of them is in the pane, and the
-// actions the rows fire. The status list is the sole authority on what
-// is changed, and every action names files by their row.
-// Data and stable callbacks only: the composer rides in as its own
-// prop, so typing a message never changes this object's identity and
-// the rail rows keyed off it stay cached.
+// rows the rail draws, which of them is in the pane, and the actions
+// the rows fire. Data and stable callbacks only. The composer rides in
+// as its own prop, so typing a message never changes this object's
+// identity.
 export interface DiffChangesControls {
   files: ChangedFile[];
   onSetStaged: (paths: string[], staged: boolean) => void;

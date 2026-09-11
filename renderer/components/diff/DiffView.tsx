@@ -47,20 +47,18 @@ const DIFF_STYLE = {
 // Below this a patch is its own table of contents: two files scroll past
 // in one flick, and a rail would cost more width than it saves.
 const INDEX_MIN_FILES = 3;
-// The rail is dragged between these; 288 is where it starts. The upper
-// one is a flat ceiling -- the pane lowers it further (see railMax).
+// The rail is dragged between these and starts at 288. The upper one is
+// a flat ceiling that the pane lowers further (see railMax).
 const RAIL_MIN = 220;
 const RAIL_MAX = 600;
 const RAIL_DEFAULT = 288;
 // Below MIN the diff beside the rail is too narrow to read a hunk
 // without wrapping, so the rail isn't offered at all. Between MIN and
-// AMPLE it's offered but stays shut unless you ask for it: opening by
-// default there trades away width the diff still needs. At AMPLE the
-// diff keeps a width that fits a wide unified hunk. Both are measured
-// as what the diff would keep with the rail out, so a wider rail asks
-// for a wider pane -- and MIN doubles as the rail's drag ceiling, since
-// dragging into it is the one way a rail already open could stop
-// fitting.
+// AMPLE it's offered but stays shut unless asked for. At AMPLE the diff
+// keeps a width that fits a wide unified hunk. Both are measured as
+// what the diff would keep with the rail out, so a wider rail asks for
+// a wider pane. MIN doubles as the rail's drag ceiling, since dragging
+// into it is the one way an open rail could stop fitting.
 const DIFF_MIN_BESIDE_RAIL = 384;
 const DIFF_AMPLE_BESIDE_RAIL = 736;
 // Matches the scroll area's p-2, so a jumped-to file lands where it
@@ -144,10 +142,10 @@ export function DiffView({
   title: ReactNode;
   subtitle: ReactNode;
   emptyMessage: ReactNode;
-  // Present on the uncommitted-changes page only. Turns the rail into
-  // a tick list with the commit composer under it, puts a checkbox in
-  // every file header, and keeps the rail on screen regardless of file
-  // count or pane width -- there is nowhere else to commit from.
+  // Present on the uncommitted-changes page only. Turns the rail into a
+  // tick list with the commit composer under it, and keeps the rail on
+  // screen regardless of file count or pane width, since there is
+  // nowhere else to commit from.
   changes?: DiffChangesControls;
   // Mounted at the foot of the rail: the commit composer.
   railFooter?: ReactNode;
@@ -161,9 +159,8 @@ export function DiffView({
   const [paneRef, paneWidth] = useElementWidth<HTMLDivElement>();
   // The drag stops where the diff's own minimum starts. Without this
   // ceiling a drag past it fails the availability check below and the
-  // rail closes under the pointer -- the pane has to be able to hold
-  // both, and the rail is the half being dragged. Unmeasured panes
-  // (first frame) get the flat ceiling, and the measurement follows.
+  // rail closes under the pointer. An unmeasured pane (first frame)
+  // gets the flat ceiling, and the measurement follows.
   const railMax =
     paneWidth === null
       ? RAIL_MAX
@@ -184,15 +181,15 @@ export function DiffView({
   const { resolved } = useTheme();
 
   // Which of the two views this is. The changes page hands over one
-  // file's diff -- the one its rail has picked -- so the pane draws
-  // what it was given, holds no fold state and needs no scroll spy. A
-  // commit or PR diff hands over the whole patch and reads as one
-  // scroll, and its rail is optional. Named once, read everywhere.
-  const railMode = changes !== undefined;
+  // file's diff, the one its rail picked, so the pane draws what it was
+  // given, holds no fold state and needs no scroll spy. A commit or PR
+  // diff hands over the whole patch, reads as one scroll, and its rail
+  // is optional.
+  const singleFile = changes !== undefined;
 
   const parsedPatches = patch ? parsePatchFiles(patch) : [];
-  // Path order, always -- which is the order git emits a commit or a PR
-  // in anyway, so this only ever settles a tie.
+  // Path order, which is how git emits a commit or a PR anyway, so this
+  // only ever settles a tie.
   const allFiles = parsedPatches
     .flatMap((p) => p.files)
     .toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
@@ -200,7 +197,7 @@ export function DiffView({
   const [activeKey, setActiveKey] = useFileScrollSpy(
     scrollRef,
     filesKey,
-    !railMode,
+    !singleFile,
   );
 
   // Fold state is keyed by path, so it can only survive a patch whose
@@ -214,26 +211,23 @@ export function DiffView({
 
   // Unmeasured (null) counts as too narrow, so the rail can't flash in
   // and back out on the first frame of a diff opened in a narrow pane.
-  // The changes page overrides all of it: its rail is the page, and it
+  // The changes page skips all of this: its rail is the page, and it
   // stays up on a clean tree too, since amending and undoing the last
   // commit live there.
-  const railForced = railMode;
   const indexAvailable =
-    !railForced &&
+    !singleFile &&
     allFiles.length >= INDEX_MIN_FILES &&
     paneWidth !== null &&
     paneWidth >= rail.width + DIFF_MIN_BESIDE_RAIL;
   const showIndex =
-    railForced ||
+    singleFile ||
     (indexAvailable &&
       (indexPref ?? paneWidth >= rail.width + DIFF_AMPLE_BESIDE_RAIL));
   const allCollapsed =
     allFiles.length > 0 && collapsedKeys.size >= allFiles.length;
 
-  // What the rail lists. A read-only diff has only its patch to go on.
-  // The changes page lists what git status reports, which is the list
-  // the commit button acts on, so a file left out of it is a file you
-  // cannot tick, discard, or even see is there.
+  // What the rail lists: the patch's files on a read-only diff, git
+  // status on the changes page.
   const indexEntries = changes
     ? changeEntries(changes.files)
     : patchEntries(allFiles);
@@ -241,8 +235,8 @@ export function DiffView({
   // A fresh file starts at its own top, not at the scroll the last one
   // was left at.
   useEffect(() => {
-    if (railMode) scrollRef.current?.scrollTo({ top: 0 });
-  }, [railMode, patch]);
+    if (singleFile) scrollRef.current?.scrollTo({ top: 0 });
+  }, [singleFile, patch]);
 
   // Toggles against what's on screen, not against the stored preference:
   // in the auto state those differ, and a chip that needs two clicks to
@@ -318,7 +312,7 @@ export function DiffView({
             allCollapsed={allCollapsed}
             onSelect={selectFile}
             onToggleAll={
-              railMode
+              singleFile
                 ? undefined
                 : () =>
                     setCollapsedKeys(
@@ -358,10 +352,10 @@ export function DiffView({
             </CenteredMessage>
           ) : allFiles.length === 0 ? (
             <CenteredMessage className="px-6 text-center">
-              {/* A picked file with no patch of its own -- a mode
-                  change, or content git won't diff -- is not the same
-                  as a clean tree, and mustn't borrow its wording. */}
-              {railMode && changes.files.length > 0
+              {/* A picked file with no patch of its own (a mode change,
+                  or content git won't diff) is not a clean tree and
+                  mustn't borrow its wording. */}
+              {singleFile && changes.files.length > 0
                 ? "No text changes to show for this file."
                 : emptyMessage}
             </CenteredMessage>
@@ -378,14 +372,13 @@ export function DiffView({
                     key={key}
                     fileDiff={fileDiff}
                     fileId={key}
-                    collapsed={!railMode && collapsedKeys.has(key)}
+                    collapsed={!singleFile && collapsedKeys.has(key)}
                     diffStyle={diffStyle}
                     themeType={resolved}
-                    // No fold control in a picker: the file in the pane
-                    // is the one you asked for, and folding it away
-                    // would leave the pane blank with nothing to
-                    // unfold it from.
-                    onToggle={railMode ? undefined : setCollapsed}
+                    // No fold control on a single file: it is the one
+                    // you asked for, and folding it away would leave
+                    // the pane blank with nothing to unfold it from.
+                    onToggle={singleFile ? undefined : setCollapsed}
                   />
                 );
               })}
@@ -399,17 +392,15 @@ export function DiffView({
 
 // One file of the patch. Its own component so folding a file re-renders
 // that file and not the other 130: pierre's FileDiff re-runs a full DOM
-// render on every pass (its instance effect has no dependency array, and
-// a collapsed instance never takes the cheap early return), so the
-// untouched rows have to keep their cached element to stay free. That
-// holds only while every prop here is stable per file -- hence `onToggle`
-// is the caller's own setter rather than a per-row closure.
+// render on every pass, so untouched rows have to keep their cached
+// element to stay free. That only holds while every prop here is stable
+// per file, which is why `onToggle` is the caller's own setter rather
+// than a per-row closure.
 //
 // The wrapper is what the index scrolls to and what the scroll spy
-// observes. `collapsed` is pierre's own option, which drops the file's
+// observes. `collapsed` is pierre's own option: it drops the file's
 // rendered rows and keeps the header, so folding a file also stops
 // paying for it.
-//
 function DiffFileRow({
   fileDiff,
   fileId,
@@ -423,8 +414,8 @@ function DiffFileRow({
   collapsed: boolean;
   diffStyle: DiffStyle;
   themeType: "light" | "dark";
-  // Absent in a picker, where there is nothing to fold away -- and with
-  // it the header prefix, which then has nothing to draw.
+  // Absent when the pane shows one picked file, where there is nothing
+  // to fold away. The header prefix goes with it.
   onToggle: ((key: string, collapsed: boolean) => void) | undefined;
 }) {
   return (
