@@ -255,7 +255,7 @@ interface KillOptions {
 async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {
   if (record.exited) return;
   if (record.cancelling) {
-    // Another caller is already escalating; wait for it, but bounded
+    // Another caller is already escalating. Wait for it, but bounded
     // so an unkillable child doesn't wedge this caller's chain too.
     await waitWithTimeout(record.done, DEFAULT_GRACE_MS + UNKILLABLE_WAIT_MS);
     return;

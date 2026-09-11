@@ -144,7 +144,7 @@ func findInstalledBundle() string {
 
 // CFBundleShortVersionString, via `defaults`, because Info.plist is
 // binary and reading it any other way would mean a plist parser. ""
-// when it can't be read; every caller treats that as "unknown", never
+// when it can't be read. Every caller treats that as "unknown", never
 // as a mismatch.
 func bundleVersion(bundle string) string {
 	if runtime.GOOS != "darwin" {

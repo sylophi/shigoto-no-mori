@@ -182,7 +182,7 @@ func runCreateLifecycle(proj project, worktree worktreeJSON, base string) []scri
 // project's setup script, then port-pool provision (skipped for
 // external worktrees, because rm skips the matching release for
 // them, so provisioning would leak a port). Returns the failures and
-// which steps ran; callers own the trailing "idle" phase.
+// which steps ran. Callers own the trailing "idle" phase.
 func runProvisionScripts(proj project, id worktreeIdentity, config *projectConfig) ([]scriptFailure, []string) {
 	failures := []scriptFailure{}
 	ran := []string{}

@@ -31,7 +31,7 @@ export type CarryOverEntry = z.infer<typeof CarryOverEntrySchema>;
 //   (sits inside the primary; lets tools that walk up to a workspace
 //   root, like Turbopack, accept symlinked node_modules from carry-over)
 // - custom: <customWorktreePath>/<worktreeName>
-//   (escape hatch; not recommended, since it can collide with other
+//   (escape hatch, not recommended, since it can collide with other
 //   repos and complicates external-vs-managed detection)
 export const WorktreeLayoutSchema = z.enum([
   "managed-root",

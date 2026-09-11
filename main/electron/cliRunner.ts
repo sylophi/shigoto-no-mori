@@ -132,7 +132,7 @@ export interface CliResult {
 
 // Runs `sm --json <args>`, parsing each stdout line as a document and
 // forwarding it to onDoc as it arrives. Resolves with every document
-// once the process exits; rejects only on spawn failure. Non-zero
+// once the process exits, and rejects only on spawn failure. Non-zero
 // exits resolve normally since the error payload is in the documents.
 // extraEnv overlays the app's environment (used by cliShell.ts to pass
 // the user's real shell-config env vars, which launchd strips).

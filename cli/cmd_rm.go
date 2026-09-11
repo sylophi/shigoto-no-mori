@@ -192,7 +192,7 @@ func reportRemoved(proj project, id worktreeIdentity, hint string, extra map[str
 	} else {
 		out(greenOut("removed " + id.Name))
 		if hint != "" {
-			note(dimErr("note: your shell is inside the removed worktree. cd " + hint))
+			note(dimErr("note: your shell is inside the removed worktree. Run `cd " + hint + "`"))
 		}
 	}
 }

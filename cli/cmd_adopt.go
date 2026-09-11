@@ -83,7 +83,7 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	}
 	code := finishCreateLifecycle(proj, worktree, "")
 	if wasInside && !jsonMode {
-		note(dimErr("note: your shell is inside the old location. cd " + worktree.Path))
+		note(dimErr("note: your shell is inside the old location. Run `cd " + worktree.Path + "`"))
 	}
 	return code, nil
 }

@@ -125,11 +125,11 @@ function ChangesView({
   const rewrite = commitRewriteAt(worktree, worktree.recentCommits, 0);
   const amending = amendRequested && rewrite.canAmend;
   const busy = commit.isPending || discarding || restoring || undo.pending;
-  const amendDraft = useAmendDraft({
+  const resetAmendDraft = useAmendDraft({
     projectId,
     worktreeId,
     amending,
-    commit: lastCommit,
+    hash: lastCommit?.hash,
     draft,
     setDraft,
   });
@@ -151,7 +151,7 @@ function ChangesView({
       },
       {
         onSuccess: ({ hash }) => {
-          amendDraft.reset();
+          resetAmendDraft();
           setDraft(EMPTY_DRAFT);
           if (wasAmend) setAmending(false);
           toast.success(

@@ -233,7 +233,7 @@ function summarizeChecks(checks: PullRequestCheck[]): PullRequestChecksSummary {
 // since invalidations from focus / refs-changed must actually hit gh.
 // The --head filter is server-side so this stays cheap regardless of
 // repo PR count. Returns the rich detail shape (checks + mergeable
-// state) since the only consumer is the worktree detail page; the slim
+// state) since the only consumer is the worktree detail page. The slim
 // PullRequest projection is used by the sidebar list path. Throws on
 // transient gh / network / parse failure so callers can distinguish
 // "no PR" (null) from "we don't know". The renderer uses that to

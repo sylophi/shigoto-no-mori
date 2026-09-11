@@ -105,7 +105,7 @@ export function startStateWatcher(poke: () => void): void {
   // state file at all. The only observable change is the new checkout
   // directory two levels down (worktrees/<project>/<name>), which a
   // non-recursive root watch never sees. (In-project and custom
-  // layouts sit outside the root and aren't covered; the managed-root
+  // layouts sit outside the root and aren't covered. The managed-root
   // default is.)
   watchDir(shigomoriRoot(), false);
   watchDir(join(shigomoriRoot(), "projects"), true);

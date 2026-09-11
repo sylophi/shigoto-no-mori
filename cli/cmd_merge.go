@@ -136,7 +136,7 @@ func allowedMergeMethods(projectPath string) []string {
 }
 
 // The PR lookup and the repo-settings read are independent gh
-// round-trips (300-800ms each); overlap them. Shared by merge and
+// round-trips (300-800ms each), so overlap them. Shared by merge and
 // land. pr is nil when the branch has no PR at all.
 func resolveMergeTarget(projectPath, branch string) (pr *prSummary, allowed []string, err error) {
 	var wg sync.WaitGroup

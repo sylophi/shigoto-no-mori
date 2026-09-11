@@ -27,7 +27,7 @@ func cmdWorktree(ctx cliContext, args []string) (int, error) {
 
 // sm worktrees <command> (wt, worktree for short) is the namespace
 // form of the bare worktree commands, mirroring `sm projects
-// <command>`. Bare `sm worktrees` prints the namespace help; a
+// <command>`. Bare `sm worktrees` prints the namespace help. A
 // worktree name enters that worktree (`switch` with the menu).
 // Subcommand words win over worktree names.
 func cmdWorktrees(ctx cliContext, args []string) (int, error) {

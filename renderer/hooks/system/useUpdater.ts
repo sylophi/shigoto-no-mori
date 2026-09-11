@@ -5,7 +5,7 @@ import { queryKeys } from "@/lib/queryKeys";
 
 // Seeded from `updater:get` once on mount and then driven entirely by
 // the `updater:state` broadcast, with no polling. The main process is
-// the single source of truth; the renderer just mirrors it.
+// the single source of truth. The renderer just mirrors it.
 export function useUpdater() {
   const queryClient = useQueryClient();
   const query = useQuery<UpdaterState>({
