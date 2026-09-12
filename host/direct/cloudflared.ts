@@ -30,6 +30,7 @@ import {
 } from "@shared/account/service";
 import type { TunnelState } from "@shared/ipc/modules/hub";
 import {
+  TUNNEL_PROBE_DEADLINE_FRESH_MS,
   BACKOFF_LADDER_MS,
   backoffDelayMs,
   defaultSupervisorClock,
@@ -97,7 +98,7 @@ export const TUNNEL_PROBE_SLOW_MS = 60_000;
 // so a probe that keeps failing means a deleted record or a stale
 // ingress, and the re-provision is what repairs those.
 export const TUNNEL_PROBE_DEADLINE_MS = 60_000;
-export const TUNNEL_PROBE_DEADLINE_FRESH_MS = 45 * 60_000;
+export { TUNNEL_PROBE_DEADLINE_FRESH_MS };
 
 // One probe attempt's own fetch bound, so a black-holed edge cannot
 // wedge the probe chain.

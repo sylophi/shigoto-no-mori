@@ -147,6 +147,32 @@ export const SyncCaptureDirtyResultSchema = z.strictObject({
   commit: CommitHashSchema.optional(),
 });
 
+// What a capture leaves behind. The dirty capture has `git add -A`
+// semantics (cli/cmd_dirty.go), so ignored files never cross a
+// transfer, and a teardown removes them with the source. Near every
+// real worktree carries ignored content (build output, node_modules),
+// so refusing the teardown over it would make the teardown
+// unreachable. Instead the transplant dialog lists these so the user
+// decides in the know. This is the one place that reasoning lives.
+// Same shape as the carry-over listing (host/lib/git/branches.ts
+// listIgnoredPaths): fully-ignored directories collapse to one
+// trailing-slash entry.
+const SyncIgnoredPathsPayloadSchema = z.strictObject({
+  projectId: z.string().min(1),
+  worktreeId: WorktreeIdSchema,
+});
+
+// Capped on the wire: the dialog shows a handful and counts the rest,
+// and a worktree with scattered per-file ignores can hold thousands.
+export const SYNC_IGNORED_PATHS_LIMIT = 32;
+export const SyncIgnoredPathsResultSchema = z.strictObject({
+  paths: z.array(z.string()).max(SYNC_IGNORED_PATHS_LIMIT),
+  total: z.number().int().nonnegative(),
+});
+export type SyncIgnoredPathsResult = z.infer<
+  typeof SyncIgnoredPathsResultSchema
+>;
+
 export const SyncBundleStartResultSchema = z.strictObject({
   transferId: TransferIdSchema,
   bytes: z.number().int().nonnegative(),
@@ -292,6 +318,14 @@ export const syncContract = defineContract("host", {
     SyncCaptureDirtyPayloadSchema,
     SyncCaptureDirtyResultSchema,
     { remote: true, mutating: true },
+  ),
+  // A read that discloses repo state (the names of ignored files), so
+  // it rides the command grant like refTips.
+  ignoredPaths: invoke(
+    "sync:ignoredPaths",
+    SyncIgnoredPathsPayloadSchema,
+    SyncIgnoredPathsResultSchema,
+    { remote: true, mutating: true, movesHostState: false },
   ),
   bundleStart: invoke(
     "sync:bundleStart",

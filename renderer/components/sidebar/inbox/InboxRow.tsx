@@ -9,6 +9,7 @@ import {
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
+import { useNow } from "@/hooks/ui/useNow";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import type { ScriptActivityKind } from "@/store/scriptRuns";
 import {
@@ -159,6 +160,7 @@ function TrailingSlot({
   isDeleting: boolean;
 }) {
   const activityAt = worktreeLastActivityAt(worktree);
+  const now = useNow();
 
   return (
     <span className="ml-auto flex shrink-0 items-center">
@@ -168,7 +170,7 @@ function TrailingSlot({
         <ActivityIcon kind={activity} />
       ) : (
         <span className="tabular">
-          {activityAt > 0 ? formatRelativeTime(activityAt) : "no activity"}
+          {activityAt > 0 ? formatRelativeTime(activityAt, now) : "no activity"}
         </span>
       )}
     </span>

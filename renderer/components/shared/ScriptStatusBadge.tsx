@@ -1,5 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useNow } from "@/hooks/ui/useNow";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import type { ScriptRunState } from "@/store/scriptRuns";
 
@@ -15,6 +16,7 @@ export function ScriptStatusBadge({
   state,
   variant = "row",
 }: ScriptStatusBadgeProps) {
+  const now = useNow();
   const compact = variant === "row";
   const iconSize = compact ? "size-3" : "size-3.5";
   const gap = compact ? "gap-1" : "gap-1.5";
@@ -45,7 +47,7 @@ export function ScriptStatusBadge({
   if (state.status === "exited") {
     const when = state.endedAt;
     const timeTitle = when ? new Date(when).toLocaleString() : undefined;
-    const suffix = when !== null ? ` · ${formatRelativeTime(when)}` : "";
+    const suffix = when !== null ? ` · ${formatRelativeTime(when, now)}` : "";
     // exitCode === null happens when the process was killed by signal
     // (the user clicked Stop, the app quit, or the worktree was
     // removed). That's intentional cancellation, not a failure, so

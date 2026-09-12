@@ -1,14 +1,8 @@
-import { useAuth, useClerk } from "@clerk/react";
-import {
-  CloudOff,
-  LogIn,
-  MonitorSmartphone,
-  type LucideIcon,
-} from "lucide-react";
+import { CloudOff, MonitorSmartphone, type LucideIcon } from "lucide-react";
 import { ACCOUNT_ENV } from "@shared/account/serviceConfig";
-import { Button } from "@/components/ui/button";
-import { useAccountStatus, useEnroll } from "@/hooks/account/useAccount";
+import { useAccountStatus } from "@/hooks/account/useAccount";
 import { hasLocalHost } from "@/lib/localHost";
+import { ClerkSignInButton } from "@/components/account/ClerkSignInButton";
 import { DeviceRegistry } from "./DeviceRegistry";
 import { EmptyPanel } from "./EmptyPanel";
 
@@ -104,46 +98,5 @@ function NotConfiguredPanel() {
         </p>
       )}
     </StatePanel>
-  );
-}
-
-// Split out so AccountSection itself never calls a Clerk hook: this
-// mounts only on the configured (and therefore provider-wrapped) path
-// above. Sign-in opens Clerk's embedded modal, and ClerkAccountSync
-// turns the resulting session into the enrollment. When Clerk is already
-// signed in but the device is not enrolled (the automatic attempt
-// failed: hub down, mint error), opening the modal again would do
-// nothing, so the button becomes the manual enrollment retry instead.
-function ClerkSignInButton() {
-  const clerk = useClerk();
-  const { isSignedIn, getToken } = useAuth();
-  const enroll = useEnroll();
-  if (isSignedIn) {
-    return (
-      <Button
-        size="sm"
-        disabled={enroll.isPending}
-        onClick={() => enroll.mutate(() => getToken({ skipCache: true }))}
-      >
-        <LogIn />
-        {enroll.isPending ? "Enrolling…" : "Retry enrollment"}
-      </Button>
-    );
-  }
-  return (
-    <Button
-      size="sm"
-      // A browser round trip (OAuth) must land back on a path this tree
-      // serves, so the tab returns to where it left. The desktop's flow
-      // runs in the system browser and deep-links back on its own.
-      onClick={() =>
-        clerk.openSignIn(
-          hasLocalHost ? undefined : { forceRedirectUrl: location.href },
-        )
-      }
-    >
-      <LogIn />
-      Sign in
-    </Button>
   );
 }

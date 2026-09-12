@@ -26,8 +26,10 @@ import {
 } from "@/hooks/remote/useCommandAccess";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useHubStatus, useTunnelState } from "@/hooks/remote/useHubStatus";
+import { useNow } from "@/hooks/ui/useNow";
 import { abbreviateId } from "@/lib/abbreviateId";
 import { localDeviceId } from "@/lib/queryKeys";
+import { ClerkSignInButton } from "@/components/account/ClerkSignInButton";
 import { DeviceRegistryRow } from "./DeviceRegistryRow";
 import { useHostChipIndex } from "./deviceHostChips";
 import { deviceRowStatus } from "./deviceRegistryStatus";
@@ -46,7 +48,14 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
   // re-renders when the tunnel flips, not on every roster transition.
   const tunnel = useTunnelState();
   const socket = useHubStatus()?.socket ?? null;
+  // A blocked socket is the one failure the hub explains itself: this
+  // device was removed from the account elsewhere, so its credential is
+  // dead and every list it asks for comes back refused. Its message is
+  // the only place that story is told, so the registry tells it here
+  // instead of leaving the generic refusal line to imply a hub problem.
+  const blockedMessage = socket?.phase === "blocked" ? socket.message : null;
   const hosts = useHostChipIndex(localDeviceId);
+  const now = useNow();
   // Whether THIS device may drive verbs on each peer: the peer's own
   // "allow control from other devices" switch, as it answers us. Asked
   // once for the whole list (the rows' forward strips would otherwise
@@ -70,7 +79,7 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
       // registry keeps the name it enrolled under. The local one is the
       // truth the user just typed, so the row shows it.
       name: isThisDevice ? localDeviceName : device.name,
-      status: deviceRowStatus(device, isThisDevice, hubDevice, socket),
+      status: deviceRowStatus(device, isThisDevice, hubDevice, socket, now),
       access: commandAccessOf(peerAccess, device.deviceId),
       // This machine knows its own version synchronously. A peer
       // confirms one only once its direct session's welcome lands.
@@ -100,14 +109,29 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
         <ClerkSignOutButton className="-my-1 text-muted-foreground" />
       </div>
 
+      {/* Signing in again is the whole fix (the Clerk session outlives
+          the revoked device credential, so the button re-enrolls this
+          machine), and it sits in the banner because that is where the
+          bad news is. */}
+      {blockedMessage !== null && (
+        <ErrorBanner className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+          <span className="min-w-0 flex-1 basis-64">{blockedMessage}</span>
+          <ClerkSignInButton />
+        </ErrorBanner>
+      )}
+
       {devicesQuery.isLoading ? (
         <p className="text-xs text-muted-foreground/70">
           Loading devices&hellip;
         </p>
       ) : devicesQuery.isError ? (
         // A failed list is unknown, not empty, so no "No devices yet"
-        // under it.
-        <ErrorBanner>{describeListError(devicesQuery.error)}</ErrorBanner>
+        // under it. Nothing at all when the banner above already named
+        // the cause: the refusal line would restate it in vaguer words
+        // and read as a second, separate problem.
+        blockedMessage === null && (
+          <ErrorBanner>{describeListError(devicesQuery.error)}</ErrorBanner>
+        )
       ) : rows.length === 0 ? (
         <p className="text-xs text-muted-foreground/70">No devices yet.</p>
       ) : (

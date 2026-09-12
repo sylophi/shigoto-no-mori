@@ -6,6 +6,7 @@ import type {
   Worktree,
 } from "@shared/schemas";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { useNow } from "@/hooks/ui/useNow";
 import { pullRequestBlockedBy } from "@/lib/pullRequest";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
@@ -138,6 +139,7 @@ function PullRequestRow({
   onSelect: () => void;
   disabled?: boolean;
 }) {
+  const now = useNow();
   const Icon = pr.isDraft ? GitPullRequestDraft : GitPullRequest;
   const taken = occupiedBy !== undefined;
   return (
@@ -178,7 +180,7 @@ function PullRequestRow({
         </span>
       </span>
       <span className="shrink-0 pt-0.5 text-xs text-muted-foreground/70">
-        {formatRelativeTime(new Date(pr.updatedAt).getTime())}
+        {formatRelativeTime(new Date(pr.updatedAt).getTime(), now)}
       </span>
     </button>
   );

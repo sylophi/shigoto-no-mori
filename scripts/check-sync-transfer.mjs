@@ -10,7 +10,8 @@
 //   - an ungranted peer is refused (typed CommandRefusedError) and the
 //     transfer surface never serves it;
 //   - sync:captureDirty over the wire snapshots a dirty worktree to
-//     its refs/shigomori/dirty/<id> ref;
+//     its refs/shigomori/dirty/<id> ref, and sync:ignoredPaths names
+//     the ignored file that capture leaves out;
 //   - a >1.5 MB bundle (branch + dirty capture, thinned by a have)
 //     crosses in >= 3 chunks and lands ONLY under refs/shigomori/ on
 //     the receiver with the source's exact tips, byte-identical
@@ -298,8 +299,13 @@ async function main() {
     listener.setAccepts(true);
 
     // (2) captureDirty over the wire: a dirty worktree snapshots to
-    // its capture ref on the host, tip echoed back.
+    // its capture ref on the host, tip echoed back. An ignored file
+    // sits beside the dirt: the capture has `git add -A` semantics, so
+    // it must stay out of the capture and be named by ignoredPaths,
+    // which is how the transplant dialog says what a teardown takes.
     writeFileSync(join(worktreePath, "dirty.txt"), "uncommitted work\n");
+    writeFileSync(join(worktreePath, ".gitignore"), "secret.env\n");
+    writeFileSync(join(worktreePath, "secret.env"), "FIXTURE_ONLY=1\n");
     const capture = await sync.captureDirty({
       projectId: sourceProjectId,
       worktreeId,
@@ -307,7 +313,23 @@ async function main() {
     assert.equal(capture.captured, true, "capture reported clean");
     const captureTip = await gitOut(sourceRepo, "rev-parse", dirtyRef);
     assert.equal(capture.commit, captureTip);
-    ok("captureDirty over the wire snapshots the worktree to its capture ref");
+    const captured = await gitOut(
+      sourceRepo,
+      "ls-tree",
+      "-r",
+      "--name-only",
+      captureTip,
+    );
+    assert.ok(captured.includes("dirty.txt"), "the dirt is captured");
+    assert.ok(!captured.includes("secret.env"), "the ignored file is not");
+    const ignored = await sync.ignoredPaths({
+      projectId: sourceProjectId,
+      worktreeId,
+    });
+    assert.deepEqual(ignored, { paths: ["secret.env"], total: 1 });
+    ok(
+      "captureDirty over the wire snapshots the worktree to its capture ref, and ignoredPaths names the file it leaves out",
+    );
 
     // (3) The full transfer: branch + capture ref, thinned by the
     // receiver's base tip, >= 3 chunks, exact tips, allowed namespaces

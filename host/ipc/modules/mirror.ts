@@ -41,60 +41,28 @@ import {
   readGitState,
   watchIndexFile,
 } from "@host/mirror/gitState";
+import {
+  engine,
+  MIRROR_LABEL_LOCAL_PROJECT,
+  MIRROR_LABEL_LOCAL_WORKTREE,
+  type MirrorSessionRaw,
+} from "@host/mirror/registry";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
 import { runPullWorktree } from "./sync";
 
-// The label keys the start orchestration writes on a session, lifted
-// back out for the renderer by annotate below. Labels are the one
-// free-form slot Mutagen persists with a session, so they survive a
-// daemon restart without any bookkeeping of our own. Ids only: the
-// engine refuses label values outside its alphabet, and the branch is
-// the local worktree's to report.
-export const MIRROR_LABEL_LOCAL_PROJECT = "localProjectId";
-export const MIRROR_LABEL_LOCAL_WORKTREE = "localWorktreeId";
-
-// What the daemon reports for one session, before annotation: the
-// daemon's own document shape (file-sync/engine.go mirrorSessionState).
-export type MirrorSessionRaw = Omit<
-  MirrorSession,
-  "localProjectId" | "localWorktreeId"
->;
-
-// The create request the daemon takes (file-sync/engine.go
-// mirrorRequest, the create fields).
-export type MirrorCreateInput = {
-  localRoot: string;
-  deviceId: string;
-  projectId: string;
-  worktreeId: string;
-  remoteRoot: string;
-  name: string;
-  labels: Record<string, string>;
-};
-
-export type MirrorImpl = {
-  status: () => "stopped" | "starting" | "running" | "unavailable";
-  sessions: () => MirrorSessionRaw[];
-  create: (input: MirrorCreateInput) => Promise<string>;
-  terminate: (session: string) => Promise<unknown>;
-  pause: (session: string) => Promise<unknown>;
-  resume: (session: string) => Promise<unknown>;
-  // The git follower's verdict for a session (host/mirror/gitFollow.ts).
-  gitStatus: (session: string) => MirrorGitStatus | undefined;
-};
-
-let impl: MirrorImpl | null = null;
-
-export function setMirrorImpl(next: MirrorImpl): void {
-  impl = next;
-}
-
-function engine(): MirrorImpl {
-  if (impl === null) {
-    throw new Error("mirror handler invoked before the daemon was wired");
-  }
-  return impl;
-}
+// The daemon slot, the session labels and the raw session shapes live
+// in host/mirror/registry.ts, where the worktree delete can reach them
+// without importing this module (which reaches sync, which reaches
+// worktrees). Re-exported so the daemon and the follower keep one
+// import path.
+export {
+  MIRROR_LABEL_LOCAL_PROJECT,
+  MIRROR_LABEL_LOCAL_WORKTREE,
+  setMirrorImpl,
+  type MirrorCreateInput,
+  type MirrorImpl,
+  type MirrorSessionRaw,
+} from "@host/mirror/registry";
 
 // The mirror streams this host currently serves, keyed by the calling
 // device and the channel id it minted (unique per connection, so the

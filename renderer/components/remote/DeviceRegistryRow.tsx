@@ -94,6 +94,13 @@ export function DeviceRegistryRow({
   // name itself.
   const [renaming, setRenaming] = useState(false);
   const traits = deviceTraits(device.platform);
+  // What to CALL the machine where the name alone cannot pick it out:
+  // the same id fragment the header shows joins it, so the Remove
+  // button a screen reader announces and the confirm sentence name one
+  // machine rather than two identical ones.
+  const namedDevice = showId
+    ? `${name} ${abbreviateId(device.deviceId)}`
+    : name;
   // A peer that is up and has ANSWERED "no" is read-only from here.
   // Nothing is said while the verdict is in flight, when the preflight
   // itself failed (that is transport, not the peer's switch), when the
@@ -194,7 +201,7 @@ export function DeviceRegistryRow({
                   variant="ghost-destructive"
                   size="xs"
                   className="text-muted-foreground"
-                  aria-label={`Remove ${name} from account`}
+                  aria-label={`Remove ${namedDevice} from account`}
                   onClick={() => revoke.trigger(onRevokeDevice)}
                 >
                   <Trash2 />
@@ -227,7 +234,7 @@ export function DeviceRegistryRow({
           <AlertTriangle aria-hidden className="size-4 shrink-0" />
           <p className="min-w-0 flex-1 basis-64">
             <span className="font-medium">
-              Remove {name} from your account?
+              Remove {namedDevice} from your account?
             </span>{" "}
             It loses access the moment it next connects, and its projects
             disappear from your sidebar. Worktrees and files on the machine

@@ -47,7 +47,9 @@ export function useAllProjectShigomoriConfigs(projects: Project[]) {
       refetchOnWindowFocus: false,
       refetchOnMount: false,
       // An unreadable project.json would otherwise toast once per
-      // project. The Configure page reports it when opened.
+      // project. The Configure page reports it when opened: a failed
+      // read there is a panel with the reason and a retry, in place of
+      // the form it would otherwise seed from nothing.
       meta: { silentError: true },
     })),
     combine: combineFanOut,

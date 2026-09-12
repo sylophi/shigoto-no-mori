@@ -1,9 +1,12 @@
-// Step 1 of the transplant: what travels and where it lands. The
-// source half reads the remote device the page is scoped to (its diff,
-// its PR). The destination half re-pins to this machine (LocalHostScope),
-// because carry-over and the folder come from the LOCAL project's
-// config, not the source's.
+// Step 1 of the transplant: what travels, what stays, and where it
+// lands. The source half reads the remote device the page is scoped
+// to (its diff, its PR, its ignored files). The destination half
+// re-pins to this machine (LocalHostScope), because carry-over and the
+// folder come from the LOCAL project's config, not the source's, and
+// so does the pre-flight: a branch this device already holds fails the
+// pull at step 2, so the review says so here and keeps Start off.
 import {
+  AlertTriangle,
   ArrowDown,
   ArrowRight,
   ArrowUp,
@@ -11,7 +14,9 @@ import {
   Laptop,
   Monitor,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import type { Project, Worktree } from "@shared/schemas";
+import { pullBranchCollision } from "@shared/pullCollision";
 import { worktreeBaseFor } from "@shared/worktreeLayout";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip-button";
@@ -23,12 +28,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusDot } from "@/components/ui/status-dot";
 import { changeEntries } from "@/components/diff/patchFiles";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
+import { useBranches } from "@/hooks/git/useBranches";
 import { worktreeIncludeExtras } from "@/hooks/projects/carryOverPaths";
 import { useWorktreeIncludeStatus } from "@/hooks/projects/useWorktreeIncludeStatus";
 import { LocalHostScope, useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
+import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
+import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import { tildify } from "@/lib/projectPaths";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
@@ -36,6 +44,32 @@ import { cn } from "@/lib/utils";
 import { NoteBox, TransplantBody, TransplantFooter } from "./TransplantChrome";
 
 const MAX_ROWS = 8;
+
+// The review's three file lists (changed, staying behind, carry-over)
+// share one card: a bordered monospace list showing the first MAX_ROWS
+// entries and counting the rest.
+const CARD = "rounded-lg border border-border bg-card p-3";
+const CARD_NOTE = `${CARD} text-xs text-muted-foreground`;
+
+function CardList({ total, children }: { total: number; children: ReactNode }) {
+  return (
+    <ul className={`${CARD} space-y-1 font-mono text-xs`}>
+      {children}
+      {total > MAX_ROWS && (
+        <li className="text-muted-foreground">and {total - MAX_ROWS} more</li>
+      )}
+    </ul>
+  );
+}
+
+function CardSkeleton({ rows = 1 }: { rows?: 1 | 2 }) {
+  return (
+    <div className={`${CARD} space-y-1.5`}>
+      {rows === 2 && <Skeleton className="h-3.5 w-3/4" />}
+      <Skeleton className="h-3.5 w-1/2" />
+    </div>
+  );
+}
 
 export function TransplantReview({
   worktree,
@@ -85,6 +119,13 @@ export function TransplantReview({
               )}
             </section>
 
+            <StaysBehind
+              worktree={worktree}
+              project={project}
+              localProject={localProject}
+              sourceDeviceLabel={sourceDeviceLabel}
+            />
+
             <LocalHostScope>
               <CarryOverList
                 localProject={localProject}
@@ -98,30 +139,11 @@ export function TransplantReview({
               <section className="space-y-2">
                 <SectionHeading>Destination</SectionHeading>
                 <ul className="space-y-1.5">
-                  <li className="flex items-center gap-2.5 rounded-lg bg-accent px-3 py-2.5 text-sm text-accent-foreground">
-                    <span
-                      aria-hidden
-                      className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
-                    >
-                      <Check className="size-2.5" />
-                    </span>
-                    <Laptop
-                      aria-hidden
-                      className="size-4 shrink-0 opacity-70"
-                    />
-                    <span className="min-w-0 flex-1 leading-tight">
-                      <span className="block truncate font-medium">
-                        {thisDeviceLabel}
-                      </span>
-                      <span className="block truncate text-[11px] opacity-70">
-                        has {localProject.name}
-                      </span>
-                    </span>
-                    <StatusDot
-                      tone="emerald"
-                      label={<span className="text-xs">this device</span>}
-                    />
-                  </li>
+                  <DestinationRow
+                    worktree={worktree}
+                    localProject={localProject}
+                    thisDeviceLabel={thisDeviceLabel}
+                  />
                   <li className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
                     <span
                       aria-hidden
@@ -161,18 +183,120 @@ export function TransplantReview({
         </div>
       </TransplantBody>
 
-      <TransplantFooter
-        note={`Nothing on ${sourceDeviceLabel} is deleted until you say so at the last step.`}
-      >
-        <Button variant="ghost" size="sm" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button size="sm" onClick={onStart}>
-          Start transplant
-          <ArrowRight />
-        </Button>
-      </TransplantFooter>
+      <LocalHostScope>
+        <ReviewFooter
+          worktree={worktree}
+          localProject={localProject}
+          sourceDeviceLabel={sourceDeviceLabel}
+          onCancel={onCancel}
+          onStart={onStart}
+        />
+      </LocalHostScope>
     </>
+  );
+}
+
+// Where the pull would refuse at step 2 (host/ipc/modules/sync.ts
+// runPullWorktree): this device already has the branch, checked out
+// in a worktree or merely existing. Read under LocalHostScope. Both
+// lists are the ordinary cached ones, so the row and the footer
+// asking the same question cost one read between them.
+function useLocalCollision(
+  localProject: Project,
+  branch: string,
+): { held: boolean; holder: Worktree | undefined } {
+  const { data: branches } = useBranches(localProject.id);
+  const { data: worktrees } = useWorktrees(localProject.id);
+  const held = branches?.local.includes(branch) ?? false;
+  const holder = held
+    ? worktrees?.find((entry) => entry.branch === branch)
+    : undefined;
+  return { held, holder };
+}
+
+function DestinationRow({
+  worktree,
+  localProject,
+  thisDeviceLabel,
+}: {
+  worktree: Worktree;
+  localProject: Project;
+  thisDeviceLabel: string;
+}) {
+  const { held, holder } = useLocalCollision(localProject, worktree.branch);
+  return (
+    <li
+      className={cn(
+        "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm",
+        held
+          ? "bg-amber-500/10 text-foreground"
+          : "bg-accent text-accent-foreground",
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          "flex size-4 shrink-0 items-center justify-center rounded-full",
+          held
+            ? "bg-amber-500 text-background"
+            : "bg-primary text-primary-foreground",
+        )}
+      >
+        {held ? (
+          <AlertTriangle className="size-2.5" />
+        ) : (
+          <Check className="size-2.5" />
+        )}
+      </span>
+      <Laptop aria-hidden className="size-4 shrink-0 opacity-70" />
+      <span className="min-w-0 flex-1 leading-tight">
+        <span className="block truncate font-medium">{thisDeviceLabel}</span>
+        <span className="block truncate text-[11px] opacity-70">
+          {held
+            ? holder === undefined
+              ? `already has ${worktree.branch}`
+              : `already has ${worktree.branch} in ${holder.name}`
+            : `has ${localProject.name}`}
+        </span>
+      </span>
+      <StatusDot
+        tone={held ? "amber" : "emerald"}
+        label={<span className="text-xs">this device</span>}
+      />
+    </li>
+  );
+}
+
+function ReviewFooter({
+  worktree,
+  localProject,
+  sourceDeviceLabel,
+  onCancel,
+  onStart,
+}: {
+  worktree: Worktree;
+  localProject: Project;
+  sourceDeviceLabel: string;
+  onCancel: () => void;
+  onStart: () => void;
+}) {
+  const { held, holder } = useLocalCollision(localProject, worktree.branch);
+  return (
+    <TransplantFooter
+      note={
+        held
+          ? pullBranchCollision(worktree.branch, holder?.path)
+          : `Nothing on ${sourceDeviceLabel} is deleted until you say so at the last step.`
+      }
+    >
+      <Button variant="ghost" size="sm" onClick={onCancel}>
+        Cancel
+      </Button>
+      <Button size="sm" onClick={onStart} disabled={held}>
+        Start transplant
+        <ArrowRight />
+      </Button>
+    </TransplantFooter>
   );
 }
 
@@ -188,6 +312,10 @@ function SourceCard({
   const { deviceId } = useHostScope();
   const device = useRemoteDevice(deviceId);
   const status = device ? deviceStatusView(device.status) : null;
+  // The card sits in the source device's scope, so this is the PEER's
+  // home, and a transplant already holds the grant that read needs.
+  // Refused or not yet answered, the path shows as it is.
+  const { data: runtime } = useRuntimeInfo();
   const { data: pr, isPending: prPending } = useWorktreePullRequest(
     project.id,
     worktree.branch,
@@ -221,8 +349,7 @@ function SourceCard({
         </p>
         <PathSpan
           path={worktree.path}
-          // A peer's home is unknown here, so the path shows as it is.
-          home={null}
+          home={runtime?.homedir ?? null}
           className="min-w-0 truncate font-mono text-xs text-muted-foreground"
         />
         <div className="flex flex-wrap gap-1.5">
@@ -266,33 +393,21 @@ function ChangedFiles({
   } = useWorktreeChanges(project.id, worktree.id, {
     refetchOnWindowFocus: false,
   });
-  if (isPending) {
-    return (
-      <div className="space-y-1.5 rounded-lg border border-border bg-card p-3">
-        <Skeleton className="h-3.5 w-3/4" />
-        <Skeleton className="h-3.5 w-1/2" />
-      </div>
-    );
-  }
+  if (isPending) return <CardSkeleton rows={2} />;
   if (isError) {
     return (
-      <p className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
+      <p className={CARD_NOTE}>
         The diff could not be read right now. The changes travel all the same.
       </p>
     );
   }
   const files = changeEntries(changed ?? []);
   if (files.length === 0) {
-    return (
-      <p className="rounded-lg border border-border bg-card p-3 text-xs text-muted-foreground">
-        No uncommitted changes to list.
-      </p>
-    );
+    return <p className={CARD_NOTE}>No uncommitted changes to list.</p>;
   }
-  const shown = files.slice(0, MAX_ROWS);
   return (
-    <ul className="space-y-1 rounded-lg border border-border bg-card p-3 font-mono text-xs">
-      {shown.map((entry) => {
+    <CardList total={files.length}>
+      {files.slice(0, MAX_ROWS).map((entry) => {
         const { mark, stats } = entry;
         return (
           <li key={entry.key} className="flex items-center gap-2">
@@ -314,12 +429,65 @@ function ChangedFiles({
           </li>
         );
       })}
-      {files.length > shown.length && (
-        <li className="text-muted-foreground">
-          and {files.length - shown.length} more
-        </li>
+    </CardList>
+  );
+}
+
+// What a transfer leaves on the source: its ignored files. The capture
+// has `git add -A` semantics (cli/cmd_dirty.go), so an .env or a build
+// folder never crosses, and a teardown at the last step removes it
+// with the source. Said here, where the user still decides, because
+// nothing in the pull can refuse over it: near every real worktree
+// carries ignored content. Under the source scope by the caller.
+function StaysBehind({
+  worktree,
+  project,
+  localProject,
+  sourceDeviceLabel,
+}: {
+  worktree: Worktree;
+  project: Project;
+  localProject: Project;
+  sourceDeviceLabel: string;
+}) {
+  const {
+    data: ignored,
+    isPending,
+    isError,
+  } = useWorktreeIgnoredPaths(project.id, worktree.id);
+  return (
+    <section className="space-y-2">
+      <SectionHeading>
+        Stays behind
+        <span className="ml-1.5 font-normal tracking-normal normal-case">
+          (ignored files never travel)
+        </span>
+      </SectionHeading>
+      {isPending ? (
+        <CardSkeleton />
+      ) : isError ? (
+        <p className={CARD_NOTE}>
+          The ignored files there could not be listed. Anything gitignored stays
+          on {sourceDeviceLabel}.
+        </p>
+      ) : ignored.total === 0 ? (
+        <p className="text-xs text-muted-foreground">No ignored files there.</p>
+      ) : (
+        <>
+          <CardList total={ignored.total}>
+            {ignored.paths.slice(0, MAX_ROWS).map((path) => (
+              <li key={path} className="min-w-0 truncate" title={path}>
+                {path}
+              </li>
+            ))}
+          </CardList>
+          <p className="text-xs text-muted-foreground">
+            Carry-over below recreates what {localProject.name} is configured
+            for. A teardown at the last step removes the rest with the source.
+          </p>
+        </>
       )}
-    </ul>
+    </section>
   );
 }
 
@@ -347,7 +515,6 @@ function CarryOverList({
     ...manual.map((e) => ({ path: e.path, tag: e.mode })),
     ...included.map((path) => ({ path, tag: "include" })),
   ];
-  const shown = rows.slice(0, MAX_ROWS);
   return (
     <section className="space-y-2">
       <SectionHeading>
@@ -357,14 +524,12 @@ function CarryOverList({
         </span>
       </SectionHeading>
       {isPending ? (
-        <div className="space-y-1.5 rounded-lg border border-border bg-card p-3">
-          <Skeleton className="h-3.5 w-1/2" />
-        </div>
+        <CardSkeleton />
       ) : rows.length === 0 ? (
         <p className="text-xs text-muted-foreground">None configured.</p>
       ) : (
-        <ul className="space-y-1 rounded-lg border border-border bg-card p-3 font-mono text-xs">
-          {shown.map((row) => (
+        <CardList total={rows.length}>
+          {rows.slice(0, MAX_ROWS).map((row) => (
             <li key={row.path} className="flex items-center gap-2">
               <Check
                 aria-hidden
@@ -376,12 +541,7 @@ function CarryOverList({
               <RowTag>{row.tag}</RowTag>
             </li>
           ))}
-          {rows.length > shown.length && (
-            <li className="text-muted-foreground">
-              and {rows.length - shown.length} more
-            </li>
-          )}
-        </ul>
+        </CardList>
       )}
     </section>
   );

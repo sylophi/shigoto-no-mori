@@ -580,23 +580,36 @@ type branchRefScan struct {
 	locals     []string // ref order, for resolveDefaultBranch's fallback
 	localSet   map[string]bool
 	remoteRefs map[string]bool
+	// refs/remotes/<remote>/HEAD symrefs, by remote, resolved to their
+	// fully qualified targets. Read off the same for-each-ref as the
+	// rest, so the remote-HEAD fallback costs no spawn of its own.
+	remoteHeads map[string]string
 }
 
 func scanBranchRefs(projectPath string) (branchRefScan, error) {
-	stdout, err := runGit(projectPath, "for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes")
+	stdout, err := runGit(projectPath, "for-each-ref", "--format=%(refname) %(symref)", "refs/heads", "refs/remotes")
 	if err != nil {
 		return branchRefScan{}, err
 	}
-	scan := branchRefScan{localSet: map[string]bool{}, remoteRefs: map[string]bool{}}
+	scan := branchRefScan{localSet: map[string]bool{}, remoteRefs: map[string]bool{}, remoteHeads: map[string]string{}}
 	for _, line := range strings.Split(stdout, "\n") {
-		ref := strings.TrimSpace(line)
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		ref := fields[0]
 		switch {
 		case strings.HasPrefix(ref, "refs/heads/"):
 			name := strings.TrimPrefix(ref, "refs/heads/")
 			scan.locals = append(scan.locals, name)
 			scan.localSet[name] = true
 		case strings.HasPrefix(ref, "refs/remotes/"):
-			scan.remoteRefs[strings.TrimPrefix(ref, "refs/remotes/")] = true
+			short := strings.TrimPrefix(ref, "refs/remotes/")
+			if remote, ok := strings.CutSuffix(short, "/HEAD"); ok && len(fields) > 1 {
+				scan.remoteHeads[remote] = fields[1]
+				continue
+			}
+			scan.remoteRefs[short] = true
 		}
 	}
 	return scan, nil
@@ -626,11 +639,23 @@ func orderRemotesByPrecedence(remotes []string) []string {
 	return append(ordered, rest...)
 }
 
-// Precedence shared with shared/defaultBranch.mts: a valid override
-// wins, then each candidate remote-first in identity's remote
-// precedence order. Fully qualified so a tag sharing a branch's name
-// can't shadow it, and WITHOUT the first-local-branch fallback: ""
-// means no default ref.
+// The branch refs/remotes/<remote>/HEAD points at, fully qualified, or
+// "" when the remote has no HEAD symref or it dangles (the scan holds
+// only refs that exist, so a symref to a deleted branch has no
+// target there). Mirrors remoteHeadTarget in shared/defaultBranch.mts.
+func remoteHeadTarget(scan branchRefScan, remote string) string {
+	target := scan.remoteHeads[remote]
+	if short, ok := strings.CutPrefix(target, "refs/remotes/"); !ok || !scan.remoteRefs[short] {
+		return ""
+	}
+	return target
+}
+
+// Precedence shared with shared/defaultBranch.mts (the rationale lives
+// there): a valid override wins, then each candidate remote-first in
+// identity's remote precedence order, and last the remote's own HEAD.
+// Fully qualified so a tag sharing a branch's name can't shadow it,
+// WITHOUT the first-local-branch fallback, and "" means no default ref.
 func pickDefaultRef(scan branchRefScan, override string, remotes []string) string {
 	if trimmed := strings.TrimSpace(override); trimmed != "" {
 		if scan.localSet[trimmed] {
@@ -650,6 +675,11 @@ func pickDefaultRef(scan branchRefScan, override string, remotes []string) strin
 		}
 		if scan.localSet[candidate] {
 			return "refs/heads/" + candidate
+		}
+	}
+	for _, remote := range orderedRemotes {
+		if target := remoteHeadTarget(scan, remote); target != "" {
+			return target
 		}
 	}
 	return ""

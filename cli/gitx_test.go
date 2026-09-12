@@ -80,3 +80,42 @@ func TestGitWorktreeCheckoutAttachesHead(t *testing.T) {
 		}
 	}
 }
+
+// The remote's HEAD symref is the LAST default-ref candidate: it
+// rescues a repo whose trunk is named none of main/master/dev, without
+// moving the merge target of a repo that also carries one of those.
+func TestResolveDefaultBranchFallsBackToRemoteHead(t *testing.T) {
+	parent := t.TempDir()
+	deterministicGitEnv(t)
+	upstream := filepath.Join(parent, "upstream")
+	runGitT(t, parent, "init", "-q", "-b", "trunk", upstream)
+	runGitT(t, upstream, "commit", "-q", "--allow-empty", "-m", "trunk-root")
+	clone := filepath.Join(parent, "clone")
+	runGitT(t, parent, "clone", "-q", upstream, clone)
+
+	// No named candidate exists, so origin/HEAD answers, resolved to the
+	// branch it points at rather than left as the symref's own name.
+	if got := resolveDefaultBranch(clone, ""); got != "origin/trunk" {
+		t.Errorf("remote-HEAD fallback = %q, want %q", got, "origin/trunk")
+	}
+
+	// A local main, even one nobody merges into any more, still wins:
+	// this resolver picks merge targets too, and those must not move
+	// under repos that already had an answer.
+	runGitT(t, clone, "branch", "main")
+	if got := resolveDefaultBranch(clone, ""); got != "main" {
+		t.Errorf("with a local main = %q, want %q", got, "main")
+	}
+	runGitT(t, clone, "branch", "-D", "main")
+
+	// A symref pointing at a branch the remote has since dropped is no
+	// candidate at all, so identity gets "" rather than a broken ref.
+	runGitT(t, clone, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/gone")
+	ref, err := resolveDefaultRef(clone, "")
+	if err != nil {
+		t.Fatalf("resolveDefaultRef: %v", err)
+	}
+	if ref != "" {
+		t.Errorf("dangling origin/HEAD = %q, want no default ref", ref)
+	}
+}

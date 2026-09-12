@@ -143,6 +143,19 @@ export function registerProjects(profile: DevProfile, dir: string): void {
   });
 }
 
+// Removes a tree a killed Electron may still be writing into. A wipe
+// usually follows a kill, and a Chromium helper that has not noticed
+// yet can write into userData while the walk is partway through it,
+// which surfaces as ENOTEMPTY. Retrying rides that out.
+export function rmTree(target: string): void {
+  rmSync(target, {
+    recursive: true,
+    force: true,
+    maxRetries: 10,
+    retryDelay: 100,
+  });
+}
+
 // Wipes the profile's folder and userData. Local only: a device the
 // profile enrolled stays on the hub (and keeps its tunnel) until it is
 // revoked, so revoking is the tidy way to end a profile, and this is
@@ -154,9 +167,7 @@ export function wipeDevProfile(profile: DevProfile): void {
         "hub. Revoke it from another device's Devices page if it lingers.",
     );
   }
-  for (const target of [profile.dir, profile.userData]) {
-    rmSync(target, { recursive: true, force: true });
-  }
+  for (const target of [profile.dir, profile.userData]) rmTree(target);
   console.log(`[dev-profile] wiped ${profile.name}`);
 }
 

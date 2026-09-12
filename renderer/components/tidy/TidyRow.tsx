@@ -3,6 +3,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RowStatusBadge, type RowStatus } from "@/components/ui/row-status";
 import { RowTag } from "@/components/ui/row-tag";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useNow } from "@/hooks/ui/useNow";
 import { formatBytes } from "@/lib/formatBytes";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
@@ -41,6 +42,7 @@ export function TidyRow({
     ageAt,
     lastActivityAt,
   } = entry;
+  const now = useNow();
   const interactive = !disabled && status.kind !== "done";
   const ageTitle =
     ageAt !== null
@@ -90,7 +92,7 @@ export function TidyRow({
           <span aria-hidden>·</span>
           <span className="shrink-0" title={ageTitle}>
             {ageAt !== null
-              ? `committed ${formatRelativeTime(ageAt)}`
+              ? `committed ${formatRelativeTime(ageAt, now)}`
               : "no commits"}
           </span>
           {editedSince !== null && (
@@ -100,7 +102,7 @@ export function TidyRow({
                 className="shrink-0"
                 title={`Files changed ${new Date(editedSince).toLocaleString()}`}
               >
-                edited {formatRelativeTime(editedSince)}
+                edited {formatRelativeTime(editedSince, now)}
               </span>
             </>
           )}

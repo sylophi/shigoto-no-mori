@@ -17,13 +17,7 @@
 // covered: on one machine the LAN candidate wins.
 import assert from "node:assert/strict";
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  openSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, openSync, writeFileSync } from "node:fs";
 import { connect, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -44,6 +38,7 @@ import {
   devProfilePaths,
   PROFILES_DIR,
   registerProjects,
+  rmTree,
   wipeDevProfile,
   type DevProfile,
 } from "../lib/devProfile.mts";
@@ -82,7 +77,7 @@ function prepareFixture(): Fixture {
   buildDevCli();
 
   const origin = join(PROFILES_DIR, "e2e-origin.git");
-  rmSync(origin, { recursive: true, force: true });
+  rmTree(origin);
   const seed = join(runDir, "seed");
   mkdirSync(seed, { recursive: true });
   git(seed, "init", "-q", "-b", "main");
@@ -578,9 +573,22 @@ async function main(): Promise<string[]> {
       await Promise.race([Promise.all(trees.map(exited)), grace]);
       clearTimeout(graceTimer);
       await killTrees(trees, "SIGKILL");
-      wipeDevProfile(fixture.a);
-      wipeDevProfile(fixture.b);
-      rmSync(fixture.origin, { recursive: true, force: true });
+      // Each wipe stands on its own, and none of them may decide the
+      // run: a throw out of this finally would skip the report, so a
+      // scenario summary this run spent minutes earning would be lost
+      // to a stray file left behind. What is left over is named in the
+      // log, and the next run wipes the profiles again before it seeds.
+      for (const [what, wipe] of [
+        [fixture.a.name, () => wipeDevProfile(fixture.a)],
+        [fixture.b.name, () => wipeDevProfile(fixture.b)],
+        ["the shared origin", () => rmTree(fixture.origin)],
+      ] as const) {
+        try {
+          wipe();
+        } catch (error) {
+          log(`cleanup: couldn't remove ${what}: ${errorMessageOf(error)}`);
+        }
+      }
     }
   }
   return failures;

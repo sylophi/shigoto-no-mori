@@ -12,6 +12,7 @@ import {
   type SyncPullProgress,
   type SyncPullWorktreePayloadSchema,
   SyncRefTipsResultSchema,
+  SYNC_IGNORED_PATHS_LIMIT,
   type SyncTeardownSourcePayloadSchema,
   type SyncTeardownSourceResult,
   syncContract,
@@ -20,6 +21,7 @@ import {
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { errorMessageOf } from "@shared/errors";
+import { pullBranchCollision } from "@shared/pullCollision";
 import { DeleteWorktreeResultSchema } from "@shared/schemas";
 import {
   bundleCreateViaCli,
@@ -31,7 +33,7 @@ import {
 import { peerSyncApiFor, peerWorktreesApiFor } from "@host/ipc/peerSync";
 import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
 import { createIdleRegistry } from "@host/lib/idleRegistry";
-import { listBranches } from "@host/lib/git/branches";
+import { listBranches, listIgnoredPaths } from "@host/lib/git/branches";
 import { listWorktreeIdentities } from "@host/lib/git/worktrees";
 import {
   deleteRef,
@@ -42,6 +44,7 @@ import {
   updateRef,
 } from "@host/lib/git/refs";
 import {
+  findProjectAndWorktreeOrThrow,
   findProjectByIdentityOrThrow,
   findProjectOrThrow,
 } from "@host/lib/projects";
@@ -211,6 +214,21 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
     return dirtyCaptureViaCli(project, worktreeId);
   },
 
+  // The ignored files a capture leaves behind (see the contract note):
+  // listed against the worktree, not the project, so a peer's
+  // transplant dialog can name what a teardown would take with it.
+  ignoredPaths: async ({ projectId, worktreeId }) => {
+    const { worktree } = await findProjectAndWorktreeOrThrow(
+      projectId,
+      worktreeId,
+    );
+    const paths = await listIgnoredPaths(worktree.path);
+    return {
+      paths: paths.slice(0, SYNC_IGNORED_PATHS_LIMIT),
+      total: paths.length,
+    };
+  },
+
   bundleStart: async ({ projectId, refs, haves }) => {
     const project = findProjectOrThrow(projectId);
     // refs/haves passed the contract's fail-closed allowlist schemas
@@ -347,11 +365,16 @@ async function sourceChangedSince(
   }
 }
 
-// The source teardown. It runs ONLY when nothing can be lost: an unapplied
-// capture means the uncommitted work still exists solely on the
-// source, so the source is kept and the caller learns why via
-// sourceError. Teardown failures never throw either -- by then the
-// pull succeeded and the worktree simply exists on both sides. An
+// The source teardown. It runs ONLY when nothing the capture describes
+// can be lost: an unapplied capture means the uncommitted work still
+// exists solely on the source, so the source is kept and the caller
+// learns why via sourceError. Ignored files are outside what a capture
+// describes and die with the source either way, forced or not: git's
+// own pre-removal check refuses untracked and modified files, never
+// ignored ones. Deliberately not a refusal here (the ignoredPaths note
+// in the contract says why). The dialog lists them before the choice.
+// Teardown failures never throw either -- by then the pull succeeded
+// and the worktree simply exists on both sides. An
 // external (adopted) source worktree keeps its local branch after
 // teardown because sm rm skips branch deletion for externals
 // (cli/gitx.go deleteBranchAfterWorktreeRemoval), so the branch then
@@ -451,11 +474,7 @@ export async function runPullWorktree(
     const holder = (
       await listWorktreeIdentities(project.id, project.path)
     ).find((w) => w.branch === branch);
-    throw new Error(
-      holder === undefined
-        ? `${branch} already exists on this device. Delete that branch first, or open it and pull normally.`
-        : `${branch} is already checked out at ${holder.path} on this device. Stop or delete that worktree first.`,
-    );
+    throw new Error(pullBranchCollision(branch, holder?.path));
   }
 
   const peer = peerSyncApiFor(sourceDeviceId);

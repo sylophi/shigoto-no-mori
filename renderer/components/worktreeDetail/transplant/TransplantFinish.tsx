@@ -21,6 +21,7 @@ import {
   useTeardownSource,
 } from "@/hooks/remote/useBringWorktreeHere";
 import { LocalHostScope } from "@/hooks/remote/useHostScope";
+import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import {
   CONFIRM_DESTRUCTIVE_MS,
@@ -28,6 +29,7 @@ import {
 } from "@/hooks/ui/useConfirmTwice";
 import { useSetShelved } from "@/hooks/worktrees/useWorktreeMutations";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { pluralize } from "@/lib/pluralize";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { TransplantBody, TransplantFooter } from "./TransplantChrome";
@@ -39,10 +41,16 @@ type SourceChoice = "keep" | "shelve" | "teardown";
 // a fallback, and shelving throws nothing away. With the changes
 // stranded on the source, keep is the default instead: hiding the only
 // copy of that work is not what "recommended" should mean.
+// The teardown card also counts the ignored files that die with the
+// source (the review step listed them): they never travelled, and
+// nothing in the teardown itself refuses over them, so this is the
+// last place the user hears it before the confirm.
 const CHOICES: {
   key: SourceChoice;
   title: string;
-  body: (source: string) => string;
+  // null: the ignored-files read has not landed or was refused, which
+  // is not the same as none.
+  body: (source: string, ignored: number | null) => string;
 }[] = [
   {
     key: "keep",
@@ -57,7 +65,14 @@ const CHOICES: {
   {
     key: "teardown",
     title: "Tear it down",
-    body: (source) => `Runs teardown and removes it from ${source} for good.`,
+    body: (source, ignored) =>
+      `Runs teardown and removes it from ${source} for good${
+        ignored === null
+          ? ", along with any ignored files that stayed there"
+          : ignored > 0
+            ? `, with ${pluralize(ignored, "ignored file")} that stayed there`
+            : ""
+      }.`,
   },
 ];
 
@@ -89,6 +104,10 @@ export function TransplantFinish({
 }) {
   const setShelved = useSetShelved();
   const teardown = useTeardownSource({ worktree, sourceProjectId: project.id });
+  // Cached from the review step. It is a fresh read only if the dialog
+  // was opened straight into this step.
+  const { data: ignored } = useWorktreeIgnoredPaths(project.id, worktree.id);
+  const ignoredCount = ignored?.total ?? null;
   const {
     armed,
     trigger,
@@ -230,7 +249,7 @@ export function TransplantFinish({
                     body={
                       off
                         ? "Off while the changes only exist there."
-                        : entry.body(sourceDeviceLabel)
+                        : entry.body(sourceDeviceLabel, ignoredCount)
                     }
                     tone={entry.key === "teardown" && !off ? "rose" : undefined}
                   />

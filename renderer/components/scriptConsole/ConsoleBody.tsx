@@ -102,13 +102,35 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
     term.loadAddon(fit);
     term.loadAddon(new WebLinksAddon((_event, uri) => openExternalUrl(uri)));
     term.open(host);
-    const dataSub = term.onData((data) => scriptRuns.write(runKey, data));
+    // Keystrokes reach the PTY only once the replay below has been
+    // parsed. Recorded output can hold terminal queries (the OSC 10/11/12
+    // colour queries, DA, DSR, XTWINOPS), which xterm answers through
+    // onData, and on a live interactive run reopened here that answer
+    // would go to the PTY as if it were typed: the program that asked
+    // has moved on, so its reply lands as input into whatever it is
+    // doing now. onData cannot tell a query reply from a keystroke, so
+    // the only way to hold the replies back is to hold everything back
+    // for the sub-second the replay takes to parse. Keystrokes typed in
+    // that window are dropped, which is the accepted price.
+    let replayed = false;
+    const dataSub = term.onData((data) => {
+      if (replayed) scriptRuns.write(runKey, data);
+    });
     const resizeSub = term.onResize(({ cols, rows }) =>
       scriptRuns.resize(runKey, cols, rows),
     );
     // Catch up on the run so far in one write, then follow the log. The
-    // two happen in the same tick, so nothing is missed or doubled.
-    term.write(scriptRuns.readOutput(runKey).join(""));
+    // two happen in the same tick, so nothing is missed or doubled, and
+    // live chunks queue behind the replay in xterm's write FIFO, so a
+    // query the program sends now is still answered once the gate opens.
+    const history = scriptRuns.readOutput(runKey).join("");
+    if (history) {
+      term.write(history, () => {
+        replayed = true;
+      });
+    } else {
+      replayed = true;
+    }
     const unsubscribeOutput = scriptRuns.subscribeOutput(runKey, (chunk) =>
       term.write(chunk),
     );

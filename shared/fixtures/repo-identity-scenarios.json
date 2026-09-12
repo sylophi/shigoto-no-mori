@@ -326,6 +326,28 @@
     "checks": [{ "dir": "trunk", "expected": null }]
   },
   {
+    "name": "a clone's remote HEAD names a non-candidate default branch",
+    "repos": [
+      {
+        "dir": "trunk-src",
+        "git": [
+          ["init", "-q", "-b", "trunk"],
+          ["commit", "-q", "--allow-empty", "-m", "trunk-head-root"]
+        ]
+      },
+      {
+        "dir": ".",
+        "git": [["clone", "-q", "{{root}}/trunk-src", "trunk-clone"]]
+      }
+    ],
+    "checks": [
+      {
+        "dir": "trunk-clone",
+        "expected": "root:b07033cb0d9f84ba4d66d409986374fa09a26fe8"
+      }
+    ]
+  },
+  {
     "name": "a remote sorting before origin cannot steal the default ref",
     "repos": [
       {

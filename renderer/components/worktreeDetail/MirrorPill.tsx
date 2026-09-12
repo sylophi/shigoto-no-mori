@@ -16,6 +16,7 @@ import type { MirrorSession, MirrorStatus } from "@shared/ipc/modules/mirror";
 import type { Worktree } from "@shared/schemas";
 import { Chip, ChipButton } from "@/components/ui/chip-button";
 import { type StatusTone, TONE_TEXT } from "@/components/ui/status-dot";
+import { MirrorConflictsChip } from "@/components/worktreeDetail/MirrorConflicts";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   useMirrorControls,
@@ -23,6 +24,7 @@ import {
 } from "@/hooks/remote/useMirrors";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { localDeviceId } from "@/lib/queryKeys";
+import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 
 const BUSY: ReadonlySet<MirrorStatus> = new Set([
@@ -35,6 +37,26 @@ const BUSY: ReadonlySet<MirrorStatus> = new Set([
   "saving",
 ]);
 
+// The engine's own description of a lifecycle state is written in its
+// own terms ("Connecting to beta"), which says nothing to someone
+// looking at two worktrees. The status code beside it is stable and
+// ours to phrase, so the states a working mirror passes through are
+// read from that instead. statusText stays for halts and errors,
+// where the engine's wording is the news.
+const STATUS_DETAIL: Partial<Record<MirrorStatus, string>> = {
+  disconnected: "Waiting for the other device",
+  "connecting-local": "Opening this device's copy",
+  "connecting-remote": "Connecting to the other device",
+  watching: "Watching for changes",
+  scanning: "Looking for changes",
+  "waiting-for-rescan": "Waiting to look again",
+  reconciling: "Working out what changed",
+  "staging-local": "Receiving files from the other device",
+  "staging-remote": "Sending files to the other device",
+  transitioning: "Applying changes",
+  saving: "Saving the mirror's state",
+};
+
 // One line of truth about a session, worst news first: a halt or a
 // stored error, then the git half's verdict, then conflicts, then
 // problems, then the ordinary lifecycle.
@@ -43,6 +65,9 @@ function describe(session: MirrorSession): {
   label: string;
   detail: string;
   spinning: boolean;
+  // Set only by the conflict branch, which is the one chip with a
+  // list behind it (MirrorConflicts.tsx).
+  showConflicts?: boolean;
 } {
   const problems =
     session.local.problems.length +
@@ -50,6 +75,7 @@ function describe(session: MirrorSession): {
     session.local.excludedProblems +
     session.remote.excludedProblems;
   const conflicts = session.conflicts.length + session.excludedConflicts;
+  const lifecycle = STATUS_DETAIL[session.status] ?? "";
   if (session.paused) {
     return {
       tone: "slate",
@@ -104,12 +130,10 @@ function describe(session: MirrorSession): {
   if (conflicts > 0) {
     return {
       tone: "amber",
-      label: `${conflicts} ${conflicts === 1 ? "conflict" : "conflicts"}`,
-      detail: session.conflicts
-        .map((c) => c.root)
-        .slice(0, 5)
-        .join("\n"),
+      label: pluralize(conflicts, "conflict"),
+      detail: "",
       spinning: false,
+      showConflicts: true,
     };
   }
   if (problems > 0) {
@@ -131,7 +155,7 @@ function describe(session: MirrorSession): {
     return {
       tone: "amber",
       label: "Mirror reconnecting",
-      detail: session.statusText,
+      detail: lifecycle,
       spinning: true,
     };
   }
@@ -142,7 +166,7 @@ function describe(session: MirrorSession): {
       detail:
         session.git?.status === "following"
           ? `git ${session.git.detail}`
-          : session.statusText,
+          : lifecycle,
       spinning: true,
     };
   }
@@ -276,13 +300,22 @@ function SessionLine({
   const view = describe(session);
   return (
     <>
-      <StatusChip
-        tone={view.tone}
-        icon={RefreshCw}
-        label={view.label}
-        title={view.detail || view.label}
-        spinning={view.spinning}
-      />
+      {view.showConflicts ? (
+        <MirrorConflictsChip
+          session={session}
+          tone={view.tone}
+          label={view.label}
+          canReveal={canControl}
+        />
+      ) : (
+        <StatusChip
+          tone={view.tone}
+          icon={RefreshCw}
+          label={view.label}
+          title={view.detail || view.label}
+          spinning={view.spinning}
+        />
+      )}
       <span className="text-muted-foreground">
         with <PeerName deviceId={session.deviceId} />
       </span>
