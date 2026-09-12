@@ -23,7 +23,11 @@ import {
   LocalHostScope,
   type HostApi,
 } from "@/hooks/remote/useHostScope";
-import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
+import {
+  useRemoteDevice,
+  useRemoteDevices,
+} from "@/hooks/remote/useRemoteDevices";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
@@ -241,24 +245,36 @@ export function DeviceTabPanel({
   // peer's scope, and its "this device" tab must not. Keyed per device
   // either way: a body seeds from the picked device's own answers, so
   // carrying state across would show one device's data under another's.
+  // The peer's last api survives a session blip so the body under it
+  // (a form and its unsaved edits) stays mounted, and the offline note
+  // moves above it. A peer never reached in this window has nothing to
+  // show and gets the note alone.
+  const kept = useLastGoodApi(useRemoteDevice(tab.deviceId));
   if (tab.isThisDevice) {
     return <LocalHostScope key={tab.deviceId}>{children}</LocalHostScope>;
   }
-  const note =
-    tab.api === undefined || tab.block === "offline"
-      ? `${tab.label} is offline, and ${subject} loads when it reconnects.`
-      : tab.block === "no-grant"
-        ? peerReadOnlyNote(tab.label)
-        : null;
-  if (note !== null || tab.api === undefined) {
+  const offline = tab.api === undefined || tab.block === "offline";
+  const note = offline
+    ? `${tab.label} is offline, and ${subject} loads when it reconnects.`
+    : tab.block === "no-grant"
+      ? peerReadOnlyNote(tab.label)
+      : null;
+  if (note !== null && (!offline || kept === undefined)) {
     return (
       <div className="p-6">
         <EmptyPanel>{note}</EmptyPanel>
       </div>
     );
   }
+  const api = tab.api ?? kept;
+  if (api === undefined) return null;
   return (
-    <HostScopeProvider key={tab.deviceId} deviceId={tab.deviceId} api={tab.api}>
+    <HostScopeProvider key={tab.deviceId} deviceId={tab.deviceId} api={api}>
+      {offline && (
+        <p className="border-b border-amber-500/30 bg-amber-500/10 px-6 py-2 text-xs text-amber-700 dark:text-amber-300">
+          {note} Showing the last state it sent.
+        </p>
+      )}
       {children}
     </HostScopeProvider>
   );

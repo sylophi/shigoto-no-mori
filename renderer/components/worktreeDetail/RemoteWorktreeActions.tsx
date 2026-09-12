@@ -1,9 +1,11 @@
 // The remote worktree detail's cross-device actions: pull a copy here
 // ("Bring here"), keep a live mirror of it here ("Mirror here"), or
 // move it here and tear down the source ("Transplant"). Text buttons,
-// since the footer has room to say what they do. Renders nothing unless the caller holds command access, the
-// branch is real, and a local project shares the repo identity (the
-// handler re-verifies that last one).
+// since the footer has room to say what they do. Renders nothing
+// unless the caller holds command access, the branch is real, and a
+// local project shares the repo identity (the handler re-verifies that
+// last one), except that a repo with no identity at all gets a line of
+// explanation instead of an empty footer.
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { type ReactNode, useState } from "react";
 import { ArrowDownToLine, Loader2, RefreshCw, Shovel } from "lucide-react";
@@ -31,12 +33,19 @@ export function RemoteWorktreeActions({
     !granted ||
     worktree.isPrimary ||
     worktree.detached ||
-    !isRealBranch(worktree.branch) ||
-    project.identity == null ||
-    localProject === undefined
+    !isRealBranch(worktree.branch)
   ) {
     return null;
   }
+  // A project git couldn't identify can never match a local one, so no
+  // button here will ever work. Say so: three controls disappearing
+  // without a word reads as a bug, and the cause (the repo, not the
+  // app) is fixable by the person looking at it.
+  if (project.identity == null) return <NoIdentityNote />;
+  // Identified, but nothing on this machine is the same repo. The
+  // buttons stay hidden: this one resolves by adding the project here,
+  // and the empty projects list already says that.
+  if (localProject === undefined) return null;
   return (
     <div className="flex items-center gap-1">
       <BringButton
@@ -58,6 +67,25 @@ export function RemoteWorktreeActions({
         localProject={localProject}
       />
     </div>
+  );
+}
+
+// Muted footer text, the shape the read-only note in the same footer
+// uses. It truncates on a narrow window, so the title repeats it. The
+// branch names spell out DEFAULT_BRANCH_CANDIDATES in
+// shared/defaultBranch.mts (the renderer bundle cannot import .mts),
+// so a change there changes this sentence.
+const NO_IDENTITY_NOTE =
+  "No shared identity for this repo (no common remote, and no main, master, dev or remote HEAD branch), so it can't be brought here, mirrored or transplanted.";
+
+function NoIdentityNote() {
+  return (
+    <span
+      className="min-w-0 truncate text-xs text-muted-foreground"
+      title={NO_IDENTITY_NOTE}
+    >
+      {NO_IDENTITY_NOTE}
+    </span>
   );
 }
 

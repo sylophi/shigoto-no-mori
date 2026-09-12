@@ -4,7 +4,12 @@
 // "account" prefix (no host sentinel, see queryKeys.ts) and the changed
 // broadcast invalidates the whole prefix at once.
 import { useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { AccountStatus } from "@shared/ipc/modules/account";
 import type { DeviceInfo } from "@shared/hub/protocol";
 import { queryKeys } from "@/lib/queryKeys";
@@ -33,18 +38,29 @@ export function useLocalDeviceName(): string {
   return account?.deviceName || "This device";
 }
 
-// The account's device registry from the device hub. Both call sites
-// render only under a signed-in guard, so a signed-out or unconfigured
-// app never mounts this and never hits the network (and the handler
-// returns [] in those states anyway).
+// The account's device registry from the device hub, as shared options
+// rather than a hook body alone: this cache entry is the renderer's ONE
+// copy of the list. The remote device sync rebuilds its store off the
+// very same entry (renderer/lib/remote/remoteDeviceSync.ts), so a
+// refetch here (a mount, a window focus, any invalidation) heals the
+// sidebar's badges and the device tabs too. A second copy alongside it
+// could only ever be corrected by this process's own account:changed
+// fan-out, which says nothing about a peer renaming itself or being
+// removed from the account elsewhere: the hub pushes neither.
+export const accountDevicesQueryOptions = queryOptions<DeviceInfo[]>({
+  queryKey: queryKeys.accountDevices(),
+  queryFn: () => window.api.account.listDevices(),
+  // The registry renders the failure inline (DeviceRegistry), so no
+  // toast on top.
+  meta: { silentError: true },
+});
+
+// Both of this hook's call sites render only under a signed-in guard,
+// so a signed-out or unconfigured app never mounts it and never hits
+// the network. The handler returns [] in those states anyway, which is
+// also all the device sync's own read of the entry can get.
 export function useAccountDevices() {
-  return useQuery<DeviceInfo[]>({
-    queryKey: queryKeys.accountDevices(),
-    queryFn: () => window.api.account.listDevices(),
-    // The registry renders the failure inline (DeviceRegistry), so no
-    // toast on top.
-    meta: { silentError: true },
-  });
+  return useQuery(accountDevicesQueryOptions);
 }
 
 // Re-read status and the device list whenever main fans out a change

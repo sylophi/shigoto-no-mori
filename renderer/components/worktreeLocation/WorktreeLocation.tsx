@@ -1,8 +1,9 @@
+import type { ReactNode } from "react";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
+import { LoadFailure } from "@/components/ui/load-failure";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
+import { useProjectConfigSeed } from "@/hooks/config/useProjectConfigSeed";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import type { Project } from "@shared/schemas";
 import { LocationForm } from "./LocationForm";
@@ -21,35 +22,41 @@ function LocationBody({ project }: { project: Project }) {
   const { data: runtime } = useRuntimeInfo();
   const { data: worktrees = [], isLoading: worktreesLoading } =
     useWorktrees(projectId);
-  const { data: config, isLoading: configLoading } =
-    useShigomoriConfig(projectId);
-  const { data: resolvedDefaultBranch, isLoading: branchLoading } =
-    useDefaultBranch(projectId);
+  const seed = useProjectConfigSeed(projectId);
+  if (seed.state === "failed") {
+    return (
+      <LocationPane>
+        <LoadFailure message={seed.message} onRetry={seed.retry} />
+      </LocationPane>
+    );
+  }
+  if (seed.state === "loading" || runtime === undefined || worktreesLoading) {
+    return (
+      <LocationPane>
+        <LocationSkeleton />
+      </LocationPane>
+    );
+  }
+  return (
+    <LocationPane>
+      <LocationForm
+        projectId={projectId}
+        projectPath={project.path}
+        dataDir={runtime.dataDir}
+        home={runtime.homedir}
+        worktrees={worktrees}
+        config={seed.config}
+        resolvedDefaultBranch={seed.resolvedDefaultBranch}
+      />
+    </LocationPane>
+  );
+}
 
-  const formReady =
-    !configLoading &&
-    !worktreesLoading &&
-    !branchLoading &&
-    !!runtime &&
-    !!resolvedDefaultBranch;
-
+// The one scroll box every state of the page renders into.
+function LocationPane({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-6">
-      <div className="flex max-w-3xl flex-col gap-6">
-        {!formReady ? (
-          <LocationSkeleton />
-        ) : (
-          <LocationForm
-            projectId={projectId}
-            projectPath={project.path}
-            dataDir={runtime.dataDir}
-            home={runtime.homedir}
-            worktrees={worktrees}
-            config={config ?? null}
-            resolvedDefaultBranch={resolvedDefaultBranch}
-          />
-        )}
-      </div>
+      <div className="flex max-w-3xl flex-col gap-6">{children}</div>
     </div>
   );
 }

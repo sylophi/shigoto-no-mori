@@ -69,9 +69,17 @@ export function startRemoteHostWatch(queryClient: QueryClient): void {
     // The peer's command-access switch moved: re-ask its preflight so
     // read-only notes and mutation controls follow without a focus.
     if (channel === COMMAND_ACCESS_CHANGED.channel) {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeysFor(deviceId).commandAccess(),
-      });
+      const keys = queryKeysFor(deviceId);
+      void queryClient.invalidateQueries({ queryKey: keys.commandAccess() });
+      // Runtime info is refused without a grant, caches forever, and
+      // sits outside the state-moved sweep, so a grant flipping on has
+      // to re-ask it here or the peer's paths stay raw until a focus.
+      // The broadcast says nothing about which way the switch went,
+      // and this read is silent, so re-asking on an off flip costs one
+      // refused round trip and no toast. The full session sweep is
+      // deliberately not used: it would refetch every grant-gated
+      // read, and on an off flip each of those would toast a refusal.
+      void queryClient.invalidateQueries({ queryKey: keys.runtimeInfo() });
       return;
     }
     // The peer's PR sweep moved one project's map: the githubCli domain

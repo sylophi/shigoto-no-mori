@@ -2,13 +2,12 @@
 // suitable for inline use ("12s ago", "3h ago"). Granularity is
 // deliberately low: seconds under a minute, then minutes, hours, days,
 // and past a fortnight weeks/months/years. A stale worktree reading
-// "8mo ago" says more at a glance than "247d ago".
+// "8mo ago" says more at a glance than "247d ago". `now` is required
+// rather than defaulted: a label built from Date.now() at render
+// freezes at that render, so callers take it from useNow, which ticks.
 const DAY = 86_400;
 
-export function formatRelativeTime(
-  ts: number,
-  now: number = Date.now(),
-): string {
+export function formatRelativeTime(ts: number, now: number): string {
   const sec = Math.max(0, Math.round((now - ts) / 1000));
   if (sec < 5) return "just now";
   if (sec < 60) return `${sec}s ago`;

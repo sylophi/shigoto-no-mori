@@ -15,6 +15,7 @@
 // rose an error would earn.
 import type { HubStatus, TunnelState } from "@shared/ipc/modules/hub";
 import type { DeviceInfo } from "@shared/hub/protocol";
+import { TUNNEL_PROBE_DEADLINE_FRESH_MS } from "@shared/remote/supervisor";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import {
   deviceStatusView,
@@ -47,7 +48,14 @@ export function tunnelNote(state: TunnelState | undefined): string | null {
     case "error":
       return `Tunnel is down (retrying). Until it's back, ${LOCAL_ONLY}`;
     case "starting":
-      return "Tunnel starting…";
+      // A brand-new tunnel waits on DNS, which the host gives that long
+      // to route, so a freshly enrolled machine can honestly sit here
+      // for a while without anything being wrong.
+      return (
+        "Tunnel starting… A brand-new tunnel's DNS can take up to " +
+        `${TUNNEL_PROBE_DEADLINE_FRESH_MS / 60_000} minutes to route, ` +
+        `and until it does, ${LOCAL_ONLY}`
+      );
     default:
       return null;
   }
@@ -59,6 +67,8 @@ export function deviceRowStatus(
   hubDevice: RemoteDevice | undefined,
   // THIS device's own hub socket, null before the first snapshot.
   socket: HubStatus["socket"] | null,
+  // The registry's clock (useNow), for the "last seen" label.
+  now: number,
 ): DeviceRowStatus {
   // This machine never appears in the hub store, and running the app
   // is not the same as being on the account: its presence to the
@@ -84,7 +94,7 @@ export function deviceRowStatus(
       label:
         device.lastSeenAt === null
           ? "Offline"
-          : `Last seen ${formatRelativeTime(device.lastSeenAt)}`,
+          : `Last seen ${formatRelativeTime(device.lastSeenAt, now)}`,
       reachable: false,
     };
   }

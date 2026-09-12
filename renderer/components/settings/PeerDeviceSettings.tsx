@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { errorMessageOf } from "@shared/errors";
 import type { ReadGlobalConfig } from "@shared/schemas";
 import { EmptyPanel } from "@/components/remote/EmptyPanel";
@@ -11,6 +11,7 @@ import {
 } from "@/hooks/config/useSettingsSave";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
+import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
 import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import type { RemoteDevice } from "@/lib/remote/devices";
@@ -29,13 +30,7 @@ import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 // a disk and a shell, and only the local section renders them.
 export function PeerDeviceSettings({ device }: { device: RemoteDevice }) {
   const { reachable } = deviceStatusView(device.status);
-  // The api of the last session the registry handed over. A hub or
-  // session blip drops device.api while the keeper redials, and the
-  // api object is one per device for the window's lifetime, so keeping
-  // the last one mounted keeps a seeded form (and its unsaved edits)
-  // alive across the blip instead of unmounting it with the note.
-  const [api, setApi] = useState(device.api);
-  if (device.api !== undefined && device.api !== api) setApi(device.api);
+  const api = useLastGoodApi(device);
   const offline = !reachable || device.api === undefined;
 
   // Never reached at all: no wire to read the device's config over, so

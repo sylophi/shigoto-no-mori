@@ -27,6 +27,18 @@ export function isEntityGoneError(error: unknown): boolean {
   return ENTITY_GONE_PREFIXES.some((prefix) => message.includes(prefix));
 }
 
+// The hub bridge's rejection for a call on a peer it has no direct
+// session with (shared/hub/bridgeHandlers.ts requirePeer). Same
+// message-text contract: the renderer keeps a peer's page mounted
+// through a session blip, and every query under it then fails this
+// way until the keeper lands the session again, which the device
+// registry already shows. So this one is not a toast.
+export const NO_DIRECT_CONNECTION_PREFIX = "no direct connection to ";
+
+export function isNoDirectConnectionError(error: unknown): boolean {
+  return errorMessageOf(error).startsWith(NO_DIRECT_CONNECTION_PREFIX);
+}
+
 // Safe branch delete (`git branch -d`) refused because the branch has
 // commits unreachable from other refs. Same message-text contract as
 // above: the renderer matches on the marker to swap its confirm dialog

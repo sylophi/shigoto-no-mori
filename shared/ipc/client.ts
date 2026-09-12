@@ -371,6 +371,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
     sync: {
       refTips: syncClient.refTips,
       captureDirty: syncClient.captureDirty,
+      ignoredPaths: syncClient.ignoredPaths,
       bundleStart: syncClient.bundleStart,
       bundleChunk: syncClient.bundleChunk,
       bundleAbort: syncClient.bundleAbort,

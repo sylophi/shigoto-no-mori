@@ -8,7 +8,8 @@ import { PROJECT_MENU_TRIGGER_CLASS } from "./sidebarChrome";
 // the full form on a modified click. Scope-aware through the hook, so
 // the same button serves a local header and a remote one mounted under
 // its device's HostScopeProvider. Hover-revealed like the `…` beside
-// it, and always shown on a phone, where there is no hover.
+// it (and on keyboard focus), always shown on a phone, where there is
+// no hover.
 export function QuickCreateButton({
   project,
   isHovered,
@@ -33,7 +34,11 @@ export function QuickCreateButton({
       className={cn(
         PROJECT_MENU_TRIGGER_CLASS,
         "disabled:cursor-not-allowed disabled:opacity-100 aria-busy:opacity-100",
-        isHovered ? "opacity-100" : "opacity-0",
+        // Hover is a pointer's idea of "reveal". Tabbing here is the
+        // keyboard's, and an invisible button under the focus ring is
+        // a dead end, so focus shows it the same way an open menu
+        // already does (aria-expanded above).
+        isHovered ? "opacity-100" : "opacity-0 focus-visible:opacity-100",
       )}
       aria-busy={creating}
     >

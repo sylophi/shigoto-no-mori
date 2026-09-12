@@ -962,6 +962,7 @@ async function main() {
       for (const key of [
         "refTips",
         "captureDirty",
+        "ignoredPaths",
         "bundleStart",
         "bundleChunk",
         "bundleAbort",
@@ -984,6 +985,7 @@ async function main() {
       // stays opted in -- it writes a capture ref, real host state.
       for (const key of [
         "refTips",
+        "ignoredPaths",
         "bundleStart",
         "bundleChunk",
         "bundleAbort",

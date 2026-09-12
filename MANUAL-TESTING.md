@@ -244,6 +244,7 @@ returns a window with `evaluate`, `waitFor`, `screenshot` and `close`.
 | `window.api.hub.invokePeer({deviceId, channel, input})` | Any host call on a peer, e.g. `projects:list`, `worktrees:list`, `worktrees:create`. |
 | `window.api.sync.pullWorktree({...})` | Brings a peer's worktree here. See the smoke for the payload. |
 | `window.api.sync.teardownSource({...})` | Second half of a transplant. |
+| `window.api.sync.ignoredPaths({projectId, worktreeId})` | The ignored files on a worktree (first few `paths`, full `total`), which a transfer leaves behind. Grant-gated. The transplant dialog lists them. |
 | `window.api.portForward.start({deviceId, remotePort})` | Forwards a peer's loopback port. Returns `localPort`. |
 | `window.api.mirror.start({...})` | Brings a peer's worktree here and keeps the two mirrored (files both ways, git state followed). Same payload as `sync.pullWorktree`. Returns the local worktree and the `session`. |
 | `window.api.mirror.list()` | This device's mirror sessions (`status`, `git.status`, conflicts) and the streams it serves for peers. |
@@ -300,6 +301,12 @@ interaction:
 
 Screenshots and logs go to a temp dir named in the output. A failing
 scenario screenshots both windows first.
+
+One mirror check is still by hand: with a mirror running, delete (or
+relocate) a's local side of it (the worktree the mirror landed there).
+a's session is gone from `window.api.mirror.list()`, and b's page for
+its own worktree no longer says it is mirrored elsewhere. A delete the
+CLI refuses (dirty tree, no force) leaves the mirror running.
 
 Prerequisites:
 

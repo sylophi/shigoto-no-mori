@@ -1,7 +1,9 @@
 // Producer for the remote device registry.
 // Rebuilds the store from the account's device registry plus the hub
-// bridge's live status, on boot, on account changes and on every hub
-// statusChanged broadcast. There is no per-device
+// bridge's live status, on boot, on every hub statusChanged broadcast,
+// and whenever the shared device-list query moves in the cache (which
+// is where account changes, this window's own and everyone else's,
+// land). There is no per-device
 // supervisor here: the one hub socket lives in main, so a hub
 // device's status DERIVES from the bridge instead of being driven.
 //
@@ -30,10 +32,11 @@
 //     would render as "Connecting" (a lie, nothing is trying) and
 //     "blocked" as a rose error (alarming for a machine that is simply
 //     switched off), so the slate "Off" is the least-lying option.
-import type { QueryClient } from "@tanstack/react-query";
+import { hashKey, type QueryClient } from "@tanstack/react-query";
 import { buildApi } from "@shared/ipc/client";
 import type { HubStatus } from "@shared/ipc/modules/hub";
 import type { DeviceInfo } from "@shared/hub/protocol";
+import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
 import { publishHubStatus, seedHubStatus } from "@/hooks/remote/useHubStatus";
 import { invalidateDeviceSession } from "@/lib/queryKeys";
 import {
@@ -45,13 +48,26 @@ import {
 } from "./devices";
 import { createHubClientTransport } from "./hubTransport";
 
-// The account device list, cached so presence and backoff transitions
-// rebuild statuses without hitting the device hub's HTTP endpoint every
-// time. Refetched when unknown, on account changes, and when the
-// socket transitions into connected (a reconnect may follow an enroll
-// or revoke elsewhere).
-let cachedList: DeviceInfo[] | null = null;
+// The account device list lives in the shared react-query entry
+// (accountDevicesQueryOptions, whose comment says why there is one
+// copy). Reads here go through fetchQuery with staleTime Infinity, so
+// a reconcile reuses whatever the cache holds rather than hitting the
+// hub's HTTP endpoint on every presence and backoff transition. The
+// three facts that make the list wrong ask for a refetch instead: an
+// account change, a socket reconnect (which may follow an enroll or a
+// revoke that happened while the socket was down), and a roster naming
+// a device the list has never seen. A refetch's landing is what
+// reconciles (the cache subscription in startRemoteDeviceSync), so a
+// list change drives exactly one rebuild, and a refetch that fails
+// leaves the store as it was.
+
+// The last phase the hub socket reported, kept so a transition INTO
+// connected can be spotted at all.
 let lastSocketPhase = "";
+
+// The queryHash of that one entry, so the cache subscription below can
+// tell its events from every other query's in one comparison.
+const deviceListHash = hashKey(accountDevicesQueryOptions.queryKey);
 
 // One api per hub deviceId, built on first reachable sighting and
 // kept: the transport forwards through the bridge, whose session for
@@ -59,9 +75,18 @@ let lastSocketPhase = "";
 // forever), so the api never goes stale the way a dead socket does.
 const apis = new Map<string, RemoteDeviceApi>();
 
-// The query client of the boot that started the sync, for the
-// convergence invalidation below.
+// The query client of the boot that started the sync: the cache the
+// device list is read from, and the target of the convergence
+// invalidation below. Bound before the first reconcile and never
+// cleared, so a null here is a boot-order bug, not a state.
 let boundQueryClient: QueryClient | null = null;
+
+function boundClient(): QueryClient {
+  if (boundQueryClient === null) {
+    throw new Error("remote device sync used before startRemoteDeviceSync");
+  }
+  return boundQueryClient;
+}
 
 // The devices whose direct session was live in the last snapshot seen,
 // so every snapshot can spot a session LANDING (a key newly present)
@@ -93,6 +118,26 @@ export function apiFor(deviceId: string): RemoteDeviceApi {
   return api;
 }
 
+// Re-reads the shared list whether or not an observer is mounted (an
+// invalidation alone would refetch only under the devices page). The
+// landing reconciles through the cache subscription. A failure is
+// swallowed there and the store keeps the last good list.
+function refetchDeviceList(): void {
+  void boundClient().refetchQueries({
+    queryKey: accountDevicesQueryOptions.queryKey,
+  });
+}
+
+// The list as the shared cache holds it, refetching only when it is
+// missing or invalidated (staleTime Infinity says so, and fetchQuery
+// honours an invalidation regardless of it).
+function fetchDeviceList(): Promise<DeviceInfo[]> {
+  return boundClient().fetchQuery({
+    ...accountDevicesQueryOptions,
+    staleTime: Infinity,
+  });
+}
+
 async function reconcileNow(status?: HubStatus): Promise<void> {
   const current = status ?? (await window.api.hub.status());
   // A fetched snapshot seeds the shared store (a broadcast that raced
@@ -104,31 +149,35 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
   const phase = current.socket.phase;
   const localDeviceId = window.api.deviceId;
   const online = new Set(current.onlineDeviceIds);
-  const knownIds = new Set((cachedList ?? []).map((info) => info.deviceId));
-  // A presence roster naming a device the cached account list has never
-  // seen (a peer enrolled elsewhere) forces a refetch, or that device
-  // would stay invisible until a restart (M3).
+  const reconnected = phase === "connected" && lastSocketPhase !== "connected";
+  lastSocketPhase = phase;
+  // A reconnect can follow an enroll or a revoke that happened while
+  // the socket was down. This pass runs on the list as it stands, and
+  // the refetch's landing runs the corrected one.
+  if (reconnected) refetchDeviceList();
+  let list: DeviceInfo[];
+  try {
+    list = await fetchDeviceList();
+  } catch {
+    // Offline or signed out mid-flight. react-query keeps the last
+    // good data through a failed refetch, so the store keeps whatever
+    // we had, an empty list when nothing was ever fetched.
+    list =
+      boundClient().getQueryData(accountDevicesQueryOptions.queryKey) ?? [];
+  }
+  const knownIds = new Set(list.map((info) => info.deviceId));
+  // A presence roster naming a device the account list has never seen
+  // (a peer enrolled elsewhere) forces a refetch, or that device would
+  // stay invisible until a restart (M3). Only a hub-driven pass asks
+  // (status came in), never the pass a refetch's own landing queues:
+  // a roster ghost the list will never explain would otherwise refetch
+  // forever, while this way it re-asks once per hub event, as before.
   const hasUnknownOnline = [...online].some(
     (id) => id !== localDeviceId && !knownIds.has(id),
   );
-  const shouldRefetch =
-    cachedList === null ||
-    (phase === "connected" && lastSocketPhase !== "connected") ||
-    hasUnknownOnline;
-  lastSocketPhase = phase;
-  if (shouldRefetch) {
-    try {
-      cachedList = await window.api.account.listDevices();
-    } catch {
-      // Offline or signed out mid-flight. Keep whatever we had, an
-      // empty list when nothing was ever fetched.
-      cachedList = cachedList ?? [];
-    }
-  }
+  if (hasUnknownOnline && status !== undefined) refetchDeviceList();
   // This machine is not a remote device to itself, so it is skipped.
-  const others = (cachedList ?? []).filter(
-    (info) => info.deviceId !== localDeviceId,
-  );
+  const others = list.filter((info) => info.deviceId !== localDeviceId);
   const devices = others.map((info) => buildEntry(info, current, online));
   setRemoteDevices(devices);
 }
@@ -229,18 +278,28 @@ async function drainReconciles(): Promise<void> {
   }
 }
 
-// Boot wiring: reconcile once now, then follow account and hub
-// changes for the life of the window. Never unsubscribed on purpose,
-// exactly like the other boot-scope subscriptions in index.tsx. This
-// subscription is also the ONE writer of the useHubStatus store:
+// Boot wiring: reconcile once now, then follow the account, the
+// shared device-list cache and the hub for the life of the window.
+// None of the three subscriptions is ever unsubscribed, on purpose,
+// exactly like the other boot-scope subscriptions in index.tsx. The
+// hub subscription is also the ONE writer of the useHubStatus store:
 // every snapshot it sees is published there, so no hook needs a
 // subscription or an initial fetch of its own. The boot's query client
 // comes in rather than being reached for, because both boots
 // (renderer/boot.tsx, one for both shells) build their own.
 export function startRemoteDeviceSync(queryClient: QueryClient): void {
   boundQueryClient = queryClient;
-  window.api.account.onChanged(() => {
-    cachedList = null;
+  // This process's own enroll, sign-out, rename or revoke.
+  window.api.account.onChanged(refetchDeviceList);
+  // Every list change reconciles from here, this module's own refetches
+  // included, alongside everyone else's landing in the shared cache (a
+  // window focus, the devices page mounting, an invalidation from
+  // anywhere). Rebuilding off the cache is the only way a peer's rename
+  // or its removal from the account reaches this store at all: the hub
+  // pushes neither, so nothing on the wire will ever say so.
+  queryClient.getQueryCache().subscribe((event) => {
+    if (event.type !== "updated" || event.action.type !== "success") return;
+    if (event.query.queryHash !== deviceListHash) return;
     reconcile();
   });
   window.api.hub.onStatusChanged((status) => {

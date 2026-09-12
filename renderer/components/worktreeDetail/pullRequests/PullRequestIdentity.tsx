@@ -1,5 +1,6 @@
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useLayoutEffect, useRef, useState } from "react";
+import { useNow } from "@/hooks/ui/useNow";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import type { PullRequestDetail, Worktree } from "@shared/schemas";
 import { DiffButton } from "../DiffButton";
@@ -20,6 +21,7 @@ export function PullRequestIdentity({
   pr: PullRequestDetail;
 }) {
   const nav = useWorktreeNav();
+  const now = useNow();
   const containerRef = useRef<HTMLDivElement>(null);
   const measurerRef = useRef<HTMLDivElement>(null);
   const [showUpdated, setShowUpdated] = useState(true);
@@ -41,7 +43,7 @@ export function PullRequestIdentity({
 
   const updatedDate = new Date(pr.updatedAt);
   const updatedTitle = updatedDate.toLocaleString();
-  const updatedLabel = `, last updated ${formatRelativeTime(updatedDate.getTime())}`;
+  const updatedLabel = `, last updated ${formatRelativeTime(updatedDate.getTime(), now)}`;
 
   const openDiff = () => {
     nav.toPrDiff(worktree.projectId, worktree.id);

@@ -5,6 +5,7 @@
 // dropped the refusal branch, so both boots build their client here.
 import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 import { isEntityGoneError } from "@shared/errors";
+import { isNoDirectConnectionError } from "@shared/errors";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { notifyError } from "@/lib/toast";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
@@ -44,6 +45,11 @@ export function createAppQueryClient(): QueryClient {
     queryCache: new QueryCache({
       onError: (err, query) => {
         if (query.meta?.silentError) return;
+        // A peer's page stays mounted through a session blip, so its
+        // queries fail this way until the keeper lands the session
+        // again. The registry shows that, and remoteDeviceSync refetches
+        // on the landing, so a toast per query per focus would only shout.
+        if (isNoDirectConnectionError(err)) return;
         notifyError(query.meta?.errorTitle ?? "Something went wrong", err);
       },
     }),

@@ -18,6 +18,7 @@ export type PeerSyncApi = Pick<
   Client<typeof syncContract>,
   | "refTips"
   | "captureDirty"
+  | "ignoredPaths"
   | "bundleStart"
   | "bundleChunk"
   | "bundleAbort"

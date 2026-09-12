@@ -8,7 +8,9 @@
 // Runs git in `cwd`, resolves stdout, rejects on non-zero exit.
 export type GitRunner = (cwd: string, args: string[]) => Promise<string>;
 
-const DEFAULT_BRANCH_CANDIDATES = ["main", "master", "dev"] as const;
+// Spelled out for the user in RemoteWorktreeActions.tsx (NO_IDENTITY_NOTE),
+// so a change here changes that sentence.
+export const DEFAULT_BRANCH_CANDIDATES = ["main", "master", "dev"] as const;
 
 export async function localBranchExists(
   run: GitRunner,
@@ -79,6 +81,38 @@ export function orderRemotesByPrecedence(remotes: readonly string[]): string[] {
   return [...preferred, ...rest];
 }
 
+// The branch `refs/remotes/<remote>/HEAD` points at, fully qualified,
+// or null when the remote has no HEAD symref or it dangles (a clone
+// whose server-side default branch was later renamed or deleted keeps
+// the stale symref). One spawn answers both: --verify makes rev-parse
+// fail on a symref it cannot follow. A plain (non-symbolic) HEAD ref
+// prints its own name and is no candidate either: an alias, not a
+// branch, and the Go mirror's scan never holds it. Resolving the
+// symref, rather than returning "origin/HEAD", keeps every caller
+// looking at an ordinary remote-tracking ref.
+async function remoteHeadTarget(
+  run: GitRunner,
+  projectPath: string,
+  remote: string,
+): Promise<string | null> {
+  const head = `refs/remotes/${remote}/HEAD`;
+  try {
+    const target = (
+      await run(projectPath, [
+        "rev-parse",
+        "--verify",
+        "--symbolic-full-name",
+        head,
+      ])
+    ).trim();
+    return target.startsWith("refs/remotes/") && target !== head
+      ? target
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 async function firstLocalBranch(
   run: GitRunner,
   projectPath: string,
@@ -98,13 +132,13 @@ async function firstLocalBranch(
 }
 
 // Fully qualified default ref (`refs/heads/<b>` or `refs/remotes/<r>/<b>`),
-// or null when no override, candidate, or remote-tracking candidate
-// matches. Deliberately WITHOUT the first-local-branch fallback: repo
-// identity resolves through this, and "whichever branch this device
-// happens to have first" must never key an identity. The show-ref
-// probes read a non-zero exit as "absent" (that IS git's not-found
-// signal), so a broken git looks like "no default ref" here. Identity's
-// remote rule runs its own git and surfaces the failure.
+// or null when no override, candidate, remote-tracking candidate, or
+// remote HEAD matches. Deliberately WITHOUT the first-local-branch
+// fallback: repo identity resolves through this, and "whichever branch
+// this device happens to have first" must never key an identity. The
+// show-ref probes read a non-zero exit as "absent" (that IS git's
+// not-found signal), so a broken git looks like "no default ref" here.
+// Identity's remote rule runs its own git and surfaces the failure.
 export async function resolveDefaultRef(
   run: GitRunner,
   projectPath: string,
@@ -136,6 +170,19 @@ export async function resolveDefaultRef(
     if (await localBranchExists(run, projectPath, candidate)) {
       return `refs/heads/${candidate}`;
     }
+  }
+  // Last, the remote's own HEAD: the symref `git clone` copies from the
+  // server's default branch, so it names the same branch on every
+  // clone. That is repo-derived, not device-derived like the
+  // first-local-branch fallback this resolver refuses, so it can key an
+  // identity for a repo whose trunk is called none of the candidates.
+  // It runs after the candidate loop because this resolver also picks
+  // merge targets: a repo with both origin/HEAD -> trunk and a stale
+  // local main must keep merging into main, as it did before.
+  for (const remote of remotes) {
+    // react-doctor-disable-next-line react-doctor/async-await-in-loop -- priority order matters
+    const target = await remoteHeadTarget(run, projectPath, remote); // oxlint-disable-line no-await-in-loop -- priority order matters
+    if (target !== null) return target;
   }
   return null;
 }

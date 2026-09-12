@@ -13,6 +13,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { errorMessageOf } from "@shared/errors";
+import { stopMirrorsForWorktree } from "@host/mirror/registry";
 import type { Project, ScriptEvent } from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
 import { type PersistedScript, persistRunningScripts } from "./persistence";
@@ -141,8 +142,16 @@ export function getInflightDeleteIds(): ReadonlySet<string> {
 // running create lifecycle can't spawn steps into a directory that is
 // vanishing or moving, reap app-spawned scripts before the mutation
 // (a dev server would otherwise outlive its worktree or keep running
-// in the old path), and always clear the mark. Callers supply the
-// busy message because the operations differ (removed vs moved).
+// in the old path), stop the mirrors rooted in it after the mutation
+// (a session would otherwise sit halted on a root that is gone or
+// moved, with the peer still calling its worktree mirrored), and
+// always clear the mark. The mirrors go AFTER, not before: the CLI may
+// refuse the mutation (a dirty tree without --force), and a mirror
+// stopped ahead of a refusal cannot be started again while the branch
+// is still checked out here. The engine is two-way safe, so the gap
+// between the root vanishing and the stop propagates nothing. Callers
+// supply the busy message because the operations differ (removed vs
+// moved).
 export async function withDeleteInflight<T>(
   worktreeId: string,
   busyMessage: string,
@@ -154,7 +163,9 @@ export async function withDeleteInflight<T>(
   markDeleteInflight(worktreeId);
   try {
     await killScriptsForWorktree(worktreeId);
-    return await run();
+    const result = await run();
+    await stopMirrorsForWorktree(worktreeId);
+    return result;
   } finally {
     clearDeleteInflight(worktreeId);
   }
