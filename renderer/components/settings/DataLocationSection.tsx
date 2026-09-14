@@ -2,13 +2,16 @@ import { useState } from "react";
 import { FolderInput, FolderOpen, FolderPen } from "lucide-react";
 import { BlockingOverlay } from "@/components/ui/blocking-overlay";
 import { Button } from "@/components/ui/button";
+import { FolderPickerModal } from "@/components/ui/folder-picker-modal";
 import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
+import { getBrowseParentPath } from "@/lib/projectPaths";
 import { notifyError } from "@/lib/toast";
 
 // Where the shigomori data dir lives, and the flow that moves it. The
-// picker chooses the new PARENT and the folder lands under its
+// picker (the in-app FolderPickerModal, which still offers Finder on
+// this machine) chooses the new PARENT and the folder lands under its
 // canonical name (the main process owns that rule in
 // lib/dataDirMove.ts). A folder boot adopted under its pre-2.0 name
 // gets a Rename button, which is the same move with no parent given.
@@ -19,6 +22,7 @@ export function DataLocationSection() {
   const root = runtime?.dataDir ?? null;
   const home = runtime?.homedir ?? null;
   const [moving, setMoving] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   // The move is refused when this session's data dir came from
   // SHIGOMORI_DATA_DIR (a sandbox owns it), so don't offer it.
@@ -36,25 +40,6 @@ export function DataLocationSection() {
       notifyError("Couldn't move data folder", err);
       setMoving(false);
     }
-  };
-
-  const handleMove = async () => {
-    if (!runtime) return;
-    let parent: string | null = null;
-    try {
-      parent = await window.api.dialog.pickFolder({
-        title: "Move the data folder",
-        buttonLabel: "Move here",
-        message: `Choose its new parent folder. It will be named ${runtime.canonicalDataDirName} there.`,
-      });
-    } catch (err) {
-      // A real dialog/IPC failure, distinct from the user cancelling
-      // (which resolves to null).
-      notifyError("Couldn't open the folder picker", err);
-      return;
-    }
-    if (!parent) return;
-    await moveTo(parent);
   };
 
   // Rename in place: the host resolves the current parent.
@@ -107,7 +92,7 @@ export function DataLocationSection() {
           variant="outline"
           size="sm"
           disabled={!movable || moving}
-          onClick={() => void handleMove()}
+          onClick={() => setPickerOpen(true)}
         >
           <FolderInput />
           Move data folder…
@@ -124,6 +109,21 @@ export function DataLocationSection() {
           </Button>
         )}
       </div>
+      {pickerOpen && runtime && (
+        <FolderPickerModal
+          // Start beside the current folder: the common move is to a
+          // sibling location, and the parent is where "here" resolves.
+          initialPath={getBrowseParentPath(runtime.dataDir) ?? undefined}
+          title="Move the data folder"
+          confirmLabel="Move here"
+          hint={`Choose its new parent folder. It will be named ${runtime.canonicalDataDirName} there.`}
+          onPick={(parent) => {
+            setPickerOpen(false);
+            void moveTo(parent);
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </section>
   );
 }

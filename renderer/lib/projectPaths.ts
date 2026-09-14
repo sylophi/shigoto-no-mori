@@ -46,6 +46,14 @@ export function canNavigateUp(currentPath: string): boolean {
   );
 }
 
+// Whether a typed path names a fixed spot on disk: absolute, or under
+// the home folder. A bare relative path would resolve against whatever
+// cwd the host process happens to have, which is never what the user
+// meant when picking a folder.
+export function isAnchoredPath(value: string): boolean {
+  return value.startsWith("/") || value === "~" || value.startsWith("~/");
+}
+
 export function normalizeForSubmit(value: string): string {
   const trimmed = value.trim();
   if (trimmed.length <= 1) return trimmed;

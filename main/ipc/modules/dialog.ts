@@ -10,8 +10,8 @@ export const dialogHandlers: Handlers<typeof dialogContract> = {
       buttonLabel: opts?.buttonLabel ?? "Add project",
       message: opts?.message,
       // Electron 43 defaults pickers to ~/Downloads; home is the
-      // sensible starting point for locating a project directory.
-      defaultPath: app.getPath("home"),
+      // sensible starting point when the caller has no better one.
+      defaultPath: opts?.defaultPath ?? app.getPath("home"),
     });
     if (result.canceled || result.filePaths.length === 0) return null;
     return result.filePaths[0];

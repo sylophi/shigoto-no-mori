@@ -24,6 +24,7 @@ import {
   getBrowseLeafSegment,
   getBrowseParentPath,
   hasTrailingSlash,
+  isAnchoredPath,
   normalizeForSubmit,
 } from "@/lib/projectPaths";
 
@@ -35,6 +36,9 @@ interface FolderPickerModalProps {
   initialPath?: string;
   title?: string;
   confirmLabel?: string;
+  // One line under the input explaining what the picked folder is for.
+  // Also shown by the native dialog (its message) when Finder is used.
+  hint?: string;
   onPick: (path: string) => void;
   onClose: () => void;
 }
@@ -47,6 +51,7 @@ export function FolderPickerModal({
   initialPath,
   title = "Pick a folder",
   confirmLabel = "Use this folder",
+  hint,
   onPick,
   onClose,
 }: FolderPickerModalProps) {
@@ -96,7 +101,7 @@ export function FolderPickerModal({
   const confirmTarget = listingEnabled
     ? (listing?.path ?? submitTarget)
     : submitTarget;
-  const canConfirm = confirmTarget.length > 0 && !error;
+  const canConfirm = isAnchoredPath(confirmTarget) && !error;
   const hasHighlighted = highlighted.startsWith(BROWSE_VALUE_PREFIX);
 
   const confirm = () => {
@@ -175,6 +180,11 @@ export function FolderPickerModal({
             </KbdGroup>
           </Button>
         </div>
+        {hint && (
+          <p className="border-b border-border px-3 py-1.5 text-xs text-muted-foreground">
+            {hint}
+          </p>
+        )}
 
         <Command.List className="max-h-96 overflow-y-auto p-2">
           {canBrowseUp && (
@@ -258,6 +268,9 @@ export function FolderPickerModal({
                   picked = await window.api.dialog.pickFolder({
                     title,
                     buttonLabel: confirmLabel,
+                    message: hint,
+                    // Open Finder where the picker is, not at ~.
+                    defaultPath: listing?.path,
                   });
                 } catch (err) {
                   // Cancelling resolves to null, so a rejection is a real

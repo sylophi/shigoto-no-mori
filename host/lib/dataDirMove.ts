@@ -14,7 +14,7 @@
 // every managed worktree under the data dir are re-keyed, and git's
 // own worktree links are re-pointed by `git worktree repair`.
 import { cp, mkdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { isSameOrInside } from "@shared/worktreeLayout";
 import {
   deleteWorktreeData,
@@ -36,9 +36,9 @@ import {
   dataDir,
   dataDirPointerPath,
   defaultDataDir,
+  expandHome,
   isENOENT,
   legacyDataDirPointerPath,
-  toAbsolute,
 } from "./util/paths";
 import { dropShelved, isShelved, setShelved } from "./worktrees/shelved";
 
@@ -58,7 +58,14 @@ export async function moveDataDir(
   const pointerFile = dataDirPointerPath();
   const legacyPointerFile = legacyDataDirPointerPath();
   const parent =
-    parentDir === undefined ? dirname(oldDir) : toAbsolute(parentDir);
+    parentDir === undefined ? dirname(oldDir) : expandHome(parentDir);
+  // Never resolve against the process cwd: a relative parent would land
+  // the data dir somewhere the user never saw.
+  if (!isAbsolute(parent)) {
+    throw new Error(
+      `The new parent folder must be an absolute path: ${parentDir}`,
+    );
+  }
   const newDir = join(parent, canonicalDataDirName());
   const toDefault = newDir === defaultDataDir();
 
