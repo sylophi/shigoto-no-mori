@@ -297,7 +297,7 @@ interaction:
 | mirror | a mirrors a fresh worktree of b's. Files written on either side land on the other, a gitignored file included. A commit on b lands on a with the same tip and a clean status. Stopping clears a's session and b's served stream. |
 | port forward | a forwards a loopback echo server on b. Bytes round-trip. |
 | liveness | b is killed with SIGKILL. a drops it from the roster. b relaunches and both reconnect. |
-| sign-out | b revokes itself. a's roster and registry drop it. |
+| revoke | a removes b from the account. a's roster and registry drop it, and b's hub socket is blocked. |
 
 Screenshots and logs go to a temp dir named in the output. A failing
 scenario screenshots both windows first.
