@@ -1,5 +1,8 @@
+import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BranchLabel } from "@/components/ui/branch-label";
+import { SimpleTooltip } from "@/components/ui/tooltip";
+import { DeviceBadge, type SidebarDeviceBadge } from "./DeviceBadge";
 import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
 import { useProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import type { ScriptActivityKind } from "@/store/scriptRuns";
@@ -11,6 +14,9 @@ import { useWorktreeRowState } from "./useWorktreeRowState";
 
 interface WorktreeRowProps {
   worktree: Worktree;
+  // The peer this worktree is mirrored with, when it is: the row then
+  // stands for both copies and wears the peer's badge.
+  mirror?: SidebarDeviceBadge;
 }
 
 // The row button's shared shell, also worn by RemoteWorktreeRow so a
@@ -45,7 +51,7 @@ export function WorktreeRowLabel({
   );
 }
 
-export function WorktreeRow({ worktree }: WorktreeRowProps) {
+export function WorktreeRow({ worktree, mirror }: WorktreeRowProps) {
   const { isSelected, open, activity, isDeleting, title } =
     useWorktreeRowState(worktree);
   const { data: prs } = useProjectPullRequests(worktree.projectId);
@@ -72,7 +78,24 @@ export function WorktreeRow({ worktree }: WorktreeRowProps) {
         isDeleting={isDeleting}
         pr={prs?.[worktree.branch]}
       />
+      {mirror && <MirrorBadge mirror={mirror} />}
     </button>
+  );
+}
+
+// The mark a local row wears for the peer it is mirrored with: the
+// mirror glyph and the peer's badge. Shared with the inbox row.
+export function MirrorBadge({ mirror }: { mirror: SidebarDeviceBadge }) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1">
+      <SimpleTooltip tip={`Mirrored with ${mirror.label}`}>
+        <RefreshCw
+          aria-label={`Mirrored with ${mirror.label}`}
+          className="size-3 text-emerald-600 dark:text-emerald-400"
+        />
+      </SimpleTooltip>
+      <DeviceBadge badge={mirror} />
+    </span>
   );
 }
 

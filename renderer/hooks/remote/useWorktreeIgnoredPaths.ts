@@ -7,11 +7,18 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 // against the scope's device, the source of a transplant, and read
 // once: the dialog's two steps share the one answer, and it crosses
 // the device link.
-export function useWorktreeIgnoredPaths(projectId: string, worktreeId: string) {
+export function useWorktreeIgnoredPaths(
+  projectId: string,
+  worktreeId: string,
+  // Off while nothing on screen reads the list: the walk covers the
+  // whole checkout, over the device link on a peer's worktree.
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   const { api, keys } = useHostScope();
   return useQuery<SyncIgnoredPathsResult>({
     queryKey: keys.worktreeIgnored(projectId, worktreeId),
     queryFn: () => api.sync.ignoredPaths({ projectId, worktreeId }),
+    enabled,
     staleTime: Infinity,
     // The dialog says so inline, so a toast would only repeat it.
     meta: { silentError: true },

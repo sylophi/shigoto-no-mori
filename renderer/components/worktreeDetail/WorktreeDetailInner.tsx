@@ -28,6 +28,7 @@ import type { CleanupError, Project, Worktree } from "@shared/schemas";
 import { LauncherRow } from "./LauncherRow";
 import { LifecycleBanner } from "./LifecycleBanner";
 import { MirrorPill } from "./MirrorPill";
+import { LocalMirrorAction } from "./mirror/LocalMirrorAction";
 import { PortsSection } from "./ports/PortsSection";
 import { RemoteWorktreeActions } from "./RemoteWorktreeActions";
 import { PullRequestSection } from "./pullRequests/PullRequestSection";
@@ -63,7 +64,7 @@ export function WorktreeDetailInner({
   // Which device this page is scoped to. Everything data-shaped below
   // already rides the host scope. `remote` only gates the affordances
   // that are local by nature (launching) and adds the
-  // cross-device ones (bring here, transplant, the device chip).
+  // cross-device ones (mirror, transplant, the device chip).
   const { remote } = useHostScope();
   const scriptRuns = useScriptRuns();
   // Always true locally (the local device is granted by contract), so
@@ -264,7 +265,9 @@ export function WorktreeDetailInner({
         leading={
           remote ? (
             <RemoteWorktreeActions worktree={worktree} project={project} />
-          ) : undefined
+          ) : (
+            <LocalMirrorAction worktree={worktree} />
+          )
         }
       />
     </div>

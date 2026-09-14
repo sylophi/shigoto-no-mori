@@ -19,7 +19,7 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import {
   keptSourceReason,
   useTeardownSource,
-} from "@/hooks/remote/useBringWorktreeHere";
+} from "@/hooks/remote/usePullWorktree";
 import { LocalHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";

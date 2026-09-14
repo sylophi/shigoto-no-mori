@@ -3,19 +3,20 @@
 // own facts), read through the surrounding scope's api and driven by
 // that device's mirror:changed broadcast, so it renders live for this
 // machine and for a peer being viewed. The mutations are local: start
-// is a bring-here plus a mirror, and stop/pause/resume speak to this
+// is a pull plus a mirror, and stop/pause/resume speak to this
 // machine's daemon.
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import type {
+  MirrorEvent,
+  MirrorIgnoreMode,
   MirrorListResult,
   MirrorSession,
   MirrorServing,
 } from "@shared/ipc/modules/mirror";
 import type { Worktree } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { reportLanded } from "@/hooks/remote/useBringWorktreeHere";
+import { invalidateLanded } from "@/hooks/remote/usePullWorktree";
 import { notifyError } from "@/lib/toast";
 
 const EMPTY: MirrorListResult = {
@@ -29,11 +30,20 @@ const EMPTY: MirrorListResult = {
 // list themselves), matching the port-forward hooks.
 export function useMirrors(): MirrorListResult {
   const { api, keys } = useHostScope();
-  const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: keys.mirrors(),
     queryFn: () => api.mirror.list(),
   });
+  useMirrorsChanged();
+  return query.data ?? EMPTY;
+}
+
+// The scoped device's mirror:changed, as the list's invalidation.
+// Every reader of the list subscribes, so whichever is mounted (the
+// always-mounted sidebar included) keeps the cache fresh.
+function useMirrorsChanged(): void {
+  const { api, keys } = useHostScope();
+  const queryClient = useQueryClient();
   useEffect(
     () =>
       api.mirror.onChanged(() => {
@@ -41,7 +51,55 @@ export function useMirrors(): MirrorListResult {
       }),
     [api, keys, queryClient],
   );
-  return query.data ?? EMPTY;
+}
+
+// A mirrored pair as the sidebar folds it: the peer's row (device,
+// worktree) that folds into a local row, and the peer device the local
+// row wears. A session pairs its local copy with the peer's source. A
+// served stream pairs the served worktree with the peer's copy, when
+// the peer named it.
+export type MirrorLink = {
+  peerDeviceId: string;
+  peerWorktreeId: string;
+  localWorktreeId: string;
+};
+
+export function mirrorLinksOf(mirrors: MirrorListResult): MirrorLink[] {
+  const links: MirrorLink[] = [];
+  for (const session of mirrors.sessions) {
+    if (session.localWorktreeId === "") continue;
+    links.push({
+      peerDeviceId: session.deviceId,
+      peerWorktreeId: session.worktreeId,
+      localWorktreeId: session.localWorktreeId,
+    });
+  }
+  for (const stream of mirrors.serving) {
+    if (stream.peerWorktreeId === undefined) continue;
+    links.push({
+      peerDeviceId: stream.peerDeviceId,
+      peerWorktreeId: stream.peerWorktreeId,
+      localWorktreeId: stream.worktreeId,
+    });
+  }
+  return links;
+}
+
+const NO_LINKS: MirrorLink[] = [];
+
+// The pairs alone, for the always-mounted sidebar: the list moves on
+// every cycle of a busy mirror (counts, status), and the projection
+// stays referentially the same through all of that, so the rows are
+// not rebuilt for news they do not show.
+export function useMirrorLinks(): MirrorLink[] {
+  const { api, keys } = useHostScope();
+  const query = useQuery({
+    queryKey: keys.mirrors(),
+    queryFn: () => api.mirror.list(),
+    select: mirrorLinksOf,
+  });
+  useMirrorsChanged();
+  return query.data ?? NO_LINKS;
 }
 
 // The one mirror picture a worktree row cares about: the session this
@@ -58,11 +116,17 @@ export function useWorktreeMirror(worktree: Worktree): {
   };
 }
 
-// Bring the peer's worktree here and keep it mirrored. Mirrors the
-// bring-here mutation's shape and reporting: the new worktree is
-// LOCAL, so the local registry keys are invalidated, and the toast is
-// usually the only visible conclusion (the result lands on another
-// page).
+// What a mirror leaves out, as the dialog and the section hand it to
+// the host: the rule plus the engine patterns it resolved to.
+export type MirrorIgnoreChoice = {
+  ignoreMode: MirrorIgnoreMode;
+  ignores: string[];
+};
+
+// Bring the peer's worktree here and keep it mirrored, driven by the
+// mirror dialog: the new worktree is LOCAL, so the local registry keys
+// are invalidated, and the dialog's last step is the report, so no
+// toast here. Refusals surface centrally.
 export function useStartMirror({
   worktree,
   sourceProjectId,
@@ -77,26 +141,40 @@ export function useStartMirror({
   const { deviceId } = useHostScope();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () =>
+    mutationFn: (choice: MirrorIgnoreChoice) =>
       window.api.mirror.start({
         sourceDeviceId: deviceId,
         sourceProjectId,
         sourceWorktreeId: worktree.id,
         sourceIdentity,
         branch: worktree.branch,
+        ...choice,
       }),
-    onSuccess: (result) =>
-      reportLanded(
-        queryClient,
-        localProjectId,
-        result,
-        `Mirroring ${worktree.branch} here`,
-      ),
-    onError: (err) => {
-      if (!isCommandRefusedError(err)) {
-        notifyError("Couldn't mirror worktree here", err);
-      }
-    },
+    onSuccess: () => invalidateLanded(queryClient, localProjectId),
+    meta: { silentError: true },
+  });
+}
+
+// The mirror's thread of events (mirror:history), read through the
+// scope like the list and refreshed by the same broadcast: the key
+// sits under the mirrors prefix the list's invalidation sweeps.
+export function useMirrorHistory(localWorktreeId: string) {
+  const { api, keys } = useHostScope();
+  return useQuery<MirrorEvent[]>({
+    queryKey: keys.mirrorHistory(localWorktreeId),
+    queryFn: async () => (await api.mirror.history({ localWorktreeId })).events,
+    meta: { silentError: true },
+  });
+}
+
+// Changing what a running mirror leaves out. Local by contract, like
+// the other controls. The list refreshes off the daemon's snapshot.
+export function useSetMirrorIgnores() {
+  return useMutation({
+    mutationFn: (input: { session: string } & MirrorIgnoreChoice) =>
+      window.api.mirror.setIgnores(input),
+    onError: (err) =>
+      notifyError("Couldn't change what the mirror leaves out", err),
     meta: { silentError: true },
   });
 }

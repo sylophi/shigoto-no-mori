@@ -14,6 +14,15 @@ import type { ShigomoriWorktreeData } from "@shared/schemas";
 import type { ContractScope } from "@shared/ipc/contract";
 import { WEB_PLATFORM } from "@shared/account/enroll";
 import type { HubStatus } from "@shared/ipc/modules/hub";
+import {
+  describeIgnores,
+  MIRROR_HISTORY_LIMIT,
+} from "@shared/ipc/modules/mirror";
+import type {
+  MirrorEvent,
+  MirrorServing,
+  MirrorSession,
+} from "@shared/ipc/modules/mirror";
 import type { ClientTransport } from "@shared/ipc/transport";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
 import { invokeIndexFor } from "../web/ipc/loopback";
@@ -91,6 +100,7 @@ function hostHandlersFor(
   emit: FixtureWire["emit"],
 ): FixtureHandlers {
   const collapsed = new Set<string>();
+  mirrorWires.set(forest.deviceId, emit);
   // The worktree data files, seeded from the fixtures and mutated by
   // worktreeData:write so adding and removing ports shows its outcome.
   const worktreeData = new Map<string, ShigomoriWorktreeData>(
@@ -125,7 +135,9 @@ function hostHandlersFor(
         forest.projects.find((project) => project.id === projectId)?.name ?? "",
       ),
     "projects:listIgnoredPaths": () => [".env.local", "node_modules"],
-    "worktrees:list": ({ projectId }) => forest.worktrees[projectId] ?? [],
+    "worktrees:list": ({ projectId }) => [
+      ...(forest.worktrees[projectId] ?? []),
+    ],
     "worktrees:create": ({ projectId, worktreeName, branchName }) => {
       const name = worktreeName ?? "tender-tanuki";
       const created = worktreeFixture({
@@ -202,12 +214,88 @@ function hostHandlersFor(
       squash: true,
       rebase: false,
     }),
+    "sync:worktreeFolder": ({ relative }: { relative: string }) => [
+      ...(LAB_TREE[relative] ?? []),
+    ],
+    "sync:ignoredPaths": () => ({
+      paths: [".env", "dist/", "node_modules/", "coverage/", ".cache/"],
+      total: 5,
+      patterns: ["node_modules/", "dist/", "coverage/", ".env", ".cache/"],
+    }),
+    // The mirror picture is host-scoped: the local forest reports the
+    // sessions it runs, and a source forest reports the streams it
+    // serves. Both refresh off mirror:changed. Copies, since the posed
+    // cycle mutates the session in place.
+    "mirror:list": () => ({
+      daemon: labMirrors.sessions.length > 0 ? "running" : "stopped",
+      sessions:
+        forest.deviceId === LOCAL_DEVICE_ID
+          ? labMirrors.sessions.map((session) => ({ ...session }))
+          : [],
+      serving: labMirrors.serving
+        .filter((stream) => stream.deviceId === forest.deviceId)
+        .map(({ deviceId: _device, ...stream }) => stream),
+    }),
+    "mirror:history": ({ localWorktreeId }: { localWorktreeId: string }) => ({
+      events: [...(labMirrors.history[localWorktreeId] ?? [])],
+    }),
     // Local-orchestrator sync verbs, mutating the fixture world so the
     // outcome is visible: the worktree lands in the identity-matched
     // local project, and a teardown removes the source row.
     ...(forest.deviceId === LOCAL_DEVICE_ID
       ? {
           "sync:pullWorktree": (input: any) => labSyncPull(forest, emit, input),
+          "mirror:start": (input: any) => labMirrorStart(forest, emit, input),
+          "mirror:stop": ({ session }: { session: string }) => {
+            const entry = findLabSession(session);
+            labMirrors.sessions = labMirrors.sessions.filter(
+              (s) => s.session !== session,
+            );
+            labMirrors.serving = labMirrors.serving.filter(
+              (stream) =>
+                !(
+                  entry !== undefined &&
+                  stream.deviceId === entry.deviceId &&
+                  stream.worktreeId === entry.worktreeId
+                ),
+            );
+            if (entry) {
+              noteMirrorEvent(
+                entry.localWorktreeId,
+                "stopped",
+                "Both copies kept",
+              );
+            }
+            mirrorChanged();
+          },
+          "mirror:pause": ({ session }: { session: string }) =>
+            setMirrorPaused(session, true),
+          "mirror:resume": ({ session }: { session: string }) =>
+            setMirrorPaused(session, false),
+          "mirror:setIgnores": ({
+            session,
+            ignoreMode,
+            ignores,
+          }: {
+            session: string;
+            ignoreMode: MirrorSession["ignoreMode"];
+            ignores: string[];
+          }) => {
+            const entry = findLabSession(session);
+            if (entry === undefined) throw new Error("[lab] no such mirror");
+            entry.session = `sync_${labSessionSerial++}`;
+            entry.ignoreMode = ignoreMode;
+            entry.ignores = ignores;
+            entry.createdAt = Date.now();
+            entry.successfulCycles = 0;
+            noteMirrorEvent(
+              entry.localWorktreeId,
+              "ignores-changed",
+              describeIgnores(ignoreMode, ignores.length),
+            );
+            mirrorChanged();
+            return { session: entry.session };
+          },
           "sync:teardownSource": (input: any) => {
             const source = forests[input.sourceDeviceId];
             if (source !== undefined) {
@@ -223,6 +311,178 @@ function hostHandlersFor(
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// The folder tree the mirror picker browses, one posed worktree.
+const LAB_TREE: Record<
+  string,
+  { name: string; isDirectory: boolean; ignored: boolean }[]
+> = {
+  "": [
+    { name: ".cache", isDirectory: true, ignored: true },
+    { name: "coverage", isDirectory: true, ignored: true },
+    { name: "dist", isDirectory: true, ignored: true },
+    { name: "node_modules", isDirectory: true, ignored: true },
+    { name: "src", isDirectory: true, ignored: false },
+    { name: ".env", isDirectory: false, ignored: true },
+    { name: ".gitignore", isDirectory: false, ignored: false },
+    { name: "package.json", isDirectory: false, ignored: false },
+    { name: "README.md", isDirectory: false, ignored: false },
+  ],
+  src: [
+    { name: "components", isDirectory: true, ignored: false },
+    { name: "generated", isDirectory: true, ignored: true },
+    { name: "index.ts", isDirectory: false, ignored: false },
+  ],
+  "src/generated": [{ name: "schema.ts", isDirectory: false, ignored: true }],
+  dist: [{ name: "bundle.js", isDirectory: false, ignored: true }],
+};
+
+// ---- mirror fixtures ----
+//
+// One lab-wide mirror world, since a session on Studio Mac and the
+// stream Thinkpad serves for it are two views of the same fact. Each
+// forest's wire is remembered so mirror:changed reaches the local page
+// through its own wire and a peer's page through the client wire's
+// peer push, exactly as the real bridge delivers it.
+const labMirrors: {
+  sessions: MirrorSession[];
+  serving: (MirrorServing & { deviceId: string })[];
+  history: Record<string, MirrorEvent[]>;
+} = { sessions: [], serving: [], history: {} };
+const mirrorWires = new Map<string, FixtureWire["emit"]>();
+let pushFromPeer: (deviceId: string, channel: string) => void = () => {};
+let labSessionSerial = 1;
+
+function mirrorChanged() {
+  for (const [deviceId, emit] of mirrorWires) {
+    if (deviceId === LOCAL_DEVICE_ID) emit("mirror:changed", undefined);
+    else pushFromPeer(deviceId, "mirror:changed");
+  }
+}
+
+function noteMirrorEvent(
+  localWorktreeId: string,
+  kind: MirrorEvent["kind"],
+  detail: string,
+) {
+  const thread = labMirrors.history[localWorktreeId] ?? [];
+  thread.unshift({ at: Date.now(), kind, detail });
+  labMirrors.history[localWorktreeId] = thread.slice(0, MIRROR_HISTORY_LIMIT);
+}
+
+function findLabSession(session: string): MirrorSession | undefined {
+  return labMirrors.sessions.find((s) => s.session === session);
+}
+
+function setMirrorPaused(session: string, paused: boolean) {
+  const entry = findLabSession(session);
+  if (entry === undefined) return;
+  entry.paused = paused;
+  entry.status = paused ? "disconnected" : "watching";
+  entry.statusText = paused ? "Paused" : "Watching for changes";
+  noteMirrorEvent(entry.localWorktreeId, paused ? "paused" : "resumed", "");
+  mirrorChanged();
+}
+
+const endpointState = () => ({
+  connected: true,
+  scanned: true,
+  directories: 42,
+  files: 318,
+  symbolicLinks: 0,
+  totalFileSize: 4_820_000,
+  problems: [],
+  excludedProblems: 0,
+});
+
+// A posed mirror: the pull lands the worktree, then a session opens
+// on top and settles. Afterwards a cycle runs every few seconds so the
+// status is seen moving, and the thread gets a conflict once, for the
+// history to have more than its start.
+async function labMirrorStart(
+  local: DeviceForest,
+  emit: FixtureWire["emit"],
+  input: Parameters<typeof labSyncPull>[2] & {
+    ignoreMode: MirrorSession["ignoreMode"];
+    ignores: string[];
+  },
+) {
+  const landed = await labSyncPull(local, emit, input);
+  const source = forests[input.sourceDeviceId];
+  const sourceWorktree = (source?.worktrees[input.sourceProjectId] ?? []).find(
+    (entry) => entry.id === input.sourceWorktreeId,
+  );
+  const tip = sourceWorktree?.recentCommits[0]?.hash.slice(0, 7) ?? "58c21fe";
+  const session: MirrorSession = {
+    session: `sync_${labSessionSerial++}`,
+    name: `sm-${landed.worktree.id}`,
+    labels: {},
+    localRoot: landed.worktree.path,
+    localProjectId: landed.worktree.projectId,
+    localWorktreeId: landed.worktree.id,
+    deviceId: input.sourceDeviceId,
+    projectId: input.sourceProjectId,
+    worktreeId: input.sourceWorktreeId,
+    remoteRoot: sourceWorktree?.path ?? "",
+    paused: false,
+    ignores: input.ignores,
+    ignoreMode: input.ignoreMode,
+    createdAt: Date.now(),
+    status: "connecting-remote",
+    statusText: "Connecting to beta",
+    successfulCycles: 0,
+    conflicts: [],
+    excludedConflicts: 0,
+    local: endpointState(),
+    remote: endpointState(),
+    git: { status: "synced", detail: `both sides at ${tip}` },
+  };
+  labMirrors.sessions.push(session);
+  labMirrors.serving.push({
+    deviceId: input.sourceDeviceId,
+    channelId: "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+    projectId: input.sourceProjectId,
+    worktreeId: input.sourceWorktreeId,
+    peerDeviceId: LOCAL_DEVICE_ID,
+    peerWorktreeId: landed.worktree.id,
+    since: Date.now(),
+  });
+  noteMirrorEvent(
+    landed.worktree.id,
+    "started",
+    describeIgnores(input.ignoreMode, input.ignores.length),
+  );
+  mirrorChanged();
+  void (async () => {
+    const live = () => labMirrors.sessions.includes(session);
+    const step = async (status: MirrorSession["status"], ms: number) => {
+      if (!live() || session.paused) return;
+      session.status = status;
+      mirrorChanged();
+      await sleep(ms);
+    };
+    await step("scanning", 900);
+    await step("watching", 0);
+    session.successfulCycles = 1;
+    noteMirrorEvent(landed.worktree.id, "connected", "");
+    mirrorChanged();
+    // oxlint-disable no-await-in-loop -- a posed mirror cycles in sequence
+    for (;;) {
+      await sleep(5000);
+      if (!live()) return;
+      if (session.paused) continue;
+      await step("scanning", 500);
+      await step("staging-local", 900);
+      await step("transitioning", 400);
+      // oxlint-enable no-await-in-loop
+      if (!live() || session.paused) continue;
+      session.status = "watching";
+      session.successfulCycles += 1;
+      mirrorChanged();
+    }
+  })();
+  return { ...landed, session: session.session };
+}
 
 async function labSyncPull(
   local: DeviceForest,
@@ -292,6 +552,9 @@ async function labSyncPull(
     shelved: false,
   });
   (local.worktrees[project.id] ??= []).push(landed);
+  // The real host pings this after any app-driven mutation, and the
+  // always-mounted sidebar refreshes off it.
+  emit("git:externalChange", undefined);
   return {
     worktree: landed,
     captured: (sourceWorktree?.changedCount ?? 0) > 0,
@@ -596,6 +859,8 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
   };
 
   const client = createFixtureWire("client", () => clientHandlers, "client");
+  pushFromPeer = (deviceId, channel) =>
+    client.emit("hub:peerPush", { deviceId, channel, payload: undefined });
 
   const api = {
     deviceId: selfDeviceId,

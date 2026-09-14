@@ -90,6 +90,9 @@ import (
 const (
 	mirrorParamProjectID  = "projectId"
 	mirrorParamWorktreeID = "worktreeId"
+	// This device's own worktree for the session, so the peer can
+	// name it on its serving list (and fold the two rows into one).
+	mirrorParamLocalWorktreeID = "localWorktreeId"
 )
 
 // Mutagen's VCS ignore covers a .git DIRECTORY. A linked worktree's
@@ -140,6 +143,9 @@ type mirrorPreface struct {
 	DeviceID   string `json:"deviceId"`
 	ProjectID  string `json:"projectId"`
 	WorktreeID string `json:"worktreeId"`
+	// The local worktree the session serves, empty on a session that
+	// was created without one.
+	LocalWorktreeID string `json:"localWorktreeId,omitempty"`
 }
 
 type mirrorGatewayHandler struct {
@@ -179,9 +185,10 @@ func (h mirrorGatewayHandler) Connect(
 		}
 	}()
 	preface := mirrorPreface{
-		DeviceID:   u.Host,
-		ProjectID:  u.Parameters[mirrorParamProjectID],
-		WorktreeID: u.Parameters[mirrorParamWorktreeID],
+		DeviceID:        u.Host,
+		ProjectID:       u.Parameters[mirrorParamProjectID],
+		WorktreeID:      u.Parameters[mirrorParamWorktreeID],
+		LocalWorktreeID: u.Parameters[mirrorParamLocalWorktreeID],
 	}
 	if err := conn.SetDeadline(time.Now().Add(mirrorGatewayTimeout)); err != nil {
 		conn.Close()
@@ -251,6 +258,12 @@ type mirrorRequest struct {
 	RemoteRoot string            `json:"remoteRoot,omitempty"`
 	Name       string            `json:"name,omitempty"`
 	Labels     map[string]string `json:"labels,omitempty"`
+	// This device's own worktree id, carried to the peer in the
+	// preface so it can pair the two copies.
+	LocalWorktreeID string `json:"localWorktreeId,omitempty"`
+	// Ignore patterns in Mutagen's gitignore-like syntax, on top of
+	// the .git pointer that is always held back.
+	Ignores []string `json:"ignores,omitempty"`
 	// terminate, pause, resume
 	Session string `json:"session,omitempty"`
 }
@@ -278,6 +291,10 @@ type mirrorSessionState struct {
 	WorktreeID string            `json:"worktreeId"`
 	RemoteRoot string            `json:"remoteRoot"`
 	Paused     bool              `json:"paused"`
+	// The create request's ignores, echoed back (the .git pointer left
+	// out), and the creation time in epoch milliseconds.
+	Ignores   []string `json:"ignores"`
+	CreatedAt int64    `json:"createdAt"`
 	// A stable kebab-case code (see mirrorStatusCode) plus Mutagen's
 	// human description.
 	Status            string              `json:"status"`
@@ -450,8 +467,9 @@ func createMirrorSession(ctx context.Context, manager *synchronization.Manager, 
 		Host:     req.DeviceID,
 		Path:     req.RemoteRoot,
 		Parameters: map[string]string{
-			mirrorParamProjectID:  req.ProjectID,
-			mirrorParamWorktreeID: req.WorktreeID,
+			mirrorParamProjectID:       req.ProjectID,
+			mirrorParamWorktreeID:      req.WorktreeID,
+			mirrorParamLocalWorktreeID: req.LocalWorktreeID,
 		},
 	}
 	// Two-way-safe: both sides write, a genuine conflict is reported
@@ -460,10 +478,20 @@ func createMirrorSession(ctx context.Context, manager *synchronization.Manager, 
 	// machine-specific gitdir, and the repo itself is git's to move),
 	// nothing else is excluded by default, because the whole point is
 	// that ignored files cross too.
+	// The caller's ignores follow the pointer: what git ignores on the
+	// source, or the user's own pick, stays where it is.
+	ignores := make([]string, 0, 1+len(req.Ignores))
+	ignores = append(ignores, mirrorGitPointerIgnore)
+	for _, pattern := range req.Ignores {
+		if pattern == "" || pattern == mirrorGitPointerIgnore {
+			continue
+		}
+		ignores = append(ignores, pattern)
+	}
 	configuration := &synchronization.Configuration{
 		SynchronizationMode: core.SynchronizationMode_SynchronizationModeTwoWaySafe,
 		IgnoreVCSMode:       ignore.IgnoreVCSMode_IgnoreVCSModeIgnore,
-		Ignores:             []string{mirrorGitPointerIgnore},
+		Ignores:             ignores,
 	}
 	return manager.Create(
 		ctx,
@@ -595,6 +623,18 @@ func mirrorSessionStateOf(state *synchronization.State) mirrorSessionState {
 	if labels == nil {
 		labels = map[string]string{}
 	}
+	ignores := []string{}
+	if session.Configuration != nil {
+		for _, pattern := range session.Configuration.Ignores {
+			if pattern != mirrorGitPointerIgnore {
+				ignores = append(ignores, pattern)
+			}
+		}
+	}
+	var createdAt int64
+	if session.CreationTime != nil {
+		createdAt = session.CreationTime.AsTime().UnixMilli()
+	}
 	out := mirrorSessionState{
 		Session:           session.Identifier,
 		Name:              session.Name,
@@ -605,6 +645,8 @@ func mirrorSessionStateOf(state *synchronization.State) mirrorSessionState {
 		WorktreeID:        session.Beta.Parameters[mirrorParamWorktreeID],
 		RemoteRoot:        session.Beta.Path,
 		Paused:            session.Paused,
+		Ignores:           ignores,
+		CreatedAt:         createdAt,
 		Status:            mirrorStatusCode(state.Status),
 		StatusText:        state.Status.Description(),
 		LastError:         state.LastError,

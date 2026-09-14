@@ -5,7 +5,7 @@
 // frozen where it stopped, with the error and a retry.
 import { AlertCircle, Check, Laptop, Monitor } from "lucide-react";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
-import type { SyncPullProgress, SyncPullStep } from "@shared/ipc/modules/sync";
+import type { SyncPullProgress } from "@shared/ipc/modules/sync";
 import { errorMessageOf } from "@shared/errors";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
@@ -14,7 +14,14 @@ import { formatBytes } from "@/lib/formatBytes";
 import { cn } from "@/lib/utils";
 import { CREATE_PHASE_LABEL } from "@/store/worktreeLifecycle";
 import { TransplantBody, TransplantFooter } from "./TransplantChrome";
-import { currentStepIndex, overallProgress } from "./transplantSteps";
+import {
+  currentStepIndex,
+  overallProgress,
+  PULL_STEPS,
+} from "./transplantSteps";
+
+const PULL_ROW_COUNT = PULL_STEPS.length;
+const NO_EXTRA_ROWS: { title: string; detail: string }[] = [];
 
 type StepState = "done" | "running" | "queued";
 
@@ -26,6 +33,11 @@ export function TransplantProgress({
   error,
   onClose,
   onRetry,
+  extraRows = NO_EXTRA_ROWS,
+  sourcePart = "source, untouched",
+  runningNote = `Keep this window open. Nothing on ${sourceDeviceLabel} changes until step 3.`,
+  failedNote = `The copy on ${sourceDeviceLabel} is untouched. If the worktree already landed here, open it from the sidebar instead of retrying.`,
+  progressLabel = "Transplant progress",
 }: {
   frame: SyncPullProgress | null;
   sourceDeviceLabel: string;
@@ -36,28 +48,34 @@ export function TransplantProgress({
   error?: unknown;
   onClose: () => void;
   onRetry: () => void;
+  // Steps after the pull's four (the mirror's session open), running
+  // once the apply frame has landed. The mutation settling ends the
+  // view, so a row here never reads as done.
+  extraRows?: { title: string; detail: string }[];
+  sourcePart?: string;
+  runningNote?: string;
+  failedNote?: string;
+  progressLabel?: string;
 }) {
   const failed = error !== undefined;
-  const current = currentStepIndex(frame);
-  const ratio = overallProgress(frame);
+  const pullDone = frame?.step === "apply" && extraRows.length > 0;
+  const current = pullDone ? PULL_ROW_COUNT : currentStepIndex(frame);
+  const ratio = pullDone ? 0.97 : overallProgress(frame);
   const transferCaption =
     frame?.step === "transfer" && frame.totalBytes
       ? `${formatBytes(frame.bytes ?? 0)} of ${formatBytes(frame.totalBytes)}`
       : null;
 
-  const rows: { step: SyncPullStep; title: string; detail: string }[] = [
+  const rows: { title: string; detail: string }[] = [
     {
-      step: "capture",
       title: `Capture on ${sourceDeviceLabel}`,
       detail: dirty ? "uncommitted changes" : "clean tree",
     },
     {
-      step: "transfer",
       title: "Transfer over the device link",
       detail: transferCaption ?? "one git bundle",
     },
     {
-      step: "create",
       title: `Create the worktree on ${thisDeviceLabel}`,
       detail:
         frame?.step === "create" && frame.createPhase
@@ -65,10 +83,10 @@ export function TransplantProgress({
           : "carry-over, setup, ports",
     },
     {
-      step: "apply",
       title: "Re-apply your changes",
       detail: dirty ? "uncommitted, staging kept" : "skipped",
     },
+    ...extraRows,
   ];
 
   return (
@@ -79,7 +97,7 @@ export function TransplantProgress({
             <DeviceEnd
               icon={<Monitor aria-hidden className="size-4" />}
               name={sourceDeviceLabel}
-              part="source, untouched"
+              part={sourcePart}
             />
             <div className="min-w-0 flex-1 space-y-1.5">
               <p className="h-4 truncate text-center text-xs text-sky-700 dark:text-sky-300">
@@ -87,7 +105,7 @@ export function TransplantProgress({
               </p>
               <div
                 role="progressbar"
-                aria-label="Transplant progress"
+                aria-label={progressLabel}
                 aria-valuemin={0}
                 aria-valuemax={100}
                 aria-valuenow={Math.round(ratio * 100)}
@@ -113,7 +131,7 @@ export function TransplantProgress({
           <ol className="space-y-1">
             {rows.map((row, index) => (
               <StepRow
-                key={row.step}
+                key={row.title}
                 state={
                   index < current
                     ? "done"
@@ -139,9 +157,7 @@ export function TransplantProgress({
       </TransplantBody>
 
       {failed ? (
-        <TransplantFooter
-          note={`The copy on ${sourceDeviceLabel} is untouched. If the worktree already landed here, open it from the sidebar instead of retrying.`}
-        >
+        <TransplantFooter note={failedNote}>
           <Button variant="ghost" size="sm" onClick={onClose}>
             Close
           </Button>
@@ -150,9 +166,7 @@ export function TransplantProgress({
           </Button>
         </TransplantFooter>
       ) : (
-        <TransplantFooter
-          note={`Keep this window open. Nothing on ${sourceDeviceLabel} changes until step 3.`}
-        />
+        <TransplantFooter note={runningNote} />
       )}
     </>
   );

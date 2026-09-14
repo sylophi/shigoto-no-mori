@@ -326,7 +326,11 @@ async function main() {
       projectId: sourceProjectId,
       worktreeId,
     });
-    assert.deepEqual(ignored, { paths: ["secret.env"], total: 1 });
+    assert.deepEqual(ignored, {
+      paths: ["secret.env"],
+      patterns: ["secret.env"],
+      total: 1,
+    });
     ok(
       "captureDirty over the wire snapshots the worktree to its capture ref, and ignoredPaths names the file it leaves out",
     );

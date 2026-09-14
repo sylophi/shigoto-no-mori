@@ -36,8 +36,10 @@ collect in `window.smLabLog`.
 Fixtures live in `fixtures.ts`. `bridge.ts` serves them and answers
 any unhandled channel with a schema-derived stub (fabricated arms
 allowed: this is a lab, not the fail-closed web bridge). The sync
-verbs really mutate the fixture world, so bring-here/transplant flows
-show their outcome.
+verbs really mutate the fixture world, so the transplant and mirror
+flows show their outcome: a posed mirror session cycles every few
+seconds, keeps a history, and folds the peer's sidebar row into the
+local one.
 
 Screenshots: `lab/shoot.mjs` (playwright-core over system Chrome;
 playwright-core is not a repo dependency, so run it from a scratch dir

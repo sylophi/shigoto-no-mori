@@ -224,6 +224,9 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 	// gitdir. It must never cross.
 	writeFileT(t, filepath.Join(local, ".git"), "gitdir: /Users/someone/repo/.git/worktrees/x\n")
 	writeFileT(t, filepath.Join(remote, "notes.md"), "from the peer\n")
+	// Under the create's own ignores: a build folder and a log stay put.
+	writeFileT(t, filepath.Join(local, "dist", "bundle.js"), "built\n")
+	writeFileT(t, filepath.Join(local, "debug.log"), "noise\n")
 
 	d := startTestDaemon(t, gateway, dataDir)
 	waitForT(t, 10*time.Second, "ready", func() bool {
@@ -237,13 +240,15 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 
 	created := d.call(mirrorRequest{
 		ID: "1", Op: "create",
-		LocalRoot:  local,
-		DeviceID:   "peer-1",
-		ProjectID:  "proj-a",
-		WorktreeID: "0123456789ab",
-		RemoteRoot: remote,
-		Name:       "feature-x",
-		Labels:     map[string]string{"localWorktreeId": "ba9876543210"},
+		LocalRoot:       local,
+		DeviceID:        "peer-1",
+		ProjectID:       "proj-a",
+		WorktreeID:      "0123456789ab",
+		RemoteRoot:      remote,
+		Name:            "feature-x",
+		Labels:          map[string]string{"localWorktreeId": "ba9876543210"},
+		LocalWorktreeID: "ba9876543210",
+		Ignores:         []string{"/dist", "*.log"},
 	})
 	if created["ok"] != true {
 		t.Fatalf("create failed: %v", created["error"])
@@ -261,6 +266,9 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 	})
 	if !fileAbsent(filepath.Join(remote, ".git")) {
 		t.Fatal(".git crossed to the peer")
+	}
+	if !fileAbsent(filepath.Join(remote, "dist", "bundle.js")) || !fileAbsent(filepath.Join(remote, "debug.log")) {
+		t.Fatal("an ignored path crossed to the peer")
 	}
 
 	// Live edits after the session is watching: local to remote, remote
@@ -306,6 +314,12 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 	if labels["localWorktreeId"] != "ba9876543210" {
 		t.Errorf("labels = %v", state["labels"])
 	}
+	if ignores, _ := state["ignores"].([]any); len(ignores) != 2 || ignores[0] != "/dist" || ignores[1] != "*.log" {
+		t.Errorf("ignores = %v (the .git pointer must stay out of the echo)", state["ignores"])
+	}
+	if createdAt, _ := state["createdAt"].(float64); createdAt <= 0 {
+		t.Errorf("createdAt = %v", state["createdAt"])
+	}
 	localState, _ := state["local"].(map[string]any)
 	remoteState, _ := state["remote"].(map[string]any)
 	if localState["connected"] != true || remoteState["connected"] != true {
@@ -324,7 +338,7 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 		t.Fatal("gateway saw no preface")
 	}
 	if seen[0].DeviceID != "peer-1" || seen[0].ProjectID != "proj-a" ||
-		seen[0].WorktreeID != "0123456789ab" {
+		seen[0].WorktreeID != "0123456789ab" || seen[0].LocalWorktreeID != "ba9876543210" {
 		t.Errorf("preface = %+v", seen[0])
 	}
 
@@ -502,11 +516,12 @@ func TestMirrorSessionSurvivesDaemonRestart(t *testing.T) {
 	first := startTestDaemon(t, gateway, dataDir)
 	created := first.call(mirrorRequest{
 		ID: "1", Op: "create",
-		LocalRoot:  local,
-		DeviceID:   "peer-1",
-		RemoteRoot: remote,
-		Name:       "feat/mirror",
-		Labels:     map[string]string{"localWorktreeId": "ba9876543210"},
+		LocalRoot:       local,
+		DeviceID:        "peer-1",
+		RemoteRoot:      remote,
+		Name:            "feat/mirror",
+		Labels:          map[string]string{"localWorktreeId": "ba9876543210"},
+		LocalWorktreeID: "ba9876543210",
 	})
 	if created["ok"] != true {
 		t.Fatalf("create failed: %v", created["error"])

@@ -1,6 +1,6 @@
-// The remote worktree detail's cross-device actions: pull a copy here
-// ("Bring here"), keep a live mirror of it here ("Mirror here"), or
-// move it here and tear down the source ("Transplant"). Text buttons,
+// The remote worktree detail's cross-device actions: keep a live
+// mirror of the worktree here ("Mirror here"), or move it here and
+// decide what becomes of the source ("Transplant"). Text buttons,
 // since the footer has room to say what they do. Renders nothing
 // unless the caller holds command access, the branch is real, and a
 // local project shares the repo identity (the handler re-verifies that
@@ -8,15 +8,14 @@
 // explanation instead of an empty footer.
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { type ReactNode, useState } from "react";
-import { ArrowDownToLine, Loader2, RefreshCw, Shovel } from "lucide-react";
+import { RefreshCw, Shovel } from "lucide-react";
 import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
-import { useBringWorktreeHere } from "@/hooks/remote/useBringWorktreeHere";
-import { useStartMirror } from "@/hooks/remote/useMirrors";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useLocalProjectForIdentity } from "@/hooks/remote/useLocalProjectForIdentity";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { MirrorDialog } from "./mirror/MirrorDialog";
 import { TransplantDialog } from "./transplant/TransplantDialog";
 
 export function RemoteWorktreeActions({
@@ -38,7 +37,7 @@ export function RemoteWorktreeActions({
     return null;
   }
   // A project git couldn't identify can never match a local one, so no
-  // button here will ever work. Say so: three controls disappearing
+  // button here will ever work. Say so: two controls disappearing
   // without a word reads as a bug, and the cause (the repo, not the
   // app) is fixable by the person looking at it.
   if (project.identity == null) return <NoIdentityNote />;
@@ -48,17 +47,11 @@ export function RemoteWorktreeActions({
   if (localProject === undefined) return null;
   return (
     <div className="flex items-center gap-1">
-      <BringButton
-        worktree={worktree}
-        sourceProjectId={project.id}
-        sourceIdentity={project.identity}
-        localProjectId={localProject.id}
-      />
       <MirrorButton
         worktree={worktree}
-        sourceProjectId={project.id}
+        project={project}
         sourceIdentity={project.identity}
-        localProjectId={localProject.id}
+        localProject={localProject}
       />
       <TransplantButton
         worktree={worktree}
@@ -76,7 +69,7 @@ export function RemoteWorktreeActions({
 // shared/defaultBranch.mts (the renderer bundle cannot import .mts),
 // so a change there changes this sentence.
 const NO_IDENTITY_NOTE =
-  "No shared identity for this repo (no common remote, and no main, master, dev or remote HEAD branch), so it can't be brought here, mirrored or transplanted.";
+  "No shared identity for this repo (no common remote, and no main, master, dev or remote HEAD branch), so it can't be mirrored or transplanted.";
 
 function NoIdentityNote() {
   return (
@@ -111,9 +104,7 @@ function TransplantButton({
       <ActionButton
         icon={<Shovel />}
         label="Transplant here"
-        pendingLabel="Transplant here"
-        title="Move this worktree to this machine and tear down the copy over there"
-        pending={false}
+        title="Move this worktree here"
         onClick={() => setOpen(true)}
       />
       {open && (
@@ -130,61 +121,58 @@ function TransplantButton({
   );
 }
 
-type LandingProps = {
+// Mirror is a pull followed by a live two-way mirror between the new
+// local worktree and the remote one, driven by the mirror dialog. It
+// only exists in the app: the daemon and the gateway live in main, and
+// the web loopback refuses the mutation.
+function MirrorButton({
+  worktree,
+  project,
+  sourceIdentity,
+  localProject,
+}: {
   worktree: Worktree;
-  sourceProjectId: string;
+  project: Project;
   sourceIdentity: string;
-  localProjectId: string;
-};
-
-function BringButton(props: LandingProps) {
-  const bring = useBringWorktreeHere(props);
-  return (
-    <ActionButton
-      icon={<ArrowDownToLine />}
-      label="Bring here"
-      pendingLabel="Bringing here…"
-      title="Create this worktree on this machine, uncommitted changes included"
-      pending={bring.isPending}
-      onClick={() => bring.mutate()}
-    />
-  );
-}
-
-// Mirror is a bring-here followed by a live two-way mirror between the
-// new local worktree and the remote one, so it shares the bring
-// button's gate and shape. It only exists in the app: the daemon and
-// the gateway live in main, and the web loopback refuses the mutation.
-function MirrorButton(props: LandingProps) {
-  const mirror = useStartMirror(props);
+  localProject: Project;
+}) {
+  const [open, setOpen] = useState(false);
+  const { deviceId } = useHostScope();
+  const deviceLabel = useRemoteDeviceLabel(deviceId);
   if (!canForwardPorts) return null;
   return (
-    <ActionButton
-      icon={<RefreshCw />}
-      label="Mirror here"
-      pendingLabel="Mirroring here…"
-      title="Create this worktree on this machine and keep the two in sync, every file, both ways"
-      pending={mirror.isPending}
-      onClick={() => mirror.mutate()}
-    />
+    <>
+      <ActionButton
+        icon={<RefreshCw />}
+        label="Mirror here"
+        title="Keep a live copy of this worktree here"
+        onClick={() => setOpen(true)}
+      />
+      {open && (
+        <MirrorDialog
+          worktree={worktree}
+          project={project}
+          sourceIdentity={sourceIdentity}
+          localProject={localProject}
+          sourceDeviceLabel={deviceLabel}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </>
   );
 }
 
-// The footer's landing buttons share one shape: ghost text button, a
-// spinner standing in for the icon while the mutation runs.
+// The footer's two buttons share one shape: a ghost text button that
+// opens a dialog.
 function ActionButton({
   icon,
   label,
-  pendingLabel,
   title,
-  pending,
   onClick,
 }: {
   icon: ReactNode;
   label: string;
-  pendingLabel: string;
   title: string;
-  pending: boolean;
   onClick: () => void;
 }) {
   return (
@@ -193,12 +181,11 @@ function ActionButton({
       size="xs"
       variant="ghost"
       className="shrink-0 text-muted-foreground hover:text-foreground"
-      disabled={pending}
       title={title}
       onClick={onClick}
     >
-      {pending ? <Loader2 className="animate-spin" /> : icon}
-      {pending ? pendingLabel : label}
+      {icon}
+      {label}
     </Button>
   );
 }

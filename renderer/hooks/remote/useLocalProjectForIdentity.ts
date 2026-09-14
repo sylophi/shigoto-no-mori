@@ -1,4 +1,4 @@
-// The identity gate behind every bring-here / transplant control: a
+// The identity gate behind every mirror / transplant control: a
 // remote worktree can only land in a LOCAL project that is the same
 // repo. The projects query is explicitly scope-less despite any
 // surrounding HostScopeProvider (the destination is this machine), and

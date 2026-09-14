@@ -40,7 +40,7 @@ export function RowContent({
         />
       );
     case "worktree":
-      return <WorktreeRow worktree={row.worktree} />;
+      return <WorktreeRow worktree={row.worktree} mirror={row.mirror} />;
     case "remote-worktree":
       return (
         <RemoteWorktreeRow
@@ -69,6 +69,7 @@ export function RowContent({
           project={row.project}
           pr={row.pr}
           device={row.device}
+          mirror={row.mirror}
         />
       );
     case "worktree-skeleton":

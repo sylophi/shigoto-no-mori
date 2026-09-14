@@ -1,11 +1,15 @@
-import type { KeyboardEvent, ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 
+// The open shells, bottom to top. Escape reaches the top one only, so
+// a picker over a dialog closes alone and the dialog under it stays.
+// A shell that owns its own Escape (closeOnEscape off) still holds the
+// top, which is what keeps the one under it from closing meanwhile.
+const openShells: symbol[] = [];
+
 interface ModalShellProps {
   // Called when the user clicks the backdrop or (default) presses Escape.
-  // Children can intercept Escape via onKeyDownCapture if they need to
-  // gate dismissal on internal state.
   onClose: () => void;
   // When true, Escape closes the shell. Off when a child view owns its
   // own Escape handling (e.g. multi-step flows where Escape backs out).
@@ -22,14 +26,30 @@ export function ModalShell({
   popoverClassName,
   children,
 }: ModalShellProps) {
-  const onKeyDown = closeOnEscape
-    ? (e: KeyboardEvent<HTMLDivElement>) => {
-        if (e.key === "Escape") {
-          e.preventDefault();
-          onClose();
-        }
-      }
-    : undefined;
+  // Escape lives on the window, not the shell: after a click on the
+  // backdrop or a gap, focus (and the keydown target) is document.body,
+  // whose events never reach React's delegated handlers. Captured, so
+  // it lands before any handler inside the shell.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  const closeOnEscapeRef = useRef(closeOnEscape);
+  closeOnEscapeRef.current = closeOnEscape;
+  useEffect(() => {
+    const id = Symbol("modal-shell");
+    openShells.push(id);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || openShells.at(-1) !== id) return;
+      if (!closeOnEscapeRef.current) return;
+      e.preventDefault();
+      e.stopPropagation();
+      onCloseRef.current();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      openShells.splice(openShells.indexOf(id), 1);
+    };
+  }, []);
   // Portaled to <body>: the shell is fixed and z-50, but under doubutsu
   // the main canvas is its own stacking context (isolation: isolate in
   // doubutsu.css), which would trap the shell beneath the sidebar
@@ -41,7 +61,6 @@ export function ModalShell({
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      onKeyDown={onKeyDown}
       className="fixed inset-0 z-50 flex items-start justify-center bg-background/40 p-4 pt-[10vh] backdrop-blur-[2px]"
     >
       <div

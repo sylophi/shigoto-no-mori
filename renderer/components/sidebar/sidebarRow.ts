@@ -26,7 +26,15 @@ export type SidebarRow =
       devices: readonly SidebarDeviceBadge[];
       members: readonly RemoteProjectMember[];
     }
-  | { kind: "worktree"; key: string; worktree: Worktree }
+  // A local worktree. `mirror` names the peer device it is kept in
+  // step with (a live mirror either way round), in which case the
+  // peer's own row for the pair is folded into this one.
+  | {
+      kind: "worktree";
+      key: string;
+      worktree: Worktree;
+      mirror?: SidebarDeviceBadge;
+    }
   // The inbox's own row: taller, cross-project, and built to be triaged
   // rather than picked out of a short list. See InboxRow. The project
   // and PR ride along because the builder already had both in hand.
@@ -41,6 +49,9 @@ export type SidebarRow =
       project: Project;
       pr: PullRequest | undefined;
       device: SidebarDeviceBadge | undefined;
+      // The peer a local row is mirrored with, when it is (the tree's
+      // worktree row wears the same).
+      mirror?: SidebarDeviceBadge;
     }
   | { kind: "worktree-skeleton"; key: string; projectId: string }
   | { kind: "worktree-error"; key: string; projectId: string }

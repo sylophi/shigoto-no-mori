@@ -1,32 +1,35 @@
-import { Copy as CopyIcon, Link as LinkIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import type { ReactNode } from "react";
 import { MaterialIcon } from "@/components/ui/material-icon";
 import { cn } from "@/lib/utils";
-import type { CarryOverCandidate, CarryOverEntry } from "@shared/schemas";
-import { OnlyInWorktrees } from "./OnlyInWorktrees";
+
+// What a picker row needs of an entry. The carry-over candidate and
+// the mirror's folder entry both carry these three.
+export interface PickerEntry {
+  name: string;
+  isDirectory: boolean;
+  ignored: boolean;
+}
 
 interface PickerRowProps {
-  entry: CarryOverCandidate;
-  added: boolean;
-  // .worktreeinclude already copies this path into every new worktree; a
-  // manual entry would be auto-removed at the next creation.
-  covered: boolean;
+  entry: PickerEntry;
   index: number;
   highlighted: boolean;
   onNavigate: () => void;
   onHover: () => void;
-  onPick: (mode: CarryOverEntry["mode"]) => void;
+  // Attribution between the name and the control (where a carry-over
+  // path was found), and the control itself.
+  provenance?: ReactNode;
+  trailing: ReactNode;
 }
 
 export function PickerRow({
   entry,
-  added,
-  covered,
   index,
   highlighted,
   onNavigate,
   onHover,
-  onPick,
+  provenance,
+  trailing,
 }: PickerRowProps) {
   const { isDirectory: isFolder, ignored } = entry;
   return (
@@ -55,56 +58,8 @@ export function PickerRow({
         {entry.name}
         {isFolder ? "/" : ""}
       </span>
-      <OnlyInWorktrees
-        inPrimary={entry.inPrimary}
-        worktrees={entry.worktrees}
-        className="max-w-40"
-      />
-      {added ? (
-        <span className="px-2 text-[11px] text-muted-foreground">Added</span>
-      ) : covered ? (
-        <span
-          className="px-2 text-[11px] text-amber-600 dark:text-amber-400"
-          title=".worktreeinclude already copies this path into every new worktree."
-        >
-          covered
-        </span>
-      ) : ignored ? (
-        <div
-          className="inline-flex items-center gap-1"
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-          role="presentation"
-        >
-          <Button
-            type="button"
-            variant="outline"
-            size="xs"
-            onClick={() => onPick("symlink")}
-            title="Edits stay in sync with the main checkout"
-          >
-            <LinkIcon />
-            Symlink
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="xs"
-            onClick={() => onPick("copy")}
-            title="Independent snapshot at worktree creation"
-          >
-            <CopyIcon />
-            Copy
-          </Button>
-        </div>
-      ) : (
-        <span
-          className="px-2 text-[11px] text-muted-foreground/70"
-          title="Tracked by git. Only ignored files and folders can be carried over."
-        >
-          tracked
-        </span>
-      )}
+      {provenance}
+      {trailing}
     </li>
   );
 }

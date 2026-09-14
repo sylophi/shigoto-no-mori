@@ -297,7 +297,10 @@ async function main() {
       worktreeId: worktreeIdA,
       remoteRoot: worktreeA,
       name: "feature",
+      localWorktreeId: worktreeIdB,
       labels: { localWorktreeId: worktreeIdB, localProjectId: projectIdB },
+      // A build folder held back by the create's own ignores.
+      ignores: ["/dist"],
     };
 
     // (1) Ungranted: the gateway's openStream is refused on A's wire, so
@@ -359,6 +362,8 @@ async function main() {
     assert.equal(served.projectId, projectIdA);
     assert.equal(served.worktreeId, worktreeIdA);
     assert.equal(served.peerDeviceId, "B");
+    // The preface carried B's own worktree id for the pair.
+    assert.equal(served.peerWorktreeId, worktreeIdB);
     assert.equal(serveChildren.size, 1);
     const [serveChild] = serveChildren;
     assert.ok(processAlive(serveChild.pid), "the serve child is not running");
@@ -412,7 +417,24 @@ async function main() {
     assert.equal(state.remote.connected, true);
     assert.ok(state.successfulCycles >= 1);
     assert.deepEqual(state.conflicts, []);
+    assert.deepEqual(state.ignores, ["/dist"]);
+    assert.ok(state.createdAt > 0, "the session carries no creation time");
     assert.ok(changes > 0, "the daemon never signalled a change");
+    // The ignore held: a file under it on A never reached B while the
+    // sibling beside it did.
+    mkdirSync(join(worktreeA, "dist"), { recursive: true });
+    writeFileSync(join(worktreeA, "dist", "bundle.js"), "built\n");
+    writeFileSync(join(worktreeA, "beside-dist.txt"), "crosses\n");
+    await waitFor(
+      () => fileEquals(join(rootB, "beside-dist.txt"), "crosses\n"),
+      "the sibling of the ignored folder to reach B",
+      30_000,
+    );
+    assert.ok(
+      !existsSync(join(rootB, "dist", "bundle.js")),
+      "an ignored path crossed to B",
+    );
+    ok("the create's ignores hold: /dist stays on A while its sibling crosses");
     ok(
       "the state stream reports watching, both endpoints connected, cycles counted",
     );

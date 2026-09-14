@@ -1,4 +1,5 @@
 import type { ProjectShigomoriConfigQueries } from "@/hooks/config/useShigomoriConfig";
+import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { ProjectPullRequestQueries } from "@/hooks/projects/useProjectPullRequests";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
@@ -8,7 +9,11 @@ import {
   type PullRequest,
   type Worktree,
 } from "@shared/schemas";
-import { deviceBadgeOf, remoteWorktreeKey } from "../buildSidebarRows";
+import {
+  deviceBadgeOf,
+  mirrorPairsOf,
+  remoteWorktreeKey,
+} from "../buildSidebarRows";
 import type { SidebarDeviceBadge } from "../DeviceBadge";
 import type { InboxShelf, SidebarRow, SidebarViewModel } from "../sidebarRow";
 
@@ -24,6 +29,8 @@ interface BuildInboxRowsArgs {
   // Each item already carries the peer's PR map and its primary opt-in,
   // the same two facts the local queries above answer per project.
   remote: RemoteForestItem[];
+  // See buildSidebarRows: a mirrored pair files once, as the local row.
+  mirrors: readonly MirrorLink[];
   // Which shelves are open. Absence means shut, so both shelves start
   // folded on every launch, the same reasoning as the per-project
   // "Show shelved" reveal in the classic view.
@@ -36,6 +43,7 @@ interface Entry {
   pr: PullRequest | undefined;
   // Undefined for this machine's own worktree.
   device: SidebarDeviceBadge | undefined;
+  mirror: SidebarDeviceBadge | undefined;
   activityAt: number;
 }
 
@@ -76,6 +84,7 @@ function worktreeRow(entry: Entry): SidebarRow {
     project: entry.project,
     pr: entry.pr,
     device: entry.device,
+    mirror: entry.mirror,
   };
 }
 
@@ -95,14 +104,37 @@ export function buildInboxRows({
   pullRequestQueries,
   configQueries,
   remote,
+  mirrors,
   openShelves,
 }: BuildInboxRowsArgs): SidebarViewModel {
+  const { peerRowsFolded, peerOfLocal } = mirrorPairsOf(mirrors);
   // Remote listing failures count beside the local ones, so the shell's
   // coalesced fan-out toast covers the whole list.
   const failedCount =
     worktreeQueries.filter((q) => q.error).length +
     remote.filter((item) => item.worktreesError).length;
   const loadingCount = worktreeQueries.filter((q) => q.isLoading).length;
+  // A peer's badge for a local row's mirror, as the tree draws it.
+  const badgeOfDevice = new Map<string, SidebarDeviceBadge>();
+  for (const item of remote) {
+    if (!badgeOfDevice.has(item.deviceId)) {
+      badgeOfDevice.set(item.deviceId, deviceBadgeOf(item));
+    }
+  }
+  const mirrorBadgeFor = (
+    worktree: Worktree,
+  ): SidebarDeviceBadge | undefined => {
+    const peer = peerOfLocal.get(worktree.id);
+    if (peer === undefined) return undefined;
+    return (
+      badgeOfDevice.get(peer) ?? {
+        deviceId: peer,
+        label: "another device",
+        tone: "slate",
+        reachable: false,
+      }
+    );
+  };
 
   const live: Entry[] = [];
   const shelves: Record<InboxShelf, Entry[]> = { shelved: [], merged: [] };
@@ -123,6 +155,7 @@ export function buildInboxRows({
         project,
         pr: prs?.[worktree.branch],
         device,
+        mirror: device === undefined ? mirrorBadgeFor(worktree) : undefined,
         activityAt: worktreeLastActivityAt(worktree),
       };
       const bucket = bucketFor(worktree, entry.pr);
@@ -144,10 +177,24 @@ export function buildInboxRows({
       undefined,
     );
   });
+  // A peer's row folds only into a local entry that files as live: a
+  // local copy on a shelf would take the peer's healthy worktree off
+  // the list with it.
+  const liveLocal = new Set(
+    live.filter((e) => e.device === undefined).map((e) => e.worktree.id),
+  );
+  const foldedInto = (peerKey: string): string | undefined => {
+    const local = peerRowsFolded.get(peerKey);
+    return local !== undefined && liveLocal.has(local) ? local : undefined;
+  };
   for (const item of remote) {
     file(
       item.project,
-      item.worktrees,
+      item.worktrees.filter(
+        (worktree) =>
+          foldedInto(remoteWorktreeKey(item.deviceId, worktree.id)) ===
+          undefined,
+      ),
       item.pullRequests,
       item.showPrimaryInInbox,
       deviceBadgeOf(item),
@@ -189,7 +236,10 @@ export function buildInboxRows({
       const key = entryKey(worktreeId, deviceId);
       const shelf = shelfOf.get(key);
       if (shelf && !openShelves.has(shelf)) return `shelf:${shelf}`;
-      return rows.some((r) => r.key === key) ? key : null;
+      if (rows.some((r) => r.key === key)) return key;
+      // A peer's worktree folded into its local mirror: reveal that.
+      const local = deviceId === undefined ? undefined : foldedInto(key);
+      return local !== undefined ? `w:${local}` : null;
     },
   };
 }

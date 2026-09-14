@@ -1,4 +1,5 @@
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
+import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
 import type { Project, Worktree } from "@shared/schemas";
 import type { SidebarDeviceBadge } from "./DeviceBadge";
@@ -16,6 +17,29 @@ interface BuildSidebarRowsArgs {
   // to that group (marked per row), the rest gather under
   // remote-project headers after the local projects.
   remote: RemoteForestItem[];
+  // This device's mirrored pairs (useMirrorLinks). A pair is one
+  // worktree on two machines, so the peer's row folds into the local
+  // row (see mirrorPairsOf).
+  mirrors: readonly MirrorLink[];
+}
+
+// The pairs as the builders look them up: the local worktree each
+// peer row (device, worktree) folds into, and the peer device of each
+// local worktree in a pair.
+export function mirrorPairsOf(mirrors: readonly MirrorLink[]): {
+  peerRowsFolded: Map<string, string>;
+  peerOfLocal: Map<string, string>;
+} {
+  const peerRowsFolded = new Map<string, string>();
+  const peerOfLocal = new Map<string, string>();
+  for (const link of mirrors) {
+    peerRowsFolded.set(
+      remoteWorktreeKey(link.peerDeviceId, link.peerWorktreeId),
+      link.localWorktreeId,
+    );
+    peerOfLocal.set(link.localWorktreeId, link.peerDeviceId);
+  }
+  return { peerRowsFolded, peerOfLocal };
 }
 
 // Flattens `projects` plus their per-project worktree queries into the
@@ -34,12 +58,53 @@ export function buildSidebarRows({
   shelvedExpanded,
   arrangeMode,
   remote,
+  mirrors,
 }: BuildSidebarRowsArgs): SidebarViewModel {
+  const { peerRowsFolded, peerOfLocal } = mirrorPairsOf(mirrors);
+  // A peer's badge for a local row's mirror, off the peer's forest
+  // when it has one here (its label and tone), else unnamed.
+  const badgeOfDevice = new Map<string, SidebarDeviceBadge>();
+  for (const item of remote) {
+    if (!badgeOfDevice.has(item.deviceId)) {
+      badgeOfDevice.set(item.deviceId, deviceBadgeOf(item));
+    }
+  }
+  const mirrorBadgeFor = (
+    worktree: Worktree,
+  ): SidebarDeviceBadge | undefined => {
+    const peer = peerOfLocal.get(worktree.id);
+    if (peer === undefined) return undefined;
+    return (
+      badgeOfDevice.get(peer) ?? {
+        deviceId: peer,
+        label: "another device",
+        tone: "slate",
+        reachable: false,
+      }
+    );
+  };
   // Remote listing failures count beside the local ones, so the shell's
   // coalesced fan-out toast covers the whole tree.
   const failedCount =
     worktreeQueries.filter((q) => q.error).length +
     remote.filter((item) => item.worktreesError).length;
+  // The local rows this build shows, decided up front: a peer's row
+  // folds only into a local row that is really on screen. Its listing
+  // still loading or failed, or its shelf folded, the peer's row stays
+  // its own, or a healthy worktree would vanish behind a local gap.
+  const shownLocal = new Set<string>();
+  projects.forEach((project, i) => {
+    if (collapsed.has(project.id) || project.pathExists === false) return;
+    const trees = (worktreeQueries[i]?.data ?? []) as Worktree[];
+    const shelfOpen = shelvedExpanded.has(project.id);
+    for (const worktree of trees) {
+      if (!worktree.shelved || shelfOpen) shownLocal.add(worktree.id);
+    }
+  });
+  const foldedInto = (peerKey: string): boolean => {
+    const local = peerRowsFolded.get(peerKey);
+    return local !== undefined && shownLocal.has(local);
+  };
 
   if (arrangeMode) {
     const rows: SidebarRow[] = projects.map((project) => ({
@@ -108,7 +173,7 @@ export function buildSidebarRows({
     // local-only failure.
     const pushRemoteHere = () => {
       for (const item of remoteHere) {
-        pushRemoteWorktreeRows(rows, item, project.id);
+        pushRemoteWorktreeRows(rows, item, project.id, foldedInto);
       }
     };
     const query = worktreeQueries[i];
@@ -142,6 +207,7 @@ export function buildSidebarRows({
         kind: "worktree",
         key: `w:${worktree.id}`,
         worktree,
+        mirror: mirrorBadgeFor(worktree),
       });
     }
     pushRemoteHere();
@@ -153,6 +219,7 @@ export function buildSidebarRows({
             kind: "worktree",
             key: `w:${worktree.id}`,
             worktree,
+            mirror: mirrorBadgeFor(worktree),
           });
         }
       }
@@ -185,7 +252,7 @@ export function buildSidebarRows({
       members: membersOf(items),
     });
     for (const item of items) {
-      pushRemoteWorktreeRows(rows, item, groupId);
+      pushRemoteWorktreeRows(rows, item, groupId, foldedInto);
     }
   }
 
@@ -201,7 +268,11 @@ export function buildSidebarRows({
       // group it merged into is folded, and neither reveals anything.
       if (deviceId !== undefined) {
         const key = remoteWorktreeKey(deviceId, worktreeId);
-        return rows.some((r) => r.key === key) ? key : null;
+        if (rows.some((r) => r.key === key)) return key;
+        // A peer's worktree folded into its local mirror: reveal that.
+        const local = peerRowsFolded.get(key);
+        if (local === undefined) return null;
+        return rows.some((r) => r.key === `w:${local}`) ? `w:${local}` : null;
       }
       return rows.some((r) => r.key === `w:${worktreeId}`)
         ? `w:${worktreeId}`
@@ -243,8 +314,11 @@ function pushRemoteWorktreeRows(
   rows: SidebarRow[],
   item: RemoteForestItem,
   groupId: string,
+  foldedInto: (peerKey: string) => boolean,
 ): void {
   for (const worktree of item.worktrees) {
+    // The local row of a mirrored pair stands for both copies.
+    if (foldedInto(remoteWorktreeKey(item.deviceId, worktree.id))) continue;
     rows.push({
       kind: "remote-worktree",
       key: remoteWorktreeKey(item.deviceId, worktree.id),

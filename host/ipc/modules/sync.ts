@@ -33,7 +33,12 @@ import {
 import { peerSyncApiFor, peerWorktreesApiFor } from "@host/ipc/peerSync";
 import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
 import { createIdleRegistry } from "@host/lib/idleRegistry";
-import { listBranches, listIgnoredPaths } from "@host/lib/git/branches";
+import { listBranches } from "@host/lib/git/branches";
+import { listIgnoreRules } from "@host/lib/git/ignoreRules";
+import {
+  cachedIgnoredPaths,
+  listWorktreeFolder,
+} from "@host/lib/worktrees/carryOver";
 import { listWorktreeIdentities } from "@host/lib/git/worktrees";
 import {
   deleteRef,
@@ -214,6 +219,14 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
     return dirtyCaptureViaCli(project, worktreeId);
   },
 
+  worktreeFolder: async ({ projectId, worktreeId, relative }) => {
+    const { worktree } = await findProjectAndWorktreeOrThrow(
+      projectId,
+      worktreeId,
+    );
+    return listWorktreeFolder(worktree.path, relative);
+  },
+
   // The ignored files a capture leaves behind (see the contract note):
   // listed against the worktree, not the project, so a peer's
   // transplant dialog can name what a teardown would take with it.
@@ -222,10 +235,14 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
       projectId,
       worktreeId,
     );
-    const paths = await listIgnoredPaths(worktree.path);
+    const [paths, patterns] = await Promise.all([
+      cachedIgnoredPaths(worktree.path),
+      listIgnoreRules(worktree.path),
+    ]);
     return {
       paths: paths.slice(0, SYNC_IGNORED_PATHS_LIMIT),
       total: paths.length,
+      patterns,
     };
   },
 
@@ -575,9 +592,12 @@ export async function runPullWorktree(
     // say) does NOT throw away the successful create: the worktree is
     // real, the capture stays parked under the local id for sm dirty
     // apply, and the caller learns via dirtyApplied:false.
+    // The frame is emitted either way, so the last step reads as
+    // reached on a clean source too (and a mirror's session open,
+    // which follows, is not mistaken for a stuck create).
+    progress({ step: "apply" });
     let dirtyApplied = false;
     if (capture.captured && capture.commit !== undefined) {
-      progress({ step: "apply" });
       const localDirtyRef = dirtyRefFor(worktree.id);
       await updateRef(project.path, localDirtyRef, capture.commit);
       if (localDirtyRef !== sourceDirtyRef) {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isSafeRelPath } from "@shared/gitPaths";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import { ChunkB64Schema } from "@shared/ipc/socket/frames";
@@ -164,13 +165,39 @@ const SyncIgnoredPathsPayloadSchema = z.strictObject({
 
 // Capped on the wire: the dialog shows a handful and counts the rest,
 // and a worktree with scattered per-file ignores can hold thousands.
+// Wide enough for the mirror dialog's picker to list a whole worktree
+// (the transplant review shows the first few and counts the rest).
 export const SYNC_IGNORED_PATHS_LIMIT = 32;
 export const SyncIgnoredPathsResultSchema = z.strictObject({
   paths: z.array(z.string()).max(SYNC_IGNORED_PATHS_LIMIT),
   total: z.number().int().nonnegative(),
+  // The gitignore rules behind them (the root .gitignore and
+  // info/exclude, host/lib/git/ignoreRules.ts), for a mirror that
+  // leaves gitignored files behind: a rule keeps out what is ignored
+  // tomorrow, where the paths above only cover today.
+  patterns: z.array(z.string()).max(SYNC_IGNORED_PATHS_LIMIT),
 });
 export type SyncIgnoredPathsResult = z.infer<
   typeof SyncIgnoredPathsResultSchema
+>;
+
+// One folder of a worktree, for the mirror dialog's picker of what
+// stays behind: the same browse the carry-over picker offers, over one
+// checkout instead of the union. `ignored` is git's verdict there, and
+// only ignored entries can be kept back (a tracked file kept back would
+// leave the two git states disagreeing). .git is never listed.
+const SyncWorktreeFolderPayloadSchema = SyncIgnoredPathsPayloadSchema.extend({
+  relative: z.string().refine(isSafeRelPath, {
+    message: "Path must stay within the worktree",
+  }),
+});
+export const SyncWorktreeFolderEntrySchema = z.strictObject({
+  name: z.string().min(1),
+  isDirectory: z.boolean(),
+  ignored: z.boolean(),
+});
+export type SyncWorktreeFolderEntry = z.infer<
+  typeof SyncWorktreeFolderEntrySchema
 >;
 
 export const SyncBundleStartResultSchema = z.strictObject({
@@ -321,6 +348,12 @@ export const syncContract = defineContract("host", {
   ),
   // A read that discloses repo state (the names of ignored files), so
   // it rides the command grant like refTips.
+  worktreeFolder: invoke(
+    "sync:worktreeFolder",
+    SyncWorktreeFolderPayloadSchema,
+    z.array(SyncWorktreeFolderEntrySchema),
+    { remote: true, mutating: true, movesHostState: false },
+  ),
   ignoredPaths: invoke(
     "sync:ignoredPaths",
     SyncIgnoredPathsPayloadSchema,

@@ -27,6 +27,7 @@ import {
   useSidebarView,
   useSidebarViewHotkey,
 } from "@/hooks/projects/useSidebarView";
+import { useMirrorLinks } from "@/hooks/remote/useMirrors";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -192,6 +193,8 @@ function Forest({
     inboxFacts: inbox,
   });
   const configQueries = useAllProjectShigomoriConfigs(orderedProjects);
+  // This device's mirrored pairs, so a pair reads as one row.
+  const mirrors = useMirrorLinks();
   const view: SidebarViewModel = inbox
     ? buildInboxRows({
         projects: orderedProjects,
@@ -199,6 +202,7 @@ function Forest({
         pullRequestQueries,
         configQueries,
         remote: remoteItems,
+        mirrors,
         openShelves,
       })
     : buildSidebarRows({
@@ -208,6 +212,7 @@ function Forest({
         shelvedExpanded,
         arrangeMode,
         remote: remoteItems,
+        mirrors,
       });
   const { rows, failedCount } = view;
   // Failed listings, local or remote, surface here -- without it a

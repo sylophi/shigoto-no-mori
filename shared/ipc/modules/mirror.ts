@@ -34,6 +34,45 @@ import {
 // daemon echoes them verbatim, so the shape is pinned only loosely.
 const MirrorSessionIdSchema = z.string().min(1).max(128);
 
+// What the mirror leaves out. Everything: only .git stays put, the
+// default and the point of a mirror (ignored files cross too).
+// Gitignored: what git ignores on the source stays there, so a build
+// folder or a .env never crosses. Custom: the user picked which of the
+// ignored paths stay behind. The mode is remembered on the session (a
+// label) so the mirror page can say which rule is in force. The
+// patterns themselves are the engine's ignore list, in its
+// gitignore-like syntax (a leading / anchors to the root, ! negates).
+export const MirrorIgnoreModeSchema = z.enum([
+  "everything",
+  "gitignored",
+  "custom",
+]);
+export type MirrorIgnoreMode = z.infer<typeof MirrorIgnoreModeSchema>;
+// The rule in one phrase, the same on every surface that names it:
+// the session's history line, the live card's chip, the lab's posed
+// thread. `count` is the custom rule's pattern count.
+export function describeIgnores(mode: MirrorIgnoreMode, count: number): string {
+  switch (mode) {
+    case "everything":
+      return "Nothing left out";
+    case "gitignored":
+      return "Gitignored left out";
+    case "custom":
+      return `${count} ${count === 1 ? "path" : "paths"} left out`;
+  }
+}
+export const MIRROR_IGNORES_LIMIT = 512;
+const MirrorIgnorePatternSchema = z
+  .string()
+  .min(1)
+  .max(1024)
+  .refine((pattern) => !/[\r\n]/.test(pattern), {
+    message: "Ignore pattern must be one line",
+  });
+const MirrorIgnoresSchema = z
+  .array(MirrorIgnorePatternSchema)
+  .max(MIRROR_IGNORES_LIMIT);
+
 // The daemon's stable status codes (file-sync/engine.go mirrorStatusCode).
 const MirrorStatusSchema = z.enum([
   "disconnected",
@@ -169,6 +208,13 @@ export const MirrorSessionSchema = z.strictObject({
   worktreeId: z.string(),
   remoteRoot: z.string(),
   paused: z.boolean(),
+  // The engine's ignore list for this session (the .git pointer left
+  // out: it is never the user's choice) and the rule it came from.
+  ignores: z.array(z.string()),
+  ignoreMode: MirrorIgnoreModeSchema,
+  // When the session was created, epoch milliseconds, so the page can
+  // say how long the mirror has been running.
+  createdAt: z.number().int().nonnegative(),
   status: MirrorStatusSchema,
   statusText: z.string(),
   lastError: z.string().optional(),
@@ -192,6 +238,10 @@ const MirrorServingSchema = z.strictObject({
   worktreeId: WorktreeIdSchema,
   // The calling device, or "" on a wire that stamps no caller.
   peerDeviceId: z.string(),
+  // The peer's own worktree for this stream (its local copy), when the
+  // peer named it: what lets this device's sidebar fold the peer's row
+  // into the served worktree's. Absent on a peer that predates it.
+  peerWorktreeId: WorktreeIdSchema.optional(),
   since: z.number().int().nonnegative(),
 });
 export type MirrorServing = z.infer<typeof MirrorServingSchema>;
@@ -212,7 +262,10 @@ export type MirrorListResult = z.infer<typeof MirrorListResultSchema>;
 
 // Same input as the pull it is built on: which peer, which of ITS
 // project/worktree ids, the repo identity to land in, the branch.
-export const MirrorStartPayloadSchema = SyncPullWorktreePayloadSchema;
+export const MirrorStartPayloadSchema = SyncPullWorktreePayloadSchema.extend({
+  ignoreMode: MirrorIgnoreModeSchema,
+  ignores: MirrorIgnoresSchema,
+});
 
 const MirrorStartResultSchema = SyncPullWorktreeResultSchema.extend({
   session: MirrorSessionIdSchema,
@@ -228,6 +281,52 @@ const MirrorSessionPayloadSchema = z.strictObject({
 // the named worktree as the far end before answering.
 const MirrorOpenStreamPayloadSchema = MirrorWorktreePayloadSchema.extend({
   channelId: HexId32Schema,
+  // See MirrorServingSchema.peerWorktreeId.
+  peerWorktreeId: WorktreeIdSchema.optional(),
+});
+
+// Changing what a mirror leaves out: the engine cannot re-configure a
+// live session, so the host ends it and opens a fresh one on the same
+// pair. The new session id comes back.
+const MirrorSetIgnoresPayloadSchema = MirrorSessionPayloadSchema.extend({
+  ignoreMode: MirrorIgnoreModeSchema,
+  ignores: MirrorIgnoresSchema,
+});
+
+// What happened to a mirror over time, kept by the device that runs
+// it, keyed by its local worktree so a re-opened session (an ignore
+// change) keeps the thread. Bounded per worktree (main/mirror/
+// history.ts), so the list is a recent window, not an archive.
+export const MirrorEventKindSchema = z.enum([
+  "started",
+  "stopped",
+  "paused",
+  "resumed",
+  "ignores-changed",
+  "connected",
+  "disconnected",
+  "halted",
+  "error",
+  "recovered",
+  "conflict",
+  "git-diverged",
+  "git-blocked",
+  "git-error",
+  "git-synced",
+]);
+export type MirrorEventKind = z.infer<typeof MirrorEventKindSchema>;
+export const MirrorEventSchema = z.strictObject({
+  at: z.number().int().nonnegative(),
+  kind: MirrorEventKindSchema,
+  detail: z.string(),
+});
+export type MirrorEvent = z.infer<typeof MirrorEventSchema>;
+export const MIRROR_HISTORY_LIMIT = 100;
+const MirrorHistoryPayloadSchema = z.strictObject({
+  localWorktreeId: WorktreeIdSchema,
+});
+const MirrorHistoryResultSchema = z.strictObject({
+  events: z.array(MirrorEventSchema).max(MIRROR_HISTORY_LIMIT),
 });
 
 export const mirrorContract = defineContract("host", {
@@ -256,6 +355,20 @@ export const mirrorContract = defineContract("host", {
     remote: false,
     mutating: true,
   }),
+  setIgnores: invoke(
+    "mirror:setIgnores",
+    MirrorSetIgnoresPayloadSchema,
+    z.strictObject({ session: MirrorSessionIdSchema }),
+    { remote: false, mutating: true },
+  ),
+  // Host-scoped like list: a peer viewing this device's mirror reads
+  // the same thread. Nothing here moves state.
+  history: invoke(
+    "mirror:history",
+    MirrorHistoryPayloadSchema,
+    MirrorHistoryResultSchema,
+    { remote: true, mutating: false },
+  ),
   // Grant-gated like every byte-stream open. The stream changes nothing
   // a viewer caches (the serving set fans out on `changed` below).
   openStream: invoke(

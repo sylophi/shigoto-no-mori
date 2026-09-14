@@ -524,6 +524,20 @@ export function createGitFollower(deps: {
         persist();
       }
     },
+    // The session was re-opened under a new id on the same pair (an
+    // ignore change): the agreement follows it, on disk and on the
+    // live record if the daemon's snapshot already made one.
+    rename(from: string, to: string): void {
+      loadStored();
+      const agreed = stored[from];
+      if (agreed === undefined) return;
+      delete stored[from];
+      stored[to] = agreed;
+      persist();
+      const record = records.get(to);
+      if (record !== undefined && record.agreed === null)
+        record.agreed = agreed;
+    },
     onLocalProjectChanged(projectId: string): void {
       syncSessions();
       triggerWhere((s) => s.labels[LABEL_LOCAL_PROJECT] === projectId);

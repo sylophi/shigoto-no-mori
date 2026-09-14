@@ -34,6 +34,10 @@ type Preface = {
   deviceId: string;
   projectId: string;
   worktreeId: string;
+  // This device's own worktree for the session, when the daemon named
+  // it (see engine.go mirrorParamLocalWorktreeID). Passed on so the
+  // peer's serving list can name the local copy.
+  localWorktreeId: string | undefined;
 };
 
 // A preface is a short JSON line. Anything longer is not our daemon.
@@ -60,10 +64,14 @@ function parsePreface(line: string): Preface {
   const record = parsed as Record<string, unknown>;
   const field = (key: string) =>
     typeof record[key] === "string" ? (record[key] as string) : "";
+  const localWorktreeId = field("localWorktreeId");
   const preface = {
     deviceId: field("deviceId"),
     projectId: field("projectId"),
     worktreeId: field("worktreeId"),
+    localWorktreeId: WorktreeIdSchema.safeParse(localWorktreeId).success
+      ? localWorktreeId
+      : undefined,
   };
   if (
     preface.deviceId === "" ||
@@ -158,6 +166,9 @@ export function createMirrorGateway(deps: {
               projectId: preface.projectId,
               worktreeId: preface.worktreeId,
               channelId,
+              ...(preface.localWorktreeId === undefined
+                ? {}
+                : { peerWorktreeId: preface.localWorktreeId }),
             }),
           carried,
           // The bridge resumes the socket itself once the far end is

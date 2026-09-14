@@ -2,200 +2,35 @@
 // is doing, if it has one. Two shapes, both quiet when there is
 // nothing to say:
 //   - this worktree is the LOCAL copy of a peer's worktree (a session
-//     this device runs): status, conflicts and problems, plus pause /
-//     resume / stop when viewed on the machine that runs it.
+//     this device runs): status, conflicts and problems. The details
+//     and the controls live in the dialog behind the footer's Mirror
+//     button (mirror/MirrorManageDialog.tsx).
 //   - this worktree is being mirrored BY peers (streams this device
 //     serves): one chip naming them.
 // Built on the shared chip (ui/chip-button.tsx) and the status tones
 // (ui/status-dot.tsx): emerald for a settled live mirror, sky while
 // cycles run, amber for conflicts and reconnects, rose for a halt or
-// an error, slate for paused and for the controls.
-import { Loader2, Pause, Play, RefreshCw, Square } from "lucide-react";
+// an error, slate for paused.
+import { RefreshCw } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
-import type { MirrorSession, MirrorStatus } from "@shared/ipc/modules/mirror";
+import type { MirrorSession } from "@shared/ipc/modules/mirror";
 import type { Worktree } from "@shared/schemas";
-import { Chip, ChipButton } from "@/components/ui/chip-button";
+import { Chip } from "@/components/ui/chip-button";
 import { type StatusTone, TONE_TEXT } from "@/components/ui/status-dot";
 import { MirrorConflictsChip } from "@/components/worktreeDetail/MirrorConflicts";
+import { describeMirror } from "@/components/worktreeDetail/mirror/mirrorStatus";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import {
-  useMirrorControls,
-  useWorktreeMirror,
-} from "@/hooks/remote/useMirrors";
+import { useWorktreeMirror } from "@/hooks/remote/useMirrors";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { localDeviceId } from "@/lib/queryKeys";
-import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 
-const BUSY: ReadonlySet<MirrorStatus> = new Set([
-  "scanning",
-  "waiting-for-rescan",
-  "reconciling",
-  "staging-local",
-  "staging-remote",
-  "transitioning",
-  "saving",
-]);
-
-// The engine's own description of a lifecycle state is written in its
-// own terms ("Connecting to beta"), which says nothing to someone
-// looking at two worktrees. The status code beside it is stable and
-// ours to phrase, so the states a working mirror passes through are
-// read from that instead. statusText stays for halts and errors,
-// where the engine's wording is the news.
-const STATUS_DETAIL: Partial<Record<MirrorStatus, string>> = {
-  disconnected: "Waiting for the other device",
-  "connecting-local": "Opening this device's copy",
-  "connecting-remote": "Connecting to the other device",
-  watching: "Watching for changes",
-  scanning: "Looking for changes",
-  "waiting-for-rescan": "Waiting to look again",
-  reconciling: "Working out what changed",
-  "staging-local": "Receiving files from the other device",
-  "staging-remote": "Sending files to the other device",
-  transitioning: "Applying changes",
-  saving: "Saving the mirror's state",
-};
-
-// One line of truth about a session, worst news first: a halt or a
-// stored error, then the git half's verdict, then conflicts, then
-// problems, then the ordinary lifecycle.
-function describe(session: MirrorSession): {
-  tone: StatusTone;
-  label: string;
-  detail: string;
-  spinning: boolean;
-  // Set only by the conflict branch, which is the one chip with a
-  // list behind it (MirrorConflicts.tsx).
-  showConflicts?: boolean;
-} {
-  const problems =
-    session.local.problems.length +
-    session.remote.problems.length +
-    session.local.excludedProblems +
-    session.remote.excludedProblems;
-  const conflicts = session.conflicts.length + session.excludedConflicts;
-  const lifecycle = STATUS_DETAIL[session.status] ?? "";
-  if (session.paused) {
-    return {
-      tone: "slate",
-      label: "Mirror paused",
-      detail: "",
-      spinning: false,
-    };
-  }
-  if (session.status.startsWith("halted-")) {
-    return {
-      tone: "rose",
-      label: "Mirror halted",
-      detail: session.statusText,
-      spinning: false,
-    };
-  }
-  if (session.lastError) {
-    return {
-      tone: "rose",
-      label: "Mirror error",
-      detail: session.lastError,
-      spinning: false,
-    };
-  }
-  // The git half's verdict outranks file-level news: a diverged or
-  // blocked branch is the thing to act on. Files keep mirroring
-  // meanwhile. Only the git state is frozen.
-  if (session.git?.status === "diverged") {
-    return {
-      tone: "amber",
-      label: "Git diverged",
-      detail: `${session.git.detail}. Files keep syncing. Git state is frozen until you put one side back.`,
-      spinning: false,
-    };
-  }
-  if (session.git?.status === "blocked") {
-    return {
-      tone: "rose",
-      label: "Git blocked",
-      detail: session.git.detail,
-      spinning: false,
-    };
-  }
-  if (session.git?.status === "error") {
-    return {
-      tone: "rose",
-      label: "Git follow error",
-      detail: session.git.detail,
-      spinning: false,
-    };
-  }
-  if (conflicts > 0) {
-    return {
-      tone: "amber",
-      label: pluralize(conflicts, "conflict"),
-      detail: "",
-      spinning: false,
-      showConflicts: true,
-    };
-  }
-  if (problems > 0) {
-    return {
-      tone: "rose",
-      label: `${problems} mirror ${problems === 1 ? "problem" : "problems"}`,
-      detail: [...session.local.problems, ...session.remote.problems]
-        .map((p) => `${p.path}: ${p.error}`)
-        .slice(0, 5)
-        .join("\n"),
-      spinning: false,
-    };
-  }
-  if (
-    session.status === "connecting-local" ||
-    session.status === "connecting-remote" ||
-    session.status === "disconnected"
-  ) {
-    return {
-      tone: "amber",
-      label: "Mirror reconnecting",
-      detail: lifecycle,
-      spinning: true,
-    };
-  }
-  if (BUSY.has(session.status) || session.git?.status === "following") {
-    return {
-      tone: "sky",
-      label: "Mirror syncing",
-      detail:
-        session.git?.status === "following"
-          ? `git ${session.git.detail}`
-          : lifecycle,
-      spinning: true,
-    };
-  }
-  return {
-    tone: "emerald",
-    label: "Mirror live",
-    detail: `${session.local.files} files, ${session.successfulCycles} cycles`,
-    spinning: false,
-  };
-}
-
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
-
-function ChipIcon({
-  icon: Icon,
-  spinning,
-}: {
-  icon: IconType;
-  spinning: boolean;
-}) {
-  return (
-    <Icon aria-hidden className={cn("size-3.5", spinning && "animate-spin")} />
-  );
-}
 
 // A read-only status chip in one of the status tones.
 function StatusChip({
   tone,
-  icon,
+  icon: Icon,
   label,
   title,
   spinning = false,
@@ -208,37 +43,12 @@ function StatusChip({
 }) {
   return (
     <Chip className={cn("tabular shrink-0", TONE_TEXT[tone])} title={title}>
-      <ChipIcon icon={icon} spinning={spinning} />
+      <Icon
+        aria-hidden
+        className={cn("size-3.5", spinning && "animate-spin")}
+      />
       {label}
     </Chip>
-  );
-}
-
-// A control chip. The mutation's in-flight state swaps its icon for
-// a spinner and disables it.
-function ActionChip({
-  icon,
-  label,
-  title,
-  pending,
-  onClick,
-}: {
-  icon: IconType;
-  label: string;
-  title: string;
-  pending: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <ChipButton
-      className="shrink-0"
-      title={title}
-      onClick={onClick}
-      disabled={pending}
-    >
-      <ChipIcon icon={pending ? Loader2 : icon} spinning={pending} />
-      {label}
-    </ChipButton>
   );
 }
 
@@ -254,23 +64,18 @@ function PeerName({ deviceId }: { deviceId: string }) {
 export function MirrorPill({ worktree }: { worktree: Worktree }) {
   const { remote } = useHostScope();
   const { session, serving } = useWorktreeMirror(worktree);
-  const controls = useMirrorControls();
   if (session === undefined && serving.length === 0) return null;
   return (
     <div className="flex flex-wrap items-center gap-1 text-xs">
       {session !== undefined && (
-        <SessionLine
-          session={session}
-          canControl={!remote}
-          controls={controls}
-        />
+        <SessionLine session={session} canControl={!remote} />
       )}
       {serving.length > 0 && (
         <>
           <StatusChip
             tone="emerald"
             icon={RefreshCw}
-            label="Mirrored elsewhere"
+            label="Mirrored"
             title="A peer keeps a live copy of this worktree"
           />
           <span className="text-muted-foreground">
@@ -291,13 +96,11 @@ export function MirrorPill({ worktree }: { worktree: Worktree }) {
 function SessionLine({
   session,
   canControl,
-  controls,
 }: {
   session: MirrorSession;
   canControl: boolean;
-  controls: ReturnType<typeof useMirrorControls>;
 }) {
-  const view = describe(session);
+  const view = describeMirror(session);
   return (
     <>
       {view.showConflicts ? (
@@ -319,34 +122,6 @@ function SessionLine({
       <span className="text-muted-foreground">
         with <PeerName deviceId={session.deviceId} />
       </span>
-      {canControl && (
-        <>
-          {session.paused ? (
-            <ActionChip
-              icon={Play}
-              label="Resume"
-              title="Resume mirroring"
-              pending={controls.resume.isPending}
-              onClick={() => controls.resume.mutate(session.session)}
-            />
-          ) : (
-            <ActionChip
-              icon={Pause}
-              label="Pause"
-              title="Pause mirroring (files stay where they are)"
-              pending={controls.pause.isPending}
-              onClick={() => controls.pause.mutate(session.session)}
-            />
-          )}
-          <ActionChip
-            icon={Square}
-            label="Stop"
-            title="Stop mirroring. Both copies stay as they are."
-            pending={controls.stop.isPending}
-            onClick={() => controls.stop.mutate(session.session)}
-          />
-        </>
-      )}
     </>
   );
 }

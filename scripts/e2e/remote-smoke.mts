@@ -331,7 +331,7 @@ async function main(): Promise<string[]> {
     });
 
     let pulled: Worktree | undefined;
-    await scenario("bring here", async () => {
+    await scenario("pull", async () => {
       const project = need(bProject, "the remote read");
       const source = need(created, "the grant gate");
       const result = await a.evaluate<{ worktree: Worktree }>(
@@ -386,6 +386,8 @@ async function main(): Promise<string[]> {
           sourceWorktreeId: source.id,
           sourceIdentity: project.identity,
           branch: source.branch,
+          ignoreMode: "everything",
+          ignores: [],
         })})`,
       );
       const local = started.worktree;
@@ -404,6 +406,34 @@ async function main(): Promise<string[]> {
         `window.api.mirror.list().then((m) => m.serving.some((s) => s.worktreeId === ${JSON.stringify(source.id)}))`,
         30_000,
       );
+      // The session says which rule it runs under and when it began,
+      // b's served stream names a's copy, and the thread has its start.
+      const listed = await a.evaluate<{
+        sessions: {
+          session: string;
+          ignoreMode: string;
+          ignores: string[];
+          createdAt: number;
+        }[];
+      }>("window.api.mirror.list()");
+      const own = listed.sessions.find((s) => s.session === started.session);
+      assert.ok(own, "a's session is not listed");
+      assert.equal(own.ignoreMode, "everything");
+      assert.deepEqual(own.ignores, []);
+      assert.ok(own.createdAt > 0, "the session has no creation time");
+      const servedOnB = await b.evaluate<{
+        serving: { worktreeId: string; peerWorktreeId?: string }[];
+      }>("window.api.mirror.list()");
+      assert.equal(
+        servedOnB.serving.find((s) => s.worktreeId === source.id)
+          ?.peerWorktreeId,
+        local.id,
+        "b's served stream does not name a's copy",
+      );
+      const history = await a.evaluate<{ events: { kind: string }[] }>(
+        `window.api.mirror.history(${JSON.stringify({ localWorktreeId: local.id })})`,
+      );
+      assert.equal(history.events[0]?.kind, "started");
       // Files, both ways, including one git ignores.
       writeFileSync(join(source.path, "from-b.txt"), "written on b\n");
       await waitFor(
@@ -441,11 +471,39 @@ async function main(): Promise<string[]> {
         "a's worktree to read clean after the follow",
         30_000,
       );
+      // A change of ignores re-opens the session on the same pair: a
+      // path under the new rule stays on a while its sibling crosses.
+      const reopened = await a.evaluate<{ session: string }>(
+        `window.api.mirror.setIgnores(${JSON.stringify({
+          session: started.session,
+          ignoreMode: "custom",
+          ignores: ["/private-notes"],
+        })})`,
+      );
+      assert.notEqual(reopened.session, started.session);
+      const session2 = JSON.stringify(reopened.session);
+      await a.waitFor(
+        "the re-opened session to be watching",
+        `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${session2} && s.status === "watching" && s.ignoreMode === "custom"))`,
+        90_000,
+      );
+      mkdirSync(join(local.path, "private-notes"), { recursive: true });
+      writeFileSync(join(local.path, "private-notes", "todo.md"), "mine\n");
+      writeFileSync(join(local.path, "shared-note.md"), "everyone\n");
+      await waitFor(
+        () => fileEquals(join(source.path, "shared-note.md"), "everyone\n"),
+        "a's file beside the ignored folder to reach b",
+        30_000,
+      );
+      assert.ok(
+        !existsSync(join(source.path, "private-notes", "todo.md")),
+        "a path under the mirror's ignores crossed to b",
+      );
       // Stop: the session leaves a's list and the stream leaves b's.
-      await a.evaluate(`window.api.mirror.stop(${session})`);
+      await a.evaluate(`window.api.mirror.stop(${session2})`);
       await a.waitFor(
         "a's mirror session to be gone",
-        `window.api.mirror.list().then((m) => !m.sessions.some((s) => s.session === ${session}))`,
+        `window.api.mirror.list().then((m) => !m.sessions.some((s) => s.session === ${session2}))`,
         30_000,
       );
       await b.waitFor(

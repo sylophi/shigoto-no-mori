@@ -98,7 +98,7 @@ export function useWorktreeNav() {
     },
 
     // Explicitly the LOCAL tree, whatever the surrounding scope: a
-    // brought-here or transplanted worktree lands on this machine, so
+    // mirrored or transplanted worktree lands on this machine, so
     // its detail page lives under /projects even when the action ran
     // from a remote page.
     toLocalWorktree(projectId: string, worktreeId: string) {
