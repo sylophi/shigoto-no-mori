@@ -9,6 +9,7 @@
 // hub store rather than the account:listDevices HTTP snapshot (which
 // only invalidates on account:changed), so a device coming online or
 // going away updates without a refetch.
+import { useIsMutating } from "@tanstack/react-query";
 import { errorMessageOf } from "@shared/errors";
 import { isHubRefusal } from "@shared/account/service";
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
@@ -19,7 +20,11 @@ import {
   useRevokeDevice,
   useWatchCommandAccessChanges,
 } from "@/hooks/account/useAccount";
-import { useAccountIdentity } from "@/hooks/account/useClerkAccount";
+import {
+  CLERK_SIGN_OUT_KEY,
+  useAccountIdentity,
+  useClerkSessionMissing,
+} from "@/hooks/account/useClerkAccount";
 import {
   commandAccessOf,
   usePeerCommandAccess,
@@ -109,15 +114,17 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
         <ClerkSignOutButton className="-my-1 text-muted-foreground" />
       </div>
 
-      {/* Signing in again is the whole fix (the Clerk session outlives
-          the revoked device credential, so the button re-enrolls this
-          machine), and it sits in the banner because that is where the
-          bad news is. */}
-      {blockedMessage !== null && (
-        <ErrorBanner className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-          <span className="min-w-0 flex-1 basis-64">{blockedMessage}</span>
-          <ClerkSignInButton />
-        </ErrorBanner>
+      {/* One slot for what is wrong with this device's sign-in, and
+          the way back sits in it because that is where the bad news
+          is. Blocked outranks a missing session: a device removed
+          from the account has nothing left to keep. */}
+      {blockedMessage !== null ? (
+        // Signing in again is the whole fix (the Clerk session
+        // outlives the revoked device credential, so the button
+        // re-enrolls this machine).
+        <SignInBanner>{blockedMessage}</SignInBanner>
+      ) : (
+        <SessionMissingBanner />
       )}
 
       {devicesQuery.isLoading ? (
@@ -192,18 +199,52 @@ function describeListError(error: unknown): string {
 
 // The person, not the account's key: the hub keys on the Clerk user
 // id, but nobody recognises that string as themselves, so the line
-// reads the email (or name) Clerk knows and only falls back to the
-// abbreviated id while the profile is still loading. A leaf, like the
+// reads the email (or name) Clerk knows. With no profile to read (still
+// loading, or no session at all) the line names the account by its
+// abbreviated id and does not call that "signed in". A leaf, like the
 // sign-out button beside it, so Clerk's session churn re-renders one
 // span and not the registry.
 function AccountIdentity({ accountId }: { accountId: string }) {
-  const identity = useAccountIdentity(abbreviateId(accountId));
+  const person = useAccountIdentity();
   return (
     <p className="text-xs text-muted-foreground">
-      Signed in as{" "}
+      {person === null ? "Account" : "Signed in as"}{" "}
       <span className="font-medium text-foreground select-text">
-        {identity}
+        {person ?? abbreviateId(accountId)}
       </span>
     </p>
+  );
+}
+
+// The Clerk session is gone while the device credential, independent
+// of it, still holds the device on the account: the sign-in expired
+// while the app was closed, or its token store went (a keychain reset,
+// a pre-Clerk upgrade), which ClerkAccountSync leaves alone on purpose.
+// The copy claims only what is known, not which. The way back is a
+// sign-in (as the same person: another account would re-enroll the
+// device under it), and the sign-out in the caption still works
+// without a session. A leaf, so Clerk's churn stays out of the
+// registry. Quiet while a sign-out runs: Clerk drops its session
+// before the hub revoke lands, and that gap is not this state.
+function SessionMissingBanner() {
+  const sessionMissing = useClerkSessionMissing();
+  const signingOut = useIsMutating({ mutationKey: CLERK_SIGN_OUT_KEY }) > 0;
+  if (!sessionMissing || signingOut) return null;
+  return (
+    <SignInBanner>
+      This device is still on the account, but you are no longer signed in. Sign
+      in again as the same person to keep it there, or sign out to remove it.
+    </SignInBanner>
+  );
+}
+
+// The banner shape both sign-in problems share: the sentence, and the
+// button beside it.
+function SignInBanner({ children }: { children: React.ReactNode }) {
+  return (
+    <ErrorBanner className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      <span className="min-w-0 flex-1 basis-64">{children}</span>
+      <ClerkSignInButton />
+    </ErrorBanner>
   );
 }
