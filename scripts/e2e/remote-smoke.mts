@@ -22,6 +22,7 @@ import { connect, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { signalTree } from "../../host/lib/scripts/process.ts";
+import { devProfileNameSuffix } from "../../shared/appName.mts";
 import { errorMessageOf } from "../../shared/errors.ts";
 import { isCommandRefusedError } from "../../shared/ipc/socket/frames.ts";
 import {
@@ -175,6 +176,23 @@ const waitSignedIn = (w: AppWindow, who: string) =>
     "window.api.account.status().then((s) => s.signedIn)",
     60_000,
   );
+
+// The teardown's revoke from one window: every device whose name
+// carries the other profile's suffix (so a re-enrolled or never-read
+// peer is still found), then the window's own sign-out.
+async function revokeFrom(port: number, otherSuffix: string): Promise<void> {
+  const w = await attachWindow(port, 5_000);
+  try {
+    await w.evaluate(
+      `window.api.account.listDevices().then((ds) => Promise.all(ds
+        .filter((d) => d.name.endsWith(${JSON.stringify(otherSuffix)}) && d.deviceId !== window.api.deviceId)
+        .map((d) => window.api.account.revokeDevice(d.deviceId))))`,
+    );
+    await w.evaluate("window.api.account.signOut()");
+  } finally {
+    w.close();
+  }
+}
 
 // One call on a peer through a's bridge, as the renderer's hub
 // transport makes it (renderer/lib/remote/hubTransport.ts).
@@ -525,15 +543,29 @@ async function main(): Promise<string[]> {
       ]);
     });
 
-    await scenario("sign-out", async () => {
-      await b.evaluate("window.api.account.signOut()");
-      await waitDropped(a, idB, "a to drop b after b signed out");
+    await scenario("revoke", async () => {
+      // a removes b from the account, as a person does on the Devices
+      // page. Not a self sign-out over the bridge: b relaunched with
+      // its credential on disk, so ClerkAccountSync holds a live Clerk
+      // session with no enrollment attempt armed and would re-enroll
+      // b the moment the credential cleared (the Sign out button ends
+      // the Clerk session first, which a cloned window cannot). Revoked
+      // from a, b keeps its dead credential and stays gone.
+      await a.evaluate(
+        `window.api.account.revokeDevice(${JSON.stringify(idB)})`,
+      );
+      await waitDropped(a, idB, "a to drop b after revoking it");
       const devices = await a.evaluate<{ deviceId: string }[]>(
         "window.api.account.listDevices()",
       );
       assert.ok(
         !devices.some((d) => d.deviceId === idB),
         "b still in a's device registry",
+      );
+      await b.waitFor(
+        "b's hub socket to be blocked",
+        'window.api.hub.status().then((s) => s.socket.phase === "blocked")',
+        60_000,
       );
     });
     await shoot("end");
@@ -551,17 +583,24 @@ async function main(): Promise<string[]> {
     } else {
       // Revoke what is still enrolled, through fresh attachments so a
       // window this run lost track of (a relaunch that failed midway)
-      // is still asked. Best effort: a dead window has nothing to
-      // revoke. Then stop both trees and wipe the local halves.
-      await Promise.allSettled(
-        [portA, portB].map(async (port) => {
-          const w = await attachWindow(port, 5_000);
-          try {
-            await w.evaluate("window.api.account.signOut()");
-          } finally {
-            w.close();
-          }
-        }),
+      // is still asked. From a: it removes every device of b's profile
+      // (b may have re-enrolled, or never been read), then signs
+      // itself out, which sticks because a booted fresh in this run
+      // (see the revoke scenario for why b's would not). Without a, b
+      // signs itself out as the best that is left. Best effort: a dead
+      // window has nothing to revoke. Then stop both trees and wipe
+      // the local halves.
+      await revokeFrom(portA, devProfileNameSuffix(fixture.b.name)).catch(
+        async (error: unknown) => {
+          log(`cleanup: a could not revoke: ${errorMessageOf(error)}`);
+          await revokeFrom(portB, devProfileNameSuffix(fixture.a.name)).catch(
+            (fallbackError: unknown) => {
+              log(
+                `cleanup: b could not revoke: ${errorMessageOf(fallbackError)}`,
+              );
+            },
+          );
+        },
       );
       await killTrees(trees, "SIGTERM");
       // A cleared timer, so a prompt exit does not leave the loop
