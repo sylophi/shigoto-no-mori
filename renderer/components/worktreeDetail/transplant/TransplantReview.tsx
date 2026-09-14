@@ -14,7 +14,6 @@ import {
   Laptop,
   Monitor,
 } from "lucide-react";
-import type { ReactNode } from "react";
 import type { Project, Worktree } from "@shared/schemas";
 import { pullBranchCollision } from "@shared/pullCollision";
 import { worktreeBaseFor } from "@shared/worktreeLayout";
@@ -41,35 +40,15 @@ import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest
 import { tildify } from "@/lib/projectPaths";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { cn } from "@/lib/utils";
-import { NoteBox, TransplantBody, TransplantFooter } from "./TransplantChrome";
-
-const MAX_ROWS = 8;
-
-// The review's three file lists (changed, staying behind, carry-over)
-// share one card: a bordered monospace list showing the first MAX_ROWS
-// entries and counting the rest.
-const CARD = "rounded-lg border border-border bg-card p-3";
-const CARD_NOTE = `${CARD} text-xs text-muted-foreground`;
-
-function CardList({ total, children }: { total: number; children: ReactNode }) {
-  return (
-    <ul className={`${CARD} space-y-1 font-mono text-xs`}>
-      {children}
-      {total > MAX_ROWS && (
-        <li className="text-muted-foreground">and {total - MAX_ROWS} more</li>
-      )}
-    </ul>
-  );
-}
-
-function CardSkeleton({ rows = 1 }: { rows?: 1 | 2 }) {
-  return (
-    <div className={`${CARD} space-y-1.5`}>
-      {rows === 2 && <Skeleton className="h-3.5 w-3/4" />}
-      <Skeleton className="h-3.5 w-1/2" />
-    </div>
-  );
-}
+import {
+  CARD_NOTE,
+  CardList,
+  CardSkeleton,
+  MAX_LIST_ROWS as MAX_ROWS,
+  NoteBox,
+  TransplantBody,
+  TransplantFooter,
+} from "./TransplantChrome";
 
 export function TransplantReview({
   worktree,
@@ -201,7 +180,7 @@ export function TransplantReview({
 // in a worktree or merely existing. Read under LocalHostScope. Both
 // lists are the ordinary cached ones, so the row and the footer
 // asking the same question cost one read between them.
-function useLocalCollision(
+export function useLocalCollision(
   localProject: Project,
   branch: string,
 ): { held: boolean; holder: Worktree | undefined } {
@@ -214,7 +193,7 @@ function useLocalCollision(
   return { held, holder };
 }
 
-function DestinationRow({
+export function DestinationRow({
   worktree,
   localProject,
   thisDeviceLabel,
@@ -300,7 +279,7 @@ function ReviewFooter({
   );
 }
 
-function SourceCard({
+export function SourceCard({
   worktree,
   project,
   sourceDeviceLabel,
@@ -550,7 +529,7 @@ function CarryOverList({
 // Where the worktree lands: the local layout's base folder, with the
 // name left open -- the create picks a fresh pool name on arrival, so
 // a full path here would be a guess.
-function DestinationFolder({
+export function DestinationFolder({
   localProject,
   thisDeviceLabel,
 }: {

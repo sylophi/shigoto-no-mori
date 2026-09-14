@@ -9,6 +9,7 @@ import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { makeIgnoreMatcher } from "@shared/gitPaths";
 import type { CarryOverCandidate, CarryOverStat } from "@shared/schemas";
+import type { SyncWorktreeFolderEntry } from "@shared/ipc/modules/sync";
 import { listIgnoredPaths } from "../git/branches";
 import {
   listWorktreeIdentities,
@@ -53,6 +54,20 @@ const ignoredPathsCache = ttlMapCache<string, string[]>(
   10_000,
   listIgnoredPaths,
 );
+
+// The same walk for the sync handler's ignored-paths read, so a
+// dialog listing a worktree and its picker browsing it share one.
+export const cachedIgnoredPaths = (worktreePath: string) =>
+  ignoredPathsCache.get(worktreePath);
+
+// Folders before files, then alphabetical within each group.
+function foldersFirst(
+  a: { name: string; isDirectory: boolean },
+  b: { name: string; isDirectory: boolean },
+): number {
+  if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
+  return a.name.localeCompare(b.name);
+}
 
 // Union of `relative` across checkouts. A checkout without the folder
 // (or one git can't read) contributes nothing. Only when none can list
@@ -104,11 +119,30 @@ export async function listCarryOverCandidates(
       else candidate.worktrees.push(result.checkout.name);
     }
   }
-  // Folders before files, then alphabetical within each group.
-  return [...byName.values()].toSorted((a, b) => {
-    if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
-    return a.name.localeCompare(b.name);
-  });
+  return [...byName.values()].toSorted(foldersFirst);
+}
+
+// One folder of one checkout, with git's ignore verdict per entry: the
+// mirror dialog's picker of what stays behind (shared/ipc/modules/
+// sync.ts worktreeFolder). Folders first, then alphabetical, like the
+// carry-over listing, and .git left out for the same reason.
+export async function listWorktreeFolder(
+  worktreePath: string,
+  relative: string,
+): Promise<SyncWorktreeFolderEntry[]> {
+  const [entries, ignored] = await Promise.all([
+    readdir(join(worktreePath, relative), { withFileTypes: true }),
+    ignoredPathsCache.get(worktreePath),
+  ]);
+  const isIgnored = makeIgnoreMatcher(ignored);
+  return entries
+    .filter((entry) => entry.name !== ".git")
+    .map((entry) => ({
+      name: entry.name,
+      isDirectory: entry.isDirectory(),
+      ignored: isIgnored(relative ? `${relative}/${entry.name}` : entry.name),
+    }))
+    .toSorted(foldersFirst);
 }
 
 // Where each configured path currently exists.

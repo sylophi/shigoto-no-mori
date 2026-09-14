@@ -2,6 +2,7 @@
 // of the four named steps is running (everything before it is done,
 // everything after queued), and a single overall figure for the bar
 // between the two devices.
+import { useEffect, useState } from "react";
 import {
   type SyncPullProgress,
   type SyncPullStep,
@@ -45,6 +46,19 @@ export function overallProgress(frame: SyncPullProgress | null): number {
     case "apply":
       return 0.93;
   }
+}
+
+// A once-a-second tick while a pull runs, for the elapsed figure.
+// Frozen (and free) otherwise.
+export function useClock(running: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!running) return;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [running]);
+  return now;
 }
 
 export function formatElapsed(ms: number): string {

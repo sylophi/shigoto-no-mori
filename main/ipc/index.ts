@@ -16,6 +16,7 @@ import { z } from "zod";
 import { coalesce } from "@host/lib/util/coalesce";
 import {
   GitStateCoreSchema,
+  MirrorEventSchema,
   MirrorWorktreePayloadSchema,
   mirrorContract,
 } from "@shared/ipc/modules/mirror";
@@ -78,6 +79,7 @@ import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import { createPortForwardEngine } from "../portForward/engine";
 import { createMirrorDaemon } from "../mirror/daemon";
 import { createMirrorGateway } from "../mirror/gateway";
+import { createMirrorHistory } from "../mirror/history";
 import { createGitFollower } from "@host/mirror/gitFollow";
 import {
   atomicWriteJsonSync,
@@ -138,6 +140,27 @@ const gitFollowStorePath = () => join(fileSyncDir(), "git-follow.json");
 const GitFollowStoreSchema = z.object({
   agreed: z.record(z.string(), GitStateCoreSchema).default({}),
 });
+// The mirrors' event threads (main/mirror/history.ts), one file
+// beside the follower's, fed by every daemon snapshot and follower
+// verdict below and by the handlers' control ops.
+const mirrorHistoryPath = () => join(fileSyncDir(), "mirror-history.json");
+const MirrorHistoryStoreSchema = z.object({
+  events: z.record(z.string(), z.array(MirrorEventSchema)).default({}),
+});
+const mirrorHistory = createMirrorHistory({
+  store: {
+    load: () =>
+      readJsonOrNullSync(mirrorHistoryPath(), MirrorHistoryStoreSchema)
+        ?.events ?? {},
+    save: (events) =>
+      atomicWriteJsonSync(mirrorHistoryPath(), withSchemaVersion({ events })),
+  },
+  onChange: () => broadcastMirrorChanged(),
+});
+const observeMirrorHistory = () =>
+  mirrorHistory.observe(mirrorDaemon.sessions(), (session) =>
+    gitFollower.statusOf(session),
+  );
 const mirrorDaemon = createMirrorDaemon({
   spawn: spawnFileSync,
   dataDir: fileSyncDir,
@@ -151,6 +174,7 @@ const mirrorDaemon = createMirrorDaemon({
     // The follower compares the session set itself. A snapshot that
     // only moved a cycle count is a no-op there.
     gitFollower.sessionsChanged();
+    observeMirrorHistory();
   },
 });
 // The git half of every session this device runs (host/mirror/
@@ -175,7 +199,10 @@ const gitFollower = createGitFollower({
     save: (agreed) =>
       atomicWriteJsonSync(gitFollowStorePath(), withSchemaVersion({ agreed })),
   },
-  onChange: broadcastMirrorChanged,
+  onChange: () => {
+    broadcastMirrorChanged();
+    observeMirrorHistory();
+  },
 });
 
 export function notifyLocalProjectChanged(projectId: string): void {
@@ -300,6 +327,25 @@ export function registerIpcHandlers(): void {
     status: () => mirrorDaemon.status(),
     sessions: () => mirrorDaemon.sessions(),
     create: (input) => mirrorDaemon.create(input),
+    // The old session is paused, not ended, until the new one is up:
+    // two running sessions on one root would fight, but a paused one
+    // holds nothing, and a create that fails (peer away) then leaves
+    // the mirror as it was instead of gone with no way to re-open it.
+    // The agreement moves to the new id, so the follower picks up
+    // where it was instead of starting from the no-agreement fallback.
+    recreate: async (session, input) => {
+      await mirrorDaemon.pause(session);
+      let next: string;
+      try {
+        next = await mirrorDaemon.create(input);
+      } catch (error) {
+        await mirrorDaemon.resume(session).catch(() => {});
+        throw error;
+      }
+      await mirrorDaemon.terminate(session);
+      gitFollower.rename(session, next);
+      return next;
+    },
     terminate: async (session) => {
       await mirrorDaemon.terminate(session);
       // An explicit stop ends the agreement too, or the git follower's
@@ -309,6 +355,10 @@ export function registerIpcHandlers(): void {
     pause: (session) => mirrorDaemon.pause(session),
     resume: (session) => mirrorDaemon.resume(session),
     gitStatus: (session) => gitFollower.statusOf(session),
+    history: (localWorktreeId) => mirrorHistory.eventsFor(localWorktreeId),
+    noteEvent: (localWorktreeId, kind, detail) =>
+      mirrorHistory.note(localWorktreeId, kind, detail),
+    forgetHistory: (localWorktreeId) => mirrorHistory.forget(localWorktreeId),
   });
   setMirrorServingListener(broadcastMirrorChanged);
   // A served worktree's index moved: tell the device mirroring it

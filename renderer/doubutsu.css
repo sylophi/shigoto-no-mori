@@ -242,6 +242,14 @@
   --doubutsu-button-outline: oklch(0.4 0.022 65);
   --doubutsu-edge: oklch(0 0 0 / 0.45);
   --doubutsu-edge-line: oklch(1 0 0 / 0.07);
+  /* Surfaces inside a modal. Dark's popover (0.30), card (0.31) and
+     muted (0.325) sit a hair apart: fine for panels on the canvas,
+     but a card or a muted row INSIDE a dialog vanishes into it. The
+     modal remaps the two tokens (below) to these: the card a real
+     step above the popover, the muted band high enough that its
+     usual 40% wash still lands a step above whichever it sits on. */
+  --doubutsu-modal-card: oklch(0.345 0.012 78);
+  --doubutsu-modal-muted: oklch(0.42 0.014 72);
 
   /* Status families, evening variants (the amber pairs are theme-split
      in component code via dark: prefixes, so the light-block values
@@ -400,6 +408,24 @@
    pill fill makes them read as controls with the rings gone. */
 .doubutsu [data-slot="chip"] {
   background-color: var(--muted);
+}
+
+/* --- Surfaces inside a modal, evening ---
+   See --doubutsu-modal-card. A scoped token remap, the way the
+   sidebar zone retints itself: every bg-card / bg-muted utility in
+   the dialog (the cards the transplant and mirror dialogs are built
+   on, the muted rows, stat tiles and bands on them) resolves to the
+   lifted pair at whatever alpha it wears. Chips and segmented tracks
+   climb to the outline-button brown so they stand off either. Dark
+   only: light's cream steps already separate. */
+.doubutsu.dark [data-slot="modal-shell"] {
+  --card: var(--doubutsu-modal-card);
+  --muted: var(--doubutsu-modal-muted);
+}
+.doubutsu.dark
+  [data-slot="modal-shell"]
+  :is([data-slot="chip"], [data-slot="segmented-control"]) {
+  background-color: var(--doubutsu-button-outline);
 }
 
 /* An unticked checkbox is a hairline box on the surface colour in v1,

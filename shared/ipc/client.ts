@@ -359,6 +359,8 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       stop: (session: string) => mirrorClient.stop({ session }),
       pause: (session: string) => mirrorClient.pause({ session }),
       resume: (session: string) => mirrorClient.resume({ session }),
+      setIgnores: mirrorClient.setIgnores,
+      history: mirrorClient.history,
       onChanged: mirrorClient.changed,
     },
 
@@ -372,6 +374,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       refTips: syncClient.refTips,
       captureDirty: syncClient.captureDirty,
       ignoredPaths: syncClient.ignoredPaths,
+      worktreeFolder: syncClient.worktreeFolder,
       bundleStart: syncClient.bundleStart,
       bundleChunk: syncClient.bundleChunk,
       bundleAbort: syncClient.bundleAbort,

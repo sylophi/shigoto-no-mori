@@ -20,6 +20,7 @@ import {
 } from "@shared/schemas";
 import { ActivityIcon } from "../ActivityIcon";
 import { DeviceBadge, type SidebarDeviceBadge } from "../DeviceBadge";
+import { MirrorBadge } from "../WorktreeRow";
 import { ProjectIcon } from "../ProjectIcon";
 import { ProjectMenuItems, useProjectMenuRemoveArm } from "../ProjectMenuItems";
 import { PullRequestPill } from "../PullRequestPill";
@@ -32,6 +33,7 @@ interface InboxRowProps {
   pr: PullRequest | undefined;
   // The peer this worktree lives on, or undefined for this machine's own.
   device: SidebarDeviceBadge | undefined;
+  mirror?: SidebarDeviceBadge;
 }
 
 // The inbox row answers a different question from the tree row. In the
@@ -53,7 +55,13 @@ interface InboxRowProps {
 // device twin, and scopes that menu to the peer. Asleep, it keeps the
 // row (last known state) and drops the menu, since there is no session
 // to act over.
-export function InboxRow({ worktree, project, pr, device }: InboxRowProps) {
+export function InboxRow({
+  worktree,
+  project,
+  pr,
+  device,
+  mirror,
+}: InboxRowProps) {
   const { isSelected, open, activity, isDeleting, title } = useWorktreeRowState(
     worktree,
     device?.deviceId,
@@ -87,6 +95,7 @@ export function InboxRow({ worktree, project, pr, device }: InboxRowProps) {
         />
         <span className="min-w-0 truncate font-medium">{project.name}</span>
         {device && <DeviceBadge badge={device} />}
+        {mirror && <MirrorBadge mirror={mirror} />}
         <TrailingSlot
           worktree={worktree}
           activity={activity}

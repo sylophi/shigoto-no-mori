@@ -34,7 +34,7 @@ interface WorktreeDetailFooterProps {
   worktree: Worktree;
   state: WorktreeFooterState;
   actions: WorktreeFooterActions;
-  // Extra scope-specific actions (the remote detail's bring-here /
+  // Extra scope-specific actions (the remote detail's mirror /
   // transplant pair), rendered leading in the quiet state only: the
   // deletion state machine keeps the whole row once it engages.
   leading?: ReactNode;

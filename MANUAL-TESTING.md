@@ -38,14 +38,14 @@ The sections below explain each piece.
 
 The app has two builds. Each keeps its own state.
 
-| | Packaged app | Dev app (`pnpm dev`) |
-|---|---|---|
-| Data dir | `~/.sm` | `~/.smd` |
-| Data dir pointer file | `~/.config/shigomori/data-dir` | `~/.config/shigomori-dev/data-dir` |
-| userData (macOS) | `~/Library/Application Support/Shigoto no Mori` | `~/Library/Application Support/Shigoto no Mori (dev)` |
-| CLI | `sm` (bundled) | `smd` (`dist-cli/smd`, built by `pnpm dev`) |
-| Renderer scheme | `shigomori://app` | `shigomori-dev://app` |
-| Hub and Clerk config | Baked in at build time | `.env.local` (`hub-dev.shigomori.com`) |
+|                       | Packaged app                                    | Dev app (`pnpm dev`)                                  |
+| --------------------- | ----------------------------------------------- | ----------------------------------------------------- |
+| Data dir              | `~/.sm`                                         | `~/.smd`                                              |
+| Data dir pointer file | `~/.config/shigomori/data-dir`                  | `~/.config/shigomori-dev/data-dir`                    |
+| userData (macOS)      | `~/Library/Application Support/Shigoto no Mori` | `~/Library/Application Support/Shigoto no Mori (dev)` |
+| CLI                   | `sm` (bundled)                                  | `smd` (`dist-cli/smd`, built by `pnpm dev`)           |
+| Renderer scheme       | `shigomori://app`                               | `shigomori-dev://app`                                 |
+| Hub and Clerk config  | Baked in at build time                          | `.env.local` (`hub-dev.shigomori.com`)                |
 
 A device is made of two folders:
 
@@ -73,7 +73,7 @@ A device is made of two folders:
   be missing, empty, or already contain shigomori state, or it is
   ignored.
 - Neither option changes userData. Two devices on one machine need
-  different data dirs *and* different userData. Dev profiles (below)
+  different data dirs _and_ different userData. Dev profiles (below)
   provide both.
 
 ### Filling a data dir with test repos
@@ -107,16 +107,16 @@ smd projects add <dir> --all --yes     # set SHIGOMORI_DATA_DIR if the data dir 
 
 ### Environment variables
 
-| Variable | Effect |
-|---|---|
-| `SHIGOMORI_DATA_DIR` | Data dir for this session. See above. |
-| `SHIGOMORI_PROFILE` | Dev profile name. The launchers set it, and it requires `SHIGOMORI_DATA_DIR`. |
-| `SHIGOMORI_DEBUG_PORT` | Opens Chromium's remote-debugging port on that window. Dev builds only. |
-| `PORT` | Renderer dev server port. `.env.local` holds the per-worktree value. |
-| `SM_DEVICE_HUB_URL` | Device hub URL. Normally from `.env.local`; a real env var overrides it. |
-| `SM_ACCOUNT_CLERK_PUBLISHABLE_KEY` | Clerk key. Same override rule. |
-| `SM_ACCOUNT_WEB_ORIGIN` | Web client origin the desktop admits. Same override rule. |
-| `SHIGOMORI_UPDATE_FEED_URL` | Alternate update feed for the updater. |
+| Variable                           | Effect                                                                        |
+| ---------------------------------- | ----------------------------------------------------------------------------- |
+| `SHIGOMORI_DATA_DIR`               | Data dir for this session. See above.                                         |
+| `SHIGOMORI_PROFILE`                | Dev profile name. The launchers set it, and it requires `SHIGOMORI_DATA_DIR`. |
+| `SHIGOMORI_DEBUG_PORT`             | Opens Chromium's remote-debugging port on that window. Dev builds only.       |
+| `PORT`                             | Renderer dev server port. `.env.local` holds the per-worktree value.          |
+| `SM_DEVICE_HUB_URL`                | Device hub URL. Normally from `.env.local`; a real env var overrides it.      |
+| `SM_ACCOUNT_CLERK_PUBLISHABLE_KEY` | Clerk key. Same override rule.                                                |
+| `SM_ACCOUNT_WEB_ORIGIN`            | Web client origin the desktop admits. Same override rule.                     |
+| `SHIGOMORI_UPDATE_FEED_URL`        | Alternate update feed for the updater.                                        |
 
 ### Theme hotkeys
 
@@ -156,9 +156,9 @@ pnpm dev --profile a [--fresh] [--clone-login]
 pnpm dev:peer b [--fresh] [--clone-login]
 ```
 
-| Flag | Effect |
-|---|---|
-| `--fresh` | Wipe the profile's folder and userData before launch. |
+| Flag            | Effect                                                                                                                                |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `--fresh`       | Wipe the profile's folder and userData before launch.                                                                                 |
 | `--clone-login` | Copy the plain dev app's Clerk sign-in into the profile. The profile boots signed in and enrolls as a new device on the same account. |
 
 ### Signing a profile in
@@ -233,22 +233,25 @@ returns a window with `evaluate`, `waitFor`, `screenshot` and `close`.
 
 ### Useful bridge calls
 
-| Call | Returns |
-|---|---|
-| `window.api.deviceId` | This window's device id. |
-| `window.api.account.status()` | `signedIn`, `accountId`, `deviceName`, `configured`. |
-| `window.api.account.listDevices()` | The account's device registry from the hub, with `online`. |
-| `window.api.account.setAcceptsCommands(bool)` | Flips this device's command grant. |
-| `window.api.account.signOut()` | Revokes this device and clears the credential. Clerk is untouched. |
-| `window.api.hub.status()` | Socket phase, `onlineDeviceIds`, `peerAppVersions` (one key per direct session), `tunnel`. |
-| `window.api.hub.invokePeer({deviceId, channel, input})` | Any host call on a peer, e.g. `projects:list`, `worktrees:list`, `worktrees:create`. |
-| `window.api.sync.pullWorktree({...})` | Brings a peer's worktree here. See the smoke for the payload. |
-| `window.api.sync.teardownSource({...})` | Second half of a transplant. |
-| `window.api.sync.ignoredPaths({projectId, worktreeId})` | The ignored files on a worktree (first few `paths`, full `total`), which a transfer leaves behind. Grant-gated. The transplant dialog lists them. |
-| `window.api.portForward.start({deviceId, remotePort})` | Forwards a peer's loopback port. Returns `localPort`. |
-| `window.api.mirror.start({...})` | Brings a peer's worktree here and keeps the two mirrored (files both ways, git state followed). Same payload as `sync.pullWorktree`. Returns the local worktree and the `session`. |
-| `window.api.mirror.list()` | This device's mirror sessions (`status`, `git.status`, conflicts) and the streams it serves for peers. |
-| `window.api.mirror.stop(session)` / `pause` / `resume` | Controls a session this device runs. |
+| Call                                                                | Returns                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `window.api.deviceId`                                               | This window's device id.                                                                                                                                                                                                                                                                             |
+| `window.api.account.status()`                                       | `signedIn`, `accountId`, `deviceName`, `configured`.                                                                                                                                                                                                                                                 |
+| `window.api.account.listDevices()`                                  | The account's device registry from the hub, with `online`.                                                                                                                                                                                                                                           |
+| `window.api.account.setAcceptsCommands(bool)`                       | Flips this device's command grant.                                                                                                                                                                                                                                                                   |
+| `window.api.account.signOut()`                                      | Revokes this device and clears the credential. Clerk is untouched.                                                                                                                                                                                                                                   |
+| `window.api.hub.status()`                                           | Socket phase, `onlineDeviceIds`, `peerAppVersions` (one key per direct session), `tunnel`.                                                                                                                                                                                                           |
+| `window.api.hub.invokePeer({deviceId, channel, input})`             | Any host call on a peer, e.g. `projects:list`, `worktrees:list`, `worktrees:create`.                                                                                                                                                                                                                 |
+| `window.api.sync.pullWorktree({...})`                               | Brings a peer's worktree here. See the smoke for the payload.                                                                                                                                                                                                                                        |
+| `window.api.sync.teardownSource({...})`                             | Second half of a transplant.                                                                                                                                                                                                                                                                         |
+| `window.api.sync.ignoredPaths({projectId, worktreeId})`             | The ignored files on a worktree (`paths`, full `total`) and the gitignore rules behind them (`patterns`). Grant-gated. The transplant dialog lists them, the mirror dialog chooses from them.                                                                                                        |
+| `window.api.sync.worktreeFolder({projectId, worktreeId, relative})` | One folder of a worktree with git's ignore verdict per entry. Grant-gated. The mirror dialog's picker browses it.                                                                                                                                                                                    |
+| `window.api.portForward.start({deviceId, remotePort})`              | Forwards a peer's loopback port. Returns `localPort`.                                                                                                                                                                                                                                                |
+| `window.api.mirror.start({...})`                                    | Brings a peer's worktree here and keeps the two mirrored (files both ways, git state followed). The `sync.pullWorktree` payload plus `ignoreMode` (`everything`, `gitignored`, `custom`) and `ignores` (engine patterns, `/path` anchors to the root). Returns the local worktree and the `session`. |
+| `window.api.mirror.list()`                                          | This device's mirror sessions (`status`, `git.status`, conflicts, `ignoreMode`, `ignores`, `createdAt`) and the streams it serves for peers (`peerWorktreeId` names the peer's copy).                                                                                                                |
+| `window.api.mirror.stop(session)` / `pause` / `resume`              | Controls a session this device runs.                                                                                                                                                                                                                                                                 |
+| `window.api.mirror.setIgnores({session, ignoreMode, ignores})`      | Changes what a running mirror leaves out. Re-opens the session and returns the new id.                                                                                                                                                                                                                  |
+| `window.api.mirror.history({localWorktreeId})`                      | The mirror's thread of events, kept by the device that runs it and keyed by its local worktree.                                                                                                                                                                                                      |
 
 ### Two argument conventions
 
@@ -287,17 +290,17 @@ interaction:
 6. Revokes what is still enrolled, stops both apps and wipes both
    profiles. `--keep` skips this and leaves everything running.
 
-| Scenario | Asserts |
-|---|---|
-| presence | Each roster holds the other. a's registry shows b online. |
-| remote read | a lists b's projects and the main worktree of `shared`. |
-| grant gate | With b's switch off, a's `worktrees:create` on b is refused with the typed message. With it on, `feat/e2e` is created and the path exists on disk. |
-| bring here | a pulls `feat/e2e`. The worktree lands under a's data dir on that branch. |
-| transplant | a tears the source down. It is gone from b's disk and still present on a. |
-| mirror | a mirrors a fresh worktree of b's. Files written on either side land on the other, a gitignored file included. A commit on b lands on a with the same tip and a clean status. Stopping clears a's session and b's served stream. |
-| port forward | a forwards a loopback echo server on b. Bytes round-trip. |
-| liveness | b is killed with SIGKILL. a drops it from the roster. b relaunches and both reconnect. |
-| revoke | a removes b from the account. a's roster and registry drop it, and b's hub socket is blocked. |
+| Scenario     | Asserts                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| presence     | Each roster holds the other. a's registry shows b online.                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| remote read  | a lists b's projects and the main worktree of `shared`.                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| grant gate   | With b's switch off, a's `worktrees:create` on b is refused with the typed message. With it on, `feat/e2e` is created and the path exists on disk.                                                                                                                                                                                                                                                                                                                          |
+| pull         | a pulls `feat/e2e` (the transplant's first half). The worktree lands under a's data dir on that branch.                                                                                                                                                                                                                                                                                                                                                                     |
+| transplant   | a tears the source down. It is gone from b's disk and still present on a.                                                                                                                                                                                                                                                                                                                                                                                                   |
+| mirror       | a mirrors a fresh worktree of b's. The session reports its ignore rule and start time, b's served stream names a's copy, and the history opens with `started`. Files written on either side land on the other, a gitignored file included. A commit on b lands on a with the same tip and a clean status. Changing the ignores re-opens the session, and a path under the new rule stays on a while its sibling crosses. Stopping clears a's session and b's served stream. |
+| port forward | a forwards a loopback echo server on b. Bytes round-trip.                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| liveness     | b is killed with SIGKILL. a drops it from the roster. b relaunches and both reconnect.                                                                                                                                                                                                                                                                                                                                                                                      |
+| revoke       | a removes b from the account. a's roster and registry drop it, and b's hub socket is blocked.                                                                                                                                                                                                                                                                                                                                                                               |
 
 Screenshots and logs go to a temp dir named in the output. A failing
 scenario screenshots both windows first.

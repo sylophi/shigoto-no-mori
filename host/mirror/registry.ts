@@ -6,7 +6,10 @@
 // can stop a worktree's mirrors without importing that module (which
 // reaches sync, which reaches worktrees).
 import type {
+  MirrorEvent,
+  MirrorEventKind,
   MirrorGitStatus,
+  MirrorIgnoreMode,
   MirrorSession,
 } from "@shared/ipc/modules/mirror";
 import { errorMessageOf } from "@shared/errors";
@@ -19,12 +22,16 @@ import { errorMessageOf } from "@shared/errors";
 // the local worktree's to report.
 export const MIRROR_LABEL_LOCAL_PROJECT = "localProjectId";
 export const MIRROR_LABEL_LOCAL_WORKTREE = "localWorktreeId";
+// The ignore rule the session was opened with (a MirrorIgnoreMode),
+// so the page can say which rule its patterns came from. Absent on a
+// session that predates it, which read as "everything".
+export const MIRROR_LABEL_IGNORE_MODE = "ignoreMode";
 
 // What the daemon reports for one session, before annotation: the
 // daemon's own document shape (file-sync/engine.go mirrorSessionState).
 export type MirrorSessionRaw = Omit<
   MirrorSession,
-  "localProjectId" | "localWorktreeId"
+  "localProjectId" | "localWorktreeId" | "ignoreMode" | "git"
 >;
 
 // The create request the daemon takes (file-sync/engine.go
@@ -36,19 +43,49 @@ export type MirrorCreateInput = {
   worktreeId: string;
   remoteRoot: string;
   name: string;
+  // This device's own worktree id, carried to the peer in the stream
+  // preface so its sidebar can fold the pair. A field of its own, not
+  // a label the engine would have to know the key of.
+  localWorktreeId: string;
   labels: Record<string, string>;
+  ignores: string[];
 };
 
 export type MirrorImpl = {
   status: () => "stopped" | "starting" | "running" | "unavailable";
   sessions: () => MirrorSessionRaw[];
   create: (input: MirrorCreateInput) => Promise<string>;
+  // Ends a session and opens a fresh one in its place, whatever hangs
+  // off the old id (the git follower's agreement) carried across.
+  recreate: (session: string, input: MirrorCreateInput) => Promise<string>;
   terminate: (session: string) => Promise<unknown>;
   pause: (session: string) => Promise<unknown>;
   resume: (session: string) => Promise<unknown>;
   // The git follower's verdict for a session (host/mirror/gitFollow.ts).
   gitStatus: (session: string) => MirrorGitStatus | undefined;
+  // The mirror's thread of events, by local worktree (main/mirror/
+  // history.ts), and the way a control op adds to it.
+  history: (localWorktreeId: string) => MirrorEvent[];
+  noteEvent: (
+    localWorktreeId: string,
+    kind: MirrorEventKind,
+    detail: string,
+  ) => void;
+  // Drops a worktree's thread, once the worktree itself is gone.
+  forgetHistory: (localWorktreeId: string) => void;
 };
+
+// The local worktree a session runs on, "" on a session that predates
+// the label.
+export function localWorktreeIdOf(raw: MirrorSessionRaw | undefined): string {
+  return raw?.labels[MIRROR_LABEL_LOCAL_WORKTREE] ?? "";
+}
+
+// The ignore mode a session's labels carry, "everything" when none.
+export function ignoreModeOf(labels: Record<string, string>): MirrorIgnoreMode {
+  const mode = labels[MIRROR_LABEL_IGNORE_MODE];
+  return mode === "gitignored" || mode === "custom" ? mode : "everything";
+}
 
 let impl: MirrorImpl | null = null;
 
@@ -96,4 +133,6 @@ export async function stopMirrorsForWorktree(
       }),
     ),
   );
+  // The worktree is gone, so its thread has no page left to show on.
+  daemon.forgetHistory(localWorktreeId);
 }

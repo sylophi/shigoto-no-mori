@@ -33,7 +33,7 @@ There are exactly three ways to work with a worktree that lives on another machi
 
 - **Port forwarding.** Start the dev server over there, open the port here. Enough for web apps and anything else reached through a browser or a socket. The files stay where they are.
 - **Worktree syncing.** The worktree is continuously mirrored between the two machines: every file, not only what git tracks. Work happens on the remote machine and shows up here instantly, and edits made here show up there. Both sides are real git worktrees whose branch, commits, and uncommitted changes agree, so git behaves identically on either machine. This is the default answer to "I want that worktree in front of me": for every practical purpose, the remote worktree is on the local disk.
-- **Worktree transfer.** A special case of syncing: the worktree crosses once, in full, uncommitted changes included, and then lives on the destination. Copy it, or move it and tear the source down. For when the work belongs on the machine with the right hardware, or the source machine is going away.
+- **Worktree transfer.** A special case of syncing: the worktree crosses once, in full, uncommitted changes included, and then lives on the destination. Move it, then keep, shelve, or tear down the copy left behind. For when the work belongs on the machine with the right hardware, or the source machine is going away.
 
 ## How Decisions Get Made
 

@@ -17,6 +17,7 @@
 // the grant-gated wire, never taken from the caller.
 import type { z } from "zod";
 import {
+  describeIgnores,
   type MirrorGitStatus,
   type MirrorServing,
   type MirrorSession,
@@ -43,6 +44,9 @@ import {
 } from "@host/mirror/gitState";
 import {
   engine,
+  ignoreModeOf,
+  localWorktreeIdOf,
+  MIRROR_LABEL_IGNORE_MODE,
   MIRROR_LABEL_LOCAL_PROJECT,
   MIRROR_LABEL_LOCAL_WORKTREE,
   type MirrorSessionRaw,
@@ -120,8 +124,16 @@ function annotateMirrorSession(
     ...raw,
     localProjectId: raw.labels[MIRROR_LABEL_LOCAL_PROJECT] ?? "",
     localWorktreeId: raw.labels[MIRROR_LABEL_LOCAL_WORKTREE] ?? "",
+    ignoreMode: ignoreModeOf(raw.labels),
     ...(git === undefined ? {} : { git }),
   });
+}
+
+function findSession(
+  daemon: ReturnType<typeof engine>,
+  session: string,
+): MirrorSessionRaw | undefined {
+  return daemon.sessions().find((raw) => raw.session === session);
 }
 
 async function rollBackPull(worktree: {
@@ -171,7 +183,8 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     if (source === undefined)
       throw unknownWorktreeError(input.sourceWorktreeId);
 
-    const pulled = await runPullWorktree(input, ctx);
+    const { ignoreMode, ignores, ...pullInput } = input;
+    const pulled = await runPullWorktree(pullInput, ctx);
     let session: string;
     try {
       session = await daemon.create({
@@ -181,10 +194,13 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
         worktreeId: input.sourceWorktreeId,
         remoteRoot: source.path,
         name: input.branch,
+        localWorktreeId: pulled.worktree.id,
         labels: {
           [MIRROR_LABEL_LOCAL_PROJECT]: pulled.worktree.projectId,
           [MIRROR_LABEL_LOCAL_WORKTREE]: pulled.worktree.id,
+          [MIRROR_LABEL_IGNORE_MODE]: ignoreMode,
         },
+        ignores,
       });
     } catch (error) {
       // No session, so no worktree either: the pull is undone (the
@@ -199,18 +215,74 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
       });
       throw error;
     }
+    daemon.noteEvent(
+      pulled.worktree.id,
+      "started",
+      describeIgnores(ignoreMode, ignores.length),
+    );
     return { ...pulled, session };
   },
 
   stop: async ({ session }) => {
-    await engine().terminate(session);
+    const daemon = engine();
+    const raw = findSession(daemon, session);
+    await daemon.terminate(session);
+    daemon.noteEvent(localWorktreeIdOf(raw), "stopped", "Both copies kept");
   },
   pause: async ({ session }) => {
-    await engine().pause(session);
+    const daemon = engine();
+    await daemon.pause(session);
+    daemon.noteEvent(
+      localWorktreeIdOf(findSession(daemon, session)),
+      "paused",
+      "",
+    );
   },
   resume: async ({ session }) => {
-    await engine().resume(session);
+    const daemon = engine();
+    await daemon.resume(session);
+    daemon.noteEvent(
+      localWorktreeIdOf(findSession(daemon, session)),
+      "resumed",
+      "",
+    );
   },
+
+  // The engine cannot re-configure a live session, so a change of
+  // ignores re-opens it on the same pair (MirrorImpl.recreate, which
+  // keeps the old one until the new one is up and carries the git
+  // follower's agreement across), the labels carried over. The pair's
+  // files are already in agreement, so the new session's first cycle
+  // has little to do.
+  setIgnores: async ({ session, ignoreMode, ignores }) => {
+    const daemon = engine();
+    const raw = findSession(daemon, session);
+    if (raw === undefined) {
+      throw new Error("That mirror is no longer running.");
+    }
+    const localWorktreeId = localWorktreeIdOf(raw);
+    const next = await daemon.recreate(session, {
+      localRoot: raw.localRoot,
+      deviceId: raw.deviceId,
+      projectId: raw.projectId,
+      worktreeId: raw.worktreeId,
+      remoteRoot: raw.remoteRoot,
+      name: raw.name,
+      localWorktreeId,
+      labels: { ...raw.labels, [MIRROR_LABEL_IGNORE_MODE]: ignoreMode },
+      ignores,
+    });
+    daemon.noteEvent(
+      localWorktreeId,
+      "ignores-changed",
+      describeIgnores(ignoreMode, ignores.length),
+    );
+    return { session: next };
+  },
+
+  history: ({ localWorktreeId }) => ({
+    events: engine().history(localWorktreeId),
+  }),
 
   // A mirror stream: the far end is a fresh `file-sync serve` for the
   // named worktree, spoken to over its stdio. The worktree must exist
@@ -221,7 +293,10 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
   // the peer's Mutagen side names travels inside the protocol, which
   // this handler does not read: the grant is the wall, as everywhere
   // on the byte-stream surface.
-  openStream: async ({ projectId, worktreeId, channelId }, ctx) => {
+  openStream: async (
+    { projectId, worktreeId, channelId, peerWorktreeId },
+    ctx,
+  ) => {
     requireChannels(ctx, channelId);
     const project = findProjectOrThrow(projectId);
     const identity = await findWorktreeIdentityOrThrow(
@@ -264,6 +339,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
         projectId,
         worktreeId,
         peerDeviceId: ctx.callerDeviceId ?? "",
+        ...(peerWorktreeId === undefined ? {} : { peerWorktreeId }),
         since: Date.now(),
       },
       stopIndexWatch: null,

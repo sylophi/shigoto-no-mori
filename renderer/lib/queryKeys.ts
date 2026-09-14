@@ -92,6 +92,10 @@ function buildQueryKeys(deviceId: string) {
     // (sync:ignoredPaths), read by the transplant dialog.
     worktreeIgnored: (projectId: string, worktreeId: string) =>
       host("worktreeIgnored", projectId, worktreeId),
+    // One folder of a worktree (sync:worktreeFolder), the mirror
+    // dialog's picker of what stays behind.
+    worktreeFolder: (projectId: string, worktreeId: string, relative: string) =>
+      host("worktreeFolder", projectId, worktreeId, relative),
     commitDiff: (
       projectId: string,
       worktreeId: string | undefined,
@@ -214,6 +218,10 @@ function buildQueryKeys(deviceId: string) {
     // serves are facts about that device, read through its api and
     // driven by its own mirror:changed broadcast.
     mirrors: () => host("mirrors"),
+    // Under the mirrors prefix, so the same changed broadcast refreshes
+    // the thread. Keyed by the local worktree like the host keeps it.
+    mirrorHistory: (worktreeId: string) =>
+      host("mirrors", "history", worktreeId),
 
     // Client-scoped: the port-forward engine (its listeners and conns)
     // lives in this app instance's main process, whichever device a
