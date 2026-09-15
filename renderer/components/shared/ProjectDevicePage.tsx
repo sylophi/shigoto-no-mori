@@ -75,6 +75,7 @@ export function ProjectDevicePage({
         deviceId: scope.deviceId,
         label: "",
         isThisDevice: !scope.remote,
+        hostsProjects: true,
         status: null,
         api: scope.api,
         block: undefined,

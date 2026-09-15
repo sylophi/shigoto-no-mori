@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { createExternalStore } from "@/store/externalStore";
+import { createExternalStore, useExternalStore } from "@/store/externalStore";
 import type { HubStatus, TunnelState } from "@shared/ipc/modules/hub";
 
 // The hub bridge's live status snapshot as a module-scope store with
@@ -27,10 +27,10 @@ export function seedHubStatus(status: HubStatus): boolean {
   return true;
 }
 
-const { subscribe, get: getSnapshot } = store;
+const { subscribe } = store;
 
 export function useHubStatus(): HubStatus | null {
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  return useExternalStore(store);
 }
 
 // Derived primitive for consumers that only care about THIS device's

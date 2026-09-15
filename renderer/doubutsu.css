@@ -41,6 +41,7 @@
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
+ *      sidebar-device-filter     sidebar/DeviceFilterBar.tsx
  *      device-chip               remote/DeviceChip.tsx, shared/DeviceTabs.tsx
  *      phone-tab-bar/-tab/-tab-pill   PhoneTabBar.tsx
  *
@@ -559,8 +560,10 @@
    it. Two stacked blocks that nearly line up read worse than two that
    either match or clearly don't. The rows underneath are text with only
    a hover fill, so they can run full width without the same clash.
-   v1 has no card, so it keeps the px-2. */
-.doubutsu [data-slot="sidebar-inbox-create"] {
+   v1 has no card, so it keeps the px-2. The device filter's pills are
+   filled surfaces too, in both views, and line up with the same edge. */
+.doubutsu
+  :is([data-slot="sidebar-inbox-create"], [data-slot="sidebar-device-filter"]) {
   padding-inline: calc(var(--spacing) * 3);
 }
 
@@ -595,6 +598,26 @@
    band. */
 .doubutsu [data-slot="device-chip"]:not([aria-selected="true"]) {
   background-color: var(--muted);
+}
+
+/* The sidebar's device filter is a row of outline buttons under the
+   New worktree button, and matches its fill. That button is a dropdown
+   trigger, and the trigger's own slot replaces the button slot on it,
+   so the peach outline fill above never lands there: it wears the
+   plain --background of its variant. The pills wear the same, so the
+   two read as one set of controls. The picked pill keeps the accent
+   every selection here wears. Both unlayered, like the outline fill
+   they outrank. */
+.doubutsu
+  [data-slot="sidebar-device-filter"]
+  [data-slot="button"]:not([aria-checked="true"]) {
+  background-color: var(--background);
+}
+.doubutsu
+  [data-slot="sidebar-device-filter"]
+  [data-slot="button"][aria-checked="true"] {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
 }
 
 /* The 1px sidebar resize handle is bg-border, which doubutsu zeroes,
