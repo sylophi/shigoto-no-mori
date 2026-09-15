@@ -224,8 +224,26 @@ curl -X PATCH https://api.clerk.com/v1/instance \
 
 Without it, desktop sign-in fails on every Frontend API call after the
 first (the web client is unaffected: a browser origin authenticates
-the browser way). For macOS passkey support later, the dashboard's
-Native applications page must also have the Native API enabled.
+the browser way). The dashboard's Native applications page does not
+show this list; read it back with `GET /v1/instance`.
+
+A PRODUCTION instance additionally enforces an allowlist of OAuth
+redirect URLs (development instances do not, so dev never trips it).
+The desktop's `@clerk/electron` bridge sends the renderer origin plus
+a trailing slash, and the sign-in modal reports "does not match an
+authorized redirect URI" until it is listed. Add it once per production
+instance, on the dashboard's Native applications page under the
+mobile OAuth redirect allowlist, or with the API:
+
+```sh
+curl -X POST https://api.clerk.com/v1/redirect_urls \
+  -H "Authorization: Bearer <CLERK_SECRET_KEY>" \
+  -H "Content-type: application/json" \
+  -d '{"url": "shigomori://app/"}'
+```
+
+For macOS passkey support later, the dashboard's Native applications
+page must also have the Native API enabled.
 
 Social (browser-redirect) sign-in works in `pnpm start` on macOS: the
 dev launcher (scripts/lib/devBundle.mts) clones Electron.app into a
