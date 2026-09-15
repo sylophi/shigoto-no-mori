@@ -3,9 +3,14 @@ package main
 // The update engine behind `sm update` (cmd_update.go). The CLI owns
 // the whole pipeline. The app is not involved until the moment a
 // running instance has to restart:
-//   query    GET the update.electronjs.org feed for this repo/arch/
-//            version. The server does the version comparison (204 =
-//            up to date, 200 = JSON pointing at the release zip).
+//   query    find the release to move to. A full release asks the
+//            update.electronjs.org feed for this repo/arch/version and
+//            lets the server compare versions (204 = up to date, 200 =
+//            JSON pointing at the release zip). That feed hides
+//            prereleases, so a PRERELEASE build reads the repo's
+//            release list from the GitHub API instead and picks the
+//            highest of: any full release ahead of it, or a later
+//            prerelease in its own channel (semver.go releaseChannel).
 //   stage    download the zip under <dataDir>/updates, extract it, verify
 //            the code signature, and park the new bundle in
 //            updates/staged with a manifest describing it.
@@ -75,29 +80,82 @@ func stagedBundlePath(man *stagedManifest) string {
 
 // --- feed ---
 
-func feedURL() string {
-	if override := strings.TrimSpace(os.Getenv("SHIGOMORI_UPDATE_FEED_URL")); override != "" {
-		return override
-	}
-	arch := runtime.GOARCH
-	if arch == "amd64" {
-		arch = "x64" // Electron's process.arch spelling
-	}
-	return "https://update.electronjs.org/" + updateFeedRepo + "/darwin-" + arch + "/" + version
+var feedClient = &http.Client{Timeout: feedTimeout}
+
+// `SHIGOMORI_UPDATE_FEED_URL` points a signed build at a stand-in for
+// the update server (MANUAL-TESTING.md). It forces that single-answer
+// path on every build, prerelease or not, so the variable a tester
+// has always used keeps a test build off the real feeds.
+func feedOverride() string {
+	return strings.TrimSpace(os.Getenv("SHIGOMORI_UPDATE_FEED_URL"))
 }
 
-// nil, nil means "already up to date" (the server compares versions and
-// answers 204). Any other non-200 answer is an error: this build's
-// version is in the URL, so 404s and friends mean a broken feed, not a
-// missing update.
-func queryFeed() (*releaseInfo, error) {
-	req, err := http.NewRequest("GET", feedURL(), nil)
+func updateServerURL() string {
+	if override := feedOverride(); override != "" {
+		return override
+	}
+	return "https://update.electronjs.org/" + updateFeedRepo + "/darwin-" + feedArch() + "/" + version
+}
+
+// `SHIGOMORI_UPDATE_RELEASES_URL` is the prerelease path's stand-in:
+// a URL serving the GitHub release-list JSON. 100 is the API's page
+// maximum. The list is ordered by the tagged commit's date, not by
+// version, so a prerelease cut from an old commit sinks. Once the repo
+// passes 100 releases such a tag could fall off the page.
+func releaseListURL() string {
+	if override := strings.TrimSpace(os.Getenv("SHIGOMORI_UPDATE_RELEASES_URL")); override != "" {
+		return override
+	}
+	return "https://api.github.com/repos/" + updateFeedRepo + "/releases?per_page=100"
+}
+
+// Electron's process.arch spelling, which names the release assets.
+func feedArch() string {
+	if runtime.GOARCH == "amd64" {
+		return "x64"
+	}
+	return runtime.GOARCH
+}
+
+// What a check learned: the release to move to (nil: nothing newer),
+// and whether that answer came from the network this run. A
+// release-list answer served from the on-disk copy (recent enough, or
+// the API rate-limiting us) is unconfirmed: it can lag a release an
+// earlier run already staged, so it must not be taken as "up to date"
+// for anything destructive.
+//
+// A prerelease build ranks the release list itself (the release
+// workflow stamps the tag into package.json, so v2.0.0-beta.2 ships as
+// "2.0.0-beta.2"). Every other build lets the update server compare.
+func queryFeed() (release *releaseInfo, confirmed bool, err error) {
+	if feedOverride() == "" {
+		if current, ok := parseSemver(version); ok && current.isPrerelease() {
+			return queryReleaseList(current)
+		}
+	}
+	release, err = queryUpdateServer()
+	return release, true, err
+}
+
+func newFeedRequest(url string) (*http.Request, error) {
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return nil, errf("Bad update feed URL: %v", err)
+		return nil, errf("Bad update URL %q: %v", url, err)
 	}
 	req.Header.Set("User-Agent", "shigoto-no-mori-cli/"+version)
-	client := &http.Client{Timeout: feedTimeout}
-	resp, err := client.Do(req)
+	return req, nil
+}
+
+// The server compares versions and answers 204 when there is nothing
+// newer. Any other non-200 answer is an error: this build's version is
+// in the URL, so 404s and friends mean a broken feed, not a missing
+// update.
+func queryUpdateServer() (*releaseInfo, error) {
+	req, err := newFeedRequest(updateServerURL())
+	if err != nil {
+		return nil, err
+	}
+	resp, err := feedClient.Do(req)
 	if err != nil {
 		return nil, errf("Couldn't reach the update feed: %v", err)
 	}
@@ -129,6 +187,224 @@ func queryFeed() (*releaseInfo, error) {
 	}, nil
 }
 
+// One entry of the GitHub releases API, the fields the picker reads.
+// Drafts never reach an unauthenticated caller, so there is no flag
+// for them.
+type ghRelease struct {
+	TagName     string    `json:"tag_name"`
+	Prerelease  bool      `json:"prerelease"`
+	Body        string    `json:"body"`
+	PublishedAt string    `json:"published_at"`
+	Assets      []ghAsset `json:"assets"`
+}
+
+type ghAsset struct {
+	Name string `json:"name"`
+	URL  string `json:"browser_download_url"`
+}
+
+// How long a fetched release list answers checks on its own. The app
+// asks every 10 minutes and a terminal check can land in between.
+// Unauthenticated requests get 60 an hour per address, shared with
+// every other unauthenticated tool on the network, so bursts are
+// coalesced rather than sent. Swappable for tests.
+var releaseListMaxAge = 15 * time.Minute
+
+// The last release list the API served, kept beside the staged
+// bundle. Within releaseListMaxAge it answers on its own. After that
+// the next request carries its ETag (a 304 is free of the rate limit,
+// though GitHub's ETag covers every asset's download count, so a 304
+// is a bonus rather than the norm). When the API says the hourly
+// budget is spent, RetryAt records when to ask again and the list
+// keeps answering until then: stale by at most the reset window,
+// instead of an error in Settings.
+type releaseListCache struct {
+	// The endpoint it came from: a stand-in's list must not answer for
+	// the real one, or the reverse.
+	URL       string    `json:"url"`
+	FetchedAt time.Time `json:"fetchedAt"`
+	ETag      string    `json:"etag,omitempty"`
+	RetryAt   time.Time `json:"retryAt"`
+	// The list as the API sent it, decoded on use so a newer build
+	// reads whatever fields it knows.
+	Body json.RawMessage `json:"body"`
+}
+
+func releaseListCachePath() string {
+	return filepath.Join(updatesDir(), "release-list.json")
+}
+
+func readReleaseListCache(url string) *releaseListCache {
+	raw, err := os.ReadFile(releaseListCachePath())
+	if err != nil {
+		return nil
+	}
+	var cache releaseListCache
+	if json.Unmarshal(raw, &cache) != nil || cache.URL != url || len(cache.Body) == 0 {
+		return nil
+	}
+	return &cache
+}
+
+func decodeReleaseList(body []byte) ([]ghRelease, error) {
+	var releases []ghRelease
+	if err := json.Unmarshal(body, &releases); err != nil {
+		return nil, errf("The release list is malformed JSON: %v", err)
+	}
+	return releases, nil
+}
+
+// The prerelease build's feed.
+func queryReleaseList(current semver) (*releaseInfo, bool, error) {
+	releases, confirmed, err := fetchReleaseList()
+	if err != nil {
+		return nil, false, err
+	}
+	return pickRelease(current, releases, feedArch()), confirmed, nil
+}
+
+// The release list, and whether it was confirmed against the API this
+// run rather than served from the on-disk copy.
+func fetchReleaseList() ([]ghRelease, bool, error) {
+	url := releaseListURL()
+	path := releaseListCachePath()
+	cached := readReleaseListCache(url)
+	now := time.Now()
+	if cached != nil && (now.Before(cached.FetchedAt.Add(releaseListMaxAge)) || now.Before(cached.RetryAt)) {
+		releases, err := decodeReleaseList(cached.Body)
+		return releases, false, err
+	}
+	req, err := newFeedRequest(url)
+	if err != nil {
+		return nil, false, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	if cached != nil && cached.ETag != "" {
+		req.Header.Set("If-None-Match", cached.ETag)
+	}
+	resp, err := feedClient.Do(req)
+	if err != nil {
+		return nil, false, errf("Couldn't reach the release list: %v", err)
+	}
+	defer resp.Body.Close()
+	switch {
+	case resp.StatusCode == http.StatusNotModified && cached != nil:
+		cached.FetchedAt, cached.RetryAt = now, time.Time{}
+		_ = atomicWriteJSON(path, cached)
+		releases, err := decodeReleaseList(cached.Body)
+		return releases, true, err
+	case rateLimited(resp):
+		retryAt := rateLimitReset(resp, now)
+		if cached == nil {
+			return nil, false, errf("GitHub is rate-limiting update checks from this address until %s.",
+				retryAt.Local().Format(time.Kitchen))
+		}
+		cached.RetryAt = retryAt
+		_ = atomicWriteJSON(path, cached)
+		releases, err := decodeReleaseList(cached.Body)
+		return releases, false, err
+	case resp.StatusCode != http.StatusOK:
+		return nil, false, errf("The release list answered HTTP %d.", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, false, errf("Couldn't read the release list: %v", err)
+	}
+	releases, err := decodeReleaseList(body)
+	if err != nil {
+		return nil, false, err
+	}
+	// Best-effort: a copy that fails to write only costs the next
+	// check a full request.
+	_ = atomicWriteJSON(path, releaseListCache{
+		URL: url, FetchedAt: now, ETag: resp.Header.Get("ETag"), Body: body,
+	})
+	return releases, true, nil
+}
+
+// GitHub spends the hourly budget with a 403 that says so, and 429 is
+// its secondary (abuse) limit. Any other 403 is a real refusal and stays
+// an error.
+func rateLimited(resp *http.Response) bool {
+	return resp.StatusCode == http.StatusTooManyRequests ||
+		(resp.StatusCode == http.StatusForbidden && resp.Header.Get("X-RateLimit-Remaining") == "0")
+}
+
+// When the limit lifts: X-RateLimit-Reset (unix seconds), else
+// Retry-After (seconds), else an hour. Never more than an hour out, so
+// a bogus header can't park checks for a day.
+func rateLimitReset(resp *http.Response, now time.Time) time.Time {
+	limit := now.Add(time.Hour)
+	if s, err := strconv.ParseInt(resp.Header.Get("X-RateLimit-Reset"), 10, 64); err == nil {
+		if t := time.Unix(s, 0); t.After(now) && t.Before(limit) {
+			return t
+		}
+	}
+	if s, err := strconv.Atoi(resp.Header.Get("Retry-After")); err == nil && s > 0 && s < 3600 {
+		return now.Add(time.Duration(s) * time.Second)
+	}
+	return limit
+}
+
+// The release a prerelease build should move to, or nil when none is
+// ahead of it: the highest of the full releases and the prereleases
+// in the current build's own channel that have a zip for this arch.
+// A full 2.0.0 therefore beats every 2.0.0-beta.N and ends the beta
+// ride. A release flagged prerelease under a full-release tag stays
+// hidden, as the update server hides it. A release without the zip
+// (the workflow uploads assets minutes after the tag is published) is
+// skipped, as the update server skips it.
+func pickRelease(current semver, releases []ghRelease, arch string) *releaseInfo {
+	var best *ghRelease
+	var bestVersion semver
+	var bestURL string
+	channel := releaseChannel(current)
+	marker := "-darwin-" + arch + "-"
+	for i := range releases {
+		release := &releases[i]
+		v, ok := parseSemver(release.TagName)
+		if !ok || compareSemver(v, current) <= 0 {
+			continue
+		}
+		if best != nil && compareSemver(v, bestVersion) <= 0 {
+			continue
+		}
+		if v.isPrerelease() {
+			if releaseChannel(v) != channel {
+				continue
+			}
+		} else if release.Prerelease {
+			continue
+		}
+		url := zipAssetURL(release.Assets, marker)
+		if url == "" {
+			continue
+		}
+		best, bestVersion, bestURL = release, v, url
+	}
+	if best == nil {
+		return nil
+	}
+	return &releaseInfo{
+		URL:         bestURL,
+		Version:     strings.TrimPrefix(best.TagName, "v"),
+		Notes:       best.Body,
+		ReleaseDate: parseReleaseDate(best.PublishedAt),
+	}
+}
+
+// The zip maker names its asset "<product>-darwin-<arch>-<version>.zip"
+// (GitHub swaps the product name's spaces for dots on upload).
+func zipAssetURL(assets []ghAsset, marker string) string {
+	for _, asset := range assets {
+		if strings.HasSuffix(asset.Name, ".zip") && strings.Contains(asset.Name, marker) {
+			return asset.URL
+		}
+	}
+	return ""
+}
+
 // The feed's pub_date passes through from GitHub. Accept the formats
 // seen in the wild and fall back to "" rather than failing an update
 // over a date.
@@ -139,6 +415,12 @@ func parseReleaseDate(raw string) string {
 		}
 	}
 	return ""
+}
+
+func newerThanThisBuild(v string) bool {
+	current, ok := parseSemver(version)
+	candidate, ok2 := parseSemver(v)
+	return ok && ok2 && compareSemver(candidate, current) > 0
 }
 
 // --- installed bundle ---
@@ -324,15 +606,23 @@ func stageUpdate(installedBundle string, progress func(phase, version string)) (
 	}
 	defer unlock()
 	pruneUpdateLeftovers(installedBundle)
-	release, err := queryFeed()
+	release, confirmed, err := queryFeed()
 	if err != nil {
 		return nil, err
 	}
 	if release == nil {
 		// Fresh boot after an install can find its own (or an older)
 		// version still staged. Keeping it would offer a pointless
-		// downgrade forever.
-		clearStaged()
+		// downgrade forever. Only a confirmed answer may clear it: one
+		// served from the on-disk release list can lag the release an
+		// earlier run staged, and that bundle stays ready.
+		if confirmed {
+			clearStaged()
+			return nil, nil
+		}
+		if man := readStagedManifest(); man != nil && newerThanThisBuild(man.Version) {
+			return man, nil
+		}
 		return nil, nil
 	}
 	if man := readStagedManifest(); man != nil && man.Version == release.Version {
@@ -393,11 +683,10 @@ func stageUpdate(installedBundle string, progress func(phase, version string)) (
 }
 
 func downloadFile(url, dest string) error {
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := newFeedRequest(url)
 	if err != nil {
-		return errf("Bad release URL: %v", err)
+		return err
 	}
-	req.Header.Set("User-Agent", "shigoto-no-mori-cli/"+version)
 	client := &http.Client{Timeout: downloadTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
