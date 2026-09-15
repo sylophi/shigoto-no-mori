@@ -26,6 +26,9 @@ node scripts/e2e/drive.mts 9223 shot /tmp/b.png
 Each window's Devices page should list the other device as online,
 then connected. The device names end in `[a]` and `[b]`.
 
+When you are done, revoke both devices before quitting. Closing the
+windows does not unenroll them. See "Cleaning up after a session".
+
 To run every remote flow unattended instead:
 
 ```sh
@@ -191,6 +194,7 @@ cloning exists.
 - **`--fresh` is local only.** A device the profile enrolled stays on
   the hub, with its tunnel, until revoked. Leftovers show on the
   Devices page of any device on the account and can be revoked there.
+  See "Cleaning up after a session".
 - **Both profiles use the owner's real dev account.** Each enrolls on
   the dev hub and provisions a tunnel. This is intended: the hub,
   Clerk and tunnel provisioning are exercised for real.
@@ -271,6 +275,43 @@ Use the DOM only where a person would click. The sidebar's Devices
 button has `aria-label="Devices"`. Clerk's modal is plain DOM in the
 page, with `.cl-*` classes.
 
+## Cleaning up after a session
+
+Every profile enrolls a device on the dev hub. Quitting, `--fresh`
+and deleting folders are local: the device and its tunnel stay on the
+account until revoked. Quit first, then revoke from another device,
+then delete.
+
+Do not revoke a window from itself with `window.api.account.signOut()`
+unless it was launched with `--fresh --clone-login` in this run. A
+window that booted with its credential on disk (a relaunch) has a live
+Clerk session and no enrollment attempt armed, so ClerkAccountSync
+re-enrolls it the moment the credential clears. The window's **Sign
+out** button is not an option either in a cloned window (see Rules).
+
+```sh
+# 1. Quit both terminals (Ctrl+C).
+# 2. Revoke the profile devices from the plain dev app, which stays a
+#    real device. Their names end in "[<profile>]". Either use its
+#    Devices page, or open it with a debug port and revoke them all:
+SHIGOMORI_DEBUG_PORT=9222 pnpm dev
+node scripts/e2e/drive.mts 9222 eval 'window.api.account.listDevices().then(ds => Promise.all(ds.filter(d => /\[[a-z0-9-]+\]$/.test(d.name) && d.deviceId !== window.api.deviceId).map(d => window.api.account.revokeDevice(d.deviceId).then(() => d.name))))'
+# 3. Delete the local halves, or launch with --fresh next time.
+rm -rf ~/.smd-profiles/<name> "$HOME/Library/Application Support/Shigoto no Mori (dev)/profiles/<name>"
+```
+
+The same two calls revoke one device by hand:
+
+```sh
+node scripts/e2e/drive.mts 9222 eval 'window.api.account.listDevices()'
+node scripts/e2e/drive.mts 9222 eval 'window.api.account.revokeDevice("<deviceId>")'
+```
+
+A revoked device that is still running sees its socket blocked and
+keeps its dead credential, so it does not re-enroll. A relaunch after
+`--fresh` is a new device. `pnpm test:remote-smoke` cleans up its own
+`e2e-*` profiles unless run with `--keep`.
+
 ## Unattended remote smoke
 
 ```sh
@@ -326,6 +367,11 @@ and assert through the bridge and the disk.
 - **UI lab** (`lab/README.md`). The real UI over a fixture bridge with
   four fake devices. Use it to pose and screenshot every multi-device
   surface without a hub or a second device. Visual only, no behavior.
+  It is also the place to record a video of a flow (`lab/record.mjs`):
+  the transfer and mirror verbs are posed there, so a recording shows
+  the UI, not a real transfer. A video of the real two-device flow
+  needs the profiles above and a screen recorder on the window, and
+  `screencapture -v` needs a permission a remote session cannot grant.
 - **Web client** (`pnpm web:dev`, port 5190). A third device that
   connects through the tunnel only, so it is the way to test the
   tunnel data path on one machine. Launch the desktop with
@@ -351,10 +397,14 @@ and assert through the bridge and the disk.
   renderer port. From another worktree it exits at the single-instance
   lock unless it runs as a profile.
 - **Profile boots signed out after `--clone-login`.** On Linux and
-  Windows the copied token store cannot be decrypted. Sign in from the
-  profile's window instead.
-- **A revoked device still shows on the Devices page.** `--fresh` does
-  not revoke. Revoke it from another device's Devices page.
+  Windows the copied token store cannot be decrypted. On any platform
+  the plain dev app's Clerk session may have expired: open `pnpm dev`,
+  sign in again, then relaunch the profile. Otherwise sign in from the
+  profile's window.
+- **A device from an old profile still shows on the Devices page.**
+  `--fresh` and quitting do not revoke, and a self sign-out over CDP
+  re-enrolls a relaunched window. Revoke it from another device. See
+  "Cleaning up after a session".
 - **`smd` in a new terminal acts on the plain dev data dir.** To
   target a profile from the shell, set its data dir first:
   `SHIGOMORI_DATA_DIR=~/.smd-profiles/<name>/data smd ...`.

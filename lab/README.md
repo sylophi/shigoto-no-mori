@@ -46,3 +46,13 @@ playwright-core is not a repo dependency, so run it from a scratch dir
 that has it installed). Run `node shoot.mjs shots.json outdir`, with
 `LAB_ORIGIN` pointing at the web flavor's port for web-shell shots.
 Each shot is `{ file, query, width?, height?, waitMs?, actions? }`.
+
+Videos: `lab/record.mjs`, the same harness recording a take instead of
+taking a shot, with a drawn cursor so clicks are visible. Same
+prerequisites plus Playwright's own ffmpeg (`playwright-core install
+ffmpeg`, once). Run `node record.mjs takes.json outdir`. Each take has
+the shot shape, with `click` taking a Playwright locator and a
+`waitFor` action that blocks on visible text, which is how a take
+waits out a posed transfer. Output is webm; set `FFMPEG` to a binary
+to get an mp4 beside it. The sync verbs are posed, so a recording
+shows the UI of a flow, not a transfer.
