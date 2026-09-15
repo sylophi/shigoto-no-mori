@@ -1,3 +1,5 @@
+import { hostsProjects } from "@/components/remote/deviceTraits";
+import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { createExternalStore } from "@/store/externalStore";
 import { useSyncExternalStore } from "react";
 import { Palette, Rocket, type LucideIcon } from "lucide-react";
@@ -51,6 +53,14 @@ export function useSelectedSettingsTab(): string {
 // offers neither and falls back to Appearance where the desktop falls
 // back to this device.
 const FALLBACK_TAB = hasLocalHost ? LOCAL_DEVICE_TAB : APPEARANCE_TAB;
+
+// The devices Settings has sections for: the account's machines. A
+// browser client is a device on the account too, but it hosts nothing
+// and has no host config to edit (the web shell keeps only its
+// appearance), so a section for it would only ever say it is loading.
+export function useSettingsDevices(): readonly RemoteDevice[] {
+  return useRemoteDevices().filter((device) => hostsProjects(device.platform));
+}
 
 // One machine on the account means no roster to place it in: the
 // Devices group reads as this device's settings rather than a list of

@@ -19,10 +19,20 @@ import {
   type MirrorSessionRaw,
 } from "@host/mirror/registry";
 
+// The two rows the link chatter around a pause or re-open repeats.
+const LINK_KINDS: ReadonlySet<MirrorEventKind> = new Set([
+  "connected",
+  "disconnected",
+]);
+
 // What the recorder remembers of a session between two snapshots, the
 // facts whose change is an event.
 type Seen = {
   connected: boolean;
+  // A "disconnected" row was noted and the link has not come back
+  // since, so the next connection is news rather than the expected
+  // first one.
+  lostConnection: boolean;
   halted: boolean;
   lastError: string;
   conflicts: number;
@@ -79,6 +89,20 @@ export function createMirrorHistory(deps: {
     if (localWorktreeId === "") return;
     const store = all();
     const thread = store[localWorktreeId] ?? [];
+    // The link flips more than once around a pause or a re-open (the
+    // session that replaced the old one is observed from scratch), and
+    // two "disconnected" rows in a row say nothing the first did not.
+    // Only the link kinds: a second conflict or a second git verdict
+    // with the same words is its own event.
+    const newest = thread[0];
+    if (
+      LINK_KINDS.has(kind) &&
+      newest !== undefined &&
+      newest.kind === kind &&
+      newest.detail === detail
+    ) {
+      return;
+    }
     // Newest first, so the page reads top-down and the cap drops the
     // oldest.
     thread.unshift({ at: now(), kind, detail });
@@ -89,6 +113,12 @@ export function createMirrorHistory(deps: {
   // The worktree is gone (the tombstone protocol says so), and with it
   // the only page the thread shows on. Without this the store keeps
   // one thread per worktree ever mirrored.
+  // The thread's newest word on the link, for a session's baseline.
+  function lastLinkEvent(localWorktreeId: string): MirrorEventKind | null {
+    const thread = all()[localWorktreeId] ?? [];
+    return thread.find((event) => LINK_KINDS.has(event.kind))?.kind ?? null;
+  }
+
   function forget(localWorktreeId: string): void {
     const store = all();
     if (!(localWorktreeId in store)) return;
@@ -110,19 +140,34 @@ export function createMirrorHistory(deps: {
       live.add(session.session);
       const localWorktreeId = localWorktreeIdOf(session);
       const git = gitStatusOf(session.session);
+      const previous = seen.get(session.session);
+      const connected = session.local.connected && session.remote.connected;
+      // A session's first connection is the expected course after
+      // "started" and stays quiet, like the first git agreement below:
+      // only a connection regained after a noted loss is news. A
+      // paused session drops its link on purpose, so that is not a
+      // loss either (the "paused" row says it). A session seen for the
+      // first time (a daemon restart, a re-open) takes the thread's
+      // word for whether a loss is outstanding, so the recovery after
+      // a restart is still recorded.
+      const lost =
+        !connected &&
+        (previous === undefined
+          ? lastLinkEvent(localWorktreeId) === "disconnected"
+          : previous.lostConnection || (previous.connected && !session.paused));
       const next: Seen = {
-        connected: session.local.connected && session.remote.connected,
+        connected,
+        lostConnection: lost,
         halted: session.status.startsWith("halted-"),
         lastError: session.lastError ?? "",
         conflicts: session.conflicts.length + session.excludedConflicts,
         git: git?.status ?? null,
       };
-      const previous = seen.get(session.session);
       seen.set(session.session, next);
       if (previous === undefined) continue;
-      if (next.connected && !previous.connected) {
+      if (connected && previous.lostConnection) {
         note(localWorktreeId, "connected", "");
-      } else if (!next.connected && previous.connected) {
+      } else if (lost && !previous.lostConnection) {
         note(localWorktreeId, "disconnected", session.statusText);
       }
       if (next.halted && !previous.halted) {

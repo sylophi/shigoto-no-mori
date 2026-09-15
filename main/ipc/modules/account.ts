@@ -7,11 +7,12 @@
 // bridge). This module only exchanges the resulting session token for
 // the hub device credential. The handlers stay thin, delegating to
 // the pure orchestration.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { devProfileSuffix } from "../../electron/devProfile";
 import { platform } from "node:os";
 import { join } from "node:path";
 import { app, safeStorage } from "electron";
+import { CLONED_LOGIN_MARKER } from "@shared/appName.mts";
 import { accountContract } from "@shared/ipc/modules/account";
 import type { TunnelProvisionResponse } from "@shared/hub/protocol";
 import type { AccountStatus } from "@shared/ipc/modules/account";
@@ -234,6 +235,11 @@ function statusOf(
     signedIn: record !== null,
     accountId: record?.accountId ?? "",
     deviceName: record?.deviceName ?? defaultName,
+    // --clone-login leaves this beside the token store it copied
+    // (scripts/lib/devProfile.mts cloneDevLogin).
+    sharedSignIn: existsSync(
+      join(app.getPath("userData"), CLONED_LOGIN_MARKER),
+    ),
   };
 }
 

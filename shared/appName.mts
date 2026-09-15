@@ -37,6 +37,20 @@ export const CLERK_TOKEN_STORE = "clerk-tokens";
 // flavor.
 export const DEV_PROFILE_ENV = "SHIGOMORI_PROFILE";
 
+// Written into a dev profile's userData beside its Clerk token store
+// when --clone-login copied the plain dev app's sign-in there. The
+// clone is persistent state, so the fact that this window's Clerk
+// session is shared with other windows has to be too: main reads it
+// on every account status (sharedSignIn), whatever flags a later
+// launch passed.
+export const CLONED_LOGIN_MARKER = "clerk-tokens.cloned";
+
+// Under `pnpm dev` the launcher (scripts/dev-electron.mts) names a
+// marker file here. The app touches it before quitting when it wants
+// to be started again (main/electron/relaunch.ts), and the launcher
+// restarts forge instead of the app respawning a detached Electron.
+export const DEV_RELAUNCH_FILE_ENV = "SHIGOMORI_DEV_RELAUNCH_FILE";
+
 const DEV_PROFILE_NAME = /^[a-z0-9][a-z0-9-]{0,31}$/;
 
 // A profile name is a path component and a device-name suffix, so a

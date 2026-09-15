@@ -11,7 +11,13 @@
 // (children inherit the launcher's environment, the app itself never
 // injects SHIGOMORI_DATA_DIR, see host/lib/util/paths.ts).
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
 import {
@@ -20,6 +26,7 @@ import {
   DEV_PROFILE_ENV,
   DEV_USER_DATA_SUFFIX,
   devProfileUserData,
+  CLONED_LOGIN_MARKER,
 } from "../../shared/appName.mts";
 import {
   CLI_DIST_DIR,
@@ -202,6 +209,10 @@ export function cloneDevLogin(profile: DevProfile): void {
   const source = devLoginSource();
   mkdirSync(profile.userData, { recursive: true });
   copyFileSync(source, join(profile.userData, TOKEN_STORE_FILE));
+  // The app's sign-out paths read this (account status sharedSignIn):
+  // a Clerk sign-out in a window holding a clone would end the session
+  // for every window that holds it.
+  writeFileSync(join(profile.userData, CLONED_LOGIN_MARKER), "");
   console.log(`[dev-profile] cloned the dev sign-in into ${profile.name}`);
 }
 

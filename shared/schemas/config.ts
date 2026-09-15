@@ -317,7 +317,8 @@ export const ClientConfigSchema = z.object({
   // crash so a machine the user hosts stays online for the device
   // hub. Per-machine and never synced, like the rest of client config:
   // the CLI never reads it and it does not ride any sync path. Default is
-  // off (absent = off), explicit `true` is the opt-in.
+  // on (absent = on): a machine on the account is meant to be there for
+  // the others, and explicit `false` is the opt-out.
   keepReachable: z.boolean().optional(),
   // Where a peer's port lands on this machine when forwarded: local port
   // by `${deviceId}:${remotePort}` (renderer/hooks/config/
@@ -343,6 +344,15 @@ export const ClientConfigSchema = z.object({
   sidebarView: SidebarViewSchema.optional(),
 });
 export type ClientConfig = z.infer<typeof ClientConfigSchema>;
+
+// The one reading of keepReachable: on unless switched off. Every
+// reader (the liveness reconcile, the write handler's change gate, the
+// toggle) asks here, so the default lives in one place.
+export function keepReachableOn(
+  config: Pick<ClientConfig, "keepReachable">,
+): boolean {
+  return config.keepReachable !== false;
+}
 
 // Read-side counterpart, loose like StoredGlobalConfigSchema.
 export const StoredClientConfigSchema = ClientConfigSchema.loose();

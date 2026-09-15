@@ -1,3 +1,4 @@
+import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useState } from "react";
 import { FolderInput, FolderOpen, FolderPen } from "lucide-react";
 import { BlockingOverlay } from "@/components/ui/blocking-overlay";
@@ -42,8 +43,11 @@ export function DataLocationSection() {
     }
   };
 
-  // Rename in place: the host resolves the current parent.
-  const handleRename = () => moveTo();
+  // Rename in place: the host resolves the current parent. Two clicks,
+  // since the app restarts on the spot and the first click is the
+  // moment to learn that.
+  const rename = useConfirmTwice(CONFIRM_QUICK_MS);
+  const handleRename = () => rename.trigger(() => void moveTo());
 
   return (
     <section className="space-y-3">
@@ -102,10 +106,13 @@ export function DataLocationSection() {
             variant="outline"
             size="sm"
             disabled={!movable || moving}
-            onClick={() => void handleRename()}
+            aria-pressed={rename.armed}
+            onClick={handleRename}
           >
             <FolderPen />
-            Rename to {runtime.canonicalDataDirName}
+            {rename.armed
+              ? "Rename and restart?"
+              : `Rename to ${runtime.canonicalDataDirName}`}
           </Button>
         )}
       </div>
@@ -116,7 +123,7 @@ export function DataLocationSection() {
           initialPath={getBrowseParentPath(runtime.dataDir) ?? undefined}
           title="Move the data folder"
           confirmLabel="Move here"
-          hint={`Choose its new parent folder. It will be named ${runtime.canonicalDataDirName} there.`}
+          hint={`Choose its new parent folder. It will be named ${runtime.canonicalDataDirName} there, and the app restarts right after the move.`}
           onPick={(parent) => {
             setPickerOpen(false);
             void moveTo(parent);

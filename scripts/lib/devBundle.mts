@@ -224,16 +224,33 @@ function processRunningFrom(bundle: string): boolean {
 // the child with its ports and the single-instance lock, and the
 // launcher exits with the child. Ctrl-C is a normal dev stop, not a
 // failure pnpm should report.
-export function superviseChild(child: ChildProcess, label: string): void {
+// `relaunch`, when given, is asked on every plain exit: a child it
+// returns takes the first one's place (the app asked to be restarted),
+// none ends the wrapper as before.
+export function superviseChild(
+  first: ChildProcess,
+  label: string,
+  relaunch?: () => ChildProcess | undefined,
+): void {
+  let child = first;
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => child.kill(signal));
   }
-  child.on("error", (error) => {
-    console.error(`[dev] failed to launch ${label}: ${error}`);
-    process.exit(1);
-  });
-  child.on("exit", (code, signal) => {
-    const interrupted = signal === "SIGINT" || signal === "SIGTERM";
-    process.exit(interrupted ? 0 : (code ?? 1));
-  });
+  const watch = (target: ChildProcess): void => {
+    target.on("error", (error) => {
+      console.error(`[dev] failed to launch ${label}: ${error}`);
+      process.exit(1);
+    });
+    target.on("exit", (code, signal) => {
+      const interrupted = signal === "SIGINT" || signal === "SIGTERM";
+      const next = interrupted ? undefined : relaunch?.();
+      if (next !== undefined) {
+        child = next;
+        watch(next);
+        return;
+      }
+      process.exit(interrupted ? 0 : (code ?? 1));
+    });
+  };
+  watch(first);
 }

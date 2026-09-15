@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidWorktreeDirName } from "@shared/branches";
 import { isSafeRelPath } from "@shared/gitPaths";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
@@ -227,6 +228,17 @@ export const SyncPullWorktreePayloadSchema = z.strictObject({
     (name) => SyncBundleRefSchema.safeParse(`refs/heads/${name}`).success,
     { message: "Branch name outside the sync allowlist" },
   ),
+  // The source worktree's folder name, so the copy lands under the
+  // same name here and the two sides read as one worktree. Omitted
+  // when the source's name is not a valid managed dirname (an external
+  // worktree with an odd folder), in which case the create picks a
+  // fresh pool name. The handler refuses, rather than renaming, when
+  // that folder already exists on this device.
+  worktreeName: z
+    .string()
+    .min(1)
+    .refine(isValidWorktreeDirName, { message: "Not a valid folder name" })
+    .optional(),
 });
 
 // The pull's progress, one frame per step change and per transferred

@@ -4,6 +4,7 @@
 // with its progress frames, plus the session open on top. Live is
 // proof: the session's first verdict, and the way to the local copy's
 // page, where the footer's Mirror button takes over.
+import { pullWorktreeName } from "@/lib/remote/pullWorktreeName";
 import { useState } from "react";
 import {
   ArrowRight,
@@ -15,7 +16,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { MirrorSession } from "@shared/ipc/modules/mirror";
-import { pullBranchCollision } from "@shared/pullCollision";
 import type { Project, Worktree } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip-button";
@@ -338,6 +338,7 @@ function MirrorReview({
               <DestinationFolder
                 localProject={localProject}
                 thisDeviceLabel={thisDeviceLabel}
+                name={pullWorktreeName(worktree)}
               />
             </div>
           </LocalHostScope>
@@ -370,19 +371,17 @@ function MirrorReviewFooter({
   onCancel: () => void;
   onStart: () => void;
 }) {
-  const { held, holder } = useLocalCollision(localProject, worktree.branch);
+  const { refusal } = useLocalCollision(localProject, worktree);
   return (
-    <TransplantFooter
-      note={
-        held
-          ? pullBranchCollision(worktree.branch, holder?.path)
-          : "Stop any time. Both copies stay."
-      }
-    >
+    <TransplantFooter note={refusal ?? "Stop any time. Both copies stay."}>
       <Button variant="ghost" size="sm" onClick={onCancel}>
         Cancel
       </Button>
-      <Button size="sm" onClick={onStart} disabled={held || waiting}>
+      <Button
+        size="sm"
+        onClick={onStart}
+        disabled={refusal !== null || waiting}
+      >
         Start mirroring
         <ArrowRight />
       </Button>

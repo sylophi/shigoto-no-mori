@@ -23,8 +23,13 @@ export type DeviceTraits = {
   spec: (appVersion: string) => string;
 };
 
+// The one trait a list filters on, without building the rest.
+export function hostsProjects(platform: string): boolean {
+  return platform !== WEB_PLATFORM;
+}
+
 export function deviceTraits(platform: string): DeviceTraits {
-  if (platform === WEB_PLATFORM) {
+  if (!hostsProjects(platform)) {
     return {
       selfLabel: "This browser",
       hostsProjects: false,

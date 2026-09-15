@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ReadGlobalConfig } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { hasLocalHost } from "@/lib/localHost";
 
 // Read side of the device config. The read is REDACTED: socketHost.token
 // is absent (a derived tokenSet boolean stands in) and remoteDevices is
@@ -16,11 +15,11 @@ import { hasLocalHost } from "@/lib/localHost";
 // local device config at all, so the local scope's read never runs
 // there (a peer's does).
 export function useGlobalConfig({ silentError = false } = {}) {
-  const { api, keys, remote } = useHostScope();
+  const { api, keys, hasHost } = useHostScope();
   return useQuery<ReadGlobalConfig>({
     queryKey: keys.globalConfig(),
     queryFn: () => api.globalConfig.read(),
-    enabled: remote || hasLocalHost,
+    enabled: hasHost,
     meta: silentError
       ? { silentError: true }
       : { errorTitle: "Couldn't load settings" },

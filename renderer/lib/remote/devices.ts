@@ -35,6 +35,9 @@ export type RemoteDevice = {
   deviceId: string;
   // Display label: the account device name.
   label: string;
+  // The registry's platform string (deviceTraits reads it), so a
+  // surface can leave out a browser without a second registry read.
+  platform: string;
   status: RemoteDeviceStatus;
   // The remote host app's version, "" until the direct session's
   // welcome confirms it.

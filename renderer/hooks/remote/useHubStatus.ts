@@ -44,3 +44,30 @@ const getTunnelState = (): TunnelState | undefined => store.get()?.tunnel;
 export function useTunnelState(): TunnelState | undefined {
   return useSyncExternalStore(subscribe, getTunnelState, getTunnelState);
 }
+
+// THIS device's blocked socket, or null while it is anything else (the
+// account sync's sign-out trigger, the registry's blocked banner).
+// Every snapshot arrives as a fresh object, so the selector hands back
+// the previous value while the two fields it reads are unchanged, which
+// is what keeps roster and presence traffic from re-rendering the
+// subscribers.
+type HubBlock = Extract<HubStatus["socket"], { phase: "blocked" }>;
+let lastBlock: HubBlock | null = null;
+const getBlock = (): HubBlock | null => {
+  const socket = store.get()?.socket;
+  const next = socket?.phase === "blocked" ? socket : null;
+  if (
+    next !== null &&
+    lastBlock !== null &&
+    next.reason === lastBlock.reason &&
+    next.message === lastBlock.message
+  ) {
+    return lastBlock;
+  }
+  lastBlock = next;
+  return next;
+};
+
+export function useHubBlock(): HubBlock | null {
+  return useSyncExternalStore(subscribe, getBlock, getBlock);
+}

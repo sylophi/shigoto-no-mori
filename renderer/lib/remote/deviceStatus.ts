@@ -31,13 +31,14 @@ function presentationOf(status: RemoteDeviceStatus): {
     case "connected":
       return { tone: "emerald", label: "Connected" };
     // The peer is in the hub roster but no direct session is
-    // established (data is direct or nothing).
-    // Honest on both axes: the roster fact shows ("Online"), and
-    // nothing claims a data connection, because the keeper's eager
-    // dial has not landed yet (it dials on presence and redials
-    // forever, so success flips this to "Connected" on its own).
+    // established (data is direct or nothing). "Online" is reserved
+    // for a peer this window can actually use, so the roster fact
+    // alone reads as the dial it is: the keeper dials on presence and
+    // redials forever, and success flips this to "Connected" on its
+    // own. A brand-new tunnel (or a browser waiting on one) can sit
+    // here for a while, which is why the label says what is being
+    // waited for rather than claiming presence.
     case "online":
-      return { tone: "sky", label: "Online" };
     case "connecting":
     case "idle":
       return { tone: "sky", label: "Connecting" };
@@ -53,8 +54,9 @@ function presentationOf(status: RemoteDeviceStatus): {
 export function deviceStatusView(status: RemoteDeviceStatus): DeviceStatusView {
   return {
     ...presentationOf(status),
-    // "online" is reachable because the keeper is already dialing or
-    // redialing the session a use would ride.
-    reachable: status.phase === "connected" || status.phase === "online",
+    // Only a live direct session counts: every use of a peer's api
+    // rides one, and "online" (rostered, no session yet) rejects until
+    // the dial lands, so it must not be offered as reachable.
+    reachable: status.phase === "connected",
   };
 }

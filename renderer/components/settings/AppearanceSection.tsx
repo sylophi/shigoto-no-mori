@@ -1,8 +1,14 @@
 import { Moon, Sun, SunMoon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SectionHeading } from "@/components/ui/section-heading";
 import type { Theme } from "@shared/schemas";
 import { ToggleRow } from "@/components/shared/ToggleRow";
+
+const THEMES: { value: Theme; label: string; Icon: typeof Sun }[] = [
+  { value: "light", label: "Light", Icon: Sun },
+  { value: "dark", label: "Dark", Icon: Moon },
+  { value: "system", label: "System", Icon: SunMoon },
+];
 
 interface AppearanceSectionProps {
   theme: Theme;
@@ -21,27 +27,28 @@ export function AppearanceSection({
   onDoubutsuChange,
   heading = "Appearance",
 }: AppearanceSectionProps) {
-  const options: { value: Theme; label: string; Icon: typeof Sun }[] = [
-    { value: "light", label: "Light", Icon: Sun },
-    { value: "dark", label: "Dark", Icon: Moon },
-    { value: "system", label: "System", Icon: SunMoon },
-  ];
+  // A three-way pick, so it wears the house segmented control: the
+  // chosen option carries the accent fill, the other two stay quiet.
+  // Three same-looking chips left the active theme unreadable.
+  const options = THEMES.map(({ value, label, Icon }) => ({
+    value,
+    label: (
+      <>
+        <Icon className="size-3.5" />
+        {label}
+      </>
+    ),
+  }));
   return (
     <section className="space-y-3">
       <SectionHeading className="mb-1">{heading}</SectionHeading>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {options.map(({ value, label, Icon }) => (
-          <Button
-            key={value}
-            variant={theme === value ? "secondary" : "outline"}
-            size="sm"
-            onClick={() => onPick(value)}
-          >
-            <Icon />
-            {label}
-          </Button>
-        ))}
-      </div>
+      <SegmentedControl
+        aria-label="Theme"
+        value={theme}
+        onChange={onPick}
+        options={options}
+        optionClassName="px-3 py-1.5 text-xs"
+      />
       <ToggleRow
         checked={doubutsu}
         onCheckedChange={onDoubutsuChange}

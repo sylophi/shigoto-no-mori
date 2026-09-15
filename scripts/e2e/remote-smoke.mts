@@ -620,9 +620,12 @@ async function main(): Promise<string[]> {
         !devices.some((d) => d.deviceId === idB),
         "b still in a's device registry",
       );
+      // A removed device signs itself out (a dev profile drops the
+      // account layer only, keeping the cloned Clerk session alive for
+      // the other windows).
       await b.waitFor(
-        "b's hub socket to be blocked",
-        'window.api.hub.status().then((s) => s.socket.phase === "blocked")',
+        "b to sign itself out of the account",
+        "window.api.account.status().then((s) => !s.signedIn)",
         60_000,
       );
     });

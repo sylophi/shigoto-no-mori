@@ -6,7 +6,12 @@
 import { rmdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { ShigomoriConfig } from "@shared/schemas";
-import { ALL_WORKTREE_LAYOUTS, worktreeBaseFor } from "@shared/worktreeLayout";
+import {
+  ALL_WORKTREE_LAYOUTS,
+  layoutInputsFor,
+  worktreeBaseFor,
+  worktreePathFor,
+} from "@shared/worktreeLayout";
 import { dataDir } from "../util/paths";
 
 // Every base directory whose direct children count as "managed" for
@@ -29,6 +34,19 @@ export function managedBasesFor(
       }),
     ];
   });
+}
+
+// Where a new worktree of the project lands under its configured
+// layout: the same mapping the CLI's resolveWorktreeBase makes.
+export function worktreePathForProject(
+  projectPath: string,
+  config: ShigomoriConfig | null,
+  worktreeName: string,
+): string {
+  return worktreePathFor(
+    layoutInputsFor(config, projectPath, dataDir()),
+    worktreeName,
+  );
 }
 
 // A worktree is managed when it sits DIRECTLY under one of the bases,

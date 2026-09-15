@@ -695,6 +695,7 @@ async function main() {
         signedIn: true,
         accountId: "acct-1",
         deviceName: "Mac",
+        sharedSignIn: false,
       });
       assert.ok(
         !("credential" in status),

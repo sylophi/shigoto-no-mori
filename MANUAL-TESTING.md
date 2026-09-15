@@ -180,6 +180,10 @@ cloning exists.
 ### Rules
 
 - **The peer needs the primary running.** It has no build of its own.
+- **A data folder move restarts the app through the launcher.** The
+  app touches a marker and quits, and `pnpm dev` starts forge again
+  (vite included) instead of leaving a detached Electron on a dead
+  renderer. The peer relaunches itself, and its wrapper exits.
 - **A main-process change restarts nothing by itself.** Forge rebuilds
   the main bundle (it prints `target built`) but leaves the primary
   running on the old code: type `rs` in the `pnpm start` terminal to
@@ -307,9 +311,13 @@ node scripts/e2e/drive.mts 9222 eval 'window.api.account.listDevices()'
 node scripts/e2e/drive.mts 9222 eval 'window.api.account.revokeDevice("<deviceId>")'
 ```
 
-A revoked device that is still running sees its socket blocked and
-keeps its dead credential, so it does not re-enroll. A relaunch after
-`--fresh` is a new device. `pnpm test:remote-smoke` cleans up its own
+A device removed from the account while it runs signs itself out: a
+packaged or plain dev app ends its Clerk session too and lands on the
+signed-out Devices page, while a profile that holds a cloned sign-in
+(`--clone-login` leaves a marker beside the token store) only drops
+the account layer, since its Clerk session is the plain dev app's and
+ending it would sign every window out. Such a profile re-enrolls if
+relaunched. A relaunch after `--fresh` is a new device. `pnpm test:remote-smoke` cleans up its own
 `e2e-*` profiles unless run with `--keep`.
 
 ## Unattended remote smoke
@@ -341,7 +349,7 @@ interaction:
 | mirror       | a mirrors a fresh worktree of b's. The session reports its ignore rule and start time, b's served stream names a's copy, and the history opens with `started`. Files written on either side land on the other, a gitignored file included. A commit on b lands on a with the same tip and a clean status. Changing the ignores re-opens the session, and a path under the new rule stays on a while its sibling crosses. Stopping clears a's session and b's served stream. |
 | port forward | a forwards a loopback echo server on b. Bytes round-trip.                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | liveness     | b is killed with SIGKILL. a drops it from the roster. b relaunches and both reconnect.                                                                                                                                                                                                                                                                                                                                                                                      |
-| revoke       | a removes b from the account. a's roster and registry drop it, and b's hub socket is blocked.                                                                                                                                                                                                                                                                                                                                                                               |
+| revoke       | a removes b from the account. a's roster and registry drop it, and b signs itself out of the account.                                                                                                                                                                                                                                                                                                                                                                               |
 
 Screenshots and logs go to a temp dir named in the output. A failing
 scenario screenshots both windows first.

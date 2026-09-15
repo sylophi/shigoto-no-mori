@@ -6,6 +6,11 @@
 // the user's choosing (app-only, since a browser cannot bind a
 // listener, and the web client sees the rows read-only).
 //
+// Two homes for one panel. On this device's own worktree it is a
+// section of the page. On a peer's worktree it is the Ports dialog
+// (PortsDialog.tsx) behind the remote footer's Ports button, next to
+// Mirror and Transplant, so every cross-device verb sits in one place.
+//
 // The section exists whenever there is something to show OR something
 // the viewer may add, so a repo without port-pool still gets a place to
 // pin its dev server's port. External worktrees have no data file, so
@@ -30,7 +35,18 @@ import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { PortForm } from "./PortForm";
 import { PortRow } from "./PortRow";
 
-export function PortsSection({ worktree }: { worktree: Worktree }) {
+// The heading row with Add port, the rows or the empty line, and the
+// add form. `hideWhenEmpty` is the page's rule: nothing to show and
+// nothing to offer (the read still in flight, or empty) renders
+// nothing, so the section stays out of the page. The dialog always
+// draws it, since opening it was the ask.
+export function PortsPanel({
+  worktree,
+  hideWhenEmpty = false,
+}: {
+  worktree: Worktree;
+  hideWhenEmpty?: boolean;
+}) {
   const { deviceId, remote } = useHostScope();
   const { granted } = useCommandAccess();
   const deviceLabel = useRemoteDeviceLabel(deviceId);
@@ -45,11 +61,7 @@ export function PortsSection({ worktree }: { worktree: Worktree }) {
   const { data: stored } = useWorktreeData(worktree.projectId, worktree.id);
   const atCap = (stored?.ports?.length ?? 0) >= MAX_CUSTOM_PORTS;
 
-  if (ports.length === 0 && !canEdit) {
-    // Nothing to show and nothing to offer, whether the read is still
-    // in flight or came back empty: stay out of the page.
-    return null;
-  }
+  if (hideWhenEmpty && ports.length === 0 && !canEdit) return null;
 
   return (
     <section className="space-y-3">
@@ -87,7 +99,7 @@ export function PortsSection({ worktree }: { worktree: Worktree }) {
         <p className="rounded-lg bg-muted/50 px-3 py-2.5 text-xs text-muted-foreground">
           {portsQuery.isError
             ? `Couldn't read this worktree's ports from ${deviceLabel}.`
-            : "Nothing listed yet. Ports port-pool allocates show up here on their own; add any other port this worktree serves."}
+            : "Nothing listed yet. Ports that port-pool allocates show up on their own. Add any other port this worktree serves."}
         </p>
       ) : (
         <ul className="flex flex-col gap-1.5">

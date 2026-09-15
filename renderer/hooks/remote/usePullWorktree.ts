@@ -7,6 +7,7 @@
 // surface centrally, and the outcome is the caller's to report: the
 // dialog's last step is the report, and the mirror lands through
 // reportLanded below.
+import { pullWorktreeName } from "@/lib/remote/pullWorktreeName";
 import {
   type QueryClient,
   useMutation,
@@ -66,6 +67,7 @@ export function usePullWorktree({
         sourceWorktreeId: worktree.id,
         sourceIdentity,
         branch: worktree.branch,
+        worktreeName: pullWorktreeName(worktree),
       }),
     // The invalidations only: the caller shows the outcome, so the
     // conclusion is told once.

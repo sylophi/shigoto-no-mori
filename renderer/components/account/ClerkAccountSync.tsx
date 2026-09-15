@@ -22,6 +22,18 @@
 //   store), and revoking it plus the command grants on a hunch would
 //   destroy real state. Such a mismatch instead resolves the moment the
 //   user acts (signs in → mismatch/enroll branch handle it).
+// - The hub closes this device's socket as revoked: it was removed
+//   from the account on another device. There is nothing left to keep,
+//   so the device signs out in full, Clerk session included, and lands
+//   on the signed-out page, where signing in again enrolls it afresh.
+//   Once per block (the guard clears when the socket leaves the blocked
+//   phase), so a sign-out that fails does not loop. A window whose
+//   sign-in is shared (status.sharedSignIn: a --clone-login dev
+//   profile) drops the account layer only, since ending the Clerk
+//   session would sign every window holding the clone out too, and
+//   arms the enroll guard so the branch above does not re-enroll it on
+//   the spot. Any other block (a refused ticket, a superseded socket)
+//   is not a verdict on the account and changes nothing here.
 import { useEffect, useRef } from "react";
 import { useAuth } from "@clerk/react";
 import {
@@ -29,6 +41,9 @@ import {
   useAccountStatus,
   useEnroll,
 } from "@/hooks/account/useAccount";
+import { credentialRevoked } from "@shared/remote/supervisor";
+import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
+import { useHubBlock } from "@/hooks/remote/useHubStatus";
 
 export function ClerkAccountSync() {
   const { isLoaded, isSignedIn, userId, getToken } = useAuth();
@@ -48,6 +63,25 @@ export function ClerkAccountSync() {
   // Whether this process ever observed a live Clerk session, gating the
   // destructive sign-out branch to sessions that ended in-process.
   const sawSession = useRef(false);
+
+  const block = useHubBlock();
+  const revoked = block !== null && credentialRevoked(block);
+  const sharedSignIn = status?.sharedSignIn === true;
+  const clerkSignOutMutate = useClerkSignOut().mutate;
+  const signOutNow = sharedSignIn ? signOutMutate : clerkSignOutMutate;
+  // Whether this block already got its sign-out: the socket stays
+  // blocked while the sign-out runs, and leaves that phase once it has.
+  const signedOutForBlock = useRef(false);
+  useEffect(() => {
+    if (!revoked) {
+      signedOutForBlock.current = false;
+      return;
+    }
+    if (!enrolled || signedOutForBlock.current || signOutPending) return;
+    signedOutForBlock.current = true;
+    if (sharedSignIn) armedFor.current = userId ?? null;
+    signOutNow();
+  }, [revoked, enrolled, sharedSignIn, signOutPending, signOutNow, userId]);
 
   useEffect(() => {
     if (!isLoaded || enrolled === undefined || !configured) return;

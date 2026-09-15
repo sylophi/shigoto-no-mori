@@ -4,7 +4,6 @@ import { BackButton } from "@/components/ui/back-button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusDot } from "@/components/ui/status-dot";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
-import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { hasLocalHost } from "@/lib/localHost";
 import { cn } from "@/lib/utils";
 import {
@@ -14,6 +13,7 @@ import {
   settingsSections,
   useActiveSettingsTab,
   type SettingsSection,
+  useSettingsDevices,
 } from "./settingsNav";
 
 // The Settings page's navigation, rendered by the app sidebar in place
@@ -26,7 +26,7 @@ import {
 // which the phone layout's chip row draws too.
 export function SettingsSidebarNav() {
   const navigate = useNavigate();
-  const devices = useRemoteDevices();
+  const devices = useSettingsDevices();
   const { activeTab } = useActiveSettingsTab(devices);
   const localName = useLocalDeviceName();
   const solo = isSolo(devices);

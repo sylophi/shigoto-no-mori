@@ -7,6 +7,7 @@
 //
 // Written immediately through the client store, never staged in a form:
 // flipping it is the whole action.
+import { keepReachableOn } from "@shared/schemas/config";
 import { ToggleRow } from "@/components/shared/ToggleRow";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useKeepReachableUpdate } from "@/hooks/config/useKeepReachableUpdate";
@@ -22,7 +23,7 @@ const launchAtLoginSupported =
 export function KeepReachableToggle() {
   const { data: clientConfig } = useClientConfig();
   const keepReachableUpdate = useKeepReachableUpdate();
-  const keepReachable = clientConfig?.keepReachable === true;
+  const keepReachable = keepReachableOn(clientConfig ?? {});
 
   return (
     <ToggleRow

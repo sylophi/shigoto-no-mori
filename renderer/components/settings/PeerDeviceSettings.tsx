@@ -47,10 +47,16 @@ export function PeerDeviceSettings({ device }: { device: RemoteDevice }) {
 }
 
 function OfflineNote({ device }: { device: RemoteDevice }) {
+  // Rostered but no session yet ("online" is the one phase that says
+  // the machine itself is up): this window just cannot reach it (a
+  // tunnel still routing, another network). Tell that apart from a
+  // machine that is simply off.
+  const dialing = device.status.phase === "online";
   return (
     <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 select-text dark:text-amber-300">
-      {device.label} is offline. Its settings live on that device and load when
-      it reconnects.
+      {dialing
+        ? `${device.label} is on, but this window hasn't connected to it yet. Its settings load once the connection is up. A brand-new tunnel can take a while to route.`
+        : `${device.label} is offline. Its settings live on that device and load when it reconnects.`}
     </p>
   );
 }

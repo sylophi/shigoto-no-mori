@@ -185,7 +185,10 @@ export function MirrorManageDialog({
 }
 
 // Four figures, one glance: how long, how many cycles, how much is
-// here, and whether git agrees.
+// here, and whether git agrees. A paused session reports no cycles,
+// no files and git off, because the engine tears its scan down while
+// paused. Shown raw that reads as a mirror that lost everything, so
+// the three figures say "paused" until it resumes.
 function Stats({ session }: { session: MirrorSession }) {
   const git = gitVerdict(session.git);
   return (
@@ -197,9 +200,13 @@ function Stats({ session }: { session: MirrorSession }) {
           "just now"
         )}
       </Stat>
-      <Stat label="Cycles">{session.successfulCycles.toLocaleString()}</Stat>
-      <Stat label="Files here">{session.local.files.toLocaleString()}</Stat>
-      <Stat label="Git" title={session.git?.detail}>
+      <Stat label="Cycles" paused={session.paused}>
+        {session.successfulCycles.toLocaleString()}
+      </Stat>
+      <Stat label="Files here" paused={session.paused}>
+        {session.local.files.toLocaleString()}
+      </Stat>
+      <Stat label="Git" title={session.git?.detail} paused={session.paused}>
         <StatusDot
           tone={git.tone}
           label={<span className={TONE_TEXT[git.tone]}>{git.label}</span>}
@@ -209,13 +216,18 @@ function Stats({ session }: { session: MirrorSession }) {
   );
 }
 
+// `paused` swaps the figure for the word: the engine tears its scan
+// down while paused and reports zeros, which would read as a mirror
+// that lost everything.
 function Stat({
   label,
   title,
+  paused = false,
   children,
 }: {
   label: string;
   title?: string;
+  paused?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -227,7 +239,11 @@ function Stat({
         {label}
       </dt>
       <dd className="mt-0.5 truncate text-sm font-medium tabular-nums">
-        {children}
+        {paused ? (
+          <span className="text-muted-foreground">paused</span>
+        ) : (
+          children
+        )}
       </dd>
     </div>
   );

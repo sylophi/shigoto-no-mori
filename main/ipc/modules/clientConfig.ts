@@ -1,3 +1,4 @@
+import { keepReachableOn } from "@shared/schemas/config";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
 import type { Handlers } from "@shared/ipc/types";
 import {
@@ -20,9 +21,9 @@ export const clientConfigHandlers: Handlers<typeof clientConfigContract> = {
     // then skip a redundant setLoginItemSettings syscall. reconcile is
     // still idempotent and never-throws, so gating is purely an
     // optimization, not a correctness requirement.
-    const priorKeepReachable = readClientConfigSync().keepReachable === true;
+    const priorKeepReachable = keepReachableOn(readClientConfigSync());
     await writeClientConfig(config);
-    if ((config.keepReachable === true) !== priorKeepReachable) {
+    if (keepReachableOn(config) !== priorKeepReachable) {
       reconcileLaunchAtLogin();
     }
   },
