@@ -1,6 +1,6 @@
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useState } from "react";
-import { FolderInput, FolderOpen, FolderPen } from "lucide-react";
+import { FolderInput, FolderOpen, RotateCcw } from "lucide-react";
 import { BlockingOverlay } from "@/components/ui/blocking-overlay";
 import { Button } from "@/components/ui/button";
 import { FolderPickerModal } from "@/components/ui/folder-picker-modal";
@@ -14,10 +14,10 @@ import { notifyError } from "@/lib/toast";
 // picker (the in-app FolderPickerModal, which still offers Finder on
 // this machine) chooses the new PARENT and the folder lands under its
 // canonical name (the main process owns that rule in
-// lib/dataDirMove.ts). A folder boot adopted under its pre-2.0 name
-// gets a Rename button, which is the same move with no parent given.
-// On success the main process relaunches the app, so the overlay's job
-// is just to block interaction until the window goes away.
+// lib/dataDirMove.ts). A folder away from the default location gets a
+// Reset button, which is the same move with no parent given. On success
+// the main process relaunches the app, so the overlay's job is just to
+// block interaction until the window goes away.
 export function DataLocationSection() {
   const { data: runtime } = useRuntimeInfo();
   const root = runtime?.dataDir ?? null;
@@ -43,11 +43,11 @@ export function DataLocationSection() {
     }
   };
 
-  // Rename in place: the host resolves the current parent. Two clicks,
+  // Reset to the default location, which the host resolves. Two clicks,
   // since the app restarts on the spot and the first click is the
   // moment to learn that.
-  const rename = useConfirmTwice(CONFIRM_QUICK_MS);
-  const handleRename = () => rename.trigger(() => void moveTo());
+  const reset = useConfirmTwice(CONFIRM_QUICK_MS);
+  const handleReset = () => reset.trigger(() => void moveTo());
 
   return (
     <section className="space-y-3">
@@ -70,12 +70,6 @@ export function DataLocationSection() {
         Worktrees, configs, and state live here. Moving the folder restarts the
         app, and the CLI follows automatically.
       </p>
-      {runtime?.dataDirSource === "legacy" && (
-        <p className="text-xs text-muted-foreground">
-          This folder still has its pre-2.0 name. Rename it to{" "}
-          {runtime.canonicalDataDirName} to keep worktree paths short.
-        </p>
-      )}
       <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="outline"
@@ -101,18 +95,16 @@ export function DataLocationSection() {
           <FolderInput />
           Move data folder…
         </Button>
-        {runtime?.dataDirSource === "legacy" && (
+        {movable && !runtime.atDefaultDataDir && (
           <Button
             variant="outline"
             size="sm"
-            disabled={!movable || moving}
-            aria-pressed={rename.armed}
-            onClick={handleRename}
+            disabled={moving}
+            aria-pressed={reset.armed}
+            onClick={handleReset}
           >
-            <FolderPen />
-            {rename.armed
-              ? "Rename and restart?"
-              : `Rename to ${runtime.canonicalDataDirName}`}
+            <RotateCcw />
+            {reset.armed ? "Reset and restart?" : "Reset to default"}
           </Button>
         )}
       </div>

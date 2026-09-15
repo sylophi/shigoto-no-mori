@@ -1,4 +1,5 @@
 import { homedir } from "node:os";
+import { resolve } from "node:path";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import type { Handlers } from "@shared/ipc/types";
 import type { NukeProgress } from "@shared/schemas";
@@ -8,6 +9,7 @@ import {
   canonicalDataDirName,
   dataDir,
   dataDirSource,
+  defaultDataDir,
 } from "@host/lib/util/paths";
 
 // The electron layer injects the app-lifecycle teardown hooks at boot:
@@ -43,6 +45,8 @@ export const runtimeHandlers: Handlers<typeof runtimeContract> = {
   info: () => ({
     dataDir: dataDir(),
     dataDirSource: dataDirSource(),
+    // resolve() drops the trailing slash a hand-edited pointer may carry.
+    atDefaultDataDir: resolve(dataDir()) === defaultDataDir(),
     canonicalDataDirName: canonicalDataDirName(),
     homedir: homedir(),
   }),
