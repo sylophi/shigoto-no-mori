@@ -15,8 +15,11 @@
 // `pnpm start --profile <name> [--fresh] [--clone-login]`
 // runs the app as a dev profile (scripts/lib/devProfile.mts). The
 // other flags go to forge as before.
-import { spawn } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
+import { existsSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DEV_RELAUNCH_FILE_ENV } from "../shared/appName.mts";
 import { errorMessageOf } from "../shared/errors.ts";
 import { repoRoot } from "./lib/checkKit.mjs";
 import { ensureDevBundle, superviseChild } from "./lib/devBundle.mts";
@@ -67,18 +70,33 @@ if (process.platform === "darwin") {
   }
 }
 
+// The app asks for a relaunch (a data folder move) by touching this
+// file before it quits (main/electron/relaunch.ts). Forge exits with
+// Electron, so the relaunch is ours: start forge again, vite and all.
+const relaunchMarker = join(tmpdir(), `shigomori-dev-relaunch-${process.pid}`);
+process.env[DEV_RELAUNCH_FILE_ENV] = relaunchMarker;
+process.on("exit", () => rmSync(relaunchMarker, { force: true }));
+
 // Windows cannot exec the extensionless .bin sh shim. Going through
 // the shell picks up electron-forge.cmd from the pnpm-provided PATH.
 const isWindows = process.platform === "win32";
-const child = isWindows
-  ? spawn("electron-forge", ["start", ...forgeArgs], {
-      cwd: repoRoot,
-      stdio: "inherit",
-      shell: true,
-    })
-  : spawn(
-      join(repoRoot, "node_modules", ".bin", "electron-forge"),
-      ["start", ...forgeArgs],
-      { cwd: repoRoot, stdio: "inherit" },
-    );
-superviseChild(child, "electron-forge");
+function launchForge(): ChildProcess {
+  return isWindows
+    ? spawn("electron-forge", ["start", ...forgeArgs], {
+        cwd: repoRoot,
+        stdio: "inherit",
+        shell: true,
+      })
+    : spawn(
+        join(repoRoot, "node_modules", ".bin", "electron-forge"),
+        ["start", ...forgeArgs],
+        { cwd: repoRoot, stdio: "inherit" },
+      );
+}
+
+superviseChild(launchForge(), "electron-forge", () => {
+  if (!existsSync(relaunchMarker)) return undefined;
+  rmSync(relaunchMarker, { force: true });
+  console.log("[dev-electron] the app asked for a relaunch, restarting");
+  return launchForge();
+});

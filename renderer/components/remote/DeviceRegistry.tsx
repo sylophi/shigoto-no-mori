@@ -9,6 +9,7 @@
 // hub store rather than the account:listDevices HTTP snapshot (which
 // only invalidates on account:changed), so a device coming online or
 // going away updates without a refetch.
+import { credentialRevoked } from "@shared/remote/supervisor";
 import { useIsMutating } from "@tanstack/react-query";
 import { errorMessageOf } from "@shared/errors";
 import { isHubRefusal } from "@shared/account/service";
@@ -30,7 +31,11 @@ import {
   usePeerCommandAccess,
 } from "@/hooks/remote/useCommandAccess";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
-import { useHubStatus, useTunnelState } from "@/hooks/remote/useHubStatus";
+import {
+  useHubBlock,
+  useHubStatus,
+  useTunnelState,
+} from "@/hooks/remote/useHubStatus";
 import { useNow } from "@/hooks/ui/useNow";
 import { abbreviateId } from "@/lib/abbreviateId";
 import { localDeviceId } from "@/lib/queryKeys";
@@ -52,13 +57,22 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
   // derived primitive off the shared hub status store: the registry
   // re-renders when the tunnel flips, not on every roster transition.
   const tunnel = useTunnelState();
+  // This device's own row reads its whole socket. The banner reads the
+  // narrower block selector so it does not re-render on roster news.
   const socket = useHubStatus()?.socket ?? null;
-  // A blocked socket is the one failure the hub explains itself: this
-  // device was removed from the account elsewhere, so its credential is
-  // dead and every list it asks for comes back refused. Its message is
-  // the only place that story is told, so the registry tells it here
-  // instead of leaving the generic refusal line to imply a hub problem.
-  const blockedMessage = socket?.phase === "blocked" ? socket.message : null;
+  const block = useHubBlock();
+  // A blocked socket is the one failure the hub explains itself, and
+  // every list this page asks for comes back refused meanwhile, so the
+  // registry tells that story here instead of leaving the generic
+  // refusal line to imply a hub problem. A revoked device is already
+  // being signed out by ClerkAccountSync, so that case says so. Any
+  // other block keeps the hub's words.
+  const blockedMessage =
+    block === null
+      ? null
+      : credentialRevoked(block)
+        ? "This device was removed from the account, so it is signing out."
+        : block.message;
   const hosts = useHostChipIndex(localDeviceId);
   const now = useNow();
   // Whether THIS device may drive verbs on each peer: the peer's own
@@ -119,9 +133,9 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
           is. Blocked outranks a missing session: a device removed
           from the account has nothing left to keep. */}
       {blockedMessage !== null ? (
-        // Signing in again is the whole fix (the Clerk session
-        // outlives the revoked device credential, so the button
-        // re-enrolls this machine).
+        // The button re-enrolls this machine (the Clerk session
+        // outlives a revoked device credential), which is the way back
+        // if the automatic sign-out did not land.
         <SignInBanner>{blockedMessage}</SignInBanner>
       ) : (
         <SessionMissingBanner />

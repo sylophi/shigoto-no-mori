@@ -21,7 +21,10 @@ import {
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { errorMessageOf } from "@shared/errors";
-import { pullBranchCollision } from "@shared/pullCollision";
+import {
+  pullBranchCollision,
+  pullFolderCollision,
+} from "@shared/pullCollision";
 import { DeleteWorktreeResultSchema } from "@shared/schemas";
 import {
   bundleCreateViaCli,
@@ -34,6 +37,9 @@ import { peerSyncApiFor, peerWorktreesApiFor } from "@host/ipc/peerSync";
 import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
 import { createIdleRegistry } from "@host/lib/idleRegistry";
 import { listBranches } from "@host/lib/git/branches";
+import { readShigomoriConfig } from "@host/lib/config/project";
+import { pathExists } from "@host/lib/util/paths";
+import { worktreePathForProject } from "@host/lib/worktrees/paths";
 import { listIgnoreRules } from "@host/lib/git/ignoreRules";
 import {
   cachedIgnoredPaths,
@@ -469,6 +475,7 @@ export async function runPullWorktree(
     sourceWorktreeId,
     sourceIdentity,
     branch,
+    worktreeName,
   }: z.infer<typeof SyncPullWorktreePayloadSchema>,
   ctx: HandlerContext,
 ) {
@@ -484,14 +491,31 @@ export async function runPullWorktree(
 
   // 2. Updating an existing branch is out of scope. Refuse up front
   // with the state the user can act on.
-  const { local } = await listBranches(project.path);
+  const [{ local }, existing] = await Promise.all([
+    listBranches(project.path),
+    listWorktreeIdentities(project.id, project.path),
+  ]);
   if (local.includes(branch)) {
     // Name the worktree holding it when one does: that is the thing
     // the user has to stop or delete.
-    const holder = (
-      await listWorktreeIdentities(project.id, project.path)
-    ).find((w) => w.branch === branch);
+    const holder = existing.find((w) => w.branch === branch);
     throw new Error(pullBranchCollision(branch, holder?.path));
+  }
+  // The copy keeps the source's folder name, and the CLI create
+  // refuses a taken one (cli/worktree.go: a worktree of this project
+  // by that name, case-insensitively, or anything at the path). That
+  // refusal lands at step 5, after the bundle crossed. The same two
+  // checks here refuse before a byte moves.
+  if (worktreeName !== undefined) {
+    const wanted = worktreeName.toLowerCase();
+    const config = await readShigomoriConfig(project.id).catch(() => null);
+    const target = worktreePathForProject(project.path, config, worktreeName);
+    if (
+      existing.some((w) => w.name.toLowerCase() === wanted) ||
+      (await pathExists(target))
+    ) {
+      throw new Error(pullFolderCollision(worktreeName, target));
+    }
   }
 
   const peer = peerSyncApiFor(sourceDeviceId);
@@ -567,7 +591,7 @@ export async function runPullWorktree(
     const notify = notifierFor(ctx);
     const { worktree } = await createViaCli(
       project,
-      { branchName: branch, base: incomingRef },
+      { branchName: branch, base: incomingRef, worktreeName },
       {
         ...notify,
         notifyPhase: (payload) => {

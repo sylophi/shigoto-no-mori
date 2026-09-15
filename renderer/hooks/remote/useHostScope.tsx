@@ -22,6 +22,7 @@
 //   module behind CliSection): the write lands on this machine's disk,
 //   so their reads and invalidations must stay pinned to the local
 //   `queryKeys` registry.
+import { hasLocalHost } from "@/lib/localHost";
 import { createContext, use, type ReactNode } from "react";
 import type { RemoteDeviceApi } from "@/lib/remote/devices";
 import {
@@ -73,6 +74,12 @@ export interface HostScope {
   // gate on the scope instead of each re-deriving the comparison
   // against localDeviceId.
   remote: boolean;
+  // True when there is a host behind the scope at all: a remote device
+  // always, the local scope only on the desktop. A hostless client (the
+  // web shell) has a local scope with nothing to answer host reads, so
+  // the hooks that read one gate on this instead of asking and being
+  // refused.
+  hasHost: boolean;
   // The api those calls go through: window.api locally, a connected
   // remote device's socket- or hub-backed api under a provider.
   api: HostApi;
@@ -87,6 +94,7 @@ export interface HostScope {
 const localHostScope: HostScope = {
   deviceId: localDeviceId,
   remote: false,
+  hasHost: hasLocalHost,
   api: window.api,
   keys: queryKeys,
 };
@@ -97,12 +105,16 @@ export function HostScopeProvider({
   deviceId,
   api,
   children,
-}: Omit<HostScope, "keys" | "remote"> & { children: ReactNode }) {
+}: Omit<HostScope, "keys" | "remote" | "hasHost"> & {
+  children: ReactNode;
+}) {
+  const remote = deviceId !== localDeviceId;
   return (
     <HostScopeContext
       value={{
         deviceId,
-        remote: deviceId !== localDeviceId,
+        remote,
+        hasHost: remote || hasLocalHost,
         api,
         keys: queryKeysFor(deviceId),
       }}

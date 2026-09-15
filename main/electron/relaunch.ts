@@ -6,22 +6,50 @@
 // so there is nothing to prompt about, and a busy dialog here could be
 // cancelled, leaving a live app pointed at a data dir that no longer
 // exists.
+import { writeFileSync } from "node:fs";
 import { app } from "electron";
+import { DEV_RELAUNCH_FILE_ENV } from "@shared/appName.mts";
 
 let requested = false;
+
+// Under `pnpm dev` a relaunch cannot be app.relaunch(): forge exits
+// with Electron and takes the vite server with it, and the detached
+// copy would open on a dead renderer. The dev launcher
+// (scripts/dev-electron.mts) hands over a marker path instead, and
+// restarts forge when the app quits with the marker present.
+const devRelaunchMarker = process.env[DEV_RELAUNCH_FILE_ENV];
 
 // Record that a relaunch is in flight WITHOUT initiating the quit. The
 // data-folder move (relaunchApp) quits through Electron so its reply is
 // delivered first. The fatal-recovery path in liveness.ts instead exits
 // hard, but it still sets this flag so if before-quit does fire it takes
 // index.ts's fast reap path rather than the busy-action prompt.
-export function markRelaunching(): void {
+function markRelaunching(): void {
   requested = true;
 }
 
-export function relaunchApp(): void {
+// Arrange for the app to start again once this process is gone, by
+// whichever mechanism this run has. Does not quit: the data-folder
+// move quits through Electron (relaunchApp), the fatal-recovery path
+// in liveness.ts exits hard on its own.
+export function scheduleRelaunch(): void {
   markRelaunching();
+  if (devRelaunchMarker !== undefined) {
+    try {
+      writeFileSync(devRelaunchMarker, "");
+      return;
+    } catch (error) {
+      // A marker that cannot be written must not strand the app on a
+      // data dir that has already moved: the plain relaunch is the
+      // one that loses the vite server, not the one that loses data.
+      console.warn(`[relaunch] could not write the dev marker: ${error}`);
+    }
+  }
   app.relaunch();
+}
+
+export function relaunchApp(): void {
+  scheduleRelaunch();
   app.quit();
 }
 

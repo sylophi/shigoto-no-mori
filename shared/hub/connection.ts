@@ -140,11 +140,13 @@ type HubConnectionCore = {
 const hubCloseClassifier: CloseClassifier = (code) => {
   if (code === CLOSE_DEVICE_REVOKED) {
     return {
+      reason: "revoked",
       message: "this device was removed from the account, sign in again",
     };
   }
   if (code === CLOSE_SUPERSEDED) {
     return {
+      reason: "superseded",
       message: "another instance of this device took over the device hub",
     };
   }

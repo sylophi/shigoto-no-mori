@@ -1,5 +1,5 @@
-// Host liveness. One opt-in, `keepReachable` in
-// client config, drives two capabilities so a machine the user hosts
+// Host liveness. One switch, `keepReachable` in client config (on
+// unless switched off), drives two capabilities so a machine the user hosts
 // stays online for the device hub:
 //   1. Launch-at-login, via setLoginItemSettings, so the app starts when
 //      the user logs in.
@@ -11,6 +11,7 @@
 // KeepAlive). That is out of scope here. The pruning and counting for
 // both crash guards is the pure module main/liveness/rateLimit.ts, which
 // scripts/check-liveness.mjs drives headlessly.
+import { keepReachableOn } from "@shared/schemas/config";
 import { app, type BrowserWindow } from "electron";
 import { platform } from "node:os";
 import { join } from "node:path";
@@ -23,7 +24,7 @@ import {
 } from "@host/lib/util/jsonFile";
 import { readClientConfigSync } from "./clientConfig";
 import { accountServiceConfigured } from "../ipc/modules/account";
-import { markRelaunching } from "./relaunch";
+import { scheduleRelaunch } from "./relaunch";
 import { CRASH_LOOP, decide, FATAL_RELAUNCH } from "../liveness/rateLimit";
 
 function keepReachableEnabled(): boolean {
@@ -33,11 +34,13 @@ function keepReachableEnabled(): boolean {
   // login item left behind by a previously configured build.
   if (!accountServiceConfigured()) return false;
   try {
-    return readClientConfigSync().keepReachable === true;
+    return keepReachableOn(readClientConfigSync());
   } catch (error) {
-    // A store read should never throw (the store's own read swallows
-    // corruption), but a liveness decision must never be what crashes
-    // the app, so treat an unreadable config as opted out.
+    // The store's own read swallows corruption (an unparseable file
+    // reads as empty, so as the default), and a liveness decision must
+    // never be what crashes the app, so anything that still throws
+    // reads as off: a login item is the wrong thing to install on a
+    // guess.
     console.warn(
       `[liveness] could not read keepReachable, treating as off: ${errorMessageOf(error)}`,
     );
@@ -235,9 +238,8 @@ export function installFatalRecovery(deps: {
     try {
       // Mark relaunching first so if before-quit somehow fires it takes
       // index.ts's fast reap path rather than the busy-action prompt.
-      markRelaunching();
+      scheduleRelaunch();
       markShuttingDown();
-      app.relaunch();
     } catch (error) {
       console.error(
         `[liveness] scheduling the relaunch failed: ${errorMessageOf(error)}`,

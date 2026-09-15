@@ -21,7 +21,7 @@ export interface SidebarDeviceBadge {
 export function DeviceBadge({ badge }: { badge: SidebarDeviceBadge }) {
   return (
     <SimpleTooltip
-      tip={`${badge.label}${badge.reachable ? "" : " (offline, last known state)"}`}
+      tip={`${badge.label}${badge.reachable ? "" : " (not reachable right now, last known state)"}`}
     >
       <span
         className={cn(

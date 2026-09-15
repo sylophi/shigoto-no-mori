@@ -183,6 +183,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       signedIn: record !== null,
       accountId: record?.accountId ?? "",
       deviceName: record?.deviceName ?? defaultDeviceName(),
+      sharedSignIn: false,
     };
   }
 

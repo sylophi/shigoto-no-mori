@@ -1,14 +1,16 @@
-// The remote worktree detail's cross-device actions: keep a live
-// mirror of the worktree here ("Mirror here"), or move it here and
-// decide what becomes of the source ("Transplant"). Text buttons,
-// since the footer has room to say what they do. Renders nothing
-// unless the caller holds command access, the branch is real, and a
-// local project shares the repo identity (the handler re-verifies that
-// last one), except that a repo with no identity at all gets a line of
-// explanation instead of an empty footer.
+// The remote worktree detail's cross-device actions, the three ways
+// to reach work on another machine in one place: its ports ("Ports":
+// forward one here, or see what it serves), a live mirror of the
+// worktree here ("Mirror here"), or moving it here and deciding what
+// becomes of the source ("Transplant"). Text buttons, since the footer
+// has room to say what they do. Ports is always there (reading the
+// list needs no grant). The two transfers need command access, a real
+// branch, and a local project sharing the repo identity (the handler
+// re-verifies that last one). A repo with no identity at all gets a
+// line of explanation instead of an empty footer.
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { type ReactNode, useState } from "react";
-import { RefreshCw, Shovel } from "lucide-react";
+import { Cable, RefreshCw, Shovel } from "lucide-react";
 import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
@@ -16,6 +18,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useLocalProjectForIdentity } from "@/hooks/remote/useLocalProjectForIdentity";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { MirrorDialog } from "./mirror/MirrorDialog";
+import { PortsDialog } from "./ports/PortsDialog";
 import { TransplantDialog } from "./transplant/TransplantDialog";
 
 export function RemoteWorktreeActions({
@@ -26,18 +29,32 @@ export function RemoteWorktreeActions({
   project: Project;
 }) {
   const { granted } = useCommandAccess();
-  const localProject = useLocalProjectForIdentity(project.identity);
+  const transferable =
+    granted &&
+    !worktree.isPrimary &&
+    !worktree.detached &&
+    isRealBranch(worktree.branch);
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <PortsButton worktree={worktree} />
+      {transferable && (
+        <TransferActions worktree={worktree} project={project} />
+      )}
+    </div>
+  );
+}
 
-  if (
-    !granted ||
-    worktree.isPrimary ||
-    worktree.detached ||
-    !isRealBranch(worktree.branch)
-  ) {
-    return null;
-  }
+// The two transfers, or the one line that explains their absence.
+function TransferActions({
+  worktree,
+  project,
+}: {
+  worktree: Worktree;
+  project: Project;
+}) {
+  const localProject = useLocalProjectForIdentity(project.identity);
   // A project git couldn't identify can never match a local one, so no
-  // button here will ever work. Say so: two controls disappearing
+  // transfer here will ever work. Say so: two controls disappearing
   // without a word reads as a bug, and the cause (the repo, not the
   // app) is fixable by the person looking at it.
   if (project.identity == null) return <NoIdentityNote />;
@@ -46,7 +63,7 @@ export function RemoteWorktreeActions({
   // and the empty projects list already says that.
   if (localProject === undefined) return null;
   return (
-    <div className="flex items-center gap-1">
+    <>
       <MirrorButton
         worktree={worktree}
         project={project}
@@ -59,7 +76,25 @@ export function RemoteWorktreeActions({
         sourceIdentity={project.identity}
         localProject={localProject}
       />
-    </div>
+    </>
+  );
+}
+
+// The peer worktree's ports, forwardable from the app.
+function PortsButton({ worktree }: { worktree: Worktree }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <ActionButton
+        icon={<Cable />}
+        label="Ports"
+        title="See this worktree's ports and forward one here"
+        onClick={() => setOpen(true)}
+      />
+      {open && (
+        <PortsDialog worktree={worktree} onClose={() => setOpen(false)} />
+      )}
+    </>
   );
 }
 

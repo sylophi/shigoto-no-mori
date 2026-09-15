@@ -233,6 +233,11 @@ function buildEntry(
       remoteAppVersion: version,
     };
     api = apiFor(info.deviceId);
+  } else if (current.socket.phase === "blocked") {
+    // A blocked socket is a verdict on THIS device, not on the peers,
+    // which are as unknown as when the app is offline: off, the
+    // least-lying reading for every surface at once.
+    status = { phase: "stopped" };
   } else if (current.socket.phase !== "connected") {
     status = current.socket;
   } else if (!online.has(info.deviceId)) {
@@ -249,6 +254,7 @@ function buildEntry(
   return {
     deviceId: info.deviceId,
     label: info.name,
+    platform: info.platform,
     status,
     appVersion: version ?? "",
     api,

@@ -5,6 +5,7 @@
 // folder come from the LOCAL project's config, not the source's, and
 // so does the pre-flight: a branch this device already holds fails the
 // pull at step 2, so the review says so here and keeps Start off.
+import { pullWorktreeName } from "@/lib/remote/pullWorktreeName";
 import {
   AlertTriangle,
   ArrowDown,
@@ -15,7 +16,10 @@ import {
   Monitor,
 } from "lucide-react";
 import type { Project, Worktree } from "@shared/schemas";
-import { pullBranchCollision } from "@shared/pullCollision";
+import {
+  pullBranchCollision,
+  pullFolderCollision,
+} from "@shared/pullCollision";
 import { worktreeBaseFor } from "@shared/worktreeLayout";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip-button";
@@ -145,6 +149,7 @@ export function TransplantReview({
               <DestinationFolder
                 localProject={localProject}
                 thisDeviceLabel={thisDeviceLabel}
+                name={pullWorktreeName(worktree)}
               />
 
               <NoteBox title="What happens">
@@ -177,20 +182,40 @@ export function TransplantReview({
 
 // Where the pull would refuse at step 2 (host/ipc/modules/sync.ts
 // runPullWorktree): this device already has the branch, checked out
-// in a worktree or merely existing. Read under LocalHostScope. Both
+// in a worktree or merely existing, or already has a worktree under
+// the folder name the copy would take. Read under LocalHostScope. Both
 // lists are the ordinary cached ones, so the row and the footer
-// asking the same question cost one read between them.
+// asking the same question cost one read between them. The disk half
+// of the folder rule (a stray folder that is no worktree) is the
+// host's alone.
 export function useLocalCollision(
   localProject: Project,
-  branch: string,
-): { held: boolean; holder: Worktree | undefined } {
+  worktree: Worktree,
+): {
+  held: boolean;
+  holder: Worktree | undefined;
+  // The refusal the footer shows and Start waits on, or null.
+  refusal: string | null;
+} {
   const { data: branches } = useBranches(localProject.id);
   const { data: worktrees } = useWorktrees(localProject.id);
-  const held = branches?.local.includes(branch) ?? false;
+  const held = branches?.local.includes(worktree.branch) ?? false;
   const holder = held
-    ? worktrees?.find((entry) => entry.branch === branch)
+    ? worktrees?.find((entry) => entry.branch === worktree.branch)
     : undefined;
-  return { held, holder };
+  const name = pullWorktreeName(worktree);
+  const taken =
+    name !== undefined &&
+    (worktrees?.some(
+      (entry) => entry.name.toLowerCase() === name.toLowerCase(),
+    ) ??
+      false);
+  const refusal = held
+    ? pullBranchCollision(worktree.branch, holder?.path)
+    : taken
+      ? pullFolderCollision(name, `${localProject.name}/${name}`)
+      : null;
+  return { held, holder, refusal };
 }
 
 export function DestinationRow({
@@ -202,7 +227,7 @@ export function DestinationRow({
   localProject: Project;
   thisDeviceLabel: string;
 }) {
-  const { held, holder } = useLocalCollision(localProject, worktree.branch);
+  const { held, holder } = useLocalCollision(localProject, worktree);
   return (
     <li
       className={cn(
@@ -259,19 +284,18 @@ function ReviewFooter({
   onCancel: () => void;
   onStart: () => void;
 }) {
-  const { held, holder } = useLocalCollision(localProject, worktree.branch);
+  const { refusal } = useLocalCollision(localProject, worktree);
   return (
     <TransplantFooter
       note={
-        held
-          ? pullBranchCollision(worktree.branch, holder?.path)
-          : `Nothing on ${sourceDeviceLabel} is deleted until you say so at the last step.`
+        refusal ??
+        `Nothing on ${sourceDeviceLabel} is deleted until you say so at the last step.`
       }
     >
       <Button variant="ghost" size="sm" onClick={onCancel}>
         Cancel
       </Button>
-      <Button size="sm" onClick={onStart} disabled={held}>
+      <Button size="sm" onClick={onStart} disabled={refusal !== null}>
         Start transplant
         <ArrowRight />
       </Button>
@@ -526,15 +550,18 @@ function CarryOverList({
   );
 }
 
-// Where the worktree lands: the local layout's base folder, with the
-// name left open -- the create picks a fresh pool name on arrival, so
-// a full path here would be a guess.
+// Where the worktree lands: the local layout's base folder plus the
+// source's own folder name (pullWorktreeName). The name is left open
+// only when the source's folder is not a valid managed dirname, in
+// which case the create picks a fresh pool name on arrival.
 export function DestinationFolder({
   localProject,
   thisDeviceLabel,
+  name,
 }: {
   localProject: Project;
   thisDeviceLabel: string;
+  name: string | undefined;
 }) {
   const { data: config } = useShigomoriConfig(localProject.id);
   const { data: runtime } = useRuntimeInfo();
@@ -551,6 +578,7 @@ export function DestinationFolder({
         runtime.homedir,
       )
     : null;
+  const shownName = name ?? "‹new name›";
   return (
     <section className="space-y-2">
       <SectionHeading>Folder on {thisDeviceLabel}</SectionHeading>
@@ -558,8 +586,15 @@ export function DestinationFolder({
         {base === null ? (
           <Skeleton className="h-3.5 w-2/3" />
         ) : (
-          <p className="truncate" title={base}>
-            {base}/<span className="text-muted-foreground">‹new name›</span>
+          <p className="truncate" title={`${base}/${shownName}`}>
+            <span className="text-muted-foreground">{base}/</span>
+            <span
+              className={
+                name === undefined ? "text-muted-foreground" : undefined
+              }
+            >
+              {shownName}
+            </span>
           </p>
         )}
       </div>

@@ -47,7 +47,7 @@ export type SupervisorStatus =
   | { phase: "connecting" }
   | { phase: "connected"; remoteDeviceId: string; remoteAppVersion: string }
   | { phase: "backoff"; attempt: number; delayMs: number }
-  | { phase: "blocked"; message: string }
+  | { phase: "blocked"; reason: BlockReason; message: string }
   | { phase: "stopped" };
 
 // Opaque timer handle: a number in the browser, a Timeout object under
@@ -93,9 +93,23 @@ export type ConnectFn = (
 // Every classifier here is an ALLOWLIST of blocking codes, so an
 // unrecognized code retries rather than wedging a device in a blocked
 // state this build cannot explain.
+// Why a blocked socket is blocked. Only "revoked" is the hub's verdict
+// on this device (its close code says the device was removed from the
+// account), which is what a device signs itself out on. "refused" is a
+// ticket mint the hub would not serve, any 401/403, which a misdeployed
+// hub produces for every device at once and which recovers on its own.
+// "superseded" is another instance of this device taking the socket
+// over, and "auth" is the LAN path's bad token.
+export type BlockReason = "revoked" | "superseded" | "refused" | "auth";
+
+// The one block a device acts on by leaving the account.
+export function credentialRevoked(status: SupervisorStatus): boolean {
+  return status.phase === "blocked" && status.reason === "revoked";
+}
+
 export type CloseClassifier = (
   code: number | null,
-) => { message: string } | null;
+) => { reason: BlockReason; message: string } | null;
 
 const AUTH_FAILED_MESSAGE = "authentication failed";
 
@@ -107,7 +121,9 @@ const AUTH_FAILED_MESSAGE = "authentication failed";
 // instead of surfacing "authentication failed" for a credential that
 // was never even read.
 const lanCloseClassifier: CloseClassifier = (code) =>
-  code === CLOSE_AUTH_FAILED ? { message: AUTH_FAILED_MESSAGE } : null;
+  code === CLOSE_AUTH_FAILED
+    ? { reason: "auth", message: AUTH_FAILED_MESSAGE }
+    : null;
 
 type SupervisorOptions = {
   params: SupervisorParams;
@@ -169,11 +185,11 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
     }
   }
 
-  function block(message: string): void {
+  function block(reason: BlockReason, message: string): void {
     // Terminal until inputs change: the owner drops and recreates the
     // supervisor when the url or token changes, which is what unblocks.
     connection = null;
-    setStatus({ phase: "blocked", message });
+    setStatus({ phase: "blocked", reason, message });
   }
 
   function scheduleBackoff(resetLadder: boolean): void {
@@ -199,7 +215,7 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
     options.onConnection?.(null);
     const verdict = classifyClose(code);
     if (verdict !== null) {
-      block(verdict.message);
+      block(verdict.reason, verdict.message);
       return;
     }
     const openMs = clock.now() - connectedAt;
@@ -232,7 +248,11 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
       // A blocking close names itself through the classifier. A
       // blocking failure with no close code (a refused ticket mint)
       // names itself in the error.
-      block(classifyClose(error.code)?.message ?? error.message);
+      const verdict = classifyClose(error.code) ?? {
+        reason: "refused" as const,
+        message: error.message,
+      };
+      block(verdict.reason, verdict.message);
       return;
     }
     scheduleBackoff(false);

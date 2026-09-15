@@ -10,7 +10,6 @@ import {
   useSettingsSave,
 } from "@/hooks/config/useSettingsSave";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
-import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useUpdater } from "@/hooks/system/useUpdater";
 import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { useDoubutsu } from "@/hooks/ui/useDoubutsu";
@@ -34,6 +33,7 @@ import {
   LOCAL_DEVICE_TAB,
   settingsPanelId,
   useActiveSettingsTab,
+  useSettingsDevices,
 } from "./settingsNav";
 import {
   SettingsEditorRegistryProvider,
@@ -74,7 +74,7 @@ export function SettingsForm({
   const save = useSettingsSave({ initialConfig, initialClientConfig });
   const { setOverride } = useTheme();
   const { setOverride: setDoubutsuOverride } = useDoubutsu();
-  const devices = useRemoteDevices();
+  const devices = useSettingsDevices();
   const localName = useLocalDeviceName();
   const { activeTab, peer } = useActiveSettingsTab(devices);
 

@@ -21,6 +21,10 @@ export const AccountStatusSchema = z.object({
   signedIn: z.boolean(),
   accountId: z.string(),
   deviceName: z.string(),
+  // The sign-in behind this device is a copy another window holds too
+  // (a dev profile launched with --clone-login), so ending the Clerk
+  // session here ends it there as well. Always false outside dev.
+  sharedSignIn: z.boolean(),
 });
 export type AccountStatus = z.infer<typeof AccountStatusSchema>;
 

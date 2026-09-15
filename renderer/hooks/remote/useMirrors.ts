@@ -5,6 +5,7 @@
 // machine and for a peer being viewed. The mutations are local: start
 // is a pull plus a mirror, and stop/pause/resume speak to this
 // machine's daemon.
+import { pullWorktreeName } from "@/lib/remote/pullWorktreeName";
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
@@ -29,10 +30,11 @@ const EMPTY: MirrorListResult = {
 // broadcast owns invalidation (the mutations below never invalidate the
 // list themselves), matching the port-forward hooks.
 export function useMirrors(): MirrorListResult {
-  const { api, keys } = useHostScope();
+  const { api, keys, hasHost } = useHostScope();
   const query = useQuery({
     queryKey: keys.mirrors(),
     queryFn: () => api.mirror.list(),
+    enabled: hasHost,
   });
   useMirrorsChanged();
   return query.data ?? EMPTY;
@@ -92,11 +94,12 @@ const NO_LINKS: MirrorLink[] = [];
 // stays referentially the same through all of that, so the rows are
 // not rebuilt for news they do not show.
 export function useMirrorLinks(): MirrorLink[] {
-  const { api, keys } = useHostScope();
+  const { api, keys, hasHost } = useHostScope();
   const query = useQuery({
     queryKey: keys.mirrors(),
     queryFn: () => api.mirror.list(),
     select: mirrorLinksOf,
+    enabled: hasHost,
   });
   useMirrorsChanged();
   return query.data ?? NO_LINKS;
@@ -148,6 +151,7 @@ export function useStartMirror({
         sourceWorktreeId: worktree.id,
         sourceIdentity,
         branch: worktree.branch,
+        worktreeName: pullWorktreeName(worktree),
         ...choice,
       }),
     onSuccess: () => invalidateLanded(queryClient, localProjectId),

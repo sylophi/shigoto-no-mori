@@ -49,6 +49,25 @@ interface LayoutInputs {
 // Directory new worktrees should live under for the given layout. Custom
 // without a path falls back to the managed root rather than producing an
 // invalid path; the UI prevents saving an empty custom path.
+// The layout inputs a project's config resolves to, told once for the
+// host and the renderer alike (a trailing space in a custom path is
+// noise, never a different folder).
+export function layoutInputsFor(
+  config: {
+    worktreeLayout?: WorktreeLayout;
+    customWorktreePath?: string | null;
+  } | null,
+  projectPath: string,
+  dataDir: string,
+): LayoutInputs {
+  return {
+    layout: config?.worktreeLayout ?? "managed-root",
+    projectPath,
+    dataDir,
+    customPath: config?.customWorktreePath?.trim() || null,
+  };
+}
+
 export function worktreeBaseFor(inputs: LayoutInputs): string {
   const { layout, projectPath, dataDir, customPath } = inputs;
   if (layout === "in-project") {
