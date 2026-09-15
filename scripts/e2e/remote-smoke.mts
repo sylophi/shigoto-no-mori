@@ -499,7 +499,8 @@ async function main(): Promise<string[]> {
         !existsSync(join(source.path, "private-notes", "todo.md")),
         "a path under the mirror's ignores crossed to b",
       );
-      // Stop: the session leaves a's list and the stream leaves b's.
+      // Stop: the session leaves a's list, the stream leaves b's, and
+      // a's copy goes with the session. The source stays.
       await a.evaluate(`window.api.mirror.stop(${session2})`);
       await a.waitFor(
         "a's mirror session to be gone",
@@ -511,9 +512,14 @@ async function main(): Promise<string[]> {
         `window.api.mirror.list().then((m) => !m.serving.some((s) => s.worktreeId === ${JSON.stringify(source.id)}))`,
         30_000,
       );
+      await a.waitFor(
+        "a's copy to be removed with the stop",
+        `window.api.worktrees.list(${JSON.stringify({ projectId: local.projectId })}).then((list) => !list.some((w) => w.id === ${JSON.stringify(local.id)}))`,
+        30_000,
+      );
       assert.ok(
-        existsSync(local.path),
-        "the mirrored worktree vanished on stop",
+        !existsSync(local.path),
+        "the mirrored worktree stayed on disk after stop",
       );
       assert.ok(
         existsSync(source.path),

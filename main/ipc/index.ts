@@ -55,6 +55,8 @@ import {
   setMirrorImpl,
   setMirrorServingListener,
 } from "@host/ipc/modules/mirror";
+import { isTransferSession } from "@shared/ipc/modules/mirror";
+import { liveTransferSessions, mirrorSessions } from "@host/mirror/registry";
 import { packageScriptsHandlers } from "@host/ipc/modules/packageScripts";
 import {
   portForwardHandlers,
@@ -157,8 +159,35 @@ const mirrorHistory = createMirrorHistory({
   },
   onChange: () => broadcastMirrorChanged(),
 });
+// The daemon's sessions that are mirrors: a transplant's one-shot file
+// transfer rides the same daemon under a label (host/mirror/oneShot.ts),
+// and neither the follower nor the history should treat it as one.
+const liveMirrorSessions = () => mirrorSessions(mirrorDaemon);
+// A transfer session no pull in this process is running outlived its
+// pull (a quit or a crash mid-transfer brought it back with the
+// engine's persisted sessions). No mirror surface would ever show it,
+// so it is ended on sight. Each is asked once, and the engine drops it
+// from the next snapshot.
+const reaped = new Set<string>();
+const reapOrphanedTransfers = () => {
+  for (const session of mirrorDaemon.sessions()) {
+    if (
+      !isTransferSession(session) ||
+      liveTransferSessions.has(session.session) ||
+      reaped.has(session.session)
+    ) {
+      continue;
+    }
+    reaped.add(session.session);
+    void mirrorDaemon.terminate(session.session).catch((error: unknown) => {
+      console.warn(
+        `[mirror] could not end an orphaned transfer session: ${errorMessageOf(error)}`,
+      );
+    });
+  }
+};
 const observeMirrorHistory = () =>
-  mirrorHistory.observe(mirrorDaemon.sessions(), (session) =>
+  mirrorHistory.observe(liveMirrorSessions(), (session) =>
     gitFollower.statusOf(session),
   );
 const mirrorDaemon = createMirrorDaemon({
@@ -175,6 +204,7 @@ const mirrorDaemon = createMirrorDaemon({
     // only moved a cycle count is a no-op there.
     gitFollower.sessionsChanged();
     observeMirrorHistory();
+    reapOrphanedTransfers();
   },
 });
 // The git half of every session this device runs (host/mirror/
@@ -184,7 +214,7 @@ const mirrorDaemon = createMirrorDaemon({
 // (main/index.ts, via notifyLocalProjectChanged), the peers' pushes
 // (onPeerPush) and the daemon's snapshots (above).
 const gitFollower = createGitFollower({
-  sessions: () => mirrorDaemon.sessions(),
+  sessions: liveMirrorSessions,
   peerSyncApiFor: (deviceId) =>
     buildClient(syncContract, peerTransportFor(deviceId)),
   peerMirrorApiFor: (deviceId) =>

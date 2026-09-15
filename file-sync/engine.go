@@ -264,6 +264,11 @@ type mirrorRequest struct {
 	// Ignore patterns in Mutagen's gitignore-like syntax, on top of
 	// the .git pointer that is always held back.
 	Ignores []string `json:"ignores,omitempty"`
+	// A pull: the remote is alpha and files flow one way, remote to
+	// local (Mutagen's one-way-safe), so nothing this side holds ever
+	// reaches the peer. A transplant's one-shot file transfer. Off, the
+	// session is a mirror: local alpha, two-way-safe.
+	Pull bool `json:"pull,omitempty"`
 	// terminate, pause, resume
 	Session string `json:"session,omitempty"`
 }
@@ -456,12 +461,12 @@ func createMirrorSession(ctx context.Context, manager *synchronization.Manager, 
 	if err := validateMirrorLabels(req.Labels); err != nil {
 		return "", err
 	}
-	alpha := &urlpkg.URL{
+	local := &urlpkg.URL{
 		Kind:     urlpkg.Kind_Synchronization,
 		Protocol: urlpkg.Protocol_Local,
 		Path:     req.LocalRoot,
 	}
-	beta := &urlpkg.URL{
+	remote := &urlpkg.URL{
 		Kind:     urlpkg.Kind_Synchronization,
 		Protocol: urlpkg.Protocol_SSH,
 		Host:     req.DeviceID,
@@ -472,14 +477,17 @@ func createMirrorSession(ctx context.Context, manager *synchronization.Manager, 
 			mirrorParamLocalWorktreeID: req.LocalWorktreeID,
 		},
 	}
-	// Two-way-safe: both sides write, a genuine conflict is reported
-	// and left alone rather than resolved by guessing. The VCS ignore
-	// keeps .git out (a linked worktree's .git is a file pointing at a
-	// machine-specific gitdir, and the repo itself is git's to move),
-	// nothing else is excluded by default, because the whole point is
-	// that ignored files cross too.
-	// The caller's ignores follow the pointer: what git ignores on the
-	// source, or the user's own pick, stays where it is.
+	// A mirror is two-way-safe: both sides write, a genuine conflict is
+	// reported and left alone rather than resolved by guessing. A pull
+	// is one-way-safe with the remote as alpha: its files land here,
+	// nothing here reaches it, and a path both sides hold differently
+	// keeps this side's version. The VCS ignore keeps .git out (a
+	// linked worktree's .git is a file pointing at a machine-specific
+	// gitdir, and the repo itself is git's to move), nothing else is
+	// excluded by default, because the whole point is that ignored
+	// files cross too. The caller's ignores follow the pointer: what
+	// git ignores on the source, or the user's own pick, stays where
+	// it is.
 	ignores := make([]string, 0, 1+len(req.Ignores))
 	ignores = append(ignores, mirrorGitPointerIgnore)
 	for _, pattern := range req.Ignores {
@@ -488,8 +496,14 @@ func createMirrorSession(ctx context.Context, manager *synchronization.Manager, 
 		}
 		ignores = append(ignores, pattern)
 	}
+	alpha, beta := local, remote
+	mode := core.SynchronizationMode_SynchronizationModeTwoWaySafe
+	if req.Pull {
+		alpha, beta = remote, local
+		mode = core.SynchronizationMode_SynchronizationModeOneWaySafe
+	}
 	configuration := &synchronization.Configuration{
-		SynchronizationMode: core.SynchronizationMode_SynchronizationModeTwoWaySafe,
+		SynchronizationMode: mode,
 		IgnoreVCSMode:       ignore.IgnoreVCSMode_IgnoreVCSModeIgnore,
 		Ignores:             ignores,
 	}
@@ -635,15 +649,27 @@ func mirrorSessionStateOf(state *synchronization.State) mirrorSessionState {
 	if session.CreationTime != nil {
 		createdAt = session.CreationTime.AsTime().UnixMilli()
 	}
+	// This side is alpha on a mirror and beta on a pull (createMirrorSession).
+	// The app's document is always local/remote, so the roles are read
+	// off the URLs rather than assumed.
+	local, remote := session.Alpha, session.Beta
+	localState, remoteState := state.AlphaState, state.BetaState
+	localSide := func(c *core.Conflict) []*core.Change { return c.AlphaChanges }
+	remoteSide := func(c *core.Conflict) []*core.Change { return c.BetaChanges }
+	if session.Alpha.Protocol != urlpkg.Protocol_Local {
+		local, remote = remote, local
+		localState, remoteState = remoteState, localState
+		localSide, remoteSide = remoteSide, localSide
+	}
 	out := mirrorSessionState{
 		Session:           session.Identifier,
 		Name:              session.Name,
 		Labels:            labels,
-		LocalRoot:         session.Alpha.Path,
-		DeviceID:          session.Beta.Host,
-		ProjectID:         session.Beta.Parameters[mirrorParamProjectID],
-		WorktreeID:        session.Beta.Parameters[mirrorParamWorktreeID],
-		RemoteRoot:        session.Beta.Path,
+		LocalRoot:         local.Path,
+		DeviceID:          remote.Host,
+		ProjectID:         remote.Parameters[mirrorParamProjectID],
+		WorktreeID:        remote.Parameters[mirrorParamWorktreeID],
+		RemoteRoot:        remote.Path,
 		Paused:            session.Paused,
 		Ignores:           ignores,
 		CreatedAt:         createdAt,
@@ -653,14 +679,14 @@ func mirrorSessionStateOf(state *synchronization.State) mirrorSessionState {
 		SuccessfulCycles:  state.SuccessfulCycles,
 		Conflicts:         make([]mirrorConflict, 0, len(state.Conflicts)),
 		ExcludedConflicts: state.ExcludedConflicts,
-		Local:             mirrorEndpointStateOf(state.AlphaState),
-		Remote:            mirrorEndpointStateOf(state.BetaState),
+		Local:             mirrorEndpointStateOf(localState),
+		Remote:            mirrorEndpointStateOf(remoteState),
 	}
 	for _, conflict := range state.Conflicts {
 		out.Conflicts = append(out.Conflicts, mirrorConflict{
 			Root:          conflict.Root,
-			LocalChanges:  mirrorChangesOf(conflict.AlphaChanges),
-			RemoteChanges: mirrorChangesOf(conflict.BetaChanges),
+			LocalChanges:  mirrorChangesOf(localSide(conflict)),
+			RemoteChanges: mirrorChangesOf(remoteSide(conflict)),
 		})
 	}
 	return out

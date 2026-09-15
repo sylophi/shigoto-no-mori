@@ -60,10 +60,15 @@ import { registerContract } from "@shared/ipc/registerContract";
 import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { setFileSyncSpawnImpl, spawnStreamChild } from "@host/fileSync/spawn";
 import { forwardHandlers } from "@host/ipc/modules/forward";
-import { listMirrorServing, mirrorHandlers } from "@host/ipc/modules/mirror";
+import {
+  listMirrorServing,
+  mirrorHandlers,
+  setMirrorImpl,
+} from "@host/ipc/modules/mirror";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { createGitFollower } from "@host/mirror/gitFollow";
+import { transferFilesOnce } from "@host/mirror/oneShot";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { initDataDirAt } from "@host/lib/util/paths";
 import { createMirrorDaemon } from "../main/mirror/daemon.ts";
@@ -623,6 +628,63 @@ async function main() {
     assert.equal(read(join(worktreeA, "from-b.txt")), "from B\n");
     ok(
       "terminate drops the stream, ends the serve child, leaves both copies intact",
+    );
+
+    // (6b) A transplant's files step (host/mirror/oneShot.ts): the same
+    // daemon run once with the leave-out rule's patterns, settled on
+    // its first cycle and ended by itself. A path under the rule stays
+    // on A, one beside it crosses, and no session survives the call.
+    // Only the daemon slot's create/sessions/terminate/status are in
+    // play. The rest of the impl is inert here.
+    setMirrorImpl({
+      ...daemon,
+      recreate: () => Promise.reject(new Error("not in this check")),
+      gitStatus: () => undefined,
+      history: () => [],
+      noteEvent: () => {},
+      forgetHistory: () => {},
+    });
+    mkdirSync(join(worktreeA, "skip"), { recursive: true });
+    writeFileSync(join(worktreeA, "skip", "me.txt"), "stays\n");
+    writeFileSync(join(worktreeA, "once.txt"), "once\n");
+    // Only on B: a pull is one way, so it must never reach A.
+    writeFileSync(join(rootB, "local-only.txt"), "mine\n");
+    const once = await transferFilesOnce(
+      {
+        localRoot: rootB,
+        localWorktreeId: worktreeIdB,
+        sourceDeviceId: "A",
+        sourceProjectId: projectIdA,
+        sourceWorktreeId: worktreeIdA,
+        remoteRoot: worktreeA,
+        name: "feature",
+        ignores: ["/skip"],
+      },
+      () => {},
+    );
+    assert.deepEqual(once, { crossed: true, conflicts: 0 });
+    assert.equal(read(join(rootB, "once.txt")), "once\n");
+    assert.equal(
+      existsSync(join(rootB, "skip")),
+      false,
+      "a path under the transfer's rule crossed",
+    );
+    assert.equal(
+      existsSync(join(worktreeA, "local-only.txt")),
+      false,
+      "a pull pushed B's own file onto A",
+    );
+    await waitFor(
+      () => daemon.sessions().length === 0,
+      "the one-shot session to be gone",
+    );
+    await waitFor(
+      () => listMirrorServing().length === 0,
+      "A's serving list to empty after the one-shot",
+      15_000,
+    );
+    ok(
+      "one-shot transfer: the admitted file crosses, the rule holds, nothing flows back, the session ends itself",
     );
 
     // (7) Stopping the daemon ends it cleanly.

@@ -4,7 +4,11 @@
 // git half's verdict, then conflicts, then problems, then the ordinary
 // lifecycle. The label is one or two words. The surfaces add "mirror"
 // or the peer's name themselves.
-import type { MirrorSession, MirrorStatus } from "@shared/ipc/modules/mirror";
+import {
+  isHaltedStatus,
+  type MirrorSession,
+  type MirrorStatus,
+} from "@shared/ipc/modules/mirror";
 import type { StatusTone } from "@/components/ui/status-dot";
 import { pluralize } from "@/lib/pluralize";
 
@@ -57,7 +61,7 @@ export function describeMirror(session: MirrorSession): {
   if (session.paused) {
     return { tone: "slate", label: "Paused", detail: "", spinning: false };
   }
-  if (session.status.startsWith("halted-")) {
+  if (isHaltedStatus(session.status)) {
     return {
       tone: "rose",
       label: "Halted",

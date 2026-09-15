@@ -219,6 +219,42 @@ const SyncBundleChunkResultSchema = z.strictObject({
 // branch refine pins it to the bundle allowlist up front, so a name
 // the transfer surface would reject fails here with a clear message
 // instead of deep inside the peer's schema.
+// What a pull (and the mirror built on it) leaves out. Everything:
+// only .git stays put, the default (ignored files cross too).
+// Gitignored: what git ignores on the source stays there, so a build
+// folder or a .env never crosses. Custom: the user picked which of the
+// ignored paths stay behind. A mirror remembers the mode on the
+// session (a label) so its page can say which rule is in force. The
+// patterns themselves are the engine's ignore list, in its
+// gitignore-like syntax (a leading / anchors to the root, ! negates).
+export const MirrorIgnoreModeSchema = z.enum([
+  "everything",
+  "gitignored",
+  "custom",
+]);
+export type MirrorIgnoreMode = z.infer<typeof MirrorIgnoreModeSchema>;
+export const MIRROR_IGNORES_LIMIT = 512;
+const MirrorIgnorePatternSchema = z
+  .string()
+  .min(1)
+  .max(1024)
+  .refine((pattern) => !/[\r\n]/.test(pattern), {
+    message: "Ignore pattern must be one line",
+  });
+export const MirrorIgnoresSchema = z
+  .array(MirrorIgnorePatternSchema)
+  .max(MIRROR_IGNORES_LIMIT);
+
+// Whether a pull with this rule has ignored files to bring: the
+// capture never carries them, and gitignored leaves every one of them
+// behind, so only the other two rules reach the files step. The host,
+// the lab and the dialogs all read this one answer.
+export function pullBringsIgnoredFiles(
+  mode: MirrorIgnoreMode | undefined,
+): boolean {
+  return mode !== undefined && mode !== "gitignored";
+}
+
 export const SyncPullWorktreePayloadSchema = z.strictObject({
   sourceDeviceId: DeviceIdSchema,
   sourceProjectId: z.string().min(1),
@@ -239,6 +275,19 @@ export const SyncPullWorktreePayloadSchema = z.strictObject({
     .min(1)
     .refine(isValidWorktreeDirName, { message: "Not a valid folder name" })
     .optional(),
+  // Whether the create here runs the project's setup script. The
+  // dialogs default it by the ignore rule and the user can flip it.
+  // Absent reads as yes, the create's ordinary lifecycle.
+  runSetup: z.boolean().optional(),
+  // The ignored files to bring across once the worktree is here, as
+  // the leave-out rule and its patterns: the capture has `git add -A`
+  // semantics, so this is the only way an ignored file travels. A
+  // one-shot run of the mirror engine carries them (the "files" step).
+  // Absent: nothing beyond the capture, the pull as the mirror start
+  // drives it (its own session brings the files and keeps bringing
+  // them). Gitignored leaves nothing to carry, so it skips the step.
+  ignoreMode: MirrorIgnoreModeSchema.optional(),
+  ignores: MirrorIgnoresSchema.optional(),
 });
 
 // The pull's progress, one frame per step change and per transferred
@@ -251,6 +300,10 @@ export const SyncPullStepSchema = z.enum([
   "transfer",
   "create",
   "apply",
+  // The ignored files, through the mirror engine run once. Only a pull
+  // with a leave-out rule reaches it, and `bytes`/`totalBytes` carry the
+  // staging figures.
+  "files",
 ]);
 export type SyncPullStep = z.infer<typeof SyncPullStepSchema>;
 
@@ -271,6 +324,17 @@ export const SyncPullWorktreeResultSchema = z.strictObject({
   // the source still holds the original dirty state.
   captured: z.boolean(),
   dirtyApplied: z.boolean(),
+  // The "files" step's outcome, present when a leave-out rule asked
+  // for it. crossed:false with the reason means the ignored files are
+  // still only on the source. conflicts counts the paths both sides
+  // held differently, which keep this side's version.
+  files: z
+    .strictObject({
+      crossed: z.boolean(),
+      conflicts: z.number().int().nonnegative(),
+      error: z.string().optional(),
+    })
+    .optional(),
 });
 export type SyncPullWorktreeResult = z.infer<
   typeof SyncPullWorktreeResultSchema

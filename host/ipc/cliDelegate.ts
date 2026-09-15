@@ -196,6 +196,10 @@ export function createViaCli(
     branchName?: string;
     base?: string;
     checkout?: boolean;
+    // Leave the project's setup script out (carry-over and port
+    // provision still run): a mirror or transplant told not to set
+    // the copy up.
+    skipSetup?: boolean;
   },
   notify: WorktreeOperationNotifiers,
   opts: { resolveOn?: "created" | "exit" } = {},
@@ -204,6 +208,7 @@ export function createViaCli(
   if (input.branchName) args.push("--branch", input.branchName);
   if (input.base) args.push("--base", input.base);
   if (input.checkout) args.push("--checkout");
+  if (input.skipSetup) args.push("--no-setup");
   // End-of-options terminator before the caller-influenced worktree name
   // so a flag-shaped name can never be read as an option. Pushed last,
   // after every flag, because `--` makes the parser treat the rest as

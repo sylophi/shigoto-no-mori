@@ -18,6 +18,7 @@ import {
   describeIgnores,
   MIRROR_HISTORY_LIMIT,
 } from "@shared/ipc/modules/mirror";
+import { pullBringsIgnoredFiles } from "@shared/ipc/modules/sync";
 import type {
   MirrorEvent,
   MirrorServing,
@@ -171,6 +172,14 @@ function hostHandlersFor(
       ),
     }),
     "remoteAccess:commandAccess": () => ({ granted: forest.grantsCaller }),
+    // The stub's shape with a setup script on it, so the pull dialogs'
+    // setup switch has something to name.
+    "shigomori:read": () => ({
+      defaultBranch: "main",
+      scripts: { setup: "pnpm install" },
+      carryOver: [],
+      launchers: [],
+    }),
     "globalConfig:read": () => labGlobalConfig,
     "globalConfig:writeDeviceSettings": () => undefined,
     // Thinkpad has an update staged, so its Settings section's
@@ -260,11 +269,13 @@ function hostHandlersFor(
                 ),
             );
             if (entry) {
-              noteMirrorEvent(
-                entry.localWorktreeId,
-                "stopped",
-                "Both copies kept",
-              );
+              // The stop takes the local copy with it, as the host's
+              // forced delete does (and the copy's history thread
+              // goes with the worktree, so nothing is noted).
+              forest.worktrees[entry.localProjectId] = (
+                forest.worktrees[entry.localProjectId] ?? []
+              ).filter((w) => w.id !== entry.localWorktreeId);
+              emit("git:externalChange", undefined);
             }
             mirrorChanged();
           },
@@ -407,7 +418,12 @@ async function labMirrorStart(
     ignores: string[];
   },
 ) {
-  const landed = await labSyncPull(local, emit, input);
+  // The rule is the session's, not the pull's: a mirror start brings
+  // the files through its own session, so the pull poses no files step.
+  const landed = await labSyncPull(local, emit, {
+    ...input,
+    ignoreMode: undefined,
+  });
   const source = forests[input.sourceDeviceId];
   const sourceWorktree = (source?.worktrees[input.sourceProjectId] ?? []).find(
     (entry) => entry.id === input.sourceWorktreeId,
@@ -493,6 +509,8 @@ async function labSyncPull(
     sourceWorktreeId: string;
     sourceIdentity: string;
     branch: string;
+    runSetup?: boolean;
+    ignoreMode?: MirrorSession["ignoreMode"];
   },
 ) {
   // A posed pull: each step lingers long enough to be seen, and the
@@ -502,24 +520,40 @@ async function labSyncPull(
       sourceWorktreeId: input.sourceWorktreeId,
       ...frame,
     });
+  // A byte-counted step, counted up in chunks like the real one.
+  const countUp = async (
+    step: "transfer" | "files",
+    totalBytes: number,
+    chunk: number,
+    ms: number,
+  ) => {
+    for (let bytes = 0; bytes < totalBytes; bytes += chunk) {
+      progress({ step, bytes, totalBytes });
+      // oxlint-disable-next-line no-await-in-loop -- a posed transfer
+      await sleep(ms);
+    }
+    progress({ step, bytes: totalBytes, totalBytes });
+  };
   progress({ step: "capture" });
   await sleep(900);
-  const totalBytes = 4_820_000;
-  for (let bytes = 0; bytes < totalBytes; bytes += 640_000) {
-    progress({ step: "transfer", bytes, totalBytes });
-    // oxlint-disable-next-line no-await-in-loop -- a posed transfer
-    await sleep(220);
-  }
-  progress({ step: "transfer", bytes: totalBytes, totalBytes });
+  await countUp("transfer", 4_820_000, 640_000, 220);
   progress({ step: "create" });
   await sleep(600);
-  for (const createPhase of ["carryOver", "setup", "portPoolProvision"]) {
+  const phases = [
+    "carryOver",
+    ...(input.runSetup === false ? [] : ["setup"]),
+    "portPoolProvision",
+  ];
+  for (const createPhase of phases) {
     progress({ step: "create", createPhase });
     // oxlint-disable-next-line no-await-in-loop -- a posed create
     await sleep(700);
   }
   progress({ step: "apply" });
   await sleep(700);
+  // The files step, a leave-out rule that admits something.
+  const files = pullBringsIgnoredFiles(input.ignoreMode);
+  if (files) await countUp("files", 92_400_000, 11_550_000, 200);
   const project = local.projects.find(
     (entry) => entry.identity === input.sourceIdentity,
   );
@@ -559,6 +593,7 @@ async function labSyncPull(
     worktree: landed,
     captured: (sourceWorktree?.changedCount ?? 0) > 0,
     dirtyApplied: (sourceWorktree?.changedCount ?? 0) > 0,
+    ...(files ? { files: { crossed: true, conflicts: 0 } } : {}),
   };
 }
 

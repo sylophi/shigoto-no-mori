@@ -48,8 +48,9 @@ type SourceChoice = "keep" | "shelve" | "teardown";
 const CHOICES: {
   key: SourceChoice;
   title: string;
-  // null: the ignored-files read has not landed or was refused, which
-  // is not the same as none.
+  // ignored: the count still only on the source (0 once the pull's
+  // files step brought them here). null: the read has not landed or
+  // was refused, which is not the same as none.
   body: (source: string, ignored: number | null) => string;
 }[] = [
   {
@@ -84,6 +85,7 @@ const FINISH_LABEL: Record<SourceChoice, string> = {
 
 export function TransplantFinish({
   result,
+  leftOutCount,
   worktree,
   project,
   sourceDeviceLabel,
@@ -92,6 +94,10 @@ export function TransplantFinish({
   onOpen,
 }: {
   result: SyncPullWorktreeResult;
+  // What the leave-out rule kept on the source once the files step
+  // ran: 0 for Nothing, the picked count for Custom, null when the
+  // rule left every ignored file there (the read below counts them).
+  leftOutCount: number | null;
   // The SOURCE worktree and project, on the remote device this page is
   // scoped to. The landed local pair is in `result`.
   worktree: Worktree;
@@ -104,10 +110,16 @@ export function TransplantFinish({
 }) {
   const setShelved = useSetShelved();
   const teardown = useTeardownSource({ worktree, sourceProjectId: project.id });
-  // Cached from the review step. It is a fresh read only if the dialog
-  // was opened straight into this step.
-  const { data: ignored } = useWorktreeIgnoredPaths(project.id, worktree.id);
-  const ignoredCount = ignored?.total ?? null;
+  const filesCrossed = result.files?.crossed === true;
+  // Only the teardown card reads it, and only when the ignored files
+  // stayed on the source: a peer round trip and a checkout walk that
+  // the default transplant (files across) never needs.
+  const { data: ignored } = useWorktreeIgnoredPaths(project.id, worktree.id, {
+    enabled: !filesCrossed,
+  });
+  // What a teardown would take with the source: every ignored file
+  // when none crossed, otherwise the ones the rule left out.
+  const staying = filesCrossed ? leftOutCount : (ignored?.total ?? null);
   const {
     armed,
     trigger,
@@ -207,6 +219,22 @@ export function TransplantFinish({
                   ) : (
                     <Chip>clean tree</Chip>
                   )}
+                  {result.files !== undefined &&
+                    (result.files.crossed ? (
+                      result.files.conflicts > 0 ? (
+                        <Chip className="text-amber-700 dark:text-amber-300">
+                          ignored files here,{" "}
+                          {pluralize(result.files.conflicts, "path")} kept this
+                          side's version
+                        </Chip>
+                      ) : (
+                        <Chip>ignored files here</Chip>
+                      )
+                    ) : (
+                      <Chip className="text-amber-700 dark:text-amber-300">
+                        ignored files stayed on {sourceDeviceLabel}
+                      </Chip>
+                    ))}
                 </div>
               </div>
               <Button size="sm" onClick={onOpen} className="shrink-0">
@@ -219,6 +247,13 @@ export function TransplantFinish({
                 The uncommitted changes could not be applied here. They are
                 still on {sourceDeviceLabel}, and the capture is parked for{" "}
                 <span className="font-mono">sm dirty apply</span>.
+              </p>
+            )}
+            {result.files !== undefined && !filesCrossed && (
+              <p className="text-xs text-muted-foreground">
+                The ignored files could not be brought over
+                {result.files.error ? `: ${result.files.error}` : ""}. They are
+                still on {sourceDeviceLabel}.
               </p>
             )}
           </section>
@@ -249,7 +284,7 @@ export function TransplantFinish({
                     body={
                       off
                         ? "Off while the changes only exist there."
-                        : entry.body(sourceDeviceLabel, ignoredCount)
+                        : entry.body(sourceDeviceLabel, staying)
                     }
                     tone={entry.key === "teardown" && !off ? "rose" : undefined}
                   />

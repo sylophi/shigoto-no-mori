@@ -46,6 +46,7 @@ import {
   CONFIRM_DESTRUCTIVE_MS,
   useConfirmTwice,
 } from "@/hooks/ui/useConfirmTwice";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { cn } from "@/lib/utils";
 import {
   CARD,
@@ -78,6 +79,7 @@ export function MirrorManageDialog({
   const peer = useRemoteDeviceLabel(session.deviceId);
   const view = describeMirror(session);
   const controls = useMirrorControls();
+  const nav = useWorktreeNav();
   const { armed, trigger } = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
   const busy =
     controls.pause.isPending ||
@@ -131,7 +133,7 @@ export function MirrorManageDialog({
       <TransplantFooter
         note={
           canControl
-            ? "Stopping keeps both copies."
+            ? `Stopping removes the copy here. ${peer} keeps its own.`
             : `Controlled from ${hostLabel}.`
         }
       >
@@ -168,8 +170,13 @@ export function MirrorManageDialog({
               disabled={busy}
               onClick={() =>
                 trigger(() =>
-                  controls.stop.mutate(session.session, {
-                    onSuccess: onClose,
+                  controls.stop.mutate(session, {
+                    // The stop removed the copy this page is on, so
+                    // leave it the way a delete does.
+                    onSuccess: () => {
+                      onClose();
+                      nav.toFallback(true);
+                    },
                   }),
                 )
               }

@@ -10,6 +10,7 @@ import type { mirrorContract } from "@shared/ipc/modules/mirror";
 import type { syncContract } from "@shared/ipc/modules/sync";
 import type { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type { Client } from "@shared/ipc/types";
+import { type Worktree, WorktreeSchema } from "@shared/schemas";
 
 // The remote verbs the orchestrations drive. Superset of the transfer
 // slices fetchBundleFromPeer and pushBundleToPeer take, so one client
@@ -67,4 +68,19 @@ export function peerSyncApiFor(deviceId: string): PeerSyncApi {
 
 export function peerWorktreesApiFor(deviceId: string): PeerWorktreesApi {
   return requireImpl().worktreesApiFor(deviceId);
+}
+
+// One of a peer's worktrees, read off its own list and re-parsed
+// here: its root path flows into a session this device persists, so
+// the caller's say-so is never the source of it. undefined when the
+// peer no longer lists it.
+export async function peerWorktreeOrUndefined(
+  deviceId: string,
+  projectId: string,
+  worktreeId: string,
+): Promise<Worktree | undefined> {
+  const worktrees = WorktreeSchema.array().parse(
+    await peerWorktreesApiFor(deviceId).list({ projectId }),
+  );
+  return worktrees.find((worktree) => worktree.id === worktreeId);
 }

@@ -147,10 +147,40 @@ interface DeleteWorktreeInput {
 const deleteWorktreeMutationKey = (deviceId: string) =>
   ["delete-worktree", deviceId] as const;
 
+// What the renderer does once a worktree is gone from disk: drop it
+// from the cached list synchronously (consumers routing off the back
+// of the mutation must not read the stale list during the refetch),
+// clear its script runs, and remove its no-longer-observed queries so
+// nothing can refetch or replay them. Shared by the delete and by a
+// mirror stop, which removes the copy the same way.
+export function useForgetDeletedWorktree() {
+  const queryClient = useQueryClient();
+  const { deviceId, keys } = useHostScope();
+  const scriptRuns = useScriptRuns();
+  return (projectId: string, worktreeId: string) => {
+    queryClient.setQueryData<Worktree[]>(keys.worktrees(projectId), (current) =>
+      current ? current.filter((w) => w.id !== worktreeId) : current,
+    );
+    void queryClient.invalidateQueries({
+      queryKey: keys.worktrees(projectId),
+    });
+    scriptRuns.clearForWorktree(worktreeId);
+    // Same treatment as project removal. Active queries (the detail
+    // route unmounts only after the post-delete navigation) are left
+    // to go inactive and gc naturally.
+    queryClient.removeQueries({
+      type: "inactive",
+      predicate: (query) =>
+        hostKeyDeviceId(query.queryKey) === deviceId &&
+        query.queryKey.includes(worktreeId),
+    });
+  };
+}
+
 export function useDeleteWorktree() {
   const queryClient = useQueryClient();
-  const { api, deviceId, keys } = useHostScope();
-  const scriptRuns = useScriptRuns();
+  const { api, deviceId } = useHostScope();
+  const forget = useForgetDeletedWorktree();
   return useMutation<DeleteWorktreeResult, Error, DeleteWorktreeInput>({
     mutationKey: deleteWorktreeMutationKey(deviceId),
     mutationFn: (input) => api.worktrees.delete(input),
@@ -168,34 +198,9 @@ export function useDeleteWorktree() {
       });
     },
     onSuccess: (data, vars) => {
-      // Only invalidate + clear runs when the worktree was actually
-      // removed. Cleanup failures keep the worktree around for retry.
-      if (data.ok) {
-        // Drop the deleted entry from cache synchronously so consumers
-        // routing off the back of this mutation (e.g. EmptyState's
-        // first-worktree resolver) don't read the stale list during the
-        // invalidate's background refetch.
-        queryClient.setQueryData<Worktree[]>(
-          keys.worktrees(vars.projectId),
-          (current) =>
-            current ? current.filter((w) => w.id !== vars.worktreeId) : current,
-        );
-        void queryClient.invalidateQueries({
-          queryKey: keys.worktrees(vars.projectId),
-        });
-        scriptRuns.clearForWorktree(vars.worktreeId);
-        // Same treatment as project removal: drop the deleted
-        // worktree's no-longer-observed queries (worktree data, diff,
-        // commits, ...) so nothing can refetch or replay them. Active
-        // ones (the detail route unmounts only after the post-delete
-        // navigation) are left to go inactive and gc naturally.
-        queryClient.removeQueries({
-          type: "inactive",
-          predicate: (query) =>
-            hostKeyDeviceId(query.queryKey) === deviceId &&
-            query.queryKey.includes(vars.worktreeId),
-        });
-      }
+      // Only when the worktree was actually removed. Cleanup failures
+      // keep the worktree around for retry.
+      if (data.ok) forget(vars.projectId, vars.worktreeId);
     },
     // The detail page swaps into a force-delete prompt on failure, so a
     // toast on top would be noise.

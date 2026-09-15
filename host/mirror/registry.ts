@@ -5,12 +5,13 @@
 // tombstone protocol (host/lib/scripts/index.ts withDeleteInflight)
 // can stop a worktree's mirrors without importing that module (which
 // reaches sync, which reaches worktrees).
-import type {
-  MirrorEvent,
-  MirrorEventKind,
-  MirrorGitStatus,
-  MirrorIgnoreMode,
-  MirrorSession,
+import {
+  isTransferSession,
+  type MirrorEvent,
+  type MirrorEventKind,
+  type MirrorGitStatus,
+  type MirrorIgnoreMode,
+  type MirrorSession,
 } from "@shared/ipc/modules/mirror";
 import { errorMessageOf } from "@shared/errors";
 
@@ -49,6 +50,10 @@ export type MirrorCreateInput = {
   localWorktreeId: string;
   labels: Record<string, string>;
   ignores: string[];
+  // A pull (file-sync/engine.go mirrorRequest.pull): files flow one
+  // way, remote to local, and nothing here reaches the peer. The
+  // transplant's one-shot transfer. Absent, a two-way mirror.
+  pull?: boolean;
 };
 
 export type MirrorImpl = {
@@ -91,6 +96,45 @@ let impl: MirrorImpl | null = null;
 
 export function setMirrorImpl(next: MirrorImpl): void {
   impl = next;
+}
+
+// The engine when it can take a session, or the reason it cannot:
+// the mirror start and the transplant's file transfer both begin here.
+export function requireRunningEngine(): MirrorImpl {
+  const daemon = engine();
+  const status = daemon.status();
+  if (status !== "running") {
+    throw new Error(
+      status === "unavailable"
+        ? "Mirroring is unavailable on this device: the file-sync engine is missing."
+        : "The mirror engine is still starting. Try again in a moment.",
+    );
+  }
+  return daemon;
+}
+
+// The daemon's sessions that ARE mirrors: a transplant's one-shot
+// transfer (host/mirror/oneShot.ts) rides the same daemon under a
+// label, and nothing that lists, follows or narrates mirrors should
+// see it. The transfer finds its own session on the raw list.
+export function mirrorSessions(
+  daemon: Pick<MirrorImpl, "sessions">,
+): MirrorSessionRaw[] {
+  return daemon.sessions().filter((raw) => !isTransferSession(raw));
+}
+
+// The transfer sessions a pull in this process is running right now.
+// A transfer session the engine reports that is NOT here outlived its
+// pull (a quit or a crash mid-transfer brought it back with the
+// engine's persisted sessions) and is ended on sight by main, since
+// no mirror surface would ever show it.
+export const liveTransferSessions = new Set<string>();
+
+export function findSession(
+  daemon: MirrorImpl,
+  session: string,
+): MirrorSessionRaw | undefined {
+  return daemon.sessions().find((raw) => raw.session === session);
 }
 
 export function engine(): MirrorImpl {

@@ -23,7 +23,7 @@ func cmdSetup(ctx cliContext, args []string) (int, error) {
 	proj, id := target.proj, target.worktree
 
 	config := readProjectConfig(proj.ID)
-	failures, ran := runProvisionScripts(proj, id, config)
+	failures, ran := runProvisionScripts(proj, id, config, false)
 	if len(ran) == 0 {
 		if jsonMode {
 			emit(map[string]any{"ok": true, "ran": []string{}})

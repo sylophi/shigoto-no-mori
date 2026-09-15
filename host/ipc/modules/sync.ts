@@ -16,6 +16,7 @@ import {
   type SyncTeardownSourcePayloadSchema,
   type SyncTeardownSourceResult,
   syncContract,
+  pullBringsIgnoredFiles,
 } from "@shared/ipc/modules/sync";
 
 import type { HandlerContext } from "@shared/ipc/transport";
@@ -27,13 +28,21 @@ import {
 } from "@shared/pullCollision";
 import { DeleteWorktreeResultSchema } from "@shared/schemas";
 import {
+  type TransferFilesResult,
+  transferFilesOnce,
+} from "@host/mirror/oneShot";
+import {
   bundleCreateViaCli,
   bundleUnpackViaCli,
   createViaCli,
   dirtyApplyViaCli,
   dirtyCaptureViaCli,
 } from "@host/ipc/cliDelegate";
-import { peerSyncApiFor, peerWorktreesApiFor } from "@host/ipc/peerSync";
+import {
+  peerSyncApiFor,
+  peerWorktreeOrUndefined,
+  peerWorktreesApiFor,
+} from "@host/ipc/peerSync";
 import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
 import { createIdleRegistry } from "@host/lib/idleRegistry";
 import { listBranches } from "@host/lib/git/branches";
@@ -476,6 +485,9 @@ export async function runPullWorktree(
     sourceIdentity,
     branch,
     worktreeName,
+    runSetup,
+    ignoreMode,
+    ignores,
   }: z.infer<typeof SyncPullWorktreePayloadSchema>,
   ctx: HandlerContext,
 ) {
@@ -591,7 +603,12 @@ export async function runPullWorktree(
     const notify = notifierFor(ctx);
     const { worktree } = await createViaCli(
       project,
-      { branchName: branch, base: incomingRef, worktreeName },
+      {
+        branchName: branch,
+        base: incomingRef,
+        worktreeName,
+        skipSetup: runSetup === false,
+      },
       {
         ...notify,
         notifyPhase: (payload) => {
@@ -634,6 +651,44 @@ export async function runPullWorktree(
         console.warn("[sync] dirty apply failed after create:", error);
       }
     }
+
+    // 7. The ignored files, once the tree has settled: the leave-out
+    // rule admits them and git never carried them, so the mirror
+    // engine runs once between the two worktrees (host/mirror/
+    // oneShot.ts). Gitignored leaves nothing to carry, and the mirror
+    // start passes no rule (its own session, opened next, carries the
+    // files and keeps carrying them). Never fatal: the worktree is
+    // real, and the outcome rides the result.
+    let files: TransferFilesResult | undefined;
+    if (pullBringsIgnoredFiles(ignoreMode)) {
+      progress({ step: "files" });
+      const source = await peerWorktreeOrUndefined(
+        sourceDeviceId,
+        sourceProjectId,
+        sourceWorktreeId,
+      );
+      files =
+        source === undefined
+          ? {
+              crossed: false,
+              conflicts: 0,
+              error: "the source worktree is no longer listed there",
+            }
+          : await transferFilesOnce(
+              {
+                localRoot: worktree.path,
+                localWorktreeId: worktree.id,
+                sourceDeviceId,
+                sourceProjectId,
+                sourceWorktreeId,
+                remoteRoot: source.path,
+                name: branch,
+                ignores: ignores ?? [],
+              },
+              (bytes, totalBytes) =>
+                progress({ step: "files", bytes, totalBytes }),
+            );
+    }
     rememberPull(
       { sourceDeviceId, sourceProjectId, sourceWorktreeId },
       {
@@ -648,7 +703,7 @@ export async function runPullWorktree(
             : undefined,
       },
     );
-    return { worktree, captured: capture.captured, dirtyApplied };
+    return { worktree, captured: capture.captured, dirtyApplied, files };
   } finally {
     // Sweep the landing ref success or fail. A survivor is not
     // harmless: a stale incoming/foo blocks any later incoming/foo/bar

@@ -2,6 +2,9 @@ import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import {
+  type MirrorIgnoreMode,
+  MirrorIgnoreModeSchema,
+  MirrorIgnoresSchema,
   SyncLandingRefSchema,
   SyncPullWorktreePayloadSchema,
   SyncPullWorktreeResultSchema,
@@ -34,20 +37,32 @@ import {
 // daemon echoes them verbatim, so the shape is pinned only loosely.
 const MirrorSessionIdSchema = z.string().min(1).max(128);
 
-// What the mirror leaves out. Everything: only .git stays put, the
-// default and the point of a mirror (ignored files cross too).
-// Gitignored: what git ignores on the source stays there, so a build
-// folder or a .env never crosses. Custom: the user picked which of the
-// ignored paths stay behind. The mode is remembered on the session (a
-// label) so the mirror page can say which rule is in force. The
-// patterns themselves are the engine's ignore list, in its
-// gitignore-like syntax (a leading / anchors to the root, ! negates).
-export const MirrorIgnoreModeSchema = z.enum([
-  "everything",
-  "gitignored",
-  "custom",
-]);
-export type MirrorIgnoreMode = z.infer<typeof MirrorIgnoreModeSchema>;
+// The leave-out rule and its patterns are defined with the pull
+// (shared/ipc/modules/sync.ts), which carries them too. Re-exported so
+// the mirror surfaces keep one import path.
+export {
+  MIRROR_IGNORES_LIMIT,
+  type MirrorIgnoreMode,
+  MirrorIgnoreModeSchema,
+} from "@shared/ipc/modules/sync";
+
+// A session the pull opens to carry a transplant's ignored files
+// across once and then ends (host/mirror/oneShot.ts), marked by a
+// label so nothing treats it as a mirror: the git follower leaves it
+// alone and the sidebar does not fold the pair over it.
+export const MIRROR_LABEL_TRANSFER = "transfer";
+export function isTransferSession(session: {
+  labels: Record<string, string>;
+}): boolean {
+  return session.labels[MIRROR_LABEL_TRANSFER] === "1";
+}
+
+// The engine's terminal states share a prefix (MirrorStatusSchema
+// below): a root emptied, deleted or changed type under the session.
+export function isHaltedStatus(status: string): boolean {
+  return status.startsWith("halted-");
+}
+
 // The rule in one phrase, the same on every surface that names it:
 // the session's history line, the live card's chip, the lab's posed
 // thread. `count` is the custom rule's pattern count.
@@ -61,18 +76,6 @@ export function describeIgnores(mode: MirrorIgnoreMode, count: number): string {
       return `${count} ${count === 1 ? "path" : "paths"} left out`;
   }
 }
-export const MIRROR_IGNORES_LIMIT = 512;
-const MirrorIgnorePatternSchema = z
-  .string()
-  .min(1)
-  .max(1024)
-  .refine((pattern) => !/[\r\n]/.test(pattern), {
-    message: "Ignore pattern must be one line",
-  });
-const MirrorIgnoresSchema = z
-  .array(MirrorIgnorePatternSchema)
-  .max(MIRROR_IGNORES_LIMIT);
-
 // The daemon's stable status codes (file-sync/engine.go mirrorStatusCode).
 const MirrorStatusSchema = z.enum([
   "disconnected",

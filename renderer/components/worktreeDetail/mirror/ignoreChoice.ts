@@ -5,13 +5,15 @@
 // ignoreRules.ts: every .gitignore, anchored, plus info/exclude), so
 // a file ignored later stays out too. Custom resolves to the paths the
 // user picked, anchored to the root.
+import { useState } from "react";
 import {
   describeIgnores,
   MIRROR_IGNORES_LIMIT,
   type MirrorIgnoreMode,
 } from "@shared/ipc/modules/mirror";
 import type { SyncIgnoredPathsResult } from "@shared/ipc/modules/sync";
-import type { MirrorIgnoreChoice } from "@/hooks/remote/useMirrors";
+import type { MirrorIgnoreChoice, PullChoice } from "@/hooks/remote/useMirrors";
+import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 
 export type IgnoreSelection = {
   mode: MirrorIgnoreMode;
@@ -23,6 +25,55 @@ export const DEFAULT_IGNORE_SELECTION: IgnoreSelection = {
   mode: "everything",
   selected: new Set(),
 };
+
+// Whether the copy runs the setup script by default, by the rule: on
+// when every file crosses, off when gitignored paths (or the user's
+// pick of them) stay behind. The dialog's switch overrides it.
+export function setupDefaultFor(mode: MirrorIgnoreMode): boolean {
+  return mode === "everything";
+}
+
+// The review state a pull dialog (transplant or mirror) keeps: the
+// leave-out rule, the ignored list the gitignored rule resolves over
+// (read only once that rule is picked, since it walks the checkout
+// over the device link), and the setup switch, which follows the rule
+// until the user pins it. `choice` is what the mutation takes, and
+// `waiting` holds Start while the gitignored list is still on its way
+// (or the copy would land with nothing left out).
+export function usePullChoice(projectId: string, worktreeId: string) {
+  const [selection, setSelection] = useState<IgnoreSelection>(
+    DEFAULT_IGNORE_SELECTION,
+  );
+  const [setupChoice, setSetupChoice] = useState<boolean | null>(null);
+  const ignored = useWorktreeIgnoredPaths(projectId, worktreeId, {
+    enabled: selection.mode === "gitignored",
+  });
+  const runSetup = setupChoice ?? setupDefaultFor(selection.mode);
+  const choice: PullChoice = {
+    ...resolveIgnores(selection, ignored.data),
+    runSetup,
+  };
+  const needsList =
+    selection.mode === "gitignored" && ignored.data === undefined;
+  return {
+    selection,
+    setSelection,
+    ignored,
+    runSetup,
+    setupPinned: setupChoice !== null,
+    setRunSetup: setSetupChoice,
+    waiting: needsList,
+    // Why Start is held, when the wait will not end on its own: the
+    // list was refused or failed, so the rule has nothing to resolve
+    // over and would leave nothing out.
+    blocked:
+      needsList && ignored.isError
+        ? "The ignored files there could not be listed, so the gitignored rule cannot apply. Pick another rule."
+        : null,
+    choice,
+  };
+}
+export type PullChoiceState = ReturnType<typeof usePullChoice>;
 
 // An ignored path as `git ls-files` lists it (a fully ignored folder
 // ends in a slash) as a root-anchored engine pattern.
