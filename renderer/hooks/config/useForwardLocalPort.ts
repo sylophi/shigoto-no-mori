@@ -19,17 +19,32 @@ function withPreference(
   return { forwardLocalPorts: Object.keys(next).length > 0 ? next : undefined };
 }
 
+// The stored override, or the default when none is stored. The rule
+// lives here so the per-row switch and the dialog's bulk forward agree
+// on where a port lands.
+export function preferredLocalPort(
+  config: ClientConfig | undefined,
+  deviceId: string,
+  remotePort: number,
+): number {
+  return (
+    config?.forwardLocalPorts?.[forwardKey(deviceId, remotePort)] ?? remotePort
+  );
+}
+
+function forwardKey(deviceId: string, remotePort: number): string {
+  return `${deviceId}:${remotePort}`;
+}
+
 export function useForwardLocalPort(deviceId: string, remotePort: number) {
-  const key = `${deviceId}:${remotePort}`;
+  const key = forwardKey(deviceId, remotePort);
   const { data } = useClientConfig();
-  const preferred = data?.forwardLocalPorts?.[key];
   const patch = useClientConfigPatch(
     (next: number | undefined, current) => withPreference(current, key, next),
     "Couldn't remember the local port",
   );
   return {
-    // The stored override, or the default when none is stored.
-    localPort: preferred ?? remotePort,
+    localPort: preferredLocalPort(data, deviceId, remotePort),
     setLocalPort: (next: number) =>
       patch.mutate(next === remotePort ? undefined : next),
   };

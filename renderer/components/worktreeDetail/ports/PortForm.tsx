@@ -1,6 +1,6 @@
 // The inline port editor, for adding a port and for editing a custom
 // one in place: a number and an optional label. It sits where the row
-// is (or will be), so neither act leaves the section. Enter submits,
+// is (or will be), so neither act leaves the dialog. Enter submits,
 // Escape cancels, and a number already on the list is refused with the
 // reason rather than silently merged.
 import { useEffect, useRef, useState } from "react";

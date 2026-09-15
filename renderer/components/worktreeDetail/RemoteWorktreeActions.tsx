@@ -4,21 +4,22 @@
 // worktree here ("Mirror here"), or moving it here and deciding what
 // becomes of the source ("Transplant"). Text buttons, since the footer
 // has room to say what they do. Ports is always there (reading the
-// list needs no grant). The two transfers need command access, a real
-// branch, and a local project sharing the repo identity (the handler
-// re-verifies that last one). A repo with no identity at all gets a
-// line of explanation instead of an empty footer.
+// list needs no grant) and is the same button the local page's footer
+// carries. The two transfers need command access, a real branch, and
+// a local project sharing the repo identity (the handler re-verifies
+// that last one). A repo with no identity at all gets a line of
+// explanation instead of an empty footer.
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
-import { type ReactNode, useState } from "react";
-import { Cable, RefreshCw, Shovel } from "lucide-react";
+import { useState } from "react";
+import { RefreshCw, Shovel } from "lucide-react";
 import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
-import { Button } from "@/components/ui/button";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useLocalProjectForIdentity } from "@/hooks/remote/useLocalProjectForIdentity";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { FooterActionButton } from "./FooterActionButton";
 import { MirrorDialog } from "./mirror/MirrorDialog";
-import { PortsDialog } from "./ports/PortsDialog";
+import { PortsButton } from "./ports/PortsButton";
 import { TransplantDialog } from "./transplant/TransplantDialog";
 
 export function RemoteWorktreeActions({
@@ -35,12 +36,12 @@ export function RemoteWorktreeActions({
     !worktree.detached &&
     isRealBranch(worktree.branch);
   return (
-    <div className="flex min-w-0 items-center gap-1">
+    <>
       <PortsButton worktree={worktree} />
       {transferable && (
         <TransferActions worktree={worktree} project={project} />
       )}
-    </div>
+    </>
   );
 }
 
@@ -76,24 +77,6 @@ function TransferActions({
         sourceIdentity={project.identity}
         localProject={localProject}
       />
-    </>
-  );
-}
-
-// The peer worktree's ports, forwardable from the app.
-function PortsButton({ worktree }: { worktree: Worktree }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <ActionButton
-        icon={<Cable />}
-        label="Ports"
-        title="See this worktree's ports and forward one here"
-        onClick={() => setOpen(true)}
-      />
-      {open && (
-        <PortsDialog worktree={worktree} onClose={() => setOpen(false)} />
-      )}
     </>
   );
 }
@@ -136,7 +119,7 @@ function TransplantButton({
   const deviceLabel = useRemoteDeviceLabel(deviceId);
   return (
     <>
-      <ActionButton
+      <FooterActionButton
         icon={<Shovel />}
         label="Transplant here"
         title="Move this worktree here"
@@ -177,7 +160,7 @@ function MirrorButton({
   if (!canForwardPorts) return null;
   return (
     <>
-      <ActionButton
+      <FooterActionButton
         icon={<RefreshCw />}
         label="Mirror here"
         title="Keep a live copy of this worktree here"
@@ -194,33 +177,5 @@ function MirrorButton({
         />
       )}
     </>
-  );
-}
-
-// The footer's two buttons share one shape: a ghost text button that
-// opens a dialog.
-function ActionButton({
-  icon,
-  label,
-  title,
-  onClick,
-}: {
-  icon: ReactNode;
-  label: string;
-  title: string;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      type="button"
-      size="xs"
-      variant="ghost"
-      className="shrink-0 text-muted-foreground hover:text-foreground"
-      title={title}
-      onClick={onClick}
-    >
-      {icon}
-      {label}
-    </Button>
   );
 }

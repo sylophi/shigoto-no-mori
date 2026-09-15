@@ -131,18 +131,21 @@ export function TransplantBody({ children }: { children: ReactNode }) {
   );
 }
 
+// A footer without a note is the buttons alone.
 export function TransplantFooter({
   note,
   children,
 }: {
-  note: ReactNode;
+  note?: ReactNode;
   children?: ReactNode;
 }) {
   return (
     <footer className="flex flex-wrap items-center gap-3 border-t border-border bg-muted/30 px-5 py-3">
-      <p className="min-w-0 flex-1 basis-56 text-xs text-muted-foreground">
-        {note}
-      </p>
+      {note && (
+        <p className="min-w-0 flex-1 basis-56 text-xs text-muted-foreground">
+          {note}
+        </p>
+      )}
       {children && (
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {children}

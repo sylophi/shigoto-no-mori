@@ -7,9 +7,9 @@
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import type { Worktree } from "@shared/schemas";
-import { Button } from "@/components/ui/button";
 import { useWorktreeMirror } from "@/hooks/remote/useMirrors";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { FooterActionButton } from "../FooterActionButton";
 import { MirrorManageDialog } from "./MirrorManageDialog";
 
 export function LocalMirrorAction({ worktree }: { worktree: Worktree }) {
@@ -19,16 +19,11 @@ export function LocalMirrorAction({ worktree }: { worktree: Worktree }) {
   if (session === undefined) return null;
   return (
     <>
-      <Button
-        type="button"
-        size="xs"
-        variant="ghost"
-        className="shrink-0 text-muted-foreground hover:text-foreground"
+      <FooterActionButton
+        icon={<RefreshCw />}
+        label={`Mirror with ${peer}`}
         onClick={() => setOpen(true)}
-      >
-        <RefreshCw />
-        Mirror with {peer}
-      </Button>
+      />
       {open && (
         <MirrorManageDialog
           session={session}

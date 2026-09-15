@@ -9,7 +9,7 @@ import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 
 // As options so the write below can fetch the stored document through
-// the same cache entry the section reads (the worktreesQueryOptions
+// the same cache entry the readers use (the worktreesQueryOptions
 // precedent).
 function worktreeDataQueryOptions(
   api: HostApi,
