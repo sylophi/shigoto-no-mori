@@ -69,6 +69,7 @@ export function TidyForest() {
     deviceId: localDeviceId,
     label: "",
     isThisDevice: true,
+    hostsProjects: true,
     status: null,
     api: window.api,
     block: undefined,

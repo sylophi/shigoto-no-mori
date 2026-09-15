@@ -21,6 +21,11 @@ interface BuildSidebarRowsArgs {
   // worktree on two machines, so the peer's row folds into the local
   // row (see mirrorPairsOf).
   mirrors: readonly MirrorLink[];
+  // Every peer's badge off the device registry (useDeviceBadges),
+  // whether or not its rows are in `remote`: the device filter narrows
+  // the rows, and a local row's mirror still names its peer while the
+  // peer's own rows are hidden.
+  deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
 }
 
 // The pairs as the builders look them up: the local worktree each
@@ -42,6 +47,27 @@ export function mirrorPairsOf(mirrors: readonly MirrorLink[]): {
   return { peerRowsFolded, peerOfLocal };
 }
 
+// The badge a local row wears for the peer it is mirrored with: the
+// peer's own when the registry knows it (its label and tone), else
+// unnamed. Shared by both builders so a pair reads the same in each.
+export function mirrorBadgeLookup(
+  peerOfLocal: ReadonlyMap<string, string>,
+  deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>,
+): (worktree: Worktree) => SidebarDeviceBadge | undefined {
+  return (worktree) => {
+    const peer = peerOfLocal.get(worktree.id);
+    if (peer === undefined) return undefined;
+    return (
+      deviceBadges.get(peer) ?? {
+        deviceId: peer,
+        label: "another device",
+        tone: "slate",
+        reachable: false,
+      }
+    );
+  };
+}
+
 // Flattens `projects` plus their per-project worktree queries into the
 // SidebarRow list the virtualizer renders. A plain function, not a hook:
 // the queries are subscribed once by the Sidebar and handed to whichever
@@ -59,35 +85,10 @@ export function buildSidebarRows({
   arrangeMode,
   remote,
   mirrors,
+  deviceBadges,
 }: BuildSidebarRowsArgs): SidebarViewModel {
   const { peerRowsFolded, peerOfLocal } = mirrorPairsOf(mirrors);
-  // A peer's badge for a local row's mirror, off the peer's forest
-  // when it has one here (its label and tone), else unnamed.
-  const badgeOfDevice = new Map<string, SidebarDeviceBadge>();
-  for (const item of remote) {
-    if (!badgeOfDevice.has(item.deviceId)) {
-      badgeOfDevice.set(item.deviceId, deviceBadgeOf(item));
-    }
-  }
-  const mirrorBadgeFor = (
-    worktree: Worktree,
-  ): SidebarDeviceBadge | undefined => {
-    const peer = peerOfLocal.get(worktree.id);
-    if (peer === undefined) return undefined;
-    return (
-      badgeOfDevice.get(peer) ?? {
-        deviceId: peer,
-        label: "another device",
-        tone: "slate",
-        reachable: false,
-      }
-    );
-  };
-  // Remote listing failures count beside the local ones, so the shell's
-  // coalesced fan-out toast covers the whole tree.
-  const failedCount =
-    worktreeQueries.filter((q) => q.error).length +
-    remote.filter((item) => item.worktreesError).length;
+  const mirrorBadgeFor = mirrorBadgeLookup(peerOfLocal, deviceBadges);
   // The local rows this build shows, decided up front: a peer's row
   // folds only into a local row that is really on screen. Its listing
   // still loading or failed, or its shelf folded, the peer's row stays
@@ -117,7 +118,6 @@ export function buildSidebarRows({
     }));
     return {
       rows,
-      failedCount,
       emptyMessage: null,
       revealKey: (projectId) => headerKeyIfPresent(rows, projectId),
     };
@@ -258,7 +258,6 @@ export function buildSidebarRows({
 
   return {
     rows,
-    failedCount,
     // Every project renders a header, so "no rows" here only ever means
     // "no projects", which the shell already has its own answer for.
     emptyMessage: null,

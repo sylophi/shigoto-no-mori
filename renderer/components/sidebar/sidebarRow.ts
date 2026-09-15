@@ -109,7 +109,6 @@ export type SidebarRow =
 // so the shell renders one of them without knowing which.
 export interface SidebarViewModel {
   rows: SidebarRow[];
-  failedCount: number;
   // Shown instead of the list when the view has nothing to render and
   // isn't merely still resolving. Null means "say nothing". That
   // includes the loading case, since a flash of "nothing here" while the

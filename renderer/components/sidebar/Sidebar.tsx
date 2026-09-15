@@ -33,8 +33,12 @@ import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SettingsSidebarNav } from "@/components/settings/SettingsSidebarNav";
 import { hasLocalHost } from "@/lib/localHost";
+import { localDeviceId } from "@/lib/queryKeys";
 import { useFanOutErrorToast } from "./useFanOutErrorToast";
 import { buildSidebarRows } from "./buildSidebarRows";
+import { useDeviceBadges } from "./DeviceBadge";
+import { useDeviceFilter } from "./deviceFilter";
+import { DeviceFilterBar } from "./DeviceFilterBar";
 import { buildInboxRows } from "./inbox/buildInboxRows";
 import { NewWorktreeButton } from "./inbox/NewWorktreeButton";
 import { ProjectDragPreview } from "./ProjectDragPreview";
@@ -195,29 +199,67 @@ function Forest({
   const configQueries = useAllProjectShigomoriConfigs(orderedProjects);
   // This device's mirrored pairs, so a pair reads as one row.
   const mirrors = useMirrorLinks();
-  const view: SidebarViewModel = inbox
-    ? buildInboxRows({
+  // Off the registry, not the rows: a local row mirrored with a peer
+  // the filter hides keeps naming it.
+  const deviceBadges = useDeviceBadges();
+  // The device filter narrows what the builders are handed rather than
+  // what they do: one machine's rows only, the local ones or one
+  // peer's. The queries above stay subscribed either way, so a pick
+  // costs no refetch. Arranging is about this machine's project order
+  // and ignores the filter (the bar hides with the rest of the chrome).
+  // Creating is not browsing: the New worktree menu keeps offering
+  // every machine.
+  const filter = useDeviceFilter();
+  const activeFilter = arrangeMode ? null : filter.selected;
+  const showLocal =
+    activeFilter === null || activeFilter.deviceId === localDeviceId;
+  // Hidden means empty, for every local input at once: the query
+  // arrays too, since the builders count loading and failed listings
+  // off them.
+  const local = showLocal
+    ? {
         projects: orderedProjects,
         worktreeQueries,
         pullRequestQueries,
         configQueries,
-        remote: remoteItems,
+      }
+    : {
+        projects: [],
+        worktreeQueries: [],
+        pullRequestQueries: [],
+        configQueries: [],
+      };
+  const shownRemote =
+    activeFilter === null
+      ? remoteItems
+      : remoteItems.filter((item) => item.deviceId === activeFilter.deviceId);
+  const view: SidebarViewModel = inbox
+    ? buildInboxRows({
+        ...local,
+        remote: shownRemote,
         mirrors,
+        deviceBadges,
         openShelves,
       })
     : buildSidebarRows({
-        projects: orderedProjects,
-        worktreeQueries,
+        projects: local.projects,
+        worktreeQueries: local.worktreeQueries,
         collapsed,
         shelvedExpanded,
         arrangeMode,
-        remote: remoteItems,
+        remote: shownRemote,
         mirrors,
+        deviceBadges,
       });
-  const { rows, failedCount } = view;
-  // Failed listings, local or remote, surface here -- without it a
-  // peer's project would silently vanish from the tree.
-  useFanOutErrorToast(failedCount);
+  const { rows } = view;
+  // Failed listings, local or remote, surface here whether or not the
+  // filter shows their rows -- without it a peer's project would
+  // silently vanish from the tree, and a narrowed forest must not also
+  // mute a failure behind it.
+  useFanOutErrorToast(
+    worktreeQueries.filter((q) => q.error).length +
+      remoteItems.filter((item) => item.worktreesError).length,
+  );
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
 
@@ -253,19 +295,13 @@ function Forest({
     ? (projects.find((p) => p.id === activeId) ?? null)
     : null;
 
-  // "Nothing configured" and "configured but nothing to show" are
-  // different answers, and neither should flash while its list is still
-  // resolving. remoteLoading joins the local gate: with zero local
-  // projects the rows can still be about to arrive from a peer, and a
-  // slow device hub must not read as "no projects".
-  const emptyMessage =
-    isLoading || remoteLoading
-      ? null
-      : projects.length === 0 && rows.length === 0
-        ? hasLocalHost
-          ? "No projects yet."
-          : "No reachable devices with projects yet. Open the Devices page to see this account's machines."
-        : view.emptyMessage;
+  const emptyMessage = emptyForestMessage({
+    loading: isLoading || remoteLoading,
+    narrowedTo: activeFilter?.label,
+    empty: rows.length === 0,
+    noProjects: projects.length === 0,
+    viewMessage: view.emptyMessage,
+  });
 
   if (settingsOpen) return <SettingsPane />;
   if (!signedIn) {
@@ -296,27 +332,34 @@ function Forest({
           which are all about this machine's own projects, so a hostless
           client's tree has nothing to show there. Arranging takes over
           the whole sidebar, so neither shows. */}
-      {arrangeMode ? null : inbox ? (
-        // px-2 like the rows below it, which is where v1 wants it.
-        // doubutsu pulls it in to its banner card, hence the slot.
-        <div
-          data-slot="sidebar-inbox-create"
-          className="flex items-center gap-1 px-2 pb-1.5"
-        >
-          <div className="min-w-0 flex-1">
-            <NewWorktreeButton
-              projects={orderedProjects}
-              remote={remoteItems}
-            />
-          </div>
-          {/* The tidy page has no other way in, so it can't live only in
-              the tree's toolbar. It spans this machine's projects, so a
-              hostless client has none to tidy. */}
-          {hasLocalHost && <TidyButton />}
-        </div>
-      ) : hasLocalHost ? (
-        <SidebarToolbar onArrange={onArrange} />
-      ) : null}
+      {arrangeMode ? null : (
+        <>
+          {inbox ? (
+            // px-2 like the rows below it, which is where v1 wants it.
+            // doubutsu pulls it in to its banner card, hence the slot.
+            <div
+              data-slot="sidebar-inbox-create"
+              className="flex items-center gap-1 px-2 pb-1.5"
+            >
+              <div className="min-w-0 flex-1">
+                <NewWorktreeButton
+                  projects={orderedProjects}
+                  remote={remoteItems}
+                />
+              </div>
+              {/* The tidy page has no other way in, so it can't live
+                  only in the tree's toolbar. It spans this machine's
+                  projects, so a hostless client has none to tidy. */}
+              {hasLocalHost && <TidyButton />}
+            </div>
+          ) : hasLocalHost ? (
+            <SidebarToolbar onArrange={onArrange} />
+          ) : null}
+          {/* The device filter sits under each view's own controls,
+              right above the list it narrows. Both views, one pick. */}
+          <DeviceFilterBar {...filter} />
+        </>
+      )}
       <div className="min-h-0 flex-1">
         <ScrollArea className="size-full" viewportRef={viewportRef}>
           {/* Dragging reorders projects, which the inbox doesn't show, so
@@ -348,6 +391,38 @@ function Forest({
       </div>
     </>
   );
+}
+
+// "Nothing configured" and "configured but nothing to show" are
+// different answers, and neither should flash while its list is still
+// resolving: `loading` covers the peers too, since with zero local
+// projects the rows can still be about to arrive from a peer, and a
+// slow device hub must not read as "no projects". A forest narrowed to
+// one machine with nothing in it says which machine it looked at,
+// since the rows it hides are the obvious thing to go looking for.
+function emptyForestMessage({
+  loading,
+  narrowedTo,
+  empty,
+  noProjects,
+  viewMessage,
+}: {
+  loading: boolean;
+  // The device filter's pick, by label. Undefined for All.
+  narrowedTo: string | undefined;
+  empty: boolean;
+  noProjects: boolean;
+  viewMessage: string | null;
+}): string | null {
+  if (loading) return null;
+  if (narrowedTo !== undefined && empty)
+    return `No worktrees on ${narrowedTo}.`;
+  if (noProjects && empty) {
+    return hasLocalHost
+      ? "No projects yet."
+      : "No reachable devices with projects yet. Open the Devices page to see this account's machines.";
+  }
+  return viewMessage;
 }
 
 function SidebarEmptyState({ message }: { message: string | null }) {

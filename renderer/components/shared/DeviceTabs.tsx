@@ -9,8 +9,9 @@
 // the devices outnumber the width, never wrapping, so the title row
 // below keeps its place however many machines there are. Left and
 // right arrows move the pick, as tabs do.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { DEVICE_PILL_CLASS } from "@/components/remote/DeviceChip";
+import { hostsProjects } from "@/components/remote/deviceTraits";
 import { EmptyPanel } from "@/components/remote/EmptyPanel";
 import { StatusDot } from "@/components/ui/status-dot";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
@@ -24,6 +25,7 @@ import {
   type HostApi,
 } from "@/hooks/remote/useHostScope";
 import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
+import { useRovingPick } from "@/hooks/ui/useRovingPick";
 import {
   useRemoteDevice,
   useRemoteDevices,
@@ -37,64 +39,82 @@ import {
 } from "@/lib/remote/deviceStatus";
 import { cn } from "@/lib/utils";
 
-export interface DeviceTab {
+export interface DeviceRosterEntry {
   deviceId: string;
   label: string;
   isThisDevice: boolean;
+  // Registers projects (deviceTraits): a browser on the account is a
+  // device too, but hosts no forest.
+  hostsProjects: boolean;
   // Null for this device, which has no connection to describe.
   status: DeviceStatusView | null;
   // The api the body is scoped to: window.api for this device, a
   // peer's only while it has a session.
   api: HostApi | undefined;
+}
+
+export interface DeviceTab extends DeviceRosterEntry {
   // Why the body can't be the page proper: the peer has no session, or
   // will not run commands from here. Undefined when it can.
   block: "offline" | "no-grant" | undefined;
 }
 
-// Every device on the account as a tab: this device first (a hostless
-// client has none), then the reachable peers, then the rest, so the
-// machines that can answer sit where the eye starts. The one list
-// behind every device pick. useDeviceTargets layers a repo's checkout
-// per device on top of it. A peer is granted while its verdict is
-// still in flight, the sidebar's rule, rather than flashing a refusal
-// that turns into a body a moment later.
-export function useDeviceTabs(): DeviceTab[] {
+// Every device on the account, in the one order every device pick
+// uses: this device first (a hostless client has none), then the
+// reachable peers, then the rest, so the machines that can answer sit
+// where the eye starts. The tabs below layer the command grant on it;
+// the sidebar's device filter reads it as is.
+export function useDeviceRoster(): DeviceRosterEntry[] {
   const devices = useRemoteDevices();
-  const access = usePeerCommandAccess(devices);
   const localName = useLocalDeviceName();
-  const here: DeviceTab[] = hasLocalHost
+  const here: DeviceRosterEntry[] = hasLocalHost
     ? [
         {
           deviceId: localDeviceId,
           label: localName,
           isThisDevice: true,
+          hostsProjects: true,
           status: null,
           api: window.api,
-          block: undefined,
         },
       ]
     : [];
-  const peers = devices.map((device): DeviceTab => {
-    const status = deviceStatusView(device.status);
-    return {
+  const peers = devices.map(
+    (device): DeviceRosterEntry => ({
       deviceId: device.deviceId,
       label: device.label,
       isThisDevice: false,
-      status,
+      hostsProjects: hostsProjects(device.platform),
+      status: deviceStatusView(device.status),
       api: device.api,
-      block:
-        !status.reachable || device.api === undefined
-          ? "offline"
-          : commandAccessOf(access, device.deviceId).canCommand
-            ? undefined
-            : "no-grant",
-    };
-  });
+    }),
+  );
   return [
     ...here,
-    ...peers.filter((tab) => tab.block !== "offline"),
-    ...peers.filter((tab) => tab.block === "offline"),
+    ...peers.filter((peer) => peer.status?.reachable),
+    ...peers.filter((peer) => !peer.status?.reachable),
   ];
+}
+
+// The roster as tabs, each with why its body can't be the page.
+// useDeviceTargets layers a repo's checkout per device on top of it. A
+// peer is granted while its verdict is still in flight, the sidebar's
+// rule, rather than flashing a refusal that turns into a body a moment
+// later.
+export function useDeviceTabs(): DeviceTab[] {
+  const access = usePeerCommandAccess(useRemoteDevices());
+  const tabs: DeviceTab[] = [];
+  for (const entry of useDeviceRoster()) {
+    const block = entry.isThisDevice
+      ? undefined
+      : !entry.status?.reachable || entry.api === undefined
+        ? "offline"
+        : commandAccessOf(access, entry.deviceId).canCommand
+          ? undefined
+          : "no-grant";
+    tabs.push({ ...entry, block });
+  }
+  return tabs;
 }
 
 // The pick, opening on `initialId` (the device the route named) and
@@ -112,22 +132,6 @@ export function usePickedDevice<T extends DeviceTab>(
   return [picked, setPickedId];
 }
 
-// Brings the picked tab into view within the row alone (not
-// scrollIntoView, which would also pull every scrolling ancestor), by
-// the row's own inset.
-function reveal(list: HTMLElement) {
-  const tab = list.querySelector<HTMLElement>('[aria-selected="true"]');
-  if (!tab) return;
-  const inset = parseFloat(getComputedStyle(list).paddingLeft) || 0;
-  const edge = list.getBoundingClientRect();
-  const box = tab.getBoundingClientRect();
-  if (box.left < edge.left + inset) {
-    list.scrollLeft += box.left - (edge.left + inset);
-  } else if (box.right > edge.right - inset) {
-    list.scrollLeft += box.right - (edge.right - inset);
-  }
-}
-
 export function DeviceTabBar({
   tabs,
   selectedId,
@@ -137,43 +141,12 @@ export function DeviceTabBar({
   selectedId: string;
   onSelect: (deviceId: string) => void;
 }) {
-  const listRef = useRef<HTMLDivElement>(null);
-
-  // On a pick (a route that opens on the last of many devices, an
-  // arrow key walking past the edge) and when the row reorders around
-  // it (a peer dropping offline moves to the end).
-  const order = tabs.map((tab) => tab.deviceId).join(" ");
-  useEffect(() => {
-    if (listRef.current) reveal(listRef.current);
-  }, [selectedId, order]);
-  // And when the row itself changes width: a window narrowed after
-  // the pick.
-  useEffect(() => {
-    const list = listRef.current;
-    if (!list) return;
-    const observer = new ResizeObserver(() => reveal(list));
-    observer.observe(list);
-    return () => observer.disconnect();
-  }, []);
-
-  // On the tabs themselves (the focusable ones, by roving tabindex),
-  // so the bar needs no focus stop of its own.
-  const onKeyDown = (event: React.KeyboardEvent) => {
-    const step =
-      event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
-    if (step === 0) return;
-    event.preventDefault();
-    const index = tabs.findIndex((tab) => tab.deviceId === selectedId);
-    const next = tabs[(index + step + tabs.length) % tabs.length];
-    if (next === undefined) return;
-    onSelect(next.deviceId);
-    // Focus follows the pick once the new tab is the focusable one.
-    requestAnimationFrame(() => {
-      listRef.current
-        ?.querySelector<HTMLElement>('[aria-selected="true"]')
-        ?.focus();
-    });
-  };
+  const { listRef, onKeyDown } = useRovingPick({
+    ids: tabs.map((tab) => tab.deviceId),
+    selectedId,
+    onSelect,
+    pickedSelector: '[aria-selected="true"]',
+  });
 
   return (
     <div

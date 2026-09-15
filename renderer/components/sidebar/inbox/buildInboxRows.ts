@@ -11,6 +11,7 @@ import {
 } from "@shared/schemas";
 import {
   deviceBadgeOf,
+  mirrorBadgeLookup,
   mirrorPairsOf,
   remoteWorktreeKey,
 } from "../buildSidebarRows";
@@ -31,6 +32,8 @@ interface BuildInboxRowsArgs {
   remote: RemoteForestItem[];
   // See buildSidebarRows: a mirrored pair files once, as the local row.
   mirrors: readonly MirrorLink[];
+  // Every peer's badge off the device registry (see buildSidebarRows).
+  deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
   // Which shelves are open. Absence means shut, so both shelves start
   // folded on every launch, the same reasoning as the per-project
   // "Show shelved" reveal in the classic view.
@@ -105,36 +108,17 @@ export function buildInboxRows({
   configQueries,
   remote,
   mirrors,
+  deviceBadges,
   openShelves,
 }: BuildInboxRowsArgs): SidebarViewModel {
   const { peerRowsFolded, peerOfLocal } = mirrorPairsOf(mirrors);
-  // Remote listing failures count beside the local ones, so the shell's
-  // coalesced fan-out toast covers the whole list.
+  // Failed listings, local or remote, hold the empty message back (the
+  // shell's fan-out toast counts them on its own).
   const failedCount =
     worktreeQueries.filter((q) => q.error).length +
     remote.filter((item) => item.worktreesError).length;
   const loadingCount = worktreeQueries.filter((q) => q.isLoading).length;
-  // A peer's badge for a local row's mirror, as the tree draws it.
-  const badgeOfDevice = new Map<string, SidebarDeviceBadge>();
-  for (const item of remote) {
-    if (!badgeOfDevice.has(item.deviceId)) {
-      badgeOfDevice.set(item.deviceId, deviceBadgeOf(item));
-    }
-  }
-  const mirrorBadgeFor = (
-    worktree: Worktree,
-  ): SidebarDeviceBadge | undefined => {
-    const peer = peerOfLocal.get(worktree.id);
-    if (peer === undefined) return undefined;
-    return (
-      badgeOfDevice.get(peer) ?? {
-        deviceId: peer,
-        label: "another device",
-        tone: "slate",
-        reachable: false,
-      }
-    );
-  };
+  const mirrorBadgeFor = mirrorBadgeLookup(peerOfLocal, deviceBadges);
 
   const live: Entry[] = [];
   const shelves: Record<InboxShelf, Entry[]> = { shelved: [], merged: [] };
@@ -197,7 +181,7 @@ export function buildInboxRows({
       ),
       item.pullRequests,
       item.showPrimaryInInbox,
-      deviceBadgeOf(item),
+      deviceBadges.get(item.deviceId) ?? deviceBadgeOf(item),
     );
   }
 
@@ -220,7 +204,6 @@ export function buildInboxRows({
 
   return {
     rows,
-    failedCount,
     // Only once every listing has landed and none of them failed. An
     // empty list looks the same whether the answer is "nothing here",
     // "still asking", or "couldn't ask". The last two have their own

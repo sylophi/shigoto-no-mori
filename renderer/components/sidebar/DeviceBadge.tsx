@@ -6,7 +6,9 @@
 // never disagree about a machine.
 import { TONE_PILL, type StatusTone } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { deviceAbbrev } from "@/lib/deviceAbbrev";
+import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { cn } from "@/lib/utils";
 
 export interface SidebarDeviceBadge {
@@ -16,6 +18,25 @@ export interface SidebarDeviceBadge {
   // Only for the tooltip's wording: an unreachable device's rows are
   // its last known state, which the tone alone doesn't say.
   reachable: boolean;
+}
+
+// Every peer on the account as a badge, by device id: the lookup behind
+// a badge that names a device by id alone (a local row's mirror). Off
+// the device registry rather than off whichever peers' rows happen to
+// be on screen, so it holds whatever the sidebar's device filter hides.
+export function useDeviceBadges(): ReadonlyMap<string, SidebarDeviceBadge> {
+  const devices = useRemoteDevices();
+  const badges = new Map<string, SidebarDeviceBadge>();
+  for (const device of devices) {
+    const { tone, reachable } = deviceStatusView(device.status);
+    badges.set(device.deviceId, {
+      deviceId: device.deviceId,
+      label: device.label,
+      tone,
+      reachable,
+    });
+  }
+  return badges;
 }
 
 export function DeviceBadge({ badge }: { badge: SidebarDeviceBadge }) {

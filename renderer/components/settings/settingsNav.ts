@@ -1,7 +1,6 @@
 import { hostsProjects } from "@/components/remote/deviceTraits";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
-import { createExternalStore } from "@/store/externalStore";
-import { useSyncExternalStore } from "react";
+import { createExternalStore, useExternalStore } from "@/store/externalStore";
 import { Palette, Rocket, type LucideIcon } from "lucide-react";
 import type { StatusTone } from "@/components/ui/status-dot";
 import type { RemoteDevice } from "@/lib/remote/devices";
@@ -41,11 +40,7 @@ export function selectSettingsTab(tab: string): void {
 
 // The raw selection. The resolved tab is the hook below.
 export function useSelectedSettingsTab(): string {
-  return useSyncExternalStore(
-    selectedTab.subscribe,
-    selectedTab.get,
-    selectedTab.get,
-  );
+  return useExternalStore(selectedTab);
 }
 
 // Launch tools and this device describe the machine the window runs
