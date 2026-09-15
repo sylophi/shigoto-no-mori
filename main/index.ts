@@ -22,6 +22,7 @@ import {
   serveRendererOverScheme,
 } from "./electron/clerk";
 import { attachContextMenu } from "./electron/contextMenu";
+import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { enableDevCdpPort } from "./electron/devCdp";
 import { devProfileSuffix, initDevProfile } from "./electron/devProfile";
 import {
@@ -119,25 +120,13 @@ if (!app.isPackaged) {
     "userData",
     profile === null ? devUserData : devProfileUserData(devUserData, profile),
   );
-  // One dev-identity policy, two halves. The rename gives dev its own
-  // menu bar label and, on Linux and Windows where safeStorage really
-  // talks to libsecret/DPAPI, its own "<name> Safe Storage" item so
-  // dev tokens never share prod's encryption key. On macOS the dev
-  // app runs from an ad-hoc-signed per-worktree bundle
-  // (scripts/dev-electron.mts) that the keychain treats as a new app
-  // per worktree and per rebuild - every launch would prompt for the
-  // login-keychain password, several dialogs at once, and "Always
-  // Allow" cannot stick - so macOS dev skips the keychain via
-  // Chromium's own test-automation switch instead. safeStorage still
-  // reports encryption available under the mock constant key, so dev
-  // tokens there are obfuscated, not protected: the accepted trade
-  // for dev-instance tokens on the owner's machine. Packaged builds
-  // keep the real keychain. After the userData suffix above, so the
-  // dev data path stays derived from the shared productName.
+  // The rename gives dev its own menu bar label and, on Linux and
+  // Windows where safeStorage really talks to libsecret/DPAPI, its
+  // own "<name> Safe Storage" item so dev tokens never share prod's
+  // encryption key. (On macOS dev never reaches the keychain, see
+  // below.) After the userData suffix above, so the dev data path
+  // stays derived from the shared productName.
   app.setName(`${app.name}${DEV_NAME_SUFFIX}${devProfileSuffix()}`);
-  if (platform() === "darwin") {
-    app.commandLine.appendSwitch("use-mock-keychain");
-  }
 }
 
 // The dev launcher's Electron-resolution override must never leak into
@@ -156,6 +145,25 @@ delete process.env.ELECTRON_OVERRIDE_DIST_PATH;
 // the running window is what launching the app asked for.
 if (!app.requestSingleInstanceLock()) {
   app.exit(0);
+}
+
+// The macOS keychain policy. Only a Developer-ID-signed packaged
+// build gets the real keychain, after making sure the Safe Storage
+// item is its own. Every other flavor (the ad-hoc per-worktree dev
+// bundle, a local `pnpm package` with no identity) runs on Chromium's
+// mock keychain, where safeStorage still reports encryption available
+// under a constant key: tokens obfuscated, not protected, the
+// accepted trade for a build that only runs on the owner's machine.
+// main/keychain/reset.ts has the model behind the split. After the
+// lock: a losing second instance must not delete the running app's
+// key on its way out. Before the Clerk bridge and the IPC handlers,
+// the two paths to safeStorage.
+if (platform() === "darwin") {
+  if (app.isPackaged && __SM_SIGNED_MAC_BUILD__) {
+    resetSafeStorageItemOnce();
+  } else {
+    app.commandLine.appendSwitch("use-mock-keychain");
+  }
 }
 
 // The Clerk main-process bridge: renderer-scheme privileges (pre-ready

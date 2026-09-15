@@ -394,7 +394,13 @@ and assert through the bridge and the disk.
   `http://localhost:8787` to run against a Worker on this machine
   instead of `hub-dev`. Needs `CLERK_SECRET_KEY` in `hub/.dev.vars`.
 - **Packaged build** (`pnpm make`). The only way to test the prod
-  scheme registration and the real keychain.
+  scheme registration. Without `APPLE_SIGNING_IDENTITY` in the build
+  environment the bundle is unsigned and, like dev, runs on
+  Chromium's mock keychain: the real keychain is exercised only by a
+  Developer-ID-signed build (the release workflow). Such a local
+  build shares the installed app's userData, and tokens it writes are
+  under the mock key, so switching between it and the installed app
+  signs the other out once.
 
 ## Troubleshooting
 
@@ -419,3 +425,13 @@ and assert through the bridge and the disk.
 - **Dev tokens on macOS.** They sit under Chromium's mock keychain,
   obfuscated but not protected. This is what makes `--clone-login`
   possible and is fine on the owner's machine.
+- **A packaged build asks for the login keychain password.** The
+  "Shigoto no Mori Safe Storage" item in the login keychain was
+  created by a binary with a different code signature (a dev run
+  before the mock keychain, an older ad-hoc package), so macOS gates
+  every read behind a dialog. A signed build replaces the item once
+  on its first launch (main/keychain/reset.ts) and logs
+  `[keychain]`. If the dialogs persist, delete the item by hand
+  (`security delete-generic-password -s "Shigoto no Mori Safe
+  Storage"`), remove `safe-storage.owned` from the app's userData and
+  relaunch. Either way the next launch is signed out once.
