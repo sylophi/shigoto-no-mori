@@ -25,6 +25,7 @@ import {
   FILE_SYNC_DIST_DIR,
 } from "./shared/fileSyncDist.mts";
 import { LOCAL_NETWORK_USAGE_DESCRIPTION } from "./shared/infoPlist.mts";
+import { macSigningIdentity } from "./shared/macSigning.mts";
 import { rendererSchemeName } from "./shared/rendererScheme.mts";
 import {
   NODE_PTY_ADDON,
@@ -55,7 +56,11 @@ const osxNotarizeConfig = process.env.APPLE_NOTARY_KEYCHAIN_PROFILE
       }
     : undefined;
 
-const shouldSignMac = Boolean(process.env.APPLE_SIGNING_IDENTITY);
+// The same reading vite.node.config.ts bakes into main as
+// __SM_SIGNED_MAC_BUILD__: the two must agree on whether this bundle
+// carries a Developer ID signature (see shared/macSigning.mts).
+const signingIdentity = macSigningIdentity(process.env);
+const shouldSignMac = signingIdentity !== null;
 const shouldNotarizeMac = shouldSignMac && Boolean(osxNotarizeConfig);
 
 const [feedOwner, feedName] = UPDATE_FEED_REPO.split("/");
@@ -134,7 +139,7 @@ const config: ForgeConfig = {
     ...(shouldSignMac
       ? {
           osxSign: {
-            identity: process.env.APPLE_SIGNING_IDENTITY,
+            identity: signingIdentity,
           },
         }
       : {}),
@@ -268,9 +273,11 @@ const config: ForgeConfig = {
       version: FuseVersion.V1,
       [FuseV1Options.RunAsNode]: false,
       // Disabled: the app has no cookies/sessions/autofill to protect,
-      // and turning this on triggers a "Shigoto no Mori wants to use
-      // your confidential information" keychain prompt on every launch
-      // since ad-hoc signatures differ between builds.
+      // and turning this on would put every flavor, ad-hoc dev bundles
+      // included, on the real macOS keychain for cookie keys, which is
+      // the login-password prompt storm main/keychain/reset.ts
+      // describes. safeStorage's own keychain use is governed by the
+      // policy in main/index.ts instead.
       [FuseV1Options.EnableCookieEncryption]: false,
       [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
       [FuseV1Options.EnableNodeCliInspectArguments]: false,

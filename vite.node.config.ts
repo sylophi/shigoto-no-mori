@@ -7,6 +7,7 @@
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import { ACCOUNT_ENV_KEYS } from "./shared/account/serviceConfig";
+import { macSigningIdentity } from "./shared/macSigning.mts";
 
 // The account service values (ACCOUNT_ENV_KEYS) present in the BUILD
 // environment, baked into
@@ -39,6 +40,13 @@ export default defineConfig({
   },
   define: {
     __SM_ACCOUNT_BAKED_ENV__: JSON.stringify(bakedAccountEnv()),
+    // Whether forge signs this build with a Developer ID (the same
+    // reading forge.config.ts makes). main/index.ts gives only such a
+    // build the real macOS keychain: an ad-hoc bundle on it is one
+    // login-password prompt per read (main/keychain/reset.ts).
+    __SM_SIGNED_MAC_BUILD__: JSON.stringify(
+      macSigningIdentity(process.env) !== null,
+    ),
   },
   build: {
     rollupOptions: {

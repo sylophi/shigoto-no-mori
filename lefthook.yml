@@ -152,6 +152,12 @@ pre-commit:
     liveness:
       glob: "{main/liveness/**,scripts/check-liveness.mjs}"
       run: pnpm run liveness:check
+    # The Safe Storage reset contract, and on macOS the real
+    # `security` deletion of a probe item. That writes to the login
+    # keychain, so the job is gated to the keychain modules alone.
+    keychain:
+      glob: "{main/keychain/**,scripts/check-keychain.mjs}"
+      run: pnpm run keychain:check
     # Drives the per-project git-directory watcher against a REAL git
     # repository with a linked worktree: a commit in the worktree, a
     # checkout and a branch delete each land as one project-scoped
