@@ -20,9 +20,9 @@ or deploying the shared half.
 ## Domains (production)
 
 Two zones on the one Cloudflare account, both required at launch.
-Dev needs only the `shigomori.com` zone for its own Worker host
-(`hub-dev.shigomori.com`, below): dev web builds point at Vercel
-preview URLs, and dev tunnels share the tunnel zone below.
+Dev needs only the `shigomori.com` zone for its own Worker and web
+hosts (`hub-dev` and `app-dev`, below); dev tunnels share the tunnel
+zone below.
 
 | Host | Serves | Pinned where |
 |---|---|---|
@@ -30,8 +30,9 @@ preview URLs, and dev tunnels share the tunnel zone below.
 | `app.shigomori.com` | Web client (Vercel) | Baked into desktop builds as `SM_ACCOUNT_WEB_ORIGIN` |
 | `hub.shigomori.com` | This Worker (Workers custom domain) | Baked into desktop builds as `SM_DEVICE_HUB_URL` |
 | `hub-dev.shigomori.com` | The dev Worker (Workers custom domain, `env.dev` in `wrangler.jsonc`) | Baked into dev builds as `SM_DEVICE_HUB_URL` |
+| `app-dev.shigomori.com` | Dev web client (Vercel branch domain for `v2`) | Baked into dev builds as `SM_ACCOUNT_WEB_ORIGIN`, which is an exact-match gate, so a per-deployment preview URL cannot serve |
 | `sm-<hash>.shigomori.link` | One per device, written by this Worker | The `TUNNEL_*` secrets, never a build |
-| `clerk.shigomori.com` | Clerk production Frontend API | Clerk prod instance (DNS-only CNAME). `vercel.json` `script-src` still lists only the dev pattern, add it when going live |
+| `clerk.shigomori.com` | Clerk production Frontend API | Clerk prod instance (DNS-only CNAME) and the `vercel.json` `script-src` |
 | `clkmail.shigomori.com` + DKIM | Clerk sign-in email | Clerk prod instance (DNS-only) |
 | `accounts.shigomori.com` | Clerk Account Portal, optional | Clerk prod instance |
 
@@ -60,9 +61,8 @@ production (`shigomori-hub`) and `env.dev` is `shigomori-hub-dev`.
 `pnpm run deploy` targets dev and `pnpm run deploy:prod` production,
 so a bare deploy never lands on production by accident. Each has its
 own D1 database (ids pinned in the config) and its own secrets, set
-with `--env dev` for dev and no flag for production. Production stays
-undeployed until launch. Everything below is written for dev, drop
-`--env dev` for the production equivalent.
+with `--env dev` for dev and no flag for production. Everything below
+is written for dev, drop `--env dev` for the production equivalent.
 
 Prerequisites: a Cloudflare account, a Clerk application, and
 `pnpm install` run in this directory.
@@ -93,12 +93,10 @@ Prerequisites: a Cloudflare account, a Clerk application, and
    pnpm run deploy
    ```
 
-The dev deploy also creates the `hub-dev.shigomori.com` custom domain
-(DNS record and certificate) and serves no workers.dev route: the
-workers.dev host carries the account's subdomain label, which
-Cloudflare derives from the account email. At launch production gets
-the same treatment with `hub.shigomori.com`, pinned in the top-level
-config rather than `env.dev`.
+Each deploy also creates its custom domain (`hub-dev.shigomori.com`
+or `hub.shigomori.com`, DNS record and certificate) and serves no
+workers.dev route: the workers.dev host carries the account's subdomain
+label, which Cloudflare derives from the account email.
 
 Deploy order when a message cap shrinks (as with the 1 MiB to 64 KiB
 `MAX_HUB_MESSAGE_BYTES` change): update all devices BEFORE
@@ -242,11 +240,11 @@ own plist, so the packaged app's `shigomori://` registration
 social providers against a packaged build before a release that
 touches it.
 
-The web deploy's CSP (vercel.json) allowlists Clerk's script host as
-`https://*.clerk.accounts.dev`, which covers development instances. A
-production (`pk_live`) instance serves Clerk's UI from your own
-`clerk.<domain>` Frontend API host instead, so add that origin to
-`script-src` when going live.
+The web deploy's CSP (vercel.json) allowlists both Clerk script
+hosts: `https://*.clerk.accounts.dev` for the development instance and
+`https://clerk.shigomori.com`, the production (`pk_live`) instance's own
+Frontend API host. One static file serves every Vercel environment, so
+both stay listed.
 
 For local development, put the account service values above in a gitignored
 `.env.local` in the repo root (simple `KEY=value` lines). Both the

@@ -67,15 +67,19 @@
   "observability": {
     "enabled": true,
   },
+  // Production serves from its custom domain on the shigomori.com zone
+  // with the workers.dev route switched off, for the same reason as
+  // dev below: the workers.dev host carries the account-derived label
+  // and this URL is baked into every release build as
+  // SM_DEVICE_HUB_URL. Wrangler creates the DNS record and
+  // certificate on deploy.
+  "workers_dev": false,
+  "routes": [{ "pattern": "hub.shigomori.com", "custom_domain": true }],
   "env": {
     "dev": {
       "name": "shigomori-hub-dev",
-      // Dev serves from its own custom domain on the shigomori.com
-      // zone and has its workers.dev route switched off: the
-      // workers.dev host carries the account's subdomain label, which
-      // is derived from the account email and would otherwise be
-      // baked into every dev build as SM_DEVICE_HUB_URL. Wrangler
-      // creates the DNS record and certificate on deploy.
+      // Dev serves from its own custom domain, workers.dev off, like
+      // production above. Routes are not inherited, so it is repeated.
       "workers_dev": false,
       "routes": [{ "pattern": "hub-dev.shigomori.com", "custom_domain": true }],
       "durable_objects": {
