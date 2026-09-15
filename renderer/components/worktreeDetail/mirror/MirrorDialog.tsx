@@ -27,7 +27,6 @@ import { useLocalDeviceName } from "@/hooks/account/useAccount";
 import { LocalHostScope } from "@/hooks/remote/useHostScope";
 import { useMirrors, useStartMirror } from "@/hooks/remote/useMirrors";
 import { usePullProgress } from "@/hooks/remote/usePullProgress";
-import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import {
@@ -36,6 +35,7 @@ import {
   TransplantBody,
   TransplantFooter,
 } from "../transplant/TransplantChrome";
+import { SetupToggle } from "../transplant/SetupToggle";
 import { TransplantProgress } from "../transplant/TransplantProgress";
 import {
   DestinationFolder,
@@ -45,10 +45,9 @@ import {
 } from "../transplant/TransplantReview";
 import { stepHeadline, useClock } from "../transplant/transplantSteps";
 import {
-  DEFAULT_IGNORE_SELECTION,
-  type IgnoreSelection,
   ignoreSummary,
-  resolveIgnores,
+  type PullChoiceState,
+  usePullChoice,
 } from "./ignoreChoice";
 import { MirrorIgnorePicker } from "./MirrorIgnorePicker";
 import { describeMirror } from "./mirrorStatus";
@@ -110,15 +109,9 @@ export function MirrorDialog({
     sourceIdentity,
     localProjectId: localProject.id,
   });
-  const [selection, setSelection] = useState<IgnoreSelection>(
-    DEFAULT_IGNORE_SELECTION,
-  );
-  // Under the source scope: the list the gitignored rule resolves
-  // over, read only once that rule is picked (it walks the checkout
-  // over the device link).
-  const ignored = useWorktreeIgnoredPaths(project.id, worktree.id, {
-    enabled: selection.mode === "gitignored",
-  });
+  // Under the source scope: its ignored list walks the checkout over
+  // the device link.
+  const pull = usePullChoice(project.id, worktree.id);
   const stage: Stage = mirror.isPending
     ? "running"
     : mirror.isError
@@ -132,9 +125,7 @@ export function MirrorDialog({
 
   const start = () => {
     progress.reset();
-    mirror.mutate(resolveIgnores(selection, ignored.data), {
-      onSettled: () => setEndedAt(Date.now()),
-    });
+    mirror.mutate(pull.choice, { onSettled: () => setEndedAt(Date.now()) });
   };
 
   const open = () => {
@@ -148,7 +139,10 @@ export function MirrorDialog({
 
   const header = HEADER[stage];
   const elapsed = (stage === "running" ? now : endedAt) - mirror.submittedAt;
-  const summary = ignoreSummary(selection.mode, selection.selected.size);
+  const summary = ignoreSummary(
+    pull.selection.mode,
+    pull.selection.selected.size,
+  );
 
   return (
     <ModalShell
@@ -202,9 +196,7 @@ export function MirrorDialog({
           localProject={localProject}
           sourceDeviceLabel={sourceDeviceLabel}
           thisDeviceLabel={thisDeviceLabel}
-          selection={selection}
-          onSelectionChange={setSelection}
-          ignored={ignored}
+          pull={pull}
           onCancel={onClose}
           onStart={start}
         />
@@ -258,9 +250,7 @@ function MirrorReview({
   localProject,
   sourceDeviceLabel,
   thisDeviceLabel,
-  selection,
-  onSelectionChange,
-  ignored,
+  pull,
   onCancel,
   onStart,
 }: {
@@ -269,15 +259,10 @@ function MirrorReview({
   localProject: Project;
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
-  selection: IgnoreSelection;
-  onSelectionChange: (next: IgnoreSelection) => void;
-  ignored: ReturnType<typeof useWorktreeIgnoredPaths>;
+  pull: PullChoiceState;
   onCancel: () => void;
   onStart: () => void;
 }) {
-  // The gitignored rule resolves over the list: no start before it
-  // lands, or the mirror would open with nothing left out.
-  const waiting = selection.mode === "gitignored" && ignored.data === undefined;
   return (
     <>
       <TransplantBody>
@@ -293,9 +278,9 @@ function MirrorReview({
             </section>
 
             <MirrorIgnorePicker
-              value={selection}
-              onChange={onSelectionChange}
-              ignored={ignored}
+              value={pull.selection}
+              onChange={pull.setSelection}
+              ignored={pull.ignored}
               worktree={{
                 projectId: project.id,
                 id: worktree.id,
@@ -340,6 +325,14 @@ function MirrorReview({
                 thisDeviceLabel={thisDeviceLabel}
                 name={pullWorktreeName(worktree)}
               />
+
+              <SetupToggle
+                localProject={localProject}
+                thisDeviceLabel={thisDeviceLabel}
+                checked={pull.runSetup}
+                onChange={pull.setRunSetup}
+                pinned={pull.setupPinned}
+              />
             </div>
           </LocalHostScope>
         </div>
@@ -349,7 +342,8 @@ function MirrorReview({
         <MirrorReviewFooter
           worktree={worktree}
           localProject={localProject}
-          waiting={waiting}
+          waiting={pull.waiting}
+          blocked={pull.blocked}
           onCancel={onCancel}
           onStart={onStart}
         />
@@ -362,18 +356,24 @@ function MirrorReviewFooter({
   worktree,
   localProject,
   waiting,
+  blocked,
   onCancel,
   onStart,
 }: {
   worktree: Worktree;
   localProject: Project;
   waiting: boolean;
+  blocked: string | null;
   onCancel: () => void;
   onStart: () => void;
 }) {
   const { refusal } = useLocalCollision(localProject, worktree);
   return (
-    <TransplantFooter note={refusal ?? "Stop any time. Both copies stay."}>
+    <TransplantFooter
+      note={
+        refusal ?? blocked ?? "Stop any time. Stopping removes the copy here."
+      }
+    >
       <Button variant="ghost" size="sm" onClick={onCancel}>
         Cancel
       </Button>

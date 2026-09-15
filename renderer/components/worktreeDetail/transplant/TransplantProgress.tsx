@@ -1,7 +1,8 @@
 // Step 2 of the transplant: both devices on screen with the pull's
-// progress between them, and the four named steps with done / running
-// / queued states read off the orchestrator's frames, so a stall is
-// attributable to one step. Also the failed view: the same list,
+// progress between them, and the named steps (the core four, plus the
+// files step when a leave-out rule admits something) with done /
+// running / queued states read off the orchestrator's frames, so a
+// stall is attributable to one step. Also the failed view: the same list,
 // frozen where it stopped, with the error and a retry.
 import { AlertCircle, Check, Laptop, Monitor } from "lucide-react";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
@@ -20,7 +21,9 @@ import {
   PULL_STEPS,
 } from "./transplantSteps";
 
-const PULL_ROW_COUNT = PULL_STEPS.length;
+// The pull's core steps, before the optional files step: the row a
+// mirror's extra rows start at once the apply frame has landed.
+const CORE_ROW_COUNT = PULL_STEPS.indexOf("files");
 const NO_EXTRA_ROWS: { title: string; detail: string }[] = [];
 
 type StepState = "done" | "running" | "queued";
@@ -34,6 +37,7 @@ export function TransplantProgress({
   onClose,
   onRetry,
   extraRows = NO_EXTRA_ROWS,
+  filesDetail,
   sourcePart = "source, untouched",
   runningNote = `Keep this window open. Nothing on ${sourceDeviceLabel} changes until step 3.`,
   failedNote = `The copy on ${sourceDeviceLabel} is untouched. If the worktree already landed here, open it from the sidebar instead of retrying.`,
@@ -48,10 +52,14 @@ export function TransplantProgress({
   error?: unknown;
   onClose: () => void;
   onRetry: () => void;
-  // Steps after the pull's four (the mirror's session open), running
-  // once the apply frame has landed. The mutation settling ends the
-  // view, so a row here never reads as done.
+  // Steps after the pull's core four (the mirror's session open),
+  // running once the apply frame has landed. The mutation settling
+  // ends the view, so a row here never reads as done.
   extraRows?: { title: string; detail: string }[];
+  // The transplant's files step (the ignored files the leave-out rule
+  // admits), as its row's caption. Absent on a mirror: its own session
+  // carries the files.
+  filesDetail?: string;
   sourcePart?: string;
   runningNote?: string;
   failedNote?: string;
@@ -59,12 +67,14 @@ export function TransplantProgress({
 }) {
   const failed = error !== undefined;
   const pullDone = frame?.step === "apply" && extraRows.length > 0;
-  const current = pullDone ? PULL_ROW_COUNT : currentStepIndex(frame);
+  const current = pullDone ? CORE_ROW_COUNT : currentStepIndex(frame);
   const ratio = pullDone ? 0.97 : overallProgress(frame);
-  const transferCaption =
-    frame?.step === "transfer" && frame.totalBytes
+  const caption = (step: "transfer" | "files") =>
+    frame?.step === step && frame.totalBytes
       ? `${formatBytes(frame.bytes ?? 0)} of ${formatBytes(frame.totalBytes)}`
       : null;
+  const transferCaption = caption("transfer");
+  const filesCaption = caption("files");
 
   const rows: { title: string; detail: string }[] = [
     {
@@ -86,6 +96,14 @@ export function TransplantProgress({
       title: "Re-apply your changes",
       detail: dirty ? "uncommitted, staging kept" : "skipped",
     },
+    ...(filesDetail === undefined
+      ? []
+      : [
+          {
+            title: "Bring the ignored files over",
+            detail: filesCaption ?? filesDetail,
+          },
+        ]),
     ...extraRows,
   ];
 
@@ -101,7 +119,7 @@ export function TransplantProgress({
             />
             <div className="min-w-0 flex-1 space-y-1.5">
               <p className="h-4 truncate text-center text-xs text-sky-700 dark:text-sky-300">
-                {failed ? "stopped" : (transferCaption ?? " ")}
+                {failed ? "stopped" : (transferCaption ?? filesCaption ?? " ")}
               </p>
               <div
                 role="progressbar"

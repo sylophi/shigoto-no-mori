@@ -133,7 +133,7 @@ func TestCreateLifecycleCarriesOverFromSiblingWorktree(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if failures := runCreateLifecycle(proj, wt, tc.base); len(failures) != 0 {
+		if failures := runCreateLifecycle(proj, wt, tc.base, false); len(failures) != 0 {
 			t.Fatalf("%s: lifecycle failures %+v", tc.name, failures)
 		}
 		if got := readFileT(t, filepath.Join(wt.Path, ".env.feat")); got != "FEAT=1\n" {

@@ -8,6 +8,7 @@
 // stage.
 import { useState } from "react";
 import { ArrowRight, Check, Loader2, X, type LucideIcon } from "lucide-react";
+import { pullBringsIgnoredFiles } from "@shared/ipc/modules/sync";
 import type { Project, Worktree } from "@shared/schemas";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { TONE_PILL } from "@/components/ui/status-dot";
@@ -15,6 +16,7 @@ import { useLocalDeviceName } from "@/hooks/account/useAccount";
 import { usePullWorktree } from "@/hooks/remote/usePullWorktree";
 import { usePullProgress } from "@/hooks/remote/usePullProgress";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
+import { ignoreSummary, usePullChoice } from "../mirror/ignoreChoice";
 import { FlowHeader, StepRail } from "./TransplantChrome";
 import { TransplantFinish } from "./TransplantFinish";
 import { TransplantProgress } from "./TransplantProgress";
@@ -22,6 +24,7 @@ import { TransplantReview } from "./TransplantReview";
 import {
   currentStepIndex,
   PULL_STEPS,
+  pullStepCount,
   stepHeadline,
   useClock,
 } from "./transplantSteps";
@@ -84,10 +87,15 @@ export function TransplantDialog({
   const [endedAt, setEndedAt] = useState(0);
   const now = useClock(stage === "running");
   const progress = usePullProgress(worktree.id);
+  // The leave-out rule and the setup switch, the mirror's pair. Under
+  // the source scope: its ignored list walks the checkout over the
+  // device link.
+  const choice = usePullChoice(project.id, worktree.id);
+  const bringsFiles = pullBringsIgnoredFiles(choice.selection.mode);
 
   const start = () => {
     progress.reset();
-    pull.mutate(undefined, { onSettled: () => setEndedAt(Date.now()) });
+    pull.mutate(choice.choice, { onSettled: () => setEndedAt(Date.now()) });
   };
 
   const open = () => {
@@ -130,7 +138,7 @@ export function TransplantDialog({
           </>
         )}
         {stage === "running" &&
-          `Step ${stepIndex + 1} of ${PULL_STEPS.length}: ${stepHeadline(PULL_STEPS[stepIndex], sourceDeviceLabel)}.`}
+          `Step ${stepIndex + 1} of ${pullStepCount(bringsFiles)}: ${stepHeadline(PULL_STEPS[stepIndex], sourceDeviceLabel)}.`}
         {stage === "failed" && `Nothing on ${sourceDeviceLabel} changed.`}
         {stage === "done" && (
           <>
@@ -149,6 +157,7 @@ export function TransplantDialog({
           localProject={localProject}
           sourceDeviceLabel={sourceDeviceLabel}
           thisDeviceLabel={thisDeviceLabel}
+          pull={choice}
           onCancel={onClose}
           onStart={start}
         />
@@ -162,11 +171,26 @@ export function TransplantDialog({
           error={stage === "failed" ? pull.error : undefined}
           onClose={onClose}
           onRetry={start}
+          filesDetail={
+            bringsFiles
+              ? (ignoreSummary(
+                  choice.selection.mode,
+                  choice.selection.selected.size,
+                ) ?? "everything ignored, too")
+              : undefined
+          }
         />
       )}
       {stage === "done" && pull.data && (
         <TransplantFinish
           result={pull.data}
+          leftOutCount={
+            choice.selection.mode === "custom"
+              ? choice.selection.selected.size
+              : choice.selection.mode === "everything"
+                ? 0
+                : null
+          }
           worktree={worktree}
           project={project}
           sourceDeviceLabel={sourceDeviceLabel}

@@ -9,6 +9,7 @@
 // data, so a restart keeps the recent past. Electron-free like the
 // daemon: the store is injected.
 import {
+  isHaltedStatus,
   MIRROR_HISTORY_LIMIT,
   type MirrorEvent,
   type MirrorEventKind,
@@ -158,7 +159,7 @@ export function createMirrorHistory(deps: {
       const next: Seen = {
         connected,
         lostConnection: lost,
-        halted: session.status.startsWith("halted-"),
+        halted: isHaltedStatus(session.status),
         lastError: session.lastError ?? "",
         conflicts: session.conflicts.length + session.excludedConflicts,
         git: git?.status ?? null,

@@ -1,6 +1,7 @@
 // The transplant dialog's reading of the pull's progress frames: which
-// of the four named steps is running (everything before it is done,
-// everything after queued), and a single overall figure for the bar
+// named step is running (the core four, plus the files step when the
+// leave-out rule admits something), with everything before it done and
+// everything after it queued, and a single overall figure for the bar
 // between the two devices.
 import { useEffect, useState } from "react";
 import {
@@ -11,6 +12,11 @@ import {
 import type { CreatePhase } from "@shared/schemas";
 
 export const PULL_STEPS = SyncPullStepSchema.options;
+// The files step is the optional one, and the last: a pull with
+// nothing to bring stops at the apply.
+export function pullStepCount(bringsFiles: boolean): number {
+  return bringsFiles ? PULL_STEPS.length : PULL_STEPS.indexOf("files");
+}
 
 // Before the first frame the orchestrator is negotiating tips, which
 // is the capture step's preamble, so the first step reads as running
@@ -45,6 +51,11 @@ export function overallProgress(frame: SyncPullProgress | null): number {
       );
     case "apply":
       return 0.93;
+    case "files": {
+      const total = frame.totalBytes ?? 0;
+      const ratio = total > 0 ? Math.min(1, (frame.bytes ?? 0) / total) : 0;
+      return 0.94 + ratio * 0.05;
+    }
   }
 }
 
@@ -83,5 +94,7 @@ export function stepHeadline(
       return "creating the worktree here";
     case "apply":
       return "re-applying your changes here";
+    case "files":
+      return `bringing the ignored files over from ${sourceDeviceLabel}`;
   }
 }

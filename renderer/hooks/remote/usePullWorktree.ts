@@ -16,6 +16,7 @@ import {
 import type { SyncPullWorktreeResult } from "@shared/ipc/modules/sync";
 import type { Worktree } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import type { PullChoice } from "@/hooks/remote/useMirrors";
 import { invalidateHostDevice, queryKeys } from "@/lib/queryKeys";
 
 // The teardown reports a kept source with its raw reason. scripts-running
@@ -60,7 +61,9 @@ export function usePullWorktree({
   const { deviceId } = useHostScope();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (): Promise<SyncPullWorktreeResult> =>
+    // The leave-out rule rides along: the host brings the ignored
+    // files it admits over once the worktree is here.
+    mutationFn: (choice: PullChoice): Promise<SyncPullWorktreeResult> =>
       window.api.sync.pullWorktree({
         sourceDeviceId: deviceId,
         sourceProjectId,
@@ -68,6 +71,7 @@ export function usePullWorktree({
         sourceIdentity,
         branch: worktree.branch,
         worktreeName: pullWorktreeName(worktree),
+        ...choice,
       }),
     // The invalidations only: the caller shows the outcome, so the
     // conclusion is told once.

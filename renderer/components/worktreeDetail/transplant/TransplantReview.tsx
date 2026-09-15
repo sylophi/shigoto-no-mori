@@ -15,6 +15,7 @@ import {
   Laptop,
   Monitor,
 } from "lucide-react";
+import { pullBringsIgnoredFiles } from "@shared/ipc/modules/sync";
 import type { Project, Worktree } from "@shared/schemas";
 import {
   pullBranchCollision,
@@ -36,7 +37,6 @@ import { worktreeIncludeExtras } from "@/hooks/projects/carryOverPaths";
 import { useWorktreeIncludeStatus } from "@/hooks/projects/useWorktreeIncludeStatus";
 import { LocalHostScope, useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
-import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
@@ -44,6 +44,9 @@ import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest
 import { tildify } from "@/lib/projectPaths";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { cn } from "@/lib/utils";
+import type { PullChoiceState } from "../mirror/ignoreChoice";
+import { MirrorIgnorePicker } from "../mirror/MirrorIgnorePicker";
+import { SetupToggle, useSetupScript } from "./SetupToggle";
 import {
   CARD_NOTE,
   CardList,
@@ -60,6 +63,7 @@ export function TransplantReview({
   localProject,
   sourceDeviceLabel,
   thisDeviceLabel,
+  pull,
   onCancel,
   onStart,
 }: {
@@ -68,6 +72,8 @@ export function TransplantReview({
   localProject: Project;
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
+  // The leave-out rule and the setup switch, the mirror's pair.
+  pull: PullChoiceState;
   onCancel: () => void;
   onStart: () => void;
 }) {
@@ -102,11 +108,15 @@ export function TransplantReview({
               )}
             </section>
 
-            <StaysBehind
-              worktree={worktree}
-              project={project}
-              localProject={localProject}
-              sourceDeviceLabel={sourceDeviceLabel}
+            <MirrorIgnorePicker
+              value={pull.selection}
+              onChange={pull.setSelection}
+              ignored={pull.ignored}
+              worktree={{
+                projectId: project.id,
+                id: worktree.id,
+                path: worktree.path,
+              }}
             />
 
             <LocalHostScope>
@@ -152,16 +162,22 @@ export function TransplantReview({
                 name={pullWorktreeName(worktree)}
               />
 
-              <NoteBox title="What happens">
-                <ol className="list-decimal space-y-1 pl-4">
-                  <li>{sourceDeviceLabel} captures the uncommitted changes.</li>
-                  <li>Branch and changes cross the device link directly.</li>
-                  <li>
-                    {thisDeviceLabel} creates the worktree, runs carry-over and
-                    setup{dirty ? ", then re-applies your edits." : "."}
-                  </li>
-                </ol>
-              </NoteBox>
+              <SetupToggle
+                localProject={localProject}
+                thisDeviceLabel={thisDeviceLabel}
+                checked={pull.runSetup}
+                onChange={pull.setRunSetup}
+                pinned={pull.setupPinned}
+              />
+
+              <WhatHappens
+                localProject={localProject}
+                sourceDeviceLabel={sourceDeviceLabel}
+                thisDeviceLabel={thisDeviceLabel}
+                runSetup={pull.runSetup}
+                dirty={dirty}
+                bringsFiles={pullBringsIgnoredFiles(pull.selection.mode)}
+              />
             </div>
           </LocalHostScope>
         </div>
@@ -172,11 +188,55 @@ export function TransplantReview({
           worktree={worktree}
           localProject={localProject}
           sourceDeviceLabel={sourceDeviceLabel}
+          waiting={pull.waiting}
+          blocked={pull.blocked}
           onCancel={onCancel}
           onStart={onStart}
         />
       </LocalHostScope>
     </>
+  );
+}
+
+// The three steps in one box. Setup is named only when it will run:
+// the switch is on AND the local project has a script (read under
+// LocalHostScope, like the switch).
+function WhatHappens({
+  localProject,
+  sourceDeviceLabel,
+  thisDeviceLabel,
+  runSetup,
+  dirty,
+  bringsFiles,
+}: {
+  localProject: Project;
+  sourceDeviceLabel: string;
+  thisDeviceLabel: string;
+  runSetup: boolean;
+  dirty: boolean;
+  // The leave-out rule admits ignored files, so the files step runs.
+  bringsFiles: boolean;
+}) {
+  const command = useSetupScript(localProject);
+  const setup = runSetup && command !== "";
+  return (
+    <NoteBox title="What happens">
+      <ol className="list-decimal space-y-1 pl-4">
+        <li>{sourceDeviceLabel} captures the uncommitted changes.</li>
+        <li>Branch and changes cross the device link directly.</li>
+        <li>
+          {thisDeviceLabel} creates the worktree, runs carry-over
+          {setup ? " and setup" : ""}
+          {dirty ? ", then re-applies your edits." : "."}
+        </li>
+        {bringsFiles && (
+          <li>
+            The ignored files the rule admits come over from {sourceDeviceLabel}
+            , as one pass of the mirror engine.
+          </li>
+        )}
+      </ol>
+    </NoteBox>
   );
 }
 
@@ -275,12 +335,19 @@ function ReviewFooter({
   worktree,
   localProject,
   sourceDeviceLabel,
+  waiting,
+  blocked,
   onCancel,
   onStart,
 }: {
   worktree: Worktree;
   localProject: Project;
   sourceDeviceLabel: string;
+  // The gitignored rule resolves over the ignored list: no start
+  // before it lands, or the files step would bring everything.
+  waiting: boolean;
+  // The wait's reason when it will not end on its own.
+  blocked: string | null;
   onCancel: () => void;
   onStart: () => void;
 }) {
@@ -289,13 +356,18 @@ function ReviewFooter({
     <TransplantFooter
       note={
         refusal ??
+        blocked ??
         `Nothing on ${sourceDeviceLabel} is deleted until you say so at the last step.`
       }
     >
       <Button variant="ghost" size="sm" onClick={onCancel}>
         Cancel
       </Button>
-      <Button size="sm" onClick={onStart} disabled={refusal !== null}>
+      <Button
+        size="sm"
+        onClick={onStart}
+        disabled={refusal !== null || waiting}
+      >
         Start transplant
         <ArrowRight />
       </Button>
@@ -433,64 +505,6 @@ function ChangedFiles({
         );
       })}
     </CardList>
-  );
-}
-
-// What a transfer leaves on the source: its ignored files. The capture
-// has `git add -A` semantics (cli/cmd_dirty.go), so an .env or a build
-// folder never crosses, and a teardown at the last step removes it
-// with the source. Said here, where the user still decides, because
-// nothing in the pull can refuse over it: near every real worktree
-// carries ignored content. Under the source scope by the caller.
-function StaysBehind({
-  worktree,
-  project,
-  localProject,
-  sourceDeviceLabel,
-}: {
-  worktree: Worktree;
-  project: Project;
-  localProject: Project;
-  sourceDeviceLabel: string;
-}) {
-  const {
-    data: ignored,
-    isPending,
-    isError,
-  } = useWorktreeIgnoredPaths(project.id, worktree.id);
-  return (
-    <section className="space-y-2">
-      <SectionHeading>
-        Stays behind
-        <span className="ml-1.5 font-normal tracking-normal normal-case">
-          (ignored files never travel)
-        </span>
-      </SectionHeading>
-      {isPending ? (
-        <CardSkeleton />
-      ) : isError ? (
-        <p className={CARD_NOTE}>
-          The ignored files there could not be listed. Anything gitignored stays
-          on {sourceDeviceLabel}.
-        </p>
-      ) : ignored.total === 0 ? (
-        <p className="text-xs text-muted-foreground">No ignored files there.</p>
-      ) : (
-        <>
-          <CardList total={ignored.total}>
-            {ignored.paths.slice(0, MAX_ROWS).map((path) => (
-              <li key={path} className="min-w-0 truncate" title={path}>
-                {path}
-              </li>
-            ))}
-          </CardList>
-          <p className="text-xs text-muted-foreground">
-            Carry-over below recreates what {localProject.name} is configured
-            for. A teardown at the last step removes the rest with the source.
-          </p>
-        </>
-      )}
-    </section>
   );
 }
 

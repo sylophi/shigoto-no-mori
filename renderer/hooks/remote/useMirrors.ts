@@ -18,6 +18,7 @@ import type {
 import type { Worktree } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { invalidateLanded } from "@/hooks/remote/usePullWorktree";
+import { useForgetDeletedWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { notifyError } from "@/lib/toast";
 
 const EMPTY: MirrorListResult = {
@@ -126,6 +127,10 @@ export type MirrorIgnoreChoice = {
   ignores: string[];
 };
 
+// What a pull dialog hands its mutation: the rule plus the setup
+// switch, the same for a transplant and a mirror start.
+export type PullChoice = MirrorIgnoreChoice & { runSetup: boolean };
+
 // Bring the peer's worktree here and keep it mirrored, driven by the
 // mirror dialog: the new worktree is LOCAL, so the local registry keys
 // are invalidated, and the dialog's last step is the report, so no
@@ -144,7 +149,7 @@ export function useStartMirror({
   const { deviceId } = useHostScope();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (choice: MirrorIgnoreChoice) =>
+    mutationFn: (choice: PullChoice) =>
       window.api.mirror.start({
         sourceDeviceId: deviceId,
         sourceProjectId,
@@ -186,8 +191,14 @@ export function useSetMirrorIgnores() {
 // This machine's daemon controls. Local by contract. The list refreshes
 // off the daemon's own state snapshot.
 export function useMirrorControls() {
+  const forget = useForgetDeletedWorktree();
+  // Stop removes the local copy with the session, so the renderer
+  // forgets the worktree the way a delete does.
   const stop = useMutation({
-    mutationFn: (session: string) => window.api.mirror.stop(session),
+    mutationFn: (session: MirrorSession) =>
+      window.api.mirror.stop(session.session),
+    onSuccess: (_data, session) =>
+      forget(session.localProjectId, session.localWorktreeId),
     onError: (err) => notifyError("Couldn't stop mirroring", err),
     meta: { silentError: true },
   });

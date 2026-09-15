@@ -30,7 +30,10 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 		// checkout: reuse the existing branch `base` instead of creating
 		// one, the app's "open existing branch" flow. Requires --base.
 		// no-cd: don't open a subshell in the new worktree afterwards.
-		bools: map[string][]string{"checkout": {}, "no-cd": {}},
+		// no-setup: skip the project's setup script (carry-over and port
+		// provision still run). The app passes it when a mirror or
+		// transplant was told not to set the copy up.
+		bools: map[string][]string{"checkout": {}, "no-cd": {}, "no-setup": {}},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
@@ -61,7 +64,7 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 	} else {
 		note("created " + cyanErr(worktree.Name) + " (branch " + cyanErr(worktree.Branch) + ")")
 	}
-	code := finishCreateLifecycle(proj, worktree, parsed.strings["base"])
+	code := finishCreateLifecycle(proj, worktree, parsed.strings["base"], parsed.bools["no-setup"])
 	// Callers who can be moved land in the new worktree (a subshell,
 	// or their own shell via the integration directive, same as
 	// `sm cd`). --no-cd, --json, and scripts skip it. Exit 3 from a
@@ -80,8 +83,8 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 // Shared tail of create and adopt: run the lifecycle, report script
 // failures, print the path as the stdout result. 0 when everything
 // ran; 3 when the worktree exists but a lifecycle step failed.
-func finishCreateLifecycle(proj project, worktree worktreeJSON, base string) int {
-	failures := runCreateLifecycle(proj, worktree, base)
+func finishCreateLifecycle(proj project, worktree worktreeJSON, base string, skipSetup bool) int {
+	failures := runCreateLifecycle(proj, worktree, base, skipSetup)
 	ok := len(failures) == 0
 	if jsonMode {
 		emit(map[string]any{
@@ -119,8 +122,9 @@ func emitPhase(phase string) {
 
 // Carry-over -> setup -> port-pool, collecting non-zero script exits.
 // `base` is the ref the worktree was branched from ("" when unknown).
-// It decides which checkout carry-over looks in first.
-func runCreateLifecycle(proj project, worktree worktreeJSON, base string) []scriptFailure {
+// It decides which checkout carry-over looks in first. skipSetup
+// leaves the setup script out (--no-setup).
+func runCreateLifecycle(proj project, worktree worktreeJSON, base string, skipSetup bool) []scriptFailure {
 	failures := []scriptFailure{}
 	config := readProjectConfig(proj.ID)
 
@@ -172,7 +176,7 @@ func runCreateLifecycle(proj project, worktree worktreeJSON, base string) []scri
 		}
 	}
 
-	provisionFailures, _ := runProvisionScripts(proj, identityOf(worktree), config)
+	provisionFailures, _ := runProvisionScripts(proj, identityOf(worktree), config, skipSetup)
 	failures = append(failures, provisionFailures...)
 	emitPhase("idle")
 	return failures
@@ -183,11 +187,11 @@ func runCreateLifecycle(proj project, worktree worktreeJSON, base string) []scri
 // external worktrees, because rm skips the matching release for
 // them, so provisioning would leak a port). Returns the failures and
 // which steps ran. Callers own the trailing "idle" phase.
-func runProvisionScripts(proj project, id worktreeIdentity, config *projectConfig) ([]scriptFailure, []string) {
+func runProvisionScripts(proj project, id worktreeIdentity, config *projectConfig, skipSetup bool) ([]scriptFailure, []string) {
 	failures := []scriptFailure{}
 	ran := []string{}
 	setupCommand := ""
-	if config != nil {
+	if config != nil && !skipSetup {
 		setupCommand = strings.TrimSpace(config.Scripts.Setup)
 	}
 	portPoolNeeded := willRunPortPool(id)
