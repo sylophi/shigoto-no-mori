@@ -4,9 +4,11 @@ export const RuntimeInfoSchema = z.object({
   // The data dir: where worktrees, configs and state live.
   dataDir: z.string().min(1),
   // How boot resolved it (host/lib/util/paths.ts DataDirSource).
-  // "legacy" is a pre-2.0 folder adopted in place, which Settings
-  // offers to rename.
+  // "legacy" is a pre-2.0 folder adopted in place.
   dataDirSource: z.enum(["env", "pointer", "legacy", "default"]),
+  // Whether the data dir sits at the flavor's default location. Settings
+  // offers a reset to the default when it doesn't.
+  atDefaultDataDir: z.boolean(),
   // The flavor's own folder name (".sm" / ".smd"): what a move renames
   // the folder to.
   canonicalDataDirName: z.string().min(1),
@@ -16,8 +18,8 @@ export type RuntimeInfo = z.infer<typeof RuntimeInfoSchema>;
 
 // Move the data dir: the picked directory becomes the new parent of
 // the data folder (which takes its canonical name). With no parent the
-// folder is renamed where it stands. The app relaunches right after a
-// successful move (the data dir is a boot-time constant), so the
+// folder goes back to its default location. The app relaunches right
+// after a successful move (the data dir is a boot-time constant), so the
 // invoke returns nothing the renderer could outlive.
 export const MoveDataDirPayloadSchema = z.object({
   parentDir: z.string().min(1).optional(),

@@ -1,5 +1,5 @@
 // Moves the shigomori data dir to a new parent directory (or, with no
-// parent, renames it where it stands): the folder relocates under the
+// parent, back to its default location): the folder relocates under the
 // flavor's canonical name (.sm / .smd -- which is also how a pre-2.0
 // ~/shigomori gets renamed), the pointer file (policy in
 // shared/cliDist.mts) records the new spot for both the app's and the
@@ -45,7 +45,7 @@ import { dropShelved, isShelved, setShelved } from "./worktrees/shelved";
 type MovedWorktree = { oldId: string; newId: string; newPath: string };
 
 export async function moveDataDir(
-  // The new parent, or undefined to rename in place.
+  // The new parent, or undefined to reset to the default location.
   parentDir: string | undefined,
   // Electron-side pre-rename hook: the caller closes its fs watchers on
   // the data dir here -- they're moot anyway, the app relaunches after
@@ -58,7 +58,7 @@ export async function moveDataDir(
   const pointerFile = dataDirPointerPath();
   const legacyPointerFile = legacyDataDirPointerPath();
   const parent =
-    parentDir === undefined ? dirname(oldDir) : expandHome(parentDir);
+    parentDir === undefined ? dirname(defaultDataDir()) : expandHome(parentDir);
   // Never resolve against the process cwd: a relative parent would land
   // the data dir somewhere the user never saw.
   if (!isAbsolute(parent)) {
