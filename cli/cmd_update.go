@@ -15,7 +15,8 @@ package main
 // Modes:
 //   (default)         check + stage, then install (directly, or via
 //                     the running app's restart handoff).
-//   --check           query the feed and report. Touches nothing.
+//   --check           query the feed and report. Touches nothing but
+//                     the release-list copy a prerelease build keeps.
 //   --stage           check + download + verify into updates/staged,
 //                     no install. The app's own periodic check runs
 //                     this, so Settings and the CLI share one pipeline.
@@ -161,11 +162,12 @@ func cmdUpdate(_ cliContext, args []string) (int, error) {
 	}
 }
 
-// --check: one feed request, no download, nothing touched on disk.
+// --check: one feed request, no download. The only thing it may
+// touch on disk is the release-list copy (updater.go fetchReleaseList).
 func cmdUpdateCheck() (int, error) {
 	spin := newSpinner()
 	spin.set("checking for updates")
-	release, err := queryFeed()
+	release, _, err := queryFeed()
 	spin.stop()
 	if err != nil {
 		return 1, err

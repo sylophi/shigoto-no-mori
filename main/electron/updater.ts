@@ -16,8 +16,9 @@
 // renderer hides the check button.
 //
 // `SHIGOMORI_UPDATE_FEED_URL` still overrides the feed for end-to-end
-// testing of a signed build. The CLI child inherits it from our
-// environment.
+// testing of a signed build, and `SHIGOMORI_UPDATE_RELEASES_URL` the
+// release list a prerelease build ranks instead (cli/updater.go). The
+// CLI child inherits both from our environment.
 import { join } from "node:path";
 import { app } from "electron";
 import { updaterContract } from "@shared/ipc/modules/updater";
