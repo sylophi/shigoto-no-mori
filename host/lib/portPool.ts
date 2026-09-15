@@ -14,9 +14,9 @@ import { binaryOnPath } from "./util/binaries";
 import { ttlMapCache, ttlValueCache } from "./util/ttlCache";
 
 const INSTALLED_CACHE_TTL_MS = 30_000;
-// The ports section polls every few seconds per open detail page. A
-// TTL past that interval means the state file is read once per window
-// across every page, and a fresh provision still shows within it.
+// The ports dialog polls every few seconds while open. A TTL past
+// that interval means the state file is read once per window across
+// every open dialog, and a fresh provision still shows within it.
 const STATE_CACHE_TTL_MS = 10_000;
 
 const installedCache = ttlValueCache(INSTALLED_CACHE_TTL_MS, () =>

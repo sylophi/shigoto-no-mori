@@ -28,8 +28,7 @@ import type { CleanupError, Project, Worktree } from "@shared/schemas";
 import { LauncherRow } from "./LauncherRow";
 import { LifecycleBanner } from "./LifecycleBanner";
 import { MirrorPill } from "./MirrorPill";
-import { LocalMirrorAction } from "./mirror/LocalMirrorAction";
-import { PortsPanel } from "./ports/PortsSection";
+import { LocalWorktreeActions } from "./LocalWorktreeActions";
 import { RemoteWorktreeActions } from "./RemoteWorktreeActions";
 import { PullRequestSection } from "./pullRequests/PullRequestSection";
 import { ScriptLaunchRow } from "./ScriptLaunchRow";
@@ -242,10 +241,6 @@ export function WorktreeDetailInner({
             </section>
           )}
 
-          {/* On a peer's worktree the ports live in the footer's Ports
-              dialog, with the other cross-device verbs. */}
-          {!remote && <PortsPanel worktree={worktree} hideWhenEmpty />}
-
           <PullRequestSection worktree={worktree} />
 
           <CommitsSection worktree={worktree} />
@@ -268,7 +263,7 @@ export function WorktreeDetailInner({
           remote ? (
             <RemoteWorktreeActions worktree={worktree} project={project} />
           ) : (
-            <LocalMirrorAction worktree={worktree} />
+            <LocalWorktreeActions worktree={worktree} />
           )
         }
       />
