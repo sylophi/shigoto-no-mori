@@ -56,6 +56,7 @@ import {
 } from "../transplant/TransplantChrome";
 import {
   type IgnoreSelection,
+  modeOf,
   resolveIgnores,
   sameSelection,
   selectionOf,
@@ -320,7 +321,11 @@ function Ignores({
     enabled: selection.base === "gitignored",
   });
   const setIgnores = useSetMirrorIgnores();
-  const dirty = draft !== null && !sameSelection(draft, current);
+  // A session whose patterns do not read back as its rule (another
+  // client's) still takes an Apply, which rewrites it as drawn.
+  const dirty =
+    draft !== null &&
+    (!sameSelection(draft, current) || modeOf(draft) !== session.ignoreMode);
   const waiting = selection.base === "gitignored" && ignored.data === undefined;
   const apply = () => {
     if (draft === null) return;

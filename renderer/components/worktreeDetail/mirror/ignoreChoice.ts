@@ -19,6 +19,7 @@ import {
   MIRROR_IGNORES_LIMIT,
   type MirrorIgnoreMode,
   summarizeIgnores,
+  unanchorIgnoredPath,
 } from "@shared/ipc/modules/mirror";
 import type { SyncIgnoredPathsResult } from "@shared/ipc/modules/sync";
 import type { MirrorIgnoreChoice, PullChoice } from "@/hooks/remote/useMirrors";
@@ -179,9 +180,7 @@ export function selectionOf(session: {
         ? "everything"
         : "gitignored",
     leftOut: new Set(
-      ignoreMode === "custom"
-        ? ignores.map((pattern) => pattern.replace(/^\//, ""))
-        : [],
+      ignoreMode === "custom" ? ignores.map(unanchorIgnoredPath) : [],
     ),
     brought: new Set(ignoreMode === "bring" ? broughtPaths(ignores) : []),
   };

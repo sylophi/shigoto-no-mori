@@ -12,7 +12,11 @@ import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { normalizeRelPath } from "@shared/gitPaths";
-import { MIRROR_IGNORES_LIMIT } from "@shared/ipc/modules/mirror";
+import {
+  BRING_PATHS_LIMIT,
+  bringRulesRoom,
+  MIRROR_IGNORES_LIMIT,
+} from "@shared/ipc/modules/mirror";
 import type { SyncIgnoredPathsResult } from "@shared/ipc/modules/sync";
 import { PathPickerModal } from "@/components/configure/PathPickerModal";
 import { Button } from "@/components/ui/button";
@@ -70,6 +74,8 @@ export function MirrorIgnorePicker({
     });
   const chosen = [...excepted].toSorted();
   const copy = IGNORE_BASE_COPY[value.base];
+  // Each brought path costs the gitignore rules two patterns of room.
+  const full = bringing && excepted.size >= BRING_PATHS_LIMIT;
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between gap-3">
@@ -125,6 +131,7 @@ export function MirrorIgnorePicker({
               // The engine never walks into a folder it leaves out, so a
               // path under one cannot be brought on its own.
               unreachable={bringing && insideIgnored}
+              full={full}
               copy={copy}
               onPick={() => toggle(path)}
             />
@@ -142,12 +149,14 @@ function Trailing({
   picked,
   ignored,
   unreachable,
+  full,
   copy,
   onPick,
 }: {
   picked: boolean;
   ignored: boolean;
   unreachable: boolean;
+  full: boolean;
   copy: { action: string; done: string };
   onPick: () => void;
 }) {
@@ -175,6 +184,16 @@ function Trailing({
         title="Tracked by git, so it always crosses. Only ignored files and folders take an exception."
       >
         tracked
+      </span>
+    );
+  }
+  if (full) {
+    return (
+      <span
+        className="px-2 text-[11px] text-muted-foreground/70"
+        title={`A rule brings ${BRING_PATHS_LIMIT} paths at most. Bring a folder higher up, or remove one.`}
+      >
+        limit reached
       </span>
     );
   }
@@ -215,6 +234,10 @@ function IgnoredList({
   );
   const total = Math.max(0, (ignored.data?.total ?? 0) - brought.size);
   const rules = ignored.data?.patterns.length ?? 0;
+  // The rules that fit: all the cap holds, less what the brought paths
+  // take. At the cap itself the wire may have cut the list already.
+  const room = bringRulesRoom(brought.size);
+  const cut = brought.size > 0 ? rules > room : rules >= MIRROR_IGNORES_LIMIT;
   // Every path the wire carries, flowed into as many columns as the
   // card fits: the rule is judged by seeing what it covers. A column
   // is as wide as the longest path, so short names pack side by side,
@@ -227,7 +250,11 @@ function IgnoredList({
   return (
     <>
       {total === 0 ? (
-        <p className={CARD_NOTE}>Nothing ignored yet.</p>
+        <p className={CARD_NOTE}>
+          {brought.size > 0
+            ? "Every ignored path there is brought."
+            : "Nothing ignored yet."}
+        </p>
       ) : (
         <ul
           className={cn(CARD, "gap-x-4 font-mono text-xs")}
@@ -245,9 +272,10 @@ function IgnoredList({
           )}
         </ul>
       )}
-      {rules >= MIRROR_IGNORES_LIMIT && (
+      {cut && (
         <p className="text-xs text-muted-foreground">
-          Only the first {MIRROR_IGNORES_LIMIT} gitignore rules apply.
+          Only the first {Math.min(room, MIRROR_IGNORES_LIMIT)} gitignore rules
+          apply.
         </p>
       )}
     </>

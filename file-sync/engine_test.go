@@ -227,18 +227,27 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 	// Under the create's own ignores: a build folder and a log stay put.
 	writeFileT(t, filepath.Join(local, "dist", "bundle.js"), "built\n")
 	writeFileT(t, filepath.Join(local, "debug.log"), "noise\n")
-	// The bring rule's shape (shared/ipc/modules/sync.ts bringIgnores):
-	// a rule ignores the folder and a trailing pair takes it back out,
-	// whole, a log inside included. A pair for a file inside a folder
-	// that stays ignored does nothing, since the scan never walks in,
-	// which is why the app's picker only offers the topmost entry.
+	// The bring rule's shape (shared/mirrorIgnores.ts bringIgnores): a
+	// rule ignores the folder and, past the marker, a trailing pair
+	// takes it back out, whole, a log inside included. A pair for a
+	// file inside a folder that stays ignored does nothing, since the
+	// scan never walks in, which is why the app's picker only offers
+	// the topmost entry. A picked name is a literal: its glob syntax
+	// is escaped, so the bracketed file crosses, the name the bare
+	// class would have matched stays, and a lone bracket is no error.
 	writeFileT(t, filepath.Join(local, "cache", "data.bin"), "warm\n")
 	writeFileT(t, filepath.Join(local, "cache", "run.log"), "kept\n")
 	writeFileT(t, filepath.Join(local, "dist", "keep.txt"), "unreachable\n")
+	writeFileT(t, filepath.Join(local, "data[1].json"), "picked\n")
+	writeFileT(t, filepath.Join(local, "data1.json"), "not picked\n")
+	writeFileT(t, filepath.Join(local, "lone[x.json"), "picked too\n")
 	ignores := []string{
-		"/dist", "*.log", "cache/",
+		"/dist", "*.log", "*.json", "cache/",
+		"/.git/shigomori-brought",
 		"!/dist/keep.txt", "!/dist/keep.txt/**",
 		"!/cache", "!/cache/**",
+		`!/data\[1\].json`, `!/data\[1\].json/**`,
+		`!/lone\[x.json`, `!/lone\[x.json/**`,
 	}
 
 	d := startTestDaemon(t, gateway, dataDir)
@@ -277,12 +286,14 @@ func TestMirrorTwoWayOverGateway(t *testing.T) {
 			fileEquals(filepath.Join(remote, ".env"), "SECRET=1\n") &&
 			fileEquals(filepath.Join(remote, "cache", "data.bin"), "warm\n") &&
 			fileEquals(filepath.Join(remote, "cache", "run.log"), "kept\n") &&
+			fileEquals(filepath.Join(remote, "data[1].json"), "picked\n") &&
+			fileEquals(filepath.Join(remote, "lone[x.json"), "picked too\n") &&
 			fileEquals(filepath.Join(local, "notes.md"), "from the peer\n")
 	})
 	if !fileAbsent(filepath.Join(remote, ".git")) {
 		t.Fatal(".git crossed to the peer")
 	}
-	if !fileAbsent(filepath.Join(remote, "dist")) || !fileAbsent(filepath.Join(remote, "debug.log")) {
+	if !fileAbsent(filepath.Join(remote, "dist")) || !fileAbsent(filepath.Join(remote, "debug.log")) || !fileAbsent(filepath.Join(remote, "data1.json")) {
 		t.Fatal("an ignored path crossed to the peer")
 	}
 

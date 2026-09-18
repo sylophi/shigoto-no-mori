@@ -47,9 +47,12 @@ export {
 } from "@shared/ipc/modules/sync";
 export {
   anchorIgnoredPath,
+  BRING_PATHS_LIMIT,
   bringIgnores,
+  bringRulesRoom,
   broughtPaths,
   MIRROR_IGNORES_LIMIT,
+  unanchorIgnoredPath,
 } from "@shared/mirrorIgnores";
 
 // A session the pull opens to carry a transplant's ignored files

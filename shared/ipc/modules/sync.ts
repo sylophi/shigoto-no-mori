@@ -187,8 +187,10 @@ export type SyncIgnoredPathsResult = z.infer<
 
 // One folder of a worktree, for the mirror dialog's picker of what
 // stays behind: the same browse the carry-over picker offers, over one
-// checkout instead of the union. `ignored` is git's verdict there, and
-// only ignored entries can be kept back (a tracked file kept back would
+// checkout instead of the union. `ignored` is git's verdict there (a
+// folder a rule names counts even when it holds a tracked file, since
+// the engine reads the rules and stays out of it whole), and only
+// ignored entries take an exception (a tracked file kept back would
 // leave the two git states disagreeing). .git is never listed.
 const SyncWorktreeFolderPayloadSchema = SyncIgnoredPathsPayloadSchema.extend({
   relative: z.string().refine(isSafeRelPath, {
