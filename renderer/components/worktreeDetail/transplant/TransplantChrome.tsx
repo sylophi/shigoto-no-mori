@@ -157,9 +157,9 @@ export function TransplantFooter({
 
 export const MAX_LIST_ROWS = 8;
 
-// The dialogs' file lists (changed, staying behind, carry-over, the
-// mirror's exclusions) share one card: a bordered monospace list
-// showing the first MAX_LIST_ROWS entries and counting the rest.
+// The dialogs' file lists (changed, carry-over) share one card: a
+// bordered monospace list showing the first MAX_LIST_ROWS entries and
+// counting the rest. A list of another shape takes CARD directly.
 export const CARD = "rounded-lg border border-border bg-card p-3";
 export const CARD_NOTE = `${CARD} text-xs text-muted-foreground`;
 
