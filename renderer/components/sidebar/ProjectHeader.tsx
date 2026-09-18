@@ -12,6 +12,9 @@ import { ProjectIcon } from "./ProjectIcon";
 
 interface ProjectHeaderProps {
   project: Project;
+  // Whose icon to show when it isn't this scope's own `project`: a
+  // project only peers hold reads it off one of them.
+  iconFrom?: { projectId: string; deviceId: string };
   // The merged tree's device badge cluster, rendered after the name on
   // the healthy branch only (arrange and missing rows stay quiet).
   badges?: React.ReactNode;
@@ -26,9 +29,7 @@ interface ProjectHeaderProps {
   reorderable?: boolean;
 }
 
-// The header row's shared shell, also worn by RemoteProjectRow so a
-// remote-only project's header keeps this typography through restyles.
-export const PROJECT_HEADER_BASE =
+const baseClass =
   "flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1 text-left text-xs font-medium";
 
 // Header row shared by the healthy and missing-project branches. The
@@ -37,6 +38,7 @@ export const PROJECT_HEADER_BASE =
 // tooltips on names that already fit.
 export function ProjectHeader({
   project,
+  iconFrom,
   badges,
   expanded,
   onToggle,
@@ -47,7 +49,12 @@ export function ProjectHeader({
   reorderable = true,
 }: ProjectHeaderProps) {
   const [nameRef, isTruncated] = useIsTruncated<HTMLSpanElement>();
-  const baseClass = PROJECT_HEADER_BASE;
+  const icon = (
+    <ProjectIcon
+      projectId={iconFrom?.projectId ?? project.id}
+      deviceId={iconFrom?.deviceId}
+    />
+  );
   const trigger = arrangeMode ? (
     <div
       {...listeners}
@@ -64,7 +71,7 @@ export function ProjectHeader({
       {missing ? (
         <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
       ) : (
-        <ProjectIcon projectId={project.id} />
+        icon
       )}
       <span
         ref={nameRef}
@@ -108,7 +115,7 @@ export function ProjectHeader({
           expanded && "rotate-90",
         )}
       />
-      <ProjectIcon projectId={project.id} />
+      {icon}
       <span ref={nameRef} className="min-w-0 truncate">
         {project.name}
       </span>

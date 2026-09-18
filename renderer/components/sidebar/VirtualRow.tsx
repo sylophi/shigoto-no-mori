@@ -6,7 +6,7 @@ import { ROW_LAYOUT, type InboxShelf, type SidebarRow } from "./sidebarRow";
 // What a row needs from the sidebar but this wrapper only forwards,
 // grouped so VirtualRow's own props stay about positioning and hover.
 export interface RowHandlers {
-  onToggle: (projectId: string) => void;
+  onToggle: (groupId: string) => void;
   onToggleShelved: (projectId: string) => void;
   onToggleShelf: (shelf: InboxShelf) => void;
   arrangeMode: boolean;
@@ -58,13 +58,11 @@ export function VirtualRow({
 // hovering in CSS) report to nobody rather than re-rendering the
 // sidebar on every row the cursor crosses.
 function projectIdForRow(row: SidebarRow): string | null {
-  if (row.kind === "project") return row.project.id;
+  if (row.kind === "project") return row.groupId;
   if (row.kind === "worktree") return row.worktree.projectId;
   if (row.kind === "inbox-worktree" || row.kind === "inbox-shelf") return null;
   // Remote rows report the group they were merged into, so hovering a
-  // peer's worktree keeps its local project header's actions alive. A
-  // remote-project header's key IS its group id.
+  // peer's worktree keeps its project header's actions alive.
   if (row.kind === "remote-worktree") return row.groupId;
-  if (row.kind === "remote-project") return row.key;
   return row.projectId;
 }

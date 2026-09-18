@@ -1,10 +1,9 @@
 // The `+` and `…` a project header wears, for a group that may span
 // several devices: this machine's checkout with the peers' merged into
-// it (ProjectRow), or the peers' alone (RemoteProjectRow). Every member
-// is a (device, project) pair with the api its actions run over, and
-// each action mounts under a member's scope so quick create, the form
-// and every menu page land on the right device with no
-// remote-awareness of their own.
+// it, or the peers' alone. Every member is a (device, project) pair
+// with the api its actions run over, and each action mounts under a
+// member's scope so quick create, the form and every menu page land on
+// the right device with no remote-awareness of their own.
 //
 // The `+` creates instantly, on the group's designated device
 // (useQuickCreateDeviceId, picked on the Configure page) when it is
