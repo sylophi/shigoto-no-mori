@@ -9,20 +9,35 @@ export function sortProjects(
   projects: Project[],
   mode: ProjectSortMode,
 ): Project[] {
+  return sortByProject(projects, mode, (project) => project);
+}
+
+// The same orders over anything that stands for a project, so the tree
+// can sort its groups (a peer-only project among the local ones) by
+// the one rule.
+export function sortByProject<T>(
+  items: T[],
+  mode: ProjectSortMode,
+  projectOf: (item: T) => Project,
+): T[] {
+  const byName = (a: T, b: T) =>
+    projectOf(a).name.localeCompare(projectOf(b).name);
   switch (mode) {
     case "manual":
-      return projects;
+      return items;
     case "alphabetical":
-      return projects.toSorted((a, b) => a.name.localeCompare(b.name));
+      return items.toSorted(byName);
     case "recent":
-      return projects.toSorted((a, b) => {
-        const diff = (b.lastUsed ?? 0) - (a.lastUsed ?? 0);
-        return diff !== 0 ? diff : a.name.localeCompare(b.name);
+      return items.toSorted((a, b) => {
+        const diff =
+          (projectOf(b).lastUsed ?? 0) - (projectOf(a).lastUsed ?? 0);
+        return diff !== 0 ? diff : byName(a, b);
       });
     case "frequent":
-      return projects.toSorted((a, b) => {
-        const diff = (b.recentCount ?? 0) - (a.recentCount ?? 0);
-        return diff !== 0 ? diff : a.name.localeCompare(b.name);
+      return items.toSorted((a, b) => {
+        const diff =
+          (projectOf(b).recentCount ?? 0) - (projectOf(a).recentCount ?? 0);
+        return diff !== 0 ? diff : byName(a, b);
       });
     default:
       return assertNever(mode);

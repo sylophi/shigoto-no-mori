@@ -14,9 +14,20 @@ export function applyPose(): void {
   const doubutsu = pose.get("doubutsu") !== "0";
   localStorage.setItem("shigomori.theme", theme);
   localStorage.setItem("shigomori.doubutsu", String(doubutsu));
+  // Posed over whatever the lab session saved, so a reload keeps the
+  // rest of the client config (folds, the sidebar view, quick-create
+  // picks) the way the real store would.
+  // Parsed here rather than through a renderer helper: this runs
+  // before the bridge owns window.api, when no renderer module may load.
+  let stored: Record<string, unknown> = {};
+  try {
+    stored = JSON.parse(localStorage.getItem("sm.lab.clientConfig") ?? "{}");
+  } catch {
+    // Corrupt storage reads as defaults.
+  }
   localStorage.setItem(
     "sm.lab.clientConfig",
-    JSON.stringify({ theme, doubutsu }),
+    JSON.stringify({ ...stored, theme, doubutsu }),
   );
   document.documentElement.classList.toggle("dark", theme === "dark");
   document.documentElement.style.colorScheme = theme;

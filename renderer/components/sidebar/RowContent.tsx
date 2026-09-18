@@ -3,7 +3,6 @@ import { assertNever } from "@/lib/utils";
 import { InboxRow } from "./inbox/InboxRow";
 import { InboxShelfRow } from "./inbox/InboxShelfRow";
 import { ProjectRow } from "./ProjectRow";
-import { RemoteProjectRow } from "./RemoteProjectRow";
 import { RemoteWorktreeRow } from "./RemoteWorktreeRow";
 import { ShelvedToggleRow } from "./ShelvedToggleRow";
 import { WorktreeRow } from "./WorktreeRow";
@@ -11,7 +10,7 @@ import type { InboxShelf, SidebarRow } from "./sidebarRow";
 
 interface RowContentProps {
   row: SidebarRow;
-  onToggle: (projectId: string) => void;
+  onToggle: (groupId: string) => void;
   onToggleShelved: (projectId: string) => void;
   onToggleShelf: (shelf: InboxShelf) => void;
   arrangeMode: boolean;
@@ -31,10 +30,12 @@ export function RowContent({
       return (
         <ProjectRow
           project={row.project}
+          local={row.local}
+          groupId={row.groupId}
           expanded={row.expanded}
           devices={row.devices}
           members={row.members}
-          onToggle={() => onToggle(row.project.id)}
+          onToggle={() => onToggle(row.groupId)}
           arrangeMode={arrangeMode}
           isHovered={isHovered}
         />
@@ -50,16 +51,6 @@ export function RowContent({
           reachable={row.reachable}
           tone={row.tone}
           pr={row.pr}
-        />
-      );
-    case "remote-project":
-      return (
-        <RemoteProjectRow
-          name={row.name}
-          count={row.count}
-          devices={row.devices}
-          members={row.members}
-          isHovered={isHovered}
         />
       );
     case "inbox-worktree":

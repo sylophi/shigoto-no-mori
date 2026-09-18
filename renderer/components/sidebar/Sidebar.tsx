@@ -18,6 +18,10 @@ import {
   useCollapsedProjects,
   useToggleCollapsedProject,
 } from "@/hooks/projects/useCollapsedProjects";
+import {
+  useCollapsedRemoteProjects,
+  useToggleCollapsedRemoteProject,
+} from "@/hooks/projects/useCollapsedRemoteProjects";
 import { useAccountStatus } from "@/hooks/account/useAccount";
 import { useAllProjectShigomoriConfigs } from "@/hooks/config/useShigomoriConfig";
 import { useAllProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
@@ -35,7 +39,11 @@ import { SettingsSidebarNav } from "@/components/settings/SettingsSidebarNav";
 import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
 import { useFanOutErrorToast } from "./useFanOutErrorToast";
-import { buildSidebarRows } from "./buildSidebarRows";
+import {
+  buildSidebarRows,
+  remoteGroupId,
+  remoteGroupKeyOf,
+} from "./buildSidebarRows";
 import { useDeviceBadges } from "./DeviceBadge";
 import { useDeviceFilter } from "./deviceFilter";
 import { DeviceFilterBar } from "./DeviceFilterBar";
@@ -147,9 +155,28 @@ function Forest({
   // Absence == expanded, so new projects default open. Persisted in
   // state.json (like the sort preference) so a relaunch keeps the tree
   // the way the user pruned it; the remove handler prunes deleted ids.
+  // A project only peers hold folds the same way, its fold kept by
+  // this window since no host here has the project.
   const { data: collapsedIds = [] } = useCollapsedProjects();
   const toggleCollapsed = useToggleCollapsedProject();
+  const collapsedRemoteKeys = useCollapsedRemoteProjects();
+  const toggleCollapsedRemote = useToggleCollapsedRemoteProject();
+  // One fold per repo: narrowed to a peer, a repo this machine also
+  // holds is drawn as that peer's group, and its fold is still the
+  // local project's, read and written under the local id.
+  const localIdByIdentity = new Map<string, string>();
+  for (const project of projects) {
+    if (project.identity != null && project.pathExists !== false) {
+      localIdByIdentity.set(project.identity, project.id);
+    }
+  }
   const collapsed = new Set(collapsedIds);
+  for (const [identity, id] of localIdByIdentity) {
+    if (collapsed.has(id)) collapsed.add(remoteGroupId(identity));
+  }
+  for (const key of collapsedRemoteKeys) {
+    if (!localIdByIdentity.has(key)) collapsed.add(remoteGroupId(key));
+  }
   // Per-project "Show shelved" reveal. Transient on purpose, since the
   // whole point of shelving is to keep the noise down on a fresh window.
   const [shelvedExpanded, setShelvedExpanded] = useState<Set<string>>(
@@ -167,8 +194,12 @@ function Forest({
     !arrangeMode && !settingsOpen && pinnedView === undefined,
   );
 
-  const toggleExpanded = (projectId: string) => {
-    toggleCollapsed.mutate(projectId);
+  const toggleExpanded = (groupId: string) => {
+    const remoteKey = remoteGroupKeyOf(groupId);
+    const localId =
+      remoteKey === undefined ? groupId : localIdByIdentity.get(remoteKey);
+    if (localId !== undefined) toggleCollapsed.mutate(localId);
+    else if (remoteKey !== undefined) toggleCollapsedRemote.mutate(remoteKey);
   };
 
   const toggleShelved = (projectId: string) => {
@@ -245,6 +276,7 @@ function Forest({
         projects: local.projects,
         worktreeQueries: local.worktreeQueries,
         collapsed,
+        sortMode,
         shelvedExpanded,
         arrangeMode,
         remote: shownRemote,

@@ -6,7 +6,7 @@ import type { SidebarDeviceBadge } from "./DeviceBadge";
 // (the live one) has no header and no toggle, so it isn't in this union.
 export type InboxShelf = "shelved" | "merged";
 
-// One device's checkout of a remote-only project group.
+// One peer device's checkout of a project group.
 export interface RemoteProjectMember {
   deviceId: string;
   deviceLabel: string;
@@ -14,14 +14,22 @@ export interface RemoteProjectMember {
 }
 
 export type SidebarRow =
-  // `devices` lists the peer devices whose worktrees merged into this
-  // project's group (empty for a purely local project), for the
-  // header's badge cluster, and `members` the same peers' checkouts,
-  // for the header's actions.
+  // A project header, for one repo wherever it is checked out: on this
+  // machine with any peers' checkouts merged in, or on peers alone.
+  // `project` is this machine's checkout when `local`, else the first
+  // peer's, standing in for the group. `groupId` is what the fold is
+  // kept under and what the group's rows report their hover to: the
+  // local project's id, or a peer-only group's (remoteGroupId).
+  // `devices` lists the peer devices in the group (empty for a purely
+  // local project), for the header's badge cluster, and `members` the
+  // same peers' checkouts, for the header's actions. A peer-only group
+  // may span several devices sharing one repo identity.
   | {
       kind: "project";
       key: string;
+      groupId: string;
       project: Project;
+      local: boolean;
       expanded: boolean;
       devices: readonly SidebarDeviceBadge[];
       members: readonly RemoteProjectMember[];
@@ -57,9 +65,9 @@ export type SidebarRow =
   | { kind: "worktree-error"; key: string; projectId: string }
   // A peer device's worktree, merged into the tree beside the local
   // rows: under the local project sharing its repo identity when one
-  // exists, else under a remote-project header. groupId names the group
-  // it renders in (the local project's id, or the remote group key) so
-  // hover attribution works without re-deriving the merge.
+  // exists, else under a peer-only project header. groupId names the
+  // group it renders in (its header's groupId) so hover attribution
+  // works without re-deriving the merge.
   | {
       kind: "remote-worktree";
       key: string;
@@ -75,20 +83,6 @@ export type SidebarRow =
       // row's off this machine's.
       pr: PullRequest | undefined;
       groupId: string;
-    }
-  // Header for remote worktrees whose project has no local counterpart.
-  // May span several devices sharing one repo identity: `members` names
-  // every (device, project) pair, in device order, and the header's
-  // actions act on whichever of them are live. Its key doubles as the
-  // group id its worktree rows carry. No collapse state: nothing
-  // persists a fold for a foreign project.
-  | {
-      kind: "remote-project";
-      key: string;
-      name: string;
-      count: number;
-      devices: readonly SidebarDeviceBadge[];
-      members: readonly RemoteProjectMember[];
     }
   | {
       kind: "shelved-toggle";
@@ -138,7 +132,6 @@ export const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
   "inbox-worktree": 66,
   "inbox-shelf": 36,
   "remote-worktree": 40,
-  "remote-project": 28,
 };
 
 // Where the row sits in the scroller, read off the kind rather than
@@ -163,5 +156,4 @@ export const ROW_LAYOUT: Record<SidebarRow["kind"], string> = {
   "inbox-worktree": "px-2 pb-1",
   "inbox-shelf": "px-2 pb-1",
   "remote-worktree": "px-2 pl-5",
-  "remote-project": "px-2",
 };

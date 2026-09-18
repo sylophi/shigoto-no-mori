@@ -342,6 +342,15 @@ export const ClientConfigSchema = z.object({
   // of a host, so a hostless client keeps one too. Absent means the
   // tree.
   sidebarView: SidebarViewSchema.optional(),
+  // The sidebar's folded projects that have no checkout on this
+  // machine, by group key (repo identity, or `${deviceId}/${projectId}`
+  // for an identity-less one). A local project's fold is its host's
+  // (state.json, host/lib/projects/collapsed.ts). A peer-only project
+  // has no host here to keep one, and a hostless client has no host at
+  // all, so the window keeps theirs
+  // (renderer/hooks/projects/useCollapsedRemoteProjects.ts is the only
+  // reader and writer).
+  collapsedRemoteProjects: z.array(z.string()).optional(),
 });
 export type ClientConfig = z.infer<typeof ClientConfigSchema>;
 
