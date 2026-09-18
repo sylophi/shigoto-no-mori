@@ -515,8 +515,16 @@
   font-weight: 500;
   -webkit-text-stroke: 0.2px currentColor;
 }
+/* A step under the body: the contrast a muted prefix or suffix beside
+   a title wants. */
 .doubutsu .font-normal {
   font-weight: 500;
+}
+/* A whole button at 500 read as a second, lighter font next to every
+   other control, so a button carrying font-normal holds the body's
+   700. */
+.doubutsu [data-slot="button"].font-normal {
+  font-weight: 700;
 }
 .doubutsu .font-medium {
   font-weight: 700;
