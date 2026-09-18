@@ -6,25 +6,51 @@ flows on one machine. Written for people and for agents.
 The automated checks (`pnpm <name>:check`, `pnpm hub:check`, listed
 in `lefthook.yml`) are not covered here.
 
+This is a reference, not a checklist. The commands are examples: test
+what your change touches, pick your own names, ports and order, and
+skip the rest. The one part to keep as written is the next section.
+
+## Sharing the machine
+
+Other sessions (agents in other worktrees, the owner) may be testing
+at the same time. Profiles, ports and the account's device list are
+shared by the whole machine, not per worktree.
+
+- **Put a session tag in every profile name**: `<tag>-a`, not `a`. The
+  worktree folder name works. A device's name ends in `[<profile>]`,
+  so this keeps device names apart too. Two sessions on one profile
+  name share its folders, and `--fresh` wipes them under the other.
+- **Touch only what carries your tag**: profiles, devices, and
+  processes (match on your worktree path, never on `Electron`). An
+  unknown device on the account may be another session's live test.
+- **Debug ports are examples.** Use any free ones.
+- **One smoke run at a time.** It uses the fixed profiles `e2e-a` and
+  `e2e-b` and wipes them when it starts.
+
 ## Quick start: two devices on one machine
 
 ```sh
-# 1. Sign the plain dev app in once (Continue with GitHub). Then quit it.
+# 0. Once per machine: sign the plain dev app in (Continue with
+#    GitHub), then quit it. Skip it unless step 2 boots signed out.
 pnpm dev
 
-# 2. Start the primary dev app as profile "a", with a debug port.
-SHIGOMORI_DEBUG_PORT=9222 pnpm dev --profile a --fresh --clone-login
+# 1. In each terminal: your session tag and two free ports.
+TAG=$(basename "$(git rev-parse --show-toplevel)")
+PORT_A=9222 PORT_B=9223
 
-# 3. In another terminal, start a second window as profile "b".
-SHIGOMORI_DEBUG_PORT=9223 pnpm dev:peer b --fresh --clone-login
+# 2. Start the primary dev app as profile "$TAG-a", with a debug port.
+SHIGOMORI_DEBUG_PORT=$PORT_A pnpm dev --profile $TAG-a --fresh --clone-login
+
+# 3. In another terminal, start a second window as profile "$TAG-b".
+SHIGOMORI_DEBUG_PORT=$PORT_B pnpm dev:peer $TAG-b --fresh --clone-login
 
 # 4. Drive either window from the shell.
-node scripts/e2e/drive.mts 9222 eval 'window.api.hub.status()'
-node scripts/e2e/drive.mts 9223 shot /tmp/b.png
+node scripts/e2e/drive.mts $PORT_A eval 'window.api.hub.status()'
+node scripts/e2e/drive.mts $PORT_B shot /tmp/$TAG-b.png
 ```
 
 Each window's Devices page should list the other device as online,
-then connected. The device names end in `[a]` and `[b]`.
+then connected. The device names end in `[<tag>-a]` and `[<tag>-b]`.
 
 When you are done, revoke both devices before quitting. Closing the
 windows does not unenroll them. See "Cleaning up after a session".
@@ -155,11 +181,11 @@ characters. `scripts/lib/devProfile.mts` owns the layout.
 ### Commands
 
 ```sh
-# Primary: a full pnpm dev (build, vite server, deep links) running as profile "a".
-pnpm dev --profile a [--fresh] [--clone-login]
+# Primary: a full pnpm dev (build, vite server, deep links) running as profile "<tag>-a".
+pnpm dev --profile <tag>-a [--fresh] [--clone-login]
 
-# Peer: a second window running as profile "b", using the primary's build and vite server.
-pnpm dev:peer b [--fresh] [--clone-login]
+# Peer: a second window running as profile "<tag>-b", using the primary's build and vite server.
+pnpm dev:peer <tag>-b [--fresh] [--clone-login]
 ```
 
 | Flag            | Effect                                                                                                                                |
@@ -300,11 +326,13 @@ out** button is not an option either in a cloned window (see Rules).
 # 1. Quit both terminals (Ctrl+C).
 # 2. Revoke the profile devices from the plain dev app, which stays a
 #    real device. Their names end in "[<profile>]". Either use its
-#    Devices page, or open it with a debug port and revoke them all:
-SHIGOMORI_DEBUG_PORT=9222 pnpm dev
-node scripts/e2e/drive.mts 9222 eval 'window.api.account.listDevices().then(ds => Promise.all(ds.filter(d => /\[[a-z0-9-]+\]$/.test(d.name) && d.deviceId !== window.api.deviceId).map(d => window.api.account.revokeDevice(d.deviceId).then(() => d.name))))'
+#    Devices page, or open it with a debug port and revoke the ones
+#    that carry your tag (not every "[...]": those may be another
+#    session's live devices):
+SHIGOMORI_DEBUG_PORT=$PORT_A pnpm dev
+node scripts/e2e/drive.mts $PORT_A eval "window.api.account.listDevices().then(ds => Promise.all(ds.filter(d => / \[$TAG-[a-z0-9-]+\]$/.test(d.name) && d.deviceId !== window.api.deviceId).map(d => window.api.account.revokeDevice(d.deviceId).then(() => d.name))))"
 # 3. Delete the local halves, or launch with --fresh next time.
-rm -rf ~/.smd-profiles/<name> "$HOME/Library/Application Support/Shigoto no Mori (dev)/profiles/<name>"
+for p in $TAG-a $TAG-b; do rm -rf ~/.smd-profiles/$p "$HOME/Library/Application Support/Shigoto no Mori (dev)/profiles/$p"; done
 ```
 
 The same two calls revoke one device by hand:
