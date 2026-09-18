@@ -2,46 +2,49 @@
 // several devices: this machine's checkout with the peers' merged into
 // it (ProjectRow), or the peers' alone (RemoteProjectRow). Every member
 // is a (device, project) pair with the api its actions run over, and
-// each action mounts under that member's scope so quick create, the
-// form and every menu page land on the right device with no
+// each action mounts under a member's scope so quick create, the form
+// and every menu page land on the right device with no
 // remote-awareness of their own.
 //
 // The `+` creates instantly, on the group's designated device
-// (useQuickCreateDeviceId) when it is live, else the first live member,
-// this machine first. The `…` carries the designation as a "Quick
-// create on" pick whenever there is a choice, then the action list:
-// this machine's inline (or the one live peer's, on a remote-only
-// header), and every other live peer's behind a submenu named for it.
-// A member with no session gets no actions, the same as a missing
-// local project.
-import { Check, MoreHorizontal } from "lucide-react";
+// (useQuickCreateDeviceId, picked on the Configure page) when it is
+// live, else the first live member, this machine first. The `…` is one
+// action list however many devices the group spans: its create pair
+// follows the `+`, and the pages open for this machine's copy (the
+// `+`'s device on a header with no local checkout). Every page carries
+// a device tab bar (ProjectDevicePage), so the menu offers no device
+// choice of its own, save for Remove: it has no page to make the choice
+// on, so on a group spanning devices it opens a submenu naming each. A
+// member with no session gets no actions, the same as a missing local
+// project.
+import { MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
+  DropdownMenuItem,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-  DropdownMenuGroup,
-  DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
 import {
   commandAccessOf,
   usePeerCommandAccess,
 } from "@/hooks/remote/useCommandAccess";
-import {
-  useQuickCreateDeviceId,
-  useSetQuickCreateDevice,
-} from "@/hooks/config/useQuickCreateDevice";
+import { useQuickCreateDeviceId } from "@/hooks/config/useQuickCreateDevice";
 import { MaybeHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { localDeviceId } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import type { Project } from "@shared/schemas";
-import { ProjectMenuItems, useProjectMenuRemoveArm } from "./ProjectMenuItems";
+import {
+  ProjectCreateMenuItems,
+  ProjectPageMenuItems,
+  ProjectRemoveMenuItem,
+  useProjectMenuRemoveArm,
+  type ProjectMenuRemoveArm,
+} from "./ProjectMenuItems";
 import { QuickCreateButton } from "./QuickCreateButton";
 import { PROJECT_MENU_TRIGGER_CLASS } from "./sidebarChrome";
 import type { RemoteProjectMember } from "./sidebarRow";
@@ -126,17 +129,19 @@ export function ProjectGroupActions({
   const creator =
     canCreate.find((member) => member.deviceId === designatedId) ??
     canCreate[0];
-  // The action list that shows inline: this machine's, or the only
-  // live peer's on a header with no local checkout.
-  const inline =
-    members.find((member) => member.isThisDevice) ??
-    (live.length === 1 ? live[0] : undefined);
-  const submenus = live.filter((member) => member !== inline);
+  // Whose copy the pages open for (and, on a group of one, the remove
+  // acts on): this machine's, or the `+`'s device on a header with no local checkout.
+  const primary =
+    members.find((member) => member.isThisDevice) ?? creator ?? live[0];
+  // One arm for the whole menu, keyed by device in the Remove submenu.
   const { removeArm, onOpenChange } = useProjectMenuRemoveArm();
-  // A group of one has nothing to name devices for: no pick, no
-  // labels, the actions plain.
   const spansDevices = members.length > 1;
-  if (inline === undefined && live.length === 0) return null;
+  // Remove lists the devices only with a copy among them to remove.
+  // When every reachable one is terrier's, the plain item says so, as
+  // it does for a group of one, rather than open onto all-inert rows.
+  const listsRemoves =
+    spansDevices && live.some((member) => member.project.source !== "terrier");
+  if (primary === undefined) return null;
 
   return (
     <>
@@ -166,101 +171,82 @@ export function ProjectGroupActions({
           }
         />
         <DropdownMenuContent align="end" sideOffset={2}>
-          {spansDevices && (
-            <>
-              <QuickCreatePick
-                identity={identity}
-                members={members}
-                // The pick itself, as the Configure page ticks it. The
-                // `+` falls back while the pick can't take a create.
-                current={designatedId ?? creator?.deviceId}
+          {creator !== undefined && (
+            <MaybeHostScope deviceId={creator.deviceId} api={creator.api}>
+              <ProjectCreateMenuItems
+                project={creator.project}
+                subject="project"
               />
-              <DropdownMenuSeparator />
-            </>
-          )}
-          {inline !== undefined && (
-            <MaybeHostScope deviceId={inline.deviceId} api={inline.api}>
-              {/* Named like the peers' submenus when the group spans
-                  devices, so "Configure" reads as configuring THIS
-                  member's copy rather than the group. The group is
-                  what lets the label render (Base UI ties them). */}
-              <DropdownMenuGroup>
-                {spansDevices && (
-                  <DropdownMenuLabel>{inline.deviceLabel}</DropdownMenuLabel>
-                )}
-                <ProjectMenuItems
-                  project={inline.project}
-                  subject="project"
-                  removeArm={removeArm}
-                />
-              </DropdownMenuGroup>
             </MaybeHostScope>
           )}
-          {inline !== undefined && submenus.length > 0 && (
-            <DropdownMenuSeparator />
+          <MaybeHostScope deviceId={primary.deviceId} api={primary.api}>
+            <ProjectPageMenuItems project={primary.project} subject="project" />
+            {!listsRemoves && (
+              <ProjectRemoveMenuItem
+                project={primary.project}
+                subject="project"
+                removeArm={removeArm}
+              />
+            )}
+          </MaybeHostScope>
+          {listsRemoves && (
+            <RemoveSubmenu
+              members={members}
+              removeArm={removeArm}
+              onOpenChange={onOpenChange}
+            />
           )}
-          {submenus.map((member) => (
-            <MemberSubmenu key={member.deviceId} member={member} />
-          ))}
         </DropdownMenuContent>
       </DropdownMenu>
     </>
   );
 }
 
-// The designation pick. Lives inside the menu content, so its writer
-// exists only while the menu is open rather than on every header.
-function QuickCreatePick({
-  identity,
+// Remove is the one entry with no page to pick a device on, so on a
+// header spanning devices it opens onto the pick itself: every member
+// by name, each a two-step remove of that device's copy. A member with
+// no session stays listed but inert, so the list always matches the
+// header's badges, which already say it is away. Leaving the submenu
+// drops a half-confirmed remove, the same as closing the menu.
+function RemoveSubmenu({
   members,
-  current,
+  removeArm,
+  onOpenChange,
 }: {
-  identity: string | null | undefined;
   members: readonly GroupMember[];
-  current: string | undefined;
+  removeArm: ProjectMenuRemoveArm;
+  onOpenChange: (open: boolean) => void;
 }) {
-  const setDevice = useSetQuickCreateDevice(identity);
-  return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger>Quick create on</DropdownMenuSubTrigger>
-      <DropdownMenuSubContent>
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Where the + creates</DropdownMenuLabel>
-          {members.map((member) => (
-            <DropdownMenuItem
-              key={member.deviceId}
-              onClick={() => setDevice(member.deviceId)}
-            >
-              <Check
-                className={cn(
-                  "size-3.5",
-                  current === member.deviceId ? "opacity-100" : "opacity-0",
-                )}
-              />
-              {member.deviceLabel}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuGroup>
-      </DropdownMenuSubContent>
-    </DropdownMenuSub>
-  );
-}
-
-// One peer's action list behind its own submenu, each with its own
-// remove arm so a confirm on one device never carries to another.
-function MemberSubmenu({ member }: { member: LiveMember }) {
-  const { removeArm, onOpenChange } = useProjectMenuRemoveArm();
   return (
     <DropdownMenuSub onOpenChange={onOpenChange}>
-      <DropdownMenuSubTrigger>{member.deviceLabel}</DropdownMenuSubTrigger>
+      <DropdownMenuSubTrigger variant="destructive">
+        Remove
+      </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
-        <MaybeHostScope deviceId={member.deviceId} api={member.api}>
-          <ProjectMenuItems
-            project={member.project}
-            subject="project"
-            removeArm={removeArm}
-          />
-        </MaybeHostScope>
+        {members.map((member) =>
+          member.api === undefined ? (
+            <DropdownMenuItem
+              key={member.deviceId}
+              variant="destructive"
+              disabled
+            >
+              {member.deviceLabel}
+            </DropdownMenuItem>
+          ) : (
+            <MaybeHostScope
+              key={member.deviceId}
+              deviceId={member.deviceId}
+              api={member.api}
+            >
+              <ProjectRemoveMenuItem
+                project={member.project}
+                subject="project"
+                removeArm={removeArm}
+                device={{ id: member.deviceId, label: member.deviceLabel }}
+              />
+            </MaybeHostScope>
+          ),
+        )}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );

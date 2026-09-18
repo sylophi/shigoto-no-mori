@@ -2,7 +2,10 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
+import {
+  CONFIRM_QUICK_MS,
+  useConfirmTwiceKeyed,
+} from "@/hooks/ui/useConfirmTwice";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
 import {
   useProjectNav,
@@ -20,8 +23,10 @@ interface ProjectMenuItemsProps {
   subject: "project" | "worktree";
   // The two-step remove confirm, owned by the menu's host so it can be
   // reset the moment the menu closes (see useProjectMenuRemoveArm).
-  removeArm: ReturnType<typeof useConfirmTwice>;
+  removeArm: ProjectMenuRemoveArm;
 }
+
+export type ProjectMenuRemoveArm = ReturnType<typeof useConfirmTwiceKeyed>;
 
 const LABELS = {
   project: {
@@ -41,83 +46,134 @@ const LABELS = {
 // fires the actual remove. The host wires `onOpenChange` to its menu
 // root so a leftover arm is cleared the instant the menu closes. The
 // popup's own unmount comes only after its exit animation, and a reopen
-// inside that window would otherwise find the item still armed.
+// inside that window would otherwise find the item still armed. Keyed,
+// so a menu listing several removes (the header's per-device submenu)
+// holds one arm between them and can never have two half-confirmed.
 export function useProjectMenuRemoveArm() {
-  const removeArm = useConfirmTwice(CONFIRM_QUICK_MS);
+  const removeArm = useConfirmTwiceKeyed(CONFIRM_QUICK_MS);
   const onOpenChange = (open: boolean) => {
     if (!open) removeArm.reset();
   };
   return { removeArm, onOpenChange };
 }
 
-// The project's action list, shared by the header's `…` dropdown and the
-// inbox row's right-click menu. Scope-aware through its hooks: mounted
-// under a peer's HostScopeProvider (a remote project header, a peer's
-// inbox row) every item acts on and links into that device.
-export function ProjectMenuItems({
+// The create pair that leads the list. Its own component so a header
+// spanning devices can mount it under the device its `+` creates on
+// while the rest of the list stays with the device the menu opened for.
+export function ProjectCreateMenuItems({
   project,
   subject,
-  removeArm: { armed: removeArmed, trigger: triggerRemove },
-}: ProjectMenuItemsProps) {
-  const { toProjectPage } = useProjectNav();
-  const labels = LABELS[subject];
-  const missing = project.pathExists === false;
-  const fromTerrier = project.source === "terrier";
-  const removeProject = useRemoveProject();
+}: Pick<ProjectMenuItemsProps, "project" | "subject">) {
   const {
     quickCreate,
     openCreateForm,
     isPending: creating,
   } = useQuickCreateWorktree();
+  if (project.pathExists === false) return null;
+
+  return (
+    <>
+      <DropdownMenuItem
+        disabled={creating}
+        onClick={() => void quickCreate(project.id)}
+      >
+        {LABELS[subject].quickCreate}
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={() => openCreateForm(project.id)}>
+        New worktree from…
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+    </>
+  );
+}
+
+// The project pages, behind the create pair. Each leads to a page with
+// a device tab bar of its own (ProjectDevicePage), so the device the
+// menu opened for is only where that page starts.
+export function ProjectPageMenuItems({
+  project,
+  subject,
+}: Pick<ProjectMenuItemsProps, "project" | "subject">) {
+  const { toProjectPage } = useProjectNav();
+  if (project.pathExists === false) return null;
 
   const goTo = (page: ProjectPage) => toProjectPage(page, project.id);
 
   return (
     <>
-      {!missing && (
-        <>
-          <DropdownMenuItem
-            disabled={creating}
-            onClick={() => void quickCreate(project.id)}
-          >
-            {labels.quickCreate}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => openCreateForm(project.id)}>
-            New worktree from…
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => goTo("convertExternal")}>
-            Convert external worktrees
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => goTo("worktreeLocation")}>
-            Set worktree location
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => goTo("branches")}>
-            Manage branches
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => goTo("configure")}>
-            {labels.configure}
-          </DropdownMenuItem>
-        </>
-      )}
-      {/* A terrier-sourced project has nothing here to remove: its presence
-          is terrier's call (`terrier rm`), so say that instead of offering
-          a remove that the main process would refuse anyway. */}
-      {fromTerrier ? (
-        <DropdownMenuItem disabled>Registered via terrier</DropdownMenuItem>
-      ) : (
-        <DropdownMenuItem
-          variant="destructive"
-          closeOnClick={removeArmed}
-          onClick={(event) => {
-            if (!removeArmed) event.preventDefault();
-            triggerRemove(() => removeProject.mutate(project.id));
-          }}
-        >
-          {removeArmed ? "Click again to confirm" : labels.remove}
-        </DropdownMenuItem>
-      )}
+      <DropdownMenuItem onClick={() => goTo("convertExternal")}>
+        Convert external worktrees
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={() => goTo("worktreeLocation")}>
+        Set worktree location
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={() => goTo("branches")}>
+        Manage branches
+      </DropdownMenuItem>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem onClick={() => goTo("configure")}>
+        {LABELS[subject].configure}
+      </DropdownMenuItem>
+    </>
+  );
+}
+
+// The remove that closes the list, under the scope of the device it
+// removes from. Plain, it reads "Remove". Given a `device` it is that
+// device's row in a header's Remove submenu: named for the device,
+// keyed by it in the shared arm, and red even when inert, as everything
+// in that submenu is.
+export function ProjectRemoveMenuItem({
+  project,
+  subject,
+  removeArm,
+  device,
+}: ProjectMenuItemsProps & {
+  device?: { id: string; label: string };
+}) {
+  const armKey = device?.id ?? "";
+  const removeProject = useRemoveProject();
+  const armed = removeArm.armedKey === armKey;
+  // A terrier-sourced project has nothing here to remove: its presence
+  // is terrier's call (`terrier rm`), so say that instead of offering
+  // a remove that the main process would refuse anyway.
+  if (project.source === "terrier") {
+    return device === undefined ? (
+      <DropdownMenuItem disabled>Registered via terrier</DropdownMenuItem>
+    ) : (
+      <DropdownMenuItem variant="destructive" disabled>
+        {device.label}
+        <span className="ml-auto pl-3">via terrier</span>
+      </DropdownMenuItem>
+    );
+  }
+  return (
+    <DropdownMenuItem
+      variant="destructive"
+      closeOnClick={armed}
+      onClick={(event) => {
+        if (!armed) event.preventDefault();
+        removeArm.trigger(armKey, () => removeProject.mutate(project.id));
+      }}
+    >
+      {armed
+        ? "Click again to confirm"
+        : (device?.label ?? LABELS[subject].remove)}
+    </DropdownMenuItem>
+  );
+}
+
+// The whole action list under one scope, as the inbox row's right-click
+// menu shows it (the project header composes the parts itself, across
+// devices). Scope-aware through its hooks: mounted under a peer's
+// HostScopeProvider every item acts on and links into that device.
+export function ProjectMenuItems(props: ProjectMenuItemsProps) {
+  const { project, subject } = props;
+  return (
+    <>
+      <ProjectCreateMenuItems project={project} subject={subject} />
+      <ProjectPageMenuItems project={project} subject={subject} />
+      <ProjectRemoveMenuItem {...props} />
     </>
   );
 }

@@ -1,13 +1,11 @@
 // The Configure page's "Create on" pick: which device the project
 // header's `+` creates a worktree on, out of every device holding this
 // repo -- the same list the new-worktree form's device picker draws
-// (useDeviceTargets), minus the ones with no checkout. The same
-// preference the header's own menu offers, written the same way, so
-// the two can't disagree. It is a preference of the client making the
-// pick, kept in its client config rather than in project.json: the
-// repo has a project file on every device, and one pick has to hold
-// across all of them. A project held on one device alone has nothing
-// to pick, so the section stays out.
+// (useDeviceTargets), minus the ones with no checkout. It is a
+// preference of the client making the pick, kept in its client config
+// rather than in project.json: the repo has a project file on every
+// device, and one pick has to hold across all of them. A project held
+// on one device alone has nothing to pick, so the section stays out.
 import { Check } from "lucide-react";
 import { SectionHeading } from "@/components/ui/section-heading";
 import {

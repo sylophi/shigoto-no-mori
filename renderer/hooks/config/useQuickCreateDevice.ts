@@ -15,9 +15,9 @@ export function useQuickCreateDeviceId(
   return identity == null ? undefined : config?.quickCreateDevices?.[identity];
 }
 
-// The writer, for the surfaces that offer the pick (a menu that is
-// mostly closed, the Configure page). A no-op for an identity-less
-// project: there is only ever one checkout of it to create in.
+// The writer, for the surface that offers the pick (the Configure
+// page). A no-op for an identity-less project: there is only ever one
+// checkout of it to create in.
 export function useSetQuickCreateDevice(identity: string | null | undefined) {
   const patch = useClientConfigPatch<string>(
     (deviceId, current) => ({
