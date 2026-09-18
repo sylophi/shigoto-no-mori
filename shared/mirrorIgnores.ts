@@ -6,6 +6,12 @@
 // The cap on a session's ignore list.
 export const MIRROR_IGNORES_LIMIT = 512;
 
+// An ignored path as `git ls-files` lists it (a fully ignored folder
+// ends in a slash) as a root-anchored engine pattern.
+export function anchorIgnoredPath(path: string): string {
+  return `/${path.replace(/\/+$/, "")}`;
+}
+
 // The bring rule's patterns: the gitignore rules, then a pair per
 // brought path that takes it back out of them, `!/path` for the entry
 // and `!/path/**` for what a folder holds (a bare-name rule like *.log
@@ -21,7 +27,8 @@ export function bringIgnores(
 ): string[] {
   const pairs = brought
     .slice(0, MIRROR_IGNORES_LIMIT / 2)
-    .flatMap((path) => [`!/${path}`, `!/${path}/**`]);
+    .map(anchorIgnoredPath)
+    .flatMap((anchored) => [`!${anchored}`, `!${anchored}/**`]);
   return [...rules.slice(0, MIRROR_IGNORES_LIMIT - pairs.length), ...pairs];
 }
 
@@ -32,7 +39,7 @@ export function broughtPaths(ignores: readonly string[]): string[] {
   for (let at = ignores.length - 2; at >= 0; at -= 2) {
     const entry = ignores[at];
     if (!entry.startsWith("!/") || ignores[at + 1] !== `${entry}/**`) break;
-    paths.unshift(entry.slice(2));
+    paths.push(entry.slice(2));
   }
-  return paths;
+  return paths.toReversed();
 }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { broughtPaths, MIRROR_IGNORES_LIMIT } from "@shared/mirrorIgnores";
+import { MIRROR_IGNORES_LIMIT } from "@shared/mirrorIgnores";
 import { isValidWorktreeDirName } from "@shared/branches";
 import { isSafeRelPath } from "@shared/gitPaths";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
@@ -240,11 +240,6 @@ export const MirrorIgnoreModeSchema = z.enum([
   "bring",
 ]);
 export type MirrorIgnoreMode = z.infer<typeof MirrorIgnoreModeSchema>;
-export {
-  bringIgnores,
-  broughtPaths,
-  MIRROR_IGNORES_LIMIT,
-} from "@shared/mirrorIgnores";
 const MirrorIgnorePatternSchema = z
   .string()
   .min(1)
@@ -255,16 +250,6 @@ const MirrorIgnorePatternSchema = z
 export const MirrorIgnoresSchema = z
   .array(MirrorIgnorePatternSchema)
   .max(MIRROR_IGNORES_LIMIT);
-
-// How many paths the rule names, the count describeIgnores takes: the
-// brought paths under bring (its patterns are mostly gitignore rules),
-// the patterns themselves otherwise.
-export function ignoreCount(
-  mode: MirrorIgnoreMode,
-  ignores: readonly string[],
-): number {
-  return mode === "bring" ? broughtPaths(ignores).length : ignores.length;
-}
 
 // Whether a pull with this rule has ignored files to bring: the
 // capture never carries them, and gitignored leaves every one of them

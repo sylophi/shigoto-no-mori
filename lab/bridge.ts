@@ -15,9 +15,8 @@ import type { ContractScope } from "@shared/ipc/contract";
 import { WEB_PLATFORM } from "@shared/account/enroll";
 import type { HubStatus } from "@shared/ipc/modules/hub";
 import {
-  describeIgnores,
-  ignoreCount,
   MIRROR_HISTORY_LIMIT,
+  summarizeIgnores,
 } from "@shared/ipc/modules/mirror";
 import { pullBringsIgnoredFiles } from "@shared/ipc/modules/sync";
 import type {
@@ -308,7 +307,7 @@ function hostHandlersFor(
             noteMirrorEvent(
               entry.localWorktreeId,
               "ignores-changed",
-              describeIgnores(ignoreMode, ignoreCount(ignoreMode, ignores)),
+              summarizeIgnores(ignoreMode, ignores),
             );
             mirrorChanged();
             return { session: entry.session };
@@ -503,10 +502,7 @@ async function labMirrorStart(
   noteMirrorEvent(
     landed.worktree.id,
     "started",
-    describeIgnores(
-      input.ignoreMode,
-      ignoreCount(input.ignoreMode, input.ignores),
-    ),
+    summarizeIgnores(input.ignoreMode, input.ignores),
   );
   mirrorChanged();
   void (async () => {

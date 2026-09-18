@@ -17,14 +17,13 @@
 // the grant-gated wire, never taken from the caller.
 import type { z } from "zod";
 import {
-  describeIgnores,
-  ignoreCount,
   type MirrorGitStatus,
   type MirrorServing,
   type MirrorSession,
   MirrorSessionSchema,
   type MirrorStartPayloadSchema,
   mirrorContract,
+  summarizeIgnores,
 } from "@shared/ipc/modules/mirror";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
@@ -205,7 +204,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     daemon.noteEvent(
       pulled.worktree.id,
       "started",
-      describeIgnores(ignoreMode, ignoreCount(ignoreMode, ignores)),
+      summarizeIgnores(ignoreMode, ignores),
     );
     return { ...pulled, session };
   },
@@ -298,7 +297,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     daemon.noteEvent(
       localWorktreeId,
       "ignores-changed",
-      describeIgnores(ignoreMode, ignoreCount(ignoreMode, ignores)),
+      summarizeIgnores(ignoreMode, ignores),
     );
     return { session: next };
   },

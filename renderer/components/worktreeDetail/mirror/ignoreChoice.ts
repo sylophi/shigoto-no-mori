@@ -12,21 +12,44 @@
 // with the picked paths taken back out (bringIgnores).
 import { useState } from "react";
 import {
+  anchorIgnoredPath,
   bringIgnores,
   broughtPaths,
   describeIgnores,
-  ignoreCount,
   MIRROR_IGNORES_LIMIT,
   type MirrorIgnoreMode,
+  summarizeIgnores,
 } from "@shared/ipc/modules/mirror";
 import type { SyncIgnoredPathsResult } from "@shared/ipc/modules/sync";
 import type { MirrorIgnoreChoice, PullChoice } from "@/hooks/remote/useMirrors";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 
-// What stays behind before the exceptions: nothing, or what git
-// ignores.
-export type IgnoreBase = "everything" | "gitignored";
-export const IGNORE_BASES: readonly IgnoreBase[] = ["everything", "gitignored"];
+// What stays behind before the exceptions (nothing, or what git
+// ignores), in the words each base goes by. The heading beside the
+// segmented control says "Leave out", so `label` answers that, and the
+// list under it reads on from the label: "nothing, except" and
+// "gitignored, except". The rest is an exception in the base's words:
+// what adding one does, the line over the picked rows, the picker
+// row's button, and a picked row's note.
+export const IGNORE_BASE_COPY = {
+  everything: {
+    label: "Nothing",
+    title: "Every file crosses, .git and your exceptions aside",
+    hint: "Ignored files and folders to leave out anyway.",
+    lead: "Except these, which stay put:",
+    action: "Leave out",
+    done: "Left out",
+  },
+  gitignored: {
+    label: "Gitignored",
+    title: "What .gitignore matches stays put, your exceptions aside",
+    hint: "Ignored files and folders to bring anyway.",
+    lead: "Except these, which cross anyway:",
+    action: "Bring",
+    done: "Brought",
+  },
+} as const;
+export type IgnoreBase = keyof typeof IGNORE_BASE_COPY;
 
 export type IgnoreSelection = {
   base: IgnoreBase;
@@ -111,12 +134,6 @@ export function usePullChoice(projectId: string, worktreeId: string) {
 }
 export type PullChoiceState = ReturnType<typeof usePullChoice>;
 
-// An ignored path as `git ls-files` lists it (a fully ignored folder
-// ends in a slash) as a root-anchored engine pattern.
-function anchorIgnoredPath(path: string): string {
-  return `/${path.replace(/\/+$/, "")}`;
-}
-
 export function resolveIgnores(
   selection: IgnoreSelection,
   ignored: SyncIgnoredPathsResult | undefined,
@@ -180,61 +197,25 @@ export function sameSelection(a: IgnoreSelection, b: IgnoreSelection) {
   return true;
 }
 
-// The base as the segmented control names it. The heading beside the
-// control says "Leave out", so the options answer that, and the list
-// under it reads on from them: "nothing, except" and "gitignored,
-// except".
-export const IGNORE_BASE_LABEL: Record<IgnoreBase, string> = {
-  everything: "Nothing",
-  gitignored: "Gitignored",
-};
-
-export const IGNORE_BASE_TITLE: Record<IgnoreBase, string> = {
-  everything: "Every file crosses, .git and your exceptions aside",
-  gitignored: "What .gitignore matches stays put, your exceptions aside",
-};
-
-// An exception in each base's words: what adding one does, the picker
-// row's button, and a picked row's note.
-export const EXCEPTION_COPY: Record<
-  IgnoreBase,
-  { hint: string; action: string; done: string }
-> = {
-  everything: {
-    hint: "Ignored files and folders to leave out anyway.",
-    action: "Leave out",
-    done: "Left out",
-  },
-  gitignored: {
-    hint: "Ignored files and folders to bring anyway.",
-    action: "Bring",
-    done: "Brought",
-  },
-};
-
 // The rule as a chip on a live session, or nothing when it is the
 // default: a mirror that leaves nothing out has nothing to declare.
 // Lowercased beside the other chips ("clean tree", "no PR yet").
-export function ignoreSummary(
-  mode: MirrorIgnoreMode,
-  count: number,
-): string | null {
-  return mode === "everything"
-    ? null
-    : describeIgnores(mode, count).toLowerCase();
+// Two ways in: a rule still being picked, and a live session.
+function asChip(mode: MirrorIgnoreMode, phrase: string): string | null {
+  return mode === "everything" ? null : phrase.toLowerCase();
 }
 
-// The same chip for a rule still being picked, and for a live session.
 export function selectionSummary(selection: IgnoreSelection): string | null {
-  return ignoreSummary(modeOf(selection), exceptionsOf(selection).size);
+  const mode = modeOf(selection);
+  return asChip(mode, describeIgnores(mode, exceptionsOf(selection).size));
 }
 
 export function sessionSummary(session: {
   ignoreMode: MirrorIgnoreMode;
   ignores: readonly string[];
 }): string | null {
-  return ignoreSummary(
+  return asChip(
     session.ignoreMode,
-    ignoreCount(session.ignoreMode, session.ignores),
+    summarizeIgnores(session.ignoreMode, session.ignores),
   );
 }

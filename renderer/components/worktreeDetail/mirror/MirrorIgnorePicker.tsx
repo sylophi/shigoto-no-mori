@@ -11,6 +11,7 @@
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import type { UseQueryResult } from "@tanstack/react-query";
+import { normalizeRelPath } from "@shared/gitPaths";
 import { MIRROR_IGNORES_LIMIT } from "@shared/ipc/modules/mirror";
 import type { SyncIgnoredPathsResult } from "@shared/ipc/modules/sync";
 import { PathPickerModal } from "@/components/configure/PathPickerModal";
@@ -19,21 +20,20 @@ import { MaterialIcon } from "@/components/ui/material-icon";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useWorktreeFolder } from "@/hooks/remote/useWorktreeFolder";
+import { withToggled } from "@/lib/toggleSet";
 import { cn } from "@/lib/utils";
 import { CARD, CARD_NOTE, CardSkeleton } from "../transplant/TransplantChrome";
 import {
-  EXCEPTION_COPY,
   exceptionsOf,
-  IGNORE_BASE_LABEL,
-  IGNORE_BASE_TITLE,
-  IGNORE_BASES,
+  IGNORE_BASE_COPY,
+  type IgnoreBase,
   type IgnoreSelection,
 } from "./ignoreChoice";
 
-const OPTIONS = IGNORE_BASES.map((base) => ({
+const OPTIONS = (Object.keys(IGNORE_BASE_COPY) as IgnoreBase[]).map((base) => ({
   value: base,
-  label: IGNORE_BASE_LABEL[base],
-  title: IGNORE_BASE_TITLE[base],
+  label: IGNORE_BASE_COPY[base].label,
+  title: IGNORE_BASE_COPY[base].title,
 }));
 
 export function MirrorIgnorePicker({
@@ -63,10 +63,13 @@ export function MirrorIgnorePicker({
   const [picking, setPicking] = useState(false);
   const bringing = value.base === "gitignored";
   const excepted = exceptionsOf(value);
-  const select = (next: ReadonlySet<string>) =>
-    onChange({ ...value, [bringing ? "brought" : "leftOut"]: next });
+  const toggle = (path: string) =>
+    onChange({
+      ...value,
+      [bringing ? "brought" : "leftOut"]: withToggled(path)(new Set(excepted)),
+    });
   const chosen = [...excepted].toSorted();
-  const copy = EXCEPTION_COPY[value.base];
+  const copy = IGNORE_BASE_COPY[value.base];
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between gap-3">
@@ -84,22 +87,14 @@ export function MirrorIgnorePicker({
       {(chosen.length > 0 || !disabled) && (
         <div className="space-y-1.5">
           {chosen.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              {bringing
-                ? "Except these, which cross anyway:"
-                : "Except these, which stay put:"}
-            </p>
+            <p className="text-xs text-muted-foreground">{copy.lead}</p>
           )}
           {chosen.map((path) => (
             <ChosenRow
               key={path}
               path={path}
               disabled={disabled}
-              onRemove={() => {
-                const next = new Set(excepted);
-                next.delete(path);
-                select(next);
-              }}
+              onRemove={() => toggle(path)}
             />
           ))}
           {!disabled && (
@@ -123,47 +118,77 @@ export function MirrorIgnorePicker({
             useWorktreeFolder(worktree.projectId, worktree.id, relative)
           }
           emptyRootLabel="The worktree is empty."
-          renderTrailing={(entry, path, parents) =>
-            excepted.has(path) ? (
-              <span className="px-2 text-[11px] text-muted-foreground">
-                {copy.done}
-              </span>
-            ) : bringing && parents.some((parent) => parent.ignored) ? (
-              <span
-                className="px-2 text-[11px] text-muted-foreground/70"
-                title="Bring the ignored folder it sits in. A folder that stays put is not opened for one file."
-              >
-                in ignored folder
-              </span>
-            ) : entry.ignored ? (
-              <div
-                className="inline-flex items-center"
-                onClick={(e) => e.stopPropagation()}
-                onKeyDown={(e) => e.stopPropagation()}
-                role="presentation"
-              >
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="xs"
-                  onClick={() => select(new Set([...excepted, path]))}
-                >
-                  {copy.action}
-                </Button>
-              </div>
-            ) : (
-              <span
-                className="px-2 text-[11px] text-muted-foreground/70"
-                title="Tracked by git, so it always crosses. Only ignored files and folders take an exception."
-              >
-                tracked
-              </span>
-            )
-          }
+          renderTrailing={(entry, path, insideIgnored) => (
+            <Trailing
+              picked={excepted.has(path)}
+              ignored={entry.ignored}
+              // The engine never walks into a folder it leaves out, so a
+              // path under one cannot be brought on its own.
+              unreachable={bringing && insideIgnored}
+              copy={copy}
+              onPick={() => toggle(path)}
+            />
+          )}
           onClose={() => setPicking(false)}
         />
       )}
     </section>
+  );
+}
+
+// A picker row's control: the note on a picked path, the button on an
+// ignored one that can take an exception, and why not otherwise.
+function Trailing({
+  picked,
+  ignored,
+  unreachable,
+  copy,
+  onPick,
+}: {
+  picked: boolean;
+  ignored: boolean;
+  unreachable: boolean;
+  copy: { action: string; done: string };
+  onPick: () => void;
+}) {
+  if (picked) {
+    return (
+      <span className="px-2 text-[11px] text-muted-foreground">
+        {copy.done}
+      </span>
+    );
+  }
+  if (unreachable) {
+    return (
+      <span
+        className="px-2 text-[11px] text-muted-foreground/70"
+        title="Bring the ignored folder it sits in. A folder that stays put is not opened for one file."
+      >
+        in ignored folder
+      </span>
+    );
+  }
+  if (!ignored) {
+    return (
+      <span
+        className="px-2 text-[11px] text-muted-foreground/70"
+        title="Tracked by git, so it always crosses. Only ignored files and folders take an exception."
+      >
+        tracked
+      </span>
+    );
+  }
+  return (
+    <div
+      className="inline-flex items-center"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+      role="presentation"
+    >
+      <Button type="button" variant="outline" size="xs" onClick={onPick}>
+        {copy.action}
+      </Button>
+    </div>
   );
 }
 
@@ -186,7 +211,7 @@ function IgnoredList({
     return <p className={CARD_NOTE}>Couldn't list the ignored files.</p>;
   }
   const paths = (ignored.data?.paths ?? []).filter(
-    (path) => !brought.has(path.replace(/\/+$/, "")),
+    (path) => !brought.has(normalizeRelPath(path)),
   );
   const total = Math.max(0, (ignored.data?.total ?? 0) - brought.size);
   const rules = ignored.data?.patterns.length ?? 0;

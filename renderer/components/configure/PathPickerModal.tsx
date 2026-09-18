@@ -31,9 +31,9 @@ interface PathPickerModalProps<E extends PickerEntry> {
     isPending: boolean;
     error: unknown;
   };
-  // The row's trailing control: added, an action, a note. `parents`
-  // are the folders stepped into to reach the row, outermost first.
-  renderTrailing: (entry: E, path: string, parents: readonly E[]) => ReactNode;
+  // The row's trailing control: added, an action, a note.
+  // `insideIgnored`: a folder stepped into to reach the row is ignored.
+  renderTrailing: (entry: E, path: string, insideIgnored: boolean) => ReactNode;
   // Extra per-row attribution, between the name and the control.
   renderProvenance?: (entry: E) => ReactNode;
   emptyRootLabel?: string;
@@ -48,12 +48,13 @@ export function PathPickerModal<E extends PickerEntry>({
   emptyRootLabel = "Project root is empty.",
   onClose,
 }: PathPickerModalProps<E>) {
-  // The browsed folder, root-relative ("" at the root). Relative rather
-  // than absolute because the listing is a union across checkouts: a
-  // folder may exist in a worktree and not in the primary.
-  const [relative, setRelative] = useState("");
-  // The entries stepped into, one per segment of `relative`.
+  // The folders stepped into, outermost first, and the browsed folder
+  // they spell, root-relative ("" at the root). Relative rather than
+  // absolute because the listing is a union across checkouts: a folder
+  // may exist in a worktree and not in the primary.
   const [parents, setParents] = useState<readonly E[]>([]);
+  const relative = parents.map((parent) => parent.name).join("/");
+  const insideIgnored = parents.some((parent) => parent.ignored);
   const [filter, setFilter] = useState("");
   const [highlightedIdx, setHighlightedIdx] = useState(0);
   const listRef = useRef<HTMLUListElement | null>(null);
@@ -64,8 +65,7 @@ export function PathPickerModal<E extends PickerEntry>({
   const atRoot = relative === "";
   const cwd = relative ? `${rootPath}/${relative}` : rootPath;
 
-  const resetView = (next: string, nextParents: readonly E[]) => {
-    setRelative(next);
+  const resetView = (nextParents: readonly E[]) => {
     setParents(nextParents);
     setFilter("");
     setHighlightedIdx(0);
@@ -73,15 +73,14 @@ export function PathPickerModal<E extends PickerEntry>({
 
   const goUp = () => {
     if (atRoot) return;
-    const idx = relative.lastIndexOf("/");
-    resetView(idx === -1 ? "" : relative.slice(0, idx), parents.slice(0, -1));
+    resetView(parents.slice(0, -1));
   };
 
   const relativeFor = (name: string): string =>
     relative ? `${relative}/${name}` : name;
 
   const navigateInto = (entry: E) => {
-    resetView(relativeFor(entry.name), [...parents, entry]);
+    resetView([...parents, entry]);
   };
 
   const trimmed = filter.trim().toLowerCase();
@@ -212,7 +211,7 @@ export function PathPickerModal<E extends PickerEntry>({
                   onNavigate={() => navigateInto(entry)}
                   onHover={() => setHighlightedIdx(idx)}
                   provenance={renderProvenance?.(entry)}
-                  trailing={renderTrailing(entry, path, parents)}
+                  trailing={renderTrailing(entry, path, insideIgnored)}
                 />
               );
             })}

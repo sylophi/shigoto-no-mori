@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
+import { broughtPaths } from "@shared/mirrorIgnores";
 import {
   type MirrorIgnoreMode,
   MirrorIgnoreModeSchema,
@@ -41,13 +42,15 @@ const MirrorSessionIdSchema = z.string().min(1).max(128);
 // (shared/ipc/modules/sync.ts), which carries them too. Re-exported so
 // the mirror surfaces keep one import path.
 export {
-  bringIgnores,
-  broughtPaths,
-  ignoreCount,
-  MIRROR_IGNORES_LIMIT,
   type MirrorIgnoreMode,
   MirrorIgnoreModeSchema,
 } from "@shared/ipc/modules/sync";
+export {
+  anchorIgnoredPath,
+  bringIgnores,
+  broughtPaths,
+  MIRROR_IGNORES_LIMIT,
+} from "@shared/mirrorIgnores";
 
 // A session the pull opens to carry a transplant's ignored files
 // across once and then ends (host/mirror/oneShot.ts), marked by a
@@ -70,18 +73,33 @@ export function isHaltedStatus(status: string): boolean {
 
 // The rule in one phrase, the same on every surface that names it:
 // the session's history line, the live card's chip, the lab's posed
-// thread. `count` is the paths the rule names (ignoreCount).
+// thread. `count` is the paths the rule names, which a rule still
+// being picked knows outright. A session's patterns go through
+// summarizeIgnores, which counts them.
 export function describeIgnores(mode: MirrorIgnoreMode, count: number): string {
+  const paths = `${count} ${count === 1 ? "path" : "paths"}`;
   switch (mode) {
     case "everything":
       return "Nothing left out";
     case "gitignored":
       return "Gitignored left out";
     case "custom":
-      return `${count} ${count === 1 ? "path" : "paths"} left out`;
+      return `${paths} left out`;
     case "bring":
-      return `Gitignored left out, except ${count} ${count === 1 ? "path" : "paths"}`;
+      return `Gitignored left out, except ${paths}`;
   }
+}
+
+// The same phrase off a session's patterns. A bring rule's patterns
+// are mostly gitignore rules, so its count is the brought paths.
+export function summarizeIgnores(
+  mode: MirrorIgnoreMode,
+  ignores: readonly string[],
+): string {
+  return describeIgnores(
+    mode,
+    mode === "bring" ? broughtPaths(ignores).length : ignores.length,
+  );
 }
 // The daemon's stable status codes (file-sync/engine.go mirrorStatusCode).
 const MirrorStatusSchema = z.enum([
