@@ -16,6 +16,8 @@ import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import type { RemoteDevice } from "@/lib/remote/devices";
 import { cn } from "@/lib/utils";
+import { CliSection } from "./CliSection";
+import { DataLocationSection } from "./DataLocationSection";
 import { DeviceToggleSections } from "./DeviceSettingsSections";
 import { useRegisterSettingsEditor } from "./useSettingsEditors";
 import { VersionSection } from "./VersionSection";
@@ -25,9 +27,11 @@ import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 // version routes through the HostScope this mounts (the scoped config
 // read, the host-scoped queries inside the shared section components,
 // the updater, and the writeDeviceSettings patch save), so no
-// client-scoped call reaches for a peer. The local-only sections (CLI,
-// data location, danger zone) are absent by construction: they act on
-// a disk and a shell, and only the local section renders them.
+// client-scoped call reaches for a peer. The CLI and data location
+// sections are the local ones mounted under this scope, so they act on
+// the peer's shell and disk behind its command grant. The danger zone
+// is absent by construction: wiping a machine is for whoever sits at
+// it, and only the local section renders it.
 export function PeerDeviceSettings({ device }: { device: RemoteDevice }) {
   const { reachable } = deviceStatusView(device.status);
   const api = useLastGoodApi(device);
@@ -199,6 +203,15 @@ function PeerSettingsForm({
       >
         <DeviceToggleSections form={form} setForm={setForm} />
       </div>
+
+      {/* Both read paths the device only names to a peer it lets
+          command it, so a read-only visitor has nothing to show here. */}
+      {!readOnly && (
+        <>
+          <CliSection />
+          <DataLocationSection />
+        </>
+      )}
 
       {save.error && <ErrorBanner>{save.error.message}</ErrorBanner>}
     </>

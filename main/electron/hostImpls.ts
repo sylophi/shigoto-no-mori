@@ -30,6 +30,7 @@ import {
   uninstallShellIntegration,
 } from "./cliShell";
 import { maybeFetchProject } from "./fetch";
+import { relaunchApp } from "./relaunch";
 import { stopStateWatcher } from "./stateWatcher";
 import { stopUpdaterBridge } from "./updaterBridge";
 
@@ -63,6 +64,7 @@ export function installHostImpls(): void {
     stopUpdaterBridge,
     broadcastNukeProgress: (progress) =>
       broadcastAll(runtimeContract, "nukeProgress", progress),
+    relaunchApp,
   });
   setCliRunnerImpl({ runCli, requireCliBinary, cliFailureMessage });
   installFileSyncSpawner();

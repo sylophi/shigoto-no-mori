@@ -259,7 +259,7 @@ const hostServer: ServerTransport = {
   // The Electron wire always serves host calls. The remote wires (LAN
   // socket and direct listener) serve a call ONLY when its def opted
   // into remote exposure, so a host-scoped-but-not-remote channel
-  // (runtime:nuke, cli:*, launchers:launch, globalConfig:write) is
+  // (runtime:nuke, launchers:launch, globalConfig:write) is
   // never even registered on them. A remote req for it gets the same
   // no-handler res a client-scoped channel does.
   handle(channel, fn, opts) {

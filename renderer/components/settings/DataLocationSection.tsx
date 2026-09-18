@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { FolderPickerModal } from "@/components/ui/folder-picker-modal";
 import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { getBrowseParentPath } from "@/lib/projectPaths";
-import { notifyError } from "@/lib/toast";
+import { notifyError, toast } from "@/lib/toast";
 
 // Where the shigomori data dir lives, and the flow that moves it. The
 // picker (the in-app FolderPickerModal, which still offers Finder on
@@ -18,7 +19,14 @@ import { notifyError } from "@/lib/toast";
 // Reset button, which is the same move with no parent given. On success
 // the main process relaunches the app, so the overlay's job is just to
 // block interaction until the window goes away.
+//
+// Host-scoped: mounted for a peer, the same flow moves THAT device's
+// folder. The peer's app relaunches itself after answering (this
+// window has no say in another machine's lifecycle), this window
+// stays up, and the session that lands when the peer is back refetches
+// its runtime info, so the new path shows up on its own.
 export function DataLocationSection() {
+  const { api, remote } = useHostScope();
   const { data: runtime } = useRuntimeInfo();
   const root = runtime?.dataDir ?? null;
   const home = runtime?.homedir ?? null;
@@ -32,7 +40,12 @@ export function DataLocationSection() {
   const moveTo = async (parent?: string) => {
     setMoving(true);
     try {
-      await window.api.runtime.moveDataDir(parent);
+      await api.runtime.moveDataDir(parent);
+      if (remote) {
+        toast.success("Data folder moved. The app there is restarting.");
+        setMoving(false);
+        return;
+      }
       // Acknowledge: the main process relaunches only after this call,
       // which can't fire before the moveDataDir reply above was delivered.
       // Fire-and-forget, because the app quits out from under the promise.
@@ -53,7 +66,9 @@ export function DataLocationSection() {
     <section className="space-y-3">
       {moving && (
         <BlockingOverlay>
-          Moving data folder… The app will restart.
+          {remote
+            ? "Moving data folder… The app on that device will restart."
+            : "Moving data folder… The app will restart."}
         </BlockingOverlay>
       )}
       <SectionHeading className="mb-1">Data location</SectionHeading>
@@ -68,24 +83,27 @@ export function DataLocationSection() {
       )}
       <p className="text-xs text-muted-foreground">
         Worktrees, configs, and state live here. Moving the folder restarts the
-        app, and the CLI follows automatically.
+        app{remote && " on that device"}, and the CLI follows automatically.
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!root}
-          onClick={() => {
-            if (root) {
-              window.api.shell
-                .showItemInFolder(root)
-                .catch((err) => notifyError("Couldn't reveal folder", err));
-            }
-          }}
-        >
-          <FolderOpen />
-          Reveal in Finder
-        </Button>
+        {/* This machine's Finder can only show this machine's disk. */}
+        {!remote && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!root}
+            onClick={() => {
+              if (root) {
+                window.api.shell
+                  .showItemInFolder(root)
+                  .catch((err) => notifyError("Couldn't reveal folder", err));
+              }
+            }}
+          >
+            <FolderOpen />
+            Reveal in Finder
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
@@ -115,7 +133,7 @@ export function DataLocationSection() {
           initialPath={getBrowseParentPath(runtime.dataDir) ?? undefined}
           title="Move the data folder"
           confirmLabel="Move here"
-          hint={`Choose its new parent folder. It will be named ${runtime.canonicalDataDirName} there, and the app restarts right after the move.`}
+          hint={`Choose its new parent folder. It will be named ${runtime.canonicalDataDirName} there, and the app${remote ? " on that device" : ""} restarts right after the move.`}
           onPick={(parent) => {
             setPickerOpen(false);
             void moveTo(parent);

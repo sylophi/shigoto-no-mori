@@ -2,9 +2,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { tildify } from "@/lib/projectPaths";
-import { queryKeys } from "@/lib/queryKeys";
 import type {
   CliStatus,
   ShellIntegrationStatus,
@@ -14,34 +14,36 @@ import type {
 // prompt: the app runs its bundled binary directly and never needs the
 // link, so this is purely "do you want the command in your shell".
 //
-// window.api + local `queryKeys` on purpose, NOT useHostScope: the cli
-// module edits shell rc files and symlinks on this machine, so both
-// the calls and the cache keys must stay pinned to the local device
-// (see the exception list in hooks/remote/useHostScope).
+// Host-scoped: the links and rc files belong to whichever device the
+// section is mounted for, so a peer's section installs on the peer. A
+// peer refuses the status read without the command grant, and the
+// section then renders nothing rather than toasting a permission state.
 export function CliSection() {
+  const { api, keys, remote } = useHostScope();
   const queryClient = useQueryClient();
   const { data: runtime } = useRuntimeInfo();
   const { data: status } = useQuery<CliStatus>({
-    queryKey: queryKeys.cli(),
-    queryFn: () => window.api.cli.status(),
-    meta: { errorTitle: "Couldn't check the CLI install" },
+    queryKey: keys.cli(),
+    queryFn: () => api.cli.status(),
+    meta: remote
+      ? { silentError: true }
+      : { errorTitle: "Couldn't check the CLI install" },
   });
 
   const applyStatus = (next: CliStatus) => {
-    queryClient.setQueryData(queryKeys.cli(), next);
+    queryClient.setQueryData(keys.cli(), next);
   };
   const install = useMutation({
-    mutationFn: (payload: { force: boolean }) =>
-      window.api.cli.install(payload),
+    mutationFn: (payload: { force: boolean }) => api.cli.install(payload),
     onSuccess: applyStatus,
     meta: { errorTitle: "Couldn't install the CLI" },
   });
   const uninstall = useMutation({
-    mutationFn: () => window.api.cli.uninstall(),
+    mutationFn: () => api.cli.uninstall(),
     onSuccess: (next) => {
       applyStatus(next);
       // CLI uninstall sweeps the shell hooks too.
-      void queryClient.invalidateQueries({ queryKey: queryKeys.cliShell() });
+      void queryClient.invalidateQueries({ queryKey: keys.cliShell() });
     },
     meta: { errorTitle: "Couldn't uninstall the CLI" },
   });
@@ -170,25 +172,28 @@ export function CliSection() {
 // mechanics live in the CLI (`sm shell ...`), so the app only triggers
 // them, so a terminal user and this section always agree.
 function ShellIntegrationBlock({ name }: { name: string }) {
+  const { api, keys, remote } = useHostScope();
   const queryClient = useQueryClient();
   const { data: runtime } = useRuntimeInfo();
   const home = runtime?.homedir ?? null;
   const { data: status } = useQuery<ShellIntegrationStatus>({
-    queryKey: queryKeys.cliShell(),
-    queryFn: () => window.api.cli.shellStatus(),
-    meta: { errorTitle: "Couldn't check shell integration" },
+    queryKey: keys.cliShell(),
+    queryFn: () => api.cli.shellStatus(),
+    meta: remote
+      ? { silentError: true }
+      : { errorTitle: "Couldn't check shell integration" },
   });
 
   const applyStatus = (next: ShellIntegrationStatus) => {
-    queryClient.setQueryData(queryKeys.cliShell(), next);
+    queryClient.setQueryData(keys.cliShell(), next);
   };
   const enable = useMutation({
-    mutationFn: () => window.api.cli.shellInstall(),
+    mutationFn: () => api.cli.shellInstall(),
     onSuccess: applyStatus,
     meta: { errorTitle: "Couldn't enable shell integration" },
   });
   const remove = useMutation({
-    mutationFn: () => window.api.cli.shellUninstall(),
+    mutationFn: () => api.cli.shellUninstall(),
     onSuccess: applyStatus,
     meta: { errorTitle: "Couldn't remove shell integration" },
   });
