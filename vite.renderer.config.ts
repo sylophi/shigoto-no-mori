@@ -3,7 +3,8 @@ import { resolve } from "node:path";
 import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig } from "vite";
+import { rendererDevServerPort } from "./shared/portsEnvFile.mts";
 
 function gitOutput(args: string): string | null {
   try {
@@ -34,8 +35,8 @@ function buildInfo(mode: string): { version: string; commit: string } {
 }
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), "");
-  const port = env["PORT"] ? Number(env["PORT"]) : undefined;
+  const envPort = rendererDevServerPort(__dirname);
+  const port = envPort ? Number(envPort) : undefined;
   const { version, commit } = buildInfo(mode);
 
   return {

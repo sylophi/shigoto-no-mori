@@ -102,7 +102,9 @@ smd projects add <dir> --all --yes     # set SHIGOMORI_DATA_DIR if the data dir 
 
 1. Builds the dev CLI (`dist-cli/smd`).
 2. Fetches the pinned `cloudflared` binary.
-3. Allocates the renderer port (`PORT` in `.env.local`, one per worktree).
+3. Allocates the renderer port (`PORT` in `.env.ports`, one per worktree).
+   An older `PORT` line in `.env.local` is no longer read and can be
+   deleted.
 4. On macOS, clones Electron into a per-worktree bundle under
    `.electron-dev/` and launches from it, so GitHub sign-in can
    deep-link back. The most recently launched worktree owns the
@@ -115,7 +117,7 @@ smd projects add <dir> --all --yes     # set SHIGOMORI_DATA_DIR if the data dir 
 | `SHIGOMORI_DATA_DIR`               | Data dir for this session. See above.                                         |
 | `SHIGOMORI_PROFILE`                | Dev profile name. The launchers set it, and it requires `SHIGOMORI_DATA_DIR`. |
 | `SHIGOMORI_DEBUG_PORT`             | Opens Chromium's remote-debugging port on that window. Dev builds only.       |
-| `PORT`                             | Renderer dev server port. `.env.local` holds the per-worktree value.          |
+| `PORT`                             | Renderer port, from `.env.ports`. A real env var overrides it.                |
 | `SM_DEVICE_HUB_URL`                | Device hub URL. Normally from `.env.local`; a real env var overrides it.      |
 | `SM_ACCOUNT_CLERK_PUBLISHABLE_KEY` | Clerk key. Same override rule.                                                |
 | `SM_ACCOUNT_WEB_ORIGIN`            | Web client origin the desktop admits. Same override rule.                     |
