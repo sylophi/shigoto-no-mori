@@ -40,6 +40,7 @@
  *      diff-index-row, diff-index-jump   diff/DiffFileIndex.tsx
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
+ *      dropdown-menu-sub-trigger (+ data-variant)   ui/dropdown-menu.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
  *      sidebar-device-filter     sidebar/DeviceFilterBar.tsx
  *      device-chip               remote/DeviceChip.tsx, shared/DeviceTabs.tsx
@@ -443,8 +444,13 @@
    The accent pillow is doubutsu's "active" signal everywhere else, so
    use it here too. aria-haspopup scopes this to menu/combobox triggers;
    tooltip triggers also carry data-popup-open but no haspopup, and the
-   combobox's search <input> carries both, so keep it a plain field. */
-.doubutsu [aria-haspopup][data-popup-open]:not(input) {
+   combobox's search <input> carries both, so keep it a plain field. A
+   destructive sub trigger (the project menu's Remove) keeps the red
+   tint its component gives it instead. */
+.doubutsu
+  [aria-haspopup][data-popup-open]:not(input):not(
+    [data-slot="dropdown-menu-sub-trigger"][data-variant="destructive"]
+  ) {
   background-color: var(--accent);
 }
 

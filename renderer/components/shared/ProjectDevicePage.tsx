@@ -5,7 +5,7 @@
 // picked device's scope. Each device keeps its own project file,
 // branches and worktrees, so the body is the picked device's copy, and
 // picking another tab swaps whose copy the page shows. The tabs are
-// the same identity match the header's "Create on" pick draws
+// the same identity match the Configure page's "Create on" pick draws
 // (useDeviceTargets), less the devices with no checkout of this repo.
 // A project held on one device alone gets no tab bar, only the plain
 // chip the worktree page wears when it is a peer's (nothing at all
