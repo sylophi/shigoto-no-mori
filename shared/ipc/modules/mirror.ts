@@ -49,12 +49,14 @@ export {
 // A session the pull opens to carry a transplant's ignored files
 // across once and then ends (host/mirror/oneShot.ts), marked by a
 // label so nothing treats it as a mirror: the git follower leaves it
-// alone and the sidebar does not fold the pair over it.
+// alone and the sidebar does not fold the pair over it. The label's
+// value is the transfer's own token (host/mirror/registry.ts
+// beginTransfer), so the mark alone says it is a transfer.
 export const MIRROR_LABEL_TRANSFER = "transfer";
 export function isTransferSession(session: {
   labels: Record<string, string>;
 }): boolean {
-  return session.labels[MIRROR_LABEL_TRANSFER] === "1";
+  return session.labels[MIRROR_LABEL_TRANSFER] !== undefined;
 }
 
 // The engine's terminal states share a prefix (MirrorStatusSchema

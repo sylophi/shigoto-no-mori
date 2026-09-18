@@ -30,7 +30,10 @@ Poses ride the URL:
 
 Runtime controls on `window.smLab`: `setPeer(deviceId, "connected" |
 "online" | "offline")`, `setSocket(phase)`, `navigate(to)` (desktop),
-plus `emitClient`/`emitHost` for raw broadcasts. Console/warns/errors
+`setMirrorConflicts(roots)` (holds those paths still on every mirror
+started in this session, for the conflict chip. Start one first,
+since the fixtures seed none), plus `emitClient`/`emitHost` for raw
+broadcasts. Console/warns/errors
 collect in `window.smLabLog`.
 
 Fixtures live in `fixtures.ts`. `bridge.ts` serves them and answers

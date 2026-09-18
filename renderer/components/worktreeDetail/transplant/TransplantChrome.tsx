@@ -190,22 +190,3 @@ export function CardSkeleton({ rows = 1 }: { rows?: 1 | 2 }) {
     </div>
   );
 }
-
-// The titled, tinted "what happens" note. Info-toned only: failures
-// go through the shared ErrorBanner.
-export function NoteBox({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="rounded-lg bg-sky-500/10 p-3 text-xs">
-      <p className="text-sm font-medium text-sky-700 dark:text-sky-300">
-        {title}
-      </p>
-      <div className="mt-1.5 space-y-1 text-foreground/80">{children}</div>
-    </div>
-  );
-}

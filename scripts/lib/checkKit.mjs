@@ -233,8 +233,14 @@ export function fakeSessionJwt(sub) {
   return `${jwtSegment({ alg: "none", typ: "JWT" })}.${jwtSegment({ sub })}.sig`;
 }
 
+// A file's text, or null when it is not there, so an assert on it
+// reports what was found instead of a bare false.
+export function readOrNull(path) {
+  return existsSync(path) ? readFileSync(path, "utf8") : null;
+}
+
 export function fileEquals(path, want) {
-  return existsSync(path) && readFileSync(path, "utf8") === want;
+  return readOrNull(path) === want;
 }
 
 // The document-run seam the checks drive the sm CLI through: the same

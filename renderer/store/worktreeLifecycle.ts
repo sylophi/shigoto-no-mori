@@ -11,9 +11,9 @@ import { KeyedSubscribers } from "./keyedSubscribers";
 
 export type { CreatePhase } from "@shared/schemas";
 
-// The phase as a banner reads it, shared by the detail page's banner
-// and the transplant dialog's create step so a new phase is worded
-// once.
+// The phase as the detail page's banner reads it. The pull dialogs
+// word the same phases as steps of their own run (transplant/
+// TransplantProgress.tsx rows, transplantSteps.ts headlines).
 export const CREATE_PHASE_LABEL = {
   carryOver: "Carrying over files...",
   setup: "Setting up...",

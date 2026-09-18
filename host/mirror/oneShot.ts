@@ -13,8 +13,9 @@ import {
   MIRROR_LABEL_TRANSFER,
 } from "@shared/ipc/modules/mirror";
 import {
+  beginTransfer,
+  endTransfer,
   findSession,
-  liveTransferSessions,
   MIRROR_LABEL_LOCAL_WORKTREE,
   type MirrorImpl,
   type MirrorSessionRaw,
@@ -60,11 +61,11 @@ export async function transferFilesOnce(
   },
   onProgress: (bytes: number, totalBytes: number) => void,
 ): Promise<TransferFilesResult> {
-  let daemon: MirrorImpl;
-  let session: string;
+  const token = beginTransfer();
+  let ended: Promise<unknown> = Promise.resolve();
   try {
-    daemon = requireRunningEngine();
-    session = await daemon.create({
+    const daemon = requireRunningEngine();
+    const session = await daemon.create({
       localRoot: input.localRoot,
       deviceId: input.sourceDeviceId,
       projectId: input.sourceProjectId,
@@ -74,24 +75,28 @@ export async function transferFilesOnce(
       localWorktreeId: input.localWorktreeId,
       labels: {
         [MIRROR_LABEL_LOCAL_WORKTREE]: input.localWorktreeId,
-        [MIRROR_LABEL_TRANSFER]: "1",
+        [MIRROR_LABEL_TRANSFER]: token,
       },
       ignores: input.ignores,
       pull: true,
     });
+    try {
+      return await waitSettled(daemon, session, onProgress);
+    } finally {
+      ended = daemon.terminate(session).catch((error: unknown) => {
+        console.warn(
+          `[sync] could not end the file transfer session: ${errorMessageOf(error)}`,
+        );
+      });
+    }
   } catch (error) {
     return failed(errorMessageOf(error));
-  }
-  liveTransferSessions.add(session);
-  try {
-    return await waitSettled(daemon, session, onProgress);
   } finally {
-    liveTransferSessions.delete(session);
-    await daemon.terminate(session).catch((error: unknown) => {
-      console.warn(
-        `[sync] could not end the file transfer session: ${errorMessageOf(error)}`,
-      );
-    });
+    // After the terminate, so main's sweep only picks the session up
+    // when that failed, or when the create was rejected with the
+    // session already made and there was no id to terminate.
+    await ended;
+    endTransfer(token);
   }
 }
 

@@ -11,6 +11,7 @@ import { ChipButton } from "@/components/ui/chip-button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -113,16 +114,20 @@ export function MirrorConflictsChip({
         }
       />
       <DropdownMenuContent align="start" className="max-w-sm min-w-64">
-        <DropdownMenuLabel>
-          {canReveal ? "Held still (click to reveal)" : "Held still"}
-        </DropdownMenuLabel>
-        {session.conflicts.map((conflict) => (
-          <ConflictRow
-            key={conflict.root}
-            conflict={conflict}
-            reveal={reveal}
-          />
-        ))}
+        {/* The label is a group part: Base UI throws when it renders
+            outside a group, which took the whole view down. */}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>
+            {canReveal ? "Held still (click to reveal)" : "Held still"}
+          </DropdownMenuLabel>
+          {session.conflicts.map((conflict) => (
+            <ConflictRow
+              key={conflict.root}
+              conflict={conflict}
+              reveal={reveal}
+            />
+          ))}
+        </DropdownMenuGroup>
         {session.excludedConflicts > 0 && (
           <p className="px-2 py-1 text-xs text-muted-foreground">
             {pluralize(session.excludedConflicts, "more conflict")} the engine

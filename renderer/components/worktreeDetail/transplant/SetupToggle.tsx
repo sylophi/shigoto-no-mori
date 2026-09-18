@@ -6,18 +6,9 @@
 import type { Project } from "@shared/schemas";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Switch } from "@/components/ui/switch";
-import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { cn } from "@/lib/utils";
+import { useCreatePlan } from "./createPlan";
 import { CARD } from "./TransplantChrome";
-
-// The local project's setup command, "" when none is configured (or
-// the config has not loaded yet). The switch and the transplant's
-// "What happens" note read the same answer, so neither promises a
-// script the other knows is missing.
-export function useSetupScript(localProject: Project): string {
-  const { data: config } = useShigomoriConfig(localProject.id);
-  return config?.scripts?.setup?.trim() ?? "";
-}
 
 export function SetupToggle({
   localProject,
@@ -34,7 +25,10 @@ export function SetupToggle({
   // leave-out rule, and the row says so.
   pinned: boolean;
 }) {
-  const command = useSetupScript(localProject);
+  // The whole plan, not just the script: the running view lists its
+  // steps from the same reads, and having them settled here means the
+  // list is complete from its first frame instead of growing a row.
+  const command = useCreatePlan(localProject).setupCommand;
   const configured = command !== "";
   return (
     <section className="space-y-2">
@@ -51,7 +45,7 @@ export function SetupToggle({
           </p>
           {!pinned && configured && (
             <p className="mt-0.5 text-[11px] text-muted-foreground">
-              Follows the leave-out rule: on when nothing stays behind.
+              Follows the leave-out rule: on when something stays behind.
             </p>
           )}
         </div>
