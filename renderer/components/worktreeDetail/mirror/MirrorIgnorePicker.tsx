@@ -20,12 +20,8 @@ import { MaterialIcon } from "@/components/ui/material-icon";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useWorktreeFolder } from "@/hooks/remote/useWorktreeFolder";
-import {
-  CARD_NOTE,
-  CardList,
-  CardSkeleton,
-  MAX_LIST_ROWS,
-} from "../transplant/TransplantChrome";
+import { cn } from "@/lib/utils";
+import { CARD, CARD_NOTE, CardSkeleton } from "../transplant/TransplantChrome";
 import {
   IGNORE_MODE_LABEL,
   IGNORE_MODE_TITLE,
@@ -164,19 +160,35 @@ function IgnoredList({
   const paths = ignored.data?.paths ?? [];
   const total = ignored.data?.total ?? 0;
   const rules = ignored.data?.patterns.length ?? 0;
-  if (total === 0 && rules === 0) {
-    return <p className={CARD_NOTE}>Nothing ignored yet.</p>;
-  }
+  // Every path the wire carries, flowed into as many columns as the
+  // card fits: the rule is judged by seeing what it covers. A column
+  // is as wide as the longest path, so short names pack side by side,
+  // up to a cap: one deep path truncates instead of costing every
+  // other row its columns.
+  const longest = Math.min(
+    28,
+    Math.max(12, ...paths.map((path) => path.length)),
+  );
   return (
     <>
-      {total > 0 && (
-        <CardList total={total}>
-          {paths.slice(0, MAX_LIST_ROWS).map((path) => (
-            <li key={path} className="min-w-0 truncate" title={path}>
+      {total === 0 ? (
+        <p className={CARD_NOTE}>Nothing ignored yet.</p>
+      ) : (
+        <ul
+          className={cn(CARD, "gap-x-4 font-mono text-xs")}
+          style={{ columnWidth: `${longest}ch` }}
+        >
+          {paths.map((path) => (
+            <li key={path} className="truncate py-0.5" title={path}>
               {path}
             </li>
           ))}
-        </CardList>
+          {total > paths.length && (
+            <li className="py-0.5 text-muted-foreground [column-span:all]">
+              and {total - paths.length} more
+            </li>
+          )}
+        </ul>
       )}
       {rules >= MIRROR_IGNORES_LIMIT && (
         <p className="text-xs text-muted-foreground">

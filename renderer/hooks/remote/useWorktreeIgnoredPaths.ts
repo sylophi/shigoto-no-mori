@@ -3,7 +3,7 @@ import type { SyncIgnoredPathsResult } from "@shared/ipc/modules/sync";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
 // The ignored files on a worktree, which a transfer leaves behind
-// (sync:ignoredPaths): the first few names and the full count. Read
+// (sync:ignoredPaths): the names, capped, and the full count. Read
 // against the scope's device, the source of a transplant, and read
 // once: the dialog's two steps share the one answer, and it crosses
 // the device link.

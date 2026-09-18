@@ -164,11 +164,13 @@ const SyncIgnoredPathsPayloadSchema = z.strictObject({
   worktreeId: WorktreeIdSchema,
 });
 
-// Capped on the wire: the dialog shows a handful and counts the rest,
-// and a worktree with scattered per-file ignores can hold thousands.
-// Wide enough for the mirror dialog's picker to list a whole worktree
-// (the transplant review shows the first few and counts the rest).
+// Capped on the wire: a worktree with scattered per-file ignores can
+// hold thousands. Wide enough for the mirror dialog's picker to list a
+// whole worktree, and past the cap it counts the rest.
 export const SYNC_IGNORED_PATHS_LIMIT = 32;
+// The rules ride under the engine's own cap, not the path list's: a
+// repo's gitignore files easily hold more than 32 lines.
+export const MIRROR_IGNORES_LIMIT = 512;
 export const SyncIgnoredPathsResultSchema = z.strictObject({
   paths: z.array(z.string()).max(SYNC_IGNORED_PATHS_LIMIT),
   total: z.number().int().nonnegative(),
@@ -176,7 +178,7 @@ export const SyncIgnoredPathsResultSchema = z.strictObject({
   // info/exclude, host/lib/git/ignoreRules.ts), for a mirror that
   // leaves gitignored files behind: a rule keeps out what is ignored
   // tomorrow, where the paths above only cover today.
-  patterns: z.array(z.string()).max(SYNC_IGNORED_PATHS_LIMIT),
+  patterns: z.array(z.string()).max(MIRROR_IGNORES_LIMIT),
 });
 export type SyncIgnoredPathsResult = z.infer<
   typeof SyncIgnoredPathsResultSchema
@@ -233,7 +235,6 @@ export const MirrorIgnoreModeSchema = z.enum([
   "custom",
 ]);
 export type MirrorIgnoreMode = z.infer<typeof MirrorIgnoreModeSchema>;
-export const MIRROR_IGNORES_LIMIT = 512;
 const MirrorIgnorePatternSchema = z
   .string()
   .min(1)

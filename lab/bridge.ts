@@ -232,9 +232,9 @@ function hostHandlersFor(
       ...(LAB_TREE[relative] ?? []),
     ],
     "sync:ignoredPaths": () => ({
-      paths: [".env", "dist/", "node_modules/", "coverage/", ".cache/"],
-      total: 5,
-      patterns: ["node_modules/", "dist/", "coverage/", ".env", ".cache/"],
+      paths: [...LAB_IGNORED_PATHS],
+      total: LAB_IGNORED_PATHS.length,
+      patterns: [...LAB_IGNORED_PATHS],
     }),
     // The mirror picture is host-scoped: the local forest reports the
     // sessions it runs, and a source forest reports the streams it
@@ -328,6 +328,27 @@ function hostHandlersFor(
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// What git ignores on the posed worktree (LAB_TREE's ignored entries,
+// folders collapsed), serving as its gitignore rules too.
+const LAB_IGNORED_PATHS = [
+  ".cache/",
+  ".env",
+  ".env.local",
+  ".eslintcache",
+  ".turbo/",
+  ".vite/",
+  "coverage/",
+  "dist/",
+  "dist-cli/",
+  "node_modules/",
+  "out/",
+  "playwright-report/",
+  "src/generated/",
+  "test-results/",
+  "tmp/",
+  "tsconfig.tsbuildinfo",
+];
+
 // The folder tree the mirror picker browses, one posed worktree.
 const LAB_TREE: Record<
   string,
@@ -335,14 +356,24 @@ const LAB_TREE: Record<
 > = {
   "": [
     { name: ".cache", isDirectory: true, ignored: true },
+    { name: ".turbo", isDirectory: true, ignored: true },
+    { name: ".vite", isDirectory: true, ignored: true },
     { name: "coverage", isDirectory: true, ignored: true },
     { name: "dist", isDirectory: true, ignored: true },
+    { name: "dist-cli", isDirectory: true, ignored: true },
     { name: "node_modules", isDirectory: true, ignored: true },
+    { name: "out", isDirectory: true, ignored: true },
+    { name: "playwright-report", isDirectory: true, ignored: true },
     { name: "src", isDirectory: true, ignored: false },
+    { name: "test-results", isDirectory: true, ignored: true },
+    { name: "tmp", isDirectory: true, ignored: true },
     { name: ".env", isDirectory: false, ignored: true },
+    { name: ".env.local", isDirectory: false, ignored: true },
+    { name: ".eslintcache", isDirectory: false, ignored: true },
     { name: ".gitignore", isDirectory: false, ignored: false },
     { name: "package.json", isDirectory: false, ignored: false },
     { name: "README.md", isDirectory: false, ignored: false },
+    { name: "tsconfig.tsbuildinfo", isDirectory: false, ignored: true },
   ],
   src: [
     { name: "components", isDirectory: true, ignored: false },
