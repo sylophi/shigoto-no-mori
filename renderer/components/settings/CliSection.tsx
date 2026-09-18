@@ -1,10 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { errorMessageOf } from "@shared/errors";
+import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { tildify } from "@/lib/projectPaths";
-import { queryKeys } from "@/lib/queryKeys";
+import { gatedHostReadMeta } from "@/lib/queryClientOptions";
 import type {
   CliStatus,
   ShellIntegrationStatus,
@@ -14,39 +17,42 @@ import type {
 // prompt: the app runs its bundled binary directly and never needs the
 // link, so this is purely "do you want the command in your shell".
 //
-// window.api + local `queryKeys` on purpose, NOT useHostScope: the cli
-// module edits shell rc files and symlinks on this machine, so both
-// the calls and the cache keys must stay pinned to the local device
-// (see the exception list in hooks/remote/useHostScope).
+// Host-scoped: the links and rc files belong to whichever device the
+// section is mounted for, so a peer's section installs on the peer. A
+// peer refuses the status read without the command grant, and the
+// section then renders nothing rather than toasting a permission state.
 export function CliSection() {
+  const { api, keys, remote } = useHostScope();
   const queryClient = useQueryClient();
   const { data: runtime } = useRuntimeInfo();
-  const { data: status } = useQuery<CliStatus>({
-    queryKey: queryKeys.cli(),
-    queryFn: () => window.api.cli.status(),
-    meta: { errorTitle: "Couldn't check the CLI install" },
+  const { data: status, error } = useQuery<CliStatus>({
+    queryKey: keys.cli(),
+    queryFn: () => api.cli.status(),
+    staleTime: peerStaleTime(remote),
+    meta: gatedHostReadMeta(remote, "Couldn't check the CLI install"),
   });
 
   const applyStatus = (next: CliStatus) => {
-    queryClient.setQueryData(queryKeys.cli(), next);
+    queryClient.setQueryData(keys.cli(), next);
   };
   const install = useMutation({
-    mutationFn: (payload: { force: boolean }) =>
-      window.api.cli.install(payload),
+    mutationFn: (payload: { force: boolean }) => api.cli.install(payload),
     onSuccess: applyStatus,
     meta: { errorTitle: "Couldn't install the CLI" },
   });
   const uninstall = useMutation({
-    mutationFn: () => window.api.cli.uninstall(),
+    mutationFn: () => api.cli.uninstall(),
     onSuccess: (next) => {
       applyStatus(next);
       // CLI uninstall sweeps the shell hooks too.
-      void queryClient.invalidateQueries({ queryKey: queryKeys.cliShell() });
+      void queryClient.invalidateQueries({ queryKey: keys.cliShell() });
     },
     meta: { errorTitle: "Couldn't uninstall the CLI" },
   });
 
-  if (!status) return null;
+  if (!status) {
+    return <PeerReadError error={error} what="the CLI install" heading />;
+  }
 
   const { name, state, onPath } = status;
   const busy = install.isPending || uninstall.isPending;
@@ -164,36 +170,78 @@ export function CliSection() {
   );
 }
 
+// Each read on a peer is a round trip, and the shell one spawns the
+// CLI there, for state that only these buttons and that machine's own
+// terminal change. The mutations seed the cache from their replies and
+// a landed session re-asks, so a peer's answer needs no focus refetch.
+// This machine keeps the default: a terminal install shows on return.
+function peerStaleTime(remote: boolean): number {
+  return remote ? Number.POSITIVE_INFINITY : 0;
+}
+
+// A peer's failed read is silent in the toast layer (gatedHostReadMeta),
+// so it is said here instead of the section just not being there. A
+// refusal is the exception: that is the read-only state the page
+// already explains. Locally the toast carries the error.
+function PeerReadError({
+  error,
+  what,
+  heading = false,
+}: {
+  error: unknown;
+  what: string;
+  heading?: boolean;
+}) {
+  const { remote } = useHostScope();
+  if (!remote || !error || isCommandRefusedError(error)) return null;
+  const note = (
+    <p className="text-xs text-muted-foreground select-text">
+      Couldn&apos;t check {what} on that device: {errorMessageOf(error)}
+    </p>
+  );
+  if (!heading) return note;
+  return (
+    <section className="space-y-3">
+      <SectionHeading className="mb-1">Command line tool</SectionHeading>
+      {note}
+    </section>
+  );
+}
+
 // Shell integration, the optional second step after the link install:
 // a hook in the user's shell config that makes cd/create move the
 // calling shell instead of opening a nested subshell. All rc-file
 // mechanics live in the CLI (`sm shell ...`), so the app only triggers
 // them, so a terminal user and this section always agree.
 function ShellIntegrationBlock({ name }: { name: string }) {
+  const { api, keys, remote } = useHostScope();
   const queryClient = useQueryClient();
   const { data: runtime } = useRuntimeInfo();
   const home = runtime?.homedir ?? null;
-  const { data: status } = useQuery<ShellIntegrationStatus>({
-    queryKey: queryKeys.cliShell(),
-    queryFn: () => window.api.cli.shellStatus(),
-    meta: { errorTitle: "Couldn't check shell integration" },
+  const { data: status, error } = useQuery<ShellIntegrationStatus>({
+    queryKey: keys.cliShell(),
+    queryFn: () => api.cli.shellStatus(),
+    staleTime: peerStaleTime(remote),
+    meta: gatedHostReadMeta(remote, "Couldn't check shell integration"),
   });
 
   const applyStatus = (next: ShellIntegrationStatus) => {
-    queryClient.setQueryData(queryKeys.cliShell(), next);
+    queryClient.setQueryData(keys.cliShell(), next);
   };
   const enable = useMutation({
-    mutationFn: () => window.api.cli.shellInstall(),
+    mutationFn: () => api.cli.shellInstall(),
     onSuccess: applyStatus,
     meta: { errorTitle: "Couldn't enable shell integration" },
   });
   const remove = useMutation({
-    mutationFn: () => window.api.cli.shellUninstall(),
+    mutationFn: () => api.cli.shellUninstall(),
     onSuccess: applyStatus,
     meta: { errorTitle: "Couldn't remove shell integration" },
   });
 
-  if (!status) return null;
+  if (!status) {
+    return <PeerReadError error={error} what="shell integration" />;
+  }
 
   const busy = enable.isPending || remove.isPending;
   const login = status.shells.find((s) => s.shell === status.loginShell);

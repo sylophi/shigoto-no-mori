@@ -45,35 +45,42 @@ export type ShellIntegrationStatus = z.infer<
   typeof ShellIntegrationStatusSchema
 >;
 
-// Local-only module: every call stays on the Electron wire (remote
-// false). These edit shell rc files and CLI symlinks on the host, so they are never served to a remote peer.
+// Served to a peer as well as the local window: Settings shows every
+// device of the account, and a peer holding the command grant may
+// manage that device's CLI links and shell hooks from there, the same
+// way it may already run scripts on it. Every call rides the grant,
+// the two status reads included (tagged mutating like runtime:info and
+// the fs reads), because they name the host's home, bin dir and rc
+// files. None of them pings viewers: links and rc hooks are no part of
+// the forest state a ping re-reads, and the caller seeds its own cache
+// from each reply.
+const gated = { remote: true, mutating: true, movesHostState: false };
+
 export const cliContract = defineContract("host", {
-  status: invoke("cli:status", z.void(), CliStatusSchema, { remote: false }),
+  status: invoke("cli:status", z.void(), CliStatusSchema, gated),
   install: invoke(
     "cli:install",
     z.object({ force: z.boolean() }),
     CliStatusSchema,
-    { remote: false },
+    gated,
   ),
-  uninstall: invoke("cli:uninstall", z.void(), CliStatusSchema, {
-    remote: false,
-  }),
+  uninstall: invoke("cli:uninstall", z.void(), CliStatusSchema, gated),
   shellStatus: invoke(
     "cli:shellStatus",
     z.void(),
     ShellIntegrationStatusSchema,
-    { remote: false },
+    gated,
   ),
   shellInstall: invoke(
     "cli:shellInstall",
     z.void(),
     ShellIntegrationStatusSchema,
-    { remote: false },
+    gated,
   ),
   shellUninstall: invoke(
     "cli:shellUninstall",
     z.void(),
     ShellIntegrationStatusSchema,
-    { remote: false },
+    gated,
   ),
 });

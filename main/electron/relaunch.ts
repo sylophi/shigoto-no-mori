@@ -1,7 +1,9 @@
 // Programmatic app restart (the data-folder move): renderer-initiated
 // after its moveDataDir invoke resolves, so the reply is guaranteed
-// delivered before the window goes away, with no timing guesses. The
-// flag gives index.ts's before-quit handler the same fast path an
+// delivered before the window goes away, with no timing guesses. A move
+// asked for by another device has no renderer here to acknowledge it,
+// so that one restarts a beat after answering (relaunchAppUnattended).
+// The flag gives index.ts's before-quit handler the same fast path an
 // update-install quit takes: scripts were already reaped by the move,
 // so there is nothing to prompt about, and a busy dialog here could be
 // cancelled, leaving a live app pointed at a data dir that no longer
@@ -51,6 +53,22 @@ export function scheduleRelaunch(): void {
 export function relaunchApp(): void {
   scheduleRelaunch();
   app.quit();
+}
+
+// How long a quit asked for by another device waits after its handler
+// resolved. A peer's invoke is answered when the handler resolves, and
+// quit tears the direct listener down before a queued frame can leave,
+// so the quit trails the reply and the caller sees success instead of
+// a dropped session. Shared with the updater's unattended install.
+export const UNATTENDED_QUIT_DELAY_MS = 500;
+
+// The relaunch is arranged at once and only the quit waits: a quit
+// from this machine's own user inside the gap then still comes back
+// up, as the peer was told it would, and takes before-quit's fast path.
+export function relaunchAppUnattended(): void {
+  if (requested) return;
+  scheduleRelaunch();
+  setTimeout(() => app.quit(), UNATTENDED_QUIT_DELAY_MS);
 }
 
 export function isRelaunching(): boolean {

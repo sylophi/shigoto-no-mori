@@ -18,10 +18,9 @@
 //   shows (useUpdater's updater:state) subscribes through scope.api
 //   instead, which a peer's transport routes over its direct session.
 // - Host-scoped hooks whose write path is deliberately local-only
-//   (the updateLocalGlobalConfig caller in useSettingsSave, the cli
-//   module behind CliSection): the write lands on this machine's disk,
-//   so their reads and invalidations must stay pinned to the local
-//   `queryKeys` registry.
+//   (the updateLocalGlobalConfig caller in useSettingsSave): the write
+//   lands on this machine's disk, so their reads and invalidations
+//   must stay pinned to the local `queryKeys` registry.
 import { hasLocalHost } from "@/lib/localHost";
 import { createContext, use, type ReactNode } from "react";
 import type { RemoteDeviceApi } from "@/lib/remote/devices";

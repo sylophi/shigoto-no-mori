@@ -20,6 +20,14 @@ declare module "@tanstack/react-query" {
   }
 }
 
+// The meta for a host read a peer serves only behind its command
+// grant: a peer that has not granted this device control refuses it,
+// which is a normal permission state its page renders as missing data,
+// not an error to toast. On this machine a failure is a real one.
+export function gatedHostReadMeta(remote: boolean, errorTitle: string) {
+  return remote ? { silentError: true } : { errorTitle };
+}
+
 export function createAppQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
@@ -36,10 +44,13 @@ export function createAppQueryClient(): QueryClient {
         staleTime: 0,
         // An entity-gone failure (project/worktree deleted out from under
         // an in-flight query) is deterministic; retrying only delays the
-        // toast until well after the UI has moved on. Keep the default
-        // three retries for everything else.
+        // toast until well after the UI has moved on. So is a command
+        // refusal: the grant moves on the host's push, never on a
+        // retry. Keep the default three retries for everything else.
         retry: (failureCount, error) =>
-          failureCount < 3 && !isEntityGoneError(error),
+          failureCount < 3 &&
+          !isEntityGoneError(error) &&
+          !isCommandRefusedError(error),
       },
     },
     queryCache: new QueryCache({

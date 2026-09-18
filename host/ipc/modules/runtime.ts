@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
+import { type HandlerContext, isRemoteCaller } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import type { NukeProgress } from "@shared/schemas";
 import { nukeEverything } from "@host/lib/nuke";
@@ -22,6 +23,11 @@ type RuntimeImpl = {
   stopStateWatcher: () => void;
   stopUpdaterBridge: () => void;
   broadcastNukeProgress: (progress: NukeProgress) => void;
+  relaunchAppUnattended: () => void;
+  // Why a move asked for by another device must not start right now
+  // (it reaps every running script, and nobody here was asked), or
+  // null when the host is idle.
+  unattendedMoveRefusal: () => string | null;
 };
 
 let impl: RuntimeImpl | null = null;
@@ -39,38 +45,74 @@ function runtimeImpl(): RuntimeImpl {
   return impl;
 }
 
-export const runtimeHandlers: Handlers<typeof runtimeContract> = {
-  // Host facts only. isDev deliberately isn't here: it describes the
-  // client build and rides the preload bridge (api.isDev) instead.
-  info: () => ({
-    dataDir: dataDir(),
-    dataDirSource: dataDirSource(),
-    // resolve() drops the trailing slash a hand-edited pointer may carry.
-    atDefaultDataDir: resolve(dataDir()) === defaultDataDir(),
-    canonicalDataDirName: canonicalDataDirName(),
-    homedir: homedir(),
-  }),
+let moveInFlight = false;
 
-  moveDataDir: async ({ parentDir }) => {
-    await moveDataDir(parentDir, {
-      beforeMove: () => {
-        runtimeImpl().stopStateWatcher();
-        runtimeImpl().stopUpdaterBridge();
-      },
-    });
-    // The data dir is a boot-time constant (initDataDir's one-shot
-    // guard exists precisely so it can't change under live callers).
-    // The renderer calls the window module's `relaunch` once this
-    // reply lands.
-  },
+export const runtimeHandlers: Handlers<typeof runtimeContract, HandlerContext> =
+  {
+    // Host facts only. isDev deliberately isn't here: it describes the
+    // client build and rides the preload bridge (api.isDev) instead.
+    info: () => ({
+      dataDir: dataDir(),
+      dataDirSource: dataDirSource(),
+      // resolve() drops the trailing slash a hand-edited pointer may carry.
+      atDefaultDataDir: resolve(dataDir()) === defaultDataDir(),
+      canonicalDataDirName: canonicalDataDirName(),
+      homedir: homedir(),
+    }),
 
-  nuke: async () => {
-    await nukeEverything((progress) =>
-      runtimeImpl().broadcastNukeProgress(progress),
-    );
-    // Nuke means "remove everything shigomori put on this machine";
-    // the CLI links and the shell-integration hooks are part of that.
-    // Settings offers a fresh install afterwards.
-    await runtimeImpl().uninstallCliEverything();
-  },
-};
+    moveDataDir: async ({ parentDir }, ctx) => {
+      const unattended = isRemoteCaller(ctx);
+      // One move at a time, now that the local window is no longer the
+      // only caller: two would share the staged pointer file and undo
+      // each other's re-key.
+      if (moveInFlight) {
+        throw new Error("The data folder is already being moved.");
+      }
+      if (unattended) {
+        const refusal = runtimeImpl().unattendedMoveRefusal();
+        if (refusal !== null) throw new Error(refusal);
+      }
+      moveInFlight = true;
+      let watchersStopped = false;
+      try {
+        await moveDataDir(parentDir, {
+          beforeMove: () => {
+            watchersStopped = true;
+            runtimeImpl().stopStateWatcher();
+            runtimeImpl().stopUpdaterBridge();
+          },
+        });
+      } catch (err) {
+        // A move that failed after the watchers stopped leaves this
+        // app running without them. At this machine the user sees the
+        // error and can restart. For a peer's move nobody here does,
+        // so the restart that brings them back happens anyway (the
+        // data dir and pointer are where they were).
+        if (unattended && watchersStopped) {
+          runtimeImpl().relaunchAppUnattended();
+        } else {
+          moveInFlight = false;
+        }
+        throw err;
+      }
+      // The latch stays set from here: the data dir is a boot-time
+      // constant (initDataDir's one-shot guard exists precisely so it
+      // can't change under live callers), so until the restart this
+      // process still names the old folder and must not move it again.
+      // The local renderer calls the window module's `relaunch` once
+      // this reply lands. A peer has no window module on this machine
+      // to acknowledge with, so the host relaunches itself, after the
+      // reply has left (the electron layer owns that timing).
+      if (unattended) runtimeImpl().relaunchAppUnattended();
+    },
+
+    nuke: async () => {
+      await nukeEverything((progress) =>
+        runtimeImpl().broadcastNukeProgress(progress),
+      );
+      // Nuke means "remove everything shigomori put on this machine";
+      // the CLI links and the shell-integration hooks are part of that.
+      // Settings offers a fresh install afterwards.
+      await runtimeImpl().uninstallCliEverything();
+    },
+  };

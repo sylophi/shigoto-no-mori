@@ -34,6 +34,7 @@ import { readJsonOrNull } from "@host/lib/util/jsonFile";
 import { pathExists, dataDir } from "@host/lib/util/paths";
 import { busyActionRemoteRefusal, confirmBusyAction } from "./busyPrompt";
 import { cliFailureMessage, runCli, spawnCliDetached } from "./cliRunner";
+import { UNATTENDED_QUIT_DELAY_MS } from "./relaunch";
 import { publishUpdaterState, startUpdaterBridge } from "./updaterBridge";
 import { errorMessageOf } from "@shared/errors";
 
@@ -236,7 +237,7 @@ async function installUpdate(unattended: boolean): Promise<void> {
   // update that is installing fine. `installing` blocks a second run
   // in the gap.
   if (unattended) {
-    setTimeout(() => app.quit(), 500);
+    setTimeout(() => app.quit(), UNATTENDED_QUIT_DELAY_MS);
     return;
   }
   app.quit();

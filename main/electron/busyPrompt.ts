@@ -73,10 +73,16 @@ export function busyActionRefusal(action: BusyAction): string | null {
 // detail describes what proceeding would do, which read as if the
 // restart had happened once it crossed the wire as an error. This says
 // what was refused and what to do about it.
-export function busyActionRemoteRefusal(action: BusyAction): string | null {
+export function busyActionRemoteRefusal(
+  action: BusyAction | "move",
+): string | null {
   const busy = getBusyOperations();
   if (!isBusy(busy)) return null;
-  const verb = action === "restart" ? "restarting to update" : "quitting";
+  const verb = {
+    restart: "restarting to update",
+    quit: "quitting",
+    move: "moving the data folder",
+  }[action];
   if (busy.runningScripts > 0) {
     const n = busy.runningScripts;
     return `${pluralize(n, `${n} script is`, `${n} scripts are`)} still running there. Stop ${pluralize(n, "it", "them")} before ${verb}.`;

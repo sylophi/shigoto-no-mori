@@ -898,7 +898,9 @@ async function main() {
       }
       // Spot-check the load-bearing decisions so a silent flip is caught.
       assert.equal(runtimeContract.calls.nuke.remote, false);
-      assert.equal(runtimeContract.calls.moveDataDir.remote, false);
+      // A peer may relocate the data folder, but only as a command.
+      assert.equal(runtimeContract.calls.moveDataDir.remote, true);
+      assert.equal(runtimeContract.calls.moveDataDir.mutating, true);
       // info is the one runtime call a peer may make: the project pages
       // under a device twin spell worktree paths off its data dir. It
       // rides the command grant like the fs reads, since it names the
@@ -907,7 +909,12 @@ async function main() {
       assert.equal(runtimeContract.calls.info.mutating, true);
       assert.equal(runtimeContract.calls.info.movesHostState, false);
       assert.equal(launchersContract.calls.launch.remote, false);
-      assert.equal(cliContract.calls.install.remote, false);
+      // The cli module rides the wire wholly behind the grant: even
+      // its status reads name host paths, so none of it is ungated.
+      for (const def of Object.values(cliContract.calls)) {
+        assert.equal(def.remote, true);
+        assert.equal(def.mutating, true);
+      }
       assert.equal(globalConfigContract.calls.write.remote, false);
       assert.equal(globalConfigContract.calls.readLocal.remote, false);
       assert.equal(globalConfigContract.calls.read.remote, true);
