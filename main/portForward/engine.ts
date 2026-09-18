@@ -15,7 +15,10 @@
 // registry.
 import { coalesce } from "@host/lib/util/coalesce";
 import { createServer, type Server, type Socket } from "node:net";
-import type { forwardContract } from "@shared/ipc/modules/forward";
+import {
+  type forwardContract,
+  isForwardConnectFailedError,
+} from "@shared/ipc/modules/forward";
 import type { Client } from "@shared/ipc/types";
 import { mintHexId } from "@host/lib/idleRegistry";
 import {
@@ -37,7 +40,7 @@ export type ForwardApi = Client<typeof forwardContract>;
 // Exported so the port-forward check's cap scenario tracks this value.
 export const MAX_CONNS_PER_DEVICE = 16;
 
-// Trailing coalesce for the changed signal: accepts and closes arrive
+// Trailing coalesce for the changed signal: opens and closes arrive
 // in bursts (one page load moves ~a dozen conns), and each signal
 // triggers a renderer list refetch, so burst members collapse into one
 // signal shortly after the first.
@@ -57,7 +60,11 @@ type Forward = {
   remotePort: number;
   localPort: number;
   server: Server;
+  // Every accepted socket, for the cap and teardown.
   conns: Set<BridgedConn>;
+  // The ones whose far end opened, which is what the summary counts: a
+  // dial to a port with nothing behind it never shows as a conn.
+  opened: Set<BridgedConn>;
   api: ForwardApi;
   channels: PeerChannels;
 };
@@ -102,13 +109,16 @@ export function createPortForwardEngine(deps: {
       channels: forward.channels,
       open: (channelId) =>
         forward.api.open({ port: forward.remotePort, channelId }),
+      onOpened: () => {
+        forward.opened.add(conn);
+        changed();
+      },
       onClosed: () => {
         forward.conns.delete(conn);
-        changed();
+        if (forward.opened.delete(conn)) changed();
       },
     });
     forward.conns.add(conn);
-    changed();
   }
 
   async function startForward(input: {
@@ -132,10 +142,15 @@ export function createPortForwardEngine(deps: {
     }
     const api = deps.forwardApiFor(input.deviceId);
     const channels = deps.channelsFor(input.deviceId);
-    // Probe the remote service before binding anything: one channel
-    // opened and reset at once, so a dead port, a revoked grant or an
-    // offline peer rejects the start with its coded error instead of
-    // minting a listener whose conns die on arrival.
+    // Probe the peer before binding anything: one channel opened and
+    // reset at once, so a revoked grant or an offline peer rejects the
+    // start with its coded error instead of minting a listener whose
+    // conns die on arrival. A port with nothing listening yet is NOT a
+    // rejection: the forward is a standing intent, so it binds anyway
+    // and each conn dials the port afresh, which means a dev server
+    // started later is reached without touching the switch again. Until
+    // then a local dial is accepted and closed, which a browser shows
+    // as an empty response.
     const probeMux = await channels();
     const probeId = mintHexId();
     const probe = probeMux.attach(probeId, {
@@ -146,6 +161,8 @@ export function createPortForwardEngine(deps: {
     });
     try {
       await api.open({ port: input.remotePort, channelId: probeId });
+    } catch (error) {
+      if (!isForwardConnectFailedError(error)) throw error;
     } finally {
       probe.reset();
     }
@@ -173,6 +190,7 @@ export function createPortForwardEngine(deps: {
       localPort,
       server,
       conns: new Set(),
+      opened: new Set(),
       api,
       channels,
     };
@@ -204,7 +222,7 @@ export function createPortForwardEngine(deps: {
       deviceId: forward.deviceId,
       remotePort: forward.remotePort,
       localPort: forward.localPort,
-      connCount: forward.conns.size,
+      connCount: forward.opened.size,
     }));
   }
 

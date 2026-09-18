@@ -14,10 +14,7 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { errorMessageOf } from "@shared/errors";
-import {
-  FORWARD_CONNECT_FAILED,
-  FORWARD_TOO_MANY_CONNS,
-} from "@shared/ipc/modules/forward";
+import { FORWARD_TOO_MANY_CONNS } from "@shared/ipc/modules/forward";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
@@ -80,9 +77,6 @@ export function describeForwardError(
   if (message.includes("EACCES")) {
     return `localhost:${ports.localPort ?? ports.remotePort} needs elevated privileges here. Pick a port above 1024.`;
   }
-  if (message.startsWith(FORWARD_CONNECT_FAILED)) {
-    return `Nothing answered on port ${ports.remotePort} over there. Is the server running?`;
-  }
   if (message.startsWith(FORWARD_TOO_MANY_CONNS)) {
     return "That device already has as many forwarded connections open as it allows.";
   }
@@ -95,7 +89,7 @@ export function usePortForwards(deviceId: string) {
     mutationFn: (input: { remotePort: number; localPort?: number }) =>
       window.api.portForward.start({ deviceId, ...input }),
     // The engine's start probe surfaces the coded errors here
-    // (connect-failed, too-many-conns). Refusals surface centrally.
+    // (too-many-conns). Refusals surface centrally.
     onError: (err, input) => {
       if (!isCommandRefusedError(err)) {
         notifyError(
