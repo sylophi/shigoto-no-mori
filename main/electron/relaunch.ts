@@ -62,8 +62,13 @@ export function relaunchApp(): void {
 // a dropped session. Shared with the updater's unattended install.
 export const UNATTENDED_QUIT_DELAY_MS = 500;
 
+// The relaunch is arranged at once and only the quit waits: a quit
+// from this machine's own user inside the gap then still comes back
+// up, as the peer was told it would, and takes before-quit's fast path.
 export function relaunchAppUnattended(): void {
-  setTimeout(relaunchApp, UNATTENDED_QUIT_DELAY_MS);
+  if (requested) return;
+  scheduleRelaunch();
+  setTimeout(() => app.quit(), UNATTENDED_QUIT_DELAY_MS);
 }
 
 export function isRelaunching(): boolean {

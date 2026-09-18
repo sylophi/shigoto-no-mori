@@ -251,9 +251,9 @@ async function main() {
         bridge.api.scripts.run({ projectId: "p", worktreeId: "w" }),
         refused,
       );
-      // Local-only channels that never classified themselves as reads
-      // reject too, which also covers the affirmative-biased enum their
-      // outputs would otherwise stub to (cli.status's first arm is
+      // A read that rides the command grant is classified mutating, so
+      // it rejects too, which also covers the affirmative-biased enum
+      // its output would otherwise stub to (cli.status's first arm is
       // "installed").
       await assert.rejects(bridge.api.cli.status(), refused);
       // updater:get IS a classified read (a peer's Settings tab shows

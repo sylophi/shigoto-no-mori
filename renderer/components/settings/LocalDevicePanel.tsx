@@ -7,9 +7,9 @@ import { DeviceToggleSections } from "./DeviceSettingsSections";
 import { BuildVersionLine, VersionSection } from "./VersionSection";
 
 // This machine's section: the version, toggle, CLI and data location
-// sections every peer section renders too, plus the danger zone, which
-// only exists for the machine the window runs on (no peer section
-// offers the nuke).
+// sections a peer section renders too (the last two only while that
+// peer allows control), plus the danger zone, which only exists for
+// the machine the window runs on (no peer section offers the nuke).
 export function LocalDevicePanel({
   form,
   setForm,

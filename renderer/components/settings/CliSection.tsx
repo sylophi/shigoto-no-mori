@@ -1,4 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { errorMessageOf } from "@shared/errors";
+import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -23,9 +25,10 @@ export function CliSection() {
   const { api, keys, remote } = useHostScope();
   const queryClient = useQueryClient();
   const { data: runtime } = useRuntimeInfo();
-  const { data: status } = useQuery<CliStatus>({
+  const { data: status, error } = useQuery<CliStatus>({
     queryKey: keys.cli(),
     queryFn: () => api.cli.status(),
+    staleTime: peerStaleTime(remote),
     meta: gatedHostReadMeta(remote, "Couldn't check the CLI install"),
   });
 
@@ -47,7 +50,9 @@ export function CliSection() {
     meta: { errorTitle: "Couldn't uninstall the CLI" },
   });
 
-  if (!status) return null;
+  if (!status) {
+    return <PeerReadError error={error} what="the CLI install" heading />;
+  }
 
   const { name, state, onPath } = status;
   const busy = install.isPending || uninstall.isPending;
@@ -165,6 +170,44 @@ export function CliSection() {
   );
 }
 
+// Each read on a peer is a round trip, and the shell one spawns the
+// CLI there, for state that only these buttons and that machine's own
+// terminal change. The mutations seed the cache from their replies and
+// a landed session re-asks, so a peer's answer needs no focus refetch.
+// This machine keeps the default: a terminal install shows on return.
+function peerStaleTime(remote: boolean): number {
+  return remote ? Number.POSITIVE_INFINITY : 0;
+}
+
+// A peer's failed read is silent in the toast layer (gatedHostReadMeta),
+// so it is said here instead of the section just not being there. A
+// refusal is the exception: that is the read-only state the page
+// already explains. Locally the toast carries the error.
+function PeerReadError({
+  error,
+  what,
+  heading = false,
+}: {
+  error: unknown;
+  what: string;
+  heading?: boolean;
+}) {
+  const { remote } = useHostScope();
+  if (!remote || !error || isCommandRefusedError(error)) return null;
+  const note = (
+    <p className="text-xs text-muted-foreground select-text">
+      Couldn&apos;t check {what} on that device: {errorMessageOf(error)}
+    </p>
+  );
+  if (!heading) return note;
+  return (
+    <section className="space-y-3">
+      <SectionHeading className="mb-1">Command line tool</SectionHeading>
+      {note}
+    </section>
+  );
+}
+
 // Shell integration, the optional second step after the link install:
 // a hook in the user's shell config that makes cd/create move the
 // calling shell instead of opening a nested subshell. All rc-file
@@ -175,9 +218,10 @@ function ShellIntegrationBlock({ name }: { name: string }) {
   const queryClient = useQueryClient();
   const { data: runtime } = useRuntimeInfo();
   const home = runtime?.homedir ?? null;
-  const { data: status } = useQuery<ShellIntegrationStatus>({
+  const { data: status, error } = useQuery<ShellIntegrationStatus>({
     queryKey: keys.cliShell(),
     queryFn: () => api.cli.shellStatus(),
+    staleTime: peerStaleTime(remote),
     meta: gatedHostReadMeta(remote, "Couldn't check shell integration"),
   });
 
@@ -195,7 +239,9 @@ function ShellIntegrationBlock({ name }: { name: string }) {
     meta: { errorTitle: "Couldn't remove shell integration" },
   });
 
-  if (!status) return null;
+  if (!status) {
+    return <PeerReadError error={error} what="shell integration" />;
+  }
 
   const busy = enable.isPending || remove.isPending;
   const login = status.shells.find((s) => s.shell === status.loginShell);

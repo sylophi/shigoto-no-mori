@@ -29,6 +29,7 @@ import {
   shellIntegrationStatus,
   uninstallShellIntegration,
 } from "./cliShell";
+import { busyActionRemoteRefusal } from "./busyPrompt";
 import { maybeFetchProject } from "./fetch";
 import { relaunchAppUnattended } from "./relaunch";
 import { stopStateWatcher } from "./stateWatcher";
@@ -65,6 +66,7 @@ export function installHostImpls(): void {
     broadcastNukeProgress: (progress) =>
       broadcastAll(runtimeContract, "nukeProgress", progress),
     relaunchAppUnattended,
+    unattendedMoveRefusal: () => busyActionRemoteRefusal("move"),
   });
   setCliRunnerImpl({ runCli, requireCliBinary, cliFailureMessage });
   installFileSyncSpawner();

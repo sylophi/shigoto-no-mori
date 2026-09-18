@@ -49,8 +49,9 @@ import { BuildVersionLine } from "./VersionSection";
 // controlled on this machine and never offered for another. "Devices"
 // is one section per machine on the account, this one first,
 // and everything in such a section is stored on that machine: its
-// update, its worktree and integration toggles, and (for this machine
-// alone) the sections that act on its disk.
+// update, its worktree and integration toggles, and the sections that
+// act on its disk (a peer's only while it allows control, and never
+// its danger zone).
 //
 // One form backs the three local sections (client config and this
 // device's config save together through useSettingsSave), and each

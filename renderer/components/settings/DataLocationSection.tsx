@@ -34,6 +34,13 @@ export function DataLocationSection() {
   const home = runtime?.homedir ?? null;
   const [moving, setMoving] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // The folder a peer's move just left. Its app is restarting, and
+  // until the session that lands afterwards re-reads the path, the
+  // cached one is this stale one and another move would be aimed at a
+  // folder that is gone. Derived against `root`, so it clears itself.
+  const [movedFrom, setMovedFrom] = useState<string | null>(null);
+  const restarting = movedFrom !== null && movedFrom === root;
+  const busy = moving || restarting;
 
   // The move is refused when this session's data dir came from
   // SHIGOMORI_DATA_DIR (a sandbox owns it), so don't offer it.
@@ -45,6 +52,7 @@ export function DataLocationSection() {
       await api.runtime.moveDataDir(parent);
       if (remote) {
         toast.success(`Data folder moved. The app${there} is restarting.`);
+        setMovedFrom(root);
         setMoving(false);
         return;
       }
@@ -66,9 +74,13 @@ export function DataLocationSection() {
 
   return (
     <section className="space-y-3">
-      {moving && (
+      {/* The overlay stands in for a window that is about to go away.
+          A peer's move leaves this window up, so there it would only
+          block work on every other device for as long as a copy across
+          volumes takes. The disabled buttons say enough. */}
+      {moving && !remote && (
         <BlockingOverlay>
-          Moving data folder… The app{there} will restart.
+          Moving data folder… The app will restart.
         </BlockingOverlay>
       )}
       <SectionHeading className="mb-1">Data location</SectionHeading>
@@ -107,7 +119,7 @@ export function DataLocationSection() {
         <Button
           variant="outline"
           size="sm"
-          disabled={!movable || moving}
+          disabled={!movable || busy}
           onClick={() => setPickerOpen(true)}
         >
           <FolderInput />
@@ -117,7 +129,7 @@ export function DataLocationSection() {
           <Button
             variant="outline"
             size="sm"
-            disabled={moving}
+            disabled={busy}
             aria-pressed={reset.armed}
             onClick={handleReset}
           >
@@ -126,6 +138,13 @@ export function DataLocationSection() {
           </Button>
         )}
       </div>
+      {remote && busy && (
+        <p className="text-xs text-muted-foreground">
+          {moving
+            ? "Moving the data folder on that device…"
+            : "Moved. The new location shows once that device is back."}
+        </p>
+      )}
       {pickerOpen && runtime && (
         <FolderPickerModal
           // Start beside the current folder: the common move is to a

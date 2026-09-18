@@ -141,7 +141,8 @@ function PeerSettingsForm({
   // frozen, and name where the grant is made. While the verdict is
   // still in flight, assume granted rather than flashing a read-only
   // form that turns editable a moment later.
-  const readOnly = !useCommandAccess().canCommand;
+  const access = useCommandAccess();
+  const readOnly = !access.canCommand;
   // Same form shape as the local Settings form so the section
   // components are shared verbatim. The client half doesn't exist here:
   // theme/doubutsu seed from an empty client config, nothing in this
@@ -205,8 +206,11 @@ function PeerSettingsForm({
       </div>
 
       {/* Both read paths the device only names to a peer it lets
-          command it, so a read-only visitor has nothing to show here. */}
-      {!readOnly && (
+          command it, so a read-only visitor has nothing to show here.
+          Mounted on the landed verdict, not the optimistic one the
+          form uses: these sections read on mount, and asking a device
+          that turns out not to allow it is a refusal per read. */}
+      {access.granted && (
         <>
           <CliSection />
           <DataLocationSection />
