@@ -284,6 +284,10 @@ export const queryKeys = queryKeysFor(localDeviceId);
 //   ping, refetching forever.
 const externalChangeExempt = new Set([
   "account",
+  // CLI links and rc hooks are not forest state, and re-reading them
+  // spawns the CLI on the host, so a git-state ping never re-asks.
+  "cli",
+  "cliShell",
   "clientConfig",
   // A permission verdict, not state: it moves only on a grant or
   // revoke on the host, never because that host's git state did.

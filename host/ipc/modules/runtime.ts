@@ -23,7 +23,7 @@ type RuntimeImpl = {
   stopStateWatcher: () => void;
   stopUpdaterBridge: () => void;
   broadcastNukeProgress: (progress: NukeProgress) => void;
-  relaunchApp: () => void;
+  relaunchAppUnattended: () => void;
 };
 
 let impl: RuntimeImpl | null = null;
@@ -40,11 +40,6 @@ function runtimeImpl(): RuntimeImpl {
   }
   return impl;
 }
-
-// How long a peer-requested move waits before relaunching, so the
-// reply leaves first (the same beat the updater's unattended install
-// takes before its quit).
-const REMOTE_RELAUNCH_DELAY_MS = 500;
 
 export const runtimeHandlers: Handlers<typeof runtimeContract, HandlerContext> =
   {
@@ -69,14 +64,10 @@ export const runtimeHandlers: Handlers<typeof runtimeContract, HandlerContext> =
       // The data dir is a boot-time constant (initDataDir's one-shot
       // guard exists precisely so it can't change under live callers).
       // The local renderer calls the window module's `relaunch` once
-      // this reply lands. A peer has no window module on this machine to
-      // acknowledge with, so the host relaunches itself a beat after
-      // answering: quit tears the direct listener down before a queued
-      // frame can leave, and the caller should see success, not a
-      // dropped session, for a move that went fine.
-      if (isRemoteCaller(ctx)) {
-        setTimeout(() => runtimeImpl().relaunchApp(), REMOTE_RELAUNCH_DELAY_MS);
-      }
+      // this reply lands. A peer has no window module on this machine
+      // to acknowledge with, so the host relaunches itself, after the
+      // reply has left (the electron layer owns that timing).
+      if (isRemoteCaller(ctx)) runtimeImpl().relaunchAppUnattended();
     },
 
     nuke: async () => {

@@ -20,6 +20,14 @@ declare module "@tanstack/react-query" {
   }
 }
 
+// The meta for a host read a peer serves only behind its command
+// grant: a peer that has not granted this device control refuses it,
+// which is a normal permission state its page renders as missing data,
+// not an error to toast. On this machine a failure is a real one.
+export function gatedHostReadMeta(remote: boolean, errorTitle: string) {
+  return remote ? { silentError: true } : { errorTitle };
+}
+
 export function createAppQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {

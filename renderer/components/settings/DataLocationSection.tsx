@@ -27,6 +27,8 @@ import { notifyError, toast } from "@/lib/toast";
 // its runtime info, so the new path shows up on its own.
 export function DataLocationSection() {
   const { api, remote } = useHostScope();
+  // Whose app the copy below is talking about.
+  const there = remote ? " on that device" : "";
   const { data: runtime } = useRuntimeInfo();
   const root = runtime?.dataDir ?? null;
   const home = runtime?.homedir ?? null;
@@ -42,7 +44,7 @@ export function DataLocationSection() {
     try {
       await api.runtime.moveDataDir(parent);
       if (remote) {
-        toast.success("Data folder moved. The app there is restarting.");
+        toast.success(`Data folder moved. The app${there} is restarting.`);
         setMoving(false);
         return;
       }
@@ -66,9 +68,7 @@ export function DataLocationSection() {
     <section className="space-y-3">
       {moving && (
         <BlockingOverlay>
-          {remote
-            ? "Moving data folder… The app on that device will restart."
-            : "Moving data folder… The app will restart."}
+          Moving data folder… The app{there} will restart.
         </BlockingOverlay>
       )}
       <SectionHeading className="mb-1">Data location</SectionHeading>
@@ -83,7 +83,7 @@ export function DataLocationSection() {
       )}
       <p className="text-xs text-muted-foreground">
         Worktrees, configs, and state live here. Moving the folder restarts the
-        app{remote && " on that device"}, and the CLI follows automatically.
+        app{there}, and the CLI follows automatically.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         {/* This machine's Finder can only show this machine's disk. */}
@@ -133,7 +133,7 @@ export function DataLocationSection() {
           initialPath={getBrowseParentPath(runtime.dataDir) ?? undefined}
           title="Move the data folder"
           confirmLabel="Move here"
-          hint={`Choose its new parent folder. It will be named ${runtime.canonicalDataDirName} there, and the app${remote ? " on that device" : ""} restarts right after the move.`}
+          hint={`Choose its new parent folder. It will be named ${runtime.canonicalDataDirName} there, and the app${there} restarts right after the move.`}
           onPick={(parent) => {
             setPickerOpen(false);
             void moveTo(parent);

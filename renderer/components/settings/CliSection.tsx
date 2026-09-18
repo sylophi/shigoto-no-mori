@@ -5,6 +5,7 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { tildify } from "@/lib/projectPaths";
+import { gatedHostReadMeta } from "@/lib/queryClientOptions";
 import type {
   CliStatus,
   ShellIntegrationStatus,
@@ -25,9 +26,7 @@ export function CliSection() {
   const { data: status } = useQuery<CliStatus>({
     queryKey: keys.cli(),
     queryFn: () => api.cli.status(),
-    meta: remote
-      ? { silentError: true }
-      : { errorTitle: "Couldn't check the CLI install" },
+    meta: gatedHostReadMeta(remote, "Couldn't check the CLI install"),
   });
 
   const applyStatus = (next: CliStatus) => {
@@ -179,9 +178,7 @@ function ShellIntegrationBlock({ name }: { name: string }) {
   const { data: status } = useQuery<ShellIntegrationStatus>({
     queryKey: keys.cliShell(),
     queryFn: () => api.cli.shellStatus(),
-    meta: remote
-      ? { silentError: true }
-      : { errorTitle: "Couldn't check shell integration" },
+    meta: gatedHostReadMeta(remote, "Couldn't check shell integration"),
   });
 
   const applyStatus = (next: ShellIntegrationStatus) => {

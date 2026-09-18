@@ -48,39 +48,39 @@ export type ShellIntegrationStatus = z.infer<
 // Served to a peer as well as the local window: Settings shows every
 // device of the account, and a peer holding the command grant may
 // manage that device's CLI links and shell hooks from there, the same
-// way it may already run scripts on it. Every call rides the grant.
-// The two status reads are tagged mutating like runtime:info and the
-// fs reads, because they name the host's home, bin dir and rc files,
-// and they opt out of the resolved-mutation ping since they move
-// nothing (a ping-driven refetch of a pinging read would loop).
-const gatedRead = { remote: true, mutating: true, movesHostState: false };
-const command = { remote: true, mutating: true };
+// way it may already run scripts on it. Every call rides the grant,
+// the two status reads included (tagged mutating like runtime:info and
+// the fs reads), because they name the host's home, bin dir and rc
+// files. None of them pings viewers: links and rc hooks are no part of
+// the forest state a ping re-reads, and the caller seeds its own cache
+// from each reply.
+const gated = { remote: true, mutating: true, movesHostState: false };
 
 export const cliContract = defineContract("host", {
-  status: invoke("cli:status", z.void(), CliStatusSchema, gatedRead),
+  status: invoke("cli:status", z.void(), CliStatusSchema, gated),
   install: invoke(
     "cli:install",
     z.object({ force: z.boolean() }),
     CliStatusSchema,
-    command,
+    gated,
   ),
-  uninstall: invoke("cli:uninstall", z.void(), CliStatusSchema, command),
+  uninstall: invoke("cli:uninstall", z.void(), CliStatusSchema, gated),
   shellStatus: invoke(
     "cli:shellStatus",
     z.void(),
     ShellIntegrationStatusSchema,
-    gatedRead,
+    gated,
   ),
   shellInstall: invoke(
     "cli:shellInstall",
     z.void(),
     ShellIntegrationStatusSchema,
-    command,
+    gated,
   ),
   shellUninstall: invoke(
     "cli:shellUninstall",
     z.void(),
     ShellIntegrationStatusSchema,
-    command,
+    gated,
   ),
 });
