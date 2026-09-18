@@ -12,8 +12,8 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseDotenv } from "../shared/account/serviceConfig.ts";
 import { errorMessageOf } from "../shared/errors.ts";
+import { rendererDevServerPort } from "../shared/portsEnvFile.mts";
 import { repoRoot } from "./lib/checkKit.mjs";
 import {
   devBundleExecutable,
@@ -52,7 +52,7 @@ try {
 
   // The build must be the dev one forge made for the running vite
   // server: forge bakes that server's URL into it, so the bundle is
-  // checked for the port port-pool gave this worktree (.env.local,
+  // checked for the port port-pool gave this worktree (.env.ports,
   // the one vite.renderer.config.ts pins), and the server is probed.
   const build = join(repoRoot, ".vite", "build", "index.js");
   if (!existsSync(build)) {
@@ -61,7 +61,7 @@ try {
         "(`pnpm start`): the peer runs from its build and its vite server.",
     );
   }
-  const port = readDotenvPort();
+  const port = rendererDevServerPort(repoRoot);
   if (port !== undefined) {
     const devServerUrl = `http://localhost:${port}`;
     if (!readFileSync(build, "utf8").includes(devServerUrl)) {
@@ -97,14 +97,4 @@ try {
   superviseChild(child, "Electron");
 } catch (error) {
   die(errorMessageOf(error));
-}
-
-// The renderer port port-pool wrote for this worktree. Unset means
-// vite picked its own, and there is nothing to check against.
-function readDotenvPort(): string | undefined {
-  try {
-    return parseDotenv(readFileSync(join(repoRoot, ".env.local"), "utf8")).PORT;
-  } catch {
-    return undefined;
-  }
 }

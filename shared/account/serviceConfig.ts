@@ -58,11 +58,11 @@ export function isConfigured(config: AccountServiceConfig): boolean {
   return config.hubUrl.length > 0 && config.publishableKey.length > 0;
 }
 
-// Minimal KEY=VALUE dotenv parser for the gitignored .env.local dev
-// convenience file. Pure string work so it lives here rather than in the
-// electron glue and the account check can drive it. Not a full dotenv
-// implementation: it skips blanks and comments, strips one layer of
-// surrounding quotes, and ignores anything malformed.
+// Minimal KEY=VALUE dotenv parser for the gitignored dev dotenv files
+// (.env.local, .env.ports). Pure string work so it lives here rather
+// than in the electron glue and the account check can drive it. Not a
+// full dotenv implementation: it skips blanks and comments, strips one
+// layer of surrounding quotes, and ignores anything malformed.
 export function parseDotenv(text: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const line of text.split("\n")) {
