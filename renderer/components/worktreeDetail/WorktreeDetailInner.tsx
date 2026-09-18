@@ -25,13 +25,12 @@ import {
   useWorktreeCreatePhase,
 } from "@/store/worktreeLifecycle";
 import type { CleanupError, Project, Worktree } from "@shared/schemas";
-import { LauncherRow } from "./LauncherRow";
+import { LaunchSection } from "./LaunchSection";
 import { LifecycleBanner } from "./LifecycleBanner";
 import { MirrorPill } from "./MirrorPill";
 import { LocalWorktreeActions } from "./LocalWorktreeActions";
 import { RemoteWorktreeActions } from "./RemoteWorktreeActions";
 import { PullRequestSection } from "./pullRequests/PullRequestSection";
-import { ScriptLaunchRow } from "./ScriptLaunchRow";
 import { ScriptsSection } from "./scripts/ScriptsSection";
 import {
   WorktreeDetailFooter,
@@ -61,9 +60,10 @@ export function WorktreeDetailInner({
   // whichever device the page is scoped to.
   const { toProjectPage } = useProjectNav();
   // Which device this page is scoped to. Everything data-shaped below
-  // already rides the host scope. `remote` only gates the affordances
-  // that are local by nature (launching) and adds the
-  // cross-device ones (mirror, transplant, the device chip).
+  // already rides the host scope. `remote` only gates what is local by
+  // nature (the create-phase lock, while LaunchSection gates launching
+  // itself) and adds the cross-device ones (mirror, transplant, the
+  // device chip).
   const { remote } = useHostScope();
   const scriptRuns = useScriptRuns();
   // Always true locally (the local device is granted by contract), so
@@ -226,20 +226,7 @@ export function WorktreeDetailInner({
         aria-disabled={locked}
       >
         <div className="flex max-w-4xl flex-col gap-10 phone:gap-8">
-          {!remote && (
-            // Launching opens editors and shells on the machine showing
-            // this window. On another device's worktree there is nothing
-            // honest to launch, so the section only exists locally.
-            <section className="space-y-3">
-              <SectionHeading>Launch</SectionHeading>
-              {/* The two rows are one wrapping group of pills, so they sit a
-                  pill-gap apart, not the section's heading-to-content gap. */}
-              <div className="space-y-2">
-                <LauncherRow worktree={worktree} />
-                <ScriptLaunchRow worktree={worktree} />
-              </div>
-            </section>
-          )}
+          <LaunchSection worktree={worktree} />
 
           <PullRequestSection worktree={worktree} />
 

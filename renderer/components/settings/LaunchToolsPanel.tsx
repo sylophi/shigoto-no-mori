@@ -16,6 +16,8 @@ import { ToggleRow } from "@/components/shared/ToggleRow";
 // this device's config like the per-device toggles do, but launching
 // is local by nature (a tool is detected here and opens here), so the
 // page files them under "Visual" and never offers them for a peer.
+// launchScripts also decides the script pills this window shows on a
+// peer's worktree page, still read from this machine's config.
 export function LaunchToolsPanel({
   form,
   setForm,
