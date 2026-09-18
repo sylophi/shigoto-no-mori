@@ -45,7 +45,8 @@ import {
 } from "../transplant/TransplantReview";
 import { stepHeadline, useClock } from "../transplant/transplantSteps";
 import {
-  ignoreSummary,
+  selectionSummary,
+  sessionSummary,
   type PullChoiceState,
   usePullChoice,
 } from "./ignoreChoice";
@@ -139,10 +140,7 @@ export function MirrorDialog({
 
   const header = HEADER[stage];
   const elapsed = (stage === "running" ? now : endedAt) - mirror.submittedAt;
-  const summary = ignoreSummary(
-    pull.selection.mode,
-    pull.selection.selected.size,
-  );
+  const summary = selectionSummary(pull.selection);
 
   return (
     <ModalShell
@@ -419,10 +417,7 @@ function MirrorLive({
     (entry) => entry.session === session,
   );
   const view = live === undefined ? null : describeMirror(live);
-  const summary =
-    live === undefined
-      ? null
-      : ignoreSummary(live.ignoreMode, live.ignores.length);
+  const summary = live === undefined ? null : sessionSummary(live);
   return (
     <>
       <TransplantBody>

@@ -7,10 +7,11 @@
 // or a folder, the first one holding it decides.
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { makeIgnoreMatcher } from "@shared/gitPaths";
+import { makeIgnoreMatcher, normalizeRelPath } from "@shared/gitPaths";
 import type { CarryOverCandidate, CarryOverStat } from "@shared/schemas";
 import type { SyncWorktreeFolderEntry } from "@shared/ipc/modules/sync";
 import { listIgnoredPaths } from "../git/branches";
+import { chunked, runLenient } from "../git/core";
 import {
   listWorktreeIdentities,
   type WorktreeIdentity,
@@ -122,6 +123,39 @@ export async function listCarryOverCandidates(
   return [...byName.values()].toSorted(foldersFirst);
 }
 
+// The folders among `folders` (root-relative) that a rule names even
+// though git's ignored walk passes over them: the walk lists untracked
+// paths only, so a folder holding one force-added file never collapses
+// to a single ignored entry. The mirror engine reads the rules alone
+// and stays out of such a folder whole, so the picker has to call it
+// ignored too, or it would offer a file inside that can never cross.
+// `--no-index` asks the rules without the index's say. Exit 1 (none
+// match) reads as none, and an oddly named folder git quotes drops out
+// the same way.
+async function ruleIgnoredFolders(
+  worktreePath: string,
+  folders: readonly string[],
+): Promise<Set<string>> {
+  const found = await Promise.all(
+    chunked(folders).map((chunk) =>
+      runLenient(worktreePath, [
+        "-c",
+        "core.quotePath=false",
+        "check-ignore",
+        "--no-index",
+        "--",
+        // The slash tells a directory-only rule (build/) what it is.
+        ...chunk.map((folder) => `${folder}/`),
+      ]),
+    ),
+  );
+  return new Set(
+    found.flatMap((out) =>
+      out.split("\n").filter(Boolean).map(normalizeRelPath),
+    ),
+  );
+}
+
 // One folder of one checkout, with git's ignore verdict per entry: the
 // mirror dialog's picker of what stays behind (shared/ipc/modules/
 // sync.ts worktreeFolder). Folders first, then alphabetical, like the
@@ -135,12 +169,19 @@ export async function listWorktreeFolder(
     ignoredPathsCache.get(worktreePath),
   ]);
   const isIgnored = makeIgnoreMatcher(ignored);
-  return entries
-    .filter((entry) => entry.name !== ".git")
+  const pathOf = (name: string) => (relative ? `${relative}/${name}` : name);
+  const listed = entries.filter((entry) => entry.name !== ".git");
+  const byRule = await ruleIgnoredFolders(
+    worktreePath,
+    listed
+      .filter((entry) => entry.isDirectory() && !isIgnored(pathOf(entry.name)))
+      .map((entry) => pathOf(entry.name)),
+  );
+  return listed
     .map((entry) => ({
       name: entry.name,
       isDirectory: entry.isDirectory(),
-      ignored: isIgnored(relative ? `${relative}/${entry.name}` : entry.name),
+      ignored: isIgnored(pathOf(entry.name)) || byRule.has(pathOf(entry.name)),
     }))
     .toSorted(foldersFirst);
 }

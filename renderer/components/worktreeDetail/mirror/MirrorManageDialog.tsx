@@ -56,6 +56,7 @@ import {
 } from "../transplant/TransplantChrome";
 import {
   type IgnoreSelection,
+  modeOf,
   resolveIgnores,
   sameSelection,
   selectionOf,
@@ -317,11 +318,15 @@ function Ignores({
   const selection = draft ?? current;
   // Read only while the gitignored rule shows: it walks the checkout.
   const ignored = useWorktreeIgnoredPaths(worktree.projectId, worktree.id, {
-    enabled: selection.mode === "gitignored",
+    enabled: selection.base === "gitignored",
   });
   const setIgnores = useSetMirrorIgnores();
-  const dirty = draft !== null && !sameSelection(draft, current);
-  const waiting = selection.mode === "gitignored" && ignored.data === undefined;
+  // A session whose patterns do not read back as its rule (another
+  // client's) still takes an Apply, which rewrites it as drawn.
+  const dirty =
+    draft !== null &&
+    (!sameSelection(draft, current) || modeOf(draft) !== session.ignoreMode);
+  const waiting = selection.base === "gitignored" && ignored.data === undefined;
   const apply = () => {
     if (draft === null) return;
     setIgnores.mutate(
