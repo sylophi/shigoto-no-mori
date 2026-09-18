@@ -133,6 +133,7 @@ export function PortRow({
         <ForwardControl
           deviceId={deviceId}
           remotePort={port}
+          listening={listening}
           granted={granted}
         />
       )}

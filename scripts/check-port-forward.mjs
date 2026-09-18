@@ -33,6 +33,8 @@
 //   - a ~1.5 MB local transfer lands byte-identical,
 //   - the fixture server closing its socket ends the local client
 //     socket (end propagation),
+//   - a forward to a port with nothing behind it starts anyway, closes
+//     a local dial empty, and reaches a server that comes up later,
 //   - stopForward closes the listener and live conns, and a fresh
 //     forward still round-trips,
 //   - the first concurrent local socket OVER the client-side
@@ -77,12 +79,12 @@ function onceWithin(emitter, event, what, timeoutMs = 10_000) {
   });
 }
 
-// A loopback fixture server on an ephemeral port. `onConnection` is
-// the per-socket behavior (echo, greet, close). `connections` counts
-// accepted sockets so the grant proof can assert the handler never
-// dialed.
-function startFixtureServer(onConnection) {
-  return new Promise((resolve) => {
+// A loopback fixture server, on an ephemeral port unless one is named.
+// `onConnection` is the per-socket behavior (echo, greet, close).
+// `connections` counts accepted sockets so the grant proof can assert
+// the handler never dialed.
+function startFixtureServer(onConnection, port = 0) {
+  return new Promise((resolve, reject) => {
     const state = { connections: 0 };
     const sockets = new Set();
     const server = createServer((socket) => {
@@ -94,7 +96,10 @@ function startFixtureServer(onConnection) {
       socket.on("error", () => {});
       onConnection(socket);
     });
-    server.listen(0, "127.0.0.1", () => {
+    // A named port can be taken: fail the check, not the process.
+    server.once("error", reject);
+    server.listen(port, "127.0.0.1", () => {
+      server.off("error", reject);
       resolve({
         port: server.address().port,
         connections: () => state.connections,
@@ -511,6 +516,51 @@ async function main() {
     engine.stopForward(byeForward.forwardId);
     await byeServer.close();
     ok("engine: the fixture closing its socket ends the local client socket");
+
+    // (11b) A forward to a port with nothing behind it still starts: a
+    // local dial is accepted and closed with no bytes, and once a server
+    // comes up on that port the SAME forward round-trips, with no second
+    // start. The local end is named: an ephemeral bind could be handed
+    // the very port just reserved for the late server.
+    const latePort = await freeLoopbackPort();
+    let earlyLocalPort = await freeLoopbackPort();
+    while (earlyLocalPort === latePort) {
+      // oxlint-disable-next-line no-await-in-loop -- redrawn until distinct.
+      earlyLocalPort = await freeLoopbackPort();
+    }
+    const early = await engine.startForward({
+      deviceId: "A",
+      remotePort: latePort,
+      localPort: earlyLocalPort,
+    });
+    const deadDial = connect({ host: "127.0.0.1", port: early.localPort });
+    let deadDialBytes = 0;
+    deadDial.on("data", (chunk) => {
+      deadDialBytes += chunk.length;
+    });
+    deadDial.on("error", () => {});
+    deadDial.on("end", () => deadDial.destroy());
+    await onceWithin(
+      deadDial,
+      "close",
+      "the dial to a dead remote port to close",
+    );
+    assert.equal(deadDialBytes, 0);
+    const lateServer = await startFixtureServer(
+      (socket) => socket.pipe(socket),
+      latePort,
+    );
+    const lateEcho = await dialAndCollect(
+      early.localPort,
+      Buffer.from("late"),
+      4,
+    );
+    assert.equal(lateEcho.toString("utf8"), "late");
+    engine.stopForward(early.forwardId);
+    await lateServer.close();
+    ok(
+      "engine: a forward to a dead port starts anyway and reaches a server that comes up later",
+    );
 
     // (12) stopForward closes the listener and live conns, and the host
     // registry does not leak: a fresh forward still round-trips.

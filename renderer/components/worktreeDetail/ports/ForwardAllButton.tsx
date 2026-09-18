@@ -1,14 +1,13 @@
-// The remote Ports dialog's bulk switch: forward every port with a
-// server behind it in one go, or stop every forward the dialog lists.
-// Only ports that are listening are started, since the engine probes
-// the remote end on start and a dead port would fail every time. The
-// rows keep their own switches for anything else. Each start lands on
-// the local port the row remembers (preferredLocalPort), so the bulk
-// action and the switches agree on where a port goes. Starts run one
-// at a time: each opens a probe channel on the peer, and the order
-// makes a local-port collision between two rows deterministic. The
-// rows reflect the outcome live off the engine's broadcast. Failures
-// fold into one toast per action rather than one per port.
+// The remote Ports dialog's bulk actions: forward every listed port in
+// one go, and stop every forward the dialog lists. A port with nothing
+// listening yet is started too: the engine binds the forward anyway and
+// it reaches the server once one comes up. Each start lands on the
+// local port the row remembers (preferredLocalPort), so the bulk action
+// and the switches agree on where a port goes. Starts run one at a
+// time: each opens a probe channel on the peer, and the order makes a
+// local-port collision between two rows deterministic. The rows reflect
+// the outcome live off the engine's broadcast. Failures fold into one
+// toast per action rather than one per port.
 import type { ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Loader2, Power, PowerOff } from "lucide-react";
@@ -47,9 +46,7 @@ export function ForwardAllButton({
   const configQuery = useClientConfig();
   const forwarded = new Set(forwards.map((forward) => forward.remotePort));
   const listed = new Set(ports.map((entry) => entry.port));
-  const toStart = ports.filter(
-    (entry) => entry.listening && !forwarded.has(entry.port),
-  );
+  const toStart = ports.filter((entry) => !forwarded.has(entry.port));
   const toStop = forwards.filter((forward) => listed.has(forward.remotePort));
 
   const bulk = useMutation({
@@ -90,43 +87,61 @@ export function ForwardAllButton({
     },
   });
 
-  // Start is the resting face: it turns into Stop once every live port
-  // is forwarded (or once starting is off the table for lack of a
-  // grant) and there is something to stop. Stopping is a local act, so
-  // it never needs the grant.
+  // Start is the resting face, shown alone until something is
+  // forwarded. Stop joins it as soon as there is a forward to stop, and
+  // stands alone once starting is off the table (everything forwarded,
+  // or no grant). The two do not take turns: a listed port that cannot
+  // bind on this machine stays startable forever, and must not keep the
+  // stop out of reach. Stopping is a local act, so it never needs the
+  // grant.
   const canStart = granted && toStart.length > 0;
-  const mode: Mode = canStart || toStop.length === 0 ? "start" : "stop";
-  const disabled =
-    bulk.isPending || configQuery.isPending || (mode === "start" && !canStart);
-  const face = bulk.isPending
-    ? {
-        icon: <Loader2 className="animate-spin" />,
-        label: bulk.variables === "start" ? "Forwarding…" : "Stopping…",
-      }
-    : MODE_FACE[mode];
+  const canStop = toStop.length > 0;
+  const modes: Mode[] = canStop
+    ? canStart
+      ? ["start", "stop"]
+      : ["stop"]
+    : ["start"];
 
   return (
-    <SimpleTooltip
-      tip={
-        bulk.isPending
-          ? undefined
-          : describeTip(mode, toStart.length, toStop.length, granted)
-      }
-    >
-      {/* The span is the trigger: a disabled button dispatches no
-          pointer events, and disabled is when the tip matters. */}
-      <span className="inline-flex">
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={disabled}
-          onClick={() => bulk.mutate(mode)}
-        >
-          {face.icon}
-          {face.label}
-        </Button>
-      </span>
-    </SimpleTooltip>
+    <>
+      {modes.map((mode) => {
+        const running = bulk.isPending && bulk.variables === mode;
+        const face = running
+          ? {
+              icon: <Loader2 className="animate-spin" />,
+              label: mode === "start" ? "Forwarding…" : "Stopping…",
+            }
+          : MODE_FACE[mode];
+        return (
+          <SimpleTooltip
+            key={mode}
+            tip={
+              bulk.isPending
+                ? undefined
+                : describeTip(mode, toStart.length, toStop.length, granted)
+            }
+          >
+            {/* The span is the trigger: a disabled button dispatches no
+                pointer events, and disabled is when the tip matters. */}
+            <span className="inline-flex">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={
+                  bulk.isPending ||
+                  configQuery.isPending ||
+                  (mode === "start" && !canStart)
+                }
+                onClick={() => bulk.mutate(mode)}
+              >
+                {face.icon}
+                {face.label}
+              </Button>
+            </span>
+          </SimpleTooltip>
+        );
+      })}
+    </>
   );
 }
 
@@ -138,8 +153,8 @@ function describeTip(
 ): string {
   if (mode === "stop") return `Stop ${pluralize(toStop, "forward")}`;
   if (!granted) return peerReadOnlyNote();
-  if (toStart === 0) return "Nothing is listening over there right now";
-  return `Forward ${pluralize(toStart, "listening port")}`;
+  if (toStart === 0) return "No ports to forward";
+  return `Forward ${pluralize(toStart, "port")}`;
 }
 
 // One toast for the whole action: the single failure in the engine's

@@ -1,13 +1,15 @@
 // The forward band under a remote port's header: on the left the
 // mapping as a form, `<device>:<remote port> -> localhost:<field>`. On
 // the right the switch with its state spelled out, and Open once the
-// forward is up. The field is the local end. While the forward is off
-// it shows the remembered preference (default: the same number as the
-// remote port, the least surprising place for it to land). While it is
-// on it shows where the listener actually bound, and committing a new
-// number moves the listener there. Failures land under the band rather
-// than in a toast, since the fix (pick another local port) is right
-// here.
+// forward is up. The switch does not wait for a server: a forward to a
+// port with nothing listening stays on and reaches the server once one
+// comes up, and the state word says it is waiting. The field is the
+// local end. While the forward is off it shows the remembered
+// preference (default: the same number as the remote port, the least
+// surprising place for it to land). While it is on it shows where the
+// listener actually bound, and committing a new number moves the
+// listener there. Failures land under the band rather than in a toast,
+// since the fix (pick another local port) is right here.
 import { useRef, useState } from "react";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { digitsOnly, parsePortNumber } from "@shared/schemas";
@@ -25,10 +27,13 @@ import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 export function ForwardControl({
   deviceId,
   remotePort,
+  listening,
   granted,
 }: {
   deviceId: string;
   remotePort: number;
+  // Whether a server is behind the port over there right now.
+  listening: boolean;
   // Whether this device may drive verbs on the peer. A live forward can
   // always be switched off (that is a local act), but switching one on
   // opens a grant-gated conn over there.
@@ -94,6 +99,7 @@ export function ForwardControl({
   const state = describeState(
     !isPending ? null : !live ? "start" : pendingMove ? "move" : "stop",
     forward,
+    listening,
   );
 
   return (
@@ -130,12 +136,12 @@ export function ForwardControl({
         <span
           className={cn(
             "text-xs",
-            live && !isPending
+            state.serving
               ? cn("font-medium", TONE_TEXT.emerald)
               : TONE_TEXT.slate,
           )}
         >
-          {state}
+          {state.word}
         </span>
         {/* A fixed-width slot so the spinner standing in for the switch
             does not shift the Open button beside it. */}
@@ -171,15 +177,28 @@ export function ForwardControl({
   );
 }
 
-// The word beside the switch.
+// The word beside the switch, and whether it reads as up (a settled
+// forward with a server behind it).
 function describeState(
   pending: "start" | "stop" | "move" | null,
   forward: { connCount: number } | undefined,
-): string {
-  if (pending === "start") return "Starting";
-  if (pending === "stop") return "Stopping";
-  if (pending === "move") return "Moving";
-  if (forward === undefined) return "Off";
-  if (forward.connCount > 0) return `Forwarding, ${forward.connCount} open`;
-  return "Forwarding";
+  listening: boolean,
+): { word: string; serving: boolean } {
+  if (pending === "start") return { word: "Starting", serving: false };
+  if (pending === "stop") return { word: "Stopping", serving: false };
+  if (pending === "move") return { word: "Moving", serving: false };
+  if (forward === undefined) return { word: "Off", serving: false };
+  // Open conns outrank the liveness poll, which lags a server that
+  // just came up. The engine counts a conn only once its far end
+  // opened, so a dial to a dead port never reads as one.
+  if (!listening && forward.connCount === 0) {
+    return { word: "Waiting for a server", serving: false };
+  }
+  return {
+    word:
+      forward.connCount > 0
+        ? `Forwarding, ${forward.connCount} open`
+        : "Forwarding",
+    serving: true,
+  };
 }

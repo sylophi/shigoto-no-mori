@@ -84,7 +84,7 @@ export function PortsDialog({
         <p>
           {remote
             ? canForwardPorts
-              ? "Switch a port on to reach it at localhost here, at a local port of your choosing."
+              ? "Switch a port on to reach it at localhost here, at a local port of your choosing. A forward stays on while its server is down."
               : `What ${deviceLabel} serves from this worktree. Forwarding needs the app.`
             : "What this worktree serves."}
         </p>
