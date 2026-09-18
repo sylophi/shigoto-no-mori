@@ -1,61 +1,71 @@
 // Step 2 of the transplant: both devices on screen with the pull's
-// progress between them, and the named steps (the core four, plus the
-// files step when a leave-out rule admits something) with done /
-// running / queued states read off the orchestrator's frames, so a
-// stall is attributable to one step. Also the failed view: the same list,
+// progress between them, and the run as named steps read off the
+// orchestrator's frames, so a stall is attributable to one step. The
+// create is spelled out as the phases this project actually has
+// (carry-over, the setup script by its command, ports), and a step
+// the run leaves out (setup switched off, a clean tree) is listed as
+// skipped rather than dropped. Also the failed view: the same list,
 // frozen where it stopped, with the error and a retry.
-import { AlertCircle, Check, Laptop, Monitor } from "lucide-react";
+import { AlertCircle, Check, Laptop, Minus, Monitor } from "lucide-react";
+import type { ReactNode } from "react";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import type { SyncPullProgress } from "@shared/ipc/modules/sync";
+import type { CreatePhase, Project, Worktree } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { LocalHostScope } from "@/hooks/remote/useHostScope";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { formatBytes } from "@/lib/formatBytes";
+import { pluralize } from "@/lib/pluralize";
+import { pullWorktreeName } from "@/lib/remote/pullWorktreeName";
 import { cn } from "@/lib/utils";
-import { CREATE_PHASE_LABEL } from "@/store/worktreeLifecycle";
+import { useCreatePlan } from "./createPlan";
 import { TransplantBody, TransplantFooter } from "./TransplantChrome";
 import {
-  currentStepIndex,
+  AFTER_PULL_POSITION,
+  framePosition,
   overallProgress,
-  PULL_STEPS,
+  type StepState,
+  stepPosition,
+  stepStates,
 } from "./transplantSteps";
 
-// The pull's core steps, before the optional files step: the row a
-// mirror's extra rows start at once the apply frame has landed.
-const CORE_ROW_COUNT = PULL_STEPS.indexOf("files");
-const NO_EXTRA_ROWS: { title: string; detail: string }[] = [];
+type ExtraRow = { title: string; detail: ReactNode };
+const NO_EXTRA_ROWS: ExtraRow[] = [];
 
-type StepState = "done" | "running" | "queued";
+type Row = ExtraRow & {
+  position: number;
+  // A step this run leaves out (setup switched off, a clean tree with
+  // nothing to re-apply). Listed so its absence is on the record.
+  skipped?: boolean;
+};
 
-export function TransplantProgress({
-  frame,
-  sourceDeviceLabel,
-  thisDeviceLabel,
-  dirty,
-  error,
-  onClose,
-  onRetry,
-  extraRows = NO_EXTRA_ROWS,
-  filesDetail,
-  sourcePart = "source, untouched",
-  runningNote = `Keep this window open. Nothing on ${sourceDeviceLabel} changes until step 3.`,
-  failedNote = `The copy on ${sourceDeviceLabel} is untouched. If the worktree already landed here, open it from the sidebar instead of retrying.`,
-  progressLabel = "Transplant progress",
-}: {
+// A row the run only sometimes has.
+const rowIf = (listed: boolean, row: Row): Row[] => (listed ? [row] : []);
+
+type Props = {
   frame: SyncPullProgress | null;
+  // The create phases the run has reported (usePullProgress).
+  phasesSeen: ReadonlySet<CreatePhase>;
+  // The source worktree being brought here.
+  worktree: Worktree;
+  // The project it lands in, whose carry-over, setup script and ports
+  // the create's rows name.
+  localProject: Project;
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
-  dirty: boolean;
+  // The review's setup switch.
+  runSetup: boolean;
   // Set on the failed view. Refusals toast centrally, so they get a
   // one-line stand-in here instead of the raw marker.
   error?: unknown;
   onClose: () => void;
   onRetry: () => void;
-  // Steps after the pull's core four (the mirror's session open),
-  // running once the apply frame has landed. The mutation settling
-  // ends the view, so a row here never reads as done.
-  extraRows?: { title: string; detail: string }[];
+  // Steps after the pull itself (the mirror's session open), running
+  // once the apply frame has landed. The mutation settling ends the
+  // view, so a row here never reads as done.
+  extraRows?: ExtraRow[];
   // The transplant's files step (the ignored files the leave-out rule
   // admits), as its row's caption. Absent on a mirror: its own session
   // carries the files.
@@ -64,10 +74,41 @@ export function TransplantProgress({
   runningNote?: string;
   failedNote?: string;
   progressLabel?: string;
-}) {
+};
+
+// The create's rows read this machine's project while the dialog sits
+// under the source's scope, so the view re-pins itself to local.
+export function TransplantProgress(props: Props) {
+  return (
+    <LocalHostScope>
+      <ProgressView {...props} />
+    </LocalHostScope>
+  );
+}
+
+function ProgressView({
+  frame,
+  phasesSeen,
+  worktree,
+  localProject,
+  sourceDeviceLabel,
+  thisDeviceLabel,
+  runSetup,
+  error,
+  onClose,
+  onRetry,
+  extraRows = NO_EXTRA_ROWS,
+  filesDetail,
+  sourcePart = "source, untouched",
+  runningNote = `Keep this window open. Nothing on ${sourceDeviceLabel} changes until you decide at the finish step.`,
+  failedNote = `The copy on ${sourceDeviceLabel} is untouched. If the worktree already landed here, open it from the sidebar instead of retrying.`,
+  progressLabel = "Transplant progress",
+}: Props) {
+  const plan = useCreatePlan(localProject);
   const failed = error !== undefined;
+  const dirty = worktree.changedCount > 0;
+  const folder = pullWorktreeName(worktree);
   const pullDone = frame?.step === "apply" && extraRows.length > 0;
-  const current = pullDone ? CORE_ROW_COUNT : currentStepIndex(frame);
   const ratio = pullDone ? 0.97 : overallProgress(frame);
   const caption = (step: "transfer" | "files") =>
     frame?.step === step && frame.totalBytes
@@ -76,36 +117,90 @@ export function TransplantProgress({
   const transferCaption = caption("transfer");
   const filesCaption = caption("files");
 
-  const rows: { title: string; detail: string }[] = [
+  const at = pullDone ? AFTER_PULL_POSITION : framePosition(frame);
+  // The create's phases are listed from the plan, which is a reading
+  // of the project made before the create ran, and settled by what the
+  // run reports: a phase it reports gets its row even unplanned, and a
+  // planned one the run went past without reporting did not happen, so
+  // it reads skipped rather than done.
+  const phaseRow = (
+    phase: CreatePhase,
+    planned: boolean,
+    row: ExtraRow & { skipped?: boolean },
+  ): Row[] =>
+    rowIf(planned || phasesSeen.has(phase), {
+      ...row,
+      position: stepPosition(phase),
+      skipped:
+        row.skipped || (at > stepPosition(phase) && !phasesSeen.has(phase)),
+    });
+
+  // Only what this run will do, or pointedly will not: carry-over and
+  // ports are listed when the project has them, setup whenever it has
+  // a script (skipped with the switch off), the re-apply always.
+  const rows: Row[] = [
     {
       title: `Capture on ${sourceDeviceLabel}`,
-      detail: dirty ? "uncommitted changes" : "clean tree",
+      detail: dirty
+        ? pluralize(worktree.changedCount, "uncommitted file")
+        : "clean tree, nothing to capture",
+      position: stepPosition("capture"),
     },
     {
       title: "Transfer over the device link",
-      detail: transferCaption ?? "one git bundle",
+      detail:
+        transferCaption ??
+        (dirty ? "the branch and your changes" : "the branch"),
+      position: stepPosition("transfer"),
     },
     {
       title: `Create the worktree on ${thisDeviceLabel}`,
-      detail:
-        frame?.step === "create" && frame.createPhase
-          ? CREATE_PHASE_LABEL[frame.createPhase]
-          : "carry-over, setup, ports",
+      detail: (
+        <>
+          <span className="font-mono">{worktree.branch}</span>
+          {folder !== undefined && (
+            <>
+              {" in "}
+              <span className="font-mono">{folder}</span>
+            </>
+          )}
+        </>
+      ),
+      position: stepPosition("create"),
     },
+    ...phaseRow("carryOver", plan.carryOverCount > 0, {
+      title: "Carry files over",
+      detail:
+        plan.carryOverCount > 0
+          ? `${pluralize(plan.carryOverCount, "path")} from ${localProject.name}`
+          : `from ${localProject.name}`,
+    }),
+    ...phaseRow("setup", plan.setupCommand !== "", {
+      title: "Run the setup script",
+      detail: <span className="font-mono">{plan.setupCommand}</span>,
+      skipped: !runSetup,
+    }),
+    ...phaseRow("portPoolProvision", plan.provisionsPorts, {
+      title: "Provision ports",
+      detail: "port-pool",
+    }),
     {
       title: "Re-apply your changes",
-      detail: dirty ? "uncommitted, staging kept" : "skipped",
+      detail: dirty ? "unstaged and staged, as they were" : "clean tree",
+      position: stepPosition("apply"),
+      skipped: !dirty,
     },
-    ...(filesDetail === undefined
-      ? []
-      : [
-          {
-            title: "Bring the ignored files over",
-            detail: filesCaption ?? filesDetail,
-          },
-        ]),
-    ...extraRows,
+    ...rowIf(filesDetail !== undefined, {
+      title: "Bring the ignored files over",
+      detail: filesCaption ?? filesDetail,
+      position: stepPosition("files"),
+    }),
+    ...extraRows.map((row, index) => ({
+      ...row,
+      position: AFTER_PULL_POSITION + index,
+    })),
   ];
+  const states = stepStates(rows, at);
 
   return (
     <>
@@ -150,13 +245,7 @@ export function TransplantProgress({
             {rows.map((row, index) => (
               <StepRow
                 key={row.title}
-                state={
-                  index < current
-                    ? "done"
-                    : index === current
-                      ? "running"
-                      : "queued"
-                }
+                state={states[index]}
                 failed={failed}
                 title={row.title}
                 detail={row.detail}
@@ -226,7 +315,7 @@ function StepRow({
   state: StepState;
   failed: boolean;
   title: string;
-  detail: string;
+  detail: ReactNode;
 }) {
   const stopped = failed && state === "running";
   return (
@@ -235,7 +324,7 @@ function StepRow({
         "flex items-center gap-3 rounded-lg px-3 py-2 text-sm",
         state === "running" && !failed && "bg-sky-500/10",
         stopped && "bg-rose-500/10",
-        state === "queued" && "text-muted-foreground",
+        (state === "queued" || state === "skipped") && "text-muted-foreground",
       )}
     >
       <StepMark state={state} stopped={stopped} />
@@ -265,6 +354,16 @@ function StepMark({ state, stopped }: { state: StepState; stopped: boolean }) {
         ) : (
           <Check className="size-2.5" />
         )}
+      </span>
+    );
+  }
+  if (state === "skipped") {
+    return (
+      <span
+        aria-hidden
+        className="flex size-4 shrink-0 items-center justify-center rounded-full border border-muted-foreground/40 text-muted-foreground"
+      >
+        <Minus className="size-2.5" />
       </span>
     );
   }

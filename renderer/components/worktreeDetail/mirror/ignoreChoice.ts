@@ -26,11 +26,21 @@ export const DEFAULT_IGNORE_SELECTION: IgnoreSelection = {
   selected: new Set(),
 };
 
-// Whether the copy runs the setup script by default, by the rule: on
-// when every file crosses, off when gitignored paths (or the user's
-// pick of them) stay behind. The dialog's switch overrides it.
-export function setupDefaultFor(mode: MirrorIgnoreMode): boolean {
-  return mode === "everything";
+// Whether the copy runs the setup script by default, by the rule: off
+// when every file crosses (what setup would build, node_modules and
+// the like, comes over with the rest), on when gitignored paths (or
+// the user's pick of them) stay behind and the copy has to build its
+// own. A custom rule with nothing picked leaves nothing out, so it
+// reads as off too. The dialog's switch overrides it.
+export function setupDefaultFor(selection: IgnoreSelection): boolean {
+  switch (selection.mode) {
+    case "everything":
+      return false;
+    case "gitignored":
+      return true;
+    case "custom":
+      return selection.selected.size > 0;
+  }
 }
 
 // The review state a pull dialog (transplant or mirror) keeps: the
@@ -48,7 +58,7 @@ export function usePullChoice(projectId: string, worktreeId: string) {
   const ignored = useWorktreeIgnoredPaths(projectId, worktreeId, {
     enabled: selection.mode === "gitignored",
   });
-  const runSetup = setupChoice ?? setupDefaultFor(selection.mode);
+  const runSetup = setupChoice ?? setupDefaultFor(selection);
   const choice: PullChoice = {
     ...resolveIgnores(selection, ignored.data),
     runSetup,

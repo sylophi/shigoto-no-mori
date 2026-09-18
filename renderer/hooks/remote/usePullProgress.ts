@@ -9,18 +9,40 @@
 // casualty of the reset.
 import { useEffect, useState } from "react";
 import type { SyncPullProgress } from "@shared/ipc/modules/sync";
+import type { CreatePhase } from "@shared/schemas";
+
+const NO_PHASES: ReadonlySet<CreatePhase> = new Set();
 
 export function usePullProgress(sourceWorktreeId: string): {
   frame: SyncPullProgress | null;
+  // The create's lifecycle phases this run has reported so far. The
+  // CLI only reports a phase it runs, so this is what the create did,
+  // where the dialog's own reading of the project is what it expected.
+  phasesSeen: ReadonlySet<CreatePhase>;
   reset: () => void;
 } {
   const [frame, setFrame] = useState<SyncPullProgress | null>(null);
+  const [phasesSeen, setPhasesSeen] = useState(NO_PHASES);
   useEffect(
     () =>
       window.api.sync.onPullProgress((evt) => {
-        if (evt.sourceWorktreeId === sourceWorktreeId) setFrame(evt);
+        if (evt.sourceWorktreeId !== sourceWorktreeId) return;
+        setFrame(evt);
+        const phase = evt.createPhase;
+        if (phase !== undefined) {
+          setPhasesSeen((seen) =>
+            seen.has(phase) ? seen : new Set(seen).add(phase),
+          );
+        }
       }),
     [sourceWorktreeId],
   );
-  return { frame, reset: () => setFrame(null) };
+  return {
+    frame,
+    phasesSeen,
+    reset: () => {
+      setFrame(null);
+      setPhasesSeen(NO_PHASES);
+    },
+  };
 }

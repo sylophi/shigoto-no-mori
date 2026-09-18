@@ -21,13 +21,7 @@ import { FlowHeader, StepRail } from "./TransplantChrome";
 import { TransplantFinish } from "./TransplantFinish";
 import { TransplantProgress } from "./TransplantProgress";
 import { TransplantReview } from "./TransplantReview";
-import {
-  currentStepIndex,
-  PULL_STEPS,
-  pullStepCount,
-  stepHeadline,
-  useClock,
-} from "./transplantSteps";
+import { stepHeadline, useClock } from "./transplantSteps";
 
 type Stage = "review" | "running" | "failed" | "done";
 
@@ -106,7 +100,6 @@ export function TransplantDialog({
     nav.toLocalWorktree(pull.data.worktree.projectId, pull.data.worktree.id);
   };
 
-  const stepIndex = currentStepIndex(progress.frame);
   const header = HEADER[stage];
   const elapsed = (stage === "running" ? now : endedAt) - pull.submittedAt;
 
@@ -138,7 +131,7 @@ export function TransplantDialog({
           </>
         )}
         {stage === "running" &&
-          `Step ${stepIndex + 1} of ${pullStepCount(bringsFiles)}: ${stepHeadline(PULL_STEPS[stepIndex], sourceDeviceLabel)}.`}
+          `${stepHeadline(progress.frame, sourceDeviceLabel)}.`}
         {stage === "failed" && `Nothing on ${sourceDeviceLabel} changed.`}
         {stage === "done" && (
           <>
@@ -165,9 +158,12 @@ export function TransplantDialog({
       {(stage === "running" || stage === "failed") && (
         <TransplantProgress
           frame={progress.frame}
+          phasesSeen={progress.phasesSeen}
           sourceDeviceLabel={sourceDeviceLabel}
           thisDeviceLabel={thisDeviceLabel}
-          dirty={worktree.changedCount > 0}
+          worktree={worktree}
+          localProject={localProject}
+          runSetup={choice.runSetup}
           error={stage === "failed" ? pull.error : undefined}
           onClose={onClose}
           onRetry={start}

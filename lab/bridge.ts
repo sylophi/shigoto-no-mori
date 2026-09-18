@@ -172,14 +172,19 @@ function hostHandlersFor(
       ),
     }),
     "remoteAccess:commandAccess": () => ({ granted: forest.grantsCaller }),
-    // The stub's shape with a setup script on it, so the pull dialogs'
-    // setup switch has something to name.
+    // The stub's shape with a full create lifecycle on it (carry-over,
+    // a setup script, and ports below), so the pull dialogs' setup
+    // switch and their running steps have every phase to name.
     "shigomori:read": () => ({
       defaultBranch: "main",
       scripts: { setup: "pnpm install" },
-      carryOver: [],
+      carryOver: [
+        { path: ".env.local", mode: "copy" },
+        { path: ".claude/settings.local.json", mode: "symlink" },
+      ],
       launchers: [],
     }),
+    "portPool:isActive": () => true,
     "globalConfig:read": () => labGlobalConfig,
     "globalConfig:writeDeviceSettings": () => undefined,
     // Thinkpad has an update staged, so its Settings section's
@@ -923,6 +928,19 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
     setSocket(phase: HubStatus["socket"]) {
       socketPhase = phase;
       pushHub();
+    },
+    // Holds the given roots still on every posed mirror, each changed
+    // on both sides, so the conflict chip and its list can be posed.
+    // No roots clears them.
+    setMirrorConflicts(roots: string[]) {
+      for (const session of labMirrors.sessions) {
+        session.conflicts = roots.map((root) => ({
+          root,
+          localChanges: [{ path: root, kind: "modified" }],
+          remoteChanges: [{ path: root, kind: "modified" }],
+        }));
+      }
+      mirrorChanged();
     },
     emitClient: client.emit,
     emitHost: localHost.emit,

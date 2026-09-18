@@ -15,7 +15,6 @@ import {
   Laptop,
   Monitor,
 } from "lucide-react";
-import { pullBringsIgnoredFiles } from "@shared/ipc/modules/sync";
 import type { Project, Worktree } from "@shared/schemas";
 import {
   pullBranchCollision,
@@ -33,8 +32,6 @@ import { StatusDot } from "@/components/ui/status-dot";
 import { changeEntries } from "@/components/diff/patchFiles";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useBranches } from "@/hooks/git/useBranches";
-import { worktreeIncludeExtras } from "@/hooks/projects/carryOverPaths";
-import { useWorktreeIncludeStatus } from "@/hooks/projects/useWorktreeIncludeStatus";
 import { LocalHostScope, useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
@@ -46,13 +43,13 @@ import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { cn } from "@/lib/utils";
 import type { PullChoiceState } from "../mirror/ignoreChoice";
 import { MirrorIgnorePicker } from "../mirror/MirrorIgnorePicker";
-import { SetupToggle, useSetupScript } from "./SetupToggle";
+import { useCarryOverRows } from "./createPlan";
+import { SetupToggle } from "./SetupToggle";
 import {
   CARD_NOTE,
   CardList,
   CardSkeleton,
   MAX_LIST_ROWS as MAX_ROWS,
-  NoteBox,
   TransplantBody,
   TransplantFooter,
 } from "./TransplantChrome";
@@ -169,15 +166,6 @@ export function TransplantReview({
                 onChange={pull.setRunSetup}
                 pinned={pull.setupPinned}
               />
-
-              <WhatHappens
-                localProject={localProject}
-                sourceDeviceLabel={sourceDeviceLabel}
-                thisDeviceLabel={thisDeviceLabel}
-                runSetup={pull.runSetup}
-                dirty={dirty}
-                bringsFiles={pullBringsIgnoredFiles(pull.selection.mode)}
-              />
             </div>
           </LocalHostScope>
         </div>
@@ -195,48 +183,6 @@ export function TransplantReview({
         />
       </LocalHostScope>
     </>
-  );
-}
-
-// The three steps in one box. Setup is named only when it will run:
-// the switch is on AND the local project has a script (read under
-// LocalHostScope, like the switch).
-function WhatHappens({
-  localProject,
-  sourceDeviceLabel,
-  thisDeviceLabel,
-  runSetup,
-  dirty,
-  bringsFiles,
-}: {
-  localProject: Project;
-  sourceDeviceLabel: string;
-  thisDeviceLabel: string;
-  runSetup: boolean;
-  dirty: boolean;
-  // The leave-out rule admits ignored files, so the files step runs.
-  bringsFiles: boolean;
-}) {
-  const command = useSetupScript(localProject);
-  const setup = runSetup && command !== "";
-  return (
-    <NoteBox title="What happens">
-      <ol className="list-decimal space-y-1 pl-4">
-        <li>{sourceDeviceLabel} captures the uncommitted changes.</li>
-        <li>Branch and changes cross the device link directly.</li>
-        <li>
-          {thisDeviceLabel} creates the worktree, runs carry-over
-          {setup ? " and setup" : ""}
-          {dirty ? ", then re-applies your edits." : "."}
-        </li>
-        {bringsFiles && (
-          <li>
-            The ignored files the rule admits come over from {sourceDeviceLabel}
-            , as one pass of the mirror engine.
-          </li>
-        )}
-      </ol>
-    </NoteBox>
   );
 }
 
@@ -508,11 +454,8 @@ function ChangedFiles({
   );
 }
 
-// The local project's carry-over: manual entries plus the repo's
-// .worktreeinclude matches, merged by the same rule the Configure page
-// uses. Under LocalHostScope by the caller. The include status is read
-// unconditionally (like Configure does) so the two requests run side
-// by side instead of the second waiting on the config.
+// The local project's carry-over (createPlan.ts), as the review's
+// card. Under LocalHostScope by the caller.
 function CarryOverList({
   localProject,
   thisDeviceLabel,
@@ -520,18 +463,7 @@ function CarryOverList({
   localProject: Project;
   thisDeviceLabel: string;
 }) {
-  const { data: config, isPending } = useShigomoriConfig(localProject.id);
-  const { data: include } = useWorktreeIncludeStatus(localProject.id);
-  const manual = config?.carryOver ?? [];
-  const included = worktreeIncludeExtras(
-    manual,
-    config?.useWorktreeInclude !== false,
-    include,
-  );
-  const rows = [
-    ...manual.map((e) => ({ path: e.path, tag: e.mode })),
-    ...included.map((path) => ({ path, tag: "include" })),
-  ];
+  const { rows, isPending } = useCarryOverRows(localProject);
   return (
     <section className="space-y-2">
       <SectionHeading>

@@ -17,7 +17,14 @@
 // covered: on one machine the LAN candidate wins.
 import assert from "node:assert/strict";
 import { type ChildProcess, execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, openSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { connect, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,6 +35,7 @@ import { isCommandRefusedError } from "../../shared/ipc/socket/frames.ts";
 import {
   fileEquals,
   freeLoopbackPort,
+  readOrNull,
   repoRoot,
   report,
   scrubbedGitEnv,
@@ -70,6 +78,38 @@ const log = (line: string) => console.log(`[e2e] ${line}`);
 
 type Fixture = { a: DevProfile; b: DevProfile; origin: string };
 
+// Every run of a's setup script appends the worktree it ran in here,
+// outside both forests so no mirror carries it: the pull scenarios
+// read it to tell a create that ran setup from one told to skip it.
+const setupLog = join(runDir, "setup-runs.log");
+const setupRuns = (): string[] =>
+  existsSync(setupLog)
+    ? readFileSync(setupLog, "utf8").split("\n").filter(Boolean)
+    : [];
+
+// a's setup script: logs the run, then builds an ignored artifact the
+// way an install or a build would, so a transplant that also brings
+// the source's build output has something to disagree with.
+const BUILT_ON_A = "built on a\n";
+const SETUP_SCRIPT = `pwd >> ${JSON.stringify(setupLog)} && mkdir -p build-out && printf 'built on a\\n' > build-out/artifact.txt`;
+
+// Gives the profile's one project a setup script, written straight
+// into its project.json the way Project Settings would.
+function configureSetupScript(profile: DevProfile, command: string): void {
+  const projects = join(profile.dataDir, "projects");
+  const [projectId, ...rest] = readdirSync(projects);
+  assert.ok(
+    projectId !== undefined && rest.length === 0,
+    `expected one project under ${projects}`,
+  );
+  const configPath = join(projects, projectId, "project.json");
+  const config = JSON.parse(readFileSync(configPath, "utf8")) as {
+    scripts?: Record<string, string>;
+  };
+  config.scripts = { ...config.scripts, setup: command };
+  writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+}
+
 function prepareFixture(): Fixture {
   const a = devProfilePaths("e2e-a");
   const b = devProfilePaths("e2e-b");
@@ -83,6 +123,9 @@ function prepareFixture(): Fixture {
   mkdirSync(seed, { recursive: true });
   git(seed, "init", "-q", "-b", "main");
   writeFileSync(join(seed, "README.md"), "e2e shared repo\n");
+  // What a real project ignores: secrets, build output, a cache. The
+  // pull scenarios put files under each and watch which ones travel.
+  writeFileSync(join(seed, ".gitignore"), ".env\nbuild-out/\ncache/\n");
   git(seed, "add", ".");
   git(seed, "commit", "-q", "-m", "Initial");
   git(seed, "init", "--bare", "-q", "-b", "main", origin);
@@ -96,6 +139,7 @@ function prepareFixture(): Fixture {
     registerProjects(profile, profile.repos);
     cloneDevLogin(profile);
   }
+  configureSetupScript(a, SETUP_SCRIPT);
   return { a, b, origin };
 }
 
@@ -148,7 +192,40 @@ function need<T>(value: T | undefined, from: string): T {
 }
 
 type Project = { id: string; name: string; identity?: string | null };
-type Worktree = { id: string; branch: string; path: string };
+type Worktree = {
+  id: string;
+  projectId: string;
+  name: string;
+  branch: string;
+  path: string;
+};
+type PullResult = {
+  worktree: Worktree;
+  captured: boolean;
+  dirtyApplied: boolean;
+  files?: { crossed: boolean; conflicts: number; error?: string };
+};
+type MirrorList = {
+  sessions: { session: string; localWorktreeId: string; ignoreMode: string }[];
+  serving: { worktreeId: string }[];
+};
+
+const refusalOf = (work: Promise<unknown>): Promise<unknown> =>
+  work.then(
+    () => null,
+    (error: unknown) => error,
+  );
+
+// What marks a control the user cannot press, the native attribute
+// and Base UI's own, as a selector literal for renderer expressions.
+const NOT_CLICKABLE = JSON.stringify(
+  '[disabled], [aria-disabled="true"], [data-disabled]',
+);
+
+// A renderer expression for the innermost element whose text is
+// exactly this, for the scenarios that drive the real dialogs.
+const byText = (text: string) =>
+  `[...document.querySelectorAll("*")].findLast((el) => el.textContent.trim() === ${JSON.stringify(text)})`;
 
 const hubStatus = (w: AppWindow) =>
   w.evaluate<{
@@ -313,10 +390,7 @@ async function main(): Promise<string[]> {
           branchName: "feat/e2e",
         }) as Promise<{ worktree: Worktree }>;
       await b.evaluate("window.api.account.setAcceptsCommands(false)");
-      const refused = await create().then(
-        () => null,
-        (error: unknown) => error,
-      );
+      const refused = await refusalOf(create());
       assert.ok(refused !== null, "create was served with commands off");
       assert.ok(
         isCommandRefusedError(refused),
@@ -359,6 +433,12 @@ async function main(): Promise<string[]> {
         .toString()
         .trim();
       assert.equal(head, "feat/e2e", "pulled worktree is on the wrong branch");
+      // runSetup absent reads as yes: the create ran a's setup script.
+      assert.deepEqual(
+        setupRuns(),
+        [pulled.path],
+        "a pull that did not opt out must run the setup script once",
+      );
     });
 
     // Continuous mirroring, end to end through both apps' engines: a
@@ -386,11 +466,16 @@ async function main(): Promise<string[]> {
           sourceWorktreeId: source.id,
           sourceIdentity: project.identity,
           branch: source.branch,
+          runSetup: false,
           ignoreMode: "everything",
           ignores: [],
         })})`,
       );
       const local = started.worktree;
+      assert.ok(
+        !setupRuns().includes(local.path),
+        "a mirror started with runSetup false still ran the setup script",
+      );
       assert.ok(
         local.path.startsWith(fixture.a.dataDir),
         `mirrored worktree not under a's root: ${local.path}`,
@@ -514,7 +599,7 @@ async function main(): Promise<string[]> {
       );
       await a.waitFor(
         "a's copy to be removed with the stop",
-        `window.api.worktrees.list(${JSON.stringify({ projectId: local.projectId })}).then((list) => !list.some((w) => w.id === ${JSON.stringify(local.id)}))`,
+        `window.api.worktrees.list(${JSON.stringify(local.projectId)}).then((list) => !list.some((w) => w.id === ${JSON.stringify(local.id)}))`,
         30_000,
       );
       assert.ok(
@@ -544,6 +629,636 @@ async function main(): Promise<string[]> {
       assert.ok(result.sourceRemoved, `source kept: ${result.sourceError}`);
       assert.ok(!existsSync(source.path), "source worktree still on disk");
       assert.ok(existsSync(local.path), "pulled worktree vanished");
+    });
+
+    // ---- The two pull flows' edge cases, as their dialogs drive them:
+    // the leave-out rule, the setup switch, and what each refuses.
+    // Every source is a fresh worktree of b's under a pinned folder
+    // name, which the pull carries over like the dialogs do.
+    const sourceOnB = async (
+      label: string,
+      prepare: (path: string) => void = () => {},
+    ): Promise<Worktree> => {
+      const project = need(bProject, "the remote read");
+      const { worktree } = (await onPeer(a, idB, "worktrees:create", {
+        projectId: project.id,
+        branchName: `edge/${label}`,
+        worktreeName: `src-${label}`,
+      })) as { worktree: Worktree };
+      // What a lived-in worktree holds that git never carries.
+      writeFileSync(join(worktree.path, ".env"), "SECRET=b\n");
+      mkdirSync(join(worktree.path, "build-out"), { recursive: true });
+      writeFileSync(
+        join(worktree.path, "build-out", "artifact.txt"),
+        "built on b\n",
+      );
+      mkdirSync(join(worktree.path, "cache"), { recursive: true });
+      writeFileSync(join(worktree.path, "cache", "blob.txt"), "cached on b\n");
+      prepare(worktree.path);
+      return worktree;
+    };
+    const pullInput = (source: Worktree, extra: Record<string, unknown>) => {
+      const project = need(bProject, "the remote read");
+      return JSON.stringify({
+        sourceDeviceId: idB,
+        sourceProjectId: project.id,
+        sourceWorktreeId: source.id,
+        sourceIdentity: project.identity,
+        branch: source.branch,
+        worktreeName: source.name,
+        ...extra,
+      });
+    };
+    const pullHere = (source: Worktree, extra: Record<string, unknown>) =>
+      a.evaluate<PullResult>(
+        `window.api.sync.pullWorktree(${pullInput(source, extra)})`,
+      );
+    const mirrorHere = (source: Worktree, extra: Record<string, unknown>) =>
+      a.evaluate<PullResult & { session: string }>(
+        `window.api.mirror.start(${pullInput(source, extra)})`,
+      );
+    const teardown = (source: Worktree) =>
+      a.evaluate<{ sourceRemoved: boolean; sourceError?: string }>(
+        `window.api.sync.teardownSource(${JSON.stringify({
+          sourceDeviceId: idB,
+          sourceProjectId: need(bProject, "the remote read").id,
+          sourceWorktreeId: source.id,
+        })})`,
+      );
+    const mirrorOp = (op: "pause" | "resume" | "stop", session: string) =>
+      a.evaluate(`window.api.mirror.${op}(${JSON.stringify(session)})`);
+    const mirrorsOn = (w: AppWindow) =>
+      w.evaluate<MirrorList>("window.api.mirror.list()");
+    const waitMirror = (session: string, what: string, test: string) =>
+      a.waitFor(
+        what,
+        `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${JSON.stringify(session)} && (${test})))`,
+        90_000,
+      );
+    // a's own copy of the shared project, the one every pull lands in.
+    const ownProjectOnA = async (): Promise<Project> =>
+      need(
+        (await a.evaluate<Project[]>("window.api.projects.list()")).find(
+          (p) => p.name === "shared",
+        ),
+        "a's own project",
+      );
+    const aRepo = join(fixture.a.repos, "shared");
+    const incomingRefs = () =>
+      gitOut(aRepo, "for-each-ref", "refs/shigomori/incoming");
+
+    // The default the dialogs pick when nothing is left out: no setup,
+    // because what setup would build comes over with everything else.
+    // The uncommitted work and every ignored file land as the source
+    // had them, one way, and the transfer leaves no session behind.
+    await scenario("transplant: setup off, nothing left out", async () => {
+      const source = await sourceOnB("all", (path) => {
+        writeFileSync(join(path, "README.md"), "edited on b\n");
+        writeFileSync(join(path, "notes.txt"), "untracked on b\n");
+      });
+      const result = await pullHere(source, {
+        runSetup: false,
+        ignoreMode: "everything",
+        ignores: [],
+      });
+      const local = result.worktree;
+      assert.equal(local.name, source.name, "the copy lost the folder name");
+      assert.ok(
+        !setupRuns().includes(local.path),
+        "the setup script ran with the switch off",
+      );
+      assert.ok(result.captured && result.dirtyApplied, "the edits were lost");
+      assert.equal(readOrNull(join(local.path, "README.md")), "edited on b\n");
+      assert.equal(
+        readOrNull(join(local.path, "notes.txt")),
+        "untracked on b\n",
+      );
+      assert.deepEqual(result.files, { crossed: true, conflicts: 0 });
+      assert.equal(readOrNull(join(local.path, ".env")), "SECRET=b\n");
+      assert.equal(
+        readOrNull(join(local.path, "build-out", "artifact.txt")),
+        "built on b\n",
+        "with setup off the source's build output is the copy's",
+      );
+      assert.equal(
+        readOrNull(join(local.path, "cache", "blob.txt")),
+        "cached on b\n",
+      );
+      // One way, once. The transfer never shows as a mirror on a (its
+      // list hides transfers by their label), so that it ENDED is read
+      // off b, which serves the stream only while a's session lives.
+      // Nothing written here afterwards reaches b.
+      writeFileSync(join(local.path, "cache", "later.txt"), "after\n");
+      assert.deepEqual(
+        (await mirrorsOn(a)).sessions,
+        [],
+        "the transplant left something a's mirror surfaces would show",
+      );
+      await b.waitFor(
+        "b to stop serving the transfer, which ends with a's session",
+        `window.api.mirror.list().then((m) => !m.serving.some((s) => s.worktreeId === ${JSON.stringify(source.id)}))`,
+        30_000,
+      );
+      assert.ok(
+        !existsSync(join(source.path, "cache", "later.txt")),
+        "a file written on a after the transplant reached b",
+      );
+      // The finish step: the source goes, forced because its edits
+      // were captured and applied, and the copy stays whole.
+      const torn = await teardown(source);
+      assert.ok(torn.sourceRemoved, `source kept: ${torn.sourceError}`);
+      assert.ok(!existsSync(source.path), "the source is still on disk");
+      assert.equal(readOrNull(join(local.path, ".env")), "SECRET=b\n");
+      assert.equal(incomingRefs(), "", "an incoming ref survived the pull");
+    });
+
+    // Setup on with nothing left out is the pairing the default avoids:
+    // both sides then hold build output. The copy keeps what its own
+    // setup built, the clash is counted, and the rest still crosses.
+    await scenario(
+      "transplant: setup on meets the source's build",
+      async () => {
+        const source = await sourceOnB("clash");
+        const result = await pullHere(source, {
+          runSetup: true,
+          ignoreMode: "everything",
+          ignores: [],
+        });
+        const local = result.worktree;
+        assert.ok(
+          setupRuns().includes(local.path),
+          "the setup script never ran",
+        );
+        assert.equal(result.files?.crossed, true, result.files?.error);
+        assert.ok(
+          (result.files?.conflicts ?? 0) >= 1,
+          "the two build outputs were not reported as a clash",
+        );
+        assert.equal(
+          readOrNull(join(local.path, "build-out", "artifact.txt")),
+          BUILT_ON_A,
+          "the copy lost its own build output to the source's",
+        );
+        assert.equal(readOrNull(join(local.path, ".env")), "SECRET=b\n");
+        assert.equal(
+          readOrNull(join(source.path, "build-out", "artifact.txt")),
+          "built on b\n",
+          "the transfer wrote into the source",
+        );
+      },
+    );
+
+    // A custom rule: the picked path stays on b, its siblings cross.
+    // The source is left standing for the refusals below.
+    let standing: { source: Worktree; local: Worktree } | undefined;
+    await scenario("transplant: custom rule", async () => {
+      const source = await sourceOnB("custom");
+      const result = await pullHere(source, {
+        runSetup: false,
+        ignoreMode: "custom",
+        ignores: ["/cache"],
+      });
+      const local = result.worktree;
+      standing = { source, local };
+      assert.deepEqual(result.files, { crossed: true, conflicts: 0 });
+      assert.ok(
+        !existsSync(join(local.path, "cache")),
+        "a path the custom rule left out crossed anyway",
+      );
+      assert.equal(readOrNull(join(local.path, ".env")), "SECRET=b\n");
+      assert.equal(
+        readOrNull(join(local.path, "build-out", "artifact.txt")),
+        "built on b\n",
+      );
+      assert.ok(!setupRuns().includes(local.path));
+    });
+
+    // Gitignored leaves every ignored file behind, so there is no files
+    // step at all and setup has to build the copy's own: the switch
+    // defaults on there, and an absent runSetup reads as on.
+    await scenario("transplant: gitignored rule", async () => {
+      const source = await sourceOnB("gitignored");
+      const project = need(bProject, "the remote read");
+      const ignored = (await onPeer(a, idB, "sync:ignoredPaths", {
+        projectId: project.id,
+        worktreeId: source.id,
+      })) as { paths: string[]; patterns: string[] };
+      assert.deepEqual(
+        ignored.paths.toSorted(),
+        [".env", "build-out/", "cache/"],
+        "the review would list the wrong ignored files",
+      );
+      const result = await pullHere(source, {
+        ignoreMode: "gitignored",
+        ignores: ignored.patterns,
+      });
+      const local = result.worktree;
+      assert.equal(result.files, undefined, "gitignored ran a files step");
+      assert.ok(setupRuns().includes(local.path), "setup did not default on");
+      assert.ok(
+        !existsSync(join(local.path, ".env")),
+        "an ignored file crossed",
+      );
+      assert.ok(!existsSync(join(local.path, "cache")));
+      assert.equal(
+        readOrNull(join(local.path, "build-out", "artifact.txt")),
+        BUILT_ON_A,
+      );
+      // A clean source goes without force.
+      const torn = await teardown(source);
+      assert.ok(torn.sourceRemoved, `source kept: ${torn.sourceError}`);
+    });
+
+    // A setup script that fails does not fail the transplant: the
+    // worktree is real, and the uncommitted work still lands in it.
+    await scenario("transplant: failing setup script", async () => {
+      const source = await sourceOnB("badsetup", (path) => {
+        writeFileSync(join(path, "README.md"), "edited before a bad setup\n");
+      });
+      const aProject = await ownProjectOnA();
+      const id = JSON.stringify(aProject.id);
+      const original = await a.evaluate<{ scripts?: Record<string, string> }>(
+        `window.api.shigomori.read(${id})`,
+      );
+      const writeSetup = (setup: string) =>
+        a.evaluate(
+          `window.api.shigomori.write(${id}, ${JSON.stringify({
+            ...original,
+            scripts: { ...original.scripts, setup },
+          })})`,
+        );
+      await writeSetup(`pwd >> ${JSON.stringify(setupLog)} && exit 7`);
+      try {
+        const result = await pullHere(source, { runSetup: true });
+        const local = result.worktree;
+        assert.ok(setupRuns().includes(local.path), "the bad setup never ran");
+        assert.ok(existsSync(local.path), "the worktree did not survive");
+        assert.ok(result.dirtyApplied, "the edits were lost to a bad setup");
+        assert.equal(
+          readOrNull(join(local.path, "README.md")),
+          "edited before a bad setup\n",
+        );
+      } finally {
+        await writeSetup(SETUP_SCRIPT);
+      }
+    });
+
+    // What a pull refuses, before a byte moves and leaving nothing
+    // behind: a branch this device already holds (a second transplant
+    // or a mirror of the same worktree), a folder name already taken,
+    // and a branch that is gone from the source. A source edited after
+    // its transplant is kept by the finish step.
+    await scenario("pull refusals", async () => {
+      const { source, local } = need(standing, "the custom rule transplant");
+      const before = await a.evaluate<Worktree[]>(
+        `window.api.worktrees.list(${JSON.stringify(local.projectId)})`,
+      );
+      const again = await refusalOf(pullHere(source, { runSetup: false }));
+      assert.match(errorMessageOf(again), /already/i, "a second pull landed");
+      const mirrored = await refusalOf(
+        mirrorHere(source, { ignoreMode: "everything", ignores: [] }),
+      );
+      assert.match(errorMessageOf(mirrored), /already/i, "a mirror landed");
+      const other = await sourceOnB("taken");
+      const taken = await refusalOf(
+        pullHere(other, { runSetup: false, worktreeName: local.name }),
+      );
+      assert.match(
+        errorMessageOf(taken),
+        new RegExp(local.name),
+        "a pull into a taken folder was not refused by name",
+      );
+      const gone = await refusalOf(
+        pullHere({ ...other, branch: "edge/never-existed" }, {}),
+      );
+      assert.match(errorMessageOf(gone), /no longer exists/);
+      const after = await a.evaluate<Worktree[]>(
+        `window.api.worktrees.list(${JSON.stringify(local.projectId)})`,
+      );
+      assert.deepEqual(
+        after.map((w) => w.id).toSorted(),
+        before.map((w) => w.id).toSorted(),
+        "a refused pull left a worktree behind",
+      );
+      assert.ok(
+        !(await mirrorsOn(a)).sessions.some(
+          (s) => s.localWorktreeId === local.id,
+        ),
+        "a refused mirror left a session behind",
+      );
+      assert.equal(incomingRefs(), "", "a refused pull left an incoming ref");
+      // The source moved on after its transplant: it is kept, with why.
+      writeFileSync(join(source.path, "late.txt"), "written after the pull\n");
+      const torn = await teardown(source);
+      assert.equal(torn.sourceRemoved, false, "an edited source was removed");
+      assert.match(torn.sourceError ?? "", /uncommitted|changed/);
+      assert.ok(existsSync(source.path), "the edited source is gone");
+    });
+
+    // A mirror that leaves gitignored files out, with setup on (that
+    // rule's default): each side builds and keeps its own ignored
+    // files, tracked work still moves both ways, and pause holds it.
+    await scenario("mirror: gitignored rule, setup on, pause", async () => {
+      const source = await sourceOnB("mirror-gi");
+      const project = need(bProject, "the remote read");
+      const ignored = (await onPeer(a, idB, "sync:ignoredPaths", {
+        projectId: project.id,
+        worktreeId: source.id,
+      })) as { patterns: string[] };
+      const started = await mirrorHere(source, {
+        runSetup: true,
+        ignoreMode: "gitignored",
+        ignores: ignored.patterns,
+      });
+      const local = started.worktree;
+      assert.ok(setupRuns().includes(local.path), "the setup script never ran");
+      await waitMirror(
+        started.session,
+        "the gitignored mirror to be watching",
+        's.status === "watching" && s.ignoreMode === "gitignored"',
+      );
+      writeFileSync(join(source.path, "tracked.txt"), "from b\n");
+      await waitFor(
+        () => fileEquals(join(local.path, "tracked.txt"), "from b\n"),
+        "b's tracked file to reach a under the gitignored rule",
+        30_000,
+      );
+      assert.equal(
+        readOrNull(join(local.path, "build-out", "artifact.txt")),
+        BUILT_ON_A,
+        "the copy's build output was replaced by the source's",
+      );
+      assert.equal(
+        readOrNull(join(source.path, "build-out", "artifact.txt")),
+        "built on b\n",
+        "the source's build output was replaced by the copy's",
+      );
+      assert.ok(
+        !existsSync(join(local.path, ".env")),
+        "an ignored file crossed",
+      );
+
+      // Paused, nothing moves. Resumed, what was held crosses.
+      await mirrorOp("pause", started.session);
+      await waitMirror(started.session, "the mirror to pause", "s.paused");
+      writeFileSync(join(source.path, "while-paused.txt"), "held\n");
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+      assert.ok(
+        !existsSync(join(local.path, "while-paused.txt")),
+        "a paused mirror still carried a file",
+      );
+      await mirrorOp("resume", started.session);
+      await waitFor(
+        () => fileEquals(join(local.path, "while-paused.txt"), "held\n"),
+        "the held file to cross after the resume",
+        60_000,
+      );
+      await mirrorOp("stop", started.session);
+      await waitFor(
+        () => !existsSync(local.path),
+        "the copy to go with the stop",
+        30_000,
+      );
+    });
+
+    // Both sides commit while the mirror is paused: the pair is
+    // diverged, neither history is touched, and Stop refuses because
+    // it would take the copy's commit with it. Deleting the copy from
+    // its page is the way out, and that ends the session on both ends.
+    await scenario("mirror: diverged stop is refused", async () => {
+      const source = await sourceOnB("mirror-div");
+      const started = await mirrorHere(source, {
+        runSetup: false,
+        ignoreMode: "everything",
+        ignores: [],
+      });
+      const local = started.worktree;
+      await waitMirror(
+        started.session,
+        "the mirror to be watching and in sync",
+        's.status === "watching" && s.git?.status === "synced"',
+      );
+      await mirrorOp("pause", started.session);
+      await waitMirror(started.session, "the mirror to pause", "s.paused");
+      writeFileSync(join(local.path, "on-a.txt"), "a\n");
+      git(local.path, "add", "on-a.txt");
+      git(local.path, "commit", "-q", "-m", "on a");
+      writeFileSync(join(source.path, "on-b.txt"), "b\n");
+      git(source.path, "add", "on-b.txt");
+      git(source.path, "commit", "-q", "-m", "on b");
+      const [tipA, tipB] = [local.path, source.path].map((path) =>
+        gitOut(path, "rev-parse", "HEAD"),
+      );
+      await mirrorOp("resume", started.session);
+      await waitMirror(
+        started.session,
+        "the pair to read as diverged",
+        's.git?.status === "diverged"',
+      );
+      assert.equal(gitOut(local.path, "rev-parse", "HEAD"), tipA);
+      assert.equal(gitOut(source.path, "rev-parse", "HEAD"), tipB);
+      const refused = await refusalOf(mirrorOp("stop", started.session));
+      assert.match(errorMessageOf(refused), /divergence/);
+      assert.ok(existsSync(local.path), "a refused stop removed the copy");
+      assert.ok(
+        (await mirrorsOn(a)).sessions.some(
+          (s) => s.session === started.session,
+        ),
+        "a refused stop ended the session",
+      );
+      await a.evaluate(
+        `window.api.worktrees.delete(${JSON.stringify({
+          projectId: local.projectId,
+          worktreeId: local.id,
+          force: true,
+        })})`,
+      );
+      await a.waitFor(
+        "the delete to end a's session",
+        `window.api.mirror.list().then((m) => !m.sessions.some((s) => s.localWorktreeId === ${JSON.stringify(local.id)}))`,
+        30_000,
+      );
+      await b.waitFor(
+        "b to stop serving the deleted copy",
+        `window.api.mirror.list().then((m) => !m.serving.some((s) => s.worktreeId === ${JSON.stringify(source.id)}))`,
+        30_000,
+      );
+      assert.equal(gitOut(source.path, "rev-parse", "HEAD"), tipB);
+    });
+
+    // ---- The same flows through the real dialogs: the sidebar row,
+    // the footer button, the rule picker and the setup switch, then
+    // Start. What the switch shows is what the create must do.
+    const SETUP_SWITCH = `document.querySelector('[role="switch"][aria-label="Run the setup script"]')`;
+    const click = (what: string, element: string) =>
+      a.waitFor(
+        what,
+        `(() => { const el = ${element}; if (!el || el.closest(${NOT_CLICKABLE})) return false; el.click(); return true; })()`,
+        30_000,
+      );
+    const clickText = (text: string) => click(text, byText(text));
+    const waitSwitch = (checked: boolean, why: string) =>
+      a.waitFor(
+        `the setup switch to read ${checked ? "on" : "off"} (${why})`,
+        `${SETUP_SWITCH}?.getAttribute("aria-checked") === ${JSON.stringify(String(checked))}`,
+        30_000,
+      );
+    const openDialogFor = async (source: Worktree, button: string) => {
+      await click(`the sidebar row of ${source.branch}`, byText(source.branch));
+      await click(`the ${button} button`, byText(button));
+      await a.waitFor(
+        "the review to show the setup switch",
+        `${SETUP_SWITCH} !== null`,
+        30_000,
+      );
+    };
+    // Clicks Start and reads the running view's setup row in the same
+    // breath, since the run it belongs to lasts a few seconds.
+    const startAndReadSetupRow = async (start: string) => {
+      await a.waitFor(
+        `${start} to be enabled`,
+        `(() => { const el = ${byText(start)}; return Boolean(el) && !el.closest(${NOT_CLICKABLE}); })()`,
+        30_000,
+      );
+      return a.evaluate<string>(
+        `(async () => {
+          ${byText(start)}.click();
+          for (let tries = 0; tries < 400; tries += 1) {
+            const row = [...document.querySelectorAll("li")].find((el) => el.textContent.includes("Run the setup script"));
+            if (row) return row.textContent;
+            await new Promise((resolve) => setTimeout(resolve, 25));
+          }
+          throw new Error("the running view never listed the setup step");
+        })()`,
+      );
+    };
+    const landedOnA = async (source: Worktree): Promise<Worktree> => {
+      const aProject = await ownProjectOnA();
+      const list = await a.evaluate<Worktree[]>(
+        `window.api.worktrees.list(${JSON.stringify(aProject.id)})`,
+      );
+      return need(
+        list.find((w) => w.branch === source.branch),
+        `a's copy of ${source.branch}`,
+      );
+    };
+
+    // The mirror dialog left alone: nothing is left out, so the switch
+    // sits off, follows the rule to on and back, and the create it
+    // starts runs no setup.
+    await scenario("dialog: mirror with the default switch", async () => {
+      const source = await sourceOnB("ui-mirror");
+      await openDialogFor(source, "Mirror here");
+      await waitSwitch(false, "nothing is left out");
+      await click("the Gitignored rule", byText("Gitignored"));
+      await waitSwitch(true, "gitignored files stay behind");
+      await click("the Nothing rule", byText("Nothing"));
+      await waitSwitch(false, "back to nothing left out");
+      assert.match(
+        await startAndReadSetupRow("Start mirroring"),
+        /skipped/,
+        "the running view did not list setup as skipped",
+      );
+      await a.waitFor(
+        "the mirror dialog to reach its live step",
+        `Boolean(${byText("Open here")})`,
+        120_000,
+      );
+      const local = await landedOnA(source);
+      assert.ok(
+        !setupRuns().includes(local.path),
+        "the dialog's default-off switch still ran the setup script",
+      );
+      const session = need(
+        (await mirrorsOn(a)).sessions.find(
+          (s) => s.localWorktreeId === local.id,
+        ),
+        "the session the dialog started",
+      );
+      assert.equal(session.ignoreMode, "everything");
+      await clickText("Open here");
+      await mirrorOp("stop", session.session);
+      await waitFor(
+        () => !existsSync(local.path),
+        "the copy to go with the stop",
+        30_000,
+      );
+    });
+
+    // The transplant dialog with the switch pinned against the rule:
+    // Gitignored turns it on, the user turns it off, and it stays off
+    // through further rule changes and into the create.
+    await scenario(
+      "dialog: transplant with the switch pinned off",
+      async () => {
+        const source = await sourceOnB("ui-pinned");
+        await openDialogFor(source, "Transplant here");
+        await waitSwitch(false, "nothing is left out");
+        await click("the Gitignored rule", byText("Gitignored"));
+        await waitSwitch(true, "gitignored files stay behind");
+        await click("the setup switch", SETUP_SWITCH);
+        await waitSwitch(false, "the user turned it off");
+        await click("the Nothing rule", byText("Nothing"));
+        await click("the Gitignored rule", byText("Gitignored"));
+        await waitSwitch(false, "a pinned switch ignores the rule");
+        assert.match(
+          await startAndReadSetupRow("Start transplant"),
+          /skipped/,
+          "the running view listed a pinned-off setup as running",
+        );
+        await a.waitFor(
+          "the transplant dialog to reach its finish step",
+          `Boolean(${byText("Decide later")})`,
+          120_000,
+        );
+        const local = await landedOnA(source);
+        assert.ok(
+          !setupRuns().includes(local.path),
+          "a switch pinned off still ran the setup script",
+        );
+        assert.ok(
+          !existsSync(join(local.path, ".env")),
+          "the gitignored rule let an ignored file cross",
+        );
+        assert.ok(
+          !existsSync(join(local.path, "build-out")),
+          "build output appeared with setup off and gitignored left out",
+        );
+        await clickText("Decide later");
+        assert.ok(existsSync(source.path), "Decide later removed the source");
+      },
+    );
+
+    // The switch pinned on with nothing left out: setup runs, and the
+    // copy keeps its own build output over the source's.
+    await scenario("dialog: transplant with the switch pinned on", async () => {
+      const source = await sourceOnB("ui-on");
+      await openDialogFor(source, "Transplant here");
+      await waitSwitch(false, "nothing is left out");
+      await click("the setup switch", SETUP_SWITCH);
+      await waitSwitch(true, "the user turned it on");
+      const setupRow = await startAndReadSetupRow("Start transplant");
+      assert.ok(
+        setupRow.includes("build-out/artifact.txt") &&
+          !setupRow.includes("skipped"),
+        `the running view did not name the setup command: ${setupRow}`,
+      );
+      await a.waitFor(
+        "the transplant dialog to reach its finish step",
+        `Boolean(${byText("Decide later")})`,
+        120_000,
+      );
+      const local = await landedOnA(source);
+      assert.ok(
+        setupRuns().includes(local.path),
+        "a switch pinned on did not run the setup script",
+      );
+      assert.equal(
+        readOrNull(join(local.path, "build-out", "artifact.txt")),
+        BUILT_ON_A,
+      );
+      assert.equal(readOrNull(join(local.path, ".env")), "SECRET=b\n");
+      await clickText("Decide later");
     });
 
     await scenario("port forward", async () => {

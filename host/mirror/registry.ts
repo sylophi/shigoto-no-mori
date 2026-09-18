@@ -5,8 +5,10 @@
 // tombstone protocol (host/lib/scripts/index.ts withDeleteInflight)
 // can stop a worktree's mirrors without importing that module (which
 // reaches sync, which reaches worktrees).
+import { randomUUID } from "node:crypto";
 import {
   isTransferSession,
+  MIRROR_LABEL_TRANSFER,
   type MirrorEvent,
   type MirrorEventKind,
   type MirrorGitStatus,
@@ -123,12 +125,36 @@ export function mirrorSessions(
   return daemon.sessions().filter((raw) => !isTransferSession(raw));
 }
 
-// The transfer sessions a pull in this process is running right now.
-// A transfer session the engine reports that is NOT here outlived its
-// pull (a quit or a crash mid-transfer brought it back with the
-// engine's persisted sessions) and is ended on sight by main, since
-// no mirror surface would ever show it.
-export const liveTransferSessions = new Set<string>();
+// Which transfer a session is, written as the transfer label's value:
+// one token per transfer, live from before its create is sent until
+// its pull has ended it. A transfer session whose token is not live
+// here has nobody waiting on it, and main ends it on sight, since no
+// mirror surface would ever show it. That covers every way one gets
+// left behind: a quit or a crash mid-transfer (the engine persists its
+// sessions, and the next launch knows none of their tokens), a create
+// that was rejected after the engine had made the session, and a
+// terminate that failed. It never covers a transfer still running,
+// even on the snapshot that names the session before the create's own
+// reply lands, because the token is live first. A label from before
+// the tokens (a plain "1") matches none.
+const liveTransfers = new Set<string>();
+
+export function beginTransfer(): string {
+  const token = randomUUID();
+  liveTransfers.add(token);
+  return token;
+}
+
+export function endTransfer(token: string): void {
+  liveTransfers.delete(token);
+}
+
+export function isOrphanedTransfer(raw: MirrorSessionRaw): boolean {
+  return (
+    isTransferSession(raw) &&
+    !liveTransfers.has(raw.labels[MIRROR_LABEL_TRANSFER] ?? "")
+  );
+}
 
 export function findSession(
   daemon: MirrorImpl,

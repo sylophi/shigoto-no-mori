@@ -1,28 +1,70 @@
-// The transplant dialog's reading of the pull's progress frames: which
-// named step is running (the core four, plus the files step when the
-// leave-out rule admits something), with everything before it done and
-// everything after it queued, and a single overall figure for the bar
-// between the two devices.
+// The pull dialogs' reading of the pull's progress frames: where the
+// run stands among its steps (the pull's own, with the create spelled
+// out as its lifecycle phases), what state each listed step is in, the
+// headline for the step underway, and a single overall figure for the
+// bar between the two devices.
 import { useEffect, useState } from "react";
 import {
   type SyncPullProgress,
   type SyncPullStep,
   SyncPullStepSchema,
 } from "@shared/ipc/modules/sync";
-import type { CreatePhase } from "@shared/schemas";
+import { type CreatePhase, CreatePhaseSchema } from "@shared/schemas";
 
-export const PULL_STEPS = SyncPullStepSchema.options;
-// The files step is the optional one, and the last: a pull with
-// nothing to bring stops at the apply.
-export function pullStepCount(bringsFiles: boolean): number {
-  return bringsFiles ? PULL_STEPS.length : PULL_STEPS.indexOf("files");
+// The run as one ordered line: the pull's steps, with the create's
+// lifecycle phases slotted in right after the create itself. Both
+// orders are the schemas' own. A row or a frame sits at its index
+// here, and whatever follows the pull (a mirror's session open) sits
+// past the end.
+type TimelineStop = SyncPullStep | CreatePhase;
+const createAt = SyncPullStepSchema.options.indexOf("create") + 1;
+const TIMELINE: TimelineStop[] = [
+  ...SyncPullStepSchema.options.slice(0, createAt),
+  ...CreatePhaseSchema.options,
+  ...SyncPullStepSchema.options.slice(createAt),
+];
+export function stepPosition(stop: TimelineStop): number {
+  return TIMELINE.indexOf(stop);
 }
+export const AFTER_PULL_POSITION = TIMELINE.length;
 
 // Before the first frame the orchestrator is negotiating tips, which
 // is the capture step's preamble, so the first step reads as running
 // from the start.
-export function currentStepIndex(frame: SyncPullProgress | null): number {
-  return PULL_STEPS.indexOf(frame?.step ?? "capture");
+export function framePosition(frame: SyncPullProgress | null): number {
+  return stepPosition(frame?.createPhase ?? frame?.step ?? "capture");
+}
+
+// Each row's state against the frame, for rows in run order. The
+// running row is the last one the run takes at or before the frame, so
+// a phase with no row of its own (ports the review did not foresee, a
+// carry-over that only reports a broken include file) reads as the row
+// before it still running. A skipped row never runs: the host passes
+// through its frame without doing the work (the apply on a clean
+// tree), so the run is already on the next row it takes, or past the
+// last one.
+export type StepState = "done" | "running" | "queued" | "skipped";
+const taken = (row: { skipped?: boolean }) => !row.skipped;
+export function stepStates(
+  rows: readonly { position: number; skipped?: boolean }[],
+  at: number,
+): StepState[] {
+  const onSkipped = rows.some((row) => row.skipped && row.position === at);
+  const next = rows.findIndex((row) => taken(row) && row.position > at);
+  const running = onSkipped
+    ? next === -1
+      ? rows.length
+      : next
+    : rows.findLastIndex((row) => taken(row) && row.position <= at);
+  return rows.map((row, index) =>
+    row.skipped
+      ? "skipped"
+      : index > running
+        ? "queued"
+        : index === running
+          ? "running"
+          : "done",
+  );
 }
 
 const CREATE_PHASE_SHARE: Record<CreatePhase, number> = {
@@ -79,19 +121,29 @@ export function formatElapsed(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-// The running headline under the dialog title, one per step, phrased
-// against the two device names.
+// The running headline under the dialog title, one per step (and per
+// lifecycle phase of the create), phrased against the two device
+// names.
 export function stepHeadline(
-  step: SyncPullStep,
+  frame: SyncPullProgress | null,
   sourceDeviceLabel: string,
 ): string {
-  switch (step) {
+  switch (frame?.step ?? "capture") {
     case "capture":
       return `capturing the uncommitted work on ${sourceDeviceLabel}`;
     case "transfer":
       return "sending the branch and changes over the device link";
     case "create":
-      return "creating the worktree here";
+      switch (frame?.createPhase) {
+        case "carryOver":
+          return "carrying files over into the new worktree";
+        case "setup":
+          return "running the setup script here";
+        case "portPoolProvision":
+          return "provisioning ports for the new worktree";
+        default:
+          return "creating the worktree here";
+      }
     case "apply":
       return "re-applying your changes here";
     case "files":

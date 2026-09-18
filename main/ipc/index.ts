@@ -55,8 +55,7 @@ import {
   setMirrorImpl,
   setMirrorServingListener,
 } from "@host/ipc/modules/mirror";
-import { isTransferSession } from "@shared/ipc/modules/mirror";
-import { liveTransferSessions, mirrorSessions } from "@host/mirror/registry";
+import { isOrphanedTransfer, mirrorSessions } from "@host/mirror/registry";
 import { packageScriptsHandlers } from "@host/ipc/modules/packageScripts";
 import {
   portForwardHandlers,
@@ -163,21 +162,15 @@ const mirrorHistory = createMirrorHistory({
 // transfer rides the same daemon under a label (host/mirror/oneShot.ts),
 // and neither the follower nor the history should treat it as one.
 const liveMirrorSessions = () => mirrorSessions(mirrorDaemon);
-// A transfer session no pull in this process is running outlived its
-// pull (a quit or a crash mid-transfer brought it back with the
-// engine's persisted sessions). No mirror surface would ever show it,
-// so it is ended on sight. Each is asked once, and the engine drops it
+// A transfer session no pull here is waiting on (registry.ts
+// isOrphanedTransfer: left by a quit or a crash mid-transfer, a
+// rejected create, a failed terminate). No mirror surface would ever
+// show it, so it is ended on sight. Each is asked once, and the engine drops it
 // from the next snapshot.
 const reaped = new Set<string>();
 const reapOrphanedTransfers = () => {
   for (const session of mirrorDaemon.sessions()) {
-    if (
-      !isTransferSession(session) ||
-      liveTransferSessions.has(session.session) ||
-      reaped.has(session.session)
-    ) {
-      continue;
-    }
+    if (!isOrphanedTransfer(session) || reaped.has(session.session)) continue;
     reaped.add(session.session);
     void mirrorDaemon.terminate(session.session).catch((error: unknown) => {
       console.warn(

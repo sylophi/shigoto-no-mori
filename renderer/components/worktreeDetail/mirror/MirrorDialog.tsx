@@ -173,7 +173,7 @@ export function MirrorDialog({
             ? "Reaching the source."
             : progress.frame.step === "apply" && !mirror.isSuccess
               ? "Opening the mirror."
-              : `${stepHeadline(progress.frame.step, sourceDeviceLabel)}.`)}
+              : `${stepHeadline(progress.frame, sourceDeviceLabel)}.`)}
         {stage === "failed" && `Nothing on ${sourceDeviceLabel} changed.`}
         {stage === "done" && (
           <>
@@ -204,9 +204,12 @@ export function MirrorDialog({
       {(stage === "running" || stage === "failed") && (
         <TransplantProgress
           frame={progress.frame}
+          phasesSeen={progress.phasesSeen}
           sourceDeviceLabel={sourceDeviceLabel}
           thisDeviceLabel={thisDeviceLabel}
-          dirty={worktree.changedCount > 0}
+          worktree={worktree}
+          localProject={localProject}
+          runSetup={pull.runSetup}
           error={stage === "failed" ? mirror.error : undefined}
           onClose={onClose}
           onRetry={start}
