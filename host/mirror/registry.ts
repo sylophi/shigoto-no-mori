@@ -13,6 +13,7 @@ import {
   type MirrorEventKind,
   type MirrorGitStatus,
   type MirrorIgnoreMode,
+  MirrorIgnoreModeSchema,
   type MirrorSession,
 } from "@shared/ipc/modules/mirror";
 import { errorMessageOf } from "@shared/errors";
@@ -90,8 +91,10 @@ export function localWorktreeIdOf(raw: MirrorSessionRaw | undefined): string {
 
 // The ignore mode a session's labels carry, "everything" when none.
 export function ignoreModeOf(labels: Record<string, string>): MirrorIgnoreMode {
-  const mode = labels[MIRROR_LABEL_IGNORE_MODE];
-  return mode === "gitignored" || mode === "custom" ? mode : "everything";
+  const mode = MirrorIgnoreModeSchema.safeParse(
+    labels[MIRROR_LABEL_IGNORE_MODE],
+  );
+  return mode.success ? mode.data : "everything";
 }
 
 let impl: MirrorImpl | null = null;

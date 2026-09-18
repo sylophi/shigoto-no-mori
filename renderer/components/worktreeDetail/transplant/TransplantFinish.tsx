@@ -95,8 +95,9 @@ export function TransplantFinish({
 }: {
   result: SyncPullWorktreeResult;
   // What the leave-out rule kept on the source once the files step
-  // ran: 0 for Nothing, the picked count for Custom, null when the
-  // rule left every ignored file there (the read below counts them).
+  // ran: 0 for Nothing, the picked count for its exceptions, null
+  // under Gitignored, which left every ignored file there (the read
+  // below counts them) or all but the brought ones (left uncounted).
   leftOutCount: number | null;
   // The SOURCE worktree and project, on the remote device this page is
   // scoped to. The landed local pair is in `result`.

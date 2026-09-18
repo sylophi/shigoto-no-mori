@@ -317,11 +317,11 @@ function Ignores({
   const selection = draft ?? current;
   // Read only while the gitignored rule shows: it walks the checkout.
   const ignored = useWorktreeIgnoredPaths(worktree.projectId, worktree.id, {
-    enabled: selection.mode === "gitignored",
+    enabled: selection.base === "gitignored",
   });
   const setIgnores = useSetMirrorIgnores();
   const dirty = draft !== null && !sameSelection(draft, current);
-  const waiting = selection.mode === "gitignored" && ignored.data === undefined;
+  const waiting = selection.base === "gitignored" && ignored.data === undefined;
   const apply = () => {
     if (draft === null) return;
     setIgnores.mutate(

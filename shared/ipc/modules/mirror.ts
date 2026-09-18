@@ -41,6 +41,9 @@ const MirrorSessionIdSchema = z.string().min(1).max(128);
 // (shared/ipc/modules/sync.ts), which carries them too. Re-exported so
 // the mirror surfaces keep one import path.
 export {
+  bringIgnores,
+  broughtPaths,
+  ignoreCount,
   MIRROR_IGNORES_LIMIT,
   type MirrorIgnoreMode,
   MirrorIgnoreModeSchema,
@@ -67,7 +70,7 @@ export function isHaltedStatus(status: string): boolean {
 
 // The rule in one phrase, the same on every surface that names it:
 // the session's history line, the live card's chip, the lab's posed
-// thread. `count` is the custom rule's pattern count.
+// thread. `count` is the paths the rule names (ignoreCount).
 export function describeIgnores(mode: MirrorIgnoreMode, count: number): string {
   switch (mode) {
     case "everything":
@@ -76,6 +79,8 @@ export function describeIgnores(mode: MirrorIgnoreMode, count: number): string {
       return "Gitignored left out";
     case "custom":
       return `${count} ${count === 1 ? "path" : "paths"} left out`;
+    case "bring":
+      return `Gitignored left out, except ${count} ${count === 1 ? "path" : "paths"}`;
   }
 }
 // The daemon's stable status codes (file-sync/engine.go mirrorStatusCode).

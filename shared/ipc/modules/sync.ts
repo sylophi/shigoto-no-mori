@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { broughtPaths, MIRROR_IGNORES_LIMIT } from "@shared/mirrorIgnores";
 import { isValidWorktreeDirName } from "@shared/branches";
 import { isSafeRelPath } from "@shared/gitPaths";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
@@ -168,9 +169,9 @@ const SyncIgnoredPathsPayloadSchema = z.strictObject({
 // hold thousands. Wide enough for the mirror dialog's picker to list a
 // whole worktree, and past the cap it counts the rest.
 export const SYNC_IGNORED_PATHS_LIMIT = 32;
-// The rules ride under the engine's own cap, not the path list's: a
-// repo's gitignore files easily hold more than 32 lines.
-export const MIRROR_IGNORES_LIMIT = 512;
+// The rules ride under the engine's own cap (MIRROR_IGNORES_LIMIT),
+// not the path list's: a repo's gitignore files easily hold more than
+// 32 lines.
 export const SyncIgnoredPathsResultSchema = z.strictObject({
   paths: z.array(z.string()).max(SYNC_IGNORED_PATHS_LIMIT),
   total: z.number().int().nonnegative(),
@@ -225,16 +226,25 @@ const SyncBundleChunkResultSchema = z.strictObject({
 // only .git stays put, the default (ignored files cross too).
 // Gitignored: what git ignores on the source stays there, so a build
 // folder or a .env never crosses. Custom: the user picked which of the
-// ignored paths stay behind. A mirror remembers the mode on the
-// session (a label) so its page can say which rule is in force. The
-// patterns themselves are the engine's ignore list, in its
-// gitignore-like syntax (a leading / anchors to the root, ! negates).
+// ignored paths stay behind. Bring: the gitignored rule turned around,
+// what git ignores stays there bar the ignored paths the user picked
+// to bring (the carry-over list's shape, for one pull or mirror). A
+// mirror remembers the mode on the session (a label) so its page can
+// say which rule is in force. The patterns themselves are the engine's
+// ignore list, in its gitignore-like syntax (a leading / anchors to
+// the root, ! negates, the last match wins).
 export const MirrorIgnoreModeSchema = z.enum([
   "everything",
   "gitignored",
   "custom",
+  "bring",
 ]);
 export type MirrorIgnoreMode = z.infer<typeof MirrorIgnoreModeSchema>;
+export {
+  bringIgnores,
+  broughtPaths,
+  MIRROR_IGNORES_LIMIT,
+} from "@shared/mirrorIgnores";
 const MirrorIgnorePatternSchema = z
   .string()
   .min(1)
@@ -246,10 +256,20 @@ export const MirrorIgnoresSchema = z
   .array(MirrorIgnorePatternSchema)
   .max(MIRROR_IGNORES_LIMIT);
 
+// How many paths the rule names, the count describeIgnores takes: the
+// brought paths under bring (its patterns are mostly gitignore rules),
+// the patterns themselves otherwise.
+export function ignoreCount(
+  mode: MirrorIgnoreMode,
+  ignores: readonly string[],
+): number {
+  return mode === "bring" ? broughtPaths(ignores).length : ignores.length;
+}
+
 // Whether a pull with this rule has ignored files to bring: the
 // capture never carries them, and gitignored leaves every one of them
-// behind, so only the other two rules reach the files step. The host,
-// the lab and the dialogs all read this one answer.
+// behind, so only the other rules reach the files step. The host, the
+// lab and the dialogs all read this one answer.
 export function pullBringsIgnoredFiles(
   mode: MirrorIgnoreMode | undefined,
 ): boolean {

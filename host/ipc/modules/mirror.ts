@@ -18,6 +18,7 @@
 import type { z } from "zod";
 import {
   describeIgnores,
+  ignoreCount,
   type MirrorGitStatus,
   type MirrorServing,
   type MirrorSession,
@@ -204,7 +205,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     daemon.noteEvent(
       pulled.worktree.id,
       "started",
-      describeIgnores(ignoreMode, ignores.length),
+      describeIgnores(ignoreMode, ignoreCount(ignoreMode, ignores)),
     );
     return { ...pulled, session };
   },
@@ -297,7 +298,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     daemon.noteEvent(
       localWorktreeId,
       "ignores-changed",
-      describeIgnores(ignoreMode, ignores.length),
+      describeIgnores(ignoreMode, ignoreCount(ignoreMode, ignores)),
     );
     return { session: next };
   },

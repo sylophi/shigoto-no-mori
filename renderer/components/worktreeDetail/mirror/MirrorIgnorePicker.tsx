@@ -1,18 +1,17 @@
-// What a mirror leaves out, as one section: the heading and the
-// three-way rule on one line, and under it only what the rule needs.
-// Gitignored lists what git ignores there today. Custom is the
-// carry-over flow turned around: the chosen paths as rows, and "Add
-// file or folder" opening the same folder browser over the worktree,
-// where an ignored entry can be left out. The worktree browsed is the
-// caller's (the source's copy in the dialog, the local copy on the
-// mirror's own page), read under the surrounding scope.
+// What a mirror leaves out, as one section: the heading and the base
+// rule on one line, and under it the exceptions to that base. Nothing
+// takes the ignored paths to leave out anyway, and gitignored (which
+// lists what git ignores there today) takes the ignored paths to bring
+// anyway, so one list serves as a leave-out list or a bring list by
+// the base it hangs off. The list is the carry-over flow: the chosen
+// paths as rows, and a button opening the same folder browser over the
+// worktree, where an ignored entry can be picked. The worktree browsed
+// is the caller's (the source's copy in the dialog, the local copy on
+// the mirror's own page), read under the surrounding scope.
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import type { UseQueryResult } from "@tanstack/react-query";
-import {
-  MIRROR_IGNORES_LIMIT,
-  MirrorIgnoreModeSchema,
-} from "@shared/ipc/modules/mirror";
+import { MIRROR_IGNORES_LIMIT } from "@shared/ipc/modules/mirror";
 import type { SyncIgnoredPathsResult } from "@shared/ipc/modules/sync";
 import { PathPickerModal } from "@/components/configure/PathPickerModal";
 import { Button } from "@/components/ui/button";
@@ -23,15 +22,18 @@ import { useWorktreeFolder } from "@/hooks/remote/useWorktreeFolder";
 import { cn } from "@/lib/utils";
 import { CARD, CARD_NOTE, CardSkeleton } from "../transplant/TransplantChrome";
 import {
-  IGNORE_MODE_LABEL,
-  IGNORE_MODE_TITLE,
+  EXCEPTION_COPY,
+  exceptionsOf,
+  IGNORE_BASE_LABEL,
+  IGNORE_BASE_TITLE,
+  IGNORE_BASES,
   type IgnoreSelection,
 } from "./ignoreChoice";
 
-const OPTIONS = MirrorIgnoreModeSchema.options.map((mode) => ({
-  value: mode,
-  label: IGNORE_MODE_LABEL[mode],
-  title: IGNORE_MODE_TITLE[mode],
+const OPTIONS = IGNORE_BASES.map((base) => ({
+  value: base,
+  label: IGNORE_BASE_LABEL[base],
+  title: IGNORE_BASE_TITLE[base],
 }));
 
 export function MirrorIgnorePicker({
@@ -59,41 +61,56 @@ export function MirrorIgnorePicker({
   // it is up (PathPickerModal's capture listener), so the dialog under
   // it needs no say.
   const [picking, setPicking] = useState(false);
+  const bringing = value.base === "gitignored";
+  const excepted = exceptionsOf(value);
   const select = (next: ReadonlySet<string>) =>
-    onChange({ ...value, selected: next });
-  const chosen = [...value.selected].toSorted();
+    onChange({ ...value, [bringing ? "brought" : "leftOut"]: next });
+  const chosen = [...excepted].toSorted();
+  const copy = EXCEPTION_COPY[value.base];
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <SectionHeading>Leave out</SectionHeading>
         <SegmentedControl
           aria-label="What the mirror leaves out"
-          value={value.mode}
-          onChange={(mode) => onChange({ ...value, mode })}
+          value={value.base}
+          onChange={(base) => onChange({ ...value, base })}
           disabled={disabled}
           options={OPTIONS}
           optionClassName="px-2.5 py-0.5 text-[11px]"
         />
       </div>
-      {value.mode === "gitignored" && <IgnoredList ignored={ignored} />}
-      {value.mode === "custom" && (
+      {bringing && <IgnoredList ignored={ignored} brought={excepted} />}
+      {(chosen.length > 0 || !disabled) && (
         <div className="space-y-1.5">
+          {chosen.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {bringing
+                ? "Except these, which cross anyway:"
+                : "Except these, which stay put:"}
+            </p>
+          )}
           {chosen.map((path) => (
             <ChosenRow
               key={path}
               path={path}
               disabled={disabled}
               onRemove={() => {
-                const next = new Set(value.selected);
+                const next = new Set(excepted);
                 next.delete(path);
                 select(next);
               }}
             />
           ))}
           {!disabled && (
-            <Button variant="ghost" size="sm" onClick={() => setPicking(true)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              title={copy.hint}
+              onClick={() => setPicking(true)}
+            >
               <Plus />
-              Add file or folder
+              Add exception
             </Button>
           )}
         </div>
@@ -106,10 +123,17 @@ export function MirrorIgnorePicker({
             useWorktreeFolder(worktree.projectId, worktree.id, relative)
           }
           emptyRootLabel="The worktree is empty."
-          renderTrailing={(entry, path) =>
-            value.selected.has(path) ? (
+          renderTrailing={(entry, path, parents) =>
+            excepted.has(path) ? (
               <span className="px-2 text-[11px] text-muted-foreground">
-                Left out
+                {copy.done}
+              </span>
+            ) : bringing && parents.some((parent) => parent.ignored) ? (
+              <span
+                className="px-2 text-[11px] text-muted-foreground/70"
+                title="Bring the ignored folder it sits in. A folder that stays put is not opened for one file."
+              >
+                in ignored folder
               </span>
             ) : entry.ignored ? (
               <div
@@ -122,15 +146,15 @@ export function MirrorIgnorePicker({
                   type="button"
                   variant="outline"
                   size="xs"
-                  onClick={() => select(new Set([...value.selected, path]))}
+                  onClick={() => select(new Set([...excepted, path]))}
                 >
-                  Leave out
+                  {copy.action}
                 </Button>
               </div>
             ) : (
               <span
                 className="px-2 text-[11px] text-muted-foreground/70"
-                title="Tracked by git, so it always crosses. Only ignored files and folders can be left out."
+                title="Tracked by git, so it always crosses. Only ignored files and folders take an exception."
               >
                 tracked
               </span>
@@ -144,21 +168,27 @@ export function MirrorIgnorePicker({
 }
 
 // What git ignores on the worktree today, the list the gitignored
-// rule leaves out.
+// rule leaves out, less the paths brought anyway. A brought path is a
+// topmost ignored entry, so it is one line of git's list (a folder's
+// ends in a slash) whether or not it made the capped page.
 function IgnoredList({
   ignored,
+  brought,
 }: {
   ignored: Pick<
     UseQueryResult<SyncIgnoredPathsResult>,
     "data" | "isPending" | "isError"
   >;
+  brought: ReadonlySet<string>;
 }) {
   if (ignored.isPending) return <CardSkeleton />;
   if (ignored.isError) {
     return <p className={CARD_NOTE}>Couldn't list the ignored files.</p>;
   }
-  const paths = ignored.data?.paths ?? [];
-  const total = ignored.data?.total ?? 0;
+  const paths = (ignored.data?.paths ?? []).filter(
+    (path) => !brought.has(path.replace(/\/+$/, "")),
+  );
+  const total = Math.max(0, (ignored.data?.total ?? 0) - brought.size);
   const rules = ignored.data?.patterns.length ?? 0;
   // Every path the wire carries, flowed into as many columns as the
   // card fits: the rule is judged by seeing what it covers. A column

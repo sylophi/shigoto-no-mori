@@ -31,6 +31,7 @@ import { join } from "node:path";
 import { signalTree } from "../../host/lib/scripts/process.ts";
 import { devProfileNameSuffix } from "../../shared/appName.mts";
 import { errorMessageOf } from "../../shared/errors.ts";
+import { bringIgnores } from "../../shared/mirrorIgnores.ts";
 import { isCommandRefusedError } from "../../shared/ipc/socket/frames.ts";
 import {
   fileEquals,
@@ -865,6 +866,32 @@ async function main(): Promise<string[]> {
         BUILT_ON_A,
       );
       // A clean source goes without force.
+      const torn = await teardown(source);
+      assert.ok(torn.sourceRemoved, `source kept: ${torn.sourceError}`);
+    });
+
+    // Gitignored with an exception: the picked path crosses, and the
+    // rest of what git ignores stays on b.
+    await scenario("transplant: bring rule", async () => {
+      const source = await sourceOnB("bring");
+      const project = need(bProject, "the remote read");
+      const ignored = (await onPeer(a, idB, "sync:ignoredPaths", {
+        projectId: project.id,
+        worktreeId: source.id,
+      })) as { patterns: string[] };
+      const result = await pullHere(source, {
+        runSetup: false,
+        ignoreMode: "bring",
+        ignores: bringIgnores(ignored.patterns, [".env"]),
+      });
+      const local = result.worktree;
+      assert.deepEqual(result.files, { crossed: true, conflicts: 0 });
+      assert.equal(readOrNull(join(local.path, ".env")), "SECRET=b\n");
+      assert.ok(
+        !existsSync(join(local.path, "cache")),
+        "an ignored path the bring rule did not name crossed",
+      );
+      assert.ok(!existsSync(join(local.path, "build-out")));
       const torn = await teardown(source);
       assert.ok(torn.sourceRemoved, `source kept: ${torn.sourceError}`);
     });

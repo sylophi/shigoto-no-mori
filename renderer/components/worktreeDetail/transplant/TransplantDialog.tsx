@@ -16,7 +16,11 @@ import { useLocalDeviceName } from "@/hooks/account/useAccount";
 import { usePullWorktree } from "@/hooks/remote/usePullWorktree";
 import { usePullProgress } from "@/hooks/remote/usePullProgress";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { ignoreSummary, usePullChoice } from "../mirror/ignoreChoice";
+import {
+  modeOf,
+  selectionSummary,
+  usePullChoice,
+} from "../mirror/ignoreChoice";
 import { FlowHeader, StepRail } from "./TransplantChrome";
 import { TransplantFinish } from "./TransplantFinish";
 import { TransplantProgress } from "./TransplantProgress";
@@ -85,7 +89,8 @@ export function TransplantDialog({
   // the source scope: its ignored list walks the checkout over the
   // device link.
   const choice = usePullChoice(project.id, worktree.id);
-  const bringsFiles = pullBringsIgnoredFiles(choice.selection.mode);
+  const mode = modeOf(choice.selection);
+  const bringsFiles = pullBringsIgnoredFiles(mode);
 
   const start = () => {
     progress.reset();
@@ -169,10 +174,8 @@ export function TransplantDialog({
           onRetry={start}
           filesDetail={
             bringsFiles
-              ? (ignoreSummary(
-                  choice.selection.mode,
-                  choice.selection.selected.size,
-                ) ?? "everything ignored, too")
+              ? (selectionSummary(choice.selection) ??
+                "everything ignored, too")
               : undefined
           }
         />
@@ -181,9 +184,9 @@ export function TransplantDialog({
         <TransplantFinish
           result={pull.data}
           leftOutCount={
-            choice.selection.mode === "custom"
-              ? choice.selection.selected.size
-              : choice.selection.mode === "everything"
+            mode === "custom"
+              ? choice.selection.leftOut.size
+              : mode === "everything"
                 ? 0
                 : null
           }
