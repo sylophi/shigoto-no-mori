@@ -5,7 +5,7 @@
 // worktree there, the gateway opens the peer's `file-sync serve` on a
 // byte channel of the direct session (mirror:openStream), answers
 // "ok" (or "error <why>"), and from then on the socket is bridged onto
-// that channel exactly like a port forward (main/portForward/
+// that channel exactly like a port forward (main/core/portForward/
 // bridge.ts). Nothing here knows Mutagen's protocol: the preface is
 // the only line the gateway reads.
 //

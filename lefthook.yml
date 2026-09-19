@@ -101,7 +101,7 @@ pre-commit:
     # the per-forward conn cap) driven over the same wire. Gated to the
     # forward surface plus the stub device hub it rides.
     port-forward:
-      glob: "{shared/ipc/modules/forward.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/**,shared/hub/protocol.ts,shared/hub/bridgeHandlers.ts,host/ipc/modules/forward.ts,host/socket/**,host/hub/**,host/lib/idleRegistry.ts,host/lib/net.ts,main/portForward/**,test/port-forward.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs,test/lib/directBoot.mjs}"
+      glob: "{shared/ipc/modules/forward.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/**,shared/hub/protocol.ts,shared/hub/bridgeHandlers.ts,host/ipc/modules/forward.ts,host/socket/**,host/hub/**,host/lib/idleRegistry.ts,host/lib/net.ts,main/core/portForward/**,test/port-forward.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs,test/lib/directBoot.mjs}"
       run: pnpm test port-forward
     # End-to-end proof for continuous worktree mirroring: builds the real
     # file-sync engine (and the sm CLI for the fixture project), then
@@ -114,7 +114,7 @@ pre-commit:
     # serve child on terminate, and the device hub staying flat. Gated
     # to the mirror surface plus the byte wire and CLI it rides.
     mirror:
-      glob: "{file-sync/**,cli/**,host/fileSync/**,host/mirror/**,shared/packaging/fileSyncDist.mts,shared/ipc/modules/mirror.ts,shared/ipc/modules/forward.ts,shared/ipc/modules/sync.ts,host/ipc/modules/sync.ts,host/ipc/peerSync.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/hub/protocol.ts,host/ipc/modules/forward.ts,host/ipc/modules/mirror.ts,host/ipc/modules/worktrees.ts,host/ipc/cliDelegate.ts,host/hub/**,host/lib/idleRegistry.ts,host/lib/net.ts,host/lib/git/**,host/lib/util/paths.ts,main/portForward/bridge.ts,main/mirror/**,shared/ipc/socket/channels.ts,host/socket/channelStreams.ts,test/mirror.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs,test/lib/directBoot.mjs}"
+      glob: "{file-sync/**,cli/**,host/fileSync/**,host/mirror/**,shared/packaging/fileSyncDist.mts,shared/ipc/modules/mirror.ts,shared/ipc/modules/forward.ts,shared/ipc/modules/sync.ts,host/ipc/modules/sync.ts,host/ipc/peerSync.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/hub/protocol.ts,host/ipc/modules/forward.ts,host/ipc/modules/mirror.ts,host/ipc/modules/worktrees.ts,host/ipc/cliDelegate.ts,host/hub/**,host/lib/idleRegistry.ts,host/lib/net.ts,host/lib/git/**,host/lib/util/paths.ts,main/core/portForward/bridge.ts,main/core/mirror/**,shared/ipc/socket/channels.ts,host/socket/channelStreams.ts,test/mirror.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs,test/lib/directBoot.mjs}"
       run: pnpm test mirror
     # Proves the worktree port list's pure parts under plain Node: the
     # port-pool state reader (XDG_DATA_HOME, declared order, malformed
@@ -150,13 +150,13 @@ pre-commit:
     # relaunch-vs-stand. Gated to the pure module plus the check itself,
     # since the Electron wiring around them is a human-verify item.
     liveness:
-      glob: "{main/liveness/**,test/liveness.mjs}"
+      glob: "{main/core/liveness/**,test/liveness.mjs}"
       run: pnpm test liveness
     # The Safe Storage reset contract, and on macOS the real
     # `security` deletion of a probe item. That writes to the login
     # keychain, so the job is gated to the keychain modules alone.
     keychain:
-      glob: "{main/keychain/**,test/keychain.mjs}"
+      glob: "{main/core/keychain/**,test/keychain.mjs}"
       run: pnpm test keychain
     # Drives the per-project git-directory watcher against a REAL git
     # repository with a linked worktree: a commit in the worktree, a
@@ -166,9 +166,9 @@ pre-commit:
     # produces none. Loop-safety of the watcher rests on that
     # allowlist, so it is pinned here.
     git-watcher:
-      glob: "{main/electron/gitWatcher.ts,test/git-watcher.mjs,test/lib/checkKit.mjs}"
+      glob: "{main/core/gitWatcher.ts,test/git-watcher.mjs,test/lib/checkKit.mjs}"
       run: pnpm test git-watcher
-    # Drives the electron-free account layer (main/account/*,
+    # Drives the electron-free account layer (main/core/account/*,
     # shared/account/*) end to end with stubs: the hub client's
     # route/method/auth-tier discipline against the shared schemas
     # (Clerk session token at enroll, device credential everywhere
@@ -179,5 +179,5 @@ pre-commit:
     # unrelated commits. Proves enrollment and storage cannot drift
     # from shared/hub/protocol.ts without electron or a browser.
     account:
-      glob: "{main/account/**,shared/account/**,shared/ipc/modules/account.ts,shared/hub/protocol.ts,test/account.mjs,test/lib/checkKit.mjs}"
+      glob: "{main/core/account/**,shared/account/**,shared/ipc/modules/account.ts,shared/hub/protocol.ts,test/account.mjs,test/lib/checkKit.mjs}"
       run: pnpm test account

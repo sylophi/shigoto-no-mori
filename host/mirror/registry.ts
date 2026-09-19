@@ -71,7 +71,7 @@ export type MirrorImpl = {
   resume: (session: string) => Promise<unknown>;
   // The git follower's verdict for a session (host/mirror/gitFollow.ts).
   gitStatus: (session: string) => MirrorGitStatus | undefined;
-  // The mirror's thread of events, by local worktree (main/mirror/
+  // The mirror's thread of events, by local worktree (main/core/mirror/
   // history.ts), and the way a control op adds to it.
   history: (localWorktreeId: string) => MirrorEvent[];
   noteEvent: (

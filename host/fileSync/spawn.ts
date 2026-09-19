@@ -1,6 +1,6 @@
 // The host's one way to run the file-sync engine (file-sync/, the
 // continuous worktree mirror). Two roles are spawned through here: the
-// long-lived `daemon` behind main/mirror/daemon.ts and one `serve`
+// long-lived `daemon` behind main/core/mirror/daemon.ts and one `serve`
 // child per stream a peer opens (host/ipc/modules/forward.ts). Both
 // are spoken to as a byte stream over stdin/stdout, never as document
 // runs, so this seam is separate from the CLI delegate on purpose: the

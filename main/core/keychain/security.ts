@@ -1,7 +1,7 @@
 // Deletes one generic-password item from the default keychain search
 // list (the login keychain) through Apple's `security` tool. Electron
 // exposes no keychain API beyond safeStorage itself, and deletion is
-// the one operation the reset needs (main/keychain/reset.ts).
+// the one operation the reset needs (main/core/keychain/reset.ts).
 //
 // Synchronous on purpose: it runs at boot before anything can touch
 // safeStorage, and takes about ten milliseconds. The timeout bounds

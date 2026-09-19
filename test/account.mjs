@@ -1,4 +1,4 @@
-// Durable proof for the electron-free account layer (main/account/*,
+// Durable proof for the electron-free account layer (main/core/account/*,
 // shared/account/*). Drives the pure modules end to end with stubs and
 // asserts the security and wire-shape invariants without electron,
 // without a browser and without the network: the hub client's
@@ -40,10 +40,10 @@ import {
 import { enrollDevice, signOutDevice } from "../shared/account/enroll.ts";
 import { createAccountService } from "../shared/account/service.ts";
 import { deriveAccountId } from "../shared/account/token.ts";
-import { createAccountStore } from "../main/account/credentialStore.ts";
+import { createAccountStore } from "../main/core/account/credentialStore.ts";
 import { createAccountStore as createCoreAccountStore } from "../shared/account/credentialStore.ts";
-import { createGrantStore } from "../main/account/grantStore.ts";
-import { shortHostname } from "../main/account/defaultDeviceName.ts";
+import { createGrantStore } from "../main/core/account/grantStore.ts";
+import { shortHostname } from "../main/core/account/defaultDeviceName.ts";
 import {
   AccountStatusSchema,
   accountContract,

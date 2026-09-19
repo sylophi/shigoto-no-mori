@@ -23,7 +23,7 @@
 //     channel cap with "too-many-conns",
 //   - the surface still serves a fresh channel after full teardown.
 //
-// Then the CLIENT ENGINE (main/portForward/engine.ts), electron-free
+// Then the CLIENT ENGINE (main/core/portForward/engine.ts), electron-free
 // and driven here over the same session, so every engine scenario
 // exercises the full chain: a plain local TCP client -> engine
 // listener -> channel -> host handler -> loopback fixture. Asserts:
@@ -59,7 +59,7 @@ import { mintHexId } from "@host/lib/idleRegistry";
 import {
   createPortForwardEngine,
   MAX_CONNS_PER_DEVICE,
-} from "../main/portForward/engine.ts";
+} from "../main/core/portForward/engine.ts";
 import { freeLoopbackPort, makeProof, makeTracker } from "./lib/checkKit.mjs";
 import { bootDirectWire } from "./lib/directBoot.mjs";
 import { waitFor } from "./lib/checkKit.mjs";

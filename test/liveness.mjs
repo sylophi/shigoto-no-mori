@@ -1,4 +1,4 @@
-// Drives the pure liveness rate limiters (main/liveness/rateLimit.ts)
+// Drives the pure liveness rate limiters (main/core/liveness/rateLimit.ts)
 // under plain Node. The Electron wiring around them (setLoginItemSettings,
 // render-process-gone, app.relaunch) cannot run headlessly and is a
 // human-verify item for the PR, but the sliding-window math that decides
@@ -10,7 +10,7 @@ import {
   CRASH_LOOP,
   FATAL_RELAUNCH,
   decide,
-} from "../main/liveness/rateLimit.ts";
+} from "../main/core/liveness/rateLimit.ts";
 import { makeChecker, report } from "./lib/checkKit.mjs";
 
 const { check, failures } = makeChecker();
@@ -93,5 +93,5 @@ check("the limiter constants are sane", () => {
 report({
   name: "liveness",
   failures,
-  hint: "The renderer crash-loop and fatal-relaunch rate limiters in main/liveness/rateLimit.ts changed shape. Re-derive the expected recreate/relaunch decisions or restore the sliding-window semantics.",
+  hint: "The renderer crash-loop and fatal-relaunch rate limiters in main/core/liveness/rateLimit.ts changed shape. Re-derive the expected recreate/relaunch decisions or restore the sliding-window semantics.",
 });

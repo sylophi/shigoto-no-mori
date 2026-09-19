@@ -1,5 +1,5 @@
 // Durable proof for the per-project git-directory watcher
-// (main/electron/gitWatcher.ts) against a REAL git repository with a
+// (main/core/gitWatcher.ts) against a REAL git repository with a
 // linked worktree: a commit made in the worktree, a checkout there and
 // a branch deleted from the main checkout each surface as exactly one
 // project-scoped change, while the churn the allowlist exists to
@@ -24,7 +24,7 @@ import {
   reconcileGitWatchers,
   startGitWatcher,
   stopGitWatcher,
-} from "../main/electron/gitWatcher.ts";
+} from "../main/core/gitWatcher.ts";
 import { delay, makeProof, scrubbedGitEnv, waitFor } from "./lib/checkKit.mjs";
 
 // The sandbox's git commands run under the scrubbed environment: this

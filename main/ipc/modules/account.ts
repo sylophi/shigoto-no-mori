@@ -1,5 +1,5 @@
 // The one electron-facing file of the hub account layer. Everything
-// under main/account/ is pure and electron-free so the account check
+// under main/core/account/ is pure and electron-free so the account check
 // script can drive it. This module is where electron enters: safeStorage
 // builds the at-rest cipher, app names the userData store path, and
 // process.env supplies the service config. Sign-in itself lives in the
@@ -23,13 +23,16 @@ import {
   type AccountStore,
   type StoreCipher,
   type StoredAccount,
-} from "../../account/credentialStore";
+} from "../../core/account/credentialStore";
 import {
   defaultDesktopDeviceName,
   isLegacyDefaultName,
   type DefaultDeviceName,
-} from "../../account/defaultDeviceName";
-import { createGrantStore, type GrantStore } from "../../account/grantStore";
+} from "../../core/account/defaultDeviceName";
+import {
+  createGrantStore,
+  type GrantStore,
+} from "../../core/account/grantStore";
 import {
   enrollDevice,
   renameDevice,

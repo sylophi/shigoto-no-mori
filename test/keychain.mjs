@@ -1,7 +1,7 @@
-// Drives the Safe Storage reset (main/keychain/reset.ts) under plain
+// Drives the Safe Storage reset (main/core/keychain/reset.ts) under plain
 // node: the owned-marker gate, the delete-then-mark order, the
 // no-marker-on-failure retry rule, and Electron's item naming. On
-// macOS it also runs the real deleter (main/keychain/security.ts)
+// macOS it also runs the real deleter (main/core/keychain/security.ts)
 // against a probe item created with an EMPTY trusted-application
 // list, the worst case a foreign item can present: the deletion must
 // land without a dialog (a dialog would hang until the deleter's own
@@ -18,8 +18,8 @@ import { platform } from "node:os";
 import {
   resetSafeStorageOnce,
   safeStorageItemNames,
-} from "../main/keychain/reset.ts";
-import { deleteGenericPassword } from "../main/keychain/security.ts";
+} from "../main/core/keychain/reset.ts";
+import { deleteGenericPassword } from "../main/core/keychain/security.ts";
 import { makeChecker, report } from "./lib/checkKit.mjs";
 
 const { check, failures } = makeChecker();
@@ -139,5 +139,5 @@ if (platform() === "darwin") {
 report({
   name: "keychain reset",
   failures,
-  hint: "The Safe Storage reset (main/keychain/) drifted from its contract: fix the module or the check.",
+  hint: "The Safe Storage reset (main/core/keychain/) drifted from its contract: fix the module or the check.",
 });

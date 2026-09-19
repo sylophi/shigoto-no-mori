@@ -69,13 +69,13 @@ import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktre
 import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
 import { killAllCli, cliChildCount } from "./electron/cliRunner";
-import { applyUserShellPath } from "./electron/shellPath";
+import { applyUserShellPath } from "./core/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
 import {
   gitDirOf,
   reconcileGitWatchers,
   startGitWatcher,
-} from "./electron/gitWatcher";
+} from "./core/gitWatcher";
 import { gitSelfWroteWithin, SELF_ECHO_MS } from "@host/lib/util/selfWrite";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import { isRelaunching } from "./electron/relaunch";
@@ -156,7 +156,7 @@ if (!app.requestSingleInstanceLock()) {
 // mock keychain, where safeStorage still reports encryption available
 // under a constant key: tokens obfuscated, not protected, the
 // accepted trade for a build that only runs on the owner's machine.
-// main/keychain/reset.ts has the model behind the split. After the
+// main/core/keychain/reset.ts has the model behind the split. After the
 // lock: a losing second instance must not delete the running app's
 // key on its way out. Before the Clerk bridge and the IPC handlers,
 // the two paths to safeStorage.

@@ -93,8 +93,8 @@ function encodeChannelFrame(
 // a forward (a browser tab opens ~6 keepalive sockets plus an HMR
 // websocket) beside a few mirror streams. The client-side budgets are
 // carved out of this one: the forwards take MAX_CONNS_PER_DEVICE
-// (main/portForward/engine.ts) and the mirror streams the rest
-// (main/mirror/gateway.ts).
+// (main/core/portForward/engine.ts) and the mirror streams the rest
+// (main/core/mirror/gateway.ts).
 export const MAX_CHANNELS_PER_CONNECTION = 32;
 
 // The refusal markers a byte-stream open answers with, stable strings

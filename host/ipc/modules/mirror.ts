@@ -1,6 +1,6 @@
 // Host side of continuous worktree mirroring (shared/ipc/modules/
 // mirror.ts). The daemon that owns the sessions lives in main
-// (main/mirror/daemon.ts, spawned and supervised there), so it arrives
+// (main/core/mirror/daemon.ts, spawned and supervised there), so it arrives
 // through an injected impl following the setPortForwardEngine
 // precedent. This module owns the rest: the start orchestration, the
 // stream open a peer drives to mirror FROM here (with the serving

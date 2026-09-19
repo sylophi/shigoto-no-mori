@@ -474,7 +474,7 @@ and assert through the bridge and the disk.
   created by a binary with a different code signature (a dev run
   before the mock keychain, an older ad-hoc package), so macOS gates
   every read behind a dialog. A signed build replaces the item once
-  on its first launch (main/keychain/reset.ts) and logs
+  on its first launch (main/core/keychain/reset.ts) and logs
   `[keychain]`. If the dialogs persist, delete the item by hand
   (`security delete-generic-password -s "Shigoto no Mori Safe
   Storage"`), remove `safe-storage.owned` from the app's userData and

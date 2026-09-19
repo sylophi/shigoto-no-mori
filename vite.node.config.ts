@@ -43,7 +43,7 @@ export default defineConfig({
     // Whether forge signs this build with a Developer ID (the same
     // reading forge.config.ts makes). main/index.ts gives only such a
     // build the real macOS keychain: an ad-hoc bundle on it is one
-    // login-password prompt per read (main/keychain/reset.ts).
+    // login-password prompt per read (main/core/keychain/reset.ts).
     __SM_SIGNED_MAC_BUILD__: JSON.stringify(
       macSigningIdentity(process.env) !== null,
     ),

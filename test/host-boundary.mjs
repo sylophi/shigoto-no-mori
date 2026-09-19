@@ -24,7 +24,11 @@
 //      shared/, or renderer/.
 //   5. ipcRenderer appears only in main/preloadTransport.ts, the one
 //      sanctioned ClientTransport binding.
-//   6. The HostApi Pick in the renderer's HostScope file names exactly
+//   6. main/core is the Electron-free half of the desktop binding: the
+//      pure cores (stores, engines, rate limiters) the node proofs in
+//      test/ drive directly. No electron import there, and no import
+//      from the rest of main/, which would drag Electron in.
+//   7. The HostApi Pick in the renderer's HostScope file names exactly
 //      the host-scoped namespaces buildApi exposes. Both sides are read
 //      from source (the Pick list, and buildApi's return object joined
 //      with each contract's defineContract scope), so the rule fails
@@ -47,6 +51,7 @@ const IS_REMOTE = /\bisRemote\b/;
 const IPC_RENDERER = /\bipcRenderer\b/;
 
 const mainDir = join(repoRoot, "main");
+const mainCoreDir = join(mainDir, "core");
 const modulesDir = join(repoRoot, "shared", "ipc", "modules");
 const IPC_RENDERER_ALLOWLIST = new Set(["main/preloadTransport.ts"]);
 
@@ -94,6 +99,28 @@ for (const dir of ["host", "main", "renderer", "shared", "web"]) {
       );
     }
 
+    // 6. main/core stays drivable by plain node.
+    if (file.startsWith(mainCoreDir + sep)) {
+      if (specifiers.some(isElectronSpecifier)) {
+        failures.push(
+          `${rel} imports electron -- main/core/ must stay Electron free, the Electron half lives in main/electron/`,
+        );
+      }
+      const leaves = specifiers.some((spec) => {
+        if (!spec.startsWith(".")) return false;
+        const target = resolve(fileDir, spec);
+        return (
+          (target === mainDir || target.startsWith(mainDir + sep)) &&
+          !target.startsWith(mainCoreDir + sep)
+        );
+      });
+      if (leaves) {
+        failures.push(
+          `${rel} imports from main/ outside main/core/ -- that pulls Electron in transitively`,
+        );
+      }
+    }
+
     // 3. A scope-less contract module would silently default to
     //    nothing: later layers route calls by scope, so every module
     //    must pick a side with a literal.
@@ -131,7 +158,7 @@ if (contractModuleCount === 0) {
   );
 }
 
-// 6. HostApi drift guard. The expected set is derived, not hardcoded:
+// 7. HostApi drift guard. The expected set is derived, not hardcoded:
 //    every top-level namespace in buildApi's return object is mapped to
 //    the contract its client was built from, and a namespace is
 //    host-scoped when that contract is defineContract("host", ...).
@@ -160,7 +187,7 @@ function buildApiHostNamespaces() {
   const returnIndex = src.indexOf("return {", buildApiIndex);
   if (buildApiIndex === -1 || returnIndex === -1) {
     failures.push(
-      "shared/ipc/client.ts: buildApi's return object not found -- rule 6's predicate no longer matches, update check-host-boundary",
+      "shared/ipc/client.ts: buildApi's return object not found -- rule 7's predicate no longer matches, update test/host-boundary.mjs",
     );
     return null;
   }
@@ -199,7 +226,7 @@ function buildApiHostNamespaces() {
       );
       if (contracts.length === 0 || contracts.some((c) => !c)) {
         failures.push(
-          `shared/ipc/client.ts: buildApi namespace "${name}" references no known contract client -- rule 6 can't classify it, update check-host-boundary`,
+          `shared/ipc/client.ts: buildApi namespace "${name}" references no known contract client -- rule 7 can't classify it, update test/host-boundary.mjs`,
         );
       } else if (contracts.some((c) => contractScopes.get(c) === "host")) {
         hostNamespaces.add(name);
@@ -209,7 +236,7 @@ function buildApiHostNamespaces() {
   }
   if (hostNamespaces.size === 0) {
     failures.push(
-      "shared/ipc/client.ts: no host-scoped buildApi namespaces found -- rule 6's predicate no longer matches anything",
+      "shared/ipc/client.ts: no host-scoped buildApi namespaces found -- rule 7's predicate no longer matches anything",
     );
     return null;
   }
@@ -222,14 +249,14 @@ function hostApiPickNames() {
     src = stripComments(readFileSync(join(repoRoot, HOST_SCOPE_FILE), "utf8"));
   } catch {
     failures.push(
-      `${HOST_SCOPE_FILE} is missing -- the HostApi Pick moved, update HOST_SCOPE_FILE in check-host-boundary`,
+      `${HOST_SCOPE_FILE} is missing -- the HostApi Pick moved, update HOST_SCOPE_FILE in test/host-boundary.mjs`,
     );
     return null;
   }
   const pick = /type HostApi = Pick<\s*RemoteDeviceApi,([^>]*)>/.exec(src);
   if (!pick) {
     failures.push(
-      `${HOST_SCOPE_FILE}: HostApi Pick<RemoteDeviceApi, ...> not found -- rule 6's predicate no longer matches, update check-host-boundary`,
+      `${HOST_SCOPE_FILE}: HostApi Pick<RemoteDeviceApi, ...> not found -- rule 7's predicate no longer matches, update test/host-boundary.mjs`,
     );
     return null;
   }

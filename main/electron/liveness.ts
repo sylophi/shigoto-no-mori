@@ -9,8 +9,9 @@
 // A true native hard-crash of the main process (a segfault) cannot be
 // caught in-process and would need an OS supervisor (macOS launchd
 // KeepAlive). That is out of scope here. The pruning and counting for
-// both crash guards is the pure module main/liveness/rateLimit.ts, which
-// test/liveness.mjs drives headlessly.
+// both crash guards is the pure module
+// main/core/liveness/rateLimit.ts, which test/liveness.mjs drives
+// headlessly.
 import { keepReachableOn } from "@shared/schemas/config";
 import { app, type BrowserWindow } from "electron";
 import { platform } from "node:os";
@@ -25,7 +26,7 @@ import {
 import { readClientConfigSync } from "./clientConfig";
 import { accountServiceConfigured } from "../ipc/modules/account";
 import { scheduleRelaunch } from "./relaunch";
-import { CRASH_LOOP, decide, FATAL_RELAUNCH } from "../liveness/rateLimit";
+import { CRASH_LOOP, decide, FATAL_RELAUNCH } from "../core/liveness/rateLimit";
 
 function keepReachableEnabled(): boolean {
   // Inert on a build with no account service: the setting exists so a

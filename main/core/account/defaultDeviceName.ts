@@ -1,7 +1,7 @@
 // The name a desktop device enrolls under before anyone renames it:
 // what the machine's owner already calls it, as far as the OS will
 // say. Pure node (os and a child process), electron-free like the rest
-// of main/account/ so the account check script drives the string half.
+// of main/core/account/ so the account check script drives the string half.
 import { execFile } from "node:child_process";
 import { hostname, platform } from "node:os";
 import { promisify } from "node:util";

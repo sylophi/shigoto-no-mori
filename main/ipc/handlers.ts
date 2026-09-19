@@ -85,10 +85,10 @@ import { windowHandlers } from "./modules/window";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { buildClient } from "@shared/ipc/buildClient";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
-import { createPortForwardEngine } from "../portForward/engine";
-import { createMirrorDaemon } from "../mirror/daemon";
-import { createMirrorGateway } from "../mirror/gateway";
-import { createMirrorHistory } from "../mirror/history";
+import { createPortForwardEngine } from "../core/portForward/engine";
+import { createMirrorDaemon } from "../core/mirror/daemon";
+import { createMirrorGateway } from "../core/mirror/gateway";
+import { createMirrorHistory } from "../core/mirror/history";
 import { createGitFollower } from "@host/mirror/gitFollow";
 import {
   atomicWriteJsonSync,
@@ -126,7 +126,7 @@ const peerTransportFor = (deviceId: string) => ({
 
 // Continuous worktree mirroring, this device's half: the loopback
 // gateway the daemon dials peers through and the daemon itself
-// (main/mirror/*, both electron-free), bound here to the peer sessions
+// (main/core/mirror/*, both electron-free), bound here to the peer sessions
 // and to the renderer's changed signal exactly like the port-forward
 // engine. Started from main/index.ts once the app is ready and stopped
 // on every quit path. A boot without the engine binary (a dev run
@@ -149,7 +149,7 @@ const gitFollowStorePath = () => join(fileSyncDir(), "git-follow.json");
 const GitFollowStoreSchema = z.object({
   agreed: z.record(z.string(), GitStateCoreSchema).default({}),
 });
-// The mirrors' event threads (main/mirror/history.ts), one file
+// The mirrors' event threads (main/core/mirror/history.ts), one file
 // beside the follower's, fed by every daemon snapshot and follower
 // verdict below and by the handlers' control ops.
 const mirrorHistoryPath = () => join(fileSyncDir(), "mirror-history.json");
@@ -334,7 +334,7 @@ export function registerIpcHandlers(): void {
   // peerTransportFor as the sync wiring above and for the same reason:
   // a second session would supersede the one the renderer's
   // remote-forest queries ride. The engine itself is electron-free
-  // (main/portForward/engine.ts), and this is its only binding to the
+  // (main/core/portForward/engine.ts), and this is its only binding to the
   // peer sessions and to the renderer's changed signal.
   setPortForwardEngine(
     createPortForwardEngine({

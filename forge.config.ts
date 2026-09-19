@@ -275,7 +275,7 @@ const config: ForgeConfig = {
       // Disabled: the app has no cookies/sessions/autofill to protect,
       // and turning this on would put every flavor, ad-hoc dev bundles
       // included, on the real macOS keychain for cookie keys, which is
-      // the login-password prompt storm main/keychain/reset.ts
+      // the login-password prompt storm main/core/keychain/reset.ts
       // describes. safeStorage's own keychain use is governed by the
       // policy in main/index.ts instead.
       [FuseV1Options.EnableCookieEncryption]: false,

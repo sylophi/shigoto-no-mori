@@ -4,7 +4,7 @@
 // main/index.ts branches its keychain policy on). A packaged build
 // that forge signed but main believed unsigned would skip the real
 // keychain for nothing, and the reverse would put an ad-hoc bundle on
-// the real keychain, which is the prompt storm main/keychain/reset.ts
+// the real keychain, which is the prompt storm main/core/keychain/reset.ts
 // describes.
 //
 // "-" is codesign's ad-hoc identity: a bundle signed with it has the

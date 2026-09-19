@@ -1,8 +1,8 @@
 import { portForwardContract } from "@shared/ipc/modules/portForward";
 import type { Handlers } from "@shared/ipc/types";
-import type { PortForwardEngine } from "../../portForward/engine";
+import type { PortForwardEngine } from "../../core/portForward/engine";
 
-// Thin shell over the engine (main/portForward/engine.ts), injected at
+// Thin shell over the engine (main/core/portForward/engine.ts), injected at
 // boot following the setUpdaterImpl precedent: the wiring (the
 // bridge's direct peer sessions, the changed broadcast) lives in
 // main/ipc/handlers.ts, so this module stays a pure handler map.

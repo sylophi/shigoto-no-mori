@@ -1,4 +1,4 @@
-// The Electron half of the Safe Storage reset (main/keychain/reset.ts
+// The Electron half of the Safe Storage reset (main/core/keychain/reset.ts
 // explains why it exists): names the item from app.name, keeps the
 // marker in userData, and deletes through `security`. Called from
 // main/index.ts for signed packaged builds on macOS, before anything
@@ -12,8 +12,8 @@ import {
   resetSafeStorageOnce,
   SAFE_STORAGE_OWNED_MARKER,
   safeStorageItemNames,
-} from "../keychain/reset";
-import { deleteGenericPassword } from "../keychain/security";
+} from "../core/keychain/reset";
+import { deleteGenericPassword } from "../core/keychain/security";
 
 export function resetSafeStorageItemOnce(): void {
   const userData = app.getPath("userData");

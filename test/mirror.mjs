@@ -1,14 +1,15 @@
 // Durable proof for continuous worktree mirroring (file-sync/,
-// main/mirror/*, mirror:openStream): two REAL directories converge in
+// main/core/mirror/*, mirror:openStream): two REAL directories converge in
 // both directions through the whole production chain, with nothing on
 // the sync path doubled. Device B runs the REAL mirror daemon (a
 // freshly built file-sync engine, Mutagen inside) behind the REAL
-// gateway (main/mirror/gateway.ts). The gateway dials device A's REAL
+// gateway (main/core/mirror/gateway.ts). The gateway dials device A's REAL
 // mirror:openStream over a REAL direct websocket (brokered by the stub
 // device hub exactly as production does, test/lib/directBoot.mjs),
 // A's handler spawns a REAL `file-sync serve` for a REAL registered
 // worktree. Bytes cross as binary channel frames on the direct socket
-// (shared/ipc/socket/channels.ts, bridged by main/portForward/bridge.ts). The sm CLI is built too, only to
+// (shared/ipc/socket/channels.ts, bridged by
+// main/core/portForward/bridge.ts). The sm CLI is built too, only to
 // register the fixture project the way the app would. Asserts:
 //   - an ungranted peer: the gateway's open is refused, the daemon's
 //     create fails with the refusal, and A spawned no serve child,
@@ -71,8 +72,8 @@ import { createGitFollower } from "@host/mirror/gitFollow";
 import { transferFilesOnce } from "@host/mirror/oneShot";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { initDataDirAt } from "@host/lib/util/paths";
-import { createMirrorDaemon } from "../main/mirror/daemon.ts";
-import { createMirrorGateway } from "../main/mirror/gateway.ts";
+import { createMirrorDaemon } from "../main/core/mirror/daemon.ts";
+import { createMirrorGateway } from "../main/core/mirror/gateway.ts";
 import {
   cliFailureMessage,
   createCliRunner,

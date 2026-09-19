@@ -11,7 +11,7 @@
 // machinery: the backoff ladder, its lookup and the stable-reset rule
 // come straight from shared/remote/supervisor.ts (whose clock seam
 // this reuses), and the give-up-vs-retry split mirrors
-// main/liveness/rateLimit.ts in being driven headlessly by the
+// main/core/liveness/rateLimit.ts in being driven headlessly by the
 // direct-plane check. Stop conditions are the caller's: main
 // reconciles this runner alongside the direct listener, so sign-out,
 // an account switch and the directConnections opt-out all land here as
