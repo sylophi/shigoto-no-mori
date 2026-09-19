@@ -32,6 +32,23 @@ forwarding) on `renderer/lib/localHost.ts`; everything else is the same
 code in both shells. `shared/` is the contract layer every side
 compiles.
 
+Where things live:
+
+| Directory | What it is |
+| --- | --- |
+| `renderer/` | The UI both shells mount. `components/ui` holds primitives, `components/shared` the app-aware pieces several features use, and the other `components/` folders are one feature each. |
+| `main/` | The Electron binding. `main/electron/` wraps the OS and Electron. Its sibling folders (`account/`, `keychain/`, `liveness/`, `mirror/`, `portForward/`) stay Electron free so the node checks can drive them. |
+| `web/` | The browser binding. |
+| `host/` | What a binding serves. No Electron, and no imports from `main/`. |
+| `shared/` | The contract layer: `ipc/` and `schemas/` are the `window.api` surface, `hub/` and `remote/` the device-to-device wire, `git/` the git rules each side (and the Go CLI) agrees on, and `packaging/` the node-only facts the build tooling and the runtime share. |
+| `cli/`, `file-sync/` | Go modules: the `sm` command and the worktree mirroring engine, both bundled with the app. |
+| `hub/` | The device hub, a Cloudflare Worker. A standalone pnpm project. |
+| `lab/` | The UI lab: the real UI over a fixture `window.api`, for posing and screenshots. Dev only. |
+| `scripts/` | Build and dev entry points, and the `check-*` proofs the pre-commit hooks run (`lefthook.yml` says what each one covers). |
+
+`scripts/check-host-boundary.mjs` enforces the `host/`, `shared/` and
+`web/` rules above on every commit.
+
 ## Agent skills
 
 `skills/` holds instruction snippets that teach coding agents the `sm`
