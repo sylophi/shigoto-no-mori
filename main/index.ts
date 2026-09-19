@@ -6,10 +6,6 @@ import {
   DEV_USER_DATA_SUFFIX,
   devProfileUserData,
 } from "@shared/appName.mts";
-import { APP_VERSION_FLAG } from "@shared/appVersionFlag.mts";
-import { CLERK_PK_FLAG } from "@shared/clerkPkFlag.mts";
-import { DEV_BUILD_FLAG } from "@shared/devBuildFlag.mts";
-import { DEVICE_ID_FLAG } from "@shared/deviceIdFlag.mts";
 import { gitContract } from "@shared/ipc/modules/git";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { windowContract } from "@shared/ipc/modules/window";
@@ -21,6 +17,12 @@ import {
   rendererSchemeUrl,
   serveRendererOverScheme,
 } from "./electron/clerk";
+import {
+  APP_VERSION_FLAG,
+  CLERK_PK_FLAG,
+  DEV_BUILD_FLAG,
+  DEVICE_ID_FLAG,
+} from "./argFlags";
 import { attachContextMenu } from "./electron/contextMenu";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { enableDevCdpPort } from "./electron/devCdp";
