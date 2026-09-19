@@ -29,22 +29,15 @@ import { DeviceIdSchema } from "@shared/hub/protocol";
 import { createWebBridge } from "../web/ipc/register.ts";
 import { defaultWebDeviceName } from "../web/account/deviceName.ts";
 import { NO_STRUCTURAL_STUB, stubValueFor } from "../web/ipc/stubDefaults.ts";
-import { delay, fakeSessionJwt, makeProof, waitFor } from "./lib/checkKit.mjs";
+import {
+  delay,
+  fakeSessionJwt,
+  makeProof,
+  memoryStorage,
+  waitFor,
+} from "./lib/checkKit.mjs";
 
 // ---- shims and fixtures ----
-
-function memoryStorage() {
-  const map = new Map();
-  return {
-    getItem: (key) => (map.has(key) ? map.get(key) : null),
-    setItem: (key, value) => {
-      map.set(key, String(value));
-    },
-    removeItem: (key) => {
-      map.delete(key);
-    },
-  };
-}
 
 const HUB_URL = "https://hub.example.test";
 const PUBLISHABLE_KEY = "pk_test_check";

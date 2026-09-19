@@ -57,6 +57,7 @@ export type HostApi = Pick<
   | "remoteAccess"
   | "runtime"
   | "scripts"
+  | "sharedSettings"
   | "shigomori"
   | "sync"
   | "terrier"

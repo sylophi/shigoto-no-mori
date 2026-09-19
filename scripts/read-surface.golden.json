@@ -31,6 +31,7 @@
   "projects:worktreeIncludeStatus",
   "remoteAccess:commandAccess",
   "scripts:orphanReport",
+  "sharedSettings:read",
   "shigomori:read",
   "terrier:readiness",
   "updater:get",

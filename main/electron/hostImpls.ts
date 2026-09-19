@@ -6,8 +6,10 @@
 // lands on a throwing default.
 import { shell } from "electron";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
+import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
 import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { onGlobalConfigChange } from "@host/lib/config/global";
+import { onSharedSettingsChange } from "@host/lib/sharedSettings/store";
 import { setCliImpl } from "@host/ipc/modules/cli";
 import { setGitImpl } from "@host/ipc/modules/git";
 import { setLaunchersImpl } from "@host/ipc/modules/launchers";
@@ -69,5 +71,11 @@ export function installHostImpls(): void {
     unattendedMoveRefusal: () => busyActionRemoteRefusal("move"),
   });
   setCliRunnerImpl({ runCli, requireCliBinary, cliFailureMessage });
+  // This device's copy of the shared settings moved (a pick here, or a
+  // peer's entries merged in): every window re-reads it off the
+  // broadcast, and every peer's window folds it into its own copy.
+  onSharedSettingsChange((doc) =>
+    broadcastAll(sharedSettingsContract, "changed", doc),
+  );
   installFileSyncSpawner();
 }

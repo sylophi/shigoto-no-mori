@@ -1,17 +1,17 @@
 // The Configure page's "Create on" pick: which device the project
 // header's `+` creates a worktree on, out of every device holding this
 // repo -- the same list the new-worktree form's device picker draws
-// (useDeviceTargets), minus the ones with no checkout. It is a
-// preference of the client making the pick, kept in its client config
-// rather than in project.json: the repo has a project file on every
-// device, and one pick has to hold across all of them. A project held
-// on one device alone has nothing to pick, so the section stays out.
+// (useDeviceTargets), minus the ones with no checkout. It is a shared
+// setting rather than a key in project.json: the repo has a project
+// file on every device, and one pick has to hold across all of them,
+// whichever device it is made from. A project held on one device alone
+// has nothing to pick, so the section stays out.
 import { Check } from "lucide-react";
 import { SectionHeading } from "@/components/ui/section-heading";
 import {
   useQuickCreateDeviceId,
   useSetQuickCreateDevice,
-} from "@/hooks/config/useQuickCreateDevice";
+} from "@/hooks/sharedSettings/useQuickCreateDevice";
 import { cn } from "@/lib/utils";
 import type { Project } from "@shared/schemas";
 import { BLOCK_REASON, useDeviceTargets } from "../newWorktree/deviceTargets";
@@ -38,8 +38,8 @@ export function CreateOnSection({ project }: { project: Project }) {
       <div>
         <SectionHeading className="mb-1">Create on</SectionHeading>
         <p className="text-xs text-muted-foreground">
-          Where this project&apos;s + creates a worktree. Applies right away,
-          and is remembered by this app rather than written to the project.
+          Where this project&apos;s + creates a worktree, from whichever device
+          it is clicked on. Applies right away.
         </p>
       </div>
       <div

@@ -295,7 +295,9 @@ const (
 
 // deviceId (app-written, host/lib/config/deviceId.ts) is deliberately
 // absent: this list drives only the state.json→registry.json split,
-// which deviceId postdates.
+// which deviceId postdates. So is sharedSettings
+// (host/lib/sharedSettings/store.ts), app-written the same way. The
+// CLI reads neither and carries both through every registry write.
 var registryKeys = []string{projectsKey, shelvedKey}
 
 // Every path under the data dir in one place, so a layout change never
