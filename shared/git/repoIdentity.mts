@@ -11,7 +11,6 @@
 //
 // Pure module: the git runner and the default-ref resolver are
 // injected so the renderer and the fixture harness can both load it.
-// Ported by hand to cli/identity.go. Keep the two in sync.
 
 import type { GitRunner } from "./defaultBranch.mts";
 
@@ -133,10 +132,10 @@ function stripPort(host: string): string {
   return colon === -1 ? host : host.slice(0, colon);
 }
 
-// ASCII-only: JS toLowerCase applies Unicode mappings the Go port's
-// strings.ToLower doesn't share exactly (U+0130 diverges), and hosts
-// with such letters are already outside any registrable name. Lower
-// only A-Z so both heads preserve everything else byte-for-byte.
+// ASCII-only: JS toLowerCase applies Unicode mappings (U+0130 grows a
+// combining dot), and hosts with such letters are already outside any
+// registrable name. Lower only A-Z so everything else is preserved
+// byte-for-byte.
 function lowerAsciiHost(host: string): string {
   return host.replace(/[A-Z]/g, (c) => c.toLowerCase());
 }

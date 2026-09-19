@@ -14,13 +14,13 @@ pre-commit:
       run: pnpm test host-boundary
     dmg-art:
       run: pnpm test dmg-art
-    # Both parity checks are glob-gated: the identity test alone costs
-    # ~140 git spawns, so neither should run on unrelated commits.
+    # Glob-gated: the identity test costs ~140 git spawns, so it should
+    # not run on unrelated commits.
     identity:
       glob: "{shared/git/repoIdentity.mts,shared/git/defaultBranch.mts,shared/fixtures/**,test/identity.mjs}"
       run: pnpm test identity
     go-test:
-      glob: "{cli/**,shared/fixtures/**}"
+      glob: "cli/**"
       run: go test -C cli ./...
     # The file-sync engine (continuous worktree mirroring) is its own
     # Go module, tested on its own.

@@ -211,7 +211,7 @@ type workingTreeChanges struct {
 
 // One record of `git status --porcelain=v1 -z`: the index column, the
 // worktree column, and the path. Callers that only want the path list
-// go through parseStatusPaths.
+// go through pathsOf.
 type statusEntry struct {
 	index    byte
 	worktree byte
@@ -242,10 +242,6 @@ func parseStatusEntries(stdout string) []statusEntry {
 		}
 	}
 	return entries
-}
-
-func parseStatusPaths(stdout string) []string {
-	return pathsOf(parseStatusEntries(stdout))
 }
 
 func pathsOf(entries []statusEntry) []string {
@@ -616,7 +612,7 @@ func scanBranchRefs(projectPath string) (branchRefScan, error) {
 }
 
 // Candidate remotes in the SAME precedence remoteKey applies in
-// identity.go: upstream first, then origin, then the rest
+// shared/git/repoIdentity.mts: upstream first, then origin, then the rest
 // alphabetically. `git remote` prints alphabetically, so without this a
 // remote sorting before "origin" would win the default-ref race, flip
 // the root commit, and the two halves of identity would disagree about
@@ -692,22 +688,6 @@ func shortRefName(fullRef string) string {
 		return name
 	}
 	return strings.TrimPrefix(fullRef, "refs/remotes/")
-}
-
-// Identity-facing variant, mirroring resolveDefaultRef in
-// shared/git/defaultBranch.mts: "" with a nil error is semantic "no
-// default ref". A scan failure propagates so identity can tell a broken
-// git from a repo with no candidates.
-func resolveDefaultRefWithRemotes(projectPath, override string, remotes []string) (string, error) {
-	scan, err := scanBranchRefs(projectPath)
-	if err != nil {
-		return "", err
-	}
-	return pickDefaultRef(scan, override, remotes), nil
-}
-
-func resolveDefaultRef(projectPath, override string) (string, error) {
-	return resolveDefaultRefWithRemotes(projectPath, override, listRemotes(projectPath))
 }
 
 // Short-name variant for merge-target callers, who additionally accept

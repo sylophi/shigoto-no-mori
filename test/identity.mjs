@@ -1,6 +1,5 @@
-// Parity harness for the repo-identity algorithm: runs the shared TS
-// implementation against the same fixtures cli/identity_test.go feeds
-// the Go port, so the two heads can't drift apart. URL cases are pure.
+// Fixture harness for the repo-identity algorithm
+// (shared/git/repoIdentity.mts): the URL normalization cases are pure.
 // Repo scenarios are materialized as real git repos in a temp dir, with
 // fixed dates/author and isolated git config so the `root:<sha>` values
 // in the fixture file hold as literals.
@@ -108,5 +107,5 @@ try {
 report({
   name: "repo identity",
   failures,
-  hint: "Either fix shared/git/repoIdentity.mts (and its Go twin cli/identity.go), or update the fixtures in shared/fixtures/ for both harnesses.",
+  hint: "Either fix shared/git/repoIdentity.mts, or update the fixtures in shared/fixtures/.",
 });

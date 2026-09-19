@@ -26,8 +26,8 @@ func TestParseStatusPaths(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := parseStatusPaths(tc.stdout); !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("parseStatusPaths(%q) = %v, want %v", tc.stdout, got, tc.want)
+			if got := pathsOf(parseStatusEntries(tc.stdout)); !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("status paths of %q = %v, want %v", tc.stdout, got, tc.want)
 			}
 		})
 	}
@@ -109,13 +109,13 @@ func TestResolveDefaultBranchFallsBackToRemoteHead(t *testing.T) {
 	runGitT(t, clone, "branch", "-D", "main")
 
 	// A symref pointing at a branch the remote has since dropped is no
-	// candidate at all, so identity gets "" rather than a broken ref.
+	// candidate at all, so the pick is "" rather than a broken ref.
 	runGitT(t, clone, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/gone")
-	ref, err := resolveDefaultRef(clone, "")
+	scan, err := scanBranchRefs(clone)
 	if err != nil {
-		t.Fatalf("resolveDefaultRef: %v", err)
+		t.Fatalf("scanBranchRefs: %v", err)
 	}
-	if ref != "" {
+	if ref := pickDefaultRef(scan, "", listRemotes(clone)); ref != "" {
 		t.Errorf("dangling origin/HEAD = %q, want no default ref", ref)
 	}
 }

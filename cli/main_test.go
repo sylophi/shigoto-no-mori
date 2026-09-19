@@ -26,3 +26,18 @@ func runGitT(t *testing.T, dir string, args ...string) {
 		t.Fatalf("git %s: %v", strings.Join(args, " "), err)
 	}
 }
+
+// Fixed dates/author and isolated config make commit SHAs reproducible
+// and keep the user's git config out of fixture repos. Inherited GIT_*
+// vars are already gone (TestMain).
+func deterministicGitEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	t.Setenv("GIT_AUTHOR_NAME", "t")
+	t.Setenv("GIT_AUTHOR_EMAIL", "t@t")
+	t.Setenv("GIT_COMMITTER_NAME", "t")
+	t.Setenv("GIT_COMMITTER_EMAIL", "t@t")
+	t.Setenv("GIT_AUTHOR_DATE", "2005-04-07T22:13:13+0000")
+	t.Setenv("GIT_COMMITTER_DATE", "2005-04-07T22:13:13+0000")
+}
