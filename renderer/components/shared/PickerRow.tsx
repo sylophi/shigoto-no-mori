@@ -2,8 +2,9 @@ import type { ReactNode } from "react";
 import { MaterialIcon } from "@/components/ui/material-icon";
 import { cn } from "@/lib/utils";
 
-// What a picker row needs of an entry. The carry-over candidate and
-// the mirror's folder entry both carry these three.
+// What a picker row needs of an entry. The carry-over candidate, the
+// worktree folder entry and the repo listing entry all carry these
+// three.
 export interface PickerEntry {
   name: string;
   isDirectory: boolean;
@@ -16,8 +17,8 @@ interface PickerRowProps {
   highlighted: boolean;
   onNavigate: () => void;
   onHover: () => void;
-  // Attribution between the name and the control (where a carry-over
-  // path was found), and the control itself.
+  // Attribution between the name and the control (the worktrees or
+  // devices a path was found in), and the control itself.
   provenance?: ReactNode;
   trailing: ReactNode;
 }

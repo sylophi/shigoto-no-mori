@@ -165,9 +165,11 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     return readWorktreeIncludeStatus(project.id, project.path);
   },
 
-  carryOverListing: async ({ projectId, relative }) => {
+  carryOverListing: async ({ projectId, relative, ruleIgnored }) => {
     const project = findProjectOrThrow(projectId);
-    return listCarryOverCandidates(project.id, project.path, relative);
+    return listCarryOverCandidates(project.id, project.path, relative, {
+      ruleIgnored,
+    });
   },
 
   carryOverStats: async ({ projectId, paths }) => {

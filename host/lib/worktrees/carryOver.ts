@@ -1,5 +1,7 @@
-// Configure-view reads for carry-over, spanning every checkout of the
-// project. Entries are root-relative, so the primary and each worktree
+// Configure-view reads spanning every checkout of the project, for
+// carry-over and for the leave-out preset's picker, which unions this
+// listing across devices (renderer/hooks/remote/useRepoListing.ts).
+// Entries are root-relative, so the primary and each worktree
 // are all candidates. The CLI applies the same idea at creation
 // (carryOverSources in cli/carryover.go looks in the base ref's
 // worktree, then the primary, then the rest). Checkouts are listed
@@ -74,13 +76,18 @@ function foldersFirst(
 // (or one git can't read) contributes nothing. Only when none can list
 // it does this throw. A name is offered as ignored only when every
 // checkout holding it ignores it: a file tracked in one checkout would
-// collide with git's own copy at creation.
+// collide with git's own copy at creation, and a pull from a checkout
+// tracking it always copies it. `ruleIgnored` adds the verdict of
+// ruleIgnoredFolders below, for the leave-out picker: carry-over must
+// not take it, since such a folder holds a file git tracks.
 export async function listCarryOverCandidates(
   projectId: string,
   projectPath: string,
   relative: string,
+  { ruleIgnored = false }: { ruleIgnored?: boolean } = {},
 ): Promise<CarryOverCandidate[]> {
   const checkouts = await listCarryOverCheckouts(projectId, projectPath);
+  const pathOf = (name: string) => (relative ? `${relative}/${name}` : name);
   const listed = await Promise.all(
     checkouts.map(async (checkout) => {
       try {
@@ -88,7 +95,20 @@ export async function listCarryOverCandidates(
           readdir(join(checkout.path, relative), { withFileTypes: true }),
           ignoredPathsCache.get(checkout.path),
         ]);
-        return { checkout, entries, isIgnored: makeIgnoreMatcher(ignored) };
+        const byWalk = makeIgnoreMatcher(ignored);
+        if (!ruleIgnored) return { checkout, entries, isIgnored: byWalk };
+        const byRule = await ruleIgnoredFolders(
+          checkout.path,
+          entries
+            .filter((entry) => entry.isDirectory() && entry.name !== ".git")
+            .map((entry) => pathOf(entry.name))
+            .filter((path) => !byWalk(path)),
+        );
+        return {
+          checkout,
+          entries,
+          isIgnored: (path: string) => byWalk(path) || byRule.has(path),
+        };
       } catch {
         return null;
       }
@@ -103,7 +123,7 @@ export async function listCarryOverCandidates(
     for (const entry of result.entries) {
       // .git is worktree metadata, never useful as carry-over.
       if (entry.name === ".git") continue;
-      const path = relative ? `${relative}/${entry.name}` : entry.name;
+      const path = pathOf(entry.name);
       let candidate = byName.get(entry.name);
       if (!candidate) {
         candidate = {

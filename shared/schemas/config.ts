@@ -102,6 +102,11 @@ export type WorktreeIncludeStatus = z.infer<typeof WorktreeIncludeStatusSchema>;
 export const CarryOverListingPayloadSchema = ProjectScopedPayloadSchema.extend({
   // Folder being browsed, root-relative, with "" for the root.
   relative: z.union([z.literal(""), CarryOverEntrySchema.shape.path]),
+  // Also call a folder ignored when a rule names it though it holds a
+  // force-added file (what a mirror leaves out, where carry-over needs
+  // git's own verdict). A peer from before the flag drops it and
+  // answers without.
+  ruleIgnored: z.boolean().optional(),
 });
 
 // One name in the browsed folder, across checkouts. `ignored` is judged

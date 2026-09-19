@@ -60,7 +60,7 @@ import {
   sameSelection,
   selectionOf,
 } from "../flow/ignoreChoice";
-import { LeaveOutPicker } from "../flow/LeaveOutPicker";
+import { browseWorktree, LeaveOutPicker } from "../flow/LeaveOutPicker";
 import { describeMirror, gitVerdict } from "./mirrorStatus";
 
 export function MirrorManageDialog({
@@ -358,7 +358,7 @@ function Ignores({
       value={selection}
       onChange={setDraft}
       ignored={ignored}
-      worktree={worktree}
+      browse={browseWorktree(worktree)}
       disabled={!canControl || setIgnores.isPending}
     >
       {dirty && (
