@@ -8,8 +8,8 @@
 // bundle (see web/account/config.ts).
 import { execSync } from "node:child_process";
 import { resolve } from "node:path";
-import react, { reactCompilerPreset } from "@vitejs/plugin-react";
-import babel from "@rolldown/plugin-babel";
+import react from "@vitejs/plugin-react";
+import { reactCompiler } from "./vite.reactCompiler";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
 import { ACCOUNT_ENV_KEYS } from "./shared/account/serviceConfig";
@@ -64,11 +64,7 @@ export default defineConfig(({ mode }) => {
       __APP_VERSION__: JSON.stringify(version),
       __APP_COMMIT__: JSON.stringify(commit),
     },
-    plugins: [
-      tailwindcss(),
-      react(),
-      babel({ presets: [reactCompilerPreset()] }),
-    ],
+    plugins: [tailwindcss(), react(), reactCompiler()],
     build: {
       outDir: resolve(__dirname, "dist-web"),
       emptyOutDir: true,

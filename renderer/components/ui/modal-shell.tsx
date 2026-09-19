@@ -14,6 +14,10 @@ interface ModalShellProps {
   // When true, Escape closes the shell. Off when a child view owns its
   // own Escape handling (e.g. multi-step flows where Escape backs out).
   closeOnEscape?: boolean;
+  // What Escape does instead of closing, for a multi-step flow where it
+  // backs out a stage. Taken here rather than on a handler inside: this
+  // one hears the key wherever focus sits, document.body included.
+  onEscape?: () => void;
   // Optional override for the popover's class list (sizing, layout).
   // Defaults to the standard "centered max-w-xl" modal shape.
   popoverClassName?: string;
@@ -23,6 +27,7 @@ interface ModalShellProps {
 export function ModalShell({
   onClose,
   closeOnEscape = true,
+  onEscape,
   popoverClassName,
   children,
 }: ModalShellProps) {
@@ -30,8 +35,8 @@ export function ModalShell({
   // backdrop or a gap, focus (and the keydown target) is document.body,
   // whose events never reach React's delegated handlers. Captured, so
   // it lands before any handler inside the shell.
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  const onEscapeRef = useRef(onEscape ?? onClose);
+  onEscapeRef.current = onEscape ?? onClose;
   const closeOnEscapeRef = useRef(closeOnEscape);
   closeOnEscapeRef.current = closeOnEscape;
   useEffect(() => {
@@ -42,7 +47,7 @@ export function ModalShell({
       if (!closeOnEscapeRef.current) return;
       e.preventDefault();
       e.stopPropagation();
-      onCloseRef.current();
+      onEscapeRef.current();
     };
     window.addEventListener("keydown", onKey, true);
     return () => {

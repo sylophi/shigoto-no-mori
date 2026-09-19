@@ -21,6 +21,7 @@ import type {
   MirrorSessionRaw,
 } from "@host/ipc/modules/mirror";
 import { lineSplitter } from "@host/lib/util/ndjson";
+import { MIRROR_GATEWAY_TOKEN_ENV } from "./gateway";
 import {
   BACKOFF_LADDER_MS,
   backoffDelayMs,
@@ -63,11 +64,15 @@ export function createMirrorDaemon(deps: {
   // when no engine binary is available (a dev run before
   // file-sync:build), in which case the daemon reports "unavailable"
   // and retries later.
-  spawn: (args: string[]) => StreamChild | null;
+  spawn: (args: string[], env?: NodeJS.ProcessEnv) => StreamChild | null;
   // The gateway address the daemon dials peers through, read at each
   // spawn (throwing when the gateway is not listening yet, which puts
   // the daemon on the restart ladder until it is).
   gatewayAddress: () => string;
+  // The gateway's per-bind token, passed through the environment and
+  // read at each spawn, so a rebound gateway's daemon carries the
+  // token that gateway accepts.
+  gatewayToken: () => string;
   // Where the engine persists sessions (a directory under the host's
   // data dir), read at each spawn.
   dataDir: () => string;
@@ -149,13 +154,13 @@ export function createMirrorDaemon(deps: {
     }
     let spawned: StreamChild | null;
     try {
-      spawned = deps.spawn([
-        "daemon",
-        "--gateway",
-        gateway,
-        "--data-dir",
-        deps.dataDir(),
-      ]);
+      spawned = deps.spawn(
+        ["daemon", "--gateway", gateway, "--data-dir", deps.dataDir()],
+        {
+          ...process.env,
+          [MIRROR_GATEWAY_TOKEN_ENV]: deps.gatewayToken(),
+        },
+      );
     } catch (error) {
       log(`[mirror] daemon spawn failed: ${errorMessageOf(error)}`);
       spawned = null;

@@ -21,6 +21,10 @@ import type {
   MirrorEventKind,
   MirrorSession,
 } from "@shared/ipc/modules/mirror";
+import {
+  isMirrorStopUnconfirmed,
+  mirrorStopIsSafe,
+} from "@shared/ipc/modules/mirror";
 import type { Worktree } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
 import { ModalShell } from "@/components/ui/modal-shell";
@@ -82,6 +86,11 @@ export function MirrorManageDialog({
   const controls = useMirrorControls();
   const nav = useWorktreeNav();
   const { armed, trigger } = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
+  // This snapshot drives the WARNING only. The host re-reads the live
+  // status and decides, so a refusal it sends escalates to the discard
+  // wording here instead of dead-ending on a raw error.
+  const [refused, setRefused] = useState(false);
+  const discarding = !mirrorStopIsSafe(session.git?.status) || refused;
   const busy =
     controls.pause.isPending ||
     controls.resume.isPending ||
@@ -133,9 +142,11 @@ export function MirrorManageDialog({
 
       <TransplantFooter
         note={
-          canControl
-            ? `Stopping removes the copy here. ${peer} keeps its own.`
-            : `Controlled from ${hostLabel}.`
+          !canControl
+            ? `Controlled from ${hostLabel}.`
+            : discarding
+              ? `Not confirmed in step with ${peer}. Stopping removes the copy here, and anything it holds that ${peer} has not received goes with it.`
+              : `Stopping removes the copy here. ${peer} keeps its own.`
         }
       >
         <Button variant="ghost" size="sm" onClick={onClose}>
@@ -171,19 +182,32 @@ export function MirrorManageDialog({
               disabled={busy}
               onClick={() =>
                 trigger(() =>
-                  controls.stop.mutate(session, {
-                    // The stop removed the copy this page is on, so
-                    // leave it the way a delete does.
-                    onSuccess: () => {
-                      onClose();
-                      nav.toFallback(true);
+                  controls.stop.mutate(
+                    // The second press is the override, after the
+                    // warning has named what goes.
+                    { session, force: discarding },
+                    {
+                      // The stop removed the copy this page is on, so
+                      // leave it the way a delete does.
+                      onSuccess: () => {
+                        onClose();
+                        nav.toFallback(true);
+                      },
+                      // The host knew something this page did not.
+                      onError: (error) => {
+                        if (isMirrorStopUnconfirmed(error)) setRefused(true);
+                      },
                     },
-                  }),
+                  ),
                 )
               }
             >
               <Square />
-              {armed ? "Confirm stop?" : "Stop"}
+              {armed
+                ? discarding
+                  ? "Discard and stop?"
+                  : "Confirm stop?"
+                : "Stop"}
             </Button>
           </>
         )}

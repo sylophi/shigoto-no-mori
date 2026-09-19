@@ -18,11 +18,12 @@ export const fileSyncBinaryPath = bundledBinaryResolver(
 );
 
 export function installFileSyncSpawner(): void {
-  setFileSyncSpawnImpl((args) => {
+  setFileSyncSpawnImpl((args, env) => {
     const binary = fileSyncBinaryPath();
     if (binary === null) return null;
     return spawnStreamChild(binary, args, {
       onSpawned: registerBackgroundChild,
+      env,
     });
   });
 }

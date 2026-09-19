@@ -28,10 +28,10 @@
 //
 // This file must stay Electron free (host:check). The Electron facts a
 // listener needs (appVersion) arrive through start opts instead.
-import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 import { errorMessageOf } from "@shared/errors";
+import { secretsMatch } from "@host/lib/util/secretCompare";
 import { rendererSchemeOrigins } from "@shared/rendererScheme.mts";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
 import {
@@ -54,12 +54,19 @@ import {
   type ServerFrame,
   TERMINATE_GRACE_MS,
 } from "@shared/ipc/socket/frames";
+import {
+  handshakeProof,
+  newHandshakeNonce,
+  proofsMatch,
+} from "@shared/ipc/socket/proof";
+import type { DirectCandidateKind } from "@shared/ipc/modules/direct";
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
 import { createLimiter } from "@shared/util/limit";
 import {
   createChannelMux,
   createUnknownChannelFrameWarner,
 } from "@shared/ipc/socket/channels";
+import type { RawData } from "ws";
 import { toBytes, toText } from "./rawData";
 
 // Ticket-mode auth for the direct data plane: a
@@ -70,10 +77,15 @@ import { toBytes, toText } from "./rawData";
 // means the legacy LAN behavior: static-token auth and the read-only
 // dispatch gate, unchanged.
 export type WsServerTicketAuth = {
-  // Verifies the connect ticket presented in hello.token against the
-  // claimed hello deviceId. The implementation must consume the ticket
-  // on first presentation regardless of outcome (single use).
-  verifyTicket(ticket: string, deviceId: string): boolean;
+  // Consumes the connect ticket the client proved possession of (it
+  // never travels, see shared/ipc/socket/proof.ts), for the claimed
+  // deviceId and the path the connection arrived on. Returns it so this
+  // binding can compute the host's half, or null when nothing matches.
+  matchTicket(
+    deviceId: string,
+    arrivedAs: DirectCandidateKind,
+    matches: (ticket: string) => Promise<boolean>,
+  ): Promise<string | null>;
   // Whether this host runs MUTATING calls from its ticketed peers at
   // all (every ticketed peer is a device of the same account), read
   // live at every dispatch (never cached on the session) so flipping
@@ -201,22 +213,55 @@ export function clientIdentityOf(
   ticketMode: boolean,
 ): string {
   const address = remoteAddress ?? "unknown";
-  if (!ticketMode || !isLoopbackAddress(address)) return address;
-  const forwarded = cfConnectingIp?.trim() ?? "";
-  return forwarded === "" ? address : forwarded;
+  if (!ticketMode || !tunnelBorne(remoteAddress, cfConnectingIp)) {
+    return address;
+  }
+  return (cfConnectingIp ?? "").trim();
 }
 
-function digest(value: string): Buffer {
-  return createHash("sha256").update(value, "utf8").digest();
+// Whether the local cloudflared connector delivered this connection.
+// One predicate, because the lockout bucket above and the candidate
+// kind below must never disagree about the same connection.
+function tunnelBorne(
+  remoteAddress: string | undefined,
+  cfConnectingIp: string | undefined,
+): boolean {
+  return (
+    isLoopbackAddress(remoteAddress ?? "unknown") &&
+    (cfConnectingIp?.trim() ?? "") !== ""
+  );
 }
 
-// Compare fixed-length digests so neither the token length nor a
-// content prefix leaks through a short-circuit or through timing. An
-// empty token on either side never matches: the accept-everything
-// degradation is rejected here at the boundary too.
-function tokenMatches(given: string, expected: string): boolean {
-  if (given === "" || expected === "") return false;
-  return timingSafeEqual(digest(given), digest(expected));
+// Which advertised candidate a ticket-mode connection came in on, so a
+// ticket can be held to the kind it was minted for.
+export function arrivalKindOf(
+  remoteAddress: string | undefined,
+  cfConnectingIp: string | undefined,
+): DirectCandidateKind {
+  return tunnelBorne(remoteAddress, cfConnectingIp) ? "tunnel" : "lan";
+}
+
+// Ticket mode's hello check. Resolves the host's half of the mutual
+// proof when the client proved one of its pending tickets, else null.
+async function answerProof(
+  auth: WsServerTicketAuth,
+  hostNonce: string,
+  arrivedAs: DirectCandidateKind,
+  hello: { deviceId: string; nonce?: string; proof?: string },
+): Promise<string | null> {
+  const { nonce, proof } = hello;
+  if (nonce === undefined || proof === undefined) return null;
+  const ticket = await auth.matchTicket(
+    hello.deviceId,
+    arrivedAs,
+    async (candidate) =>
+      proofsMatch(
+        proof,
+        await handshakeProof(candidate, "client", hostNonce, nonce),
+      ),
+  );
+  if (ticket === null) return null;
+  return handshakeProof(ticket, "host", hostNonce, nonce);
 }
 
 // Origin pre-filter for the upgrade, NOT the security boundary: the
@@ -472,10 +517,17 @@ export function createWsServerBinding(
     const helloTimeoutMs = opts.helloTimeoutMs ?? HELLO_TIMEOUT_MS;
     wss.on("connection", (socket, req) => {
       const forwardedFor = req.headers["cf-connecting-ip"];
+      const cfConnectingIp = Array.isArray(forwardedFor)
+        ? forwardedFor[0]
+        : forwardedFor;
       const ip = clientIdentityOf(
         req.socket.remoteAddress,
-        Array.isArray(forwardedFor) ? forwardedFor[0] : forwardedFor,
+        cfConnectingIp,
         auth !== undefined,
+      );
+      const arrivalKind = arrivalKindOf(
+        req.socket.remoteAddress,
+        cfConnectingIp,
       );
       // Caps are checked before any controller or timer is allocated.
       if (authed.size + preAuthCount >= MAX_CONNECTIONS) {
@@ -539,6 +591,17 @@ export function createWsServerBinding(
       });
       const warnUnknownChannelFrame = createUnknownChannelFrameWarner("socket");
 
+      // Ticket mode opens the handshake: the client cannot hello until
+      // it has this nonce. Not a secret, so it goes out pre-auth.
+      const hostNonce = auth === undefined ? null : newHandshakeNonce();
+      if (hostNonce !== null) {
+        send(socket, { t: "challenge", nonce: hostNonce });
+      }
+      // One hello per connection, latched before the proof check
+      // awaits: two hellos racing through the await would otherwise
+      // both see ctx === null and both authenticate.
+      let helloSeen = false;
+
       const helloTimer = setTimeout(() => {
         // A hello arriving after this fires must not authenticate.
         dead = true;
@@ -589,6 +652,20 @@ export function createWsServerBinding(
         console.warn(`[socket] connection error: ${errorMessageOf(error)}`);
       });
       socket.on("message", (data, isBinary) => {
+        // The hello path awaits the proof check. A frame that throws
+        // kills its own connection, never the host process.
+        void handleMessage(data, isBinary).catch((error) => {
+          console.warn(
+            `[socket] dropping connection after a failed frame: ${errorMessageOf(error)}`,
+          );
+          kill(CLOSE_GOING_AWAY, "internal error");
+        });
+      });
+
+      async function handleMessage(
+        data: RawData,
+        isBinary: boolean,
+      ): Promise<void> {
         if (dead) return;
         const alive = authed.get(socket);
         if (alive !== undefined) alive.lastInboundAt = Date.now();
@@ -621,15 +698,29 @@ export function createWsServerBinding(
             closeThenTerminate(socket, CLOSE_HELLO_FAILED, "malformed hello");
             return;
           }
-          // Legacy mode compares the static token. Ticket mode hands
-          // hello.token to the injected verifier as a connect ticket
-          // bound to the claimed hello deviceId, which the verifier
-          // consumes single-use regardless of outcome. Both failures
-          // take the same lockout-counted auth path.
+          if (helloSeen) {
+            dead = true;
+            clearTimeout(helloTimer);
+            leavePreAuth();
+            closeThenTerminate(socket, CLOSE_HELLO_FAILED, "duplicate hello");
+            return;
+          }
+          helloSeen = true;
+          // Legacy mode compares the static token. Ticket mode never
+          // receives a ticket, only a proof of holding one, and a hello
+          // that carries no proof proves nothing. Both failures take
+          // the same lockout-counted auth path.
+          const hostProof =
+            auth === undefined || hostNonce === null
+              ? undefined
+              : await answerProof(auth, hostNonce, arrivalKind, frame);
+          // The await yielded, so re-read the liveness flag a close or
+          // a timeout may have set meanwhile.
+          if (dead) return;
           const authenticated =
             auth === undefined
-              ? tokenMatches(frame.token, opts.token)
-              : auth.verifyTicket(frame.token, frame.deviceId);
+              ? secretsMatch(frame.token ?? "", opts.token)
+              : typeof hostProof === "string";
           if (!authenticated) {
             dead = true;
             clearTimeout(helloTimer);
@@ -698,6 +789,7 @@ export function createWsServerBinding(
             t: "welcome",
             deviceId: opts.deviceId,
             appVersion: opts.appVersion,
+            proof: hostProof ?? undefined,
           });
           return;
         }
@@ -732,7 +824,7 @@ export function createWsServerBinding(
         void dispatch(socket, ctx, frame, generation).finally(() => {
           inFlight -= 1;
         });
-      });
+      }
     });
   }
 

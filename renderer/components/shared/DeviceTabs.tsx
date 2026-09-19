@@ -144,6 +144,7 @@ export function DeviceTabBar({
   selectedId,
   onSelect,
   allDevicesTab = false,
+  className,
 }: {
   tabs: readonly DeviceTab[];
   selectedId: string;
@@ -151,6 +152,8 @@ export function DeviceTabBar({
   // Leads the row with the tab for what every device shares, picked
   // as ALL_DEVICES_TAB_ID.
   allDevicesTab?: boolean;
+  // Overrides the page inset for a bar that sits in a dialog instead.
+  className?: string;
 }) {
   // One list for the row, so the roving order and the rendered order
   // cannot disagree.
@@ -189,7 +192,10 @@ export function DeviceTabBar({
       // The page inset as padding rather than the header's, so a long
       // row scrolls out under the header's edge (which cancels the
       // inset with a matching negative margin) instead of clipping.
-      className="flex [scrollbar-width:none] gap-1.5 overflow-x-auto px-6 phone:px-4"
+      className={cn(
+        "flex [scrollbar-width:none] gap-1.5 overflow-x-auto px-6 phone:px-4",
+        className,
+      )}
     >
       {pills.map((pill) => {
         const selected = pill.id === selectedId;

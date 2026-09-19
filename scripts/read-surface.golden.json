@@ -20,6 +20,7 @@
   "ports:list",
   "projects:carryOverListing",
   "projects:carryOverStats",
+  "projects:cloneUrl",
   "projects:defaultBranch",
   "projects:getCollapsed",
   "projects:getSort",

@@ -176,6 +176,12 @@ pre-commit:
     git-watcher:
       glob: "{main/electron/gitWatcher.ts,scripts/check-git-watcher.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run gitwatch:check
+    # Clones a real sandbox repository through cloneRepo and walks the
+    # projects:clone payload's accept/reject table (remotes only, one
+    # folder segment), which is what a peer's clone request is held to.
+    clone:
+      glob: "{host/lib/git/clone.ts,shared/cloneUrl.ts,shared/schemas/project.ts,shared/repoIdentity.mts,scripts/check-clone.mjs,scripts/lib/checkKit.mjs}"
+      run: pnpm run clone:check
     # Drives the electron-free account layer (main/account/*,
     # shared/account/*) end to end with stubs: the hub client's
     # route/method/auth-tier discipline against the shared schemas

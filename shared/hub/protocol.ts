@@ -82,6 +82,13 @@ export function utf8ByteLength(text: string): number {
 // that carries it (asserted in hub/test/hub.spec.ts).
 export const MAX_ONLINE_DEVICES = 64;
 
+// How many devices one account may have enrolled at once. Sign-up is
+// public and every device can provision a real tunnel and DNS record
+// on the owner's Cloudflare account, so an unbounded registry would let
+// one stranger spend the quota everyone shares. Each browser profile
+// that opens the web client counts as a device.
+export const MAX_ACCOUNT_DEVICES = 16;
+
 // Application close codes for the hub socket. Deliberately disjoint
 // from the LAN socket's 4001/4002 (frames.ts) so a log line's code
 // names its transport. TICKET_REJECTED covers unknown, expired and

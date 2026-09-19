@@ -25,6 +25,7 @@ import {
   createHeartbeat,
   type HeartbeatOptions,
 } from "@shared/ipc/socket/heartbeat";
+import { handshakeProof, newHandshakeNonce, proofsMatch } from "./proof";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
 import {
   type ChannelMux,
@@ -104,8 +105,14 @@ const openGlobalSocket: OpenClientSocket = (url) => new WebSocket(url);
 export type ConnectDeviceOptions = {
   // ws:// URL of the host listener.
   url: string;
-  // Shared secret from the device config, sent in the hello frame.
+  // The credential: the device config's shared secret on the legacy
+  // LAN wire, a single-use connect ticket on the direct data plane.
   token: string;
+  // "token" (the default) sends the credential in the hello. "proof"
+  // never sends it: both ends prove they hold it instead, and the
+  // welcome is only trusted once the host's half checks out
+  // (shared/ipc/socket/proof.ts). The direct dialer uses "proof".
+  auth?: "token" | "proof";
   // This client build's version, carried in the hello so the host can
   // log or gate skew later.
   appVersion: string;
@@ -278,17 +285,49 @@ export function openDevice(
   let opened = false;
   let helloRequested = false;
   let helloWasSent = false;
+  const proofMode = options.auth === "proof";
+  // The nonce pair. Proof mode cannot hello until the host's arrives.
+  let hostNonce: string | null = null;
+  let clientNonce: string | null = null;
 
-  const sendHello = (): void => {
-    if (helloWasSent || closed) return;
+  // The whole precondition lives here, so call sites are a bare
+  // sendHello(). It runs synchronously to its first await, so the
+  // latches below land before any yield.
+  const sendHello = async (): Promise<void> => {
+    if (helloWasSent || closed || !opened || !helloRequested) return;
+    if (!proofMode) {
+      helloWasSent = true;
+      // Hello must be the first frame, within the host's hello timeout.
+      socket.send(
+        encodeFrame({
+          t: "hello",
+          token: options.token,
+          deviceId: options.localDeviceId,
+          appVersion: options.appVersion,
+        }),
+      );
+      return;
+    }
+    // Not challenged yet: the challenge frame calls back in here.
+    const challenge = hostNonce;
+    if (challenge === null) return;
     helloWasSent = true;
-    // Hello must be the first frame, within the host's hello timeout.
+    const nonce = newHandshakeNonce();
+    clientNonce = nonce;
+    const proof = await handshakeProof(
+      options.token,
+      "client",
+      challenge,
+      nonce,
+    );
+    if (closed) return;
     socket.send(
       encodeFrame({
         t: "hello",
-        token: options.token,
         deviceId: options.localDeviceId,
         appVersion: options.appVersion,
+        nonce,
+        proof,
       }),
     );
   };
@@ -344,8 +383,90 @@ export function openDevice(
     if (closed) return;
     opened = true;
     resolveOpen();
-    if (helloRequested) sendHello();
+    sendHello().catch(proofFailed);
   });
+
+  // The one place a welcome becomes an established connection. In
+  // proof mode it runs only after the host's proof checked out, so the
+  // identity pin's blocking verdict is never handed to an impostor.
+  const acceptWelcome = (deviceId: string, appVersion: string): void => {
+    if (closed || welcome !== null) return;
+    if (
+      options.expectedDeviceId !== undefined &&
+      deviceId !== options.expectedDeviceId
+    ) {
+      // The wrong machine answered (a stale address, a NAT
+      // surprise). Blocked, not retryable: redialing the same
+      // address cannot change who lives there, so the caller
+      // surfaces the failure instead of caching the wrong host.
+      closed = true;
+      clearTimeout(helloTimer);
+      try {
+        socket.close();
+      } catch {
+        // Already closing.
+      }
+      reject(
+        new RemoteConnectError("welcome from an unexpected device", null, true),
+      );
+      return;
+    }
+    clearTimeout(helloTimer);
+    welcome = { remoteDeviceId: deviceId, remoteAppVersion: appVersion };
+    heartbeat.start();
+    resolve({
+      transport,
+      channels,
+      close,
+      probe: heartbeat.probe,
+      remoteDeviceId: welcome.remoteDeviceId,
+      remoteAppVersion: welcome.remoteAppVersion,
+    });
+  };
+
+  // Checks the host's half of the mutual proof before accepting.
+  const verifyHostProof = async (
+    expected: string,
+    challenge: string,
+    nonce: string,
+    frame: { deviceId: string; appVersion: string },
+  ): Promise<void> => {
+    const want = await handshakeProof(options.token, "host", challenge, nonce);
+    if (closed) return;
+    if (!proofsMatch(expected, want)) {
+      failHandshake(
+        "welcome proof did not match the connect ticket",
+        frame.deviceId,
+      );
+      return;
+    }
+    acceptWelcome(frame.deviceId, frame.appVersion);
+  };
+
+  // Web Crypto failing must fail this dial now, not at its deadline.
+  const proofFailed = (error: unknown): void =>
+    failHandshake(
+      `handshake proof could not be computed: ${errorMessageOf(error)}`,
+      options.expectedDeviceId ?? "unknown",
+    );
+
+  // A far end that could not prove it holds the ticket. Deliberately
+  // NOT a blocking verdict: an impostor squatting one address retires
+  // that candidate only, and the peer stays reachable on the others.
+  const failHandshake = (reason: string, deviceId: string): void => {
+    if (closed) return;
+    closed = true;
+    clearTimeout(helloTimer);
+    console.warn(
+      `[socket] ${reason} (peer claimed ${deviceId} at ${options.url})`,
+    );
+    try {
+      socket.close();
+    } catch {
+      // Already closing.
+    }
+    reject(new RemoteConnectError(reason, null, false));
+  };
 
   socket.addEventListener("message", (event) => {
     if (closed) return;
@@ -378,51 +499,37 @@ export function openDevice(
     heartbeat.noteInbound();
 
     if (welcome === null) {
-      // Before the welcome, the only frame we act on is the welcome.
+      // The challenge opens proof mode's handshake, so it is the one
+      // other frame that can legitimately arrive before the welcome.
+      if (frame.t === "challenge") {
+        if (!proofMode || hostNonce !== null) return;
+        hostNonce = frame.nonce;
+        sendHello().catch(proofFailed);
+        return;
+      }
       // Anything else pre-welcome is dropped: the host sends nothing
       // else before it.
       if (frame.t !== "welcome") {
         console.warn("[socket] dropping pre-welcome frame");
         return;
       }
-      if (
-        options.expectedDeviceId !== undefined &&
-        frame.deviceId !== options.expectedDeviceId
-      ) {
-        // The wrong machine answered (a stale address, a NAT
-        // surprise). Blocked, not retryable: redialing the same
-        // address cannot change who lives there, so the caller
-        // surfaces the failure instead of caching the wrong host.
-        closed = true;
-        clearTimeout(helloTimer);
-        try {
-          socket.close();
-        } catch {
-          // Already closing.
+      if (proofMode) {
+        // The far end must prove it holds the ticket too, before the
+        // welcome is recorded.
+        const expected = frame.proof;
+        const challenge = hostNonce;
+        const nonce = clientNonce;
+        if (expected === undefined || challenge === null || nonce === null) {
+          failHandshake(
+            "welcome carried no proof of the connect ticket",
+            frame.deviceId,
+          );
+          return;
         }
-        reject(
-          new RemoteConnectError(
-            "welcome from an unexpected device",
-            null,
-            true,
-          ),
-        );
+        verifyHostProof(expected, challenge, nonce, frame).catch(proofFailed);
         return;
       }
-      clearTimeout(helloTimer);
-      welcome = {
-        remoteDeviceId: frame.deviceId,
-        remoteAppVersion: frame.appVersion,
-      };
-      heartbeat.start();
-      resolve({
-        transport,
-        channels,
-        close,
-        probe: heartbeat.probe,
-        remoteDeviceId: welcome.remoteDeviceId,
-        remoteAppVersion: welcome.remoteAppVersion,
-      });
+      acceptWelcome(frame.deviceId, frame.appVersion);
       return;
     }
 
@@ -600,7 +707,7 @@ export function openDevice(
     authenticate() {
       if (!helloRequested) {
         helloRequested = true;
-        if (opened && !closed) sendHello();
+        sendHello().catch(proofFailed);
       }
       return connectPromise;
     },

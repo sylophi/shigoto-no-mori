@@ -193,6 +193,11 @@ const mirrorDaemon = createMirrorDaemon({
     if (address === null) throw new Error("mirror gateway is not listening");
     return address;
   },
+  gatewayToken: () => {
+    const token = mirrorGateway.token();
+    if (token === null) throw new Error("mirror gateway is not listening");
+    return token;
+  },
   onChange: () => {
     broadcastMirrorChanged();
     // The follower compares the session set itself. A snapshot that

@@ -23,6 +23,7 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   writeFileSync,
 } from "node:fs";
 import { connect, createServer, type Socket } from "node:net";
@@ -202,7 +203,12 @@ function need<T>(value: T | undefined, from: string): T {
   return value;
 }
 
-type Project = { id: string; name: string; identity?: string | null };
+type Project = {
+  id: string;
+  name: string;
+  path: string;
+  identity?: string | null;
+};
 type Worktree = {
   id: string;
   projectId: string;
@@ -642,8 +648,12 @@ async function main(): Promise<string[]> {
         "a path under the mirror's ignores crossed to b",
       );
       // Stop: the session leaves a's list, the stream leaves b's, and
-      // a's copy goes with the session. The source stays.
-      await a.evaluate(`window.api.mirror.stop(${session2})`);
+      // a's copy goes with the session. The source stays. Forced,
+      // because the host refuses an unforced stop unless the git
+      // follower has reported "synced", and a session this young may
+      // not have reconciled yet: this check is about the teardown, not
+      // about the confirmation rule (host/ipc/modules/mirror.ts).
+      await a.evaluate(`window.api.mirror.stop(${session2}, true)`);
       await a.waitFor(
         "a's mirror session to be gone",
         `window.api.mirror.list().then((m) => !m.sessions.some((s) => s.session === ${session2}))`,
@@ -1385,6 +1395,117 @@ async function main(): Promise<string[]> {
       } finally {
         for (const conn of conns) conn.destroy();
         echo.close();
+      }
+    });
+
+    // The add-project flow's reach onto a machine that doesn't have the
+    // repo: a asks b to clone a remote and register it. The remote is a
+    // git daemon on loopback, because the payload (rightly) takes no
+    // path for one. Placed after every scenario that reads b's project
+    // list, which this one grows.
+    await scenario("clone onto a peer", async () => {
+      const served = join(runDir, "served");
+      const solo = join(runDir, "solo");
+      mkdirSync(served, { recursive: true });
+      mkdirSync(solo, { recursive: true });
+      git(solo, "init", "-q", "-b", "main");
+      writeFileSync(join(solo, "README.md"), "cloned onto a peer\n");
+      git(solo, "add", ".");
+      git(solo, "commit", "-q", "-m", "Solo");
+      git(served, "clone", "-q", "--bare", solo, "solo.git");
+      const port = await freeLoopbackPort();
+      const daemon = spawn(
+        "git",
+        [
+          "daemon",
+          `--base-path=${served}`,
+          "--export-all",
+          "--listen=127.0.0.1",
+          `--port=${port}`,
+          "--reuseaddr",
+          served,
+        ],
+        { env: gitEnv, stdio: "ignore" },
+      );
+      const url = `git://127.0.0.1:${port}/solo.git`;
+      const clone = (input: Record<string, unknown>) =>
+        onPeer(a, idB, "projects:clone", input) as Promise<Project>;
+      try {
+        await waitFor(() => {
+          try {
+            git(runDir, "ls-remote", url);
+            return true;
+          } catch {
+            return false;
+          }
+        }, "the git daemon to serve");
+
+        // Gated like every command: a peer that takes none clones none,
+        // and its disk stays closed to the folder picker too.
+        await b.evaluate("window.api.account.setAcceptsCommands(false)");
+        for (const refused of [
+          await refusalOf(clone({ url, parentDir: fixture.b.repos })),
+          await refusalOf(
+            onPeer(a, idB, "fs:listDirectory", { path: fixture.b.repos }),
+          ),
+        ]) {
+          assert.ok(refused !== null, "served with commands off");
+          assert.ok(
+            isCommandRefusedError(refused),
+            `unexpected refusal: ${errorMessageOf(refused)}`,
+          );
+        }
+        await b.evaluate("window.api.account.setAcceptsCommands(true)");
+
+        // Held to remotes on b's side of the wire, whatever a sends: an
+        // option-shaped string and a path on b's own disk both bounce.
+        const marker = join(runDir, "clone-injected");
+        const bounced = await Promise.all(
+          [`--upload-pack=touch ${marker}`, fixture.origin].map((bad) =>
+            refusalOf(clone({ url: bad, parentDir: fixture.b.repos })),
+          ),
+        );
+        assert.ok(
+          bounced.every((refused) => refused !== null),
+          "b cloned something that is not a remote",
+        );
+        assert.ok(!existsSync(marker), "an option-shaped URL ran");
+
+        const project = await clone({ url, parentDir: fixture.b.repos });
+        const dest = join(fixture.b.repos, "solo");
+        assert.equal(project.path, realpathSync(dest));
+        assert.equal(
+          readFileSync(join(dest, "README.md"), "utf8"),
+          "cloned onto a peer\n",
+        );
+        const listed = (await onPeer(a, idB, "projects:list")) as Project[];
+        const mine = listed.find((entry) => entry.id === project.id);
+        assert.ok(mine, "the clone is not in b's project list");
+        assert.ok(
+          mine.identity?.startsWith("root:"),
+          "the clone has no identity",
+        );
+
+        // The remote another device would clone it from reads back. The
+        // shared repo's origin is a path, which is nobody else's remote.
+        assert.equal(
+          await onPeer(a, idB, "projects:cloneUrl", { projectId: project.id }),
+          url,
+        );
+        assert.equal(
+          await onPeer(a, idB, "projects:cloneUrl", {
+            projectId: need(bProject, "the remote read").id,
+          }),
+          null,
+        );
+
+        // Never onto something that is already there.
+        const again = await refusalOf(
+          clone({ url, parentDir: fixture.b.repos }),
+        );
+        assert.match(errorMessageOf(again), /already exists/);
+      } finally {
+        daemon.kill();
       }
     });
 

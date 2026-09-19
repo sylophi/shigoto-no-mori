@@ -306,6 +306,33 @@ const MirrorSessionPayloadSchema = z.strictObject({
   session: MirrorSessionIdSchema,
 });
 
+// Stopping removes the copy on this device, so it is refused unless
+// the git follower says "synced", the one state where the peer is known
+// to hold this copy's commits. A paused session, an unreachable peer or
+// one too young to have reconciled all report something else. `force`
+// is the user overriding that after being told.
+const MirrorStopPayloadSchema = MirrorSessionPayloadSchema.extend({
+  force: z.boolean().optional(),
+});
+
+// Shared by the host that enforces it and the dialog that warns.
+export function mirrorStopIsSafe(
+  status: MirrorGitStatus["status"] | undefined,
+): boolean {
+  return status === "synced";
+}
+
+// The refusal's leading text, which the renderer matches to offer
+// discard-and-stop. Text rather than a code because Electron's IPC
+// flattens an error to its message (see COMMAND_REFUSED_MESSAGE).
+export const MIRROR_STOP_UNCONFIRMED =
+  "This copy is not confirmed in step with the other device";
+
+export function isMirrorStopUnconfirmed(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes(MIRROR_STOP_UNCONFIRMED);
+}
+
 // The mirror stream's open: the caller has attached its end of a byte
 // channel under this id on the calling connection (shared/ipc/socket/
 // channels.ts), and the host attaches a fresh `file-sync serve` for
@@ -374,7 +401,7 @@ export const mirrorContract = defineContract("host", {
       mutating: true,
     },
   ),
-  stop: invoke("mirror:stop", MirrorSessionPayloadSchema, z.void(), {
+  stop: invoke("mirror:stop", MirrorStopPayloadSchema, z.void(), {
     remote: false,
     mutating: true,
   }),

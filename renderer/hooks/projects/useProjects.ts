@@ -6,7 +6,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
-import type { Project } from "@shared/schemas";
+import type { CloneProjectPayload, Project } from "@shared/schemas";
 import { reorderProjects } from "@shared/reorder";
 import {
   hostKeyDeviceId,
@@ -65,6 +65,20 @@ export function useAddProject() {
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: keys.projects() }),
     meta: { errorTitle: "Couldn't add project" },
+  });
+}
+
+// Clones a remote onto the scoped device and registers the checkout.
+// The clone runs there, under that device's git credentials.
+export function useCloneProject() {
+  const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
+  return useMutation<Project, Error, CloneProjectPayload>({
+    mutationFn: (input) => api.projects.clone(input),
+    // Returned for the same reason useAddProject returns it.
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: keys.projects() }),
+    meta: { errorTitle: "Couldn't clone the repository" },
   });
 }
 

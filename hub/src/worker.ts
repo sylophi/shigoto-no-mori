@@ -20,6 +20,7 @@ import {
   RenameDeviceRequestSchema,
   type ErrorBody,
   HUB_ROUTES,
+  MAX_ACCOUNT_DEVICES,
   type TicketResponse,
   TUNNEL_UNCONFIGURED_STATUS,
   type TunnelProvisionResponse,
@@ -35,6 +36,7 @@ import {
 import type { Env } from "./env.ts";
 import {
   type DeviceRow,
+  listAccountDeviceIds,
   getDeviceByCredentialHash,
   getDeviceById,
   renameDevice,
@@ -245,7 +247,7 @@ export function createWorker(deps: HubDeps): HubWorker {
       request.method === HUB_ROUTES.enroll.method &&
       url.pathname === HUB_ROUTES.enroll.path
     ) {
-      return await enroll(request, env);
+      return await enroll(request, env, ctx);
     }
     if (
       request.method === HUB_ROUTES.listDevices.method &&
@@ -290,7 +292,7 @@ export function createWorker(deps: HubDeps): HubWorker {
     return jsonError(404, { error: "not found" });
   }
 
-  async function enroll(request: Request, env: Env) {
+  async function enroll(request: Request, env: Env, ctx: ExecutionContext) {
     const token = bearerToken(request);
     const login = token === null ? null : await deps.verifyLogin(token, env);
     if (login === null) return jsonError(401, { error: "invalid login token" });
@@ -304,6 +306,35 @@ export function createWorker(deps: HubDeps): HubWorker {
         error:
           "deviceId is enrolled under a different account, revoke it there first",
       });
+    }
+    // The cap counts NEW devices only, so a full account can still
+    // re-enroll the devices it has. A pre-read rather than a SQL guard:
+    // two racing enrolls can land one over, which a quota shrugs off.
+    //
+    // A full account makes room by dropping its stalest offline device
+    // rather than refusing. Removing a device takes a device credential,
+    // and a browser profile that cleared its storage has lost its own,
+    // so a refusal could lock an account out with nothing left to
+    // remove devices from. The login authorizing this enroll is the
+    // account owner's, and the evicted device only has to sign in again.
+    if (existing === null) {
+      const stalestFirst = await listAccountDeviceIds(env.DB, login.accountId);
+      if (stalestFirst.length >= MAX_ACCOUNT_DEVICES) {
+        const online = await accountPresenceSafe(env, login.accountId);
+        const evict = stalestFirst.find((id) => !online.has(id));
+        if (evict === undefined) {
+          return jsonError(409, {
+            error: `this account already has ${MAX_ACCOUNT_DEVICES} devices online, remove one from the Devices page first`,
+          });
+        }
+        try {
+          await revokeAccountDevice(env, ctx, login.accountId, evict);
+        } catch {
+          return jsonError(502, {
+            error: "could not make room for the device",
+          });
+        }
+      }
     }
     // Enrolling again rotates the credential: exactly one credential
     // per device is valid at any time, because only one hash is
@@ -375,6 +406,28 @@ export function createWorker(deps: HubDeps): HubWorker {
     return Response.json(response);
   }
 
+  // The revocation itself, shared by the revoke route and the enroll
+  // cap's eviction. The account is threaded in so the DO's D1 delete is
+  // scoped to it and cannot delete a row concurrently re-enrolled under
+  // another account. Throws when the DO fails. The tunnel teardown is
+  // best-effort: teardownTunnel swallows every CF failure, and it rides
+  // waitUntil so the response never waits on the CF API.
+  async function revokeAccountDevice(
+    env: Env,
+    ctx: ExecutionContext,
+    accountId: string,
+    deviceId: string,
+  ): Promise<void> {
+    await callObject(accountStub(env, accountId), INTERNAL_REVOKE_PATH, {
+      method: "POST",
+      body: JSON.stringify({ deviceId, accountId } satisfies RevokeRequest),
+    });
+    const cf = tunnelEnvOf(env);
+    if (cf !== null) {
+      ctx.waitUntil(teardownTunnel(cf, cfFetch, accountId, deviceId));
+    }
+  }
+
   // Any device of the account may revoke any device of the account,
   // including itself. A device of another account gets the same 404 as
   // a nonexistent one, so the endpoint leaks nothing about foreign
@@ -397,33 +450,10 @@ export function createWorker(deps: HubDeps): HubWorker {
     if (target === null || target.account_id !== device.account_id) {
       return jsonError(404, { error: "unknown device" });
     }
-    // The account is threaded into the revoke so the DO's D1 delete is
-    // scoped to it and cannot delete a row concurrently re-enrolled
-    // under another account. A DO failure surfaces as a 502.
     try {
-      await callObject(
-        accountStub(env, device.account_id),
-        INTERNAL_REVOKE_PATH,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            deviceId: targetId,
-            accountId: device.account_id,
-          } satisfies RevokeRequest),
-        },
-      );
+      await revokeAccountDevice(env, ctx, device.account_id, targetId);
     } catch {
       return jsonError(502, { error: "revocation failed" });
-    }
-    // Best-effort tunnel teardown: the revoked
-    // device's named tunnel and DNS record die with it when the tunnel
-    // env is configured. teardownTunnel swallows every CF failure
-    // itself, so it can never fail a revoke the DO already committed,
-    // and it rides waitUntil so the caller's 204 never waits on the CF
-    // API either.
-    const cf = tunnelEnvOf(env);
-    if (cf !== null) {
-      ctx.waitUntil(teardownTunnel(cf, cfFetch, device.account_id, targetId));
     }
     return new Response(null, { status: 204 });
   }

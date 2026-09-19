@@ -16,7 +16,10 @@
 // dials then present a vanished ticket.
 //
 // This file must stay Electron free (host:check).
-import { DIRECT_TICKET_TTL_MS } from "@shared/ipc/modules/direct";
+import {
+  type DirectCandidateKind,
+  DIRECT_TICKET_TTL_MS,
+} from "@shared/ipc/modules/direct";
 import { mintHexId } from "@host/lib/idleRegistry";
 
 // The distinguishing prefix, following the hub worker's smrt_/smdc_
@@ -33,18 +36,31 @@ export const DIRECT_TICKET_PREFIX = "smpt_";
 const MAX_PENDING_TICKETS = 256;
 
 export type ConnectTicketStore = {
-  // Mints `count` tickets bound to the named peer deviceId, REPLACING
-  // any tickets that peer still had pending. Returns null when the
-  // global backstop cap would be exceeded, which the broker surfaces
-  // as available:false.
-  mint(peerDeviceId: string, count: number): string[] | null;
-  // Consumes a presented ticket. The entry is deleted on FIRST
-  // presentation regardless of outcome (single use), then the verdict
-  // requires: the ticket existed, is unexpired, and its bound peer
-  // deviceId equals the claimed one. 128 random bits looked up by map
-  // key make a constant-time comparison unnecessary: an attacker
-  // cannot iterate toward a stored key through timing on a hash map.
-  consume(ticket: string, peerDeviceId: string): boolean;
+  // Mints one ticket per candidate KIND, in order, all bound to the
+  // named peer deviceId and REPLACING any tickets that peer still had
+  // pending. Returns null when the global backstop cap would be
+  // exceeded, which the broker surfaces as available:false.
+  mint(
+    peerDeviceId: string,
+    kinds: readonly DirectCandidateKind[],
+  ): string[] | null;
+  // Consumes the pending ticket the dialer proved possession of and
+  // hands it back, so the caller can compute the host's half of the
+  // proof. Null when none matches. The ticket never arrives (see
+  // shared/ipc/socket/proof.ts), so the caller's predicate is tried
+  // against this peer's few pending tickets in turn.
+  //
+  // `arrivedAs` is the path the connection came in on, and must equal
+  // the kind the ticket was minted for. That stops a RELAY: a machine
+  // squatting an advertised LAN address could shuttle the nonces and
+  // proofs through to the real listener over the public tunnel without
+  // ever holding the ticket. A relay within one kind needs an attacker
+  // on that network already, and only TLS on the LAN candidate stops it.
+  consumeProven(
+    peerDeviceId: string,
+    arrivedAs: DirectCandidateKind,
+    matches: (ticket: string) => Promise<boolean>,
+  ): Promise<string | null>;
 };
 
 export type ConnectTicketStoreOpts = {
@@ -61,11 +77,20 @@ export function createConnectTicketStore(
   // The lookup consume needs, ticket string to its binding.
   const pending = new Map<
     string,
-    { peerDeviceId: string; expiresAt: number }
+    { peerDeviceId: string; expiresAt: number; kind: DirectCandidateKind }
   >();
   // The per-peer index mint's replacement runs on, so one peer's mint
   // can only ever delete that peer's own tickets.
   const byPeer = new Map<string, Set<string>>();
+
+  // Removes one ticket and keeps the per-peer index in step.
+  function forget(ticket: string, peerDeviceId: string): void {
+    pending.delete(ticket);
+    const set = byPeer.get(peerDeviceId);
+    if (set === undefined) return;
+    set.delete(ticket);
+    if (set.size === 0) byPeer.delete(peerDeviceId);
+  }
 
   function dropPeerSet(peerDeviceId: string): void {
     const tickets = byPeer.get(peerDeviceId);
@@ -81,31 +106,26 @@ export function createConnectTicketStore(
     const cutoff = now();
     for (const [ticket, entry] of pending) {
       if (entry.expiresAt > cutoff) continue;
-      pending.delete(ticket);
-      const set = byPeer.get(entry.peerDeviceId);
-      if (set !== undefined) {
-        set.delete(ticket);
-        if (set.size === 0) byPeer.delete(entry.peerDeviceId);
-      }
+      forget(ticket, entry.peerDeviceId);
     }
   }
 
   return {
-    mint(peerDeviceId, count) {
+    mint(peerDeviceId, kinds) {
       sweepExpired();
       // Replacement first: a fresh connectInfo invalidates the same
       // peer's previous candidate-set (only the freshest dial should
       // hold live tickets), and its slots do not count against it.
       dropPeerSet(peerDeviceId);
-      if (pending.size + count > MAX_PENDING_TICKETS) return null;
+      if (pending.size + kinds.length > MAX_PENDING_TICKETS) return null;
       const expiresAt = now() + ttlMs;
       const tickets: string[] = [];
       const set = new Set<string>();
-      for (let i = 0; i < count; i += 1) {
+      for (const kind of kinds) {
         // The random half reuses the host's opaque-id minter so the
         // random-secret recipe lives in one place.
         const ticket = `${DIRECT_TICKET_PREFIX}${mintHexId()}`;
-        pending.set(ticket, { peerDeviceId, expiresAt });
+        pending.set(ticket, { peerDeviceId, expiresAt, kind });
         set.add(ticket);
         tickets.push(ticket);
       }
@@ -113,19 +133,26 @@ export function createConnectTicketStore(
       return tickets;
     },
 
-    consume(ticket, peerDeviceId) {
-      const entry = pending.get(ticket);
-      // Single use: gone the moment it is presented, whatever the
-      // verdict, so a replay after a failed hello fails too.
-      pending.delete(ticket);
-      if (entry === undefined) return false;
-      const set = byPeer.get(entry.peerDeviceId);
-      if (set !== undefined) {
-        set.delete(ticket);
-        if (set.size === 0) byPeer.delete(entry.peerDeviceId);
+    async consumeProven(peerDeviceId, arrivedAs, matches) {
+      // Snapshot before awaiting: the predicate yields, and a
+      // concurrent mint or sweep must not be walked mid-mutation.
+      const candidates = [...(byPeer.get(peerDeviceId) ?? [])];
+      const cutoff = now();
+      for (const ticket of candidates) {
+        const entry = pending.get(ticket);
+        if (entry === undefined) continue;
+        if (entry.expiresAt <= cutoff) continue;
+        if (entry.kind !== arrivedAs) continue;
+        // oxlint-disable-next-line no-await-in-loop -- stop at the ticket that matches, rather than computing every candidate's proof
+        if (!(await matches(ticket))) continue;
+        // Single use. The delete's own answer is the claim: two dials
+        // racing one ticket across the await above would otherwise
+        // both see it pending and both be admitted.
+        if (!pending.delete(ticket)) continue;
+        forget(ticket, entry.peerDeviceId);
+        return ticket;
       }
-      if (entry.expiresAt <= now()) return false;
-      return entry.peerDeviceId === peerDeviceId;
+      return null;
     },
   };
 }

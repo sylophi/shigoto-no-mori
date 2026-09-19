@@ -6,6 +6,7 @@ import {
   DeviceListResponseSchema,
   EnrollResponseSchema,
   HUB_ROUTES,
+  MAX_ACCOUNT_DEVICES,
 } from "../../shared/hub/protocol.ts";
 import {
   DEVICE_CREDENTIAL_PREFIX,
@@ -27,6 +28,16 @@ import {
 } from "./helpers.ts";
 
 afterEach(closeAllSockets);
+
+// The 17th device, for the enroll cap. A fresh Request per call, since
+// a Request's body cannot be read twice.
+function overCapRequest(): Request {
+  return enrollRequest(`${TEST_TOKEN_PREFIX}acct-cap`, {
+    deviceId: "dev-cap-extra",
+    name: "One too many",
+    platform: "darwin",
+  });
+}
 
 function listRequest(credential: string): Request {
   return new Request(`${BASE}${HUB_ROUTES.listDevices.path}`, {
@@ -88,6 +99,28 @@ describe("POST /devices/enroll", () => {
     expect(oldAuth.status).toBe(401);
     const newAuth = await call(listRequest(second.credential));
     expect(newAuth.status).toBe(200);
+  });
+
+  it("caps devices per account by dropping the stalest one, never by locking the account out", async () => {
+    const enrolled = [];
+    for (let i = 0; i < MAX_ACCOUNT_DEVICES; i++) {
+      // oxlint-disable-next-line no-await-in-loop -- eviction order is enroll order, so these have to land one at a time
+      enrolled.push(await enroll("acct-cap", `dev-cap-${i}`));
+    }
+    // Re-enrolling is a rotation, not a new device, so nothing is
+    // dropped for it.
+    const rotated = await enroll("acct-cap", "dev-cap-1");
+    expect(rotated.credential).not.toBe(enrolled[1].credential);
+    expect((await call(listRequest(enrolled[0].credential))).status).toBe(200);
+    // A new device over the cap takes the place of the stalest one,
+    // whose credential dies with it.
+    expect((await call(overCapRequest())).status).toBe(200);
+    expect((await call(listRequest(enrolled[0].credential))).status).toBe(401);
+    const listed = await call(listRequest(rotated.credential));
+    const { devices } = (await listed.json()) as { devices: unknown[] };
+    expect(devices).toHaveLength(MAX_ACCOUNT_DEVICES);
+    // The cap is per account, so a neighbor is unaffected.
+    await enroll("acct-cap-neighbor", "dev-cap-neighbor");
   });
 
   it("rejects the same deviceId under a different account with 409", async () => {
