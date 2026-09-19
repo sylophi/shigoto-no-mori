@@ -306,6 +306,43 @@ const MirrorSessionPayloadSchema = z.strictObject({
   session: MirrorSessionIdSchema,
 });
 
+// Stopping removes the copy on this device, so it is refused unless
+// the peer provably holds everything: the git follower saying "synced"
+// is the only state that proves it. A paused session, an unreachable
+// peer or a session too young to have reconciled all report something
+// else, and each of those is a state where commits and uncommitted
+// edits here may exist nowhere else. `force` is the user overriding
+// that after being told, which stays available because the copy is
+// theirs to discard.
+const MirrorStopPayloadSchema = MirrorSessionPayloadSchema.extend({
+  force: z.boolean().optional(),
+});
+
+// The rule itself, so the host that enforces it and the dialog that
+// warns about it cannot drift into disagreeing.
+export function mirrorStopIsSafe(
+  status: MirrorGitStatus["status"] | undefined,
+): boolean {
+  return status === "synced";
+}
+
+// The refusal's leading text. The host's message continues past it with
+// the live status, and the renderer matches on this prefix to turn a
+// refusal into the discard-and-stop offer rather than a dead end. Text
+// rather than a code because Electron's IPC error serialization
+// flattens an error to its message, the same reason
+// COMMAND_REFUSED_MESSAGE is matched that way.
+export const MIRROR_STOP_UNCONFIRMED =
+  "This copy is not confirmed in step with the other device";
+
+// Whether a failed stop was the confirmation refusal rather than a real
+// failure. Matches the message text, which is what survives Electron's
+// IPC error serialization.
+export function isMirrorStopUnconfirmed(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes(MIRROR_STOP_UNCONFIRMED);
+}
+
 // The mirror stream's open: the caller has attached its end of a byte
 // channel under this id on the calling connection (shared/ipc/socket/
 // channels.ts), and the host attaches a fresh `file-sync serve` for
@@ -374,7 +411,7 @@ export const mirrorContract = defineContract("host", {
       mutating: true,
     },
   ),
-  stop: invoke("mirror:stop", MirrorSessionPayloadSchema, z.void(), {
+  stop: invoke("mirror:stop", MirrorStopPayloadSchema, z.void(), {
     remote: false,
     mutating: true,
   }),

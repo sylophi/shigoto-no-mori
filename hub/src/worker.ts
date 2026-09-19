@@ -20,6 +20,7 @@ import {
   RenameDeviceRequestSchema,
   type ErrorBody,
   HUB_ROUTES,
+  MAX_ACCOUNT_DEVICES,
   type TicketResponse,
   TUNNEL_UNCONFIGURED_STATUS,
   type TunnelProvisionResponse,
@@ -35,6 +36,7 @@ import {
 import type { Env } from "./env.ts";
 import {
   type DeviceRow,
+  countAccountDevices,
   getDeviceByCredentialHash,
   getDeviceById,
   renameDevice,
@@ -303,6 +305,20 @@ export function createWorker(deps: HubDeps): HubWorker {
       return jsonError(409, {
         error:
           "deviceId is enrolled under a different account, revoke it there first",
+      });
+    }
+    // The cap counts NEW devices only, so a full account can still
+    // re-enroll (rotate) the devices it has. A pre-read, not a SQL
+    // guard: two racing enrolls can land one device over, which a quota
+    // shrugs off, and it keeps the upsert's zero-changes verdict meaning
+    // exactly one thing.
+    if (
+      existing === null &&
+      (await countAccountDevices(env.DB, login.accountId)) >=
+        MAX_ACCOUNT_DEVICES
+    ) {
+      return jsonError(409, {
+        error: `this account already has ${MAX_ACCOUNT_DEVICES} devices, remove one from the Devices page first`,
       });
     }
     // Enrolling again rotates the credential: exactly one credential

@@ -3,10 +3,19 @@
 // one localStorage key. Browsers have no OS keychain, so the cipher is
 // permanently unavailable and the core stamps enc:false plaintext
 // envelopes, the same fallback a keychain-less desktop uses. That means
-// the hub credential sits in plaintext site storage: acceptable for a
-// read-only web client whose credential the account owner can revoke
-// from any device, and the envelope shape means a future encrypted
-// backing slots in without a migration.
+// the hub credential sits in plaintext site storage, and the exposure
+// is not the read-only one it looks like: this client is a full peer,
+// so against a host whose command-access switch is on, whoever lifts
+// the credential drives MUTATING calls. host/socket/server.ts resolves
+// the grant from that one host-wide switch rather than per peer, so
+// there is no weaker tier the web device could be pinned to. Anything
+// with script on this origin, or with the browser profile's storage on
+// disk, therefore gets everything the device gets. The tradeoff is
+// still taken: there is no browser keychain to put the credential in,
+// it never rides a URL (so it stays out of logs, referrers and
+// history), the account owner can revoke this device from any other
+// one, and the envelope shape means an encrypted backing slots in
+// without a migration.
 import {
   createAccountStore,
   type AccountStore,

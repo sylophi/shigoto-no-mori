@@ -379,7 +379,16 @@ func readJSONObject(path string) (map[string]json.RawMessage, error) {
 // already-encoded JSON, so the marker goes in encoded too.
 func writeJSONObject(path string, doc map[string]json.RawMessage) error {
 	doc["schemaVersion"] = schemaVersionRaw
-	return atomicWriteJSON(path, doc)
+	return atomicWriteJSONMode(path, doc, configFileMode(path))
+}
+
+// config.json carries a bearer secret, so it is not world-readable. The
+// other document this helper writes (the project file) carries none.
+func configFileMode(path string) os.FileMode {
+	if filepath.Base(path) == "config.json" {
+		return 0o600
+	}
+	return 0o644
 }
 
 func readStateFile() (map[string]json.RawMessage, error) {
@@ -739,6 +748,16 @@ func deleteWorktreeData(projectID, worktreeID string) {
 var tempCounter int
 
 func atomicWriteJSON(path string, value any) error {
+	return atomicWriteJSONMode(path, value, 0o644)
+}
+
+// The mode-carrying form. config.json holds socketHost.token, a bearer
+// secret for the LAN wire, so it is written 0600 to match the app's own
+// writer (host/lib/util/jsonFile.ts, via host/lib/config/global.ts). A
+// mode only applies to a file this call creates, and the rename below
+// carries it, so a config the app wrote stays 0600 and one this CLI
+// wrote first arrives that way too.
+func atomicWriteJSONMode(path string, value any, mode os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -748,7 +767,7 @@ func atomicWriteJSON(path string, value any) error {
 	}
 	tmp := fmt.Sprintf("%s.tmp.%d.%d.%d", path, os.Getpid(), time.Now().UnixMilli(), tempCounter)
 	tempCounter++
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o644); err != nil {
+	if err := os.WriteFile(tmp, append(data, '\n'), mode); err != nil {
 		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {

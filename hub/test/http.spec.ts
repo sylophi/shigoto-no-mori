@@ -6,6 +6,7 @@ import {
   DeviceListResponseSchema,
   EnrollResponseSchema,
   HUB_ROUTES,
+  MAX_ACCOUNT_DEVICES,
 } from "../../shared/hub/protocol.ts";
 import {
   DEVICE_CREDENTIAL_PREFIX,
@@ -27,6 +28,16 @@ import {
 } from "./helpers.ts";
 
 afterEach(closeAllSockets);
+
+// The 17th device, for the enroll cap. A fresh Request per call, since
+// a Request's body cannot be read twice.
+function overCapRequest(): Request {
+  return enrollRequest(`${TEST_TOKEN_PREFIX}acct-cap`, {
+    deviceId: "dev-cap-extra",
+    name: "One too many",
+    platform: "darwin",
+  });
+}
 
 function listRequest(credential: string): Request {
   return new Request(`${BASE}${HUB_ROUTES.listDevices.path}`, {
@@ -88,6 +99,29 @@ describe("POST /devices/enroll", () => {
     expect(oldAuth.status).toBe(401);
     const newAuth = await call(listRequest(second.credential));
     expect(newAuth.status).toBe(200);
+  });
+
+  it("caps new devices per account, but still rotates and frees slots", async () => {
+    const enrolled = [];
+    for (let i = 0; i < MAX_ACCOUNT_DEVICES; i++) {
+      // oxlint-disable-next-line no-await-in-loop -- the cap counts rows, so these have to land one at a time
+      enrolled.push(await enroll("acct-cap", `dev-cap-${i}`));
+    }
+    const refused = await call(overCapRequest());
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
+      error: expect.stringContaining(`${MAX_ACCOUNT_DEVICES} devices`),
+    });
+    // A full account is not locked out of the devices it has: re-enroll
+    // is a rotation, not a new device.
+    const rotated = await enroll("acct-cap", "dev-cap-0");
+    expect(rotated.credential).not.toBe(enrolled[0].credential);
+    // The cap is per account, so a neighbor is unaffected.
+    await enroll("acct-cap-neighbor", "dev-cap-neighbor");
+    // Removing a device frees its slot.
+    const removed = await revoke(rotated.credential, "dev-cap-1");
+    expect(removed.status).toBe(204);
+    expect((await call(overCapRequest())).status).toBe(200);
   });
 
   it("rejects the same deviceId under a different account with 409", async () => {

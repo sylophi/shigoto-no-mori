@@ -332,9 +332,12 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
           openDevice({
             url: candidate.url,
             openSocket: deps.openSocket,
-            // This candidate's own single-use ticket rides the
-            // existing hello token field.
+            // This candidate's own single-use ticket. It never reaches
+            // the wire: a candidate address is answered by whoever
+            // holds it on the network we happen to be on, so both ends
+            // prove possession instead (shared/ipc/socket/proof.ts).
             token: candidate.ticket,
+            auth: "proof",
             appVersion: deps.localAppVersion,
             localDeviceId: deps.localDeviceId,
             // Identity pin: a welcome from any other deviceId fails

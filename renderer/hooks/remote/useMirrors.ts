@@ -195,9 +195,14 @@ export function useMirrorControls() {
   // Stop removes the local copy with the session, so the renderer
   // forgets the worktree the way a delete does.
   const stop = useMutation({
-    mutationFn: (session: MirrorSession) =>
-      window.api.mirror.stop(session.session),
-    onSuccess: (_data, session) =>
+    mutationFn: ({
+      session,
+      force,
+    }: {
+      session: MirrorSession;
+      force?: boolean;
+    }) => window.api.mirror.stop(session.session, force),
+    onSuccess: (_data, { session }) =>
       forget(session.localProjectId, session.localWorktreeId),
     onError: (err) => notifyError("Couldn't stop mirroring", err),
     meta: { silentError: true },

@@ -59,6 +59,18 @@ export async function listDevicesByCredentialHash(
   return result.results;
 }
 
+// How many devices the account has enrolled, for the enroll cap.
+export async function countAccountDevices(
+  db: D1Database,
+  accountId: string,
+): Promise<number> {
+  const row = await db
+    .prepare("SELECT COUNT(*) AS count FROM devices WHERE account_id = ?")
+    .bind(accountId)
+    .first<{ count: number }>();
+  return row?.count ?? 0;
+}
+
 // Enrollment upsert. Re-enrolling an existing device rotates the
 // credential and refreshes name and platform but keeps created_at and
 // last_seen_at. The ON CONFLICT update is guarded by

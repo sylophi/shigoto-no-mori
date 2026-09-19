@@ -140,6 +140,11 @@ func (s stdioStream) Close() error {
 // peer to reach and the worktree there. The gateway answers with one
 // line, "ok" or "error <message>".
 type mirrorPreface struct {
+	// Proves this is the daemon the gateway spawned rather than another
+	// process on this machine that found the loopback port. Handed over
+	// in the environment (see mirrorGatewayTokenEnv), never argv, which
+	// is world-readable through `ps`.
+	Token      string `json:"token"`
 	DeviceID   string `json:"deviceId"`
 	ProjectID  string `json:"projectId"`
 	WorktreeID string `json:"worktreeId"`
@@ -147,6 +152,11 @@ type mirrorPreface struct {
 	// was created without one.
 	LocalWorktreeID string `json:"localWorktreeId,omitempty"`
 }
+
+// The environment variable carrying the gateway token. main/mirror/
+// gateway.ts mints the value and exports this same name, so the two
+// must be changed together.
+const mirrorGatewayTokenEnv = "SM_MIRROR_GATEWAY_TOKEN"
 
 type mirrorGatewayHandler struct {
 	gateway string
@@ -185,6 +195,7 @@ func (h mirrorGatewayHandler) Connect(
 		}
 	}()
 	preface := mirrorPreface{
+		Token:           os.Getenv(mirrorGatewayTokenEnv),
 		DeviceID:        u.Host,
 		ProjectID:       u.Parameters[mirrorParamProjectID],
 		WorktreeID:      u.Parameters[mirrorParamWorktreeID],
@@ -488,14 +499,21 @@ func createMirrorSession(ctx context.Context, manager *synchronization.Manager, 
 	// files cross too. The caller's ignores follow the pointer: what
 	// git ignores on the source, or the user's own pick, stays where
 	// it is.
+	// The .git pointer rule is appended LAST, after the caller's
+	// patterns. Mutagen applies patterns in order with the last match
+	// winning and a "!" prefix flipping an ignore back to an include,
+	// and the caller's list is derived from the repository's own
+	// .gitignore files, so a repo carrying a negation like "!.git*"
+	// would cancel a guard placed first and put the pointer file back
+	// in the sync set.
 	ignores := make([]string, 0, 1+len(req.Ignores))
-	ignores = append(ignores, mirrorGitPointerIgnore)
 	for _, pattern := range req.Ignores {
 		if pattern == "" || pattern == mirrorGitPointerIgnore {
 			continue
 		}
 		ignores = append(ignores, pattern)
 	}
+	ignores = append(ignores, mirrorGitPointerIgnore)
 	alpha, beta := local, remote
 	mode := core.SynchronizationMode_SynchronizationModeTwoWaySafe
 	if req.Pull {

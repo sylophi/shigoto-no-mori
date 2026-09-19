@@ -25,6 +25,7 @@ import {
   createHeartbeat,
   type HeartbeatOptions,
 } from "@shared/ipc/socket/heartbeat";
+import { handshakeProof, newHandshakeNonce, proofsMatch } from "./proof";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
 import {
   type ChannelMux,
@@ -104,8 +105,18 @@ const openGlobalSocket: OpenClientSocket = (url) => new WebSocket(url);
 export type ConnectDeviceOptions = {
   // ws:// URL of the host listener.
   url: string;
-  // Shared secret from the device config, sent in the hello frame.
+  // The credential this dial authenticates with: the device config's
+  // shared secret on the legacy LAN wire, a single-use connect ticket
+  // on the direct data plane. What happens to it depends on `auth`.
   token: string;
+  // How the credential is presented. "token" sends it in the hello, the
+  // legacy LAN wire's behavior. "proof" never sends it: the host opens
+  // with a nonce and this side answers with an HMAC, then checks the
+  // host's own HMAC on the welcome before trusting the connection
+  // (shared/ipc/socket/proof.ts). The direct dialer uses "proof"
+  // because its candidates are unauthenticated addresses that any
+  // machine on the current network may answer. Defaults to "token".
+  auth?: "token" | "proof";
   // This client build's version, carried in the hello so the host can
   // log or gate skew later.
   appVersion: string;
@@ -278,17 +289,56 @@ export function openDevice(
   let opened = false;
   let helloRequested = false;
   let helloWasSent = false;
+  const proofMode = options.auth === "proof";
+  // Proof mode's third precondition for the hello, alongside opened and
+  // helloRequested: the host's nonce, which only arrives on the wire.
+  let hostNonce: string | null = null;
+  // Kept so the welcome's proof can be checked against the same pair.
+  let clientNonce: string | null = null;
 
-  const sendHello = (): void => {
-    if (helloWasSent || closed) return;
+  // The whole precondition lives here, so the call sites are a bare
+  // sendHello() and no reader has to assemble the rule from three
+  // partial guards. An async function runs to its first await
+  // synchronously, so the latches below still land before any yield.
+  const sendHello = async (): Promise<void> => {
+    if (helloWasSent || closed || !opened || !helloRequested) return;
+    if (!proofMode) {
+      helloWasSent = true;
+      // Hello must be the first frame, within the host's hello timeout.
+      socket.send(
+        encodeFrame({
+          t: "hello",
+          token: options.token,
+          deviceId: options.localDeviceId,
+          appVersion: options.appVersion,
+        }),
+      );
+      return;
+    }
+    // Proof mode cannot speak until challenged. The caller's deadline
+    // still bounds the wait, and the challenge is the host's first
+    // frame, so this is one round trip and not a state to get stuck in.
+    const challenge = hostNonce;
+    if (challenge === null) return;
     helloWasSent = true;
-    // Hello must be the first frame, within the host's hello timeout.
+    const nonce = newHandshakeNonce();
+    clientNonce = nonce;
+    const proof = await handshakeProof(
+      options.token,
+      "client",
+      challenge,
+      nonce,
+    );
+    // The await yielded: a close or a timeout in the meantime means
+    // this hello must not go out.
+    if (closed) return;
     socket.send(
       encodeFrame({
         t: "hello",
-        token: options.token,
         deviceId: options.localDeviceId,
         appVersion: options.appVersion,
+        nonce,
+        proof,
       }),
     );
   };
@@ -344,8 +394,71 @@ export function openDevice(
     if (closed) return;
     opened = true;
     resolveOpen();
-    if (helloRequested) sendHello();
+    void sendHello();
   });
+
+  // The one place a welcome becomes an established connection, so the
+  // proof check cannot be bypassed by a second code path resolving
+  // first.
+  const acceptWelcome = (deviceId: string, appVersion: string): void => {
+    if (closed || welcome !== null) return;
+    clearTimeout(helloTimer);
+    welcome = { remoteDeviceId: deviceId, remoteAppVersion: appVersion };
+    heartbeat.start();
+    resolve({
+      transport,
+      channels,
+      close,
+      probe: heartbeat.probe,
+      remoteDeviceId: welcome.remoteDeviceId,
+      remoteAppVersion: welcome.remoteAppVersion,
+    });
+  };
+
+  // The host's half of the mutual proof. Its own function rather than
+  // an inline async block, so the welcome branch above reads as one
+  // decision instead of nesting a whole handshake inside itself.
+  const verifyHostProof = async (
+    expected: string,
+    challenge: string,
+    nonce: string,
+    frame: { deviceId: string; appVersion: string },
+  ): Promise<void> => {
+    const want = await handshakeProof(options.token, "host", challenge, nonce);
+    if (closed) return;
+    if (!proofsMatch(expected, want)) {
+      failHandshake(
+        "welcome proof did not match the connect ticket",
+        frame.deviceId,
+      );
+      return;
+    }
+    acceptWelcome(frame.deviceId, frame.appVersion);
+  };
+
+  // A far end that could not prove it holds the ticket. Deliberately
+  // NOT a blocking verdict: the dialer races several candidates, and an
+  // impostor squatting one address must retire that candidate only,
+  // leaving the peer reachable on the others. Blocking here would let
+  // anyone who answers on a LAN address deny the whole dial. The ticket
+  // was never sent, so nothing was spent and the next candidate still
+  // has its own.
+  const failHandshake = (reason: string, deviceId: string): void => {
+    if (closed) return;
+    closed = true;
+    clearTimeout(helloTimer);
+    console.warn(
+      `[socket] ${reason} (peer claimed ${deviceId} at ${options.url})`,
+    );
+    try {
+      socket.close();
+    } catch {
+      // Already closing.
+    }
+    // No rejectOpen: a welcome only arrives on an open socket, so
+    // whenOpen resolved long before this.
+    reject(new RemoteConnectError(reason, null, false));
+  };
 
   socket.addEventListener("message", (event) => {
     if (closed) return;
@@ -378,7 +491,14 @@ export function openDevice(
     heartbeat.noteInbound();
 
     if (welcome === null) {
-      // Before the welcome, the only frame we act on is the welcome.
+      // The challenge opens proof mode's handshake, so it is the one
+      // other frame that can legitimately arrive before the welcome.
+      if (frame.t === "challenge") {
+        if (!proofMode || hostNonce !== null) return;
+        hostNonce = frame.nonce;
+        void sendHello();
+        return;
+      }
       // Anything else pre-welcome is dropped: the host sends nothing
       // else before it.
       if (frame.t !== "welcome") {
@@ -409,20 +529,26 @@ export function openDevice(
         );
         return;
       }
-      clearTimeout(helloTimer);
-      welcome = {
-        remoteDeviceId: frame.deviceId,
-        remoteAppVersion: frame.appVersion,
-      };
-      heartbeat.start();
-      resolve({
-        transport,
-        channels,
-        close,
-        probe: heartbeat.probe,
-        remoteDeviceId: welcome.remoteDeviceId,
-        remoteAppVersion: welcome.remoteAppVersion,
-      });
+      if (proofMode) {
+        // The far end must prove it holds the ticket too. Without this
+        // the dialer would trust whichever machine answered at one of
+        // the peer's advertised addresses, which on a hostile network
+        // is not the peer. Checked before the welcome is recorded, so a
+        // failed proof never becomes an established connection.
+        const expected = frame.proof;
+        const challenge = hostNonce;
+        const nonce = clientNonce;
+        if (expected === undefined || challenge === null || nonce === null) {
+          failHandshake(
+            "welcome carried no proof of the connect ticket",
+            frame.deviceId,
+          );
+          return;
+        }
+        void verifyHostProof(expected, challenge, nonce, frame);
+        return;
+      }
+      acceptWelcome(frame.deviceId, frame.appVersion);
       return;
     }
 
@@ -600,7 +726,7 @@ export function openDevice(
     authenticate() {
       if (!helloRequested) {
         helloRequested = true;
-        if (opened && !closed) sendHello();
+        void sendHello();
       }
       return connectPromise;
     },

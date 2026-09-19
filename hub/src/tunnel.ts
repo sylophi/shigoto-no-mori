@@ -37,13 +37,34 @@ export function tunnelEnvOf(env: Env): TunnelEnv | null {
   return { apiToken, accountId, zoneId, domain };
 }
 
-// Deterministic per-device tunnel name: `sm-` plus the first 12 hex of
+// Deterministic per-device tunnel name: `sm-` plus the first 32 hex of
 // SHA-256(accountId + ":" + deviceId). Stable across calls, so the
 // name is the create-or-reuse key and nothing new persists in D1. The
-// hash keeps account and device ids out of public DNS labels, and 48
-// bits is plenty against accidental collision within one owner's
-// device fleet.
+// hash keeps account and device ids out of public DNS labels.
+//
+// The width is a security bound, not a collision-avoidance nicety. The
+// name is looked up across the whole Cloudflare account and a hit is
+// reused, connector token and all, so the name IS the ownership check.
+// A device picks its own deviceId, which makes the search for one that
+// lands on somebody else's name an offline one: 128 bits puts it out of
+// reach, where a short prefix would cost an evening on a rented GPU.
+// 35 characters is well inside a DNS label's 63.
 export async function tunnelNameFor(
+  accountId: string,
+  deviceId: string,
+): Promise<string> {
+  const digest = await sha256Hex(`${accountId}:${deviceId}`);
+  return `sm-${digest.slice(0, 32)}`;
+}
+
+// The width this Worker used before, kept for teardown only. Widening
+// the name re-keys every device: the next provision creates a tunnel
+// under the new name and leaves the old one behind, and a revoke that
+// only knew the new name could never delete it, so the orphan and its
+// DNS record would outlive the device forever. Teardown therefore
+// sweeps both. Delete this once no device provisioned by an older
+// Worker remains.
+async function legacyTunnelNameFor(
   accountId: string,
   deviceId: string,
 ): Promise<string> {
@@ -253,34 +274,40 @@ export async function teardownTunnel(
   accountId: string,
   deviceId: string,
 ): Promise<void> {
-  const name = await tunnelNameFor(accountId, deviceId);
-  const hostname = `${name}.${cf.domain}`;
-  await Promise.all([
-    (async () => {
-      const tunnel = await findTunnel(cf, cfFetch, name);
-      if (tunnel !== null) {
-        await cfCall(
-          cf,
-          cfFetch,
-          "DELETE",
-          `/accounts/${cf.accountId}/cfd_tunnel/${tunnel.id}?cascade=true`,
-        );
-      }
-    })().catch(() => {
-      // Best-effort, see above.
-    }),
-    (async () => {
-      const record = await findDnsRecord(cf, cfFetch, hostname);
-      if (record !== null) {
-        await cfCall(
-          cf,
-          cfFetch,
-          "DELETE",
-          `/zones/${cf.zoneId}/dns_records/${record.id}`,
-        );
-      }
-    })().catch(() => {
-      // Best-effort, see above.
-    }),
+  // Both widths, so a device provisioned by an older Worker still has
+  // its tunnel and DNS record removed rather than orphaned.
+  const names = await Promise.all([
+    tunnelNameFor(accountId, deviceId),
+    legacyTunnelNameFor(accountId, deviceId),
   ]);
+  await Promise.all(
+    names.flatMap((name) => [
+      (async () => {
+        const tunnel = await findTunnel(cf, cfFetch, name);
+        if (tunnel !== null) {
+          await cfCall(
+            cf,
+            cfFetch,
+            "DELETE",
+            `/accounts/${cf.accountId}/cfd_tunnel/${tunnel.id}?cascade=true`,
+          );
+        }
+      })().catch(() => {
+        // Best-effort, see above.
+      }),
+      (async () => {
+        const record = await findDnsRecord(cf, cfFetch, `${name}.${cf.domain}`);
+        if (record !== null) {
+          await cfCall(
+            cf,
+            cfFetch,
+            "DELETE",
+            `/zones/${cf.zoneId}/dns_records/${record.id}`,
+          );
+        }
+      })().catch(() => {
+        // Best-effort, see above.
+      }),
+    ]),
+  );
 }
