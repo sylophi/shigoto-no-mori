@@ -1,5 +1,5 @@
-import { DiffNotFound } from "@/components/diff/DiffNotFound";
-import { WorktreeMissing } from "@/components/diff/WorktreeMissing";
+import { SubPageNotFound } from "@/components/shared/SubPageNotFound";
+import { WorktreeMissing } from "@/components/shared/WorktreeMissing";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { paramToSlot } from "@/store/scriptRuns";
 import { ScriptConsoleInner } from "./ScriptConsoleInner";
@@ -15,7 +15,7 @@ export function ScriptConsole() {
     return <WorktreeMissing {...missing} message="Script not found." />;
   }
   if (!slot) {
-    return <DiffNotFound onBack={goBack} message="Script not found." />;
+    return <SubPageNotFound onBack={goBack} message="Script not found." />;
   }
 
   return <ScriptConsoleInner worktree={worktree} slot={slot} onBack={goBack} />;

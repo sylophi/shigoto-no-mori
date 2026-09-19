@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useIsTruncated } from "@/hooks/ui/useIsTruncated";
 import type { Project } from "@shared/schemas";
-import { ProjectIcon } from "./ProjectIcon";
+import { ProjectIcon } from "@/components/shared/ProjectIcon";
 
 interface ProjectHeaderProps {
   project: Project;

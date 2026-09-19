@@ -10,7 +10,7 @@ import type { Project, Worktree } from "@shared/schemas";
 import { DiffStats } from "@/components/ui/diff-stats";
 import { RowTag } from "@/components/ui/row-tag";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { changeEntries } from "@/components/diff/patchFiles";
+import { changeEntries } from "@/lib/patchFiles";
 import { LocalHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
 import { cn } from "@/lib/utils";

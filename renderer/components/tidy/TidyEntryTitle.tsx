@@ -1,5 +1,5 @@
 import { Folder } from "lucide-react";
-import { ProjectIcon } from "@/components/sidebar/ProjectIcon";
+import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { cn } from "@/lib/utils";
 import type { TidyEntry } from "./tidyModel";
 import { TidyVerdictBadge } from "./TidyVerdictBadge";

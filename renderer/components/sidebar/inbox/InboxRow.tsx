@@ -21,7 +21,7 @@ import {
 import { ActivityIcon } from "../ActivityIcon";
 import { DeviceBadge, type SidebarDeviceBadge } from "../DeviceBadge";
 import { MirrorBadge } from "../WorktreeRow";
-import { ProjectIcon } from "../ProjectIcon";
+import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { ProjectMenuItems, useProjectMenuRemoveArm } from "../ProjectMenuItems";
 import { PullRequestPill } from "../PullRequestPill";
 import { ChangedFilesPill, RemoteSyncPill } from "../StatusIndicator";

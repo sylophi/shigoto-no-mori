@@ -12,13 +12,13 @@
 // locally): there is no pick to make.
 import type { ReactNode } from "react";
 import { PawPrint } from "lucide-react";
-import { DeviceChip } from "@/components/remote/DeviceChip";
+import { DeviceChip } from "@/components/shared/DeviceChip";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
   useDeviceTargets,
   type DeviceTarget,
-} from "@/components/newWorktree/deviceTargets";
+} from "@/components/shared/deviceTargets";
 import { useScopedProjectParams } from "@/hooks/projects/useProjectNav";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useHostScope } from "@/hooks/remote/useHostScope";

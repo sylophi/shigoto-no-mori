@@ -10,8 +10,8 @@
 // below keeps its place however many machines there are. Left and
 // right arrows move the pick, as tabs do.
 import { useState, type ReactNode } from "react";
-import { DEVICE_PILL_CLASS } from "@/components/remote/DeviceChip";
-import { hostsProjects } from "@/components/remote/deviceTraits";
+import { DEVICE_PILL_CLASS } from "@/components/shared/DeviceChip";
+import { hostsProjects } from "@/lib/remote/deviceTraits";
 import { EmptyPanel } from "@/components/ui/empty-panel";
 import { StatusDot } from "@/components/ui/status-dot";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";

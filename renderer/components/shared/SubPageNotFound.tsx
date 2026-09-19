@@ -1,7 +1,7 @@
 import { BackButton } from "@/components/ui/back-button";
 import { Button } from "@/components/ui/button";
 
-export function DiffNotFound({
+export function SubPageNotFound({
   onBack,
   message,
   action,

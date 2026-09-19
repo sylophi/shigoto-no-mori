@@ -15,7 +15,7 @@
 // says "last known" rather than pretending the numbers are live.
 import { useState } from "react";
 import { FolderGit2 } from "lucide-react";
-import { ProjectIcon } from "@/components/sidebar/ProjectIcon";
+import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { Chip, ChipButton } from "@/components/ui/chip-button";
 import type { HostChip } from "./deviceHostChips";
 

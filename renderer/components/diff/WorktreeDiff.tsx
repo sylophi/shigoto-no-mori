@@ -21,7 +21,7 @@ import { changedFilePaths, includedFiles } from "./changesControls";
 import { CommitComposer } from "./CommitComposer";
 import { DiffView } from "./DiffView";
 import { LastCommitStrip } from "./LastCommitStrip";
-import { WorktreeMissing } from "./WorktreeMissing";
+import { WorktreeMissing } from "@/components/shared/WorktreeMissing";
 
 export function WorktreeDiff() {
   const { projectId, worktreeId, nav, worktree, goBack, missing } =

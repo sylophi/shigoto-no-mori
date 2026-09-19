@@ -28,7 +28,7 @@ import {
   includedFiles,
   type DiffChangesControls,
 } from "./changesControls";
-import type { IndexEntry } from "./patchFiles";
+import type { IndexEntry } from "@/lib/patchFiles";
 
 // The file rail beside a diff: every file in scroll order with its
 // change marker and +/- counts. Order is never re-ranked, which is why

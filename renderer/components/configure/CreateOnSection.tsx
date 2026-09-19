@@ -14,7 +14,10 @@ import {
 } from "@/hooks/config/useQuickCreateDevice";
 import { cn } from "@/lib/utils";
 import type { Project } from "@shared/schemas";
-import { BLOCK_REASON, useDeviceTargets } from "../newWorktree/deviceTargets";
+import {
+  BLOCK_REASON,
+  useDeviceTargets,
+} from "@/components/shared/deviceTargets";
 
 export function CreateOnSection({ project }: { project: Project }) {
   const holders = useDeviceTargets(project).filter(

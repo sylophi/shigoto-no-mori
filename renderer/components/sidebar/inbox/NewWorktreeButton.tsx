@@ -19,7 +19,7 @@ import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree
 import type { Project } from "@shared/schemas";
 import { deviceBadgeOf } from "../buildSidebarRows";
 import { DeviceBadge, type SidebarDeviceBadge } from "../DeviceBadge";
-import { ProjectIcon } from "../ProjectIcon";
+import { ProjectIcon } from "@/components/shared/ProjectIcon";
 
 interface NewWorktreeButtonProps {
   projects: Project[];

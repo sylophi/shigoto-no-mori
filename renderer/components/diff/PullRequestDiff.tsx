@@ -1,9 +1,9 @@
 import { usePullRequestDiff } from "@/hooks/pullRequests/usePullRequestDiff";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
-import { DiffNotFound } from "./DiffNotFound";
+import { SubPageNotFound } from "@/components/shared/SubPageNotFound";
 import { DiffView } from "./DiffView";
-import { WorktreeMissing } from "./WorktreeMissing";
+import { WorktreeMissing } from "@/components/shared/WorktreeMissing";
 import { DiffStats } from "@/components/ui/diff-stats";
 
 export function PullRequestDiff() {
@@ -30,11 +30,13 @@ export function PullRequestDiff() {
     // lookup shells out to `gh`, which can hang on a slow network, so
     // the pending state keeps the back button instead of a blank pane.
     if (prPending) {
-      return <DiffNotFound onBack={goBack} message="Loading pull request…" />;
+      return (
+        <SubPageNotFound onBack={goBack} message="Loading pull request…" />
+      );
     }
     if (prError) {
       return (
-        <DiffNotFound
+        <SubPageNotFound
           onBack={goBack}
           message="Couldn't load the pull request."
           action={{ label: "Retry", onClick: () => void refetchPullRequest() }}
@@ -42,7 +44,7 @@ export function PullRequestDiff() {
       );
     }
     return (
-      <DiffNotFound
+      <SubPageNotFound
         onBack={goBack}
         message="No pull request found for this branch."
       />

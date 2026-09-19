@@ -1,4 +1,4 @@
-import { hostsProjects } from "@/components/remote/deviceTraits";
+import { hostsProjects } from "@/lib/remote/deviceTraits";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { createExternalStore, useExternalStore } from "@/store/externalStore";
 import { Palette, Rocket, type LucideIcon } from "lucide-react";

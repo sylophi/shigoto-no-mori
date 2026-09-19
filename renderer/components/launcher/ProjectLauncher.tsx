@@ -8,7 +8,7 @@ import {
 } from "react";
 import { Input } from "@/components/ui/input";
 import { isEditableTarget } from "@/lib/dom";
-import { sortProjects } from "@/components/sidebar/sortProjects";
+import { sortProjects } from "@/lib/sortProjects";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useProjectSort } from "@/hooks/projects/useProjectSort";
 import { useOverlays } from "@/hooks/ui/useOverlays";

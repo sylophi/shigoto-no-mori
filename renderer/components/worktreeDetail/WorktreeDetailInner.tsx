@@ -1,4 +1,4 @@
-import { DeviceChip } from "@/components/remote/DeviceChip";
+import { DeviceChip } from "@/components/shared/DeviceChip";
 import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeader";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { PathSpan } from "@/components/ui/path-span";

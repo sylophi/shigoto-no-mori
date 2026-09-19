@@ -1,7 +1,7 @@
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useCommitDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import { DiffView } from "./DiffView";
-import { WorktreeMissing } from "./WorktreeMissing";
+import { WorktreeMissing } from "@/components/shared/WorktreeMissing";
 
 export function CommitDiff() {
   const { projectId, hash, worktree, goBack, missing } = useRouteWorktree();

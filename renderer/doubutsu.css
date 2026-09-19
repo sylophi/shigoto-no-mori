@@ -43,7 +43,7 @@
  *      dropdown-menu-sub-trigger (+ data-variant)   ui/dropdown-menu.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
  *      sidebar-device-filter     sidebar/DeviceFilterBar.tsx
- *      device-chip               remote/DeviceChip.tsx, shared/DeviceTabs.tsx
+ *      device-chip               shared/DeviceChip.tsx, shared/DeviceTabs.tsx
  *      phone-tab-bar/-tab/-tab-pill   PhoneTabBar.tsx
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,

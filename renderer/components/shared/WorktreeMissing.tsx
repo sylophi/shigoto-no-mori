@@ -1,4 +1,4 @@
-import { DiffNotFound } from "./DiffNotFound";
+import { SubPageNotFound } from "@/components/shared/SubPageNotFound";
 
 // The shared "resolve a worktree out of the list query" fallback.
 // Pending renders nothing. On a cold cache (e.g. a reload landing
@@ -22,12 +22,12 @@ export function WorktreeMissing({
   if (isPending) return null;
   if (isError) {
     return (
-      <DiffNotFound
+      <SubPageNotFound
         onBack={onBack}
         message="Couldn't load worktrees."
         action={{ label: "Retry", onClick: () => void refetch() }}
       />
     );
   }
-  return <DiffNotFound onBack={onBack} message={message} />;
+  return <SubPageNotFound onBack={onBack} message={message} />;
 }
