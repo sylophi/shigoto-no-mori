@@ -21,13 +21,6 @@ import { useOverlays } from "@/hooks/ui/useOverlays";
 import { notifyError, toast } from "@/lib/toast";
 import type { GroupMember } from "./ProjectGroupActions";
 
-// Why a device can't take the clone right now, said in a word beside
-// its name. The Devices page is where either is fixed.
-const BLOCK_LABEL: Record<NonNullable<DeviceTab["block"]>, string> = {
-  offline: "offline",
-  "no-grant": "read-only",
-};
-
 export function AddToDeviceSubmenu({
   name,
   members,
@@ -79,17 +72,14 @@ export function AddToDeviceSubmenu({
       <DropdownMenuSubTrigger>Add to device</DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
         {candidates.map((tab) => (
+          // A device that is away, or takes no commands from here, stays
+          // listed but inert, the way the Remove submenu keeps its own.
           <DropdownMenuItem
             key={tab.deviceId}
             disabled={tab.block !== undefined}
             onClick={() => void addTo(tab)}
           >
-            <span className="min-w-0 flex-1 truncate">{tab.label}</span>
-            {tab.block !== undefined && (
-              <span className="text-xs text-muted-foreground">
-                {BLOCK_LABEL[tab.block]}
-              </span>
-            )}
+            {tab.label}
           </DropdownMenuItem>
         ))}
       </DropdownMenuSubContent>
