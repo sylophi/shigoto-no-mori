@@ -30,7 +30,7 @@ zone below.
 | `app.shigomori.com` | Web client (Vercel) | Baked into desktop builds as `SM_ACCOUNT_WEB_ORIGIN` |
 | `hub.shigomori.com` | This Worker (Workers custom domain) | Baked into desktop builds as `SM_DEVICE_HUB_URL` |
 | `hub-dev.shigomori.com` | The dev Worker (Workers custom domain, `env.dev` in `wrangler.jsonc`) | Baked into dev builds as `SM_DEVICE_HUB_URL` |
-| `app-dev.shigomori.com` | Dev web client (Vercel branch domain for `v2`) | Baked into dev builds as `SM_ACCOUNT_WEB_ORIGIN`, which is an exact-match gate, so a per-deployment preview URL cannot serve |
+| `app-dev.shigomori.com` | Dev web client (Vercel) | Baked into dev builds as `SM_ACCOUNT_WEB_ORIGIN`, which is an exact-match gate, so a per-deployment preview URL cannot serve |
 | `sm-<hash>.shigomori.link` | One per device, written by this Worker | The `TUNNEL_*` secrets, never a build |
 | `clerk.shigomori.com` | Clerk production Frontend API | Clerk prod instance (DNS-only CNAME) and the `vercel.json` `script-src` |
 | `clkmail.shigomori.com` + DKIM | Clerk sign-in email | Clerk prod instance (DNS-only) |
