@@ -24,7 +24,11 @@ export default defineConfig(async () => {
         // idempotent however often it runs.
         wrangler: { configPath: "./wrangler.jsonc" },
         miniflare: {
-          bindings: { TEST_MIGRATIONS: migrations },
+          bindings: {
+            TEST_MIGRATIONS: migrations,
+            // Stands in for the wrangler secret, any string signs.
+            TICKET_SIGNING_KEY: "test-ticket-signing-key",
+          },
         },
       }),
     ],

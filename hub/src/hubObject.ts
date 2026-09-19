@@ -214,10 +214,11 @@ export class DeviceHub implements DurableObject {
   // `connect` for the TCP socket handler. The whole body is wrapped so
   // ANY throw (storage, acceptWebSocket, D1) becomes a rejected socket,
   // never a rejected fetch that would surface to the client as a 500.
-  // The client must always see CLOSE_TICKET_REJECTED. A forged account
-  // half still instantiates an empty hibernating DO that immediately
-  // rejects here, which is inherent to routing on the ticket's account
-  // half. Real rate-limiting is out of scope for this slice.
+  // The client must always see CLOSE_TICKET_REJECTED. The worker only
+  // forwards tickets it signed itself (src/ticket.ts), so a caller
+  // cannot instantiate an object by forging the account half: what
+  // reaches here unknown is a real ticket that expired, was replayed
+  // or was purged by a revoke.
   private async handleConnect(url: URL): Promise<Response> {
     try {
       const random = url.searchParams.get("random");
