@@ -2,6 +2,7 @@
 // and CORS. Runs inside workerd against real D1 and DO bindings, with
 // the stub Clerk verifier from helpers.ts.
 import { afterEach, describe, expect, it } from "vitest";
+import { env } from "cloudflare:test";
 import {
   DeviceListResponseSchema,
   EnrollResponseSchema,
@@ -302,6 +303,86 @@ describe("POST /tickets", () => {
       ticketRequest(`${DEVICE_CREDENTIAL_PREFIX}nope`),
     );
     expect(response.status).toBe(401);
+  });
+
+  it("refuses to mint unsigned tickets when the signing key is unset", async () => {
+    const { credential } = await enroll("acct-nokey", "dev-nokey");
+    const response = await call(ticketRequest(credential), {
+      ...env,
+      TICKET_SIGNING_KEY: undefined,
+    });
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error: "ticket signing is not configured",
+    });
+  });
+});
+
+// The limiters key on CF-Connecting-IP, which only the Cloudflare edge
+// sets, so every other spec (no such header) runs unlimited and each
+// rate limiting case spends its own made-up address.
+async function statusesFrom(ip: string, count: number, path: string) {
+  const statuses: number[] = [];
+  for (let i = 0; i < count; i++) {
+    // oxlint-disable-next-line no-await-in-loop -- the limiter counts in arrival order, so these have to land one at a time
+    const response = await call(
+      new Request(`${BASE}${path}`, {
+        headers: {
+          Authorization: `Bearer ${DEVICE_CREDENTIAL_PREFIX}nobody`,
+          "CF-Connecting-IP": ip,
+          Upgrade: "websocket",
+        },
+      }),
+    );
+    statuses.push(response.status);
+  }
+  return statuses;
+}
+
+describe("rate limiting", () => {
+  it("answers 429 with Retry-After once one address is over budget", async () => {
+    const statuses = await statusesFrom(
+      "203.0.113.10",
+      310,
+      HUB_ROUTES.listDevices.path,
+    );
+    expect(statuses.slice(0, 300).every((status) => status === 401)).toBe(true);
+    expect(statuses.at(-1)).toBe(429);
+    const response = await call(
+      new Request(`${BASE}${HUB_ROUTES.listDevices.path}`, {
+        headers: { "CF-Connecting-IP": "203.0.113.10" },
+      }),
+    );
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("60");
+    expect(await response.json()).toEqual({ error: "too many requests" });
+    // The 429 still carries CORS, or a browser client could not read it.
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    // One caller's budget is not another's.
+    const other = await statusesFrom(
+      "203.0.113.11",
+      1,
+      HUB_ROUTES.listDevices.path,
+    );
+    expect(other).toEqual([401]);
+  });
+
+  it("holds the credential-free routes to the tighter budget", async () => {
+    const statuses = await statusesFrom(
+      "203.0.113.20",
+      70,
+      HUB_ROUTES.connect.path,
+    );
+    expect(statuses.slice(0, 60).every((status) => status === 403)).toBe(true);
+    expect(statuses.at(-1)).toBe(429);
+    // Enroll draws on the same budget, already spent above.
+    const response = await call(
+      new Request(`${BASE}${HUB_ROUTES.enroll.path}`, {
+        method: HUB_ROUTES.enroll.method,
+        headers: { "CF-Connecting-IP": "203.0.113.20" },
+      }),
+    );
+    expect(response.status).toBe(429);
   });
 });
 

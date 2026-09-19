@@ -41,8 +41,7 @@ export function CreateOnSection({ project }: { project: Project }) {
       <div>
         <SectionHeading className="mb-1">Create on</SectionHeading>
         <p className="text-xs text-muted-foreground">
-          Where this project&apos;s + creates a worktree, from whichever device
-          it is clicked on. Applies right away.
+          The device where this project&apos;s + button creates new worktrees.
         </p>
       </div>
       <div
@@ -94,8 +93,8 @@ export function CreateOnSection({ project }: { project: Project }) {
       </div>
       {pickBlocked && fallback && (
         <p className="text-xs text-muted-foreground">
-          Until {pickedHolder.label} can take it, the + creates on{" "}
-          {fallback.label}.
+          {pickedHolder.label} isn&apos;t available right now, so + creates on{" "}
+          {fallback.label} until it is.
         </p>
       )}
     </section>

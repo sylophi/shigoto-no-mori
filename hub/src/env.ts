@@ -6,6 +6,18 @@ export interface Env {
   DEVICE_HUB: DurableObjectNamespace;
   // Wrangler secret, only read by the real Clerk verifier in index.ts.
   CLERK_SECRET_KEY: string;
+  // Wrangler secret keying the HMAC over connection tickets (see
+  // src/ticket.ts), any high-entropy string. Optional in the type
+  // because a deploy can miss it: minting then answers a 500 that
+  // names the missing secret instead of issuing unsigned tickets.
+  TICKET_SIGNING_KEY?: string;
+  // Per-IP rate limiters (wrangler.jsonc `ratelimits`). RATE_LIMIT
+  // covers the routes that do nothing without a device credential.
+  // RATE_LIMIT_OPEN is the tighter one for the two routes where a
+  // caller with no credential still makes the Worker do real work:
+  // enroll (Clerk verification) and connect (a Durable Object).
+  RATE_LIMIT: RateLimit;
+  RATE_LIMIT_OPEN: RateLimit;
   // Ticket TTL override in milliseconds, a test seam. Production
   // leaves it unset and gets TICKET_TTL_MS from hub/src/ticket.ts.
   TICKET_TTL_MS?: string;

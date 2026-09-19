@@ -31,7 +31,7 @@ import {
   type PullChoiceState,
   usePullChoice,
 } from "../flow/ignoreChoice";
-import { LeaveOutPicker } from "../flow/LeaveOutPicker";
+import { PullLeaveOut } from "../flow/PullLeaveOut";
 import { describeMirror } from "./mirrorStatus";
 
 const STEPS = ["Review", "Mirror", "Live"] as const;
@@ -69,7 +69,7 @@ export function MirrorDialog({
   });
   // Under the source scope: its ignored list walks the checkout over
   // the device link.
-  const pull = usePullChoice(project.id, worktree.id);
+  const pull = usePullChoice(project.id, worktree.id, sourceIdentity);
   const { stage, elapsed, progress, start, open } = usePullFlow({
     mutation: mirror,
     sourceWorktreeId: worktree.id,
@@ -204,10 +204,8 @@ function MirrorReview({
               />
             </section>
 
-            <LeaveOutPicker
-              value={pull.selection}
-              onChange={pull.setSelection}
-              ignored={pull.ignored}
+            <PullLeaveOut
+              pull={pull}
               worktree={{
                 projectId: project.id,
                 id: worktree.id,

@@ -13,7 +13,9 @@
 // Secrets never live here. CLERK_SECRET_KEY is a wrangler secret, read
 // by src/index.ts to verify Clerk session tokens at enrollment. Each
 // environment holds the key of ITS Clerk instance (development for
-// dev, production for prod).
+// dev, production for prod). TICKET_SIGNING_KEY is the other required
+// secret, any random string, keying the signature on connection
+// tickets (src/ticket.ts).
 //
 // Plain vars the owner may set (via `vars`, which `env.dev` must then
 // repeat since vars are not inherited, or the dashboard):
@@ -64,6 +66,25 @@
       "migrations_dir": "migrations",
     },
   ],
+  // Per-IP request budgets, counted per Cloudflare location (see
+  // rateLimited in src/worker.ts). RATE_LIMIT_OPEN guards enroll and
+  // connect, the two routes that do real work for a caller with no
+  // credential. Sized so a full account behind one NAT (16 devices all
+  // redialing after a network blip) stays well under it. A
+  // namespace_id is any integer unique within the Cloudflare account,
+  // and dev uses its own so the environments never share a counter.
+  "ratelimits": [
+    {
+      "name": "RATE_LIMIT",
+      "namespace_id": "1001",
+      "simple": { "limit": 300, "period": 60 },
+    },
+    {
+      "name": "RATE_LIMIT_OPEN",
+      "namespace_id": "1002",
+      "simple": { "limit": 60, "period": 60 },
+    },
+  ],
   "observability": {
     "enabled": true,
   },
@@ -96,6 +117,18 @@
           "database_name": "shigomori-hub-dev",
           "database_id": "e762aa88-9dc7-4a16-8698-a6c58029a061",
           "migrations_dir": "migrations",
+        },
+      ],
+      "ratelimits": [
+        {
+          "name": "RATE_LIMIT",
+          "namespace_id": "2001",
+          "simple": { "limit": 300, "period": 60 },
+        },
+        {
+          "name": "RATE_LIMIT_OPEN",
+          "namespace_id": "2002",
+          "simple": { "limit": 60, "period": 60 },
         },
       ],
     },

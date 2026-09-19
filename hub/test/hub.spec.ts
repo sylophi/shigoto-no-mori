@@ -2,7 +2,7 @@
 // nacks, supersede, revoke and cross-account isolation. Everything
 // runs against the real DeviceHub Durable Object under workerd.
 import { afterEach, describe, expect, it } from "vitest";
-import { env } from "cloudflare:test";
+import { env, listDurableObjectIds } from "cloudflare:test";
 import {
   CLOSE_DEVICE_REVOKED,
   CLOSE_SUPERSEDED,
@@ -33,6 +33,12 @@ import {
 
 afterEach(closeAllSockets);
 
+// A ticket signed like the worker signs one, for the specs that need a
+// well-formed ticket the hub never minted.
+async function signedTicket(accountId: string, random: string) {
+  return await buildTicket(env.TICKET_SIGNING_KEY ?? "", accountId, random);
+}
+
 describe("GET /connect", () => {
   it("accepts a fresh ticket and sends the presence list", async () => {
     const { socket } = await enrollAndConnect("acct-conn", "dev-conn");
@@ -53,7 +59,7 @@ describe("GET /connect", () => {
     // A 3000-character random fails parseTicket's exact-length shape
     // check, so it is rejected as plain HTTP before naming a DO and can
     // never become an oversized storage key that crashes the object.
-    const ticket = buildTicket("acct-huge", "x".repeat(3000));
+    const ticket = await signedTicket("acct-huge", "x".repeat(3000));
     const params = new URLSearchParams({ [CONNECT_TICKET_PARAM]: ticket });
     const response = await call(
       new Request(`${BASE}${HUB_ROUTES.connect.path}?${params}`, {
@@ -69,9 +75,44 @@ describe("GET /connect", () => {
     // never minted: the upgrade completes, then the DO rejects it with
     // the ticket close code.
     const socket = await openSocket(
-      buildTicket("acct-conn-unknown", "A".repeat(22)),
+      await signedTicket("acct-conn-unknown", "A".repeat(22)),
     );
     expect((await socket.closed).code).toBe(CLOSE_TICKET_REJECTED);
+  });
+
+  it("rejects a ticket this worker did not sign before naming a DO", async () => {
+    // GET /connect takes no credential, so the signature is all that
+    // stops a caller from instantiating a Durable Object per request
+    // under any name it likes. Both forgeries are well-formed: one
+    // signed with the wrong key, one with the account half swapped
+    // under a genuine signature.
+    const { credential } = await enroll("acct-forge-real", "dev-forge");
+    const { ticket: genuine } = await mintTicket(credential);
+    const [, random, signature] = genuine.split(".");
+    const swapped = `${(await signedTicket("acct-forged-swap", random)).split(".")[0]}.${random}.${signature}`;
+    const wrongKey = await buildTicket(
+      "not-the-key",
+      "acct-forged-key",
+      "A".repeat(22),
+    );
+    for (const ticket of [swapped, wrongKey]) {
+      const params = new URLSearchParams({ [CONNECT_TICKET_PARAM]: ticket });
+      // oxlint-disable-next-line no-await-in-loop -- two requests, and a failure should name which forgery got through
+      const response = await call(
+        new Request(`${BASE}${HUB_ROUTES.connect.path}?${params}`, {
+          headers: { Upgrade: "websocket" },
+        }),
+      );
+      expect(response.status).toBe(403);
+    }
+    const ids = await listDurableObjectIds(env.DEVICE_HUB);
+    for (const forged of ["acct-forged-swap", "acct-forged-key"]) {
+      const id = env.DEVICE_HUB.idFromName(forged);
+      expect(ids.some((made) => made.equals(id))).toBe(false);
+    }
+    // The genuine ticket was untouched by the forgeries around it.
+    const socket = await openSocket(genuine);
+    await socket.untilPresence(["dev-forge"]);
   });
 
   it("consumes a ticket on first use, a replay is rejected", async () => {

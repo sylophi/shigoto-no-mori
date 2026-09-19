@@ -6,12 +6,14 @@
 // them up when it is next online with another.
 import type { Project } from "@shared/schemas";
 import { CreateOnSection } from "./CreateOnSection";
+import { LeaveOutSection } from "./LeaveOutSection";
 
 export function ConfigureShared({ project }: { project: Project }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-6">
       <div className="flex max-w-3xl flex-col gap-10">
         <CreateOnSection project={project} />
+        <LeaveOutSection project={project} />
       </div>
     </div>
   );

@@ -7,11 +7,14 @@
 // associative and idempotent, so copies may exchange entries in any
 // order, any number of times, over any path, and still agree: there is
 // no sync session to complete and nothing to resume.
+import { z } from "zod";
+import { isSafeRelPath } from "@shared/git/gitPaths";
 import {
   MAX_SHARED_SETTING_ENTRIES,
   type SharedSettingEntry,
   type SharedSettingsDoc,
   type SharedSettingValue,
+  SharedSettingValueSchema,
 } from "@shared/schemas/sharedSettings";
 
 export const EMPTY_SHARED_SETTINGS: SharedSettingsDoc = { entries: {} };
@@ -24,7 +27,82 @@ export const sharedSettingKeys = {
   // (the merged header IS the identity group). The value is a device
   // id.
   quickCreateDevice: (identity: string) => `quickCreateDevice/${identity}`,
+  // What a mirror or transplant of the repo leaves out unless the
+  // dialog says otherwise, by repo identity. The value is the whole
+  // rule as one JSON string (leaveOutPresetValue): one entry a repo,
+  // like every other key, so the rule's paths never spend the
+  // document's entry budget, and a pick replaces the rule whole.
+  leaveOutPreset: (identity: string) => `leaveOutPreset/${identity}`,
 };
+
+// The preset: the base in force and each base's exceptions as
+// root-relative paths, both kept so a switch of base and back loses
+// nothing, like the dialog's own selection. `leftOut` hangs off
+// "everything" and `brought` off "gitignored".
+// A path is read as leniently as the entries are: one this build would
+// not hand the engine (it leaves the root, or is more than one line) is
+// dropped and the rest of the rule still holds. It came off another
+// device, and a bad one would fail every pull of the repo at Start.
+const PresetPathsSchema = z
+  .array(z.unknown())
+  .transform((paths) =>
+    paths.filter(
+      (path): path is string =>
+        typeof path === "string" &&
+        path.length > 0 &&
+        isSafeRelPath(path) &&
+        !/[\r\n]/.test(path),
+    ),
+  )
+  .default([]);
+const LeaveOutPresetSchema = z.object({
+  base: z.enum(["everything", "gitignored"]),
+  leftOut: PresetPathsSchema,
+  brought: PresetPathsSchema,
+});
+export type LeaveOutPreset = z.infer<typeof LeaveOutPresetSchema>;
+export type LeaveOutPresetBase = LeaveOutPreset["base"];
+
+// The dialogs' own default, nothing left out: what a repo with no
+// preset (or one this build cannot read) opens on.
+export const NO_LEAVE_OUT_PRESET: LeaveOutPreset = {
+  base: "everything",
+  leftOut: [],
+  brought: [],
+};
+
+export function parseLeaveOutPreset(value: string | undefined): LeaveOutPreset {
+  if (value === undefined) return NO_LEAVE_OUT_PRESET;
+  try {
+    const parsed = LeaveOutPresetSchema.safeParse(JSON.parse(value));
+    return parsed.success ? parsed.data : NO_LEAVE_OUT_PRESET;
+  } catch {
+    return NO_LEAVE_OUT_PRESET;
+  }
+}
+
+// The preset as its entry's value, or null when the rule in force
+// outgrows what a value holds. Paths sorted and empty lists left out,
+// so the same rule is the same string and re-picking it is not a
+// write. The other base's exceptions ride along only while there is
+// room: they are off screen, and must never be why a rule is refused.
+export function leaveOutPresetValue(preset: LeaveOutPreset): string | null {
+  const inForce = preset.base === "everything" ? "leftOut" : "brought";
+  const encode = (kept: ReadonlyArray<"leftOut" | "brought">) =>
+    JSON.stringify({
+      base: preset.base,
+      ...Object.fromEntries(
+        kept
+          .filter((list) => preset[list].length > 0)
+          .map((list) => [list, preset[list].toSorted()]),
+      ),
+    });
+  return (
+    [encode(["leftOut", "brought"]), encode([inForce])].find(
+      (value) => SharedSettingValueSchema.safeParse(value).success,
+    ) ?? null
+  );
+}
 
 // Whether write `a` outranks write `b`: the later stamp, then the
 // device id, an arbitrary order that is the same on every copy.

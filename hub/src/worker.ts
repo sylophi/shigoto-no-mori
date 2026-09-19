@@ -11,6 +11,12 @@
 // ever rides in the Authorization header. The only secret allowed in a
 // URL is the single-use connection ticket on GET /connect, because
 // websocket clients cannot set headers.
+//
+// Every route sits behind a per-IP rate limiter (see rateLimited).
+// It bounds what one caller can make the Worker do downstream (D1,
+// the Durable Objects, Clerk). It cannot stop the Worker invocation
+// itself from being billed, only a WAF rule at the zone can, see
+// README.md (Abuse limits).
 import {
   CONNECT_TICKET_PARAM,
   type DeviceInfo,
@@ -179,6 +185,39 @@ function toDeviceInfo(row: DeviceRow, online: Set<string>): DeviceInfo {
   };
 }
 
+// How long a limited caller is told to wait, the limiters' period in
+// wrangler.jsonc.
+const RATE_LIMIT_PERIOD_SECONDS = 60;
+
+// True when this caller is over its budget. Keyed on the client IP
+// because most callers here have no verified identity yet, and the
+// work worth bounding happens before one could be established.
+// Cloudflare sets CF-Connecting-IP on every request that arrives
+// through the edge and a client cannot strip it, so its absence means
+// the request did not come through the edge at all (the vitest suite,
+// a bare `wrangler dev`), where there is nothing to protect. A
+// limiter failure fails open: throttling is a cost guard, and it must
+// never be the reason a device cannot reach its hub.
+async function rateLimited(
+  request: Request,
+  limiter: RateLimit,
+): Promise<boolean> {
+  const ip = request.headers.get("CF-Connecting-IP");
+  if (ip === null) return false;
+  try {
+    const { success } = await limiter.limit({ key: ip });
+    return !success;
+  } catch {
+    return false;
+  }
+}
+
+function tooManyRequests(): Response {
+  const response = jsonError(429, { error: "too many requests" });
+  response.headers.set("Retry-After", String(RATE_LIMIT_PERIOD_SECONDS));
+  return response;
+}
+
 function ticketTtlMs(env: Env): number {
   const override = Number(env.TICKET_TTL_MS);
   return Number.isInteger(override) && override > 0 ? override : TICKET_TTL_MS;
@@ -198,6 +237,9 @@ export function createWorker(deps: HubDeps): HubWorker {
           request.method === HUB_ROUTES.connect.method &&
           url.pathname === HUB_ROUTES.connect.path
         ) {
+          if (await rateLimited(request, env.RATE_LIMIT_OPEN)) {
+            return tooManyRequests();
+          }
           return await connect(request, env, url);
         }
 
@@ -240,13 +282,17 @@ export function createWorker(deps: HubDeps): HubWorker {
     url: URL,
     ctx: ExecutionContext,
   ): Promise<Response> {
+    // A preflight does no work worth limiting, and a 429 on one would
+    // only surface in the browser as an opaque CORS failure.
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204 });
     }
-    if (
+    const isEnroll =
       request.method === HUB_ROUTES.enroll.method &&
-      url.pathname === HUB_ROUTES.enroll.path
-    ) {
+      url.pathname === HUB_ROUTES.enroll.path;
+    const limiter = isEnroll ? env.RATE_LIMIT_OPEN : env.RATE_LIMIT;
+    if (await rateLimited(request, limiter)) return tooManyRequests();
+    if (isEnroll) {
       return await enroll(request, env, ctx);
     }
     if (
@@ -523,6 +569,10 @@ export function createWorker(deps: HubDeps): HubWorker {
     const device = await authDevice(request, env);
     if (device === null)
       return jsonError(401, { error: "invalid device credential" });
+    const signingKey = env.TICKET_SIGNING_KEY ?? "";
+    if (signingKey === "") {
+      return jsonError(500, { error: "ticket signing is not configured" });
+    }
     const ttlMs = ticketTtlMs(env);
     let minted: MintTicketResponse;
     try {
@@ -541,15 +591,17 @@ export function createWorker(deps: HubDeps): HubWorker {
       return jsonError(502, { error: "ticket service unavailable" });
     }
     const body = {
-      ticket: buildTicket(device.account_id, minted.random),
+      ticket: await buildTicket(signingKey, device.account_id, minted.random),
       expiresInMs: ttlMs,
     } satisfies TicketResponse;
     return Response.json(body);
   }
 
   // The ticket's account half routes to the DO without a D1 hit. A
-  // structurally malformed ticket cannot even name a DO and is
-  // rejected here with plain HTTP. Everything past parsing (unknown,
+  // ticket that is structurally malformed or not signed by this Worker
+  // cannot even name a DO and is rejected here with plain HTTP, which
+  // is what keeps this unauthenticated route from instantiating
+  // objects of a caller's choosing. Everything past parsing (unknown,
   // expired, replayed) is the DO's call and surfaces as a close code
   // after the upgrade, see DeviceHub.rejectSocket.
   async function connect(request: Request, env: Env, url: URL) {
@@ -557,7 +609,11 @@ export function createWorker(deps: HubDeps): HubWorker {
       return jsonError(426, { error: "websocket upgrade required" });
     }
     const ticket = url.searchParams.get(CONNECT_TICKET_PARAM);
-    const parsed = ticket === null ? null : parseTicket(ticket);
+    const signingKey = env.TICKET_SIGNING_KEY ?? "";
+    const parsed =
+      ticket === null || signingKey === ""
+        ? null
+        : await parseTicket(signingKey, ticket);
     if (parsed === null) return jsonError(403, { error: "malformed ticket" });
     const doUrl = new URL(`${DO_ORIGIN}${INTERNAL_CONNECT_PATH}`);
     doUrl.searchParams.set("random", parsed.random);
