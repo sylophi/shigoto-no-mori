@@ -1,5 +1,5 @@
 // In-memory stand-in for @clerk/react and @clerk/electron/react,
-// aliased in by vite.lab.config.ts only. Exposes exactly the names the
+// aliased in by lab/vite.base.ts only. Exposes exactly the names the
 // renderer/web trees import, shaped so the lab boots signed-in: the
 // stub session's userId matches the fixture account id
 // (lab/fixtures.ts), so ClerkAccountSync sees "enrolled under this

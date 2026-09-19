@@ -1,8 +1,8 @@
-// The web-shell flavor of the UI lab (see vite.lab.config.ts): serves
+// The web-shell flavor of the UI lab (see vite.config.ts): serves
 // lab/web.html for every app path so the web router's browser history
 // works, on its own port beside the desktop lab.
 import { defineConfig, type Plugin } from "vite";
-import { labBaseConfig } from "./vite.lab.base";
+import { labBaseConfig } from "./vite.base";
 
 // Rewrite document requests to the web entry (vite's default SPA
 // fallback only serves index.html, which is the desktop lab's entry).

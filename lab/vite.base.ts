@@ -1,5 +1,5 @@
-// Everything the two UI lab flavors share (vite.lab.config.ts for the
-// desktop renderer tree, vite.weblab.config.ts for the web shell),
+// Everything the two UI lab flavors share (vite.config.ts for the
+// desktop renderer tree, vite.web.config.ts for the web shell),
 // parameterized by the two things that actually differ. Its own module
 // rather than a named export beside a default one, which vite's config
 // bundler warns about.
@@ -9,6 +9,8 @@ import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 import type { UserConfig } from "vite";
 
+const repoRoot = resolve(__dirname, "..");
+
 export function labBaseConfig(opts: {
   port: number;
   // The HTML entry vite pre-bundles deps from: the desktop lab's
@@ -16,16 +18,16 @@ export function labBaseConfig(opts: {
   entry: string;
 }): UserConfig {
   return {
-    root: resolve(__dirname, "lab"),
+    root: __dirname,
     // Reuse the web client's public dir for the CSP-safe theme boot
     // script the HTML shell references.
-    publicDir: resolve(__dirname, "web/public"),
+    publicDir: resolve(repoRoot, "web/public"),
     resolve: {
       alias: {
-        "@clerk/electron/react": resolve(__dirname, "lab/clerkStub.tsx"),
-        "@clerk/react": resolve(__dirname, "lab/clerkStub.tsx"),
-        "@": resolve(__dirname, "renderer"),
-        "@shared": resolve(__dirname, "shared"),
+        "@clerk/electron/react": resolve(__dirname, "clerkStub.tsx"),
+        "@clerk/react": resolve(__dirname, "clerkStub.tsx"),
+        "@": resolve(repoRoot, "renderer"),
+        "@shared": resolve(repoRoot, "shared"),
       },
     },
     server: { port: opts.port, strictPort: true },

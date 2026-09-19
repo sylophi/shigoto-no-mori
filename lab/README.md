@@ -8,10 +8,10 @@ nothing here ships.
 
 Two flavors:
 
-- **Desktop shell**: `pnpm exec vite --config vite.lab.config.ts`
+- **Desktop shell**: `pnpm exec vite --config lab/vite.config.ts`
   (port 5191). Mounts the desktop renderer (`renderer/App.tsx`), with
   the lab page posing as "Studio Mac" over a local forest.
-- **Web shell**: `pnpm exec vite --config vite.weblab.config.ts`
+- **Web shell**: `pnpm exec vite --config lab/vite.web.config.ts`
   (port 5192). Mounts the real web boot (`web/boot`). The page
   poses as an enrolled browser device, and every machine forest
   (Studio Mac included) is a peer.
