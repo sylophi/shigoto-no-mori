@@ -32,24 +32,6 @@ forwarding) on `renderer/lib/localHost.ts`; everything else is the same
 code in both shells. `shared/` is the contract layer every side
 compiles.
 
-Where things live:
-
-| Directory | What it is |
-| --- | --- |
-| `renderer/` | The UI both shells mount. `components/ui` holds primitives, `components/shared` the app-aware pieces several features use, and the other `components/` folders are one feature each. |
-| `main/` | The desktop binding, in two halves. `main/core/` is the Electron-free half (the account stores, the mirror and port-forward engines, the keychain reset, the rate limiters), which the node proofs in `test/` drive directly. The rest may bind Electron: `main/electron/` holds the adapters and `main/ipc/` puts the handlers on the wires. |
-| `web/` | The browser binding. |
-| `host/` | What a binding serves. No Electron, and no imports from `main/`. |
-| `shared/` | The contract layer: `ipc/` and `schemas/` are the `window.api` surface, `hub/` and `remote/` the device-to-device wire, `git/` the git rules each side (and the Go CLI) agrees on, and `packaging/` the node-only facts the build tooling and the runtime share. |
-| `cli/`, `file-sync/` | Go modules: the `sm` command and the worktree mirroring engine, both bundled with the app. |
-| `hub/` | The device hub, a Cloudflare Worker. A standalone pnpm project. |
-| `lab/` | The UI lab: the real UI over a fixture `window.api`, for posing and screenshots. Dev only. |
-| `scripts/` | Build, packaging and dev entry points. |
-| `test/` | The proofs the pre-commit hooks run, one standalone node script each. `pnpm test` lists them, `pnpm test <name>` runs one, and `lefthook.yml` says what each covers and which files trigger it. |
-
-`test/host-boundary.mjs` enforces the `host/`, `shared/`, `web/` and
-`main/core/` rules above on every commit.
-
 ## Agent skills
 
 `skills/` holds instruction snippets that teach coding agents the `sm`
