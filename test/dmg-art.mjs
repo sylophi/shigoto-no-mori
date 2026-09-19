@@ -42,9 +42,24 @@ const ART_FILES = [false, true].flatMap((prerelease) =>
 
 export const ART_STAMP_FILE = join(ROOT, DMG_ART_DIR, "inputs.sha256");
 
+// A design input with its comments removed, so rewording one (a moved
+// file's path, a renamed check) does not read as a design change and
+// send someone off to re-render identical pixels. Deliberately narrow,
+// per file type, and never `//` to end of line: the stylesheet carries
+// SVG data URIs whose xmlns holds a `//`, and dropping the rest of that
+// line would hide a real wallpaper edit.
+function withoutComments(file, src) {
+  if (file.endsWith(".css")) return src.replace(/\/\*[\s\S]*?\*\//g, "");
+  if (file.endsWith(".html")) return src.replace(/<!--[\s\S]*?-->/g, "");
+  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*\n/gm, "");
+}
+
 export function artInputsHash() {
   const hash = createHash("sha256");
-  for (const file of [...INPUT_FILES, ...ART_FILES]) {
+  for (const file of INPUT_FILES) {
+    hash.update(withoutComments(file, readFileSync(join(ROOT, file), "utf8")));
+  }
+  for (const file of ART_FILES) {
     hash.update(readFileSync(join(ROOT, file)));
   }
   const font = join(ROOT, FONT_PACKAGE);
