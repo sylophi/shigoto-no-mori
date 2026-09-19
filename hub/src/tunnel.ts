@@ -37,18 +37,27 @@ export function tunnelEnvOf(env: Env): TunnelEnv | null {
   return { apiToken, accountId, zoneId, domain };
 }
 
-// Deterministic per-device tunnel name: `sm-` plus the first 12 hex of
+// Deterministic per-device tunnel name: `sm-` plus leading hex of
 // SHA-256(accountId + ":" + deviceId). Stable across calls, so the
 // name is the create-or-reuse key and nothing new persists in D1. The
-// hash keeps account and device ids out of public DNS labels, and 48
-// bits is plenty against accidental collision within one owner's
-// device fleet.
+// hash keeps account and device ids out of public DNS labels.
+//
+// The width is a security bound. A name hit is reused, connector token
+// and all, so the name IS the ownership check, and a device picks its
+// own deviceId: at 128 bits nobody can search for one that lands on
+// another device's name, where the old 48 made that an offline search.
+const NAME_HEX = 32;
+// The old width, for teardown only: a device provisioned before the
+// widening still has a tunnel under it. Delete once none remain.
+const LEGACY_NAME_HEX = 12;
+
 export async function tunnelNameFor(
   accountId: string,
   deviceId: string,
+  hexWidth = NAME_HEX,
 ): Promise<string> {
   const digest = await sha256Hex(`${accountId}:${deviceId}`);
-  return `sm-${digest.slice(0, 12)}`;
+  return `sm-${digest.slice(0, hexWidth)}`;
 }
 
 const CF_API_BASE = "https://api.cloudflare.com/client/v4";
@@ -253,34 +262,38 @@ export async function teardownTunnel(
   accountId: string,
   deviceId: string,
 ): Promise<void> {
-  const name = await tunnelNameFor(accountId, deviceId);
-  const hostname = `${name}.${cf.domain}`;
-  await Promise.all([
-    (async () => {
-      const tunnel = await findTunnel(cf, cfFetch, name);
-      if (tunnel !== null) {
-        await cfCall(
-          cf,
-          cfFetch,
-          "DELETE",
-          `/accounts/${cf.accountId}/cfd_tunnel/${tunnel.id}?cascade=true`,
-        );
-      }
-    })().catch(() => {
-      // Best-effort, see above.
-    }),
-    (async () => {
-      const record = await findDnsRecord(cf, cfFetch, hostname);
-      if (record !== null) {
-        await cfCall(
-          cf,
-          cfFetch,
-          "DELETE",
-          `/zones/${cf.zoneId}/dns_records/${record.id}`,
-        );
-      }
-    })().catch(() => {
-      // Best-effort, see above.
-    }),
+  const names = await Promise.all([
+    tunnelNameFor(accountId, deviceId),
+    tunnelNameFor(accountId, deviceId, LEGACY_NAME_HEX),
   ]);
+  await Promise.all(
+    names.flatMap((name) => [
+      (async () => {
+        const tunnel = await findTunnel(cf, cfFetch, name);
+        if (tunnel !== null) {
+          await cfCall(
+            cf,
+            cfFetch,
+            "DELETE",
+            `/accounts/${cf.accountId}/cfd_tunnel/${tunnel.id}?cascade=true`,
+          );
+        }
+      })().catch(() => {
+        // Best-effort, see above.
+      }),
+      (async () => {
+        const record = await findDnsRecord(cf, cfFetch, `${name}.${cf.domain}`);
+        if (record !== null) {
+          await cfCall(
+            cf,
+            cfFetch,
+            "DELETE",
+            `/zones/${cf.zoneId}/dns_records/${record.id}`,
+          );
+        }
+      })().catch(() => {
+        // Best-effort, see above.
+      }),
+    ]),
+  );
 }

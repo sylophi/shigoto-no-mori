@@ -145,7 +145,8 @@ const wsServer = createWsServerBinding();
 // enrollment in refreshDirectHost below.
 const directTickets = createConnectTicketStore();
 const directWsServer = createWsServerBinding({
-  verifyTicket: (ticket, deviceId) => directTickets.consume(ticket, deviceId),
+  matchTicket: (deviceId, arrivedAs, matches) =>
+    directTickets.consumeProven(deviceId, arrivedAs, matches),
   isCommandGranted: acceptsPeerCommands,
 });
 
@@ -561,7 +562,7 @@ export const directHandlers = makeDirectHandlers({
     const current = directWsServer.status();
     return current.listening ? current.port : null;
   },
-  mintTickets: (peerDeviceId, count) => directTickets.mint(peerDeviceId, count),
+  mintTickets: (peerDeviceId, kinds) => directTickets.mint(peerDeviceId, kinds),
   isPeerOnline: (peerDeviceId) =>
     hubServer.status().onlineDeviceIds.includes(peerDeviceId),
   // The tunnel candidate, advertised only while

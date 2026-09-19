@@ -19,6 +19,7 @@
 // chunks (WIRE_CHUNK_BYTES below) for flow control, and so an uplink
 // req carrying a chunk stays under the inbound cap.
 import { z } from "zod";
+import { HANDSHAKE_NONCE_PATTERN } from "./proof";
 
 // One well-known default keeps the app listener and a client's connect
 // form aligned without either hardcoding it. High and unregistered so
@@ -138,16 +139,23 @@ export const CLOSE_GOING_AWAY = 1001;
 export const CLOSE_OVER_CAPACITY = 1013;
 
 // The first frame a client sends, required within the server's hello
-// timeout (10s default). `token` is the shared secret from the device
-// config -- step 4 replaces this auth wholesale with pairing, so
-// nothing else should grow to depend on its shape. deviceId and
-// appVersion identify the CLIENT, carried so the server can log or
-// gate version skew later without a protocol change.
+// timeout (10s default). deviceId and appVersion identify the CLIENT,
+// carried so the server can log or gate version skew later without a
+// protocol change.
+//
+// The credential comes in one of two shapes, fixed by how the listener
+// was constructed and never chosen by the frame: the legacy LAN wire
+// reads `token`, the direct data plane reads `nonce` and `proof`
+// (shared/ipc/socket/proof.ts). Both are optional so one schema serves
+// both wires, and each listener fails closed without its own.
 const HelloFrameSchema = z.object({
   t: z.literal("hello"),
-  token: z.string(),
+  token: z.string().optional(),
   deviceId: z.string(),
   appVersion: z.string(),
+  // The client's nonce, and its HMAC of both nonces under the ticket.
+  nonce: z.string().regex(HANDSHAKE_NONCE_PATTERN).optional(),
+  proof: z.string().optional(),
 });
 
 const ReqFrameSchema = z.object({
@@ -198,6 +206,16 @@ const WelcomeFrameSchema = z.object({
   t: z.literal("welcome"),
   deviceId: z.string(),
   appVersion: z.string(),
+  // The host's half of the mutual proof, direct data plane only. A
+  // proof-mode client refuses a welcome without it.
+  proof: z.string().optional(),
+});
+
+// Opens the direct data plane's handshake. Only the host's nonce, no
+// secret, so it goes to an unauthenticated socket.
+const ChallengeFrameSchema = z.object({
+  t: z.literal("challenge"),
+  nonce: z.string().regex(HANDSHAKE_NONCE_PATTERN),
 });
 
 const ResOkFrameSchema = z.object({
@@ -272,6 +290,7 @@ const PushFrameSchema = z.object({
 // in a nested discriminated union.
 export const ServerFrameSchema = z.discriminatedUnion("t", [
   WelcomeFrameSchema,
+  ChallengeFrameSchema,
   z.discriminatedUnion("ok", [ResOkFrameSchema, ResErrFrameSchema]),
   PushFrameSchema,
   PongFrameSchema,

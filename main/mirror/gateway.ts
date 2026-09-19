@@ -9,6 +9,12 @@
 // bridge.ts). Nothing here knows Mutagen's protocol: the preface is
 // the only line the gateway reads.
 //
+// Loopback keeps the listener off the network but not away from other
+// accounts on this machine, which could find the port and drive mirror
+// streams against peer devices. So the preface carries a token minted
+// at bind and handed to the daemon through its environment, never
+// argv, which every account can read from `ps`.
+//
 // Electron-free on purpose, like the port-forward engine: the mirror
 // check drives this exact gateway over a real direct wire.
 import { createServer, type Server, type Socket } from "node:net";
@@ -16,6 +22,8 @@ import { errorMessageOf } from "@shared/errors";
 import type { mirrorContract } from "@shared/ipc/modules/mirror";
 import type { Client } from "@shared/ipc/types";
 import { WorktreeIdSchema } from "@shared/schemas";
+import { mintHexId } from "@host/lib/idleRegistry";
+import { secretsMatch } from "@host/lib/util/secretCompare";
 import { MAX_CONNS_PER_DEVICE } from "../portForward/engine";
 import { MAX_CHANNELS_PER_CONNECTION } from "@shared/ipc/socket/channels";
 import {
@@ -25,12 +33,16 @@ import {
   type PeerChannels,
 } from "../portForward/bridge";
 
+// file-sync/engine.go reads this exact name.
+export const MIRROR_GATEWAY_TOKEN_ENV = "SM_MIRROR_GATEWAY_TOKEN";
+
 export type MirrorPeerApi = Pick<Client<typeof mirrorContract>, "openStream">;
 
 // The preface's shape (file-sync/engine.go mirrorPreface), reduced to
 // the fields the gateway acts on. Validated by hand rather than zod:
 // this is a loopback line from our own child.
 type Preface = {
+  token: string;
   deviceId: string;
   projectId: string;
   worktreeId: string;
@@ -66,6 +78,7 @@ function parsePreface(line: string): Preface {
     typeof record[key] === "string" ? (record[key] as string) : "";
   const localWorktreeId = field("localWorktreeId");
   const preface = {
+    token: field("token"),
     deviceId: field("deviceId"),
     projectId: field("projectId"),
     worktreeId: field("worktreeId"),
@@ -139,6 +152,8 @@ export function createMirrorGateway(deps: {
   const log = deps.log ?? ((message: string) => console.warn(message));
   let server: Server | null = null;
   let address: string | null = null;
+  // Minted per bind, so a token cannot outlive the listener it opened.
+  let token: string | null = null;
   const streams = new Set<BridgedConn>();
 
   function handleConnection(socket: Socket): void {
@@ -156,6 +171,12 @@ export function createMirrorGateway(deps: {
           preface = parsePreface(line);
         } catch (error) {
           socket.end(`error ${errorMessageOf(error)}\n`);
+          return;
+        }
+        if (!secretsMatch(preface.token, token ?? "")) {
+          // Nothing legitimate reaches here, so log it.
+          log("[mirror] gateway refused a connection with a bad token");
+          socket.end("error bad preface\n");
           return;
         }
         const api = deps.peerApiFor(preface.deviceId);
@@ -206,6 +227,7 @@ export function createMirrorGateway(deps: {
     listener.on("error", () => {});
     const port = await listenLoopback(listener, 0);
     server = listener;
+    token = mintHexId();
     address = `127.0.0.1:${port}`;
     return address;
   }
@@ -214,6 +236,7 @@ export function createMirrorGateway(deps: {
     server?.close();
     server = null;
     address = null;
+    token = null;
     for (const conn of streams) conn.destroy();
   }
 
@@ -221,6 +244,7 @@ export function createMirrorGateway(deps: {
     start,
     stop,
     address: () => address,
+    token: () => token,
     streamCount: () => streams.size,
   };
 }

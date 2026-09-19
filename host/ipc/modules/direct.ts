@@ -29,10 +29,16 @@ export type DirectHandlerDeps = {
   // The direct listener's bound port, or null while it is not running
   // (not enrolled, bind failed, or the platform cannot listen).
   listenerPort(): number | null;
-  // Mints one single-use connect ticket per candidate, all bound to
-  // the named peer, replacing that peer's previous pending set. Null
-  // means the store refused (global backstop cap).
-  mintTickets(peerDeviceId: string, count: number): string[] | null;
+  // Mints one single-use connect ticket per candidate, in the order the
+  // kinds are given, all bound to the named peer and replacing that
+  // peer's previous pending set. Each ticket carries the kind it was
+  // minted for, so it can only be redeemed on a connection that
+  // actually arrived that way. Null means the store refused (global
+  // backstop cap).
+  mintTickets(
+    peerDeviceId: string,
+    kinds: readonly DirectCandidateKind[],
+  ): string[] | null;
   // Whether the named peer is currently in the device hub's live
   // presence roster. connectInfo can arrive over an existing direct
   // socket too, and presence is what scopes the data plane (a revoked
@@ -99,7 +105,10 @@ export function makeDirectHandlers(
       // One ticket per candidate, so the dialer's concurrent race
       // burns at most one ticket per candidate that actually reached
       // us.
-      const tickets = deps.mintTickets(peerDeviceId, dialable.length);
+      const tickets = deps.mintTickets(
+        peerDeviceId,
+        dialable.map((candidate) => candidate.kind),
+      );
       if (tickets === null) return { available: false };
       return {
         available: true,

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isSafeRelPath } from "../gitPaths";
 import { WorktreeScopedPayloadSchema } from "./payloads";
 import { CommitHashSchema, WorktreeSchema } from "./worktree";
 
@@ -63,15 +64,14 @@ export function isUntracked(file: ChangedFile): boolean {
 }
 
 // Every path list travels into git argv after `--`, so a name that looks
-// like a flag is never one. NUL is the one byte a path can't carry.
-const PathListSchema = z
-  .array(
-    z
-      .string()
-      .min(1)
-      .refine((p) => !p.includes("\0")),
-  )
-  .min(1);
+// like a flag is never one. A remote peer sends whatever it likes, so
+// paths are held to the worktree here: `git diff --no-index` reads any
+// file it is pointed at.
+const RepoRelPathSchema = z.string().min(1).refine(isSafeRelPath, {
+  message: "Path must stay within the worktree",
+});
+
+const PathListSchema = z.array(RepoRelPathSchema).min(1);
 
 // The file whose diff to read: its path, with the old one first when
 // git records a rename, and whether it is untracked. The caller has the
@@ -94,7 +94,7 @@ export const CommitChangesPayloadSchema = WorktreeScopedPayloadSchema.extend({
   // Staged before the commit. When nothing is ticked the page sends
   // every path it listed, so "all of it" means what was on screen and
   // not whatever landed in the tree since.
-  stagePaths: z.array(z.string().min(1)).optional(),
+  stagePaths: z.array(RepoRelPathSchema).optional(),
   // Rewrite HEAD instead of adding a commit on top of it.
   amend: z.boolean().optional(),
 });

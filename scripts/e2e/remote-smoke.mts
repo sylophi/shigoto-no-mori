@@ -592,8 +592,12 @@ async function main(): Promise<string[]> {
         "a path under the mirror's ignores crossed to b",
       );
       // Stop: the session leaves a's list, the stream leaves b's, and
-      // a's copy goes with the session. The source stays.
-      await a.evaluate(`window.api.mirror.stop(${session2})`);
+      // a's copy goes with the session. The source stays. Forced,
+      // because the host refuses an unforced stop unless the git
+      // follower has reported "synced", and a session this young may
+      // not have reconciled yet: this check is about the teardown, not
+      // about the confirmation rule (host/ipc/modules/mirror.ts).
+      await a.evaluate(`window.api.mirror.stop(${session2}, true)`);
       await a.waitFor(
         "a's mirror session to be gone",
         `window.api.mirror.list().then((m) => !m.sessions.some((s) => s.session === ${session2}))`,

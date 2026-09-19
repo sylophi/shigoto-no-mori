@@ -11,6 +11,7 @@ import {
   TUNNEL_UNCONFIGURED_STATUS,
   TunnelProvisionResponseSchema,
 } from "../../shared/hub/protocol.ts";
+import { sha256Hex } from "../src/crypto.ts";
 import type { Env } from "../src/env.ts";
 import {
   call,
@@ -174,8 +175,8 @@ describe("POST /tunnel", () => {
     );
     expect(response.status).toBe(200);
     const body = TunnelProvisionResponseSchema.parse(await response.json());
-    // Deterministic name: sm- plus 12 hex under the configured domain.
-    expect(body.hostname).toMatch(/^sm-[0-9a-f]{12}\.sm\.example\.test$/);
+    // Deterministic name: sm- plus 32 hex under the configured domain.
+    expect(body.hostname).toMatch(/^sm-[0-9a-f]{32}\.sm\.example\.test$/);
     expect(stub.liveTunnels()).toHaveLength(1);
     const tunnel = stub.liveTunnels()[0];
     expect(body.hostname).toBe(`${tunnel.name}.sm.example.test`);
@@ -293,6 +294,47 @@ describe("tunnel teardown on revoke", () => {
     expect(stub.liveTunnels()).toHaveLength(1);
     const revoked = await call(
       revokeRequest(credential, "dev-tr-1"),
+      tunnelEnv(),
+      worker,
+    );
+    expect(revoked.status).toBe(204);
+    expect(stub.liveTunnels()).toHaveLength(0);
+    expect(stub.dnsRecords).toHaveLength(0);
+  });
+
+  it("revoking also sweeps a tunnel provisioned under the older, shorter name", async () => {
+    const stub = createCfStub();
+    const worker = makeTestWorker({ cfFetch: stub.cfFetch });
+    const accountId = "acct-tunnel-legacy";
+    const deviceId = "dev-tl-1";
+    const { credential } = await enroll(accountId, deviceId);
+    // What an older Worker left behind: the same device's tunnel under
+    // the 12-hex name, with its DNS record. Widening the name re-keys
+    // the device, so unless teardown knows the old width this pair
+    // outlives the device that owned it.
+    const digest = await sha256Hex(`${accountId}:${deviceId}`);
+    const legacyName = `sm-${digest.slice(0, 12)}`;
+    stub.tunnels.push({
+      id: "legacy-tunnel",
+      name: legacyName,
+      deleted: false,
+    });
+    stub.dnsRecords.push({
+      id: "legacy-dns",
+      type: "CNAME",
+      name: `${legacyName}.sm.example.test`,
+      content: "legacy-tunnel.cfargotunnel.com",
+      proxied: true,
+    });
+    // The device then provisions under the current name, so both exist.
+    expect(
+      (await call(provisionRequest(credential, 4321), tunnelEnv(), worker))
+        .status,
+    ).toBe(200);
+    expect(stub.liveTunnels()).toHaveLength(2);
+
+    const revoked = await call(
+      revokeRequest(credential, deviceId),
       tunnelEnv(),
       worker,
     );

@@ -379,7 +379,16 @@ func readJSONObject(path string) (map[string]json.RawMessage, error) {
 // already-encoded JSON, so the marker goes in encoded too.
 func writeJSONObject(path string, doc map[string]json.RawMessage) error {
 	doc["schemaVersion"] = schemaVersionRaw
-	return atomicWriteJSON(path, doc)
+	return atomicWriteJSONMode(path, doc, configFileMode(path))
+}
+
+// config.json carries socketHost.token, a bearer secret, so it is
+// 0600 like the app's own writer (host/lib/config/global.ts).
+func configFileMode(path string) os.FileMode {
+	if filepath.Base(path) == "config.json" {
+		return 0o600
+	}
+	return 0o644
 }
 
 func readStateFile() (map[string]json.RawMessage, error) {
@@ -739,6 +748,12 @@ func deleteWorktreeData(projectID, worktreeID string) {
 var tempCounter int
 
 func atomicWriteJSON(path string, value any) error {
+	return atomicWriteJSONMode(path, value, 0o644)
+}
+
+// The mode-carrying form. The temp file is always new, so the mode
+// applies and the rename carries it.
+func atomicWriteJSONMode(path string, value any, mode os.FileMode) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -748,7 +763,7 @@ func atomicWriteJSON(path string, value any) error {
 	}
 	tmp := fmt.Sprintf("%s.tmp.%d.%d.%d", path, os.Getpid(), time.Now().UnixMilli(), tempCounter)
 	tempCounter++
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o644); err != nil {
+	if err := os.WriteFile(tmp, append(data, '\n'), mode); err != nil {
 		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {

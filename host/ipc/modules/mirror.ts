@@ -17,12 +17,14 @@
 // the grant-gated wire, never taken from the caller.
 import type { z } from "zod";
 import {
+  MIRROR_STOP_UNCONFIRMED,
   type MirrorGitStatus,
   type MirrorServing,
   type MirrorSession,
   MirrorSessionSchema,
   type MirrorStartPayloadSchema,
   mirrorContract,
+  mirrorStopIsSafe,
   summarizeIgnores,
 } from "@shared/ipc/modules/mirror";
 import type { HandlerContext } from "@shared/ipc/transport";
@@ -217,17 +219,20 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
   // by design. A copy the delete cannot remove is reported with the
   // session already gone: the worktree page then offers the ordinary
   // delete.
-  stop: async ({ session }, ctx) => {
+  stop: async ({ session, force }, ctx) => {
     const daemon = engine();
     const raw = findSession(daemon, session);
     if (raw === undefined) {
       throw new Error("That mirror is no longer running.");
     }
-    // Commits here the peer never received would go with the copy:
-    // a diverged pair is the user's to resolve before the stop.
-    if (daemon.gitStatus(session)?.status === "diverged") {
+    // The copy goes with the stop. Refusing on "diverged" alone read
+    // as safe exactly when it cannot know: a paused session reports
+    // "off" and an unreachable peer "error", since divergence is
+    // computed against a live peer. So anything but "synced" refuses.
+    const git = daemon.gitStatus(session)?.status;
+    if (force !== true && !mirrorStopIsSafe(git)) {
       throw new Error(
-        "This copy has commits the other side does not. Resolve the divergence first, or delete the copy from its page to drop them.",
+        `${MIRROR_STOP_UNCONFIRMED} (${git ?? "starting"}), so it may hold commits that exist nowhere else. Resume or reconnect the mirror to let it catch up, or stop it anyway to discard them.`,
       );
     }
     await daemon.terminate(session);

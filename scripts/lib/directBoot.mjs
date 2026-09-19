@@ -26,7 +26,8 @@ export async function startDirectListener(track, opts = {}) {
   const tickets = createConnectTicketStore(opts.ticketOpts);
   let accepts = false;
   const binding = createWsServerBinding({
-    verifyTicket: (ticket, deviceId) => tickets.consume(ticket, deviceId),
+    matchTicket: (deviceId, arrivedAs, matches) =>
+      tickets.consumeProven(deviceId, arrivedAs, matches),
     isCommandGranted: () => accepts,
   });
   opts.registerHandlers?.(binding);
@@ -68,8 +69,8 @@ export async function bootBrokeredPair(stub, track, listener, opts = {}) {
         broker: brokerHandlerFor(
           makeDirectHandlers({
             listenerPort: listener.listenerPort,
-            mintTickets: (peerDeviceId, count) => {
-              const tickets = listener.tickets.mint(peerDeviceId, count);
+            mintTickets: (peerDeviceId, kinds) => {
+              const tickets = listener.tickets.mint(peerDeviceId, kinds);
               // Observation seam for the mint-alignment assertions.
               if (tickets !== null) opts.onMinted?.(tickets);
               return tickets;
