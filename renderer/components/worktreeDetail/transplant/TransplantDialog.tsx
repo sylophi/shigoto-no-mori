@@ -58,7 +58,7 @@ export function TransplantDialog({
   // The leave-out rule and the setup switch, the mirror's pair. Under
   // the source scope: its ignored list walks the checkout over the
   // device link.
-  const choice = usePullChoice(project.id, worktree.id);
+  const choice = usePullChoice(project.id, worktree.id, sourceIdentity);
   const mode = modeOf(choice.selection);
   const bringsFiles = pullBringsIgnoredFiles(mode);
   const { stage, elapsed, progress, start, open } = usePullFlow({

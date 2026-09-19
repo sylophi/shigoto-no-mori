@@ -46,6 +46,7 @@ export function LeaveOutPicker({
   ignored,
   worktree,
   disabled = false,
+  note,
   children,
 }: {
   value: IgnoreSelection;
@@ -55,9 +56,14 @@ export function LeaveOutPicker({
     "data" | "isPending" | "isError"
   >;
   // The worktree the custom picker browses, in the surrounding scope.
-  worktree: { projectId: string; id: string; path: string };
+  // Without one the rule still shows and its rows still come off, but
+  // there is nothing to pick a new path from.
+  worktree: { projectId: string; id: string; path: string } | undefined;
   // Read-only: the rule shows, nothing changes it.
   disabled?: boolean;
+  // What the rule is for, under the heading, where the surrounding
+  // page does not already say (the Configure page's preset).
+  note?: React.ReactNode;
   // Trailing content under the rule (the manage dialog's apply row).
   children?: React.ReactNode;
 }) {
@@ -89,6 +95,9 @@ export function LeaveOutPicker({
           optionClassName="px-2.5 py-0.5 text-[11px]"
         />
       </div>
+      {note !== undefined && (
+        <p className="text-xs text-muted-foreground">{note}</p>
+      )}
       {bringing && <IgnoredList ignored={ignored} brought={excepted} />}
       {(chosen.length > 0 || !disabled) && (
         <div className="space-y-1.5">
@@ -103,7 +112,7 @@ export function LeaveOutPicker({
               onRemove={() => toggle(path)}
             />
           ))}
-          {!disabled && (
+          {!disabled && worktree !== undefined && (
             <Button
               variant="ghost"
               size="sm"
@@ -111,13 +120,13 @@ export function LeaveOutPicker({
               onClick={() => setPicking(true)}
             >
               <Plus />
-              Add exception
+              {copy.add}
             </Button>
           )}
         </div>
       )}
       {children}
-      {picking && (
+      {picking && worktree !== undefined && (
         <PathPickerModal
           rootPath={worktree.path}
           useListing={(relative) =>
@@ -171,7 +180,7 @@ function Trailing({
     return (
       <span
         className="px-2 text-[11px] text-muted-foreground/70"
-        title="Bring the ignored folder it sits in. A folder that stays put is not opened for one file."
+        title="This is inside an ignored folder. Bring the whole folder instead."
       >
         in ignored folder
       </span>
@@ -181,7 +190,7 @@ function Trailing({
     return (
       <span
         className="px-2 text-[11px] text-muted-foreground/70"
-        title="Tracked by git, so it always crosses. Only ignored files and folders take an exception."
+        title="Git tracks this, so it is always copied. Only ignored files and folders can be picked."
       >
         tracked
       </span>
@@ -191,7 +200,7 @@ function Trailing({
     return (
       <span
         className="px-2 text-[11px] text-muted-foreground/70"
-        title={`A rule brings ${BRING_PATHS_LIMIT} paths at most. Bring a folder higher up, or remove one.`}
+        title={`You can bring up to ${BRING_PATHS_LIMIT} paths. Bring a parent folder instead, or remove one.`}
       >
         limit reached
       </span>
@@ -229,10 +238,15 @@ function IgnoredList({
   if (ignored.isError) {
     return <p className={CARD_NOTE}>Couldn't list the ignored files.</p>;
   }
-  const paths = (ignored.data?.paths ?? []).filter(
-    (path) => !brought.has(normalizeRelPath(path)),
-  );
-  const total = Math.max(0, (ignored.data?.total ?? 0) - brought.size);
+  const listed = ignored.data?.paths ?? [];
+  const paths = listed.filter((path) => !brought.has(normalizeRelPath(path)));
+  // How many of the brought paths are ignored here. A path picked in
+  // this worktree always is, but a project preset's may not be, so
+  // they are counted off the list while it is whole. Past the cap the
+  // list cannot say, and every brought path is taken to be one.
+  const allListed = (ignored.data?.total ?? 0) <= listed.length;
+  const broughtHere = allListed ? listed.length - paths.length : brought.size;
+  const total = Math.max(0, (ignored.data?.total ?? 0) - broughtHere);
   const rules = ignored.data?.patterns.length ?? 0;
   // The rules that fit: all the cap holds, less what the brought paths
   // take. At the cap itself the wire may have cut the list already.
@@ -251,9 +265,9 @@ function IgnoredList({
     <>
       {total === 0 ? (
         <p className={CARD_NOTE}>
-          {brought.size > 0
-            ? "Every ignored path there is brought."
-            : "Nothing ignored yet."}
+          {broughtHere > 0
+            ? "Every ignored path is being brought."
+            : "No ignored files here yet."}
         </p>
       ) : (
         <ul

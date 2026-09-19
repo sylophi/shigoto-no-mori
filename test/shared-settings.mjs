@@ -10,7 +10,9 @@
 // device whose clock runs behind, a cleared setting stays cleared
 // against a copy still holding the old value, an entry this build has
 // never heard of is carried and forwarded while one it cannot hold is
-// left out without costing the rest, a full copy refuses a new key out
+// left out without costing the rest, a project's leave-out preset is
+// one entry that reads back as picked and falls back when unreadable,
+// a full copy refuses a new key out
 // loud, the host copy persists in
 // registry.json beside the keys the CLI owns and announces only real
 // changes, the browser copy does the same off localStorage, and three
@@ -27,7 +29,10 @@ import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
   exchangeSharedSettings,
+  leaveOutPresetValue,
   mergeSharedSettings,
+  NO_LEAVE_OUT_PRESET,
+  parseLeaveOutPreset,
   sharedSettingKeys,
   sharedSettingsAhead,
   sharedStringSetting,
@@ -62,6 +67,10 @@ function webBridge() {
     fetchImpl: () => Promise.reject(new TypeError("fetch is not stubbed")),
   });
 }
+
+// Paths enough to crowd a leave-out preset's one value.
+const many = (count) =>
+  Array.from({ length: count }, (_, at) => `packages/app-${at}/dist`);
 
 // The exchange the renderer runs on a session landing
 // (renderer/lib/remote/sharedSettingsSync.ts), over two bridges.
@@ -139,6 +148,70 @@ async function main() {
       assert.equal(merged, cleared);
       assert.equal(sharedStringSetting(merged, KEY), undefined);
       assert.equal(merged.entries[KEY].value, null);
+    },
+  );
+
+  await check(
+    "leave-out preset: one entry a repo, nothing left out until picked, unreadable values fall back, a rule too long for a value is refused",
+    () => {
+      const key = sharedSettingKeys.leaveOutPreset("github.com/acme/widgets");
+      const read = (doc) => parseLeaveOutPreset(sharedStringSetting(doc, key));
+      assert.deepEqual(read(EMPTY_SHARED_SETTINGS), NO_LEAVE_OUT_PRESET);
+
+      const preset = {
+        base: "gitignored",
+        leftOut: [],
+        brought: ["public/icons", ".env.local"],
+      };
+      const value = leaveOutPresetValue(preset);
+      const doc = withSharedSetting(
+        EMPTY_SHARED_SETTINGS,
+        key,
+        value,
+        KIWI,
+        10,
+      );
+      assert.deepEqual(Object.keys(doc.entries), [key]);
+      assert.deepEqual(read(doc), {
+        ...preset,
+        brought: [".env.local", "public/icons"],
+      });
+      // The same rule is the same value, whatever order it was picked
+      // in, so saving it again is not a write.
+      const again = leaveOutPresetValue({
+        ...preset,
+        brought: [".env.local", "public/icons"],
+      });
+      assert.equal(withSharedSetting(doc, key, again, LYCHEE, 20), doc);
+
+      for (const bad of ["not json", "{}", '{"base":"sometimes"}', "3"]) {
+        assert.deepEqual(parseLeaveOutPreset(bad), NO_LEAVE_OUT_PRESET);
+      }
+      // A path the engine would refuse is dropped, the rest holds.
+      assert.deepEqual(
+        parseLeaveOutPreset(
+          JSON.stringify({
+            base: "gitignored",
+            brought: ["dist", "../up", "/abs", "two\nlines", "", 7],
+          }),
+        ).brought,
+        ["dist"],
+      );
+
+      // The other base's exceptions are off screen, so they go before
+      // the rule in force is refused. Only that rule outgrowing a value
+      // refuses the save.
+      const crowded = leaveOutPresetValue({
+        base: "gitignored",
+        leftOut: many(8),
+        brought: many(6),
+      });
+      assert.deepEqual(parseLeaveOutPreset(crowded), {
+        base: "gitignored",
+        leftOut: [],
+        brought: many(6).toSorted(),
+      });
+      assert.equal(leaveOutPresetValue({ ...preset, brought: many(40) }), null);
     },
   );
 
