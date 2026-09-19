@@ -47,24 +47,32 @@ export function invalidateLanded(
   });
 }
 
-export function usePullWorktree({
-  worktree,
-  sourceProjectId,
-  sourceIdentity,
-  localProjectId,
-}: {
+// Where a pull-shaped landing comes from and where it lands.
+export type PullSource = {
   worktree: Worktree;
   sourceProjectId: string;
   sourceIdentity: string;
   localProjectId: string;
-}) {
+};
+
+// The mirror start's payload: the pull's with the leave-out rule
+// required, which a PullChoice always carries.
+type LandingPayload = Parameters<typeof window.api.mirror.start>[0];
+
+// The mutation the pull and the mirror start share: the same payload
+// built from the scope and the source, handed to whichever verb lands
+// it. The leave-out rule rides along (the host brings the ignored files
+// it admits over once the worktree is here). Success only invalidates:
+// the caller shows the outcome, so the conclusion is told once.
+export function useLandingMutation<Result>(
+  { worktree, sourceProjectId, sourceIdentity, localProjectId }: PullSource,
+  land: (payload: LandingPayload) => Promise<Result>,
+) {
   const { deviceId } = useHostScope();
   const queryClient = useQueryClient();
   return useMutation({
-    // The leave-out rule rides along: the host brings the ignored
-    // files it admits over once the worktree is here.
-    mutationFn: (choice: PullChoice): Promise<SyncPullWorktreeResult> =>
-      window.api.sync.pullWorktree({
+    mutationFn: (choice: PullChoice) =>
+      land({
         sourceDeviceId: deviceId,
         sourceProjectId,
         sourceWorktreeId: worktree.id,
@@ -73,11 +81,17 @@ export function usePullWorktree({
         worktreeName: pullWorktreeName(worktree),
         ...choice,
       }),
-    // The invalidations only: the caller shows the outcome, so the
-    // conclusion is told once.
     onSuccess: () => invalidateLanded(queryClient, localProjectId),
     meta: { silentError: true },
   });
+}
+
+export function usePullWorktree(source: PullSource) {
+  return useLandingMutation(
+    source,
+    (payload): Promise<SyncPullWorktreeResult> =>
+      window.api.sync.pullWorktree(payload),
+  );
 }
 
 // The transplant's second half: tear the source worktree down on the
