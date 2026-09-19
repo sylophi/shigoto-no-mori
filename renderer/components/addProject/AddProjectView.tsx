@@ -24,7 +24,8 @@ import { worktreesQueryOptions } from "@/hooks/worktrees/useWorktrees";
 import type { Worktree } from "@shared/schemas";
 import { notifyError } from "@/lib/toast";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { useNavigate } from "@tanstack/react-router";
+import { useProjectNav } from "@/hooks/projects/useProjectNav";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ITEM_CLASS } from "@/components/ui/cmdk-classes";
 import { ScanningPanel } from "./ScanningPanel";
@@ -84,18 +85,18 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
   // ensureQueryData reuses a warm cache entry (e.g. the always-mounted
   // sidebar already listed this project mid-bulk-add) over re-listing.
   // Best-effort: if listing fails, the project is added either way.
-  // Route choice built outside the try below: React Compiler can't
+  // Both navs follow the scope, so a project added on a peer opens
+  // under that peer's /devices twin.
+  // Route choice made outside the try below: React Compiler can't
   // lower a conditional inside one, and bails out the whole component.
-  const navigate = useNavigate();
+  const worktreeNav = useWorktreeNav();
+  const projectNav = useProjectNav();
   const selectPrimary = async (projectId: string) => {
     try {
       const worktrees = await queryClient.ensureQueryData(
         worktreesQueryOptions(projectId, scope),
       );
-      // A bare repo registers fine but has no primary checkout, so
-      // offer worktree creation instead (same fallback as ProjectLauncher).
-      const primary = worktrees.find((w) => w.isPrimary);
-      await navigate(buildOpenTarget(projectId, primary));
+      openProject(worktreeNav, projectNav, projectId, worktrees);
     } catch {
       // Stay wherever we are. The add itself already succeeded.
     }
@@ -136,7 +137,7 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
     setScanRoot(browseDir);
     setStage("scanning");
     try {
-      const results = await window.api.fs.scanForGitRepos(browseDir);
+      const results = await scope.api.fs.scanForGitRepos(browseDir);
       const existingPaths = new Set(existingProjects.map((p) => p.path));
       const newOnly = results.filter((p) => !existingPaths.has(p));
       setScanResults(newOnly);
@@ -406,21 +407,28 @@ export function AddProjectView({ onClose }: AddProjectViewProps) {
             </KbdGroup>
           )}
         </div>
-        <ChipButton onClick={() => void pickViaDialog()}>
-          <FileManagerIcon />
-          Open in Finder
-        </ChipButton>
+        {/* The native dialog is this machine's, so it can't pick a
+            folder on a peer's disk. */}
+        {!scope.remote && (
+          <ChipButton onClick={() => void pickViaDialog()}>
+            <FileManagerIcon />
+            Open in Finder
+          </ChipButton>
+        )}
       </div>
     </Command>
   );
 }
 
-function buildOpenTarget(projectId: string, primary: Worktree | undefined) {
-  if (!primary) {
-    return { to: "/projects/$projectId/new", params: { projectId } } as const;
-  }
-  return {
-    to: "/projects/$projectId/worktrees/$worktreeId",
-    params: { projectId, worktreeId: primary.id },
-  } as const;
+function openProject(
+  worktreeNav: ReturnType<typeof useWorktreeNav>,
+  projectNav: ReturnType<typeof useProjectNav>,
+  projectId: string,
+  worktrees: readonly Worktree[],
+) {
+  // A bare repo registers fine but has no primary checkout, so offer
+  // worktree creation instead (same fallback as ProjectLauncher).
+  const primary = worktrees.find((w) => w.isPrimary);
+  if (primary) worktreeNav.toWorktree(projectId, primary.id);
+  else projectNav.toProjectPage("new", projectId);
 }

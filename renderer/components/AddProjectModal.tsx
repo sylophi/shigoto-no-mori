@@ -1,6 +1,14 @@
 import { useEffect } from "react";
+import { EmptyPanel } from "@/components/remote/EmptyPanel";
+import {
+  DeviceTabBar,
+  DeviceTabPanel,
+  useDeviceTabs,
+  usePickedDevice,
+} from "@/components/shared/DeviceTabs";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useOverlays } from "@/hooks/ui/useOverlays";
+import { localDeviceId } from "@/lib/queryKeys";
 import { AddProjectView } from "./addProject/AddProjectView";
 
 // Standalone host for the add-project flow (File → Add project…, ⌘N, and
@@ -10,17 +18,55 @@ export function AddProjectModal() {
   const { addProjectOpen, setAddProjectOpen, openAddProject } = useOverlays();
 
   useEffect(
-    () => window.api.projectLauncher.onAddProject(openAddProject),
+    () => window.api.projectLauncher.onAddProject(() => openAddProject()),
     [openAddProject],
   );
 
   if (!addProjectOpen) return null;
+  return <AddProjectDialog onClose={() => setAddProjectOpen(false)} />;
+}
+
+// The flow under a device pick: the same browse, scan and add, run on
+// whichever machine the tab names. The view reads everything off the
+// scope the panel mounts it under, so a peer's disk browses like this
+// one's. The bar shows only once there is a choice to make.
+function AddProjectDialog({ onClose }: { onClose: () => void }) {
+  const { addProjectDeviceId } = useOverlays();
+  // A browser on the account is a device too, but registers no projects.
+  const tabs = useDeviceTabs().filter((tab) => tab.hostsProjects);
+  const [picked, pick] = usePickedDevice(
+    tabs,
+    addProjectDeviceId ?? localDeviceId,
+  );
 
   // AddProjectView owns its own Escape handling (cancels the scan stage,
   // or closes from the browse stage), so the shell must not also close.
+  // A tab that can't show the view has nothing to take the key.
+  const viewOwnsEscape = picked !== undefined && picked.block === undefined;
+
   return (
-    <ModalShell onClose={() => setAddProjectOpen(false)} closeOnEscape={false}>
-      <AddProjectView onClose={() => setAddProjectOpen(false)} />
+    <ModalShell onClose={onClose} closeOnEscape={!viewOwnsEscape}>
+      {tabs.length > 1 && picked && (
+        <div className="border-b border-border py-2">
+          <DeviceTabBar
+            tabs={tabs}
+            selectedId={picked.deviceId}
+            onSelect={pick}
+            className="px-3 phone:px-3"
+          />
+        </div>
+      )}
+      {picked ? (
+        <DeviceTabPanel tab={picked} subject="its folder listing">
+          <AddProjectView onClose={onClose} />
+        </DeviceTabPanel>
+      ) : (
+        <div className="p-6">
+          <EmptyPanel>
+            No device that holds projects is signed in to this account.
+          </EmptyPanel>
+        </div>
+      )}
     </ModalShell>
   );
 }

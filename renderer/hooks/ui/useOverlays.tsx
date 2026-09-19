@@ -6,7 +6,10 @@ interface OverlaysState {
   toggleLauncher: () => void;
   addProjectOpen: boolean;
   setAddProjectOpen: (open: boolean) => void;
-  openAddProject: () => void;
+  // The device the dialog opens on. Undefined opens on this one (or,
+  // on a hostless client, the first device that answers).
+  addProjectDeviceId: string | undefined;
+  openAddProject: (deviceId?: string) => void;
 }
 
 const OverlaysContext = createContext<OverlaysState | null>(null);
@@ -14,6 +17,9 @@ const OverlaysContext = createContext<OverlaysState | null>(null);
 export function OverlaysProvider({ children }: { children: ReactNode }) {
   const [launcherOpen, setLauncherOpen] = useState(false);
   const [addProjectOpen, setAddProjectOpen] = useState(false);
+  const [addProjectDeviceId, setAddProjectDeviceId] = useState<
+    string | undefined
+  >();
 
   const value: OverlaysState = {
     launcherOpen,
@@ -21,10 +27,12 @@ export function OverlaysProvider({ children }: { children: ReactNode }) {
     toggleLauncher: () => setLauncherOpen((v) => !v),
     addProjectOpen,
     setAddProjectOpen,
+    addProjectDeviceId,
     // Closing the launcher first keeps ⌘N sane while it's open. The
     // modal shouldn't stack on top of the full-screen overlay.
-    openAddProject: () => {
+    openAddProject: (deviceId) => {
       setLauncherOpen(false);
+      setAddProjectDeviceId(deviceId);
       setAddProjectOpen(true);
     },
   };

@@ -51,7 +51,7 @@ export function EmptyState() {
 
   if (projectsLoading) return null;
   if (projects.length === 0) {
-    return <FirstRun onAdd={openAddProject} />;
+    return <FirstRun onAdd={() => openAddProject()} />;
   }
   // Suppress BetweenWorktrees while a redirect is pending or still resolvable.
   if (redirectProjectId || waitingForQuery) return null;
