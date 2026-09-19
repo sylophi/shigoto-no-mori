@@ -136,10 +136,13 @@ export function DeviceTabBar({
   tabs,
   selectedId,
   onSelect,
+  className,
 }: {
   tabs: readonly DeviceTab[];
   selectedId: string;
   onSelect: (deviceId: string) => void;
+  // Overrides the page inset for a bar that sits in a dialog instead.
+  className?: string;
 }) {
   const { listRef, onKeyDown } = useRovingPick({
     ids: tabs.map((tab) => tab.deviceId),
@@ -156,7 +159,10 @@ export function DeviceTabBar({
       // The page inset as padding rather than the header's, so a long
       // row scrolls out under the header's edge (which cancels the
       // inset with a matching negative margin) instead of clipping.
-      className="flex [scrollbar-width:none] gap-1.5 overflow-x-auto px-6 phone:px-4"
+      className={cn(
+        "flex [scrollbar-width:none] gap-1.5 overflow-x-auto px-6 phone:px-4",
+        className,
+      )}
     >
       {tabs.map((tab) => {
         const selected = tab.deviceId === selectedId;

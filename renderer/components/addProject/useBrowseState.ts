@@ -8,6 +8,10 @@ import {
 } from "@/lib/projectPaths";
 import { useFsIsGitRepo } from "@/hooks/fs/useFsIsGitRepo";
 import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";
+import { useDebouncedValue } from "@/hooks/ui/useDebouncedValue";
+
+// How long a typed name holds still before it is worth asking about.
+const PROBE_PAUSE_MS = 250;
 
 interface UseBrowseStateOptions {
   query: string;
@@ -42,10 +46,35 @@ export function useBrowseState(opts: UseBrowseStateOptions) {
   // existing git repo we offer "Add"; otherwise we offer "Scan for git
   // repos" so the same primary slot doubles as the discovery path.
   const submitTarget = normalizeForSubmit(query);
-  const { data: targetIsGitRepo = false } = useFsIsGitRepo(
-    submitTarget,
-    enabled,
+  // Whether it is a repo. A name typed inside the listed folder is
+  // often answered by the listing already in hand. Only a yes is taken
+  // from it: the listing leaves out dotfolders and symlinks, and knows
+  // a repo by its `.git` alone, where the probe also knows a bare one.
+  // Everything else is probed, and the probe's key moves with every
+  // keystroke, each a round trip under a peer's scope, so a name still
+  // being typed waits for a pause. A path ending in a slash changes per
+  // folder entered, not per key, and is asked at once: ↩ right after
+  // walking into a repo has to mean "add" already.
+  const typingLeaf = !hasTrailingSlash(query);
+  const listedAsRepo =
+    typingLeaf &&
+    (listing?.entries.some(
+      (entry) => entry.name === leafFilter && entry.isGitRepo,
+    ) ??
+      false);
+  const pausedTarget = useDebouncedValue(submitTarget, PROBE_PAUSE_MS);
+  const probeTarget = typingLeaf ? pausedTarget : submitTarget;
+  const { data: probedIsGitRepo = false, isLoading: probing } = useFsIsGitRepo(
+    probeTarget,
+    enabled && !listedAsRepo,
   );
+  const targetIsGitRepo =
+    listedAsRepo || (probeTarget === submitTarget && probedIsGitRepo);
+  // False while the answer above is a guess: the pause hasn't run out,
+  // or the probe is still out. ↩ must not read "not a repo" off that,
+  // or a path pasted and entered at once scans its parent instead.
+  const targetSettled =
+    listedAsRepo || (probeTarget === submitTarget && !probing);
 
   const browseTo = (name: string) => {
     setQuery(appendBrowsePathSegment(query, name));
@@ -69,6 +98,7 @@ export function useBrowseState(opts: UseBrowseStateOptions) {
     filtered,
     submitTarget,
     targetIsGitRepo,
+    targetSettled,
     browseTo,
     browseUp,
   };

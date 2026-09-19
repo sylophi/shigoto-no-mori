@@ -7,7 +7,11 @@
 // webm; set FFMPEG to an ffmpeg binary to also get an mp4 beside it.
 // Each take: { file, query, width?, height?, waitMs?, actions? }
 //   actions: [{ click: "playwright locator" } | { press: "Key" }
+//            | { type: "text" } | { paste: "text" }
 //            | { waitFor: "visible text" } | { waitMs: n } | { evaluate: "js" }]
+// `type` keys the text into whatever has focus at a readable pace, and
+// `paste` replaces the focused input's text in one go, the way a
+// clipboard would (a URL typed out key by key is a long watch).
 // A click glides a visible cursor to the target first, since a headless
 // capture has no pointer of its own, and `waitFor` blocks on text so a
 // take can wait out the lab's posed progress. The final frame lingers
@@ -100,6 +104,11 @@ for (const take of takes) {
         await page.waitForTimeout(action.settleMs ?? 1200);
       }
       if (action.press) await page.keyboard.press(action.press);
+      if (action.type) await page.keyboard.type(action.type, { delay: 45 });
+      if (action.paste) {
+        await page.keyboard.press("ControlOrMeta+a");
+        await page.keyboard.insertText(action.paste);
+      }
       if (action.waitFor) {
         await page
           .getByText(action.waitFor)

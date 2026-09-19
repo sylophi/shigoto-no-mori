@@ -15,7 +15,7 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { notifyError } from "@/lib/toast";
-import { ITEM_CLASS } from "@/components/ui/cmdk-classes";
+import { ITEM_CLASS, keepFocusInInput } from "@/components/ui/cmdk-classes";
 import {
   appendBrowsePathSegment,
   canNavigateUp,
@@ -95,12 +95,15 @@ export function FolderPickerModal({
   };
 
   const submitTarget = normalizeForSubmit(query);
-  // The folder we'd confirm is the resolved listing path when the input
-  // ends in "/" (so the user is "inside" that folder); otherwise it's
-  // whatever they've typed verbatim.
-  const confirmTarget = listingEnabled
-    ? (listing?.path ?? submitTarget)
-    : submitTarget;
+  // The folder we'd confirm, off the listing's resolved path where
+  // there is one: the listed folder itself when the input ends in "/"
+  // (the user is "inside" it), and the typed name under it otherwise.
+  // The listing is of that name's parent then, never the folder asked
+  // for. With nothing listed it's whatever they've typed verbatim.
+  const confirmTarget =
+    listingEnabled && listing
+      ? `${leafFilter ? ensureTrailingSep(listing.path) : listing.path}${leafFilter}`
+      : submitTarget;
   const canConfirm = isAnchoredPath(confirmTarget) && !error;
   const hasHighlighted = highlighted.startsWith(BROWSE_VALUE_PREFIX);
 
@@ -186,7 +189,10 @@ export function FolderPickerModal({
           </p>
         )}
 
-        <Command.List className="max-h-96 overflow-y-auto p-2">
+        <Command.List
+          onMouseDown={keepFocusInInput}
+          className="max-h-96 overflow-y-auto p-2"
+        >
           {canBrowseUp && (
             <Command.Item
               value={`${BROWSE_VALUE_PREFIX}up`}
