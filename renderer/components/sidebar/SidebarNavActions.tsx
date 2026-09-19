@@ -1,15 +1,15 @@
 // The footer's page-nav cluster (Devices, Settings). Devices is always
 // reachable: unconfigured or signed out, the page itself explains the
-// state (AccountSection) instead of the button hiding. A hostless
-// client has no updater to flag.
+// state (AccountSection) instead of the button hiding. Settings wears
+// a dot while any device's section there holds an update this window
+// could install: this machine's, or a peer's (the only kind a hostless
+// client can have).
 import { MonitorSmartphone, Settings as SettingsIcon } from "lucide-react";
+import { useStagedUpdates } from "@/hooks/system/useUpdater";
 import { NavIconButton } from "./NavIconButton";
 
-export function SidebarNavActions({
-  updateReady = false,
-}: {
-  updateReady?: boolean;
-}) {
+export function SidebarNavActions() {
+  const updateReady = Object.keys(useStagedUpdates()).length > 0;
   return (
     <>
       <NavIconButton to="/devices" tip="Devices" label="Devices">

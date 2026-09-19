@@ -2,7 +2,6 @@ import { FolderPlus } from "lucide-react";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { hasLocalHost } from "@/lib/localHost";
-import { useUpdater } from "@/hooks/system/useUpdater";
 import { SidebarNavActions } from "./SidebarNavActions";
 import { SidebarViewToggle } from "./SidebarViewToggle";
 import { SIDEBAR_FOOTER_BAR, SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
@@ -16,8 +15,8 @@ interface SidebarFooterProps {
 // What both views share: the layout toggle, and the app-level actions.
 // Anything that only answers a question the project tree asks lives in
 // SidebarToolbar, above the tree. A hostless client has no local tree
-// to arrange or add to, and no updater of its own, so its bar carries
-// the toggle and the page-nav cluster alone.
+// to arrange or add to, so its bar carries the toggle and the page-nav
+// cluster alone.
 export function SidebarFooter(props: SidebarFooterProps) {
   return hasLocalHost ? <LocalFooter {...props} /> : <PeerFooter />;
 }
@@ -34,8 +33,6 @@ function PeerFooter() {
 
 function LocalFooter({ arrangeMode, onToggleArrange }: SidebarFooterProps) {
   const { openAddProject } = useOverlays();
-  const { state: updaterState } = useUpdater();
-  const updateReady = updaterState?.kind === "ready";
   // aria-keyshortcuts restores the AT-audible shortcut hints the old
   // native titles carried; Base UI tooltips are visual-only.
   const modName = "Meta";
@@ -68,7 +65,7 @@ function LocalFooter({ arrangeMode, onToggleArrange }: SidebarFooterProps) {
           <FolderPlus className="size-3.5" />
         </button>
       </SimpleTooltip>
-      <SidebarNavActions updateReady={updateReady} />
+      <SidebarNavActions />
     </div>
   );
 }

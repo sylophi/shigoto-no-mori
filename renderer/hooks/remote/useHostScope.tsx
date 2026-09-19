@@ -11,12 +11,12 @@
 //   belong to the machine the window runs on, so their call sites keep
 //   window.api and HostApi excludes them.
 // - Local broadcast subscriptions (the fs watcher's externalChange in
-//   renderer/index.tsx, the worktree lifecycle events): main emits
+//   renderer/boot.tsx, the worktree lifecycle events): main emits
 //   this machine's events, so those watchers subscribe via window.api
-//   and invalidate the local `queryKeys` registry explicitly. A hook
-//   that mirrors a remote:true host broadcast for whichever device it
-//   shows (useUpdater's updater:state) subscribes through scope.api
-//   instead, which a peer's transport routes over its direct session.
+//   and invalidate the local `queryKeys` registry explicitly. A
+//   remote:true host broadcast mirrored for every device
+//   (updater:state) follows the same split at boot scope: boot.tsx
+//   for this machine, lib/remote/remoteHostWatch.ts for the peers.
 // - Host-scoped hooks whose write path is deliberately local-only
 //   (the updateLocalGlobalConfig caller in useSettingsSave): the write
 //   lands on this machine's disk, so their reads and invalidations

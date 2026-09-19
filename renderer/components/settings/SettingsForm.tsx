@@ -10,7 +10,8 @@ import {
   useSettingsSave,
 } from "@/hooks/config/useSettingsSave";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
-import { useUpdater } from "@/hooks/system/useUpdater";
+import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
+import { useStagedUpdates } from "@/hooks/system/useUpdater";
 import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { useDoubutsu } from "@/hooks/ui/useDoubutsu";
 import { useTheme } from "@/hooks/ui/useTheme";
@@ -33,7 +34,6 @@ import {
   LOCAL_DEVICE_TAB,
   settingsPanelId,
   useActiveSettingsTab,
-  useSettingsDevices,
 } from "./settingsNav";
 import {
   SettingsEditorRegistryProvider,
@@ -75,7 +75,7 @@ export function SettingsForm({
   const save = useSettingsSave({ initialConfig, initialClientConfig });
   const { setOverride } = useTheme();
   const { setOverride: setDoubutsuOverride } = useDoubutsu();
-  const devices = useSettingsDevices();
+  const devices = useHostDevices();
   const localName = useLocalDeviceName();
   const { activeTab, peer } = useActiveSettingsTab(devices);
 
@@ -156,19 +156,25 @@ export function SettingsForm({
     discardAll();
   };
 
+  const updates = useStagedUpdates();
+  useStagedUpdateLanding(updates);
+
   const heading = headingFor(activeTab, peer, localName, isSolo(devices));
 
   return (
     // The page marker picks the settings wallpaper (doubutsu.css), the
     // same one the loading skeleton in Settings.tsx wears.
     <div data-doubutsu-page="settings" className="flex h-full flex-col">
-      {hasLocalHost && <StagedUpdateLanding />}
       <PageHeader
         eyebrow={heading.eyebrow}
         title={heading.title}
         watermark="設定"
       />
-      <SettingsSectionChips devices={devices} activeTab={activeTab} />
+      <SettingsSectionChips
+        devices={devices}
+        activeTab={activeTab}
+        updates={updates}
+      />
 
       <SettingsEditorRegistryProvider registry={registry}>
         <div className="flex min-h-0 flex-1 flex-col">
@@ -242,20 +248,17 @@ export function SettingsForm({
   );
 }
 
-// No provider above the form, so this is the local updater: the
-// sidebar's update dot brought the visitor here for its button. Only on
-// arrival, though. A check that finishes while the page is open must
-// not yank the visitor out of the section they are editing. Mounted
-// only where a local updater exists (a hostless client has none).
-function StagedUpdateLanding() {
-  const { state: localUpdate } = useUpdater();
-  const [stagedOnArrival] = useState(() =>
-    localUpdate?.kind === "ready" ? localUpdate.version : null,
-  );
+// The sidebar's update dot brought the visitor here for a button, so
+// land on the section holding it (landOnStagedUpdate picks which).
+// Only on arrival, though. A check that finishes while the page is
+// open must not yank the visitor out of the section they are editing.
+function useStagedUpdateLanding(
+  updates: Readonly<Record<string, string>>,
+): void {
+  const [stagedOnArrival] = useState(updates);
   useEffect(() => {
-    if (stagedOnArrival !== null) landOnStagedUpdate(stagedOnArrival);
+    landOnStagedUpdate(stagedOnArrival);
   }, [stagedOnArrival]);
-  return null;
 }
 
 // The build this hostless client runs.

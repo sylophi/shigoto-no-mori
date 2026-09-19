@@ -5,6 +5,7 @@
 // settings UI and no scoped data live here, just the live snapshot the
 // scoped surfaces resolve their device from.
 import { useSyncExternalStore } from "react";
+import { hostsProjects } from "@/components/remote/deviceTraits";
 import {
   type RemoteDevice,
   type RemoteDeviceApi,
@@ -21,6 +22,13 @@ export function useRemoteDevices(): readonly RemoteDevice[] {
     remoteDeviceStore.getSnapshot,
     remoteDeviceStore.getSnapshot,
   );
+}
+
+// The account's machines: every registered device that hosts projects.
+// A browser client is a device on the account too, but there is no
+// host behind it to read config, updater state or a forest from.
+export function useHostDevices(): readonly RemoteDevice[] {
+  return useRemoteDevices().filter((device) => hostsProjects(device.platform));
 }
 
 // One registered device by id, live like the list. Undefined for the
