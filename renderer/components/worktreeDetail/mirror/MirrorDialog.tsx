@@ -4,8 +4,7 @@
 // with its progress frames, plus the session open on top. Live is
 // proof: the session's first verdict, and the way to the local copy's
 // page, where the footer's Mirror button takes over.
-import { pullWorktreeName } from "@/lib/remote/pullWorktreeName";
-import { ArrowRight, Check, Monitor, RefreshCw } from "lucide-react";
+import { ArrowRight, RefreshCw } from "lucide-react";
 import type { MirrorSession } from "@shared/ipc/modules/mirror";
 import type { Project, Worktree } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
@@ -26,12 +25,10 @@ import {
   TransplantBody,
   TransplantFooter,
 } from "../transplant/TransplantChrome";
-import { SetupToggle } from "../transplant/SetupToggle";
 import { TransplantProgress } from "../transplant/TransplantProgress";
 import {
-  DestinationFolder,
-  DestinationRow,
   PullReviewFooter,
+  ReviewDevicesColumn,
   SourceCard,
 } from "../transplant/TransplantReview";
 import { stepHeadline } from "../transplant/transplantSteps";
@@ -226,52 +223,16 @@ function MirrorReview({
             />
           </div>
 
-          <LocalHostScope>
-            <div className="flex min-w-0 flex-col gap-5">
-              <section className="space-y-2">
-                <SectionHeading>On both</SectionHeading>
-                <ul className="space-y-1.5">
-                  <DestinationRow
-                    worktree={worktree}
-                    localProject={localProject}
-                    thisDeviceLabel={thisDeviceLabel}
-                  />
-                  <li className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
-                    <span
-                      aria-hidden
-                      className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted-foreground/20"
-                    >
-                      <Check className="size-2.5" />
-                    </span>
-                    <Monitor aria-hidden className="size-4 shrink-0" />
-                    <span className="min-w-0 flex-1 leading-tight">
-                      <span className="block truncate font-medium">
-                        {sourceDeviceLabel}
-                      </span>
-                      <span className="block truncate text-[11px]">
-                        keeps its copy
-                      </span>
-                    </span>
-                    <span className="text-xs">source</span>
-                  </li>
-                </ul>
-              </section>
-
-              <DestinationFolder
-                localProject={localProject}
-                thisDeviceLabel={thisDeviceLabel}
-                name={pullWorktreeName(worktree)}
-              />
-
-              <SetupToggle
-                localProject={localProject}
-                thisDeviceLabel={thisDeviceLabel}
-                checked={pull.runSetup}
-                onChange={pull.setRunSetup}
-                pinned={pull.setupPinned}
-              />
-            </div>
-          </LocalHostScope>
+          <ReviewDevicesColumn
+            heading="On both"
+            sourceNote="keeps its copy"
+            sourceKeeps
+            worktree={worktree}
+            localProject={localProject}
+            sourceDeviceLabel={sourceDeviceLabel}
+            thisDeviceLabel={thisDeviceLabel}
+            pull={pull}
+          />
         </div>
       </TransplantBody>
 

@@ -124,50 +124,15 @@ export function TransplantReview({
             </LocalHostScope>
           </div>
 
-          <LocalHostScope>
-            <div className="flex min-w-0 flex-col gap-5">
-              <section className="space-y-2">
-                <SectionHeading>Destination</SectionHeading>
-                <ul className="space-y-1.5">
-                  <DestinationRow
-                    worktree={worktree}
-                    localProject={localProject}
-                    thisDeviceLabel={thisDeviceLabel}
-                  />
-                  <li className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
-                    <span
-                      aria-hidden
-                      className="size-4 shrink-0 rounded-full bg-muted-foreground/20"
-                    />
-                    <Monitor aria-hidden className="size-4 shrink-0" />
-                    <span className="min-w-0 flex-1 leading-tight">
-                      <span className="block truncate font-medium">
-                        {sourceDeviceLabel}
-                      </span>
-                      <span className="block truncate text-[11px]">
-                        where it is now
-                      </span>
-                    </span>
-                    <span className="text-xs">source</span>
-                  </li>
-                </ul>
-              </section>
-
-              <DestinationFolder
-                localProject={localProject}
-                thisDeviceLabel={thisDeviceLabel}
-                name={pullWorktreeName(worktree)}
-              />
-
-              <SetupToggle
-                localProject={localProject}
-                thisDeviceLabel={thisDeviceLabel}
-                checked={pull.runSetup}
-                onChange={pull.setRunSetup}
-                pinned={pull.setupPinned}
-              />
-            </div>
-          </LocalHostScope>
+          <ReviewDevicesColumn
+            heading="Destination"
+            sourceNote="where it is now"
+            worktree={worktree}
+            localProject={localProject}
+            sourceDeviceLabel={sourceDeviceLabel}
+            thisDeviceLabel={thisDeviceLabel}
+            pull={pull}
+          />
         </div>
       </TransplantBody>
 
@@ -275,6 +240,78 @@ export function DestinationRow({
         label={<span className="text-xs">this device</span>}
       />
     </li>
+  );
+}
+
+// The review step's right-hand column, the transplant's and the
+// mirror's: the two devices (this one landing the branch, the source
+// beneath it), the folder it lands in, and the setup switch. Read under
+// the local scope, since every fact in it is this machine's. The mirror
+// ticks the source row, because there the source keeps its copy.
+export function ReviewDevicesColumn({
+  heading,
+  sourceNote,
+  sourceKeeps = false,
+  worktree,
+  localProject,
+  sourceDeviceLabel,
+  thisDeviceLabel,
+  pull,
+}: {
+  heading: string;
+  sourceNote: string;
+  sourceKeeps?: boolean;
+  worktree: Worktree;
+  localProject: Project;
+  sourceDeviceLabel: string;
+  thisDeviceLabel: string;
+  pull: PullChoiceState;
+}) {
+  return (
+    <LocalHostScope>
+      <div className="flex min-w-0 flex-col gap-5">
+        <section className="space-y-2">
+          <SectionHeading>{heading}</SectionHeading>
+          <ul className="space-y-1.5">
+            <DestinationRow
+              worktree={worktree}
+              localProject={localProject}
+              thisDeviceLabel={thisDeviceLabel}
+            />
+            <li className="flex items-center gap-2.5 rounded-lg bg-muted/40 px-3 py-2.5 text-sm text-muted-foreground">
+              <span
+                aria-hidden
+                className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted-foreground/20"
+              >
+                {sourceKeeps && <Check className="size-2.5" />}
+              </span>
+              <Monitor aria-hidden className="size-4 shrink-0" />
+              <span className="min-w-0 flex-1 leading-tight">
+                <span className="block truncate font-medium">
+                  {sourceDeviceLabel}
+                </span>
+                <span className="block truncate text-[11px]">{sourceNote}</span>
+              </span>
+              <span className="text-xs">source</span>
+            </li>
+          </ul>
+        </section>
+
+        <DestinationFolder
+          localProject={localProject}
+          thisDeviceLabel={thisDeviceLabel}
+          name={pullWorktreeName(worktree)}
+        />
+
+        <SetupToggle
+          localProject={localProject}
+          thisDeviceLabel={thisDeviceLabel}
+          checked={pull.runSetup}
+          onChange={pull.setRunSetup}
+          pinned={pull.setupPinned}
+        />
+      </div>
+    </LocalHostScope>
   );
 }
 
