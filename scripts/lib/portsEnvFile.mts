@@ -7,7 +7,7 @@
 // build against it, so both read through this module.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseDotenv } from "./account/serviceConfig.ts";
+import { parseDotenv } from "../../shared/account/serviceConfig.ts";
 
 // A real PORT env var wins over the provisioned one. Undefined when
 // neither is set (port-pool not installed, or never run in `dir`):

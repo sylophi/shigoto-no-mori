@@ -48,7 +48,9 @@ Where things live:
 | `test/` | The proofs the pre-commit hooks run, one standalone node script each. `pnpm test` lists them, `pnpm test <name>` runs one, and `lefthook.yml` says what each covers and which files trigger it. |
 
 `test/host-boundary.mjs` enforces the `host/`, `shared/` and
-`web/` rules above on every commit.
+`web/` rules above on every commit. `CONTRIBUTING.md` has the working
+rules: setup, checks, where code goes, and how to add a channel or a
+proof.
 
 ## Agent skills
 
