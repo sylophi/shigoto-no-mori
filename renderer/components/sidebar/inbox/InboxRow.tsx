@@ -6,7 +6,7 @@ import {
   ContextMenuContent,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
+import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
 import { useNow } from "@/hooks/ui/useNow";

@@ -31,7 +31,7 @@
  *      checkbox (+ data-variant) ui/checkbox.tsx
  *      chip                      ui/chip-button.tsx
  *      segmented-control         ui/segmented-control.tsx
- *      combobox-trigger/-popup/-search   ui/branch-combobox.tsx
+ *      combobox-trigger/-popup/-search   shared/BranchCombobox.tsx
  *      modal-shell               ui/modal-shell.tsx
  *      launcher                  launcher/ProjectLauncher.tsx
  *      launcher-tile             launcher/LauncherTile.tsx
@@ -52,7 +52,7 @@
  *    tidy/TidyForest, remote/DevicesPage, ForestPage), the
  *    `doubutsu-only` / `v1-only` classes
  *    (per-theme markup shipped side by side), li[data-row-idx]
- *    (configure/PickerRow.tsx).
+ *    (shared/PickerRow.tsx).
  *
  * 4. Upstream library attributes (re-verify on upgrades; theme:check
  *    greps the packages): Base UI's data-highlighted / data-disabled /

@@ -12,7 +12,7 @@
 import { useState, type ReactNode } from "react";
 import { DEVICE_PILL_CLASS } from "@/components/remote/DeviceChip";
 import { hostsProjects } from "@/components/remote/deviceTraits";
-import { EmptyPanel } from "@/components/remote/EmptyPanel";
+import { EmptyPanel } from "@/components/ui/empty-panel";
 import { StatusDot } from "@/components/ui/status-dot";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
 import {

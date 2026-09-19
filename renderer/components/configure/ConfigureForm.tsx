@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { FolderOpen, Plus } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { BranchCombobox } from "@/components/ui/branch-combobox";
+import { BranchCombobox } from "@/components/shared/BranchCombobox";
 import { Button } from "@/components/ui/button";
 import { EditorFooter } from "@/components/shared/EditorFooter";
 import { ErrorBanner } from "@/components/ui/error-banner";

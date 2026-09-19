@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { LauncherIcon } from "@/components/LauncherIcon";
+import { LauncherIcon } from "@/components/shared/LauncherIcon";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { cn } from "@/lib/utils";
 import type { DetectedLauncher } from "@shared/schemas";

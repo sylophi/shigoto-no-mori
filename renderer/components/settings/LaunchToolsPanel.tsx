@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { Plus } from "lucide-react";
 import type { DetectedLauncher } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
-import { LauncherIcon } from "@/components/LauncherIcon";
+import { LauncherIcon } from "@/components/shared/LauncherIcon";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
 import type { SettingsFormState } from "@/hooks/config/useSettingsSave";

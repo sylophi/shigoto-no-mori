@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BranchCombobox } from "@/components/ui/branch-combobox";
+import { BranchCombobox } from "@/components/shared/BranchCombobox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCreateBranch } from "@/hooks/git/useBranches";

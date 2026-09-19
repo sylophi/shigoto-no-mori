@@ -5,7 +5,7 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { Switch } from "@/components/ui/switch";
 import { ExternalLink } from "@/components/ui/external-link";
 import { useCarryOverStats } from "@/hooks/projects/useCarryOverStats";
-import { worktreeIncludeExtras } from "@/hooks/projects/carryOverPaths";
+import { worktreeIncludeExtras } from "@/lib/carryOverPaths";
 import { useWorktreeIncludeStatus } from "@/hooks/projects/useWorktreeIncludeStatus";
 import { makeIgnoreMatcher, normalizeRelPath } from "@shared/git/gitPaths";
 import type { CarryOverEntry } from "@shared/schemas";

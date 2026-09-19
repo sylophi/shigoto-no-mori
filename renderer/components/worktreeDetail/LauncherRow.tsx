@@ -7,7 +7,7 @@ import {
   useLaunch,
   useLauncherForProject,
 } from "@/hooks/launchers/useLaunchers";
-import { LauncherIcon } from "@/components/LauncherIcon";
+import { LauncherIcon } from "@/components/shared/LauncherIcon";
 import type { LauncherEntry, Worktree } from "@shared/schemas";
 import {
   LAUNCH_TAB,

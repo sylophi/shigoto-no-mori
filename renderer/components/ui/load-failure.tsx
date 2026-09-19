@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { EmptyPanel } from "@/components/remote/EmptyPanel";
+import { EmptyPanel } from "@/components/ui/empty-panel";
 
 // A read that failed, in place of the body it would have seeded: the
 // reason, selectable, and the one thing to do about it.

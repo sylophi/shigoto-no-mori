@@ -4,7 +4,7 @@ import { useAccountStatus } from "@/hooks/account/useAccount";
 import { hasLocalHost } from "@/lib/localHost";
 import { ClerkSignInButton } from "@/components/account/ClerkSignInButton";
 import { DeviceRegistry } from "./DeviceRegistry";
-import { EmptyPanel } from "./EmptyPanel";
+import { EmptyPanel } from "@/components/ui/empty-panel";
 
 // "Account": sign in to the device hub so this device can reach the
 // account's other devices. Three states. Not

@@ -7,7 +7,7 @@
 import type { Project } from "@shared/schemas";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { usePortPoolActive } from "@/hooks/ports/usePortPoolActive";
-import { worktreeIncludeExtras } from "@/hooks/projects/carryOverPaths";
+import { worktreeIncludeExtras } from "@/lib/carryOverPaths";
 import { useWorktreeIncludeStatus } from "@/hooks/projects/useWorktreeIncludeStatus";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 

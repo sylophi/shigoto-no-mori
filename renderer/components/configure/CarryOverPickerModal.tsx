@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useCarryOverListing } from "@/hooks/projects/useCarryOverListing";
 import type { CarryOverEntry } from "@shared/schemas";
 import { OnlyInWorktrees } from "./OnlyInWorktrees";
-import { PathPickerModal } from "./PathPickerModal";
+import { PathPickerModal } from "@/components/shared/PathPickerModal";
 
 interface CarryOverPickerModalProps {
   projectId: string;

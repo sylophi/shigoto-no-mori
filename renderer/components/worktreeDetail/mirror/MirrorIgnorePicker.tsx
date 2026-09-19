@@ -18,7 +18,7 @@ import {
   MIRROR_IGNORES_LIMIT,
 } from "@shared/ipc/modules/mirror";
 import type { SyncIgnoredPathsResult } from "@shared/ipc/modules/sync";
-import { PathPickerModal } from "@/components/configure/PathPickerModal";
+import { PathPickerModal } from "@/components/shared/PathPickerModal";
 import { Button } from "@/components/ui/button";
 import { MaterialIcon } from "@/components/ui/material-icon";
 import { SectionHeading } from "@/components/ui/section-heading";

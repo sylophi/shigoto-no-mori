@@ -3,7 +3,7 @@ import { useState } from "react";
 import { FolderInput, FolderOpen, RotateCcw } from "lucide-react";
 import { BlockingOverlay } from "@/components/ui/blocking-overlay";
 import { Button } from "@/components/ui/button";
-import { FolderPickerModal } from "@/components/ui/folder-picker-modal";
+import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { useHostScope } from "@/hooks/remote/useHostScope";
