@@ -242,13 +242,19 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
         // The provision-specific failure classes, layered on the
         // shared dance: 501 is the Worker's typed "no tunnel env",
         // any other 4xx is a refusal that a timed retry cannot change
-        // (revoked credential, older Worker deploy). 5xx and network
-        // failures rethrow as-is and stay retryable.
+        // (revoked credential, older Worker deploy). The one 4xx a
+        // retry does change is 429, the Worker's rate limiter, so it
+        // rethrows as-is with the 5xx and network failures and stays
+        // retryable.
         if (error instanceof HubRequestError) {
           if (error.status === TUNNEL_UNCONFIGURED_STATUS) {
             throw new TunnelUnconfiguredError();
           }
-          if (error.status >= 400 && error.status < 500) {
+          if (
+            error.status >= 400 &&
+            error.status < 500 &&
+            error.status !== 429
+          ) {
             throw new TunnelProvisionDeniedError(error.message, error.status);
           }
         }

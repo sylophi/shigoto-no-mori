@@ -38,7 +38,12 @@ import {
   resolveServiceConfig,
 } from "../shared/account/serviceConfig.ts";
 import { enrollDevice, signOutDevice } from "../shared/account/enroll.ts";
-import { createAccountService } from "../shared/account/service.ts";
+import {
+  HubRequestError,
+  TunnelProvisionDeniedError,
+  createAccountService,
+  isHubRefusal,
+} from "../shared/account/service.ts";
 import { deriveAccountId } from "../shared/account/token.ts";
 import { createAccountStore } from "../main/core/account/credentialStore.ts";
 import { createAccountStore as createCoreAccountStore } from "../shared/account/credentialStore.ts";
@@ -290,6 +295,35 @@ async function main() {
       await assert.rejects(
         () => service.listDevices("device-credential"),
         /device revoked/,
+      );
+    },
+  );
+
+  await check(
+    "service: a rate-limited tunnel provision stays retryable, any other 4xx is a denial",
+    async () => {
+      const provisionWith = (status) => {
+        const { fetchImpl } = recordingFetch(() =>
+          json({ error: "refused" }, status),
+        );
+        return createAccountService({
+          baseUrl: "https://hub.test",
+          fetchImpl,
+        }).provisionTunnel("device-credential", 4000);
+      };
+      await assert.rejects(
+        () => provisionWith(401),
+        (error) => error instanceof TunnelProvisionDeniedError,
+      );
+      // The hub's rate limiter answers 429, which a later attempt can
+      // turn into a success, so it must not park the tunnel runner the
+      // way a denial does.
+      await assert.rejects(
+        () => provisionWith(429),
+        (error) =>
+          error instanceof HubRequestError &&
+          error.status === 429 &&
+          !isHubRefusal(error),
       );
     },
   );

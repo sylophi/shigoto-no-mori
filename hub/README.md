@@ -87,7 +87,18 @@ Prerequisites: a Cloudflare account, a Clerk application, and
    pnpm exec wrangler secret put CLERK_SECRET_KEY --env dev
    ```
 
-4. Deploy:
+4. Set the ticket signing key, any random string. It never leaves the
+   Worker, so generate it straight into the prompt and keep no copy:
+
+   ```sh
+   openssl rand -base64 32 | pnpm exec wrangler secret put TICKET_SIGNING_KEY --env dev
+   ```
+
+   Without it the Worker answers ticket mints with a 500 that names
+   the missing secret, and no device can connect. Rotating it only
+   voids the tickets in flight, which live for a minute anyway.
+
+5. Deploy:
 
    ```sh
    pnpm run deploy
@@ -126,6 +137,37 @@ unauthenticated request could not: it cannot read another origin's
 localStorage to forge the header. The desktop's `SM_ACCOUNT_WEB_ORIGIN`
 (below) is a separate gate on a separate process and is NOT paired with
 anything here.
+
+### Abuse limits
+
+The hub is on the public internet and most of its routes answer
+before any credential is checked, so a stranger can make it do billed
+work. Nothing here is a security boundary (every route still
+authenticates), it only bounds what that traffic can cost.
+
+- The Worker rate-limits per client IP through two `ratelimits`
+  bindings in `wrangler.jsonc`: 60 requests a minute on enroll and
+  connect, the two routes that do real work for a caller with no
+  credential (Clerk verification, a Durable Object), and 300 a minute
+  on everything else. Over budget answers `429` with `Retry-After`.
+  The counters are per Cloudflare location and approximate, which is
+  fine for a cost guard.
+- Connection tickets are signed (`TICKET_SIGNING_KEY`), so
+  `GET /connect` cannot be used to instantiate a Durable Object under
+  a name of the caller's choosing. A forged ticket is a `403` from the
+  Worker.
+- The Worker's limiter runs inside the Worker, so a limited request is
+  still a billed Worker invocation. Only a rule at the zone stops a
+  flood before it is billed. Set one up once, in the Cloudflare
+  dashboard under the `shigomori.com` zone, Security, WAF, Rate
+  limiting rules: count by IP and block above a threshold comfortably
+  over the Worker's own, 200 requests per 10 seconds fits. The free
+  plan gives one rule, a 10 second window, and only the path to match
+  on, so there the rule matches every path (`/*`) and covers the whole
+  zone, which no person browsing the site comes near. A paid zone can
+  narrow it to the two hub hostnames. Pair it with a usage
+  notification (Notifications, Usage Based Billing) so a bill that
+  does grow is noticed the same day.
 
 ### Per-device tunnels (needed for devices off the LAN)
 
@@ -281,4 +323,5 @@ The suite runs inside workerd via @cloudflare/vitest-pool-workers with
 real (local) D1, Durable Object and websocket implementations. Clerk
 is stubbed through the `createWorker(deps)` seam, so no network or
 real credentials are needed. For `wrangler dev` against real Clerk,
-put `CLERK_SECRET_KEY` in a local `.dev.vars` (gitignored).
+put `CLERK_SECRET_KEY` and a `TICKET_SIGNING_KEY` of any value in a
+local `.dev.vars` (gitignored).
