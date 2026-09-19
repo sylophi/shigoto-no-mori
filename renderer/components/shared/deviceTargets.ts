@@ -23,13 +23,15 @@ import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 export type DeviceBlock = "offline" | "no-project" | "no-grant";
 
 // Honest and specific, and none of them offer a fix here: reconnecting
-// is the device hub's job, granting happens on the other machine's
-// Devices page, and cloning a missing repo is not something this form
-// does.
+// is the device hub's job, and granting happens on the other machine's
+// Devices page. `no-project` is only ever shown for a device that
+// registers the repo and has lost its folder (the lists these lines
+// appear in are of devices holding a project), so it says that. A
+// device with no copy at all is the project menu's Add to device.
 export const BLOCK_REASON: Record<DeviceBlock, string> = {
   offline: "Creating needs a live connection.",
   "no-project":
-    "Doesn't have this repo registered. Matching by git remote found no checkout there.",
+    "Its checkout's folder is missing, so there is nowhere to create.",
   "no-grant": peerReadOnlyNote("it"),
 };
 

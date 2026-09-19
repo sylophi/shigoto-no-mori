@@ -3,11 +3,15 @@ import { LoadFailure } from "@/components/ui/load-failure";
 import { useProjectConfigSeed } from "@/hooks/config/useProjectConfigSeed";
 import type { Project } from "@shared/schemas";
 import { ConfigureForm } from "./ConfigureForm";
+import { ConfigureShared } from "./ConfigureShared";
 import { ConfigureSkeleton } from "./ConfigureSkeleton";
 
 export function ConfigureProject() {
   return (
-    <ProjectDevicePage title="Configure">
+    <ProjectDevicePage
+      title="Configure"
+      renderAllDevices={(project) => <ConfigureShared project={project} />}
+    >
       {(scoped) => <ConfigureBody project={scoped} />}
     </ProjectDevicePage>
   );
@@ -30,7 +34,6 @@ function ConfigureBody({ project }: { project: Project }) {
       key={project.id}
       projectId={project.id}
       projectPath={project.path}
-      project={project}
       initialConfig={seed.config}
       resolvedDefaultBranch={seed.resolvedDefaultBranch}
     />

@@ -1,5 +1,3 @@
-import { hostsProjects } from "@/lib/remote/deviceTraits";
-import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { createExternalStore, useExternalStore } from "@/store/externalStore";
 import { Palette, Rocket, type LucideIcon } from "lucide-react";
 import type { StatusTone } from "@/components/ui/status-dot";
@@ -49,14 +47,6 @@ export function useSelectedSettingsTab(): string {
 // back to this device.
 const FALLBACK_TAB = hasLocalHost ? LOCAL_DEVICE_TAB : APPEARANCE_TAB;
 
-// The devices Settings has sections for: the account's machines. A
-// browser client is a device on the account too, but it hosts nothing
-// and has no host config to edit (the web shell keeps only its
-// appearance), so a section for it would only ever say it is loading.
-export function useSettingsDevices(): readonly RemoteDevice[] {
-  return useRemoteDevices().filter((device) => hostsProjects(device.platform));
-}
-
 // One machine on the account means no roster to place it in: the
 // Devices group reads as this device's settings rather than a list of
 // one, and the presence dot (a fact about peers) stays off. Never true
@@ -88,28 +78,40 @@ export function useActiveSettingsTab(devices: readonly RemoteDevice[]): {
   return { activeTab: known ? selected : FALLBACK_TAB, peer };
 }
 
-// The sidebar's "update available" dot leads here, and the button it
-// promises lives on this device's section, so the first visit while a
-// given update is staged lands there. Once per version: after that
-// the visitor's own choice stands.
-let noticedUpdateVersion: string | null = null;
+// The sidebar's "update available" dot leads to Settings, and the
+// button it promises lives on the section of the device holding the
+// update, so the first visit while a given update is staged lands
+// there. Once per device and version: after that the visitor's own
+// choice stands.
+const noticedUpdates = new Set<string>();
 
-export function landOnStagedUpdate(version: string): void {
-  if (noticedUpdateVersion === version) return;
-  noticedUpdateVersion = version;
-  selectSettingsTab(LOCAL_DEVICE_TAB);
+// `updates` is useStagedUpdates' answer, this device first. The first
+// one not yet noticed wins, so a peer's update staged behind an
+// already-seen local one still gets its visit.
+export function landOnStagedUpdate(
+  updates: Readonly<Record<string, string>>,
+): void {
+  for (const [deviceId, version] of Object.entries(updates)) {
+    const update = `${deviceId}@${version}`;
+    if (noticedUpdates.has(update)) continue;
+    noticedUpdates.add(update);
+    selectSettingsTab(deviceTab(deviceId));
+    return;
+  }
 }
 
 // One section of the page as a list draws it: its tab id, its label,
 // and either an icon (the visual sections) or a presence tone (the
 // device sections, absent for a lone device, which has no roster to
-// be present in).
+// be present in). A device section holding a staged update this window
+// could install carries its version, which the list flags.
 export interface SettingsSection {
   id: string;
   label: string;
   icon?: LucideIcon;
   tone?: StatusTone;
   title?: string;
+  update?: string;
 }
 
 // The page's sections in order, for whichever surface lists them: the
@@ -122,6 +124,8 @@ export interface SettingsSection {
 export function settingsSections(
   devices: readonly RemoteDevice[],
   localName: string,
+  // useStagedUpdates' answer: deviceId to the version staged there.
+  updates: Readonly<Record<string, string>>,
 ): { visual: SettingsSection[]; devices: SettingsSection[] } {
   const solo = isSolo(devices);
   const visual: SettingsSection[] = [
@@ -132,20 +136,24 @@ export function settingsSections(
   }
   const deviceRows: SettingsSection[] = [];
   if (hasLocalHost) {
+    const update = updates[localDeviceId];
     deviceRows.push({
       id: LOCAL_DEVICE_TAB,
       label: localName,
       tone: solo ? undefined : "emerald",
       title: "This device: the machine this window runs on",
+      update,
     });
   }
   for (const device of devices) {
     const { tone, label } = deviceStatusView(device.status);
+    const update = updates[device.deviceId];
     deviceRows.push({
       id: deviceTab(device.deviceId),
       label: device.label,
       tone,
       title: `${device.label}: ${label}`,
+      update,
     });
   }
   return { visual, devices: deviceRows };

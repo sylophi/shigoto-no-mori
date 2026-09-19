@@ -25,6 +25,7 @@ import { hubContract } from "@shared/ipc/modules/hub";
 import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
+import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
 import { cliContract } from "@shared/ipc/modules/cli";
 import { shellContract } from "@shared/ipc/modules/shell";
 import { terrierContract } from "@shared/ipc/modules/terrier";
@@ -42,6 +43,8 @@ import type {
   PackageScriptSortMode,
   PickFolderPayload,
   ProjectSortMode,
+  SharedSettingsDoc,
+  SharedSettingValue,
   ShigomoriConfig,
   ShigomoriWorktreeData,
   Theme,
@@ -79,6 +82,7 @@ export const allContractModules: readonly ContractModule[] = [
   remoteAccessContract,
   runtimeContract,
   scriptsContract,
+  sharedSettingsContract,
   cliContract,
   shellContract,
   terrierContract,
@@ -122,6 +126,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const remoteAccessClient = c(remoteAccessContract);
   const runtimeClient = c(runtimeContract);
   const scriptsClient = c(scriptsContract);
+  const sharedSettingsClient = c(sharedSettingsContract);
   const cliClient = c(cliContract);
   const shellClient = c(shellContract);
   const terrierClient = c(terrierContract);
@@ -289,6 +294,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
     projects: {
       list: projectsClient.list,
       add: (path: string) => projectsClient.add({ path }),
+      clone: projectsClient.clone,
       remove: (id: string) => projectsClient.remove({ id }),
       reorder: (input: {
         draggedId: string;
@@ -303,6 +309,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       onUsageBumped: projectsClient.usageBumped,
       defaultBranch: (projectId: string) =>
         projectsClient.defaultBranch({ projectId }),
+      cloneUrl: (projectId: string) => projectsClient.cloneUrl({ projectId }),
       listBranches: (projectId: string) =>
         projectsClient.listBranches({ projectId }),
       pickWorktreeName: (projectId: string) =>
@@ -347,6 +354,14 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       onStoppedForRemovedWorktree: scriptsClient.stoppedForRemovedWorktree,
     },
 
+    sharedSettings: {
+      read: sharedSettingsClient.read,
+      set: (key: string, value: SharedSettingValue) =>
+        sharedSettingsClient.set({ key, value }),
+      merge: (doc: SharedSettingsDoc) => sharedSettingsClient.merge({ doc }),
+      onChanged: sharedSettingsClient.changed,
+    },
+
     shell: {
       openExternal: (url: string) => shellClient.openExternal({ url }),
       showItemInFolder: (path: string) =>
@@ -356,7 +371,9 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
     mirror: {
       list: mirrorClient.list,
       start: mirrorClient.start,
-      stop: (session: string) => mirrorClient.stop({ session }),
+      // `force` discards a copy the peer is not confirmed to hold.
+      stop: (session: string, force?: boolean) =>
+        mirrorClient.stop({ session, force }),
       pause: (session: string) => mirrorClient.pause({ session }),
       resume: (session: string) => mirrorClient.resume({ session }),
       setIgnores: mirrorClient.setIgnores,

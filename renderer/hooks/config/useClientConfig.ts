@@ -7,14 +7,21 @@ import { queryKeys } from "@/lib/queryKeys";
 // stay in useGlobalConfig. Three writers exist (useSettingsSave,
 // useKeepReachableUpdate, and the web AppearancePage save) and every one
 // funnels through mergeClientConfigWrite.
+// Shared with the one reader outside a component (the boot-time
+// create-device move in lib/remote/sharedSettingsSync.ts), so both hit
+// the same cache entry under the same rule.
+export const clientConfigQueryOptions = {
+  queryKey: queryKeys.clientConfig(),
+  queryFn: (): Promise<ClientConfig> => window.api.clientConfig.read(),
+  // Every writer merges over this cached doc via mergeClientConfigWrite
+  // and setQueryData's the result back, so the value can never change
+  // behind this cache.
+  staleTime: Number.POSITIVE_INFINITY,
+};
+
 export function useClientConfig() {
   return useQuery<ClientConfig>({
-    queryKey: queryKeys.clientConfig(),
-    queryFn: () => window.api.clientConfig.read(),
-    // Every writer merges over this cached doc via mergeClientConfigWrite
-    // and setQueryData's the result back, so the value can never change
-    // behind this cache.
-    staleTime: Number.POSITIVE_INFINITY,
+    ...clientConfigQueryOptions,
     meta: { errorTitle: "Couldn't load appearance settings" },
   });
 }

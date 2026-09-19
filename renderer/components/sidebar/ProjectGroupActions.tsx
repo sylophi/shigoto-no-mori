@@ -12,8 +12,10 @@
 // follows the `+`, and the pages open for this machine's copy (the
 // `+`'s device on a header with no local checkout). Every page carries
 // a device tab bar (ProjectDevicePage), so the menu offers no device
-// choice of its own, save for Remove: it has no page to make the choice
-// on, so on a group spanning devices it opens a submenu naming each. A
+// choice of its own, save for two entries with no page to make the
+// choice on, which open a submenu naming devices instead: Remove, on a
+// group spanning devices, names each member, and Add to device names
+// the machines that don't hold the repo yet (AddToDeviceSubmenu). A
 // member with no session gets no actions, the same as a missing local
 // project.
 import { MoreHorizontal } from "lucide-react";
@@ -31,12 +33,13 @@ import {
   commandAccessOf,
   usePeerCommandAccess,
 } from "@/hooks/remote/useCommandAccess";
-import { useQuickCreateDeviceId } from "@/hooks/config/useQuickCreateDevice";
+import { useQuickCreateDeviceId } from "@/hooks/sharedSettings/useQuickCreateDevice";
 import { MaybeHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { localDeviceId } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import type { Project } from "@shared/schemas";
+import { AddToDeviceSubmenu } from "./AddToDeviceSubmenu";
 import {
   ProjectCreateMenuItems,
   ProjectPageMenuItems,
@@ -178,6 +181,11 @@ export function ProjectGroupActions({
               />
             </MaybeHostScope>
           )}
+          <AddToDeviceSubmenu
+            name={name}
+            members={members}
+            onOpenChange={onOpenChange}
+          />
           <MaybeHostScope deviceId={primary.deviceId} api={primary.api}>
             <ProjectPageMenuItems project={primary.project} subject="project" />
             {!listsRemoves && (

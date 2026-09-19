@@ -71,7 +71,10 @@ export function spawnStreamChild(
 // Returns null when no engine binary is available (a dev run before
 // `pnpm file-sync:build`), so callers degrade to "unavailable" rather
 // than throwing at boot.
-type FileSyncSpawnImpl = (args: string[]) => StreamChild | null;
+type FileSyncSpawnImpl = (
+  args: string[],
+  env?: NodeJS.ProcessEnv,
+) => StreamChild | null;
 
 let impl: FileSyncSpawnImpl | null = null;
 
@@ -79,9 +82,12 @@ export function setFileSyncSpawnImpl(next: FileSyncSpawnImpl): void {
   impl = next;
 }
 
-export function spawnFileSync(args: string[]): StreamChild | null {
+export function spawnFileSync(
+  args: string[],
+  env?: NodeJS.ProcessEnv,
+): StreamChild | null {
   if (impl === null) {
     throw new Error("file-sync spawned before setFileSyncSpawnImpl ran");
   }
-  return impl(args);
+  return impl(args, env);
 }

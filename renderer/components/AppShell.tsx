@@ -131,16 +131,12 @@ export function AppShell() {
 
       {phone && <ForestKeepalive />}
 
-      {/* The two overlays that act on local projects (the ⌘K launcher,
-          add project). They live here, under the router, so their
-          navigation is plain useNavigate, and only where there are
-          local projects to act on. */}
-      {hasLocalHost && (
-        <>
-          <ProjectLauncher />
-          <AddProjectModal />
-        </>
-      )}
+      {/* The two app-wide overlays. They live here, under the router,
+          so their navigation is plain useNavigate. The ⌘K launcher acts
+          on local projects, so it mounts only where there are some. Add
+          project picks its device, so a hostless client has it too. */}
+      {hasLocalHost && <ProjectLauncher />}
+      <AddProjectModal />
     </div>
   );
 }

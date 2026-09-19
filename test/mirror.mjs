@@ -49,6 +49,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { connect as netConnect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -270,12 +271,15 @@ async function main() {
     log: () => {},
   });
   const daemon = createMirrorDaemon({
-    spawn: (args) =>
+    // The daemon's env carries the gateway token, so the harness merges
+    // it over its own rather than replacing it.
+    spawn: (args, env) =>
       spawnStreamChild(fileSyncBinary, args, {
-        env: smEnv,
+        env: { ...smEnv, ...env },
         onSpawned: (child) => track(() => child.kill("SIGKILL")),
       }),
     gatewayAddress: () => gateway.address(),
+    gatewayToken: () => gateway.token(),
     dataDir: () => fileSyncDataDir,
     onChange: () => {
       changes++;
@@ -295,6 +299,42 @@ async function main() {
       30_000,
     );
     ok("gateway bound and the real mirror daemon reported ready");
+
+    // The loopback port is reachable by every process on this machine,
+    // so the preface token is what separates our own daemon from one
+    // that merely found the port and would otherwise drive file
+    // transfers against peer devices.
+    {
+      const [host, port] = gateway.address().split(":");
+      const answer = await new Promise((resolve, reject) => {
+        const socket = netConnect(Number(port), host, () => {
+          socket.write(
+            `${JSON.stringify({
+              deviceId: "A",
+              projectId: "p",
+              worktreeId: "0123456789ab",
+            })}\n`,
+          );
+        });
+        let text = "";
+        socket.on("data", (chunk) => {
+          text += String(chunk);
+        });
+        socket.on("error", reject);
+        socket.on("close", () => resolve(text));
+      });
+      assert.match(
+        answer,
+        /^error /,
+        "an untokened local process opened a mirror stream",
+      );
+      assert.equal(
+        gateway.streamCount(),
+        0,
+        "the refused connection was bridged anyway",
+      );
+      ok("gateway refuses a local process that cannot present its token");
+    }
 
     const createInput = {
       localRoot: rootB,

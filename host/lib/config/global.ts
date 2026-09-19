@@ -199,7 +199,9 @@ function updateConfigDocSync(
   return withFileLock(`${path}.lock`, () => {
     const doc = readJsonOrNullSync(path, StoredGlobalConfigSchema);
     if (doc === null || !mutate(doc)) return false;
-    atomicWriteJsonSync(path, withSchemaVersion(doc));
+    // 0o600 like the credential and grant stores: this document carries
+    // socketHost.token, the LAN wire's bearer secret.
+    atomicWriteJsonSync(path, withSchemaVersion(doc), { mode: 0o600 });
     cache.invalidate();
     return true;
   });

@@ -14,7 +14,6 @@
 // Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
 // imports resolve. Run: pnpm test git-watcher.
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -25,20 +24,20 @@ import {
   startGitWatcher,
   stopGitWatcher,
 } from "../main/core/gitWatcher.ts";
-import { delay, makeProof, scrubbedGitEnv, waitFor } from "./lib/checkKit.mjs";
+import {
+  delay,
+  makeProof,
+  sandboxGit,
+  scrubbedGitEnv,
+  waitFor,
+} from "./lib/checkKit.mjs";
 
 // The sandbox's git commands run under the scrubbed environment: this
 // check runs from the pre-commit hook, whose GIT_* variables would
 // otherwise point every command below at the commit in progress.
 const gitEnv = scrubbedGitEnv();
 
-function git(cwd, ...args) {
-  return execFileSync(
-    "git",
-    ["-c", "user.name=sm", "-c", "user.email=sm@example.test", ...args],
-    { cwd, env: gitEnv, encoding: "utf8" },
-  );
-}
+const git = sandboxGit(gitEnv);
 
 const { check, done, fail } = makeProof("git-watcher proof");
 

@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import type { SidebarView } from "@shared/schemas";
 import { useSidebarView } from "@/hooks/projects/useSidebarView";
+import { useStagedUpdates } from "@/hooks/system/useUpdater";
 import { cn } from "@/lib/utils";
 
 // The forest tabs share one route, told apart by its view param.
@@ -76,6 +77,9 @@ export function PhoneTabBar() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const view = useSidebarView();
+  // The Settings tab is the phone's Settings icon, so it wears the
+  // sidebar's update dot (SidebarNavActions).
+  const updateReady = Object.keys(useStagedUpdates()).length > 0;
   const active =
     TABS.find((tab) => tab.pathname === pathname)?.pathname ??
     forestTabFor(view).pathname;
@@ -106,13 +110,22 @@ export function PhoneTabBar() {
             <span
               data-slot="phone-tab-pill"
               className={cn(
-                "flex h-8 w-16 items-center justify-center rounded-full transition-[background-color,color,transform]",
+                "relative flex h-8 w-16 items-center justify-center rounded-full transition-[background-color,color,transform]",
                 isCurrent && "bg-accent text-accent-foreground",
               )}
             >
               <Icon aria-hidden className="size-5" />
+              {tabPath === "/settings" && updateReady && (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute top-1 right-4.5 size-1.5 rounded-full bg-sky-500"
+                />
+              )}
             </span>
             {label}
+            {tabPath === "/settings" && updateReady && (
+              <span className="sr-only">(update available)</span>
+            )}
           </button>
         );
       })}

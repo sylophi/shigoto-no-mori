@@ -24,6 +24,27 @@ export function readKey(storage: KeyValueStorage, key: string): string | null {
   }
 }
 
+// A stored JSON document read against its schema. Absent, unparseable
+// and wrong-shaped all read as `fallback`: corrupt storage reads as
+// defaults, and the next write heals it.
+export function readJsonKey<T>(
+  storage: KeyValueStorage,
+  key: string,
+  schema: {
+    safeParse(value: unknown): { success: true; data: T } | { success: false };
+  },
+  fallback: T,
+): T {
+  const raw = readKey(storage, key);
+  if (raw === null) return fallback;
+  try {
+    const parsed = schema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export function writeKey(
   storage: KeyValueStorage,
   key: string,

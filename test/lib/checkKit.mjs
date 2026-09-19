@@ -1,7 +1,7 @@
 // Shared plumbing for the repo's check scripts. Scripts collect their
 // own failure strings and hand them to `report` for the one epilogue
 // shape every check prints.
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -144,6 +144,18 @@ export function scrubbedGitEnv() {
     GIT_CONFIG_SYSTEM: "/dev/null",
     LC_ALL: "C",
   };
+}
+
+// git in a sandbox repository, under the scrubbed environment and a
+// pinned identity, for the checks that build real repos. One copy, so a
+// fix to how a sandbox is kept off the real repository reaches them all.
+export function sandboxGit(gitEnv = scrubbedGitEnv()) {
+  return (cwd, ...args) =>
+    execFileSync(
+      "git",
+      ["-c", "user.name=sm", "-c", "user.email=sm@example.test", ...args],
+      { cwd, env: gitEnv, encoding: "utf8" },
+    );
 }
 
 export function makeProof(name) {
@@ -310,4 +322,19 @@ export function createCliRunner(binary, env) {
     return result;
   }
   return { runCli, sm };
+}
+
+// An in-memory KeyValueStorage (web/lib/kvStorage.ts), standing in for
+// window.localStorage in the checks that drive the web bridge headless.
+export function memoryStorage() {
+  const map = new Map();
+  return {
+    getItem: (key) => (map.has(key) ? map.get(key) : null),
+    setItem: (key, value) => {
+      map.set(key, String(value));
+    },
+    removeItem: (key) => {
+      map.delete(key);
+    },
+  };
 }

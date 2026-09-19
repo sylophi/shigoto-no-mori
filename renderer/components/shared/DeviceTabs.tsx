@@ -8,8 +8,11 @@
 // every selection in the app wears. One row that scrolls sideways when
 // the devices outnumber the width, never wrapping, so the title row
 // below keeps its place however many machines there are. Left and
-// right arrows move the pick, as tabs do.
+// right arrows move the pick, as tabs do. A page with something that
+// belongs to the devices as a group (Configure's shared settings) leads
+// the row with one tab for it, ahead of the machines it spans.
 import { useState, type ReactNode } from "react";
+import { MonitorSmartphone } from "lucide-react";
 import { DEVICE_PILL_CLASS } from "@/components/shared/DeviceChip";
 import { hostsProjects } from "@/lib/remote/deviceTraits";
 import { EmptyPanel } from "@/components/ui/empty-panel";
@@ -132,17 +135,50 @@ export function usePickedDevice<T extends DeviceTab>(
   return [picked, setPickedId];
 }
 
+// The id the all-devices tab is picked by. Not a device id (those are
+// UUIDs), so it can share onSelect with them.
+export const ALL_DEVICES_TAB_ID = "all-devices";
+
 export function DeviceTabBar({
   tabs,
   selectedId,
   onSelect,
+  allDevicesTab = false,
+  className,
 }: {
   tabs: readonly DeviceTab[];
   selectedId: string;
   onSelect: (deviceId: string) => void;
+  // Leads the row with the tab for what every device shares, picked
+  // as ALL_DEVICES_TAB_ID.
+  allDevicesTab?: boolean;
+  // Overrides the page inset for a bar that sits in a dialog instead.
+  className?: string;
 }) {
+  // One list for the row, so the roving order and the rendered order
+  // cannot disagree.
+  const pills = [
+    ...(allDevicesTab
+      ? [
+          {
+            id: ALL_DEVICES_TAB_ID,
+            title: "Settings every device shares",
+            lead: <MonitorSmartphone className="size-3.5 shrink-0" />,
+            label: "All devices",
+          },
+        ]
+      : []),
+    ...tabs.map((tab) => ({
+      id: tab.deviceId,
+      title: tab.isThisDevice
+        ? "This device"
+        : `${tab.label} (${tab.status?.label})`,
+      lead: tab.status && <StatusDot tone={tab.status.tone} />,
+      label: tab.label,
+    })),
+  ];
   const { listRef, onKeyDown } = useRovingPick({
-    ids: tabs.map((tab) => tab.deviceId),
+    ids: pills.map((pill) => pill.id),
     selectedId,
     onSelect,
     pickedSelector: '[aria-selected="true"]',
@@ -156,24 +192,23 @@ export function DeviceTabBar({
       // The page inset as padding rather than the header's, so a long
       // row scrolls out under the header's edge (which cancels the
       // inset with a matching negative margin) instead of clipping.
-      className="flex [scrollbar-width:none] gap-1.5 overflow-x-auto px-6 phone:px-4"
+      className={cn(
+        "flex [scrollbar-width:none] gap-1.5 overflow-x-auto px-6 phone:px-4",
+        className,
+      )}
     >
-      {tabs.map((tab) => {
-        const selected = tab.deviceId === selectedId;
+      {pills.map((pill) => {
+        const selected = pill.id === selectedId;
         return (
           <button
-            key={tab.deviceId}
+            key={pill.id}
             type="button"
             role="tab"
             aria-selected={selected}
             tabIndex={selected ? 0 : -1}
             data-slot="device-chip"
-            title={
-              tab.isThisDevice
-                ? "This device"
-                : `${tab.label} (${tab.status?.label})`
-            }
-            onClick={() => onSelect(tab.deviceId)}
+            title={pill.title}
+            onClick={() => onSelect(pill.id)}
             onKeyDown={onKeyDown}
             className={cn(
               DEVICE_PILL_CLASS,
@@ -183,8 +218,8 @@ export function DeviceTabBar({
                 : "hover:text-foreground",
             )}
           >
-            {tab.status && <StatusDot tone={tab.status.tone} />}
-            <span className="max-w-40 truncate">{tab.label}</span>
+            {pill.lead}
+            <span className="max-w-40 truncate">{pill.label}</span>
           </button>
         );
       })}

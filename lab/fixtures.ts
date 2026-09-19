@@ -415,6 +415,75 @@ const miniWorktrees: Record<string, Worktree[]> = {
   ],
 };
 
+// A disk per device for the add-project flow to browse: home folder,
+// then every folder it can list, keyed by absolute path. A registered
+// project's folder is a git repo here too, and each machine has a repo
+// or two it never registered, so a scan finds something. The Thinkpad
+// has no port-pool, which is what cloning one onto it is posed with.
+export type LabDisk = {
+  home: string;
+  dirs: Record<string, { name: string; isGitRepo: boolean }[]>;
+};
+
+const dir = (name: string) => ({ name, isGitRepo: false });
+const repo = (name: string) => ({ name, isGitRepo: true });
+
+export const labDisks: Record<string, LabDisk> = {
+  [LOCAL_DEVICE_ID]: {
+    home: "/Users/rin",
+    dirs: {
+      "/Users/rin": [dir("Documents"), dir("Downloads"), dir("dev")],
+      "/Users/rin/Documents": [],
+      "/Users/rin/Downloads": [],
+      "/Users/rin/dev": [
+        repo("hub-worker"),
+        repo("port-pool"),
+        dir("sandbox"),
+        repo("shigoto-no-mori"),
+        repo("t3code"),
+      ],
+      "/Users/rin/dev/sandbox": [repo("advent-2025")],
+    },
+  },
+  [THINKPAD_ID]: {
+    home: "/home/rin",
+    dirs: {
+      "/home/rin": [
+        dir("Downloads"),
+        dir("dev"),
+        repo("dotfiles"),
+        dir("notes"),
+      ],
+      "/home/rin/Downloads": [],
+      "/home/rin/notes": [],
+      "/home/rin/dev": [
+        repo("blog"),
+        dir("experiments"),
+        repo("shigoto-no-mori"),
+      ],
+      "/home/rin/dev/experiments": [repo("zig-raytracer")],
+    },
+  },
+  [MINI_ID]: {
+    home: "/Users/rin",
+    dirs: {
+      "/Users/rin": [dir("dev")],
+      "/Users/rin/dev": [repo("shigoto-no-mori")],
+    },
+  },
+  [WORKPC_ID]: { home: "/home/rin", dirs: { "/home/rin": [] } },
+};
+
+// The remote each fixture repo was cloned from, by repo identity (the
+// one thing a repo's checkouts share across devices). A clone of one
+// lands with that identity, so it folds into the sidebar group the
+// other devices' checkouts already sit in.
+export const labRemoteUrls: Record<string, string> = {
+  [SM_IDENTITY]: "git@github.com:sylophi/shigoto-no-mori.git",
+  [PP_IDENTITY]: "git@github.com:sylophi/port-pool.git",
+  [DF_IDENTITY]: "git@github.com:rin/dotfiles.git",
+};
+
 export const forests: Record<string, DeviceForest> = {
   [LOCAL_DEVICE_ID]: {
     deviceId: LOCAL_DEVICE_ID,

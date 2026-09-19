@@ -185,6 +185,7 @@ import {
   DIRECT_TICKET_PREFIX,
 } from "@host/direct/tickets";
 import { makeDirectHandlers } from "@host/ipc/modules/direct";
+import { handshakeProof, newHandshakeNonce } from "@shared/ipc/socket/proof";
 import {
   TunnelProvisionDeniedError,
   TunnelUnconfiguredError,
@@ -240,6 +241,7 @@ function dialWith(port, ticket, overrides = {}) {
   return connectDevice({
     url: `ws://127.0.0.1:${port}`,
     token: ticket,
+    auth: "proof",
     appVersion: "1.0.0",
     localDeviceId: "A",
     expectedDeviceId: "B",
@@ -369,6 +371,34 @@ function delayProxy(track, targetPort, delayMs) {
   });
 }
 
+// A stub host opens the handshake the way a real listener does. Without
+// the challenge a proof-mode client never sends its hello, so a stub
+// that waits for one would just stall until the deadline.
+function sendChallenge(socket) {
+  socket.send(JSON.stringify({ t: "challenge", nonce: newHandshakeNonce() }));
+}
+
+// The store mints per candidate KIND and never takes a raw ticket back
+// (the dialer proves possession instead), so these two keep the checks
+// below reading the way they read before that change. A loopback dial
+// with no CF-Connecting-IP arrives as a "lan" candidate, which is what
+// the default matches.
+function mintTickets(store, peer, count, kind = "lan") {
+  return store.mint(
+    peer,
+    Array.from({ length: count }, () => kind),
+  );
+}
+
+async function consumeTicket(store, ticket, peer, kind = "lan") {
+  const matched = await store.consumeProven(
+    peer,
+    kind,
+    async (candidate) => candidate === ticket,
+  );
+  return matched !== null;
+}
+
 // One raw ticket-mode dial through the `ws` client (which, unlike the
 // browser-global WebSocket, can set headers), for the lockout-identity
 // scenario. Resolves with the close code and whether a welcome landed.
@@ -378,18 +408,27 @@ function rawHeaderDial(port, ticket, cfConnectingIp) {
       headers: { "cf-connecting-ip": cfConnectingIp },
     });
     let welcomed = false;
-    socket.on("open", () => {
-      socket.send(
-        JSON.stringify({
-          t: "hello",
-          token: ticket,
-          deviceId: "A",
-          appVersion: "1.0.0",
-        }),
-      );
-    });
     socket.on("message", (data) => {
       const frame = JSON.parse(String(data));
+      if (frame.t === "challenge") {
+        // The ticket never goes on the wire: answer the host's nonce
+        // with an HMAC of both, exactly as the real client does.
+        const nonce = newHandshakeNonce();
+        void handshakeProof(ticket, "client", frame.nonce, nonce).then(
+          (proof) => {
+            socket.send(
+              JSON.stringify({
+                t: "hello",
+                deviceId: "A",
+                appVersion: "1.0.0",
+                nonce,
+                proof,
+              }),
+            );
+          },
+        );
+        return;
+      }
       if (frame.t === "welcome") {
         welcomed = true;
         socket.close();
@@ -490,9 +529,9 @@ async function main() {
       let online = false;
       const handlers = makeDirectHandlers({
         listenerPort: () => 42017,
-        mintTickets: (_peer, count) => {
-          minted += count;
-          return Array.from({ length: count }, (_, i) => `smpt_${i}`);
+        mintTickets: (_peer, kinds) => {
+          minted += kinds.length;
+          return kinds.map((_kind, i) => `smpt_${i}`);
         },
         isPeerOnline: () => online,
         candidateAddresses: () => ["127.0.0.1"],
@@ -593,7 +632,7 @@ async function main() {
   );
 
   await check(
-    "blocked verdict is terminal: an auth-refused candidate rejects the whole attempt instead of waiting out the remaining candidates",
+    "blocked verdict is terminal but does not end the race: an auth-refused candidate still rejects the attempt as blocked once the remaining candidates have had their turn, never as a transient timeout",
     async (track) => {
       const stub = await startStubHub();
       track(() => stub.close());
@@ -611,8 +650,7 @@ async function main() {
       const { client } = await bootPair(stub, track, brokerListener, {
         candidateAddresses: () => ["127.0.0.1", BLACKHOLE],
       });
-      const { bridge } = makeDirectBridge(client, { deadlineMs: 5000 });
-      const startedAt = Date.now();
+      const { bridge } = makeDirectBridge(client, { deadlineMs: 1500 });
       await assert.rejects(
         () => bridge.dialPeer("B"),
         (error) =>
@@ -621,11 +659,34 @@ async function main() {
           error.code === CLOSE_AUTH_FAILED,
         "an auth-refused candidate did not reject the attempt as blocked",
       );
-      const elapsed = Date.now() - startedAt;
-      assert.ok(
-        elapsed < 2500,
-        `the blocked verdict waited on the blackhole candidate (${elapsed}ms)`,
-      );
+    },
+  );
+
+  await check(
+    "a refusing candidate cannot deny the dial: a far end that refuses has proved nothing (on a LAN address it may be a squatter), so a candidate that opens later still wins",
+    async (track) => {
+      const listener = await startDirectListener(track);
+      // A different device's listener stands in for the squatter: it
+      // holds none of our tickets, so it refuses the hello it is sent.
+      const squatter = await startDirectListener(track, { deviceId: "X" });
+      // The real listener sits behind a delay, so the squatter opens,
+      // takes the first hello and refuses it before the real one is up.
+      const slowPort = await delayProxy(track, listener.port, 250);
+      const [ticket] = mintTickets(listener.tickets, "A", 1);
+      const { dialer } = fakeBrokerDialer({
+        available: true,
+        candidates: [
+          {
+            kind: "lan",
+            url: `ws://127.0.0.1:${squatter.port}`,
+            ticket: "smpt_never_minted",
+          },
+          { kind: "lan", url: `ws://127.0.0.1:${slowPort}`, ticket },
+        ],
+      });
+      const connection = await dialer.connectDirect("B");
+      track(() => connection.close());
+      assert.equal(connection.remoteDeviceId, "B");
     },
   );
 
@@ -639,7 +700,7 @@ async function main() {
       // the host's per-device supersede would kill the winner's fresh
       // session and the invoke below would reject.
       const slowPort = await delayProxy(track, listener.port, 250);
-      const [slowTicket, fastTicket] = listener.tickets.mint("A", 2);
+      const [slowTicket, fastTicket] = mintTickets(listener.tickets, "A", 2);
       const { dialer } = fakeBrokerDialer({
         available: true,
         candidates: [
@@ -669,11 +730,14 @@ async function main() {
       // The loser never sent a hello, so its ticket was never
       // presented and is still consumable.
       assert.equal(
-        listener.tickets.consume(slowTicket, "A"),
+        await consumeTicket(listener.tickets, slowTicket, "A"),
         true,
         "the abandoned candidate spent its ticket",
       );
-      assert.equal(listener.tickets.consume(fastTicket, "A"), false);
+      assert.equal(
+        await consumeTicket(listener.tickets, fastTicket, "A"),
+        false,
+      );
     },
   );
 
@@ -698,7 +762,7 @@ async function main() {
       // the lockout's close arrives an event later. A tunnel-only peer
       // has exactly this shape, which is why this was the common
       // permanent-stuck path.
-      const [ticket] = listener.tickets.mint("A", 1);
+      const [ticket] = mintTickets(listener.tickets, "A", 1);
       const { dialer } = fakeBrokerDialer({
         available: true,
         candidates: [
@@ -792,6 +856,7 @@ async function main() {
       // 300ms, holding the hello slot while candidate 2 arrives.
       const slowFail = new WebSocketServer({ host: "127.0.0.1", port: 0 });
       slowFail.on("connection", (socket) => {
+        sendChallenge(socket);
         socket.on("message", () => {
           setTimeout(() => socket.close(1011, "boom"), 300);
         });
@@ -814,7 +879,7 @@ async function main() {
       // Candidate 3 is the real listener, opening only after both
       // failures played out.
       const realPort = await delayProxy(track, listener.port, 450);
-      const [ticket] = listener.tickets.mint("A", 1);
+      const [ticket] = mintTickets(listener.tickets, "A", 1);
       const { dialer } = fakeBrokerDialer({
         available: true,
         candidates: [
@@ -853,6 +918,7 @@ async function main() {
       // belt for a peer whose close code predates that.
       const slowFail = new WebSocketServer({ host: "127.0.0.1", port: 0 });
       slowFail.on("connection", (socket) => {
+        sendChallenge(socket);
         socket.on("message", () => {
           setTimeout(() => socket.close(1011, "boom"), 300);
         });
@@ -963,7 +1029,7 @@ async function main() {
       // broker answer is skipped, so the dial fails and the ticket is
       // never presented, even though the URL itself is reachable.
       const listener = await startDirectListener(track);
-      const [ticket] = listener.tickets.mint("A", 1);
+      const [ticket] = mintTickets(listener.tickets, "A", 1);
       const { dialer } = fakeBrokerDialer(
         {
           available: true,
@@ -983,9 +1049,116 @@ async function main() {
         "a tunnel-kind ws:// candidate was dialed",
       );
       assert.equal(
-        listener.tickets.consume(ticket, "A"),
+        await consumeTicket(listener.tickets, ticket, "A"),
         true,
         "the refused candidate's ticket was spent",
+      );
+    },
+  );
+
+  await check(
+    "the ticket never travels: a machine that answers at an advertised LAN address captures nothing it can spend, and the hello it did capture is worthless against the real listener",
+    async (track) => {
+      const listener = await startDirectListener(track);
+      const [ticket] = mintTickets(listener.tickets, "A", 1);
+      // The impostor: whoever holds that private address on the network
+      // the dialer happens to be on. It challenges like a real host so
+      // the client will talk to it at all, then keeps what it is told.
+      let captured = null;
+      const impostor = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+      impostor.on("connection", (socket) => {
+        sendChallenge(socket);
+        socket.on("message", (data) => {
+          captured = String(data);
+        });
+      });
+      await new Promise((resolve) => impostor.on("listening", resolve));
+      track(() => new Promise((resolve) => impostor.close(() => resolve())));
+
+      // The victim dials the impostor with a live ticket.
+      await assert.rejects(
+        () =>
+          dialWith(impostor.address().port, ticket, {
+            helloTimeoutMs: 600,
+            expectedDeviceId: "B",
+          }),
+        "the client accepted a host that never proved it holds the ticket",
+      );
+      assert.notEqual(captured, null, "the impostor saw no hello at all");
+      const hello = JSON.parse(captured);
+      assert.equal(hello.t, "hello");
+      assert.equal(
+        hello.token,
+        undefined,
+        "the connect ticket was sent to whoever answered first",
+      );
+      assert.equal(
+        captured.includes(ticket),
+        false,
+        "the connect ticket appeared on the wire",
+      );
+
+      // What the impostor did capture, replayed verbatim at the real
+      // listener, authenticates nothing: the proof answers a nonce that
+      // listener never issued.
+      const replay = await new Promise((resolve) => {
+        const socket = new WsClient(`ws://127.0.0.1:${listener.port}`);
+        let welcomed = false;
+        socket.on("message", (data) => {
+          const frame = JSON.parse(String(data));
+          if (frame.t === "challenge") socket.send(captured);
+          if (frame.t === "welcome") {
+            welcomed = true;
+            socket.close();
+          }
+        });
+        socket.on("error", () => {});
+        socket.on("close", (code) => resolve({ code, welcomed }));
+      });
+      assert.equal(
+        replay.welcomed,
+        false,
+        "a captured hello was replayed into a session",
+      );
+      assert.equal(replay.code, CLOSE_AUTH_FAILED);
+      // The ticket was never spent by any of that, so the honest dial
+      // it belongs to still works.
+      assert.equal(
+        await consumeTicket(listener.tickets, ticket, "A"),
+        true,
+        "the impostor burned a ticket it never held",
+      );
+    },
+  );
+
+  await check(
+    "tickets are bound to the path they were minted for: a LAN ticket presented on a tunnel-borne connection is refused",
+    async (track) => {
+      const listener = await startDirectListener(track);
+      // Minted for a LAN candidate, then presented on a connection that
+      // arrives the way the cloudflared connector delivers one
+      // (loopback carrying CF-Connecting-IP). A machine squatting the
+      // advertised LAN address is off the host's own network, so the
+      // tunnel is its only route to the real listener: refusing the
+      // cross-path redemption is what denies it the relay.
+      const [lanTicket] = mintTickets(listener.tickets, "A", 1, "lan");
+      const crossPath = await rawHeaderDial(
+        listener.port,
+        lanTicket,
+        "203.0.113.9",
+      );
+      assert.equal(
+        crossPath.welcomed,
+        false,
+        "a LAN ticket authed through the tunnel path",
+      );
+      assert.equal(crossPath.code, CLOSE_AUTH_FAILED);
+      // Refused, not consumed: the honest LAN dial it was minted for is
+      // untouched by someone else's failed attempt.
+      assert.equal(
+        await consumeTicket(listener.tickets, lanTicket, "A", "lan"),
+        true,
+        "a cross-path attempt spent the ticket it failed to redeem",
       );
     },
   );
@@ -1005,8 +1178,11 @@ async function main() {
         assert.equal(code, CLOSE_AUTH_FAILED);
       }
       // The locked identity is refused at connection time even with a
-      // VALID ticket (never presented, so it stays live).
-      const [lockedTicket] = listener.tickets.mint("A", 1);
+      // VALID ticket (never presented, so it stays live). Minted
+      // "tunnel" because that is what a loopback connection carrying
+      // CF-Connecting-IP arrives as, which is the whole point of this
+      // scenario: these dials stand in for the cloudflared connector.
+      const [lockedTicket] = mintTickets(listener.tickets, "A", 1, "tunnel");
       const locked = await rawHeaderDial(
         listener.port,
         lockedTicket,
@@ -1023,14 +1199,14 @@ async function main() {
         "the lockout refusal was indistinguishable from a bad ticket",
       );
       assert.equal(
-        listener.tickets.consume(lockedTicket, "A"),
+        await consumeTicket(listener.tickets, lockedTicket, "A", "tunnel"),
         true,
         "the lockout refusal spent the valid ticket it never read",
       );
       // A DIFFERENT identity over the same loopback path dials fine:
       // under remoteAddress keying both would share one 127.0.0.1
       // bucket and this dial would be benched too.
-      const [freshTicket] = listener.tickets.mint("A", 1);
+      const [freshTicket] = mintTickets(listener.tickets, "A", 1, "tunnel");
       const other = await rawHeaderDial(
         listener.port,
         freshTicket,
@@ -1116,7 +1292,7 @@ async function main() {
       const listener = await startDirectListener(track, {
         ticketOpts: { ttlMs: 80 },
       });
-      const [ticket] = listener.tickets.mint("A", 1);
+      const [ticket] = mintTickets(listener.tickets, "A", 1);
       const first = await dialWith(listener.port, ticket);
       first.close();
       // Replay: the ticket was consumed on first presentation.
@@ -1129,7 +1305,7 @@ async function main() {
         "a replayed ticket authenticated",
       );
       // Expiry: a fresh ticket past its TTL is refused too.
-      const [stale] = listener.tickets.mint("A", 1);
+      const [stale] = mintTickets(listener.tickets, "A", 1);
       await delay(150);
       await assert.rejects(
         () => dialWith(listener.port, stale),
@@ -1148,31 +1324,31 @@ async function main() {
       // Siblings of one candidate-set are independent: consuming one
       // must not spend the others (the old single-ticket design burned
       // the whole dial on the first candidate that reached the host).
-      const a = store.mint("A", 3);
+      const a = mintTickets(store, "A", 3);
       assert.equal(a.length, 3);
-      assert.equal(store.consume(a[0], "A"), true);
-      assert.equal(store.consume(a[1], "A"), true);
+      assert.equal(await consumeTicket(store, a[0], "A"), true);
+      assert.equal(await consumeTicket(store, a[1], "A"), true);
       // Another peer's mint leaves A's remaining ticket alone.
-      const b = store.mint("B", 2);
-      assert.equal(store.consume(a[2], "A"), true);
-      assert.equal(store.consume(b[0], "B"), true);
+      const b = mintTickets(store, "B", 2);
+      assert.equal(await consumeTicket(store, a[2], "A"), true);
+      assert.equal(await consumeTicket(store, b[0], "B"), true);
       // A's own re-mint REPLACES its previous set: only the freshest
       // dial holds live tickets.
-      const a1 = store.mint("A", 2);
-      const a2 = store.mint("A", 2);
+      const a1 = mintTickets(store, "A", 2);
+      const a2 = mintTickets(store, "A", 2);
       assert.equal(
-        store.consume(a1[0], "A"),
+        await consumeTicket(store, a1[0], "A"),
         false,
         "a replaced ticket authed",
       );
-      assert.equal(store.consume(a2[0], "A"), true);
+      assert.equal(await consumeTicket(store, a2[0], "A"), true);
       // The global backstop refuses the overflowing mint outright and
       // never evicts another peer's pending tickets (an eviction would
       // feed the per-IP lockout against the innocent peer's dial).
-      const keeper = store.mint("keeper", 2);
-      for (let i = 0; i < 200; i += 1) store.mint(`peer-${i}`, 1);
-      assert.equal(store.mint("overflow", 60), null);
-      assert.equal(store.consume(keeper[0], "keeper"), true);
+      const keeper = mintTickets(store, "keeper", 2);
+      for (let i = 0; i < 200; i += 1) mintTickets(store, `peer-${i}`, 1);
+      assert.equal(mintTickets(store, "overflow", 60), null);
+      assert.equal(await consumeTicket(store, keeper[0], "keeper"), true);
     },
   );
 
@@ -1182,7 +1358,7 @@ async function main() {
       const listener = await startDirectListener(track);
       // The ticket is bound to A, the hello claims C. No identity pin:
       // the refusal under test is the listener's, not the client's.
-      const [wrongPeer] = listener.tickets.mint("A", 1);
+      const [wrongPeer] = mintTickets(listener.tickets, "A", 1);
       await assert.rejects(
         () =>
           dialWith(listener.port, wrongPeer, {
@@ -1196,7 +1372,7 @@ async function main() {
       );
       // The welcome names B. A dial pinned to another identity must
       // fail and close rather than cache the wrong machine.
-      const [ticket] = listener.tickets.mint("A", 1);
+      const [ticket] = mintTickets(listener.tickets, "A", 1);
       await assert.rejects(
         () => dialWith(listener.port, ticket, { expectedDeviceId: "X" }),
         (error) =>
@@ -1214,7 +1390,7 @@ async function main() {
       const listener = await startDirectListener(track);
       const connection = await dialWith(
         listener.port,
-        listener.tickets.mint("A", 1)[0],
+        mintTickets(listener.tickets, "A", 1)[0],
       );
       track(() => connection.close());
       await assert.rejects(
@@ -1259,7 +1435,7 @@ async function main() {
       listener.setAccepts(true);
       const first = await dialWith(
         listener.port,
-        listener.tickets.mint("A", 1)[0],
+        mintTickets(listener.tickets, "A", 1)[0],
       );
       assert.equal(
         await first.transport.invoke("test:mutate", undefined),
@@ -1272,7 +1448,7 @@ async function main() {
       // without the kill it would run twice.
       const second = await dialWith(
         listener.port,
-        listener.tickets.mint("A", 1)[0],
+        mintTickets(listener.tickets, "A", 1)[0],
       );
       track(() => second.close());
       await assert.rejects(
@@ -1398,7 +1574,7 @@ async function main() {
       let hostSideClosed = false;
       const inbound = await dialWith(
         listener.port,
-        listener.tickets.mint("A", 1)[0],
+        mintTickets(listener.tickets, "A", 1)[0],
         { onClose: () => (hostSideClosed = true) },
       );
       applyDirectPresence(true, ["A"], presenceDeps);
@@ -1539,7 +1715,7 @@ async function main() {
       });
       const connection = await dialWith(
         listener.port,
-        listener.tickets.mint("A", 1)[0],
+        mintTickets(listener.tickets, "A", 1)[0],
       );
       track(() => connection.close());
       // The preflight is a read, served ungated, and fail-closed about
@@ -1755,11 +1931,8 @@ async function main() {
       const minted = [];
       const handlers = makeDirectHandlers({
         listenerPort: () => 42017,
-        mintTickets: (_peer, count) => {
-          const tickets = Array.from(
-            { length: count },
-            (_unused, i) => `smpt_${minted.length}_${i}`,
-          );
+        mintTickets: (_peer, kinds) => {
+          const tickets = kinds.map((_kind, i) => `smpt_${minted.length}_${i}`);
           minted.push(tickets);
           return tickets;
         },

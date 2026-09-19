@@ -206,8 +206,21 @@ function noteSessions(status: HubStatus): void {
     if (boundQueryClient !== null) {
       invalidateDeviceSession(boundQueryClient, deviceId);
     }
+    for (const listener of sessionLandedListeners) listener(deviceId);
   }
   liveSessions = now;
+}
+
+// Followers of a session landing that have more to do than refetch:
+// the shared settings exchange catches a peer up on what it missed
+// while it was away. Boot-scoped like everything here, so there is no
+// unsubscribe. A listener hears the sessions already up as landings
+// too, so nothing rests on the order the boot starts things in.
+const sessionLandedListeners = new Set<(deviceId: string) => void>();
+
+export function onSessionLanded(listener: (deviceId: string) => void): void {
+  sessionLandedListeners.add(listener);
+  for (const deviceId of liveSessions) listener(deviceId);
 }
 
 // Pure and synchronous: the peer's appVersion now rides the status

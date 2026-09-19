@@ -329,13 +329,11 @@ export const ClientConfigSchema = z.object({
   // default (the remote port itself) are stored, so the map stays as
   // small as the user's overrides.
   forwardLocalPorts: z.record(z.string(), PortNumberSchema).optional(),
-  // Which device a project header's `+` creates on when the project
-  // spans several: device id by repo identity
-  // (renderer/hooks/config/useQuickCreateDevice.ts is the only reader
-  // and writer). Keyed by identity rather than project id because the
-  // merged header IS the identity group, and the same pick then holds
-  // from whichever device the group is viewed. Absent means the first
-  // live device, this machine first.
+  // Legacy: the create-device picks, from before they became a shared
+  // setting (shared/sharedSettings.ts, quickCreateDevice). Nothing
+  // reads it but the one-time move in
+  // renderer/lib/remote/sharedSettingsSync.ts, which clears it. Still
+  // modeled so a doc that carries it parses and the move can see it.
   quickCreateDevices: z.record(z.string(), z.string()).optional(),
   // Which sidebar layout this window shows: the classic tree, or the
   // flat cross-project inbox. A preference of the window rather than

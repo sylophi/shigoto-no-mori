@@ -15,27 +15,42 @@ import { PATCH_MAX_BUFFER, runLenient } from "./core";
 // `paths` is the file, preceded by its old name when git records a
 // rename. Handing over both is what makes the pair one entry rather
 // than an unexplained addition.
-export function getFileDiff(
+export async function getFileDiff(
   worktreePath: string,
   paths: readonly string[],
   untracked: boolean,
 ): Promise<string> {
   const file = paths[paths.length - 1];
-  if (file === undefined) return Promise.resolve("");
+  if (file === undefined) return "";
+  // A path is a filename and never a pattern. Without this a file called
+  // `a[1].txt` is a glob, and the pane for one file quietly answers with
+  // another's hunks.
+  const pathspecOpts = ["-c", "core.quotePath=false", "--literal-pathspecs"];
+  // `--no-index` reads a file straight off the disk, so it would answer
+  // for a path git does not count as a change, an ignored `.env`, say.
+  // Read-only remote peers reach this, so git is asked first whether
+  // the file is an untracked change. A symlink is safe to let through:
+  // `--no-index` prints where it points, never what is there.
+  if (untracked) {
+    const listed = await runLenient(worktreePath, [
+      ...pathspecOpts,
+      "ls-files",
+      "--others",
+      "--exclude-standard",
+      "--",
+      file,
+    ]);
+    if (listed === "") return "";
+  }
   // `--` keeps a filename like `-weird.txt` from being parsed as flags,
   // and `runLenient` swallows the non-zero exit `--no-index` makes
   // whenever it has a diff to print.
   const args = untracked
     ? ["diff", "--no-index", "--no-color", "--", "/dev/null", file]
     : ["diff", "HEAD", "--no-color", "--", ...paths];
-  return runLenient(
-    worktreePath,
-    // Every path here came out of `git status`, so it is a filename and
-    // never a pattern. Without this a file called `a[1].txt` is a glob,
-    // and the pane for one file quietly answers with another's hunks.
-    ["-c", "core.quotePath=false", "--literal-pathspecs", ...args],
-    { maxBuffer: PATCH_MAX_BUFFER },
-  );
+  return runLenient(worktreePath, [...pathspecOpts, ...args], {
+    maxBuffer: PATCH_MAX_BUFFER,
+  });
 }
 
 // Unified patch of a single commit, with the commit metadata stripped

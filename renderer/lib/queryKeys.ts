@@ -195,6 +195,14 @@ function buildQueryKeys(deviceId: string) {
     // no host sentinel and no device id.
     clientConfig: () => ["clientConfig"] as const,
 
+    // Client-scoped: THIS device's copy of the shared settings. Every
+    // device's copy converges on the same entries, so there is one
+    // answer wherever the reader sits and no peer's copy is ever cached
+    // (lib/remote/sharedSettingsSync.ts folds them into this one). So it
+    // is the same key in every device's registry: never pair it with a
+    // peer's api, or that peer's copy overwrites this device's.
+    sharedSettings: () => ["sharedSettings"] as const,
+
     // Client-scoped: the hub account credential lives in this app
     // instance's userData, not a host's state. Status and the device list
     // share the "account" prefix so the changed broadcast can invalidate
@@ -298,6 +306,8 @@ const externalChangeExempt = new Set([
   "mirrors",
   "portForwards",
   "runtime",
+  // Written off its own changed broadcast, like updater.
+  "sharedSettings",
   "updater",
   "worktreeHygiene",
   "worktreeDiskUsage",

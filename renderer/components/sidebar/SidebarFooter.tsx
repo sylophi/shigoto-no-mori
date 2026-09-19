@@ -2,7 +2,6 @@ import { FolderPlus } from "lucide-react";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { hasLocalHost } from "@/lib/localHost";
-import { useUpdater } from "@/hooks/system/useUpdater";
 import { SidebarNavActions } from "./SidebarNavActions";
 import { SidebarViewToggle } from "./SidebarViewToggle";
 import { SIDEBAR_FOOTER_BAR, SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
@@ -16,8 +15,8 @@ interface SidebarFooterProps {
 // What both views share: the layout toggle, and the app-level actions.
 // Anything that only answers a question the project tree asks lives in
 // SidebarToolbar, above the tree. A hostless client has no local tree
-// to arrange or add to, and no updater of its own, so its bar carries
-// the toggle and the page-nav cluster alone.
+// to arrange, so its bar carries the toggle, add project (onto one of
+// its peers) and the page-nav cluster.
 export function SidebarFooter(props: SidebarFooterProps) {
   return hasLocalHost ? <LocalFooter {...props} /> : <PeerFooter />;
 }
@@ -27,19 +26,34 @@ function PeerFooter() {
     <div className={SIDEBAR_FOOTER_BAR}>
       <SidebarViewToggle />
       <div className="flex-1" />
+      <AddProjectButton />
       <SidebarNavActions />
     </div>
   );
 }
 
-function LocalFooter({ arrangeMode, onToggleArrange }: SidebarFooterProps) {
+// ⌘N is a native menu accelerator, so only the desktop app has it.
+function AddProjectButton() {
   const { openAddProject } = useOverlays();
-  const { state: updaterState } = useUpdater();
-  const updateReady = updaterState?.kind === "ready";
   // aria-keyshortcuts restores the AT-audible shortcut hints the old
   // native titles carried; Base UI tooltips are visual-only.
   const modName = "Meta";
+  return (
+    <SimpleTooltip tip={hasLocalHost ? "Add project (⌘N)" : "Add project"}>
+      <button
+        type="button"
+        onClick={() => openAddProject()}
+        aria-label="Add project"
+        aria-keyshortcuts={hasLocalHost ? `${modName}+N` : undefined}
+        className={SIDEBAR_ICON_BUTTON}
+      >
+        <FolderPlus className="size-3.5" />
+      </button>
+    </SimpleTooltip>
+  );
+}
 
+function LocalFooter({ arrangeMode, onToggleArrange }: SidebarFooterProps) {
   if (arrangeMode) {
     return (
       <div className={cn(SIDEBAR_FOOTER_BAR, "justify-end")}>
@@ -57,18 +71,8 @@ function LocalFooter({ arrangeMode, onToggleArrange }: SidebarFooterProps) {
     <div className={SIDEBAR_FOOTER_BAR}>
       <SidebarViewToggle />
       <div className="flex-1" />
-      <SimpleTooltip tip="Add project (⌘N)">
-        <button
-          type="button"
-          onClick={openAddProject}
-          aria-label="Add project"
-          aria-keyshortcuts={`${modName}+N`}
-          className={SIDEBAR_ICON_BUTTON}
-        >
-          <FolderPlus className="size-3.5" />
-        </button>
-      </SimpleTooltip>
-      <SidebarNavActions updateReady={updateReady} />
+      <AddProjectButton />
+      <SidebarNavActions />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isCloneableRemote } from "@shared/cloneUrl";
 import { ProjectScopedPayloadSchema } from "./payloads";
 
 // Sentinel returned by `deriveBranch` when a worktree has no branch and
@@ -76,6 +77,30 @@ export type SidebarView = z.infer<typeof SidebarViewSchema>;
 export const ToggleCollapsedProjectPayloadSchema = z.object({
   projectId: z.string().min(1),
 });
+
+// Clone a remote into `parentDir` and register the checkout. What
+// counts as a remote is isCloneableRemote's call (a plain path or
+// file:// names this machine's disk, which means nothing on the device
+// doing the clone, and a leading dash would read as a git option).
+// `name` is the new folder, one segment, defaulting to the repo's own
+// name.
+export const CloneProjectPayloadSchema = z.object({
+  url: z
+    .string()
+    .trim()
+    .refine(isCloneableRemote, { message: "Not a git remote URL" }),
+  parentDir: z.string().min(1),
+  name: z
+    .string()
+    .trim()
+    .min(1)
+    .refine((name) => !/[\\/]/.test(name) && name !== "." && name !== "..", {
+      message: "The folder name must be a single path segment",
+    })
+    .optional(),
+});
+
+export type CloneProjectPayload = z.infer<typeof CloneProjectPayloadSchema>;
 
 export const RemoveProjectPayloadSchema = z.object({
   id: z.string().min(1),

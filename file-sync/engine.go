@@ -140,6 +140,9 @@ func (s stdioStream) Close() error {
 // peer to reach and the worktree there. The gateway answers with one
 // line, "ok" or "error <message>".
 type mirrorPreface struct {
+	// Proves this is the daemon the gateway spawned. Handed over in the
+	// environment (mirrorGatewayTokenEnv), never argv.
+	Token      string `json:"token"`
 	DeviceID   string `json:"deviceId"`
 	ProjectID  string `json:"projectId"`
 	WorktreeID string `json:"worktreeId"`
@@ -147,6 +150,9 @@ type mirrorPreface struct {
 	// was created without one.
 	LocalWorktreeID string `json:"localWorktreeId,omitempty"`
 }
+
+// main/core/mirror/gateway.ts mints the value and exports this same name.
+const mirrorGatewayTokenEnv = "SM_MIRROR_GATEWAY_TOKEN"
 
 type mirrorGatewayHandler struct {
 	gateway string
@@ -185,6 +191,7 @@ func (h mirrorGatewayHandler) Connect(
 		}
 	}()
 	preface := mirrorPreface{
+		Token:           os.Getenv(mirrorGatewayTokenEnv),
 		DeviceID:        u.Host,
 		ProjectID:       u.Parameters[mirrorParamProjectID],
 		WorktreeID:      u.Parameters[mirrorParamWorktreeID],
@@ -488,14 +495,18 @@ func createMirrorSession(ctx context.Context, manager *synchronization.Manager, 
 	// files cross too. The caller's ignores follow the pointer: what
 	// git ignores on the source, or the user's own pick, stays where
 	// it is.
+	// The .git pointer rule goes LAST. The last matching pattern wins
+	// and "!" flips an ignore back to an include, so a repo whose
+	// .gitignore carries a negation like "!.git*" would cancel a guard
+	// placed first.
 	ignores := make([]string, 0, 1+len(req.Ignores))
-	ignores = append(ignores, mirrorGitPointerIgnore)
 	for _, pattern := range req.Ignores {
 		if pattern == "" || pattern == mirrorGitPointerIgnore {
 			continue
 		}
 		ignores = append(ignores, pattern)
 	}
+	ignores = append(ignores, mirrorGitPointerIgnore)
 	alpha, beta := local, remote
 	mode := core.SynchronizationMode_SynchronizationModeTwoWaySafe
 	if req.Pull {

@@ -379,7 +379,7 @@ func updateConfigDoc(path string, fn func(doc map[string]any) error) error {
 		// that predates it can't turn a write nobody asked for into an
 		// mtime bump the watcher reacts to.
 		stampSchemaVersion(doc)
-		return atomicWriteJSON(path, doc)
+		return atomicWriteJSONMode(path, doc, configFileMode(path))
 	})
 }
 
@@ -1056,7 +1056,7 @@ func openConfigFileInEditor(path string) (int, error) {
 	if _, err := os.Stat(path); err != nil {
 		seeded := map[string]any{}
 		stampSchemaVersion(seeded)
-		if writeErr := atomicWriteJSON(path, seeded); writeErr != nil {
+		if writeErr := atomicWriteJSONMode(path, seeded, configFileMode(path)); writeErr != nil {
 			return 1, errf("Couldn't create %s: %v", path, writeErr)
 		}
 	}

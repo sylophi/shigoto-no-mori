@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, powerMonitor } from "electron";
+import { app, BrowserWindow, dialog, powerMonitor, session } from "electron";
 import { platform } from "node:os";
 import path from "node:path";
 import {
@@ -369,6 +369,14 @@ app.on("second-instance", () => {
 });
 
 app.on("ready", async () => {
+  // Electron grants most permission requests by default, and this
+  // window hosts remote content (Clerk's script and captcha iframe), so
+  // everything is refused except what the app uses: copy buttons, which
+  // Electron routes through here as clipboard-sanitized-write.
+  session.defaultSession.setPermissionRequestHandler(
+    (_contents, permission, callback) =>
+      callback(permission === "clipboard-sanitized-write"),
+  );
   // The scheme the window loads from (see createWindow). protocol.handle
   // only works post-ready, and it must precede the first loadURL.
   serveRendererOverScheme(

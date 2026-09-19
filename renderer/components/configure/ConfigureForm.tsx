@@ -17,13 +17,11 @@ import { notifyError } from "@/lib/toast";
 import type {
   CarryOverEntry,
   LauncherCommand,
-  Project,
   ShigomoriConfig,
 } from "@shared/schemas";
 import { SCRIPT_ENV_DOCS } from "@shared/scriptEnv";
 import { ToggleRow } from "@/components/shared/ToggleRow";
 import { CarryOverSection } from "./CarryOverSection";
-import { CreateOnSection } from "./CreateOnSection";
 import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
 import { ScriptField } from "./ScriptField";
 import {
@@ -84,9 +82,6 @@ function toConfig(
 interface ConfigureFormProps {
   projectId: string;
   projectPath: string;
-  // The project itself, for the "Create on" pick (its identity names
-  // the group, and the picker matches devices on it).
-  project: Project;
   initialConfig: ShigomoriConfig | null;
   resolvedDefaultBranch: string;
 }
@@ -94,7 +89,6 @@ interface ConfigureFormProps {
 export function ConfigureForm({
   projectId,
   projectPath,
-  project,
   initialConfig,
   resolvedDefaultBranch,
 }: ConfigureFormProps) {
@@ -250,8 +244,6 @@ export function ConfigureForm({
               description="Lists it alongside the worktrees. The project view always shows it."
             />
           </section>
-
-          <CreateOnSection project={project} />
 
           <CarryOverSection
             projectId={projectId}

@@ -354,7 +354,7 @@ relaunched. A relaunch after `--fresh` is a new device. `pnpm test e2e/remote-sm
 ## Unattended remote smoke
 
 ```sh
-pnpm test e2e/remote-smoke [--keep]
+pnpm test e2e/remote-smoke [--keep] [--only=<label part>,...]
 ```
 
 `test/e2e/remote-smoke.mts` runs the full remote loop with no
@@ -370,10 +370,17 @@ interaction:
 6. Revokes what is still enrolled, stops both apps and wipes both
    profiles. `--keep` skips this and leaves everything running.
 
+`--only` runs the scenarios whose label contains one of the given
+parts, for a quick pass over one area
+(`--only="presence,shared settings"`). The boot and the teardown always
+run. A scenario that builds on an earlier one's result fails when that
+one was filtered out, so name both.
+
 | Scenario     | Asserts                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
 | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | presence     | Each roster holds the other. a's registry shows b online.                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | remote read  | a lists b's projects and the main worktree of `shared`.                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| shared settings | With b's switch off, a value written on a lands in b's own copy by b's pull alone. With it on, one written on b lands in a's, and the two copies read identical. |
 | grant gate   | With b's switch off, a's `worktrees:create` on b is refused with the typed message. With it on, `feat/e2e` is created and the path exists on disk.                                                                                                                                                                                                                                                                                                                          |
 | pull         | a pulls `feat/e2e` (the transplant's first half). The worktree lands under a's data dir on that branch. a's project carries a setup script that logs each run, and the pull runs it once.                                                                                                                                                                                                                                                                                                                                                                     |
 | transplant   | a tears the source down. It is gone from b's disk and still present on a.                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -391,7 +398,9 @@ interaction:
 | dialog: transplant with the switch pinned off | The switch turned off under Gitignored stays off through rule changes, the running view lists setup as skipped, and the transplant runs no setup and brings no ignored file. |
 | dialog: transplant with the switch pinned on | The switch turned on under Nothing runs setup, the running view names the setup command, and the copy keeps its own build output. |
 | port forward | a forwards a loopback echo server on b. Bytes round-trip.                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| clone onto a peer | a asks b to clone a loopback `git://` remote into b's repos folder and register it. Refused with commands off (the folder listing too), and for an option-shaped string or a path as the URL. The checkout lands, lists with an identity, and its `cloneUrl` reads back, where the path-origin shared repo answers null. A second clone onto the folder is refused.                                                                                                     |
 | liveness     | b is killed with SIGKILL. a drops it from the roster. b relaunches and both reconnect.                                                                                                                                                                                                                                                                                                                                                                                      |
+| shared settings: offline catch-up | b is killed, a writes a value, b relaunches. b's copy takes the value once its session lands, with no server having held it. |
 | revoke       | a removes b from the account. a's roster and registry drop it, and b signs itself out of the account.                                                                                                                                                                                                                                                                                                                                                                               |
 
 Screenshots and logs go to a temp dir named in the output. A failing

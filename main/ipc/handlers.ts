@@ -38,6 +38,7 @@ import { hubContract } from "@shared/ipc/modules/hub";
 import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
+import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
 import { cliContract } from "@shared/ipc/modules/cli";
 import { shellContract } from "@shared/ipc/modules/shell";
 import { terrierContract } from "@shared/ipc/modules/terrier";
@@ -75,6 +76,7 @@ import { projectsHandlers } from "@host/ipc/modules/projects";
 import { remoteAccessHandlers } from "@host/ipc/modules/remoteAccess";
 import { runtimeHandlers } from "@host/ipc/modules/runtime";
 import { scriptsHandlers } from "@host/ipc/modules/scripts";
+import { sharedSettingsHandlers } from "@host/ipc/modules/sharedSettings";
 import { cliHandlers } from "@host/ipc/modules/cli";
 import { shellHandlers } from "./modules/shell";
 import { terrierHandlers } from "@host/ipc/modules/terrier";
@@ -198,6 +200,11 @@ const mirrorDaemon = createMirrorDaemon({
     const address = mirrorGateway.address();
     if (address === null) throw new Error("mirror gateway is not listening");
     return address;
+  },
+  gatewayToken: () => {
+    const token = mirrorGateway.token();
+    if (token === null) throw new Error("mirror gateway is not listening");
+    return token;
   },
   onChange: () => {
     broadcastMirrorChanged();
@@ -439,6 +446,7 @@ export function registerIpcHandlers(): void {
   registerContract(worktreesContract, worktreesHandlers);
   registerContract(hygieneContract, hygieneHandlers);
   registerContract(scriptsContract, scriptsHandlers);
+  registerContract(sharedSettingsContract, sharedSettingsHandlers);
   registerContract(cliContract, cliHandlers);
   registerContract(shigomoriContract, shigomoriHandlers);
   registerContract(syncContract, syncHandlers);

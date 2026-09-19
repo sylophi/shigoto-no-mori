@@ -4,8 +4,8 @@
 // rather than a named export beside a default one, which vite's config
 // bundler warns about.
 import { resolve } from "node:path";
-import react, { reactCompilerPreset } from "@vitejs/plugin-react";
-import babel from "@rolldown/plugin-babel";
+import react from "@vitejs/plugin-react";
+import { reactCompiler } from "../vite.reactCompiler";
 import tailwindcss from "@tailwindcss/vite";
 import type { UserConfig } from "vite";
 
@@ -36,10 +36,6 @@ export function labBaseConfig(opts: {
       __APP_VERSION__: JSON.stringify("2.0.3"),
       __APP_COMMIT__: JSON.stringify("lab"),
     },
-    plugins: [
-      tailwindcss(),
-      react(),
-      babel({ presets: [reactCompilerPreset()] }),
-    ],
+    plugins: [tailwindcss(), react(), reactCompiler()],
   };
 }

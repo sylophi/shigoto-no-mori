@@ -1,6 +1,6 @@
 // The remote flows, end to end, on one machine:
 //
-//   pnpm test e2e/remote-smoke [--keep]
+//   pnpm test e2e/remote-smoke [--keep] [--only=<label part>,...]
 //
 // Two dev profiles (scripts/lib/devProfile.mts) as two devices of the
 // owner's dev account, both signed in by cloning the plain dev
@@ -23,6 +23,7 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   writeFileSync,
 } from "node:fs";
 import { connect, createServer, type Socket } from "node:net";
@@ -55,6 +56,16 @@ import {
 import { attachWindow, type AppWindow } from "./cdp.mts";
 
 const keep = process.argv.includes("--keep");
+// Runs only the scenarios whose label contains one of these, for a
+// quick pass over one area. The boot, the connection wait and the
+// teardown always run. A scenario that leans on an earlier one's result
+// fails its `need` when that one was filtered out, so name both.
+const only = (
+  process.argv.find((arg) => arg.startsWith("--only="))?.slice(7) ?? ""
+)
+  .split(",")
+  .map((part) => part.trim())
+  .filter((part) => part !== "");
 
 // Git against the fixture worktrees, both of which live on this
 // machine: pinned identity, the inherited GIT_* scrubbed (a lefthook
@@ -192,7 +203,12 @@ function need<T>(value: T | undefined, from: string): T {
   return value;
 }
 
-type Project = { id: string; name: string; identity?: string | null };
+type Project = {
+  id: string;
+  name: string;
+  path: string;
+  identity?: string | null;
+};
 type Worktree = {
   id: string;
   projectId: string;
@@ -272,6 +288,29 @@ async function revokeFrom(port: number, otherSuffix: string): Promise<void> {
   }
 }
 
+// The shared settings, driven through the renderer's own write path
+// (the local copy, then an offer to each peer) rather than the raw
+// channel, so the scenario covers what the Configure page runs.
+const SHARED_KEY = "e2e/sharedSetting";
+
+const setSharedSetting = (w: AppWindow, value: string) =>
+  w.evaluate(
+    `import("/renderer/lib/remote/sharedSettingsSync.ts").then((m) =>
+      m.writeSharedSetting(${JSON.stringify(SHARED_KEY)}, ${JSON.stringify(value)}))`,
+  );
+
+const waitSharedSetting = (w: AppWindow, value: string, what: string) =>
+  waitFor(
+    async () => {
+      const doc = await w.evaluate<{
+        entries: Record<string, { value: unknown }>;
+      }>("window.api.sharedSettings.read()");
+      return doc.entries[SHARED_KEY]?.value === value;
+    },
+    what,
+    30_000,
+  );
+
 // One call on a peer through a's bridge, as the renderer's hub
 // transport makes it (renderer/lib/remote/hubTransport.ts).
 const onPeer = (
@@ -324,6 +363,10 @@ async function main(): Promise<string[]> {
       }),
     );
   const scenario = async (label: string, fn: () => Promise<void>) => {
+    if (only.length > 0 && !only.some((part) => label.includes(part))) {
+      log(`skip ${label}`);
+      return;
+    }
     try {
       await fn();
       log(`ok   ${label}`);
@@ -380,6 +423,25 @@ async function main(): Promise<string[]> {
         worktrees.some((w) => w.branch === "main"),
         "b's 'shared' has no main worktree",
       );
+    });
+
+    // No server holds the shared settings, so this is the whole
+    // path: a pick made on one device has to land in the other's own
+    // copy. First with b refusing commands, which leaves only the pull
+    // (b's window hears a's copy move and folds it into its own), then
+    // the other way round with the switch back on.
+    await scenario("shared settings", async () => {
+      await b.evaluate("window.api.account.setAcceptsCommands(false)");
+      await setSharedSetting(a, "picked-on-a");
+      await waitSharedSetting(b, "picked-on-a", "b to pull a's");
+      await b.evaluate("window.api.account.setAcceptsCommands(true)");
+      await setSharedSetting(b, "picked-on-b");
+      await waitSharedSetting(a, "picked-on-b", "a to take b's");
+      const [docA, docB] = await Promise.all([
+        a.evaluate<unknown>("window.api.sharedSettings.read()"),
+        b.evaluate<unknown>("window.api.sharedSettings.read()"),
+      ]);
+      assert.deepEqual(docA, docB, "the two copies differ after the exchange");
     });
 
     let created: Worktree | undefined;
@@ -586,8 +648,12 @@ async function main(): Promise<string[]> {
         "a path under the mirror's ignores crossed to b",
       );
       // Stop: the session leaves a's list, the stream leaves b's, and
-      // a's copy goes with the session. The source stays.
-      await a.evaluate(`window.api.mirror.stop(${session2})`);
+      // a's copy goes with the session. The source stays. Forced,
+      // because the host refuses an unforced stop unless the git
+      // follower has reported "synced", and a session this young may
+      // not have reconciled yet: this check is about the teardown, not
+      // about the confirmation rule (host/ipc/modules/mirror.ts).
+      await a.evaluate(`window.api.mirror.stop(${session2}, true)`);
       await a.waitFor(
         "a's mirror session to be gone",
         `window.api.mirror.list().then((m) => !m.sessions.some((s) => s.session === ${session2}))`,
@@ -1332,6 +1398,117 @@ async function main(): Promise<string[]> {
       }
     });
 
+    // The add-project flow's reach onto a machine that doesn't have the
+    // repo: a asks b to clone a remote and register it. The remote is a
+    // git daemon on loopback, because the payload (rightly) takes no
+    // path for one. Placed after every scenario that reads b's project
+    // list, which this one grows.
+    await scenario("clone onto a peer", async () => {
+      const served = join(runDir, "served");
+      const solo = join(runDir, "solo");
+      mkdirSync(served, { recursive: true });
+      mkdirSync(solo, { recursive: true });
+      git(solo, "init", "-q", "-b", "main");
+      writeFileSync(join(solo, "README.md"), "cloned onto a peer\n");
+      git(solo, "add", ".");
+      git(solo, "commit", "-q", "-m", "Solo");
+      git(served, "clone", "-q", "--bare", solo, "solo.git");
+      const port = await freeLoopbackPort();
+      const daemon = spawn(
+        "git",
+        [
+          "daemon",
+          `--base-path=${served}`,
+          "--export-all",
+          "--listen=127.0.0.1",
+          `--port=${port}`,
+          "--reuseaddr",
+          served,
+        ],
+        { env: gitEnv, stdio: "ignore" },
+      );
+      const url = `git://127.0.0.1:${port}/solo.git`;
+      const clone = (input: Record<string, unknown>) =>
+        onPeer(a, idB, "projects:clone", input) as Promise<Project>;
+      try {
+        await waitFor(() => {
+          try {
+            git(runDir, "ls-remote", url);
+            return true;
+          } catch {
+            return false;
+          }
+        }, "the git daemon to serve");
+
+        // Gated like every command: a peer that takes none clones none,
+        // and its disk stays closed to the folder picker too.
+        await b.evaluate("window.api.account.setAcceptsCommands(false)");
+        for (const refused of [
+          await refusalOf(clone({ url, parentDir: fixture.b.repos })),
+          await refusalOf(
+            onPeer(a, idB, "fs:listDirectory", { path: fixture.b.repos }),
+          ),
+        ]) {
+          assert.ok(refused !== null, "served with commands off");
+          assert.ok(
+            isCommandRefusedError(refused),
+            `unexpected refusal: ${errorMessageOf(refused)}`,
+          );
+        }
+        await b.evaluate("window.api.account.setAcceptsCommands(true)");
+
+        // Held to remotes on b's side of the wire, whatever a sends: an
+        // option-shaped string and a path on b's own disk both bounce.
+        const marker = join(runDir, "clone-injected");
+        const bounced = await Promise.all(
+          [`--upload-pack=touch ${marker}`, fixture.origin].map((bad) =>
+            refusalOf(clone({ url: bad, parentDir: fixture.b.repos })),
+          ),
+        );
+        assert.ok(
+          bounced.every((refused) => refused !== null),
+          "b cloned something that is not a remote",
+        );
+        assert.ok(!existsSync(marker), "an option-shaped URL ran");
+
+        const project = await clone({ url, parentDir: fixture.b.repos });
+        const dest = join(fixture.b.repos, "solo");
+        assert.equal(project.path, realpathSync(dest));
+        assert.equal(
+          readFileSync(join(dest, "README.md"), "utf8"),
+          "cloned onto a peer\n",
+        );
+        const listed = (await onPeer(a, idB, "projects:list")) as Project[];
+        const mine = listed.find((entry) => entry.id === project.id);
+        assert.ok(mine, "the clone is not in b's project list");
+        assert.ok(
+          mine.identity?.startsWith("root:"),
+          "the clone has no identity",
+        );
+
+        // The remote another device would clone it from reads back. The
+        // shared repo's origin is a path, which is nobody else's remote.
+        assert.equal(
+          await onPeer(a, idB, "projects:cloneUrl", { projectId: project.id }),
+          url,
+        );
+        assert.equal(
+          await onPeer(a, idB, "projects:cloneUrl", {
+            projectId: need(bProject, "the remote read").id,
+          }),
+          null,
+        );
+
+        // Never onto something that is already there.
+        const again = await refusalOf(
+          clone({ url, parentDir: fixture.b.repos }),
+        );
+        assert.match(errorMessageOf(again), /already exists/);
+      } finally {
+        daemon.kill();
+      }
+    });
+
     await scenario("liveness", async () => {
       // SIGKILL to the whole peer tree: the wrapper cannot be tidy
       // about it, and Electron dies mid-socket, which is the event.
@@ -1347,6 +1524,25 @@ async function main(): Promise<string[]> {
         waitConnected(a, idB, "a (after b's relaunch)"),
         waitConnected(b, idA, "b (relaunched)"),
       ]);
+    });
+
+    // A pick made while the other device was off reaches it when the
+    // session next lands, with nothing in between to have held it.
+    await scenario("shared settings: offline catch-up", async () => {
+      b.close();
+      windows.splice(windows.indexOf(b), 1);
+      await killTrees([need(peer ?? undefined, "a running peer")], "SIGKILL");
+      await waitDropped(a, idB, "a to drop b from its roster");
+      await setSharedSetting(a, "picked-while-b-was-off");
+      launchPeer();
+      b = await attachWindow(portB, 120_000);
+      windows.push(b);
+      await waitSignedIn(b, "b (relaunched again)");
+      await waitSharedSetting(
+        b,
+        "picked-while-b-was-off",
+        "b to catch up after its relaunch",
+      );
     });
 
     await scenario("revoke", async () => {

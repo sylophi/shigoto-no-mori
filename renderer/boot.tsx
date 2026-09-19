@@ -27,10 +27,12 @@ import {
   ClerkGate,
   type ClerkProviderComponent,
 } from "./components/account/ClerkGate";
+import { writeUpdaterState } from "./hooks/system/useUpdater";
 import { createAppQueryClient } from "./lib/queryClientOptions";
 import { hasLocalHost } from "./lib/localHost";
 import { startRemoteDeviceSync } from "./lib/remote/remoteDeviceSync";
 import { startRemoteHostWatch } from "./lib/remote/remoteHostWatch";
+import { startSharedSettingsSync } from "./lib/remote/sharedSettingsSync";
 import {
   invalidateHostDevice,
   invalidateHostProject,
@@ -56,6 +58,10 @@ export function bootApp({
   const router = createAppRouter(history);
 
   if (hasLocalHost) startLocalHost(queryClient);
+
+  // The shared settings exchange: this device's copy follows its peers'
+  // and theirs follow it.
+  startSharedSettingsSync(queryClient);
 
   // Remote devices: the remote device registry, rebuilt from the
   // account's device list plus the hub bridge status, on boot and on
@@ -94,6 +100,14 @@ export function bootApp({
 // navigated away from the new worktree's detail page).
 function startLocalHost(queryClient: QueryClient): void {
   scriptRuns.start();
+
+  // The local machine's updater state rides its broadcast whole, so it is
+  // written rather than re-asked. Boot-scoped so the sidebar's Settings
+  // dot follows a check that finishes with no Version section mounted
+  // (remoteHostWatch mirrors the same channel for every peer).
+  window.api.updater.onState((next) => {
+    writeUpdaterState(queryClient, localDeviceId, next);
+  });
 
   // Scripts that survived a crash or a force quit are stopped by the
   // host at boot. Their consoles died with the session that started

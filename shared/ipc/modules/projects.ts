@@ -2,6 +2,7 @@ import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   BranchListSchema,
+  CloneProjectPayloadSchema,
   PathPayloadSchema,
   ProjectIconSchema,
   ProjectSchema,
@@ -24,6 +25,12 @@ export const projectsContract = defineContract("host", {
     mutating: false,
   }),
   add: invoke("projects:add", PathPayloadSchema, ProjectSchema, {
+    remote: true,
+    mutating: true,
+  }),
+  // Runs for as long as the clone does. The wire has no per-call
+  // timeout, and the device doing the clone uses its own credentials.
+  clone: invoke("projects:clone", CloneProjectPayloadSchema, ProjectSchema, {
     remote: true,
     mutating: true,
   }),
@@ -63,6 +70,14 @@ export const projectsContract = defineContract("host", {
     "projects:defaultBranch",
     ProjectScopedPayloadSchema,
     z.string(),
+    { remote: true, mutating: false },
+  ),
+  // The remote another device would clone to get this repo, or null
+  // when it has none. Credentials never ride along (shared/cloneUrl.ts).
+  cloneUrl: invoke(
+    "projects:cloneUrl",
+    ProjectScopedPayloadSchema,
+    z.string().nullable(),
     { remote: true, mutating: false },
   ),
   listBranches: invoke(
