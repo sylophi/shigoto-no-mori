@@ -4,6 +4,8 @@ import { BackButton } from "@/components/ui/back-button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusDot } from "@/components/ui/status-dot";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
+import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
+import { useStagedUpdates } from "@/hooks/system/useUpdater";
 import { hasLocalHost } from "@/lib/localHost";
 import { cn } from "@/lib/utils";
 import {
@@ -13,7 +15,6 @@ import {
   settingsSections,
   useActiveSettingsTab,
   type SettingsSection,
-  useSettingsDevices,
 } from "./settingsNav";
 
 // The Settings page's navigation, rendered by the app sidebar in place
@@ -26,11 +27,12 @@ import {
 // which the phone layout's chip row draws too.
 export function SettingsSidebarNav() {
   const navigate = useNavigate();
-  const devices = useSettingsDevices();
+  const devices = useHostDevices();
   const { activeTab } = useActiveSettingsTab(devices);
   const localName = useLocalDeviceName();
   const solo = isSolo(devices);
-  const sections = settingsSections(devices, localName);
+  const updates = useStagedUpdates();
+  const sections = settingsSections(devices, localName, updates);
 
   return (
     <nav aria-label="Settings sections" className="flex flex-col px-2 pb-2">
@@ -73,7 +75,9 @@ export function SettingsSidebarNav() {
 }
 
 // A section's icon or presence dot and its name, the same in a sidebar
-// row and in a phone chip.
+// row and in a phone chip. A device holding a staged update trails the
+// sidebar Settings dot's own mark, so the dot that brought the visitor
+// here points at the row it meant.
 export function SectionLabel({ section }: { section: SettingsSection }) {
   const Icon = section.icon;
   return (
@@ -81,6 +85,12 @@ export function SectionLabel({ section }: { section: SettingsSection }) {
       {Icon && <Icon aria-hidden className="size-3.5 shrink-0" />}
       {section.tone && <StatusDot tone={section.tone} />}
       <span className="truncate">{section.label}</span>
+      {section.update !== undefined && (
+        <>
+          <StatusDot tone="sky" className="ml-auto" />
+          <span className="sr-only">update to v{section.update} available</span>
+        </>
+      )}
     </>
   );
 }

@@ -27,6 +27,7 @@ import {
   ClerkGate,
   type ClerkProviderComponent,
 } from "./components/account/ClerkGate";
+import { writeUpdaterState } from "./hooks/system/useUpdater";
 import { createAppQueryClient } from "./lib/queryClientOptions";
 import { hasLocalHost } from "./lib/localHost";
 import { startRemoteDeviceSync } from "./lib/remote/remoteDeviceSync";
@@ -94,6 +95,14 @@ export function bootApp({
 // navigated away from the new worktree's detail page).
 function startLocalHost(queryClient: QueryClient): void {
   scriptRuns.start();
+
+  // The local machine's updater state rides its broadcast whole, so it is
+  // written rather than re-asked. Boot-scoped so the sidebar's Settings
+  // dot follows a check that finishes with no Version section mounted
+  // (remoteHostWatch mirrors the same channel for every peer).
+  window.api.updater.onState((next) => {
+    writeUpdaterState(queryClient, localDeviceId, next);
+  });
 
   // Scripts that survived a crash or a force quit are stopped by the
   // host at boot. Their consoles died with the session that started
