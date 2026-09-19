@@ -1,24 +1,10 @@
-import {
-  useScopedWorktreeParams,
-  useWorktreeNav,
-} from "@/hooks/worktrees/useWorktreeNav";
-import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useCommitDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import { DiffView } from "./DiffView";
 import { WorktreeMissing } from "./WorktreeMissing";
 
 export function CommitDiff() {
-  const { projectId, worktreeId, hash } = useScopedWorktreeParams();
-  const nav = useWorktreeNav();
-  const {
-    data: worktrees = [],
-    isPending,
-    isError,
-    refetch,
-  } = useWorktrees(projectId);
-  const worktree = worktrees.find((w) => w.id === worktreeId);
-
-  const goBack = () => nav.toWorktree(projectId, worktreeId);
+  const { projectId, hash, worktree, goBack, missing } = useRouteWorktree();
 
   // Resolve commit metadata from the worktree's recentCommits cache so the
   // header shows author/subject without an extra IPC round-trip. If it's
@@ -32,15 +18,7 @@ export function CommitDiff() {
   } = useCommitDiff(projectId, worktree?.id, hash);
 
   if (!worktree) {
-    return (
-      <WorktreeMissing
-        isPending={isPending}
-        isError={isError}
-        refetch={refetch}
-        onBack={goBack}
-        message="Worktree not found."
-      />
-    );
+    return <WorktreeMissing {...missing} message="Worktree not found." />;
   }
 
   return (

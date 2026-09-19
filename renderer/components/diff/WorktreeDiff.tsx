@@ -1,10 +1,7 @@
 import { useState } from "react";
 import { useSearch } from "@tanstack/react-router";
-import {
-  useScopedWorktreeParams,
-  useWorktreeNav,
-} from "@/hooks/worktrees/useWorktreeNav";
-import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useFileDiff } from "@/hooks/worktrees/useWorktreeDiff";
 import {
   useCommitChanges,
@@ -27,36 +24,18 @@ import { LastCommitStrip } from "./LastCommitStrip";
 import { WorktreeMissing } from "./WorktreeMissing";
 
 export function WorktreeDiff() {
-  const { projectId, worktreeId } = useScopedWorktreeParams();
+  const { projectId, worktreeId, nav, worktree, goBack, missing } =
+    useRouteWorktree();
   // Read non-strictly like the params: the page serves both the local
   // route and its /devices twin, and both validate the same `amend`.
   const { amend } = useSearch({ strict: false }) as { amend?: true };
-  const nav = useWorktreeNav();
-  const {
-    data: worktrees = [],
-    isPending,
-    isError,
-    refetch,
-  } = useWorktrees(projectId);
-  const worktree = worktrees.find((w) => w.id === worktreeId);
-
-  const goBack = () => nav.toWorktree(projectId, worktreeId);
-
   // Amend mode lives in the route's search param, so the page and the
   // row menu that opens it agree on one source of truth.
   const setAmending = (on: boolean) =>
     nav.toDiff(projectId, worktreeId, { amend: on, replace: true });
 
   if (!worktree) {
-    return (
-      <WorktreeMissing
-        isPending={isPending}
-        isError={isError}
-        refetch={refetch}
-        onBack={goBack}
-        message="Worktree not found."
-      />
-    );
+    return <WorktreeMissing {...missing} message="Worktree not found." />;
   }
 
   return (

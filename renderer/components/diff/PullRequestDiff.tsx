@@ -1,33 +1,19 @@
 import { usePullRequestDiff } from "@/hooks/pullRequests/usePullRequestDiff";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
-import {
-  useScopedWorktreeParams,
-  useWorktreeNav,
-} from "@/hooks/worktrees/useWorktreeNav";
-import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { DiffNotFound } from "./DiffNotFound";
 import { DiffView } from "./DiffView";
 import { WorktreeMissing } from "./WorktreeMissing";
 import { DiffStats } from "@/components/ui/diff-stats";
 
 export function PullRequestDiff() {
-  const { projectId, worktreeId } = useScopedWorktreeParams();
-  const nav = useWorktreeNav();
-  const {
-    data: worktrees = [],
-    isPending: worktreesPending,
-    isError: worktreesError,
-    refetch: refetchWorktrees,
-  } = useWorktrees(projectId);
-  const worktree = worktrees.find((w) => w.id === worktreeId);
+  const { projectId, worktree, goBack, missing } = useRouteWorktree();
   const {
     data: pr,
     isPending: prPending,
     isError: prError,
     refetch: refetchPullRequest,
   } = useWorktreePullRequest(projectId, worktree?.branch ?? "");
-
-  const goBack = () => nav.toWorktree(projectId, worktreeId);
 
   const {
     data: patch,
@@ -36,15 +22,7 @@ export function PullRequestDiff() {
   } = usePullRequestDiff(projectId, pr?.number);
 
   if (!worktree) {
-    return (
-      <WorktreeMissing
-        isPending={worktreesPending}
-        isError={worktreesError}
-        refetch={refetchWorktrees}
-        onBack={goBack}
-        message="Worktree not found."
-      />
-    );
+    return <WorktreeMissing {...missing} message="Worktree not found." />;
   }
   if (!pr) {
     // Same story for the PR lookup: pending or failed both leave `pr`
