@@ -2,8 +2,8 @@
 // It is built on the global WebSocket rather than the node `ws` client,
 // and node 22 ships that same global (undici), which is what lets the
 // browser-only connection run headlessly here. The harness boots the
-// SAME stub Durable Object as check-hub-link.mjs
-// (scripts/lib/hubStub.mjs) and drives the web connection as device A
+// SAME stub Durable Object as hub-link.mjs
+// (test/lib/hubStub.mjs) and drives the web connection as device A
 // against a real node HOST peer (device B, host/hub/connection.ts,
 // booted through the shared hubBoot fixture) answering the broker
 // slot.
@@ -20,8 +20,8 @@
 // (see the SESSION EPOCH note in shared/hub/link.ts), which the stub
 // forwards verbatim as the opaque `frame`.
 //
-// Runs under scripts/lib/register-ts-alias.mjs so the app's TypeScript
-// imports resolve. See package.json "web:hub:check".
+// Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
+// imports resolve. Run: pnpm test web-hub.
 import assert from "node:assert/strict";
 import { directContract } from "@shared/ipc/modules/direct";
 import { CLOSE_DEVICE_REVOKED, CLOSE_SUPERSEDED } from "@shared/hub/protocol";

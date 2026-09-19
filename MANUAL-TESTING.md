@@ -3,8 +3,8 @@
 How to run the real app, drive it from a script, and test remote
 flows on one machine. Written for people and for agents.
 
-The automated checks (`pnpm <name>:check`, `pnpm hub:check`, listed
-in `lefthook.yml`) are not covered here.
+The automated checks (`pnpm test <name>` for the proofs in `test/`, and
+the hub's own suite, all listed in `lefthook.yml`) are not covered here.
 
 This is a reference, not a checklist. The commands are examples: test
 what your change touches, pick your own names, ports and order, and
@@ -45,8 +45,8 @@ SHIGOMORI_DEBUG_PORT=$PORT_A pnpm dev --profile $TAG-a --fresh --clone-login
 SHIGOMORI_DEBUG_PORT=$PORT_B pnpm dev:peer $TAG-b --fresh --clone-login
 
 # 4. Drive either window from the shell.
-node scripts/e2e/drive.mts $PORT_A eval 'window.api.hub.status()'
-node scripts/e2e/drive.mts $PORT_B shot /tmp/$TAG-b.png
+node test/e2e/drive.mts $PORT_A eval 'window.api.hub.status()'
+node test/e2e/drive.mts $PORT_B shot /tmp/$TAG-b.png
 ```
 
 Each window's Devices page should list the other device as online,
@@ -58,7 +58,7 @@ windows does not unenroll them. See "Cleaning up after a session".
 To run every remote flow unattended instead:
 
 ```sh
-pnpm test:remote-smoke
+pnpm test e2e/remote-smoke
 ```
 
 The sections below explain each piece.
@@ -120,7 +120,7 @@ smd projects add <dir> --all --yes     # set SHIGOMORI_DATA_DIR if the data dir 
 - A worktree can only be pulled between devices that hold the same
   repo, matched by root commit. Clone one repo into both profiles
   instead of creating it twice. `prepareFixture` in
-  `scripts/e2e/remote-smoke.mts` shows the pattern.
+  `test/e2e/remote-smoke.mts` shows the pattern.
 
 ## Running the dev app
 
@@ -247,9 +247,9 @@ on the DOM.
 ### Shell driver
 
 ```sh
-node scripts/e2e/drive.mts <port> eval '<expression>'
-node scripts/e2e/drive.mts <port> wait '<expression>' [timeoutMs]
-node scripts/e2e/drive.mts <port> shot <file.png>
+node test/e2e/drive.mts <port> eval '<expression>'
+node test/e2e/drive.mts <port> wait '<expression>' [timeoutMs]
+node test/e2e/drive.mts <port> shot <file.png>
 ```
 
 - `eval` awaits the expression and prints the result as JSON.
@@ -259,13 +259,13 @@ node scripts/e2e/drive.mts <port> shot <file.png>
 Examples:
 
 ```sh
-node scripts/e2e/drive.mts 9222 eval 'window.api.hub.status()'
-node scripts/e2e/drive.mts 9222 eval 'window.api.account.status()'
-node scripts/e2e/drive.mts 9222 wait 'window.api.account.status().then(s => s.signedIn)' 60000
-node scripts/e2e/drive.mts 9222 shot /tmp/window.png
+node test/e2e/drive.mts 9222 eval 'window.api.hub.status()'
+node test/e2e/drive.mts 9222 eval 'window.api.account.status()'
+node test/e2e/drive.mts 9222 wait 'window.api.account.status().then(s => s.signedIn)' 60000
+node test/e2e/drive.mts 9222 shot /tmp/window.png
 ```
 
-For scripted use, `scripts/e2e/cdp.mts` exports `attachWindow`, which
+For scripted use, `test/e2e/cdp.mts` exports `attachWindow`, which
 returns a window with `evaluate`, `waitFor`, `screenshot` and `close`.
 
 ### Useful bridge calls
@@ -330,7 +330,7 @@ out** button is not an option either in a cloned window (see Rules).
 #    that carry your tag (not every "[...]": those may be another
 #    session's live devices):
 SHIGOMORI_DEBUG_PORT=$PORT_A pnpm dev
-node scripts/e2e/drive.mts $PORT_A eval "window.api.account.listDevices().then(ds => Promise.all(ds.filter(d => / \[$TAG-[a-z0-9-]+\]$/.test(d.name) && d.deviceId !== window.api.deviceId).map(d => window.api.account.revokeDevice(d.deviceId).then(() => d.name))))"
+node test/e2e/drive.mts $PORT_A eval "window.api.account.listDevices().then(ds => Promise.all(ds.filter(d => / \[$TAG-[a-z0-9-]+\]$/.test(d.name) && d.deviceId !== window.api.deviceId).map(d => window.api.account.revokeDevice(d.deviceId).then(() => d.name))))"
 # 3. Delete the local halves, or launch with --fresh next time.
 for p in $TAG-a $TAG-b; do rm -rf ~/.smd-profiles/$p "$HOME/Library/Application Support/Shigoto no Mori (dev)/profiles/$p"; done
 ```
@@ -338,8 +338,8 @@ for p in $TAG-a $TAG-b; do rm -rf ~/.smd-profiles/$p "$HOME/Library/Application 
 The same two calls revoke one device by hand:
 
 ```sh
-node scripts/e2e/drive.mts 9222 eval 'window.api.account.listDevices()'
-node scripts/e2e/drive.mts 9222 eval 'window.api.account.revokeDevice("<deviceId>")'
+node test/e2e/drive.mts 9222 eval 'window.api.account.listDevices()'
+node test/e2e/drive.mts 9222 eval 'window.api.account.revokeDevice("<deviceId>")'
 ```
 
 A device removed from the account while it runs signs itself out: a
@@ -348,16 +348,16 @@ signed-out Devices page, while a profile that holds a cloned sign-in
 (`--clone-login` leaves a marker beside the token store) only drops
 the account layer, since its Clerk session is the plain dev app's and
 ending it would sign every window out. Such a profile re-enrolls if
-relaunched. A relaunch after `--fresh` is a new device. `pnpm test:remote-smoke` cleans up its own
+relaunched. A relaunch after `--fresh` is a new device. `pnpm test e2e/remote-smoke` cleans up its own
 `e2e-*` profiles unless run with `--keep`.
 
 ## Unattended remote smoke
 
 ```sh
-pnpm test:remote-smoke [--keep]
+pnpm test e2e/remote-smoke [--keep]
 ```
 
-`scripts/e2e/remote-smoke.mts` runs the full remote loop with no
+`test/e2e/remote-smoke.mts` runs the full remote loop with no
 interaction:
 
 1. Builds the dev CLI and the file-sync engine.

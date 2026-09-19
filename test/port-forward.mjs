@@ -2,7 +2,7 @@
 // channel frames): TCP bytes cross a REAL DIRECT
 // websocket between the two fixtures as channel frames
 // (shared/ipc/socket/channels.ts), brokered by the stub device hub
-// exactly as production does (scripts/lib/directBoot.mjs). Nothing
+// exactly as production does (test/lib/directBoot.mjs). Nothing
 // here is a double on the forward path: device A registers the REAL
 // forward contract and handlers on a real ticket-mode listener, B
 // attaches channels on the real client transport and opens them
@@ -44,8 +44,8 @@
 //
 // Both "devices" share one node process. What separates them is the
 // direct wire between them, which is exactly the surface this proof
-// pins. Runs under scripts/lib/register-ts-alias.mjs. See
-// package.json "forward:check".
+// pins. Runs under test/lib/register-ts-alias.mjs. See
+// Run: pnpm test port-forward.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { connect, createServer } from "node:net";

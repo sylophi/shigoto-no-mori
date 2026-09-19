@@ -1,6 +1,6 @@
 // The remote flows, end to end, on one machine:
 //
-//   pnpm test:remote-smoke [--keep]
+//   pnpm test e2e/remote-smoke [--keep]
 //
 // Two dev profiles (scripts/lib/devProfile.mts) as two devices of the
 // owner's dev account, both signed in by cloning the plain dev
@@ -51,7 +51,7 @@ import {
   rmTree,
   wipeDevProfile,
   type DevProfile,
-} from "../lib/devProfile.mts";
+} from "../../scripts/lib/devProfile.mts";
 import { attachWindow, type AppWindow } from "./cdp.mts";
 
 const keep = process.argv.includes("--keep");

@@ -11,8 +11,8 @@
 // linked worktree's `.git` file to the repository's common dir, and
 // the reconcile dropping a project that left the registry.
 //
-// Runs under scripts/lib/register-ts-alias.mjs so the app's TypeScript
-// imports resolve. See package.json "gitwatch:check".
+// Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
+// imports resolve. Run: pnpm test git-watcher.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";

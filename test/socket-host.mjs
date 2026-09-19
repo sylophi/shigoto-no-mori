@@ -24,10 +24,10 @@
 // mutating:false) is pinned in read-surface.golden.json, so flipping a
 // mutating tag shows up as a reviewed diff instead of silently opening
 // or closing the ungated wire. Regenerate deliberately with
-// `pnpm socket:check --update`.
+// `pnpm test socket-host --update`.
 //
-// Runs under scripts/lib/register-ts-alias.mjs so the app's TypeScript
-// imports resolve. See package.json "socket:check".
+// Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
+// imports resolve. Run: pnpm test socket-host.
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -1125,10 +1125,10 @@ async function main() {
       if (opened.length > 0 || closed.length > 0) {
         assert.fail(
           [
-            "the ungated read surface drifted from scripts/read-surface.golden.json",
+            "the ungated read surface drifted from test/read-surface.golden.json",
             ...opened.map((channel) => `  now servable ungated: ${channel}`),
             ...closed.map((channel) => `  no longer servable:   ${channel}`),
-            "if the change is deliberate, regenerate with: pnpm socket:check --update",
+            "if the change is deliberate, regenerate with: pnpm test socket-host --update",
           ].join("\n"),
         );
       }

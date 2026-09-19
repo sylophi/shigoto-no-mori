@@ -8,17 +8,17 @@ pre-commit:
     format:
       run: pnpm run format:check
     theme-contract:
-      run: pnpm run theme:check
+      run: pnpm test theme-contract
     host-boundary:
-      glob: "{host/**,main/**,renderer/**,shared/**,web/**,scripts/check-host-boundary.mjs,scripts/lib/checkKit.mjs}"
-      run: pnpm run host:check
+      glob: "{host/**,main/**,renderer/**,shared/**,web/**,test/host-boundary.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test host-boundary
     dmg-art:
-      run: pnpm run dmg:check
-    # Both parity checks are glob-gated: identity:check alone costs
+      run: pnpm test dmg-art
+    # Both parity checks are glob-gated: the identity test alone costs
     # ~140 git spawns, so neither should run on unrelated commits.
     identity:
-      glob: "{shared/git/repoIdentity.mts,shared/git/defaultBranch.mts,shared/fixtures/**,scripts/check-identity.mjs}"
-      run: pnpm run identity:check
+      glob: "{shared/git/repoIdentity.mts,shared/git/defaultBranch.mts,shared/fixtures/**,test/identity.mjs}"
+      run: pnpm test identity
     go-test:
       glob: "{cli/**,shared/fixtures/**}"
       run: go test -C cli ./...
@@ -35,9 +35,9 @@ pre-commit:
     # and the shared/schemas the contracts are built from, which feed
     # the invariant through allContractModules), so adding an untagged
     # host invoke also trips it.
-    socket:
-      glob: "{host/socket/**,host/ipc/modules/globalConfig.ts,host/ipc/modules/remoteAccess.ts,shared/ipc/**,shared/schemas/**,shared/hub/protocol.ts,main/ipc/register.ts,scripts/check-socket-host.mjs,scripts/lib/checkKit.mjs}"
-      run: pnpm run socket:check
+    socket-host:
+      glob: "{host/socket/**,host/ipc/modules/globalConfig.ts,host/ipc/modules/remoteAccess.ts,shared/ipc/**,shared/schemas/**,shared/hub/protocol.ts,main/ipc/register.ts,test/socket-host.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test socket-host
     # Typechecks the hub Worker package and runs its vitest suite
     # inside workerd (real D1, Durable Object and websocket bindings)
     # against the shared app-to-worker protocol, so enrollment, ticket,
@@ -51,7 +51,7 @@ pre-commit:
     # those shared files.
     hub:
       glob: "{hub/**,shared/hub/protocol.ts,shared/ipc/socket/frames.ts}"
-      run: pnpm run hub:check
+      run: pnpm -C hub install --frozen-lockfile --prefer-offline && pnpm -C hub run check
     # Boots a stub Durable Object (a node ws server speaking the hub
     # envelope protocol) and drives two REAL hub connections through the
     # real link, asserting the sm hello/welcome over the device hub, id
@@ -61,9 +61,9 @@ pre-commit:
     # redials, the revoked/superseded blocked verdicts, the ignored
     # hello token and the per-peer in-flight cap. Gated to the hub
     # transport surface plus the sm frame layer it multiplexes.
-    hublink:
-      glob: "{shared/hub/**,shared/remote/**,host/hub/**,shared/ipc/socket/**,shared/ipc/registerContract.ts,shared/ipc/modules/remoteAccess.ts,host/ipc/modules/remoteAccess.ts,shared/util/limit.ts,scripts/check-hub-link.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs}"
-      run: pnpm run hublink:check
+    hub-link:
+      glob: "{shared/hub/**,shared/remote/**,host/hub/**,shared/ipc/socket/**,shared/ipc/registerContract.ts,shared/ipc/modules/remoteAccess.ts,host/ipc/modules/remoteAccess.ts,shared/util/limit.ts,test/hub-link.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test hub-link
     # Durable proof for the direct data plane (supervised by the keeper): boots the stub Durable Object plus a REAL ticket-mode
     # listener on an ephemeral loopback port, brokers connect tickets
     # over the device hub via direct:connectInfo, and asserts the whole
@@ -77,8 +77,8 @@ pre-commit:
     # direct-connected client through the shared peerPush path. Gated to
     # the direct surface plus the socket and hub layers it composes.
     direct-plane:
-      glob: "{host/direct/**,shared/packaging/cloudflaredDist.mts,host/socket/**,host/ipc/modules/direct.ts,host/lib/util/binaries.ts,host/lib/scripts/process.ts,shared/ipc/modules/direct.ts,shared/ipc/socket/**,shared/ipc/transport.ts,shared/ipc/registerContract.ts,shared/hub/**,host/hub/**,shared/account/service.ts,shared/remote/supervisor.ts,scripts/check-direct-plane.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
-      run: pnpm run direct:check
+      glob: "{host/direct/**,shared/packaging/cloudflaredDist.mts,host/socket/**,host/ipc/modules/direct.ts,host/lib/util/binaries.ts,host/lib/scripts/process.ts,shared/ipc/modules/direct.ts,shared/ipc/socket/**,shared/ipc/transport.ts,shared/ipc/registerContract.ts,shared/hub/**,host/hub/**,shared/account/service.ts,shared/remote/supervisor.ts,test/direct-plane.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs,test/lib/directBoot.mjs}"
+      run: pnpm test direct-plane
     # End-to-end proof for the device-sync transfer plumbing: builds the
     # real sm binary, seeds fixture repos in a sandboxed SHIGOMORI_DATA_DIR,
     # and moves a >1.5 MB git bundle between two REAL hub connections
@@ -88,8 +88,8 @@ pre-commit:
     # transfer cleanup, and the coded corrupted-bundle error. Gated to
     # the sync surface plus the CLI engine it shells.
     sync-transfer:
-      glob: "{cli/**,shared/ipc/modules/sync.ts,shared/ipc/modules/worktrees.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/hub/protocol.ts,host/ipc/modules/sync.ts,host/ipc/modules/worktrees.ts,host/ipc/peerSync.ts,host/ipc/cliDelegate.ts,host/hub/**,host/lib/sync/**,host/lib/idleRegistry.ts,host/lib/git/**,host/lib/scripts/**,host/lib/util/paths.ts,scripts/check-sync-transfer.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
-      run: pnpm run sync:check
+      glob: "{cli/**,shared/ipc/modules/sync.ts,shared/ipc/modules/worktrees.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/hub/protocol.ts,host/ipc/modules/sync.ts,host/ipc/modules/worktrees.ts,host/ipc/peerSync.ts,host/ipc/cliDelegate.ts,host/hub/**,host/lib/sync/**,host/lib/idleRegistry.ts,host/lib/git/**,host/lib/scripts/**,host/lib/util/paths.ts,test/sync-transfer.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs,test/lib/directBoot.mjs}"
+      run: pnpm test sync-transfer
     # End-to-end proof for the port-forward wire: drives the host-side
     # forward verbs between two REAL hub connections against real
     # loopback TCP fixture servers, asserting grant refusal before any
@@ -101,8 +101,8 @@ pre-commit:
     # the per-forward conn cap) driven over the same wire. Gated to the
     # forward surface plus the stub device hub it rides.
     port-forward:
-      glob: "{shared/ipc/modules/forward.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/**,shared/hub/protocol.ts,shared/hub/bridgeHandlers.ts,host/ipc/modules/forward.ts,host/socket/**,host/hub/**,host/lib/idleRegistry.ts,host/lib/net.ts,main/portForward/**,scripts/check-port-forward.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
-      run: pnpm run forward:check
+      glob: "{shared/ipc/modules/forward.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/**,shared/hub/protocol.ts,shared/hub/bridgeHandlers.ts,host/ipc/modules/forward.ts,host/socket/**,host/hub/**,host/lib/idleRegistry.ts,host/lib/net.ts,main/portForward/**,test/port-forward.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs,test/lib/directBoot.mjs}"
+      run: pnpm test port-forward
     # End-to-end proof for continuous worktree mirroring: builds the real
     # file-sync engine (and the sm CLI for the fixture project), then
     # runs a REAL `file-sync daemon` on device B behind the real
@@ -114,16 +114,16 @@ pre-commit:
     # serve child on terminate, and the device hub staying flat. Gated
     # to the mirror surface plus the byte wire and CLI it rides.
     mirror:
-      glob: "{file-sync/**,cli/**,host/fileSync/**,host/mirror/**,shared/packaging/fileSyncDist.mts,shared/ipc/modules/mirror.ts,shared/ipc/modules/forward.ts,shared/ipc/modules/sync.ts,host/ipc/modules/sync.ts,host/ipc/peerSync.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/hub/protocol.ts,host/ipc/modules/forward.ts,host/ipc/modules/mirror.ts,host/ipc/modules/worktrees.ts,host/ipc/cliDelegate.ts,host/hub/**,host/lib/idleRegistry.ts,host/lib/net.ts,host/lib/git/**,host/lib/util/paths.ts,main/portForward/bridge.ts,main/mirror/**,shared/ipc/socket/channels.ts,host/socket/channelStreams.ts,scripts/check-mirror.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
-      run: pnpm run mirror:check
+      glob: "{file-sync/**,cli/**,host/fileSync/**,host/mirror/**,shared/packaging/fileSyncDist.mts,shared/ipc/modules/mirror.ts,shared/ipc/modules/forward.ts,shared/ipc/modules/sync.ts,host/ipc/modules/sync.ts,host/ipc/peerSync.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/hub/protocol.ts,host/ipc/modules/forward.ts,host/ipc/modules/mirror.ts,host/ipc/modules/worktrees.ts,host/ipc/cliDelegate.ts,host/hub/**,host/lib/idleRegistry.ts,host/lib/net.ts,host/lib/git/**,host/lib/util/paths.ts,main/portForward/bridge.ts,main/mirror/**,shared/ipc/socket/channels.ts,host/socket/channelStreams.ts,test/mirror.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs,test/lib/directBoot.mjs}"
+      run: pnpm test mirror
     # Proves the worktree port list's pure parts under plain Node: the
     # port-pool state reader (XDG_DATA_HOME, declared order, malformed
     # entries), the pool-then-custom merge with its shadowing rule, and
     # the loopback probe and dial with the ::1 fallback. Gated to those
     # modules plus the check itself.
     worktree-ports:
-      glob: "{host/lib/portPool.ts,shared/ports/mergeWorktreePorts.ts,host/lib/net.ts,host/ipc/modules/ports.ts,shared/schemas/ports.ts,scripts/check-worktree-ports.mjs,scripts/lib/checkKit.mjs}"
-      run: pnpm run ports:check
+      glob: "{host/lib/portPool.ts,shared/ports/mergeWorktreePorts.ts,host/lib/net.ts,host/ipc/modules/ports.ts,shared/schemas/ports.ts,test/worktree-ports.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test worktree-ports
     # Boots the same stub Durable Object and drives the BROWSER hub
     # connection (web/hub/connection.ts, built on the global WebSocket)
     # under node against a real node host peer, asserting connect,
@@ -132,8 +132,8 @@ pre-commit:
     # per-dial ticket mint. Gated to the browser connection plus the hub
     # transport surface it drives.
     web-hub:
-      glob: "{web/**,shared/hub/**,shared/remote/**,shared/util/limit.ts,host/hub/**,scripts/check-web-hub.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs}"
-      run: pnpm run web:hub:check
+      glob: "{web/**,shared/hub/**,shared/remote/**,shared/util/limit.ts,host/hub/**,test/web-hub.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test web-hub
     # Drives the web client's window.api bridge headlessly: the surface
     # parity against buildApi (so renderer components mount unmodified),
     # the localStorage-backed clientConfig and credential stores, the
@@ -143,21 +143,21 @@ pre-commit:
     # unconfigured/origin-blocked access states that keep a
     # misconfigured deployment from looping the hub supervisor.
     web-bridge:
-      glob: "{web/**,shared/account/**,shared/ipc/**,shared/hub/protocol.ts,scripts/check-web-bridge.mjs,scripts/lib/checkKit.mjs}"
-      run: pnpm run web:bridge:check
+      glob: "{web/**,shared/account/**,shared/ipc/**,shared/hub/protocol.ts,test/web-bridge.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test web-bridge
     # Drives the pure liveness rate limiters (renderer crash-loop guard
     # and fatal-relaunch guard) that decide recreate-vs-give-up and
     # relaunch-vs-stand. Gated to the pure module plus the check itself,
     # since the Electron wiring around them is a human-verify item.
     liveness:
-      glob: "{main/liveness/**,scripts/check-liveness.mjs}"
-      run: pnpm run liveness:check
+      glob: "{main/liveness/**,test/liveness.mjs}"
+      run: pnpm test liveness
     # The Safe Storage reset contract, and on macOS the real
     # `security` deletion of a probe item. That writes to the login
     # keychain, so the job is gated to the keychain modules alone.
     keychain:
-      glob: "{main/keychain/**,scripts/check-keychain.mjs}"
-      run: pnpm run keychain:check
+      glob: "{main/keychain/**,test/keychain.mjs}"
+      run: pnpm test keychain
     # Drives the per-project git-directory watcher against a REAL git
     # repository with a linked worktree: a commit in the worktree, a
     # checkout and a branch delete each land as one project-scoped
@@ -166,8 +166,8 @@ pre-commit:
     # produces none. Loop-safety of the watcher rests on that
     # allowlist, so it is pinned here.
     git-watcher:
-      glob: "{main/electron/gitWatcher.ts,scripts/check-git-watcher.mjs,scripts/lib/checkKit.mjs}"
-      run: pnpm run gitwatch:check
+      glob: "{main/electron/gitWatcher.ts,test/git-watcher.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test git-watcher
     # Drives the electron-free account layer (main/account/*,
     # shared/account/*) end to end with stubs: the hub client's
     # route/method/auth-tier discipline against the shared schemas
@@ -179,5 +179,5 @@ pre-commit:
     # unrelated commits. Proves enrollment and storage cannot drift
     # from shared/hub/protocol.ts without electron or a browser.
     account:
-      glob: "{main/account/**,shared/account/**,shared/ipc/modules/account.ts,shared/hub/protocol.ts,scripts/check-account.mjs,scripts/lib/checkKit.mjs}"
-      run: pnpm run account:check
+      glob: "{main/account/**,shared/account/**,shared/ipc/modules/account.ts,shared/hub/protocol.ts,test/account.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test account

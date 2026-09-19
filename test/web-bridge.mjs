@@ -21,8 +21,8 @@
 // and a device hub refusal blocks the supervisor (terminal, no retry
 // loop) the way it does on the desktop.
 //
-// Runs under scripts/lib/register-ts-alias.mjs so the app's TypeScript
-// imports resolve. See package.json "web:bridge:check".
+// Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
+// imports resolve. Run: pnpm test web-bridge.
 import assert from "node:assert/strict";
 import { buildApi } from "@shared/ipc/client";
 import { DeviceIdSchema } from "@shared/hub/protocol";
@@ -86,7 +86,7 @@ const STORED_ENVELOPE = JSON.stringify({
   deviceName: "Stored browser",
 });
 
-// ---- harness (scripts/lib/checkKit.mjs) ----
+// ---- harness (test/lib/checkKit.mjs) ----
 
 const { check, done, fail } = makeProof("web bridge proof");
 

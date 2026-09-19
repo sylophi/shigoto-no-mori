@@ -3,7 +3,7 @@
 // recoveries and the current time, decide whether one more is allowed
 // and return the pruned-and-appended list to persist for next time.
 // Keeping this logic here (importing nothing) is what lets
-// scripts/check-liveness.mjs drive it under plain Node, since the
+// test/liveness.mjs drive it under plain Node, since the
 // Electron wiring around it can only be exercised in a real app.
 
 // Renderer crash-loop guard. A renderer that dies and gets recreated

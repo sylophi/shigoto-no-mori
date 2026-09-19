@@ -5,7 +5,7 @@
 // freshly built file-sync engine, Mutagen inside) behind the REAL
 // gateway (main/mirror/gateway.ts). The gateway dials device A's REAL
 // mirror:openStream over a REAL direct websocket (brokered by the stub
-// device hub exactly as production does, scripts/lib/directBoot.mjs),
+// device hub exactly as production does, test/lib/directBoot.mjs),
 // A's handler spawns a REAL `file-sync serve` for a REAL registered
 // worktree. Bytes cross as binary channel frames on the direct socket
 // (shared/ipc/socket/channels.ts, bridged by main/portForward/bridge.ts). The sm CLI is built too, only to
@@ -36,7 +36,7 @@
 // Both "devices" share one node process and one sandboxed
 // SHIGOMORI_DATA_DIR. What separates them is the direct wire between them,
 // which is exactly the surface this proof pins. Runs under
-// scripts/lib/register-ts-alias.mjs. See package.json "mirror:check".
+// test/lib/register-ts-alias.mjs. Run: pnpm test mirror.
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import {

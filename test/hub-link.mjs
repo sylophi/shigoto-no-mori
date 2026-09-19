@@ -32,8 +32,8 @@
 // forwards that wrapper verbatim and the assertions read the inner
 // frame at entry.frame.sm.
 //
-// Runs under scripts/lib/register-ts-alias.mjs so the app's TypeScript
-// imports resolve. See package.json "hublink:check".
+// Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
+// imports resolve. Run: pnpm test hub-link.
 import assert from "node:assert/strict";
 import { WebSocket } from "ws";
 import {
@@ -66,7 +66,7 @@ const OVERSIZE = "x".repeat(70_000);
 const smOf = (entry) => entry?.frame?.sm;
 
 // ---- The stub Durable Object ----
-// Lives in scripts/lib/hubStub.mjs, shared with the direct, sync and
+// Lives in test/lib/hubStub.mjs, shared with the direct, sync and
 // forward checks.
 
 // ---- Real hub connections ----
@@ -91,7 +91,7 @@ async function brokerTestHandler(_ctx, raw) {
   return raw;
 }
 
-// The shared boot (scripts/lib/hubBoot.mjs) with this check's
+// The shared boot (test/lib/hubBoot.mjs) with this check's
 // registerHandlers:true shorthand mapped onto the broker slot.
 function bootDevice(stub, deviceId, opts = {}, track) {
   return bootHubDevice(

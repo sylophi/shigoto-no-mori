@@ -7,7 +7,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Repo root, resolved from this file's location under scripts/lib/.
+// Repo root, resolved from this file's location under test/lib/.
 export const repoRoot = join(
   dirname(fileURLToPath(import.meta.url)),
   "..",

@@ -5,7 +5,7 @@
 //   1. Map the repo's import aliases (@shared, @host, @) to their dirs.
 //   2. Resolve an extensionless specifier to its .ts/.mts file (or an
 //      index file), the way the bundler does.
-// Registered via scripts/lib/register-ts-alias.mjs. Kept dependency
+// Registered via test/lib/register-ts-alias.mjs. Kept dependency
 // free and used only by checks, never by the app build.
 import { existsSync, statSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";

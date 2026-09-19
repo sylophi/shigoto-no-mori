@@ -1,7 +1,7 @@
 package main
 
 // Parity tests for the repo-identity port: the same JSON fixtures
-// scripts/check-identity.mjs feeds the shared TS implementation, so the
+// test/identity.mjs feeds the shared TS implementation, so the
 // two heads can't drift apart. go:embed can't reach outside cli/, so
 // the fixtures load relative to the package directory, where `go test`
 // runs.

@@ -7,10 +7,11 @@
 // live here exactly once, behind a small socket adapter each platform
 // implements over its own WebSocket.
 //
-// This file must stay electron-free and node-builtin-free (host:check):
-// everything platform specific lives in the injected adapter, and
-// everything account flavored (deviceId, appVersion, accountId, the
-// credential-backed ticket mint) arrives through HubConnectOpts.
+// This file must stay electron-free and node-builtin-free (pnpm test
+// host-boundary): everything platform specific lives in the injected
+// adapter, and everything account flavored (deviceId, appVersion,
+// accountId, the credential-backed ticket mint) arrives through
+// HubConnectOpts.
 import type { ChannelMux } from "@shared/ipc/socket/channels";
 import { errorMessageOf } from "@shared/errors";
 import { isHubRefusal } from "@shared/account/service";

@@ -1,9 +1,9 @@
 // Drive a running dev window from the shell, for a tester or an agent
 // poking at the app by hand (the library form is cdp.mts):
 //
-//   node scripts/e2e/drive.mts <port> eval '<expression>'
-//   node scripts/e2e/drive.mts <port> wait '<expression>' [timeoutMs]
-//   node scripts/e2e/drive.mts <port> shot <file.png>
+//   node test/e2e/drive.mts <port> eval '<expression>'
+//   node test/e2e/drive.mts <port> wait '<expression>' [timeoutMs]
+//   node test/e2e/drive.mts <port> shot <file.png>
 //
 // <port> is the SHIGOMORI_DEBUG_PORT the window was launched with.
 // eval prints the awaited result as JSON, wait polls until the

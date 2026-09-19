@@ -4,14 +4,14 @@
 // single-use connect tickets, with no hub fallback behind a failed
 // dial.
 //
-// Boots the stub Durable Object (scripts/lib/hubStub.mjs) with two
+// Boots the stub Durable Object (test/lib/hubStub.mjs) with two
 // REAL hub connections (A the dialing client, B the host) plus a
 // REAL ticket-mode ws listener instance (host/socket/server.ts with a
 // WsServerTicketAuth) on an ephemeral loopback port, and drives the
 // real broker (direct:connectInfo wired into the binding's one slot)
 // and the REAL shared composition (shared/hub/directPlane.ts: the
 // dialer over the broker leg, the bridge cache over the dialer),
-// through the shared fixtures in scripts/lib/directBoot.mjs. Asserts:
+// through the shared fixtures in test/lib/directBoot.mjs. Asserts:
 //
 //   - connectInfo over the device hub answers available:true with fully
 //     dialable candidates (kind, complete URL, one smpt_ ticket EACH)
@@ -48,7 +48,7 @@
 //     dial rejects with the typed unreachable outcome with no hub
 //     session created for data.
 //     (The hub wire refusing every non-broker channel is pinned in
-//     check-hub-link.mjs. Here there is nothing left to register on
+//     hub-link.mjs. Here there is nothing left to register on
 //     the wire, so no second proof exists to write.)
 //   - pushes from the host reach a direct-connected client through the
 //     shared peerPush path while the hub stub forwards nothing.
@@ -128,10 +128,10 @@
 //     connector token never in any status object.
 //
 // The legacy LAN listener's unchanged behavior is pinned by
-// scripts/check-socket-host.mjs, which the battery runs alongside.
+// test/socket-host.mjs, which the battery runs alongside.
 //
-// Runs under scripts/lib/register-ts-alias.mjs so the app's TypeScript
-// imports resolve. See package.json "direct:check".
+// Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
+// imports resolve. Run: pnpm test direct-plane.
 import assert from "node:assert/strict";
 import { rmSync, writeFileSync } from "node:fs";
 import { createServer, connect as netConnect } from "node:net";
@@ -204,7 +204,7 @@ import { startStubHub } from "./lib/hubStub.mjs";
 // hangs or dies on its own, never reaching any listener.
 const BLACKHOLE = "203.0.113.1";
 
-// The shared listener fixture (scripts/lib/directBoot.mjs) with this
+// The shared listener fixture (test/lib/directBoot.mjs) with this
 // check's data-plane test handlers mounted. Handler counters prove
 // refusals never ran a body.
 async function startDirectListener(track, opts = {}) {
@@ -1317,7 +1317,7 @@ async function main() {
       assert.ok(bye, "the broker session close never sent a bye");
       // The device hub stays quiet from here: data flows on the direct
       // socket only, so nothing else rides the stub. (The wire itself
-      // refusing non-broker channels is pinned in check-hub-link.mjs,
+      // refusing non-broker channels is pinned in hub-link.mjs,
       // and there is no registration surface left here to prove twice.)
       const baseline = stub.forwardedCount();
       assert.equal(

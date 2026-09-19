@@ -2,7 +2,7 @@
 // ws server implementing hubObject.ts's envelope behavior (deliver
 // forwarding, full-roster presence on join and leave, offline and
 // too-large nacks, supersede on a duplicate deviceId). Extracted from
-// check-hub-link.mjs so check-sync-transfer.mjs drives the same stub
+// hub-link.mjs so sync-transfer.mjs drives the same stub
 // instead of a second copy. Runs under register-ts-alias so the shared
 // TypeScript imports resolve.
 import { WebSocket, WebSocketServer } from "ws";

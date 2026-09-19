@@ -44,9 +44,10 @@ Where things live:
 | `cli/`, `file-sync/` | Go modules: the `sm` command and the worktree mirroring engine, both bundled with the app. |
 | `hub/` | The device hub, a Cloudflare Worker. A standalone pnpm project. |
 | `lab/` | The UI lab: the real UI over a fixture `window.api`, for posing and screenshots. Dev only. |
-| `scripts/` | Build and dev entry points, and the `check-*` proofs the pre-commit hooks run (`lefthook.yml` says what each one covers). |
+| `scripts/` | Build, packaging and dev entry points. |
+| `test/` | The proofs the pre-commit hooks run, one standalone node script each. `pnpm test` lists them, `pnpm test <name>` runs one, and `lefthook.yml` says what each covers and which files trigger it. |
 
-`scripts/check-host-boundary.mjs` enforces the `host/`, `shared/` and
+`test/host-boundary.mjs` enforces the `host/`, `shared/` and
 `web/` rules above on every commit.
 
 ## Agent skills

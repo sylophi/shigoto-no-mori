@@ -14,7 +14,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { errorMessageOf } from "../shared/errors.ts";
 import { rendererDevServerPort } from "../shared/portsEnvFile.mts";
-import { repoRoot } from "./lib/checkKit.mjs";
+import { repoRoot } from "./lib/repoRoot.mts";
 import {
   devBundleExecutable,
   stockElectronExecutable,

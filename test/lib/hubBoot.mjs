@@ -1,6 +1,6 @@
 // The two-device boot helper shared by the hub-transport e2e checks
-// (check-hub-link.mjs, check-sync-transfer.mjs,
-// check-port-forward.mjs): a REAL hub connection against the stub
+// (hub-link.mjs, sync-transfer.mjs,
+// port-forward.mjs): a REAL hub connection against the stub
 // Durable Object (hubStub.mjs, extracted for the same reason). Runs under
 // register-ts-alias so the shared TypeScript imports resolve.
 import { directContract } from "@shared/ipc/modules/direct";

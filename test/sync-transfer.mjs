@@ -1,7 +1,7 @@
 // Durable proof for the device-sync transfer plumbing (direct-only): git bundles as chunked,
 // grant-gated invoke responses over a REAL DIRECT websocket between the
 // two fixtures, brokered by the stub device hub exactly as production
-// does (scripts/lib/directBoot.mjs). Nothing here is a double on the
+// does (test/lib/directBoot.mjs). Nothing here is a double on the
 // sync path itself: device A registers the REAL sync contract and
 // handlers on a real ticket-mode listener, the handlers shell the REAL
 // sm binary (built from cli/ by this check), sm runs REAL git against
@@ -31,7 +31,7 @@
 // SHIGOMORI_DATA_DIR holding two projects (source and target repos); what
 // separates them is the direct wire between them, which is exactly the
 // surface this proof pins. Runs under
-// scripts/lib/register-ts-alias.mjs. See package.json "sync:check".
+// test/lib/register-ts-alias.mjs. Run: pnpm test sync-transfer.
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
@@ -143,7 +143,7 @@ async function refSnapshot(repo) {
   return new Set(out ? out.split("\n") : []);
 }
 
-// The real CLI runner seam (scripts/lib/checkKit.mjs): the same
+// The real CLI runner seam (test/lib/checkKit.mjs): the same
 // NDJSON-per-line protocol as the Electron implementation, minus the
 // child bookkeeping the app needs.
 const { runCli, sm } = createCliRunner(smBinary, smEnv);

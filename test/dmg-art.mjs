@@ -7,7 +7,7 @@
 // old it is, so the renderer stamps a hash of its inputs next to it and
 // this compares the two. Same shape as licenses:check.
 //
-// Run by lefthook pre-commit, and by hand as `pnpm dmg:check`.
+// Run by lefthook pre-commit, and by hand as `pnpm test dmg-art`.
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";

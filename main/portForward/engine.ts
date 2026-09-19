@@ -5,7 +5,7 @@
 // host/ipc/modules/forward.ts, the wire rules in
 // shared/ipc/modules/forward.ts). Electron-free on purpose, node:net
 // plus injected dependencies, so the e2e check drives the real engine
-// over a real device wire (scripts/check-port-forward.mjs) while
+// over a real device wire (test/port-forward.mjs) while
 // main/ipc wires the peer reach over the bridge's shared direct
 // sessions.
 //

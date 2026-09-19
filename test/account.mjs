@@ -19,8 +19,8 @@
 // runs against injected cipher stubs and the real encryption path is
 // exercised by hand.
 //
-// Runs under scripts/lib/register-ts-alias.mjs so the app's TypeScript
-// and @shared imports resolve. See package.json "account:check".
+// Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
+// and @shared imports resolve. Run: pnpm test account.
 import assert from "node:assert/strict";
 import {
   mkdtempSync,

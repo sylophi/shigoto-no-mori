@@ -10,7 +10,7 @@
 // prompt of a locked login keychain, and safeStorage's own read would
 // raise that right after anyway.
 //
-// Electron-free, so scripts/check-keychain.mjs can run the real thing
+// Electron-free, so test/keychain.mjs can run the real thing
 // against a probe item.
 import { execFileSync } from "node:child_process";
 

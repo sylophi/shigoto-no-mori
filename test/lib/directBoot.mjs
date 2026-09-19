@@ -1,10 +1,10 @@
 // Shared fixtures for the checks that run a REAL direct data plane
-// beside the stub device hub (scripts/lib/hubStub.mjs): a ticket-mode
+// beside the stub device hub (test/lib/hubStub.mjs): a ticket-mode
 // ws listener (host/socket/server.ts), the broker slot registration on
 // a hub host device, and the REAL shared composition
 // (shared/hub/directPlane.ts) a client drives. Extracted from
-// check-direct-plane.mjs so check-sync-transfer.mjs and
-// check-port-forward.mjs move their transfer scenarios onto a real
+// direct-plane.mjs so sync-transfer.mjs and
+// port-forward.mjs move their transfer scenarios onto a real
 // direct connection without a second copy of the plumbing. Runs under
 // register-ts-alias so the shared TypeScript imports resolve.
 import { brokerHandlerFor, makeDirectHandlers } from "@host/ipc/modules/direct";

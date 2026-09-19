@@ -8,7 +8,7 @@
 // links the app's own renderer/doubutsu.css, so the leaf wallpaper, the
 // palette tokens, the sticker and stripe recipes and Zen Maru Gothic in
 // the artwork are the rules the app ships rather than copies that can
-// drift. Re-run this after a doubutsu palette change. `pnpm dmg:check`
+// drift. Re-run this after a doubutsu palette change. `pnpm test dmg-art`
 // (lefthook pre-commit) fails when the committed art predates one.
 //
 // Window and icon geometry, and the file names, come from
@@ -82,7 +82,7 @@ app
   .then(async () => {
     const layout = await import("../shared/packaging/dmgLayout.mts");
     const { artInputsHash, ART_STAMP_FILE } =
-      await import("./check-dmg-art.mjs");
+      await import("../test/dmg-art.mjs");
     const outDir = join(ROOT, layout.DMG_ART_DIR);
     const win = new BrowserWindow({
       // render() sets the real size before every capture.
@@ -131,7 +131,7 @@ app
     await write(true, 1);
     await write(true, 2);
 
-    // Stamp what these pixels were rendered from, so dmg:check can tell
+    // Stamp what these pixels were rendered from, so dmg-art can tell
     // when they've fallen behind it.
     writeFileSync(ART_STAMP_FILE, `${artInputsHash()}\n`);
     console.log(`wrote ${ART_STAMP_FILE}`);

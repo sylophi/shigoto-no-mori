@@ -11,8 +11,8 @@
 //   - the loopback probe and dial (host/lib/net.ts) see a listener on
 //     127.0.0.1, fall back to ::1 for a v6-only listener, and report a
 //     closed port as not listening within the deadline.
-// Runs under scripts/lib/register-ts-alias.mjs. See package.json
-// "ports:check".
+// Runs under test/lib/register-ts-alias.mjs. See package.json
+// pnpm test worktree-ports.
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";

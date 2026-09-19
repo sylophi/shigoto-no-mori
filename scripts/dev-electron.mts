@@ -21,7 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DEV_RELAUNCH_FILE_ENV } from "../shared/packaging/appName.mts";
 import { errorMessageOf } from "../shared/errors.ts";
-import { repoRoot } from "./lib/checkKit.mjs";
+import { repoRoot } from "./lib/repoRoot.mts";
 import { ensureDevBundle, superviseChild } from "./lib/devBundle.mts";
 import {
   applyDevProfileFlags,

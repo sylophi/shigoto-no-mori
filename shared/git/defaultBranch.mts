@@ -1,5 +1,5 @@
 // Default-branch resolution, extracted from host/lib/git/remotes.ts so
-// the parity harness (scripts/check-identity.mjs) can run the same
+// the parity harness (test/identity.mjs) can run the same
 // policy under its own scrubbed git runner instead of a hand-written
 // mirror. Pure module: the runner is injected. Mirrored by
 // resolveDefaultBranchWithRemotes in cli/gitx.go. Keep the precedence

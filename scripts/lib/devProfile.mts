@@ -34,7 +34,7 @@ import {
   cliBinaryName,
   cliDataDirName,
 } from "../../shared/packaging/cliDist.mts";
-import { repoRoot } from "./checkKit.mjs";
+import { repoRoot } from "./repoRoot.mts";
 import { productName } from "./devBundle.mts";
 
 export const PROFILES_DIR = join(

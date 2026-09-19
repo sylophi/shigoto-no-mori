@@ -3,7 +3,7 @@
 // the real listener status, ticket store and hub roster in, and the
 // direct-plane check drives the same factory with its own instances.
 //
-// This file must stay Electron free (host:check).
+// This file must stay Electron free (pnpm test host-boundary).
 import {
   ALL_DIRECT_CANDIDATE_KINDS,
   type DirectCandidate,

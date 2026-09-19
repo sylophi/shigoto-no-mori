@@ -45,7 +45,7 @@ import { APP_BUNDLE_ID } from "../../shared/packaging/cliDist.mts";
 import { LOCAL_NETWORK_USAGE_DESCRIPTION } from "../../shared/packaging/infoPlist.mts";
 import { rendererSchemeName } from "../../shared/packaging/rendererScheme.mts";
 
-import { repoRoot } from "./checkKit.mjs";
+import { repoRoot } from "./repoRoot.mts";
 
 const require = createRequire(import.meta.url);
 export const productName = require("../../package.json").productName as string;

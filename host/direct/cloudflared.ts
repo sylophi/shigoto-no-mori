@@ -18,8 +18,8 @@
 // reconcile(null), while quit alone calls stop() (a terminal latch,
 // see below).
 //
-// This file must stay Electron free (host:check). Node builtins are
-// fine here.
+// This file must stay Electron free (pnpm test host-boundary). Node
+// builtins are fine here.
 import { execFile, spawn } from "node:child_process";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
