@@ -166,6 +166,12 @@ export function findSession(
   return daemon.sessions().find((raw) => raw.session === session);
 }
 
+// The daemon, or null before it is wired, for a caller that has a
+// sensible answer without one.
+export function engineOrNull(): MirrorImpl | null {
+  return impl;
+}
+
 export function engine(): MirrorImpl {
   if (impl === null) {
     throw new Error("mirror handler invoked before the daemon was wired");

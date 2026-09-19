@@ -12,12 +12,13 @@
 //   - sync:captureDirty over the wire snapshots a dirty worktree to
 //     its refs/shigomori/dirty/<id> ref, and sync:ignoredPaths names
 //     the ignored file that capture leaves out;
-//   - a >1.5 MB bundle (branch + dirty capture, thinned by a have)
-//     crosses in >= 3 chunks and lands ONLY under refs/shigomori/ on
-//     the receiver with the source's exact tips, byte-identical
-//     content via git cat-file, and no branch materialized -- while
-//     the stub device hub's forwardedCount stays FLAT (nothing but the
-//     one-time broker frames ever rides the device hub);
+//   - a >2.5 MB bundle (branch + dirty capture, thinned by a have)
+//     crosses in >= 4 chunks (windowed, the final one last) and lands
+//     ONLY under refs/shigomori/ on the receiver with the source's
+//     exact tips, byte-identical content via git cat-file, and no
+//     branch materialized -- while the stub device hub's
+//     forwardedCount stays FLAT (nothing but the one-time broker
+//     frames ever rides the device hub);
 //   - the host drops a finished transfer (a stale chunk request is
 //     refused) and bundleAbort cleans up an abandoned one;
 //   - unpacking a corrupted bundle fails with the coded "bad-bundle".
@@ -65,6 +66,8 @@ import {
   startScript,
 } from "@host/lib/scripts";
 import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
+import { pushBundleToPeer } from "@host/lib/sync/pushBundle";
+import { findProjectOrThrow } from "@host/lib/projects";
 import { getRepoIdentity } from "@host/lib/git/repoIdentity";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { initDataDirAt } from "@host/lib/util/paths";
@@ -150,6 +153,33 @@ const { runCli, sm } = createCliRunner(smBinary, smEnv);
 
 const { ok, done, fail } = makeProof("sync-transfer proof");
 
+// A peer whose chunk calls (bundleChunk or pushChunk) are counted: how
+// many were in flight at once, the offsets in the order they were
+// sent, and how many others were in flight when the eof chunk was
+// asked for.
+function observedChunks(peer, method) {
+  const seen = { inFlight: 0, most: 0, offsets: [], othersAtEof: null };
+  return {
+    seen,
+    peer: {
+      ...peer,
+      [method]: async (input) => {
+        seen.offsets.push(input.offset);
+        seen.inFlight += 1;
+        seen.most = Math.max(seen.most, seen.inFlight);
+        const others = seen.inFlight - 1;
+        try {
+          const result = await peer[method](input);
+          if (result?.eof) seen.othersAtEof = others;
+          return result;
+        } finally {
+          seen.inFlight -= 1;
+        }
+      },
+    },
+  };
+}
+
 async function main() {
   console.log("sync-transfer proof\n");
 
@@ -160,8 +190,8 @@ async function main() {
   });
 
   // Source repo: base commit on main, a "feature" branch carrying
-  // ~1.7 MB of incompressible bytes (so the thin bundle still crosses
-  // in >= 3 chunks), a linked worktree for the dirty capture.
+  // ~2.7 MB of incompressible bytes (so the thin bundle still crosses
+  // in >= 4 chunks), a linked worktree for the dirty capture.
   const sourceRepo = join(sandbox, "source");
   await git(sandbox, ["init", "-q", "-b", "main", "source"]);
   for (const args of [
@@ -185,7 +215,7 @@ async function main() {
   await git(targetRepo, ["config", "maintenance.auto", "false"]);
 
   await git(sourceRepo, ["checkout", "-q", "-b", "feature"]);
-  writeFileSync(join(sourceRepo, "big.bin"), randomBytes(1_700_000));
+  writeFileSync(join(sourceRepo, "big.bin"), randomBytes(2_700_000));
   await git(sourceRepo, ["add", "-A"]);
   await git(sourceRepo, ["commit", "-qm", "big feature"]);
   const featureTip = await gitOut(sourceRepo, "rev-parse", "HEAD");
@@ -336,7 +366,7 @@ async function main() {
     );
 
     // (3) The full transfer: branch + capture ref, thinned by the
-    // receiver's base tip, >= 3 chunks, exact tips, allowed namespaces
+    // receiver's base tip, >= 4 chunks, exact tips, allowed namespaces
     // only, byte-identical objects. The direct session is established
     // by now (the refusals above dialed it), so the device hub must
     // stay COMPLETELY flat for the whole transfer: no frame of it may
@@ -344,7 +374,11 @@ async function main() {
     const hubBaseline = stub.forwardedCount();
     const chunksBefore = peerA.invokeCount("sync:bundleChunk");
     const refsBefore = await refSnapshot(targetRepo);
-    const { fetched } = await fetchBundleFromPeer(sync, {
+    // The chunk requests are windowed, not one per round trip, and the
+    // final chunk (which makes the host drop the transfer) is asked
+    // for only once every other one has landed.
+    const windowed = observedChunks(sync, "bundleChunk");
+    const { fetched } = await fetchBundleFromPeer(windowed.peer, {
       sourceProjectId,
       targetProjectId,
       refs: ["refs/heads/feature", dirtyRef],
@@ -352,8 +386,17 @@ async function main() {
     });
     const chunkReqs = peerA.invokeCount("sync:bundleChunk") - chunksBefore;
     assert.ok(
-      chunkReqs >= 3,
-      `expected >= 3 chunks for a >1.5 MB bundle, saw ${chunkReqs}`,
+      chunkReqs >= 4,
+      `expected >= 4 chunks for the bundle, saw ${chunkReqs}`,
+    );
+    assert.ok(
+      windowed.seen.most >= 2,
+      `expected the chunk requests to overlap, saw ${windowed.seen.most} in flight`,
+    );
+    assert.equal(
+      windowed.seen.othersAtEof,
+      0,
+      "the final chunk was requested while others were still in flight",
     );
     assert.equal(
       stub.forwardedCount(),
@@ -403,13 +446,13 @@ async function main() {
       blob(sourceRepo),
       blob(targetRepo),
     ]);
-    assert.equal(sourceBlob.length, 1_700_000);
+    assert.equal(sourceBlob.length, 2_700_000);
     assert.ok(
       Buffer.compare(sourceBlob, targetBlob) === 0,
       "transferred blob differs byte-for-byte",
     );
     ok(
-      "granted transfer: >1.5 MB bundle crosses in >= 3 chunks and lands only under refs/shigomori/ with byte-identical objects",
+      "granted transfer: >2.5 MB bundle crosses in >= 4 overlapping chunks and lands only under refs/shigomori/ with byte-identical objects",
     );
 
     // (4) Transfer lifecycle: eof drops the host entry (a stale chunk
@@ -462,6 +505,83 @@ async function main() {
     const errorDoc = result.docs.find((doc) => doc.ok === false);
     assert.equal(errorDoc?.code, "bad-bundle");
     ok('corrupted bundle: unpack fails with the coded "bad-bundle" error');
+
+    // (6) The push direction: this device bundles a branch and writes
+    // it to the peer in chunks. Against a host that takes them
+    // pipelined the chunks overlap (in offset order still), against an
+    // older host that never said so they go one at a time, and either
+    // way the ref lands under refs/shigomori/ with the exact tip.
+    await git(targetRepo, ["checkout", "-q", "-b", "pushed"]);
+    writeFileSync(join(targetRepo, "pushed.bin"), randomBytes(2_700_000));
+    await git(targetRepo, ["add", "-A"]);
+    await git(targetRepo, ["commit", "-qm", "pushed from the target"]);
+    const pushedTip = await gitOut(targetRepo, "rev-parse", "HEAD");
+    await git(targetRepo, ["checkout", "-q", "main"]);
+    const pushInput = {
+      localProject: findProjectOrThrow(targetProjectId),
+      peerProjectId: sourceProjectId,
+      refs: ["refs/heads/pushed"],
+      haves: [baseSha],
+    };
+    const pipelined = observedChunks(sync, "pushChunk");
+    const pushed = await pushBundleToPeer(pipelined.peer, pushInput);
+    assert.deepEqual(pushed.fetched, [
+      { ref: "refs/shigomori/incoming/pushed", commit: pushedTip },
+    ]);
+    assert.equal(
+      await gitOut(
+        sourceRepo,
+        "rev-parse",
+        "--verify",
+        "refs/shigomori/incoming/pushed",
+      ),
+      pushedTip,
+    );
+    assert.ok(
+      pipelined.seen.offsets.length >= 4,
+      `expected >= 4 push chunks, saw ${pipelined.seen.offsets.length}`,
+    );
+    assert.ok(
+      pipelined.seen.most >= 2,
+      `expected the push chunks to overlap, saw ${pipelined.seen.most} in flight`,
+    );
+    assert.deepEqual(
+      pipelined.seen.offsets,
+      pipelined.seen.offsets.toSorted((x, y) => x - y),
+      "push chunks were sent out of offset order",
+    );
+    const olderHost = observedChunks(
+      {
+        ...sync,
+        pushStart: async (input) => {
+          const { transferId } = await sync.pushStart(input);
+          return { transferId };
+        },
+      },
+      "pushChunk",
+    );
+    await pushBundleToPeer(olderHost.peer, pushInput);
+    assert.equal(
+      olderHost.seen.most,
+      1,
+      "chunks overlapped against a host that never said it takes them pipelined",
+    );
+    const strayPush = await sync.pushStart({
+      projectId: sourceProjectId,
+      bytes: 10,
+    });
+    await assert.rejects(
+      () =>
+        sync.pushChunk({
+          transferId: strayPush.transferId,
+          offset: 5,
+          dataB64: Buffer.from("hello").toString("base64"),
+        }),
+      /push chunk out of order/,
+    );
+    ok(
+      "push: a >2.5 MB bundle crosses in overlapping in-order chunks and lands under refs/shigomori/, an older host gets them one at a time, and an out-of-order chunk is refused",
+    );
 
     // ---- The slice-C pull orchestration, end to end. The handler runs
     // HERE as device B (the registered surface above is A's), with its

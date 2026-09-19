@@ -378,6 +378,11 @@ const SyncPushStartPayloadSchema = z.strictObject({
 
 const SyncPushStartResultSchema = z.strictObject({
   transferId: TransferIdSchema,
+  // This host takes chunks the sender did not await one by one: in
+  // offset order still, but several in flight. Absent from an older
+  // host, which refuses a chunk sent before the last was answered, so
+  // a sender without it stays one at a time.
+  pipelined: z.literal(true).optional(),
 });
 
 const SyncPushChunkPayloadSchema = z.strictObject({

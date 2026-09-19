@@ -40,11 +40,20 @@ func runGit(cwd string, args ...string) (string, error) {
 // which gettext would otherwise translate. The TS twin pins it in
 // host/lib/git/core.ts for the same reason.
 func runGitEnv(cwd string, extraEnv []string, args ...string) (string, error) {
+	return runGitStdin(cwd, extraEnv, "", args...)
+}
+
+// runGitEnv with `stdin` fed to the child, for the batch modes that
+// answer many questions in one spawn (cat-file --batch-check).
+func runGitStdin(cwd string, extraEnv []string, stdin string, args ...string) (string, error) {
 	gitSlots <- struct{}{}
 	defer func() { <-gitSlots }()
 	cmd := exec.Command("git", args...)
 	cmd.Dir = cwd
 	cmd.Env = append(append(os.Environ(), "LC_ALL=C"), extraEnv...)
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

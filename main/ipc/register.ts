@@ -6,6 +6,7 @@
 // through `broadcast` / `broadcastAll` below so the payload runs
 // through the contract's payload schema before it crosses the bridge.
 import { bundledBinaryPath } from "../electron/bundledBinary";
+import { devDialKinds } from "../electron/devDialKinds";
 import { coalesce } from "@host/lib/util/coalesce";
 import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
@@ -218,6 +219,7 @@ const directPlane = createDirectPlane({
   // nor Node's global sends an Origin header, so the peer's upgrade
   // gate reads the two identically.
   openSocket: (url) => new WsWebSocket(url, { perMessageDeflate: false }),
+  dialableKinds: devDialKinds(),
   host: {
     closeHostPeersNotIn: (online) => directWsServer.closePeersNotIn(online),
     tunnelState: () => tunnelRunner.status().state,

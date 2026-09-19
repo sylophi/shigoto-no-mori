@@ -178,6 +178,7 @@ import {
   TUNNEL_PROBE_SLOW_MS,
   TUNNEL_PROBE_WARN_MS,
   TUNNEL_PROBE_DELAYS_MS,
+  TUNNEL_PROBE_DELAYS_REUSED_MS,
   TUNNEL_STABLE_MS,
 } from "@host/direct/cloudflared";
 import {
@@ -2498,10 +2499,10 @@ async function main() {
       assert.equal(runner.tunnelUrl(), null);
       // First probe attempt answers not-routable: still starting, the
       // chain retries on the next rung instead of advertising.
-      await clock.advance(TUNNEL_PROBE_DELAYS_MS[0]);
+      await clock.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
       assert.equal(runner.status().state, "starting");
       assert.equal(runner.tunnelUrl(), null);
-      await clock.advance(TUNNEL_PROBE_DELAYS_MS[1]);
+      await clock.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[1]);
       assert.equal(runner.status().state, "up");
       assert.equal(runner.tunnelUrl(), "wss://sm-feedfacecafe.sm.example.test");
       assert.ok(statusChanges > 0);
@@ -2530,7 +2531,7 @@ async function main() {
         [40100],
         "a post-ready crash restart re-provisioned an unchanged port",
       );
-      await clock.advance(TUNNEL_PROBE_DELAYS_MS[0]);
+      await clock.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
       assert.equal(runner.status().state, "up");
       // A listener restart on a NEW ephemeral port kills the old child
       // and re-provisions against the new port.
@@ -2600,7 +2601,7 @@ async function main() {
       // restart reuses the cache (no third provision) and starts from
       // the ladder's bottom rung again.
       routable = true;
-      await clock.advance(TUNNEL_PROBE_DELAYS_MS[0]);
+      await clock.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
       assert.equal(runner.status().state, "up");
       await clock.advance(TUNNEL_STABLE_MS);
       spawned.at(-1).exit("cloudflared exited (code 1)");

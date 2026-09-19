@@ -25,6 +25,11 @@ import {
   createHeartbeat,
   type HeartbeatOptions,
 } from "@shared/ipc/socket/heartbeat";
+import {
+  canInflateFrames,
+  inflateFrame,
+  isDeflatedFrame,
+} from "./deflatedFrame";
 import { handshakeProof, newHandshakeNonce, proofsMatch } from "./proof";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
 import {
@@ -33,6 +38,7 @@ import {
   createUnknownChannelFrameWarner,
 } from "@shared/ipc/socket/channels";
 import type { ClientTransport } from "@shared/ipc/transport";
+import { createLimiter } from "@shared/util/limit";
 
 // A connect attempt failed before the welcome landed. `code` is the
 // close code when the failure came from a socket close (null on a
@@ -84,6 +90,11 @@ export type ClientSocket = {
   // `ws` package send a Uint8Array as a binary message.
   send(data: string | Uint8Array<ArrayBuffer>): void;
   close(): void;
+  // How binary messages are delivered. A browser (and Node's global)
+  // defaults to "blob", which this transport cannot read in order, so
+  // openDevice switches such a socket to "arraybuffer". `ws` hands
+  // over Buffers by default and is left alone.
+  binaryType?: string;
   addEventListener(type: "open", listener: () => void): void;
   addEventListener(
     type: "message",
@@ -241,6 +252,7 @@ export function openDevice(
   whenOpen.catch(() => {});
 
   const socket = (options.openSocket ?? openGlobalSocket)(options.url);
+  if (socket.binaryType === "blob") socket.binaryType = "arraybuffer";
 
   // Correlation state for invokes on this socket.
   let nextId = 1;
@@ -304,6 +316,8 @@ export function openDevice(
           token: options.token,
           deviceId: options.localDeviceId,
           appVersion: options.appVersion,
+          // Asks the host for deflated frames (deflatedFrame.ts).
+          deflate: canInflateFrames(),
         }),
       );
       return;
@@ -328,6 +342,7 @@ export function openDevice(
         appVersion: options.appVersion,
         nonce,
         proof,
+        deflate: canInflateFrames(),
       }),
     );
   };
@@ -468,13 +483,55 @@ export function openDevice(
     reject(new RemoteConnectError(reason, null, false));
   };
 
+  // Frames are handled where they land, in arrival order. Two steps
+  // are async and must not be overtaken by the frames behind them:
+  // inflating a deflated frame (script output is ordered pushes), and
+  // in proof mode checking the host's proof before its welcome counts.
+  // So while one is outstanding every later frame, text or bytes,
+  // queues behind it, and with none outstanding, nearly always, a
+  // frame pays nothing.
+  let queuedFrames = 0;
+  const inOrder = createLimiter(1);
+  const handleFrame = (step: () => void | Promise<void>): void => {
+    // With nothing queued the frame is handled here and now. One that
+    // goes async holds everything behind it until it settles.
+    const started = queuedFrames === 0 ? step() : null;
+    if (started === undefined) return;
+    queuedFrames += 1;
+    void inOrder(async () => {
+      try {
+        await (started ?? step());
+      } catch (error) {
+        console.warn(
+          `[socket] a queued frame's handler threw: ${errorMessageOf(error)}`,
+        );
+      } finally {
+        queuedFrames -= 1;
+      }
+    });
+  };
+
+  // A deflated frame this side cannot read. Dropping it would leave
+  // the invoke it answers pending forever, so the link is given up
+  // instead, exactly like a heartbeat death: every pending invoke
+  // rejects and the owner redials.
+  const inflateFailed = (error: unknown): void => {
+    if (closed) return;
+    console.warn(
+      `[socket] closing on a frame that failed to inflate: ${errorMessageOf(error)}`,
+    );
+    close();
+    options.onClose(null);
+  };
+
   socket.addEventListener("message", (event) => {
     if (closed) return;
-    // A binary frame is a byte-channel frame (channels.ts), routed to
-    // the attached channel. One that names no channel (a late frame
-    // after a reset) is dropped. Anything else non-text (a browser
-    // Blob, which no owner asks for) is dropped too. Either way the
-    // host proved itself alive.
+    // A binary frame is a deflated JSON frame (deflatedFrame.ts) or a
+    // byte-channel frame (channels.ts), routed to the attached
+    // channel. One that names no channel (a late frame after a reset)
+    // is dropped. Anything else non-text (a browser Blob, which no
+    // owner asks for) is dropped too. Either way the host proved
+    // itself alive.
     if (typeof event.data !== "string") {
       heartbeat.noteInbound();
       const bytes =
@@ -483,12 +540,43 @@ export function openDevice(
           : event.data instanceof ArrayBuffer
             ? new Uint8Array(event.data)
             : null;
-      if (bytes === null || !channels.handleFrame(bytes)) {
-        warnUnknownChannelFrame();
+      if (bytes !== null && isDeflatedFrame(bytes)) {
+        handleFrame(async () => {
+          // Only a welcomed host may make this side inflate anything.
+          // Asked in turn, so a frame right behind the welcome finds
+          // it recorded.
+          if (closed) return;
+          if (welcome === null) {
+            warnUnknownChannelFrame();
+            return;
+          }
+          let text: string;
+          try {
+            text = await inflateFrame(bytes);
+          } catch (error) {
+            inflateFailed(error);
+            return;
+          }
+          await handleText(text);
+        });
+        return;
       }
+      handleFrame(() => {
+        if (bytes === null || !channels.handleFrame(bytes)) {
+          warnUnknownChannelFrame();
+        }
+      });
       return;
     }
-    const frame = decodeFrame(event.data, ServerFrameSchema);
+    const text = event.data;
+    handleFrame(() => handleText(text));
+  });
+
+  // A promise only for the one frame whose handling is async, the
+  // proof-mode welcome.
+  function handleText(text: string): void | Promise<void> {
+    if (closed) return;
+    const frame = decodeFrame(text, ServerFrameSchema);
     if (frame === null) {
       // A malformed inbound frame is logged and dropped, never fatal:
       // one bad message must not kill a socket carrying live invokes.
@@ -526,8 +614,9 @@ export function openDevice(
           );
           return;
         }
-        verifyHostProof(expected, challenge, nonce, frame).catch(proofFailed);
-        return;
+        return verifyHostProof(expected, challenge, nonce, frame).catch(
+          proofFailed,
+        );
       }
       acceptWelcome(frame.deviceId, frame.appVersion);
       return;
@@ -584,7 +673,7 @@ export function openDevice(
     // A second welcome, or any other frame after welcome, is not part
     // of the contract. Drop it.
     console.warn("[socket] dropping unexpected server frame");
-  });
+  }
 
   // Whatever the platform said about WHY the socket failed, when it
   // said anything: the browser and Node's global fire error with no

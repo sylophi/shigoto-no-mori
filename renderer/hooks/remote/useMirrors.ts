@@ -43,16 +43,26 @@ export function useMirrors(): MirrorListResult {
   return query.data ?? EMPTY;
 }
 
-// The scoped device's mirror:changed, as the list's invalidation.
-// Every reader of the list subscribes, so whichever is mounted (the
-// always-mounted sidebar included) keeps the cache fresh.
+// The scoped device's mirror:changed, as the list's refresh. The
+// broadcast carries the list, so it is written into the cache with no
+// round trip: a busy mirror fires several times a second. An in-flight
+// read is cancelled first, or its older answer would land on top. An
+// older host sends no list, and that one is re-asked. Every reader of
+// the list subscribes, so whichever is mounted (the always-mounted
+// sidebar included) keeps the cache fresh.
 function useMirrorsChanged(): void {
   const { api, keys } = useHostScope();
   const queryClient = useQueryClient();
   useEffect(
     () =>
-      api.mirror.onChanged(() => {
-        void queryClient.invalidateQueries({ queryKey: keys.mirrors() });
+      api.mirror.onChanged((list) => {
+        const queryKey = keys.mirrors();
+        if (list === undefined) {
+          void queryClient.invalidateQueries({ queryKey });
+          return;
+        }
+        void queryClient.cancelQueries({ queryKey });
+        queryClient.setQueryData(queryKey, list);
       }),
     [api, keys, queryClient],
   );

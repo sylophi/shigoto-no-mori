@@ -1151,7 +1151,10 @@ async function main(): Promise<string[]> {
       assert.equal(gitOut(local.path, "rev-parse", "HEAD"), tipA);
       assert.equal(gitOut(source.path, "rev-parse", "HEAD"), tipB);
       const refused = await refusalOf(mirrorOp("stop", started.session));
-      assert.match(errorMessageOf(refused), /divergence/);
+      assert.match(
+        errorMessageOf(refused),
+        /not confirmed in step with the other device \(diverged\)/,
+      );
       assert.ok(existsSync(local.path), "a refused stop removed the copy");
       assert.ok(
         (await mirrorsOn(a)).sessions.some(

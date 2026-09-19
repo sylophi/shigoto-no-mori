@@ -23,10 +23,7 @@ import { NotFoundPage } from "@/components/NotFoundPage";
 import { Settings } from "@/components/settings/Settings";
 import { DevicesPage } from "@/components/remote/DevicesPage";
 import { withRemoteScope } from "@/components/remote/RemoteScope";
-import { CommitDiff } from "@/components/diff/CommitDiff";
-import { PullRequestDiff } from "@/components/diff/PullRequestDiff";
 import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
-import { WorktreeDiff } from "@/components/diff/WorktreeDiff";
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
 import { hasLocalHost } from "@/lib/localHost";
 import { PROJECT_ROUTE_PATHS, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
@@ -104,6 +101,23 @@ const devicesIndexRoute = createRoute({
 const scriptConsoleComponent = lazyRouteComponent(
   () => import("@/components/scriptConsole/ScriptConsole"),
   "ScriptConsole",
+);
+
+// The three diff pages bring the diff renderer and the syntax
+// highlighter along, over a quarter of what boot would otherwise
+// download, and a session starts on a forest or a worktree, never on a
+// diff. Lazy like the console, one component per page for both trees.
+const WorktreeDiff = lazyRouteComponent(
+  () => import("@/components/diff/WorktreeDiff"),
+  "WorktreeDiff",
+);
+const PullRequestDiff = lazyRouteComponent(
+  () => import("@/components/diff/PullRequestDiff"),
+  "PullRequestDiff",
+);
+const CommitDiff = lazyRouteComponent(
+  () => import("@/components/diff/CommitDiff"),
+  "CommitDiff",
 );
 
 // `amend` opens the changes page already set to rewrite the last

@@ -156,6 +156,9 @@ const HelloFrameSchema = z.object({
   // The client's nonce, and its HMAC of both nonces under the ticket.
   nonce: z.string().regex(HANDSHAKE_NONCE_PATTERN).optional(),
   proof: z.string().optional(),
+  // The client can read deflated frames (deflatedFrame.ts), so the host
+  // may send them. Absent from an old client, ignored by an old host.
+  deflate: z.boolean().optional(),
 });
 
 const ReqFrameSchema = z.object({
