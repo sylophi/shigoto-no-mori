@@ -9,6 +9,16 @@ import { sharedStringSetting } from "@shared/sharedSettings";
 import { queryKeys } from "@/lib/queryKeys";
 import { writeSharedSetting } from "@/lib/remote/sharedSettingsSync";
 
+// The one read every observer shares.
+const sharedSettingsQuery = {
+  queryKey: queryKeys.sharedSettings(),
+  queryFn: () => window.api.sharedSettings.read(),
+  // Every move of the local copy arrives on its broadcast, which the
+  // sync module merges into this entry.
+  staleTime: Number.POSITIVE_INFINITY,
+  meta: { errorTitle: "Couldn't load shared settings" },
+};
+
 // One string setting out of the document (undefined key: no setting to
 // read). Narrowed with `select`, so an observer re-renders when its own
 // setting moves and not on every pick made anywhere: the sidebar holds
@@ -17,16 +27,23 @@ export function useSharedStringSetting(
   key: string | undefined,
 ): string | undefined {
   const { data } = useQuery<SharedSettingsDoc, Error, string | null>({
-    queryKey: queryKeys.sharedSettings(),
-    queryFn: () => window.api.sharedSettings.read(),
-    // Every move of the local copy arrives on its broadcast, which the
-    // sync module merges into this entry.
-    staleTime: Number.POSITIVE_INFINITY,
+    ...sharedSettingsQuery,
     select: (doc) =>
       key === undefined ? null : (sharedStringSetting(doc, key) ?? null),
-    meta: { errorTitle: "Couldn't load shared settings" },
   });
   return data ?? undefined;
+}
+
+// Whether the local copy has been read (or the read has failed, which
+// leaves nothing to wait for). Until then an unset setting and an
+// unread one look alike, and a surface that acts on the difference
+// holds off.
+export function useSharedSettingsSettled(): boolean {
+  const { isPending } = useQuery<SharedSettingsDoc, Error, null>({
+    ...sharedSettingsQuery,
+    select: () => null,
+  });
+  return !isPending;
 }
 
 // The writer for one key (undefined: nothing to write to, a no-op).

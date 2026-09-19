@@ -23,6 +23,15 @@ import {
 } from "@shared/ipc/modules/mirror";
 import type { SyncIgnoredPathsResult } from "@shared/ipc/modules/sync";
 import type {
+  LeaveOutPreset,
+  LeaveOutPresetBase,
+} from "@shared/sharedSettings";
+import {
+  useLeaveOutPreset,
+  useSaveLeaveOutPreset,
+} from "@/hooks/sharedSettings/useLeaveOutPreset";
+import { useSharedSettingsSettled } from "@/hooks/sharedSettings/useSharedSettings";
+import type {
   MirrorIgnoreChoice,
   PullChoice,
 } from "@/hooks/remote/usePullWorktree";
@@ -33,27 +42,29 @@ import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths"
 // segmented control says "Leave out", so `label` answers that, and the
 // list under it reads on from the label: "nothing, except" and
 // "gitignored, except". The rest is an exception in the base's words:
-// what adding one does, the line over the picked rows, the picker
-// row's button, and a picked row's note.
+// the add button and its tooltip, the line over the picked rows, the
+// picker row's button, and a picked row's note.
 export const IGNORE_BASE_COPY = {
   everything: {
     label: "Nothing",
-    title: "Every file crosses, .git and your exceptions aside",
-    hint: "Ignored files and folders to leave out anyway.",
-    lead: "Except these, which stay put:",
+    title: "Copy every file, gitignored ones included",
+    add: "Leave something out",
+    hint: "Pick ignored files or folders to leave out.",
+    lead: "Except these, which are left out:",
     action: "Leave out",
     done: "Left out",
   },
   gitignored: {
     label: "Gitignored",
-    title: "What .gitignore matches stays put, your exceptions aside",
-    hint: "Ignored files and folders to bring anyway.",
-    lead: "Except these, which cross anyway:",
+    title: "Skip whatever .gitignore matches",
+    add: "Bring something anyway",
+    hint: "Pick ignored files or folders to bring anyway.",
+    lead: "Except these, which are brought anyway:",
     action: "Bring",
     done: "Brought",
   },
-} as const;
-export type IgnoreBase = keyof typeof IGNORE_BASE_COPY;
+} as const satisfies Record<LeaveOutPresetBase, unknown>;
+export type IgnoreBase = LeaveOutPresetBase;
 
 export type IgnoreSelection = {
   base: IgnoreBase;
@@ -64,11 +75,23 @@ export type IgnoreSelection = {
   brought: ReadonlySet<string>;
 };
 
-export const DEFAULT_IGNORE_SELECTION: IgnoreSelection = {
-  base: "everything",
-  leftOut: new Set(),
-  brought: new Set(),
-};
+// The project's preset (hooks/sharedSettings/useLeaveOutPreset.ts) as
+// a selection, and back.
+export function selectionOfPreset(preset: LeaveOutPreset): IgnoreSelection {
+  return {
+    base: preset.base,
+    leftOut: new Set(preset.leftOut),
+    brought: new Set(preset.brought),
+  };
+}
+
+export function presetOfSelection(selection: IgnoreSelection): LeaveOutPreset {
+  return {
+    base: selection.base,
+    leftOut: [...selection.leftOut],
+    brought: [...selection.brought],
+  };
+}
 
 // The exceptions to the base in force.
 export function exceptionsOf(selection: IgnoreSelection): ReadonlySet<string> {
@@ -100,13 +123,26 @@ export function setupDefaultFor(selection: IgnoreSelection): boolean {
 // leave-out rule, the ignored list the gitignored rule resolves over
 // (read only once that rule is picked, since it walks the checkout
 // over the device link), and the setup switch, which follows the rule
-// until the user pins it. `choice` is what the mutation takes, and
-// `waiting` holds Start while the gitignored list is still on its way
-// (or the copy would land with nothing left out).
-export function usePullChoice(projectId: string, worktreeId: string) {
-  const [selection, setSelection] = useState<IgnoreSelection>(
-    DEFAULT_IGNORE_SELECTION,
-  );
+// until the user pins it. The rule opens on the project's preset (by
+// the repo identity both ends share) until the user picks. `choice` is
+// what the mutation takes, and `waiting` holds Start while the preset
+// or the gitignored list is still on its way (or the copy would land
+// with nothing left out).
+export function usePullChoice(
+  projectId: string,
+  worktreeId: string,
+  identity: string | null | undefined,
+) {
+  const preset = useLeaveOutPreset(identity);
+  const presetRead = useSharedSettingsSettled();
+  const savePreset = useSaveLeaveOutPreset(identity);
+  // The preset as it stood when the dialog opened, taken once: a rule
+  // under review must not move because another device saved a preset
+  // meanwhile.
+  const [opened, setOpened] = useState<IgnoreSelection | null>(null);
+  if (opened === null && presetRead) setOpened(selectionOfPreset(preset));
+  const [picked, setSelection] = useState<IgnoreSelection | null>(null);
+  const selection = picked ?? opened ?? selectionOfPreset(preset);
   const [setupChoice, setSetupChoice] = useState<boolean | null>(null);
   const ignored = useWorktreeIgnoredPaths(projectId, worktreeId, {
     enabled: selection.base === "gitignored",
@@ -122,10 +158,17 @@ export function usePullChoice(projectId: string, worktreeId: string) {
     selection,
     setSelection,
     ignored,
+    // The rule on screen is not the project's preset, and can be made
+    // it. Never for an identity-less project, which has none to keep.
+    presetDiffers:
+      identity != null &&
+      picked !== null &&
+      !sameSelection(picked, selectionOfPreset(preset)),
+    saveAsPreset: () => savePreset(presetOfSelection(selection)),
     runSetup,
     setupPinned: setupChoice !== null,
     setRunSetup: setSetupChoice,
-    waiting: needsList,
+    waiting: needsList || !presetRead,
     // Why Start is held, when the wait will not end on its own: the
     // list was refused or failed, so the rule has nothing to resolve
     // over and would leave nothing out.

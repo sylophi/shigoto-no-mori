@@ -15,7 +15,7 @@ import { LocalHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
 import { cn } from "@/lib/utils";
 import type { PullChoiceState } from "../flow/ignoreChoice";
-import { LeaveOutPicker } from "../flow/LeaveOutPicker";
+import { PullLeaveOut } from "../flow/PullLeaveOut";
 import { useCarryOverRows } from "../flow/createPlan";
 import {
   PullReviewFooter,
@@ -81,10 +81,8 @@ export function TransplantReview({
               )}
             </section>
 
-            <LeaveOutPicker
-              value={pull.selection}
-              onChange={pull.setSelection}
-              ignored={pull.ignored}
+            <PullLeaveOut
+              pull={pull}
               worktree={{
                 projectId: project.id,
                 id: worktree.id,
