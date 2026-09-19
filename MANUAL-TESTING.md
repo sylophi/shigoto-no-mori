@@ -143,6 +143,7 @@ smd projects add <dir> --all --yes     # set SHIGOMORI_DATA_DIR if the data dir 
 | `SHIGOMORI_DATA_DIR`               | Data dir for this session. See above.                                         |
 | `SHIGOMORI_PROFILE`                | Dev profile name. The launchers set it, and it requires `SHIGOMORI_DATA_DIR`. |
 | `SHIGOMORI_DEBUG_PORT`             | Opens Chromium's remote-debugging port on that window. Dev builds only.       |
+| `SHIGOMORI_DIAL_KINDS`             | Candidate kinds this device dials, e.g. `tunnel`. Dev builds only. See Rules. |
 | `PORT`                             | Renderer port, from `.env.ports`. A real env var overrides it.                |
 | `SM_DEVICE_HUB_URL`                | Device hub URL. Normally from `.env.local`; a real env var overrides it.      |
 | `SM_ACCOUNT_CLERK_PUBLISHABLE_KEY` | Clerk key. Same override rule.                                                |
@@ -231,8 +232,13 @@ cloning exists.
 - **Both profiles use the owner's real dev account.** Each enrolls on
   the dev hub and provisions a tunnel. This is intended: the hub,
   Clerk and tunnel provisioning are exercised for real.
-- **The tunnel data path is not covered on one machine.** The LAN
-  candidate always wins locally. Use the web client (below) for that.
+- **The tunnel data path needs asking for on one machine.** The LAN
+  candidate always wins locally. Launch one profile with
+  `SHIGOMORI_DIAL_KINDS=tunnel` and its session to the other rides that
+  device's tunnel, the way a web client's does (the other profile's log
+  says `deflating large frames for <device> (tunnel-borne)` when it
+  lands). The dev hub needs the tunnel secrets configured. The web
+  client (below) is the other way.
 
 ## Driving a window over CDP
 

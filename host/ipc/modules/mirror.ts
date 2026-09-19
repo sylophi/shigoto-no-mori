@@ -19,6 +19,7 @@ import type { z } from "zod";
 import {
   MIRROR_STOP_UNCONFIRMED,
   type MirrorGitStatus,
+  type MirrorListResult,
   type MirrorServing,
   type MirrorSession,
   MirrorSessionSchema,
@@ -45,6 +46,7 @@ import {
 } from "@host/mirror/gitState";
 import {
   engine,
+  engineOrNull,
   findSession,
   ignoreModeOf,
   localWorktreeIdOf,
@@ -144,17 +146,37 @@ async function rollBackPull(worktree: {
   await deleteAnyLocalBranch(project.path, worktree.branch, true);
 }
 
+// A device's mirror picture: what mirror:list answers and what
+// mirror:changed carries. The same for every caller.
+function mirrorListOf(daemon: ReturnType<typeof engine>): MirrorListResult {
+  return {
+    daemon: daemon.status(),
+    sessions: mirrorSessions(daemon).map((raw) =>
+      annotateMirrorSession(raw, daemon.gitStatus(raw.session)),
+    ),
+    serving: listMirrorServing(),
+  };
+}
+
+// The list for the changed broadcast, or undefined, which a reader
+// answers by asking. Before the daemon is wired there is none to send.
+// A list that fails to build is said so: this runs off a timer, where
+// a throw would be the main process's uncaught exception.
+export function currentMirrorList(): MirrorListResult | undefined {
+  const daemon = engineOrNull();
+  if (daemon === null) return undefined;
+  try {
+    return mirrorListOf(daemon);
+  } catch (error) {
+    console.warn(
+      `[mirror] the changed broadcast goes without its list: ${errorMessageOf(error)}`,
+    );
+    return undefined;
+  }
+}
+
 export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
-  list: () => {
-    const daemon = engine();
-    return {
-      daemon: daemon.status(),
-      sessions: mirrorSessions(daemon).map((raw) =>
-        annotateMirrorSession(raw, daemon.gitStatus(raw.session)),
-      ),
-      serving: listMirrorServing(),
-    };
-  },
+  list: () => mirrorListOf(engine()),
 
   start: async (input: z.infer<typeof MirrorStartPayloadSchema>, ctx) => {
     // Every precondition before the pull, so a refusal creates

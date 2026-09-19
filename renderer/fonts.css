@@ -1,0 +1,11 @@
+/* Zen Maru Gothic, the doubutsu overlay's face. Its own stylesheet,
+   loaded by boot.tsx beside the app rather than inside index.css: the
+   four weights declare 488 @font-face blocks (one per unicode-range
+   subset, so Japanese text keeps the face), which is most of the bytes
+   of the stylesheet the first paint would otherwise wait on. Every
+   block is font-display: swap, so text paints in the fallback face and
+   swaps exactly as it did when these lived in index.css. */
+@import "@fontsource/zen-maru-gothic/400.css";
+@import "@fontsource/zen-maru-gothic/500.css";
+@import "@fontsource/zen-maru-gothic/700.css";
+@import "@fontsource/zen-maru-gothic/900.css";

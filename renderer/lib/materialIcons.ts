@@ -1,4 +1,4 @@
-import manifest from "material-icon-theme/dist/material-icons.json";
+import { createExternalStore, type ExternalStore } from "@/store/externalStore";
 
 type LightVariants = {
   fileExtensions?: Record<string, string>;
@@ -6,7 +6,7 @@ type LightVariants = {
   languageIds?: Record<string, string>;
 };
 
-const m = manifest as {
+export type IconManifest = {
   fileNames: Record<string, string>;
   fileExtensions: Record<string, string>;
   folderNames: Record<string, string>;
@@ -16,6 +16,45 @@ const m = manifest as {
   file: string;
   folder: string;
   folderExpanded: string;
+};
+
+// The manifest is ~440 KB of JSON that only the file pickers read, so
+// it is its own chunk, fetched when the first icon mounts, instead of
+// part of what every window (and every web page load) downloads at
+// boot. A store rather than a promise so MaterialIcon paints the
+// moment it lands.
+const loaded = createExternalStore<IconManifest | null>(null);
+let requested = false;
+let attempts = 0;
+const MANIFEST_ATTEMPTS = 5;
+const MANIFEST_RETRY_MS = 5_000;
+
+function requestManifest(): void {
+  if (requested) return;
+  requested = true;
+  import("material-icon-theme/dist/material-icons.json")
+    .then((module) => {
+      loaded.publish(module.default as IconManifest);
+    })
+    .catch(() => {
+      // A failed chunk fetch (offline, mostly). The icons already
+      // mounted subscribed once and will not ask again, so this does,
+      // a few times: a chunk a deploy removed never comes back.
+      requested = false;
+      attempts += 1;
+      if (attempts < MANIFEST_ATTEMPTS) {
+        setTimeout(requestManifest, MANIFEST_RETRY_MS);
+      }
+    });
+}
+
+// Null until the manifest lands. Subscribing is what asks for it.
+export const iconManifestStore: ExternalStore<IconManifest | null> = {
+  ...loaded,
+  subscribe(listener) {
+    requestManifest();
+    return loaded.subscribe(listener);
+  },
 };
 
 // VS Code resolves bare extensions through its language registry rather
@@ -80,7 +119,11 @@ function* extensionsOf(name: string): Generator<string> {
 
 const EMPTY: Record<string, string> = Object.freeze({});
 
-export function resolveFileIcon(name: string, light: boolean): string {
+export function resolveFileIcon(
+  m: IconManifest,
+  name: string,
+  light: boolean,
+): string {
   const lower = name.toLowerCase();
   const lightFileNames = light ? (m.light?.fileNames ?? EMPTY) : EMPTY;
   const lightFileExts = light ? (m.light?.fileExtensions ?? EMPTY) : EMPTY;
@@ -102,7 +145,11 @@ export function resolveFileIcon(name: string, light: boolean): string {
   return m.file;
 }
 
-export function resolveFolderIcon(name: string, expanded: boolean): string {
+export function resolveFolderIcon(
+  m: IconManifest,
+  name: string,
+  expanded: boolean,
+): string {
   const lower = name.toLowerCase();
   const map = expanded ? m.folderNamesExpanded : m.folderNames;
   return map[lower] ?? (expanded ? m.folderExpanded : m.folder);

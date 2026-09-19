@@ -455,8 +455,14 @@ export const mirrorContract = defineContract("host", {
   ),
   // Fired on every daemon snapshot and every serving-set change, so
   // the list query refreshes without polling, locally and on the
-  // devices viewing this one. Payload-free: the list read is cheap.
-  changed: broadcast("mirror:changed", z.void(), { remote: true }),
+  // devices viewing this one. It carries the list it announces: a busy
+  // mirror fires this several times a second, and a viewer on another
+  // device would otherwise answer each one with a list round trip.
+  // Optional for version skew: an older host sends none, and a reader
+  // without one re-asks, as every reader once did.
+  changed: broadcast("mirror:changed", MirrorListResultSchema.optional(), {
+    remote: true,
+  }),
   // A served worktree's index was rewritten (something staged or
   // unstaged there). Refs and HEAD already ping through
   // git:projectChanged. The index is the one git fact that watcher

@@ -145,7 +145,12 @@ type IncomingPush = {
   path: string;
   handle: FileHandle;
   bytes: number;
+  // Bytes claimed by the chunks accepted so far, written or not yet.
   received: number;
+  // The chunk writes still in flight.
+  writes: Set<Promise<unknown>>;
+  // A chunk write rejected, so the file has a hole `received` hides.
+  failed: boolean;
 };
 
 const pushes = createIdleRegistry<IncomingPush>({
@@ -169,12 +174,18 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
       handle,
       bytes,
       received: 0,
+      writes: new Set(),
+      failed: false,
     });
-    return { transferId };
+    return { transferId, pipelined: true };
   },
 
-  // Chunks arrive in order (the sender awaits each), so an offset that
-  // is not the next byte is a broken sender, not a retry to honor.
+  // Chunks arrive in offset order (one socket, dispatched as they
+  // land), so an offset that is not the next byte is a broken sender,
+  // not a retry to honor. The sender may have several in flight, so
+  // the bytes are claimed BEFORE the write is awaited: the next chunk's
+  // check runs while this one is still writing. A write that fails
+  // fails its chunk, and the sender gives the transfer up.
   pushChunk: async ({ transferId, offset, dataB64 }) => {
     const push = pushes.get(transferId);
     if (push === undefined) throw new Error("unknown-transfer");
@@ -184,14 +195,30 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
     if (push.received + data.length > push.bytes) {
       throw new Error("push overran the announced size");
     }
-    await push.handle.write(data, 0, data.length, offset);
     push.received += data.length;
+    const write = push.handle.write(data, 0, data.length, offset);
+    push.writes.add(write);
+    try {
+      await write;
+    } catch (error) {
+      // The bytes were claimed and are not on disk, so the count no
+      // longer proves the file whole: the finish must refuse.
+      push.failed = true;
+      throw error;
+    } finally {
+      push.writes.delete(write);
+    }
   },
 
   pushFinish: async ({ transferId, refspecs }) => {
     const push = pushes.get(transferId);
     if (push === undefined) throw new Error("unknown-transfer");
     try {
+      // A well-behaved sender finishes only once every chunk was
+      // answered. One that does not must still not unpack under a
+      // write.
+      await Promise.allSettled(push.writes);
+      if (push.failed) throw new Error("push failed: a chunk was not written");
       if (push.received !== push.bytes) {
         throw new Error(
           `push incomplete: got ${push.received} of ${push.bytes} bytes`,

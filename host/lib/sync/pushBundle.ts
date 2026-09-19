@@ -4,7 +4,7 @@
 // peer unpack it under its refs/shigomori/ namespace. The mirror of
 // fetchBundleFromPeer, for the git follower shipping local commits to
 // the device it mirrors with.
-import { mkdtemp, open, rm } from "node:fs/promises";
+import { type FileHandle, mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { syncContract } from "@shared/ipc/modules/sync";
@@ -12,6 +12,7 @@ import type { Client } from "@shared/ipc/types";
 import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
 import type { Project } from "@shared/schemas";
 import { bundleCreateViaCli } from "@host/ipc/cliDelegate";
+import { createChunkWindow } from "./chunkWindow";
 import { landingRefspec } from "./fetchBundle";
 
 export interface PushBundleInput {
@@ -26,6 +27,51 @@ export interface PushBundleInput {
   // not name a ref whose tip is covered by a have: `git bundle create`
   // drops such a ref silently and the unpack would then miss it.
   haves: string[];
+}
+
+// Sends the bundle's bytes as chunks in offset order. Against a host
+// that said it takes them pipelined, several ride the wire at once
+// (chunkWindow.ts), sent in order and answered in any. Against an
+// older host each chunk waits for the last one's answer, which is the
+// only order that host accepts. Exported for the wire benchmark
+// (test/bench/wire.mjs).
+export async function sendBundleChunks(
+  peer: Pick<Client<typeof syncContract>, "pushChunk">,
+  transferId: string,
+  handle: Pick<FileHandle, "read">,
+  bytes: number,
+  { pipelined }: { pipelined: boolean },
+): Promise<void> {
+  const window = createChunkWindow(WIRE_CHUNK_BYTES, {
+    maxInFlight: pipelined ? undefined : 1,
+  });
+  try {
+    for (let offset = 0; offset < bytes;) {
+      // A buffer per chunk: the last one is still being encoded and
+      // sent when the next is read. Unzeroed, since only the bytes the
+      // read filled are ever used.
+      const buffer = Buffer.allocUnsafe(
+        Math.min(WIRE_CHUNK_BYTES, bytes - offset),
+      );
+      // oxlint-disable-next-line no-await-in-loop -- chunks are read in order
+      const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset);
+      if (bytesRead === 0) throw new Error("bundle shrank while sending");
+      const at = offset;
+      // oxlint-disable-next-line no-await-in-loop -- the window's backpressure
+      await window.add(async () => {
+        await peer.pushChunk({
+          transferId,
+          offset: at,
+          dataB64: buffer.subarray(0, bytesRead).toString("base64"),
+        });
+        return bytesRead;
+      });
+      offset += bytesRead;
+    }
+    await window.drain();
+  } finally {
+    await window.settled();
+  }
 }
 
 export async function pushBundleToPeer(
@@ -44,31 +90,15 @@ export async function pushBundleToPeer(
       input.refs,
       input.haves,
     );
-    const { transferId } = await peer.pushStart({
+    const { transferId, pipelined } = await peer.pushStart({
       projectId: input.peerProjectId,
       bytes: created.bytes,
     });
     const handle = await open(path, "r");
     try {
-      const buffer = Buffer.alloc(WIRE_CHUNK_BYTES);
-      let offset = 0;
-      while (offset < created.bytes) {
-        // oxlint-disable-next-line no-await-in-loop -- sequential by design
-        const { bytesRead } = await handle.read(
-          buffer,
-          0,
-          WIRE_CHUNK_BYTES,
-          offset,
-        );
-        if (bytesRead === 0) throw new Error("bundle shrank while sending");
-        // oxlint-disable-next-line no-await-in-loop -- sequential by design
-        await peer.pushChunk({
-          transferId,
-          offset,
-          dataB64: buffer.subarray(0, bytesRead).toString("base64"),
-        });
-        offset += bytesRead;
-      }
+      await sendBundleChunks(peer, transferId, handle, created.bytes, {
+        pipelined: pipelined === true,
+      });
     } finally {
       await handle.close();
     }

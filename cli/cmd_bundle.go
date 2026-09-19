@@ -74,6 +74,40 @@ func resolveRefTips(projectPath string, refs []string) ([]bundleRefTip, error) {
 	return tips, nil
 }
 
+// Splits hex commit hashes into the ones this repo holds as commits and
+// the ones it does not, in one git spawn. A receiver sends a have per
+// local branch (up to 256), and a rev-parse apiece was seconds of
+// process churn before the bundle even started, on every pull. One
+// answer line per input line, in order: "<oid> commit <size>" for a
+// known commit, "<input> missing" otherwise (an unknown object, or one
+// that does not peel to a commit).
+func partitionKnownCommits(projectPath string, hashes []string) (known, unknown []string, err error) {
+	if len(hashes) == 0 {
+		return nil, nil, nil
+	}
+	var stdin strings.Builder
+	for _, hash := range hashes {
+		stdin.WriteString(hash + "^{commit}\n")
+	}
+	out, err := runGitStdin(projectPath, nil, stdin.String(), "cat-file", "--batch-check")
+	if err != nil {
+		return nil, nil, err
+	}
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != len(hashes) {
+		return nil, nil, fmt.Errorf("git cat-file answered %d of %d haves", len(lines), len(hashes))
+	}
+	for i, hash := range hashes {
+		fields := strings.Fields(lines[i])
+		if len(fields) == 3 && fields[1] == "commit" {
+			known = append(known, hash)
+		} else {
+			unknown = append(unknown, hash)
+		}
+	}
+	return known, unknown, nil
+}
+
 // Builds `git bundle create <out> ^<have>... <ref>...`. Haves the local
 // object store doesn't know are skipped, not fatal: they describe the
 // RECEIVER's tips, which this repo may never have heard of, and a
@@ -87,16 +121,14 @@ func createBundle(projectPath, out string, refs, haves []string) (bundleCreateRe
 			return bundleCreateResult{}, codedErrf("unknown-ref", "Ref %q does not exist here.", ref)
 		}
 	}
-	var kept, skipped []string
 	for _, have := range haves {
 		if !bundleHaveRe.MatchString(have) {
 			return bundleCreateResult{}, codedErrf("bad-have", "Invalid have %q (must be a hex commit hash).", have)
 		}
-		if _, err := runGit(projectPath, "rev-parse", "--verify", "--quiet", "--end-of-options", have+"^{commit}"); err != nil {
-			skipped = append(skipped, have)
-			continue
-		}
-		kept = append(kept, have)
+	}
+	kept, skipped, err := partitionKnownCommits(projectPath, haves)
+	if err != nil {
+		return bundleCreateResult{}, err
 	}
 	// --end-of-options pins everything after it to the revision slot
 	// (house argv discipline, see captureDirtyState). ^<have> stays a

@@ -45,6 +45,10 @@ import { scriptRuns } from "./store/scriptRuns";
 import { worktreeLifecycle } from "./store/worktreeLifecycle";
 import "./index.css";
 
+// Not render blocking, unlike index.css (see fonts.css). A failed fetch
+// leaves the fallback face, which is what text paints in meanwhile.
+import("./fonts.css").catch(() => {});
+
 export function bootApp({
   ClerkProvider,
   history,

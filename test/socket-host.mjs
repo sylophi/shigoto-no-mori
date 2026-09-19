@@ -29,6 +29,7 @@
 // Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
 // imports resolve. Run: pnpm test socket-host.
 import assert from "node:assert/strict";
+import { deflateRawSync } from "node:zlib";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -42,6 +43,7 @@ import {
   encodeFrame,
   MAX_IN_FLIGHT_PER_PEER,
 } from "@shared/ipc/socket/frames";
+import { DEFLATED_FRAME_KIND } from "@shared/ipc/socket/deflatedFrame";
 import { connectDevice } from "@shared/ipc/socket/wsClientTransport";
 import { rendererSchemeOrigins } from "@shared/packaging/rendererScheme.mts";
 import { z } from "zod";
@@ -192,6 +194,36 @@ async function authenticate(url, token = TOKEN) {
     "expected a welcome frame after a valid hello",
   );
   return { client, welcome };
+}
+
+// A stand-in host, to put exact bytes on the wire: welcomes any
+// hello, then hands the socket to the check.
+async function fakeHost(track, afterWelcome) {
+  const wss = new WebSocketServer({ port: 0, host: "127.0.0.1" });
+  await new Promise((resolve) => wss.once("listening", resolve));
+  track(() => new Promise((resolve) => wss.close(resolve)));
+  wss.on("connection", (ws) => {
+    track(() => ws.terminate());
+    ws.once("message", () => {
+      ws.send(
+        encodeFrame({ t: "welcome", deviceId: "fake-host", appVersion: "1" }),
+      );
+      afterWelcome(ws);
+    });
+  });
+  return `ws://127.0.0.1:${wss.address().port}`;
+}
+const deflatedFrame = (frame) =>
+  Buffer.concat([
+    Buffer.from([DEFLATED_FRAME_KIND]),
+    deflateRawSync(Buffer.from(encodeFrame(frame))),
+  ]);
+
+// The raw messages a socket receives, binary or text, in order.
+function rawMessages(ws) {
+  const seen = [];
+  ws.on("message", (data, isBinary) => seen.push({ data, isBinary }));
+  return seen;
 }
 
 const { check, done, fail } = makeProof("socket-host proof");
@@ -1132,6 +1164,200 @@ async function main() {
           ].join("\n"),
         );
       }
+    },
+  );
+
+  // Deflated frames (shared/ipc/socket/deflatedFrame.ts). The host
+  // deflates a large text frame only for a tunnel-borne connection
+  // (loopback plus the connector's CF-Connecting-IP) whose hello asked.
+  const TUNNEL_HEADERS = { "cf-connecting-ip": "203.0.113.7" };
+  const bigValue = { patch: "a line of a diff that repeats\n".repeat(4_000) };
+
+  await check(
+    "deflate: a tunnel-borne client that asks gets a large res deflated, and reads it",
+    async () => {
+      const { binding, url } = await startBinding();
+      try {
+        let socket;
+        const connection = await connectDevice({
+          url,
+          token: TOKEN,
+          appVersion: "1",
+          localDeviceId: "client",
+          onClose: () => {},
+          openSocket: (target) => {
+            socket = new WebSocket(target, { headers: TUNNEL_HEADERS });
+            return socket;
+          },
+        });
+        const seen = rawMessages(socket);
+        const result = await connection.transport.invoke("test:echo", bigValue);
+        assert.deepEqual(result, bigValue, "the inflated result is intact");
+        assert.equal(seen.length, 1);
+        assert.equal(
+          seen[0].isBinary,
+          true,
+          "the res crossed as a binary frame",
+        );
+        assert.equal(seen[0].data[0], DEFLATED_FRAME_KIND);
+        assert.ok(
+          seen[0].data.length < JSON.stringify(bigValue).length / 10,
+          "and as a fraction of its text",
+        );
+        // A small answer is not worth deflating and stays text.
+        await connection.transport.invoke("test:echo", { hi: 1 });
+        assert.equal(seen[1].isBinary, false);
+        connection.close();
+      } finally {
+        await binding.stop();
+      }
+    },
+  );
+
+  await check(
+    "deflate: frames behind a deflating one keep their order",
+    async () => {
+      const { binding, url } = await startBinding();
+      try {
+        const connection = await connectDevice({
+          url,
+          token: TOKEN,
+          appVersion: "1",
+          localDeviceId: "client",
+          onClose: () => {},
+          openSocket: (target) =>
+            new WebSocket(target, { headers: TUNNEL_HEADERS }),
+        });
+        const order = [];
+        connection.transport.subscribe("test:ping", (payload) =>
+          order.push(payload.n),
+        );
+        // A big push (deflated, async on both ends) chased by small
+        // ones (text, sync on both ends).
+        binding.broadcastAll("test:ping", { n: 1, pad: bigValue });
+        binding.broadcastAll("test:ping", { n: 2 });
+        binding.broadcastAll("test:ping", { n: 3, pad: bigValue });
+        binding.broadcastAll("test:ping", { n: 4 });
+        await waitFor(() => order.length === 4, "four pushes");
+        assert.deepEqual(order, [1, 2, 3, 4]);
+        connection.close();
+      } finally {
+        await binding.stop();
+      }
+    },
+  );
+
+  await check(
+    "deflate: a LAN-borne client, and one that never asked, get plain text",
+    async () => {
+      const { binding, url } = await startBinding();
+      try {
+        // Asks (connectDevice always does where it can inflate), but
+        // arrives without the connector's header: a LAN peer.
+        let lanSocket;
+        const lan = await connectDevice({
+          url,
+          token: TOKEN,
+          appVersion: "1",
+          localDeviceId: "client",
+          onClose: () => {},
+          openSocket: (target) => {
+            lanSocket = new WebSocket(target);
+            return lanSocket;
+          },
+        });
+        const lanSeen = rawMessages(lanSocket);
+        assert.deepEqual(
+          await lan.transport.invoke("test:echo", bigValue),
+          bigValue,
+        );
+        assert.equal(
+          lanSeen[0].isBinary,
+          false,
+          "a LAN peer is never deflated for",
+        );
+        lan.close();
+
+        // Tunnel-borne, but an old client whose hello carries no ask.
+        const old = connect(url, TUNNEL_HEADERS);
+        await old.opened;
+        old.send({
+          t: "hello",
+          token: TOKEN,
+          deviceId: "old",
+          appVersion: "1",
+        });
+        assert.equal((await old.nextFrame()).t, "welcome");
+        old.send({ t: "req", id: 1, channel: "test:echo", input: bigValue });
+        // The helper JSON-parses every message, so a binary frame
+        // would have thrown there.
+        assert.deepEqual((await old.nextFrame()).result, bigValue);
+        old.close();
+      } finally {
+        await binding.stop();
+      }
+    },
+  );
+
+  await check(
+    "deflate: a deflated frame sent in the same tick as the welcome is read, not lost",
+    async (track) => {
+      const url = await fakeHost(track, (ws) => {
+        ws.send(
+          deflatedFrame({ t: "push", channel: "test:ping", payload: bigValue }),
+        );
+        ws.send(encodeFrame({ t: "push", channel: "test:ping", payload: 2 }));
+      });
+      const pushes = [];
+      const connection = await connectDevice({
+        url,
+        token: TOKEN,
+        appVersion: "1",
+        localDeviceId: "client",
+        onClose: () => {},
+        onAnyPush: (_channel, payload) => pushes.push(payload),
+        openSocket: (target) => new WebSocket(target),
+      });
+      track(() => connection.close());
+      await waitFor(() => pushes.length === 2, "both pushes");
+      assert.deepEqual(pushes, [bigValue, 2], "in the order they were sent");
+    },
+  );
+
+  await check(
+    "deflate: a frame that fails to inflate closes the connection, so the invoke it answered rejects instead of hanging",
+    async (track) => {
+      const url = await fakeHost(track, (ws) => {
+        ws.once("message", () => {
+          ws.send(
+            Buffer.concat([
+              Buffer.from([DEFLATED_FRAME_KIND]),
+              Buffer.from("not a deflate stream at all"),
+            ]),
+          );
+        });
+      });
+      let closedWith;
+      const connection = await connectDevice({
+        url,
+        token: TOKEN,
+        appVersion: "1",
+        localDeviceId: "client",
+        onClose: (code) => {
+          closedWith = code;
+        },
+        openSocket: (target) => new WebSocket(target),
+      });
+      track(() => connection.close());
+      await assert.rejects(
+        () => connection.transport.invoke("test:echo", { hi: 1 }),
+        /remote device disconnected/,
+      );
+      assert.equal(
+        closedWith,
+        null,
+        "the owner was told, like a heartbeat death",
+      );
     },
   );
 

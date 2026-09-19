@@ -30,6 +30,7 @@
 // Electron facts a listener needs (appVersion) arrive through start
 // opts instead.
 import type { IncomingMessage } from "node:http";
+import { deflateRaw } from "node:zlib";
 import { WebSocket, WebSocketServer } from "ws";
 import { errorMessageOf } from "@shared/errors";
 import { secretsMatch } from "@host/lib/util/secretCompare";
@@ -60,6 +61,10 @@ import {
   newHandshakeNonce,
   proofsMatch,
 } from "@shared/ipc/socket/proof";
+import {
+  DEFLATE_MIN_TEXT_LENGTH,
+  DEFLATED_FRAME_KIND,
+} from "@shared/ipc/socket/deflatedFrame";
 import type { DirectCandidateKind } from "@shared/ipc/modules/direct";
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
 import { createLimiter } from "@shared/util/limit";
@@ -298,11 +303,77 @@ export function isAllowedOrigin(
   }
 }
 
+const DEFLATED_FRAME_PREFIX = Buffer.from([DEFLATED_FRAME_KIND]);
+
+// The ordered writer of each socket the host deflates for
+// (shared/ipc/socket/deflatedFrame.ts): a tunnel-borne connection whose
+// hello asked. Every other socket has no entry and its frames go
+// straight out. A LAN peer is left alone on purpose: its link outruns
+// the deflate, which would then be the slow part of a bundle transfer.
+type FrameWriter = (data: string | Uint8Array) => void;
+const deflatingWriters = new WeakMap<WebSocket, FrameWriter>();
+
+// The raw-deflate bytes of a frame's text, or null when it is not
+// worth sending that way (it did not shrink, or zlib refused).
+function deflated(text: string): Promise<Buffer | null> {
+  return new Promise((resolve) => {
+    const raw = Buffer.from(text, "utf8");
+    deflateRaw(raw, (error, bytes) => {
+      resolve(error === null && bytes.length + 1 < raw.length ? bytes : null);
+    });
+  });
+}
+
+// Deflating is async (zlib's thread pool, so a megabyte of diff never
+// blocks the host's loop), and a frame that finishes late must not be
+// overtaken by the ones behind it: script output arrives as ordered
+// pushes, and a channel's bytes keep their place among the JSON frames.
+// So while a deflate is outstanding every later frame of the socket
+// queues behind it, and with none outstanding a frame that needs no
+// deflating goes straight out and pays nothing.
+function createDeflatingWriter(socket: WebSocket): FrameWriter {
+  let queued = 0;
+  const inOrder = createLimiter(1);
+  const write = (data: string | Uint8Array): void => {
+    if (socket.readyState === WebSocket.OPEN) socket.send(data);
+  };
+  return (data) => {
+    const text =
+      typeof data === "string" && data.length >= DEFLATE_MIN_TEXT_LENGTH
+        ? data
+        : null;
+    if (queued === 0 && text === null) {
+      write(data);
+      return;
+    }
+    queued += 1;
+    void inOrder(async () => {
+      try {
+        const bytes = text === null ? null : await deflated(text);
+        if (bytes === null) write(data);
+        else write(Buffer.concat([DEFLATED_FRAME_PREFIX, bytes]));
+      } catch (error) {
+        // A send that threw (the socket dying under it) loses this
+        // frame only, not the ones queued behind it.
+        console.warn(`[socket] queued send failed: ${errorMessageOf(error)}`);
+      } finally {
+        queued -= 1;
+      }
+    });
+  };
+}
+
+function sendData(socket: WebSocket, data: string | Uint8Array): void {
+  const writer = deflatingWriters.get(socket);
+  if (writer === undefined) socket.send(data);
+  else writer(data);
+}
+
 // Unconditional send for res and welcome frames: these are answers a
 // caller is awaiting, so they are never dropped under backpressure.
 function send(socket: WebSocket, frame: ServerFrame): void {
   if (socket.readyState !== WebSocket.OPEN) return;
-  socket.send(encodeFrame(frame));
+  sendData(socket, encodeFrame(frame));
 }
 
 export function createWsServerBinding(
@@ -413,7 +484,7 @@ export function createWsServerBinding(
       }
       return;
     }
-    socket.send(text);
+    sendData(socket, text);
   }
 
   // close() alone is advisory: ws keeps delivering inbound frames for up
@@ -587,7 +658,7 @@ export function createWsServerBinding(
           if (socket.readyState !== WebSocket.OPEN) {
             throw new Error("socket not open");
           }
-          socket.send(frame);
+          sendData(socket, frame);
         },
       });
       const warnUnknownChannelFrame = createUnknownChannelFrameWarner("socket");
@@ -786,6 +857,12 @@ export function createWsServerBinding(
             heartbeats: false,
             kill,
           });
+          if (frame.deflate === true && arrivalKind === "tunnel") {
+            deflatingWriters.set(socket, createDeflatingWriter(socket));
+            console.info(
+              `[socket] deflating large frames for ${frame.deviceId} (tunnel-borne)`,
+            );
+          }
           send(socket, {
             t: "welcome",
             deviceId: opts.deviceId,

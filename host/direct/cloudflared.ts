@@ -79,6 +79,16 @@ export const TUNNEL_STABLE_MS = STABLE_CONNECTION_MS;
 // advertisement (a transient failure, so it retries forever -- but
 // each wasted rung pushes the next attempt further out).
 export const TUNNEL_PROBE_DELAYS_MS: readonly number[] = [5_000, 8_000];
+// The ladder for a tunnel the Worker REUSED, which is every launch
+// after a device's first. Its hostname resolved before, so there is no
+// propagation to wait out and no negative answer to earn: all a probe
+// waits on is the connector registering at the edge, a second or two.
+// Until it passes the device advertises no tunnel candidate, so on the
+// ladder above a web client (whose only candidate is the tunnel) could
+// not reach a freshly launched device for its first five seconds.
+export const TUNNEL_PROBE_DELAYS_REUSED_MS: readonly number[] = [
+  1_000, 2_000, 4_000, 8_000,
+];
 // Past this, one warning names the hostname that is still not
 // routable, so a stuck tunnel is visible in the log without the
 // runner giving up on a healthy child, and the probe slows to the
@@ -476,8 +486,14 @@ export function createCloudflaredRunner(
     next: TunnelChild,
     port: number,
     hostname: string,
-    deadlineMs: number,
+    fresh: boolean,
   ): void {
+    const deadlineMs = fresh
+      ? TUNNEL_PROBE_DEADLINE_FRESH_MS
+      : TUNNEL_PROBE_DEADLINE_MS;
+    const delaysMs = fresh
+      ? TUNNEL_PROBE_DELAYS_MS
+      : TUNNEL_PROBE_DELAYS_REUSED_MS;
     const startedAt = clock.now();
     let probeAttempt = 0;
     let warned = false;
@@ -516,9 +532,7 @@ export function createCloudflaredRunner(
           if (!live()) return;
           probeTunnel(hostname).then(finish, () => finish(false));
         },
-        warned
-          ? TUNNEL_PROBE_SLOW_MS
-          : backoffDelayMs(TUNNEL_PROBE_DELAYS_MS, probeAttempt),
+        warned ? TUNNEL_PROBE_SLOW_MS : backoffDelayMs(delaysMs, probeAttempt),
       );
       probeAttempt += 1;
     };
@@ -592,12 +606,7 @@ export function createCloudflaredRunner(
       if (clock.now() - spawnedAt >= TUNNEL_STABLE_MS) attempt = 0;
       scheduleRestart(detail);
     });
-    beginProbe(
-      next,
-      port,
-      hostname,
-      dnsCreated ? TUNNEL_PROBE_DEADLINE_FRESH_MS : TUNNEL_PROBE_DEADLINE_MS,
-    );
+    beginProbe(next, port, hostname, dnsCreated);
   }
 
   // One start attempt for the given port. Runs inside the lifecycle

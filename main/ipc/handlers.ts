@@ -59,6 +59,7 @@ import { hygieneHandlers } from "@host/ipc/modules/hygiene";
 import { launchersHandlers } from "@host/ipc/modules/launchers";
 import { menuHandlers } from "./modules/menu";
 import {
+  currentMirrorList,
   mirrorHandlers,
   setMirrorGitChangedListener,
   setMirrorImpl,
@@ -141,10 +142,20 @@ const mirrorGateway = createMirrorGateway({
 // The daemon snapshots on every cycle of every session and the
 // follower reports every verdict. The renderer's ping is coalesced so
 // a busy mirror costs viewers one refetch per beat, not one per cycle.
-const broadcastMirrorChanged = coalesce(
-  () => broadcastAll(mirrorContract, "changed", undefined),
-  150,
-);
+const broadcastMirrorChanged = coalesce(() => {
+  // Off a timer, so a throw here is the main process's uncaught
+  // exception. The list is validated against its strict schema on the
+  // way out, and one that fails it goes out as the bare signal (a
+  // reader then asks), as it did before the broadcast carried a list.
+  try {
+    broadcastAll(mirrorContract, "changed", currentMirrorList());
+  } catch (error) {
+    console.warn(
+      `[mirror] the changed broadcast goes without its list: ${errorMessageOf(error)}`,
+    );
+    broadcastAll(mirrorContract, "changed", undefined);
+  }
+}, 150);
 const fileSyncDir = () => join(dataDir(), "file-sync");
 // The git follower's agreed states, one file beside the engine's data.
 const gitFollowStorePath = () => join(fileSyncDir(), "git-follow.json");
