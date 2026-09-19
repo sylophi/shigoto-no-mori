@@ -2,7 +2,7 @@
 // reachable: unconfigured or signed out, the page itself explains the
 // state (AccountSection) instead of the button hiding. Settings wears
 // a dot while any device's section there holds an update this window
-// could install: this machine's, or a peer's (the only kind a hostless
+// could install: the local machine's, or a peer's (the only kind a hostless
 // client can have).
 import { MonitorSmartphone, Settings as SettingsIcon } from "lucide-react";
 import { useStagedUpdates } from "@/hooks/system/useUpdater";

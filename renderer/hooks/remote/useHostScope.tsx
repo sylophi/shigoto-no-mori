@@ -16,7 +16,7 @@
 //   and invalidate the local `queryKeys` registry explicitly. A
 //   remote:true host broadcast mirrored for every device
 //   (updater:state) follows the same split at boot scope: boot.tsx
-//   for this machine, lib/remote/remoteHostWatch.ts for the peers.
+//   for the local machine, lib/remote/remoteHostWatch.ts for the peers.
 // - Host-scoped hooks whose write path is deliberately local-only
 //   (the updateLocalGlobalConfig caller in useSettingsSave): the write
 //   lands on this machine's disk, so their reads and invalidations

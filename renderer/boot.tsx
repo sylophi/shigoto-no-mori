@@ -96,7 +96,7 @@ export function bootApp({
 function startLocalHost(queryClient: QueryClient): void {
   scriptRuns.start();
 
-  // This machine's updater state rides its broadcast whole, so it is
+  // The local machine's updater state rides its broadcast whole, so it is
   // written rather than re-asked. Boot-scoped so the sidebar's Settings
   // dot follows a check that finishes with no Version section mounted
   // (remoteHostWatch mirrors the same channel for every peer).

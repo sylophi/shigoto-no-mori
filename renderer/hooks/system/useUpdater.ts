@@ -25,7 +25,7 @@ function updaterStateQueryOptions(deviceId: string, api: HostApi) {
     queryKey: queryKeysFor(deviceId).updaterState(),
     queryFn: () => api.updater.get(),
     // Never stale: the updater:state broadcast is mirrored into this
-    // key for the window's lifetime, this machine's by the boot-scope
+    // key for the window's lifetime, the local machine's by the boot-scope
     // subscription (boot.tsx) and a peer's by the push watch
     // (remoteHostWatch), and a peer's is re-read whenever its session
     // lands, which covers a restart into the new build.
@@ -88,7 +88,7 @@ export function useUpdater() {
 }
 
 // The updates this window could install right now, as deviceId to the
-// staged version, this machine's first: its own, plus every peer's
+// staged version, the local machine's first: its own, plus every peer's
 // that is reachable and lets this device command it (a staged update
 // behind a refused grant has no button to lead to). What the sidebar's
 // Settings dot and the Settings device rows flag. A peer is asked only
