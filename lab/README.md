@@ -60,6 +60,7 @@ ffmpeg`, once). Run `node record.mjs takes.json outdir`. Each take has
 the shot shape, with `click` taking a Playwright locator, `type` and
 `paste` putting text into whatever has focus (keyed at a readable pace,
 or all at once as a clipboard would), and a `waitFor` action that
-blocks on visible text, which is how a take waits out a posed transfer. Output is webm; set `FFMPEG` to a binary
-to get an mp4 beside it. The sync verbs are posed, so a recording
-shows the UI of a flow, not a transfer.
+blocks on visible text, which is how a take waits out a posed
+transfer. Output is webm; set `FFMPEG` to a binary to get an mp4
+beside it. The sync verbs are posed, so a recording shows the UI of a
+flow, not a transfer.
