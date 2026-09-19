@@ -18,14 +18,17 @@ import {
 export function SettingsSectionChips({
   devices,
   activeTab,
+  updates,
 }: {
   devices: readonly RemoteDevice[];
   activeTab: string;
+  // useStagedUpdates' answer, read once by the form for the page.
+  updates: Readonly<Record<string, string>>;
 }) {
   const phone = usePhoneLayout();
   const localName = useLocalDeviceName();
   if (!phone) return null;
-  const sections = settingsSections(devices, localName);
+  const sections = settingsSections(devices, localName, updates);
   return (
     <nav
       aria-label="Settings sections"

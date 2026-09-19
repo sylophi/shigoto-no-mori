@@ -2,7 +2,6 @@ import { FolderPlus } from "lucide-react";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { hasLocalHost } from "@/lib/localHost";
-import { useUpdater } from "@/hooks/system/useUpdater";
 import { SidebarNavActions } from "./SidebarNavActions";
 import { SidebarViewToggle } from "./SidebarViewToggle";
 import { SIDEBAR_FOOTER_BAR, SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
@@ -16,8 +15,8 @@ interface SidebarFooterProps {
 // What both views share: the layout toggle, and the app-level actions.
 // Anything that only answers a question the project tree asks lives in
 // SidebarToolbar, above the tree. A hostless client has no local tree
-// to arrange and no updater of its own, so its bar carries the toggle,
-// add project (onto one of its peers) and the page-nav cluster.
+// to arrange, so its bar carries the toggle, add project (onto one of
+// its peers) and the page-nav cluster.
 export function SidebarFooter(props: SidebarFooterProps) {
   return hasLocalHost ? <LocalFooter {...props} /> : <PeerFooter />;
 }
@@ -55,9 +54,6 @@ function AddProjectButton() {
 }
 
 function LocalFooter({ arrangeMode, onToggleArrange }: SidebarFooterProps) {
-  const { state: updaterState } = useUpdater();
-  const updateReady = updaterState?.kind === "ready";
-
   if (arrangeMode) {
     return (
       <div className={cn(SIDEBAR_FOOTER_BAR, "justify-end")}>
@@ -76,7 +72,7 @@ function LocalFooter({ arrangeMode, onToggleArrange }: SidebarFooterProps) {
       <SidebarViewToggle />
       <div className="flex-1" />
       <AddProjectButton />
-      <SidebarNavActions updateReady={updateReady} />
+      <SidebarNavActions />
     </div>
   );
 }

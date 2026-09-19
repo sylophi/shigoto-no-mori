@@ -6,9 +6,9 @@
 // any tool (its git-directory watcher), git:refsRefreshed narrows
 // a background fetch to one project's branch state,
 // remoteAccess:commandAccessChanged says the host's command-access
-// switch flipped, and githubCli:projectPullRequestsRefreshed says its
-// PR sweep found one project's map changed. All ride the peer's direct
-// session and
+// switch flipped, githubCli:projectPullRequestsRefreshed says its
+// PR sweep found one project's map changed, and updater:state carries
+// its updater's every move. All ride the peer's direct session and
 // arrive here as the bridge's peerPush fan-out, tagged with the
 // sending device, so one subscription serves every device and every
 // surface: the always-mounted sidebar rows for a peer's forest refresh
@@ -25,7 +25,7 @@
 // while a session was down, so this subscription never needs to know a
 // session's lifecycle.
 //
-// Deliberately NOT mirrored, so this stays five channels:
+// Deliberately NOT mirrored, so this stays six channels:
 // - projects:usageBumped drives the local sidebar's usage sorts, which
 //   a peer's rows don't drive.
 // - git:fetchActive feeds the device-blind fetch-spinner store, which
@@ -34,7 +34,9 @@ import type { QueryClient } from "@tanstack/react-query";
 import { gitContract } from "@shared/ipc/modules/git";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
 import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
+import { updaterContract } from "@shared/ipc/modules/updater";
 import { invalidateBranchState } from "@/hooks/git/useBranches";
+import { writeUpdaterState } from "@/hooks/system/useUpdater";
 import {
   invalidateHostDevice,
   invalidateHostProject,
@@ -47,6 +49,7 @@ const REFS_REFRESHED = gitContract.calls.refsRefreshed;
 const COMMAND_ACCESS_CHANGED = remoteAccessContract.calls.commandAccessChanged;
 const PULL_REQUESTS_REFRESHED =
   githubCliContract.calls.projectPullRequestsRefreshed;
+const UPDATER_STATE = updaterContract.calls.state;
 
 // Boot wiring: subscribe once for the life of the window, never
 // unsubscribed on purpose, exactly like the other boot-scope
@@ -94,6 +97,17 @@ export function startRemoteHostWatch(queryClient: QueryClient): void {
           parsed.data.projectId,
         ),
       });
+      return;
+    }
+    // The peer's updater moved. The state rides the push whole, so it
+    // is written rather than re-asked, the way boot.tsx mirrors the
+    // local broadcast. Always on, so the update flags (the sidebar's
+    // Settings dot, the Settings device rows) follow a peer whose
+    // section was never opened.
+    if (channel === UPDATER_STATE.channel) {
+      const parsed = UPDATER_STATE.payload.safeParse(payload);
+      if (!parsed.success) return;
+      writeUpdaterState(queryClient, deviceId, parsed.data);
       return;
     }
     if (channel === REFS_REFRESHED.channel) {
