@@ -15,7 +15,7 @@ import { AddProjectView } from "./addProject/AddProjectView";
 // the sidebar ＋ button). The shortcut is a native menu accelerator in
 // main/menu.ts that broadcasts over IPC.
 export function AddProjectModal() {
-  const { addProjectOpen, setAddProjectOpen, openAddProject } = useOverlays();
+  const { addProjectOpen, openAddProject } = useOverlays();
 
   useEffect(
     () => window.api.projectLauncher.onAddProject(() => openAddProject()),
@@ -23,15 +23,16 @@ export function AddProjectModal() {
   );
 
   if (!addProjectOpen) return null;
-  return <AddProjectDialog onClose={() => setAddProjectOpen(false)} />;
+  return <AddProjectDialog />;
 }
 
 // The flow under a device pick: the same browse, scan and add, run on
 // whichever machine the tab names. The view reads everything off the
 // scope the panel mounts it under, so a peer's disk browses like this
 // one's. The bar shows only once there is a choice to make.
-function AddProjectDialog({ onClose }: { onClose: () => void }) {
-  const { addProjectTarget } = useOverlays();
+function AddProjectDialog() {
+  const { addProjectTarget, setAddProjectOpen } = useOverlays();
+  const onClose = () => setAddProjectOpen(false);
   // Held here, above the per-device view, so what was typed survives a
   // change of device: a pasted URL is as good on the next machine, and
   // `~/dev/` means the same folder on each.

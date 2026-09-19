@@ -4,10 +4,17 @@
 // a plain path, a `~` path and file:// all name a disk, never a remote.
 import { normalizeRemoteUrl } from "@shared/repoIdentity.mts";
 
+// The one definition of "a remote a device may be asked to clone": it
+// normalizes, and it can't be read as a git option. The clone payload,
+// the dialog and the URL handed to another device all ask this.
+export function isCloneableRemote(url: string): boolean {
+  return !url.trim().startsWith("-") && normalizeRemoteUrl(url) !== null;
+}
+
 // The folder `git clone` would make for this URL (the repo's own name,
 // `.git` dropped), or null when the string is not a remote.
 export function repoNameFromUrl(url: string): string | null {
-  if (url.trim().startsWith("-")) return null;
+  if (!isCloneableRemote(url)) return null;
   return normalizeRemoteUrl(url)?.split("/").at(-1) ?? null;
 }
 
@@ -21,7 +28,7 @@ export function repoNameFromUrl(url: string): string | null {
 export function pickCloneUrl(
   remotes: readonly { name: string; url: string }[],
 ): string | null {
-  const usable = remotes.filter((remote) => repoNameFromUrl(remote.url));
+  const usable = remotes.filter((remote) => isCloneableRemote(remote.url));
   const picked =
     usable.find((remote) => remote.name === "origin") ??
     usable.find((remote) => remote.name === "upstream") ??

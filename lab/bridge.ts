@@ -120,11 +120,11 @@ function isRepoOnDisk(disk: LabDisk, path: string): boolean {
 // joins the device's list with a primary worktree on main, so the add
 // flow has somewhere to land and the sidebar shows it.
 function registerProject(
+  disk: LabDisk,
   forest: DeviceForest,
   path: string,
   identity: string | null = null,
 ): Project {
-  const disk = labDisks[forest.deviceId] ?? { home: "", dirs: {} };
   if (!isRepoOnDisk(disk, path)) {
     throw new Error(`${path} is not a git repository`);
   }
@@ -182,7 +182,7 @@ function hostHandlersFor(
     // changed" to the query cache's structural sharing.
     "projects:list": () => [...forest.projects],
     "projects:add": ({ path }) =>
-      registerProject(forest, resolveOnDisk(disk, path)),
+      registerProject(disk, forest, resolveOnDisk(disk, path)),
     // Takes a moment, as a clone does, so the cloning stage is seen.
     "projects:clone": async ({ url, parentDir, name }) => {
       await new Promise((resolve) => setTimeout(resolve, 2200));
@@ -198,7 +198,7 @@ function hostHandlersFor(
         Object.entries(labRemoteUrls).find(
           ([, known]) => normalizeRemoteUrl(known) === normalizeRemoteUrl(url),
         )?.[0] ?? `remote:${normalizeRemoteUrl(url)}`;
-      return registerProject(forest, `${parent}/${folder}`, identity);
+      return registerProject(disk, forest, `${parent}/${folder}`, identity);
     },
     "projects:cloneUrl": ({ projectId }) => {
       const identity = forest.projects.find(

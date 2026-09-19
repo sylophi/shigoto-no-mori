@@ -31,7 +31,7 @@ import {
   useProjects,
 } from "@/hooks/projects/useProjects";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
+import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { worktreesQueryOptions } from "@/hooks/worktrees/useWorktrees";
 import type { Worktree } from "@shared/schemas";
 import { notifyError, toast } from "@/lib/toast";
@@ -39,7 +39,7 @@ import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
-import { ITEM_CLASS } from "@/components/ui/cmdk-classes";
+import { ITEM_CLASS, keepFocusInInput } from "@/components/ui/cmdk-classes";
 import { CloneDestination, CloningPanel } from "./ClonePanel";
 import { defaultCloneParent } from "./cloneDestination";
 import { ScanningPanel } from "./ScanningPanel";
@@ -80,7 +80,6 @@ export function AddProjectView({
   // parses as a remote long before it is finished, and a mode that
   // flipped on a keystroke would take the half-typed URL with it.
   const cloneName = repoNameFromUrl(query);
-  const cloneUrl = cloneName === null ? null : query.trim();
   const cloneProject = useCloneProject();
   // The picked parent folder. Null follows the device's own layout.
   const [pickedCloneParent, setPickedCloneParent] = useState<string | null>(
@@ -97,12 +96,25 @@ export function AddProjectView({
   };
   const cloneParent =
     pickedCloneParent ?? defaultCloneParent(existingProjects, home);
-  // Tildified here, once: a picked parent comes back as the device
-  // resolved it, absolute.
-  const cloneDest = tildify(`${cloneParent}${cloneName ?? ""}`, home);
-  // Undefined on this device: only a peer's name is worth saying.
-  const peer = useRemoteDevice(scope.deviceId);
-  const deviceLabel = scope.remote ? peer?.label : undefined;
+  // Everything the clone is, or null while the input is a path: one
+  // fact, so no branch below has to agree with another about it.
+  const clone =
+    cloneName === null
+      ? null
+      : {
+          name: cloneName,
+          url: query.trim(),
+          // The remote as repo identity spells it (host/owner/repo).
+          repo: normalizeRemoteUrl(query) ?? query.trim(),
+          // Tildified here, once: a picked parent comes back as the
+          // device resolved it, absolute.
+          dest: tildify(`${cloneParent}${cloneName}`, home),
+        };
+  // Undefined on this device: only a peer's name is worth saying. The
+  // hook's own fallback covers a peer that leaves the registry mid-clone,
+  // so the wording never slides back to this device's.
+  const peerLabel = useRemoteDeviceLabel(scope.deviceId);
+  const deviceLabel = scope.remote ? peerLabel : undefined;
   // A clone outlives the dialog, so what follows it has to know
   // whether anyone is still looking.
   const mounted = useRef(true);
@@ -127,7 +139,7 @@ export function AddProjectView({
     setQuery,
     setHighlighted,
     // A URL is not a path to list on the device's disk.
-    enabled: stage === "browse" && cloneName === null,
+    enabled: stage === "browse" && clone === null,
   });
   const {
     browseDir,
@@ -141,6 +153,10 @@ export function AddProjectView({
     browseTo,
     browseUp,
   } = browse;
+  // The listed folder as the device resolved it, for matching entries
+  // against registered paths: the typed one may be tildified, a
+  // registered one never is.
+  const listedDir = listing ? ensureTrailingSep(listing.path) : null;
 
   // Land on the just-added project's primary checkout so the flow ends
   // somewhere useful instead of wherever the app happened to be.
@@ -180,12 +196,12 @@ export function AddProjectView({
   };
 
   const cloneAndOpen = async () => {
-    if (cloneUrl === null || cloneName === null) return;
+    if (clone === null) return;
     setStage("cloning");
     // useCloneProject surfaces the error via toast. No try here: React
     // Compiler bails on the early return one would need.
     const project = await cloneProject
-      .mutateAsync({ url: cloneUrl, parentDir: cloneParent, name: cloneName })
+      .mutateAsync({ url: clone.url, parentDir: cloneParent, name: clone.name })
       .catch(() => null);
     if (project === null) {
       // Back to the URL, still in the input, to fix it or the folder.
@@ -271,10 +287,15 @@ export function AddProjectView({
 
   // ---------- Keyboard handling ----------
 
+  // One answer for the ← key, the `..` row and the hint. Anchored only:
+  // a half-typed URL can end in a slash too, and going "up" from it
+  // would eat the scheme.
+  const canBrowseUp = isAnchoredPath(query) && canNavigateUp(query);
+
   const hasHighlighted = highlighted.startsWith("browse:");
 
   const primaryAction = () => {
-    if (cloneName !== null) {
+    if (clone !== null) {
       void cloneAndOpen();
     } else if (targetIsGitRepo) {
       void submit();
@@ -296,14 +317,7 @@ export function AddProjectView({
       primaryAction();
       return;
     }
-    // Anchored only: a half-typed URL can end in a slash too, and going
-    // "up" from it would eat the scheme.
-    if (
-      e.key === "ArrowLeft" &&
-      isAnchoredPath(query) &&
-      canNavigateUp(query) &&
-      !leafFilter
-    ) {
+    if (e.key === "ArrowLeft" && canBrowseUp && !leafFilter) {
       e.preventDefault();
       e.stopPropagation();
       browseUp();
@@ -363,30 +377,29 @@ export function AddProjectView({
     );
   }
 
-  if (stage === "cloning" && cloneUrl !== null) {
+  if (stage === "cloning" && clone !== null) {
     return (
       <CloningPanel
-        repo={normalizeRemoteUrl(cloneUrl) ?? cloneUrl}
-        dest={cloneDest}
+        repo={clone.repo}
+        dest={clone.dest}
         deviceLabel={deviceLabel}
       />
     );
   }
 
   // Browse stage.
-  const cloneMode = cloneUrl !== null;
+  const cloneMode = clone !== null;
   const submitLabel = cloneMode
     ? "Clone"
     : targetIsGitRepo
       ? "Add"
       : "Scan for repos in folder";
   const submitKbd = hasHighlighted && !cloneMode ? "⌘↩" : "↩";
-  const canBrowseUp = !cloneMode && canNavigateUp(query);
-  const canPrimary = cloneMode
-    ? true
-    : targetIsGitRepo
+  const canPrimary =
+    cloneMode ||
+    (targetIsGitRepo
       ? submitTarget.length > 0
-      : hasTrailingSlash(browseDir) && !!listing && !error;
+      : hasTrailingSlash(browseDir) && !!listing && !error);
 
   return (
     <>
@@ -410,7 +423,7 @@ export function AddProjectView({
           />
           <button
             type="button"
-            onMouseDown={(e) => e.preventDefault()}
+            onMouseDown={keepFocusInInput}
             onClick={primaryAction}
             disabled={!canPrimary || addProject.isPending}
             className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
@@ -435,19 +448,16 @@ export function AddProjectView({
           </button>
         </div>
 
-        {cloneMode && (
+        {clone !== null && (
           <CloneDestination
-            repo={normalizeRemoteUrl(cloneUrl) ?? cloneUrl}
-            dest={cloneDest}
-            home={home}
+            repo={clone.repo}
+            dest={clone.dest}
             deviceLabel={deviceLabel}
             onChangeParent={() => setCloneParentPickerOpen(true)}
           />
         )}
         {/* Kept mounted (cmdk wants its list), just empty, in clone mode. */}
         <Command.List
-          // Focus stays in the input through a click on a row, where
-          // every key of this flow is handled.
           onMouseDown={(e) => e.preventDefault()}
           className={cloneMode ? "hidden" : "max-h-96 overflow-y-auto p-2"}
         >
@@ -465,13 +475,9 @@ export function AddProjectView({
 
           {filtered.map((entry) => {
             const entryPath = `${browseDir}${entry.name}`;
-            // Matched on the path as the device resolved it: the typed
-            // one may be tildified, a registered one never is.
             const registered =
-              listing !== undefined &&
-              registeredPaths.has(
-                `${listing.path.replace(/\/+$/, "")}/${entry.name}`,
-              );
+              listedDir !== null &&
+              registeredPaths.has(`${listedDir}${entry.name}`);
             return (
               <Command.Item
                 key={entry.name}
@@ -488,37 +494,37 @@ export function AddProjectView({
                 <span className="min-w-0 flex-1 truncate font-mono">
                   {entry.name}
                 </span>
-                {entry.isGitRepo && registered && (
-                  <span className="text-xs text-muted-foreground/80">
-                    Added
-                  </span>
-                )}
-                {entry.isGitRepo && !registered && (
-                  <div
-                    className="inline-flex items-center"
-                    onClick={(e) => e.stopPropagation()}
-                    onKeyDown={(e) => e.stopPropagation()}
-                    role="presentation"
-                  >
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="xs"
-                      onClick={() => void submit(entryPath)}
-                      title={`Add ${entry.name} as a project`}
+                {entry.isGitRepo &&
+                  (registered ? (
+                    <span className="text-xs text-muted-foreground/80">
+                      Added
+                    </span>
+                  ) : (
+                    <div
+                      className="inline-flex items-center"
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      role="presentation"
                     >
-                      Add
-                    </Button>
-                  </div>
-                )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="xs"
+                        onClick={() => void submit(entryPath)}
+                        title={`Add ${entry.name} as a project`}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  ))}
               </Command.Item>
             );
           })}
 
-          {!cloneMode && isLoading && !listing && (
+          {isLoading && !listing && (
             <div className="p-3 text-xs text-muted-foreground">Loading…</div>
           )}
-          {!cloneMode && !isLoading && !error && filtered.length === 0 && (
+          {!isLoading && !error && filtered.length === 0 && (
             <div className="p-3 text-center text-xs text-muted-foreground">
               {leafFilter.length > 0
                 ? `No folders matching "${leafFilter}".`
@@ -576,7 +582,7 @@ export function AddProjectView({
         <FolderPickerModal
           initialPath={cloneParent}
           title="Clone into"
-          hint={`${cloneName ?? "The repository"} becomes a new folder inside the one you pick.`}
+          hint={`${clone?.name ?? "The repository"} becomes a new folder inside the one you pick.`}
           onPick={(parent) => {
             setPickedCloneParent(ensureTrailingSep(parent));
             closeCloneParentPicker();

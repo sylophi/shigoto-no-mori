@@ -9,15 +9,14 @@ import { PathSpan } from "@/components/ui/path-span";
 export function CloneDestination({
   repo,
   dest,
-  home,
   deviceLabel,
   onChangeParent,
 }: {
   // The remote as repo identity spells it (host/owner/repo): the
   // credentials and scheme of the pasted URL are noise here.
   repo: string;
+  // Already tildified by the dialog, as CloningPanel's is.
   dest: string;
-  home: string | null;
   // The peer doing the clone. Undefined on this device.
   deviceLabel: string | undefined;
   onChangeParent: () => void;
@@ -32,7 +31,8 @@ export function CloneDestination({
         <FolderInput className="size-4 shrink-0 text-muted-foreground/80" />
         <PathSpan
           path={dest}
-          home={home}
+          // Nothing left to tildify. PathSpan is here to shorten to fit.
+          home={null}
           className="min-w-0 flex-1 truncate font-mono"
         />
         <Button

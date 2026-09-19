@@ -17,8 +17,12 @@ export function defaultCloneParent(
     if (parent !== null) counts.set(parent, (counts.get(parent) ?? 0) + 1);
   }
   let best: string | null = null;
+  let bestCount = 0;
   for (const [parent, count] of counts) {
-    if (best === null || count > (counts.get(best) ?? 0)) best = parent;
+    if (count > bestCount) {
+      best = parent;
+      bestCount = count;
+    }
   }
   return best === null ? "~/" : tildify(best, home);
 }

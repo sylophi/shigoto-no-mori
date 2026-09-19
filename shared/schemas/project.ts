@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { normalizeRemoteUrl } from "@shared/repoIdentity.mts";
+import { isCloneableRemote } from "@shared/cloneUrl";
 import { ProjectScopedPayloadSchema } from "./payloads";
 
 // Sentinel returned by `deriveBranch` when a worktree has no branch and
@@ -78,18 +78,17 @@ export const ToggleCollapsedProjectPayloadSchema = z.object({
   projectId: z.string().min(1),
 });
 
-// Clone a remote into `parentDir` and register the checkout. Only a URL
-// that normalizes is a remote (a plain path or file:// names this
-// machine's disk, which means nothing on the device doing the clone),
-// and a leading dash would read as a git option. `name` is the new
-// folder, one segment, defaulting to the repo's own name.
+// Clone a remote into `parentDir` and register the checkout. What
+// counts as a remote is isCloneableRemote's call (a plain path or
+// file:// names this machine's disk, which means nothing on the device
+// doing the clone, and a leading dash would read as a git option).
+// `name` is the new folder, one segment, defaulting to the repo's own
+// name.
 export const CloneProjectPayloadSchema = z.object({
   url: z
     .string()
     .trim()
-    .refine((url) => !url.startsWith("-") && normalizeRemoteUrl(url) !== null, {
-      message: "Not a git remote URL",
-    }),
+    .refine(isCloneableRemote, { message: "Not a git remote URL" }),
   parentDir: z.string().min(1),
   name: z
     .string()

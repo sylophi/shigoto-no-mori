@@ -16,7 +16,6 @@ import {
   DropdownMenuSubTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useDeviceTabs, type DeviceTab } from "@/components/shared/DeviceTabs";
-import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { notifyError, toast } from "@/lib/toast";
 import type { GroupMember } from "./ProjectGroupActions";
@@ -31,21 +30,19 @@ export function AddToDeviceSubmenu({
   onOpenChange: (open: boolean) => void;
 }) {
   const tabs = useDeviceTabs();
-  const registry = useRemoteDevices();
   const { openAddProject } = useOverlays();
 
   const holders = new Set(members.map((member) => member.deviceId));
   const candidates = tabs.filter(
     (tab) => tab.hostsProjects && !holders.has(tab.deviceId),
   );
-  // The registry's api rather than the member's: a member's is withheld
-  // without the command grant, which a read doesn't need.
+  // The tab's api rather than the member's: a member's is withheld
+  // without the command grant, which a read doesn't need, and a tab's
+  // is simply the device's session (window.api for this one).
   const source = members
     .map((member) => ({
       project: member.project,
-      api: member.isThisDevice
-        ? window.api
-        : registry.find((device) => device.deviceId === member.deviceId)?.api,
+      api: tabs.find((tab) => tab.deviceId === member.deviceId)?.api,
     }))
     .find((member) => member.api !== undefined);
   if (candidates.length === 0 || source?.api === undefined) return null;

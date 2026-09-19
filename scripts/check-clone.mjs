@@ -8,7 +8,6 @@
 // Runs under scripts/lib/register-ts-alias.mjs so the app's TypeScript
 // imports resolve. See package.json "clone:check".
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
@@ -20,7 +19,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { makeProof, scrubbedGitEnv } from "./lib/checkKit.mjs";
+import { makeProof, sandboxGit, scrubbedGitEnv } from "./lib/checkKit.mjs";
 
 // cloneRepo runs git under this process's environment. The pre-commit
 // hook's GIT_* variables would point that git at the commit in
@@ -38,13 +37,7 @@ const { pickCloneUrl, repoNameFromUrl, stripUrlCredentials } =
 const { CloneProjectPayloadSchema } =
   await import("../shared/schemas/project.ts");
 
-function git(cwd, ...args) {
-  return execFileSync(
-    "git",
-    ["-c", "user.name=sm", "-c", "user.email=sm@example.test", ...args],
-    { cwd, env: gitEnv, encoding: "utf8" },
-  );
-}
+const git = sandboxGit(gitEnv);
 
 const { check, done, fail } = makeProof("clone proof");
 

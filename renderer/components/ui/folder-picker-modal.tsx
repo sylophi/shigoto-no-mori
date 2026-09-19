@@ -15,7 +15,7 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { notifyError } from "@/lib/toast";
-import { ITEM_CLASS } from "@/components/ui/cmdk-classes";
+import { ITEM_CLASS, keepFocusInInput } from "@/components/ui/cmdk-classes";
 import {
   appendBrowsePathSegment,
   canNavigateUp,
@@ -186,11 +186,8 @@ export function FolderPickerModal({
           </p>
         )}
 
-        {/* A click on a row must not take focus off the input: every
-            key this picker answers is handled there, and an ↩ that lands
-            on the list instead selects its highlighted row (`..`). */}
         <Command.List
-          onMouseDown={(e) => e.preventDefault()}
+          onMouseDown={keepFocusInInput}
           className="max-h-96 overflow-y-auto p-2"
         >
           {canBrowseUp && (
