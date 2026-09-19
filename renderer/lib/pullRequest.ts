@@ -5,7 +5,7 @@ import {
   GitPullRequestDraft,
 } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
-import { forkBranchCandidates } from "@shared/branches";
+import { forkBranchCandidates } from "@shared/git/branches";
 import {
   MergeMethodSchema,
   type MergeMethod,

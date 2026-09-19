@@ -66,7 +66,7 @@ export async function listRemotes(
 }
 
 // Candidate remotes in the SAME precedence remoteKey applies in
-// shared/repoIdentity.mts: upstream first, then origin, then the rest
+// shared/git/repoIdentity.mts: upstream first, then origin, then the rest
 // alphabetically. `git remote` prints alphabetically, so without this a
 // remote sorting before "origin" (say "base") would win the default-ref
 // race, flip the root commit, and the two halves of identity would

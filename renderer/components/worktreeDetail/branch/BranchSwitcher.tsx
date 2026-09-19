@@ -8,7 +8,7 @@ import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useCheckoutBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import { type BranchEntry } from "@/components/ui/branch-combobox";
 import { rankByScore } from "@/lib/fuzzyMatch";
-import { localBranchOf } from "@shared/branches";
+import { localBranchOf } from "@shared/git/branches";
 import { isRealBranch, type Worktree } from "@shared/schemas";
 import { ErrorBanner } from "@/components/ui/error-banner";
 

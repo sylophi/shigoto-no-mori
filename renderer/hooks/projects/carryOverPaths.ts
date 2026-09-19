@@ -4,7 +4,7 @@
 // covered badge until creation-time reconciliation removes it). One
 // rule, so the Configure page and the transplant review agree on what
 // a new worktree gets.
-import { normalizeRelPath } from "@shared/gitPaths";
+import { normalizeRelPath } from "@shared/git/gitPaths";
 import type { CarryOverEntry, WorktreeIncludeStatus } from "@shared/schemas";
 
 export function worktreeIncludeExtras(

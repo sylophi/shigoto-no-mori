@@ -7,7 +7,7 @@
 // or a folder, the first one holding it decides.
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { makeIgnoreMatcher, normalizeRelPath } from "@shared/gitPaths";
+import { makeIgnoreMatcher, normalizeRelPath } from "@shared/git/gitPaths";
 import type { CarryOverCandidate, CarryOverStat } from "@shared/schemas";
 import type { SyncWorktreeFolderEntry } from "@shared/ipc/modules/sync";
 import { listIgnoredPaths } from "../git/branches";

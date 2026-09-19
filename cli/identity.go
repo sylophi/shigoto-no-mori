@@ -1,6 +1,6 @@
 package main
 
-// Repo identity, ported from shared/repoIdentity.mts: decides when the
+// Repo identity, ported from shared/git/repoIdentity.mts: decides when the
 // same project on two devices is the same repo. Root commit first,
 // normalized remote URL second, "" (no identity) third. That way a fork
 // and its upstream share an identity, and a shallow clone (fake root)

@@ -182,7 +182,7 @@ func resolveWorktreeIncludeAcross(sources []worktreeIdentity, config *projectCon
 
 // Collapse duplicate separators and trailing slashes before comparing
 // stored entry paths against git output. Must stay in lockstep with
-// normalizeRelPath in shared/gitPaths.ts.
+// normalizeRelPath in shared/git/gitPaths.ts.
 func normalizeRelPath(p string) string {
 	var parts []string
 	for _, seg := range strings.Split(p, "/") {

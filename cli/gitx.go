@@ -621,7 +621,7 @@ func scanBranchRefs(projectPath string) (branchRefScan, error) {
 // remote sorting before "origin" would win the default-ref race, flip
 // the root commit, and the two halves of identity would disagree about
 // the canonical remote. Mirrors orderRemotesByPrecedence in
-// shared/defaultBranch.mts.
+// shared/git/defaultBranch.mts.
 func orderRemotesByPrecedence(remotes []string) []string {
 	ordered := make([]string, 0, len(remotes))
 	for _, name := range []string{"upstream", "origin"} {
@@ -642,7 +642,7 @@ func orderRemotesByPrecedence(remotes []string) []string {
 // The branch refs/remotes/<remote>/HEAD points at, fully qualified, or
 // "" when the remote has no HEAD symref or it dangles (the scan holds
 // only refs that exist, so a symref to a deleted branch has no
-// target there). Mirrors remoteHeadTarget in shared/defaultBranch.mts.
+// target there). Mirrors remoteHeadTarget in shared/git/defaultBranch.mts.
 func remoteHeadTarget(scan branchRefScan, remote string) string {
 	target := scan.remoteHeads[remote]
 	if short, ok := strings.CutPrefix(target, "refs/remotes/"); !ok || !scan.remoteRefs[short] {
@@ -651,7 +651,7 @@ func remoteHeadTarget(scan branchRefScan, remote string) string {
 	return target
 }
 
-// Precedence shared with shared/defaultBranch.mts (the rationale lives
+// Precedence shared with shared/git/defaultBranch.mts (the rationale lives
 // there): a valid override wins, then each candidate remote-first in
 // identity's remote precedence order, and last the remote's own HEAD.
 // Fully qualified so a tag sharing a branch's name can't shadow it,
@@ -695,9 +695,9 @@ func shortRefName(fullRef string) string {
 }
 
 // Identity-facing variant, mirroring resolveDefaultRef in
-// shared/defaultBranch.mts: "" with a nil error is semantic "no default
-// ref". A scan failure propagates so identity can tell a broken git
-// from a repo with no candidates.
+// shared/git/defaultBranch.mts: "" with a nil error is semantic "no
+// default ref". A scan failure propagates so identity can tell a broken
+// git from a repo with no candidates.
 func resolveDefaultRefWithRemotes(projectPath, override string, remotes []string) (string, error) {
 	scan, err := scanBranchRefs(projectPath)
 	if err != nil {

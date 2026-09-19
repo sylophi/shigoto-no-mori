@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { tildify } from "@/lib/projectPaths";
 import type { WorktreeLayout } from "@shared/schemas";
-import { worktreeBaseFor } from "@shared/worktreeLayout";
+import { worktreeBaseFor } from "@shared/git/worktreeLayout";
 
 export interface LayoutOption {
   value: WorktreeLayout;

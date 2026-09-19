@@ -20,7 +20,7 @@ import {
   pullBranchCollision,
   pullFolderCollision,
 } from "@shared/pullCollision";
-import { worktreeBaseFor } from "@shared/worktreeLayout";
+import { worktreeBaseFor } from "@shared/git/worktreeLayout";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip-button";
 import { DiffStats } from "@/components/ui/diff-stats";

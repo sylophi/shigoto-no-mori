@@ -1,7 +1,7 @@
 // Which machines hold THIS repo: the device tabs (shared/DeviceTabs)
 // with each device's checkout of the repo laid on top, for the pages
 // whose tabs are the devices holding a project and for the header's
-// "Create on" pick. Identity (shared/repoIdentity.mts) is what "has
+// "Create on" pick. Identity (shared/git/repoIdentity.mts) is what "has
 // this repo" means -- the same match the merged sidebar and the
 // pull-here control use -- so a peer with a differently-named clone
 // still counts and a same-named unrelated repo never does.

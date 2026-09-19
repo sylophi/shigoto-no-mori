@@ -11,7 +11,7 @@
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { normalizeRelPath } from "@shared/gitPaths";
+import { normalizeRelPath } from "@shared/git/gitPaths";
 import {
   BRING_PATHS_LIMIT,
   bringRulesRoom,

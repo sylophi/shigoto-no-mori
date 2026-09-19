@@ -16,7 +16,7 @@
 // own worktree links are re-pointed by `git worktree repair`.
 import { cp, mkdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
-import { isSameOrInside } from "@shared/worktreeLayout";
+import { isSameOrInside } from "@shared/git/worktreeLayout";
 import {
   deleteWorktreeData,
   readWorktreeData,

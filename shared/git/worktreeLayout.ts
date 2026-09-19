@@ -4,7 +4,7 @@
 //
 // Kept dependency-free so it can run in either environment.
 
-import type { WorktreeLayout } from "./schemas";
+import type { WorktreeLayout } from "../schemas";
 
 // Project-relative directory used by the "in-project" layout. Top-level
 // component (`.shigomori`) is also the path appended to the primary's

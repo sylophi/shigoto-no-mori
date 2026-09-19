@@ -4,7 +4,7 @@
 // worktree in every sidebar. Undefined when that name would not be a
 // valid managed dirname (an external worktree in an odd folder), in
 // which case the create picks a fresh pool name as it always did.
-import { isValidWorktreeDirName } from "@shared/branches";
+import { isValidWorktreeDirName } from "@shared/git/branches";
 import type { Worktree } from "@shared/schemas";
 
 export function pullWorktreeName(

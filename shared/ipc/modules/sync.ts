@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { MIRROR_IGNORES_LIMIT } from "@shared/mirrorIgnores";
-import { isValidWorktreeDirName } from "@shared/branches";
-import { isSafeRelPath } from "@shared/gitPaths";
+import { isValidWorktreeDirName } from "@shared/git/branches";
+import { isSafeRelPath } from "@shared/git/gitPaths";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import { ChunkB64Schema } from "@shared/ipc/socket/frames";

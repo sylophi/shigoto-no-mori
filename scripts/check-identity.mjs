@@ -10,11 +10,11 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { resolveDefaultRef } from "../shared/defaultBranch.mts";
+import { resolveDefaultRef } from "../shared/git/defaultBranch.mts";
 import {
   computeRepoIdentity,
   normalizeRemoteUrl,
-} from "../shared/repoIdentity.mts";
+} from "../shared/git/repoIdentity.mts";
 import { report, scrubbedGitEnv } from "./lib/checkKit.mjs";
 
 const execFileP = promisify(execFile);
@@ -108,5 +108,5 @@ try {
 report({
   name: "repo identity",
   failures,
-  hint: "Either fix shared/repoIdentity.mts (and its Go twin cli/identity.go), or update the fixtures in shared/fixtures/ for both harnesses.",
+  hint: "Either fix shared/git/repoIdentity.mts (and its Go twin cli/identity.go), or update the fixtures in shared/fixtures/ for both harnesses.",
 });

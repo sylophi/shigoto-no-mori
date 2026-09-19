@@ -13,7 +13,7 @@ import {
   type Worktree,
   type WorktreeLayout,
 } from "@shared/schemas";
-import { worktreePathFor } from "@shared/worktreeLayout";
+import { worktreePathFor } from "@shared/git/worktreeLayout";
 import { LayoutOptionItem, type LayoutOption } from "./LayoutOptionItem";
 import { RelocateRow } from "./RelocateRow";
 

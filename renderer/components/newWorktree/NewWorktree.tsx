@@ -33,7 +33,7 @@ import {
   sanitizeBranchName,
   sanitizeWorktreeNameInput,
   localBranchOf,
-} from "@shared/branches";
+} from "@shared/git/branches";
 import {
   isRealBranch,
   type CreateWorktreeResult,
@@ -41,7 +41,7 @@ import {
   type PullRequestCandidate,
   type Worktree,
 } from "@shared/schemas";
-import { worktreeBaseFor } from "@shared/worktreeLayout";
+import { worktreeBaseFor } from "@shared/git/worktreeLayout";
 import { ModeToggle, type Mode } from "./ModeToggle";
 import { PullRequestSource } from "./PullRequestPicker";
 

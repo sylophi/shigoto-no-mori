@@ -3,7 +3,7 @@ import { BranchCombobox } from "@/components/ui/branch-combobox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCreateBranch } from "@/hooks/git/useBranches";
-import { sanitizeBranchName } from "@shared/branches";
+import { sanitizeBranchName } from "@shared/git/branches";
 
 export function NewBranchForm({
   projectId,

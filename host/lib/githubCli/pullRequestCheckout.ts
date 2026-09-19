@@ -10,7 +10,7 @@ import type {
   PullRequestCandidateList,
   PullRequestCheckoutRef,
 } from "@shared/schemas";
-import { forkBranchCandidates } from "@shared/branches";
+import { forkBranchCandidates } from "@shared/git/branches";
 import { errorMessageOf } from "@shared/errors";
 import { createLocalBranch } from "../git/branches";
 import { run } from "../git/core";

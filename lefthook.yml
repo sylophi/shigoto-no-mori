@@ -17,7 +17,7 @@ pre-commit:
     # Both parity checks are glob-gated: identity:check alone costs
     # ~140 git spawns, so neither should run on unrelated commits.
     identity:
-      glob: "{shared/repoIdentity.mts,shared/defaultBranch.mts,shared/fixtures/**,scripts/check-identity.mjs}"
+      glob: "{shared/git/repoIdentity.mts,shared/git/defaultBranch.mts,shared/fixtures/**,scripts/check-identity.mjs}"
       run: pnpm run identity:check
     go-test:
       glob: "{cli/**,shared/fixtures/**}"

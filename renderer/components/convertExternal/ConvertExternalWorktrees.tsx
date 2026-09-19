@@ -10,9 +10,9 @@ import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useConvertExternalWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { sanitizeBranchForPath } from "@shared/branches";
+import { sanitizeBranchForPath } from "@shared/git/branches";
 import type { Project, Worktree } from "@shared/schemas";
-import { worktreePathFor } from "@shared/worktreeLayout";
+import { worktreePathFor } from "@shared/git/worktreeLayout";
 import { ConvertRow } from "./ConvertRow";
 import { withToggled } from "@/lib/toggleSet";
 

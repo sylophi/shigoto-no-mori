@@ -7,7 +7,7 @@ import { ExternalLink } from "@/components/ui/external-link";
 import { useCarryOverStats } from "@/hooks/projects/useCarryOverStats";
 import { worktreeIncludeExtras } from "@/hooks/projects/carryOverPaths";
 import { useWorktreeIncludeStatus } from "@/hooks/projects/useWorktreeIncludeStatus";
-import { makeIgnoreMatcher, normalizeRelPath } from "@shared/gitPaths";
+import { makeIgnoreMatcher, normalizeRelPath } from "@shared/git/gitPaths";
 import type { CarryOverEntry } from "@shared/schemas";
 import { CarryOverPickerModal } from "./CarryOverPickerModal";
 import { CarryOverRow } from "./CarryOverRow";

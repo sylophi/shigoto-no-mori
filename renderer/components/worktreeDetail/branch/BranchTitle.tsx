@@ -4,7 +4,7 @@ import { BranchLabel } from "@/components/ui/branch-label";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Input } from "@/components/ui/input";
 import { useRenameBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
-import { sanitizeBranchName } from "@shared/branches";
+import { sanitizeBranchName } from "@shared/git/branches";
 import type { Worktree } from "@shared/schemas";
 import { BranchSwitcher } from "./BranchSwitcher";
 
