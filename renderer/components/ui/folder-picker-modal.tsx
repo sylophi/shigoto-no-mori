@@ -186,7 +186,13 @@ export function FolderPickerModal({
           </p>
         )}
 
-        <Command.List className="max-h-96 overflow-y-auto p-2">
+        {/* A click on a row must not take focus off the input: every
+            key this picker answers is handled there, and an ↩ that lands
+            on the list instead selects its highlighted row (`..`). */}
+        <Command.List
+          onMouseDown={(e) => e.preventDefault()}
+          className="max-h-96 overflow-y-auto p-2"
+        >
           {canBrowseUp && (
             <Command.Item
               value={`${BROWSE_VALUE_PREFIX}up`}

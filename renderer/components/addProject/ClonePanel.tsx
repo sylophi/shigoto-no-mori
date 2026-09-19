@@ -62,7 +62,7 @@ export function CloningPanel({
   deviceLabel,
 }: {
   repo: string;
-  // Already as the dialog spelled it (tildified parent plus the name).
+  // Already tildified by the dialog.
   dest: string;
   deviceLabel: string | undefined;
 }) {

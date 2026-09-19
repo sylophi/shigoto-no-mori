@@ -19,6 +19,7 @@ import {
   hasTrailingSlash,
   isAnchoredPath,
   normalizeForSubmit,
+  tildify,
 } from "@/lib/projectPaths";
 import { Button } from "@/components/ui/button";
 import { ChipButton } from "@/components/ui/chip-button";
@@ -86,9 +87,19 @@ export function AddProjectView({
     null,
   );
   const [cloneParentPickerOpen, setCloneParentPickerOpen] = useState(false);
+  // The picker takes focus while it is up. Handing it back puts the
+  // next ↩ where this flow listens, so the pick and the clone are two
+  // keys with no click between them.
+  const inputRef = useRef<HTMLInputElement>(null);
+  const closeCloneParentPicker = () => {
+    setCloneParentPickerOpen(false);
+    inputRef.current?.focus();
+  };
   const cloneParent =
     pickedCloneParent ?? defaultCloneParent(existingProjects, home);
-  const cloneDest = `${cloneParent}${cloneName ?? ""}`;
+  // Tildified here, once: a picked parent comes back as the device
+  // resolved it, absolute.
+  const cloneDest = tildify(`${cloneParent}${cloneName ?? ""}`, home);
   // Undefined on this device: only a peer's name is worth saying.
   const peer = useRemoteDevice(scope.deviceId);
   const deviceLabel = scope.remote ? peer?.label : undefined;
@@ -388,6 +399,7 @@ export function AddProjectView({
       >
         <div className="relative flex items-center gap-2 border-b border-border px-3 py-2">
           <Command.Input
+            ref={inputRef}
             // oxlint-disable-next-line jsx-a11y/no-autofocus -- focusing the input is the whole point of this flow
             autoFocus
             value={query}
@@ -434,6 +446,9 @@ export function AddProjectView({
         )}
         {/* Kept mounted (cmdk wants its list), just empty, in clone mode. */}
         <Command.List
+          // Focus stays in the input through a click on a row, where
+          // every key of this flow is handled.
+          onMouseDown={(e) => e.preventDefault()}
           className={cloneMode ? "hidden" : "max-h-96 overflow-y-auto p-2"}
         >
           {canBrowseUp && (
@@ -563,10 +578,10 @@ export function AddProjectView({
           title="Clone into"
           hint={`${cloneName ?? "The repository"} becomes a new folder inside the one you pick.`}
           onPick={(parent) => {
-            setCloneParentPickerOpen(false);
             setPickedCloneParent(ensureTrailingSep(parent));
+            closeCloneParentPicker();
           }}
-          onClose={() => setCloneParentPickerOpen(false)}
+          onClose={closeCloneParentPicker}
         />
       )}
     </>

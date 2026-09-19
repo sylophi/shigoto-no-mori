@@ -36,7 +36,10 @@ since the fixtures seed none), plus `emitClient`/`emitHost` for raw
 broadcasts. Console/warns/errors
 collect in `window.smLabLog`.
 
-Fixtures live in `fixtures.ts`. `bridge.ts` serves them and answers
+Fixtures live in `fixtures.ts`. Each device has a small disk there
+(`labDisks`) for the add-project dialog to browse, and adding or
+cloning on one really registers the project, so it folds into the
+sidebar the way a real one would. `bridge.ts` serves them and answers
 any unhandled channel with a schema-derived stub (fabricated arms
 allowed: this is a lab, not the fail-closed web bridge). The sync
 verbs really mutate the fixture world, so the transplant and mirror
@@ -54,8 +57,9 @@ Videos: `lab/record.mjs`, the same harness recording a take instead of
 taking a shot, with a drawn cursor so clicks are visible. Same
 prerequisites plus Playwright's own ffmpeg (`playwright-core install
 ffmpeg`, once). Run `node record.mjs takes.json outdir`. Each take has
-the shot shape, with `click` taking a Playwright locator and a
-`waitFor` action that blocks on visible text, which is how a take
-waits out a posed transfer. Output is webm; set `FFMPEG` to a binary
+the shot shape, with `click` taking a Playwright locator, `type` and
+`paste` putting text into whatever has focus (keyed at a readable pace,
+or all at once as a clipboard would), and a `waitFor` action that
+blocks on visible text, which is how a take waits out a posed transfer. Output is webm; set `FFMPEG` to a binary
 to get an mp4 beside it. The sync verbs are posed, so a recording
 shows the UI of a flow, not a transfer.
