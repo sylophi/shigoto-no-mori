@@ -11,8 +11,8 @@ import { TONE_PILL } from "@/components/ui/status-dot";
 import type { PullChoice } from "@/hooks/remote/useMirrors";
 import { usePullProgress } from "@/hooks/remote/usePullProgress";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { FlowHeader, StepRail } from "./TransplantChrome";
-import { useClock } from "./transplantSteps";
+import { FlowHeader, StepRail } from "./FlowChrome";
+import { useClock } from "./pullSteps";
 
 export type FlowStage = "review" | "running" | "failed" | "done";
 

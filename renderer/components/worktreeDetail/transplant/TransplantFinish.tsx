@@ -32,7 +32,7 @@ import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { pluralize } from "@/lib/pluralize";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { TransplantBody, TransplantFooter } from "./TransplantChrome";
+import { FlowBody, FlowFooter } from "../flow/FlowChrome";
 
 type SourceChoice = "keep" | "shelve" | "teardown";
 
@@ -190,7 +190,7 @@ export function TransplantFinish({
 
   return (
     <>
-      <TransplantBody>
+      <FlowBody>
         <div className="flex flex-col gap-5">
           <section className="space-y-2">
             <SectionHeading>Ready on {thisDeviceLabel}</SectionHeading>
@@ -308,9 +308,9 @@ export function TransplantFinish({
             )
           )}
         </div>
-      </TransplantBody>
+      </FlowBody>
 
-      <TransplantFooter
+      <FlowFooter
         note={`You can change this later from the worktree's page on ${sourceDeviceLabel}.`}
       >
         <Button variant="ghost" size="sm" onClick={onClose} disabled={pending}>
@@ -329,7 +329,7 @@ export function TransplantFinish({
               ? "Click again to confirm"
               : FINISH_LABEL[choice]}
         </Button>
-      </TransplantFooter>
+      </FlowFooter>
     </>
   );
 }

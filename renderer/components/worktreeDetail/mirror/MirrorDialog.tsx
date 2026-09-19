@@ -16,29 +16,22 @@ import { useLocalDeviceName } from "@/hooks/account/useAccount";
 import { LocalHostScope } from "@/hooks/remote/useHostScope";
 import { useMirrors, useStartMirror } from "@/hooks/remote/useMirrors";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import {
-  type FlowStage,
-  PullFlowFrame,
-  usePullFlow,
-} from "../transplant/PullFlow";
-import {
-  TransplantBody,
-  TransplantFooter,
-} from "../transplant/TransplantChrome";
-import { TransplantProgress } from "../transplant/TransplantProgress";
+import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
+import { FlowBody, FlowFooter } from "../flow/FlowChrome";
+import { PullProgress } from "../flow/PullProgress";
 import {
   PullReviewFooter,
   ReviewDevicesColumn,
   SourceCard,
-} from "../transplant/TransplantReview";
-import { stepHeadline } from "../transplant/transplantSteps";
+} from "../flow/PullReview";
+import { stepHeadline } from "../flow/pullSteps";
 import {
   selectionSummary,
   sessionSummary,
   type PullChoiceState,
   usePullChoice,
-} from "./ignoreChoice";
-import { MirrorIgnorePicker } from "./MirrorIgnorePicker";
+} from "../flow/ignoreChoice";
+import { LeaveOutPicker } from "../flow/LeaveOutPicker";
 import { describeMirror } from "./mirrorStatus";
 
 const STEPS = ["Review", "Mirror", "Live"] as const;
@@ -133,7 +126,7 @@ export function MirrorDialog({
         />
       )}
       {(stage === "running" || stage === "failed") && (
-        <TransplantProgress
+        <PullProgress
           frame={progress.frame}
           phasesSeen={progress.phasesSeen}
           sourceDeviceLabel={sourceDeviceLabel}
@@ -199,7 +192,7 @@ function MirrorReview({
 }) {
   return (
     <>
-      <TransplantBody>
+      <FlowBody>
         <div className="grid gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <div className="flex min-w-0 flex-col gap-5">
             <section className="space-y-2">
@@ -211,7 +204,7 @@ function MirrorReview({
               />
             </section>
 
-            <MirrorIgnorePicker
+            <LeaveOutPicker
               value={pull.selection}
               onChange={pull.setSelection}
               ignored={pull.ignored}
@@ -234,7 +227,7 @@ function MirrorReview({
             pull={pull}
           />
         </div>
-      </TransplantBody>
+      </FlowBody>
 
       <LocalHostScope>
         <PullReviewFooter
@@ -282,7 +275,7 @@ function MirrorLive({
   const summary = live === undefined ? null : sessionSummary(live);
   return (
     <>
-      <TransplantBody>
+      <FlowBody>
         <section className="space-y-2">
           <SectionHeading>On {thisDeviceLabel}</SectionHeading>
           <div className="flex flex-wrap items-center gap-3 rounded-lg bg-emerald-500/10 p-3">
@@ -320,8 +313,8 @@ function MirrorLive({
             </div>
           </div>
         </section>
-      </TransplantBody>
-      <TransplantFooter note="Pause, stop, or change what stays out from the Mirror button on its page.">
+      </FlowBody>
+      <FlowFooter note="Pause, stop, or change what stays out from the Mirror button on its page.">
         <Button variant="ghost" size="sm" onClick={onClose}>
           Close
         </Button>
@@ -329,7 +322,7 @@ function MirrorLive({
           Open here
           <ArrowRight />
         </Button>
-      </TransplantFooter>
+      </FlowFooter>
     </>
   );
 }

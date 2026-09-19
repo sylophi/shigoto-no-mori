@@ -1,13 +1,14 @@
-// The transplant dialog's frame pieces, shared by its three steps so
-// the rail, the scroll body and the footer band read the same from
-// review to finish. The mirror dialog (../mirror/) wears the same
-// frame with its own step names.
+// The frame a multi-step worktree dialog wears: the header, the step
+// rail, the scroll body, the footer band and the card styles. The
+// transplant and the mirror (../transplant/, ../mirror/) walk all of it
+// through PullFlow.tsx, and the ports dialog borrows the body and
+// cards.
 import { Check, X, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { formatElapsed } from "./transplantSteps";
+import { formatElapsed } from "./pullSteps";
 
 const TRANSPLANT_STEPS = [
   "Review & destination",
@@ -125,14 +126,14 @@ export function FlowHeader({
   );
 }
 
-export function TransplantBody({ children }: { children: ReactNode }) {
+export function FlowBody({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
   );
 }
 
 // A footer without a note is the buttons alone.
-export function TransplantFooter({
+export function FlowFooter({
   note,
   children,
 }: {

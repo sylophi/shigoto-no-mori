@@ -11,16 +11,12 @@ import { pullBringsIgnoredFiles } from "@shared/ipc/modules/sync";
 import type { Project, Worktree } from "@shared/schemas";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
 import { usePullWorktree } from "@/hooks/remote/usePullWorktree";
-import {
-  modeOf,
-  selectionSummary,
-  usePullChoice,
-} from "../mirror/ignoreChoice";
-import { type FlowStage, PullFlowFrame, usePullFlow } from "./PullFlow";
+import { modeOf, selectionSummary, usePullChoice } from "../flow/ignoreChoice";
+import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
 import { TransplantFinish } from "./TransplantFinish";
-import { TransplantProgress } from "./TransplantProgress";
+import { PullProgress } from "../flow/PullProgress";
 import { TransplantReview } from "./TransplantReview";
-import { stepHeadline } from "./transplantSteps";
+import { stepHeadline } from "../flow/pullSteps";
 
 const TITLES: Record<FlowStage, string> = {
   review: "Transplant worktree",
@@ -107,7 +103,7 @@ export function TransplantDialog({
         />
       )}
       {(stage === "running" || stage === "failed") && (
-        <TransplantProgress
+        <PullProgress
           frame={progress.frame}
           phasesSeen={progress.phasesSeen}
           sourceDeviceLabel={sourceDeviceLabel}

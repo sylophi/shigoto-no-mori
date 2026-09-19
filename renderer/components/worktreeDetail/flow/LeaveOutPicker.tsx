@@ -26,7 +26,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useWorktreeFolder } from "@/hooks/remote/useWorktreeFolder";
 import { withToggled } from "@/lib/toggleSet";
 import { cn } from "@/lib/utils";
-import { CARD, CARD_NOTE, CardSkeleton } from "../transplant/TransplantChrome";
+import { CARD, CARD_NOTE, CardSkeleton } from "./FlowChrome";
 import {
   exceptionsOf,
   IGNORE_BASE_COPY,
@@ -40,7 +40,7 @@ const OPTIONS = (Object.keys(IGNORE_BASE_COPY) as IgnoreBase[]).map((base) => ({
   title: IGNORE_BASE_COPY[base].title,
 }));
 
-export function MirrorIgnorePicker({
+export function LeaveOutPicker({
   value,
   onChange,
   ignored,

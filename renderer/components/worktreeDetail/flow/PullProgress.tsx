@@ -21,7 +21,7 @@ import { pluralize } from "@/lib/pluralize";
 import { pullWorktreeName } from "@/lib/remote/pullWorktreeName";
 import { cn } from "@/lib/utils";
 import { useCreatePlan } from "./createPlan";
-import { TransplantBody, TransplantFooter } from "./TransplantChrome";
+import { FlowBody, FlowFooter } from "./FlowChrome";
 import {
   AFTER_PULL_POSITION,
   framePosition,
@@ -29,7 +29,7 @@ import {
   type StepState,
   stepPosition,
   stepStates,
-} from "./transplantSteps";
+} from "./pullSteps";
 
 type ExtraRow = { title: string; detail: ReactNode };
 const NO_EXTRA_ROWS: ExtraRow[] = [];
@@ -78,7 +78,7 @@ type Props = {
 
 // The create's rows read this machine's project while the dialog sits
 // under the source's scope, so the view re-pins itself to local.
-export function TransplantProgress(props: Props) {
+export function PullProgress(props: Props) {
   return (
     <LocalHostScope>
       <ProgressView {...props} />
@@ -204,7 +204,7 @@ function ProgressView({
 
   return (
     <>
-      <TransplantBody>
+      <FlowBody>
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-4">
             <DeviceEnd
@@ -261,19 +261,19 @@ function ProgressView({
             </ErrorBanner>
           )}
         </div>
-      </TransplantBody>
+      </FlowBody>
 
       {failed ? (
-        <TransplantFooter note={failedNote}>
+        <FlowFooter note={failedNote}>
           <Button variant="ghost" size="sm" onClick={onClose}>
             Close
           </Button>
           <Button size="sm" onClick={onRetry}>
             Try again
           </Button>
-        </TransplantFooter>
+        </FlowFooter>
       ) : (
-        <TransplantFooter note={runningNote} />
+        <FlowFooter note={runningNote} />
       )}
     </>
   );

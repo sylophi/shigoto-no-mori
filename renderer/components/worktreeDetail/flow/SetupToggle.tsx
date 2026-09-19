@@ -8,7 +8,7 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { useCreatePlan } from "./createPlan";
-import { CARD } from "./TransplantChrome";
+import { CARD } from "./FlowChrome";
 
 export function SetupToggle({
   localProject,

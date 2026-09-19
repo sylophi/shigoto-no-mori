@@ -48,20 +48,15 @@ import {
 } from "@/hooks/ui/useConfirmTwice";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { cn } from "@/lib/utils";
-import {
-  CARD,
-  FlowHeader,
-  TransplantBody,
-  TransplantFooter,
-} from "../transplant/TransplantChrome";
+import { CARD, FlowHeader, FlowBody, FlowFooter } from "../flow/FlowChrome";
 import {
   type IgnoreSelection,
   modeOf,
   resolveIgnores,
   sameSelection,
   selectionOf,
-} from "./ignoreChoice";
-import { MirrorIgnorePicker } from "./MirrorIgnorePicker";
+} from "../flow/ignoreChoice";
+import { LeaveOutPicker } from "../flow/LeaveOutPicker";
 import { describeMirror, gitVerdict } from "./mirrorStatus";
 
 export function MirrorManageDialog({
@@ -113,7 +108,7 @@ export function MirrorManageDialog({
         </p>
       </FlowHeader>
 
-      <TransplantBody>
+      <FlowBody>
         <div className="grid gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <div className="flex min-w-0 flex-col gap-5">
             <Stats session={session} />
@@ -129,9 +124,9 @@ export function MirrorManageDialog({
             <HistoryList localWorktreeId={worktree.id} />
           </section>
         </div>
-      </TransplantBody>
+      </FlowBody>
 
-      <TransplantFooter
+      <FlowFooter
         note={
           canControl
             ? `Stopping removes the copy here. ${peer} keeps its own.`
@@ -187,7 +182,7 @@ export function MirrorManageDialog({
             </Button>
           </>
         )}
-      </TransplantFooter>
+      </FlowFooter>
     </ModalShell>
   );
 }
@@ -335,7 +330,7 @@ function Ignores({
     );
   };
   return (
-    <MirrorIgnorePicker
+    <LeaveOutPicker
       value={selection}
       onChange={setDraft}
       ignored={ignored}
@@ -364,7 +359,7 @@ function Ignores({
           </span>
         </div>
       )}
-    </MirrorIgnorePicker>
+    </LeaveOutPicker>
   );
 }
 
