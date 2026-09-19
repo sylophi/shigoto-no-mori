@@ -22,6 +22,8 @@
     "moduleDetection": "force",
     "useDefineForClassFields": true,
     "resolveJsonModule": true,
+    "allowJs": true,
+    "checkJs": false,
     "erasableSyntaxOnly": true,
     "noEmit": true,
     "sourceMap": true,
@@ -38,6 +40,8 @@
     "shared/**/*",
     "web/**/*",
     "lab/**/*",
+    "scripts/**/*.mts",
+    "test/**/*.mts",
     "forge.config.ts",
     "forge.env.d.ts",
     "vite.*.config.ts"
