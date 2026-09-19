@@ -10,7 +10,11 @@
 // change the socket phase, navigate the memory router.
 import { buildApi } from "@shared/ipc/client";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
-import type { ShigomoriWorktreeData } from "@shared/schemas";
+import type { SharedSettingsDoc, ShigomoriWorktreeData } from "@shared/schemas";
+import {
+  createSharedSettingsCopy,
+  EMPTY_SHARED_SETTINGS,
+} from "@shared/sharedSettings";
 import type { ContractScope } from "@shared/ipc/contract";
 import { WEB_PLATFORM } from "@shared/account/enroll";
 import type { HubStatus } from "@shared/ipc/modules/hub";
@@ -96,6 +100,33 @@ function createFixtureWire(
 
 // ---- per-device host fixtures ----
 
+// One device's copy of the shared settings, in memory, over the real
+// copy rule, so a pick made in the lab stamps, announces and converges
+// the way it does between machines.
+function sharedSettingsHandlersFor(
+  deviceId: string,
+  emit: FixtureWire["emit"],
+): FixtureHandlers {
+  let doc: SharedSettingsDoc = EMPTY_SHARED_SETTINGS;
+  const copy = createSharedSettingsCopy(
+    {
+      read: () => doc,
+      transact: (next) => {
+        doc = next(doc) ?? doc;
+      },
+    },
+    {
+      deviceId: () => deviceId,
+      announce: (moved) => emit("sharedSettings:changed", moved),
+    },
+  );
+  return {
+    "sharedSettings:read": () => copy.read(),
+    "sharedSettings:set": ({ key, value }) => copy.set(key, value),
+    "sharedSettings:merge": ({ doc: incoming }) => copy.merge(incoming),
+  };
+}
+
 function hostHandlersFor(
   forest: DeviceForest,
   emit: FixtureWire["emit"],
@@ -117,6 +148,7 @@ function hostHandlersFor(
       .map((worktree) => worktree.branch),
   ];
   return {
+    ...sharedSettingsHandlersFor(forest.deviceId, emit),
     "projects:list": () => forest.projects,
     "projects:getSort": () => "manual",
     "projects:getCollapsed": () => [...collapsed],
@@ -793,7 +825,10 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
   const localHost = createFixtureWire(
     "host",
     (emit) =>
-      WEB_SHELL ? {} : hostHandlersFor(forests[LOCAL_DEVICE_ID], emit),
+      WEB_SHELL
+        ? // A browser still keeps its own copy of the shared settings.
+          sharedSettingsHandlersFor(WEB_DEVICE_ID, emit)
+        : hostHandlersFor(forests[LOCAL_DEVICE_ID], emit),
     "local",
   );
 

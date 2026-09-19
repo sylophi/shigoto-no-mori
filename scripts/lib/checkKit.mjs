@@ -311,3 +311,18 @@ export function createCliRunner(binary, env) {
   }
   return { runCli, sm };
 }
+
+// An in-memory KeyValueStorage (web/lib/kvStorage.ts), standing in for
+// window.localStorage in the checks that drive the web bridge headless.
+export function memoryStorage() {
+  const map = new Map();
+  return {
+    getItem: (key) => (map.has(key) ? map.get(key) : null),
+    setItem: (key, value) => {
+      map.set(key, String(value));
+    },
+    removeItem: (key) => {
+      map.delete(key);
+    },
+  };
+}

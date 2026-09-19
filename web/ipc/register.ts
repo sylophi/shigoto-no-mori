@@ -26,12 +26,20 @@ import {
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
 import { directContract } from "@shared/ipc/modules/direct";
 import { hubContract } from "@shared/ipc/modules/hub";
+import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
 import { shellContract } from "@shared/ipc/modules/shell";
 import { broadcastAll, registerContract } from "@shared/ipc/registerContract";
 import type { Handlers } from "@shared/ipc/types";
 import { createDirectPlane } from "@shared/hub/directPlane";
 import { isConfigured } from "@shared/account/serviceConfig";
-import { StoredClientConfigSchema } from "@shared/schemas";
+import {
+  SharedSettingsDocSchema,
+  StoredClientConfigSchema,
+} from "@shared/schemas";
+import {
+  createSharedSettingsCopy,
+  EMPTY_SHARED_SETTINGS,
+} from "@shared/sharedSettings";
 import {
   enrollDevice,
   renameDevice,
@@ -43,7 +51,7 @@ import { webServiceConfig } from "../account/config";
 import { getWebDeviceId } from "../account/deviceId";
 import { defaultWebDeviceName, type BrowserHints } from "../account/deviceName";
 import { createWebAccountStore } from "../account/store";
-import { readKey, writeKey, type KeyValueStorage } from "../lib/kvStorage";
+import { readJsonKey, writeKey, type KeyValueStorage } from "../lib/kvStorage";
 import { createLoopbackWire } from "./loopback";
 
 export type WebBridgeDeps = {
@@ -94,6 +102,7 @@ export type WebBridge = {
 };
 
 const CLIENT_CONFIG_KEY = "sm.web.clientConfig";
+const SHARED_SETTINGS_KEY = "sm.web.sharedSettings";
 export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const config = webServiceConfig(deps.env);
   const store = createWebAccountStore(deps.localStorage);
@@ -296,20 +305,61 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // ---- clientConfig module ----
 
   const clientConfigHandlers: Handlers<typeof clientConfigContract> = {
-    read: () => {
-      const raw = readKey(deps.localStorage, CLIENT_CONFIG_KEY);
-      if (raw === null) return {};
-      try {
-        const parsed = StoredClientConfigSchema.safeParse(JSON.parse(raw));
-        return parsed.success ? parsed.data : {};
-      } catch {
-        // Corrupt storage reads as defaults, and the next write heals it.
-        return {};
-      }
-    },
+    read: () =>
+      readJsonKey(
+        deps.localStorage,
+        CLIENT_CONFIG_KEY,
+        StoredClientConfigSchema,
+        {},
+      ),
     write: ({ config: next }) => {
       writeKey(deps.localStorage, CLIENT_CONFIG_KEY, JSON.stringify(next));
     },
+  };
+
+  // ---- sharedSettings module ----
+
+  // This browser's copy of the shared settings, the one host-scoped
+  // module served here: every device keeps a copy, a browser included,
+  // so the renderer reads and writes "the local copy" the same way in
+  // both shells. No peer can read this one (a web client serves no
+  // calls), so what is picked here reaches the others only by the
+  // renderer offering it to them (sharedSettingsSync).
+  const readSharedSettings = () =>
+    readJsonKey(
+      deps.localStorage,
+      SHARED_SETTINGS_KEY,
+      SharedSettingsDocSchema,
+      EMPTY_SHARED_SETTINGS,
+    );
+  const sharedSettingsCopy = createSharedSettingsCopy(
+    {
+      read: readSharedSettings,
+      // One tab's writes are already serial. Another tab's are not
+      // locked against, and the merge absorbs the loser the next time
+      // either hears from a peer.
+      transact: (next) => {
+        const result = next(readSharedSettings());
+        if (result !== undefined) {
+          writeKey(
+            deps.localStorage,
+            SHARED_SETTINGS_KEY,
+            JSON.stringify(result),
+          );
+        }
+      },
+    },
+    {
+      deviceId: () => deviceId,
+      announce: (doc) =>
+        broadcastAll(sharedSettingsContract, "changed", doc, hostWire.server),
+    },
+  );
+
+  const sharedSettingsHandlers: Handlers<typeof sharedSettingsContract> = {
+    read: () => sharedSettingsCopy.read(),
+    set: ({ key, value }) => sharedSettingsCopy.set(key, value),
+    merge: ({ doc }) => sharedSettingsCopy.merge(doc),
   };
 
   // ---- shell module ----
@@ -336,6 +386,12 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     registrarOpts,
   );
   registerContract(hubContract, hubHandlers, clientWire.server, registrarOpts);
+  registerContract(
+    sharedSettingsContract,
+    sharedSettingsHandlers,
+    hostWire.server,
+    registrarOpts,
+  );
   registerContract(
     shellContract,
     shellHandlers,

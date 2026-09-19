@@ -145,6 +145,14 @@ pre-commit:
     web-bridge:
       glob: "{web/**,shared/account/**,shared/ipc/**,shared/hub/protocol.ts,scripts/check-web-bridge.mjs,scripts/lib/checkKit.mjs}"
       run: pnpm run web:bridge:check
+    # Drives the shared settings merge and both places a copy lives
+    # (the host's registry.json key, the browser's localStorage) through
+    # pairwise exchanges: no server holds the settings, so convergence
+    # rests on the merge being order-free, and on a no-op merge staying
+    # silent so two copies never announce at each other forever.
+    shared-settings:
+      glob: "{shared/sharedSettings.ts,shared/schemas/sharedSettings.ts,shared/ipc/modules/sharedSettings.ts,host/lib/sharedSettings/**,web/ipc/register.ts,scripts/check-shared-settings.mjs,scripts/lib/checkKit.mjs}"
+      run: pnpm run sharedsettings:check
     # Drives the pure liveness rate limiters (renderer crash-loop guard
     # and fatal-relaunch guard) that decide recreate-vs-give-up and
     # relaunch-vs-stand. Gated to the pure module plus the check itself,

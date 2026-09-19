@@ -30,6 +30,10 @@ export const SHELVED_KEY = "shelvedWorktrees";
 // prod data dir on one laptop are two devices. Generated on first read by
 // host/lib/config/deviceId.ts. The CLI only preserves it.
 export const DEVICE_ID_KEY = "deviceId";
+// This device's copy of the shared settings
+// (host/lib/sharedSettings/store.ts). App-written like deviceId: the
+// CLI never reads it and only preserves it.
+export const SHARED_SETTINGS_KEY = "sharedSettings";
 
 // Drives only the state.json→registry.json split below. deviceId is
 // deliberately absent because it postdates the split, so no old-format

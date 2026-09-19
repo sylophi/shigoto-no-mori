@@ -31,7 +31,7 @@ import {
   commandAccessOf,
   usePeerCommandAccess,
 } from "@/hooks/remote/useCommandAccess";
-import { useQuickCreateDeviceId } from "@/hooks/config/useQuickCreateDevice";
+import { useQuickCreateDeviceId } from "@/hooks/sharedSettings/useQuickCreateDevice";
 import { MaybeHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { localDeviceId } from "@/lib/queryKeys";

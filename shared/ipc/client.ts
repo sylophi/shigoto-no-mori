@@ -25,6 +25,7 @@ import { hubContract } from "@shared/ipc/modules/hub";
 import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
+import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
 import { cliContract } from "@shared/ipc/modules/cli";
 import { shellContract } from "@shared/ipc/modules/shell";
 import { terrierContract } from "@shared/ipc/modules/terrier";
@@ -42,6 +43,8 @@ import type {
   PackageScriptSortMode,
   PickFolderPayload,
   ProjectSortMode,
+  SharedSettingsDoc,
+  SharedSettingValue,
   ShigomoriConfig,
   ShigomoriWorktreeData,
   Theme,
@@ -79,6 +82,7 @@ export const allContractModules: readonly ContractModule[] = [
   remoteAccessContract,
   runtimeContract,
   scriptsContract,
+  sharedSettingsContract,
   cliContract,
   shellContract,
   terrierContract,
@@ -122,6 +126,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const remoteAccessClient = c(remoteAccessContract);
   const runtimeClient = c(runtimeContract);
   const scriptsClient = c(scriptsContract);
+  const sharedSettingsClient = c(sharedSettingsContract);
   const cliClient = c(cliContract);
   const shellClient = c(shellContract);
   const terrierClient = c(terrierContract);
@@ -345,6 +350,14 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       orphanReport: scriptsClient.orphanReport,
       onEvent: scriptsClient.event,
       onStoppedForRemovedWorktree: scriptsClient.stoppedForRemovedWorktree,
+    },
+
+    sharedSettings: {
+      read: sharedSettingsClient.read,
+      set: (key: string, value: SharedSettingValue) =>
+        sharedSettingsClient.set({ key, value }),
+      merge: (doc: SharedSettingsDoc) => sharedSettingsClient.merge({ doc }),
+      onChanged: sharedSettingsClient.changed,
     },
 
     shell: {

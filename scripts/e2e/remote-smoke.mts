@@ -1,6 +1,6 @@
 // The remote flows, end to end, on one machine:
 //
-//   pnpm test:remote-smoke [--keep]
+//   pnpm test:remote-smoke [--keep] [--only=<label part>,...]
 //
 // Two dev profiles (scripts/lib/devProfile.mts) as two devices of the
 // owner's dev account, both signed in by cloning the plain dev
@@ -55,6 +55,16 @@ import {
 import { attachWindow, type AppWindow } from "./cdp.mts";
 
 const keep = process.argv.includes("--keep");
+// Runs only the scenarios whose label contains one of these, for a
+// quick pass over one area. The boot, the connection wait and the
+// teardown always run. A scenario that leans on an earlier one's result
+// fails its `need` when that one was filtered out, so name both.
+const only = (
+  process.argv.find((arg) => arg.startsWith("--only="))?.slice(7) ?? ""
+)
+  .split(",")
+  .map((part) => part.trim())
+  .filter((part) => part !== "");
 
 // Git against the fixture worktrees, both of which live on this
 // machine: pinned identity, the inherited GIT_* scrubbed (a lefthook
@@ -272,6 +282,29 @@ async function revokeFrom(port: number, otherSuffix: string): Promise<void> {
   }
 }
 
+// The shared settings, driven through the renderer's own write path
+// (the local copy, then an offer to each peer) rather than the raw
+// channel, so the scenario covers what the Configure page runs.
+const SHARED_KEY = "e2e/sharedSetting";
+
+const setSharedSetting = (w: AppWindow, value: string) =>
+  w.evaluate(
+    `import("/renderer/lib/remote/sharedSettingsSync.ts").then((m) =>
+      m.writeSharedSetting(${JSON.stringify(SHARED_KEY)}, ${JSON.stringify(value)}))`,
+  );
+
+const waitSharedSetting = (w: AppWindow, value: string, what: string) =>
+  waitFor(
+    async () => {
+      const doc = await w.evaluate<{
+        entries: Record<string, { value: unknown }>;
+      }>("window.api.sharedSettings.read()");
+      return doc.entries[SHARED_KEY]?.value === value;
+    },
+    what,
+    30_000,
+  );
+
 // One call on a peer through a's bridge, as the renderer's hub
 // transport makes it (renderer/lib/remote/hubTransport.ts).
 const onPeer = (
@@ -324,6 +357,10 @@ async function main(): Promise<string[]> {
       }),
     );
   const scenario = async (label: string, fn: () => Promise<void>) => {
+    if (only.length > 0 && !only.some((part) => label.includes(part))) {
+      log(`skip ${label}`);
+      return;
+    }
     try {
       await fn();
       log(`ok   ${label}`);
@@ -380,6 +417,25 @@ async function main(): Promise<string[]> {
         worktrees.some((w) => w.branch === "main"),
         "b's 'shared' has no main worktree",
       );
+    });
+
+    // No server holds the shared settings, so this is the whole
+    // path: a pick made on one device has to land in the other's own
+    // copy. First with b refusing commands, which leaves only the pull
+    // (b's window hears a's copy move and folds it into its own), then
+    // the other way round with the switch back on.
+    await scenario("shared settings", async () => {
+      await b.evaluate("window.api.account.setAcceptsCommands(false)");
+      await setSharedSetting(a, "picked-on-a");
+      await waitSharedSetting(b, "picked-on-a", "b to pull a's");
+      await b.evaluate("window.api.account.setAcceptsCommands(true)");
+      await setSharedSetting(b, "picked-on-b");
+      await waitSharedSetting(a, "picked-on-b", "a to take b's");
+      const [docA, docB] = await Promise.all([
+        a.evaluate<unknown>("window.api.sharedSettings.read()"),
+        b.evaluate<unknown>("window.api.sharedSettings.read()"),
+      ]);
+      assert.deepEqual(docA, docB, "the two copies differ after the exchange");
     });
 
     let created: Worktree | undefined;
@@ -1347,6 +1403,25 @@ async function main(): Promise<string[]> {
         waitConnected(a, idB, "a (after b's relaunch)"),
         waitConnected(b, idA, "b (relaunched)"),
       ]);
+    });
+
+    // A pick made while the other device was off reaches it when the
+    // session next lands, with nothing in between to have held it.
+    await scenario("shared settings: offline catch-up", async () => {
+      b.close();
+      windows.splice(windows.indexOf(b), 1);
+      await killTrees([need(peer ?? undefined, "a running peer")], "SIGKILL");
+      await waitDropped(a, idB, "a to drop b from its roster");
+      await setSharedSetting(a, "picked-while-b-was-off");
+      launchPeer();
+      b = await attachWindow(portB, 120_000);
+      windows.push(b);
+      await waitSignedIn(b, "b (relaunched again)");
+      await waitSharedSetting(
+        b,
+        "picked-while-b-was-off",
+        "b to catch up after its relaunch",
+      );
     });
 
     await scenario("revoke", async () => {

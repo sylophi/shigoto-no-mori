@@ -32,6 +32,7 @@ import { createAppQueryClient } from "./lib/queryClientOptions";
 import { hasLocalHost } from "./lib/localHost";
 import { startRemoteDeviceSync } from "./lib/remote/remoteDeviceSync";
 import { startRemoteHostWatch } from "./lib/remote/remoteHostWatch";
+import { startSharedSettingsSync } from "./lib/remote/sharedSettingsSync";
 import {
   invalidateHostDevice,
   invalidateHostProject,
@@ -57,6 +58,10 @@ export function bootApp({
   const router = createAppRouter(history);
 
   if (hasLocalHost) startLocalHost(queryClient);
+
+  // The shared settings exchange: this device's copy follows its peers'
+  // and theirs follow it.
+  startSharedSettingsSync(queryClient);
 
   // Remote devices: the remote device registry, rebuilt from the
   // account's device list plus the hub bridge status, on boot and on
