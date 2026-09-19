@@ -1,3 +1,4 @@
+import { pickCloneUrl, repoNameFromUrl } from "@shared/cloneUrl";
 import { reorderProjects } from "@shared/reorder";
 import type { Project } from "@shared/schemas";
 import type { Handlers } from "@shared/ipc/types";
@@ -5,8 +6,9 @@ import { projectsContract } from "@shared/ipc/modules/projects";
 import { readShigomoriConfig } from "@host/lib/config/project";
 import { PROJECTS_KEY, registryStore } from "@host/lib/config/store";
 import { listBranches } from "@host/lib/git/branches";
+import { cloneRepo } from "@host/lib/git/clone";
 import { isGitRepo } from "@host/lib/git/core";
-import { resolveDefaultBranch } from "@host/lib/git/remotes";
+import { listRemoteEntries, resolveDefaultBranch } from "@host/lib/git/remotes";
 import { pickAvailableWorktreeName } from "@host/lib/git/worktrees";
 import {
   findProjectOrThrow,
@@ -50,6 +52,13 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
 
     // Same engine as `sm projects add`: registration and the config
     // seed run in the CLI.
+    return projectsAddViaCli(path);
+  },
+
+  clone: async ({ url, parentDir, name }) => {
+    const folder = name ?? repoNameFromUrl(url);
+    if (folder === null) throw new Error(`${url} is not a git remote URL`);
+    const path = await cloneRepo(url, expandHome(parentDir), folder);
     return projectsAddViaCli(path);
   },
 
@@ -125,6 +134,11 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     const project = findProjectOrThrow(projectId);
     const config = await readShigomoriConfig(project.id);
     return resolveDefaultBranch(project.path, config?.defaultBranch);
+  },
+
+  cloneUrl: async ({ projectId }) => {
+    const project = findProjectOrThrow(projectId);
+    return pickCloneUrl(await listRemoteEntries(project.path));
   },
 
   listBranches: async ({ projectId }) => {

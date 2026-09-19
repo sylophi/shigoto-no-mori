@@ -289,6 +289,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
     projects: {
       list: projectsClient.list,
       add: (path: string) => projectsClient.add({ path }),
+      clone: projectsClient.clone,
       remove: (id: string) => projectsClient.remove({ id }),
       reorder: (input: {
         draggedId: string;
@@ -303,6 +304,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       onUsageBumped: projectsClient.usageBumped,
       defaultBranch: (projectId: string) =>
         projectsClient.defaultBranch({ projectId }),
+      cloneUrl: (projectId: string) => projectsClient.cloneUrl({ projectId }),
       listBranches: (projectId: string) =>
         projectsClient.listBranches({ projectId }),
       pickWorktreeName: (projectId: string) =>

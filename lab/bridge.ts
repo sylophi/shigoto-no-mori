@@ -10,7 +10,9 @@
 // change the socket phase, navigate the memory router.
 import { buildApi } from "@shared/ipc/client";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
-import type { ShigomoriWorktreeData } from "@shared/schemas";
+import type { Project, ShigomoriWorktreeData } from "@shared/schemas";
+import { repoNameFromUrl } from "@shared/cloneUrl";
+import { normalizeRemoteUrl } from "@shared/repoIdentity.mts";
 import type { ContractScope } from "@shared/ipc/contract";
 import { WEB_PLATFORM } from "@shared/account/enroll";
 import type { HubStatus } from "@shared/ipc/modules/hub";
@@ -30,6 +32,7 @@ import { invokeIndexFor } from "../web/ipc/loopback";
 import { NO_STRUCTURAL_STUB, stubValueFor } from "../web/ipc/stubDefaults";
 import {
   type DeviceForest,
+  type LabDisk,
   LAB_ACCOUNT_ID,
   LAB_APP_VERSION,
   LOCAL_DEVICE_ID,
@@ -39,9 +42,11 @@ import {
   accountDevices,
   forests,
   labCustomPorts,
+  labDisks,
   labGlobalConfig,
   labListeningPorts,
   labPoolPorts,
+  labRemoteUrls,
   projectIconFor,
   worktree as worktreeFixture,
 } from "./fixtures";
@@ -96,11 +101,66 @@ function createFixtureWire(
 
 // ---- per-device host fixtures ----
 
+// A typed path as the device's disk spells it: `~` expanded against
+// that device's home, trailing separators dropped.
+function resolveOnDisk(disk: LabDisk, path: string): string {
+  const expanded =
+    path === "~" || path.startsWith("~/") ? disk.home + path.slice(1) : path;
+  return expanded.length > 1 ? expanded.replace(/\/+$/, "") : expanded;
+}
+
+function isRepoOnDisk(disk: LabDisk, path: string): boolean {
+  const cut = path.lastIndexOf("/");
+  return (disk.dirs[path.slice(0, cut) || "/"] ?? []).some(
+    (entry) => entry.name === path.slice(cut + 1) && entry.isGitRepo,
+  );
+}
+
+// What registering a checkout does to the fixture world: the project
+// joins the device's list with a primary worktree on main, so the add
+// flow has somewhere to land and the sidebar shows it.
+function registerProject(
+  forest: DeviceForest,
+  path: string,
+  identity: string | null = null,
+): Project {
+  const disk = labDisks[forest.deviceId] ?? { home: "", dirs: {} };
+  if (!isRepoOnDisk(disk, path)) {
+    throw new Error(`${path} is not a git repository`);
+  }
+  if (forest.projects.some((project) => project.path === path)) {
+    throw new Error(`${path} is already registered`);
+  }
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const project: Project = {
+    id: `lab_${forest.projects.length}_${name}`,
+    name,
+    path,
+    pathExists: true,
+    identity,
+    lastUsed: Date.now(),
+    recentCount: 0,
+  };
+  forest.projects.push(project);
+  forest.worktrees[project.id] = [
+    worktreeFixture({
+      id: `lab${String(Date.now()).slice(-9)}`,
+      projectId: project.id,
+      name,
+      branch: "main",
+      path,
+      isPrimary: true,
+    }),
+  ];
+  return project;
+}
+
 function hostHandlersFor(
   forest: DeviceForest,
   emit: FixtureWire["emit"],
 ): FixtureHandlers {
   const collapsed = new Set<string>();
+  const disk = labDisks[forest.deviceId] ?? { home: "/home/rin", dirs: {} };
   mirrorWires.set(forest.deviceId, emit);
   // The worktree data files, seeded from the fixtures and mutated by
   // worktreeData:write so adding and removing ports shows its outcome.
@@ -117,7 +177,64 @@ function hostHandlersFor(
       .map((worktree) => worktree.branch),
   ];
   return {
-    "projects:list": () => forest.projects,
+    // A copy, as a wire would hand over: projects:add and projects:clone
+    // push onto the list, and the same array back would read as "nothing
+    // changed" to the query cache's structural sharing.
+    "projects:list": () => [...forest.projects],
+    "projects:add": ({ path }) =>
+      registerProject(forest, resolveOnDisk(disk, path)),
+    // Takes a moment, as a clone does, so the cloning stage is seen.
+    "projects:clone": async ({ url, parentDir, name }) => {
+      await new Promise((resolve) => setTimeout(resolve, 2200));
+      const parent = resolveOnDisk(disk, parentDir);
+      const entries = disk.dirs[parent];
+      if (entries === undefined) throw new Error(`${parent} is not a folder`);
+      const folder = name ?? repoNameFromUrl(url) ?? "repo";
+      if (entries.some((entry) => entry.name === folder)) {
+        throw new Error(`${parent}/${folder} already exists`);
+      }
+      entries.push({ name: folder, isGitRepo: true });
+      const identity =
+        Object.entries(labRemoteUrls).find(
+          ([, known]) => normalizeRemoteUrl(known) === normalizeRemoteUrl(url),
+        )?.[0] ?? `remote:${normalizeRemoteUrl(url)}`;
+      return registerProject(forest, `${parent}/${folder}`, identity);
+    },
+    "projects:cloneUrl": ({ projectId }) => {
+      const identity = forest.projects.find(
+        (project) => project.id === projectId,
+      )?.identity;
+      return identity ? (labRemoteUrls[identity] ?? null) : null;
+    },
+    "runtime:info": () => ({
+      dataDir: `${disk.home}/.sm`,
+      dataDirSource: "default",
+      atDefaultDataDir: true,
+      canonicalDataDirName: ".sm",
+      homedir: disk.home,
+    }),
+    "fs:listDirectory": ({ path }) => {
+      const resolved = resolveOnDisk(disk, path);
+      const entries = disk.dirs[resolved];
+      if (entries === undefined) {
+        throw new Error(
+          `ENOENT: no such file or directory, scandir '${resolved}'`,
+        );
+      }
+      return { path: resolved, entries };
+    },
+    "fs:isGitRepo": ({ path }) => isRepoOnDisk(disk, resolveOnDisk(disk, path)),
+    "fs:scanForGitRepos": async ({ path }) => {
+      await new Promise((resolve) => setTimeout(resolve, 900));
+      const root = resolveOnDisk(disk, path);
+      return Object.entries(disk.dirs).flatMap(([folder, entries]) =>
+        folder === root || folder.startsWith(`${root}/`)
+          ? entries
+              .filter((entry) => entry.isGitRepo)
+              .map((entry) => `${folder}/${entry.name}`)
+          : [],
+      );
+    },
     "projects:getSort": () => "manual",
     "projects:getCollapsed": () => [...collapsed],
     "projects:toggleCollapsed": ({ projectId }) => {

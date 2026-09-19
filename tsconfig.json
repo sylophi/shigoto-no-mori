@@ -39,6 +39,7 @@
     "web/**/*",
     "forge.config.ts",
     "forge.env.d.ts",
-    "vite.*.config.ts"
+    "vite.*.config.ts",
+    "vite.reactCompiler.ts"
   ]
 }
