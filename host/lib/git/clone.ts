@@ -24,8 +24,13 @@ export async function cloneRepo(
     throw new Error(`${dest} already exists`);
   }
   // Nobody is at this process's terminal to answer a credential prompt,
-  // least of all when the clone was asked for from another device, so a
-  // remote this machine can't authenticate to fails instead of hanging.
+  // least of all when the clone was asked for from another device, so
+  // git's own is turned off and a remote it can't authenticate to fails
+  // rather than waits. That covers git alone: ssh asking about a host
+  // key and an askpass helper prompt on their own, and forcing ssh into
+  // batch mode here would override the user's own ssh command. A
+  // packaged app has no terminal for ssh to ask on, so it fails there
+  // too, and the clone has no timeout beyond that.
   // `--` ends the options: the URL and name come from the caller.
   await run(parentDir, ["clone", "--", url, name], {
     env: { GIT_TERMINAL_PROMPT: "0" },
