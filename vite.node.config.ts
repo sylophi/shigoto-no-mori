@@ -7,7 +7,7 @@
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 import { ACCOUNT_ENV_KEYS } from "./shared/account/serviceConfig";
-import { macSigningIdentity } from "./shared/macSigning.mts";
+import { macSigningIdentity } from "./shared/packaging/macSigning.mts";
 
 // The account service values (ACCOUNT_ENV_KEYS) present in the BUILD
 // environment, baked into

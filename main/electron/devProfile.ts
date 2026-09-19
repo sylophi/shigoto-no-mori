@@ -1,16 +1,15 @@
-// The dev profile this instance runs as (shared/appName.mts), for the
-// two consumers: main/index.ts (userData and app name) and the account
-// module (the default device name). Derived lazily from the
-// environment, which is there from process start, so no reader
-// depends on boot order. initDevProfile is the boot-time validation
-// that turns a bad value into an error box instead of a silent plain
-// dev instance.
+// The dev profile this instance runs as (shared/packaging/appName.mts),
+// for the two consumers: main/index.ts (userData and app name) and the
+// account module (the default device name). Derived lazily from the
+// environment, which is there from process start, so no reader depends
+// on boot order. initDevProfile is the boot-time validation that turns
+// a bad value into an error box instead of a silent plain dev instance.
 import { app } from "electron";
 import {
   DEV_PROFILE_ENV,
   devProfileFromEnv,
   devProfileNameSuffix,
-} from "@shared/appName.mts";
+} from "@shared/packaging/appName.mts";
 
 let profile: string | null | undefined;
 

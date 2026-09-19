@@ -29,7 +29,7 @@ import { connect, createServer, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { signalTree } from "../../host/lib/scripts/process.ts";
-import { devProfileNameSuffix } from "../../shared/appName.mts";
+import { devProfileNameSuffix } from "../../shared/packaging/appName.mts";
 import { errorMessageOf } from "../../shared/errors.ts";
 import { bringIgnores } from "../../shared/mirrorIgnores.ts";
 import { isCommandRefusedError } from "../../shared/ipc/socket/frames.ts";

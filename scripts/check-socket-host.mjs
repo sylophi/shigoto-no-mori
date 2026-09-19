@@ -43,7 +43,7 @@ import {
   MAX_IN_FLIGHT_PER_PEER,
 } from "@shared/ipc/socket/frames";
 import { connectDevice } from "@shared/ipc/socket/wsClientTransport";
-import { rendererSchemeOrigins } from "@shared/rendererScheme.mts";
+import { rendererSchemeOrigins } from "@shared/packaging/rendererScheme.mts";
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { registerContract } from "@shared/ipc/registerContract";

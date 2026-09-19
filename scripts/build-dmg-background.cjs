@@ -12,8 +12,8 @@
 // (lefthook pre-commit) fails when the committed art predates one.
 //
 // Window and icon geometry, and the file names, come from
-// shared/dmgLayout.mts, which forge.config.ts reads too. Everything else
-// about the composition lives in the html.
+// shared/packaging/dmgLayout.mts, which forge.config.ts reads too.
+// Everything else about the composition lives in the html.
 //
 // CommonJS, unlike the rest of scripts/: an ESM main process never sees
 // Electron's `ready` event fire (app.whenReady() simply never settles),
@@ -80,7 +80,7 @@ async function render(win, layout, prerelease, scale) {
 app
   .whenReady()
   .then(async () => {
-    const layout = await import("../shared/dmgLayout.mts");
+    const layout = await import("../shared/packaging/dmgLayout.mts");
     const { artInputsHash, ART_STAMP_FILE } =
       await import("./check-dmg-art.mjs");
     const outDir = join(ROOT, layout.DMG_ART_DIR);

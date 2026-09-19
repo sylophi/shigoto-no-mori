@@ -11,7 +11,7 @@
 // so callers may overlap them.
 import { createRequire } from "node:module";
 import { errorMessageOf } from "../../shared/errors.ts";
-import { rendererSchemeName } from "../../shared/rendererScheme.mts";
+import { rendererSchemeName } from "../../shared/packaging/rendererScheme.mts";
 import { delay } from "../lib/checkKit.mjs";
 
 const require = createRequire(import.meta.url);

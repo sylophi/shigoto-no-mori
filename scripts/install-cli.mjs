@@ -15,7 +15,7 @@ import {
   cliAliasName,
   cliBinaryName,
   cliUserBinDir,
-} from "../shared/cliDist.mts";
+} from "../shared/packaging/cliDist.mts";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const binary = join(repoRoot, CLI_DIST_DIR, cliBinaryName("prod"));

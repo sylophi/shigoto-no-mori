@@ -11,8 +11,8 @@
 // per-binary signature the keychain policy exists to keep off the
 // real keychain, so it reads as no identity at all.
 //
-// Like shared/cliDist.mts: no imports, so plain node scripts and the
-// build configs can load it without a loader shim.
+// Like shared/packaging/cliDist.mts: no imports, so plain node scripts
+// and the build configs can load it without a loader shim.
 export function macSigningIdentity(
   env: Record<string, string | undefined>,
 ): string | null {

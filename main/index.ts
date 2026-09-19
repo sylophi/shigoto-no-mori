@@ -5,7 +5,7 @@ import {
   DEV_NAME_SUFFIX,
   DEV_USER_DATA_SUFFIX,
   devProfileUserData,
-} from "@shared/appName.mts";
+} from "@shared/packaging/appName.mts";
 import { gitContract } from "@shared/ipc/modules/git";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { windowContract } from "@shared/ipc/modules/window";
@@ -114,10 +114,10 @@ function devProfile(): string | null {
 if (!app.isPackaged) {
   const profile = devProfile();
   const devUserData = `${app.getPath("userData")}${DEV_USER_DATA_SUFFIX}`;
-  // A dev profile (shared/appName.mts) is a further dev instance on
-  // this machine with its own userData, so its own lock, credential,
-  // grants and tokens: a separate device for testing remote flows
-  // against a real peer (scripts/dev-peer.mts).
+  // A dev profile (shared/packaging/appName.mts) is a further dev
+  // instance on this machine with its own userData, so its own lock,
+  // credential, grants and tokens: a separate device for testing remote
+  // flows against a real peer (scripts/dev-peer.mts).
   app.setPath(
     "userData",
     profile === null ? devUserData : devProfileUserData(devUserData, profile),

@@ -10,7 +10,7 @@
 // exists.
 import { writeFileSync } from "node:fs";
 import { app } from "electron";
-import { DEV_RELAUNCH_FILE_ENV } from "@shared/appName.mts";
+import { DEV_RELAUNCH_FILE_ENV } from "@shared/packaging/appName.mts";
 
 let requested = false;
 

@@ -112,7 +112,7 @@ export function cloudflaredArgs(): string[] {
   // --no-autoupdate: cloudflared otherwise checks for a newer release
   // and replaces its own binary, which would break the signature of
   // the copy the app ships. The version is pinned in
-  // shared/cloudflaredDist.mts and bumped with the app.
+  // shared/packaging/cloudflaredDist.mts and bumped with the app.
   return ["tunnel", "--no-autoupdate", "run"];
 }
 

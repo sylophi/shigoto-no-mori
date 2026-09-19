@@ -11,7 +11,7 @@ import {
   CLOUDFLARED_LICENSE,
   CLOUDFLARED_REPOSITORY,
   CLOUDFLARED_VERSION,
-} from "../shared/cloudflaredDist.mts";
+} from "../shared/packaging/cloudflaredDist.mts";
 
 const require = createRequire(import.meta.url);
 const licenseChecker = require("license-checker");

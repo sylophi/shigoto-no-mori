@@ -12,7 +12,10 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { DMG_ART_DIR, dmgBackgroundName } from "../shared/dmgLayout.mts";
+import {
+  DMG_ART_DIR,
+  dmgBackgroundName,
+} from "../shared/packaging/dmgLayout.mts";
 import { report } from "./lib/checkKit.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -24,7 +27,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const INPUT_FILES = [
   "renderer/doubutsu.css",
   "scripts/dmg-background.html",
-  "shared/dmgLayout.mts",
+  "shared/packaging/dmgLayout.mts",
 ];
 const FONT_PACKAGE = "node_modules/@fontsource/zen-maru-gothic/package.json";
 

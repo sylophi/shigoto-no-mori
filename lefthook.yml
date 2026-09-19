@@ -77,7 +77,7 @@ pre-commit:
     # direct-connected client through the shared peerPush path. Gated to
     # the direct surface plus the socket and hub layers it composes.
     direct-plane:
-      glob: "{host/direct/**,shared/cloudflaredDist.mts,host/socket/**,host/ipc/modules/direct.ts,host/lib/util/binaries.ts,host/lib/scripts/process.ts,shared/ipc/modules/direct.ts,shared/ipc/socket/**,shared/ipc/transport.ts,shared/ipc/registerContract.ts,shared/hub/**,host/hub/**,shared/account/service.ts,shared/remote/supervisor.ts,scripts/check-direct-plane.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
+      glob: "{host/direct/**,shared/packaging/cloudflaredDist.mts,host/socket/**,host/ipc/modules/direct.ts,host/lib/util/binaries.ts,host/lib/scripts/process.ts,shared/ipc/modules/direct.ts,shared/ipc/socket/**,shared/ipc/transport.ts,shared/ipc/registerContract.ts,shared/hub/**,host/hub/**,shared/account/service.ts,shared/remote/supervisor.ts,scripts/check-direct-plane.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
       run: pnpm run direct:check
     # End-to-end proof for the device-sync transfer plumbing: builds the
     # real sm binary, seeds fixture repos in a sandboxed SHIGOMORI_DATA_DIR,
@@ -114,7 +114,7 @@ pre-commit:
     # serve child on terminate, and the device hub staying flat. Gated
     # to the mirror surface plus the byte wire and CLI it rides.
     mirror:
-      glob: "{file-sync/**,cli/**,host/fileSync/**,host/mirror/**,shared/fileSyncDist.mts,shared/ipc/modules/mirror.ts,shared/ipc/modules/forward.ts,shared/ipc/modules/sync.ts,host/ipc/modules/sync.ts,host/ipc/peerSync.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/hub/protocol.ts,host/ipc/modules/forward.ts,host/ipc/modules/mirror.ts,host/ipc/modules/worktrees.ts,host/ipc/cliDelegate.ts,host/hub/**,host/lib/idleRegistry.ts,host/lib/net.ts,host/lib/git/**,host/lib/util/paths.ts,main/portForward/bridge.ts,main/mirror/**,shared/ipc/socket/channels.ts,host/socket/channelStreams.ts,scripts/check-mirror.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
+      glob: "{file-sync/**,cli/**,host/fileSync/**,host/mirror/**,shared/packaging/fileSyncDist.mts,shared/ipc/modules/mirror.ts,shared/ipc/modules/forward.ts,shared/ipc/modules/sync.ts,host/ipc/modules/sync.ts,host/ipc/peerSync.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/hub/protocol.ts,host/ipc/modules/forward.ts,host/ipc/modules/mirror.ts,host/ipc/modules/worktrees.ts,host/ipc/cliDelegate.ts,host/hub/**,host/lib/idleRegistry.ts,host/lib/net.ts,host/lib/git/**,host/lib/util/paths.ts,main/portForward/bridge.ts,main/mirror/**,shared/ipc/socket/channels.ts,host/socket/channelStreams.ts,scripts/check-mirror.mjs,scripts/lib/hubStub.mjs,scripts/lib/hubBoot.mjs,scripts/lib/checkKit.mjs,scripts/lib/directBoot.mjs}"
       run: pnpm run mirror:check
     # Proves the worktree port list's pure parts under plain Node: the
     # port-pool state reader (XDG_DATA_HOME, declared order, malformed

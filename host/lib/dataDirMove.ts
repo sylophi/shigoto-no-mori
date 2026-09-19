@@ -2,11 +2,12 @@
 // parent, back to its default location): the folder relocates under the
 // flavor's canonical name (.sm / .smd -- which is also how a pre-2.0
 // ~/shigomori gets renamed), the pointer file (policy in
-// shared/cliDist.mts) records the new spot for both the app's and the
-// CLI's next boot -- or is removed when the new spot is the default,
-// so "pointer exists" keeps meaning "relocated" -- and the caller must
-// relaunch the app right after: the in-process data dir is a boot-time
-// constant and every module has already derived paths from it.
+// shared/packaging/cliDist.mts) records the new spot for both the app's
+// and the CLI's next boot -- or is removed when the new spot is the
+// default, so "pointer exists" keeps meaning "relocated" -- and the
+// caller must relaunch the app right after: the in-process data dir is
+// a boot-time constant and every module has already derived paths from
+// it.
 //
 // Two kinds of stored paths go stale and are carried along: worktree
 // ids are hashes of the worktree's absolute path (git/worktrees.ts

@@ -9,9 +9,9 @@
 // the dev safeStorage keychain item, so a drift would silently split
 // labels or re-key dev tokens with no build error.
 //
-// Like shared/cliDist.mts: node-builtin imports only, so plain `node
-// scripts/*.mts` can load it without a loader shim, and never imported
-// from the renderer.
+// Like shared/packaging/cliDist.mts: node-builtin imports only, so
+// plain `node scripts/*.mts` can load it without a loader shim, and
+// never imported from the renderer.
 import { join } from "node:path";
 
 export const DEV_NAME_SUFFIX = " (Dev)";

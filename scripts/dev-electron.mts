@@ -19,7 +19,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DEV_RELAUNCH_FILE_ENV } from "../shared/appName.mts";
+import { DEV_RELAUNCH_FILE_ENV } from "../shared/packaging/appName.mts";
 import { errorMessageOf } from "../shared/errors.ts";
 import { repoRoot } from "./lib/checkKit.mjs";
 import { ensureDevBundle, superviseChild } from "./lib/devBundle.mts";

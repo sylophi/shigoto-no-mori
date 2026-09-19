@@ -84,9 +84,9 @@ func initDataDir() error {
 // The pointer file relocates the data dir without an env var:
 // $XDG_CONFIG_HOME/<configDirName>/<dataDirPointerName>, one line
 // holding an absolute path (~/ allowed). Go mirror of the policy in
-// shared/cliDist.mts (the app reads and writes the same file). The
-// pre-2.0 filename is read only when the current one is absent, so a
-// stale old pointer can't outrank an unusable current one.
+// shared/packaging/cliDist.mts (the app reads and writes the same
+// file). The pre-2.0 filename is read only when the current one is
+// absent, so a stale old pointer can't outrank an unusable current one.
 // SHIGOMORI_DATA_DIR still beats it, and nothing injects that var. A
 // caller who sets it is sandboxing the whole tree on purpose
 // (scripts.go). Missing, empty, or non-absolute content falls through

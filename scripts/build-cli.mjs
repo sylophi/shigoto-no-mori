@@ -1,8 +1,8 @@
 // Compiles the sm CLI (a Go module in cli/) into a standalone binary,
 // same distribution shape as port-pool. Two flavors, mirroring the
 // app's packaged/dev split; naming and data dir policy come from
-// shared/cliDist.mts and are injected into the binary via -ldflags so
-// the two languages share one source of truth.
+// shared/packaging/cliDist.mts and are injected into the binary via
+// -ldflags so the two languages share one source of truth.
 //   default -> dist-cli/sm   targets ~/.sm  (bundled with the app)
 //   --dev   -> dist-cli/smd  targets ~/.smd (built by `pnpm dev`)
 //
@@ -22,7 +22,7 @@ import {
   DATA_DIR_POINTER_FILE,
   LEGACY_DATA_DIR_POINTER_FILE,
   legacyDataDirName,
-} from "../shared/cliDist.mts";
+} from "../shared/packaging/cliDist.mts";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const flavor = process.argv.includes("--dev") ? "dev" : "prod";

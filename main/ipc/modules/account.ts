@@ -12,7 +12,7 @@ import { devProfileSuffix } from "../../electron/devProfile";
 import { platform } from "node:os";
 import { join } from "node:path";
 import { app, safeStorage } from "electron";
-import { CLONED_LOGIN_MARKER } from "@shared/appName.mts";
+import { CLONED_LOGIN_MARKER } from "@shared/packaging/appName.mts";
 import { accountContract } from "@shared/ipc/modules/account";
 import type { TunnelProvisionResponse } from "@shared/hub/protocol";
 import type { AccountStatus } from "@shared/ipc/modules/account";

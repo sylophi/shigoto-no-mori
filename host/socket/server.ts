@@ -32,7 +32,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 import { errorMessageOf } from "@shared/errors";
-import { rendererSchemeOrigins } from "@shared/rendererScheme.mts";
+import { rendererSchemeOrigins } from "@shared/packaging/rendererScheme.mts";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
 import {
   CLOSE_AUTH_FAILED,

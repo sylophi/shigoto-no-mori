@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import {
   FILE_SYNC_BINARY_NAME,
   FILE_SYNC_DIST_DIR,
-} from "../shared/fileSyncDist.mts";
+} from "../shared/packaging/fileSyncDist.mts";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const outfile = join(repoRoot, FILE_SYNC_DIST_DIR, FILE_SYNC_BINARY_NAME);

@@ -7,7 +7,7 @@
 import {
   FILE_SYNC_BINARY_NAME,
   FILE_SYNC_DIST_DIR,
-} from "@shared/fileSyncDist.mts";
+} from "@shared/packaging/fileSyncDist.mts";
 import { setFileSyncSpawnImpl, spawnStreamChild } from "@host/fileSync/spawn";
 import { bundledBinaryResolver } from "./bundledBinary";
 import { registerBackgroundChild } from "./cliRunner";
