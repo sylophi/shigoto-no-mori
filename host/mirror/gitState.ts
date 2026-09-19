@@ -128,13 +128,9 @@ type IndexSnapshot = { size: number; mtimeMs: number; tree: string };
 const indexSnapshots = new Map<string, IndexSnapshot>();
 
 // One private 0700 directory for every scratch index, minted lazily and
-// kept for the life of the process. The copies cannot sit directly
-// under the OS temp dir: their names are derived from the worktree
-// path, so on a host with a shared /tmp another local account could
-// guess one and read the index, or pre-plant it as a symlink and have
-// the copyFile below write through it. mkdtemp is what the other
-// scratch paths here use (host/lib/sync/fetchBundle.ts) for the same
-// reason.
+// kept for the life of the process. Directly under a shared /tmp the
+// copies' names are guessable, so another account could read one or
+// pre-plant it as a symlink for the copyFile below to write through.
 let scratchDir: Promise<string> | null = null;
 
 function scratchIndexDir(): Promise<string> {
@@ -158,10 +154,8 @@ async function scratchIndexPath(worktreePath: string): Promise<string> {
 }
 
 // Copies the index into the scratch dir, re-minting it once if it went
-// away. The directory is cached for the life of the process, and the
-// OS reaps its temp dir on a schedule of its own, so a long-running app
-// can outlive the path it cached. Without this the follower would then
-// report "error" for every worktree until the app restarted.
+// away: the OS reaps its temp dir on its own schedule, and a
+// long-running app can outlive the path it cached.
 async function copyIndexToScratch(
   worktreePath: string,
   indexPath: string,

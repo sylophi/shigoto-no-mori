@@ -44,29 +44,18 @@ export type ConnectTicketStore = {
     peerDeviceId: string,
     kinds: readonly DirectCandidateKind[],
   ): string[] | null;
-  // Finds this peer's pending ticket that the dialer proved possession
-  // of, consumes it, and hands it back so the caller can compute its
-  // own half of the mutual proof. Null when no pending ticket matches.
+  // Consumes the pending ticket the dialer proved possession of and
+  // hands it back, so the caller can compute the host's half of the
+  // proof. Null when none matches. The ticket never arrives (see
+  // shared/ipc/socket/proof.ts), so the caller's predicate is tried
+  // against this peer's few pending tickets in turn.
   //
-  // The ticket itself never arrives, so there is nothing to look up by:
-  // the caller supplies a predicate and the candidates are tried in
-  // turn. A peer holds at most one candidate-set (mint replaces), so
-  // that is a handful of HMACs, and only for a peer the hub already
-  // vouched for.
-  //
-  // `arrivedAs` is the path the connection actually came in on, checked
-  // against the kind the ticket was minted for. The handshake already
-  // keeps the ticket off the wire, so this is not about a stolen one:
-  // it is what stops a RELAY. A machine squatting an advertised LAN
-  // address can accept a dial and shuttle the nonces and proofs through
-  // to the real listener without ever holding the ticket, and binding
-  // the kind means it cannot do that through the public tunnel, which
-  // is the only route it has when it is not on the host's own network.
-  //
-  // It does NOT stop a relay between two addresses of the same kind,
-  // which needs an attacker already on that network. Nothing here does:
-  // a LAN candidate is plaintext, so such an attacker reads and rewrites
-  // the traffic regardless. Only TLS on the LAN candidate closes that.
+  // `arrivedAs` is the path the connection came in on, and must equal
+  // the kind the ticket was minted for. That stops a RELAY: a machine
+  // squatting an advertised LAN address could shuttle the nonces and
+  // proofs through to the real listener over the public tunnel without
+  // ever holding the ticket. A relay within one kind needs an attacker
+  // on that network already, and only TLS on the LAN candidate stops it.
   consumeProven(
     peerDeviceId: string,
     arrivedAs: DirectCandidateKind,
@@ -94,9 +83,7 @@ export function createConnectTicketStore(
   // can only ever delete that peer's own tickets.
   const byPeer = new Map<string, Set<string>>();
 
-  // Removes one ticket and keeps the per-peer index honest. Every
-  // single-ticket removal goes through here so the invariant lives in
-  // one place rather than being re-spelled at each call site.
+  // Removes one ticket and keeps the per-peer index in step.
   function forget(ticket: string, peerDeviceId: string): void {
     pending.delete(ticket);
     const set = byPeer.get(peerDeviceId);
@@ -158,11 +145,9 @@ export function createConnectTicketStore(
         if (entry.kind !== arrivedAs) continue;
         // oxlint-disable-next-line no-await-in-loop -- stop at the ticket that matches, rather than computing every candidate's proof
         if (!(await matches(ticket))) continue;
-        // Single use, and only the ticket that actually matched: a
-        // candidate that lost the race keeps its own for its own dial.
-        // The delete's own answer is the claim: two dials racing the
-        // same ticket across the await above would otherwise both see
-        // it pending and both be admitted on one single-use ticket.
+        // Single use. The delete's own answer is the claim: two dials
+        // racing one ticket across the await above would otherwise
+        // both see it pending and both be admitted.
         if (!pending.delete(ticket)) continue;
         forget(ticket, entry.peerDeviceId);
         return ticket;

@@ -37,39 +37,27 @@ export function tunnelEnvOf(env: Env): TunnelEnv | null {
   return { apiToken, accountId, zoneId, domain };
 }
 
-// Deterministic per-device tunnel name: `sm-` plus the first 32 hex of
+// Deterministic per-device tunnel name: `sm-` plus leading hex of
 // SHA-256(accountId + ":" + deviceId). Stable across calls, so the
 // name is the create-or-reuse key and nothing new persists in D1. The
 // hash keeps account and device ids out of public DNS labels.
 //
-// The width is a security bound, not a collision-avoidance nicety. The
-// name is looked up across the whole Cloudflare account and a hit is
-// reused, connector token and all, so the name IS the ownership check.
-// A device picks its own deviceId, which makes the search for one that
-// lands on somebody else's name an offline one: 128 bits puts it out of
-// reach, where a short prefix would cost an evening on a rented GPU.
-// 35 characters is well inside a DNS label's 63.
+// The width is a security bound. A name hit is reused, connector token
+// and all, so the name IS the ownership check, and a device picks its
+// own deviceId: at 128 bits nobody can search for one that lands on
+// another device's name, where the old 48 made that an offline search.
+const NAME_HEX = 32;
+// The old width, for teardown only: a device provisioned before the
+// widening still has a tunnel under it. Delete once none remain.
+const LEGACY_NAME_HEX = 12;
+
 export async function tunnelNameFor(
   accountId: string,
   deviceId: string,
+  hexWidth = NAME_HEX,
 ): Promise<string> {
   const digest = await sha256Hex(`${accountId}:${deviceId}`);
-  return `sm-${digest.slice(0, 32)}`;
-}
-
-// The width this Worker used before, kept for teardown only. Widening
-// the name re-keys every device: the next provision creates a tunnel
-// under the new name and leaves the old one behind, and a revoke that
-// only knew the new name could never delete it, so the orphan and its
-// DNS record would outlive the device forever. Teardown therefore
-// sweeps both. Delete this once no device provisioned by an older
-// Worker remains.
-async function legacyTunnelNameFor(
-  accountId: string,
-  deviceId: string,
-): Promise<string> {
-  const digest = await sha256Hex(`${accountId}:${deviceId}`);
-  return `sm-${digest.slice(0, 12)}`;
+  return `sm-${digest.slice(0, hexWidth)}`;
 }
 
 const CF_API_BASE = "https://api.cloudflare.com/client/v4";
@@ -274,11 +262,9 @@ export async function teardownTunnel(
   accountId: string,
   deviceId: string,
 ): Promise<void> {
-  // Both widths, so a device provisioned by an older Worker still has
-  // its tunnel and DNS record removed rather than orphaned.
   const names = await Promise.all([
     tunnelNameFor(accountId, deviceId),
-    legacyTunnelNameFor(accountId, deviceId),
+    tunnelNameFor(accountId, deviceId, LEGACY_NAME_HEX),
   ]);
   await Promise.all(
     names.flatMap((name) => [

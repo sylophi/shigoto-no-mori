@@ -101,27 +101,26 @@ describe("POST /devices/enroll", () => {
     expect(newAuth.status).toBe(200);
   });
 
-  it("caps new devices per account, but still rotates and frees slots", async () => {
+  it("caps devices per account by dropping the stalest one, never by locking the account out", async () => {
     const enrolled = [];
     for (let i = 0; i < MAX_ACCOUNT_DEVICES; i++) {
-      // oxlint-disable-next-line no-await-in-loop -- the cap counts rows, so these have to land one at a time
+      // oxlint-disable-next-line no-await-in-loop -- eviction order is enroll order, so these have to land one at a time
       enrolled.push(await enroll("acct-cap", `dev-cap-${i}`));
     }
-    const refused = await call(overCapRequest());
-    expect(refused.status).toBe(409);
-    expect(await refused.json()).toEqual({
-      error: expect.stringContaining(`${MAX_ACCOUNT_DEVICES} devices`),
-    });
-    // A full account is not locked out of the devices it has: re-enroll
-    // is a rotation, not a new device.
-    const rotated = await enroll("acct-cap", "dev-cap-0");
-    expect(rotated.credential).not.toBe(enrolled[0].credential);
+    // Re-enrolling is a rotation, not a new device, so nothing is
+    // dropped for it.
+    const rotated = await enroll("acct-cap", "dev-cap-1");
+    expect(rotated.credential).not.toBe(enrolled[1].credential);
+    expect((await call(listRequest(enrolled[0].credential))).status).toBe(200);
+    // A new device over the cap takes the place of the stalest one,
+    // whose credential dies with it.
+    expect((await call(overCapRequest())).status).toBe(200);
+    expect((await call(listRequest(enrolled[0].credential))).status).toBe(401);
+    const listed = await call(listRequest(rotated.credential));
+    const { devices } = (await listed.json()) as { devices: unknown[] };
+    expect(devices).toHaveLength(MAX_ACCOUNT_DEVICES);
     // The cap is per account, so a neighbor is unaffected.
     await enroll("acct-cap-neighbor", "dev-cap-neighbor");
-    // Removing a device frees its slot.
-    const removed = await revoke(rotated.credential, "dev-cap-1");
-    expect(removed.status).toBe(204);
-    expect((await call(overCapRequest())).status).toBe(200);
   });
 
   it("rejects the same deviceId under a different account with 409", async () => {

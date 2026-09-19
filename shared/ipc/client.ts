@@ -356,8 +356,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
     mirror: {
       list: mirrorClient.list,
       start: mirrorClient.start,
-      // `force` discards a copy the peer is not confirmed to hold. The
-      // caller has to ask for it, so the default stays the safe one.
+      // `force` discards a copy the peer is not confirmed to hold.
       stop: (session: string, force?: boolean) =>
         mirrorClient.stop({ session, force }),
       pause: (session: string) => mirrorClient.pause({ session }),

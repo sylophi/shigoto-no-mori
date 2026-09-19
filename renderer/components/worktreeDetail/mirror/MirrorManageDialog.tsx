@@ -86,16 +86,9 @@ export function MirrorManageDialog({
   const controls = useMirrorControls();
   const nav = useWorktreeNav();
   const { armed, trigger } = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
-  // Stopping takes the copy here with it, so it only reads as safe when
-  // the peer provably holds everything. Every other verdict (paused,
-  // unreachable, still catching up) leaves open that work here exists
-  // nowhere else.
-  //
   // This snapshot drives the WARNING only. The host re-reads the live
-  // status and is the one that decides, so when the two disagree the
-  // refusal is what escalates: sending `force` off a status that went
-  // stale would either discard work with no warning shown, or dead-end
-  // the user on a raw error with their confirm already spent.
+  // status and decides, so a refusal it sends escalates to the discard
+  // wording here instead of dead-ending on a raw error.
   const [refused, setRefused] = useState(false);
   const discarding = !mirrorStopIsSafe(session.git?.status) || refused;
   const busy =
@@ -190,8 +183,8 @@ export function MirrorManageDialog({
               onClick={() =>
                 trigger(() =>
                   controls.stop.mutate(
-                    // The second press IS the override, and only once
-                    // the warning it replaced has named what goes.
+                    // The second press is the override, after the
+                    // warning has named what goes.
                     { session, force: discarding },
                     {
                       // The stop removed the copy this page is on, so
@@ -200,9 +193,7 @@ export function MirrorManageDialog({
                         onClose();
                         nav.toFallback(true);
                       },
-                      // The host knew something this page did not. Arm
-                      // the discard wording rather than leaving a raw
-                      // error and a spent confirm.
+                      // The host knew something this page did not.
                       onError: (error) => {
                         if (isMirrorStopUnconfirmed(error)) setRefused(true);
                       },

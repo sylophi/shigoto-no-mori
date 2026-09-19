@@ -105,17 +105,13 @@ const openGlobalSocket: OpenClientSocket = (url) => new WebSocket(url);
 export type ConnectDeviceOptions = {
   // ws:// URL of the host listener.
   url: string;
-  // The credential this dial authenticates with: the device config's
-  // shared secret on the legacy LAN wire, a single-use connect ticket
-  // on the direct data plane. What happens to it depends on `auth`.
+  // The credential: the device config's shared secret on the legacy
+  // LAN wire, a single-use connect ticket on the direct data plane.
   token: string;
-  // How the credential is presented. "token" sends it in the hello, the
-  // legacy LAN wire's behavior. "proof" never sends it: the host opens
-  // with a nonce and this side answers with an HMAC, then checks the
-  // host's own HMAC on the welcome before trusting the connection
-  // (shared/ipc/socket/proof.ts). The direct dialer uses "proof"
-  // because its candidates are unauthenticated addresses that any
-  // machine on the current network may answer. Defaults to "token".
+  // "token" (the default) sends the credential in the hello. "proof"
+  // never sends it: both ends prove they hold it instead, and the
+  // welcome is only trusted once the host's half checks out
+  // (shared/ipc/socket/proof.ts). The direct dialer uses "proof".
   auth?: "token" | "proof";
   // This client build's version, carried in the hello so the host can
   // log or gate skew later.
@@ -290,16 +286,13 @@ export function openDevice(
   let helloRequested = false;
   let helloWasSent = false;
   const proofMode = options.auth === "proof";
-  // Proof mode's third precondition for the hello, alongside opened and
-  // helloRequested: the host's nonce, which only arrives on the wire.
+  // The nonce pair. Proof mode cannot hello until the host's arrives.
   let hostNonce: string | null = null;
-  // Kept so the welcome's proof can be checked against the same pair.
   let clientNonce: string | null = null;
 
-  // The whole precondition lives here, so the call sites are a bare
-  // sendHello() and no reader has to assemble the rule from three
-  // partial guards. An async function runs to its first await
-  // synchronously, so the latches below still land before any yield.
+  // The whole precondition lives here, so call sites are a bare
+  // sendHello(). It runs synchronously to its first await, so the
+  // latches below land before any yield.
   const sendHello = async (): Promise<void> => {
     if (helloWasSent || closed || !opened || !helloRequested) return;
     if (!proofMode) {
@@ -315,9 +308,7 @@ export function openDevice(
       );
       return;
     }
-    // Proof mode cannot speak until challenged. The caller's deadline
-    // still bounds the wait, and the challenge is the host's first
-    // frame, so this is one round trip and not a state to get stuck in.
+    // Not challenged yet: the challenge frame calls back in here.
     const challenge = hostNonce;
     if (challenge === null) return;
     helloWasSent = true;
@@ -329,8 +320,6 @@ export function openDevice(
       challenge,
       nonce,
     );
-    // The await yielded: a close or a timeout in the meantime means
-    // this hello must not go out.
     if (closed) return;
     socket.send(
       encodeFrame({
@@ -394,14 +383,34 @@ export function openDevice(
     if (closed) return;
     opened = true;
     resolveOpen();
-    void sendHello();
+    sendHello().catch(proofFailed);
   });
 
-  // The one place a welcome becomes an established connection, so the
-  // proof check cannot be bypassed by a second code path resolving
-  // first.
+  // The one place a welcome becomes an established connection. In
+  // proof mode it runs only after the host's proof checked out, so the
+  // identity pin's blocking verdict is never handed to an impostor.
   const acceptWelcome = (deviceId: string, appVersion: string): void => {
     if (closed || welcome !== null) return;
+    if (
+      options.expectedDeviceId !== undefined &&
+      deviceId !== options.expectedDeviceId
+    ) {
+      // The wrong machine answered (a stale address, a NAT
+      // surprise). Blocked, not retryable: redialing the same
+      // address cannot change who lives there, so the caller
+      // surfaces the failure instead of caching the wrong host.
+      closed = true;
+      clearTimeout(helloTimer);
+      try {
+        socket.close();
+      } catch {
+        // Already closing.
+      }
+      reject(
+        new RemoteConnectError("welcome from an unexpected device", null, true),
+      );
+      return;
+    }
     clearTimeout(helloTimer);
     welcome = { remoteDeviceId: deviceId, remoteAppVersion: appVersion };
     heartbeat.start();
@@ -415,9 +424,7 @@ export function openDevice(
     });
   };
 
-  // The host's half of the mutual proof. Its own function rather than
-  // an inline async block, so the welcome branch above reads as one
-  // decision instead of nesting a whole handshake inside itself.
+  // Checks the host's half of the mutual proof before accepting.
   const verifyHostProof = async (
     expected: string,
     challenge: string,
@@ -436,13 +443,16 @@ export function openDevice(
     acceptWelcome(frame.deviceId, frame.appVersion);
   };
 
+  // Web Crypto failing must fail this dial now, not at its deadline.
+  const proofFailed = (error: unknown): void =>
+    failHandshake(
+      `handshake proof could not be computed: ${errorMessageOf(error)}`,
+      options.expectedDeviceId ?? "unknown",
+    );
+
   // A far end that could not prove it holds the ticket. Deliberately
-  // NOT a blocking verdict: the dialer races several candidates, and an
-  // impostor squatting one address must retire that candidate only,
-  // leaving the peer reachable on the others. Blocking here would let
-  // anyone who answers on a LAN address deny the whole dial. The ticket
-  // was never sent, so nothing was spent and the next candidate still
-  // has its own.
+  // NOT a blocking verdict: an impostor squatting one address retires
+  // that candidate only, and the peer stays reachable on the others.
   const failHandshake = (reason: string, deviceId: string): void => {
     if (closed) return;
     closed = true;
@@ -455,8 +465,6 @@ export function openDevice(
     } catch {
       // Already closing.
     }
-    // No rejectOpen: a welcome only arrives on an open socket, so
-    // whenOpen resolved long before this.
     reject(new RemoteConnectError(reason, null, false));
   };
 
@@ -496,7 +504,7 @@ export function openDevice(
       if (frame.t === "challenge") {
         if (!proofMode || hostNonce !== null) return;
         hostNonce = frame.nonce;
-        void sendHello();
+        sendHello().catch(proofFailed);
         return;
       }
       // Anything else pre-welcome is dropped: the host sends nothing
@@ -505,36 +513,9 @@ export function openDevice(
         console.warn("[socket] dropping pre-welcome frame");
         return;
       }
-      if (
-        options.expectedDeviceId !== undefined &&
-        frame.deviceId !== options.expectedDeviceId
-      ) {
-        // The wrong machine answered (a stale address, a NAT
-        // surprise). Blocked, not retryable: redialing the same
-        // address cannot change who lives there, so the caller
-        // surfaces the failure instead of caching the wrong host.
-        closed = true;
-        clearTimeout(helloTimer);
-        try {
-          socket.close();
-        } catch {
-          // Already closing.
-        }
-        reject(
-          new RemoteConnectError(
-            "welcome from an unexpected device",
-            null,
-            true,
-          ),
-        );
-        return;
-      }
       if (proofMode) {
-        // The far end must prove it holds the ticket too. Without this
-        // the dialer would trust whichever machine answered at one of
-        // the peer's advertised addresses, which on a hostile network
-        // is not the peer. Checked before the welcome is recorded, so a
-        // failed proof never becomes an established connection.
+        // The far end must prove it holds the ticket too, before the
+        // welcome is recorded.
         const expected = frame.proof;
         const challenge = hostNonce;
         const nonce = clientNonce;
@@ -545,7 +526,7 @@ export function openDevice(
           );
           return;
         }
-        void verifyHostProof(expected, challenge, nonce, frame);
+        verifyHostProof(expected, challenge, nonce, frame).catch(proofFailed);
         return;
       }
       acceptWelcome(frame.deviceId, frame.appVersion);
@@ -726,7 +707,7 @@ export function openDevice(
     authenticate() {
       if (!helloRequested) {
         helloRequested = true;
-        void sendHello();
+        sendHello().catch(proofFailed);
       }
       return connectPromise;
     },

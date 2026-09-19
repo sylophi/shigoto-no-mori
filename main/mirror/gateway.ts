@@ -9,13 +9,11 @@
 // bridge.ts). Nothing here knows Mutagen's protocol: the preface is
 // the only line the gateway reads.
 //
-// The listener is loopback, which keeps it away from the network but
-// not away from this machine: any other process running as this user
-// could otherwise find the ephemeral port and drive mirror streams
-// against peer devices. So the preface carries a token minted when the
-// gateway binds and handed to the daemon through its environment,
-// never argv, which is readable from `ps`. It authenticates the child
-// we spawned rather than whoever connected first.
+// Loopback keeps the listener off the network but not away from other
+// accounts on this machine, which could find the port and drive mirror
+// streams against peer devices. So the preface carries a token minted
+// at bind and handed to the daemon through its environment, never
+// argv, which every account can read from `ps`.
 //
 // Electron-free on purpose, like the port-forward engine: the mirror
 // check drives this exact gateway over a real direct wire.
@@ -35,9 +33,7 @@ import {
   type PeerChannels,
 } from "../portForward/bridge";
 
-// The environment variable the gateway token rides to the daemon on.
-// file-sync/engine.go reads this exact name, so the two must be changed
-// together.
+// file-sync/engine.go reads this exact name.
 export const MIRROR_GATEWAY_TOKEN_ENV = "SM_MIRROR_GATEWAY_TOKEN";
 
 export type MirrorPeerApi = Pick<Client<typeof mirrorContract>, "openStream">;
@@ -178,8 +174,7 @@ export function createMirrorGateway(deps: {
           return;
         }
         if (!secretsMatch(preface.token, token ?? "")) {
-          // Another local process found the port. Say nothing useful
-          // about why, and log it: nothing legitimate reaches here.
+          // Nothing legitimate reaches here, so log it.
           log("[mirror] gateway refused a connection with a bad token");
           socket.end("error bad preface\n");
           return;
@@ -249,8 +244,6 @@ export function createMirrorGateway(deps: {
     start,
     stop,
     address: () => address,
-    // Handed to the daemon through its environment at spawn. Null until
-    // the listener binds, which is the same moment `address` appears.
     token: () => token,
     streamCount: () => streams.size,
   };

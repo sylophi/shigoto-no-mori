@@ -83,12 +83,10 @@ export function utf8ByteLength(text: string): number {
 export const MAX_ONLINE_DEVICES = 64;
 
 // How many devices one account may have enrolled at once. Sign-up is
-// open to the public and every device can provision a tunnel, which is
-// a real tunnel and DNS record on the owner's Cloudflare account, so an
-// unbounded registry would let one stranger spend the quota every other
-// user shares. Generous for one person: each browser profile that opens
-// the web client counts as a device. Well under MAX_ONLINE_DEVICES, so
-// the roster bound above still holds.
+// public and every device can provision a real tunnel and DNS record
+// on the owner's Cloudflare account, so an unbounded registry would let
+// one stranger spend the quota everyone shares. Each browser profile
+// that opens the web client counts as a device.
 export const MAX_ACCOUNT_DEVICES = 16;
 
 // Application close codes for the hub socket. Deliberately disjoint

@@ -225,18 +225,14 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     if (raw === undefined) {
       throw new Error("That mirror is no longer running.");
     }
-    // The copy goes with the stop, so anything it holds that the peer
-    // does not goes too. Only "synced" proves the peer has everything,
-    // so every other verdict refuses. Checking for "diverged" instead
-    // read as safe in exactly the states where it cannot know: a
-    // paused session reports "off" and an unreachable peer "error",
-    // because divergence is computed against a live peer, and those
-    // are precisely when the user has been working on a copy nobody
-    // else has seen. Fail closed and let them override.
+    // The copy goes with the stop. Refusing on "diverged" alone read
+    // as safe exactly when it cannot know: a paused session reports
+    // "off" and an unreachable peer "error", since divergence is
+    // computed against a live peer. So anything but "synced" refuses.
     const git = daemon.gitStatus(session)?.status;
     if (force !== true && !mirrorStopIsSafe(git)) {
       throw new Error(
-        `${MIRROR_STOP_UNCONFIRMED} (${git ?? "starting"}), so it may hold commits or edits that exist nowhere else. Resume or reconnect the mirror to let it catch up, or stop it anyway to discard them.`,
+        `${MIRROR_STOP_UNCONFIRMED} (${git ?? "starting"}), so it may hold commits that exist nowhere else. Resume or reconnect the mirror to let it catch up, or stop it anyway to discard them.`,
       );
     }
     await daemon.terminate(session);

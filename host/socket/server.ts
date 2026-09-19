@@ -77,11 +77,10 @@ import { toBytes, toText } from "./rawData";
 // means the legacy LAN behavior: static-token auth and the read-only
 // dispatch gate, unchanged.
 export type WsServerTicketAuth = {
-  // Resolves the connect ticket the client PROVED possession of (see
-  // shared/ipc/socket/proof.ts: the ticket itself never travels), for
-  // the claimed hello deviceId and the path the connection arrived on,
-  // and consumes it. Returns the matched ticket so this binding can
-  // compute the host's half of the proof, or null when nothing matches.
+  // Consumes the connect ticket the client proved possession of (it
+  // never travels, see shared/ipc/socket/proof.ts), for the claimed
+  // deviceId and the path the connection arrived on. Returns it so this
+  // binding can compute the host's half, or null when nothing matches.
   matchTicket(
     deviceId: string,
     arrivedAs: DirectCandidateKind,
@@ -220,13 +219,9 @@ export function clientIdentityOf(
   return (cfConnectingIp ?? "").trim();
 }
 
-// Whether the local cloudflared connector delivered this connection: it
-// dials loopback and forwards the real client address in
-// CF-Connecting-IP. One predicate because two things key on it and they
-// must never disagree about the same connection -- the lockout bucket
-// above, and the candidate kind a ticket is held to below. A LAN peer
-// cannot reach this by claiming the header, since its remoteAddress is
-// not loopback.
+// Whether the local cloudflared connector delivered this connection.
+// One predicate, because the lockout bucket above and the candidate
+// kind below must never disagree about the same connection.
 function tunnelBorne(
   remoteAddress: string | undefined,
   cfConnectingIp: string | undefined,
@@ -237,13 +232,36 @@ function tunnelBorne(
   );
 }
 
-// Which advertised candidate a ticket-mode connection actually came in
-// on, so a ticket can be held to the one it was minted for.
+// Which advertised candidate a ticket-mode connection came in on, so a
+// ticket can be held to the kind it was minted for.
 export function arrivalKindOf(
   remoteAddress: string | undefined,
   cfConnectingIp: string | undefined,
 ): DirectCandidateKind {
   return tunnelBorne(remoteAddress, cfConnectingIp) ? "tunnel" : "lan";
+}
+
+// Ticket mode's hello check. Resolves the host's half of the mutual
+// proof when the client proved one of its pending tickets, else null.
+async function answerProof(
+  auth: WsServerTicketAuth,
+  hostNonce: string,
+  arrivedAs: DirectCandidateKind,
+  hello: { deviceId: string; nonce?: string; proof?: string },
+): Promise<string | null> {
+  const { nonce, proof } = hello;
+  if (nonce === undefined || proof === undefined) return null;
+  const ticket = await auth.matchTicket(
+    hello.deviceId,
+    arrivedAs,
+    async (candidate) =>
+      proofsMatch(
+        proof,
+        await handshakeProof(candidate, "client", hostNonce, nonce),
+      ),
+  );
+  if (ticket === null) return null;
+  return handshakeProof(ticket, "host", hostNonce, nonce);
 }
 
 // Origin pre-filter for the upgrade, NOT the security boundary: the
@@ -507,8 +525,6 @@ export function createWsServerBinding(
         cfConnectingIp,
         auth !== undefined,
       );
-      // Which advertised candidate this connection came in on, so the
-      // ticket it presents can be held to the one it was minted for.
       const arrivalKind = arrivalKindOf(
         req.socket.remoteAddress,
         cfConnectingIp,
@@ -576,9 +592,7 @@ export function createWsServerBinding(
       const warnUnknownChannelFrame = createUnknownChannelFrameWarner("socket");
 
       // Ticket mode opens the handshake: the client cannot hello until
-      // it has this nonce, which is what stops the ticket from being
-      // handed to whichever machine merely accepted the socket first.
-      // Sent before any authentication because it is not a secret.
+      // it has this nonce. Not a secret, so it goes out pre-auth.
       const hostNonce = auth === undefined ? null : newHandshakeNonce();
       if (hostNonce !== null) {
         send(socket, { t: "challenge", nonce: hostNonce });
@@ -638,10 +652,8 @@ export function createWsServerBinding(
         console.warn(`[socket] connection error: ${errorMessageOf(error)}`);
       });
       socket.on("message", (data, isBinary) => {
-        // The hello path awaits (the proof check), so this handler is
-        // async and its rejection would otherwise be unhandled and take
-        // the whole host process down. A frame that throws kills its
-        // own connection and nothing else.
+        // The hello path awaits the proof check. A frame that throws
+        // kills its own connection, never the host process.
         void handleMessage(data, isBinary).catch((error) => {
           console.warn(
             `[socket] dropping connection after a failed frame: ${errorMessageOf(error)}`,
@@ -694,43 +706,21 @@ export function createWsServerBinding(
             return;
           }
           helloSeen = true;
-          // Legacy mode compares the static token from the device
-          // config. Ticket mode never receives a ticket: the client
-          // sends its nonce and an HMAC of both nonces under the
-          // ticket, and the store finds which of this peer's pending
-          // tickets that proves, scoped to the path the connection
-          // arrived on. Both failures take the same lockout-counted
-          // auth path. A ticket-mode hello carrying a bare token and no
-          // proof is simply one that proves nothing, and fails here.
-          let proven: { ticket: string; clientNonce: string } | null = null;
-          if (auth !== undefined && hostNonce !== null) {
-            const clientNonce = frame.nonce;
-            const clientProof = frame.proof;
-            if (clientNonce !== undefined && clientProof !== undefined) {
-              const ticket = await auth.matchTicket(
-                frame.deviceId,
-                arrivalKind,
-                async (candidate) =>
-                  proofsMatch(
-                    clientProof,
-                    await handshakeProof(
-                      candidate,
-                      "client",
-                      hostNonce,
-                      clientNonce,
-                    ),
-                  ),
-              );
-              if (ticket !== null) proven = { ticket, clientNonce };
-            }
-          }
-          // The await above yielded, so re-read the liveness flags a
-          // close or a timeout may have set meanwhile.
+          // Legacy mode compares the static token. Ticket mode never
+          // receives a ticket, only a proof of holding one, and a hello
+          // that carries no proof proves nothing. Both failures take
+          // the same lockout-counted auth path.
+          const hostProof =
+            auth === undefined || hostNonce === null
+              ? undefined
+              : await answerProof(auth, hostNonce, arrivalKind, frame);
+          // The await yielded, so re-read the liveness flag a close or
+          // a timeout may have set meanwhile.
           if (dead) return;
           const authenticated =
             auth === undefined
               ? secretsMatch(frame.token ?? "", opts.token)
-              : proven !== null;
+              : typeof hostProof === "string";
           if (!authenticated) {
             dead = true;
             clearTimeout(helloTimer);
@@ -741,21 +731,6 @@ export function createWsServerBinding(
             closeThenTerminate(socket, CLOSE_AUTH_FAILED, "auth failed");
             return;
           }
-          // The host's half of the mutual proof, so the dialer can tell
-          // this listener from a machine that merely answered at one of
-          // the advertised addresses. Only a holder of the ticket can
-          // produce it. Computed here, beside the client's half, so
-          // everything below runs without awaiting again.
-          const hostProof =
-            proven === null || hostNonce === null
-              ? undefined
-              : await handshakeProof(
-                  proven.ticket,
-                  "host",
-                  hostNonce,
-                  proven.clientNonce,
-                );
-          if (dead) return;
           clearTimeout(helloTimer);
           failedAuth.delete(ip);
           leavePreAuth();
@@ -814,7 +789,7 @@ export function createWsServerBinding(
             t: "welcome",
             deviceId: opts.deviceId,
             appVersion: opts.appVersion,
-            proof: hostProof,
+            proof: hostProof ?? undefined,
           });
           return;
         }

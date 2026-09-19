@@ -69,10 +69,9 @@ export function createMirrorDaemon(deps: {
   // spawn (throwing when the gateway is not listening yet, which puts
   // the daemon on the restart ladder until it is).
   gatewayAddress: () => string;
-  // The gateway's per-bind token, handed over through the environment
-  // rather than argv, which any local process can read out of `ps`.
-  // Read at each spawn so a rebound gateway's daemon carries the token
-  // that gateway will actually accept.
+  // The gateway's per-bind token, passed through the environment and
+  // read at each spawn, so a rebound gateway's daemon carries the
+  // token that gateway accepts.
   gatewayToken: () => string;
   // Where the engine persists sessions (a directory under the host's
   // data dir), read at each spawn.

@@ -367,18 +367,10 @@ app.on("second-instance", () => {
 });
 
 app.on("ready", async () => {
-  // Electron grants most permission requests by default. This window
-  // has no use for the camera, the microphone, geolocation or
-  // notifications, and it hosts remote content (Clerk's script and its
-  // captcha iframe), so the whole class is refused rather than left to
-  // a default that could change.
-  //
-  // Copy buttons are the one thing the app does ask for: Electron routes
-  // navigator.clipboard.writeText through here as
-  // clipboard-sanitized-write, and the call sites (copy-button.tsx,
-  // CommitRow.tsx, ErrorFallback.tsx) do not catch a rejection, so
-  // refusing it would break copying silently. Writing text the user
-  // asked to copy is not a capability worth withholding.
+  // Electron grants most permission requests by default, and this
+  // window hosts remote content (Clerk's script and captcha iframe), so
+  // everything is refused except what the app uses: copy buttons, which
+  // Electron routes through here as clipboard-sanitized-write.
   session.defaultSession.setPermissionRequestHandler(
     (_contents, permission, callback) =>
       callback(permission === "clipboard-sanitized-write"),

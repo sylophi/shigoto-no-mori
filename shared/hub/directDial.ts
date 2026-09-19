@@ -43,10 +43,13 @@
 // with no roster transition to unpark on. The close code fixes that at
 // the source.
 //
-// The helloSent gate stays, with a narrower job: FAIL FAST. A blocked
-// verdict on a candidate we helloed aborts the whole attempt at once
-// instead of waiting out a blackhole candidate's deadline. It is also
-// the conservative belt against a peer whose close code cannot be
+// A blocked verdict on a candidate we helloed is terminal, but it does
+// NOT end the race: a refusing far end has proved nothing, and a
+// plaintext LAN address may be held by a squatter, which must not deny
+// a dial the tunnel can still win. The refusal is remembered and
+// decides the attempt only if no candidate wins (at exhaustion or at
+// the deadline). The helloSent gate is also the conservative belt
+// against a peer whose close code cannot be
 // trusted (an old build predating CLOSE_AUTH_LOCKED_OUT): such a
 // blocked-but-never-helloed error retires just that candidate, and if
 // it is the LAST one the exhaustion reject carries it in its transient
@@ -326,6 +329,9 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       // next hello.
       const ready: number[] = [];
       let helloIndex: number | null = null;
+      // The first hello-sent refusal, which decides the attempt only if
+      // no candidate wins.
+      let refusal: RemoteConnectError | null = null;
 
       const handles: PendingDeviceConnection[] = candidates.map(
         (candidate, index) =>
@@ -380,26 +386,22 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
           error.blocked
         ) {
           // The ticket was refused, or the wrong machine answered.
-          // Terminal for the whole attempt: redialing cannot change
-          // it, so the caller learns at once instead of waiting out
-          // the deadline. `blocked` is the load-bearing half (the
-          // host's close code, which distinguishes a refused
-          // credential from its temporary lockout). helloWasSent is
-          // the conservative belt, keeping a peer whose code cannot be
-          // trusted from aborting the rest of the race.
-          done = true;
-          settleAll();
-          reject(error);
-          return;
+          // Terminal, but only once the race is over: the far end
+          // proved nothing, and on a LAN address it may be a squatter,
+          // which must not deny a dial another candidate can win.
+          // `blocked` is the host's close code, which tells a refused
+          // credential from its temporary lockout. helloWasSent is the
+          // belt against a peer whose code cannot be trusted.
+          refusal ??= error;
         }
         failures.push({ candidate: candidates[index], error });
         outstanding -= 1;
         if (outstanding === 0) {
           done = true;
-          // Every candidate retired without a hello-sent refusal, so a
-          // blocked verdict among them came from a peer whose close
-          // code cannot be trusted, and is surfaced as transient.
-          reject(exhaustionError(deviceId, failures));
+          // Without a hello-sent refusal, a blocked verdict among the
+          // failures came from a peer whose close code cannot be
+          // trusted, and is surfaced as transient.
+          reject(refusal ?? exhaustionError(deviceId, failures));
         }
       };
 
@@ -448,7 +450,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
         if (done) return;
         done = true;
         settleAll();
-        reject(error);
+        reject(refusal ?? error);
       });
     });
   }

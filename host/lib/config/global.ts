@@ -200,9 +200,7 @@ function updateConfigDocSync(
     const doc = readJsonOrNullSync(path, StoredGlobalConfigSchema);
     if (doc === null || !mutate(doc)) return false;
     // 0o600 like the credential and grant stores: this document carries
-    // socketHost.token, the bearer secret the LAN wire authenticates
-    // with, and the default 0644 would hand it to every other account
-    // on the machine.
+    // socketHost.token, the LAN wire's bearer secret.
     atomicWriteJsonSync(path, withSchemaVersion(doc), { mode: 0o600 });
     cache.invalidate();
     return true;

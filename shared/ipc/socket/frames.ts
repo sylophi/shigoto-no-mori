@@ -143,22 +143,17 @@ export const CLOSE_OVER_CAPACITY = 1013;
 // carried so the server can log or gate version skew later without a
 // protocol change.
 //
-// The credential half comes in one of two shapes, and which one a
-// listener accepts is fixed by how it was constructed, never chosen by
-// the frame: the legacy LAN wire reads `token`, the shared secret from
-// the device config, while the direct data plane reads `nonce` and
-// `proof` and refuses a bare token outright (shared/ipc/socket/proof.ts
-// explains why its ticket must not travel). Both are optional here so
-// one schema serves both wires. Each listener requires its own and
-// fails closed on the other, so the absent field can never be read as
-// a pass.
+// The credential comes in one of two shapes, fixed by how the listener
+// was constructed and never chosen by the frame: the legacy LAN wire
+// reads `token`, the direct data plane reads `nonce` and `proof`
+// (shared/ipc/socket/proof.ts). Both are optional so one schema serves
+// both wires, and each listener fails closed without its own.
 const HelloFrameSchema = z.object({
   t: z.literal("hello"),
   token: z.string().optional(),
   deviceId: z.string(),
   appVersion: z.string(),
-  // The client's half of the handshake nonce pair, and its HMAC of both
-  // nonces under the connect ticket.
+  // The client's nonce, and its HMAC of both nonces under the ticket.
   nonce: z.string().regex(HANDSHAKE_NONCE_PATTERN).optional(),
   proof: z.string().optional(),
 });
@@ -211,15 +206,13 @@ const WelcomeFrameSchema = z.object({
   t: z.literal("welcome"),
   deviceId: z.string(),
   appVersion: z.string(),
-  // The host's half of the mutual proof, present on the direct data
-  // plane only. A ticket-mode client treats a welcome without it as an
-  // impostor: a machine that cannot produce this never held the ticket.
+  // The host's half of the mutual proof, direct data plane only. A
+  // proof-mode client refuses a welcome without it.
   proof: z.string().optional(),
 });
 
-// Opens the direct data plane's handshake, before the client has said
-// anything. It carries no secret, only the host's nonce, so sending it
-// to an unauthenticated socket costs nothing.
+// Opens the direct data plane's handshake. Only the host's nonce, no
+// secret, so it goes to an unauthenticated socket.
 const ChallengeFrameSchema = z.object({
   t: z.literal("challenge"),
   nonce: z.string().regex(HANDSHAKE_NONCE_PATTERN),

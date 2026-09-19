@@ -307,37 +307,27 @@ const MirrorSessionPayloadSchema = z.strictObject({
 });
 
 // Stopping removes the copy on this device, so it is refused unless
-// the peer provably holds everything: the git follower saying "synced"
-// is the only state that proves it. A paused session, an unreachable
-// peer or a session too young to have reconciled all report something
-// else, and each of those is a state where commits and uncommitted
-// edits here may exist nowhere else. `force` is the user overriding
-// that after being told, which stays available because the copy is
-// theirs to discard.
+// the git follower says "synced", the one state where the peer is known
+// to hold this copy's commits. A paused session, an unreachable peer or
+// one too young to have reconciled all report something else. `force`
+// is the user overriding that after being told.
 const MirrorStopPayloadSchema = MirrorSessionPayloadSchema.extend({
   force: z.boolean().optional(),
 });
 
-// The rule itself, so the host that enforces it and the dialog that
-// warns about it cannot drift into disagreeing.
+// Shared by the host that enforces it and the dialog that warns.
 export function mirrorStopIsSafe(
   status: MirrorGitStatus["status"] | undefined,
 ): boolean {
   return status === "synced";
 }
 
-// The refusal's leading text. The host's message continues past it with
-// the live status, and the renderer matches on this prefix to turn a
-// refusal into the discard-and-stop offer rather than a dead end. Text
-// rather than a code because Electron's IPC error serialization
-// flattens an error to its message, the same reason
-// COMMAND_REFUSED_MESSAGE is matched that way.
+// The refusal's leading text, which the renderer matches to offer
+// discard-and-stop. Text rather than a code because Electron's IPC
+// flattens an error to its message (see COMMAND_REFUSED_MESSAGE).
 export const MIRROR_STOP_UNCONFIRMED =
   "This copy is not confirmed in step with the other device";
 
-// Whether a failed stop was the confirmation refusal rather than a real
-// failure. Matches the message text, which is what survives Electron's
-// IPC error serialization.
 export function isMirrorStopUnconfirmed(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes(MIRROR_STOP_UNCONFIRMED);

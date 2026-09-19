@@ -1,47 +1,32 @@
 // Mutual proof of ticket possession for the direct data plane's hello.
 //
-// The connect ticket is a bearer secret, and the dialer races candidate
-// addresses it learned from the peer: LAN interface addresses that are
-// plain ws:// and answered by whoever holds that address on whatever
-// network the dialer is currently sitting on. Handing the ticket over
-// as the first frame therefore handed it to the first machine that
-// accepted a socket, which on a hostile network is not the peer. That
-// machine could then spend the still-live ticket against the real
-// listener over a different candidate.
+// The dialer races candidate addresses it learned from the peer, and a
+// plain ws:// LAN address is answered by whoever holds it on the
+// network the dialer is sitting on. A ticket sent in the hello would go
+// to that machine, which could then spend it against the real listener.
 //
-// So the ticket never travels. The host opens with a random nonce, the
-// client answers with its own nonce and an HMAC of both under the
-// ticket, and the welcome carries the host's HMAC of the same pair
-// under the other role. Each side proves it already holds the ticket
-// without revealing it, and a recorded exchange is worthless against
-// the next one because both nonces are fresh. A machine that does not
-// hold the ticket cannot produce either half, so an impostor on a LAN
-// address is caught at the welcome instead of being trusted.
+// So the ticket never travels. The host opens with a nonce, the client
+// answers with its own nonce and an HMAC of both under the ticket, and
+// the welcome carries the host's HMAC of the same pair under the other
+// role. Neither side trusts a far end that cannot produce its half.
 //
-// This is not confidentiality: a LAN candidate is still plaintext, so
-// anyone already positioned on that network reads and can rewrite the
-// traffic that follows. Closing that needs TLS on the LAN candidate
-// with the certificate pinned through the hub. What this does close is
-// the theft of a reusable credential by a machine that merely answered
-// first.
+// This is not confidentiality: a LAN candidate is still plaintext, and
+// closing that needs TLS pinned through the hub. There is deliberately
+// no fallback to a ticket-in-hello handshake, since an attacker who
+// could ask for one would downgrade every dial.
 //
-// Pure browser-global code (Web Crypto, no node builtins): the same
-// helper serves the host, the desktop dialer and the web client.
+// Web Crypto only, no node builtins: the same helper serves the host,
+// the desktop dialer and the web client.
 
-// Domain separation, so a proof can only ever be read as what it is.
-// The version rides along because both ends are app builds that the
-// owner rolls out together: there is deliberately NO fallback to the
-// old ticket-in-hello handshake, since an attacker who could ask for
-// one would simply downgrade every dial back into the hole above.
+// Domain separation, versioned so a changed construction cannot be
+// confused with this one.
 const PROOF_DOMAIN = "sm-direct-v1";
 
-// 128 bits, the same width as the ticket's own random half. The nonce
-// is public; it only has to never repeat for a given ticket.
+// 128 bits. A nonce is public and only has to never repeat per ticket.
 const NONCE_BYTES = 16;
 
-// The wire shape of both nonces, enforced at the frame schema so a
-// malformed one is a malformed hello rather than something the proof
-// construction has to defend against.
+// Enforced at the frame schema, so a malformed nonce is a malformed
+// frame and never reaches the proof construction.
 export const HANDSHAKE_NONCE_PATTERN = /^[0-9a-f]{32}$/;
 
 function toHex(bytes: Uint8Array): string {
@@ -56,9 +41,8 @@ export function newHandshakeNonce(): string {
   return toHex(bytes);
 }
 
-// Which end of the exchange a proof speaks for. Both halves cover the
-// same two nonces, so the role is what keeps the client's proof from
-// being replayed straight back at it as the host's.
+// Both proofs cover the same nonce pair, so the role is what keeps the
+// client's proof from being replayed back at it as the host's.
 export type HandshakeRole = "client" | "host";
 
 export async function handshakeProof(
@@ -83,9 +67,7 @@ export async function handshakeProof(
   return toHex(new Uint8Array(mac));
 }
 
-// Constant-time-ish compare over the hex text. Both sides are fixed
-// width, so the length check leaks nothing, and the loop runs to the
-// end regardless so a shared prefix is not measurable.
+// Runs to the end regardless, so a shared prefix is not measurable.
 export function proofsMatch(a: string, b: string): boolean {
   if (a.length === 0 || a.length !== b.length) return false;
   let diff = 0;

@@ -140,10 +140,8 @@ func (s stdioStream) Close() error {
 // peer to reach and the worktree there. The gateway answers with one
 // line, "ok" or "error <message>".
 type mirrorPreface struct {
-	// Proves this is the daemon the gateway spawned rather than another
-	// process on this machine that found the loopback port. Handed over
-	// in the environment (see mirrorGatewayTokenEnv), never argv, which
-	// is world-readable through `ps`.
+	// Proves this is the daemon the gateway spawned. Handed over in the
+	// environment (mirrorGatewayTokenEnv), never argv.
 	Token      string `json:"token"`
 	DeviceID   string `json:"deviceId"`
 	ProjectID  string `json:"projectId"`
@@ -153,9 +151,7 @@ type mirrorPreface struct {
 	LocalWorktreeID string `json:"localWorktreeId,omitempty"`
 }
 
-// The environment variable carrying the gateway token. main/mirror/
-// gateway.ts mints the value and exports this same name, so the two
-// must be changed together.
+// main/mirror/gateway.ts mints the value and exports this same name.
 const mirrorGatewayTokenEnv = "SM_MIRROR_GATEWAY_TOKEN"
 
 type mirrorGatewayHandler struct {
@@ -499,13 +495,10 @@ func createMirrorSession(ctx context.Context, manager *synchronization.Manager, 
 	// files cross too. The caller's ignores follow the pointer: what
 	// git ignores on the source, or the user's own pick, stays where
 	// it is.
-	// The .git pointer rule is appended LAST, after the caller's
-	// patterns. Mutagen applies patterns in order with the last match
-	// winning and a "!" prefix flipping an ignore back to an include,
-	// and the caller's list is derived from the repository's own
-	// .gitignore files, so a repo carrying a negation like "!.git*"
-	// would cancel a guard placed first and put the pointer file back
-	// in the sync set.
+	// The .git pointer rule goes LAST. The last matching pattern wins
+	// and "!" flips an ignore back to an include, so a repo whose
+	// .gitignore carries a negation like "!.git*" would cancel a guard
+	// placed first.
 	ignores := make([]string, 0, 1+len(req.Ignores))
 	for _, pattern := range req.Ignores {
 		if pattern == "" || pattern == mirrorGitPointerIgnore {

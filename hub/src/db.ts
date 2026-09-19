@@ -59,16 +59,20 @@ export async function listDevicesByCredentialHash(
   return result.results;
 }
 
-// How many devices the account has enrolled, for the enroll cap.
-export async function countAccountDevices(
+// The account's device ids, least recently seen first, for the enroll
+// cap and its eviction. A device that never connected sorts by when it
+// enrolled.
+export async function listAccountDeviceIds(
   db: D1Database,
   accountId: string,
-): Promise<number> {
-  const row = await db
-    .prepare("SELECT COUNT(*) AS count FROM devices WHERE account_id = ?")
+): Promise<string[]> {
+  const result = await db
+    .prepare(
+      "SELECT device_id FROM devices WHERE account_id = ? ORDER BY COALESCE(last_seen_at, created_at), device_id",
+    )
     .bind(accountId)
-    .first<{ count: number }>();
-  return row?.count ?? 0;
+    .all<{ device_id: string }>();
+  return result.results.map((row) => row.device_id);
 }
 
 // Enrollment upsert. Re-enrolling an existing device rotates the

@@ -632,7 +632,7 @@ async function main() {
   );
 
   await check(
-    "blocked verdict is terminal: an auth-refused candidate rejects the whole attempt instead of waiting out the remaining candidates",
+    "blocked verdict is terminal but does not end the race: an auth-refused candidate still rejects the attempt as blocked once the remaining candidates have had their turn, never as a transient timeout",
     async (track) => {
       const stub = await startStubHub();
       track(() => stub.close());
@@ -650,8 +650,7 @@ async function main() {
       const { client } = await bootPair(stub, track, brokerListener, {
         candidateAddresses: () => ["127.0.0.1", BLACKHOLE],
       });
-      const { bridge } = makeDirectBridge(client, { deadlineMs: 5000 });
-      const startedAt = Date.now();
+      const { bridge } = makeDirectBridge(client, { deadlineMs: 1500 });
       await assert.rejects(
         () => bridge.dialPeer("B"),
         (error) =>
@@ -660,11 +659,34 @@ async function main() {
           error.code === CLOSE_AUTH_FAILED,
         "an auth-refused candidate did not reject the attempt as blocked",
       );
-      const elapsed = Date.now() - startedAt;
-      assert.ok(
-        elapsed < 2500,
-        `the blocked verdict waited on the blackhole candidate (${elapsed}ms)`,
-      );
+    },
+  );
+
+  await check(
+    "a refusing candidate cannot deny the dial: a far end that refuses has proved nothing (on a LAN address it may be a squatter), so a candidate that opens later still wins",
+    async (track) => {
+      const listener = await startDirectListener(track);
+      // A different device's listener stands in for the squatter: it
+      // holds none of our tickets, so it refuses the hello it is sent.
+      const squatter = await startDirectListener(track, { deviceId: "X" });
+      // The real listener sits behind a delay, so the squatter opens,
+      // takes the first hello and refuses it before the real one is up.
+      const slowPort = await delayProxy(track, listener.port, 250);
+      const [ticket] = mintTickets(listener.tickets, "A", 1);
+      const { dialer } = fakeBrokerDialer({
+        available: true,
+        candidates: [
+          {
+            kind: "lan",
+            url: `ws://127.0.0.1:${squatter.port}`,
+            ticket: "smpt_never_minted",
+          },
+          { kind: "lan", url: `ws://127.0.0.1:${slowPort}`, ticket },
+        ],
+      });
+      const connection = await dialer.connectDirect("B");
+      track(() => connection.close());
+      assert.equal(connection.remoteDeviceId, "B");
     },
   );
 

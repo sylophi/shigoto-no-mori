@@ -26,12 +26,11 @@ export async function getFileDiff(
   // `a[1].txt` is a glob, and the pane for one file quietly answers with
   // another's hunks.
   const pathspecOpts = ["-c", "core.quotePath=false", "--literal-pathspecs"];
-  // `--no-index` is git reading a file straight off the disk, so it is
-  // the one comparison that would answer for a path git does not count
-  // as a change: an ignored `.env`, say. This read serves remote peers
-  // that may look but not touch, and what they may look at is changes.
-  // Git is asked whether the file is one first. A symlink is safe to let
-  // through: `--no-index` prints where it points, never what is there.
+  // `--no-index` reads a file straight off the disk, so it would answer
+  // for a path git does not count as a change, an ignored `.env`, say.
+  // Read-only remote peers reach this, so git is asked first whether
+  // the file is an untracked change. A symlink is safe to let through:
+  // `--no-index` prints where it points, never what is there.
   if (untracked) {
     const listed = await runLenient(worktreePath, [
       ...pathspecOpts,
