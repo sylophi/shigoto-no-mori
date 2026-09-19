@@ -12,18 +12,13 @@ import { ChipButton } from "@/components/ui/chip-button";
 import { FileManagerIcon } from "@/components/ui/file-manager";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";
+import { useBrowseListing } from "@/hooks/fs/useBrowseListing";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { notifyError } from "@/lib/toast";
 import { ITEM_CLASS } from "@/components/ui/cmdk-classes";
 import {
-  appendBrowsePathSegment,
   canNavigateUp,
   ensureTrailingSep,
-  getBrowseDirectoryPath,
-  getBrowseLeafSegment,
-  getBrowseParentPath,
-  hasTrailingSlash,
   isAnchoredPath,
   normalizeForSubmit,
 } from "@/lib/projectPaths";
@@ -68,31 +63,17 @@ export function FolderPickerModal({
   const { remote } = useHostScope();
   const [highlighted, setHighlighted] = useState<string>("");
 
-  const browseDir = getBrowseDirectoryPath(query);
-  const leafFilter = hasTrailingSlash(query) ? "" : getBrowseLeafSegment(query);
-  const listingEnabled = browseDir.length > 0 && hasTrailingSlash(browseDir);
   const {
-    data: listing,
+    browseDir,
+    leafFilter,
+    listingEnabled,
+    listing,
     isLoading,
     error,
-  } = useFsListDirectory(browseDir, listingEnabled);
-
-  const filtered = (listing?.entries ?? []).filter((e) =>
-    e.name.toLowerCase().startsWith(leafFilter.toLowerCase()),
-  );
-
-  const browseTo = (name: string) => {
-    setQuery(appendBrowsePathSegment(query, name));
-    setHighlighted("");
-  };
-
-  const browseUp = () => {
-    const parent = getBrowseParentPath(query);
-    if (parent) {
-      setQuery(parent);
-      setHighlighted("");
-    }
-  };
+    filtered,
+    browseTo,
+    browseUp,
+  } = useBrowseListing({ query, setQuery, setHighlighted });
 
   const submitTarget = normalizeForSubmit(query);
   // The folder we'd confirm is the resolved listing path when the input
