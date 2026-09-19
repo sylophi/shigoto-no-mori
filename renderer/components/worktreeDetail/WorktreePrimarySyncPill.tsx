@@ -1,7 +1,7 @@
 import { ArrowDown } from "lucide-react";
 import { useSyncWithPrimaryWorktree } from "@/hooks/worktrees/useWorktreeSync";
+import { pluralize } from "@/lib/pluralize";
 import type { Worktree } from "@shared/schemas";
-import { commitsLabel } from "./commitsLabel";
 import { SyncActionButton } from "./SyncActionButton";
 
 // Precondition: caller has verified the worktree is eligible
@@ -15,7 +15,7 @@ export function WorktreePrimarySyncPill({ worktree }: { worktree: Worktree }) {
     <SyncActionButton
       tone="sky"
       icon={ArrowDown}
-      label={`Sync ${commitsLabel(worktree.behindPrimary)} from ${branchName}`}
+      label={`Sync ${pluralize(worktree.behindPrimary, "commit")} from ${branchName}`}
       title={`git fetch && git rebase ${branchName}, falling back to a merge on conflict`}
       pending={sync.isPending}
       onClick={() =>

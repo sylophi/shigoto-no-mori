@@ -99,10 +99,6 @@ interface OutputLog {
 interface RunMeta {
   worktreeId: string;
   slotKind: SlotKind;
-  exitDeferred: {
-    promise: Promise<number | null>;
-    resolve: (code: number | null) => void;
-  } | null;
 }
 
 export type ScriptActivityKind = "setup" | "teardown" | "package";
@@ -175,7 +171,7 @@ export class ScriptRunsStore {
   }
 
   async run(input: StartInput): Promise<void> {
-    this.setMetaWithDeferred(input.key, input.worktreeId, input.slot);
+    this.setMeta(input.key, input.worktreeId, input.slot);
     this.buffers.delete(input.key);
 
     this.setStateWithActivity(input.key, () => ({
@@ -201,9 +197,6 @@ export class ScriptRunsStore {
         status: "errored",
         endedAt: Date.now(),
       }));
-      const m = this.meta.get(input.key);
-      m?.exitDeferred?.resolve(null);
-      if (m) this.meta.set(input.key, { ...m, exitDeferred: null });
       throw err;
     }
 
@@ -317,12 +310,6 @@ export class ScriptRunsStore {
     });
   }
 
-  awaitExit(key: ScriptKey): Promise<number | null> {
-    const m = this.meta.get(key);
-    if (m?.exitDeferred) return m.exitDeferred.promise;
-    return Promise.resolve(this.states.get(key)?.exitCode ?? null);
-  }
-
   snapshot(key: ScriptKey): ScriptRunState {
     return this.states.get(key) ?? EMPTY_STATE;
   }
@@ -422,8 +409,6 @@ export class ScriptRunsStore {
         return;
       case "exit": {
         const m = this.meta.get(key);
-        m?.exitDeferred?.resolve(event.code);
-        if (m) this.meta.set(key, { ...m, exitDeferred: null });
         this.runIdToKey.delete(event.runId);
         this.appendChunk(key, exitSentinel(event.code));
         this.setStateWithActivity(key, (s) => ({
@@ -467,22 +452,10 @@ export class ScriptRunsStore {
     });
   }
 
-  private setMetaWithDeferred(
-    key: ScriptKey,
-    worktreeId: string,
-    slot: ScriptSlot,
-  ): void {
+  private setMeta(key: ScriptKey, worktreeId: string, slot: ScriptSlot): void {
     const prev = this.states.get(key);
     if (prev?.runId) this.runIdToKey.delete(prev.runId);
-    let deferredResolve!: (code: number | null) => void;
-    const exitPromise = new Promise<number | null>((resolve) => {
-      deferredResolve = resolve;
-    });
-    this.meta.set(key, {
-      worktreeId,
-      slotKind: deriveSlotKind(slot),
-      exitDeferred: { promise: exitPromise, resolve: deferredResolve },
-    });
+    this.meta.set(key, { worktreeId, slotKind: deriveSlotKind(slot) });
   }
 
   private bindRunIdAndDrain(key: ScriptKey, runId: string): void {
@@ -496,7 +469,7 @@ export class ScriptRunsStore {
 
   private bindStarted(event: Extract<ScriptEvent, { kind: "started" }>): void {
     const key = scriptKey(event.projectId, event.worktreeId, event.slot);
-    this.setMetaWithDeferred(key, event.worktreeId, event.slot);
+    this.setMeta(key, event.worktreeId, event.slot);
     this.buffers.delete(key);
 
     this.setStateWithActivity(key, () => ({

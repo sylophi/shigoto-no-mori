@@ -2,7 +2,6 @@ import { z } from "zod";
 import { ProjectScopedPayloadSchema } from "./payloads";
 
 export const PullRequestStateSchema = z.enum(["OPEN", "CLOSED", "MERGED"]);
-export type PullRequestState = z.infer<typeof PullRequestStateSchema>;
 
 export const PullRequestSchema = z.object({
   number: z.number().int().positive(),
@@ -216,9 +215,6 @@ export const MergePullRequestPayloadSchema = ProjectScopedPayloadSchema.extend({
   number: z.number().int().positive(),
   method: MergeMethodSchema,
 });
-export type MergePullRequestPayload = z.infer<
-  typeof MergePullRequestPayloadSchema
->;
 
 export const SetPullRequestDraftPayloadSchema =
   ProjectScopedPayloadSchema.extend({
