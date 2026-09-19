@@ -18,7 +18,7 @@ import {
   GitBranch,
 } from "lucide-react";
 import { repoNameFromUrl, stripUrlCredentials } from "@shared/cloneUrl";
-import { normalizeRemoteUrl } from "@shared/repoIdentity.mts";
+import { normalizeRemoteUrl } from "@shared/git/repoIdentity.mts";
 import {
   canNavigateUp,
   ensureTrailingSep,
@@ -30,7 +30,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ChipButton } from "@/components/ui/chip-button";
 import { FileManagerIcon } from "@/components/ui/file-manager";
-import { FolderPickerModal } from "@/components/ui/folder-picker-modal";
+import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import {
   useAddProject,
   useCloneProject,

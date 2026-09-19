@@ -18,12 +18,12 @@ import { app, net, protocol } from "electron";
 import { createClerkBridge } from "@clerk/electron";
 import { storage } from "@clerk/electron/storage";
 import type { TokenStorage } from "@clerk/electron";
-import { CLERK_TOKEN_STORE } from "@shared/appName.mts";
+import { CLERK_TOKEN_STORE } from "@shared/packaging/appName.mts";
 import {
   RENDERER_SCHEME_HOST,
   rendererSchemeName,
   rendererSchemeOrigin,
-} from "@shared/rendererScheme.mts";
+} from "@shared/packaging/rendererScheme.mts";
 
 function rendererScheme(): string {
   return rendererSchemeName(app.isPackaged ? "prod" : "dev");

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isSafeRelPath } from "../gitPaths";
+import { isSafeRelPath } from "../git/gitPaths";
 import { WorktreeScopedPayloadSchema } from "./payloads";
 import { CommitHashSchema, WorktreeSchema } from "./worktree";
 

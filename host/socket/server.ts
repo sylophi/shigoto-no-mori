@@ -26,13 +26,14 @@
 // peer tracking (one authed socket per deviceId with supersede). All
 // the hardening above is shared between both instances.
 //
-// This file must stay Electron free (host:check). The Electron facts a
-// listener needs (appVersion) arrive through start opts instead.
+// This file must stay Electron free (pnpm test host-boundary). The
+// Electron facts a listener needs (appVersion) arrive through start
+// opts instead.
 import type { IncomingMessage } from "node:http";
 import { WebSocket, WebSocketServer } from "ws";
 import { errorMessageOf } from "@shared/errors";
 import { secretsMatch } from "@host/lib/util/secretCompare";
-import { rendererSchemeOrigins } from "@shared/rendererScheme.mts";
+import { rendererSchemeOrigins } from "@shared/packaging/rendererScheme.mts";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
 import {
   CLOSE_AUTH_FAILED,

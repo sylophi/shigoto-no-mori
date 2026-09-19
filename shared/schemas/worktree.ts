@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isValidWorktreeDirName } from "../branches";
+import { isValidWorktreeDirName } from "../git/branches";
 import {
   ProjectScopedPayloadSchema,
   WorktreeScopedPayloadSchema,

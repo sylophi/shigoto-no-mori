@@ -415,8 +415,8 @@ func rcFileMode(path string) os.FileMode {
 }
 
 // Atomic replace (temp sibling + rename), the same shape as
-// replaceWithSymlinkSync in shared/cliDist.mts: a failed or interrupted
-// write must never leave the user's rc truncated.
+// replaceWithSymlinkSync in shared/packaging/cliDist.mts: a failed or
+// interrupted write must never leave the user's rc truncated.
 func writeHookFile(path, content string, mode os.FileMode) error {
 	tmp := filepath.Join(filepath.Dir(path),
 		fmt.Sprintf(".%s.tmp-%d", filepath.Base(path), os.Getpid()))

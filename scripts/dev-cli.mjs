@@ -28,7 +28,7 @@ function build(script, ...args) {
 
 // The file-sync engine ships beside the CLI and the app spawns it the
 // same way, so a dev run builds it here too (one flavor, see
-// shared/fileSyncDist.mts).
+// shared/packaging/fileSyncDist.mts).
 await Promise.all([
   build("build-cli.mjs", "--dev"),
   build("build-file-sync.mjs"),

@@ -16,7 +16,7 @@ import type {
   ShigomoriWorktreeData,
 } from "@shared/schemas";
 import { repoNameFromUrl } from "@shared/cloneUrl";
-import { normalizeRemoteUrl } from "@shared/repoIdentity.mts";
+import { normalizeRemoteUrl } from "@shared/git/repoIdentity.mts";
 import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,

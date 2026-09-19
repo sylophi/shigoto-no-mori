@@ -6,7 +6,7 @@
 // backs the Configure view's read.
 
 import { join } from "node:path";
-import { makeIgnoreMatcher, normalizeRelPath } from "@shared/gitPaths";
+import { makeIgnoreMatcher, normalizeRelPath } from "@shared/git/gitPaths";
 import { pathExists } from "../util/paths";
 import type { WorktreeIncludeStatus } from "@shared/schemas";
 import {

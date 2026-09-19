@@ -14,31 +14,31 @@ import {
   CLI_DIST_DIR,
   cliBinaryName,
   UPDATE_FEED_REPO,
-} from "./shared/cliDist.mts";
+} from "./shared/packaging/cliDist.mts";
 import { productName, version } from "./package.json";
 import {
   CLOUDFLARED_BINARY_NAME,
   CLOUDFLARED_DIST_DIR,
-} from "./shared/cloudflaredDist.mts";
+} from "./shared/packaging/cloudflaredDist.mts";
 import {
   FILE_SYNC_BINARY_NAME,
   FILE_SYNC_DIST_DIR,
-} from "./shared/fileSyncDist.mts";
-import { LOCAL_NETWORK_USAGE_DESCRIPTION } from "./shared/infoPlist.mts";
-import { macSigningIdentity } from "./shared/macSigning.mts";
-import { rendererSchemeName } from "./shared/rendererScheme.mts";
+} from "./shared/packaging/fileSyncDist.mts";
+import { LOCAL_NETWORK_USAGE_DESCRIPTION } from "./shared/packaging/infoPlist.mts";
+import { macSigningIdentity } from "./shared/packaging/macSigning.mts";
+import { rendererSchemeName } from "./shared/packaging/rendererScheme.mts";
 import {
   NODE_PTY_ADDON,
   NODE_PTY_SPAWN_HELPER,
   nodePtyPrebuildDir,
-} from "./shared/nodePty.mts";
+} from "./shared/packaging/nodePty.mts";
 import {
   DMG_APP_ICON,
   DMG_APPS_ICON,
   DMG_ICON_SIZE,
   DMG_WINDOW,
   dmgBackgroundFor,
-} from "./shared/dmgLayout.mts";
+} from "./shared/packaging/dmgLayout.mts";
 
 loadEnv();
 
@@ -58,7 +58,7 @@ const osxNotarizeConfig = process.env.APPLE_NOTARY_KEYCHAIN_PROFILE
 
 // The same reading vite.node.config.ts bakes into main as
 // __SM_SIGNED_MAC_BUILD__: the two must agree on whether this bundle
-// carries a Developer ID signature (see shared/macSigning.mts).
+// carries a Developer ID signature (see shared/packaging/macSigning.mts).
 const signingIdentity = macSigningIdentity(process.env);
 const shouldSignMac = signingIdentity !== null;
 const shouldNotarizeMac = shouldSignMac && Boolean(osxNotarizeConfig);
@@ -124,15 +124,15 @@ const config: ForgeConfig = {
       "resources/licenses",
       `${CLI_DIST_DIR}/${cliBinaryName("prod")}`,
       // The tunnel connector, fetched by the prePackage hook below for
-      // the target platform (shared/cloudflaredDist.mts pins it), so
-      // remote access needs nothing installed.
+      // the target platform (shared/packaging/cloudflaredDist.mts pins
+      // it), so remote access needs nothing installed.
       `${CLOUDFLARED_DIST_DIR}/${CLOUDFLARED_BINARY_NAME}`,
       // The file-sync engine (continuous worktree mirroring), compiled
       // by the prePackage hook like the CLI and spawned only by main.
       `${FILE_SYNC_DIST_DIR}/${FILE_SYNC_BINARY_NAME}`,
     ],
     // The Local Network prompt's sentence (macOS 15+), shared with the
-    // dev bundle. See shared/infoPlist.mts.
+    // dev bundle. See shared/packaging/infoPlist.mts.
     extendInfo: {
       NSLocalNetworkUsageDescription: LOCAL_NETWORK_USAGE_DESCRIPTION,
     },
@@ -275,7 +275,7 @@ const config: ForgeConfig = {
       // Disabled: the app has no cookies/sessions/autofill to protect,
       // and turning this on would put every flavor, ad-hoc dev bundles
       // included, on the real macOS keychain for cookie keys, which is
-      // the login-password prompt storm main/keychain/reset.ts
+      // the login-password prompt storm main/core/keychain/reset.ts
       // describes. safeStorage's own keychain use is governed by the
       // policy in main/index.ts instead.
       [FuseV1Options.EnableCookieEncryption]: false,

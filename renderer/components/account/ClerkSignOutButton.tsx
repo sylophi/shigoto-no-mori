@@ -6,13 +6,7 @@ import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
 
-export function ClerkSignOutButton({
-  className,
-  onSignedOut,
-}: {
-  className?: string;
-  onSignedOut?: () => void;
-}) {
+export function ClerkSignOutButton({ className }: { className?: string }) {
   const signOut = useClerkSignOut();
   return (
     <Button
@@ -20,7 +14,7 @@ export function ClerkSignOutButton({
       size="sm"
       className={className}
       disabled={signOut.isPending}
-      onClick={() => signOut.mutate(undefined, { onSuccess: onSignedOut })}
+      onClick={() => signOut.mutate()}
     >
       <LogOut />
       Sign out

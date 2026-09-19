@@ -5,11 +5,7 @@ import {
   DEV_NAME_SUFFIX,
   DEV_USER_DATA_SUFFIX,
   devProfileUserData,
-} from "@shared/appName.mts";
-import { APP_VERSION_FLAG } from "@shared/appVersionFlag.mts";
-import { CLERK_PK_FLAG } from "@shared/clerkPkFlag.mts";
-import { DEV_BUILD_FLAG } from "@shared/devBuildFlag.mts";
-import { DEVICE_ID_FLAG } from "@shared/deviceIdFlag.mts";
+} from "@shared/packaging/appName.mts";
 import { gitContract } from "@shared/ipc/modules/git";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { windowContract } from "@shared/ipc/modules/window";
@@ -21,6 +17,12 @@ import {
   rendererSchemeUrl,
   serveRendererOverScheme,
 } from "./electron/clerk";
+import {
+  APP_VERSION_FLAG,
+  CLERK_PK_FLAG,
+  DEV_BUILD_FLAG,
+  DEVICE_ID_FLAG,
+} from "./argFlags";
 import { attachContextMenu } from "./electron/contextMenu";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { enableDevCdpPort } from "./electron/devCdp";
@@ -39,7 +41,7 @@ import {
   registerIpcHandlers,
   startMirrorEngine,
   stopMirrorEngine,
-} from "./ipc";
+} from "./ipc/handlers";
 import { clerkPublishableKey } from "./ipc/modules/account";
 import { stopAllPortForwards } from "./ipc/modules/portForward";
 import { installHostImpls } from "./electron/hostImpls";
@@ -67,13 +69,13 @@ import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktre
 import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
 import { killAllCli, cliChildCount } from "./electron/cliRunner";
-import { applyUserShellPath } from "./electron/shellPath";
+import { applyUserShellPath } from "./core/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
 import {
   gitDirOf,
   reconcileGitWatchers,
   startGitWatcher,
-} from "./electron/gitWatcher";
+} from "./core/gitWatcher";
 import { gitSelfWroteWithin, SELF_ECHO_MS } from "@host/lib/util/selfWrite";
 import { confirmBusyActionSync } from "./electron/busyPrompt";
 import { isRelaunching } from "./electron/relaunch";
@@ -112,10 +114,10 @@ function devProfile(): string | null {
 if (!app.isPackaged) {
   const profile = devProfile();
   const devUserData = `${app.getPath("userData")}${DEV_USER_DATA_SUFFIX}`;
-  // A dev profile (shared/appName.mts) is a further dev instance on
-  // this machine with its own userData, so its own lock, credential,
-  // grants and tokens: a separate device for testing remote flows
-  // against a real peer (scripts/dev-peer.mts).
+  // A dev profile (shared/packaging/appName.mts) is a further dev
+  // instance on this machine with its own userData, so its own lock,
+  // credential, grants and tokens: a separate device for testing remote
+  // flows against a real peer (scripts/dev-peer.mts).
   app.setPath(
     "userData",
     profile === null ? devUserData : devProfileUserData(devUserData, profile),
@@ -154,7 +156,7 @@ if (!app.requestSingleInstanceLock()) {
 // mock keychain, where safeStorage still reports encryption available
 // under a constant key: tokens obfuscated, not protected, the
 // accepted trade for a build that only runs on the owner's machine.
-// main/keychain/reset.ts has the model behind the split. After the
+// main/core/keychain/reset.ts has the model behind the split. After the
 // lock: a losing second instance must not delete the running app's
 // key on its way out. Before the Clerk bridge and the IPC handlers,
 // the two paths to safeStorage.
@@ -456,7 +458,7 @@ app.on("ready", async () => {
   // The hub socket: connect to the account's
   // Durable Object when a credential is stored. The same reconcile
   // reruns after every account change (the emitChanged path in
-  // main/ipc/index.ts), making this the boot-time pass only. The
+  // main/ipc/handlers.ts), making this the boot-time pass only. The
   // direct data-plane listener follows the same
   // enrollment condition, so its reconcile rides this refresh's tail.
   void refreshHubConnection();

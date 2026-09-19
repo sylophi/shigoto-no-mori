@@ -1,7 +1,7 @@
 // The browser hub connection: the shared lifecycle core
 // in shared/hub/connection.ts bound to the browser WebSocket global
 // (no node ws), so it runs in a plain browser and, under node 22 (which
-// ships a global WebSocket client), in the headless web:hub:check.
+// ships a global WebSocket client), in the headless web-hub test.
 //
 // A web client is a refuse-all host: it supplies the broker CHANNEL
 // (the client role's req frames need it) but no handler, so the link's
@@ -11,11 +11,11 @@
 // surface (connectBroker) plus the lifecycle (refresh, stop, status),
 // not the broker slot the node connection carries.
 //
-// This file must stay electron-free and node-builtin-free (host:check):
-// everything platform specific arrives through browser globals or the
-// injected HubConnectOpts (deviceId, appVersion, accountId, the
-// credential-backed ticket mint) and options (the broker channel, so
-// no contract import lands here).
+// This file must stay electron-free and node-builtin-free (pnpm test
+// host-boundary): everything platform specific arrives through browser
+// globals or the injected HubConnectOpts (deviceId, appVersion,
+// accountId, the credential-backed ticket mint) and options (the broker
+// channel, so no contract import lands here).
 import { type HubBrokerSession, HubLinkDownError } from "@shared/hub/link";
 import {
   createHubConnectionCore,

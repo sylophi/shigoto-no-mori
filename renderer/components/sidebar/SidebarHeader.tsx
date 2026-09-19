@@ -18,7 +18,7 @@ const badge = hasLocalHost ? undefined : "web";
 
 // Both headers always render; `doubutsu-only` / `v1-only` pick which
 // shows. A JS branch on the theme would fork this component per theme
-// and be invisible to `pnpm theme:check`.
+// and be invisible to `pnpm test theme-contract`.
 export function SidebarHeader() {
   // A client fact off the preload bridge, not runtime.info: the badge
   // marks this build, never the host it talks to.

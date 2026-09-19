@@ -1,8 +1,8 @@
-import { DeviceChip } from "@/components/remote/DeviceChip";
+import { DeviceChip } from "@/components/shared/DeviceChip";
 import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeader";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { PathSpan } from "@/components/ui/path-span";
-import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
+import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { cn } from "@/lib/utils";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";

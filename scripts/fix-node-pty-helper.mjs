@@ -21,7 +21,7 @@ import {
   NODE_PTY_PREBUILDS,
   NODE_PTY_SPAWN_HELPER,
   nodePtyPrebuildDir,
-} from "../shared/nodePty.mts";
+} from "../shared/packaging/nodePty.mts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 

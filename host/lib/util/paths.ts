@@ -11,7 +11,7 @@ import {
   dataDirPointerPath as pointerPathFor,
   legacyDataDirName,
   legacyDataDirPointerPath as legacyPointerPathFor,
-} from "@shared/cliDist.mts";
+} from "@shared/packaging/cliDist.mts";
 
 // How the data dir was resolved: the env override, a pointer file
 // (either filename), a pre-2.0 default adopted in place, or the flavor
@@ -35,15 +35,16 @@ let cachedFlavor: CliFlavor | null = null;
 // The pointer file the resolution actually read, for messages.
 let cachedPointerRead: string | null = null;
 
-// Called once at boot from main/index.ts with `app.isPackaged`. Keeping the
-// `electron` import out of this file is what lets the rest of `host/lib/`
-// stay free of Electron coupling. Refuses a second call so a stray re-init
-// from somewhere unexpected fails loudly instead of silently flipping the
-// path under live callers. Resolution matches the CLI (cli/state.go
-// initDataDir): SHIGOMORI_DATA_DIR env override first (so a test harness
-// can sandbox the app), then the flavor's pointer file (policy in
-// shared/cliDist.mts), then the flavor's default under $HOME, with a
-// pre-2.0 default adopted in place while it still holds the state.
+// Called once at boot from main/index.ts with `app.isPackaged`. Keeping
+// the `electron` import out of this file is what lets the rest of
+// `host/lib/` stay free of Electron coupling. Refuses a second call so
+// a stray re-init from somewhere unexpected fails loudly instead of
+// silently flipping the path under live callers. Resolution matches the
+// CLI (cli/state.go initDataDir): SHIGOMORI_DATA_DIR env override first
+// (so a test harness can sandbox the app), then the flavor's pointer
+// file (policy in shared/packaging/cliDist.mts), then the flavor's
+// default under $HOME, with a pre-2.0 default adopted in place while it
+// still holds the state.
 //
 // The override is something a human or a test harness sets, and it must
 // stay that way: the app itself may never put SHIGOMORI_DATA_DIR into a

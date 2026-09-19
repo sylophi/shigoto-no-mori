@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react";
 import { reactCompiler } from "./vite.reactCompiler";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
-import { rendererDevServerPort } from "./shared/portsEnvFile.mts";
+import { rendererDevServerPort } from "./scripts/lib/portsEnvFile.mts";
 
 function gitOutput(args: string): string | null {
   try {

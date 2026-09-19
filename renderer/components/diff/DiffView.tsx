@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import type { DiffChangesControls } from "./changesControls";
 import { DiffFileIndex } from "./DiffFileIndex";
 import { DiffStyleToggle, type DiffStyle } from "./DiffStyleToggle";
-import { changeEntries, fileKey, patchEntries } from "./patchFiles";
+import { changeEntries, fileKey, patchEntries } from "@/lib/patchFiles";
 import { useFileScrollSpy } from "./useFileScrollSpy";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { readStored, writeStored } from "@/lib/localStorage";

@@ -7,7 +7,7 @@
 // reads the same pointer file the app does, so it lands on the app's
 // root without being told.
 import { type ChildProcess, spawn } from "node:child_process";
-import { CLI_DIST_DIR, cliBinaryName } from "@shared/cliDist.mts";
+import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
 import { app } from "electron";
 import { registerInflightContributor } from "@host/lib/scripts";
 import { noteSelfWrite } from "@host/lib/util/selfWrite";

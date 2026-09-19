@@ -198,7 +198,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
   // Any account transition re-reconciles the hub socket and fans the
   // change out so every account query re-reads, matching the desktop's
-  // emitChanged wiring in main/ipc/index.ts.
+  // emitChanged wiring in main/ipc/handlers.ts.
   function accountChanged(): void {
     broadcastAll(accountContract, "changed", undefined, clientWire.server);
     void refreshHub();

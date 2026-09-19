@@ -11,8 +11,9 @@
 // already installed when its target moved, so an existing install
 // keeps working across app updates and relocations.
 //
-// Naming and path policy lives in @shared/cliDist.mts; this module
-// owns the link state machine and the "is that link ours?" judgment.
+// Naming and path policy lives in @shared/packaging/cliDist.mts; this
+// module owns the link state machine and the "is that link ours?"
+// judgment.
 import { lstat, readlink, rm } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import {
@@ -21,7 +22,7 @@ import {
   cliAliasName,
   cliBinaryName,
   cliUserBinDir,
-} from "@shared/cliDist.mts";
+} from "@shared/packaging/cliDist.mts";
 import type { CliStatus } from "@shared/ipc/modules/cli";
 import { app } from "electron";
 import { cliBinaryPath } from "./cliRunner";

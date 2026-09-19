@@ -6,7 +6,7 @@ import {
   ContextMenuContent,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
+import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
 import { useNow } from "@/hooks/ui/useNow";
@@ -21,7 +21,7 @@ import {
 import { ActivityIcon } from "../ActivityIcon";
 import { DeviceBadge, type SidebarDeviceBadge } from "../DeviceBadge";
 import { MirrorBadge } from "../WorktreeRow";
-import { ProjectIcon } from "../ProjectIcon";
+import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { ProjectMenuItems, useProjectMenuRemoveArm } from "../ProjectMenuItems";
 import { PullRequestPill } from "../PullRequestPill";
 import { ChangedFilesPill, RemoteSyncPill } from "../StatusIndicator";

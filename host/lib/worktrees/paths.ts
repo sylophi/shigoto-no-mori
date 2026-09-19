@@ -11,7 +11,7 @@ import {
   layoutInputsFor,
   worktreeBaseFor,
   worktreePathFor,
-} from "@shared/worktreeLayout";
+} from "@shared/git/worktreeLayout";
 import { dataDir } from "../util/paths";
 
 // Every base directory whose direct children count as "managed" for

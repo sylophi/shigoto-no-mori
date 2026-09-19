@@ -24,7 +24,6 @@ export type RuntimeInfo = z.infer<typeof RuntimeInfoSchema>;
 export const MoveDataDirPayloadSchema = z.object({
   parentDir: z.string().min(1).optional(),
 });
-export type MoveDataDirPayload = z.infer<typeof MoveDataDirPayloadSchema>;
 
 // Progress broadcast while `runtime:nuke` runs, driving the renderer's
 // blocking overlay: reap scripts → remove worktrees (with a counter) →

@@ -7,7 +7,7 @@
 // walks the whole directory (node_modules and all) and is fetched
 // per-row so a slow disk never holds up the page.
 import { unknownWorktreeError } from "@shared/errors";
-import { isSameOrInside } from "@shared/worktreeLayout";
+import { isSameOrInside } from "@shared/git/worktreeLayout";
 import {
   isRealBranch,
   type WorktreeDiskUsage,

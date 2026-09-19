@@ -1,6 +1,6 @@
 import { Folder } from "lucide-react";
 import type { Project } from "@shared/schemas";
-import { ProjectIcon } from "@/components/sidebar/ProjectIcon";
+import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { formatBytes } from "@/lib/formatBytes";
 

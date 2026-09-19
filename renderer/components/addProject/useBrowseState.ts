@@ -1,13 +1,6 @@
-import {
-  appendBrowsePathSegment,
-  getBrowseDirectoryPath,
-  getBrowseLeafSegment,
-  getBrowseParentPath,
-  hasTrailingSlash,
-  normalizeForSubmit,
-} from "@/lib/projectPaths";
+import { hasTrailingSlash, normalizeForSubmit } from "@/lib/projectPaths";
+import { useBrowseListing } from "@/hooks/fs/useBrowseListing";
 import { useFsIsGitRepo } from "@/hooks/fs/useFsIsGitRepo";
-import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";
 import { useDebouncedValue } from "@/hooks/ui/useDebouncedValue";
 
 // How long a typed name holds still before it is worth asking about.
@@ -21,26 +14,14 @@ interface UseBrowseStateOptions {
 }
 
 // Browse-mode derivations + navigation helpers for the add-project modal.
-// Owns the directory listing query and the "is this a git repo?" probe, plus
-// the path-segment math so the parent component stays focused on stage
-// orchestration and keyboard handling.
+// The listing and the path-segment moves are useBrowseListing's, shared
+// with the folder picker. This adds the "is this a git repo?" probe, so
+// the parent component stays focused on stage orchestration and keyboard
+// handling.
 export function useBrowseState(opts: UseBrowseStateOptions) {
-  const { query, setQuery, setHighlighted, enabled } = opts;
-
-  const browseDir = getBrowseDirectoryPath(query);
-  const leafFilter = hasTrailingSlash(query) ? "" : getBrowseLeafSegment(query);
-
-  const listingEnabled =
-    enabled && browseDir.length > 0 && hasTrailingSlash(browseDir);
-  const {
-    data: listing,
-    isLoading,
-    error,
-  } = useFsListDirectory(browseDir, listingEnabled);
-
-  const filtered = (listing?.entries ?? []).filter((e) =>
-    e.name.toLowerCase().startsWith(leafFilter.toLowerCase()),
-  );
+  const { query, enabled } = opts;
+  const browse = useBrowseListing(opts);
+  const { listing, leafFilter } = browse;
 
   // What the user is about to submit. When the query points at an
   // existing git repo we offer "Add"; otherwise we offer "Scan for git
@@ -76,30 +57,5 @@ export function useBrowseState(opts: UseBrowseStateOptions) {
   const targetSettled =
     listedAsRepo || (probeTarget === submitTarget && !probing);
 
-  const browseTo = (name: string) => {
-    setQuery(appendBrowsePathSegment(query, name));
-    setHighlighted("");
-  };
-
-  const browseUp = () => {
-    const parent = getBrowseParentPath(query);
-    if (parent) {
-      setQuery(parent);
-      setHighlighted("");
-    }
-  };
-
-  return {
-    browseDir,
-    leafFilter,
-    listing,
-    isLoading,
-    error,
-    filtered,
-    submitTarget,
-    targetIsGitRepo,
-    targetSettled,
-    browseTo,
-    browseUp,
-  };
+  return { ...browse, submitTarget, targetIsGitRepo, targetSettled };
 }

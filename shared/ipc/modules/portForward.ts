@@ -4,8 +4,9 @@ import { HexId32Schema } from "@shared/ipc/hexId";
 import { DeviceIdSchema } from "@shared/hub/protocol";
 import { PortNumberSchema } from "@shared/schemas";
 
-// Client-scoped control surface for the port-forward engine. The engine binds real TCP listeners on THIS machine's
-// loopback (main/portForward/engine.ts) and drives a peer's host-scoped
+// Client-scoped control surface for the port-forward engine. The engine
+// binds real TCP listeners on THIS machine's loopback
+// (main/core/portForward/engine.ts) and drives a peer's host-scoped
 // forward verbs (forward.ts) underneath, so these calls belong to the
 // window's own device exactly like dialog and updater: they never mount
 // on a remote wire, and the web loopback rejects them fail-closed

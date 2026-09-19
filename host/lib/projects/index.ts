@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { basename } from "node:path";
 import { unknownProjectError } from "@shared/errors";
 import type { Project } from "@shared/schemas";
-import { isSameOrInside } from "@shared/worktreeLayout";
+import { isSameOrInside } from "@shared/git/worktreeLayout";
 import { PROJECTS_KEY, registryStore } from "../config/store";
 import { getRepoIdentity } from "../git/repoIdentity";
 import {
@@ -93,7 +93,7 @@ export async function listProjectsWithStatus(): Promise<Project[]> {
 }
 
 // Resolves which LOCAL project a peer's project corresponds to, by repo
-// identity (shared/repoIdentity.mts). First registry match wins: two
+// identity (shared/git/repoIdentity.mts). First registry match wins: two
 // local clones of the same repo are both legitimate targets, so the
 // ambiguity is benign. Recomputed here from disk rather than trusted
 // from the caller, so a pull can never be aimed at a non-matching repo.

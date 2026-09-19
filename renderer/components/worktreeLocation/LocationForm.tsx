@@ -3,7 +3,7 @@ import { Info } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { FolderPickerModal } from "@/components/ui/folder-picker-modal";
+import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
 import { useRelocateWorktree } from "@/hooks/worktrees/useWorktreeMutations";
@@ -13,7 +13,7 @@ import {
   type Worktree,
   type WorktreeLayout,
 } from "@shared/schemas";
-import { worktreePathFor } from "@shared/worktreeLayout";
+import { worktreePathFor } from "@shared/git/worktreeLayout";
 import { LayoutOptionItem, type LayoutOption } from "./LayoutOptionItem";
 import { RelocateRow } from "./RelocateRow";
 

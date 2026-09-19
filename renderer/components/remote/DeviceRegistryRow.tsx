@@ -37,7 +37,7 @@ import { KeepReachableToggle } from "./KeepReachableToggle";
 import { PortForwardSection } from "./PortForwardSection";
 import type { HostChip } from "./deviceHostChips";
 import { tunnelNote, type DeviceRowStatus } from "./deviceRegistryStatus";
-import { deviceTraits } from "./deviceTraits";
+import { deviceTraits } from "@/lib/remote/deviceTraits";
 
 export function DeviceRegistryRow({
   device,

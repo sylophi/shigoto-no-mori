@@ -3,9 +3,9 @@
 // light/dark and the doubutsu overlay (which remaps the same tokens)
 // propagate into Clerk's portaled surfaces with no remount. Clerk's UI
 // is outside doubutsu.css's selector contract. This appearance object
-// is its entire theming surface, so keep it to theme tokens (theme:check
-// verifies every bare var here still resolves in both systems) and
-// eyeball all four modes when touching it.
+// is its entire theming surface, so keep it to theme tokens
+// (theme-contract verifies every bare var here still resolves in both
+// systems) and eyeball all four modes when touching it.
 import type { ClerkProviderProps } from "@clerk/react";
 
 export const clerkAppearance: ClerkProviderProps["appearance"] = {

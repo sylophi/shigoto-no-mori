@@ -20,7 +20,7 @@ import {
 // remote work"): a worktree kept identical on two devices, every file,
 // both directions, live. The engine is the file-sync engine (file-sync/engine.go, on
 // Mutagen). The app supervises this device's daemon
-// (main/mirror/daemon.ts), bridges its streams to peers as byte
+// (main/core/mirror/daemon.ts), bridges its streams to peers as byte
 // channels on the direct socket (openStream below, the channel layer in
 // shared/ipc/socket/channels.ts), and serves `file-sync serve` for
 // peers mirroring FROM here.
@@ -297,6 +297,7 @@ export const MirrorStartPayloadSchema = SyncPullWorktreePayloadSchema.extend({
   ignoreMode: MirrorIgnoreModeSchema,
   ignores: MirrorIgnoresSchema,
 });
+export type MirrorStartPayload = z.infer<typeof MirrorStartPayloadSchema>;
 
 const MirrorStartResultSchema = SyncPullWorktreeResultSchema.extend({
   session: MirrorSessionIdSchema,
@@ -353,7 +354,7 @@ const MirrorSetIgnoresPayloadSchema = MirrorSessionPayloadSchema.extend({
 
 // What happened to a mirror over time, kept by the device that runs
 // it, keyed by its local worktree so a re-opened session (an ignore
-// change) keeps the thread. Bounded per worktree (main/mirror/
+// change) keeps the thread. Bounded per worktree (main/core/mirror/
 // history.ts), so the list is a recent window, not an archive.
 export const MirrorEventKindSchema = z.enum([
   "started",

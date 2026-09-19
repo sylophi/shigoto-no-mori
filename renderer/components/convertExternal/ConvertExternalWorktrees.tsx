@@ -10,9 +10,9 @@ import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useConvertExternalWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { sanitizeBranchForPath } from "@shared/branches";
+import { sanitizeBranchForPath } from "@shared/git/branches";
 import type { Project, Worktree } from "@shared/schemas";
-import { worktreePathFor } from "@shared/worktreeLayout";
+import { worktreePathFor } from "@shared/git/worktreeLayout";
 import { ConvertRow } from "./ConvertRow";
 import { withToggled } from "@/lib/toggleSet";
 
@@ -109,7 +109,6 @@ function ConvertExternalBody({ project }: { project: Project }) {
 
   const selectableCount = externals.length;
   const allSelected = selectableCount > 0 && selected.size === selectableCount;
-  const someSelected = selected.size > 0 && !allSelected;
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-6">
@@ -159,7 +158,6 @@ function ConvertExternalBody({ project }: { project: Project }) {
                   checked={selected.has(wt.id)}
                   status={status.get(wt.id) ?? { kind: "idle" }}
                   disabled={batchRunning}
-                  indeterminateHeader={someSelected}
                   proposedPath={proposedPath(wt)}
                   home={home}
                   onToggle={() => toggle(wt.id)}

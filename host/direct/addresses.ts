@@ -8,8 +8,8 @@
 // races or walks the list, so a dead candidate costs a timeout, never
 // correctness.
 //
-// This file must stay Electron free (host:check). Node builtins are
-// fine here.
+// This file must stay Electron free (pnpm test host-boundary). Node
+// builtins are fine here.
 import { networkInterfaces } from "node:os";
 import { MAX_DIRECT_CANDIDATES } from "@shared/ipc/modules/direct";
 

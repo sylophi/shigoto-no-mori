@@ -1,6 +1,7 @@
 // Dev profiles for the launchers: a further dev instance on this
-// machine that is a separate device (shared/appName.mts explains the
-// app side). Each profile owns one folder under PROFILES_DIR:
+// machine that is a separate device (shared/packaging/appName.mts
+// explains the app side). Each profile owns one folder under
+// PROFILES_DIR:
 //
 //   <name>/data    the profile's data dir (SHIGOMORI_DATA_DIR)
 //   <name>/repos   the tester's own repos for that forest
@@ -27,13 +28,13 @@ import {
   DEV_USER_DATA_SUFFIX,
   devProfileUserData,
   CLONED_LOGIN_MARKER,
-} from "../../shared/appName.mts";
+} from "../../shared/packaging/appName.mts";
 import {
   CLI_DIST_DIR,
   cliBinaryName,
   cliDataDirName,
-} from "../../shared/cliDist.mts";
-import { repoRoot } from "./checkKit.mjs";
+} from "../../shared/packaging/cliDist.mts";
+import { repoRoot } from "./repoRoot.mts";
 import { productName } from "./devBundle.mts";
 
 export const PROFILES_DIR = join(

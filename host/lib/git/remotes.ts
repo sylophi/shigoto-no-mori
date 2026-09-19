@@ -4,10 +4,10 @@ import {
   remoteRefExists as remoteRefExistsWith,
   resolveDefaultBranch as resolveDefaultBranchWith,
   resolveDefaultRef as resolveDefaultRefWith,
-} from "@shared/defaultBranch.mts";
+} from "@shared/git/defaultBranch.mts";
 import { run } from "./core";
 
-// Default-branch policy lives in shared/defaultBranch.mts so the
+// Default-branch policy lives in shared/git/defaultBranch.mts so the
 // identity parity harness resolves through the same code. These
 // wrappers bind the app's git runner.
 export function localBranchExists(
@@ -61,7 +61,7 @@ export function resolveDefaultBranch(
 }
 
 // Qualified, fallback-free variant for repo identity. See
-// shared/defaultBranch.mts for the contract split.
+// shared/git/defaultBranch.mts for the contract split.
 export function resolveDefaultRef(
   projectPath: string,
   override?: string,

@@ -1,33 +1,19 @@
 import { usePullRequestDiff } from "@/hooks/pullRequests/usePullRequestDiff";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
-import {
-  useScopedWorktreeParams,
-  useWorktreeNav,
-} from "@/hooks/worktrees/useWorktreeNav";
-import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { DiffNotFound } from "./DiffNotFound";
+import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
+import { SubPageNotFound } from "@/components/shared/SubPageNotFound";
 import { DiffView } from "./DiffView";
-import { WorktreeMissing } from "./WorktreeMissing";
+import { WorktreeMissing } from "@/components/shared/WorktreeMissing";
 import { DiffStats } from "@/components/ui/diff-stats";
 
 export function PullRequestDiff() {
-  const { projectId, worktreeId } = useScopedWorktreeParams();
-  const nav = useWorktreeNav();
-  const {
-    data: worktrees = [],
-    isPending: worktreesPending,
-    isError: worktreesError,
-    refetch: refetchWorktrees,
-  } = useWorktrees(projectId);
-  const worktree = worktrees.find((w) => w.id === worktreeId);
+  const { projectId, worktree, goBack, missing } = useRouteWorktree();
   const {
     data: pr,
     isPending: prPending,
     isError: prError,
     refetch: refetchPullRequest,
   } = useWorktreePullRequest(projectId, worktree?.branch ?? "");
-
-  const goBack = () => nav.toWorktree(projectId, worktreeId);
 
   const {
     data: patch,
@@ -36,15 +22,7 @@ export function PullRequestDiff() {
   } = usePullRequestDiff(projectId, pr?.number);
 
   if (!worktree) {
-    return (
-      <WorktreeMissing
-        isPending={worktreesPending}
-        isError={worktreesError}
-        refetch={refetchWorktrees}
-        onBack={goBack}
-        message="Worktree not found."
-      />
-    );
+    return <WorktreeMissing {...missing} />;
   }
   if (!pr) {
     // Same story for the PR lookup: pending or failed both leave `pr`
@@ -52,11 +30,13 @@ export function PullRequestDiff() {
     // lookup shells out to `gh`, which can hang on a slow network, so
     // the pending state keeps the back button instead of a blank pane.
     if (prPending) {
-      return <DiffNotFound onBack={goBack} message="Loading pull request…" />;
+      return (
+        <SubPageNotFound onBack={goBack} message="Loading pull request…" />
+      );
     }
     if (prError) {
       return (
-        <DiffNotFound
+        <SubPageNotFound
           onBack={goBack}
           message="Couldn't load the pull request."
           action={{ label: "Retry", onClick: () => void refetchPullRequest() }}
@@ -64,7 +44,7 @@ export function PullRequestDiff() {
       );
     }
     return (
-      <DiffNotFound
+      <SubPageNotFound
         onBack={goBack}
         message="No pull request found for this branch."
       />

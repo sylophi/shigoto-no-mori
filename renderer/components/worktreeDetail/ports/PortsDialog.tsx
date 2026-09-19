@@ -31,11 +31,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { useWorktreeData } from "@/hooks/worktrees/useWorktreeData";
-import {
-  FlowHeader,
-  TransplantBody,
-  TransplantFooter,
-} from "../transplant/TransplantChrome";
+import { FlowHeader, FlowBody, FlowFooter } from "../flow/FlowChrome";
 import { ForwardAllButton } from "./ForwardAllButton";
 import { PortForm } from "./PortForm";
 import { PortRow } from "./PortRow";
@@ -89,7 +85,7 @@ export function PortsDialog({
             : "What this worktree serves."}
         </p>
       </FlowHeader>
-      <TransplantBody>
+      <FlowBody>
         <div className="space-y-3">
           {portsQuery.isPending ? (
             <Skeleton className="h-10 w-full rounded-lg" />
@@ -134,8 +130,8 @@ export function PortsDialog({
             />
           )}
         </div>
-      </TransplantBody>
-      <TransplantFooter>
+      </FlowBody>
+      <FlowFooter>
         {remote && canForwardPorts && (
           <ForwardAllButton
             deviceId={deviceId}
@@ -169,7 +165,7 @@ export function PortsDialog({
         <Button variant="ghost" size="sm" onClick={onClose}>
           Close
         </Button>
-      </TransplantFooter>
+      </FlowFooter>
     </ModalShell>
   );
 }

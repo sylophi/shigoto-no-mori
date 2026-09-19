@@ -1,5 +1,5 @@
 // The one electron-facing file of the hub account layer. Everything
-// under main/account/ is pure and electron-free so the account check
+// under main/core/account/ is pure and electron-free so the account check
 // script can drive it. This module is where electron enters: safeStorage
 // builds the at-rest cipher, app names the userData store path, and
 // process.env supplies the service config. Sign-in itself lives in the
@@ -12,7 +12,7 @@ import { devProfileSuffix } from "../../electron/devProfile";
 import { platform } from "node:os";
 import { join } from "node:path";
 import { app, safeStorage } from "electron";
-import { CLONED_LOGIN_MARKER } from "@shared/appName.mts";
+import { CLONED_LOGIN_MARKER } from "@shared/packaging/appName.mts";
 import { accountContract } from "@shared/ipc/modules/account";
 import type { TunnelProvisionResponse } from "@shared/hub/protocol";
 import type { AccountStatus } from "@shared/ipc/modules/account";
@@ -23,13 +23,16 @@ import {
   type AccountStore,
   type StoreCipher,
   type StoredAccount,
-} from "../../account/credentialStore";
+} from "../../core/account/credentialStore";
 import {
   defaultDesktopDeviceName,
   isLegacyDefaultName,
   type DefaultDeviceName,
-} from "../../account/defaultDeviceName";
-import { createGrantStore, type GrantStore } from "../../account/grantStore";
+} from "../../core/account/defaultDeviceName";
+import {
+  createGrantStore,
+  type GrantStore,
+} from "../../core/account/grantStore";
 import {
   enrollDevice,
   renameDevice,
@@ -173,7 +176,7 @@ function serviceConfig(): AccountServiceConfig {
   // __SM_ACCOUNT_BAKED_ENV__ is the vite.node.config.ts define. This
   // module only ever loads through that build, so a bare reference is
   // safe, and it stays out of the pure shared module so serviceConfig.ts
-  // remains drivable under plain node (scripts/check-account.mjs).
+  // remains drivable under plain node (test/account.mjs).
   cachedConfig = resolveServiceConfig(
     mergeServiceEnv(fileEnv, __SM_ACCOUNT_BAKED_ENV__, process.env),
   );
@@ -426,9 +429,7 @@ export function makeAccountHandlers(
             // device.
             deviceId: getDeviceId(),
             fallbackDeviceName: (await defaultDeviceName()).name,
-            // os.platform() is the same value as process.platform,
-            // which the linter restricts here. The device hub stores it
-            // as an opaque label.
+            // The device hub stores it as an opaque label.
             platform: platform(),
           },
           token,

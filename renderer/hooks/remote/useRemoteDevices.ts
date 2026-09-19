@@ -5,7 +5,7 @@
 // settings UI and no scoped data live here, just the live snapshot the
 // scoped surfaces resolve their device from.
 import { useSyncExternalStore } from "react";
-import { hostsProjects } from "@/components/remote/deviceTraits";
+import { hostsProjects } from "@/lib/remote/deviceTraits";
 import {
   type RemoteDevice,
   type RemoteDeviceApi,

@@ -11,15 +11,15 @@
 // machinery: the backoff ladder, its lookup and the stable-reset rule
 // come straight from shared/remote/supervisor.ts (whose clock seam
 // this reuses), and the give-up-vs-retry split mirrors
-// main/liveness/rateLimit.ts in being driven headlessly by the
+// main/core/liveness/rateLimit.ts in being driven headlessly by the
 // direct-plane check. Stop conditions are the caller's: main
 // reconciles this runner alongside the direct listener, so sign-out,
 // an account switch and the directConnections opt-out all land here as
 // reconcile(null), while quit alone calls stop() (a terminal latch,
 // see below).
 //
-// This file must stay Electron free (host:check). Node builtins are
-// fine here.
+// This file must stay Electron free (pnpm test host-boundary). Node
+// builtins are fine here.
 import { execFile, spawn } from "node:child_process";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
@@ -112,7 +112,7 @@ export function cloudflaredArgs(): string[] {
   // --no-autoupdate: cloudflared otherwise checks for a newer release
   // and replaces its own binary, which would break the signature of
   // the copy the app ships. The version is pinned in
-  // shared/cloudflaredDist.mts and bumped with the app.
+  // shared/packaging/cloudflaredDist.mts and bumped with the app.
   return ["tunnel", "--no-autoupdate", "run"];
 }
 

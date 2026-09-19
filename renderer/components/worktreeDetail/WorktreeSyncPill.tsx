@@ -8,8 +8,8 @@ import {
   usePushForceWorktree,
   usePushWorktree,
 } from "@/hooks/worktrees/useWorktreeSync";
+import { pluralize } from "@/lib/pluralize";
 import { deriveRemoteSyncState, type Worktree } from "@shared/schemas";
-import { commitsLabel } from "./commitsLabel";
 import { SyncActionButton } from "./SyncActionButton";
 
 interface WorktreeSyncPillProps {
@@ -62,7 +62,7 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
       <SyncActionButton
         tone="emerald"
         icon={ArrowUp}
-        label={`Push ${commitsLabel(state.ahead)}`}
+        label={`Push ${pluralize(state.ahead, "commit")}`}
         title="git push"
         pending={push.isPending}
         onClick={() => push.mutate(input)}
@@ -75,7 +75,7 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
       <SyncActionButton
         tone="sky"
         icon={ArrowDown}
-        label={`Pull ${commitsLabel(state.behind)}`}
+        label={`Pull ${pluralize(state.behind, "commit")}`}
         title="git pull --ff-only"
         pending={pull.isPending}
         onClick={() => pull.mutate(input)}

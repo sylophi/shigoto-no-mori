@@ -28,5 +28,4 @@ export const DirectoryListingSchema = z.object({
   entries: z.array(DirectoryEntrySchema),
 });
 
-export type DirectoryEntry = z.infer<typeof DirectoryEntrySchema>;
 export type DirectoryListing = z.infer<typeof DirectoryListingSchema>;

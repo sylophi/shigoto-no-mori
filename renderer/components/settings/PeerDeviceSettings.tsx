@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { errorMessageOf } from "@shared/errors";
 import type { ReadGlobalConfig } from "@shared/schemas";
-import { EmptyPanel } from "@/components/remote/EmptyPanel";
+import { EmptyPanel } from "@/components/ui/empty-panel";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { useDeviceSettingsSave } from "@/hooks/config/useDeviceSettingsSave";
 import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";

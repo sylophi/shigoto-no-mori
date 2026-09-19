@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { DeviceBadge, type SidebarDeviceBadge } from "./DeviceBadge";
-import { WorktreeKindIcon } from "@/components/WorktreeKindIcon";
+import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { useProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import type { ScriptActivityKind } from "@/store/scriptRuns";
 import type { PullRequest, Worktree } from "@shared/schemas";

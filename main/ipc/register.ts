@@ -34,7 +34,7 @@ import type {
 import {
   CLOUDFLARED_BINARY_NAME,
   CLOUDFLARED_DIST_DIR,
-} from "@shared/cloudflaredDist.mts";
+} from "@shared/packaging/cloudflaredDist.mts";
 import { getDeviceId } from "@host/lib/config/deviceId";
 import {
   ensureSocketHostToken,
@@ -168,7 +168,7 @@ const tunnelRunner = createCloudflaredRunner({
   // dead for the PATH case.
   resolveBinary: async () => {
     const config = await readGlobalConfig();
-    // The connector the app ships (shared/cloudflaredDist.mts,
+    // The connector the app ships (shared/packaging/cloudflaredDist.mts,
     // fetched by `pnpm start` in dev).
     return resolveCloudflaredBinary(
       config.cloudflaredPath,

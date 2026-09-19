@@ -7,7 +7,7 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { useDeleteBranch, useRenameAnyBranch } from "@/hooks/git/useBranches";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { cn } from "@/lib/utils";
-import { sanitizeBranchName } from "@shared/branches";
+import { sanitizeBranchName } from "@shared/git/branches";
 import { isBranchNotMergedError } from "@shared/errors";
 import type { Worktree } from "@shared/schemas";
 

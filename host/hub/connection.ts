@@ -7,10 +7,10 @@
 // to a wire loop that expects a ServerTransport is a type error rather
 // than a discouraged one-liner.
 //
-// This file must stay Electron free (host:check). Everything Electron
-// or account flavored (deviceId, appVersion, accountId, the
-// credential-backed ticket mint) arrives through HubConnectOpts, which
-// main composes.
+// This file must stay Electron free (pnpm test host-boundary).
+// Everything Electron or account flavored (deviceId, appVersion,
+// accountId, the credential-backed ticket mint) arrives through
+// HubConnectOpts, which main composes.
 import { WebSocket } from "ws";
 import {
   type HubBroker,

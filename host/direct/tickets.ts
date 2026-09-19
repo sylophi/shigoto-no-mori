@@ -15,7 +15,7 @@
 // the listener's per-IP auth lockout against innocent peers whose
 // dials then present a vanished ticket.
 //
-// This file must stay Electron free (host:check).
+// This file must stay Electron free (pnpm test host-boundary).
 import {
   type DirectCandidateKind,
   DIRECT_TICKET_TTL_MS,

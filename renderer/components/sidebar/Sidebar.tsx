@@ -55,7 +55,7 @@ import { SidebarFooter } from "./SidebarFooter";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarToolbar } from "./SidebarToolbar";
 import { TidyButton } from "./TidyButton";
-import { sortProjects } from "./sortProjects";
+import { sortProjects } from "@/lib/sortProjects";
 import { SidebarList } from "./SidebarList";
 import { withToggled } from "@/lib/toggleSet";
 

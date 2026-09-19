@@ -6,9 +6,9 @@
 // `pnpm start` runs it best-effort so dev builds carry the binary too.
 //
 // Supply-chain discipline: the version AND the sha256 of every asset
-// are committed (shared/cloudflaredDist.mts). The download is refused
-// unless the digest matches, nothing is executed during the fetch, and
-// a bump is an ordinary reviewed change to that one file.
+// are committed (shared/packaging/cloudflaredDist.mts). The download is
+// refused unless the digest matches, nothing is executed during the
+// fetch, and a bump is an ordinary reviewed change to that one file.
 //
 // Run: node scripts/fetch-cloudflared.mjs [--platform darwin] [--arch arm64] [--best-effort]
 import { execFileSync } from "node:child_process";
@@ -30,7 +30,7 @@ import {
   CLOUDFLARED_VERSION,
   cloudflaredAsset,
   cloudflaredDownloadUrl,
-} from "../shared/cloudflaredDist.mts";
+} from "../shared/packaging/cloudflaredDist.mts";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);

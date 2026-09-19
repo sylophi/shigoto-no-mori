@@ -11,7 +11,6 @@ interface ConvertRowProps {
   checked: boolean;
   status: RowStatus;
   disabled: boolean;
-  indeterminateHeader: boolean;
   proposedPath: string;
   home: string | null;
   onToggle: () => void;

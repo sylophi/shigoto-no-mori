@@ -17,14 +17,14 @@
 // identity.
 //
 // The bundle id is per worktree, but the scheme is one spelling
-// (shared/rendererScheme.mts), so across several dev worktrees the
-// last one launched owns the deep links. That is the workflow that
-// makes sense: you sign in wherever you are currently working. A cold
-// activation (a deep link arriving with no dev app running) launches
-// the stock executable with no app and shows Electron's welcome
-// window: a harmless dead end, deliberately not wired to boot the
-// real app, which would grab the single-instance lock and linger as a
-// half-alive instance.
+// (shared/packaging/rendererScheme.mts), so across several dev
+// worktrees the last one launched owns the deep links. That is the
+// workflow that makes sense: you sign in wherever you are currently
+// working. A cold activation (a deep link arriving with no dev app
+// running) launches the stock executable with no app and shows
+// Electron's welcome window: a harmless dead end, deliberately not
+// wired to boot the real app, which would grab the single-instance lock
+// and linger as a half-alive instance.
 //
 // Never touch node_modules/electron itself: pnpm hard-links package
 // files from a shared store, so an edit there could bleed into every
@@ -40,12 +40,12 @@ import {
 } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, join, resolve } from "node:path";
-import { DEV_NAME_SUFFIX } from "../../shared/appName.mts";
-import { APP_BUNDLE_ID } from "../../shared/cliDist.mts";
-import { LOCAL_NETWORK_USAGE_DESCRIPTION } from "../../shared/infoPlist.mts";
-import { rendererSchemeName } from "../../shared/rendererScheme.mts";
+import { DEV_NAME_SUFFIX } from "../../shared/packaging/appName.mts";
+import { APP_BUNDLE_ID } from "../../shared/packaging/cliDist.mts";
+import { LOCAL_NETWORK_USAGE_DESCRIPTION } from "../../shared/packaging/infoPlist.mts";
+import { rendererSchemeName } from "../../shared/packaging/rendererScheme.mts";
 
-import { repoRoot } from "./checkKit.mjs";
+import { repoRoot } from "./repoRoot.mts";
 
 const require = createRequire(import.meta.url);
 export const productName = require("../../package.json").productName as string;

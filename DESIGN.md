@@ -33,7 +33,7 @@ Rules that keep both themes cheap to maintain:
   Tailwind utility names. Never a component's internal utility-class
   combination. That breaks silently when the component is restyled.
 - The full dependency list lives in the CONTRACT header of
-  `renderer/doubutsu.css`; `pnpm theme:check` (run by lefthook
+  `renderer/doubutsu.css`; `pnpm test theme-contract` (run by lefthook
   pre-commit) verifies every hook still exists. If it fails, either
   restore the hook or update the CSS + CONTRACT together.
 - When changing UI chrome (surfaces, borders, focus, hover), eyeball

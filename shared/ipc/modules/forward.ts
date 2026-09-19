@@ -16,7 +16,7 @@ import { PortNumberSchema } from "@shared/schemas";
 // backpressure end to end. The mirror stream is the other byte-stream
 // open (mirror:openStream), on the same channel layer. This is the HOST
 // side a remote peer drives. The client half is
-// main/portForward/bridge.ts.
+// main/core/portForward/bridge.ts.
 //
 // {remote:true, mutating:true}: the surface rides the per-peer command
 // grant, fail-closed, and the LAN wire (read-only by policy) refuses

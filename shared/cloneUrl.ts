@@ -2,7 +2,7 @@
 // clone, or a path to browse. normalizeRemoteUrl is the judge, the same
 // one repo identity uses, so "is a remote" means one thing everywhere:
 // a plain path, a `~` path and file:// all name a disk, never a remote.
-import { normalizeRemoteUrl } from "@shared/repoIdentity.mts";
+import { normalizeRemoteUrl } from "@shared/git/repoIdentity.mts";
 
 // The one definition of "a remote a device may be asked to clone": it
 // normalizes, and it can't be read as a git option. The clone payload,

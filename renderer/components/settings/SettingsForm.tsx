@@ -20,7 +20,7 @@ import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import type { ClientConfig, GlobalConfig, Theme } from "@shared/schemas";
 import type { RemoteDevice } from "@/lib/remote/devices";
 import { AppearanceSection } from "./AppearanceSection";
-import { DeviceStatusPill } from "@/components/remote/DeviceStatusPill";
+import { DeviceStatusPill } from "@/components/settings/DeviceStatusPill";
 import { LaunchToolsPanel } from "./LaunchToolsPanel";
 import { LocalDevicePanel } from "./LocalDevicePanel";
 import { PeerDeviceSettings } from "./PeerDeviceSettings";

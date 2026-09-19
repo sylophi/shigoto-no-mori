@@ -3,12 +3,15 @@
 // https://www.electronjs.org/docs/latest/tutorial/process-model#preload-scripts
 import { contextBridge } from "electron";
 import { exposeClerkBridge } from "@clerk/electron/preload";
-import { APP_VERSION_FLAG } from "@shared/appVersionFlag.mts";
 import { buildApi } from "@shared/ipc/client";
-import { CLERK_PK_FLAG } from "@shared/clerkPkFlag.mts";
-import { DEV_BUILD_FLAG } from "@shared/devBuildFlag.mts";
-import { DEVICE_ID_FLAG } from "@shared/deviceIdFlag.mts";
-import { optionalArgFlag, requireArgFlag } from "./argFlags";
+import {
+  APP_VERSION_FLAG,
+  CLERK_PK_FLAG,
+  DEV_BUILD_FLAG,
+  DEVICE_ID_FLAG,
+  optionalArgFlag,
+  requireArgFlag,
+} from "./argFlags";
 import { electronClientTransport } from "./preloadTransport";
 
 // The narrow bridge @clerk/electron/react rides for token storage and

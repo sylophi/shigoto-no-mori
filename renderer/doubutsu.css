@@ -12,7 +12,7 @@
  *
  * ============================= CONTRACT =============================
  * Everything this file hooks into, so refactors can't silently strip
- * the theme. `pnpm theme:check` (scripts/check-theme-contract.mjs, run
+ * the theme. `pnpm test theme-contract` (test/theme-contract.mjs, run
  * in pre-commit) verifies each hook still exists.
  *
  * 1. Theme tokens (index.css / @theme): --background, --card, --popover,
@@ -31,7 +31,7 @@
  *      checkbox (+ data-variant) ui/checkbox.tsx
  *      chip                      ui/chip-button.tsx
  *      segmented-control         ui/segmented-control.tsx
- *      combobox-trigger/-popup/-search   ui/branch-combobox.tsx
+ *      combobox-trigger/-popup/-search   shared/BranchCombobox.tsx
  *      modal-shell               ui/modal-shell.tsx
  *      launcher                  launcher/ProjectLauncher.tsx
  *      launcher-tile             launcher/LauncherTile.tsx
@@ -43,7 +43,7 @@
  *      dropdown-menu-sub-trigger (+ data-variant)   ui/dropdown-menu.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
  *      sidebar-device-filter     sidebar/DeviceFilterBar.tsx
- *      device-chip               remote/DeviceChip.tsx, shared/DeviceTabs.tsx
+ *      device-chip               shared/DeviceChip.tsx, shared/DeviceTabs.tsx
  *      phone-tab-bar/-tab/-tab-pill   PhoneTabBar.tsx
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
@@ -52,23 +52,23 @@
  *    tidy/TidyForest, remote/DevicesPage, ForestPage), the
  *    `doubutsu-only` / `v1-only` classes
  *    (per-theme markup shipped side by side), li[data-row-idx]
- *    (configure/PickerRow.tsx).
+ *    (shared/PickerRow.tsx).
  *
- * 4. Upstream library attributes (re-verify on upgrades; theme:check
+ * 4. Upstream library attributes (re-verify on upgrades; theme-contract
  *    greps the packages): Base UI's data-highlighted / data-disabled /
  *    data-popup-open / data-unchecked, cmdk's [cmdk-item] +
  *    aria-selected, sonner's [data-sonner-toast]. Clerk's .cl-rootBox /
  *    .cl-modalBackdrop (the ambient-strip carve-outs below) are part of
  *    Clerk's documented appearance API but live in its runtime-loaded
- *    UI bundle, so theme:check cannot grep them -- re-verify by eye
+ *    UI bundle, so theme-contract cannot grep them -- re-verify by eye
  *    when the Clerk packages move.
  *
  * 5. One consumer outside renderer/: scripts/dmg-background.html, the
  *    dmg installer artwork, which links this file and renders against
  *    the leaf-wallpaper ::before, the header/footer band rule and the
  *    --doubutsu-* tokens. It is a committed png, so a broken hook there
- *    is invisible until someone opens a release. `pnpm theme:check`
- *    verifies it, and `pnpm dmg:check` catches art that predates a
+ *    is invisible until someone opens a release. `pnpm test theme-contract`
+ *    verifies it, and `pnpm test dmg-art` catches art that predates a
  *    palette edit.
  *
  * 6. Tailwind utility names (stable public API, checked loosely):
@@ -802,7 +802,7 @@
 /* The mirror: `v1-only` markup keeps its natural display in v1 and
    drops out under doubutsu. Together the two let a component ship both
    theme's markup side by side rather than branching on the theme in
-   JS, which theme:check can't see. */
+   JS, which theme-contract can't see. */
 .doubutsu .v1-only {
   display: none;
 }

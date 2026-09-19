@@ -5,19 +5,21 @@
 // machine and for a peer being viewed. The mutations are local: start
 // is a pull plus a mirror, and stop/pause/resume speak to this
 // machine's daemon.
-import { pullWorktreeName } from "@/lib/remote/pullWorktreeName";
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   MirrorEvent,
-  MirrorIgnoreMode,
   MirrorListResult,
   MirrorSession,
   MirrorServing,
 } from "@shared/ipc/modules/mirror";
 import type { Worktree } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { invalidateLanded } from "@/hooks/remote/usePullWorktree";
+import {
+  type MirrorIgnoreChoice,
+  type PullSource,
+  useLandingMutation,
+} from "@/hooks/remote/usePullWorktree";
 import { useForgetDeletedWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { notifyError } from "@/lib/toast";
 
@@ -120,48 +122,14 @@ export function useWorktreeMirror(worktree: Worktree): {
   };
 }
 
-// What a mirror leaves out, as the dialog and the section hand it to
-// the host: the rule plus the engine patterns it resolved to.
-export type MirrorIgnoreChoice = {
-  ignoreMode: MirrorIgnoreMode;
-  ignores: string[];
-};
-
-// What a pull dialog hands its mutation: the rule plus the setup
-// switch, the same for a transplant and a mirror start.
-export type PullChoice = MirrorIgnoreChoice & { runSetup: boolean };
-
 // Bring the peer's worktree here and keep it mirrored, driven by the
 // mirror dialog: the new worktree is LOCAL, so the local registry keys
 // are invalidated, and the dialog's last step is the report, so no
 // toast here. Refusals surface centrally.
-export function useStartMirror({
-  worktree,
-  sourceProjectId,
-  sourceIdentity,
-  localProjectId,
-}: {
-  worktree: Worktree;
-  sourceProjectId: string;
-  sourceIdentity: string;
-  localProjectId: string;
-}) {
-  const { deviceId } = useHostScope();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (choice: PullChoice) =>
-      window.api.mirror.start({
-        sourceDeviceId: deviceId,
-        sourceProjectId,
-        sourceWorktreeId: worktree.id,
-        sourceIdentity,
-        branch: worktree.branch,
-        worktreeName: pullWorktreeName(worktree),
-        ...choice,
-      }),
-    onSuccess: () => invalidateLanded(queryClient, localProjectId),
-    meta: { silentError: true },
-  });
+export function useStartMirror(source: PullSource) {
+  return useLandingMutation(source, (payload) =>
+    window.api.mirror.start(payload),
+  );
 }
 
 // The mirror's thread of events (mirror:history), read through the

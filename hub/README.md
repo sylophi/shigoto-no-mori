@@ -147,7 +147,7 @@ and an API token with Cloudflare Tunnel edit on the account and DNS
 edit on that one zone. One zone serves both environments: device
 names hash the Clerk user id, which differs per Clerk instance. Devices need
 nothing installed: the app bundles a pinned `cloudflared`
-(`shared/cloudflaredDist.mts`, fetched at package time and by
+(`shared/packaging/cloudflaredDist.mts`, fetched at package time and by
 `pnpm start`). The `cloudflaredPath` device config key overrides it,
 and PATH is the fallback for a build that carries none.
 

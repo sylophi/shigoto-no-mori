@@ -84,7 +84,7 @@ function TransferActions({
 // Muted footer text, the shape the read-only note in the same footer
 // uses. It truncates on a narrow window, so the title repeats it. The
 // branch names spell out DEFAULT_BRANCH_CANDIDATES in
-// shared/defaultBranch.mts (the renderer bundle cannot import .mts),
+// shared/git/defaultBranch.mts (the renderer bundle cannot import .mts),
 // so a change there changes this sentence.
 const NO_IDENTITY_NOTE =
   "No shared identity for this repo (no common remote, and no main, master, dev or remote HEAD branch), so it can't be mirrored or transplanted.";

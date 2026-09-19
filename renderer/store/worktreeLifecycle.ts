@@ -13,7 +13,7 @@ export type { CreatePhase } from "@shared/schemas";
 
 // The phase as the detail page's banner reads it. The pull dialogs
 // word the same phases as steps of their own run (transplant/
-// TransplantProgress.tsx rows, transplantSteps.ts headlines).
+// PullProgress.tsx rows, pullSteps.ts headlines).
 export const CREATE_PHASE_LABEL = {
   carryOver: "Carrying over files...",
   setup: "Setting up...",

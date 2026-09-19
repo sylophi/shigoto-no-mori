@@ -57,7 +57,7 @@ export function useWatchProjectPullRequests(): void {
 }
 
 // Branch -> PR for a project, feeding the sidebar dots. The background
-// sweep in main/fetch.ts refreshes it and broadcasts
+// sweep in main/electron/fetch.ts refreshes it and broadcasts
 // GithubCliProjectPullRequestsRefreshed only when the data actually
 // changed; useWatchProjectPullRequests invalidates this query off that
 // broadcast. The open worktree page reads its PR through

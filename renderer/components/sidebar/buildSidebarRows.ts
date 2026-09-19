@@ -4,7 +4,7 @@ import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
 import type { Project, ProjectSortMode, Worktree } from "@shared/schemas";
 import type { SidebarDeviceBadge } from "./DeviceBadge";
 import type { SidebarRow, SidebarViewModel } from "./sidebarRow";
-import { sortByProject } from "./sortProjects";
+import { sortByProject } from "@/lib/sortProjects";
 
 interface BuildSidebarRowsArgs {
   projects: Project[];

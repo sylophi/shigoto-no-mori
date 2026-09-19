@@ -1,6 +1,6 @@
 package main
 
-// Path math ported from shared/worktreeLayout.ts and
+// Path math ported from shared/git/worktreeLayout.ts and
 // host/lib/worktrees/paths.ts: path-derived worktree ids and the
 // managed-layout bases. Must stay behavior-identical to the TS side.
 // Both compute the same ids and "is this managed?" answers over the
@@ -166,7 +166,7 @@ func removeIfEmptyDir(path string) error {
 	return os.Remove(path)
 }
 
-// --- worktree dir name validation (shared/branches.ts port) ---
+// --- worktree dir name validation (shared/git/branches.ts port) ---
 
 var (
 	pathSeparatorRe = regexp.MustCompile(`[/:]`)
@@ -185,7 +185,7 @@ func sanitizeBranchForPath(branch string) string {
 }
 
 // The reserved worktree refs, mirroring RESERVED_NAMES in
-// shared/branches.ts: `sm cd root` / `sm path primary` (and the
+// shared/git/branches.ts: `sm cd root` / `sm path primary` (and the
 // qualified <project>/root, -p forms) address the project's primary
 // checkout, unconditionally. A worktree carrying one of these names
 // never resolves by name, only by path or menu. sanitizeBranchForPath

@@ -81,7 +81,7 @@ export function useWorktreePullRequest(
       // catch a PR merging on GitHub even after the user opened the
       // worktree. The IPC throws on transient gh failure, so we only
       // reach here with ground truth and never clobber the project map
-      // on a network hiccup. The sweep in main/fetch.ts still covers
+      // on a network hiccup. The sweep in main/electron/fetch.ts still covers
       // branches the user hasn't visited.
       mirrorIntoProjectMap(queryClient, keys, projectId, branch, pr);
       return pr;

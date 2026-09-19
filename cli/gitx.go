@@ -211,7 +211,7 @@ type workingTreeChanges struct {
 
 // One record of `git status --porcelain=v1 -z`: the index column, the
 // worktree column, and the path. Callers that only want the path list
-// go through parseStatusPaths.
+// go through pathsOf.
 type statusEntry struct {
 	index    byte
 	worktree byte
@@ -242,10 +242,6 @@ func parseStatusEntries(stdout string) []statusEntry {
 		}
 	}
 	return entries
-}
-
-func parseStatusPaths(stdout string) []string {
-	return pathsOf(parseStatusEntries(stdout))
 }
 
 func pathsOf(entries []statusEntry) []string {
@@ -616,12 +612,12 @@ func scanBranchRefs(projectPath string) (branchRefScan, error) {
 }
 
 // Candidate remotes in the SAME precedence remoteKey applies in
-// identity.go: upstream first, then origin, then the rest
+// shared/git/repoIdentity.mts: upstream first, then origin, then the rest
 // alphabetically. `git remote` prints alphabetically, so without this a
 // remote sorting before "origin" would win the default-ref race, flip
 // the root commit, and the two halves of identity would disagree about
 // the canonical remote. Mirrors orderRemotesByPrecedence in
-// shared/defaultBranch.mts.
+// shared/git/defaultBranch.mts.
 func orderRemotesByPrecedence(remotes []string) []string {
 	ordered := make([]string, 0, len(remotes))
 	for _, name := range []string{"upstream", "origin"} {
@@ -642,7 +638,7 @@ func orderRemotesByPrecedence(remotes []string) []string {
 // The branch refs/remotes/<remote>/HEAD points at, fully qualified, or
 // "" when the remote has no HEAD symref or it dangles (the scan holds
 // only refs that exist, so a symref to a deleted branch has no
-// target there). Mirrors remoteHeadTarget in shared/defaultBranch.mts.
+// target there). Mirrors remoteHeadTarget in shared/git/defaultBranch.mts.
 func remoteHeadTarget(scan branchRefScan, remote string) string {
 	target := scan.remoteHeads[remote]
 	if short, ok := strings.CutPrefix(target, "refs/remotes/"); !ok || !scan.remoteRefs[short] {
@@ -651,7 +647,7 @@ func remoteHeadTarget(scan branchRefScan, remote string) string {
 	return target
 }
 
-// Precedence shared with shared/defaultBranch.mts (the rationale lives
+// Precedence shared with shared/git/defaultBranch.mts (the rationale lives
 // there): a valid override wins, then each candidate remote-first in
 // identity's remote precedence order, and last the remote's own HEAD.
 // Fully qualified so a tag sharing a branch's name can't shadow it,
@@ -692,22 +688,6 @@ func shortRefName(fullRef string) string {
 		return name
 	}
 	return strings.TrimPrefix(fullRef, "refs/remotes/")
-}
-
-// Identity-facing variant, mirroring resolveDefaultRef in
-// shared/defaultBranch.mts: "" with a nil error is semantic "no default
-// ref". A scan failure propagates so identity can tell a broken git
-// from a repo with no candidates.
-func resolveDefaultRefWithRemotes(projectPath, override string, remotes []string) (string, error) {
-	scan, err := scanBranchRefs(projectPath)
-	if err != nil {
-		return "", err
-	}
-	return pickDefaultRef(scan, override, remotes), nil
-}
-
-func resolveDefaultRef(projectPath, override string) (string, error) {
-	return resolveDefaultRefWithRemotes(projectPath, override, listRemotes(projectPath))
 }
 
 // Short-name variant for merge-target callers, who additionally accept

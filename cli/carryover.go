@@ -1,7 +1,7 @@
 package main
 
 // Carry-over, ported from host/lib/worktrees/{carryOver,
-// worktreeInclude}.ts and host/lib/git/{branches,exclude}.ts: manual
+// worktreeInclude}.ts and host/lib/git/branches.ts: manual
 // entries (symlink/copy) from project.json merged with the repo's
 // .worktreeinclude resolution, applied best-effort into the new
 // worktree, with directory symlinks hidden via .git/info/exclude.
@@ -182,7 +182,7 @@ func resolveWorktreeIncludeAcross(sources []worktreeIdentity, config *projectCon
 
 // Collapse duplicate separators and trailing slashes before comparing
 // stored entry paths against git output. Must stay in lockstep with
-// normalizeRelPath in shared/gitPaths.ts.
+// normalizeRelPath in shared/git/gitPaths.ts.
 func normalizeRelPath(p string) string {
 	var parts []string
 	for _, seg := range strings.Split(p, "/") {
@@ -364,7 +364,7 @@ func applyOneCarryOver(sources []worktreeIdentity, destPath string, entry carryO
 	return nil, "", source
 }
 
-// --- .git/info/exclude (exclude.ts parity) ---
+// --- .git/info/exclude ---
 
 var gitignoreMetaRe = regexp.MustCompile(`([*?[\]#!])`)
 

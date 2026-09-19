@@ -7,7 +7,7 @@
 // Concurrent callers share one in-flight compute via the cache's own
 // coalescing. A root commit and a remote URL essentially never change,
 // so the TTL is the whole staleness rule.
-import { computeRepoIdentity } from "@shared/repoIdentity.mts";
+import { computeRepoIdentity } from "@shared/git/repoIdentity.mts";
 import { ttlMapCache } from "../util/ttlCache";
 import { run } from "./core";
 import { resolveDefaultRef } from "./remotes";
