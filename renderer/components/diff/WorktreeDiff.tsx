@@ -35,7 +35,7 @@ export function WorktreeDiff() {
     nav.toDiff(projectId, worktreeId, { amend: on, replace: true });
 
   if (!worktree) {
-    return <WorktreeMissing {...missing} message="Worktree not found." />;
+    return <WorktreeMissing {...missing} />;
   }
 
   return (

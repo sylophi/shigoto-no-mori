@@ -22,7 +22,10 @@ import {
   unanchorIgnoredPath,
 } from "@shared/ipc/modules/mirror";
 import type { SyncIgnoredPathsResult } from "@shared/ipc/modules/sync";
-import type { MirrorIgnoreChoice, PullChoice } from "@/hooks/remote/useMirrors";
+import type {
+  MirrorIgnoreChoice,
+  PullChoice,
+} from "@/hooks/remote/usePullWorktree";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 
 // What stays behind before the exceptions (nothing, or what git

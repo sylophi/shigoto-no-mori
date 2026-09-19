@@ -9,7 +9,6 @@ import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   MirrorEvent,
-  MirrorIgnoreMode,
   MirrorListResult,
   MirrorSession,
   MirrorServing,
@@ -17,6 +16,7 @@ import type {
 import type { Worktree } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
+  type MirrorIgnoreChoice,
   type PullSource,
   useLandingMutation,
 } from "@/hooks/remote/usePullWorktree";
@@ -121,17 +121,6 @@ export function useWorktreeMirror(worktree: Worktree): {
     serving: serving.filter((s) => s.worktreeId === worktree.id),
   };
 }
-
-// What a mirror leaves out, as the dialog and the section hand it to
-// the host: the rule plus the engine patterns it resolved to.
-export type MirrorIgnoreChoice = {
-  ignoreMode: MirrorIgnoreMode;
-  ignores: string[];
-};
-
-// What a pull dialog hands its mutation: the rule plus the setup
-// switch, the same for a transplant and a mirror start.
-export type PullChoice = MirrorIgnoreChoice & { runSetup: boolean };
 
 // Bring the peer's worktree here and keep it mirrored, driven by the
 // mirror dialog: the new worktree is LOCAL, so the local registry keys

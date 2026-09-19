@@ -297,6 +297,7 @@ export const MirrorStartPayloadSchema = SyncPullWorktreePayloadSchema.extend({
   ignoreMode: MirrorIgnoreModeSchema,
   ignores: MirrorIgnoresSchema,
 });
+export type MirrorStartPayload = z.infer<typeof MirrorStartPayloadSchema>;
 
 const MirrorStartResultSchema = SyncPullWorktreeResultSchema.extend({
   session: MirrorSessionIdSchema,

@@ -8,98 +8,38 @@
 // this compares the two. Same shape as licenses:check.
 //
 // Run by lefthook pre-commit, and by hand as `pnpm test dmg-art`.
-import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { join } from "node:path";
+import { DMG_ART_DIR } from "../shared/packaging/dmgLayout.mts";
 import {
-  DMG_ART_DIR,
-  dmgBackgroundName,
-} from "../shared/packaging/dmgLayout.mts";
-import { report } from "./lib/checkKit.mjs";
+  ART_FILES,
+  ART_STAMP_FILE,
+  artInputsHash,
+} from "../scripts/lib/dmgArtStamp.mjs";
+import { report, repoRoot } from "./lib/checkKit.mjs";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-
-// The design the pixels are rendered from: the stylesheet the art is
-// drawn with, the art itself, the geometry both it and the maker read,
-// and the webfont package (a bump reshapes every glyph in the window).
-// Not the render script, since editing that means running it.
-const INPUT_FILES = [
-  "renderer/doubutsu.css",
-  "scripts/dmg-background.html",
-  "shared/packaging/dmgLayout.mts",
-];
-const FONT_PACKAGE = "node_modules/@fontsource/zen-maru-gothic/package.json";
-
-// The rendered art itself is hashed too, so a twin that goes missing or
-// gets reverted fails here rather than at someone's retina download,
-// since appdmg falls back to the 1x image without complaining.
-const ART_FILES = [false, true].flatMap((prerelease) =>
-  [1, 2].map(
-    (scale) => `${DMG_ART_DIR}/${dmgBackgroundName(prerelease, scale)}`,
-  ),
-);
-
-export const ART_STAMP_FILE = join(ROOT, DMG_ART_DIR, "inputs.sha256");
-
-// A design input with its comments removed, so rewording one (a moved
-// file's path, a renamed check) does not read as a design change and
-// send someone off to re-render identical pixels. Deliberately narrow,
-// per file type, and never `//` to end of line: the stylesheet carries
-// SVG data URIs whose xmlns holds a `//`, and dropping the rest of that
-// line would hide a real wallpaper edit.
-function withoutComments(file, src) {
-  if (file.endsWith(".css")) return src.replace(/\/\*[\s\S]*?\*\//g, "");
-  if (file.endsWith(".html")) return src.replace(/<!--[\s\S]*?-->/g, "");
-  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^[ \t]*\/\/.*\n/gm, "");
-}
-
-export function artInputsHash() {
-  const hash = createHash("sha256");
-  for (const file of INPUT_FILES) {
-    hash.update(withoutComments(file, readFileSync(join(ROOT, file), "utf8")));
-  }
-  for (const file of ART_FILES) {
-    hash.update(readFileSync(join(ROOT, file)));
-  }
-  const font = join(ROOT, FONT_PACKAGE);
-  hash.update(
-    existsSync(font) ? JSON.parse(readFileSync(font, "utf8")).version : "",
+const failures = [];
+const missing = ART_FILES.filter((file) => !existsSync(join(repoRoot, file)));
+if (missing.length > 0) {
+  // Hashing reads every art file, so a missing twin short-circuits
+  // before the stamp comparison.
+  failures.push(
+    `the installer artwork is incomplete, missing ${missing.join(", ")}.`,
   );
-  return hash.digest("hex");
-}
-
-function check() {
-  const failures = [];
-  const missing = ART_FILES.filter((file) => !existsSync(join(ROOT, file)));
-  if (missing.length > 0) {
-    // Hashing reads every art file, so a missing twin short-circuits
-    // before the stamp comparison.
+} else {
+  const stamped = existsSync(ART_STAMP_FILE)
+    ? readFileSync(ART_STAMP_FILE, "utf8").trim()
+    : null;
+  if (stamped !== artInputsHash()) {
     failures.push(
-      `the installer artwork is incomplete, missing ${missing.join(", ")}.`,
+      stamped === null
+        ? `no stamp at ${DMG_ART_DIR}/inputs.sha256.`
+        : "the installer artwork predates a change to the design it is rendered from.",
     );
-  } else {
-    const stamped = existsSync(ART_STAMP_FILE)
-      ? readFileSync(ART_STAMP_FILE, "utf8").trim()
-      : null;
-    if (stamped !== artInputsHash()) {
-      failures.push(
-        stamped === null
-          ? `no stamp at ${DMG_ART_DIR}/inputs.sha256.`
-          : "the installer artwork predates a change to the design it is rendered from.",
-      );
-    }
   }
-  report({
-    name: "dmg art",
-    failures,
-    hint: "Re-render it with `pnpm dmg:background` and commit the result.",
-  });
 }
-
-if (
-  process.argv[1] &&
-  pathToFileURL(process.argv[1]).href === import.meta.url
-) {
-  check();
-}
+report({
+  name: "dmg art",
+  failures,
+  hint: "Re-render it with `pnpm dmg:background` and commit the result.",
+});

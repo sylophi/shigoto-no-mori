@@ -20,15 +20,24 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const testDir = dirname(fileURLToPath(import.meta.url));
 const SELF = "run.mjs";
 
+const SUFFIXES = [".mjs", ".mts"];
+
+// The proofs, which sit at the top of test/. The drivers under e2e/ run
+// by path (`pnpm test e2e/remote-smoke`) and stay off this list: they
+// need two signed-in dev apps, see MANUAL-TESTING.md.
 function available() {
   return readdirSync(testDir)
-    .filter((file) => file.endsWith(".mjs") && file !== SELF)
-    .map((file) => file.slice(0, -".mjs".length))
+    .filter((file) => file !== SELF)
+    .flatMap((file) =>
+      SUFFIXES.filter((suffix) => file.endsWith(suffix)).map((suffix) =>
+        file.slice(0, -suffix.length),
+      ),
+    )
     .toSorted();
 }
 
 function resolveTest(name) {
-  for (const suffix of [".mjs", ".mts"]) {
+  for (const suffix of SUFFIXES) {
     const file = join(testDir, name + suffix);
     if (existsSync(file)) return file;
   }

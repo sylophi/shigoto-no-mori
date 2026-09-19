@@ -61,12 +61,16 @@ const isElectronSpecifier = (spec) =>
   spec.startsWith("electron-") ||
   spec.startsWith("@electron/");
 
-const isMainSpecifier = (spec, fileDir) => {
-  if (spec === "main" || spec.startsWith("main/")) return true;
-  if (!spec.startsWith(".")) return false;
-  const target = resolve(fileDir, spec);
-  return target === mainDir || target.startsWith(mainDir + sep);
+// Whether a specifier lands in `dir` (one of main/'s folders), written
+// either relative to the importing file or bare from the repo root.
+const pointsInto = (dir, spec, fileDir) => {
+  const bare = spec === "main" || spec.startsWith("main/");
+  if (!bare && !spec.startsWith(".")) return false;
+  const target = resolve(bare ? repoRoot : fileDir, spec);
+  return target === dir || target.startsWith(dir + sep);
 };
+
+const isMainSpecifier = (spec, fileDir) => pointsInto(mainDir, spec, fileDir);
 
 const visitedAllowlisted = new Set();
 let contractModuleCount = 0;
@@ -106,14 +110,11 @@ for (const dir of ["host", "main", "renderer", "shared", "web"]) {
           `${rel} imports electron -- main/core/ must stay Electron free, the Electron half lives in main/electron/`,
         );
       }
-      const leaves = specifiers.some((spec) => {
-        if (!spec.startsWith(".")) return false;
-        const target = resolve(fileDir, spec);
-        return (
-          (target === mainDir || target.startsWith(mainDir + sep)) &&
-          !target.startsWith(mainCoreDir + sep)
-        );
-      });
+      const leaves = specifiers.some(
+        (spec) =>
+          isMainSpecifier(spec, fileDir) &&
+          !pointsInto(mainCoreDir, spec, fileDir),
+      );
       if (leaves) {
         failures.push(
           `${rel} imports from main/ outside main/core/ -- that pulls Electron in transitively`,

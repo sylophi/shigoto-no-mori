@@ -8,7 +8,7 @@ import { Check, Loader2, X, type LucideIcon } from "lucide-react";
 import type { UseMutationResult } from "@tanstack/react-query";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { TONE_PILL } from "@/components/ui/status-dot";
-import type { PullChoice } from "@/hooks/remote/useMirrors";
+import type { PullChoice } from "@/hooks/remote/usePullWorktree";
 import { usePullProgress } from "@/hooks/remote/usePullProgress";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { FlowHeader, StepRail } from "./FlowChrome";
@@ -27,11 +27,11 @@ const STAGE_STEP: Record<FlowStage, number> = {
 // dialog brings its own review icon and its four titles.
 const STAGE_LOOK: Record<
   Exclude<FlowStage, "review">,
-  { tint: string; icon: LucideIcon; spin?: boolean }
+  { tint: string; icon: LucideIcon; spin: boolean }
 > = {
   running: { tint: TONE_PILL.sky, icon: Loader2, spin: true },
-  failed: { tint: TONE_PILL.rose, icon: X },
-  done: { tint: TONE_PILL.emerald, icon: Check },
+  failed: { tint: TONE_PILL.rose, icon: X, spin: false },
+  done: { tint: TONE_PILL.emerald, icon: Check, spin: false },
 };
 
 type Landed = { worktree: { projectId: string; id: string } };
@@ -103,9 +103,8 @@ export function PullFlowFrame({
   reviewIcon: LucideIcon;
   titles: Record<FlowStage, string>;
   thisDeviceLabel: string;
-  // Omitted for the transplant, whose names are the rail's defaults.
-  steps?: readonly string[];
-  stepsLabel?: string;
+  steps: readonly string[];
+  stepsLabel: string;
   // The line under the title, the dialog's own words for this stage.
   headline: ReactNode;
   onClose: () => void;
@@ -113,7 +112,11 @@ export function PullFlowFrame({
 }) {
   const look =
     stage === "review"
-      ? { tint: "bg-accent text-accent-foreground", icon: reviewIcon }
+      ? {
+          tint: "bg-accent text-accent-foreground",
+          icon: reviewIcon,
+          spin: false,
+        }
       : STAGE_LOOK[stage];
   const running = stage === "running";
   return (
@@ -128,7 +131,7 @@ export function PullFlowFrame({
       <FlowHeader
         tint={look.tint}
         icon={look.icon}
-        spin={"spin" in look ? look.spin : undefined}
+        spin={look.spin}
         title={`${titles[stage]}${running ? ` to ${thisDeviceLabel}` : ""}`}
         elapsed={
           stage === "review"

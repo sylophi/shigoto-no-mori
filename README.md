@@ -37,7 +37,7 @@ Where things live:
 | Directory | What it is |
 | --- | --- |
 | `renderer/` | The UI both shells mount. `components/ui` holds primitives, `components/shared` the app-aware pieces several features use, and the other `components/` folders are one feature each. |
-| `main/` | The desktop binding, in two halves. `main/electron/` is everything that touches Electron. `main/core/` is the Electron-free rest (the account stores, the mirror and port-forward engines, the keychain reset, the rate limiters), which the node proofs in `test/` drive directly. `main/ipc/` puts the handlers on the wires. |
+| `main/` | The desktop binding, in two halves. `main/core/` is the Electron-free half (the account stores, the mirror and port-forward engines, the keychain reset, the rate limiters), which the node proofs in `test/` drive directly. The rest may bind Electron: `main/electron/` holds the adapters and `main/ipc/` puts the handlers on the wires. |
 | `web/` | The browser binding. |
 | `host/` | What a binding serves. No Electron, and no imports from `main/`. |
 | `shared/` | The contract layer: `ipc/` and `schemas/` are the `window.api` surface, `hub/` and `remote/` the device-to-device wire, `git/` the git rules each side (and the Go CLI) agrees on, and `packaging/` the node-only facts the build tooling and the runtime share. |

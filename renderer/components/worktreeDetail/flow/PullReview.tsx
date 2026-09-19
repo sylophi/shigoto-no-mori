@@ -46,7 +46,7 @@ import { FlowFooter } from "./FlowChrome";
 // asking the same question cost one read between them. The disk half
 // of the folder rule (a stray folder that is no worktree) is the
 // host's alone.
-export function useLocalCollision(
+function useLocalCollision(
   localProject: Project,
   worktree: Worktree,
 ): {
@@ -76,7 +76,7 @@ export function useLocalCollision(
   return { held, holder, refusal };
 }
 
-export function DestinationRow({
+function DestinationRow({
   worktree,
   localProject,
   thisDeviceLabel,
@@ -325,7 +325,7 @@ export function SourceCard({
 // source's own folder name (pullWorktreeName). The name is left open
 // only when the source's folder is not a valid managed dirname, in
 // which case the create picks a fresh pool name on arrival.
-export function DestinationFolder({
+function DestinationFolder({
   localProject,
   thisDeviceLabel,
   name,

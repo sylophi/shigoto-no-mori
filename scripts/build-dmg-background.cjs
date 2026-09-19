@@ -82,7 +82,7 @@ app
   .then(async () => {
     const layout = await import("../shared/packaging/dmgLayout.mts");
     const { artInputsHash, ART_STAMP_FILE } =
-      await import("../test/dmg-art.mjs");
+      await import("./lib/dmgArtStamp.mjs");
     const outDir = join(ROOT, layout.DMG_ART_DIR);
     const win = new BrowserWindow({
       // render() sets the real size before every capture.

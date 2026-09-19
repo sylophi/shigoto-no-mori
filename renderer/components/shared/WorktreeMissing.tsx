@@ -11,13 +11,13 @@ export function WorktreeMissing({
   isError,
   refetch,
   onBack,
-  message,
+  message = "Worktree not found.",
 }: {
   isPending: boolean;
   isError: boolean;
   refetch: () => Promise<unknown>;
   onBack: () => void;
-  message: string;
+  message?: string;
 }) {
   if (isPending) return null;
   if (isError) {

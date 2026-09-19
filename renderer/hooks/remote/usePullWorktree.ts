@@ -13,10 +13,13 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
+import type {
+  MirrorIgnoreMode,
+  MirrorStartPayload,
+} from "@shared/ipc/modules/mirror";
 import type { SyncPullWorktreeResult } from "@shared/ipc/modules/sync";
 import type { Worktree } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import type { PullChoice } from "@/hooks/remote/useMirrors";
 import { invalidateHostDevice, queryKeys } from "@/lib/queryKeys";
 
 // The teardown reports a kept source with its raw reason. scripts-running
@@ -35,7 +38,7 @@ export function keptSourceReason(
 // local forest's registry keys refresh. The outcome is the caller's
 // to report (the dialogs' last step is the report). Shared with the
 // mirror start, which lands the same way.
-export function invalidateLanded(
+function invalidateLanded(
   queryClient: QueryClient,
   localProjectId: string,
 ): void {
@@ -55,18 +58,26 @@ export type PullSource = {
   localProjectId: string;
 };
 
-// The mirror start's payload: the pull's with the leave-out rule
-// required, which a PullChoice always carries.
-type LandingPayload = Parameters<typeof window.api.mirror.start>[0];
+// What a mirror leaves out, as the dialog and the section hand it to
+// the host: the rule plus the engine patterns it resolved to.
+export type MirrorIgnoreChoice = {
+  ignoreMode: MirrorIgnoreMode;
+  ignores: string[];
+};
+
+// What a pull dialog hands its mutation: the rule plus the setup
+// switch, the same for a transplant and a mirror start.
+export type PullChoice = MirrorIgnoreChoice & { runSetup: boolean };
 
 // The mutation the pull and the mirror start share: the same payload
-// built from the scope and the source, handed to whichever verb lands
-// it. The leave-out rule rides along (the host brings the ignored files
+// built from the scope and the source (the mirror start's, which is the
+// pull's with the leave-out rule a PullChoice always carries), handed
+// to whichever verb lands it. The leave-out rule rides along (the host brings the ignored files
 // it admits over once the worktree is here). Success only invalidates:
 // the caller shows the outcome, so the conclusion is told once.
 export function useLandingMutation<Result>(
   { worktree, sourceProjectId, sourceIdentity, localProjectId }: PullSource,
-  land: (payload: LandingPayload) => Promise<Result>,
+  land: (payload: MirrorStartPayload) => Promise<Result>,
 ) {
   const { deviceId } = useHostScope();
   const queryClient = useQueryClient();

@@ -18,6 +18,12 @@ import { PullProgress } from "../flow/PullProgress";
 import { TransplantReview } from "./TransplantReview";
 import { stepHeadline } from "../flow/pullSteps";
 
+const STEPS = [
+  "Review & destination",
+  "Transplant",
+  "Finish up source",
+] as const;
+
 const TITLES: Record<FlowStage, string> = {
   review: "Transplant worktree",
   running: "Transplanting",
@@ -69,6 +75,8 @@ export function TransplantDialog({
       reviewIcon={ArrowRight}
       titles={TITLES}
       thisDeviceLabel={thisDeviceLabel}
+      steps={STEPS}
+      stepsLabel="Transplant steps"
       onClose={onClose}
       headline={
         <>

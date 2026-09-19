@@ -22,7 +22,7 @@ export function PullRequestDiff() {
   } = usePullRequestDiff(projectId, pr?.number);
 
   if (!worktree) {
-    return <WorktreeMissing {...missing} message="Worktree not found." />;
+    return <WorktreeMissing {...missing} />;
   }
   if (!pr) {
     // Same story for the PR lookup: pending or failed both leave `pr`

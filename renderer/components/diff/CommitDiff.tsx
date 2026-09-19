@@ -18,7 +18,7 @@ export function CommitDiff() {
   } = useCommitDiff(projectId, worktree?.id, hash);
 
   if (!worktree) {
-    return <WorktreeMissing {...missing} message="Worktree not found." />;
+    return <WorktreeMissing {...missing} />;
   }
 
   return (

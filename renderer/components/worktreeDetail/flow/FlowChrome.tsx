@@ -10,20 +10,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { formatElapsed } from "./pullSteps";
 
-const TRANSPLANT_STEPS = [
-  "Review & destination",
-  "Transplant",
-  "Finish up source",
-] as const;
-
 export function StepRail({
   current,
-  steps = TRANSPLANT_STEPS,
-  label = "Transplant steps",
+  steps,
+  label,
 }: {
   current: number;
-  steps?: readonly string[];
-  label?: string;
+  steps: readonly string[];
+  label: string;
 }) {
   return (
     <ol
