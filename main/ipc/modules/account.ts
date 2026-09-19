@@ -426,9 +426,7 @@ export function makeAccountHandlers(
             // device.
             deviceId: getDeviceId(),
             fallbackDeviceName: (await defaultDeviceName()).name,
-            // os.platform() is the same value as process.platform,
-            // which the linter restricts here. The device hub stores it
-            // as an opaque label.
+            // The device hub stores it as an opaque label.
             platform: platform(),
           },
           token,

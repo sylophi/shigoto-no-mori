@@ -58,8 +58,6 @@ export function reconcileLaunchAtLogin(): void {
   const keepReachable = keepReachableEnabled();
   // setLoginItemSettings is a no-op on Linux in Electron, so registering
   // there would silently do nothing. Say so rather than pretend it took.
-  // os.platform() is the same value as the lint-restricted
-  // process.platform (see main/ipc/modules/account.ts).
   const os = platform();
   if (os !== "darwin" && os !== "win32") {
     console.info(

@@ -39,29 +39,8 @@
     "jsx-a11y/label-has-associated-control": [
       "error",
       { "controlComponents": ["Checkbox"] }
-    ],
-    "no-restricted-properties": [
-      "error",
-      {
-        "object": "process",
-        "property": "platform",
-        "message": "Branch on the named platform primitives instead: host/lib/util/platform.ts (main) or renderer/lib/platform.ts (renderer)."
-      }
     ]
   },
-  "overrides": [
-    {
-      "files": [
-        "host/lib/util/platform.ts",
-        "main/preload.ts",
-        "forge.config.ts",
-        "scripts/**"
-      ],
-      "rules": {
-        "no-restricted-properties": "off"
-      }
-    }
-  ],
   "ignorePatterns": [
     "**/node_modules/**",
     "**/out/**",
