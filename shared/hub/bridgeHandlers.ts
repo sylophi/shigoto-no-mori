@@ -4,8 +4,8 @@
 // here so the view layer never owns a connection the remote host's
 // supersede rule would kill. Pure aside from the injected deps (no
 // electron, no node builtins), which is why both bindings share it:
-// the Electron main process serves it over IPC (main/ipc/index.ts) and
-// the web bridge serves it in-page (web/ipc/register.ts).
+// the Electron main process serves it over IPC (main/ipc/handlers.ts)
+// and the web bridge serves it in-page (web/ipc/register.ts).
 //
 // DIRECT OR NOTHING: the session cache here is
 // the single peer-session chokepoint every consumer shares (renderer
