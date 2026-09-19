@@ -208,7 +208,7 @@ func emitExit(runID string, slot scriptSlot, code int) {
 	}
 }
 
-// --- port-pool integration (host/lib/portPool.ts + command.ts) ---
+// --- port-pool integration (host/lib/portPool.ts) ---
 
 func portPoolInstalled() bool {
 	_, err := exec.LookPath("port-pool")

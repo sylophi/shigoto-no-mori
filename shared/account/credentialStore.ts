@@ -23,8 +23,8 @@ export type StoreCipher = {
   decrypt(payload: string): string;
 };
 
-// What the caller reads and writes. accountId may be empty (the enroll
-// response does not always carry one, see login.ts), deviceName is always
+// What the caller reads and writes. accountId may be empty (a token
+// that does not parse yields "", see token.ts), deviceName is always
 // set.
 export type StoredAccount = {
   credential: string;

@@ -1,7 +1,7 @@
 package main
 
 // Carry-over, ported from host/lib/worktrees/{carryOver,
-// worktreeInclude}.ts and host/lib/git/{branches,exclude}.ts: manual
+// worktreeInclude}.ts and host/lib/git/branches.ts: manual
 // entries (symlink/copy) from project.json merged with the repo's
 // .worktreeinclude resolution, applied best-effort into the new
 // worktree, with directory symlinks hidden via .git/info/exclude.
@@ -364,7 +364,7 @@ func applyOneCarryOver(sources []worktreeIdentity, destPath string, entry carryO
 	return nil, "", source
 }
 
-// --- .git/info/exclude (exclude.ts parity) ---
+// --- .git/info/exclude ---
 
 var gitignoreMetaRe = regexp.MustCompile(`([*?[\]#!])`)
 

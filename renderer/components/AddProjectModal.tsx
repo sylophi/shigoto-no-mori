@@ -5,7 +5,7 @@ import { AddProjectView } from "./addProject/AddProjectView";
 
 // Standalone host for the add-project flow (File → Add project…, ⌘N, and
 // the sidebar ＋ button). The shortcut is a native menu accelerator in
-// main/menu.ts that broadcasts over IPC.
+// main/electron/menu.ts that broadcasts over IPC.
 export function AddProjectModal() {
   const { addProjectOpen, setAddProjectOpen, openAddProject } = useOverlays();
 
