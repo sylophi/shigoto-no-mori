@@ -38,14 +38,23 @@ export function AddToDeviceSubmenu({
   );
   // The tab's api rather than the member's: a member's is withheld
   // without the command grant, which a read doesn't need, and a tab's
-  // is simply the device's session (window.api for this one).
-  const source = members
-    .map((member) => ({
-      project: member.project,
-      api: tabs.find((tab) => tab.deviceId === member.deviceId)?.api,
-    }))
-    .find((member) => member.api !== undefined);
-  if (candidates.length === 0 || source?.api === undefined) return null;
+  // is simply the device's session (window.api for this one). A peer
+  // in the roster has an api before it has a session to carry a call,
+  // so a member that can answer now goes ahead of one that may not.
+  const sources = members.flatMap((member) => {
+    const tab = tabs.find((t) => t.deviceId === member.deviceId);
+    return tab?.api === undefined
+      ? []
+      : [
+          {
+            project: member.project,
+            api: tab.api,
+            live: tab.block !== "offline",
+          },
+        ];
+  });
+  const source = sources.find((member) => member.live) ?? sources[0];
+  if (candidates.length === 0 || source === undefined) return null;
   const { api, project } = source;
 
   const addTo = async (tab: DeviceTab) => {

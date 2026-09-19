@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EmptyPanel } from "@/components/remote/EmptyPanel";
 import {
   DeviceTabBar,
@@ -15,7 +15,7 @@ import { AddProjectView } from "./addProject/AddProjectView";
 // the sidebar ＋ button). The shortcut is a native menu accelerator in
 // main/menu.ts that broadcasts over IPC.
 export function AddProjectModal() {
-  const { addProjectOpen, openAddProject } = useOverlays();
+  const { addProjectOpen, addProjectRequest, openAddProject } = useOverlays();
 
   useEffect(
     () => window.api.projectLauncher.onAddProject(() => openAddProject()),
@@ -23,7 +23,7 @@ export function AddProjectModal() {
   );
 
   if (!addProjectOpen) return null;
-  return <AddProjectDialog />;
+  return <AddProjectDialog key={addProjectRequest} />;
 }
 
 // The flow under a device pick: the same browse, scan and add, run on
@@ -44,13 +44,17 @@ function AddProjectDialog() {
     addProjectTarget.deviceId ?? localDeviceId,
   );
 
-  // AddProjectView owns its own Escape handling (cancels the scan stage,
-  // or closes from the browse stage), so the shell must not also close.
-  // A tab that can't show the view has nothing to take the key.
-  const viewOwnsEscape = picked !== undefined && picked.block === undefined;
+  // Escape is the shell's to hear (it hears it wherever focus sits),
+  // and the view's to answer while it has a stage to back out of. The
+  // view leaves this null otherwise, and whenever it isn't mounted (a
+  // tab that can only show a note), so the key closes the dialog.
+  const escapeRef = useRef<(() => void) | null>(null);
 
   return (
-    <ModalShell onClose={onClose} closeOnEscape={!viewOwnsEscape}>
+    <ModalShell
+      onClose={onClose}
+      onEscape={() => (escapeRef.current ?? onClose)()}
+    >
       {tabs.length > 1 && picked && (
         <div className="border-b border-border py-2">
           <DeviceTabBar
@@ -63,7 +67,12 @@ function AddProjectDialog() {
       )}
       {picked ? (
         <DeviceTabPanel tab={picked} subject="its folder listing">
-          <AddProjectView query={query} setQuery={setQuery} onClose={onClose} />
+          <AddProjectView
+            query={query}
+            setQuery={setQuery}
+            onClose={onClose}
+            escapeRef={escapeRef}
+          />
         </DeviceTabPanel>
       ) : (
         <div className="p-6">

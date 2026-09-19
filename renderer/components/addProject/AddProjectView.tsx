@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type RefObject,
+} from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Command } from "cmdk";
 import {
@@ -11,7 +17,7 @@ import {
   FolderSearch,
   GitBranch,
 } from "lucide-react";
-import { repoNameFromUrl } from "@shared/cloneUrl";
+import { repoNameFromUrl, stripUrlCredentials } from "@shared/cloneUrl";
 import { normalizeRemoteUrl } from "@shared/repoIdentity.mts";
 import {
   canNavigateUp,
@@ -30,6 +36,7 @@ import {
   useCloneProject,
   useProjects,
 } from "@/hooks/projects/useProjects";
+import { fsIsGitRepoQueryOptions } from "@/hooks/fs/useFsIsGitRepo";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { worktreesQueryOptions } from "@/hooks/worktrees/useWorktrees";
@@ -54,6 +61,9 @@ interface AddProjectViewProps {
   query: string;
   setQuery: (value: string) => void;
   onClose: () => void;
+  // What the dialog's Escape runs instead of closing. Set while there
+  // is a scan to back out of, null otherwise.
+  escapeRef: RefObject<(() => void) | null>;
 }
 
 type AddProjectStage = "browse" | "scanning" | "results" | "cloning";
@@ -64,6 +74,7 @@ export function AddProjectView({
   query,
   setQuery,
   onClose,
+  escapeRef,
 }: AddProjectViewProps) {
   const [highlighted, setHighlighted] = useState<string>("");
   const addProject = useAddProject();
@@ -103,7 +114,9 @@ export function AddProjectView({
       ? null
       : {
           name: cloneName,
-          url: query.trim(),
+          // A peer clones with its own credentials. Ones pasted in with
+          // the URL stay on this device, the rule pickCloneUrl keeps.
+          url: scope.remote ? stripUrlCredentials(query) : query.trim(),
           // The remote as repo identity spells it (host/owner/repo).
           repo: normalizeRemoteUrl(query) ?? query.trim(),
           // Tildified here, once: a picked parent comes back as the
@@ -131,6 +144,9 @@ export function AddProjectView({
   const [scanResults, setScanResults] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkAdding, setBulkAdding] = useState(false);
+  // Which scan is current, so one cancelled mid-flight can't land its
+  // results over the browse stage the user went back to.
+  const scanRun = useRef(0);
 
   // ---------- Browse mode ----------
 
@@ -150,6 +166,7 @@ export function AddProjectView({
     filtered,
     submitTarget,
     targetIsGitRepo,
+    targetSettled,
     browseTo,
     browseUp,
   } = browse;
@@ -240,25 +257,48 @@ export function AddProjectView({
     if (!hasTrailingSlash(browseDir)) return;
     setScanRoot(browseDir);
     setStage("scanning");
-    try {
-      const results = await scope.api.fs.scanForGitRepos(browseDir);
-      const newOnly = results.filter((p) => !registeredPaths.has(p));
-      setScanResults(newOnly);
-      setSelected(new Set(newOnly));
-      setHighlighted("");
-      setStage("results");
-    } catch (err) {
-      notifyError("Couldn't scan for git repos", err);
+    scanRun.current += 1;
+    const run = scanRun.current;
+    // No try here, for cloneAndOpen's reason: the early return.
+    const results = await scope.api.fs
+      .scanForGitRepos(browseDir)
+      .catch((err: unknown) => {
+        if (scanRun.current === run) {
+          notifyError("Couldn't scan for git repos", err);
+        }
+        return null;
+      });
+    // Cancelled meanwhile: its outcome is nobody's.
+    if (scanRun.current !== run) return;
+    if (results === null) {
       setStage("browse");
+      return;
     }
+    const newOnly = results.filter((p) => !registeredPaths.has(p));
+    setScanResults(newOnly);
+    setSelected(new Set(newOnly));
+    setHighlighted("");
+    setStage("results");
   };
 
   const exitScan = () => {
+    scanRun.current += 1;
     setStage("browse");
     setScanResults([]);
     setSelected(new Set());
     setHighlighted("");
   };
+
+  // Escape backs out of a scan, from wherever focus sits (the panels
+  // have no input to hold it). Every other stage leaves the key to the
+  // dialog, which closes: a clone keeps running without it.
+  const backsOut = stage === "scanning" || stage === "results";
+  useEffect(() => {
+    escapeRef.current = backsOut ? exitScan : null;
+    return () => {
+      escapeRef.current = null;
+    };
+  });
 
   const toggleSelected = (path: string) => {
     setSelected(withToggled(path));
@@ -292,41 +332,44 @@ export function AddProjectView({
   // would eat the scheme.
   const canBrowseUp = isAnchoredPath(query) && canNavigateUp(query);
 
-  const hasHighlighted = highlighted.startsWith("browse:");
+  // Never in clone mode: the rows are gone, but cmdk can keep the value
+  // of one that unmounted with the rest, and ↩ has to mean "clone".
+  const hasHighlighted = clone === null && highlighted.startsWith("browse:");
 
-  const primaryAction = () => {
+  const primaryAction = async () => {
     if (clone !== null) {
       void cloneAndOpen();
-    } else if (targetIsGitRepo) {
-      void submit();
-    } else {
-      void scanCurrentDir();
+      return;
     }
+    // The hint can trail the input (useBrowseState), and a path pasted
+    // and entered at once would scan its parent off a stale "no". ↩
+    // asks for itself then.
+    const isRepo = targetSettled
+      ? targetIsGitRepo
+      : await queryClient
+          .ensureQueryData(fsIsGitRepoQueryOptions(submitTarget, scope))
+          .catch(() => false);
+    if (isRepo) void submit(submitTarget);
+    else void scanCurrentDir();
   };
 
   const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && e.metaKey) {
       e.preventDefault();
       e.stopPropagation();
-      primaryAction();
+      void primaryAction();
       return;
     }
     if (e.key === "Enter" && !hasHighlighted) {
       e.preventDefault();
       e.stopPropagation();
-      primaryAction();
+      void primaryAction();
       return;
     }
     if (e.key === "ArrowLeft" && canBrowseUp && !leafFilter) {
       e.preventDefault();
       e.stopPropagation();
       browseUp();
-      return;
-    }
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      onClose();
       return;
     }
     if (e.key === "Backspace" && query === "") {
@@ -340,12 +383,6 @@ export function AddProjectView({
       e.preventDefault();
       e.stopPropagation();
       void bulkAdd();
-      return;
-    }
-    if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      exitScan();
     }
   };
 
@@ -394,7 +431,7 @@ export function AddProjectView({
     : targetIsGitRepo
       ? "Add"
       : "Scan for repos in folder";
-  const submitKbd = hasHighlighted && !cloneMode ? "⌘↩" : "↩";
+  const submitKbd = hasHighlighted ? "⌘↩" : "↩";
   const canPrimary =
     cloneMode ||
     (targetIsGitRepo
@@ -424,7 +461,7 @@ export function AddProjectView({
           <button
             type="button"
             onMouseDown={keepFocusInInput}
-            onClick={primaryAction}
+            onClick={() => void primaryAction()}
             disabled={!canPrimary || addProject.isPending}
             className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={`${submitLabel} (${submitKbd})`}
@@ -458,7 +495,7 @@ export function AddProjectView({
         )}
         {/* Kept mounted (cmdk wants its list), just empty, in clone mode. */}
         <Command.List
-          onMouseDown={(e) => e.preventDefault()}
+          onMouseDown={keepFocusInInput}
           className={cloneMode ? "hidden" : "max-h-96 overflow-y-auto p-2"}
         >
           {canBrowseUp && (

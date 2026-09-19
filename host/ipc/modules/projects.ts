@@ -1,4 +1,5 @@
 import { pickCloneUrl, repoNameFromUrl } from "@shared/cloneUrl";
+import { errorMessageOf } from "@shared/errors";
 import { reorderProjects } from "@shared/reorder";
 import type { Project } from "@shared/schemas";
 import type { Handlers } from "@shared/ipc/types";
@@ -57,9 +58,17 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
 
   clone: async ({ url, parentDir, name }) => {
     const folder = name ?? repoNameFromUrl(url);
-    if (folder === null) throw new Error(`${url} is not a git remote URL`);
+    // The payload schema has held the URL to a remote already. Not
+    // echoed: it may carry a token.
+    if (folder === null) throw new Error("Not a git remote URL");
     const path = await cloneRepo(url, expandHome(parentDir), folder);
-    return projectsAddViaCli(path);
+    // The checkout stays if registering fails, so the error says where
+    // it is: a retry would only find the folder taken.
+    return projectsAddViaCli(path).catch((error: unknown) => {
+      throw new Error(
+        `Cloned into ${path}, but couldn't add it as a project: ${errorMessageOf(error)}`,
+      );
+    });
   },
 
   remove: async ({ id }) => {

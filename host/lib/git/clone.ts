@@ -29,6 +29,14 @@ export async function cloneRepo(
   // `--` ends the options: the URL and name come from the caller.
   await run(parentDir, ["clone", "--", url, name], {
     env: { GIT_TERMINAL_PROMPT: "0" },
+  }).catch((error: unknown) => {
+    // Refusing to prompt, git names the URL it wanted a password for,
+    // userinfo and all, and a pasted token sits there. The message goes
+    // to a toast, so that part is dropped.
+    if (error instanceof Error) {
+      error.message = error.message.replace(/(https?:\/\/)[^/\s'"]*@/gi, "$1");
+    }
+    throw error;
   });
   return dest;
 }

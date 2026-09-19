@@ -173,6 +173,30 @@ async function main() {
     assert.ok(!existsSync(join(parent, "ghost")));
   });
 
+  await check(
+    "a failed clone's message never carries the URL's credentials",
+    async (track) => {
+      const sandbox = realpathSync(mkdtempSync(join(tmpdir(), "sm-clone-")));
+      track(() => rmSync(sandbox, { recursive: true, force: true }));
+      // Nothing listens on port 1, so this fails at once and offline,
+      // with git naming the URL it could not reach.
+      const failure = await cloneRepo(
+        "https://someone:s3cret-t0ken@127.0.0.1:1/owner/repo.git",
+        sandbox,
+        "repo",
+      ).then(
+        () => null,
+        (error) => error,
+      );
+      assert.ok(failure instanceof Error, "the clone did not fail");
+      assert.ok(
+        !failure.message.includes("s3cret-t0ken"),
+        `the token is in the message: ${failure.message}`,
+      );
+      assert.ok(!existsSync(join(sandbox, "repo")));
+    },
+  );
+
   done();
 }
 

@@ -64,12 +64,17 @@ export function useBrowseState(opts: UseBrowseStateOptions) {
       false);
   const pausedTarget = useDebouncedValue(submitTarget, PROBE_PAUSE_MS);
   const probeTarget = typingLeaf ? pausedTarget : submitTarget;
-  const { data: probedIsGitRepo = false } = useFsIsGitRepo(
+  const { data: probedIsGitRepo = false, isLoading: probing } = useFsIsGitRepo(
     probeTarget,
     enabled && !listedAsRepo,
   );
   const targetIsGitRepo =
     listedAsRepo || (probeTarget === submitTarget && probedIsGitRepo);
+  // False while the answer above is a guess: the pause hasn't run out,
+  // or the probe is still out. ↩ must not read "not a repo" off that,
+  // or a path pasted and entered at once scans its parent instead.
+  const targetSettled =
+    listedAsRepo || (probeTarget === submitTarget && !probing);
 
   const browseTo = (name: string) => {
     setQuery(appendBrowsePathSegment(query, name));
@@ -93,6 +98,7 @@ export function useBrowseState(opts: UseBrowseStateOptions) {
     filtered,
     submitTarget,
     targetIsGitRepo,
+    targetSettled,
     browseTo,
     browseUp,
   };
