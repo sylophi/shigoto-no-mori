@@ -27,10 +27,10 @@ jobs:
       # Every build is signed and notarized. A full release must point
       # at a commit on main, so one cannot be cut from a side branch by
       # accident. A PRERELEASE may be tagged anywhere (a test build cut
-      # from v2) and is signed like any other: only this repo's admin
-      # can publish a release and a fork's workflows never see these
-      # secrets, so an on-main rule for prereleases would only have
-      # produced test builds Gatekeeper refuses to open.
+      # from a feature branch) and is signed like any other: only this
+      # repo's admin can publish a release and a fork's workflows never
+      # see these secrets, so an on-main rule for prereleases would only
+      # have produced test builds Gatekeeper refuses to open.
       - name: Require a full release to be on main
         env:
           PRERELEASE: ${{ github.event.release.prerelease }}
