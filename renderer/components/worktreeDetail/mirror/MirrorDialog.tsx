@@ -5,33 +5,24 @@
 // proof: the session's first verdict, and the way to the local copy's
 // page, where the footer's Mirror button takes over.
 import { pullWorktreeName } from "@/lib/remote/pullWorktreeName";
-import { useState } from "react";
-import {
-  ArrowRight,
-  Check,
-  Loader2,
-  Monitor,
-  RefreshCw,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowRight, Check, Monitor, RefreshCw } from "lucide-react";
 import type { MirrorSession } from "@shared/ipc/modules/mirror";
 import type { Project, Worktree } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip-button";
-import { ModalShell } from "@/components/ui/modal-shell";
 import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
-import { StatusDot, TONE_PILL } from "@/components/ui/status-dot";
+import { StatusDot } from "@/components/ui/status-dot";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
 import { LocalHostScope } from "@/hooks/remote/useHostScope";
 import { useMirrors, useStartMirror } from "@/hooks/remote/useMirrors";
-import { usePullProgress } from "@/hooks/remote/usePullProgress";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import {
-  FlowHeader,
-  StepRail,
+  type FlowStage,
+  PullFlowFrame,
+  usePullFlow,
+} from "../transplant/PullFlow";
+import {
   TransplantBody,
   TransplantFooter,
 } from "../transplant/TransplantChrome";
@@ -40,10 +31,10 @@ import { TransplantProgress } from "../transplant/TransplantProgress";
 import {
   DestinationFolder,
   DestinationRow,
+  PullReviewFooter,
   SourceCard,
-  useLocalCollision,
 } from "../transplant/TransplantReview";
-import { stepHeadline, useClock } from "../transplant/transplantSteps";
+import { stepHeadline } from "../transplant/transplantSteps";
 import {
   selectionSummary,
   sessionSummary,
@@ -55,34 +46,11 @@ import { describeMirror } from "./mirrorStatus";
 
 const STEPS = ["Review", "Mirror", "Live"] as const;
 
-type Stage = "review" | "running" | "failed" | "done";
-
-// The same tints as the transplant header, so the two dialogs are one
-// family.
-const HEADER: Record<
-  Stage,
-  { tint: string; icon: LucideIcon; spin?: boolean; title: string }
-> = {
-  review: {
-    tint: "bg-accent text-accent-foreground",
-    icon: RefreshCw,
-    title: "Mirror worktree",
-  },
-  running: {
-    tint: TONE_PILL.sky,
-    icon: Loader2,
-    spin: true,
-    title: "Mirroring",
-  },
-  failed: { tint: TONE_PILL.rose, icon: X, title: "Mirror stopped" },
-  done: { tint: TONE_PILL.emerald, icon: Check, title: "Mirror live" },
-};
-
-const STAGE_STEP: Record<Stage, number> = {
-  review: 0,
-  running: 1,
-  failed: 1,
-  done: 2,
+const TITLES: Record<FlowStage, string> = {
+  review: "Mirror worktree",
+  running: "Mirroring",
+  failed: "Mirror stopped",
+  done: "Mirror live",
 };
 
 export function MirrorDialog({
@@ -102,7 +70,6 @@ export function MirrorDialog({
   sourceDeviceLabel: string;
   onClose: () => void;
 }) {
-  const nav = useWorktreeNav();
   const thisDeviceLabel = useLocalDeviceName();
   const mirror = useStartMirror({
     worktree,
@@ -113,80 +80,49 @@ export function MirrorDialog({
   // Under the source scope: its ignored list walks the checkout over
   // the device link.
   const pull = usePullChoice(project.id, worktree.id);
-  const stage: Stage = mirror.isPending
-    ? "running"
-    : mirror.isError
-      ? "failed"
-      : mirror.isSuccess
-        ? "done"
-        : "review";
-  const [endedAt, setEndedAt] = useState(0);
-  const now = useClock(stage === "running");
-  const progress = usePullProgress(worktree.id);
-
-  const start = () => {
-    progress.reset();
-    mirror.mutate(pull.choice, { onSettled: () => setEndedAt(Date.now()) });
-  };
-
-  const open = () => {
-    if (!mirror.data) return;
-    onClose();
-    nav.toLocalWorktree(
-      mirror.data.worktree.projectId,
-      mirror.data.worktree.id,
-    );
-  };
-
-  const header = HEADER[stage];
-  const elapsed = (stage === "running" ? now : endedAt) - mirror.submittedAt;
+  const { stage, elapsed, progress, start, open } = usePullFlow({
+    mutation: mirror,
+    sourceWorktreeId: worktree.id,
+    choice: pull.choice,
+    onClose,
+  });
   const summary = selectionSummary(pull.selection);
 
   return (
-    <ModalShell
-      onClose={stage === "running" ? () => {} : onClose}
-      closeOnEscape={stage !== "running"}
-      popoverClassName="flex max-h-[85vh] max-w-4xl flex-col"
+    <PullFlowFrame
+      stage={stage}
+      elapsed={elapsed}
+      reviewIcon={RefreshCw}
+      titles={TITLES}
+      thisDeviceLabel={thisDeviceLabel}
+      steps={STEPS}
+      stepsLabel="Mirror steps"
+      onClose={onClose}
+      headline={
+        <>
+          {stage === "review" && (
+            <>
+              A live copy of{" "}
+              <span className="font-mono">{worktree.branch}</span> here, kept in
+              step with {sourceDeviceLabel}.
+            </>
+          )}
+          {stage === "running" &&
+            (progress.frame === null
+              ? "Reaching the source."
+              : progress.frame.step === "apply" && !mirror.isSuccess
+                ? "Opening the mirror."
+                : `${stepHeadline(progress.frame, sourceDeviceLabel)}.`)}
+          {stage === "failed" && `Nothing on ${sourceDeviceLabel} changed.`}
+          {stage === "done" && (
+            <>
+              <span className="font-mono">{worktree.branch}</span> is on both
+              devices and stays in step.
+            </>
+          )}
+        </>
+      }
     >
-      <FlowHeader
-        tint={header.tint}
-        icon={header.icon}
-        spin={header.spin}
-        title={`${header.title}${stage === "running" ? ` to ${thisDeviceLabel}` : ""}`}
-        elapsed={
-          stage === "review"
-            ? undefined
-            : { ms: elapsed, label: stage === "running" ? "elapsed" : "total" }
-        }
-        onClose={onClose}
-      >
-        {stage === "review" && (
-          <>
-            A live copy of <span className="font-mono">{worktree.branch}</span>{" "}
-            here, kept in step with {sourceDeviceLabel}.
-          </>
-        )}
-        {stage === "running" &&
-          (progress.frame === null
-            ? "Reaching the source."
-            : progress.frame.step === "apply" && !mirror.isSuccess
-              ? "Opening the mirror."
-              : `${stepHeadline(progress.frame, sourceDeviceLabel)}.`)}
-        {stage === "failed" && `Nothing on ${sourceDeviceLabel} changed.`}
-        {stage === "done" && (
-          <>
-            <span className="font-mono">{worktree.branch}</span> is on both
-            devices and stays in step.
-          </>
-        )}
-      </FlowHeader>
-
-      <StepRail
-        current={STAGE_STEP[stage]}
-        steps={STEPS}
-        label="Mirror steps"
-      />
-
       {stage === "review" && (
         <MirrorReview
           worktree={worktree}
@@ -237,7 +173,7 @@ export function MirrorDialog({
           />
         </LocalHostScope>
       )}
-    </ModalShell>
+    </PullFlowFrame>
   );
 }
 
@@ -340,53 +276,18 @@ function MirrorReview({
       </TransplantBody>
 
       <LocalHostScope>
-        <MirrorReviewFooter
+        <PullReviewFooter
           worktree={worktree}
           localProject={localProject}
           waiting={pull.waiting}
           blocked={pull.blocked}
+          idleNote="Stop any time. Stopping removes the copy here."
+          startLabel="Start mirroring"
           onCancel={onCancel}
           onStart={onStart}
         />
       </LocalHostScope>
     </>
-  );
-}
-
-function MirrorReviewFooter({
-  worktree,
-  localProject,
-  waiting,
-  blocked,
-  onCancel,
-  onStart,
-}: {
-  worktree: Worktree;
-  localProject: Project;
-  waiting: boolean;
-  blocked: string | null;
-  onCancel: () => void;
-  onStart: () => void;
-}) {
-  const { refusal } = useLocalCollision(localProject, worktree);
-  return (
-    <TransplantFooter
-      note={
-        refusal ?? blocked ?? "Stop any time. Stopping removes the copy here."
-      }
-    >
-      <Button variant="ghost" size="sm" onClick={onCancel}>
-        Cancel
-      </Button>
-      <Button
-        size="sm"
-        onClick={onStart}
-        disabled={refusal !== null || waiting}
-      >
-        Start mirroring
-        <ArrowRight />
-      </Button>
-    </TransplantFooter>
   );
 }
 

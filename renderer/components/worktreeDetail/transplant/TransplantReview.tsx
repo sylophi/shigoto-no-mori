@@ -172,12 +172,13 @@ export function TransplantReview({
       </TransplantBody>
 
       <LocalHostScope>
-        <ReviewFooter
+        <PullReviewFooter
           worktree={worktree}
           localProject={localProject}
-          sourceDeviceLabel={sourceDeviceLabel}
           waiting={pull.waiting}
           blocked={pull.blocked}
+          idleNote={`Nothing on ${sourceDeviceLabel} is deleted until you say so at the last step.`}
+          startLabel="Start transplant"
           onCancel={onCancel}
           onStart={onStart}
         />
@@ -277,35 +278,35 @@ export function DestinationRow({
   );
 }
 
-function ReviewFooter({
+// The review step's footer band, the transplant's and the mirror's:
+// the collision refusal or the wait's reason when there is one, the
+// flow's own reassurance when there is not, and the start button held
+// until both clear.
+export function PullReviewFooter({
   worktree,
   localProject,
-  sourceDeviceLabel,
   waiting,
   blocked,
+  idleNote,
+  startLabel,
   onCancel,
   onStart,
 }: {
   worktree: Worktree;
   localProject: Project;
-  sourceDeviceLabel: string;
   // The gitignored rule resolves over the ignored list: no start
   // before it lands, or the files step would bring everything.
   waiting: boolean;
   // The wait's reason when it will not end on its own.
   blocked: string | null;
+  idleNote: string;
+  startLabel: string;
   onCancel: () => void;
   onStart: () => void;
 }) {
   const { refusal } = useLocalCollision(localProject, worktree);
   return (
-    <TransplantFooter
-      note={
-        refusal ??
-        blocked ??
-        `Nothing on ${sourceDeviceLabel} is deleted until you say so at the last step.`
-      }
-    >
+    <TransplantFooter note={refusal ?? blocked ?? idleNote}>
       <Button variant="ghost" size="sm" onClick={onCancel}>
         Cancel
       </Button>
@@ -314,7 +315,7 @@ function ReviewFooter({
         onClick={onStart}
         disabled={refusal !== null || waiting}
       >
-        Start transplant
+        {startLabel}
         <ArrowRight />
       </Button>
     </TransplantFooter>
