@@ -5,7 +5,7 @@ import type { PortForwardEngine } from "../../portForward/engine";
 // Thin shell over the engine (main/portForward/engine.ts), injected at
 // boot following the setUpdaterImpl precedent: the wiring (the
 // bridge's direct peer sessions, the changed broadcast) lives in
-// main/ipc/index.ts, so this module stays a pure handler map.
+// main/ipc/handlers.ts, so this module stays a pure handler map.
 let impl: PortForwardEngine | null = null;
 
 export function setPortForwardEngine(next: PortForwardEngine): void {

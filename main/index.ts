@@ -41,7 +41,7 @@ import {
   registerIpcHandlers,
   startMirrorEngine,
   stopMirrorEngine,
-} from "./ipc";
+} from "./ipc/handlers";
 import { clerkPublishableKey } from "./ipc/modules/account";
 import { stopAllPortForwards } from "./ipc/modules/portForward";
 import { installHostImpls } from "./electron/hostImpls";
@@ -450,7 +450,7 @@ app.on("ready", async () => {
   // The hub socket: connect to the account's
   // Durable Object when a credential is stored. The same reconcile
   // reruns after every account change (the emitChanged path in
-  // main/ipc/index.ts), making this the boot-time pass only. The
+  // main/ipc/handlers.ts), making this the boot-time pass only. The
   // direct data-plane listener follows the same
   // enrollment condition, so its reconcile rides this refresh's tail.
   void refreshHubConnection();

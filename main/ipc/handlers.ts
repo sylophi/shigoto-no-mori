@@ -1,3 +1,11 @@
+// Every handler this device serves, assembled and put on the wires.
+// The wires themselves are register.ts (the Electron and websocket
+// bindings, broadcast, and the hub and direct plane's lifecycle). This
+// file is what rides them: it builds each contract module's handler map
+// from host/ipc/modules and ./modules, binds the two engines that need
+// peer reach (the mirror daemon and the port forwards) to the same peer
+// sessions the renderer uses, and registers the lot in
+// registerIpcHandlers, which main/index.ts calls once at boot.
 import { join } from "node:path";
 import { accountContract } from "@shared/ipc/modules/account";
 import { branchesContract } from "@shared/ipc/modules/branches";
