@@ -39,7 +39,7 @@ function available() {
 function resolveTest(name) {
   for (const suffix of SUFFIXES) {
     const file = join(testDir, name + suffix);
-    if (existsSync(file)) return file;
+    if (name + suffix !== SELF && existsSync(file)) return file;
   }
   return null;
 }

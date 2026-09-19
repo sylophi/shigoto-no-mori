@@ -1,6 +1,6 @@
 // The engine patterns of the bring rule (shared/ipc/modules/sync.ts
 // MirrorIgnoreModeSchema), built and read back. Free of imports so the
-// smoke (scripts/e2e, plain node) can build the same patterns the app
+// smoke (test/e2e, plain node) can build the same patterns the app
 // does.
 
 // The cap on a session's ignore list.
