@@ -6,7 +6,7 @@
 import { Bookmark } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { PullChoiceState } from "./ignoreChoice";
-import { LeaveOutPicker } from "./LeaveOutPicker";
+import { browseWorktree, LeaveOutPicker } from "./LeaveOutPicker";
 
 export function PullLeaveOut({
   pull,
@@ -21,7 +21,7 @@ export function PullLeaveOut({
       value={pull.selection}
       onChange={pull.setSelection}
       ignored={pull.ignored}
-      worktree={worktree}
+      browse={browseWorktree(worktree)}
     >
       {pull.presetDiffers && (
         <Button

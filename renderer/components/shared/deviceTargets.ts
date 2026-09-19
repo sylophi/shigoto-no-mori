@@ -44,6 +44,14 @@ export type DeviceTarget = Omit<DeviceTab, "block"> & {
   block: DeviceBlock | undefined;
 };
 
+// A device with a checkout of the repo whose folder is still there,
+// which leaves it a tab's own blocks.
+export function isHolder(
+  candidate: DeviceTarget,
+): candidate is DeviceTarget & DeviceTab & { project: Project } {
+  return candidate.project !== undefined && candidate.block !== "no-project";
+}
+
 // A tab with the repo's checkout on that device laid on top.
 function target(
   tab: DeviceTab,

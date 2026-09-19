@@ -16,10 +16,7 @@ import { PawPrint } from "lucide-react";
 import { DeviceChip } from "@/components/shared/DeviceChip";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import {
-  useDeviceTargets,
-  type DeviceTarget,
-} from "@/components/shared/deviceTargets";
+import { isHolder, useDeviceTargets } from "@/components/shared/deviceTargets";
 import { useScopedProjectParams } from "@/hooks/projects/useProjectNav";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useHostScope } from "@/hooks/remote/useHostScope";
@@ -32,13 +29,6 @@ import {
   type DeviceTab,
 } from "./DeviceTabs";
 import { PageHeader } from "./PageHeader";
-
-type Holder = DeviceTab & { project: Project };
-
-// A device with a checkout of the repo whose folder is still there.
-function isHolder(target: DeviceTarget): target is DeviceTarget & Holder {
-  return target.project !== undefined && target.block !== "no-project";
-}
 
 export function ProjectDevicePage({
   title,

@@ -98,6 +98,9 @@ export const projectsContract = defineContract("host", {
     WorktreeIncludeStatusSchema,
     { remote: true, mutating: false },
   ),
+  // Named for its first caller. The leave-out preset's picker reads it
+  // too, on every device holding the repo, so the name stays for the
+  // peers that know it.
   carryOverListing: invoke(
     "projects:carryOverListing",
     CarryOverListingPayloadSchema,

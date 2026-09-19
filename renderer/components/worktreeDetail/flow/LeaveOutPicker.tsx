@@ -5,9 +5,11 @@
 // anyway, so one list serves as a leave-out list or a bring list by
 // the base it hangs off. The list is the carry-over flow: the chosen
 // paths as rows, and a button opening the same folder browser over the
-// worktree, where an ignored entry can be picked. The worktree browsed
-// is the caller's (the source's copy in the dialog, the local copy on
-// the mirror's own page), read under the surrounding scope.
+// caller's files, where an ignored entry can be picked. What is browsed
+// is the caller's: one worktree under the surrounding scope for a pull
+// (the source's copy in the dialog, the local copy on the mirror's own
+// page), since only what the source holds can cross, and the repo as
+// every device holds it for the project's preset.
 import { useState } from "react";
 import { Plus, X } from "lucide-react";
 import type { UseQueryResult } from "@tanstack/react-query";
@@ -18,7 +20,11 @@ import {
   MIRROR_IGNORES_LIMIT,
 } from "@shared/ipc/modules/mirror";
 import type { SyncIgnoredPathsResult } from "@shared/ipc/modules/sync";
-import { PathPickerModal } from "@/components/shared/PathPickerModal";
+import {
+  PathPickerModal,
+  type PathPickerModalProps,
+} from "@/components/shared/PathPickerModal";
+import type { PickerEntry } from "@/components/shared/PickerRow";
 import { Button } from "@/components/ui/button";
 import { MaterialIcon } from "@/components/ui/material-icon";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -40,11 +46,32 @@ const OPTIONS = (Object.keys(IGNORE_BASE_COPY) as IgnoreBase[]).map((base) => ({
   title: IGNORE_BASE_COPY[base].title,
 }));
 
-export function LeaveOutPicker({
+// What the picker browses: the folder browser's own props, less the
+// row control and the close, which are the picker's.
+export type LeaveOutBrowse<E extends PickerEntry = PickerEntry> = Omit<
+  PathPickerModalProps<E>,
+  "renderTrailing" | "onClose"
+>;
+
+// One worktree, read under the surrounding scope.
+export function browseWorktree(worktree: {
+  projectId: string;
+  id: string;
+  path: string;
+}): LeaveOutBrowse {
+  return {
+    rootPath: worktree.path,
+    useListing: (relative) =>
+      useWorktreeFolder(worktree.projectId, worktree.id, relative),
+    emptyRootLabel: "The worktree is empty.",
+  };
+}
+
+export function LeaveOutPicker<E extends PickerEntry>({
   value,
   onChange,
   ignored,
-  worktree,
+  browse,
   disabled = false,
   note,
   children,
@@ -55,10 +82,8 @@ export function LeaveOutPicker({
     UseQueryResult<SyncIgnoredPathsResult>,
     "data" | "isPending" | "isError"
   >;
-  // The worktree the custom picker browses, in the surrounding scope.
-  // Without one the rule still shows and its rows still come off, but
-  // there is nothing to pick a new path from.
-  worktree: { projectId: string; id: string; path: string } | undefined;
+  // What the custom picker browses.
+  browse: LeaveOutBrowse<E>;
   // Read-only: the rule shows, nothing changes it.
   disabled?: boolean;
   // What the rule is for, under the heading, where the surrounding
@@ -112,7 +137,7 @@ export function LeaveOutPicker({
               onRemove={() => toggle(path)}
             />
           ))}
-          {!disabled && worktree !== undefined && (
+          {!disabled && (
             <Button
               variant="ghost"
               size="sm"
@@ -126,13 +151,9 @@ export function LeaveOutPicker({
         </div>
       )}
       {children}
-      {picking && worktree !== undefined && (
+      {picking && (
         <PathPickerModal
-          rootPath={worktree.path}
-          useListing={(relative) =>
-            useWorktreeFolder(worktree.projectId, worktree.id, relative)
-          }
-          emptyRootLabel="The worktree is empty."
+          {...browse}
           renderTrailing={(entry, path, insideIgnored) => (
             <Trailing
               picked={excepted.has(path)}

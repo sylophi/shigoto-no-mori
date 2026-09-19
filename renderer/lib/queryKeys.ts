@@ -174,8 +174,13 @@ function buildQueryKeys(deviceId: string) {
     fsListDirectory: (path: string) => host("fs", "listDirectory", path),
     fsIsGitRepo: (path: string) => host("fs", "isGitRepo", path),
 
-    carryOverListing: (projectId: string, relative: string) =>
-      host("carryOver", "listing", projectId, relative),
+    // `ruleIgnored` is another verdict on the same folder, so it keys
+    // apart from the carry-over picker's.
+    carryOverListing: (
+      projectId: string,
+      relative: string,
+      ruleIgnored = false,
+    ) => host("carryOver", "listing", projectId, relative, ruleIgnored),
     carryOverStats: (projectId: string, paths: string[]) =>
       host("carryOver", "stats", projectId, paths),
     worktreeIncludeStatus: (projectId: string | null) =>

@@ -2,15 +2,21 @@
 // transplant of the repo opens on, which the dialog can still change
 // for the one pull. A shared setting like "Create on", and for the same
 // reason: a pull has a device at each end, so the preset has to hold on
-// both. The picker is the dialogs' own, browsing the primary checkout
-// of the device the page is scoped to, since ignored paths are much
-// the same in every checkout of a repo.
+// both. The picker is the dialogs' own, browsing every checkout on
+// every device holding the repo at once (useRepoListing): a preset
+// names paths for pulls from any of them, and an ignored file may sit
+// on one machine alone. The list of what git ignores stays the scoped
+// device's primary checkout, as a sample of what the rule covers.
 import { useState } from "react";
 import type { Project } from "@shared/schemas";
 import {
   useLeaveOutPreset,
   useSaveLeaveOutPreset,
 } from "@/hooks/sharedSettings/useLeaveOutPreset";
+import {
+  type RepoListingEntry,
+  useRepoListing,
+} from "@/hooks/remote/useRepoListing";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import {
@@ -20,9 +26,18 @@ import {
   selectionOfPreset,
 } from "../worktreeDetail/flow/ignoreChoice";
 import { LeaveOutPicker } from "../worktreeDetail/flow/LeaveOutPicker";
+import { FoundOnDevices } from "./OnlyInWorktrees";
 
 const NOTE =
   "The default when you mirror or transplant one of this project's worktrees.";
+
+// Where a row was found, unless every device has it in its main
+// checkout.
+function foundOn(entry: RepoListingEntry) {
+  return entry.everywhere ? null : (
+    <FoundOnDevices holders={entry.holders} className="max-w-56" />
+  );
+}
 
 export function LeaveOutSection({ project }: { project: Project }) {
   const worktrees = useWorktrees(project.id);
@@ -60,17 +75,14 @@ export function LeaveOutSection({ project }: { project: Project }) {
               isError: !worktrees.isPending,
             }
       }
-      worktree={
-        primary && { projectId: project.id, id: primary.id, path: primary.path }
-      }
+      browse={{
+        // The repo by name: a folder here may sit on a peer alone, under
+        // no path this device has.
+        rootPath: project.name,
+        useListing: (relative) => useRepoListing(project, relative),
+        renderProvenance: foundOn,
+      }}
       note={NOTE}
-    >
-      {primary === undefined && !worktrees.isPending && (
-        <p className="text-xs text-muted-foreground">
-          Couldn&apos;t read this project&apos;s checkout, so there are no files
-          to pick from.
-        </p>
-      )}
-    </LeaveOutPicker>
+    />
   );
 }

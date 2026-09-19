@@ -16,13 +16,13 @@ import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { PathSpan } from "@/components/ui/path-span";
 import { type PickerEntry, PickerRow } from "./PickerRow";
 
-// The folder browser behind the carry-over picker and the mirror's
-// "what stays behind" picker: a filter that owns the keyboard, folders
-// to step into, and a trailing control per row the caller decides. The
-// listing is a hook the caller hands in (carry-over unions every
-// checkout, the mirror reads one worktree), called for the browsed
-// folder.
-interface PathPickerModalProps<E extends PickerEntry> {
+// The folder browser behind the carry-over picker and the "leave out"
+// pickers: a filter that owns the keyboard, folders to step into, and
+// a trailing control per row the caller decides. The listing is a hook
+// the caller hands in (carry-over unions every checkout, a pull reads
+// its source worktree, the leave-out preset unions every device),
+// called for the browsed folder.
+export interface PathPickerModalProps<E extends PickerEntry> {
   // The root the relative paths hang off, for the header.
   rootPath: string;
   // The listing for one root-relative folder ("" at the root).
@@ -50,8 +50,9 @@ export function PathPickerModal<E extends PickerEntry>({
 }: PathPickerModalProps<E>) {
   // The folders stepped into, outermost first, and the browsed folder
   // they spell, root-relative ("" at the root). Relative rather than
-  // absolute because the listing is a union across checkouts: a folder
-  // may exist in a worktree and not in the primary.
+  // absolute because the listing may be a union across checkouts or
+  // devices: a folder may exist in a worktree and not in the primary,
+  // or on a peer and not here.
   const [parents, setParents] = useState<readonly E[]>([]);
   const relative = parents.map((parent) => parent.name).join("/");
   const insideIgnored = parents.some((parent) => parent.ignored);
