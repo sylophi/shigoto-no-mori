@@ -47,6 +47,11 @@ import { useBrowseState } from "./useBrowseState";
 import { withToggled } from "@/lib/toggleSet";
 
 interface AddProjectViewProps {
+  // The input value IS the path. Tildified paths are expanded server-side.
+  // Or it is a remote URL, and the flow clones instead of browsing.
+  // Owned by the dialog, so it outlives a change of device.
+  query: string;
+  setQuery: (value: string) => void;
   onClose: () => void;
 }
 
@@ -54,10 +59,11 @@ type AddProjectStage = "browse" | "scanning" | "results" | "cloning";
 
 // react-doctor-disable-next-line react-doctor/no-giant-component -- browse logic already extracted to useBrowseState; remaining scan flow + keyboard handlers are tightly coupled
 // react-doctor-disable-next-line react-doctor/prefer-useReducer -- 7 fields split between browse and scan flows; transitions are linear and local, useReducer would add boilerplate without removing branching
-export function AddProjectView({ onClose }: AddProjectViewProps) {
-  // The input value IS the path. Tildified paths are expanded server-side.
-  // Or it is a remote URL, and the flow clones instead of browsing.
-  const [query, setQuery] = useState<string>("~/");
+export function AddProjectView({
+  query,
+  setQuery,
+  onClose,
+}: AddProjectViewProps) {
   const [highlighted, setHighlighted] = useState<string>("");
   const addProject = useAddProject();
   const queryClient = useQueryClient();

@@ -1,0 +1,98 @@
+// "Add to device": the project menu's way onto a machine that doesn't
+// hold the repo yet. It lists the devices that register projects and
+// aren't among the group's members, and a pick opens the add-project
+// dialog on that device with the repo's remote already in the input,
+// so getting a project onto a new machine is the pick, a glance at the
+// folder, and ↩. The clone itself is the dialog's (AddProjectView).
+//
+// The remote comes from a member that has the repo. projects:cloneUrl
+// is a read, so any member with a session can answer it, including a
+// peer that won't take commands from here: bringing its repo to THIS
+// machine needs nothing of it but the URL.
+import {
+  DropdownMenuItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useDeviceTabs, type DeviceTab } from "@/components/shared/DeviceTabs";
+import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import { useOverlays } from "@/hooks/ui/useOverlays";
+import { notifyError, toast } from "@/lib/toast";
+import type { GroupMember } from "./ProjectGroupActions";
+
+// Why a device can't take the clone right now, said in a word beside
+// its name. The Devices page is where either is fixed.
+const BLOCK_LABEL: Record<NonNullable<DeviceTab["block"]>, string> = {
+  offline: "offline",
+  "no-grant": "read-only",
+};
+
+export function AddToDeviceSubmenu({
+  name,
+  members,
+  onOpenChange,
+}: {
+  name: string;
+  members: readonly GroupMember[];
+  onOpenChange: (open: boolean) => void;
+}) {
+  const tabs = useDeviceTabs();
+  const registry = useRemoteDevices();
+  const { openAddProject } = useOverlays();
+
+  const holders = new Set(members.map((member) => member.deviceId));
+  const candidates = tabs.filter(
+    (tab) => tab.hostsProjects && !holders.has(tab.deviceId),
+  );
+  // The registry's api rather than the member's: a member's is withheld
+  // without the command grant, which a read doesn't need.
+  const source = members
+    .map((member) => ({
+      project: member.project,
+      api: member.isThisDevice
+        ? window.api
+        : registry.find((device) => device.deviceId === member.deviceId)?.api,
+    }))
+    .find((member) => member.api !== undefined);
+  if (candidates.length === 0 || source?.api === undefined) return null;
+  const { api, project } = source;
+
+  const addTo = async (tab: DeviceTab) => {
+    const url = await api.projects.cloneUrl(project.id).catch((err) => {
+      notifyError(`Couldn't read ${name}'s remote`, err);
+      return undefined;
+    });
+    if (url === undefined) return;
+    if (url === null) {
+      // Nothing to clone from. The dialog still opens there, to browse:
+      // the repo may already sit on that disk, just never registered.
+      toast(`${name} has no remote to clone from`, {
+        description: `If ${tab.label} already has a copy, add it by its folder.`,
+      });
+    }
+    openAddProject({ deviceId: tab.deviceId, query: url ?? undefined });
+  };
+
+  return (
+    <DropdownMenuSub onOpenChange={onOpenChange}>
+      <DropdownMenuSubTrigger>Add to device</DropdownMenuSubTrigger>
+      <DropdownMenuSubContent>
+        {candidates.map((tab) => (
+          <DropdownMenuItem
+            key={tab.deviceId}
+            disabled={tab.block !== undefined}
+            onClick={() => void addTo(tab)}
+          >
+            <span className="min-w-0 flex-1 truncate">{tab.label}</span>
+            {tab.block !== undefined && (
+              <span className="text-xs text-muted-foreground">
+                {BLOCK_LABEL[tab.block]}
+              </span>
+            )}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
+  );
+}

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { EmptyPanel } from "@/components/remote/EmptyPanel";
 import {
   DeviceTabBar,
@@ -31,12 +31,16 @@ export function AddProjectModal() {
 // scope the panel mounts it under, so a peer's disk browses like this
 // one's. The bar shows only once there is a choice to make.
 function AddProjectDialog({ onClose }: { onClose: () => void }) {
-  const { addProjectDeviceId } = useOverlays();
+  const { addProjectTarget } = useOverlays();
+  // Held here, above the per-device view, so what was typed survives a
+  // change of device: a pasted URL is as good on the next machine, and
+  // `~/dev/` means the same folder on each.
+  const [query, setQuery] = useState(addProjectTarget.query ?? "~/");
   // A browser on the account is a device too, but registers no projects.
   const tabs = useDeviceTabs().filter((tab) => tab.hostsProjects);
   const [picked, pick] = usePickedDevice(
     tabs,
-    addProjectDeviceId ?? localDeviceId,
+    addProjectTarget.deviceId ?? localDeviceId,
   );
 
   // AddProjectView owns its own Escape handling (cancels the scan stage,
@@ -58,7 +62,7 @@ function AddProjectDialog({ onClose }: { onClose: () => void }) {
       )}
       {picked ? (
         <DeviceTabPanel tab={picked} subject="its folder listing">
-          <AddProjectView onClose={onClose} />
+          <AddProjectView query={query} setQuery={setQuery} onClose={onClose} />
         </DeviceTabPanel>
       ) : (
         <div className="p-6">

@@ -24,12 +24,12 @@ export type DeviceBlock = "offline" | "no-project" | "no-grant";
 
 // Honest and specific, and none of them offer a fix here: reconnecting
 // is the device hub's job, granting happens on the other machine's
-// Devices page, and cloning a missing repo is not something this form
-// does.
+// Devices page, and getting a missing repo onto a device is the
+// project menu's Add to device, which this points at.
 export const BLOCK_REASON: Record<DeviceBlock, string> = {
   offline: "Creating needs a live connection.",
   "no-project":
-    "Doesn't have this repo registered. Matching by git remote found no checkout there.",
+    "Doesn't have this repo yet. Add to device, in the project's menu, clones it there.",
   "no-grant": peerReadOnlyNote("it"),
 };
 

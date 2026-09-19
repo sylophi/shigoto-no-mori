@@ -6,20 +6,27 @@ interface OverlaysState {
   toggleLauncher: () => void;
   addProjectOpen: boolean;
   setAddProjectOpen: (open: boolean) => void;
-  // The device the dialog opens on. Undefined opens on this one (or,
-  // on a hostless client, the first device that answers).
-  addProjectDeviceId: string | undefined;
-  openAddProject: (deviceId?: string) => void;
+  // What the dialog opens on, for a caller that already knows.
+  addProjectTarget: AddProjectTarget;
+  openAddProject: (target?: AddProjectTarget) => void;
 }
+
+export interface AddProjectTarget {
+  // Undefined opens on this device (or, on a hostless client, the
+  // first device that answers).
+  deviceId?: string;
+  // What the input starts as: a path to browse, or a URL to clone.
+  query?: string;
+}
+
+const NO_TARGET: AddProjectTarget = {};
 
 const OverlaysContext = createContext<OverlaysState | null>(null);
 
 export function OverlaysProvider({ children }: { children: ReactNode }) {
   const [launcherOpen, setLauncherOpen] = useState(false);
   const [addProjectOpen, setAddProjectOpen] = useState(false);
-  const [addProjectDeviceId, setAddProjectDeviceId] = useState<
-    string | undefined
-  >();
+  const [addProjectTarget, setAddProjectTarget] = useState(NO_TARGET);
 
   const value: OverlaysState = {
     launcherOpen,
@@ -27,12 +34,12 @@ export function OverlaysProvider({ children }: { children: ReactNode }) {
     toggleLauncher: () => setLauncherOpen((v) => !v),
     addProjectOpen,
     setAddProjectOpen,
-    addProjectDeviceId,
+    addProjectTarget,
     // Closing the launcher first keeps ⌘N sane while it's open. The
     // modal shouldn't stack on top of the full-screen overlay.
-    openAddProject: (deviceId) => {
+    openAddProject: (target = NO_TARGET) => {
       setLauncherOpen(false);
-      setAddProjectDeviceId(deviceId);
+      setAddProjectTarget(target);
       setAddProjectOpen(true);
     },
   };
