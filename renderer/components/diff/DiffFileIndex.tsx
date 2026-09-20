@@ -153,6 +153,7 @@ export function DiffFileIndex({
             aria-label={
               allCollapsed ? "Expand all files" : "Collapse all files"
             }
+            data-icon-button
             className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             {allCollapsed ? (
@@ -285,6 +286,7 @@ function DiscardMenu({
         aria-label="Discard changes"
         title="Discard changes"
         disabled={total === 0}
+        data-icon-button
         className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40 data-popup-open:bg-accent data-popup-open:text-foreground"
       >
         <Ellipsis aria-hidden className="size-3.5" />

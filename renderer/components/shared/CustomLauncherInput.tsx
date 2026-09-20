@@ -1,6 +1,7 @@
 import { X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { LauncherCommand } from "@shared/schemas";
+import { IconButton } from "@/components/ui/icon-button";
 
 interface CustomLauncherInputProps {
   launcher: LauncherCommand;
@@ -31,14 +32,14 @@ export function CustomLauncherInput({
         aria-label="Launcher command"
         className="min-w-0 px-2.5 py-1.5 font-mono text-xs"
       />
-      <button
-        type="button"
+      <IconButton
         onClick={onRemove}
         aria-label="Remove launcher"
-        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+        tone="destructive"
+        className="p-1.5"
       >
         <X className="size-4" />
-      </button>
+      </IconButton>
     </div>
   );
 }

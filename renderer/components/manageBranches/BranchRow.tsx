@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { sanitizeBranchName } from "@shared/git/branches";
 import { isBranchNotMergedError } from "@shared/errors";
 import type { Worktree } from "@shared/schemas";
+import { IconButton } from "@/components/ui/icon-button";
 
 export function BranchRow({
   projectId,
@@ -102,17 +103,14 @@ export function BranchRow({
 
       {!editing && (
         <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100 phone:opacity-100">
-          <button
-            type="button"
+          <IconButton
             onClick={() => setDraft(name)}
             aria-label={`Rename ${name}`}
             title="Rename"
-            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <Pencil className="size-3.5" />
-          </button>
-          <button
-            type="button"
+          </IconButton>
+          <IconButton
             onClick={() => setConfirmingDelete(true)}
             disabled={checkedOut || del.isPending}
             aria-label={`Delete ${name}`}
@@ -121,38 +119,35 @@ export function BranchRow({
                 ? "Switch to a different branch in this worktree first"
                 : "Delete"
             }
-            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+            tone="destructive"
+            className="disabled:opacity-30"
           >
             <Trash2 className="size-3.5" />
-          </button>
+          </IconButton>
         </div>
       )}
 
       {editing && (
-        <button
-          type="button"
+        <IconButton
           onMouseDown={(e) => {
             // Prevent onBlur from firing before this click is processed.
             e.preventDefault();
             setDraft(null);
           }}
           aria-label="Cancel rename"
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <X className="size-3.5" />
-        </button>
+        </IconButton>
       )}
       {editing && (
-        <button
-          type="button"
+        <IconButton
           onMouseDown={(e) => e.preventDefault()}
           onClick={commitRename}
           aria-label="Save rename"
           disabled={rename.isPending}
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <Check className="size-3.5" />
-        </button>
+        </IconButton>
       )}
 
       {confirmingDelete && (

@@ -48,7 +48,10 @@ import {
   type ProjectMenuRemoveArm,
 } from "./ProjectMenuItems";
 import { QuickCreateButton } from "./QuickCreateButton";
-import { PROJECT_MENU_TRIGGER_CLASS } from "./sidebarChrome";
+import {
+  PROJECT_ACTION_HOOKS,
+  PROJECT_MENU_TRIGGER_CLASS,
+} from "./sidebarChrome";
 import type { RemoteProjectMember } from "./sidebarRow";
 
 export interface GroupMember {
@@ -163,6 +166,7 @@ export function ProjectGroupActions({
               ref={triggerRef}
               type="button"
               aria-label={`More actions for ${name}`}
+              {...PROJECT_ACTION_HOOKS}
               className={cn(
                 PROJECT_MENU_TRIGGER_CLASS,
                 isHovered ? "opacity-100" : "opacity-0",

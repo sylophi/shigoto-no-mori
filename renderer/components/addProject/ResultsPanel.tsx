@@ -4,6 +4,7 @@ import { ArrowLeft, FolderSearch } from "lucide-react";
 import { PathSpan } from "@/components/ui/path-span";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ResultRow } from "./ResultRow";
+import { IconButton } from "@/components/ui/icon-button";
 
 interface ResultsPanelProps {
   scanRoot: string;
@@ -36,14 +37,9 @@ export function ResultsPanel(props: ResultsPanelProps) {
         onValueChange={props.onHighlightChange}
       >
         <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-          <button
-            type="button"
-            onClick={props.onBack}
-            aria-label="Back"
-            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
+          <IconButton onClick={props.onBack} aria-label="Back">
             <ArrowLeft className="size-4" />
-          </button>
+          </IconButton>
           <FolderSearch className="size-4 shrink-0 text-muted-foreground/80" />
           <div className="flex min-w-0 flex-1 flex-col">
             <span className="text-sm text-foreground">

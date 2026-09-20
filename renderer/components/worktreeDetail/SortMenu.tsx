@@ -29,6 +29,7 @@ export function SortMenu({
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Sort scripts"
+        data-icon-button
         className="flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-muted-foreground/70 transition-colors hover:bg-accent hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 data-popup-open:bg-accent data-popup-open:text-foreground"
       >
         <ArrowDownUp aria-hidden className="size-3" />

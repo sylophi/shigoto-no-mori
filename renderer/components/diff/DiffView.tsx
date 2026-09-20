@@ -494,6 +494,7 @@ function DiffFileRow({
                       ? `Expand ${fileDiff.name}`
                       : `Collapse ${fileDiff.name}`
                   }
+                  data-icon-button
                   className="inline-flex size-5 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 >
                   <ChevronDown
