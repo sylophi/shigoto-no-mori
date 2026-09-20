@@ -7,6 +7,7 @@ import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { openExternalUrl } from "@/lib/openExternal";
 import type { ScriptKey, ScriptRunState } from "@/store/scriptRuns";
 import { readTerminalTheme, sameTheme } from "./terminalTheme";
+import { IconButton } from "@/components/ui/icon-button";
 
 // Refits during a window drag are coalesced to this. The first fit of
 // a terminal runs at once so it never paints at xterm's default grid.
@@ -46,19 +47,17 @@ export function ConsoleBody({ runKey, state, onClear }: ConsoleBodyProps) {
         </div>
       )}
       {onClear && (
-        <button
-          type="button"
+        <IconButton
           onClick={onClear}
           aria-label="Clear log"
           title="Clear log"
           // Above the terminal, whose hover-revealed scrollbar shares
           // this corner once the output overflows (the terminal wrapper
           // isolates xterm's own z-indexes, so any positive value wins).
-          data-icon-button
-          className="absolute top-2 right-3 z-10 rounded-md p-1 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+          className="absolute top-2 right-3 z-10 text-muted-foreground/60"
         >
           <Trash2 className="size-3.5" />
-        </button>
+        </IconButton>
       )}
     </div>
   );

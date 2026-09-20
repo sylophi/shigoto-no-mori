@@ -120,7 +120,7 @@ export function BranchRow({
                 : "Delete"
             }
             tone="destructive"
-            className="disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+            className="disabled:opacity-30"
           >
             <Trash2 className="size-3.5" />
           </IconButton>

@@ -79,8 +79,8 @@ Rules that keep that working:
   so a hover-only fill never says "tap me". phone.css gives the ghost
   variants a resting fill, and a bare icon button joins them through
   `data-icon-button`: use `ui/icon-button.tsx`, which carries it. A
-  `<footer>`'s buttons and the back button stay bare, since their place
-  on the screen already says control.
+  page's `<footer>` bar and the back button stay bare, since their
+  place on the screen already says control.
 - The `data-*` hooks phone.css selects are verified by
   `pnpm test theme-contract`, like doubutsu's.
 - When changing UI, check it at phone width as well. The UI lab's web

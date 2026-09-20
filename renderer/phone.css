@@ -68,7 +68,8 @@
 
 /* min-* rather than a height: it outranks the primitive's own h-*
    without a specificity fight and still lets a wrapping label grow.
-   Hooked on data-size alone, which only ui/button.tsx sets: a Button
+   Hooked on data-size alone, which ui/button.tsx sets (and a project
+   header's bare pair borrows, below): a Button
    rendered as a menu trigger has its data-slot overwritten by the
    trigger's, and must not fall out of these rules for it. The size
    ladder is written once, as --control, and an icon button is that
@@ -83,8 +84,14 @@
 [data-layout="phone"] [data-size$="xs"] {
   --control: var(--touch-target-xs);
 }
+/* An icon control also keeps its desktop shape at its new size. The
+   corner radii are fixed lengths, so a 24px button that doubutsu's
+   radius rounds into a circle would come out a rounded square at 40px.
+   One step up the radius scale grows the corner with the box: a circle
+   again in doubutsu, and v1's rounded square in proportion. */
 [data-layout="phone"] [data-size^="icon"] {
   min-width: var(--control);
+  border-radius: var(--radius-xl);
 }
 
 [data-layout="phone"] :is([data-slot="input"], [data-slot="combobox-trigger"]) {
@@ -117,15 +124,6 @@
   [data-icon-button][data-size]
   + [data-icon-button][data-size] {
   margin-inline-start: calc(var(--spacing) * 1.5);
-}
-
-/* An icon control keeps its desktop shape at its new size. The corner
-   radii are fixed lengths, so a 24px button that doubutsu's radius
-   rounds into a circle would come out a rounded square at 40px. One
-   step up the radius scale grows the corner with the box: a circle
-   again in doubutsu, and v1's rounded square in proportion. */
-[data-layout="phone"] [data-size^="icon"] {
-  border-radius: var(--radius-xl);
 }
 
 /* What stacks edge to edge, or sits in a scrolling strip, is sized for
@@ -204,21 +202,27 @@
 /* ---- 4. Resting surfaces ------------------------------------------ */
 
 /* The fill, by the surface the button sits on. The canvas by default.
-   doubutsu's header band and floating surfaces are the card colour
-   themselves, so a button on one steps down to the muted fill its
-   chips wear (v1's surfaces are all one white, and the hairline does
-   the work there). A footer's buttons stay bare: a bar along the
-   screen's edge already reads as controls, and a fill on each only
-   crowds it. */
+   doubutsu's header band, its card-coloured panels and its floating
+   surfaces are the card colour themselves, so a button on one steps
+   down to the muted fill its chips wear (v1's surfaces are all one
+   white, and the hairline does the work there). A page's footer bar
+   keeps its buttons bare: a bar along the screen's edge already reads
+   as controls, and a fill on each only crowds it. A dialog's footer is
+   not that bar, and its buttons keep the dialog's fill. */
 [data-layout="phone"] {
   --resting-fill: var(--card);
   --resting-ring: var(--border);
 }
 .doubutsu[data-layout="phone"]
-  :is(header, [data-slot="modal-shell"], [data-slot="sheet-content"]) {
+  :is(
+    header,
+    .bg-card:not(footer),
+    [data-slot="modal-shell"],
+    [data-slot="sheet-content"]
+  ) {
   --resting-fill: var(--muted);
 }
-[data-layout="phone"] footer {
+[data-layout="phone"] footer:not([data-slot="modal-shell"] *) {
   --resting-fill: transparent;
   --resting-ring: transparent;
 }

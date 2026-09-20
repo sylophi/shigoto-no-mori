@@ -34,7 +34,6 @@ export function NavIconButton({
         onClick={() => void navigate({ to })}
         aria-label={label}
         aria-current={active ? "page" : undefined}
-        data-icon-button
         className={cn(
           SIDEBAR_ICON_BUTTON,
           "relative",

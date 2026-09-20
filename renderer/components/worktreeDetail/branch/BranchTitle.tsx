@@ -7,6 +7,7 @@ import { useRenameBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import { sanitizeBranchName } from "@shared/git/branches";
 import type { Worktree } from "@shared/schemas";
 import { BranchSwitcher } from "./BranchSwitcher";
+import { IconButton } from "@/components/ui/icon-button";
 
 export function BranchTitle({ worktree }: { worktree: Worktree }) {
   // null while idle; the in-flight edit value otherwise. Folds "editing"
@@ -63,26 +64,22 @@ export function BranchTitle({ worktree }: { worktree: Worktree }) {
           }}
           className="min-w-0 flex-1 px-2 py-1 font-mono text-2xl font-medium tracking-tight"
         />
-        <button
-          type="button"
+        <IconButton
           onClick={commit}
           disabled={rename.isPending}
           aria-label="Confirm rename"
-          data-icon-button
-          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+          className="p-1.5"
         >
           <Check className="size-4" />
-        </button>
-        <button
-          type="button"
+        </IconButton>
+        <IconButton
           onClick={cancel}
           disabled={rename.isPending}
           aria-label="Cancel rename"
-          data-icon-button
-          className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+          className="p-1.5"
         >
           <X className="size-4" />
-        </button>
+        </IconButton>
         {rename.error && (
           <span className="truncate text-xs text-destructive select-text">
             {rename.error.message}

@@ -21,7 +21,7 @@ export function IconButton({
       type="button"
       data-icon-button
       className={cn(
-        "rounded-md p-1 text-muted-foreground transition-colors",
+        "rounded-md p-1 text-muted-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50",
         TONE_CLASS[tone],
         className,
       )}

@@ -71,7 +71,6 @@ export function SidebarToolbar({ onArrange }: SidebarToolbarProps) {
                 <button
                   type="button"
                   aria-label="Sort projects"
-                  data-icon-button
                   className={SIDEBAR_ICON_BUTTON}
                 >
                   <ArrowUpDown className="size-3.5" />
@@ -123,7 +122,6 @@ export function SidebarToolbar({ onArrange }: SidebarToolbarProps) {
           onClick={toggleLauncher}
           aria-label="Project launcher"
           aria-keyshortcuts="` Meta+Shift+P"
-          data-icon-button
           className={SIDEBAR_ICON_BUTTON}
         >
           <LayoutGrid className="size-3.5" />

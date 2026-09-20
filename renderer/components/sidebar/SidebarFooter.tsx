@@ -45,7 +45,6 @@ function AddProjectButton() {
         onClick={() => openAddProject()}
         aria-label="Add project"
         aria-keyshortcuts={hasLocalHost ? `${modName}+N` : undefined}
-        data-icon-button
         className={SIDEBAR_ICON_BUTTON}
       >
         <FolderPlus className="size-3.5" />
