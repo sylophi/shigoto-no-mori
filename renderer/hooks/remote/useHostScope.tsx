@@ -101,6 +101,18 @@ const localHostScope: HostScope = {
 
 const HostScopeContext = createContext<HostScope>(localHostScope);
 
+// A device's scope, the one shape both providers below hand down.
+function hostScopeFor(deviceId: string, api: HostApi): HostScope {
+  const remote = deviceId !== localDeviceId;
+  return {
+    deviceId,
+    remote,
+    hasHost: remote || hasLocalHost,
+    api,
+    keys: queryKeysFor(deviceId),
+  };
+}
+
 export function HostScopeProvider({
   deviceId,
   api,
@@ -108,17 +120,8 @@ export function HostScopeProvider({
 }: Omit<HostScope, "keys" | "remote" | "hasHost"> & {
   children: ReactNode;
 }) {
-  const remote = deviceId !== localDeviceId;
   return (
-    <HostScopeContext
-      value={{
-        deviceId,
-        remote,
-        hasHost: remote || hasLocalHost,
-        api,
-        keys: queryKeysFor(deviceId),
-      }}
-    >
+    <HostScopeContext value={hostScopeFor(deviceId, api)}>
       {children}
     </HostScopeContext>
   );
@@ -154,6 +157,44 @@ export function MaybeHostScope({
 // on a local page.
 export function LocalHostScope({ children }: { children: ReactNode }) {
   return <HostScopeContext value={localHostScope}>{children}</HostScopeContext>;
+}
+
+// The destination half of a cross-device flow, for the dialogs that
+// serve both directions. A transplant or a mirror lands on this
+// machine, so with no provider mounted this is LocalHostScope. A
+// flow to a peer mounts DestinationProvider around its dialog, and
+// every destination read beneath (the project's config, its
+// carry-over, its branches and paths) goes to that peer instead. The
+// peer is absent until the dialog's destination is picked. The
+// provider is mounted either way, so picking re-scopes the subtree
+// without remounting it, and nothing beneath reads a destination
+// before there is one.
+const DestinationContext = createContext<HostScope>(localHostScope);
+
+export function DestinationProvider({
+  peer,
+  children,
+}: {
+  peer: Pick<HostScope, "deviceId" | "api"> | null;
+  children: ReactNode;
+}) {
+  return (
+    <DestinationContext
+      value={
+        peer === null ? localHostScope : hostScopeFor(peer.deviceId, peer.api)
+      }
+    >
+      {children}
+    </DestinationContext>
+  );
+}
+
+export function DestinationScope({ children }: { children: ReactNode }) {
+  return (
+    <HostScopeContext value={use(DestinationContext)}>
+      {children}
+    </HostScopeContext>
+  );
 }
 
 // No null check: the context always resolves (to the local device when

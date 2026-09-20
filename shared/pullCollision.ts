@@ -6,15 +6,23 @@
 // name is taken here (a worktree of this project by that name, case-
 // insensitively, or anything at the path), the same rule the CLI
 // create applies (cli/worktree.go).
-export function pullFolderCollision(name: string, path: string): string {
-  return `A folder named ${name} already exists here (${path}). Remove or rename it first.`;
+// `where` places the landing device when it is not the one speaking
+// ("on Thinkpad"): the review of a flow to a peer, told from the
+// sending side.
+export function pullFolderCollision(
+  name: string,
+  path: string,
+  where = "here",
+): string {
+  return `A folder named ${name} already exists ${where} (${path}). Remove or rename it first.`;
 }
 
 export function pullBranchCollision(
   branch: string,
   holderPath: string | undefined,
+  where = "on this device",
 ): string {
   return holderPath === undefined
-    ? `${branch} already exists on this device. Delete that branch first, or open it and pull normally.`
-    : `${branch} is already checked out at ${holderPath} on this device. Stop or delete that worktree first.`;
+    ? `${branch} already exists ${where}. Delete that branch first, or open it and pull normally.`
+    : `${branch} is already checked out at ${holderPath} ${where}. Stop or delete that worktree first.`;
 }

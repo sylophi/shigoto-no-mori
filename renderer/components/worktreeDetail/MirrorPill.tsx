@@ -1,8 +1,9 @@
 // The worktree header's mirror line: what this worktree's live mirror
 // is doing, if it has one. Two shapes, both quiet when there is
 // nothing to say:
-//   - this worktree is the LOCAL copy of a peer's worktree (a session
-//     this device runs): status, conflicts and problems. The details
+//   - this worktree is the local side of a session this device runs
+//     (the copy of a peer's worktree, or the original of a copy made
+//     on a peer): status, conflicts and problems. The details
 //     and the controls live in the dialog behind the footer's Mirror
 //     button (mirror/MirrorManageDialog.tsx).
 //   - this worktree is being mirrored BY peers (streams this device

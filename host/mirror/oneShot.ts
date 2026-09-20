@@ -2,7 +2,9 @@
 // has landed the branch and the capture through git. What git never
 // carries (the ignored files the leave-out rule admits) crosses here,
 // as one session between the new worktree and the source, held until
-// its first full cycle has settled, then ended. Labelled a transfer so
+// its first full cycle has settled, then ended. A send runs the same
+// session the other way: this device holds the source and pushes to
+// the worktree the peer just created. Labelled a transfer so
 // nothing that lists, follows or narrates mirrors sees it
 // (registry.ts mirrorSessions). Nothing here fails the pull: the
 // worktree is real either way, and the outcome (crossed, with how
@@ -52,12 +54,15 @@ export async function transferFilesOnce(
     // The local worktree's id, the one label a session must carry:
     // the worktree delete stops whatever runs on it by that label.
     localWorktreeId: string;
+    // The peer's half. The source of a pull, the destination of a push.
     sourceDeviceId: string;
     sourceProjectId: string;
     sourceWorktreeId: string;
     remoteRoot: string;
     name: string;
     ignores: string[];
+    // Which way the files flow. Absent, a pull: the peer's come here.
+    direction?: "pull" | "push";
   },
   onProgress: (bytes: number, totalBytes: number) => void,
 ): Promise<TransferFilesResult> {
@@ -78,7 +83,7 @@ export async function transferFilesOnce(
         [MIRROR_LABEL_TRANSFER]: token,
       },
       ignores: input.ignores,
-      pull: true,
+      ...(input.direction === "push" ? { push: true } : { pull: true }),
     });
     try {
       return await waitSettled(daemon, session, onProgress);
@@ -150,9 +155,7 @@ async function waitSettled(
           !raw.local.connected ||
           !raw.remote.connected)
       ) {
-        return failed(
-          raw.lastError ?? "the source device could not be reached",
-        );
+        return failed(raw.lastError ?? "the other device could not be reached");
       }
       if (settled(raw)) {
         return { crossed: true, conflicts: raw.conflicts.length };

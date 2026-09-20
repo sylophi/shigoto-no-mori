@@ -9,6 +9,7 @@ import {
   SyncLandingRefSchema,
   SyncPullWorktreePayloadSchema,
   SyncPullWorktreeResultSchema,
+  SyncSendWorktreePayloadSchema,
 } from "@shared/ipc/modules/sync";
 import {
   CommitHashSchema,
@@ -62,6 +63,19 @@ export {
 // value is the transfer's own token (host/mirror/registry.ts
 // beginTransfer), so the mark alone says it is a transfer.
 export const MIRROR_LABEL_TRANSFER = "transfer";
+
+// Which side holds the copy the mirror made. A mirror started from a
+// peer's page brings the copy HERE, which is what an unlabelled
+// session means. One started from a local worktree's page (startTo)
+// makes the copy on the PEER, labelled so stopping removes that one
+// and never the original this device holds. A label and not a session
+// field: the session document crosses to peers that parse it strictly.
+export const MIRROR_LABEL_COPY_SIDE = "copySide";
+export function mirrorCopyIsRemote(session: {
+  labels: Record<string, string>;
+}): boolean {
+  return session.labels[MIRROR_LABEL_COPY_SIDE] === "remote";
+}
 export function isTransferSession(session: {
   labels: Record<string, string>;
 }): boolean {
@@ -303,13 +317,22 @@ const MirrorStartResultSchema = SyncPullWorktreeResultSchema.extend({
   session: MirrorSessionIdSchema,
 });
 
+// The mirror turned around, built on the send the way start is built
+// on the pull: one of THIS device's worktrees, copied to a peer and
+// kept in step with it. The session still runs here.
+export const MirrorStartToPayloadSchema = SyncSendWorktreePayloadSchema.extend({
+  ignoreMode: MirrorIgnoreModeSchema,
+  ignores: MirrorIgnoresSchema,
+});
+
 const MirrorSessionPayloadSchema = z.strictObject({
   session: MirrorSessionIdSchema,
 });
 
-// Stopping removes the copy on this device, so it is refused unless
-// the git follower says "synced", the one state where the peer is known
-// to hold this copy's commits. A paused session, an unreachable peer or
+// Stopping removes the copy (on this device, or on the peer for a
+// mirror started to it), so it is refused unless the git follower says
+// "synced", the one state where the other side is known to hold the
+// copy's commits. A paused session, an unreachable peer or
 // one too young to have reconciled all report something else. `force`
 // is the user overriding that after being told.
 const MirrorStopPayloadSchema = MirrorSessionPayloadSchema.extend({
@@ -327,7 +350,7 @@ export function mirrorStopIsSafe(
 // discard-and-stop. Text rather than a code because Electron's IPC
 // flattens an error to its message (see COMMAND_REFUSED_MESSAGE).
 export const MIRROR_STOP_UNCONFIRMED =
-  "This copy is not confirmed in step with the other device";
+  "The copy is not confirmed in step with the other device";
 
 export function isMirrorStopUnconfirmed(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
@@ -396,6 +419,15 @@ export const mirrorContract = defineContract("host", {
   start: invoke(
     "mirror:start",
     MirrorStartPayloadSchema,
+    MirrorStartResultSchema,
+    {
+      remote: false,
+      mutating: true,
+    },
+  ),
+  startTo: invoke(
+    "mirror:startTo",
+    MirrorStartToPayloadSchema,
     MirrorStartResultSchema,
     {
       remote: false,

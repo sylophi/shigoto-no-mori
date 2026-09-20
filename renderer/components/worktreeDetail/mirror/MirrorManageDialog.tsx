@@ -23,6 +23,7 @@ import type {
 } from "@shared/ipc/modules/mirror";
 import {
   isMirrorStopUnconfirmed,
+  mirrorCopyIsRemote,
   mirrorStopIsSafe,
 } from "@shared/ipc/modules/mirror";
 import type { Worktree } from "@shared/schemas";
@@ -69,7 +70,8 @@ export function MirrorManageDialog({
   onClose,
 }: {
   session: MirrorSession;
-  // The local copy the session runs on, in the surrounding scope.
+  // The local worktree the session runs on, in the surrounding scope:
+  // the copy, or the original when the mirror was started to a peer.
   worktree: Worktree;
   onClose: () => void;
 }) {
@@ -86,6 +88,10 @@ export function MirrorManageDialog({
   // wording here instead of dead-ending on a raw error.
   const [refused, setRefused] = useState(false);
   const discarding = !mirrorStopIsSafe(session.git?.status) || refused;
+  // Where the copy a stop removes is: here, or on the peer for a
+  // mirror started to it, where this page's worktree stays.
+  const copyThere = mirrorCopyIsRemote(session);
+  const copyWhere = copyThere ? `on ${peer}` : "here";
   const busy =
     controls.pause.isPending ||
     controls.resume.isPending ||
@@ -140,8 +146,8 @@ export function MirrorManageDialog({
           !canControl
             ? `Controlled from ${hostLabel}.`
             : discarding
-              ? `Not confirmed in step with ${peer}. Stopping removes the copy here, and anything it holds that ${peer} has not received goes with it.`
-              : `Stopping removes the copy here. ${peer} keeps its own.`
+              ? `Not confirmed in step with ${peer}. Stopping removes the copy ${copyWhere}, and anything it holds that ${copyThere ? "this device" : peer} has not received goes with it.`
+              : `Stopping removes the copy ${copyWhere}. ${copyThere ? "This device" : peer} keeps its own.`
         }
       >
         <Button variant="ghost" size="sm" onClick={onClose}>
@@ -182,11 +188,12 @@ export function MirrorManageDialog({
                     // warning has named what goes.
                     { session, force: discarding },
                     {
-                      // The stop removed the copy this page is on, so
-                      // leave it the way a delete does.
+                      // A stop that removed the copy this page is on
+                      // leaves it the way a delete does. The original
+                      // of a copy on the peer stays where it is.
                       onSuccess: () => {
                         onClose();
-                        nav.toFallback(true);
+                        if (!copyThere) nav.toFallback(true);
                       },
                       // The host knew something this page did not.
                       onError: (error) => {

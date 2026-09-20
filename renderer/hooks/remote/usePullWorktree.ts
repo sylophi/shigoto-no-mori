@@ -6,8 +6,9 @@
 // match, so the gate at the call sites is UX, not the wall. Refusals
 // surface centrally, and the outcome is the caller's to report: the
 // dialog's last step is the report, and the mirror lands through
-// reportLanded below.
-import { pullWorktreeName } from "@/lib/remote/pullWorktreeName";
+// reportLanded below. The send is the same landing the other way: one
+// of this device's worktrees, landed on a peer.
+import { pullWorktreeName } from "@shared/git/branches";
 import {
   type QueryClient,
   useMutation,
@@ -103,6 +104,66 @@ export function usePullWorktree(source: PullSource) {
     (payload): Promise<SyncPullWorktreeResult> =>
       window.api.sync.pullWorktree(payload),
   );
+}
+
+// The landing the other way: one of this device's worktrees, landed on
+// a peer by a local verb (the send, or the mirror start built on it).
+// What lands is on the target, so its cached view is what refreshes.
+// The target is absent until the dialog's destination is picked, which
+// its Start waits on, so the refusal here is a guard and not a path.
+const UNPICKED = "Pick the device it goes to first.";
+
+export function useLandingOnPeer<Result>(
+  targetDeviceId: string | undefined,
+  land: (targetDeviceId: string, choice: PullChoice) => Promise<Result>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (choice: PullChoice) => {
+      if (targetDeviceId === undefined) throw new Error(UNPICKED);
+      const result = await land(targetDeviceId, choice);
+      invalidateHostDevice(queryClient, targetDeviceId);
+      return result;
+    },
+    meta: { silentError: true },
+  });
+}
+
+export function useSendWorktree(
+  worktree: Worktree,
+  targetDeviceId: string | undefined,
+) {
+  return useLandingOnPeer(
+    targetDeviceId,
+    (target, choice): Promise<SyncPullWorktreeResult> =>
+      window.api.sync.sendWorktree({
+        targetDeviceId: target,
+        projectId: worktree.projectId,
+        worktreeId: worktree.id,
+        ...choice,
+      }),
+  );
+}
+
+// The sent worktree's teardown: what it removes is here, so the local
+// forest's keys are what refresh.
+export function useTeardownSent(
+  worktree: Worktree,
+  targetDeviceId: string | undefined,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => {
+      if (targetDeviceId === undefined) throw new Error(UNPICKED);
+      return window.api.sync.teardownSent({
+        targetDeviceId,
+        projectId: worktree.projectId,
+        worktreeId: worktree.id,
+      });
+    },
+    onSuccess: () => invalidateLanded(queryClient, worktree.projectId),
+    meta: { errorTitle: "Couldn't tear down the source worktree" },
+  });
 }
 
 // The transplant's second half: tear the source worktree down on the

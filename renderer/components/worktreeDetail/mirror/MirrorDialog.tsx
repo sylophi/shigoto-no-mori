@@ -2,29 +2,42 @@
 // three steps on one rail. Review shows the source, both devices, and
 // what stays out (the one choice a mirror has). Mirror is the pull
 // with its progress frames, plus the session open on top. Live is
-// proof: the session's first verdict, and the way to the local copy's
-// page, where the footer's Mirror button takes over.
+// proof: the session's first verdict, and the way to the copy's page.
+// The flow runs both ways: MirrorDialog copies a peer's worktree here,
+// MirrorToDialog copies one of this device's to a peer (under that
+// peer's DestinationProvider). The session runs on this device either
+// way, and its Mirror button sits on this device's worktree page.
 import { ArrowRight, RefreshCw } from "lucide-react";
+import type { UseMutationResult } from "@tanstack/react-query";
 import type { MirrorSession } from "@shared/ipc/modules/mirror";
 import type { Project, Worktree } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip-button";
-import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusDot } from "@/components/ui/status-dot";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
-import { LocalHostScope } from "@/hooks/remote/useHostScope";
-import { useMirrors, useStartMirror } from "@/hooks/remote/useMirrors";
-import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
+import {
+  DestinationProvider,
+  DestinationScope,
+  LocalHostScope,
+} from "@/hooks/remote/useHostScope";
+import {
+  useMirrors,
+  useStartMirror,
+  useStartMirrorTo,
+} from "@/hooks/remote/useMirrors";
+import type { PullChoice } from "@/hooks/remote/usePullWorktree";
 import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
-import { FlowBody, FlowFooter } from "../flow/FlowChrome";
+import { FlowBody, FlowFooter, LandedPath } from "../flow/FlowChrome";
+import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
 import { PullProgress } from "../flow/PullProgress";
 import {
+  type DestinationPick,
   PullReviewFooter,
   ReviewDevicesColumn,
   SourceCard,
 } from "../flow/PullReview";
-import { stepHeadline } from "../flow/pullSteps";
+import { type Landing, LANDS_HERE, stepHeadline } from "../flow/pullSteps";
 import {
   selectionSummary,
   sessionSummary,
@@ -67,6 +80,91 @@ export function MirrorDialog({
     sourceIdentity,
     localProjectId: localProject.id,
   });
+  return (
+    <MirrorFlow
+      worktree={worktree}
+      project={project}
+      sourceIdentity={sourceIdentity}
+      localProject={localProject}
+      sourceDeviceLabel={sourceDeviceLabel}
+      thisDeviceLabel={thisDeviceLabel}
+      mirror={mirror}
+      onClose={onClose}
+    />
+  );
+}
+
+// The same flow the other way: a live copy of one of THIS device's
+// worktrees on a peer that holds the same repo.
+export function MirrorToDialog({
+  worktree,
+  project,
+  sourceIdentity,
+  targets,
+  onClose,
+}: {
+  // The source pair, on this machine.
+  worktree: Worktree;
+  project: Project;
+  sourceIdentity: string;
+  // The peers holding the same repo (flow/peerTargets.ts).
+  targets: PeerTarget[];
+  onClose: () => void;
+}) {
+  const { picked, flow } = usePeerDestination(targets);
+  const mirror = useStartMirrorTo(worktree, picked?.deviceId);
+  return (
+    <DestinationProvider peer={picked}>
+      <MirrorFlow
+        worktree={worktree}
+        project={project}
+        sourceIdentity={sourceIdentity}
+        {...flow}
+        mirror={mirror}
+        onClose={onClose}
+      />
+    </DestinationProvider>
+  );
+}
+
+function MirrorFlow({
+  worktree,
+  project,
+  sourceIdentity,
+  localProject,
+  sourceDeviceLabel,
+  thisDeviceLabel,
+  landing = LANDS_HERE,
+  toPeer,
+  mirror,
+  onClose,
+}: {
+  worktree: Worktree;
+  project: Project;
+  sourceIdentity: string;
+  // The landing side, named as the flow's pieces name it
+  // (flow/PullReview.tsx says why): this machine, or the picked peer.
+  // Absent only on the review of a flow to a peer with none picked
+  // yet, which Start waits on.
+  localProject: Project | undefined;
+  sourceDeviceLabel: string;
+  thisDeviceLabel: string;
+  // A flow to a peer: the words for landing there, and the pick of
+  // which peer (flow/peerTargets.ts makes both).
+  landing?: Landing;
+  toPeer?: DestinationPick;
+  mirror: UseMutationResult<
+    {
+      worktree: Worktree;
+      captured: boolean;
+      dirtyApplied: boolean;
+      session: string;
+    },
+    Error,
+    PullChoice
+  >;
+  onClose: () => void;
+}) {
   // Under the source scope: its ignored list walks the checkout over
   // the device link.
   const pull = usePullChoice(project.id, worktree.id, sourceIdentity);
@@ -74,6 +172,7 @@ export function MirrorDialog({
     mutation: mirror,
     sourceWorktreeId: worktree.id,
     choice: pull.choice,
+    destinationDeviceId: toPeer?.pickedId ?? undefined,
     onClose,
   });
   const summary = selectionSummary(pull.selection);
@@ -93,16 +192,18 @@ export function MirrorDialog({
           {stage === "review" && (
             <>
               A live copy of{" "}
-              <span className="font-mono">{worktree.branch}</span> here, kept in
-              step with {sourceDeviceLabel}.
+              <span className="font-mono">{worktree.branch}</span> {landing.on},
+              kept in step with {sourceDeviceLabel}.
             </>
           )}
           {stage === "running" &&
             (progress.frame === null
-              ? "Reaching the source."
+              ? landing.onPeer
+                ? `Reaching ${thisDeviceLabel}.`
+                : "Reaching the source."
               : progress.frame.step === "apply" && !mirror.isSuccess
                 ? "Opening the mirror."
-                : `${stepHeadline(progress.frame, sourceDeviceLabel)}.`)}
+                : `${stepHeadline(progress.frame, sourceDeviceLabel, landing)}.`)}
           {stage === "failed" && `Nothing on ${sourceDeviceLabel} changed.`}
           {stage === "done" && (
             <>
@@ -120,12 +221,14 @@ export function MirrorDialog({
           localProject={localProject}
           sourceDeviceLabel={sourceDeviceLabel}
           thisDeviceLabel={thisDeviceLabel}
+          landing={landing}
+          toPeer={toPeer}
           pull={pull}
           onCancel={onClose}
           onStart={start}
         />
       )}
-      {(stage === "running" || stage === "failed") && (
+      {(stage === "running" || stage === "failed") && localProject && (
         <PullProgress
           frame={progress.frame}
           phasesSeen={progress.phasesSeen}
@@ -134,6 +237,8 @@ export function MirrorDialog({
           worktree={worktree}
           localProject={localProject}
           runSetup={pull.runSetup}
+          landing={landing}
+          phasesReported={!landing.onPeer}
           error={stage === "failed" ? mirror.error : undefined}
           onClose={onClose}
           onRetry={start}
@@ -146,7 +251,7 @@ export function MirrorDialog({
           sourcePart="source, keeps its copy"
           progressLabel="Mirror progress"
           runningNote="Keep this window open."
-          failedNote="If the worktree already landed here, open it from the sidebar rather than retrying."
+          failedNote={`If the worktree already landed ${landing.on}, open it from the sidebar rather than retrying.`}
         />
       )}
       {stage === "done" && mirror.data && (
@@ -157,6 +262,7 @@ export function MirrorDialog({
             branch={worktree.branch}
             sourceDeviceLabel={sourceDeviceLabel}
             thisDeviceLabel={thisDeviceLabel}
+            landing={landing}
             dirtyApplied={!mirror.data.captured || mirror.data.dirtyApplied}
             onClose={onClose}
             onOpen={open}
@@ -168,24 +274,28 @@ export function MirrorDialog({
 }
 
 // Step 1: the source, what stays out, and the two devices that will
-// hold the branch. The source half reads the remote device the page
-// is scoped to. The device half re-pins to this machine, like the
-// transplant's.
+// hold the branch. The source half reads the device the page is scoped
+// to. The device half re-pins to the landing device (DestinationScope),
+// like the transplant's.
 function MirrorReview({
   worktree,
   project,
   localProject,
   sourceDeviceLabel,
   thisDeviceLabel,
+  landing = LANDS_HERE,
+  toPeer,
   pull,
   onCancel,
   onStart,
 }: {
   worktree: Worktree;
   project: Project;
-  localProject: Project;
+  localProject: Project | undefined;
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
+  landing?: Landing;
+  toPeer?: DestinationPick;
   pull: PullChoiceState;
   onCancel: () => void;
   onStart: () => void;
@@ -218,6 +328,7 @@ function MirrorReview({
             heading="On both"
             sourceNote="keeps its copy"
             sourceKeeps
+            toPeer={toPeer}
             worktree={worktree}
             localProject={localProject}
             sourceDeviceLabel={sourceDeviceLabel}
@@ -227,30 +338,33 @@ function MirrorReview({
         </div>
       </FlowBody>
 
-      <LocalHostScope>
+      <DestinationScope>
         <PullReviewFooter
           worktree={worktree}
           localProject={localProject}
+          landing={landing}
           waiting={pull.waiting}
           blocked={pull.blocked}
-          idleNote="Stop any time. Stopping removes the copy here."
+          idleNote={`Stop any time. Stopping removes the copy ${landing.on}.`}
           startLabel="Start mirroring"
           onCancel={onCancel}
           onStart={onStart}
         />
-      </LocalHostScope>
+      </DestinationScope>
     </>
   );
 }
 
-// Step 3: the copy is here and the session is up. Read under the local
-// scope: the session is this machine's fact.
+// Step 3: the copy has landed and the session is up. Read under the
+// local scope: the session is this machine's fact, whichever device
+// holds the copy.
 function MirrorLive({
   session,
   landed,
   branch,
   sourceDeviceLabel,
   thisDeviceLabel,
+  landing,
   dirtyApplied,
   onClose,
   onOpen,
@@ -259,13 +373,14 @@ function MirrorLive({
   landed: Worktree;
   branch: string;
   sourceDeviceLabel: string;
+  // The device holding the copy, and the words for that.
   thisDeviceLabel: string;
+  landing: Landing;
   dirtyApplied: boolean;
   onClose: () => void;
   onOpen: () => void;
 }) {
   const { sessions } = useMirrors();
-  const { data: runtime } = useRuntimeInfo();
   const live: MirrorSession | undefined = sessions.find(
     (entry) => entry.session === session,
   );
@@ -287,12 +402,7 @@ function MirrorLive({
               <p className="truncate font-mono text-sm font-semibold">
                 {branch}
               </p>
-              <PathSpan
-                path={landed.path}
-                home={runtime?.homedir ?? null}
-                className="min-w-0 truncate font-mono text-xs text-muted-foreground"
-                copyable
-              />
+              <LandedPath path={landed.path} />
               <div className="flex flex-wrap gap-1.5">
                 <Chip>
                   {view === null ? (
@@ -312,12 +422,18 @@ function MirrorLive({
           </div>
         </section>
       </FlowBody>
-      <FlowFooter note="Pause, stop, or change what stays out from the Mirror button on its page.">
+      <FlowFooter
+        note={
+          landing.onPeer
+            ? "Pause, stop, or change what stays out from the Mirror button on this worktree's page."
+            : "Pause, stop, or change what stays out from the Mirror button on its page."
+        }
+      >
         <Button variant="ghost" size="sm" onClick={onClose}>
           Close
         </Button>
         <Button size="sm" onClick={onOpen}>
-          Open here
+          Open {landing.here}
           <ArrowRight />
         </Button>
       </FlowFooter>

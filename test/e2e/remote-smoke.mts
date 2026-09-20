@@ -24,6 +24,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { connect, createServer, type Socket } from "node:net";
@@ -1048,6 +1049,171 @@ async function main(): Promise<string[]> {
       assert.ok(existsSync(source.path), "the edited source is gone");
     });
 
+    // The transplant the other way, as the local page's "Transplant
+    // to" drives it: one of a's worktrees goes to b, which only has to
+    // accept a's commands (a gives no grant of its own). The branch,
+    // the uncommitted work and the ignored files land there, a second
+    // send is refused by b, and the finish step removes a's source
+    // only while it is still what was sent.
+    await scenario("transplant to a peer", async () => {
+      const own = await ownProjectOnA();
+      const { worktree: source } = await a.evaluate<{ worktree: Worktree }>(
+        `window.api.worktrees.create(${JSON.stringify({
+          projectId: own.id,
+          branchName: "edge/sent",
+          worktreeName: "src-sent",
+        })})`,
+      );
+      writeFileSync(join(source.path, "README.md"), "edited on a\n");
+      writeFileSync(join(source.path, "notes.txt"), "untracked on a\n");
+      writeFileSync(join(source.path, ".env"), "SECRET=a\n");
+      const sendInput = JSON.stringify({
+        targetDeviceId: idB,
+        projectId: own.id,
+        worktreeId: source.id,
+        runSetup: false,
+        ignoreMode: "everything",
+        ignores: [],
+      });
+      const result = await a.evaluate<PullResult>(
+        `window.api.sync.sendWorktree(${sendInput})`,
+      );
+      const landed = result.worktree;
+      assert.ok(
+        landed.path.startsWith(realpathSync(fixture.b.dataDir)),
+        `the copy landed outside b's data dir: ${landed.path}`,
+      );
+      assert.equal(landed.name, source.name, "the copy lost the folder name");
+      assert.equal(landed.branch, "edge/sent");
+      assert.ok(result.captured && result.dirtyApplied, "the edits were lost");
+      assert.equal(readOrNull(join(landed.path, "README.md")), "edited on a\n");
+      assert.equal(
+        readOrNull(join(landed.path, "notes.txt")),
+        "untracked on a\n",
+      );
+      assert.deepEqual(result.files, { crossed: true, conflicts: 0 });
+      assert.equal(readOrNull(join(landed.path, ".env")), "SECRET=a\n");
+      assert.equal(
+        gitOut(
+          join(fixture.b.repos, "shared"),
+          "for-each-ref",
+          "refs/shigomori/incoming",
+        ),
+        "",
+        "the send left an incoming ref on b",
+      );
+      await assert.rejects(
+        () => a.evaluate(`window.api.sync.sendWorktree(${sendInput})`),
+        /The other device answered: edge\/sent is already checked out/,
+      );
+      const sentRef = JSON.stringify({
+        targetDeviceId: idB,
+        projectId: own.id,
+        worktreeId: source.id,
+      });
+      const tearDownSent = () =>
+        a.evaluate<{ sourceRemoved: boolean; sourceError?: string }>(
+          `window.api.sync.teardownSent(${sentRef})`,
+        );
+      writeFileSync(join(source.path, "late.txt"), "written after the send\n");
+      const kept = await tearDownSent();
+      assert.equal(kept.sourceRemoved, false, "an edited source was removed");
+      assert.match(kept.sourceError ?? "", /changed/);
+      rmSync(join(source.path, "late.txt"));
+      const torn = await tearDownSent();
+      assert.ok(torn.sourceRemoved, `source kept: ${torn.sourceError}`);
+      assert.ok(!existsSync(source.path), "source worktree still on disk");
+      assert.ok(existsSync(landed.path), "the sent worktree vanished");
+    });
+
+    // The mirror the other way, as the local page's "Mirror to"
+    // drives it: a copy of one of a's worktrees is made on b and kept
+    // in step from a, which runs the session. Files and commits move
+    // both ways, and the stop removes b's copy, never a's original.
+    await scenario("mirror to a peer", async () => {
+      const own = await ownProjectOnA();
+      const { worktree: source } = await a.evaluate<{ worktree: Worktree }>(
+        `window.api.worktrees.create(${JSON.stringify({
+          projectId: own.id,
+          branchName: "edge/mirror-to",
+          worktreeName: "src-mirror-to",
+        })})`,
+      );
+      writeFileSync(join(source.path, "README.md"), "edited on a\n");
+      writeFileSync(join(source.path, ".env"), "SECRET=a\n");
+      // Staged on the original, which the first reconcile must take as
+      // the reference: the copy's index starts out unstaged.
+      git(source.path, "add", "README.md");
+      const started = await a.evaluate<PullResult & { session: string }>(
+        `window.api.mirror.startTo(${JSON.stringify({
+          targetDeviceId: idB,
+          projectId: own.id,
+          worktreeId: source.id,
+          runSetup: false,
+          ignoreMode: "everything",
+          ignores: [],
+        })})`,
+      );
+      const copy = started.worktree;
+      assert.ok(
+        copy.path.startsWith(realpathSync(fixture.b.dataDir)),
+        `the copy landed outside b's data dir: ${copy.path}`,
+      );
+      assert.equal(readOrNull(join(copy.path, "README.md")), "edited on a\n");
+      await waitMirror(
+        started.session,
+        "the mirror to a peer to be watching and in sync",
+        's.status === "watching" && s.git?.status === "synced" && s.labels.copySide === "remote"',
+      );
+      await waitFor(
+        () => fileEquals(join(copy.path, ".env"), "SECRET=a\n"),
+        "a's ignored file to reach the copy on b",
+        30_000,
+      );
+      assert.equal(
+        gitOut(source.path, "diff", "--cached", "--name-only"),
+        "README.md",
+        "the mirror unstaged the original's work",
+      );
+      await waitFor(
+        () =>
+          gitOut(copy.path, "diff", "--cached", "--name-only") === "README.md",
+        "the original's staging to reach the copy",
+        30_000,
+      );
+      writeFileSync(join(copy.path, "from-b.txt"), "written on b\n");
+      await waitFor(
+        () => fileEquals(join(source.path, "from-b.txt"), "written on b\n"),
+        "a file written on the copy to reach the original",
+        30_000,
+      );
+      git(copy.path, "add", "-A");
+      git(copy.path, "commit", "-q", "-m", "Committed on b");
+      const tipOnB = gitOut(copy.path, "rev-parse", "HEAD");
+      await waitFor(
+        () => gitOut(source.path, "rev-parse", "HEAD") === tipOnB,
+        "b's commit to be followed on a",
+        60_000,
+      );
+      await waitMirror(
+        started.session,
+        "the pair to agree again",
+        's.git?.status === "synced"',
+      );
+      await mirrorOp("stop", started.session);
+      await waitFor(
+        () => !existsSync(copy.path),
+        "b's copy to go with the stop",
+        30_000,
+      );
+      assert.ok(existsSync(source.path), "the stop removed a's original");
+      await a.waitFor(
+        "a's session list to empty after the stop",
+        "window.api.mirror.list().then((m) => m.sessions.length === 0)",
+        30_000,
+      );
+    });
+
     // A mirror that leaves gitignored files out, with setup on (that
     // rule's default): each side builds and keeps its own ignored
     // files, tracked work still moves both ways, and pause holds it.
@@ -1355,6 +1521,68 @@ async function main(): Promise<string[]> {
       );
       assert.equal(readOrNull(join(local.path, ".env")), "SECRET=b\n");
       await clickText("Decide later");
+    });
+
+    // The other direction through its dialog: the local page's
+    // "Transplant to…", which opens on its one ready device (b), the
+    // destination's facts read from that device, and the finish step
+    // tearing down a's source and leaving for the copy's page on b.
+    await scenario("dialog: transplant to a peer", async () => {
+      const own = await ownProjectOnA();
+      const { worktree: source } = await a.evaluate<{ worktree: Worktree }>(
+        `window.api.worktrees.create(${JSON.stringify({
+          projectId: own.id,
+          branchName: "edge/ui-sent",
+          worktreeName: "src-ui-sent",
+        })})`,
+      );
+      writeFileSync(join(source.path, "README.md"), "edited on a\n");
+      // A create through the raw bridge skips the renderer's own
+      // mutation, whose success is what re-lists the sidebar. The
+      // refetch a returning window makes stands in for it: a blur and
+      // a focus, since only the transition counts, and again until the
+      // row is there, since a list still fresh is not re-read.
+      await a.waitFor(
+        "a's sidebar to list the new worktree",
+        `(window.dispatchEvent(new Event("blur")), window.dispatchEvent(new Event("focus")), Boolean(${byText("edge/ui-sent")}))`,
+        120_000,
+      );
+      await openDialogFor(source, "Transplant to…");
+      await a.waitFor(
+        "the review to name b as the destination",
+        `Boolean(${byText("destination")})`,
+        30_000,
+      );
+      await clickText("Start transplant");
+      await a.waitFor(
+        "the dialog to reach its finish step",
+        `Boolean(${byText("Decide later")})`,
+        120_000,
+      );
+      const landed = need(
+        (
+          (await onPeer(a, idB, "worktrees:list", {
+            projectId: need(bProject, "the remote read").id,
+          })) as Worktree[]
+        ).find((w) => w.branch === "edge/ui-sent"),
+        "the copy on b",
+      );
+      assert.equal(readOrNull(join(landed.path, "README.md")), "edited on a\n");
+      await clickText("Tear it down");
+      await clickText("Tear down and finish");
+      await clickText("Click again to confirm");
+      await waitFor(
+        () => !existsSync(source.path),
+        "a's source to go with the teardown",
+        60_000,
+      );
+      // The router keeps its place in memory, so the page is read off
+      // what it shows: the copy's branch, under a peer's footer.
+      await a.waitFor(
+        "the app to leave for the copy's page on b",
+        `[...document.querySelectorAll("h1")].some((h) => h.textContent.trim() === "edge/ui-sent") && Boolean(${byText("Transplant here")})`,
+        30_000,
+      );
     });
 
     await scenario("port forward", async () => {

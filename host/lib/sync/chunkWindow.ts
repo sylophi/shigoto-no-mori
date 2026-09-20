@@ -82,3 +82,25 @@ export function createChunkWindow(
     },
   };
 }
+
+// Byte progress for a caller that reports it, coalesced to about half
+// a percent or 100ms between reports (every frame is an IPC round trip
+// and a render), and always once more at the end.
+export function coalescedProgress(
+  totalBytes: number,
+  onProgress: ((bytes: number, totalBytes: number) => void) | undefined,
+): (bytes: number, final: boolean) => void {
+  let lastReportedMark = 0;
+  let lastReportedAt = Date.now();
+  return (bytes, final) => {
+    if (onProgress === undefined) return;
+    const mark = Math.floor((bytes / Math.max(1, totalBytes)) * 200);
+    const now = Date.now();
+    if (!final && mark === lastReportedMark && now - lastReportedAt < 100) {
+      return;
+    }
+    lastReportedMark = mark;
+    lastReportedAt = now;
+    onProgress(bytes, totalBytes);
+  };
+}

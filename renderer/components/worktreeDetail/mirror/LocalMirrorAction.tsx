@@ -1,9 +1,10 @@
-// The footer's mirror button on the copy a mirror landed: the same
-// spot the remote page's "Mirror here" sits, opening the dialog with
-// the running mirror's status, history and controls. Nothing rendered
-// on a worktree that is not mirrored, and nothing on the device being
-// mirrored FROM either: its header pill names the peer, and the mirror
-// is run from that peer.
+// The footer's mirror button on the worktree a mirror session runs on
+// (the copy a "Mirror here" landed, or the original a "Mirror to" was
+// started from): the same spot the remote page's "Mirror here" sits,
+// opening the dialog with the running mirror's status, history and
+// controls. Nothing rendered on a worktree that is not mirrored, and
+// nothing on the device at the session's far end either: its header
+// pill names the peer, and the mirror is run from that peer.
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import type { Worktree } from "@shared/schemas";

@@ -7,6 +7,7 @@
 // drift apart.
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { localDeviceId } from "@/lib/queryKeys";
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import { slotToParam, type ScriptSlot } from "@/store/scriptSlot";
 
@@ -97,15 +98,23 @@ export function useWorktreeNav() {
       go("script", { projectId, worktreeId, scriptKey: slotToParam(slot) });
     },
 
-    // Explicitly the LOCAL tree, whatever the surrounding scope: a
-    // mirrored or transplanted worktree lands on this machine, so
-    // its detail page lives under /projects even when the action ran
-    // from a remote page.
-    toLocalWorktree(projectId: string, worktreeId: string) {
-      void navigate({
-        to: WORKTREE_ROUTE_PATHS.detail.local,
-        params: { projectId, worktreeId },
-      });
+    // Explicitly a NAMED device's tree, whatever the surrounding scope:
+    // a mirrored or transplanted worktree lands on this machine (its
+    // page lives under /projects even when the action ran from a
+    // remote page) or on a peer (under that device's twin, even
+    // though the action ran from a local one).
+    toDeviceWorktree(landedOn: string, projectId: string, worktreeId: string) {
+      void navigate(
+        landedOn === localDeviceId
+          ? {
+              to: WORKTREE_ROUTE_PATHS.detail.local,
+              params: { projectId, worktreeId },
+            }
+          : {
+              to: WORKTREE_ROUTE_PATHS.detail.remote,
+              params: { deviceId: landedOn, projectId, worktreeId },
+            },
+      );
     },
 
     // Where "leave this worktree's pages" lands. The root in both

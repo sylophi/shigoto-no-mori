@@ -13,7 +13,11 @@ import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
 import type { Client } from "@shared/ipc/types";
 import { bundleUnpackViaCli } from "@host/ipc/cliDelegate";
 import { findProjectOrThrow } from "@host/lib/projects";
-import { type ChunkWindow, createChunkWindow } from "./chunkWindow";
+import {
+  type ChunkWindow,
+  coalescedProgress,
+  createChunkWindow,
+} from "./chunkWindow";
 
 export interface FetchBundleInput {
   // The project id on the PEER (ids differ per device registry;
@@ -28,9 +32,7 @@ export interface FetchBundleInput {
   // Local tips the peer may thin the bundle against.
   haves: string[];
   // Byte progress for a caller that reports it: once with 0 when the
-  // peer announces the size, then coalesced to about half a percent
-  // or 100ms between reports (every frame is an IPC round trip and a
-  // render), and always once more at the end.
+  // peer announces the size, then coalesced (chunkWindow.ts).
   onProgress?: (bytes: number, totalBytes: number) => void;
 }
 
@@ -156,19 +158,7 @@ export async function fetchBundleFromPeer(
     }),
   );
   input.onProgress?.(0, start.bytes);
-  let lastReportedMark = 0;
-  let lastReportedAt = Date.now();
-  const report = (bytes: number, final: boolean) => {
-    if (input.onProgress === undefined) return;
-    const mark = Math.floor((bytes / Math.max(1, start.bytes)) * 200);
-    const now = Date.now();
-    if (!final && mark === lastReportedMark && now - lastReportedAt < 100) {
-      return;
-    }
-    lastReportedMark = mark;
-    lastReportedAt = now;
-    input.onProgress(bytes, start.bytes);
-  };
+  const report = coalescedProgress(start.bytes, input.onProgress);
   const dir = await mkdtemp(join(tmpdir(), "sm-sync-recv-"));
   try {
     const path = join(dir, "incoming.bundle");

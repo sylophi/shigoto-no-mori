@@ -12,7 +12,7 @@ import type { Client } from "@shared/ipc/types";
 import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
 import type { Project } from "@shared/schemas";
 import { bundleCreateViaCli } from "@host/ipc/cliDelegate";
-import { createChunkWindow } from "./chunkWindow";
+import { coalescedProgress, createChunkWindow } from "./chunkWindow";
 import { landingRefspec } from "./fetchBundle";
 
 export interface PushBundleInput {
@@ -27,6 +27,9 @@ export interface PushBundleInput {
   // not name a ref whose tip is covered by a have: `git bundle create`
   // drops such a ref silently and the unpack would then miss it.
   haves: string[];
+  // Byte progress, as fetchBundleFromPeer reports it: once with 0 when
+  // the size is known, then as chunks are answered.
+  onProgress?: (bytes: number, totalBytes: number) => void;
 }
 
 // Sends the bundle's bytes as chunks in offset order. Against a host
@@ -40,11 +43,19 @@ export async function sendBundleChunks(
   transferId: string,
   handle: Pick<FileHandle, "read">,
   bytes: number,
-  { pipelined }: { pipelined: boolean },
+  {
+    pipelined,
+    onSent,
+  }: {
+    pipelined: boolean;
+    // The running total of bytes the peer has answered for.
+    onSent?: (bytes: number, final: boolean) => void;
+  },
 ): Promise<void> {
   const window = createChunkWindow(WIRE_CHUNK_BYTES, {
     maxInFlight: pipelined ? undefined : 1,
   });
+  let sent = 0;
   try {
     for (let offset = 0; offset < bytes;) {
       // A buffer per chunk: the last one is still being encoded and
@@ -64,6 +75,8 @@ export async function sendBundleChunks(
           offset: at,
           dataB64: buffer.subarray(0, bytesRead).toString("base64"),
         });
+        sent += bytesRead;
+        onSent?.(sent, sent >= bytes);
         return bytesRead;
       });
       offset += bytesRead;
@@ -94,10 +107,12 @@ export async function pushBundleToPeer(
       projectId: input.peerProjectId,
       bytes: created.bytes,
     });
+    input.onProgress?.(0, created.bytes);
     const handle = await open(path, "r");
     try {
       await sendBundleChunks(peer, transferId, handle, created.bytes, {
         pipelined: pipelined === true,
+        onSent: coalescedProgress(created.bytes, input.onProgress),
       });
     } finally {
       await handle.close();

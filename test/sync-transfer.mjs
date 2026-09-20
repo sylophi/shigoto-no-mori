@@ -968,6 +968,71 @@ async function main() {
     ok(
       "teardownSource: refuses without a receipt, refuses a source that changed after the pull, and removes it once it matches again",
     );
+
+    // ---- The send, the pull turned around: the handler runs HERE as
+    // the device holding the source, and the peer it lands on is the
+    // same wire (its identity scan takes the target repo, registered
+    // first). The push, the peer's landing and the local teardown are
+    // production code against real git.
+    const wt7Path = join(sandbox, "wt7");
+    await git(sourceRepo, ["worktree", "add", "-q", "-b", "feature7", wt7Path]);
+    writeFileSync(join(wt7Path, "seventh.txt"), "seventh\n");
+    await git(wt7Path, ["add", "-A"]);
+    await git(wt7Path, ["commit", "-qm", "seventh feature"]);
+    writeFileSync(join(wt7Path, "draft.txt"), "sent draft\n");
+    const wt7 = {
+      targetDeviceId: "A",
+      projectId: sourceProjectId,
+      worktreeId: worktreeIdFromPath(wt7Path),
+    };
+    await assert.rejects(
+      () => syncHandlers.teardownSent(wt7, pullCtx),
+      /No send recorded/,
+    );
+    const sent = await syncHandlers.sendWorktree(wt7, pullCtx);
+    assert.equal(sent.captured, true);
+    assert.equal(sent.dirtyApplied, true);
+    assert.equal(sent.worktree.projectId, targetProjectId);
+    assert.equal(sent.worktree.branch, "feature7");
+    assert.equal(
+      readFileSync(join(sent.worktree.path, "seventh.txt"), "utf8"),
+      "seventh\n",
+      "the branch's commit landed on the peer",
+    );
+    assert.equal(
+      readFileSync(join(sent.worktree.path, "draft.txt"), "utf8"),
+      "sent draft\n",
+      "the uncommitted work was re-applied on the peer",
+    );
+    await assert.rejects(
+      () =>
+        git(targetRepo, [
+          "rev-parse",
+          "--verify",
+          "-q",
+          "refs/shigomori/incoming/feature7",
+        ]),
+      undefined,
+      "the peer's incoming ref must be swept",
+    );
+    // A second send meets the branch the first one landed, refused by
+    // the peer before a byte moves and attributed to it.
+    await assert.rejects(
+      () => syncHandlers.sendWorktree(wt7, pullCtx),
+      /The other device answered: feature7 is already checked out/,
+    );
+    writeFileSync(join(wt7Path, "draft.txt"), "sent draft, then edited\n");
+    const keptSent = await syncHandlers.teardownSent(wt7, pullCtx);
+    assert.equal(keptSent.sourceRemoved, false);
+    assert.match(keptSent.sourceError ?? "", /changed after/);
+    assert.equal(existsSync(wt7Path), true, "a changed source must survive");
+    writeFileSync(join(wt7Path, "draft.txt"), "sent draft\n");
+    const tornSent = await syncHandlers.teardownSent(wt7, pullCtx);
+    assert.equal(tornSent.sourceRemoved, true, tornSent.sourceError);
+    assert.equal(existsSync(wt7Path), false);
+    ok(
+      "sendWorktree: a dirty worktree lands on the peer with its commit and its uncommitted work, a repeat is refused by the peer, and teardownSent removes the local source only while it still matches what was sent",
+    );
   } finally {
     // Reverse creation order via the shared tracker: the direct
     // sessions and listener first, then the hub connections, then

@@ -45,6 +45,15 @@ import {
 // the user decides what happens to the copy on the source device.
 // pullProgress is the pull's running commentary back to the renderer
 // that invoked it (local-only, like the orchestrators themselves).
+//
+// sendWorktree is the pull turned around: the LOCAL orchestrator that
+// sends one of this device's worktrees to a peer. This device captures
+// and pushes (pushStart through pushFinish), then asks the peer to
+// land what arrived (landCheck before a byte moves, landWorktree
+// after), so a send rides the same single grant a pull does: the
+// peer's. teardownSent is its second half, tearing down the local
+// source once the copy is safe on the peer. Its progress rides
+// pullProgress, keyed by the local source worktree.
 
 // The refs a peer may request into a bundle, fail-closed: a branch
 // (refs/heads/<name>), a dirty-state capture
@@ -348,6 +357,53 @@ export type SyncPullWorktreeResult = z.infer<
   typeof SyncPullWorktreeResultSchema
 >;
 
+// The send's input: which peer, and which of THIS device's worktrees.
+// The branch, the folder name and the repo identity are read off the
+// worktree by the handler, never taken from the caller. The setup
+// switch and the leave-out rule are the pull's.
+export const SyncSendWorktreePayloadSchema = z.strictObject({
+  targetDeviceId: DeviceIdSchema,
+  projectId: z.string().min(1),
+  worktreeId: WorktreeIdSchema,
+  runSetup: SyncPullWorktreePayloadSchema.shape.runSetup,
+  ignoreMode: SyncPullWorktreePayloadSchema.shape.ignoreMode,
+  ignores: SyncPullWorktreePayloadSchema.shape.ignores,
+});
+
+// Where a sent worktree would land, asked of the receiving peer before
+// a byte moves: the pull's own refusals (no project of that identity,
+// the branch or the folder name already taken), run on the device
+// they are about. The answer is the peer's project id, which the push
+// unpacks into.
+const SyncLandTargetSchema = z.strictObject({
+  identity: z.string().min(1),
+  branch: SyncPullWorktreePayloadSchema.shape.branch,
+  worktreeName: SyncPullWorktreePayloadSchema.shape.worktreeName,
+});
+export const SyncLandCheckResultSchema = z.strictObject({
+  projectId: z.string().min(1),
+});
+
+// The landing itself, once the push has unpacked: the create on the
+// branch tip and the re-apply of the capture, the pull's steps 5 and 6
+// run by the receiver. The tip is named because a branch the receiver
+// already held the tip of never crossed, and the capture by its commit
+// and the SENDER's worktree id, the key its ref arrived under.
+export const SyncLandWorktreePayloadSchema = SyncLandTargetSchema.extend({
+  branchTip: CommitHashSchema,
+  runSetup: SyncPullWorktreePayloadSchema.shape.runSetup,
+  capture: z
+    .strictObject({
+      sourceWorktreeId: WorktreeIdSchema,
+      commit: CommitHashSchema,
+    })
+    .optional(),
+});
+export const SyncLandWorktreeResultSchema = z.strictObject({
+  worktree: WorktreeSchema,
+  dirtyApplied: z.boolean(),
+});
+
 // The teardown's fate. A refused or failed teardown never fails the
 // call: by then the pull succeeded and the state is safe on both
 // sides, so the caller learns via sourceRemoved:false with sourceError
@@ -403,9 +459,10 @@ const SyncPushFinishResultSchema = z.strictObject({
 // Which of the named commits the host already holds, so a sender can
 // thin a bundle (and skip a ref whose tip the receiver has, which
 // `git bundle create` would otherwise drop silently).
+export const SYNC_HAS_COMMITS_LIMIT = 64;
 const SyncHasCommitsPayloadSchema = z.strictObject({
   projectId: z.string().min(1),
-  commits: z.array(CommitHashSchema).min(1).max(64),
+  commits: z.array(CommitHashSchema).min(1).max(SYNC_HAS_COMMITS_LIMIT),
 });
 
 export const SyncHasCommitsResultSchema = z.strictObject({
@@ -416,6 +473,15 @@ export const SyncTeardownSourcePayloadSchema = z.strictObject({
   sourceDeviceId: DeviceIdSchema,
   sourceProjectId: z.string().min(1),
   sourceWorktreeId: WorktreeIdSchema,
+});
+
+// The sent worktree's teardown: which peer it went to and which local
+// worktree that was. Like teardownSource, what the send captured and
+// applied is the host's own record, never the caller's claim.
+export const SyncTeardownSentPayloadSchema = z.strictObject({
+  targetDeviceId: DeviceIdSchema,
+  projectId: z.string().min(1),
+  worktreeId: WorktreeIdSchema,
 });
 
 export const syncContract = defineContract("host", {
@@ -494,6 +560,20 @@ export const syncContract = defineContract("host", {
     // A read that discloses repo state, like refTips.
     { remote: true, mutating: true, movesHostState: false },
   ),
+  // The receiving half of a send (see the header note). The check
+  // moves nothing, but it discloses repo state like refTips.
+  landCheck: invoke(
+    "sync:landCheck",
+    SyncLandTargetSchema,
+    SyncLandCheckResultSchema,
+    { remote: true, mutating: true, movesHostState: false },
+  ),
+  landWorktree: invoke(
+    "sync:landWorktree",
+    SyncLandWorktreePayloadSchema,
+    SyncLandWorktreeResultSchema,
+    { remote: true, mutating: true },
+  ),
   // The local orchestrator (see the header note): remote:false keeps
   // it off every remote wire, mutating:true documents intent and keeps
   // the web loopback's fail-closed refusal.
@@ -509,6 +589,19 @@ export const syncContract = defineContract("host", {
   teardownSource: invoke(
     "sync:teardownSource",
     SyncTeardownSourcePayloadSchema,
+    SyncTeardownSourceResultSchema,
+    { remote: false, mutating: true },
+  ),
+  // The send and its teardown, local-only like the pull and its own.
+  sendWorktree: invoke(
+    "sync:sendWorktree",
+    SyncSendWorktreePayloadSchema,
+    SyncPullWorktreeResultSchema,
+    { remote: false, mutating: true },
+  ),
+  teardownSent: invoke(
+    "sync:teardownSent",
+    SyncTeardownSentPayloadSchema,
     SyncTeardownSourceResultSchema,
     { remote: false, mutating: true },
   ),
