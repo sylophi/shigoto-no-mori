@@ -69,9 +69,11 @@ export function startStateWatcher(poke: () => void): void {
           // into an app-wide refetch. Prefix match: the request file
           // spawns a `.consuming` sibling while being claimed. The
           // running-scripts record (scripts/persistence.ts) is the same
-          // kind of plumbing, rewritten on every script spawn and exit.
+          // kind of plumbing, rewritten on every script spawn and exit,
+          // and so is the control wire's address (core/control/server.ts).
           if (
             file === "updater.json" ||
+            file === "control.json" ||
             file === "running-scripts.json" ||
             file?.startsWith("updater-request.json")
           ) {

@@ -71,11 +71,26 @@ func changesCell(p palette, w worktreeJSON) string {
 
 func cmdList(ctx cliContext, args []string) (int, error) {
 	parsed, err := parseCmdArgs(args, argSpec{
-		strings: map[string][]string{"project": {"p"}},
-		bools:   map[string][]string{"all": {"a"}},
+		strings: map[string][]string{"project": {"p"}, "from": nil},
+		bools:   map[string][]string{"all": {"a"}, "remote": nil},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
+	}
+	// The project's worktrees on the user's other devices, which the
+	// running app reads for us (cmd_transfer.go).
+	if err := checkDeviceFlags(parsed); err != nil {
+		return 2, err
+	}
+	if parsed.bools["remote"] || parsed.strings["from"] != "" {
+		if parsed.bools["all"] {
+			return 2, usageErrf("--remote lists one project's worktrees. Name it with -p, or run from inside it.")
+		}
+		proj, err := resolveProject(ctx, parsed.strings["project"])
+		if err != nil {
+			return exitCodeOf(err), err
+		}
+		return listRemoteWorktrees(proj, parsed.strings["from"])
 	}
 
 	if len(ctx.projects) == 0 {

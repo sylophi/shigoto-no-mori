@@ -357,6 +357,17 @@ export function isMirrorStopUnconfirmed(error: unknown): boolean {
   return message.includes(MIRROR_STOP_UNCONFIRMED);
 }
 
+// mirror:stop's other failure, thrown once the session is already
+// gone: the mirror did stop and only the copy's removal failed. Text
+// for the same reason, and told apart so a caller that reports the
+// stop (the CLI's unmirror) does not report a failure to stop.
+export const MIRROR_COPY_STAYED = "The mirror stopped, but the copy";
+
+export function isMirrorCopyStayed(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes(MIRROR_COPY_STAYED);
+}
+
 // The mirror stream's open: the caller has attached its end of a byte
 // channel under this id on the calling connection (shared/ipc/socket/
 // channels.ts), and the host attaches a fresh `file-sync serve` for

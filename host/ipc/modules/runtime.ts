@@ -22,7 +22,13 @@ type RuntimeImpl = {
   uninstallCliEverything: () => Promise<void>;
   stopStateWatcher: () => void;
   stopUpdaterBridge: () => void;
+  // Unpublishes control.json, so the moved data dir never carries the
+  // address of this pre-move process to a CLI that resolved the new one.
+  stopControlHost: () => void;
   broadcastNukeProgress: (progress: NukeProgress) => void;
+  // The data dir was wiped and reseeded under the running app: put back
+  // the plumbing files this process keeps there.
+  afterDataWipe: () => void;
   relaunchAppUnattended: () => void;
   // Why a move asked for by another device must not start right now
   // (it reaps every running script, and nobody here was asked), or
@@ -80,6 +86,7 @@ export const runtimeHandlers: Handlers<typeof runtimeContract, HandlerContext> =
             watchersStopped = true;
             runtimeImpl().stopStateWatcher();
             runtimeImpl().stopUpdaterBridge();
+            runtimeImpl().stopControlHost();
           },
         });
       } catch (err) {
@@ -107,9 +114,14 @@ export const runtimeHandlers: Handlers<typeof runtimeContract, HandlerContext> =
     },
 
     nuke: async () => {
-      await nukeEverything((progress) =>
-        runtimeImpl().broadcastNukeProgress(progress),
-      );
+      try {
+        await nukeEverything((progress) =>
+          runtimeImpl().broadcastNukeProgress(progress),
+        );
+      } finally {
+        // A wipe that failed past the rm still took the files along.
+        runtimeImpl().afterDataWipe();
+      }
       // Nuke means "remove everything shigomori put on this machine";
       // the CLI links and the shell-integration hooks are part of that.
       // Settings offers a fresh install afterwards.

@@ -37,6 +37,8 @@ var generalItems = []helpItem{
 	{"run [<script>] [<args>...]", "Run a package.json script here",
 		"Works inside any registered project's checkout or worktree. Detects the package manager from the lockfile (bun/pnpm/yarn/npm) and execs `<manager> run <script>` at the worktree root, so output, signals, and the exit code are the script's own. Extra args pass through to the script (put dashed ones after --). With no script, lists them."},
 	{"app", "Open the Shigoto no Mori app", ""},
+	{"devices [-p <project>]", "List your other devices",
+		"The machines signed in to your account, by the names --to and --from take. Inside a project (or with -p) each says whether it can take part in a send, bring or mirror of it, and if not, why: not connected, no checkout of this repo, or not accepting commands (a switch on that device's Devices page). Asks the running app."},
 	{"update [--check]", "Update the app to the latest release",
 		"Checks GitHub releases, downloads, verifies, and installs, all from the CLI, without opening the app (the linked CLI updates with it). If the app is running it restarts into the new version. --check only asks the feed and reports. A prerelease build follows its own channel (v2.0.0-beta.N) and takes a full release that is ahead of it."},
 	{"doctor [--fix] [--yes]", "Check the installation and data dir",
@@ -46,8 +48,8 @@ var generalItems = []helpItem{
 }
 
 var worktreeItems = []helpItem{
-	{"worktrees list [--all]", "List worktrees",
-		"All projects when outside one, or with --all."},
+	{"worktrees list [--all] [--remote] [--from <device>]", "List worktrees",
+		"All projects when outside one, or with --all. --remote lists this project's worktrees on your other devices, by the names `bring` and `mirror --from` take, and --from narrows it to one device. The remote list asks the running app."},
 	{"worktrees status [<name>] [--no-pr]", "Status card for one worktree",
 		"Where the worktree you're standing in stands: branch, base, changes, stash, last commit, ports, scripts, PR. The PR lookup needs gh and degrades to a note rather than stalling the card. --no-pr skips it."},
 	{"worktrees switch [<name>]", "Open a subshell in this project's worktrees",
@@ -77,6 +79,15 @@ var worktreeItems = []helpItem{
 			"capture, unstaged, onto a clean worktree whose HEAD matches the capture's parent, then " +
 			"deletes the ref. -f skips apply's clean check only. git still refuses where local changes " +
 			"overlap the capture, and a HEAD mismatch always refuses (sync the branch first)."},
+	{"worktrees send [<name>] [--to <device>]", "Move a worktree to another device",
+		"The app's \"Transplant to…\": the branch, its uncommitted changes and its ignored files land as a worktree on another of your devices. --to takes a device's name (or the start of it) and can be left off when only one device qualifies: connected, holding the same repo, and accepting commands (`devices` says which). Options, shared with bring and mirror: --leave-out nothing|gitignored picks which ignored files stay behind (default: the project's saved rule), and --setup / --no-setup overrides whether the copy runs the setup script (default: only when ignored files stayed behind). --source keep|shelve|teardown decides what becomes of the original, keep by default. teardown removes it once the copy holds its commits and uncommitted changes, along with any ignored files the leave-out rule kept back, which then exist nowhere. Refuses when the branch or folder name is already taken there. Runs in the app, so the app must be open, and finishes there even if this command is interrupted. Exits 3 when the worktree landed but something after it didn't hold."},
+	{"worktrees bring <worktree> [--from <device>]", "Move a worktree here from another device",
+		"send, the other way round. <worktree> is the other device's folder name or branch (`list --remote` shows them). --from is only needed when the name is on several devices. Same options as send, with --source deciding what becomes of the worktree over there. Prints the new worktree's path."},
+	{"worktrees mirror [<name>] [--to <device> | --from <device>]", "Keep a worktree in step on two devices",
+		"send or bring that stays. With --to (or neither) a copy of this device's worktree lands on the other device. With --from, <name> is the other device's worktree and the copy lands here. From then on files, commits, staging and branch moves follow each other both ways until unmirror. Asking again for a worktree that is already mirrored answers with the running mirror. Takes --leave-out and --setup / --no-setup like send. The original always stays. Prints the copy's path when it landed here."},
+	{"worktrees unmirror [<name>] [-f]", "Stop mirroring and remove the copy",
+		"Removes the copy, wherever it is, and never the original. Refuses until both sides hold the same commits. -f stops anyway."},
+	{"worktrees mirrors", "List this device's mirrors", ""},
 	{"worktrees shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`, ""},
 	{"worktrees open [<tool>] [<name>]", "Launch a launcher-row tool in a worktree",
 		"Finder, editors, custom commands. With no tool, shows the row as a menu."},
@@ -254,7 +265,8 @@ func helpText(full bool) string {
 	}
 	for _, line := range wrapText(
 		"Exit codes: 0 ok, 1 error, 2 usage, 3 worktree created but a "+
-			"lifecycle script failed (create prints the path either way).", width) {
+			"lifecycle script failed (create prints the path either way), or "+
+			"sent or brought with something after it not holding.", width) {
 		b.WriteString(line + "\n")
 	}
 	return strings.TrimRight(b.String(), "\n")
@@ -415,6 +427,13 @@ var commands = []command{
 	{name: "adopt", worktree: true, run: cmdAdopt},
 	{name: "setup", worktree: true, run: cmdSetup},
 	{name: "dirty", worktree: true, run: cmdDirty},
+	// The cross-device verbs, which run in the app (control.go).
+	{name: "send", worktree: true, run: cmdSend},
+	{name: "bring", worktree: true, run: cmdBring},
+	{name: "mirror", worktree: true, run: cmdMirror},
+	{name: "unmirror", worktree: true, run: cmdUnmirror},
+	{name: "mirrors", worktree: true, run: cmdMirrors},
+	{name: "devices", run: cmdDevices},
 	// App plumbing for device sync (bundle create/unpack); hidden from
 	// the help catalog on purpose, like the config `write --data` verbs.
 	{name: "bundle", run: cmdBundle},

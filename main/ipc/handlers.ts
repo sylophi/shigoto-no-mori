@@ -40,6 +40,7 @@ import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
 import { cliContract } from "@shared/ipc/modules/cli";
+import { controlContract } from "@shared/ipc/modules/control";
 import { shellContract } from "@shared/ipc/modules/shell";
 import { terrierContract } from "@shared/ipc/modules/terrier";
 import { shigomoriContract } from "@shared/ipc/modules/shigomori";
@@ -79,6 +80,7 @@ import { runtimeHandlers } from "@host/ipc/modules/runtime";
 import { scriptsHandlers } from "@host/ipc/modules/scripts";
 import { sharedSettingsHandlers } from "@host/ipc/modules/sharedSettings";
 import { cliHandlers } from "@host/ipc/modules/cli";
+import { controlHandlers, setControlImpl } from "@host/ipc/modules/control";
 import { shellHandlers } from "./modules/shell";
 import { terrierHandlers } from "@host/ipc/modules/terrier";
 import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
@@ -101,12 +103,14 @@ import {
 import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
 import { spawnFileSync } from "@host/fileSync/spawn";
 import { dataDir } from "@host/lib/util/paths";
+import { getDeviceId } from "@host/lib/config/deviceId";
 import { makeAccountHandlers } from "./modules/account";
 import {
   broadcastAll,
   directHandlers,
   refreshHubConnection,
   registerContract,
+  registerControlContract,
   hubHandlers,
   onPeerPush,
 } from "./register";
@@ -297,34 +301,32 @@ export function registerIpcHandlers(): void {
   // wire. The changed broadcast fans out to every window after any
   // sign-in, sign-out or rename, and the hub socket re-reconciles
   // against the fresh account state at the same moment.
-  registerContract(
-    accountContract,
-    makeAccountHandlers(
-      () => {
-        broadcastAll(accountContract, "changed", undefined);
-        // A direct account switch that stays signed in changes the
-        // command-access answer, so refresh the renderer's switch query
-        // too. Main's grant cache is already invalidated in
-        // makeAccountHandlers, so enforcement is correct without this.
-        // This only keeps the renderer display fresh, since `changed`
-        // invalidates the ["account"] prefix but not
-        // ["accountCommandAccess"].
-        broadcastAll(accountContract, "commandAccessChanged", undefined);
-        broadcastAll(remoteAccessContract, "commandAccessChanged", undefined);
-        // Also reconciles the direct listener from its tail, which
-        // follows the same enrollment condition.
-        void refreshHubConnection();
-      },
-      // The switch flipping fans out on its own channel so the toggle
-      // does not thrash the account status and device queries. No hub
-      // reconnect: the listener reads the predicate live. The peers
-      // hear it too (remote:true), so their verdict refreshes at once.
-      () => {
-        broadcastAll(accountContract, "commandAccessChanged", undefined);
-        broadcastAll(remoteAccessContract, "commandAccessChanged", undefined);
-      },
-    ),
+  const accountHandlers = makeAccountHandlers(
+    () => {
+      broadcastAll(accountContract, "changed", undefined);
+      // A direct account switch that stays signed in changes the
+      // command-access answer, so refresh the renderer's switch query
+      // too. Main's grant cache is already invalidated in
+      // makeAccountHandlers, so enforcement is correct without this.
+      // This only keeps the renderer display fresh, since `changed`
+      // invalidates the ["account"] prefix but not
+      // ["accountCommandAccess"].
+      broadcastAll(accountContract, "commandAccessChanged", undefined);
+      broadcastAll(remoteAccessContract, "commandAccessChanged", undefined);
+      // Also reconciles the direct listener from its tail, which
+      // follows the same enrollment condition.
+      void refreshHubConnection();
+    },
+    // The switch flipping fans out on its own channel so the toggle
+    // does not thrash the account status and device queries. No hub
+    // reconnect: the listener reads the predicate live. The peers
+    // hear it too (remote:true), so their verdict refreshes at once.
+    () => {
+      broadcastAll(accountContract, "commandAccessChanged", undefined);
+      broadcastAll(remoteAccessContract, "commandAccessChanged", undefined);
+    },
   );
+  registerContract(accountContract, accountHandlers);
   // Client-scoped bridge onto the main-process hub socket: status,
   // invokes over the keeper-held direct sessions, and the
   // peerPush/statusChanged fan-outs. The
@@ -459,6 +461,20 @@ export function registerIpcHandlers(): void {
   registerContract(scriptsContract, scriptsHandlers);
   registerContract(sharedSettingsContract, sharedSettingsHandlers);
   registerContract(cliContract, cliHandlers);
+  // The CLI's cross-device verbs, on the control wire alone
+  // (shared/ipc/modules/control.ts). The device registry rides the
+  // stored credential and the peer reach is peerTransportFor above,
+  // the one cached session per peer everything else rides.
+  setControlImpl({
+    listDevices: async () => accountHandlers.listDevices(undefined, undefined),
+    thisDeviceId: getDeviceId,
+    connectedDeviceIds: async () =>
+      Object.keys(
+        (await hubHandlers.status(undefined, undefined)).peerAppVersions,
+      ),
+    peerTransportFor,
+  });
+  registerControlContract(controlContract, controlHandlers);
   registerContract(shigomoriContract, shigomoriHandlers);
   registerContract(syncContract, syncHandlers);
   // Host side of the port-forward wire: host-scoped, so it mounts on

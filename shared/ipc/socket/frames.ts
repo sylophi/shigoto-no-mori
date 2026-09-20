@@ -161,7 +161,7 @@ const HelloFrameSchema = z.object({
   deflate: z.boolean().optional(),
 });
 
-const ReqFrameSchema = z.object({
+export const ReqFrameSchema = z.object({
   t: z.literal("req"),
   // Client-assigned correlation id, echoed on the matching res.
   id: z.number().int(),

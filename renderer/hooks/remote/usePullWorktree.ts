@@ -14,11 +14,9 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
-import type {
-  MirrorIgnoreMode,
-  MirrorStartPayload,
-} from "@shared/ipc/modules/mirror";
+import type { MirrorStartPayload } from "@shared/ipc/modules/mirror";
 import type { SyncPullWorktreeResult } from "@shared/ipc/modules/sync";
+import type { MirrorIgnoreChoice } from "@shared/leaveOutRule";
 import type { Worktree } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { invalidateHostDevice, queryKeys } from "@/lib/queryKeys";
@@ -61,10 +59,7 @@ export type PullSource = {
 
 // What a mirror leaves out, as the dialog and the section hand it to
 // the host: the rule plus the engine patterns it resolved to.
-export type MirrorIgnoreChoice = {
-  ignoreMode: MirrorIgnoreMode;
-  ignores: string[];
-};
+export type { MirrorIgnoreChoice };
 
 // What a pull dialog hands its mutation: the rule plus the setup
 // switch, the same for a transplant and a mirror start.

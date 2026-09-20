@@ -12,30 +12,42 @@
 // with the picked paths taken back out (bringIgnores).
 import { useState } from "react";
 import {
-  anchorIgnoredPath,
-  bringIgnores,
   broughtPaths,
   describeIgnores,
-  MIRROR_IGNORES_LIMIT,
   type MirrorIgnoreMode,
   summarizeIgnores,
   unanchorIgnoredPath,
 } from "@shared/ipc/modules/mirror";
-import type { SyncIgnoredPathsResult } from "@shared/ipc/modules/sync";
-import type {
-  LeaveOutPreset,
-  LeaveOutPresetBase,
-} from "@shared/sharedSettings";
+import {
+  exceptionsOf,
+  type IgnoreBase,
+  type IgnoreSelection,
+  modeOf,
+  presetOfSelection,
+  resolveIgnores,
+  selectionOfPreset,
+  setupDefaultFor,
+} from "@shared/leaveOutRule";
 import {
   useLeaveOutPreset,
   useSaveLeaveOutPreset,
 } from "@/hooks/sharedSettings/useLeaveOutPreset";
 import { useSharedSettingsSettled } from "@/hooks/sharedSettings/useSharedSettings";
-import type {
-  MirrorIgnoreChoice,
-  PullChoice,
-} from "@/hooks/remote/usePullWorktree";
+import type { PullChoice } from "@/hooks/remote/usePullWorktree";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
+
+// The rule itself (the selection, its mode, the setup default and the
+// patterns it resolves to) lives in shared/leaveOutRule.ts, which the
+// CLI's control ops read too. Re-exported for the dialogs.
+export {
+  exceptionsOf,
+  type IgnoreBase,
+  type IgnoreSelection,
+  modeOf,
+  presetOfSelection,
+  resolveIgnores,
+  selectionOfPreset,
+};
 
 // What stays behind before the exceptions (nothing, or what git
 // ignores), in the words each base goes by. The heading beside the
@@ -63,62 +75,7 @@ export const IGNORE_BASE_COPY = {
     action: "Bring",
     done: "Brought",
   },
-} as const satisfies Record<LeaveOutPresetBase, unknown>;
-export type IgnoreBase = LeaveOutPresetBase;
-
-export type IgnoreSelection = {
-  base: IgnoreBase;
-  // The exceptions, each base's own so a switch of base and back loses
-  // nothing: the ignored paths left out though nothing else is, and
-  // the ignored paths brought though the rest stay.
-  leftOut: ReadonlySet<string>;
-  brought: ReadonlySet<string>;
-};
-
-// The project's preset (hooks/sharedSettings/useLeaveOutPreset.ts) as
-// a selection, and back.
-export function selectionOfPreset(preset: LeaveOutPreset): IgnoreSelection {
-  return {
-    base: preset.base,
-    leftOut: new Set(preset.leftOut),
-    brought: new Set(preset.brought),
-  };
-}
-
-export function presetOfSelection(selection: IgnoreSelection): LeaveOutPreset {
-  return {
-    base: selection.base,
-    leftOut: [...selection.leftOut],
-    brought: [...selection.brought],
-  };
-}
-
-// The exceptions to the base in force.
-export function exceptionsOf(selection: IgnoreSelection): ReadonlySet<string> {
-  return selection.base === "everything"
-    ? selection.leftOut
-    : selection.brought;
-}
-
-// The rule the selection comes to. A base with no exceptions is the
-// plain rule.
-export function modeOf(selection: IgnoreSelection): MirrorIgnoreMode {
-  const excepted = exceptionsOf(selection).size > 0;
-  if (selection.base === "everything") {
-    return excepted ? "custom" : "everything";
-  }
-  return excepted ? "bring" : "gitignored";
-}
-
-// Whether the copy runs the setup script by default, by the rule: off
-// when every file crosses (what setup would build, node_modules and
-// the like, comes over with the rest), on when gitignored paths (or
-// the user's pick of them) stay behind and the copy has to build its
-// own. The dialog's switch overrides it.
-export function setupDefaultFor(selection: IgnoreSelection): boolean {
-  return modeOf(selection) !== "everything";
-}
-
+} as const satisfies Record<IgnoreBase, unknown>;
 // The review state a pull dialog (transplant or mirror) keeps: the
 // leave-out rule, the ignored list the gitignored rule resolves over
 // (read only once that rule is picked, since it walks the checkout
@@ -180,37 +137,6 @@ export function usePullChoice(
   };
 }
 export type PullChoiceState = ReturnType<typeof usePullChoice>;
-
-export function resolveIgnores(
-  selection: IgnoreSelection,
-  ignored: SyncIgnoredPathsResult | undefined,
-): MirrorIgnoreChoice {
-  const ignoreMode = modeOf(selection);
-  switch (ignoreMode) {
-    case "everything":
-      return { ignoreMode, ignores: [] };
-    case "gitignored":
-      return {
-        ignoreMode,
-        ignores: (ignored?.patterns ?? []).slice(0, MIRROR_IGNORES_LIMIT),
-      };
-    case "custom":
-      return {
-        ignoreMode,
-        ignores: [...selection.leftOut]
-          .map(anchorIgnoredPath)
-          .slice(0, MIRROR_IGNORES_LIMIT),
-      };
-    case "bring":
-      return {
-        ignoreMode,
-        ignores: bringIgnores(
-          ignored?.patterns ?? [],
-          [...selection.brought].toSorted(),
-        ),
-      };
-  }
-}
 
 // The session's rule as a selection: custom patterns come back as the
 // root-relative paths they were anchored from, and a bring rule's

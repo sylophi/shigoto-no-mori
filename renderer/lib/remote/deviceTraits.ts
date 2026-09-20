@@ -6,7 +6,7 @@
 // project strip nor the switches that expose a machine to the others.
 // One place, so a row never branches on the platform string, or on
 // the shell it happens to render in, by itself.
-import { WEB_PLATFORM } from "@shared/account/enroll";
+import { hostsProjects } from "@shared/account/enroll";
 import { platformLabel } from "@/lib/platformLabel";
 
 export type DeviceTraits = {
@@ -24,9 +24,7 @@ export type DeviceTraits = {
 };
 
 // The one trait a list filters on, without building the rest.
-export function hostsProjects(platform: string): boolean {
-  return platform !== WEB_PLATFORM;
-}
+export { hostsProjects };
 
 export function deviceTraits(platform: string): DeviceTraits {
   if (!hostsProjects(platform)) {

@@ -115,7 +115,7 @@ export class HubLinkDownError extends Error {
 // arrival. A res carries a message and nothing else (a code field
 // would be a wire change), so re-typing the answer here is what keeps
 // every caller from pattern-matching a string it does not own.
-function noHandlerMessage(channel: string): string {
+export function noHandlerMessage(channel: string): string {
   return `No handler registered for channel "${channel}"`;
 }
 

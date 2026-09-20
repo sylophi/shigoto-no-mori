@@ -80,8 +80,10 @@ A device is made of two folders:
 
 - **Data dir.** Projects and worktrees: `registry.json` (projects
   and the device id), `state.json`, `config.json`, `projects/`,
-  `worktrees/`. The device id is created per data dir, so one data dir
-  is one device. A pre-2.0 `~/shigomori` (`~/shigomori-dev`) that still
+  `worktrees/`, and while the app runs `control.json` (the loopback
+  port and token the CLI's cross-device verbs reach it through,
+  owner-only, removed on quit). The device id is created per data dir,
+  so one data dir is one device. A pre-2.0 `~/shigomori` (`~/shigomori-dev`) that still
   holds state is adopted in place until `~/.sm` (`~/.smd`) holds state;
   Settings > Data location offers to rename it, and `sm doctor` warns.
 - **userData.** The app instance: `account.json` (hub credential),
@@ -312,6 +314,32 @@ returns a window with `evaluate`, `waitFor`, `screenshot` and `close`.
 A rejection with a zod issue list means the payload shape matches the
 wrong convention.
 
+### From a terminal
+
+The cross-device verbs are also on the CLI, which asks the running app
+for them over the control wire (`main/core/control/server.ts`) and runs
+the same orchestrators as the bridge calls above. Point `smd` at the
+profile whose app should act, from a checkout of the repo:
+
+```sh
+export SHIGOMORI_DATA_DIR=~/.smd-profiles/<tag>-a/data
+smd devices                                     # the other devices, and why one can't take part
+smd worktrees send [<name>] [--to <device>]     # sync.sendWorktree (+ --source keep|shelve|teardown)
+smd worktrees list --remote [--from <device>]   # the repo's worktrees on the other devices
+smd worktrees bring <worktree> [--from <device>]   # sync.pullWorktree
+smd worktrees mirror [<name>] [--to <device>]   # mirror.startTo
+smd worktrees mirror <worktree> --from <device> # mirror.start
+smd worktrees mirrors                           # mirror.list
+smd worktrees unmirror [<name>] [-f]            # mirror.stop
+```
+
+A device is named by its name, the start of it, or its id, and can be
+left off when only one other device is ready. `--json` streams the
+transfer's progress frames, then the result. With the app not running
+(or another profile's data dir) every verb fails with
+`app-not-running`. `pnpm test control` covers the wire and the verbs
+without an app, and the smoke's `cli:` scenario covers them with two.
+
 ### DOM hooks
 
 Use the DOM only where a person would click. The sidebar's Devices
@@ -403,6 +431,7 @@ one was filtered out, so name both.
 | transplant: failing setup script | A setup script that exits non-zero leaves a real worktree with the uncommitted work applied. |
 | pull refusals | A second transplant and a mirror of a branch a already holds, a taken folder name, and a branch gone from the source are all refused, leaving no worktree, session or incoming ref. A source edited after its transplant is kept by the finish step, with the reason. |
 | transplant to a peer | a sends one of its own worktrees to b, which alone accepts commands. The branch, the uncommitted work and the ignored files land on b with no incoming ref left there. A second send is refused by b, and the finish step removes a's source only once it again matches what was sent. |
+| cli: send, bring and mirror | The same verbs from a terminal: the real `smd`, pointed at a's data dir, reaches a's app over the control wire. `devices` reports b ready. `send --source teardown` lands a's worktree on b with its edit and its ignored file and removes the source, `list --remote` shows it on b and `bring` brings it back by its branch, and `mirror` copies it to b, answers a second ask with the running mirror, carries a file and a commit across, and is removed from b by `unmirror` while a's original stays. `mirror --from` then copies one of b's worktrees to a, carries a file back to b's original, and its `unmirror` removes a's copy only. |
 | mirror to a peer | a copies one of its own worktrees to b and runs the mirror itself. Files and a commit made on b's copy come back to a, and the stop removes b's copy while a's original stays. |
 | mirror: gitignored rule, setup on, pause | Setup runs, each side keeps its own ignored files, and tracked work crosses. A paused mirror carries nothing, and resuming carries what was held. |
 | mirror: diverged stop is refused | Both sides commit while paused. The pair reads diverged with both tips untouched, Stop is refused and changes nothing, and deleting a's copy ends the session on both devices. |

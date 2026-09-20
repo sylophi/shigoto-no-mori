@@ -36,7 +36,8 @@ compiles.
 
 `skills/` holds instruction snippets that teach coding agents the `sm`
 workflow (create a worktree, switch to one, land and clean up, tear one
-down, register a project). Install with [Vercel skills](https://github.com/vercel-labs/skills)
+down, register a project, send a worktree to another of your machines or
+bring one over). Install with [Vercel skills](https://github.com/vercel-labs/skills)
 (skills.sh); the installer lets you pick which ones to include:
 
 ```sh

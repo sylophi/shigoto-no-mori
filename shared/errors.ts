@@ -10,6 +10,16 @@ export function errorMessageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+// The machine-readable code an error carries, when it has one (a
+// ControlError, a Node errno). What a wire sends beside the message so
+// the far side keys on the code and not on the prose.
+export function errorCodeOf(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) {
+    return undefined;
+  }
+  return typeof error.code === "string" ? error.code : undefined;
+}
+
 export function unknownProjectError(projectId: string): Error {
   return new Error(`Unknown project: ${projectId}`);
 }

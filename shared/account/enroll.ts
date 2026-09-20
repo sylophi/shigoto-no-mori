@@ -18,6 +18,13 @@ import { deriveAccountId } from "./token";
 // this so a typo cannot silently turn a browser into a desktop row.
 export const WEB_PLATFORM = "web";
 
+// Whether a device of this platform registers projects. The one trait
+// a list filters on, here so the host's device roster (the CLI's
+// cross-device verbs) and the renderer's lists cannot disagree.
+export function hostsProjects(platform: string): boolean {
+  return platform !== WEB_PLATFORM;
+}
+
 type EnrollDeviceDeps = {
   config: AccountServiceConfig;
   service: AccountService;
