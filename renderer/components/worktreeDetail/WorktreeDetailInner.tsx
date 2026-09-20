@@ -252,7 +252,7 @@ export function WorktreeDetailInner({
           remote ? (
             <RemoteWorktreeActions worktree={worktree} project={project} />
           ) : (
-            <LocalWorktreeActions worktree={worktree} />
+            <LocalWorktreeActions worktree={worktree} project={project} />
           )
         }
       />

@@ -6,7 +6,10 @@
 import { Check, X, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { PathSpan } from "@/components/ui/path-span";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DestinationScope } from "@/hooks/remote/useHostScope";
+import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { cn } from "@/lib/utils";
 import { formatElapsed } from "./pullSteps";
 
@@ -183,5 +186,27 @@ export function CardSkeleton({ rows = 1 }: { rows?: 1 | 2 }) {
       {rows === 2 && <Skeleton className="h-3.5 w-3/4" />}
       <Skeleton className="h-3.5 w-1/2" />
     </div>
+  );
+}
+
+// The landed worktree's path, tildified against the landing machine's
+// home: the dialogs sit in the source's scope, hence the re-pin.
+export function LandedPath({ path }: { path: string }) {
+  return (
+    <DestinationScope>
+      <TildifiedPath path={path} />
+    </DestinationScope>
+  );
+}
+
+function TildifiedPath({ path }: { path: string }) {
+  const { data: runtime } = useRuntimeInfo();
+  return (
+    <PathSpan
+      path={path}
+      home={runtime?.homedir ?? null}
+      className="min-w-0 truncate font-mono text-xs text-muted-foreground"
+      copyable
+    />
   );
 }

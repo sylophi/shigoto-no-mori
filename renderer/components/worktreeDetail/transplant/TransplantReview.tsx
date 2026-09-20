@@ -1,23 +1,26 @@
 // Step 1 of the transplant: what travels, what stays, and where it
-// lands. The source half reads the remote device the page is scoped
-// to (its diff, its PR, its ignored files). The destination half
-// re-pins to this machine (LocalHostScope), because carry-over and the
-// folder come from the LOCAL project's config, not the source's, and
-// so does the pre-flight: a branch this device already holds fails the
-// pull at step 2, so the review says so here and keeps Start off.
+// lands. The source half reads the device the page is scoped to (its
+// diff, its PR, its ignored files). The destination half re-pins to
+// the landing device (DestinationScope: this machine, or the peer a
+// local worktree is being transplanted to), because carry-over and the
+// folder come from the DESTINATION project's config, not the source's,
+// and so does the pre-flight: a branch that device already holds fails
+// the pull at step 2, so the review says so here and keeps Start off.
 import { Check } from "lucide-react";
 import type { Project, Worktree } from "@shared/schemas";
 import { DiffStats } from "@/components/ui/diff-stats";
 import { RowTag } from "@/components/ui/row-tag";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { changeEntries } from "@/lib/patchFiles";
-import { LocalHostScope } from "@/hooks/remote/useHostScope";
+import { DestinationScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
 import { cn } from "@/lib/utils";
 import type { PullChoiceState } from "../flow/ignoreChoice";
+import type { Landing } from "../flow/pullSteps";
 import { PullLeaveOut } from "../flow/PullLeaveOut";
 import { useCarryOverRows } from "../flow/createPlan";
 import {
+  type DestinationPick,
   PullReviewFooter,
   ReviewDevicesColumn,
   SourceCard,
@@ -36,15 +39,22 @@ export function TransplantReview({
   localProject,
   sourceDeviceLabel,
   thisDeviceLabel,
+  landing,
+  toPeer,
   pull,
   onCancel,
   onStart,
 }: {
   worktree: Worktree;
   project: Project;
-  localProject: Project;
+  // The landing project and device: this machine's, or the picked
+  // peer's when the transplant goes to one (`toPeer`), absent until
+  // one is picked.
+  localProject: Project | undefined;
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
+  landing?: Landing;
+  toPeer?: DestinationPick;
   // The leave-out rule and the setup switch, the mirror's pair.
   pull: PullChoiceState;
   onCancel: () => void;
@@ -90,17 +100,20 @@ export function TransplantReview({
               }}
             />
 
-            <LocalHostScope>
-              <CarryOverList
-                localProject={localProject}
-                thisDeviceLabel={thisDeviceLabel}
-              />
-            </LocalHostScope>
+            {localProject !== undefined && (
+              <DestinationScope>
+                <CarryOverList
+                  localProject={localProject}
+                  thisDeviceLabel={thisDeviceLabel}
+                />
+              </DestinationScope>
+            )}
           </div>
 
           <ReviewDevicesColumn
             heading="Destination"
             sourceNote="where it is now"
+            toPeer={toPeer}
             worktree={worktree}
             localProject={localProject}
             sourceDeviceLabel={sourceDeviceLabel}
@@ -110,10 +123,11 @@ export function TransplantReview({
         </div>
       </FlowBody>
 
-      <LocalHostScope>
+      <DestinationScope>
         <PullReviewFooter
           worktree={worktree}
           localProject={localProject}
+          landing={landing}
           waiting={pull.waiting}
           blocked={pull.blocked}
           idleNote={`Nothing on ${sourceDeviceLabel} is deleted until you say so at the last step.`}
@@ -121,7 +135,7 @@ export function TransplantReview({
           onCancel={onCancel}
           onStart={onStart}
         />
-      </LocalHostScope>
+      </DestinationScope>
     </>
   );
 }
@@ -183,8 +197,8 @@ function ChangedFiles({
   );
 }
 
-// The local project's carry-over (../flow/createPlan.ts), as the review's
-// card. Under LocalHostScope by the caller.
+// The landing project's carry-over (../flow/createPlan.ts), as the
+// review's card. Under DestinationScope by the caller.
 function CarryOverList({
   localProject,
   thisDeviceLabel,

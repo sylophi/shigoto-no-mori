@@ -5,24 +5,26 @@
 // same guarded teardown the one-shot orchestrator did
 // (sync:teardownSource). Shelve is preselected: the work is here now,
 // the source copy is only a fallback, and shelving throws nothing away.
+// A transplant to a peer ends on the same step with the two machines
+// swapped: the copy landed there and the source is this device's own
+// worktree, so its words say "there" and its teardown is the local one
+// the dialog hands in.
 import { ArrowRight, Check } from "lucide-react";
 import { useState } from "react";
-import type { SyncPullWorktreeResult } from "@shared/ipc/modules/sync";
+import type { UseMutationResult } from "@tanstack/react-query";
+import type {
+  SyncPullWorktreeResult,
+  SyncTeardownSourceResult,
+} from "@shared/ipc/modules/sync";
 import type { Project, Worktree } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip-button";
-import { PathSpan } from "@/components/ui/path-span";
 import { RowTag } from "@/components/ui/row-tag";
 import { SectionHeading } from "@/components/ui/section-heading";
-import {
-  keptSourceReason,
-  useTeardownSource,
-} from "@/hooks/remote/usePullWorktree";
-import { LocalHostScope } from "@/hooks/remote/useHostScope";
+import { keptSourceReason } from "@/hooks/remote/usePullWorktree";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
-import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import {
   CONFIRM_DESTRUCTIVE_MS,
   useConfirmTwice,
@@ -32,7 +34,8 @@ import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { pluralize } from "@/lib/pluralize";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { FlowBody, FlowFooter } from "../flow/FlowChrome";
+import { FlowBody, FlowFooter, LandedPath } from "../flow/FlowChrome";
+import { type Landing, LANDS_HERE } from "../flow/pullSteps";
 
 type SourceChoice = "keep" | "shelve" | "teardown";
 
@@ -61,7 +64,7 @@ const CHOICES: {
   {
     key: "shelve",
     title: "Shelve it",
-    body: () => "Hidden from the sidebar there, files kept. Unshelve any time.",
+    body: () => "Hidden from its sidebar, files kept. Unshelve any time.",
   },
   {
     key: "teardown",
@@ -90,6 +93,8 @@ export function TransplantFinish({
   project,
   sourceDeviceLabel,
   thisDeviceLabel,
+  landing = LANDS_HERE,
+  teardown,
   onClose,
   onOpen,
 }: {
@@ -99,18 +104,23 @@ export function TransplantFinish({
   // under Gitignored, which left every ignored file there (the read
   // below counts them) or all but the brought ones (left uncounted).
   leftOutCount: number | null;
-  // The SOURCE worktree and project, on the remote device this page is
-  // scoped to. The landed local pair is in `result`.
+  // The SOURCE worktree and project, on the device this page is scoped
+  // to. The landed pair is in `result`.
   worktree: Worktree;
   project: Project;
   sourceDeviceLabel: string;
+  // The device it landed on, and the words for that (pullSteps.ts).
   thisDeviceLabel: string;
+  landing?: Landing;
+  // The source's guarded teardown, the direction's own
+  // (sync:teardownSource, or sync:teardownSent for a peer landing).
+  teardown: UseMutationResult<SyncTeardownSourceResult, Error, void>;
   onClose: () => void;
-  // Leave for the landed worktree's own page, on this machine.
+  // Leave for the landed worktree's own page.
   onOpen: () => void;
 }) {
   const setShelved = useSetShelved();
-  const teardown = useTeardownSource({ worktree, sourceProjectId: project.id });
+  const { here } = landing;
   const filesCrossed = result.files?.crossed === true;
   // Only the teardown card reads it, and only when the ignored files
   // stayed on the source: a peer round trip and a checkout walk that
@@ -163,19 +173,24 @@ export function TransplantFinish({
           worktreeId: worktree.id,
           shelved: true,
         });
-        toast.success(`Transplanted ${branch} here`, {
+        toast.success(`Transplanted ${branch} ${landing.to}`, {
           description: `The copy on ${sourceDeviceLabel} is shelved.`,
         });
       } else if (choice === "teardown") {
         const outcome = await teardown.mutateAsync();
         if (!outcome.sourceRemoved) return;
-        toast.success(`Transplanted ${branch} here`, {
+        toast.success(`Transplanted ${branch} ${landing.to}`, {
           description: `The copy on ${sourceDeviceLabel} was torn down.`,
         });
       } else {
-        toast.success(`Brought ${branch} here`, {
-          description: `The copy on ${sourceDeviceLabel} is kept.`,
-        });
+        toast.success(
+          landing.onPeer
+            ? `Sent ${branch} ${landing.to}`
+            : `Brought ${branch} here`,
+          {
+            description: `The copy on ${sourceDeviceLabel} is kept.`,
+          },
+        );
       }
       onOpen();
     } catch {
@@ -205,9 +220,7 @@ export function TransplantFinish({
                 <p className="truncate font-mono text-sm font-semibold">
                   {branch}
                 </p>
-                <LocalHostScope>
-                  <LandedPath path={result.worktree.path} />
-                </LocalHostScope>
+                <LandedPath path={result.worktree.path} />
                 <div className="flex flex-wrap gap-1.5">
                   {result.captured ? (
                     result.dirtyApplied ? (
@@ -224,12 +237,12 @@ export function TransplantFinish({
                     (result.files.crossed ? (
                       result.files.conflicts > 0 ? (
                         <Chip className="text-amber-700 dark:text-amber-300">
-                          ignored files here,{" "}
-                          {pluralize(result.files.conflicts, "path")} kept this
-                          side's version
+                          ignored files {here},{" "}
+                          {pluralize(result.files.conflicts, "path")} kept{" "}
+                          {landing.onPeer ? "that" : "this"} side's version
                         </Chip>
                       ) : (
-                        <Chip>ignored files here</Chip>
+                        <Chip>ignored files {here}</Chip>
                       )
                     ) : (
                       <Chip className="text-amber-700 dark:text-amber-300">
@@ -239,15 +252,15 @@ export function TransplantFinish({
                 </div>
               </div>
               <Button size="sm" onClick={onOpen} className="shrink-0">
-                Open here
+                Open {here}
                 <ArrowRight />
               </Button>
             </div>
             {stranded && (
               <p className="text-xs text-muted-foreground">
-                The uncommitted changes could not be applied here. They are
-                still on {sourceDeviceLabel}, and the capture is parked for{" "}
-                <span className="font-mono">sm dirty apply</span>.
+                The uncommitted changes could not be applied {here}. They are
+                still on {sourceDeviceLabel}, and the capture is parked {here}{" "}
+                for <span className="font-mono">sm dirty apply</span>.
               </p>
             )}
             {result.files !== undefined && !filesCrossed && (
@@ -397,19 +410,5 @@ function ChoiceCard({
       </span>
       <span className={cn(!selected && "text-muted-foreground")}>{body}</span>
     </button>
-  );
-}
-
-// The landed path, tildified against this machine's home (the ready
-// card sits inside the remote page's scope, hence the local re-pin).
-function LandedPath({ path }: { path: string }) {
-  const { data: runtime } = useRuntimeInfo();
-  return (
-    <PathSpan
-      path={path}
-      home={runtime?.homedir ?? null}
-      className="min-w-0 truncate font-mono text-xs text-muted-foreground"
-      copyable
-    />
   );
 }

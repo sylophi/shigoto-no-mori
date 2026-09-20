@@ -17,22 +17,29 @@
 // the grant-gated wire, never taken from the caller.
 import type { z } from "zod";
 import {
+  MIRROR_LABEL_COPY_SIDE,
   MIRROR_STOP_UNCONFIRMED,
+  mirrorCopyIsRemote,
   type MirrorGitStatus,
   type MirrorListResult,
   type MirrorServing,
   type MirrorSession,
   MirrorSessionSchema,
   type MirrorStartPayloadSchema,
+  type MirrorStartToPayloadSchema,
   mirrorContract,
   mirrorStopIsSafe,
   summarizeIgnores,
 } from "@shared/ipc/modules/mirror";
+import { DeleteWorktreeResultSchema } from "@shared/schemas";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { errorMessageOf, unknownWorktreeError } from "@shared/errors";
 import { spawnFileSync } from "@host/fileSync/spawn";
-import { peerWorktreeOrUndefined } from "@host/ipc/peerSync";
+import {
+  peerWorktreeOrUndefined,
+  peerWorktreesApiFor,
+} from "@host/ipc/peerSync";
 import { deleteAnyLocalBranch } from "@host/lib/git/branches";
 import {
   findWorktreeIdentityOrThrow,
@@ -58,7 +65,7 @@ import {
   requireRunningEngine,
 } from "@host/mirror/registry";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
-import { runPullWorktree } from "./sync";
+import { runPullWorktree, sendWorktree } from "./sync";
 import { worktreesHandlers } from "./worktrees";
 
 // The daemon slot, the session labels and the raw session shapes live
@@ -233,9 +240,68 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     return { ...pulled, session };
   },
 
-  // Stop ends the session and removes the copy this device made: the
+  // The mirror turned around: one of this device's worktrees, sent to
+  // a peer and kept in step with the copy made there. The session runs
+  // here all the same (this device holds the original, the peer the
+  // copy, and the label says so for the stop), so like the send it
+  // rides the peer's grant alone. No leave-out rule goes to the send:
+  // the session opened next carries the ignored files and keeps
+  // carrying them, as in start.
+  startTo: async (input: z.infer<typeof MirrorStartToPayloadSchema>, ctx) => {
+    const daemon = requireRunningEngine();
+    const { ignoreMode, ignores, ...sendInput } = input;
+    const { source: worktree, result: sent } = await sendWorktree(
+      sendInput,
+      ctx,
+    );
+    const copy = {
+      projectId: sent.worktree.projectId,
+      worktreeId: sent.worktree.id,
+    };
+    let session: string;
+    try {
+      session = await daemon.create({
+        localRoot: worktree.path,
+        deviceId: input.targetDeviceId,
+        ...copy,
+        // The copy's root as the peer's landing answered it, re-parsed
+        // by the send.
+        remoteRoot: sent.worktree.path,
+        name: worktree.branch,
+        localWorktreeId: worktree.id,
+        labels: {
+          [MIRROR_LABEL_LOCAL_PROJECT]: input.projectId,
+          [MIRROR_LABEL_LOCAL_WORKTREE]: worktree.id,
+          [MIRROR_LABEL_IGNORE_MODE]: ignoreMode,
+          [MIRROR_LABEL_COPY_SIDE]: "remote",
+        },
+        ignores,
+      });
+    } catch (error) {
+      // No session, so no copy either, for start's reason: a retry
+      // would refuse on the branch the failed attempt left on the
+      // peer. Best effort, and logged, not thrown over the real error.
+      await peerWorktreesApiFor(input.targetDeviceId)
+        .delete({ ...copy, force: true })
+        .catch((rollbackError: unknown) => {
+          console.warn(
+            `[mirror] could not remove the peer's copy of a failed start: ${errorMessageOf(rollbackError)}`,
+          );
+        });
+      throw error;
+    }
+    daemon.noteEvent(
+      worktree.id,
+      "started",
+      summarizeIgnores(ignoreMode, ignores),
+    );
+    return { ...sent, session };
+  },
+
+  // Stop ends the session and removes the copy the mirror made: the
   // mirror was the copy's reason to exist, and the source keeps the
-  // branch. The delete follows the terminate (the other way round the
+  // branch. The copy is this device's worktree, or the peer's for a
+  // mirror started to it (startTo), where the original here stays. The delete follows the terminate (the other way round the
   // tombstone protocol would stop the session itself, mid-delete) and
   // is forced, since the copy carries the source's uncommitted state
   // by design. A copy the delete cannot remove is reported with the
@@ -258,23 +324,52 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
       );
     }
     await daemon.terminate(session);
+    // How the copy goes depends on where it is. What follows does not:
+    // a copy that stayed is reported, with the session already gone.
     const localWorktreeId = localWorktreeIdOf(raw);
     const projectId = raw.labels[MIRROR_LABEL_LOCAL_PROJECT];
-    if (localWorktreeId === "" || projectId === undefined) {
-      throw new Error(
-        "The mirror stopped, but the copy here stayed: the session did not name its worktree. Delete it from its page.",
+    const onPeer = mirrorCopyIsRemote(raw);
+    let stayed: string | null;
+    if (onPeer) {
+      stayed = await peerWorktreesApiFor(raw.deviceId)
+        .delete({
+          projectId: raw.projectId,
+          worktreeId: raw.worktreeId,
+          force: true,
+        })
+        .then((result) => {
+          const removed = DeleteWorktreeResultSchema.parse(result);
+          return removed.ok
+            ? null
+            : `its ${removed.cleanupError.phase} step failed`;
+        }, errorMessageOf);
+    } else if (localWorktreeId === "" || projectId === undefined) {
+      stayed = "the session did not name its worktree";
+    } else {
+      // The ordinary delete, which takes the worktree's history thread
+      // with it: there is no page left to show a "stopped" line on.
+      const removed = await worktreesHandlers.delete(
+        { projectId, worktreeId: localWorktreeId, force: true },
+        ctx,
+      );
+      stayed = removed.ok
+        ? null
+        : `its ${removed.cleanupError.phase} step failed`;
+    }
+    // A copy on the peer leaves the page this was stopped from
+    // standing, so its thread gets the line either way.
+    if (stayed !== null || onPeer) {
+      daemon.noteEvent(
+        localWorktreeId,
+        "stopped",
+        stayed === null
+          ? ""
+          : `Copy on ${onPeer ? "the other" : "this"} device kept`,
       );
     }
-    // The ordinary delete, which takes the worktree's history thread
-    // with it: there is no page left to show a "stopped" line on.
-    const removed = await worktreesHandlers.delete(
-      { projectId, worktreeId: localWorktreeId, force: true },
-      ctx,
-    );
-    if (!removed.ok) {
-      daemon.noteEvent(localWorktreeId, "stopped", "Copy on this device kept");
+    if (stayed !== null) {
       throw new Error(
-        `The mirror stopped, but the copy here stayed: its ${removed.cleanupError.phase} step failed. Delete it from its page.`,
+        `The mirror stopped, but the copy ${onPeer ? "on the other device" : "here"} stayed: ${stayed}. Delete it from its page.`,
       );
     }
   },

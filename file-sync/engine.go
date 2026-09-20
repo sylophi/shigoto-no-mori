@@ -276,6 +276,11 @@ type mirrorRequest struct {
 	// reaches the peer. A transplant's one-shot file transfer. Off, the
 	// session is a mirror: local alpha, two-way-safe.
 	Pull bool `json:"pull,omitempty"`
+	// A push, the pull turned around: local stays alpha and files flow
+	// one way, local to remote, so nothing the peer holds ever lands
+	// here. A sent worktree's one-shot file transfer. Pull wins when
+	// both are set.
+	Push bool `json:"push,omitempty"`
 	// terminate, pause, resume
 	Session string `json:"session,omitempty"`
 }
@@ -488,13 +493,14 @@ func createMirrorSession(ctx context.Context, manager *synchronization.Manager, 
 	// reported and left alone rather than resolved by guessing. A pull
 	// is one-way-safe with the remote as alpha: its files land here,
 	// nothing here reaches it, and a path both sides hold differently
-	// keeps this side's version. The VCS ignore keeps .git out (a
-	// linked worktree's .git is a file pointing at a machine-specific
-	// gitdir, and the repo itself is git's to move), nothing else is
-	// excluded by default, because the whole point is that ignored
-	// files cross too. The caller's ignores follow the pointer: what
-	// git ignores on the source, or the user's own pick, stays where
-	// it is.
+	// keeps this side's version. A push is the same rule with local as
+	// alpha: the peer's differing path keeps the peer's version. The
+	// VCS ignore keeps .git out (a linked worktree's .git is a file
+	// pointing at a machine-specific gitdir, and the repo itself is
+	// git's to move), nothing else is excluded by default, because the
+	// whole point is that ignored files cross too. The caller's ignores
+	// follow the pointer: what git ignores on the source, or the user's
+	// own pick, stays where it is.
 	// The .git pointer rule goes LAST. The last matching pattern wins
 	// and "!" flips an ignore back to an include, so a repo whose
 	// .gitignore carries a negation like "!.git*" would cancel a guard
@@ -511,6 +517,8 @@ func createMirrorSession(ctx context.Context, manager *synchronization.Manager, 
 	mode := core.SynchronizationMode_SynchronizationModeTwoWaySafe
 	if req.Pull {
 		alpha, beta = remote, local
+		mode = core.SynchronizationMode_SynchronizationModeOneWaySafe
+	} else if req.Push {
 		mode = core.SynchronizationMode_SynchronizationModeOneWaySafe
 	}
 	configuration := &synchronization.Configuration{

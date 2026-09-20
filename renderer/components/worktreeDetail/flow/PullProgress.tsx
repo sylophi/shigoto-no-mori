@@ -14,17 +14,19 @@ import type { CreatePhase, Project, Worktree } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { LocalHostScope } from "@/hooks/remote/useHostScope";
+import { DestinationScope } from "@/hooks/remote/useHostScope";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { formatBytes } from "@/lib/formatBytes";
 import { pluralize } from "@/lib/pluralize";
-import { pullWorktreeName } from "@/lib/remote/pullWorktreeName";
+import { pullWorktreeName } from "@shared/git/branches";
 import { cn } from "@/lib/utils";
 import { useCreatePlan } from "./createPlan";
 import { FlowBody, FlowFooter } from "./FlowChrome";
 import {
   AFTER_PULL_POSITION,
   framePosition,
+  type Landing,
+  LANDS_HERE,
   overallProgress,
   type StepState,
   stepPosition,
@@ -74,15 +76,22 @@ type Props = {
   runningNote?: string;
   failedNote?: string;
   progressLabel?: string;
+  // Where it lands (pullSteps.ts). On a peer, `thisDeviceLabel` names
+  // that peer, and a refused command is its refusal, not the source's.
+  landing?: Landing;
+  // False when the create's phases are not reported back (it runs on a
+  // peer): a planned phase the run has passed then reads done, where a
+  // reported run would have shown it skipped.
+  phasesReported?: boolean;
 };
 
-// The create's rows read this machine's project while the dialog sits
-// under the source's scope, so the view re-pins itself to local.
+// The create's rows read the destination's project while the dialog
+// sits under the source's scope, so the view re-pins itself.
 export function PullProgress(props: Props) {
   return (
-    <LocalHostScope>
+    <DestinationScope>
       <ProgressView {...props} />
-    </LocalHostScope>
+    </DestinationScope>
   );
 }
 
@@ -103,6 +112,8 @@ function ProgressView({
   runningNote = `Keep this window open. Nothing on ${sourceDeviceLabel} changes until you decide at the finish step.`,
   failedNote = `The copy on ${sourceDeviceLabel} is untouched. If the worktree already landed here, open it from the sidebar instead of retrying.`,
   progressLabel = "Transplant progress",
+  landing = LANDS_HERE,
+  phasesReported = true,
 }: Props) {
   const plan = useCreatePlan(localProject);
   const failed = error !== undefined;
@@ -132,7 +143,8 @@ function ProgressView({
       ...row,
       position: stepPosition(phase),
       skipped:
-        row.skipped || (at > stepPosition(phase) && !phasesSeen.has(phase)),
+        row.skipped ||
+        (phasesReported && at > stepPosition(phase) && !phasesSeen.has(phase)),
     });
 
   // Only what this run will do, or pointedly will not: carry-over and
@@ -191,7 +203,9 @@ function ProgressView({
       skipped: !dirty,
     },
     ...rowIf(filesDetail !== undefined, {
-      title: "Bring the ignored files over",
+      title: landing.onPeer
+        ? "Send the ignored files over"
+        : "Bring the ignored files over",
       detail: filesCaption ?? filesDetail,
       position: stepPosition("files"),
     }),
@@ -256,7 +270,9 @@ function ProgressView({
           {failed && (
             <ErrorBanner>
               {isCommandRefusedError(error)
-                ? peerReadOnlyNote(sourceDeviceLabel)
+                ? peerReadOnlyNote(
+                    landing.onPeer ? thisDeviceLabel : sourceDeviceLabel,
+                  )
                 : errorMessageOf(error)}
             </ErrorBanner>
           )}

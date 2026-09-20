@@ -9,10 +9,16 @@ import { join } from "node:path";
 import type { z } from "zod";
 import {
   SyncCaptureDirtyResultSchema,
+  SyncHasCommitsResultSchema,
+  SyncLandCheckResultSchema,
+  SyncLandWorktreeResultSchema,
   type SyncPullProgress,
   type SyncPullWorktreePayloadSchema,
   SyncRefTipsResultSchema,
+  type SyncSendWorktreePayloadSchema,
+  SYNC_HAS_COMMITS_LIMIT,
   SYNC_IGNORED_PATHS_LIMIT,
+  type SyncTeardownSentPayloadSchema,
   type SyncTeardownSourcePayloadSchema,
   type SyncTeardownSourceResult,
   syncContract,
@@ -26,7 +32,13 @@ import {
   pullBranchCollision,
   pullFolderCollision,
 } from "@shared/pullCollision";
-import { DeleteWorktreeResultSchema } from "@shared/schemas";
+import { pullWorktreeName } from "@shared/git/branches";
+import {
+  DeleteWorktreeResultSchema,
+  isRealBranch,
+  type Project,
+  type Worktree,
+} from "@shared/schemas";
 import {
   type TransferFilesResult,
   transferFilesOnce,
@@ -43,7 +55,10 @@ import {
   peerWorktreeOrUndefined,
   peerWorktreesApiFor,
 } from "@host/ipc/peerSync";
-import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
+import {
+  isCommandRefusedError,
+  WIRE_CHUNK_BYTES,
+} from "@shared/ipc/socket/frames";
 import { createIdleRegistry } from "@host/lib/idleRegistry";
 import { listBranches } from "@host/lib/git/branches";
 import { readShigomoriConfig } from "@host/lib/config/project";
@@ -54,6 +69,7 @@ import {
   cachedIgnoredPaths,
   listWorktreeFolder,
 } from "@host/lib/worktrees/carryOver";
+import { getRepoIdentity } from "@host/lib/git/repoIdentity";
 import { listWorktreeIdentities } from "@host/lib/git/worktrees";
 import {
   deleteRef,
@@ -69,7 +85,8 @@ import {
   findProjectOrThrow,
 } from "@host/lib/projects";
 import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
-import { notifierFor } from "./worktrees";
+import { pushBundleToPeer } from "@host/lib/sync/pushBundle";
+import { notifierFor, worktreesHandlers } from "./worktrees";
 
 // The ref the CLI's dirty capture lands a worktree's uncommitted state
 // under (cli/cmd_dirty.go owns the name on that side).
@@ -98,14 +115,28 @@ const RECEIPT_LIMIT = 64;
 const pullReceipts = new Map<string, PullReceipt>();
 const receiptKey = (source: SourceRef) =>
   `${source.sourceDeviceId}/${source.sourceProjectId}/${source.sourceWorktreeId}`;
-function rememberPull(source: SourceRef, receipt: PullReceipt): void {
-  pullReceipts.delete(receiptKey(source));
-  pullReceipts.set(receiptKey(source), receipt);
-  for (const key of pullReceipts.keys()) {
-    if (pullReceipts.size <= RECEIPT_LIMIT) break;
-    pullReceipts.delete(key);
+function remember<Receipt>(
+  receipts: Map<string, Receipt>,
+  key: string,
+  receipt: Receipt,
+): void {
+  receipts.delete(key);
+  receipts.set(key, receipt);
+  for (const oldest of receipts.keys()) {
+    if (receipts.size <= RECEIPT_LIMIT) break;
+    receipts.delete(oldest);
   }
 }
+
+// The same record for a send, where the source is this device's own
+// worktree and the peer is where it went. The tip and the capture's
+// tree are this repo's, so the teardown's proof never leaves the
+// machine.
+type SentRef = z.infer<typeof SyncTeardownSentPayloadSchema>;
+type SendReceipt = Omit<PullReceipt, "targetProjectId">;
+const sendReceipts = new Map<string, SendReceipt>();
+const sentKey = (sent: SentRef) =>
+  `${sent.targetDeviceId}/${sent.projectId}/${sent.worktreeId}`;
 
 // A registered transfer: the bundle file (inside its own mkdtemp dir,
 // 0700, so the data is no more readable than the repo it came from).
@@ -351,6 +382,82 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
 
   pullWorktree: runPullWorktree,
 
+  // The receiving half of a send (runSendWorktree below drives both
+  // from the sending device). The identity is re-resolved from disk
+  // here, the same wall the pull stands behind, so a send structurally
+  // cannot land in a repo that is not the sender's.
+  landCheck: async ({ identity, branch, worktreeName }) => {
+    const project = await findProjectByIdentityOrThrow(identity);
+    await refuseLandingCollision(project, branch, worktreeName);
+    return { projectId: project.id };
+  },
+
+  // The push left the branch under the incoming ref, unless this
+  // device already held its tip, in which case nothing crossed and the
+  // ref is set here. Either way the tip and the capture must be
+  // commits this repo holds, checked before the create so a transfer
+  // that fell short never leaves a worktree without its changes. The
+  // sweep covers a refused create too, for the pull's reason: a stale
+  // incoming ref blocks later ones beneath its name.
+  landWorktree: async (
+    { identity, branch, worktreeName, branchTip, runSetup, capture },
+    ctx,
+  ) => {
+    const project = await findProjectByIdentityOrThrow(identity);
+    const incomingRef = `refs/shigomori/incoming/${branch}`;
+    try {
+      await refuseLandingCollision(project, branch, worktreeName);
+      const expected = [branchTip, ...(capture ? [capture.commit] : [])];
+      for (const commit of expected) {
+        // oxlint-disable-next-line no-await-in-loop -- two cheap probes at most
+        if (!(await hasCommit(project.path, commit))) {
+          throw new Error(`${branch} did not arrive whole on this device.`);
+        }
+      }
+      await updateRef(project.path, incomingRef, branchTip);
+      return await landIncoming(
+        project,
+        { branch, incomingRef, worktreeName, runSetup, capture },
+        ctx,
+      );
+    } finally {
+      await deleteRef(project.path, incomingRef).catch(() => {});
+    }
+  },
+
+  sendWorktree: async (input, ctx) => (await sendWorktree(input, ctx)).result,
+
+  // The sent worktree's teardown, the mirror image of teardownSource
+  // below: the send's own receipt decides whether it may run, the
+  // local source must still be exactly what was sent, and a refusal is
+  // an answer, not a throw.
+  teardownSent: async (sent, ctx) => {
+    const key = sentKey(sent);
+    const receipt = sendReceipts.get(key);
+    if (receipt === undefined) {
+      throw new Error(
+        "No send recorded for that worktree on this device. Send it first.",
+      );
+    }
+    const changed = await sentSourceChangedSince(sent, receipt);
+    if (changed !== undefined) {
+      return { sourceRemoved: false, sourceError: changed };
+    }
+    const result = await tearDown(receipt, "on the other device", (force) =>
+      worktreesHandlers.delete(
+        {
+          projectId: sent.projectId,
+          worktreeId: sent.worktreeId,
+          force,
+          refuseRunningScripts: true,
+        },
+        ctx,
+      ),
+    );
+    if (result.sourceRemoved) sendReceipts.delete(key);
+    return result;
+  },
+
   // The source teardown, after a pull landed here. The
   // pull's own receipt decides whether it may run at all. Without one
   // (no pull, or a restart in between) the call refuses outright
@@ -368,7 +475,14 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
     if (changed !== undefined) {
       return { sourceRemoved: false, sourceError: changed };
     }
-    const result = await tearDownSource(source, receipt);
+    const result = await tearDown(receipt, "here", (force) =>
+      peerWorktreesApiFor(source.sourceDeviceId).delete({
+        projectId: source.sourceProjectId,
+        worktreeId: source.sourceWorktreeId,
+        force,
+        refuseRunningScripts: true,
+      }),
+    );
     if (result.sourceRemoved) pullReceipts.delete(key);
     return result;
   },
@@ -424,6 +538,33 @@ async function sourceChangedSince(
   }
 }
 
+// The same proof for a sent worktree, all of it local: the branch has
+// not moved since the send, and a fresh capture holds the tree the
+// send captured.
+async function sentSourceChangedSince(
+  sent: SentRef,
+  receipt: SendReceipt,
+): Promise<string | undefined> {
+  const project = findProjectOrThrow(sent.projectId);
+  const tip = await refTip(project.path, `refs/heads/${receipt.branch}`);
+  if (tip !== receipt.branchTip) {
+    return "the branch moved after it was sent.";
+  }
+  const fresh = await dirtyCaptureViaCli(project, sent.worktreeId);
+  const changedSince =
+    "the worktree changed after its uncommitted work was captured.";
+  if (!fresh.captured) return receipt.captured ? changedSince : undefined;
+  if (
+    !receipt.captured ||
+    receipt.captureTree === undefined ||
+    fresh.commit === undefined
+  ) {
+    return "the worktree has uncommitted changes that were never sent.";
+  }
+  const tree = await treeOf(project.path, fresh.commit);
+  return tree === receipt.captureTree ? undefined : changedSince;
+}
+
 // The source teardown. It runs ONLY when nothing the capture describes
 // can be lost: an unapplied capture means the uncommitted work still
 // exists solely on the source, so the source is kept and the caller
@@ -438,15 +579,18 @@ async function sourceChangedSince(
 // teardown because sm rm skips branch deletion for externals
 // (cli/gitx.go deleteBranchAfterWorktreeRemoval), so the branch then
 // exists on both devices, which is not lossy.
-async function tearDownSource(
-  source: SourceRef,
+// Both directions run it: a pull tears down the peer's worktree over
+// the wire, a send this device's own through the same handler, and
+// `landed` is where the copy went, for the refusal's wording.
+async function tearDown(
   pulled: { captured: boolean; dirtyApplied: boolean },
+  landed: "here" | "on the other device",
+  remove: (force: boolean) => unknown,
 ): Promise<SyncTeardownSourceResult> {
   if (pulled.captured && !pulled.dirtyApplied) {
     return {
       sourceRemoved: false,
-      sourceError:
-        "the uncommitted changes could not be applied here and only exist on the source worktree",
+      sourceError: `the uncommitted changes could not be applied ${landed} and only exist on the source worktree`,
     };
   }
   try {
@@ -466,12 +610,7 @@ async function tearDownSource(
     // refuseRunningScripts is the app-side guard the local
     // kill-then-delete path deliberately lacks.
     const removed = DeleteWorktreeResultSchema.parse(
-      await peerWorktreesApiFor(source.sourceDeviceId).delete({
-        projectId: source.sourceProjectId,
-        worktreeId: source.sourceWorktreeId,
-        force: pulled.captured,
-        refuseRunningScripts: true,
-      }),
+      await remove(pulled.captured),
     );
     if (removed.ok) return { sourceRemoved: true };
     // ok:false means the worktree was NOT removed: cleanup scripts
@@ -484,6 +623,124 @@ async function tearDownSource(
   } catch (error) {
     return { sourceRemoved: false, sourceError: errorMessageOf(error) };
   }
+}
+
+// Where a landing would refuse, shared by the pull and by the
+// receiving half of a send. Updating an existing branch is out of
+// scope, so a held one refuses with the state the user can act on.
+async function refuseLandingCollision(
+  project: Project,
+  branch: string,
+  worktreeName: string | undefined,
+): Promise<void> {
+  const [{ local }, existing] = await Promise.all([
+    listBranches(project.path),
+    listWorktreeIdentities(project.id, project.path),
+  ]);
+  if (local.includes(branch)) {
+    // Name the worktree holding it when one does: that is the thing
+    // the user has to stop or delete.
+    const holder = existing.find((w) => w.branch === branch);
+    throw new Error(pullBranchCollision(branch, holder?.path));
+  }
+  // The copy keeps the source's folder name, and the CLI create
+  // refuses a taken one (cli/worktree.go: a worktree of this project
+  // by that name, case-insensitively, or anything at the path). That
+  // refusal lands at the create, after the bundle crossed. The same
+  // two checks here refuse before a byte moves.
+  if (worktreeName !== undefined) {
+    const wanted = worktreeName.toLowerCase();
+    const config = await readShigomoriConfig(project.id).catch(() => null);
+    const target = worktreePathForProject(project.path, config, worktreeName);
+    if (
+      existing.some((w) => w.name.toLowerCase() === wanted) ||
+      (await pathExists(target))
+    ) {
+      throw new Error(pullFolderCollision(worktreeName, target));
+    }
+  }
+}
+
+// The landing proper, shared the same way: the worktree created on the
+// incoming ref, then the capture re-applied in it. The caller owns the
+// incoming ref and its sweep.
+async function landIncoming(
+  project: Project,
+  input: {
+    branch: string;
+    incomingRef: string;
+    worktreeName: string | undefined;
+    runSetup: boolean | undefined;
+    // The capture commit, and the worktree id its ref arrived under.
+    capture: { sourceWorktreeId: string; commit: string } | undefined;
+  },
+  ctx: HandlerContext,
+  progress: (
+    frame: Pick<SyncPullProgress, "step" | "createPhase">,
+  ) => void = () => {},
+): Promise<{ worktree: Worktree; dirtyApplied: boolean }> {
+  // The ordinary create, on a new branch at the incoming ref.
+  // checkout stays UNSET: checkout:true would leave the worktree ON
+  // the incoming ref instead of the new branch. resolveOn "exit"
+  // holds the mutation until carry-over and setup finished, so the
+  // dirty apply below never races the setup scripts. The new
+  // worktree's own lifecycle phases still reach its detail page as
+  // usual. They are mirrored into the pull's progress because the
+  // caller cannot subscribe by an id that does not exist yet.
+  progress({ step: "create" });
+  const notify = notifierFor(ctx);
+  const { worktree } = await createViaCli(
+    project,
+    {
+      branchName: input.branch,
+      base: input.incomingRef,
+      worktreeName: input.worktreeName,
+      skipSetup: input.runSetup === false,
+    },
+    {
+      ...notify,
+      notifyPhase: (payload) => {
+        notify.notifyPhase(payload);
+        if (payload.phase !== "idle") {
+          progress({ step: "create", createPhase: payload.phase });
+        }
+      },
+    },
+    { resolveOn: "exit" },
+  );
+
+  // Capture refs are keyed by worktree id, and ids are derived
+  // from paths (sha256(path)[:12]), so the source's id names the
+  // worktree just created only when both devices minted the SAME
+  // managed path (root/worktrees/<project>/<name> with the name from
+  // a shared pool) -- rare, but real across same-username machines.
+  // Re-key the ref to the local id, then apply and let the CLI
+  // consume it. On that collision the re-key is a no-op and the
+  // delete below is skipped, or it would discard the capture it just
+  // parked. An apply refusal (a setup script left an untracked file,
+  // say) does NOT throw away the successful create: the worktree is
+  // real, the capture stays parked under the local id for sm dirty
+  // apply, and the caller learns via dirtyApplied:false.
+  // The frame is emitted either way, so the last step reads as
+  // reached on a clean source too (and a mirror's session open,
+  // which follows, is not mistaken for a stuck create).
+  progress({ step: "apply" });
+  let dirtyApplied = false;
+  if (input.capture !== undefined) {
+    const sourceDirtyRef = dirtyRefFor(input.capture.sourceWorktreeId);
+    const localDirtyRef = dirtyRefFor(worktree.id);
+    await updateRef(project.path, localDirtyRef, input.capture.commit);
+    if (localDirtyRef !== sourceDirtyRef) {
+      await deleteRef(project.path, sourceDirtyRef);
+    }
+    try {
+      await dirtyApplyViaCli(project, worktree.id);
+      dirtyApplied = true;
+    } catch (error) {
+      console.warn("[sync] dirty apply failed after create:", error);
+    }
+  }
+  return { worktree, dirtyApplied };
 }
 
 // The pull orchestration, shared with the
@@ -528,34 +785,9 @@ export async function runPullWorktree(
   // 1. The local target repo, re-resolved by identity from disk.
   const project = await findProjectByIdentityOrThrow(sourceIdentity);
 
-  // 2. Updating an existing branch is out of scope. Refuse up front
-  // with the state the user can act on.
-  const [{ local }, existing] = await Promise.all([
-    listBranches(project.path),
-    listWorktreeIdentities(project.id, project.path),
-  ]);
-  if (local.includes(branch)) {
-    // Name the worktree holding it when one does: that is the thing
-    // the user has to stop or delete.
-    const holder = existing.find((w) => w.branch === branch);
-    throw new Error(pullBranchCollision(branch, holder?.path));
-  }
-  // The copy keeps the source's folder name, and the CLI create
-  // refuses a taken one (cli/worktree.go: a worktree of this project
-  // by that name, case-insensitively, or anything at the path). That
-  // refusal lands at step 5, after the bundle crossed. The same two
-  // checks here refuse before a byte moves.
-  if (worktreeName !== undefined) {
-    const wanted = worktreeName.toLowerCase();
-    const config = await readShigomoriConfig(project.id).catch(() => null);
-    const target = worktreePathForProject(project.path, config, worktreeName);
-    if (
-      existing.some((w) => w.name.toLowerCase() === wanted) ||
-      (await pathExists(target))
-    ) {
-      throw new Error(pullFolderCollision(worktreeName, target));
-    }
-  }
+  // 2. Refuse up front what the create would refuse after the bundle
+  // crossed.
+  await refuseLandingCollision(project, branch, worktreeName);
 
   const peer = peerSyncApiFor(sourceDeviceId);
   const branchRef = `refs/heads/${branch}`;
@@ -618,66 +850,23 @@ export async function runPullWorktree(
     }
     if (tipIsLocal) await updateRef(project.path, incomingRef, branchTip);
 
-    // 5. The ordinary create, on a new branch at the incoming ref.
-    // checkout stays UNSET: checkout:true would leave the worktree ON
-    // the incoming ref instead of the new branch. resolveOn "exit"
-    // holds the mutation until carry-over and setup finished, so the
-    // dirty apply below never races the setup scripts. The new
-    // worktree's own lifecycle phases still reach its detail page as
-    // usual. They are mirrored into the pull's progress because the
-    // caller cannot subscribe by an id that does not exist yet.
-    progress({ step: "create" });
-    const notify = notifierFor(ctx);
-    const { worktree } = await createViaCli(
+    // 5 and 6. The create on the incoming ref, then the capture
+    // re-applied in it.
+    const { worktree, dirtyApplied } = await landIncoming(
       project,
       {
-        branchName: branch,
-        base: incomingRef,
+        branch,
+        incomingRef,
         worktreeName,
-        skipSetup: runSetup === false,
+        runSetup,
+        capture:
+          capture.captured && capture.commit !== undefined
+            ? { sourceWorktreeId, commit: capture.commit }
+            : undefined,
       },
-      {
-        ...notify,
-        notifyPhase: (payload) => {
-          notify.notifyPhase(payload);
-          if (payload.phase !== "idle") {
-            progress({ step: "create", createPhase: payload.phase });
-          }
-        },
-      },
-      { resolveOn: "exit" },
+      ctx,
+      progress,
     );
-
-    // 6. Capture refs are keyed by worktree id, and ids are derived
-    // from paths (sha256(path)[:12]), so the source's id names the
-    // worktree just created only when both devices minted the SAME
-    // managed path (root/worktrees/<project>/<name> with the name from
-    // a shared pool) -- rare, but real across same-username machines.
-    // Re-key the ref to the local id, then apply and let the CLI
-    // consume it. On that collision the re-key is a no-op and the
-    // delete below is skipped, or it would discard the capture it just
-    // parked. An apply refusal (a setup script left an untracked file,
-    // say) does NOT throw away the successful create: the worktree is
-    // real, the capture stays parked under the local id for sm dirty
-    // apply, and the caller learns via dirtyApplied:false.
-    // The frame is emitted either way, so the last step reads as
-    // reached on a clean source too (and a mirror's session open,
-    // which follows, is not mistaken for a stuck create).
-    progress({ step: "apply" });
-    let dirtyApplied = false;
-    if (capture.captured && capture.commit !== undefined) {
-      const localDirtyRef = dirtyRefFor(worktree.id);
-      await updateRef(project.path, localDirtyRef, capture.commit);
-      if (localDirtyRef !== sourceDirtyRef) {
-        await deleteRef(project.path, sourceDirtyRef);
-      }
-      try {
-        await dirtyApplyViaCli(project, worktree.id);
-        dirtyApplied = true;
-      } catch (error) {
-        console.warn("[sync] dirty apply failed after create:", error);
-      }
-    }
 
     // 7. The ignored files, once the tree has settled: the leave-out
     // rule admits them and git never carried them, so the mirror
@@ -716,8 +905,9 @@ export async function runPullWorktree(
                 progress({ step: "files", bytes, totalBytes }),
             );
     }
-    rememberPull(
-      { sourceDeviceId, sourceProjectId, sourceWorktreeId },
+    remember(
+      pullReceipts,
+      receiptKey({ sourceDeviceId, sourceProjectId, sourceWorktreeId }),
       {
         targetProjectId: project.id,
         branch,
@@ -737,4 +927,177 @@ export async function runPullWorktree(
     // at git's directory/file ref boundary.
     await deleteRef(project.path, incomingRef).catch(() => {});
   }
+}
+
+// A landing refusal is worded on the peer, where "this device" means
+// the peer, so it is attributed before it reaches this device's user.
+// The command refusal passes as it is: surfaces match on its text.
+function fromPeer<T>(answer: Promise<T>): Promise<T> {
+  return answer.catch((error: unknown) => {
+    if (isCommandRefusedError(error)) throw error;
+    throw new Error(`The other device answered: ${errorMessageOf(error)}`);
+  });
+}
+
+// The send orchestration, the pull turned around: one of this device's
+// worktrees goes to a peer. Local-only by contract (remote:false), and
+// every remote step rides the PEER's grant (the push surface, then
+// landCheck and landWorktree), so sending needs exactly what a pull
+// needs: command access on the other device, none given here.
+// Sequenced: the peer's refusals first -> capture the local dirty
+// state -> push the branch and the capture, thinned by what the peer
+// holds -> the peer lands it (the pull's create and re-apply, run
+// there) -> the ignored files, pushed by the mirror engine run once.
+// The create's lifecycle phases play out on the peer and are not
+// reported back, so the progress goes from the create straight to the
+// apply. What the caller names is only the worktree: the branch, the
+// folder name and the identity are read off it here. The source it
+// resolved rides back beside the result, for the mirror start built on
+// this (mirror:startTo), which opens its session on that worktree.
+export async function sendWorktree(
+  {
+    targetDeviceId,
+    projectId,
+    worktreeId,
+    runSetup,
+    ignoreMode,
+    ignores,
+  }: z.infer<typeof SyncSendWorktreePayloadSchema>,
+  ctx: HandlerContext,
+) {
+  const notifyProgress = ctx.notifier(syncContract, "pullProgress");
+  const progress = (frame: Omit<SyncPullProgress, "sourceWorktreeId">) =>
+    notifyProgress({ sourceWorktreeId: worktreeId, ...frame });
+
+  // 1. The local source. A primary checkout is the project itself, and
+  // a detached head has no branch to land.
+  const { project, worktree } = await findProjectAndWorktreeOrThrow(
+    projectId,
+    worktreeId,
+  );
+  if (
+    worktree.isPrimary ||
+    worktree.detached ||
+    !isRealBranch(worktree.branch)
+  ) {
+    throw new Error("Only a worktree on a branch of its own can be sent.");
+  }
+  const identity = await getRepoIdentity(project.path).catch(() => null);
+  if (identity === null) {
+    throw new Error(
+      "This repository has no shared identity, so no other device can be matched to it.",
+    );
+  }
+  const branch = worktree.branch;
+  const worktreeName = pullWorktreeName(worktree);
+
+  // 2. The peer's refusals, before a byte moves. Its answers are
+  // re-parsed like the pull's: they flow into the push below.
+  const peer = peerSyncApiFor(targetDeviceId);
+  const { projectId: peerProjectId } = SyncLandCheckResultSchema.parse(
+    await fromPeer(peer.landCheck({ identity, branch, worktreeName })),
+  );
+
+  // 3. The tip, then the capture, with the peer asked meanwhile which
+  // of this repo's tips it holds: the branch's own, and the other
+  // local branches' for thinning. One round trip answers both.
+  const branchRef = `refs/heads/${branch}`;
+  const branchTip = await refTip(project.path, branchRef);
+  if (branchTip === null) throw new Error(`${branch} no longer exists.`);
+  const otherTips = (await localBranchTips(project.path))
+    .filter((tip) => tip !== branchTip)
+    .slice(0, SYNC_HAS_COMMITS_LIMIT - 1);
+  progress({ step: "capture" });
+  const [capture, held] = await Promise.all([
+    dirtyCaptureViaCli(project, worktreeId),
+    peer.hasCommits({
+      projectId: peerProjectId,
+      commits: [branchTip, ...otherTips],
+    }),
+  ]);
+  const captured = capture.captured && capture.commit !== undefined;
+  const { present } = SyncHasCommitsResultSchema.parse(held);
+
+  // 4. Push what the peer lacks. The pull's tip rule from the other
+  // side: a branch whose tip the peer holds must not be named, or
+  // `git bundle create` drops it under the have. Otherwise the local
+  // branch tips the peer also holds thin the bundle (none of them is
+  // the branch's own, which the peer was just found to lack).
+  const tipIsThere = present.includes(branchTip);
+  const dirtyRef = dirtyRefFor(worktreeId);
+  const sendRefs = [
+    ...(tipIsThere ? [] : [branchRef]),
+    ...(captured ? [dirtyRef] : []),
+  ];
+  if (sendRefs.length > 0) {
+    await pushBundleToPeer(peer, {
+      localProject: project,
+      peerProjectId,
+      refs: sendRefs,
+      haves: tipIsThere ? [branchTip] : present,
+      onProgress: (bytes, totalBytes) =>
+        progress({ step: "transfer", bytes, totalBytes }),
+    });
+  } else {
+    progress({ step: "transfer" });
+  }
+
+  // 5. The landing, on the peer.
+  progress({ step: "create" });
+  const landed = SyncLandWorktreeResultSchema.parse(
+    await fromPeer(
+      peer.landWorktree({
+        identity,
+        branch,
+        worktreeName,
+        branchTip,
+        runSetup,
+        capture:
+          captured && capture.commit !== undefined
+            ? { sourceWorktreeId: worktreeId, commit: capture.commit }
+            : undefined,
+      }),
+    ),
+  );
+  progress({ step: "apply" });
+
+  // 6. The ignored files, pushed into the root the peer's landing
+  // answered with (re-parsed above, like everything it sends).
+  let files: TransferFilesResult | undefined;
+  if (pullBringsIgnoredFiles(ignoreMode)) {
+    progress({ step: "files" });
+    files = await transferFilesOnce(
+      {
+        localRoot: worktree.path,
+        localWorktreeId: worktree.id,
+        sourceDeviceId: targetDeviceId,
+        sourceProjectId: peerProjectId,
+        sourceWorktreeId: landed.worktree.id,
+        remoteRoot: landed.worktree.path,
+        name: branch,
+        ignores: ignores ?? [],
+        direction: "push",
+      },
+      (bytes, totalBytes) => progress({ step: "files", bytes, totalBytes }),
+    );
+  }
+  remember(sendReceipts, sentKey({ targetDeviceId, projectId, worktreeId }), {
+    branch,
+    branchTip,
+    captured,
+    dirtyApplied: landed.dirtyApplied,
+    captureTree:
+      captured && capture.commit !== undefined
+        ? await treeOf(project.path, capture.commit)
+        : undefined,
+  });
+  return {
+    source: worktree,
+    result: {
+      worktree: landed.worktree,
+      captured,
+      dirtyApplied: landed.dirtyApplied,
+      files,
+    },
+  };
 }

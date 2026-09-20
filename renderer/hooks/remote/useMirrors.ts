@@ -7,11 +7,12 @@
 // machine's daemon.
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type {
-  MirrorEvent,
-  MirrorListResult,
-  MirrorSession,
-  MirrorServing,
+import {
+  mirrorCopyIsRemote,
+  type MirrorEvent,
+  type MirrorListResult,
+  type MirrorSession,
+  type MirrorServing,
 } from "@shared/ipc/modules/mirror";
 import type { Worktree } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
@@ -19,7 +20,9 @@ import {
   type MirrorIgnoreChoice,
   type PullSource,
   useLandingMutation,
+  useLandingOnPeer,
 } from "@/hooks/remote/usePullWorktree";
+import { invalidateHostDevice } from "@/lib/queryKeys";
 import { useForgetDeletedWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { notifyError } from "@/lib/toast";
 
@@ -119,8 +122,9 @@ export function useMirrorLinks(): MirrorLink[] {
 }
 
 // The one mirror picture a worktree row cares about: the session this
-// device runs INTO it (it is the local copy of a peer's worktree), and
-// the streams this device serves FROM it (peers mirroring it).
+// device runs ON it (it is the local copy of a peer's worktree, or the
+// original of a copy made on a peer), and the streams this device
+// serves FROM it (peers mirroring it).
 export function useWorktreeMirror(worktree: Worktree): {
   session: MirrorSession | undefined;
   serving: MirrorServing[];
@@ -139,6 +143,22 @@ export function useWorktreeMirror(worktree: Worktree): {
 export function useStartMirror(source: PullSource) {
   return useLandingMutation(source, (payload) =>
     window.api.mirror.start(payload),
+  );
+}
+
+// The mirror the other way: one of this device's worktrees, copied to
+// a peer and kept in step from here.
+export function useStartMirrorTo(
+  worktree: Worktree,
+  targetDeviceId: string | undefined,
+) {
+  return useLandingOnPeer(targetDeviceId, (target, choice) =>
+    window.api.mirror.startTo({
+      targetDeviceId: target,
+      projectId: worktree.projectId,
+      worktreeId: worktree.id,
+      ...choice,
+    }),
   );
 }
 
@@ -170,8 +190,10 @@ export function useSetMirrorIgnores() {
 // off the daemon's own state snapshot.
 export function useMirrorControls() {
   const forget = useForgetDeletedWorktree();
-  // Stop removes the local copy with the session, so the renderer
-  // forgets the worktree the way a delete does.
+  const queryClient = useQueryClient();
+  // Stop removes the copy with the session. A local copy the renderer
+  // forgets the way a delete does. A copy on the peer (a mirror
+  // started to it) is that device's view to refresh.
   const stop = useMutation({
     mutationFn: ({
       session,
@@ -181,7 +203,9 @@ export function useMirrorControls() {
       force?: boolean;
     }) => window.api.mirror.stop(session.session, force),
     onSuccess: (_data, { session }) =>
-      forget(session.localProjectId, session.localWorktreeId),
+      mirrorCopyIsRemote(session)
+        ? invalidateHostDevice(queryClient, session.deviceId)
+        : forget(session.localProjectId, session.localWorktreeId),
     onError: (err) => notifyError("Couldn't stop mirroring", err),
     meta: { silentError: true },
   });

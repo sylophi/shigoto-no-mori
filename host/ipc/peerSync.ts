@@ -27,6 +27,8 @@ export type PeerSyncApi = Pick<
   | "pushChunk"
   | "pushFinish"
   | "hasCommits"
+  | "landCheck"
+  | "landWorktree"
 >;
 
 // The git follower's reach into a peer's mirror surface: read the git

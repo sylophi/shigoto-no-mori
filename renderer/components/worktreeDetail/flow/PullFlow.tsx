@@ -10,6 +10,7 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { TONE_PILL } from "@/components/ui/status-dot";
 import type { PullChoice } from "@/hooks/remote/usePullWorktree";
 import { usePullProgress } from "@/hooks/remote/usePullProgress";
+import { localDeviceId } from "@/lib/queryKeys";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { FlowHeader, StepRail } from "./FlowChrome";
 import { useClock } from "./pullSteps";
@@ -40,11 +41,15 @@ export function usePullFlow<Data extends Landed>({
   mutation,
   sourceWorktreeId,
   choice,
+  destinationDeviceId = localDeviceId,
   onClose,
 }: {
   mutation: UseMutationResult<Data, Error, PullChoice>;
   sourceWorktreeId: string;
   choice: PullChoice;
+  // Where the worktree lands: this machine, unless the flow is a
+  // transplant to a peer.
+  destinationDeviceId?: string;
   onClose: () => void;
 }) {
   const nav = useWorktreeNav();
@@ -69,12 +74,11 @@ export function usePullFlow<Data extends Landed>({
   const open = () => {
     if (!mutation.data) return;
     onClose();
-    // The landed worktree is local, so leave the remote scope behind
-    // explicitly rather than through the scoped nav.
-    nav.toLocalWorktree(
-      mutation.data.worktree.projectId,
-      mutation.data.worktree.id,
-    );
+    // The landed worktree is on the destination, not in the scope the
+    // dialog opened under, so the tree is named explicitly rather than
+    // left to the scoped nav.
+    const { projectId, id } = mutation.data.worktree;
+    nav.toDeviceWorktree(destinationDeviceId, projectId, id);
   };
 
   return {

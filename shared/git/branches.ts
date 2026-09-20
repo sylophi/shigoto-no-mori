@@ -88,3 +88,17 @@ export function forkBranchCandidates(
     owner ? `${owner}-${headRefName}` : `pr-${number}-${headRefName}`,
   ];
 }
+
+// The folder a pulled or sent (transplanted or mirrored) worktree
+// lands under on the other device: the source's own folder name
+// (Worktree.name, the source host's basename of its path), so the two
+// sides read as one worktree in every sidebar. Undefined when that
+// name would not be a valid managed dirname (an external worktree in
+// an odd folder), in which case the create picks a fresh pool name as
+// it always did. Shared so the dialogs' review and the host's send
+// name the same folder.
+export function pullWorktreeName(worktree: {
+  name: string;
+}): string | undefined {
+  return isValidWorktreeDirName(worktree.name) ? worktree.name : undefined;
+}

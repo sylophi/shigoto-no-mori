@@ -27,7 +27,9 @@
 // agreement), ancestry decides: the peer is the reference when the
 // tips are equal or the local tip is an ancestor of the peer's, which
 // is exactly the state mirror:start leaves behind (a pull, then a
-// mirror). This side is the reference when the peer's tip is an
+// mirror). A session started the other way (mirror:startTo, the copy
+// on the peer) turns the tie around: on equal tips the original here
+// is the reference. This side is the reference when the peer's tip is an
 // ancestor of the local one. Anything else is diverged from the start.
 //
 // Signals: the local git-directory watcher (a project ping), a local
@@ -41,6 +43,7 @@ import {
   GitStateSchema,
   type MirrorGitStatus,
   MirrorApplyGitStateResultSchema,
+  mirrorCopyIsRemote,
 } from "@shared/ipc/modules/mirror";
 import { SyncHasCommitsResultSchema } from "@shared/ipc/modules/sync";
 import { hasCommit, isAncestor, localBranchTips } from "@host/lib/git/refs";
@@ -242,7 +245,13 @@ export function createGitFollower(deps: {
         return;
       }
 
-      const direction = await decide(project, record, local, peer);
+      const direction = await decide(
+        project,
+        record,
+        local,
+        peer,
+        mirrorCopyIsRemote(session),
+      );
       if (direction === "diverged") {
         setStatus(record, {
           status: "diverged",
@@ -286,10 +295,15 @@ export function createGitFollower(deps: {
     record: FollowRecord,
     local: GitState,
     peer: GitState,
+    // The copy is the peer's (mirror:startTo), so the original is here.
+    copyIsRemote: boolean,
   ): Promise<"pull" | "push" | "diverged"> {
     const agreed = record.agreed;
     if (agreed === null) {
-      if (local.tip === peer.tip) return "pull";
+      // Equal tips that still differ (the index): the original is the
+      // reference, never the copy a dirty apply just rebuilt, whose
+      // index starts out unstaged.
+      if (local.tip === peer.tip) return copyIsRemote ? "push" : "pull";
       // The peer's tip is here only if a pull ever landed it (a fresh
       // session started by mirror:start always has it). An unknown or
       // unrelated tip is two histories.

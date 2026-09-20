@@ -121,13 +121,38 @@ export function formatElapsed(ms: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+// Where a flow lands, as the words for it: this machine (the pulls), or
+// a peer (a transplant or a mirror to it), where "here" would name the
+// wrong machine. Made once per dialog and handed down, so every piece
+// of the flow says the same place the same way.
+export type Landing = {
+  onPeer: boolean;
+  // Standing alone: "Open here", "ignored files there".
+  here: "here" | "there";
+  // In a sentence: "creating the worktree here / on Thinkpad".
+  on: string;
+  // As a direction: "Transplanted feat here / to Thinkpad".
+  to: string;
+};
+export const LANDS_HERE: Landing = {
+  onPeer: false,
+  here: "here",
+  on: "here",
+  to: "here",
+};
+export function landsOnPeer(label: string): Landing {
+  return { onPeer: true, here: "there", on: `on ${label}`, to: `to ${label}` };
+}
+
 // The running headline under the dialog title, one per step (and per
-// lifecycle phase of the create), phrased against the two device
-// names.
+// lifecycle phase of the create), phrased against the source's name
+// and the landing.
 export function stepHeadline(
   frame: SyncPullProgress | null,
   sourceDeviceLabel: string,
+  landing: Landing = LANDS_HERE,
 ): string {
+  const here = landing.on;
   switch (frame?.step ?? "capture") {
     case "capture":
       return `capturing the uncommitted work on ${sourceDeviceLabel}`;
@@ -138,15 +163,17 @@ export function stepHeadline(
         case "carryOver":
           return "carrying files over into the new worktree";
         case "setup":
-          return "running the setup script here";
+          return `running the setup script ${here}`;
         case "portPoolProvision":
           return "provisioning ports for the new worktree";
         default:
-          return "creating the worktree here";
+          return `creating the worktree ${here}`;
       }
     case "apply":
-      return "re-applying your changes here";
+      return `re-applying your changes ${here}`;
     case "files":
-      return `bringing the ignored files over from ${sourceDeviceLabel}`;
+      return landing.onPeer
+        ? `sending the ignored files over ${landing.to}`
+        : `bringing the ignored files over from ${sourceDeviceLabel}`;
   }
 }

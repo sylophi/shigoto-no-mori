@@ -1071,6 +1071,17 @@ async function main() {
       // worktrees:delete.
       assert.equal(syncContract.calls.teardownSource.remote, false);
       assert.equal(syncContract.calls.teardownSource.mutating, true);
+      // The send and its teardown are the pull's pair turned around,
+      // local-only the same way. The receiving half is what a peer
+      // drives, so it rides the command grant.
+      for (const name of ["sendWorktree", "teardownSent"]) {
+        assert.equal(syncContract.calls[name].remote, false);
+        assert.equal(syncContract.calls[name].mutating, true);
+      }
+      for (const name of ["landCheck", "landWorktree"]) {
+        assert.equal(syncContract.calls[name].remote, true);
+        assert.equal(syncContract.calls[name].mutating, true);
+      }
       // The pull's progress frames go back to the invoking renderer
       // only: an untagged broadcast never reaches a remote wire.
       assert.notEqual(syncContract.calls.pullProgress.remote, true);

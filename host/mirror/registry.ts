@@ -57,6 +57,10 @@ export type MirrorCreateInput = {
   // way, remote to local, and nothing here reaches the peer. The
   // transplant's one-shot transfer. Absent, a two-way mirror.
   pull?: boolean;
+  // A push (mirrorRequest.push), the pull turned around: local to
+  // remote, and nothing the peer holds lands here. A sent worktree's
+  // one-shot transfer.
+  push?: boolean;
 };
 
 export type MirrorImpl = {
