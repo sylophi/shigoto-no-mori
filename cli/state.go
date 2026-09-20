@@ -9,6 +9,7 @@ package main
 //   projects/<projectId>/project.json       per-project config
 //   projects/<projectId>/worktrees/<id>.json  per-worktree data
 //   updater.json / updater-request.json     `sm update` bridge (cmd_update.go)
+//   control.json                            the running app's control wire (control.go)
 //   updates/                                staged app updates (updater.go)
 // Writes are atomic tmp+rename; each read-modify-write holds the same
 // `<file>.lock` advisory lock the app takes, so the two processes can't

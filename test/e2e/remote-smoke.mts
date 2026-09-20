@@ -47,6 +47,8 @@ import {
 import {
   buildDevCli,
   cloneDevLogin,
+  devCliPath,
+  devProfileEnv,
   devProfilePaths,
   PROFILES_DIR,
   registerProjects,
@@ -1124,6 +1126,227 @@ async function main(): Promise<string[]> {
       assert.ok(torn.sourceRemoved, `source kept: ${torn.sourceError}`);
       assert.ok(!existsSync(source.path), "source worktree still on disk");
       assert.ok(existsSync(landed.path), "the sent worktree vanished");
+    });
+
+    // The same verbs from a terminal, the way an agent runs them: the
+    // real dev CLI, pointed at a's data dir, finds a's control wire
+    // through control.json and asks a's app, which runs the dialogs'
+    // own orchestrators against b. Devices are named, never id'd, and
+    // with b the only ready device none needs naming at all.
+    await scenario("cli: send, bring and mirror", async () => {
+      const own = await ownProjectOnA();
+      type Doc = Record<string, unknown> & {
+        ok?: boolean;
+        worktree?: Worktree;
+      };
+      const smdDocs = (
+        ...args: string[]
+      ): { code: number; docs: unknown[] } => {
+        let stdout = "";
+        let code = 0;
+        try {
+          stdout = execFileSync(devCliPath(), ["--json", ...args], {
+            cwd: aRepo,
+            env: { ...process.env, ...devProfileEnv(fixture.a) },
+            stdio: ["ignore", "pipe", "pipe"],
+          }).toString();
+        } catch (error) {
+          const failed = error as { status?: number; stdout?: Buffer };
+          code = failed.status ?? -1;
+          stdout = failed.stdout?.toString() ?? "";
+        }
+        const docs = stdout
+          .split("\n")
+          .filter((line) => line.trim() !== "")
+          .map((line) => JSON.parse(line) as unknown);
+        return { code, docs };
+      };
+      // A verb's final {ok} document, past its progress events.
+      const smd = (...args: string[]): { code: number; doc: Doc } => {
+        const { code, docs } = smdDocs(...args);
+        const doc = need(
+          (docs as Doc[]).findLast(
+            (candidate) => typeof candidate.ok === "boolean",
+          ),
+          `a final document from smd ${args.join(" ")}`,
+        );
+        return { code, doc };
+      };
+
+      // b alone accepts commands, which is all either direction needs.
+      await b.evaluate("window.api.account.setAcceptsCommands(true)");
+      const listed = smd("devices").doc as Doc & {
+        devices: { deviceId: string; name: string; block?: string }[];
+      };
+      const rowB = need(
+        listed.devices.find((device) => device.deviceId === idB),
+        "b in `smd devices`",
+      );
+      assert.equal(rowB.block, undefined, `b is not ready: ${rowB.block}`);
+
+      // send: a's worktree, with an edit, an untracked file and an
+      // ignored one, lands on b and the source is torn down.
+      const { worktree: source } = await a.evaluate<{ worktree: Worktree }>(
+        `window.api.worktrees.create(${JSON.stringify({
+          projectId: own.id,
+          branchName: "cli/sent",
+          worktreeName: "cli-sent",
+        })})`,
+      );
+      writeFileSync(join(source.path, "README.md"), "edited by the agent\n");
+      writeFileSync(join(source.path, ".env"), "SECRET=agent\n");
+      const sent = smd(
+        "worktrees",
+        "send",
+        "cli-sent",
+        "--no-setup",
+        "--source",
+        "teardown",
+      );
+      assert.equal(sent.code, 0, JSON.stringify(sent.doc));
+      const landed = need(sent.doc.worktree, "the sent worktree");
+      assert.ok(
+        landed.path.startsWith(realpathSync(fixture.b.dataDir)),
+        `the copy landed outside b's data dir: ${landed.path}`,
+      );
+      assert.equal(
+        readOrNull(join(landed.path, "README.md")),
+        "edited by the agent\n",
+      );
+      assert.equal(readOrNull(join(landed.path, ".env")), "SECRET=agent\n");
+      assert.deepEqual(sent.doc.source, { fate: "teardown", done: true });
+      assert.ok(!existsSync(source.path), "the torn-down source is on disk");
+
+      // bring: it comes back by its branch, named as a person would,
+      // and b's copy is torn down in turn.
+      const listing = smdDocs("worktrees", "list", "--remote")
+        .docs[0] as (Worktree & { device: { name: string } })[];
+      assert.ok(
+        listing.some(
+          (entry) =>
+            entry.branch === "cli/sent" && entry.device.name === rowB.name,
+        ),
+        "list --remote lacks the worktree just sent to b",
+      );
+      const brought = smd(
+        "worktrees",
+        "bring",
+        "cli/sent",
+        "--no-setup",
+        "--source",
+        "teardown",
+      );
+      assert.equal(brought.code, 0, JSON.stringify(brought.doc));
+      const back = need(brought.doc.worktree, "the brought worktree");
+      assert.ok(back.path.startsWith(realpathSync(fixture.a.dataDir)));
+      assert.equal(
+        readOrNull(join(back.path, "README.md")),
+        "edited by the agent\n",
+      );
+      assert.equal(readOrNull(join(back.path, ".env")), "SECRET=agent\n");
+      assert.ok(!existsSync(landed.path), "b's torn-down copy is on disk");
+
+      // mirror: the worktree stays here and b gets a live copy. A
+      // second ask answers with the running mirror.
+      const mirrored = smd("worktrees", "mirror", "cli-sent", "--no-setup");
+      assert.equal(mirrored.code, 0, JSON.stringify(mirrored.doc));
+      const copy = need(mirrored.doc.worktree, "the mirror's copy");
+      const session = mirrored.doc.session as string;
+      await waitMirror(
+        session,
+        "the CLI's mirror to be watching and in sync",
+        's.status === "watching" && s.git?.status === "synced" && s.labels.copySide === "remote"',
+      );
+      const again = smd("worktrees", "mirror", "cli-sent");
+      assert.equal(again.doc.alreadyMirrored, true);
+      assert.equal(again.doc.session, session);
+      writeFileSync(join(back.path, "agent.txt"), "written by the agent\n");
+      await waitFor(
+        () =>
+          fileEquals(join(copy.path, "agent.txt"), "written by the agent\n"),
+        "the agent's file to reach the copy on b",
+        30_000,
+      );
+      git(back.path, "add", "-A");
+      git(back.path, "commit", "-q", "-m", "Committed by the agent");
+      const tip = gitOut(back.path, "rev-parse", "HEAD");
+      await waitFor(
+        () => gitOut(copy.path, "rev-parse", "HEAD") === tip,
+        "the agent's commit to be followed on b",
+        60_000,
+      );
+      await waitMirror(
+        session,
+        "the pair to agree again",
+        's.git?.status === "synced"',
+      );
+      const running = smd("worktrees", "mirrors").doc as Doc & {
+        mirrors: { session: string; copySide: string; git?: string }[];
+      };
+      const row = need(
+        running.mirrors.find((mirror) => mirror.session === session),
+        "the mirror in `smd worktrees mirrors`",
+      );
+      assert.equal(row.copySide, "remote");
+      assert.equal(row.git, "synced");
+      const stopped = smd("worktrees", "unmirror", "cli-sent");
+      assert.equal(stopped.code, 0, JSON.stringify(stopped.doc));
+      await waitFor(
+        () => !existsSync(copy.path),
+        "b's copy to go with the unmirror",
+        30_000,
+      );
+      assert.ok(existsSync(back.path), "the unmirror removed a's original");
+
+      // mirror --from: one of b's worktrees is copied here and kept in
+      // step, b named as a person would. The unmirror removes a's copy
+      // and leaves b's original.
+      const projectOnB = need(
+        (await b.evaluate<Project[]>("window.api.projects.list()")).find(
+          (p) => p.name === "shared",
+        ),
+        "b's own project",
+      );
+      const { worktree: theirs } = await b.evaluate<{ worktree: Worktree }>(
+        `window.api.worktrees.create(${JSON.stringify({
+          projectId: projectOnB.id,
+          branchName: "cli/theirs",
+          worktreeName: "cli-theirs",
+        })})`,
+      );
+      writeFileSync(join(theirs.path, "README.md"), "edited on b\n");
+      const inbound = smd(
+        "worktrees",
+        "mirror",
+        "cli/theirs",
+        "--from",
+        rowB.name,
+        "--no-setup",
+      );
+      assert.equal(inbound.code, 0, JSON.stringify(inbound.doc));
+      const here = need(inbound.doc.worktree, "the inbound mirror's copy");
+      assert.ok(here.path.startsWith(realpathSync(fixture.a.dataDir)));
+      assert.equal(readOrNull(join(here.path, "README.md")), "edited on b\n");
+      await waitMirror(
+        inbound.doc.session as string,
+        "the inbound mirror to be watching and in sync",
+        's.status === "watching" && s.git?.status === "synced" && s.labels.copySide !== "remote"',
+      );
+      writeFileSync(join(here.path, "agent.txt"), "the agent took over\n");
+      await waitFor(
+        () =>
+          fileEquals(join(theirs.path, "agent.txt"), "the agent took over\n"),
+        "the agent's file to reach b's original",
+        30_000,
+      );
+      const released = smd("worktrees", "unmirror", here.path);
+      assert.equal(released.code, 0, JSON.stringify(released.doc));
+      await waitFor(
+        () => !existsSync(here.path),
+        "a's copy to go with the unmirror",
+        30_000,
+      );
+      assert.ok(existsSync(theirs.path), "the unmirror removed b's original");
     });
 
     // The mirror the other way, as the local page's "Mirror to"

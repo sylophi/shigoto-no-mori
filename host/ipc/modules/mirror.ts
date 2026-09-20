@@ -18,6 +18,7 @@
 import type { z } from "zod";
 import {
   MIRROR_LABEL_COPY_SIDE,
+  MIRROR_COPY_STAYED,
   MIRROR_STOP_UNCONFIRMED,
   mirrorCopyIsRemote,
   type MirrorGitStatus,
@@ -369,7 +370,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     }
     if (stayed !== null) {
       throw new Error(
-        `The mirror stopped, but the copy ${onPeer ? "on the other device" : "here"} stayed: ${stayed}. Delete it from its page.`,
+        `${MIRROR_COPY_STAYED} ${onPeer ? "on the other device" : "here"} stayed: ${stayed}. Delete it from its page.`,
       );
     }
   },

@@ -90,6 +90,19 @@ pre-commit:
     sync-transfer:
       glob: "{cli/**,shared/ipc/modules/sync.ts,shared/ipc/modules/worktrees.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/hub/protocol.ts,host/ipc/modules/sync.ts,host/ipc/modules/worktrees.ts,host/ipc/peerSync.ts,host/ipc/cliDelegate.ts,host/hub/**,host/lib/sync/**,host/lib/idleRegistry.ts,host/lib/git/**,host/lib/scripts/**,host/lib/util/paths.ts,test/sync-transfer.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs,test/lib/directBoot.mjs}"
       run: pnpm test sync-transfer
+    # End-to-end proof for the CLI's cross-device verbs: the real sm
+    # binary finds the real control server through control.json in a
+    # sandboxed data dir and drives `devices`, `send`, `bring`,
+    # `mirror`, `mirrors` and `unmirror` through the real control
+    # handlers, which run the real send and pull orchestrators over a
+    # real direct wire against real git. Asserts the hello gate and the
+    # owner-only token file, every app-not-running dead end, device and
+    # worktree resolution by code, streamed progress, the source fates,
+    # exit 3 on a caveat, and the mirror stop guard. Gated to the
+    # control surface plus the sync surface and CLI it rides.
+    control:
+      glob: "{cli/**,shared/ipc/modules/control.ts,shared/ipc/modules/sync.ts,shared/ipc/modules/mirror.ts,shared/ipc/modules/worktrees.ts,shared/ipc/modules/projects.ts,shared/ipc/modules/remoteAccess.ts,shared/leaveOutRule.ts,shared/sharedSettings.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,host/ipc/modules/control.ts,host/ipc/modules/sync.ts,host/ipc/modules/mirror.ts,host/ipc/modules/worktrees.ts,host/ipc/peerSync.ts,host/ipc/cliDelegate.ts,host/mirror/**,host/lib/sync/**,host/lib/git/**,host/lib/util/paths.ts,main/core/control/**,main/core/portForward/bridge.ts,test/control.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs,test/lib/directBoot.mjs}"
+      run: pnpm test control
     # End-to-end proof for the port-forward wire: drives the host-side
     # forward verbs between two REAL hub connections against real
     # loopback TCP fixture servers, asserting grant refusal before any

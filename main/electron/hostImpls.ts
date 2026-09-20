@@ -18,6 +18,8 @@ import {
   broadcastAll,
   refreshDirectHost,
   refreshSocketHost,
+  republishControlHost,
+  stopControlHost,
 } from "../ipc/register";
 import {
   cliLinkStatus,
@@ -65,8 +67,10 @@ export function installHostImpls(): void {
     uninstallCliEverything,
     stopStateWatcher,
     stopUpdaterBridge,
+    stopControlHost,
     broadcastNukeProgress: (progress) =>
       broadcastAll(runtimeContract, "nukeProgress", progress),
+    afterDataWipe: republishControlHost,
     relaunchAppUnattended,
     unattendedMoveRefusal: () => busyActionRemoteRefusal("move"),
   });

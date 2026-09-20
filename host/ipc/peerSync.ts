@@ -39,11 +39,12 @@ export type PeerMirrorApi = Pick<
 >;
 
 // The transplant orchestration's teardown reach (the peer's ordinary
-// worktrees:delete) and the mirror start's path lookup (worktrees:list),
-// riding the same grant-gated wire as the sync verbs.
+// worktrees:delete), the mirror start's path lookup (worktrees:list)
+// and the control ops' shelving of a brought worktree's source, riding
+// the same grant-gated wire as the sync verbs.
 export type PeerWorktreesApi = Pick<
   Client<typeof worktreesContract>,
-  "delete" | "list"
+  "delete" | "list" | "setShelved"
 >;
 
 type PeerSyncImpl = {

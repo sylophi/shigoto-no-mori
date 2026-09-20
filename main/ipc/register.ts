@@ -50,6 +50,8 @@ import {
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createHubConnection } from "@host/hub/connection";
 import { createWsServerBinding } from "@host/socket/server";
+import { dataDir } from "@host/lib/util/paths";
+import { CONTROL_FILE_NAME, createControlServer } from "../core/control/server";
 import { directContract } from "@shared/ipc/modules/direct";
 import { brokerHandlerFor, makeDirectHandlers } from "@host/ipc/modules/direct";
 import { createDirectPlane } from "@shared/hub/directPlane";
@@ -184,6 +186,16 @@ const tunnelRunner = createCloudflaredRunner({
   // Tunnel state rides the same status snapshot the device hub and
   // direct transitions feed, so the devices page updates live.
   onChange: () => directPlane.notifyStatusChanged(),
+});
+
+// The control wire: the loopback listener the CLI drives the
+// cross-device verbs through (main/core/control/server.ts). A wire of
+// its own, outside hostServer's fan: it serves the control contract
+// and nothing else, so no app channel is reachable from a terminal
+// unless that contract names an op for it.
+const controlServer = createControlServer({
+  appVersion: () => app.getVersion(),
+  filePath: () => join(dataDir(), CONTROL_FILE_NAME),
 });
 
 // Main-side consumers of peer pushes (the mirror's git follower reacts
@@ -362,6 +374,49 @@ export function registerContract<M extends ContractModule>(
     // belt and braces.
     onMutationResolved: module.scope === "host" ? pingViewers : undefined,
   });
+}
+
+// The control contract's registration, on the control wire alone. A
+// mutation the CLI drove is external to every window here, exactly
+// like one a peer drove (and its CLI children mute the state watcher
+// the same way), so it pings the local windows along with the remote
+// viewers.
+export function registerControlContract<M extends ContractModule>(
+  module: M,
+  handlers: Handlers<M, HandlerContext>,
+): void {
+  registerContractCore(module, handlers, controlServer.transport, {
+    validateOutputs: VALIDATE_OUTPUTS,
+    onMutationResolved: () => {
+      mutationPingLocal = true;
+      flushMutationPing();
+    },
+  });
+}
+
+// Binds the control listener and publishes it in the data dir. Never
+// throws: the app works without the CLI's cross-device verbs, which
+// then report the app as unreachable.
+export async function startControlHost(): Promise<void> {
+  try {
+    await controlServer.start();
+  } catch (error) {
+    console.warn(
+      `[control] listener failed to start: ${errorMessageOf(error)}`,
+    );
+  }
+}
+
+// Synchronous, for every quit path: unpublishes first, so a CLI run
+// that starts during the quit reads "not running" instead of dialing
+// a closing listener.
+export function stopControlHost(): void {
+  controlServer.stop();
+}
+
+// After a data wipe took control.json along with the data dir.
+export function republishControlHost(): void {
+  controlServer.republish();
 }
 
 // Single-window broadcast for client-scoped window and menu events. A

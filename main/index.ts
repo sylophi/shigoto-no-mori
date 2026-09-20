@@ -51,6 +51,8 @@ import {
   broadcastAll,
   refreshHubConnection,
   refreshSocketHost,
+  startControlHost,
+  stopControlHost,
   stopDirectHost,
   onHostMutationSettled,
   probeRemoteConnections,
@@ -455,6 +457,11 @@ app.on("ready", async () => {
   // after every globalConfig write (hostImpls wiring), making this the
   // boot-time pass only.
   void refreshSocketHost();
+  // The control wire the CLI's cross-device verbs ride (`sm worktrees
+  // send|bring|mirror`). Here, past the single-instance lock and the
+  // data dir, so only the instance that owns the data dir publishes
+  // its address there.
+  void startControlHost();
   // The hub socket: connect to the account's
   // Durable Object when a credential is stored. The same reconcile
   // reruns after every account change (the emitChanged path in
@@ -560,6 +567,7 @@ app.on("before-quit", (event) => {
     // hub teardown gives the best-effort host-side conn closes a
     // socket to ride out on.
     stopAllPortForwards();
+    stopControlHost();
     stopMirrorEngine();
     // Fire and forget: the hub close frame either flushes in the
     // handoff window or the DO notices the dead socket on its own. The
@@ -594,6 +602,7 @@ app.on("before-quit", (event) => {
   // mirror daemon gets its stdin closed here and is reaped with the
   // CLI children below if it lingers.
   stopAllPortForwards();
+  stopControlHost();
   stopMirrorEngine();
   // Close the hub socket alongside the script reaping so the DO sees
   // a clean departure, and the direct listener with it so peers see a
