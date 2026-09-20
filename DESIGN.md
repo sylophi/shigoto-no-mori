@@ -79,7 +79,8 @@ Rules that keep that working:
   so a hover-only fill never says "tap me". phone.css gives the ghost
   variants a resting fill, and a bare icon `<button>` written outside
   the primitive (the `rounded-md p-1 hover:bg-accent` kind) joins them
-  by carrying `data-icon-button`.
+  by carrying `data-icon-button`. A footer bar's buttons and the back
+  button stay bare: their place on the screen already says control.
 - The `data-*` hooks phone.css selects are verified by
   `pnpm test theme-contract`, like doubutsu's.
 - When changing UI, check it at phone width as well. The UI lab's web

@@ -223,20 +223,22 @@
 .doubutsu[data-layout="phone"]
   :is(
     header,
-    footer,
     [data-slot="modal-shell"],
     [data-slot="sheet-content"],
     [data-slot="phone-tab-bar"]
   ) {
   --resting-fill: var(--muted);
 }
+/* Left bare: a page's footer bar and the back button. A bar along the
+   screen's edge and an arrow in the top corner already read as
+   controls by where they sit, and a fill on each only crowds them. */
 @layer base {
   [data-layout="phone"]
     :is(
       [data-variant="ghost"],
       [data-variant="ghost-destructive"],
       [data-icon-button]
-    ) {
+    ):not(footer *, [data-back-button]) {
     background-color: var(--resting-fill);
     box-shadow: inset 0 0 0 1px var(--border);
   }
