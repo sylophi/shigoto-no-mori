@@ -113,7 +113,7 @@ function DestinationRow({
       <Laptop aria-hidden className="size-4 shrink-0 opacity-70" />
       <span className="min-w-0 flex-1 leading-tight">
         <span className="block truncate font-medium">{thisDeviceLabel}</span>
-        <span className="block truncate text-[11px] opacity-70">
+        <span className="block truncate text-2xs opacity-70">
           {held
             ? holder === undefined
               ? `already has ${worktree.branch}`
@@ -176,7 +176,7 @@ export function ReviewDevicesColumn({
                 <span className="block truncate font-medium">
                   {sourceDeviceLabel}
                 </span>
-                <span className="block truncate text-[11px]">{sourceNote}</span>
+                <span className="block truncate text-2xs">{sourceNote}</span>
               </span>
               <span className="text-xs">source</span>
             </li>

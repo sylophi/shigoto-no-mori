@@ -25,7 +25,7 @@ export function TidyEntryTitle({
 }: TidyEntryTitleProps) {
   const { project, worktree, verdict } = entry;
   return (
-    <div className="flex min-w-0 items-center gap-2">
+    <div className="flex min-w-0 items-center gap-2 phone:flex-wrap phone:gap-y-1">
       <div className="flex min-w-0 items-center gap-1.5">
         {/* Fallback icon rather than nothing, for the same reason the
             inbox uses one: this list mixes projects, so a missing icon

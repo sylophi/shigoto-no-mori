@@ -1,5 +1,6 @@
 import { DeviceChip } from "@/components/shared/DeviceChip";
 import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeader";
+import { PAGE_BODY } from "@/components/shared/PageShell";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { PathSpan } from "@/components/ui/path-span";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
@@ -220,7 +221,8 @@ export function WorktreeDetailInner({
 
       <div
         className={cn(
-          "min-h-0 flex-1 overflow-y-auto px-6 py-6 phone:px-4 phone:py-5",
+          PAGE_BODY,
+          "phone:py-5",
           locked && "pointer-events-none opacity-50",
         )}
         aria-disabled={locked}

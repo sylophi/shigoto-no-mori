@@ -38,7 +38,7 @@ export function StatusPill({
       title={title}
       aria-label={ariaLabel}
       className={cn(
-        "inline-flex shrink-0 items-center text-[10px]",
+        "inline-flex shrink-0 items-center text-3xs",
         children != null && "tabular gap-0.5",
         TONE_CLASSES[tone],
       )}

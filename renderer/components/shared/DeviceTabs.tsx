@@ -269,7 +269,7 @@ export function DeviceTabPanel({
       : null;
   if (note !== null && (!offline || kept === undefined)) {
     return (
-      <div className="p-6">
+      <div className="p-6 phone:p-4">
         <EmptyPanel>{note}</EmptyPanel>
       </div>
     );

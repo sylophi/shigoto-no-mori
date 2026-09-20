@@ -204,7 +204,7 @@ export function LocationForm({
 
       {toMove.length > 0 && (
         <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 select-text dark:text-amber-300">
-          <p className="text-[11px] font-semibold tracking-wide uppercase">
+          <p className="text-2xs font-semibold tracking-wide uppercase">
             Heads up
           </p>
           <p className="mt-2 leading-relaxed">

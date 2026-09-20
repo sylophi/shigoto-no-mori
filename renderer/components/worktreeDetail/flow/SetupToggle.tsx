@@ -44,7 +44,7 @@ export function SetupToggle({
             )}
           </p>
           {!pinned && configured && (
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
+            <p className="mt-0.5 text-2xs text-muted-foreground">
               Follows the leave-out rule: on when something stays behind.
             </p>
           )}

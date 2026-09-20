@@ -107,7 +107,7 @@ function NavGroup({
 }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <SectionHeading className="px-2 pt-3 pb-1 text-[10px] text-muted-foreground/80">
+      <SectionHeading className="px-2 pt-3 pb-1 text-3xs text-muted-foreground/80">
         {label}
       </SectionHeading>
       {children}

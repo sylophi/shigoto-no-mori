@@ -124,7 +124,7 @@ export function CommitComposer({
       )}
       {error && (
         <ErrorBanner>
-          <pre className="max-h-32 overflow-auto font-mono text-[11px] whitespace-pre-wrap">
+          <pre className="max-h-32 overflow-auto font-mono text-2xs whitespace-pre-wrap">
             {error.message}
           </pre>
         </ErrorBanner>

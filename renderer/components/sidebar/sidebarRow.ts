@@ -134,6 +134,18 @@ export const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
   "remote-worktree": 40,
 };
 
+// The phone layout draws the same rows on a larger scale, and never
+// shorter than its touch target (phone.css). A hint that ignored that
+// would have the reveal scroll land short of a row not yet measured.
+const PHONE_ROW_SCALE = 1.15;
+const PHONE_ROW_MIN = 44;
+export function rowSizeHint(kind: SidebarRow["kind"], phone: boolean): number {
+  const hint = ROW_SIZE_HINTS[kind];
+  return phone
+    ? Math.max(Math.round(hint * PHONE_ROW_SCALE), PHONE_ROW_MIN)
+    : hint;
+}
+
 // Where the row sits in the scroller, read off the kind rather than
 // handed down from the view, so the virtualizer never has to be told
 // which layout it is drawing.

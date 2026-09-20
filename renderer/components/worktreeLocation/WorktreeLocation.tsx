@@ -7,6 +7,7 @@ import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import type { Project } from "@shared/schemas";
 import { LocationForm } from "./LocationForm";
+import { PAGE_BODY } from "@/components/shared/PageShell";
 
 export function WorktreeLocation() {
   return (
@@ -55,7 +56,7 @@ function LocationBody({ project }: { project: Project }) {
 // The one scroll box every state of the page renders into.
 function LocationPane({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto p-6">
+    <div className={PAGE_BODY}>
       <div className="flex max-w-3xl flex-col gap-6">{children}</div>
     </div>
   );

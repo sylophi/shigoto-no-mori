@@ -22,14 +22,21 @@ import { report, walk } from "./lib/checkKit.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 // Strip comments: only selectors are contract, prose may name anything.
-const css = readFileSync(join(root, "renderer/doubutsu.css"), "utf8").replace(
-  /\/\*[\s\S]*?\*\//g,
-  "",
-);
+const readCss = (path) =>
+  readFileSync(join(root, path), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+const css = readCss("renderer/doubutsu.css");
+// The phone layout's sizing hooks the same way (data-slot, data-size),
+// so its selectors are held to check 1 as well.
+const HOOKING_CSS = [
+  { name: "doubutsu.css", source: css },
+  { name: "phone.css", source: readCss("renderer/phone.css") },
+];
 
 let rendererSource = "";
 for (const file of walk(join(root, "renderer"), /\.(tsx?|css)$/)) {
-  if (file.endsWith("doubutsu.css")) continue;
+  // Neither stylesheet counts as a setter: one naming a slot must not
+  // vouch for the other selecting it.
+  if (HOOKING_CSS.some(({ name }) => file.endsWith(name))) continue;
   rendererSource += readFileSync(file, "utf8");
 }
 
@@ -45,9 +52,24 @@ const RUNTIME_ATTRS = new Set([
   "data-disabled",
   "data-unchecked",
   "data-sonner-toast",
+  // Set through `dataset` (AppShell) and by web/public/boot-theme.js,
+  // so the attribute never appears literally in renderer source.
+  "data-layout",
+  // sonner's list element, which phone.css keeps its hit areas out of.
+  "data-sonner-toaster",
 ]);
-const attrRefs = [...css.matchAll(/\[(data-[\w-]+)(?:="([^"]+)")?\]/g)];
-for (const [, attr, value] of attrRefs) {
+// A prefix/suffix match ([data-size$="sm"]) names part of a value the
+// component computes, so it is held to the attribute being set at all.
+const attrRefs = HOOKING_CSS.flatMap(({ name, source }) =>
+  [...source.matchAll(/\[(data-[\w-]+)(?:([$^*~|]?)="([^"]+)")?\]/g)].map(
+    ([, attr, operator, value]) => ({
+      name,
+      attr,
+      value: operator ? undefined : value,
+    }),
+  ),
+);
+for (const { name, attr, value } of attrRefs) {
   if (RUNTIME_ATTRS.has(attr)) continue;
   const literal = value ? `${attr}="${value}"` : `${attr}=`;
   // `data-variant={variant}`-style dynamic values can't be matched
@@ -61,7 +83,7 @@ for (const [, attr, value] of attrRefs) {
     !bare
   ) {
     failures.push(
-      `doubutsu.css selects [${attr}${value ? `="${value}"` : ""}] but no renderer component sets it`,
+      `${name} selects [${attr}${value ? `="${value}"` : ""}] but no renderer component sets it`,
     );
   }
 }
@@ -103,6 +125,12 @@ const upstream = [
     pkg: "sonner",
     file: "node_modules/sonner/dist/index.mjs",
     needle: "data-sonner-toast",
+  },
+  {
+    pkg: "sonner",
+    file: "node_modules/sonner/dist/index.mjs",
+    // Quoted: bare, it would be satisfied by data-sonner-toast alone.
+    needle: '"data-sonner-toaster"',
   },
 ];
 for (const { pkg, file, needle } of upstream) {

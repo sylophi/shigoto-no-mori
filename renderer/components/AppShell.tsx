@@ -101,7 +101,9 @@ export function AppShell() {
       <div className="flex h-full min-w-0 flex-1 flex-col">
         {phone && !isTabRoute(pathname) && (
           /* A page stacked over the forest: the way back to it, where a
-             wide viewport keeps the sidebar. Thumb-height on purpose. */
+             wide viewport keeps the sidebar. Its full touch height is
+             drawn, not left to the hit-area net: the page body under
+             the bar is later in the document and would win the overhang. */
           <header className="flex shrink-0 items-center border-b border-border bg-card px-4 py-1">
             <BackButton
               label={forestTab.label}

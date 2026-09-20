@@ -18,7 +18,7 @@ export function TidyStat({
 }: TidyStatProps) {
   return (
     <div className="flex flex-col gap-0.5 rounded-md border border-border bg-card px-3 py-2.5">
-      <span className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+      <span className="text-3xs font-medium tracking-wide text-muted-foreground uppercase">
         {label}
       </span>
       <span
@@ -29,7 +29,10 @@ export function TidyStat({
       >
         {value}
       </span>
-      <span className="truncate text-xs text-muted-foreground" title={detail}>
+      <span
+        className="truncate text-xs text-muted-foreground phone:whitespace-normal"
+        title={detail}
+      >
         {detail}
       </span>
     </div>

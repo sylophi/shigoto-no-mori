@@ -42,7 +42,7 @@ type ThemeHeaderProps = DevAffordance;
 // Both doubutsu corner stickers are the same fat little pill, slapped
 // on at the same angle. The fill is what tells them apart.
 const STICKER =
-  "-rotate-6 rounded-full px-2 py-[3px] text-[10px] leading-none font-black tracking-widest uppercase";
+  "-rotate-6 rounded-full px-2 py-0.75 text-3xs leading-none font-black tracking-widest uppercase";
 
 // The "album-art" moment of doubutsu mode: a cream pill anchoring the
 // sidebar, with 仕事の森 as the hero and a giant 森 watermark bleeding
@@ -75,7 +75,7 @@ function DoubutsuBrandHeader({ showDevStyle, onRevealProd }: ThemeHeaderProps) {
         >
           仕事の森
         </h1>
-        <span className="relative z-[1] mt-1.5 block text-[12px] font-bold text-muted-foreground">
+        <span className="relative z-[1] mt-1.5 block text-xs leading-normal font-bold text-muted-foreground">
           Shigoto no Mori
         </span>
         {/* Stickers slapped on the corner of the card, AC-style. A pair
@@ -130,7 +130,7 @@ function DoubutsuBrandHeader({ showDevStyle, onRevealProd }: ThemeHeaderProps) {
 // ui/chip-button.tsx: that primitive is ring-based and carries
 // data-slot="chip" for doubutsu to restyle, and this markup is v1-only.
 const HEADER_CHIP =
-  "shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-[9px] leading-none font-medium tracking-widest text-muted-foreground uppercase";
+  "shrink-0 rounded-md border border-border bg-muted px-1.5 py-0.5 font-mono text-4xs leading-none font-medium tracking-widest text-muted-foreground uppercase";
 
 function DefaultSidebarHeader({
   showDevStyle,
@@ -142,7 +142,7 @@ function DefaultSidebarHeader({
       // clearing the traffic lights. The web bar keeps the height,
       // drops both.
       className={cn(
-        "v1-only flex h-[52px] items-center gap-2",
+        "v1-only flex h-13 items-center gap-2",
         hasLocalHost ? "px-3 pl-[92px]" : "px-4",
       )}
       style={hasLocalHost ? dragRegion("drag") : undefined}

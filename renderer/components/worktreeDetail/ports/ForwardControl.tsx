@@ -167,9 +167,7 @@ export function ForwardControl({
       </div>
 
       {error !== null && (
-        <p
-          className={cn("basis-full text-[11px] leading-snug", TONE_TEXT.rose)}
-        >
+        <p className={cn("basis-full text-2xs leading-snug", TONE_TEXT.rose)}>
           {error}
         </p>
       )}

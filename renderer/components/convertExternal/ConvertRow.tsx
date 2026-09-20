@@ -60,7 +60,7 @@ export function ConvertRow({
         branchAdornment={
           dirty && (
             <span
-              className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400"
+              className="inline-flex shrink-0 items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-3xs font-medium text-amber-600 dark:text-amber-400"
               title="Uncommitted changes will be wiped"
             >
               <FileDiff aria-hidden className="size-3" />

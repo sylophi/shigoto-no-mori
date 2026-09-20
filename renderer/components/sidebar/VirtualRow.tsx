@@ -35,6 +35,7 @@ export function VirtualRow({
   return (
     <div
       data-index={index}
+      data-slot="sidebar-row"
       ref={measureRef}
       className={cn("absolute top-0 left-0 w-full", ROW_LAYOUT[row.kind])}
       style={{ transform: `translateY(${start}px)` }}

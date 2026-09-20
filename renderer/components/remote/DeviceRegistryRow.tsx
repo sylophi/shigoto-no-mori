@@ -152,7 +152,7 @@ export function DeviceRegistryRow({
               {showId && (
                 <span
                   title={device.deviceId}
-                  className="font-mono text-[11px] text-muted-foreground/70 select-text"
+                  className="font-mono text-2xs text-muted-foreground/70 select-text"
                 >
                   {abbreviateId(device.deviceId)}
                 </span>

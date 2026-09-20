@@ -59,7 +59,7 @@ function FoundNote({
 }) {
   return (
     <span
-      className={cn("truncate text-[11px] text-muted-foreground/70", className)}
+      className={cn("truncate text-2xs text-muted-foreground/70", className)}
       title={title}
     >
       {note}
