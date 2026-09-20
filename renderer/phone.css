@@ -8,7 +8,7 @@
  * (stamped pre-paint by web/public/boot-theme.js, kept in step by
  * AppShell), so the desktop window and a wide browser tab never see it.
  *
- * Three sizing layers, broadest first:
+ * Four layers, broadest first:
  *
  * 1. Scale tokens. Tailwind's text-* and spacing utilities read
  *    --text-* and --spacing, so remapping those resizes every existing
@@ -21,9 +21,8 @@
  * 3. A hit-area safety net for every other interactive element, by
  *    tag and role, so a bare <button> wrapping an icon still takes a
  *    44px tap without its drawn size changing.
- *
- * And a fourth that is not about size: a resting fill for the buttons
- * that only show one on hover, which a phone never does.
+ * 4. Not a size: a resting fill for the buttons that only show one on
+ *    hover, which a phone never does.
  *
  * The `phone:` variant (index.css) remains for what a scale cannot
  * express: a different layout. DESIGN.md ("Sizing") has the rules for
@@ -101,22 +100,23 @@
   justify-content: center;
 }
 
-/* A project header's `+` and `…` sit side by side at the row's end, so
-   they are sized for real too, icon included: drawn at the sidebar's
-   12px rhythm they are the smallest things on the page. */
-[data-layout="phone"] [data-slot="project-actions"] {
-  gap: calc(var(--spacing) * 2);
-}
-[data-layout="phone"] [data-slot="project-actions"] > button {
+/* A bare icon button on the ladder (a project header's `+` and `…`,
+   which sit side by side and so need a real size): unlike the
+   primitive it has no centering or icon size of its own to grow into
+   the box, and the pair wants a thumb's gap between them. */
+[data-layout="phone"] [data-icon-button][data-size] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: var(--touch-target-sm);
-  min-height: var(--touch-target-sm);
 }
-[data-layout="phone"] [data-slot="project-actions"] > button > svg {
+[data-layout="phone"] [data-icon-button][data-size] > svg {
   width: calc(var(--spacing) * 5);
   height: calc(var(--spacing) * 5);
+}
+[data-layout="phone"]
+  [data-icon-button][data-size]
+  + [data-icon-button][data-size] {
+  margin-inline-start: calc(var(--spacing) * 1.5);
 }
 
 /* An icon control keeps its desktop shape at its new size. The corner
@@ -124,8 +124,7 @@
    rounds into a circle would come out a rounded square at 40px. One
    step up the radius scale grows the corner with the box: a circle
    again in doubutsu, and v1's rounded square in proportion. */
-[data-layout="phone"]
-  :is([data-size^="icon"], [data-slot="project-actions"] > button) {
+[data-layout="phone"] [data-size^="icon"] {
   border-radius: var(--radius-xl);
 }
 
@@ -204,58 +203,57 @@
 
 /* ---- 4. Resting surfaces ------------------------------------------ */
 
+/* The fill, by the surface the button sits on. The canvas by default.
+   doubutsu's header band and floating surfaces are the card colour
+   themselves, so a button on one steps down to the muted fill its
+   chips wear (v1's surfaces are all one white, and the hairline does
+   the work there). A footer's buttons stay bare: a bar along the
+   screen's edge already reads as controls, and a fill on each only
+   crowds it. */
+[data-layout="phone"] {
+  --resting-fill: var(--card);
+  --resting-ring: var(--border);
+}
+.doubutsu[data-layout="phone"]
+  :is(header, [data-slot="modal-shell"], [data-slot="sheet-content"]) {
+  --resting-fill: var(--muted);
+}
+[data-layout="phone"] footer {
+  --resting-fill: transparent;
+  --resting-ring: transparent;
+}
+
 /* A ghost button is bare text or a bare icon until the pointer finds
    it, and a finger never hovers, so on a phone nothing says it can be
    tapped. The same goes for the bare icon buttons written outside the
-   primitive (a row's pencil, copy, `+` and `…`), which mark themselves
-   with data-icon-button. Both rest on the card fill here, with the
-   hairline v1's outline buttons wear (doubutsu zeroes --border, and
-   its cream card already stands off the patterned canvas). In the base
-   layer so the variant's own state fills (aria-expanded, aria-pressed)
-   and a caller's bg-* still win. */
-[data-layout="phone"] {
-  --resting-fill: var(--card);
-}
-/* doubutsu's page bands and floating surfaces are the card colour
-   themselves, so a button on one steps down to the muted fill its
-   chips wear. v1's surfaces are all one white and the hairline does
-   the work there. */
-.doubutsu[data-layout="phone"]
-  :is(
-    header,
-    [data-slot="modal-shell"],
-    [data-slot="sheet-content"],
-    [data-slot="phone-tab-bar"]
-  ) {
-  --resting-fill: var(--muted);
-}
-/* Left bare: a page's footer bar and the back button. A bar along the
-   screen's edge and an arrow in the top corner already read as
-   controls by where they sit, and a fill on each only crowds them. */
+   primitive (ui/icon-button.tsx and its kin), which mark themselves
+   with data-icon-button. Both rest on a fill here, with the hairline
+   v1's outline buttons wear (doubutsu zeroes --border, and its cream
+   card already stands off the patterned canvas). The back button opts
+   out: an arrow in the top corner needs no more. In the base layer so
+   the variant's own state fills (aria-expanded, aria-pressed) and a
+   caller's bg-* still win. */
 @layer base {
   [data-layout="phone"]
     :is(
       [data-variant="ghost"],
       [data-variant="ghost-destructive"],
       [data-icon-button]
-    ):not(footer *, [data-back-button]) {
+    ):not([data-back-button]) {
     background-color: var(--resting-fill);
-    box-shadow: inset 0 0 0 1px var(--border);
+    box-shadow: inset 0 0 0 1px var(--resting-ring);
   }
 }
 
 /* doubutsu paints the inbox's New worktree button and the device
    filter's unpicked pills the canvas colour, which reads on the
    desktop's mint rail. On a phone they sit on the patterned canvas
-   itself and vanish into it, so they take the card fill too. :root for
-   the specificity to outrank those rules, which are unlayered as well. */
-:root[data-layout="phone"]
-  [data-slot="sidebar-inbox-create"]
-  [data-variant="outline"],
-:root[data-layout="phone"]
-  [data-slot="sidebar-device-filter"]
-  [data-slot="button"]:not([aria-checked="true"]) {
-  background-color: var(--card);
+   itself and vanish into it, so they take the resting fill too.
+   Unlayered like the doubutsu rules it outranks, by one attribute. */
+.doubutsu[data-layout="phone"]
+  :is([data-slot="sidebar-inbox-create"], [data-slot="sidebar-device-filter"])
+  [data-variant="outline"]:not([aria-checked="true"]) {
+  background-color: var(--resting-fill);
 }
 
 /* ---- Browser behaviour -------------------------------------------- */

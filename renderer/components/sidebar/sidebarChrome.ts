@@ -16,3 +16,13 @@ export const SIDEBAR_FOOTER_BAR =
 // hover.
 export const PROJECT_MENU_TRIGGER_CLASS =
   "rounded-md p-1 text-muted-foreground transition-opacity hover:bg-accent hover:text-foreground aria-expanded:opacity-100 phone:opacity-100";
+
+// The phone layout's hooks for a project header's `+` and `…`, which
+// travel with the class above. data-icon-button is the resting fill,
+// and data-size puts the pair on the button primitive's touch ladder,
+// since side by side they need a real size rather than a hit area
+// (phone.css). Neither styles anything on the desktop.
+export const PROJECT_ACTION_HOOKS = {
+  "data-icon-button": true,
+  "data-size": "icon-sm",
+} as const;

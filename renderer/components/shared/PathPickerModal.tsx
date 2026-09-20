@@ -15,6 +15,7 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { PathSpan } from "@/components/ui/path-span";
 import { type PickerEntry, PickerRow } from "./PickerRow";
+import { IconButton } from "@/components/ui/icon-button";
 
 // The folder browser behind the carry-over picker and the "leave out"
 // pickers: a filter that owns the keyboard, folders to step into, and
@@ -127,16 +128,9 @@ export function PathPickerModal<E extends PickerEntry>({
     <ModalShell onClose={onClose} popoverClassName="flex flex-col">
       <header className="flex items-center gap-2 border-b border-border px-3 py-2">
         {!atRoot && (
-          <button
-            type="button"
-            onClick={goUp}
-            aria-label="Go up"
-            title="Go up"
-            data-icon-button
-            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-          >
+          <IconButton onClick={goUp} aria-label="Go up" title="Go up">
             <ArrowLeft className="size-4" />
-          </button>
+          </IconButton>
         )}
         <Folder className="size-4 shrink-0 text-muted-foreground/80" />
         <PathSpan
@@ -144,15 +138,9 @@ export function PathPickerModal<E extends PickerEntry>({
           home={home}
           className="min-w-0 flex-1 truncate font-mono text-sm select-text"
         />
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close picker"
-          data-icon-button
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
+        <IconButton onClick={onClose} aria-label="Close picker">
           <X className="size-4" />
-        </button>
+        </IconButton>
       </header>
 
       <div className="flex items-center gap-1.5 border-b border-border bg-card/40 px-3 py-1.5">

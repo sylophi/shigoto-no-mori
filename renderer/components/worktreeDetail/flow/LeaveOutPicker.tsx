@@ -39,6 +39,7 @@ import {
   type IgnoreBase,
   type IgnoreSelection,
 } from "./ignoreChoice";
+import { IconButton } from "@/components/ui/icon-button";
 
 const OPTIONS = (Object.keys(IGNORE_BASE_COPY) as IgnoreBase[]).map((base) => ({
   value: base,
@@ -333,14 +334,13 @@ function ChosenRow({
         {path}
       </span>
       {!disabled && (
-        <button
-          type="button"
+        <IconButton
           onClick={onRemove}
           aria-label={`Remove ${path}`}
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+          tone="destructive"
         >
           <X className="size-3.5" />
-        </button>
+        </IconButton>
       )}
     </div>
   );

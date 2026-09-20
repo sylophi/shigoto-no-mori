@@ -2,7 +2,10 @@ import { Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
 import type { Project } from "@shared/schemas";
-import { PROJECT_MENU_TRIGGER_CLASS } from "./sidebarChrome";
+import {
+  PROJECT_ACTION_HOOKS,
+  PROJECT_MENU_TRIGGER_CLASS,
+} from "./sidebarChrome";
 
 // The project header's `+`: a quick create off the default branch, or
 // the full form on a modified click. Scope-aware through the hook, so
@@ -31,7 +34,7 @@ export function QuickCreateButton({
       disabled={creating}
       aria-label={label}
       title={label}
-      data-icon-button
+      {...PROJECT_ACTION_HOOKS}
       className={cn(
         PROJECT_MENU_TRIGGER_CLASS,
         "disabled:cursor-not-allowed disabled:opacity-100 aria-busy:opacity-100",

@@ -1,6 +1,7 @@
 import { ArrowLeft, FolderSearch, Loader2 } from "lucide-react";
 import { PathSpan } from "@/components/ui/path-span";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { IconButton } from "@/components/ui/icon-button";
 
 interface ScanningPanelProps {
   scanRoot: string;
@@ -16,15 +17,9 @@ export function ScanningPanel({
   return (
     <div className="flex flex-col">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <button
-          type="button"
-          onClick={onCancel}
-          aria-label="Cancel"
-          data-icon-button
-          className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
+        <IconButton onClick={onCancel} aria-label="Cancel">
           <ArrowLeft className="size-4" />
-        </button>
+        </IconButton>
         <FolderSearch className="size-4 shrink-0 text-muted-foreground/80" />
         <PathSpan
           path={scanRoot}

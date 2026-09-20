@@ -16,10 +16,10 @@ export function BackButton({
       variant="ghost"
       size="xs"
       onClick={onClick}
-      // Opts out of the phone layout's resting fill (phone.css).
+      // Negative margin keeps the label aligned with the header column.
+      // The ghost fill only shows on hover, on a phone too: this opts
+      // out of the resting fill there (phone.css).
       data-back-button
-      // Negative margin keeps the label aligned with the header column;
-      // the ghost fill only shows on hover.
       className={cn(
         "-ml-2 w-fit gap-1 text-xs font-normal text-muted-foreground hover:text-foreground",
         className,

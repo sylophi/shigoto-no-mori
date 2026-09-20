@@ -5,6 +5,7 @@ import type { CarryOverEntry, CarryOverStat } from "@shared/schemas";
 import { ModePicker } from "./ModePicker";
 import { OnlyInWorktrees } from "./OnlyInWorktrees";
 import { ChipButton } from "@/components/ui/chip-button";
+import { IconButton } from "@/components/ui/icon-button";
 
 interface CarryOverRowProps {
   entry: CarryOverEntry;
@@ -103,14 +104,13 @@ export function CarryOverRow({
             mode={entry.mode}
             onChange={(mode) => onChangeMode?.(mode)}
           />
-          <button
-            type="button"
+          <IconButton
             onClick={onRemove}
             aria-label={`Remove ${entry.path}`}
-            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+            tone="destructive"
           >
             <X className="size-3.5" />
-          </button>
+          </IconButton>
         </>
       )}
     </div>
