@@ -22,7 +22,7 @@ export function EditorFooter({
 }: EditorFooterProps) {
   const saveEnabled = canSave ?? isDirty;
   return (
-    <footer className="flex h-[38px] items-center gap-3 border-t border-border bg-card px-6">
+    <footer className="flex h-9.5 items-center gap-3 border-t border-border bg-card px-6 phone:h-11 phone:px-4">
       <span
         className={cn(
           "min-w-0 flex-1 truncate text-xs",

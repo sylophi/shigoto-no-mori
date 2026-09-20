@@ -126,7 +126,7 @@ export function DeviceNameField({
       <Button variant="ghost" size="xs" onClick={cancel}>
         Cancel
       </Button>
-      <span className="text-[10px] text-muted-foreground">
+      <span className="text-3xs text-muted-foreground">
         Enter to save, Esc to cancel
       </span>
     </span>

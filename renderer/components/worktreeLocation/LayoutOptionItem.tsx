@@ -73,7 +73,7 @@ export function LayoutOptionItem({
         <div className="flex items-center gap-2">
           <span className="font-medium">{option.label}</span>
           {option.recommended && (
-            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+            <span className="rounded-md bg-muted px-1.5 py-0.5 text-3xs font-medium tracking-wide text-muted-foreground uppercase">
               recommended
             </span>
           )}

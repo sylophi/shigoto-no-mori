@@ -40,10 +40,10 @@ export function CarryOverPickerModal({
       )}
       renderTrailing={(entry, path) =>
         selectedPaths.has(path) ? (
-          <span className="px-2 text-[11px] text-muted-foreground">Added</span>
+          <span className="px-2 text-2xs text-muted-foreground">Added</span>
         ) : isCovered(path) ? (
           <span
-            className="px-2 text-[11px] text-amber-600 dark:text-amber-400"
+            className="px-2 text-2xs text-amber-600 dark:text-amber-400"
             title=".worktreeinclude already copies this path into every new worktree."
           >
             covered
@@ -78,7 +78,7 @@ export function CarryOverPickerModal({
           </div>
         ) : (
           <span
-            className="px-2 text-[11px] text-muted-foreground/70"
+            className="px-2 text-2xs text-muted-foreground/70"
             title="Tracked by git. Only ignored files and folders can be carried over."
           >
             tracked

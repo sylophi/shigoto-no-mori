@@ -176,7 +176,7 @@ export function BranchCombobox({
                     {entry.name}
                   </span>
                   {entry.kind === "remote" && (
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-3xs text-muted-foreground">
                       remote
                     </span>
                   )}

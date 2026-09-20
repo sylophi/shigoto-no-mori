@@ -117,7 +117,7 @@ export function LeaveOutPicker<E extends PickerEntry>({
           onChange={(base) => onChange({ ...value, base })}
           disabled={disabled}
           options={OPTIONS}
-          optionClassName="px-2.5 py-0.5 text-[11px]"
+          optionClassName="px-2.5 py-0.5 text-2xs"
         />
       </div>
       {note !== undefined && (
@@ -192,15 +192,13 @@ function Trailing({
 }) {
   if (picked) {
     return (
-      <span className="px-2 text-[11px] text-muted-foreground">
-        {copy.done}
-      </span>
+      <span className="px-2 text-2xs text-muted-foreground">{copy.done}</span>
     );
   }
   if (unreachable) {
     return (
       <span
-        className="px-2 text-[11px] text-muted-foreground/70"
+        className="px-2 text-2xs text-muted-foreground/70"
         title="This is inside an ignored folder. Bring the whole folder instead."
       >
         in ignored folder
@@ -210,7 +208,7 @@ function Trailing({
   if (!ignored) {
     return (
       <span
-        className="px-2 text-[11px] text-muted-foreground/70"
+        className="px-2 text-2xs text-muted-foreground/70"
         title="Git tracks this, so it is always copied. Only ignored files and folders can be picked."
       >
         tracked
@@ -220,7 +218,7 @@ function Trailing({
   if (full) {
     return (
       <span
-        className="px-2 text-[11px] text-muted-foreground/70"
+        className="px-2 text-2xs text-muted-foreground/70"
         title={`You can bring up to ${BRING_PATHS_LIMIT} paths. Bring a parent folder instead, or remove one.`}
       >
         limit reached

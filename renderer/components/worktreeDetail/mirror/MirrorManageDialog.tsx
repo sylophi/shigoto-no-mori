@@ -269,7 +269,7 @@ function Stat({
       className="min-w-0 rounded-lg bg-muted/40 px-3 py-2 leading-tight"
       title={title}
     >
-      <dt className="text-[10px] tracking-wide text-muted-foreground uppercase">
+      <dt className="text-3xs tracking-wide text-muted-foreground uppercase">
         {label}
       </dt>
       <dd className="mt-0.5 truncate text-sm font-medium tabular-nums">

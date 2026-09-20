@@ -31,7 +31,7 @@ export function LastCommitStrip({
       className="flex items-center gap-2 border-t border-border px-3 py-2"
     >
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-2xs text-muted-foreground">
           Last commit, <RelativeDate date={commit.date} />
         </p>
         <p className="truncate text-xs" title={commit.subject}>

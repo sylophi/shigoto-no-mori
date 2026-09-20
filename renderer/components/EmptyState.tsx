@@ -135,7 +135,7 @@ function Step({
 }) {
   return (
     <li className="flex gap-3">
-      <span className="tabular mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-md border border-border bg-card text-[11px] font-medium text-muted-foreground">
+      <span className="tabular mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded-md border border-border bg-card text-2xs font-medium text-muted-foreground">
         {n}
       </span>
       <div className="min-w-0">
@@ -148,7 +148,7 @@ function Step({
 
 function Mono({ children }: { children: React.ReactNode }) {
   return (
-    <span className="rounded bg-muted px-1 py-px font-mono text-[12px]">
+    <span className="rounded bg-muted px-1 py-px font-mono text-xs">
       {children}
     </span>
   );

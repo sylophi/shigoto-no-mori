@@ -44,7 +44,7 @@ export function InboxShelfRow({
       className="mt-2 flex w-full items-center gap-2 px-2 py-1 text-left text-muted-foreground transition-colors hover:text-foreground"
     >
       <Icon aria-hidden className="size-3 shrink-0" />
-      <span className="text-[11px] font-medium">
+      <span className="text-2xs font-medium">
         {expanded ? label : `${label} (${count})`}
       </span>
       <span aria-hidden className="h-px flex-1 bg-border" />

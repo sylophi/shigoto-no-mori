@@ -9,6 +9,7 @@ import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
 import { BranchRow } from "./BranchRow";
 import { NewBranchForm } from "./NewBranchForm";
+import { PAGE_BODY } from "@/components/shared/PageShell";
 
 export function ManageBranches() {
   return (
@@ -34,7 +35,7 @@ function BranchesBody({ project }: { project: Project }) {
   const locals = branches?.local ?? [];
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto p-6">
+    <div className={PAGE_BODY}>
       <div className="flex max-w-3xl flex-col gap-10">
         <section className="space-y-3">
           <div className="flex items-center justify-between">

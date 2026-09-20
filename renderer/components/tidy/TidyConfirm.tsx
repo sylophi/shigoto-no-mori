@@ -78,7 +78,7 @@ export function TidyConfirm({
 
         {risky.length > 0 && (
           <ErrorBanner className="mt-3">
-            <p className="text-[11px] font-semibold tracking-wide uppercase">
+            <p className="text-2xs font-semibold tracking-wide uppercase">
               Unsaved work will be destroyed
             </p>
             <p className="mt-2 leading-relaxed">

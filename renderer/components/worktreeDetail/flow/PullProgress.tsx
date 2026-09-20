@@ -316,7 +316,7 @@ function DeviceEnd({
       <span className="text-muted-foreground">{icon}</span>
       <div className="leading-tight">
         <p className="text-sm font-medium">{name}</p>
-        <p className="text-[11px] text-muted-foreground">{part}</p>
+        <p className="text-2xs text-muted-foreground">{part}</p>
       </div>
     </div>
   );

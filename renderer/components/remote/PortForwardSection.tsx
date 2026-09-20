@@ -91,7 +91,7 @@ export function PortForwardSection({
           </ExternalLink>
           {forward.connCount > 0 && (
             <span
-              className="tabular ml-1 text-[10px] text-muted-foreground/70"
+              className="tabular ml-1 text-3xs text-muted-foreground/70"
               title={`${forward.connCount} open ${forward.connCount === 1 ? "connection" : "connections"}`}
             >
               {forward.connCount}

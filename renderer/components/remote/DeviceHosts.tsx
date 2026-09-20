@@ -79,7 +79,7 @@ export function DeviceHosts({
         </ChipButton>
       )}
       {cached && chips.length > 0 && (
-        <span className="text-[10px] text-muted-foreground/60">last known</span>
+        <span className="text-3xs text-muted-foreground/60">last known</span>
       )}
     </div>
   );

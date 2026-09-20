@@ -52,7 +52,7 @@ export function WorktreeDetailFooter({
   canMutate = true,
 }: WorktreeDetailFooterProps) {
   return (
-    <footer className="flex h-[38px] items-center gap-3 border-t border-border bg-card px-6 phone:h-12 phone:px-4">
+    <footer className="flex h-9.5 items-center gap-3 border-t border-border bg-card px-6 phone:h-11 phone:px-4">
       {state.kind === "normal" && leading && (
         <div className="flex min-w-0 items-center gap-1">{leading}</div>
       )}

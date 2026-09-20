@@ -3,11 +3,12 @@ import { useLocation } from "@tanstack/react-router";
 import { matchRoutePath, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import {
-  ROW_SIZE_HINTS,
+  rowSizeHint,
   type SidebarRow,
   type SidebarViewModel,
 } from "./sidebarRow";
 import { VirtualRow, type RowHandlers } from "./VirtualRow";
+import { isPhoneLayout } from "@/hooks/ui/useViewport";
 
 interface SidebarListProps {
   rows: SidebarRow[];
@@ -54,7 +55,8 @@ export function SidebarList({
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => viewportRef.current,
-    estimateSize: (index) => ROW_SIZE_HINTS[rows[index]?.kind ?? "worktree"],
+    estimateSize: (index) =>
+      rowSizeHint(rows[index]?.kind ?? "worktree", isPhoneLayout()),
     overscan: 12,
     getItemKey: (index) => rows[index]?.key ?? index,
   });

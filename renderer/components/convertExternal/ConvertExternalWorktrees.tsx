@@ -15,6 +15,7 @@ import type { Project, Worktree } from "@shared/schemas";
 import { worktreePathFor } from "@shared/git/worktreeLayout";
 import { ConvertRow } from "./ConvertRow";
 import { withToggled } from "@/lib/toggleSet";
+import { PAGE_BODY } from "@/components/shared/PageShell";
 
 // For detached HEADs `worktree.branch` is a short SHA. Pass it
 // through unchanged so the managed worktree gets a hash-named dir.
@@ -111,10 +112,10 @@ function ConvertExternalBody({ project }: { project: Project }) {
   const allSelected = selectableCount > 0 && selected.size === selectableCount;
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto p-6">
+    <div className={PAGE_BODY}>
       <div className="flex max-w-3xl flex-col gap-6">
         <ErrorBanner>
-          <p className="text-[11px] font-semibold tracking-wide uppercase">
+          <p className="text-2xs font-semibold tracking-wide uppercase">
             This is destructive
           </p>
           <p className="mt-2 leading-relaxed">

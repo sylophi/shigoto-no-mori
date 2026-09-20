@@ -44,6 +44,7 @@ import {
 import { worktreeBaseFor } from "@shared/git/worktreeLayout";
 import { ModeToggle, type Mode } from "./ModeToggle";
 import { PullRequestSource } from "./PullRequestPicker";
+import { PAGE_BODY } from "@/components/shared/PageShell";
 
 // What the destination line leads with, per mode. The device, when there
 // is a choice of one, is spliced in after this: "... checked out on
@@ -87,7 +88,7 @@ export function NewWorktree() {
   return (
     <ProjectDevicePage title="New worktree">
       {(scoped, tab) => (
-        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+        <div className={PAGE_BODY}>
           <div className="flex max-w-xl flex-col gap-7">
             <NewWorktreeForm
               projectId={scoped.id}
@@ -458,7 +459,7 @@ function NewWorktreeForm({
               // The row is baseline-aligned for the label and the old
               // checkbox, but a bordered track wants its own centering.
               className="self-center"
-              optionClassName="px-2 py-0.5 text-[11px]"
+              optionClassName="px-2 py-0.5 text-2xs"
             />
           ) : (
             <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none">

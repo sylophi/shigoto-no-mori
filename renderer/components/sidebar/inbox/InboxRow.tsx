@@ -86,7 +86,7 @@ export function InboxRow({
         device && !device.reachable && "opacity-60",
       )}
     >
-      <div className="flex min-w-0 items-center gap-1.5 text-[10px] text-muted-foreground">
+      <div className="flex min-w-0 items-center gap-1.5 text-3xs text-muted-foreground">
         <ProjectIcon
           projectId={worktree.projectId}
           deviceId={device?.deviceId}
@@ -129,7 +129,7 @@ export function InboxRow({
           primary's house glyph stays. When it's opted into the inbox
           it's the only thing telling the root apart from a worktree
           named after the project. */}
-      <span className="flex min-w-0 items-center gap-1 text-[10px] text-muted-foreground/70">
+      <span className="flex min-w-0 items-center gap-1 text-3xs text-muted-foreground/70">
         {!worktree.shelved && (
           <WorktreeKindIcon worktree={worktree} showTooltip={false} />
         )}

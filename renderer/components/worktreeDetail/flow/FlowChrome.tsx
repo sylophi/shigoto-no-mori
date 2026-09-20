@@ -44,7 +44,7 @@ export function StepRail({
             <span
               aria-hidden
               className={cn(
-                "flex size-4 shrink-0 items-center justify-center rounded-full font-mono text-[9px] font-semibold",
+                "flex size-4 shrink-0 items-center justify-center rounded-full font-mono text-4xs font-semibold",
                 state === "next"
                   ? "bg-muted text-muted-foreground"
                   : "bg-primary text-primary-foreground",
@@ -114,7 +114,7 @@ export function FlowHeader({
           <p className="font-mono text-lg font-semibold tabular-nums">
             {formatElapsed(elapsed.ms)}
           </p>
-          <p className="text-[10px] tracking-wide text-muted-foreground uppercase">
+          <p className="text-3xs tracking-wide text-muted-foreground uppercase">
             {elapsed.label}
           </p>
         </div>

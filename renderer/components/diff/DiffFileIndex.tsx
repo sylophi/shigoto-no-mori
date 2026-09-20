@@ -194,7 +194,7 @@ export function DiffFileIndex({
       </div>
 
       {needle && matches.length > 0 && (
-        <p className="border-t border-border px-2.5 py-1 text-[11px] text-muted-foreground">
+        <p className="border-t border-border px-2.5 py-1 text-2xs text-muted-foreground">
           {matches.length} of {entries.length} files
         </p>
       )}
@@ -325,7 +325,7 @@ function DiscardConfirmStrip({
   return (
     <div className="flex flex-col gap-2 border-t border-border p-3">
       <p className="text-xs font-medium">{label}</p>
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-2xs text-muted-foreground">
         The contents are snapshotted first, and the notification that follows
         has Undo.
       </p>
@@ -440,13 +440,13 @@ function IndexRow({
       >
         <span
           aria-hidden
-          className={cn("w-2 shrink-0 font-mono text-[10px]", className)}
+          className={cn("w-2 shrink-0 font-mono text-3xs", className)}
         >
           {mark}
         </span>
         <span
           ref={pathRef}
-          className="min-w-0 flex-1 truncate font-mono text-[11px]"
+          className="min-w-0 flex-1 truncate font-mono text-2xs"
         >
           {cut >= 0 && (
             <span className="text-muted-foreground">
@@ -481,8 +481,8 @@ function IndexRow({
           className={cn(
             "h-5 shrink-0 transition-opacity",
             discardArmed
-              ? "px-1.5 text-[11px] opacity-100"
-              : "w-5 px-0 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100",
+              ? "px-1.5 text-2xs opacity-100"
+              : "w-5 px-0 opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 phone:opacity-100",
           )}
         >
           <Undo2 aria-hidden />

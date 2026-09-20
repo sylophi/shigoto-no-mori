@@ -138,9 +138,7 @@ function DeviceRow({
       />
       <span className="min-w-0 flex-1 leading-tight">
         <span className="block truncate font-medium">{title}</span>
-        <span
-          className={cn("block truncate text-[11px]", soft && "opacity-70")}
-        >
+        <span className={cn("block truncate text-2xs", soft && "opacity-70")}>
           {note}
         </span>
       </span>

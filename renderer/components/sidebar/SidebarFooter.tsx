@@ -60,7 +60,7 @@ function LocalFooter({ arrangeMode, onToggleArrange }: SidebarFooterProps) {
         <button
           type="button"
           onClick={onToggleArrange}
-          className="rounded-md px-2 py-1 text-[11px] font-semibold tracking-wide text-foreground uppercase transition-colors hover:bg-accent"
+          className="rounded-md px-2 py-1 text-2xs font-semibold tracking-wide text-foreground uppercase transition-colors hover:bg-accent"
         >
           Done arranging
         </button>

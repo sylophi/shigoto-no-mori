@@ -95,7 +95,7 @@ export function ProjectHeader({
       >
         {project.name}
       </span>
-      <span className="shrink-0 text-[10px] font-medium tracking-normal text-muted-foreground/60 normal-case">
+      <span className="shrink-0 text-3xs font-medium tracking-normal text-muted-foreground/60 normal-case">
         missing
       </span>
     </div>
