@@ -15,6 +15,9 @@ and removes the worktree. When run from the primary checkout sitting on the
 merged branch, it lands the checkout back on the primary branch instead
 of removing anything.
 
+To land a worktree other than the one you are in, pass its name
+(`sm worktrees land <name>`) or `cd` into it first.
+
 If there is no PR, `sm worktrees land` stops. Do not merge by other means: tell
 the user the branch needs a PR first.
 
