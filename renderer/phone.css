@@ -119,6 +119,16 @@
   height: calc(var(--spacing) * 5);
 }
 
+/* An icon control keeps its desktop shape at its new size. The corner
+   radii are fixed lengths, so a 24px button that doubutsu's radius
+   rounds into a circle would come out a rounded square at 40px. One
+   step up the radius scale grows the corner with the box: a circle
+   again in doubutsu, and v1's rounded square in proportion. */
+[data-layout="phone"]
+  :is([data-size^="icon"], [data-slot="project-actions"] > button) {
+  border-radius: var(--radius-xl);
+}
+
 /* What stacks edge to edge, or sits in a scrolling strip, is sized for
    real: an expanded hit area there would reach into the neighbouring
    row (where the later row wins the overlap) or add scroll range to
