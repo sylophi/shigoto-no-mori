@@ -23,7 +23,7 @@ function ConfigureBody({ project }: { project: Project }) {
   const seed = useProjectConfigSeed(project.id);
   if (seed.state === "failed") {
     return (
-      <div className="p-6">
+      <div className="p-6 phone:p-4">
         <LoadFailure message={seed.message} onRetry={seed.retry} />
       </div>
     );

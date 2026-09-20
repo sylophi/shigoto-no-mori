@@ -42,6 +42,7 @@ import { TidyGroupHeading } from "./TidyGroupHeading";
 import { TidyRow } from "./TidyRow";
 import { TidyStat } from "./TidyStat";
 import { withToggled } from "@/lib/toggleSet";
+import { PAGE_BODY } from "@/components/shared/PageShell";
 
 // One shared object for every un-started row: a fresh literal per render
 // would give all 40 rows a new `status` prop each time a disk walk
@@ -226,9 +227,11 @@ function TidyBody() {
 
   return (
     <>
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+      <div className={PAGE_BODY}>
         <div className="flex max-w-3xl flex-col gap-6">
-          <div className="grid grid-cols-3 gap-3">
+          {/* A narrower gutter on a phone: three columns leave a card just
+              short of its longest word at the full one. */}
+          <div className="grid grid-cols-3 gap-3 phone:gap-2">
             <TidyStat
               label="On disk"
               value={`${disk.partial ? "~" : ""}${formatBytes(disk.measuredBytes)}`}
@@ -269,7 +272,7 @@ function TidyBody() {
             </div>
           ) : (
             <>
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center justify-between gap-3 phone:flex-wrap">
                 <SegmentedControl
                   aria-label="Sort worktrees"
                   value={sort}

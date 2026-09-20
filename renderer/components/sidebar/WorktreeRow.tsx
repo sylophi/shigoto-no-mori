@@ -22,9 +22,8 @@ interface WorktreeRowProps {
 // The row button's shared shell, also worn by RemoteWorktreeRow so a
 // peer's worktree reads as a sibling of a local one -- and stays one
 // through the next restyle.
-// Taller and a size up on a phone: the row is the thumb target there.
 export const WORKTREE_ROW_BUTTON =
-  "group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-accent/60 phone:py-2 phone:text-[13px]";
+  "group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-accent/60";
 
 // The two-line branch-over-name block both row flavors lead with.
 export function WorktreeRowLabel({
@@ -44,7 +43,7 @@ export function WorktreeRowLabel({
       >
         <BranchLabel branch={worktree.branch} detached={worktree.detached} />
       </span>
-      <span className="truncate text-[10px] text-muted-foreground">
+      <span className="truncate text-3xs text-muted-foreground">
         {worktree.name}
       </span>
     </div>

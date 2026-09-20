@@ -40,6 +40,7 @@ import {
   useSettingsEditorRegistry,
 } from "./useSettingsEditors";
 import { BuildVersionLine } from "./VersionSection";
+import { PAGE_BODY } from "@/components/shared/PageShell";
 
 // The Settings page: one panel per section, picked from the app
 // sidebar (SettingsSidebarNav takes the project tree's place while this
@@ -324,11 +325,7 @@ function SettingsPanel({
   const [shown, setShown] = useState(active);
   if (active && !shown) setShown(true);
   return (
-    <div
-      id={settingsPanelId(id)}
-      hidden={!active}
-      className="min-h-0 flex-1 overflow-y-auto p-6"
-    >
+    <div id={settingsPanelId(id)} hidden={!active} className={PAGE_BODY}>
       {shown && (
         <div className="flex max-w-3xl flex-col gap-10">{children}</div>
       )}

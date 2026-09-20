@@ -26,11 +26,16 @@ const buttonVariants = cva(
           "border-border bg-background text-destructive hover:bg-destructive/10 hover:text-destructive aria-pressed:bg-destructive/10 dark:border-input dark:bg-input/30",
         link: "text-primary underline-offset-4 hover:underline",
       },
+      // sm's text sits between text-xs and text-sm. It reads a variable
+      // (unset on the desktop, hence the fallback) so the phone layout
+      // can move it with the rest of the type scale (phone.css). Not a
+      // text-* theme key: tailwind-merge would not know a new `text-…`
+      // name for a font size, and a caller's text-sm must still replace it.
       size: {
         default:
           "h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
+        sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[length:var(--button-sm-text,0.8rem)] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
         lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         icon: "size-8",
         "icon-xs":
@@ -59,6 +64,8 @@ function Button({
       // Variant exposed as a data attribute so theme overlays (doubutsu)
       // can restyle a variant without depending on its utility classes.
       data-variant={variant}
+      // Size likewise, for the phone layout's control minimums (phone.css).
+      data-size={size}
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
     />

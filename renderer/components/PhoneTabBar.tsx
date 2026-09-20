@@ -101,7 +101,7 @@ export function PhoneTabBar() {
             onClick={() => void navigate(to)}
             aria-current={isCurrent ? "page" : undefined}
             className={cn(
-              "flex min-w-0 flex-1 flex-col items-center gap-1 pt-2 pb-1.5 text-[11px] font-medium transition-colors",
+              "flex min-w-0 flex-1 flex-col items-center gap-1 pt-2 pb-1.5 text-2xs font-medium transition-colors",
               isCurrent
                 ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground",

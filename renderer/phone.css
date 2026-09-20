@@ -1,0 +1,184 @@
+/*
+ * The phone layout's sizing, in one place. The components are written
+ * at desktop density (12px text, 24-32px controls, a cursor's
+ * precision), and a phone needs roughly 16px body text and 44px touch
+ * targets. Rather than a `phone:` size on every call site, this file
+ * resizes the vocabulary the call sites are already written in, the
+ * way doubutsu.css recolors it. Active under <html data-layout="phone">
+ * (stamped pre-paint by web/public/boot-theme.js, kept in step by
+ * AppShell), so the desktop window and a wide browser tab never see it.
+ *
+ * Three layers, broadest first:
+ *
+ * 1. Scale tokens. Tailwind's text-* and spacing utilities read
+ *    --text-* and --spacing, so remapping those resizes every existing
+ *    and future utility at once. This only reaches sizes that come
+ *    from the scale: write `text-2xs`, never `text-[11px]`, and `h-7`,
+ *    never `h-[28px]` (index.css names the steps under text-xs).
+ * 2. Control minimums, hooked on the primitives' data-slot and the
+ *    button's data-size (the kind of hook doubutsu.css uses). Real
+ *    layout size: these are the controls a thumb aims for.
+ * 3. A hit-area safety net for every other interactive element, by
+ *    tag and role, so a bare <button> wrapping an icon still takes a
+ *    44px tap without its drawn size changing.
+ *
+ * The `phone:` variant (index.css) remains for what a scale cannot
+ * express: a different layout. DESIGN.md ("Sizing") has the rules for
+ * component code. test/theme-contract.mjs verifies every data-* hook
+ * selected here is still set by a component.
+ */
+
+/* ---- 1. Scale tokens ---------------------------------------------- */
+
+/* :root as well, to match the specificity of doubutsu's token blocks
+   (:root.doubutsu): imported after them, this then wins a tie, should
+   that theme ever set one of these. */
+:root[data-layout="phone"] {
+  /* Type: the steps up to text-sm move up about two pixels, which puts
+     the app's two working sizes (text-xs, text-sm) at 14 and 16px. The
+     steps above stay put: a heading that grew in proportion would wrap
+     on a 390px screen. */
+  --text-4xs: 0.6875rem;
+  --text-3xs: 0.75rem;
+  --text-2xs: 0.8125rem;
+  --text-xs: 0.875rem;
+  --text-xs--line-height: calc(1.25 / 0.875);
+  --button-sm-text: 0.9375rem;
+  --text-sm: 1rem;
+  --text-sm--line-height: calc(1.5 / 1);
+
+  /* Space: paddings, gaps, heights and icon sizes all multiply this,
+     so one step up keeps the components' proportions while the type
+     above grows by about the same factor. */
+  --spacing: 0.2875rem;
+
+  /* The sizes layers 2 and 3 build on. 2.75rem is the 44px minimum of
+     Apple's guidelines and WCAG 2.5.5. The two smaller steps are for
+     the button's sm and xs, which sit inline with text and would crowd
+     a row out at full height. The safety net still gives them the full
+     target to tap. */
+  --touch-target: 2.75rem;
+  --touch-target-sm: 2.5rem;
+  --touch-target-xs: 2.25rem;
+}
+
+/* ---- 2. Control minimums ------------------------------------------ */
+
+/* min-* rather than a height: it outranks the primitive's own h-*
+   without a specificity fight and still lets a wrapping label grow.
+   Hooked on data-size alone, which only ui/button.tsx sets: a Button
+   rendered as a menu trigger has its data-slot overwritten by the
+   trigger's, and must not fall out of these rules for it. The size
+   ladder is written once, as --control, and an icon button is that
+   square. */
+[data-layout="phone"] [data-size] {
+  --control: var(--touch-target);
+  min-height: var(--control);
+}
+[data-layout="phone"] [data-size$="sm"] {
+  --control: var(--touch-target-sm);
+}
+[data-layout="phone"] [data-size$="xs"] {
+  --control: var(--touch-target-xs);
+}
+[data-layout="phone"] [data-size^="icon"] {
+  min-width: var(--control);
+}
+
+[data-layout="phone"] :is([data-slot="input"], [data-slot="combobox-trigger"]) {
+  min-height: var(--touch-target);
+}
+[data-layout="phone"] button[data-slot="chip"],
+[data-layout="phone"] [data-slot="segmented-control"] > button {
+  min-height: var(--touch-target-xs);
+}
+/* A track's options touch, so a narrow one is widened for real. */
+[data-layout="phone"] [data-slot="segmented-control"] > button {
+  min-width: var(--touch-target);
+  justify-content: center;
+}
+
+/* What stacks edge to edge, or sits in a scrolling strip, is sized for
+   real: an expanded hit area there would reach into the neighbouring
+   row (where the later row wins the overlap) or add scroll range to
+   the strip. Menu and picker rows by role, which reaches Base UI's
+   menus and cmdk's lists alike, and tabs the same way. The forest's
+   rows and the diff's file list go by slot. */
+[data-layout="phone"]
+  :is(
+    [role="menuitem"],
+    [role="menuitemcheckbox"],
+    [role="menuitemradio"],
+    [role="option"],
+    [role="tab"],
+    [data-slot="diff-index-row"],
+    [data-slot="sidebar-row"]
+  ) {
+  min-height: var(--touch-target);
+}
+/* The forest's row is a wrapper around its controls, so it is the
+   wrapper that grows, with the controls centered in it at their drawn
+   size: their hit areas then fill the row and stop at its edges. */
+[data-layout="phone"] [data-slot="sidebar-row"] {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* ---- 3. Hit-area safety net --------------------------------------- */
+
+/* Every interactive element gets an invisible ::after that is at least
+   --touch-target in each direction, centered on it. An element already
+   that large gets one exactly its own size (the min() clamps the
+   outset at zero), which changes nothing. Percentages in an inset
+   resolve against the element's own box, so no size is assumed.
+
+   In the base layer so a positioning utility on the element (absolute,
+   fixed, sticky) still wins over the `relative` here. The element
+   isolates and the ::after sits at z-index -1 inside it: under the
+   element's own content, so a control nested in a tappable row keeps
+   its taps. An element that clips (truncate, overflow-hidden) clips
+   its ::after too and simply stays its drawn size.
+
+   The area can reach over a neighbour, and between two controls the
+   later one in the document wins the overlap, so this is for controls
+   with some room around them. Where they pack tight, layer 2 sizes
+   them instead. Left out: data-no-hit-area (a link in running text,
+   whose area would cover the lines around it) and sonner's toast
+   buttons, which hang off the toast's corner over the page. */
+@layer base {
+  [data-layout="phone"]
+    :is(
+      button,
+      summary,
+      a[href],
+      [role="button"],
+      [role="tab"],
+      [role="switch"],
+      [role="checkbox"],
+      [role="radio"]
+    ):not([data-no-hit-area], [data-sonner-toaster] *) {
+    position: relative;
+    isolation: isolate;
+
+    &::after {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      inset-block: min(0px, (100% - var(--touch-target)) / 2);
+      inset-inline: min(0px, (100% - var(--touch-target)) / 2);
+    }
+  }
+}
+
+/* ---- Browser behaviour -------------------------------------------- */
+
+/* iOS Safari zooms the page into a focused field set under 16px, which
+   on an app shell reads as a broken layout, and the rubber-band bounce
+   at the top of a fixed shell reads the same way. */
+[data-layout="phone"] :is(input, textarea, select) {
+  font-size: 16px;
+}
+[data-layout="phone"] body {
+  overscroll-behavior-y: none;
+}

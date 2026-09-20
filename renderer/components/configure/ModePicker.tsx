@@ -34,7 +34,7 @@ export function ModePicker({ mode, onChange }: ModePickerProps) {
   return (
     <SegmentedControl
       aria-label="Carry-over mode"
-      optionClassName="px-2 py-0.5 text-[11px]"
+      optionClassName="px-2 py-0.5 text-2xs"
       value={mode}
       onChange={onChange}
       options={OPTIONS}

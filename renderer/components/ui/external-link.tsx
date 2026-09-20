@@ -17,6 +17,9 @@ export function ExternalLink({
   return (
     <button
       type="button"
+      // Sits in running text: the phone's 44px hit area (phone.css)
+      // would cover the lines above and below it.
+      data-no-hit-area
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();

@@ -13,6 +13,7 @@ import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { commitRewriteAt } from "@/lib/commitRewrite";
 import type { CommitSummary, Worktree } from "@shared/schemas";
 import { CommitRow } from "../commits/CommitRow";
+import { isPhoneLayout } from "@/hooks/ui/useViewport";
 
 interface BranchHistoryDrawerProps {
   worktree: Worktree;
@@ -24,6 +25,8 @@ interface BranchHistoryDrawerProps {
 // virtualizer's size hint. It remeasures real rows on mount, so this
 // only needs to be in the right ballpark.
 const ROW_ESTIMATE = 60;
+// The same row on the phone layout's larger scale (phone.css).
+const PHONE_ROW_ESTIMATE = 70;
 
 // How many rows from the bottom of the rendered window trigger the next
 // page fetch. Five gives a comfortable head-start on scroll.
@@ -46,7 +49,7 @@ export function BranchHistoryDrawer({
         className="flex w-full flex-col gap-0 p-0 sm:max-w-[360px]"
       >
         <SheetHeader className="border-b border-border">
-          <SheetTitle className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+          <SheetTitle className="text-2xs font-semibold tracking-wide text-muted-foreground uppercase">
             Branch history
           </SheetTitle>
           <SheetDescription className="truncate font-mono text-sm text-foreground">
@@ -134,7 +137,7 @@ function BranchHistoryList({ worktree, onNavigate }: BranchHistoryListProps) {
         </div>
       )}
       {!hasNextPage && !isLoading && commits.length > 0 && (
-        <div className="py-3 text-center text-[11px] text-muted-foreground/60">
+        <div className="py-3 text-center text-2xs text-muted-foreground/60">
           End of history
         </div>
       )}
@@ -166,7 +169,7 @@ function VirtualCommitList({
   const virtualizer = useVirtualizer({
     count: commits.length,
     getScrollElement: () => containerRef.current,
-    estimateSize: () => ROW_ESTIMATE,
+    estimateSize: () => (isPhoneLayout() ? PHONE_ROW_ESTIMATE : ROW_ESTIMATE),
     overscan: 8,
     getItemKey: (index) => commits[index]?.hash ?? index,
   });

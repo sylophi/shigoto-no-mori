@@ -61,6 +61,7 @@ function AddProjectDialog() {
             tabs={tabs}
             selectedId={picked.deviceId}
             onSelect={pick}
+            // phone:px-3 as well: the bar's own phone:px-4 outlives a bare px-3.
             className="px-3 phone:px-3"
           />
         </div>

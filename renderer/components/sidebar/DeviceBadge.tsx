@@ -46,7 +46,7 @@ export function DeviceBadge({ badge }: { badge: SidebarDeviceBadge }) {
     >
       <span
         className={cn(
-          "inline-flex shrink-0 items-center rounded px-1 py-px font-mono text-[9px] font-semibold tracking-wide",
+          "inline-flex shrink-0 items-center rounded px-1 py-px font-mono text-4xs font-semibold tracking-wide",
           TONE_PILL[badge.tone],
         )}
         aria-label={`On ${badge.label}`}

@@ -131,7 +131,7 @@ export function PortForm({
         </div>
       </div>
       {error !== null && (
-        <p className={cn("text-[11px]", TONE_TEXT.rose)}>{error}</p>
+        <p className={cn("text-2xs", TONE_TEXT.rose)}>{error}</p>
       )}
     </form>
   );

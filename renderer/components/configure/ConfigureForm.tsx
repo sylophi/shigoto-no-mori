@@ -28,6 +28,7 @@ import {
   LAUNCH_TAB,
   selectSettingsTab,
 } from "@/components/settings/settingsNav";
+import { PAGE_BODY } from "@/components/shared/PageShell";
 
 interface FormState {
   defaultBranch: string;
@@ -173,7 +174,7 @@ export function ConfigureForm({
 
   return (
     <>
-      <div className="min-h-0 flex-1 overflow-y-auto p-6">
+      <div className={PAGE_BODY}>
         <div className="flex max-w-3xl flex-col gap-10">
           <section className="space-y-3">
             <SectionHeading className="mb-1">Location</SectionHeading>
