@@ -107,6 +107,7 @@ export function BranchRow({
             onClick={() => setDraft(name)}
             aria-label={`Rename ${name}`}
             title="Rename"
+            data-icon-button
             className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <Pencil className="size-3.5" />
@@ -137,6 +138,7 @@ export function BranchRow({
             setDraft(null);
           }}
           aria-label="Cancel rename"
+          data-icon-button
           className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <X className="size-3.5" />
@@ -149,6 +151,7 @@ export function BranchRow({
           onClick={commitRename}
           aria-label="Save rename"
           disabled={rename.isPending}
+          data-icon-button
           className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <Check className="size-3.5" />

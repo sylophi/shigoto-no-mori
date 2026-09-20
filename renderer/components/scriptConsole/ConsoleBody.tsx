@@ -54,6 +54,7 @@ export function ConsoleBody({ runKey, state, onClear }: ConsoleBodyProps) {
           // Above the terminal, whose hover-revealed scrollbar shares
           // this corner once the output overflows (the terminal wrapper
           // isolates xterm's own z-indexes, so any positive value wins).
+          data-icon-button
           className="absolute top-2 right-3 z-10 rounded-md p-1 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
         >
           <Trash2 className="size-3.5" />

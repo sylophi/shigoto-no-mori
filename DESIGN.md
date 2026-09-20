@@ -49,9 +49,9 @@ Rules that keep both themes cheap to maintain:
 Components are written once, at desktop density. The web client's
 phone layout (`<html data-layout="phone">`) does not get a size per
 call site: `renderer/phone.css` remaps the type and spacing scales
-there, gives the primitives their touch minimums, and extends every
-other interactive element's hit area to 44px. Its header explains the
-three layers.
+there, gives the primitives their touch minimums, extends every
+other interactive element's hit area to 44px, and gives hover-only
+buttons a resting fill. Its header explains the layers.
 
 Rules that keep that working:
 
@@ -75,6 +75,11 @@ Rules that keep that working:
   `shared/PageShell.tsx` and `PAGE_HEADER_PADDING` carry them, so a
   page reuses those). A `phone:` utility that only makes a control or
   its text bigger belongs in phone.css as a scale or control change.
+- **A button shows a fill at rest on a phone.** Nothing hovers there,
+  so a hover-only fill never says "tap me". phone.css gives the ghost
+  variants a resting fill, and a bare icon `<button>` written outside
+  the primitive (the `rounded-md p-1 hover:bg-accent` kind) joins them
+  by carrying `data-icon-button`.
 - The `data-*` hooks phone.css selects are verified by
   `pnpm test theme-contract`, like doubutsu's.
 - When changing UI, check it at phone width as well. The UI lab's web

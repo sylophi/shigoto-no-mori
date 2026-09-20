@@ -8,7 +8,7 @@
  * (stamped pre-paint by web/public/boot-theme.js, kept in step by
  * AppShell), so the desktop window and a wide browser tab never see it.
  *
- * Three layers, broadest first:
+ * Three sizing layers, broadest first:
  *
  * 1. Scale tokens. Tailwind's text-* and spacing utilities read
  *    --text-* and --spacing, so remapping those resizes every existing
@@ -21,6 +21,9 @@
  * 3. A hit-area safety net for every other interactive element, by
  *    tag and role, so a bare <button> wrapping an icon still takes a
  *    44px tap without its drawn size changing.
+ *
+ * And a fourth that is not about size: a resting fill for the buttons
+ * that only show one on hover, which a phone never does.
  *
  * The `phone:` variant (index.css) remains for what a scale cannot
  * express: a different layout. DESIGN.md ("Sizing") has the rules for
@@ -98,6 +101,24 @@
   justify-content: center;
 }
 
+/* A project header's `+` and `…` sit side by side at the row's end, so
+   they are sized for real too, icon included: drawn at the sidebar's
+   12px rhythm they are the smallest things on the page. */
+[data-layout="phone"] [data-slot="project-actions"] {
+  gap: calc(var(--spacing) * 2);
+}
+[data-layout="phone"] [data-slot="project-actions"] > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--touch-target-sm);
+  min-height: var(--touch-target-sm);
+}
+[data-layout="phone"] [data-slot="project-actions"] > button > svg {
+  width: calc(var(--spacing) * 5);
+  height: calc(var(--spacing) * 5);
+}
+
 /* What stacks edge to edge, or sits in a scrolling strip, is sized for
    real: an expanded hit area there would reach into the neighbouring
    row (where the later row wins the overlap) or add scroll range to
@@ -169,6 +190,60 @@
       inset-inline: min(0px, (100% - var(--touch-target)) / 2);
     }
   }
+}
+
+/* ---- 4. Resting surfaces ------------------------------------------ */
+
+/* A ghost button is bare text or a bare icon until the pointer finds
+   it, and a finger never hovers, so on a phone nothing says it can be
+   tapped. The same goes for the bare icon buttons written outside the
+   primitive (a row's pencil, copy, `+` and `…`), which mark themselves
+   with data-icon-button. Both rest on the card fill here, with the
+   hairline v1's outline buttons wear (doubutsu zeroes --border, and
+   its cream card already stands off the patterned canvas). In the base
+   layer so the variant's own state fills (aria-expanded, aria-pressed)
+   and a caller's bg-* still win. */
+[data-layout="phone"] {
+  --resting-fill: var(--card);
+}
+/* doubutsu's page bands and floating surfaces are the card colour
+   themselves, so a button on one steps down to the muted fill its
+   chips wear. v1's surfaces are all one white and the hairline does
+   the work there. */
+.doubutsu[data-layout="phone"]
+  :is(
+    header,
+    footer,
+    [data-slot="modal-shell"],
+    [data-slot="sheet-content"],
+    [data-slot="phone-tab-bar"]
+  ) {
+  --resting-fill: var(--muted);
+}
+@layer base {
+  [data-layout="phone"]
+    :is(
+      [data-variant="ghost"],
+      [data-variant="ghost-destructive"],
+      [data-icon-button]
+    ) {
+    background-color: var(--resting-fill);
+    box-shadow: inset 0 0 0 1px var(--border);
+  }
+}
+
+/* doubutsu paints the inbox's New worktree button and the device
+   filter's unpicked pills the canvas colour, which reads on the
+   desktop's mint rail. On a phone they sit on the patterned canvas
+   itself and vanish into it, so they take the card fill too. :root for
+   the specificity to outrank those rules, which are unlayered as well. */
+:root[data-layout="phone"]
+  [data-slot="sidebar-inbox-create"]
+  [data-variant="outline"],
+:root[data-layout="phone"]
+  [data-slot="sidebar-device-filter"]
+  [data-slot="button"]:not([aria-checked="true"]) {
+  background-color: var(--card);
 }
 
 /* ---- Browser behaviour -------------------------------------------- */

@@ -146,7 +146,9 @@ export function ProjectGroupActions({
   if (primary === undefined) return null;
 
   return (
-    <>
+    // The slot is the phone layout's hook: it sizes the pair as real
+    // touch targets and gives them a resting fill (phone.css).
+    <div data-slot="project-actions" className="flex items-center gap-0.5">
       {creator !== undefined && (
         <MaybeHostScope deviceId={creator.deviceId} api={creator.api}>
           <QuickCreateButton
@@ -163,6 +165,7 @@ export function ProjectGroupActions({
               ref={triggerRef}
               type="button"
               aria-label={`More actions for ${name}`}
+              data-icon-button
               className={cn(
                 PROJECT_MENU_TRIGGER_CLASS,
                 isHovered ? "opacity-100" : "opacity-0",
@@ -205,7 +208,7 @@ export function ProjectGroupActions({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-    </>
+    </div>
   );
 }
 

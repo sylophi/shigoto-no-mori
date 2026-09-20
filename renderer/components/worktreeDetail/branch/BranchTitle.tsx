@@ -68,6 +68,7 @@ export function BranchTitle({ worktree }: { worktree: Worktree }) {
           onClick={commit}
           disabled={rename.isPending}
           aria-label="Confirm rename"
+          data-icon-button
           className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
         >
           <Check className="size-4" />
@@ -77,6 +78,7 @@ export function BranchTitle({ worktree }: { worktree: Worktree }) {
           onClick={cancel}
           disabled={rename.isPending}
           aria-label="Cancel rename"
+          data-icon-button
           className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
         >
           <X className="size-4" />
@@ -109,6 +111,7 @@ export function BranchTitle({ worktree }: { worktree: Worktree }) {
           onClick={begin}
           aria-label="Rename branch"
           title="Rename branch"
+          data-icon-button
           className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 phone:opacity-100"
         >
           <Pencil className="size-3.5" />

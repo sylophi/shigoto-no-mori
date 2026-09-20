@@ -40,6 +40,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
             type="button"
             onClick={props.onBack}
             aria-label="Back"
+            data-icon-button
             className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <ArrowLeft className="size-4" />

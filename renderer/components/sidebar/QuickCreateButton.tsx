@@ -31,6 +31,7 @@ export function QuickCreateButton({
       disabled={creating}
       aria-label={label}
       title={label}
+      data-icon-button
       className={cn(
         PROJECT_MENU_TRIGGER_CLASS,
         "disabled:cursor-not-allowed disabled:opacity-100 aria-busy:opacity-100",

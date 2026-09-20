@@ -132,6 +132,7 @@ export function PathPickerModal<E extends PickerEntry>({
             onClick={goUp}
             aria-label="Go up"
             title="Go up"
+            data-icon-button
             className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
           >
             <ArrowLeft className="size-4" />
@@ -147,6 +148,7 @@ export function PathPickerModal<E extends PickerEntry>({
           type="button"
           onClick={onClose}
           aria-label="Close picker"
+          data-icon-button
           className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >
           <X className="size-4" />
