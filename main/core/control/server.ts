@@ -1,26 +1,19 @@
 // The control wire: the loopback listener the CLI reaches the running
-// app through (`sm worktrees send|bring|mirror`, cli/control.go). One
-// listener for the app's life, like the mirror gateway beside it
-// (main/core/mirror/gateway.ts), and a ServerTransport like the other
-// wires, so the control contract registers on it through the shared
-// registrar and gets the same input parsing every wire gets.
+// app through (`sm worktrees send|bring|mirror`, cli/control.go). A
+// ServerTransport like the other wires, so the control contract
+// registers on it through the shared registrar.
 //
-// The wire is newline-delimited JSON, the websocket wire's frames
-// (shared/ipc/socket/frames.ts) without the websocket: the client says
-// hello with the token, then each line is one `req`, answered by one
-// `res`, with `push` lines in between carrying the broadcasts a handler
-// streams to its caller (sync:pullProgress). A closed socket aborts the
-// context's signal, as a closed window does on the Electron wire. The
-// transfer orchestrators do not read it, so a transfer that started
-// runs to its end in the app whether or not the terminal is still
-// there, exactly like one whose dialog was closed.
+// Newline-delimited JSON: the client says hello with the token, then
+// each line is one `req`, answered by one `res`, with `push` lines in
+// between for the broadcasts a handler streams to its caller
+// (sync:pullProgress). A closed socket aborts the context's signal, but
+// the transfer orchestrators do not read it, so a transfer that started
+// runs to its end like one whose dialog was closed.
 //
-// The CLI finds the listener through control.json in the data dir:
-// the data dir is what names an app instance (flavor and dev profile
-// each have their own), so a CLI that resolved its data dir has named
-// the one app it may talk to. Loopback keeps the listener off the
-// network but not away from other accounts on this machine, so the
-// file carries a token minted at bind and is written owner-only.
+// The CLI finds the listener through control.json in the data dir,
+// which is what names an app instance (flavor and dev profile). Other
+// accounts on this machine can reach loopback, so the file carries a
+// token minted at bind and is written owner-only.
 //
 // Electron-free on purpose: test/control.mjs drives this exact server.
 import { createServer, type Server, type Socket } from "node:net";

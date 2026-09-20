@@ -5,29 +5,20 @@ import { SyncPullWorktreeResultSchema } from "@shared/ipc/modules/sync";
 import { WorktreeIdSchema, WorktreeSchema } from "@shared/schemas";
 
 // What the CLI asks of the running app: the cross-device verbs (`sm
-// worktrees send|bring|mirror|unmirror|mirrors`, `sm devices`). The
-// CLI is the engine for everything git, but reaching another device
-// takes the account, the hub socket and the one cached direct session
-// per peer, which only the running app holds (a second dial from
-// another process would supersede the session every remote query
-// rides). So these verbs ride the control wire (main/core/control/
-// server.ts) into the app, which runs the same orchestrators its own
-// dialogs do (sync:sendWorktree, sync:pullWorktree, mirror:start,
-// mirror:startTo), and those shell the CLI back for each git step.
+// worktrees send|bring|mirror|unmirror|mirrors`, `sm devices`). Reaching
+// another device takes the account and the one cached direct session
+// per peer, which only the running app holds, so these verbs ride the
+// control wire (main/core/control/server.ts) into the app. It runs the
+// orchestrators its own dialogs do, which shell the CLI back for each
+// git step.
 //
-// Served on the control wire ONLY, never on the Electron or remote
-// wires: the contract is registered straight onto that binding
-// (main/ipc/handlers.ts), which is why no call here carries a remote
-// tag. Its caller is a local process of this user, a local window's
-// equal, so it commands this machine without a grant. `mutating` is
-// tagged all the same: it is what pings the app's own windows and the
-// remote viewers once an op moved this host's state.
+// Served on the control wire ONLY (main/ipc/handlers.ts), so no call
+// carries a remote tag. Its caller is a local process of this user and
+// commands this machine without a grant. `mutating` is what pings the
+// app's windows and the remote viewers once an op moved state.
 //
 // Each op takes what a person would say (a device by name, a worktree
-// by name or branch) and resolves it the way the dialogs do: the
-// destination must hold the same repo by identity, be connected, and
-// accept commands. The leave-out rule and the setup switch open on the
-// project's preset, exactly as the review step does.
+// by name or branch) and resolves it the way the dialogs do.
 
 // Why a device can't take part, in the dialogs' order
 // (renderer/components/shared/deviceTargets.ts).
