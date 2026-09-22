@@ -1,10 +1,15 @@
 // Background `git fetch` for every registered project so refs/remotes/*
-// doesn't drift between explicit pulls. Triggered on app ready, on window
-// focus, and on a slow periodic timer. Broadcasts GitRefsRefreshed when a
-// fetch actually ran so the renderer can invalidate ref-dependent queries.
-// The periodic sweep also refreshes the project-wide PR cache (sidebar
-// dots); focus does not, since the open worktree page has its own
-// fresher per-branch PR query.
+// doesn't drift between explicit pulls, plus the project-wide PR cache
+// refresh (sidebar dots). Runs on app ready, on window focus, on a slow
+// periodic timer while a window here is focused, and on a peer's
+// git:sweep request (a peer asks when its own window focuses). The
+// timer sits out while nothing here is focused: the results go to
+// this window (fresh again on the focus sweep) and to peers (who ask
+// for themselves), so an unattended sweep is a git and a gh spawn per
+// project every minute that nobody reads. Broadcasts GitRefsRefreshed
+// when a fetch actually changed something so the renderer can
+// invalidate ref-dependent queries.
+import { BrowserWindow } from "electron";
 import { errorMessageOf } from "@shared/errors";
 import { gitContract } from "@shared/ipc/modules/git";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
@@ -19,14 +24,17 @@ import { loadProjects } from "@host/lib/projects";
 import { broadcastAll } from "../ipc/register";
 
 // Skip if a fetch finished within this window. Short enough that rapid
-// focus events don't feel stale, long enough that the focus + sweep +
-// pre-action paths collapse onto one network round-trip.
+// focus events don't feel stale, long enough that the focus, sweep,
+// peer-request and pre-action paths collapse onto one network
+// round-trip.
 const FRESHNESS_MS = 3_000;
 
-// Periodic sweep keeps refs fresh even when the user never refocuses.
+// Periodic sweep keeps refs fresh while the user sits on the window
+// without refocusing it.
 const SWEEP_INTERVAL_MS = 60_000;
 
 const lastFetchedAt = new Map<string, number>();
+const lastPullRequestSweepAt = new Map<string, number>();
 // Projects whose last fetch attempt failed, so a run of failures warns once.
 const failingProjects = new Set<string>();
 let sweepHandle: NodeJS.Timeout | null = null;
@@ -68,6 +76,11 @@ async function sweepProjectPullRequests(
   projectId: string,
   projectPath: string,
 ): Promise<void> {
+  // Same freshness window as the git fetch, so a focus landing on a
+  // timer tick (or two peers focusing together) runs gh once.
+  const ts = lastPullRequestSweepAt.get(projectId) ?? 0;
+  if (Date.now() - ts < FRESHNESS_MS) return;
+  lastPullRequestSweepAt.set(projectId, Date.now());
   try {
     const before = readCachedProjectPullRequests(projectPath);
     const after = await refreshProjectPullRequests(projectPath);
@@ -95,24 +108,24 @@ function projectsToSweep(): Project[] {
   }
 }
 
-// Git-only refresh used by the window-focus handler. The PR sweep is
-// timer-driven only. The open worktree page has its own per-branch
-// query that handles focus.
-export function refreshAllProjectGitRefs(): void {
-  for (const project of projectsToSweep()) {
-    void maybeFetchProject(project.id, project.path);
-  }
-}
-
-function sweepAllProjects(): void {
+// One full pass: refs and PRs for every project. The window-focus
+// handler and a peer's git:sweep call this directly, so returning to
+// the window (here or on a peer) catches the sidebar dots up at once
+// rather than on the next timer tick.
+export function sweepProjects(): void {
   for (const project of projectsToSweep()) {
     void maybeFetchProject(project.id, project.path);
     void sweepProjectPullRequests(project.id, project.path);
   }
 }
 
+function sweepIfAttended(): void {
+  if (BrowserWindow.getFocusedWindow() === null) return;
+  sweepProjects();
+}
+
 export function startBackgroundFetch(): void {
   if (sweepHandle) return;
-  sweepAllProjects();
-  sweepHandle = setInterval(sweepAllProjects, SWEEP_INTERVAL_MS);
+  sweepProjects();
+  sweepHandle = setInterval(sweepIfAttended, SWEEP_INTERVAL_MS);
 }

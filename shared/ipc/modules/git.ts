@@ -12,6 +12,20 @@ export const gitContract = defineContract("host", {
     z.void(),
     { remote: true, mutating: true },
   ),
+  // A peer asking this host to run its background sweep now (refs and
+  // PRs for every project), because the peer's window just focused or
+  // its session just landed. Read-class on purpose: the host runs the
+  // same sweep unprompted whenever its own window is focused, so a
+  // request moves it earlier and nothing else, the host's freshness
+  // window bounds the rate, and gating it on a command grant would
+  // leave a read-only viewer looking at whatever the host last saw.
+  // Resolves as soon as the sweep is started, not when it finishes.
+  // The results arrive as refsRefreshed and
+  // projectPullRequestsRefreshed pushes, like any other sweep's.
+  sweep: invoke("git:sweep", z.void(), z.void(), {
+    remote: true,
+    mutating: false,
+  }),
   refsRefreshed: broadcast("git:refsRefreshed", ProjectScopedPayloadSchema, {
     remote: true,
   }),

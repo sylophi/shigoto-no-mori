@@ -32,6 +32,7 @@ import { createAppQueryClient } from "./lib/queryClientOptions";
 import { hasLocalHost } from "./lib/localHost";
 import { startRemoteDeviceSync } from "./lib/remote/remoteDeviceSync";
 import { startRemoteHostWatch } from "./lib/remote/remoteHostWatch";
+import { startRemoteSweepRequests } from "./lib/remote/remoteSweep";
 import { startSharedSettingsSync } from "./lib/remote/sharedSettingsSync";
 import {
   invalidateHostDevice,
@@ -89,6 +90,10 @@ export function bootApp({
   // client this is the ONLY thing keeping the forest live between
   // focus refetches.
   startRemoteHostWatch(queryClient);
+
+  // The other direction: a host sweeps for whoever is looking, and
+  // this window asks the hosts it is looking at.
+  startRemoteSweepRequests();
 
   const rootElement = document.getElementById("root");
   if (!rootElement) {

@@ -27,10 +27,7 @@ import { attachContextMenu } from "./electron/contextMenu";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { enableDevCdpPort } from "./electron/devCdp";
 import { devProfileSuffix, initDevProfile } from "./electron/devProfile";
-import {
-  refreshAllProjectGitRefs,
-  startBackgroundFetch,
-} from "./electron/fetch";
+import { startBackgroundFetch, sweepProjects } from "./electron/fetch";
 import {
   applyThemeSource,
   readClientConfigSync,
@@ -282,7 +279,7 @@ const createWindow = () => {
   const sendFocus = () => {
     const wc = mainWindow?.webContents;
     if (wc) broadcast(windowContract, "focused", undefined, wc);
-    refreshAllProjectGitRefs();
+    sweepProjects();
   };
   const sendBlur = () => {
     const wc = mainWindow?.webContents;
