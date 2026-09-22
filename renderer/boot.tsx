@@ -63,6 +63,22 @@ export function bootApp({
 
   if (hasLocalHost) startLocalHost(queryClient);
 
+  // Mirror focus onto <html> so CSS can stop animating while nobody is
+  // looking. A running animation asks the compositor for a frame every
+  // vsync, and the doubutsu wallpaper's drift is infinite, so an idle
+  // but visible window was costing ~88% of the app's energy impact
+  // just by being open. `.unfocused` pauses the drift and the
+  // long-lived spinners (see doubutsu.css and index.css). Rides React
+  // Query's focus signal (window focus/blur, visibilitychange, plus the
+  // desktop's IPC channel wired in startLocalHost) so the class flips
+  // on exactly the transitions the refetch-on-focus already trusts.
+  // The first read comes from the document rather than the manager,
+  // which assumes focus until its first event: a window opened behind
+  // another (a login-item launch) would otherwise drift until the
+  // first blur.
+  syncFocusClass(document.hasFocus() && document.visibilityState === "visible");
+  focusManager.subscribe(syncFocusClass);
+
   // The shared settings exchange: this device's copy follows its peers'
   // and theirs follow it.
   startSharedSettingsSync(queryClient);
@@ -96,6 +112,10 @@ export function bootApp({
   );
 
   return router;
+}
+
+function syncFocusClass(focused: boolean): void {
+  document.documentElement.classList.toggle("unfocused", !focused);
 }
 
 // The boot-scope subscriptions about THIS machine's projects. Single

@@ -662,8 +662,8 @@
    with data-doubutsu-page and letting :has() match, so a page carries a
    name rather than a stylesheet, and a page with no marker keeps the
    leaves. Keeping the mechanics in one rule is what makes the
-   reduced-motion opt-out at the bottom of this file work: it only has
-   to out-rank one `animation`, not one per page.
+   reduced-motion and unfocused opt-outs at the bottom of this file
+   work: they only have to out-rank one `animation`, not one per page.
 
    Two constraints on the numbers. Travel must be a whole multiple of
    the tile on each axis or the loop visibly jumps. As written, every
@@ -877,4 +877,18 @@
   .doubutsu [data-slot="launcher"]::before {
     will-change: auto;
   }
+}
+
+/* Nobody is looking: the window lost focus or the document is hidden
+   (boot.tsx keeps `.unfocused` on <html> in step with React Query's
+   focus signal). An infinite animation holds the compositor at 60 Hz
+   for as long as the window is up, and a worktree manager sits
+   unfocused most of its life, so this is where the wallpaper's whole
+   idle bill went. Paused rather than removed so the pattern picks up
+   where it left off on refocus instead of snapping back to frame one.
+   The hover stripes need a pointer, so they have nothing to pause. */
+.doubutsu.unfocused [data-doubutsu-zone="main"]::before,
+.doubutsu.unfocused [data-slot="launcher"]::before {
+  animation-play-state: paused;
+  will-change: auto;
 }
