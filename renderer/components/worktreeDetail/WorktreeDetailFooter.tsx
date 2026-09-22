@@ -1,7 +1,16 @@
-import { Archive, ArchiveRestore, Trash2 } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  RefreshCw,
+  RefreshCwOff,
+  Trash2,
+} from "lucide-react";
 import { type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { useSetShelved } from "@/hooks/worktrees/useWorktreeMutations";
+import {
+  useSetAutoPull,
+  useSetShelved,
+} from "@/hooks/worktrees/useWorktreeMutations";
 import { assertNever } from "@/lib/utils";
 import {
   isManagedWorktree,
@@ -209,9 +218,36 @@ function NormalRow({
   onDelete: () => void;
 }) {
   const setShelved = useSetShelved();
+  const setAutoPull = useSetAutoPull();
+  // Offered wherever a fast-forward could ever happen. Once on, it
+  // stays visible even if the upstream vanishes, so it can be turned
+  // off again.
+  const canAutoPull =
+    worktree.autoPull || (worktree.hasUpstream && !worktree.detached);
+  const autoPullUi = AUTO_PULL_UI[worktree.autoPull ? "on" : "off"];
 
   return (
     <div className="ml-auto flex items-center gap-3">
+      {canAutoPull && (
+        <Button
+          variant="ghost"
+          size="xs"
+          className={autoPullUi.className}
+          aria-pressed={worktree.autoPull}
+          disabled={setAutoPull.isPending || busy}
+          onClick={() =>
+            setAutoPull.mutate({
+              projectId: worktree.projectId,
+              worktreeId: worktree.id,
+              autoPull: !worktree.autoPull,
+            })
+          }
+          title={autoPullUi.title}
+        >
+          <autoPullUi.Icon />
+          {autoPullUi.label}
+        </Button>
+      )}
       {isManagedWorktree(worktree) && (
         <Button
           variant="ghost"
@@ -252,6 +288,26 @@ function NormalRow({
     </div>
   );
 }
+
+// The auto-pull toggle's two faces. On is sky like the header's pull
+// pill, since that is the action it automates.
+const AUTO_PULL_UI = {
+  on: {
+    Icon: RefreshCw,
+    label: "Auto-pull on",
+    className:
+      "shrink-0 text-sky-600 hover:text-sky-700 dark:text-sky-400 dark:hover:text-sky-300",
+    title:
+      "Auto-pull is on: this worktree fast-forwards from its upstream after each fetch while it has no local commits, changes or running scripts. Click to turn off.",
+  },
+  off: {
+    Icon: RefreshCwOff,
+    label: "Auto-pull",
+    className: "shrink-0 text-muted-foreground hover:text-foreground",
+    title:
+      "Auto-pull: fast-forward from the upstream automatically while this worktree has no local commits, changes or running scripts",
+  },
+};
 
 function deleteButtonLabel(busy: boolean, armed: boolean): string {
   if (busy) return "Deleting…";

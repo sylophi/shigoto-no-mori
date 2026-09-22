@@ -230,6 +230,12 @@ export function getRunningScriptWorktrees(): RunningScriptWorktree[] {
   return Array.from(byWorktree.values());
 }
 
+// The worktrees with a live app-started script, by id: what the
+// auto-pull paths treat as busy.
+export function runningScriptWorktreeIds(): Set<string> {
+  return new Set(getRunningScriptWorktrees().map((entry) => entry.worktreeId));
+}
+
 export function getBusyOperations(): BusyOperations {
   let contributed = 0;
   for (const count of inflightContributors) contributed += count();

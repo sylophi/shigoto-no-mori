@@ -37,7 +37,7 @@ import {
 } from "./electron/clientConfig";
 import { seedClientConfigFromLegacy } from "./electron/clientConfigMigration";
 import {
-  notifyLocalProjectChanged,
+  announceProjectChanged,
   registerIpcHandlers,
   startMirrorEngine,
   stopMirrorEngine,
@@ -515,12 +515,7 @@ app.on("ready", async () => {
   // project-scoped ping on every wire: this window and every device
   // viewing this host refetch that project's rows.
   startGitWatcher({
-    onChange: (projectId) => {
-      broadcastAll(gitContract, "projectChanged", { projectId });
-      // The mirror's git follower re-looks at every session in that
-      // project (a commit or checkout here must reach the peer).
-      notifyLocalProjectChanged(projectId);
-    },
+    onChange: announceProjectChanged,
     // The app's own git commands move refs the same way an agent's
     // do, and their callers already invalidate their targets, so the
     // watcher skips a running sm CLI child and any app-run mutating

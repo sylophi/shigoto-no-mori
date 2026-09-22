@@ -76,7 +76,11 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
         tone="sky"
         icon={ArrowDown}
         label={`Pull ${pluralize(state.behind, "commit")}`}
-        title="git pull --ff-only"
+        title={
+          worktree.autoPull
+            ? "git pull --ff-only. Auto-pull is on: the app fast-forwards after its next fetch, as long as the worktree has no uncommitted changes or running script."
+            : "git pull --ff-only"
+        }
         pending={pull.isPending}
         onClick={() => pull.mutate(input)}
       />

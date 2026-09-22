@@ -17,6 +17,38 @@ export async function pushForceWithLease(worktreePath: string): Promise<void> {
   await run(worktreePath, ["push", "--force-with-lease"]);
 }
 
+// Fast-forward onto the already-fetched upstream, no network. What the
+// auto-pull sweep runs right after the app's own fetch, where a `pull`
+// would fetch a second time. `--ff-only` refuses anything but a plain
+// fast-forward, so a commit that raced the caller's checks fails the
+// merge rather than producing a merge commit nobody asked for.
+export async function fastForwardToUpstream(
+  worktreePath: string,
+): Promise<void> {
+  await run(worktreePath, ["merge", "--ff-only", "@{u}"]);
+}
+
+// Uncommitted changes, untracked files included. Pinned to
+// `--untracked-files=normal` against a user-level
+// `status.showUntrackedFiles = no`: the guards below decide whether a
+// tree can be overwritten or fast-forwarded, and an untracked file the
+// upstream now tracks is exactly what those would land on.
+// getWorkingTreeChanges (git/worktrees.ts) deliberately does NOT pin
+// it. It runs per worktree on every window focus, and `-uno` is a
+// setting people choose to make exactly that scan cheap. The only cost
+// of the mismatch is a button showing when the guard will refuse, and
+// the guard still refuses.
+export async function hasUncommittedOrUntracked(
+  worktreePath: string,
+): Promise<boolean> {
+  const status = await run(worktreePath, [
+    "status",
+    "--porcelain=v1",
+    "--untracked-files=normal",
+  ]);
+  return status.trim().length > 0;
+}
+
 // "Overwrite": throw away the local divergence and snap to the upstream.
 // Fetch first so `@{u}` reflects the current remote tip, then re-check
 // the tree right before the reset. The renderer only offers this action
@@ -25,13 +57,8 @@ export async function pushForceWithLease(worktreePath: string): Promise<void> {
 // window ever losing focus. A `reset --hard` past uncommitted work
 // leaves nothing to recover from, so the guard has to live here.
 // Untracked files count as dirty too: `reset --hard` silently
-// overwrites any untracked file whose path exists in the upstream tree.
-// `--untracked-files=normal` pins that protection against a user-level
-// `status.showUntrackedFiles = no`. getWorkingTreeChanges deliberately
-// does NOT pin it. It runs per worktree on every window focus, and
-// `-uno` is a setting people choose to make exactly that scan cheap. The
-// only cost of the mismatch is the overwrite button showing when this
-// guard will refuse, and the guard still refuses.
+// overwrites any untracked file whose path exists in the upstream tree
+// (see hasUncommittedOrUntracked).
 //
 // Ignored files never appear in `status`, but `reset --hard` overwrites
 // them all the same when the upstream tree tracks a file at their path
@@ -54,12 +81,7 @@ export async function overwriteFromUpstream(
   worktreePath: string,
 ): Promise<void> {
   await run(worktreePath, ["fetch"]);
-  const status = await run(worktreePath, [
-    "status",
-    "--porcelain=v1",
-    "--untracked-files=normal",
-  ]);
-  if (status.trim().length > 0) {
+  if (await hasUncommittedOrUntracked(worktreePath)) {
     throw new Error(
       "This worktree has uncommitted or untracked changes. Commit, stash, or discard them before overwriting from upstream.",
     );

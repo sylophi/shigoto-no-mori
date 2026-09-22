@@ -8,6 +8,7 @@ import {
   UNKNOWN_BRANCH,
   type Worktree,
 } from "@shared/schemas";
+import { readAutoPullSet } from "../worktrees/autoPull";
 import { readShelvedSet } from "../worktrees/shelved";
 import { readShigomoriConfig } from "../config/project";
 import { pickWorktreeName } from "../worktrees/names";
@@ -110,10 +111,13 @@ interface RemoteSync {
 // whether a whole-tree merge would land cleanly. The action behind
 // the "Pull and push" button tries `rebase` first and falls back to
 // `merge` on a per-commit conflict, so this probe gates that fallback.
-async function getRemoteSync(worktreePath: string): Promise<RemoteSync> {
-  let ahead = 0;
-  let behind = 0;
-  let hasUpstream = false;
+// Commits HEAD has that the upstream lacks, and vice versa. Null when
+// there is no upstream to measure against: the branch was never
+// pushed, its remote branch is gone, or HEAD is detached. Shared with
+// the auto-pull sweep, which decides on the same two numbers.
+export async function getUpstreamCounts(
+  worktreePath: string,
+): Promise<{ ahead: number; behind: number } | null> {
   try {
     const stdout = await run(worktreePath, [
       "rev-list",
@@ -122,12 +126,19 @@ async function getRemoteSync(worktreePath: string): Promise<RemoteSync> {
       "HEAD...@{u}",
     ]);
     const [a, b] = stdout.trim().split(/\s+/);
-    ahead = Number(a) || 0;
-    behind = Number(b) || 0;
-    hasUpstream = true;
+    return { ahead: Number(a) || 0, behind: Number(b) || 0 };
   } catch {
+    return null;
+  }
+}
+
+async function getRemoteSync(worktreePath: string): Promise<RemoteSync> {
+  const counts = await getUpstreamCounts(worktreePath);
+  if (counts === null) {
     return { ahead: 0, behind: 0, hasUpstream: false, divergedClean: false };
   }
+  const { ahead, behind } = counts;
+  const hasUpstream = true;
   if (ahead === 0 || behind === 0) {
     return { ahead, behind, hasUpstream, divergedClean: false };
   }
@@ -452,6 +463,7 @@ interface BuildContext {
   hasRemote: boolean;
   primaryRef: string | null;
   shelvedSet: ReadonlySet<string>;
+  autoPullSet: ReadonlySet<string>;
   primaryChain: PrimaryChainReader;
 }
 
@@ -471,6 +483,7 @@ async function loadBuildContext(
     hasRemote: remotes.length > 0,
     primaryRef,
     shelvedSet: readShelvedSet(),
+    autoPullSet: readAutoPullSet(),
     primaryChain: primaryChainReader(projectPath, primaryRef),
   };
 }
@@ -512,6 +525,7 @@ async function buildWorktree(
       !identity.isPrimary &&
       !identity.isExternal &&
       ctx.shelvedSet.has(identity.id),
+    autoPull: ctx.autoPullSet.has(identity.id),
   };
 }
 
