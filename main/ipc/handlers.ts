@@ -320,6 +320,18 @@ export function notifyLocalProjectChanged(projectId: string): void {
   gitFollower.onLocalProjectChanged(projectId);
 }
 
+// "This project's git state moved on this machine": the project-scoped
+// ping on every wire (this window and every device viewing this host
+// refetch that project's rows), and the mirror's git follower
+// re-looking at every session in the project (a commit or checkout
+// here must reach the peer). Sent by the git-directory watcher for
+// every external ref move, and by the app-run git commands the watcher
+// skips as the app's own when no renderer caller invalidates for them.
+export function announceProjectChanged(projectId: string): void {
+  broadcastAll(gitContract, "projectChanged", { projectId });
+  notifyLocalProjectChanged(projectId);
+}
+
 // A gateway that fails to bind (a loopback oddity) is retried on a
 // slow timer rather than given up on: the daemon starts regardless
 // and its own restart ladder picks the address up once bound.

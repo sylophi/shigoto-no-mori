@@ -12,8 +12,8 @@ import {
   worktreeIdFromPath,
 } from "../git/worktrees";
 import { withDeleteInflight } from "../scripts";
+import { moveWorktreeMarks } from "./marks";
 import { pruneEmptyManagedParents } from "./paths";
-import { dropShelved, isShelved, setShelved } from "./shelved";
 
 export async function relocateWorktreeToManagedPath(
   project: Project,
@@ -42,8 +42,7 @@ export async function relocateWorktreeToManagedPath(
     async () => {
       const carryData = await readWorktreeData(project.id, worktreeId);
       // The id is path-derived, so the relocate changes it. Carry the
-      // shelf flag and per-worktree state forward to the new id.
-      const carryShelved = isShelved(worktreeId);
+      // marks and per-worktree state forward to the new id.
       await relocateWorktree(project.path, target.path, destinationPath);
       // Sweep the old parent dir if it's one we own (managed root's
       // per-project subdir, or the in-project .shigomori scaffolding).
@@ -52,10 +51,7 @@ export async function relocateWorktreeToManagedPath(
       // failures are swallowed so concurrent moves don't race.
       await pruneEmptyManagedParents(target.path, project.path);
       const newId = worktreeIdFromPath(destinationPath);
-      if (carryShelved) {
-        dropShelved(worktreeId);
-        setShelved(newId, true);
-      }
+      moveWorktreeMarks(worktreeId, newId);
       if (carryData) {
         await Promise.all([
           writeWorktreeData(project.id, newId, carryData),

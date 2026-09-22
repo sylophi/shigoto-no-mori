@@ -116,6 +116,7 @@ export function worktree(
     isExternal: false,
     detached: false,
     shelved: false,
+    autoPull: false,
     ...base,
   };
 }

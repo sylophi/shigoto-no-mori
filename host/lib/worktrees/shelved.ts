@@ -5,41 +5,14 @@
 // registry.json alongside the project list, since rebuilding a shelf by
 // hand means remembering which of dozens of worktrees were hidden. Not
 // in the per-project shigomori config: "what's currently in focus" is a
-// per-user, per-machine thing rather than a property of the repo.
-import { registryStore, SHELVED_KEY } from "../config/store";
+// per-user, per-machine thing rather than a property of the repo. The
+// CLI mutates this key too (shelve, unshelve, and the drop on rm).
+import { SHELVED_KEY } from "../config/store";
+import { makeRegistryIdSet } from "./registryIdSet";
 
-type ShelvedMap = Record<string, true>;
+export const shelvedMarks = makeRegistryIdSet(SHELVED_KEY);
 
-function readMap(): ShelvedMap {
-  return registryStore.readKey<ShelvedMap>(SHELVED_KEY, {});
-}
-
-export function isShelved(worktreeId: string): boolean {
-  return readMap()[worktreeId] === true;
-}
-
-// Bulk lookup form: read the file once for callers that need to check
-// many ids in a row (the worktree list build). Mirrors `usageFor` in
-// packageScriptStats.ts. Returned set is owned by the caller.
-export function readShelvedSet(): Set<string> {
-  return new Set(Object.keys(readMap()));
-}
-
-// updateKey so the current map is read under the cross-process lock.
-// The CLI mutates this key too, and a read-outside-the-lock version
-// would clobber a concurrent CLI write.
-export function setShelved(worktreeId: string, shelved: boolean): void {
-  registryStore.updateKey<ShelvedMap>(SHELVED_KEY, {}, (map) => {
-    if ((map[worktreeId] === true) === shelved) return undefined;
-    if (shelved) {
-      map[worktreeId] = true;
-    } else {
-      delete map[worktreeId];
-    }
-    return map;
-  });
-}
-
-export function dropShelved(worktreeId: string): void {
-  setShelved(worktreeId, false);
-}
+export const isShelved = shelvedMarks.has;
+export const readShelvedSet = shelvedMarks.readSet;
+export const setShelved = shelvedMarks.set;
+export const dropShelved = shelvedMarks.drop;
