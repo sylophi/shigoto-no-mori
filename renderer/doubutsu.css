@@ -881,9 +881,9 @@
 
 /* Nobody is looking (boot.tsx keeps `.unfocused` on <html>): pause the
    drift rather than remove it, so it resumes where it was on refocus
-   instead of snapping to frame one. The layer stays promoted; dropping
-   it would repaint the whole surface on every focus flip. The hover
-   stripes need a pointer, so they have nothing to pause. */
+   instead of snapping to frame one. The layer stays promoted, since
+   dropping it would repaint the whole surface on every focus flip.
+   The hover stripes need a pointer, so they have nothing to pause. */
 .doubutsu.unfocused [data-doubutsu-zone="main"]::before,
 .doubutsu.unfocused [data-slot="launcher"]::before {
   animation-play-state: paused;
