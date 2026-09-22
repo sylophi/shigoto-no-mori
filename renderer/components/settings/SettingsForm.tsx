@@ -111,6 +111,7 @@ export function SettingsForm({
           ...form,
           theme: prev.theme,
           doubutsu: prev.doubutsu,
+          pauseAnimationsOnBattery: prev.pauseAnimationsOnBattery,
         }));
       }
     }
@@ -189,6 +190,10 @@ export function SettingsForm({
               onPick={pickTheme}
               doubutsu={form.doubutsu}
               onDoubutsuChange={setDoubutsu}
+              pauseAnimationsOnBattery={form.pauseAnimationsOnBattery}
+              onPauseAnimationsOnBatteryChange={(next) =>
+                setForm((prev) => ({ ...prev, pauseAnimationsOnBattery: next }))
+              }
             />
             {/* The desktop states its build in this device's section.
                 A hostless client has no such section, and its build is

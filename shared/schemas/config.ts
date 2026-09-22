@@ -326,6 +326,10 @@ export const ClientConfigSchema = z.object({
   // `false` is the opt-out back to the v1 look. Mirrored to
   // localStorage so startup paints without a flash.
   doubutsu: z.boolean().optional(),
+  // Pause the doubutsu wallpaper drift while this machine runs on
+  // battery, the same pause an unfocused window gets. On by default
+  // (absent = on), explicit `false` keeps it drifting on battery.
+  pauseAnimationsOnBattery: z.boolean().optional(),
   // "Keep this device reachable": the single opt-in behind two liveness
   // capabilities the main process reconciles (main/electron/liveness.ts).
   // When on, the app registers a login item so it starts when the user

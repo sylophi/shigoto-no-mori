@@ -16,11 +16,12 @@ import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
 
 // The settings form's staged state. One flat shape across both stores:
-// the first two fields are client config (appearance), the rest are
+// the first three fields are client config (appearance), the rest are
 // device config.
 export interface SettingsFormState {
   theme: Theme;
   doubutsu: boolean;
+  pauseAnimationsOnBattery: boolean;
   launchers: LauncherCommand[];
   hiddenLaunchers: string[];
   launchScripts: boolean;
@@ -43,6 +44,7 @@ export function fromConfig(
   return {
     theme: clientConfig.theme ?? "system",
     doubutsu: clientConfig.doubutsu ?? true,
+    pauseAnimationsOnBattery: clientConfig.pauseAnimationsOnBattery ?? true,
     launchers: config.launchers ?? [],
     // Sorted here and on every toggle so the id list has one canonical
     // order. useDirtyForm compares FormState by JSON.stringify, and
@@ -149,6 +151,10 @@ function toClientConfig(state: SettingsFormState): ClientConfig {
     // Default is on; omit when on, store explicit `false` when off so
     // the user's opt-out survives reads (same as deleteBranchOnRemove).
     doubutsu: state.doubutsu ? undefined : false,
+    // Default is on, with the same opt-out serialization as doubutsu.
+    pauseAnimationsOnBattery: state.pauseAnimationsOnBattery
+      ? undefined
+      : false,
   };
 }
 

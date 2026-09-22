@@ -662,8 +662,9 @@
    with data-doubutsu-page and letting :has() match, so a page carries a
    name rather than a stylesheet, and a page with no marker keeps the
    leaves. Keeping the mechanics in one rule is what makes the
-   reduced-motion and unfocused opt-outs at the bottom of this file
-   work: they only have to out-rank one `animation`, not one per page.
+   reduced-motion, unfocused and battery opt-outs at the bottom of this
+   file work: they only have to out-rank one `animation`, not one per
+   page.
 
    Two constraints on the numbers. Travel must be a whole multiple of
    the tile on each axis or the loop visibly jumps. As written, every
@@ -879,12 +880,17 @@
   }
 }
 
-/* Nobody is looking (boot.tsx keeps `.unfocused` on <html>): pause the
-   drift rather than remove it, so it resumes where it was on refocus
-   instead of snapping to frame one. The layer stays promoted, since
-   dropping it would repaint the whole surface on every focus flip.
-   The hover stripes need a pointer, so they have nothing to pause. */
+/* Nobody is looking (boot.tsx keeps `.unfocused` on <html>), or the
+   machine is on battery (usePauseAnimationsOnBattery keeps
+   `.battery-saver`): pause the drift rather than remove it, so it
+   resumes where it was instead of snapping to frame one. The layer
+   stays promoted, since dropping it would repaint the whole surface on
+   every flip. The hover stripes only run under a pointer, so they are
+   left alone. (The spinners' unfocused pause is in index.css, and
+   stays off battery: a frozen spinner in view reads as a hang.) */
 .doubutsu.unfocused [data-doubutsu-zone="main"]::before,
-.doubutsu.unfocused [data-slot="launcher"]::before {
+.doubutsu.unfocused [data-slot="launcher"]::before,
+.doubutsu.battery-saver [data-doubutsu-zone="main"]::before,
+.doubutsu.battery-saver [data-slot="launcher"]::before {
   animation-play-state: paused;
 }

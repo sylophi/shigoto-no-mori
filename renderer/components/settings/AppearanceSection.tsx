@@ -10,11 +10,19 @@ const THEMES: { value: Theme; label: string; Icon: typeof Sun }[] = [
   { value: "system", label: "System", Icon: SunMoon },
 ];
 
+// The battery pause reads the power source through the Battery Status
+// API (usePauseAnimationsOnBattery), which Chromium has and Safari and
+// Firefox do not, so a browser without it gets no toggle.
+const batterySupported =
+  typeof navigator !== "undefined" && "getBattery" in navigator;
+
 interface AppearanceSectionProps {
   theme: Theme;
   onPick: (theme: Theme) => void;
   doubutsu: boolean;
   onDoubutsuChange: (next: boolean) => void;
+  pauseAnimationsOnBattery: boolean;
+  onPauseAnimationsOnBatteryChange: (next: boolean) => void;
   // "Appearance" where the section stands alone (the web page). The
   // desktop's Appearance section already says that and names it "Theme".
   heading?: string;
@@ -25,6 +33,8 @@ export function AppearanceSection({
   onPick,
   doubutsu,
   onDoubutsuChange,
+  pauseAnimationsOnBattery,
+  onPauseAnimationsOnBatteryChange,
   heading = "Appearance",
 }: AppearanceSectionProps) {
   // A three-way pick, so it wears the house segmented control: the
@@ -55,6 +65,14 @@ export function AppearanceSection({
         label="Doubutsu mode"
         description="Bold, color-blocked Animal Crossing inspired theme. Layers on top of light and dark; turn off for the plain, neutral look."
       />
+      {batterySupported && (
+        <ToggleRow
+          checked={pauseAnimationsOnBattery}
+          onCheckedChange={onPauseAnimationsOnBatteryChange}
+          label="Pause always-on animations on battery"
+          description="The drifting wallpaper redraws the window every frame, even when nothing else is happening. Pausing it while this machine runs on battery saves energy, and it picks up again when plugged in."
+        />
+      )}
     </section>
   );
 }
