@@ -198,6 +198,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
     git: {
       refreshProject: (projectId: string) =>
         gitClient.refreshProject({ projectId }),
+      sweep: () => gitClient.sweep(),
       onRefsRefreshed: gitClient.refsRefreshed,
       onFetchActive: gitClient.fetchActive,
       onExternalChange: gitClient.externalChange,

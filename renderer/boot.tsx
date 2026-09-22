@@ -32,6 +32,8 @@ import { createAppQueryClient } from "./lib/queryClientOptions";
 import { hasLocalHost } from "./lib/localHost";
 import { startRemoteDeviceSync } from "./lib/remote/remoteDeviceSync";
 import { startRemoteHostWatch } from "./lib/remote/remoteHostWatch";
+import { startRemoteSweepRequests } from "./lib/remote/remoteSweep";
+import { documentFocused } from "./lib/focus";
 import { startSharedSettingsSync } from "./lib/remote/sharedSettingsSync";
 import {
   invalidateHostDevice,
@@ -68,10 +70,8 @@ export function bootApp({
   // looking: a running animation asks the compositor for a frame every
   // vsync, which was ~88% of the app's idle energy. Rides React Query's
   // focus signal (window focus/blur, visibilitychange, plus the
-  // desktop's IPC channel wired in startLocalHost). Seeded from the
-  // document rather than the manager, which assumes focus until its
-  // first event, so a window opened behind another starts paused.
-  syncFocusClass(document.hasFocus() && document.visibilityState === "visible");
+  // desktop's IPC channel wired in startLocalHost).
+  syncFocusClass(documentFocused());
   focusManager.subscribe(syncFocusClass);
 
   // The shared settings exchange: this device's copy follows its peers'
@@ -89,6 +89,10 @@ export function bootApp({
   // client this is the ONLY thing keeping the forest live between
   // focus refetches.
   startRemoteHostWatch(queryClient);
+
+  // The other direction: a host sweeps while someone is looking, and
+  // this window says so to the hosts it is looking at.
+  startRemoteSweepRequests();
 
   const rootElement = document.getElementById("root");
   if (!rootElement) {

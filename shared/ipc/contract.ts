@@ -20,9 +20,11 @@ export type InvokeDef<
   // Routing treats anything other than exactly true as local-only.
   remote?: boolean;
   // Command-vs-read axis for the hub grant model. `mutating`
-  // marks a call that changes state (spawns a subprocess, writes files
-  // or config, or performs a git or network action), as opposed to a
-  // pure read of existing state. Reads are always served to any account
+  // marks a call that changes state the user owns (writes files or
+  // config, runs a script, moves a branch or a worktree), as opposed to
+  // a read. A call that only refreshes a cache the host keeps for
+  // itself (a fetch of remote-tracking refs, a gh listing) is a read
+  // even though it spawns a process and touches the network. Reads are always served to any account
   // peer, while mutations require a per-peer command grant enforced at
   // the hub link's dispatch. Optional in the type because only
   // remote:true host invokes need it (the socket check enforces that a
