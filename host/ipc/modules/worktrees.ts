@@ -39,7 +39,7 @@ import {
   getRunningScriptWorktrees,
   withDeleteInflight,
 } from "@host/lib/scripts";
-import { dropAutoPull, setAutoPull } from "@host/lib/worktrees/autoPull";
+import { setAutoPull } from "@host/lib/worktrees/autoPull";
 import { relocateWorktreeToManagedPath } from "@host/lib/worktrees/relocate";
 import { scriptEventNotifier } from "../scriptRun";
 import {
@@ -116,7 +116,8 @@ export const worktreesHandlers: Handlers<
     }
     // The CLI can't see the app's script registry, so the delete runs
     // under the shared tombstone protocol (see withDeleteInflight).
-    const result = await withDeleteInflight(
+    // The CLI drops the shelf and auto-pull marks with the worktree.
+    return withDeleteInflight(
       worktreeId,
       "This worktree is already being removed.",
       () =>
@@ -126,11 +127,6 @@ export const worktreesHandlers: Handlers<
           notifierFor(ctx),
         ),
     );
-    // The CLI drops its own shelf mark. The auto-pull mark is app-only.
-    // A stale mark would match nothing until a worktree reappears at
-    // the same path, which would then follow the remote unasked.
-    dropAutoPull(worktreeId);
-    return result;
   },
 
   setShelved: ({ projectId, worktreeId, shelved }) =>

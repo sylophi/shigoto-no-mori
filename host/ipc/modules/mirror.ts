@@ -45,8 +45,10 @@ import { deleteAnyLocalBranch } from "@host/lib/git/branches";
 import {
   findWorktreeIdentityOrThrow,
   removeWorktreeForce,
+  worktreeIdFromPath,
 } from "@host/lib/git/worktrees";
 import { findProjectOrThrow } from "@host/lib/projects";
+import { dropWorktreeMarks } from "@host/lib/worktrees/marks";
 import {
   applyGitState,
   readGitState,
@@ -151,6 +153,9 @@ async function rollBackPull(worktree: {
 }): Promise<void> {
   const project = findProjectOrThrow(worktree.projectId);
   await removeWorktreeForce(project.path, worktree.path);
+  // The create ran through the CLI, which may have seeded an auto-pull
+  // mark (autoPullNew). This removal does not, so retire it here.
+  dropWorktreeMarks(worktreeIdFromPath(worktree.path));
   await deleteAnyLocalBranch(project.path, worktree.branch, true);
 }
 

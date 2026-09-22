@@ -35,8 +35,8 @@ export const DEVICE_ID_KEY = "deviceId";
 // CLI never reads it and only preserves it.
 export const SHARED_SETTINGS_KEY = "sharedSettings";
 // Worktree ids that fast-forward from their upstream on the app's own
-// fetch cadence (host/lib/worktrees/autoPull.ts). App-written like
-// deviceId: the CLI never reads it and only preserves it.
+// fetch cadence (host/lib/worktrees/autoPull.ts). Written by the app
+// and the CLI alike (cli/state.go autoPullKey).
 export const AUTO_PULL_KEY = "autoPullWorktrees";
 
 // Drives only the state.json→registry.json split below. deviceId is

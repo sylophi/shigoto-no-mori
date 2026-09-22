@@ -155,9 +155,7 @@ func execRemove(proj project, id worktreeIdentity, opts removeOptions) (string, 
 		pruneEmptyManagedParents(id.Path, proj.Path)
 	}
 
-	if err := dropShelved(id.ID); err != nil {
-		vlog("[state] drop shelved: %v", err)
-	}
+	dropWorktreeMarks(id.ID)
 	// A dirty-state capture describes a worktree that no longer exists;
 	// best-effort, and absent for most worktrees.
 	dropDirtyCapture(proj.Path, id.ID)

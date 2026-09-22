@@ -516,6 +516,8 @@ export const labGlobalConfig = {
   launchScripts: true,
   deleteBranchOnRemove: true,
   autoPopulateInstall: true,
+  autoPullNew: false,
+  autoPullPrimaryOnly: false,
   portPool: true,
   terrier: false,
   githubCli: true,
