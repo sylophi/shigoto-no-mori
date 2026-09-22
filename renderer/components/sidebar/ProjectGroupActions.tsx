@@ -258,7 +258,11 @@ function RemoveSubmenu({
                 project={member.project}
                 subject="project"
                 removeArm={removeArm}
-                device={{ id: member.deviceId, label: member.deviceLabel }}
+                device={{
+                  id: member.deviceId,
+                  label: member.deviceLabel,
+                  kind: member.deviceKind,
+                }}
               />
             </MaybeHostScope>
           ),
