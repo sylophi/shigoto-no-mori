@@ -63,6 +63,17 @@ export function bootApp({
 
   if (hasLocalHost) startLocalHost(queryClient);
 
+  // Mirror focus onto <html> so CSS can pause the infinite animations
+  // (the doubutsu wallpaper drift, the spinners) while nobody is
+  // looking: a running animation asks the compositor for a frame every
+  // vsync, which was ~88% of the app's idle energy. Rides React Query's
+  // focus signal (window focus/blur, visibilitychange, plus the
+  // desktop's IPC channel wired in startLocalHost). Seeded from the
+  // document rather than the manager, which assumes focus until its
+  // first event, so a window opened behind another starts paused.
+  syncFocusClass(document.hasFocus() && document.visibilityState === "visible");
+  focusManager.subscribe(syncFocusClass);
+
   // The shared settings exchange: this device's copy follows its peers'
   // and theirs follow it.
   startSharedSettingsSync(queryClient);
@@ -96,6 +107,10 @@ export function bootApp({
   );
 
   return router;
+}
+
+function syncFocusClass(focused: boolean): void {
+  document.documentElement.classList.toggle("unfocused", !focused);
 }
 
 // The boot-scope subscriptions about THIS machine's projects. Single

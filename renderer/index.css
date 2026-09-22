@@ -186,6 +186,22 @@
 }
 
 /*
+ * Nobody is looking (boot.tsx keeps `.unfocused` on <html>): freeze
+ * the infinite utilities, which sit on long-lived state (a running
+ * script's badge, the status dot) for as long as the operation does.
+ * One-shot enter/exit animations are left alone so a toast that fires
+ * into a blurred window doesn't stall mid-fade. Unlayered on purpose:
+ * the utilities layer sets the `animation` shorthand, which resets
+ * play-state, and a layered rule would lose to it.
+ */
+.unfocused .animate-spin,
+.unfocused .animate-pulse,
+.unfocused .animate-bounce,
+.unfocused .animate-ping {
+  animation-play-state: paused;
+}
+
+/*
  * ANSI 16-color palette for the script console. xterm reads these (and
  * the --background / --foreground tokens) through
  * scriptConsole/terminalTheme.ts whenever <html>'s theme classes
