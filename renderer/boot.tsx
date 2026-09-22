@@ -63,19 +63,14 @@ export function bootApp({
 
   if (hasLocalHost) startLocalHost(queryClient);
 
-  // Mirror focus onto <html> so CSS can stop animating while nobody is
-  // looking. A running animation asks the compositor for a frame every
-  // vsync, and the doubutsu wallpaper's drift is infinite, so an idle
-  // but visible window was costing ~88% of the app's energy impact
-  // just by being open. `.unfocused` pauses the drift and the
-  // long-lived spinners (see doubutsu.css and index.css). Rides React
-  // Query's focus signal (window focus/blur, visibilitychange, plus the
-  // desktop's IPC channel wired in startLocalHost) so the class flips
-  // on exactly the transitions the refetch-on-focus already trusts.
-  // The first read comes from the document rather than the manager,
-  // which assumes focus until its first event: a window opened behind
-  // another (a login-item launch) would otherwise drift until the
-  // first blur.
+  // Mirror focus onto <html> so CSS can pause the infinite animations
+  // (the doubutsu wallpaper drift, the spinners) while nobody is
+  // looking: a running animation asks the compositor for a frame every
+  // vsync, which was ~88% of the app's idle energy. Rides React Query's
+  // focus signal (window focus/blur, visibilitychange, plus the
+  // desktop's IPC channel wired in startLocalHost). Seeded from the
+  // document rather than the manager, which assumes focus until its
+  // first event, so a window opened behind another starts paused.
   syncFocusClass(document.hasFocus() && document.visibilityState === "visible");
   focusManager.subscribe(syncFocusClass);
 

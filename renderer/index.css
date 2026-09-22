@@ -186,19 +186,18 @@
 }
 
 /*
- * Nobody is looking (boot.tsx puts `.unfocused` on <html> while the
- * window is blurred or the document hidden): freeze the indeterminate
- * spinners. A running animation holds the compositor at 60 Hz whatever
- * it draws, and these sit on long-lived state (a running script's
- * badge, the activity icon, the status dot) for as long as the
- * operation does. Unlayered on purpose: the utilities layer sets the
- * `animation` shorthand, which resets play-state, and a layered rule
- * would lose to it. The doubutsu wallpaper's drift pauses the same way
- * in doubutsu.css.
+ * Nobody is looking (boot.tsx keeps `.unfocused` on <html>): freeze
+ * the infinite utilities, which sit on long-lived state (a running
+ * script's badge, the status dot) for as long as the operation does.
+ * One-shot enter/exit animations are left alone so a toast that fires
+ * into a blurred window doesn't stall mid-fade. Unlayered on purpose:
+ * the utilities layer sets the `animation` shorthand, which resets
+ * play-state, and a layered rule would lose to it.
  */
 .unfocused .animate-spin,
 .unfocused .animate-pulse,
-.unfocused .animate-bounce {
+.unfocused .animate-bounce,
+.unfocused .animate-ping {
   animation-play-state: paused;
 }
 
