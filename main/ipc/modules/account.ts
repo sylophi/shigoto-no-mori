@@ -36,6 +36,7 @@ import {
 import {
   enrollDevice,
   renameDevice,
+  retryParkedRevoke,
   signOutDevice,
 } from "@shared/account/enroll";
 import {
@@ -345,6 +346,20 @@ export function hubConnectInputs(): {
   };
 }
 
+// Delivers a revoke a sign-out could not (enroll.ts retryParkedRevoke),
+// at boot: a device that signed out offline is still on the hub's
+// registry until this lands.
+export async function retryParkedSignOut(): Promise<void> {
+  const config = serviceConfig();
+  if (!isConfigured(config)) return;
+  await retryParkedRevoke({
+    config,
+    service: createAccountService({ baseUrl: config.hubUrl }),
+    store: store(),
+    deviceId: getDeviceId(),
+  });
+}
+
 export function makeAccountHandlers(
   emitChanged: () => void,
   emitCommandAccessChanged: () => void,
@@ -457,6 +472,11 @@ export function makeAccountHandlers(
     signOut: async () => {
       if (signOutInFlight) return signOutInFlight;
       signOutInFlight = (async (): Promise<void> => {
+        // The command-access switch is off from the first moment of
+        // the sign-out, not from the fan-out after the revoke: a peer's
+        // mutating invoke landing between the credential clear and
+        // accountChanged() must not read the cached grant.
+        invalidateGrantCache();
         const config = serviceConfig();
         await signOutDevice({
           config,

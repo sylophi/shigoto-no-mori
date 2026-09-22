@@ -69,6 +69,11 @@ import { createHubClientTransport } from "./hubTransport";
 // connected can be spotted at all.
 let lastSocketPhase = "";
 
+// The last roster seen, so a device LEAVING it can be spotted: the
+// hub pushes no removal, and a peer that signed out or was revoked
+// looks exactly like one that went to sleep until the list is asked.
+let lastRoster: ReadonlySet<string> = new Set();
+
 // The queryHash of that one entry, so the cache subscription below can
 // tell its events from every other query's in one comparison.
 const deviceListHash = hashKey(accountDevicesQueryOptions.queryKey);
@@ -193,6 +198,16 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
     (id) => id !== localDeviceId && !knownIds.has(id),
   );
   if (hasUnknownOnline && status !== undefined) refetchDeviceList();
+  // A device that left the roster may have left the account (a
+  // sign-out, a revoke on another device), which only the list can
+  // say, and which main's own peer-side teardown (a mirror with that
+  // device) hangs off the list landing. One HTTP call per departure,
+  // hub-driven passes only, like the unknown-online rule.
+  const someoneLeft = [...lastRoster].some((id) => !online.has(id));
+  if (phase === "connected") lastRoster = online;
+  if (someoneLeft && status !== undefined && phase === "connected") {
+    refetchDeviceList();
+  }
   // This machine is not a remote device to itself, so it is skipped.
   const others = list.filter((info) => info.deviceId !== localDeviceId);
   const devices = others.map((info) => buildEntry(info, current, online));

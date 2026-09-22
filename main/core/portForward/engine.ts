@@ -232,5 +232,13 @@ export function createPortForwardEngine(deps: {
     for (const forwardId of forwards.keys()) stopForward(forwardId);
   }
 
-  return { startForward, stopForward, listForwards, stopAll };
+  // Every forward onto a device `keep` refuses: the peer left the
+  // account, so its loopback listener would only ever black-hole.
+  function stopForwardsTo(keep: (deviceId: string) => boolean): void {
+    for (const forward of forwards.values()) {
+      if (!keep(forward.deviceId)) stopForward(forward.forwardId);
+    }
+  }
+
+  return { startForward, stopForward, listForwards, stopAll, stopForwardsTo };
 }

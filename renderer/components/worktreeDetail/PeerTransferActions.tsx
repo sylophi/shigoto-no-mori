@@ -53,7 +53,11 @@ function TransferButtons({
   // A worktree already running a mirror has its Mirror button beside
   // these (LocalMirrorAction), which is where that one is managed.
   const mirrored = useWorktreeMirror(worktree).session !== undefined;
-  if (targets.length === 0) return null;
+  // The buttons need a target; an OPEN dialog does not. A run in
+  // progress keeps its progress, its finish-up step and its report
+  // when the roster empties under it (a sign-out, a revoke), and says
+  // what failed rather than vanishing mid-run.
+  if (targets.length === 0 && open === null) return null;
   const dialog = {
     worktree,
     project,

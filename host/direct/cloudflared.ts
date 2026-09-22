@@ -675,6 +675,15 @@ export function createCloudflaredRunner(
         if (stopped) return;
         if (wanted === null) {
           stopNow();
+          // A signed-out boot never reaches a start, so the connector
+          // a crashed signed-in run left behind (still fronting the
+          // hostname, onto a port anything local may rebind) would
+          // never be reaped. Reaped here instead, once.
+          const pidFile = pidFilePathOf();
+          if (pidFile !== null && !stalePidReaped) {
+            stalePidReaped = true;
+            await reapStaleChild(pidFile);
+          }
           return;
         }
         // No-op whenever the port is unchanged and the runner is not

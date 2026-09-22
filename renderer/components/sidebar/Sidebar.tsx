@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { useLocation } from "@tanstack/react-router";
+import { useRef, useState, type ReactNode } from "react";
+import { Link, useLocation } from "@tanstack/react-router";
 import type { SidebarView } from "@shared/schemas";
 import {
   DndContext,
@@ -337,8 +337,18 @@ function Forest({
 
   if (settingsOpen) return <SettingsPane />;
   if (!signedIn) {
+    // The phone layout lands a hostless client here (the inbox tab),
+    // where the way in is the Devices page, so say so rather than
+    // leaving a sentence with nothing to press.
     return (
-      <SidebarEmptyState message="Sign in to reach this account's devices." />
+      <SidebarEmptyState message="Sign in to reach this account's devices.">
+        <Link
+          to="/devices"
+          className="text-primary underline-offset-2 hover:underline"
+        >
+          Open Devices
+        </Link>
+      </SidebarEmptyState>
     );
   }
 
@@ -457,11 +467,18 @@ function emptyForestMessage({
   return viewMessage;
 }
 
-function SidebarEmptyState({ message }: { message: string | null }) {
+function SidebarEmptyState({
+  message,
+  children,
+}: {
+  message: string | null;
+  children?: ReactNode;
+}) {
   if (!message) return null;
   return (
-    <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+    <div className="flex flex-col items-center gap-2 px-3 py-6 text-center text-xs text-muted-foreground">
       {message}
+      {children}
     </div>
   );
 }

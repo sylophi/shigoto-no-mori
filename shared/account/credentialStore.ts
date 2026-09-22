@@ -42,10 +42,31 @@ type StoredShape = {
   deviceName: string;
 };
 
+// What a sign-out leaves behind, in the same slot: the device's name
+// (so the next enrollment keeps it instead of reverting to the
+// machine default) and, when the sign-out's revoke never reached the
+// hub, the credential it should have revoked with, parked for a later
+// retry (enroll.ts retryParkedRevoke). A parked credential is a dead
+// one as far as this device is concerned: read() never returns it.
+type SignedOutShape = {
+  v: 1;
+  signedOut: true;
+  deviceName: string;
+  parked?: { enc: boolean; credential: string; accountId: string };
+};
+
 export type AccountStore = {
   read(): StoredAccount | null;
   write(account: StoredAccount): void;
+  // Signs out: drops the credential, keeps the name (and any parked
+  // revoke).
   clear(): void;
+  // The name the device last enrolled under, kept across a sign-out.
+  rememberedDeviceName(): string | null;
+  // Parks a credential whose revoke did not land, signing out.
+  park(account: StoredAccount): void;
+  readParked(): StoredAccount | null;
+  clearParked(): void;
 };
 
 // The injected storage primitives. readRaw returns the stored document
@@ -65,53 +86,80 @@ export function createAccountStore(opts: {
 }): AccountStore {
   const { storage, cipher } = opts;
 
+  // The document as stored, or null for nothing, unreadable or
+  // corrupt (all of which read as signed out with nothing remembered;
+  // the next write overwrites).
+  function readDoc(): StoredShape | SignedOutShape | null {
+    const raw = storage.readRaw();
+    if (raw === null) return null;
+    try {
+      const parsed = JSON.parse(raw) as StoredShape | SignedOutShape;
+      return parsed && parsed.v === 1 ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function decrypt(stored: {
+    enc: boolean;
+    credential: string;
+    accountId: string;
+  }): { credential: string; accountId: string } | null {
+    if (
+      typeof stored.credential !== "string" ||
+      typeof stored.accountId !== "string"
+    ) {
+      return null;
+    }
+    try {
+      return {
+        credential: stored.enc
+          ? cipher.decrypt(stored.credential)
+          : stored.credential,
+        accountId: stored.accountId,
+      };
+    } catch {
+      // Decrypt failure (keychain rotated, moved machine) is
+      // unrecoverable for this credential. Treat it as signed out so
+      // the user can sign in again.
+      return null;
+    }
+  }
+
+  function encrypt(credential: string): { enc: boolean; credential: string } {
+    return {
+      enc: cipher.available,
+      credential: cipher.available ? cipher.encrypt(credential) : credential,
+    };
+  }
+
+  function signedOutDoc(): SignedOutShape | null {
+    const doc = readDoc();
+    return doc !== null && "signedOut" in doc ? doc : null;
+  }
+
+  function writeSignedOut(doc: SignedOutShape): void {
+    storage.writeRaw(JSON.stringify(doc));
+  }
+
   return {
     read() {
-      const raw = storage.readRaw();
-      // A missing document is the normal signed-out state, and an
-      // unreadable one (permissions, partial write) also reads as signed
-      // out rather than crashing sign-in.
-      if (raw === null) return null;
-      let parsed: StoredShape;
-      try {
-        parsed = JSON.parse(raw) as StoredShape;
-      } catch {
-        // Corrupt JSON reads as signed out. The next write overwrites it.
-        return null;
-      }
+      const doc = readDoc();
       if (
-        !parsed ||
-        parsed.v !== 1 ||
-        typeof parsed.credential !== "string" ||
-        typeof parsed.accountId !== "string" ||
-        typeof parsed.deviceName !== "string"
+        doc === null ||
+        "signedOut" in doc ||
+        typeof doc.deviceName !== "string"
       ) {
         return null;
       }
-      try {
-        const credential = parsed.enc
-          ? cipher.decrypt(parsed.credential)
-          : parsed.credential;
-        return {
-          credential,
-          accountId: parsed.accountId,
-          deviceName: parsed.deviceName,
-        };
-      } catch {
-        // Decrypt failure (keychain rotated, moved machine) is
-        // unrecoverable for this credential. Treat it as signed out so
-        // the user can sign in again.
-        return null;
-      }
+      const opened = decrypt(doc);
+      return opened === null ? null : { ...opened, deviceName: doc.deviceName };
     },
 
     write(account) {
       const doc: StoredShape = {
         v: 1,
-        enc: cipher.available,
-        credential: cipher.available
-          ? cipher.encrypt(account.credential)
-          : account.credential,
+        ...encrypt(account.credential),
         accountId: account.accountId,
         deviceName: account.deviceName,
       };
@@ -119,7 +167,51 @@ export function createAccountStore(opts: {
     },
 
     clear() {
-      storage.removeRaw();
+      const doc = readDoc();
+      if (doc === null) {
+        storage.removeRaw();
+        return;
+      }
+      const deviceName =
+        typeof doc.deviceName === "string" ? doc.deviceName : "";
+      const parked = "signedOut" in doc ? doc.parked : undefined;
+      writeSignedOut({
+        v: 1,
+        signedOut: true,
+        deviceName,
+        ...(parked === undefined ? {} : { parked }),
+      });
+    },
+
+    rememberedDeviceName() {
+      const doc = readDoc();
+      if (doc === null || typeof doc.deviceName !== "string") return null;
+      return doc.deviceName === "" ? null : doc.deviceName;
+    },
+
+    park(account) {
+      writeSignedOut({
+        v: 1,
+        signedOut: true,
+        deviceName: account.deviceName,
+        parked: {
+          ...encrypt(account.credential),
+          accountId: account.accountId,
+        },
+      });
+    },
+
+    readParked() {
+      const doc = signedOutDoc();
+      if (doc === null || doc.parked === undefined) return null;
+      const opened = decrypt(doc.parked);
+      return opened === null ? null : { ...opened, deviceName: doc.deviceName };
+    },
+
+    clearParked() {
+      const doc = signedOutDoc();
+      if (doc === null || doc.parked === undefined) return;
+      writeSignedOut({ v: 1, signedOut: true, deviceName: doc.deviceName });
     },
   };
 }

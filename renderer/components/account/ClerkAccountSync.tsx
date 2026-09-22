@@ -44,6 +44,7 @@ import {
 import { credentialRevoked } from "@shared/remote/supervisor";
 import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
 import { useHubBlock } from "@/hooks/remote/useHubStatus";
+import { toast } from "@/lib/toast";
 
 export function ClerkAccountSync() {
   const { isLoaded, isSignedIn, userId, getToken } = useAuth();
@@ -80,6 +81,14 @@ export function ClerkAccountSync() {
     if (!enrolled || signedOutForBlock.current || signOutPending) return;
     signedOutForBlock.current = true;
     if (sharedSignIn) armedFor.current = userId ?? null;
+    // The one word the user gets on why every peer just vanished: the
+    // registry's own banner says it too, but that page is replaced by
+    // the signed-out panel the moment the sign-out lands.
+    toast.warning("This device was removed from the account", {
+      id: "account:revoked",
+      description: "It has signed out. Sign in again to enroll it afresh.",
+      duration: 15_000,
+    });
     signOutNow();
   }, [revoked, enrolled, sharedSignIn, signOutPending, signOutNow, userId]);
 

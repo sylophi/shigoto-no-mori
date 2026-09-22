@@ -126,6 +126,12 @@ async function waitSettled(
   const startedAt = Date.now();
   let missingSince: number | null = null;
   let reportedBytes = -1;
+  // When a side that had connected stopped being connected, so a
+  // peer lost mid-transfer (its session closed under a sign-out or
+  // a revoke, on either end) fails at the connect ceiling like a
+  // peer never reached, instead of polling out the settle ceiling.
+  let disconnectedSince: number | null = null;
+  let everConnected = false;
   while (Date.now() - startedAt < SETTLE_CEILING_MS) {
     const raw = findSession(daemon, session);
     if (raw === undefined) {
@@ -156,6 +162,18 @@ async function waitSettled(
           !raw.remote.connected)
       ) {
         return failed(raw.lastError ?? "the other device could not be reached");
+      }
+      const connected = raw.local.connected && raw.remote.connected;
+      if (connected) {
+        everConnected = true;
+        disconnectedSince = null;
+      } else if (everConnected) {
+        disconnectedSince ??= Date.now();
+        if (Date.now() - disconnectedSince > CONNECT_CEILING_MS) {
+          return failed(
+            raw.lastError ?? "the other device went away mid-transfer",
+          );
+        }
       }
       if (settled(raw)) {
         return { crossed: true, conflicts: raw.conflicts.length };

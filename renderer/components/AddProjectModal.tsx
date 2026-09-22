@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { EmptyPanel } from "@/components/ui/empty-panel";
+import { useAccountStatus } from "@/hooks/account/useAccount";
 import {
   DeviceTabBar,
   DeviceTabPanel,
@@ -39,6 +40,7 @@ function AddProjectDialog() {
   const [query, setQuery] = useState(addProjectTarget.query ?? "~/");
   // A browser on the account is a device too, but registers no projects.
   const tabs = useDeviceTabs().filter((tab) => tab.hostsProjects);
+  const { data: status } = useAccountStatus();
   const [picked, pick] = usePickedDevice(
     tabs,
     addProjectTarget.deviceId ?? localDeviceId,
@@ -78,7 +80,9 @@ function AddProjectDialog() {
       ) : (
         <div className="p-6">
           <EmptyPanel>
-            No device that holds projects is signed in to this account.
+            {status?.signedIn === true
+              ? "No device that holds projects is signed in to this account."
+              : "Sign in to add a project from one of the account's devices."}
           </EmptyPanel>
         </div>
       )}

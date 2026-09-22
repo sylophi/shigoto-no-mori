@@ -76,6 +76,7 @@ import {
   portForwardHandlers,
   setPortForwardEngine,
   stopAllPortForwards,
+  stopPortForwardsTo,
 } from "./modules/portForward";
 import { portPoolHandlers } from "@host/ipc/modules/portPool";
 import { portsHandlers } from "@host/ipc/modules/ports";
@@ -112,6 +113,11 @@ import { dataDir } from "@host/lib/util/paths";
 import { getDeviceId } from "@host/lib/config/deviceId";
 import { hubConnectInputs, makeAccountHandlers } from "./modules/account";
 import { reconcileLaunchAtLogin } from "../electron/liveness";
+import { withoutPeerState } from "@shared/schemas/config";
+import {
+  readClientConfigSync,
+  writeClientConfig,
+} from "../electron/clientConfig";
 import {
   broadcastAll,
   directHandlers,
@@ -235,8 +241,33 @@ const mirrorDaemon = createMirrorDaemon({
     gitFollower.sessionsChanged();
     observeMirrorHistory();
     reapOrphanedTransfers();
+    endMirrorsOfNoAccount();
   },
 });
+// The engine persists its sessions, so they come back on every spawn:
+// a boot that starts signed out (a sign-out that never reached the
+// daemon, a credential removed by hand) or a daemon that was down at
+// the sign-out would otherwise resume mirroring with peers of an
+// account this device is not on. Every snapshot of a running daemon
+// re-asks, once per session set, and the account fan-out's own sweep
+// covers the daemon-was-up case.
+let sweptSessionSet = "";
+function endMirrorsOfNoAccount(): void {
+  if (mirrorDaemon.status() !== "running") return;
+  const signature = mirrorDaemon
+    .sessions()
+    .map((raw) => raw.session)
+    .toSorted()
+    .join("\n");
+  if (signature === "" || signature === sweptSessionSet) return;
+  sweptSessionSet = signature;
+  if (hubConnectInputs() !== null) return;
+  void endMirrorsWithPeers(
+    () => false,
+    "This device is signed out. The copy stays as a worktree.",
+    { transfers: true },
+  );
+}
 // The git half of every session this device runs (host/mirror/
 // gitFollow.ts): reads the daemon's sessions, reaches the peer through
 // the same cached direct sessions, and reports through the same
@@ -315,6 +346,12 @@ export function registerIpcHandlers(): void {
   const accountHandlers = makeAccountHandlers(
     () => {
       const accountId = hubConnectInputs()?.accountId ?? null;
+      // The mirror sweep is what needs the peer sessions still up (a
+      // terminate is local, but the daemon's own stream close is
+      // cleaner than the socket dying under it), so the hub refresh
+      // that stops them waits on it, bounded so a stuck daemon
+      // request cannot hold the sign-out.
+      let teardown: Promise<unknown> = Promise.resolve();
       if (accountId !== peerAccountId) {
         peerAccountId = accountId;
         // Every port forward rides a session with a peer of the
@@ -325,15 +362,32 @@ export function registerIpcHandlers(): void {
         stopAllPortForwards();
         // A mirror pairs two devices of one account, and this device
         // is no longer one of them: every mirror ends, its copy kept
-        // as a plain worktree (endMirrorsWithPeers says why kept).
-        void endMirrorsWithPeers(
-          () => false,
-          "This device left the account. The copy stays as a worktree.",
-        );
+        // as a plain worktree (endMirrorsWithPeers says why kept). The
+        // one-shot transfers in flight go too: a send half across to
+        // a peer of an account this device has left has no ending
+        // but this one.
+        teardown = Promise.race([
+          endMirrorsWithPeers(
+            () => false,
+            "This device left the account. The copy stays as a worktree.",
+            { transfers: true },
+          ),
+          new Promise((resolve) => setTimeout(resolve, 5_000).unref?.()),
+        ]);
         // The shared settings belong to the account's devices as a
         // group, so the copy goes with the membership (clear says how
         // they come back).
         sharedSettingsCopy.clear();
+        // The client config's peer-keyed picks go with it too
+        // (withoutPeerState says which). The renderer re-reads its
+        // copy off the account:changed fan-out below.
+        void writeClientConfig(withoutPeerState(readClientConfigSync())).catch(
+          (error: unknown) => {
+            console.warn(
+              `[account] could not drop the peer-keyed client config: ${errorMessageOf(error)}`,
+            );
+          },
+        );
         // The login item exists so a machine stays reachable TO its
         // account. Signed out there is none, so it is cleared here and
         // reinstalled by the next sign-in's fan-out (the setting
@@ -353,7 +407,7 @@ export function registerIpcHandlers(): void {
       broadcastAll(remoteAccessContract, "commandAccessChanged", undefined);
       // Also reconciles the direct listener from its tail, which
       // follows the same enrollment condition.
-      void refreshHubConnection();
+      void teardown.then(() => refreshHubConnection());
     },
     // The switch flipping fans out on its own channel so the toggle
     // does not thrash the account status and device queries. No hub
@@ -370,10 +424,15 @@ export function registerIpcHandlers(): void {
     // account ends here, the other half of the sign-out rule above.
     (devices) => {
       const onAccount = new Set(devices.map((device) => device.deviceId));
+      const stillOn = (deviceId: string) => onAccount.has(deviceId);
       void endMirrorsWithPeers(
-        (deviceId) => onAccount.has(deviceId),
+        stillOn,
         "The other device left the account. The copy stays as a worktree.",
+        { transfers: true },
       );
+      // A forward is standing intent across a peer being asleep, so
+      // it follows the account's membership, never the roster.
+      stopPortForwardsTo(stillOn);
     },
   );
   registerContract(accountContract, accountHandlers);
@@ -427,7 +486,15 @@ export function registerIpcHandlers(): void {
   setMirrorImpl({
     status: () => mirrorDaemon.status(),
     sessions: () => mirrorDaemon.sessions(),
-    create: (input) => mirrorDaemon.create(input),
+    create: (input) => {
+      // A start's long leg (the copy across) can straddle a sign-out;
+      // the sweep that ran meanwhile found nothing, so this is the
+      // last gate before a session with a peer of no account.
+      if (hubConnectInputs() === null) {
+        throw new Error("This device is signed out, so it cannot mirror.");
+      }
+      return mirrorDaemon.create(input);
+    },
     // The old session is paused, not ended, until the new one is up:
     // two running sessions on one root would fight, but a paused one
     // holds nothing, and a create that fails (peer away) then leaves
@@ -448,10 +515,16 @@ export function registerIpcHandlers(): void {
       return next;
     },
     terminate: async (session) => {
-      await mirrorDaemon.terminate(session);
-      // An explicit stop ends the agreement too, or the git follower's
-      // store keeps one entry per session ever created.
-      gitFollower.forget(session);
+      try {
+        await mirrorDaemon.terminate(session);
+      } finally {
+        // An explicit stop ends the agreement too, or the git
+        // follower's store keeps one entry per session ever created.
+        // A terminate that failed still ends it: the session is
+        // doomed either way, and the entry would otherwise outlive
+        // the daemon that could ever match it.
+        gitFollower.forget(session);
+      }
     },
     pause: (session) => mirrorDaemon.pause(session),
     resume: (session) => mirrorDaemon.resume(session),

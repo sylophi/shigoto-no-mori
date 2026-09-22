@@ -357,6 +357,22 @@ export const ClientConfigSchema = z.object({
 });
 export type ClientConfig = z.infer<typeof ClientConfigSchema>;
 
+// The client config without what was keyed by the account's peers:
+// a device leaving the account (a sign-out, a sign-in under another)
+// leaves the local port picks, the folded peer projects and the
+// legacy create-device picks behind, since every one of them names a
+// device of the account that is gone, and a device of a later
+// account with the same id must not inherit them.
+export function withoutPeerState(config: ClientConfig): ClientConfig {
+  const {
+    forwardLocalPorts: _forwardLocalPorts,
+    collapsedRemoteProjects: _collapsedRemoteProjects,
+    quickCreateDevices: _quickCreateDevices,
+    ...rest
+  } = config;
+  return rest;
+}
+
 // The one reading of keepReachable: on unless switched off. Every
 // reader (the liveness reconcile, the write handler's change gate, the
 // toggle) asks here, so the default lives in one place.

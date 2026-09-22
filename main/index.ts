@@ -42,7 +42,7 @@ import {
   startMirrorEngine,
   stopMirrorEngine,
 } from "./ipc/handlers";
-import { clerkPublishableKey } from "./ipc/modules/account";
+import { clerkPublishableKey, retryParkedSignOut } from "./ipc/modules/account";
 import { stopAllPortForwards } from "./ipc/modules/portForward";
 import { installHostImpls } from "./electron/hostImpls";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
@@ -469,7 +469,9 @@ app.on("ready", async () => {
   // main/ipc/handlers.ts), making this the boot-time pass only. The
   // direct data-plane listener follows the same
   // enrollment condition, so its reconcile rides this refresh's tail.
-  void refreshHubConnection();
+  // A sign-out whose revoke never reached the hub is delivered first,
+  // so the hub's registry stops listing a device that left.
+  void retryParkedSignOut().then(() => refreshHubConnection());
   // Sleep is the one event that reliably kills every remote socket
   // without a close: on resume, probe the hub socket and every direct
   // session so the dead ones are found and redialed within seconds,

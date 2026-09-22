@@ -7,7 +7,7 @@
 // AccountService, AccountStore, AccountServiceConfig), so the
 // account check script drives both paths with stubs.
 import { errorMessageOf } from "../errors";
-import type { AccountService } from "./service";
+import { isHubRefusal, type AccountService } from "./service";
 import type { AccountStore } from "./credentialStore";
 import { isConfigured, type AccountServiceConfig } from "./serviceConfig";
 import { deriveAccountId } from "./token";
@@ -47,7 +47,14 @@ export async function enrollDevice(
   if (!isConfigured(deps.config)) {
     throw new Error("the device hub is not configured on this build");
   }
-  const deviceName = deps.store.read()?.deviceName ?? deps.fallbackDeviceName;
+  // A revoke a sign-out could not deliver goes first: the hub still
+  // lists this device under the old account, and refuses to enroll
+  // the same device under another one until that row is gone.
+  await retryParkedRevoke(deps);
+  const deviceName =
+    deps.store.read()?.deviceName ??
+    deps.store.rememberedDeviceName() ??
+    deps.fallbackDeviceName;
   const enrollment = await deps.service.enroll(token, {
     deviceId: deps.deviceId,
     name: deviceName,
@@ -87,9 +94,45 @@ export async function signOutDevice(deps: {
       );
     } catch (error) {
       deps.onRevokeFailure?.(error);
+      // A refusal means the hub already does not honor the credential
+      // (revoked elsewhere, rotated away): nothing to deliver later.
+      // Anything else (offline, hub down, the timeout) leaves the
+      // device enrolled on the hub with a credential only this machine
+      // holds, so it is parked for retryParkedRevoke rather than
+      // dropped: an undelivered revoke is what strands the row (and
+      // the next account's enroll on a 409) for good.
+      if (!isHubRefusal(error)) {
+        deps.store.park(record);
+        return;
+      }
     }
   }
   deps.store.clear();
+}
+
+// Delivers the revoke a sign-out parked, if any: at boot and before
+// an enrollment (both shells). A delivered or refused revoke clears
+// the parking; anything else keeps it for the next try. Never throws,
+// and a failure is not a reason to hold the caller up: the parked
+// credential is dead to this device either way.
+export async function retryParkedRevoke(deps: {
+  config: AccountServiceConfig;
+  service: AccountService;
+  store: AccountStore;
+  deviceId: string;
+}): Promise<void> {
+  const parked = deps.store.readParked();
+  if (parked === null || !isConfigured(deps.config)) return;
+  try {
+    await deps.service.revoke(
+      parked.credential,
+      deps.deviceId,
+      AbortSignal.timeout(SIGN_OUT_REVOKE_TIMEOUT_MS),
+    );
+    deps.store.clearParked();
+  } catch (error) {
+    if (isHubRefusal(error)) deps.store.clearParked();
+  }
 }
 
 // A rename, both halves: the local store write (the name every status

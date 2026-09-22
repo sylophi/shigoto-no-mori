@@ -5,6 +5,7 @@
 // in shared/account/credentialStore.ts. The web client reuses that same
 // core over a different backing, so the on-storage envelope stays
 // identical across platforms and the desktop file format is unchanged.
+import { errorMessageOf } from "@shared/errors";
 import {
   mkdirSync,
   readFileSync,
@@ -53,11 +54,23 @@ export function createAccountStore(opts: {
         renameSync(tmp, filePath);
       },
       removeRaw() {
-        try {
-          unlinkSync(filePath);
-        } catch {
-          // Already gone is success, and no other failure (permissions and
-          // so on) is worth failing a sign-out over. Swallow it.
+        // The atomic write's temp file too: a crash between its write
+        // and the rename leaves the envelope there, and a sign-out
+        // that only removed the real file would leave a credential
+        // behind on disk.
+        for (const path of [filePath, `${filePath}.tmp`]) {
+          try {
+            unlinkSync(path);
+          } catch (error) {
+            // Already gone is success, and no other failure (permissions
+            // and so on) is worth failing a sign-out over. Said, not
+            // swallowed: a credential that stayed is worth a line.
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+              console.warn(
+                `[account] could not remove ${path}: ${errorMessageOf(error)}`,
+              );
+            }
+          }
         }
       },
     },

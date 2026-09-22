@@ -234,12 +234,18 @@ export async function stopMirrorsForWorktree(
 export async function endMirrorsWithPeers(
   stillOnAccount: (deviceId: string) => boolean,
   detail: string,
+  // With `transfers`, the one-shot transfer sessions with such a peer
+  // go too (a send or pull half across to it has no other ending:
+  // their tokens stay live, so the orphan reaper never picks them
+  // up). Their wait sees the session gone and fails the transfer.
+  opts: { transfers?: boolean } = {},
 ): Promise<void> {
   const daemon = impl;
   if (daemon === null) return;
-  const doomed = mirrorSessions(daemon).filter(
-    (raw) => !stillOnAccount(raw.deviceId),
-  );
+  const candidates = opts.transfers
+    ? daemon.sessions()
+    : mirrorSessions(daemon);
+  const doomed = candidates.filter((raw) => !stillOnAccount(raw.deviceId));
   await Promise.all(
     doomed.map(async (raw) => {
       try {
@@ -250,6 +256,7 @@ export async function endMirrorsWithPeers(
         );
         return;
       }
+      if (isTransferSession(raw)) return;
       const localWorktreeId = localWorktreeIdOf(raw);
       if (localWorktreeId !== "") {
         daemon.noteEvent(localWorktreeId, "stopped", detail);
