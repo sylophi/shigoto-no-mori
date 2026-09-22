@@ -93,6 +93,18 @@ function launchToolMenuItems(): MenuItemConstructorOptions[] {
   ];
 }
 
+// Reload and devtools are developer tooling. A packaged build has no use
+// for them, and ⌘R in prod throws away the renderer's state (mirrors the
+// dev-only "Inspect Element" in the context menu).
+function devViewMenuItems(): MenuItemConstructorOptions[] {
+  if (app.isPackaged) return [];
+  return [
+    { type: "separator" },
+    { role: "reload" },
+    { role: "toggleDevTools" },
+  ];
+}
+
 export function buildAppMenu(): void {
   const template: MenuItemConstructorOptions[] = [
     {
@@ -150,9 +162,7 @@ export function buildAppMenu(): void {
           accelerator: "Cmd+Shift+P",
           click: clickBroadcast(projectLauncherContract, "toggle", undefined),
         },
-        { type: "separator" },
-        { role: "reload" },
-        { role: "toggleDevTools" },
+        ...devViewMenuItems(),
       ],
     },
     {
