@@ -23,3 +23,34 @@ export function getRecentWorktree(projectId: string): string | null {
   const id = readMap()[projectId];
   return typeof id === "string" ? id : null;
 }
+
+// When each worktree was last opened in this window, across every
+// project and device, for the worktree palette's order: where you were
+// last floats to the top. Keyed by device and worktree (the same repo
+// on two machines can carry the same worktree id), and trimmed to the
+// newest few so the record can't grow without bound.
+const VISITS_KEY = "recentWorktree.visits";
+const MAX_VISITS = 100;
+
+export function worktreeVisitKey(
+  deviceId: string | undefined,
+  worktreeId: string,
+): string {
+  return `${deviceId ?? "local"}:${worktreeId}`;
+}
+
+export function readWorktreeVisits(): Record<string, number> {
+  return readStoredJson<Record<string, number>>(VISITS_KEY, {});
+}
+
+export function recordWorktreeVisit(
+  deviceId: string | undefined,
+  worktreeId: string,
+): void {
+  const visits = readWorktreeVisits();
+  visits[worktreeVisitKey(deviceId, worktreeId)] = Date.now();
+  const newest = Object.entries(visits)
+    .toSorted((a, b) => b[1] - a[1])
+    .slice(0, MAX_VISITS);
+  writeStored(VISITS_KEY, JSON.stringify(Object.fromEntries(newest)));
+}
