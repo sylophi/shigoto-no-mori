@@ -32,7 +32,7 @@ export function useWorktreeRowState(
 ): WorktreeRowState {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const activity = useWorktreeScriptActivity(worktree.id, deviceId);
+  const running = useWorktreeScriptActivity(worktree.id, deviceId);
   const isDeleting = useIsDeletingWorktree(worktree.id, deviceId);
   const params = {
     deviceId: routeDeviceId(deviceId),
@@ -43,7 +43,12 @@ export function useWorktreeRowState(
   // Not useMatchRoute: its stable function return reads from a hidden
   // store, which React Compiler can't see, so isSelected stays cached at
   // false. location.pathname is already decoded, so no encoding here.
-  const isSelected = pathname === fillRoutePath(route, params);
+  const detailPath = fillRoutePath(route, params);
+  const isSelected = pathname === detailPath;
+  // A failure is only news off the worktree's pages (its console, diff
+  // and commits all sit under the detail path): on them it is on screen.
+  const onScreen = isSelected || pathname.startsWith(`${detailPath}/`);
+  const activity = running === "failed" && onScreen ? null : running;
 
   return {
     isSelected,
@@ -63,6 +68,7 @@ function describeRow(
   if (activity === "setup") return "Running setup";
   if (activity === "teardown") return "Running teardown";
   if (activity === "package") return "Running a script";
+  if (activity === "failed") return "A script failed here";
   if (shelved) return "Shelved";
   return undefined;
 }
