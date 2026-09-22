@@ -96,9 +96,6 @@ export const TUNNEL_PROBE_DELAYS_REUSED_MS: readonly number[] = [
 // cached for the zone's TTL, a deleted record) costs one edge request
 // a minute, not one every eight seconds, for as long as the child
 // lives.
-// Edge connections the tunnel keeps open. See cloudflaredArgs.
-export const TUNNEL_HA_CONNECTIONS = 1;
-
 export const TUNNEL_PROBE_WARN_MS = 60_000;
 export const TUNNEL_PROBE_SLOW_MS = 60_000;
 // Past the deadline, the child is treated exactly like one that died:
@@ -127,23 +124,14 @@ export function cloudflaredArgs(): string[] {
   // the copy the app ships. The version is pinned in
   // shared/packaging/cloudflaredDist.mts and bumped with the app.
   //
-  // --ha-connections: cloudflared opens four connections to the edge
-  // by default, for redundancy rather than throughput (a stream rides
-  // one of them, and dies with it either way). Each one keeps its own
-  // QUIC keepalive going for the whole time the app is up, and that
-  // idle chatter was most of the app's energy floor. One connection
-  // carries everything this tunnel does. Losing it costs a reconnect
-  // (cloudflared's own, then the ladder below if the child dies),
-  // during which a peer's connect attempt fails and its supervisor
-  // retries. The flag belongs to `tunnel`, not `run`, and is hidden
-  // from --help.
-  return [
-    "tunnel",
-    "--no-autoupdate",
-    "--ha-connections",
-    String(TUNNEL_HA_CONNECTIONS),
-    "run",
-  ];
+  // --ha-connections: the default four edge connections are for
+  // redundancy, not throughput (a stream rides one and dies with it
+  // either way), and their idle keepalives were most of the app's
+  // energy floor. One carries everything this tunnel does. If it
+  // drops, cloudflared reconnects and a peer's connect attempt in
+  // that window fails once and retries. A `tunnel` flag, so it goes
+  // before `run`.
+  return ["tunnel", "--no-autoupdate", "--ha-connections", "1", "run"];
 }
 
 export function cloudflaredEnv(
