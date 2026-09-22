@@ -71,6 +71,7 @@ import { packageScriptsHandlers } from "@host/ipc/modules/packageScripts";
 import {
   portForwardHandlers,
   setPortForwardEngine,
+  stopAllPortForwards,
 } from "./modules/portForward";
 import { portPoolHandlers } from "@host/ipc/modules/portPool";
 import { portsHandlers } from "@host/ipc/modules/ports";
@@ -104,7 +105,8 @@ import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
 import { spawnFileSync } from "@host/fileSync/spawn";
 import { dataDir } from "@host/lib/util/paths";
 import { getDeviceId } from "@host/lib/config/deviceId";
-import { makeAccountHandlers } from "./modules/account";
+import { hubConnectInputs, makeAccountHandlers } from "./modules/account";
+import { reconcileLaunchAtLogin } from "../electron/liveness";
 import {
   broadcastAll,
   directHandlers,
@@ -296,6 +298,10 @@ export function stopMirrorEngine(): void {
 
 export function registerIpcHandlers(): void {
   registerContract(clientConfigContract, clientConfigHandlers);
+  // The account the peer-facing state was built under, so a change
+  // can tell a rename (same account, nothing to tear down) from a
+  // sign-out or an account switch.
+  let peerAccountId = hubConnectInputs()?.accountId ?? null;
   // Client-scoped: sign-in drives the OS browser and writes an
   // OS-keychain credential on this machine, so it never rides the socket
   // wire. The changed broadcast fans out to every window after any
@@ -303,6 +309,22 @@ export function registerIpcHandlers(): void {
   // against the fresh account state at the same moment.
   const accountHandlers = makeAccountHandlers(
     () => {
+      const accountId = hubConnectInputs()?.accountId ?? null;
+      if (accountId !== peerAccountId) {
+        peerAccountId = accountId;
+        // Every port forward rides a session with a peer of the
+        // account this device just left: the loopback listeners would
+        // otherwise stay bound, forwarding into a peer that is about
+        // to drop us (the direct sessions themselves close through the
+        // presence rule when the hub socket stops below).
+        stopAllPortForwards();
+        // The login item exists so a machine stays reachable TO its
+        // account. Signed out there is none, so it is cleared here and
+        // reinstalled by the next sign-in's fan-out (the setting
+        // itself is kept: it is this machine's preference, not the
+        // account's).
+        reconcileLaunchAtLogin();
+      }
       broadcastAll(accountContract, "changed", undefined);
       // A direct account switch that stays signed in changes the
       // command-access answer, so refresh the renderer's switch query

@@ -9,6 +9,10 @@
 //
 // Status mapping, chosen to lie the least given the
 // RemoteDeviceStatus vocabulary:
+//   - the hub socket stopped: no devices at all. The socket is stopped
+//     exactly while this device is signed out (main's hub refresh),
+//     and a signed-out window shows no peers, whatever the cached
+//     device list still says.
 //   - a direct session established (a peerAppVersions key): phase
 //     "connected" with the appVersion the session's welcome confirmed,
 //     WHATEVER the hub socket is doing. Data is direct or nothing (v2
@@ -151,6 +155,19 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
   const online = new Set(current.onlineDeviceIds);
   const reconnected = phase === "connected" && lastSocketPhase !== "connected";
   lastSocketPhase = phase;
+  // A stopped socket is main's word that this device is signed out
+  // (the hub refresh stops it exactly when the account inputs are
+  // gone, and restarts it under a new account's before this reads
+  // "stopped" for long). No account, no peers: the store empties by
+  // rule, not by trusting the device-list refetch to come back empty.
+  // That refetch does come back empty, but a refetch that fails
+  // instead falls back to the cached list below, and this is what
+  // keeps a stale list from putting the old account's device tabs
+  // back on a signed-out window.
+  if (phase === "stopped") {
+    setRemoteDevices([]);
+    return;
+  }
   // A reconnect can follow an enroll or a revoke that happened while
   // the socket was down. This pass runs on the list as it stands, and
   // the refetch's landing runs the corrected one.

@@ -2007,6 +2007,13 @@ async function main(): Promise<string[]> {
       // b the moment the credential cleared (the Sign out button ends
       // the Clerk session first, which a cloned window cannot). Revoked
       // from a, b keeps its dead credential and stays gone.
+      // b runs a port forward onto a first: the remote setup a device
+      // leaves behind, which its sign-out must tear down with it. The
+      // forward's open rides a's grant, which the boot leaves off.
+      await a.evaluate("window.api.account.setAcceptsCommands(true)");
+      const forward = await b.evaluate<{ forwardId: string }>(
+        `window.api.portForward.start(${JSON.stringify({ deviceId: idA, remotePort: 1 })})`,
+      );
       await a.evaluate(
         `window.api.account.revokeDevice(${JSON.stringify(idB)})`,
       );
@@ -2025,6 +2032,27 @@ async function main(): Promise<string[]> {
         "b to sign itself out of the account",
         "window.api.account.status().then((s) => !s.signedIn)",
         60_000,
+      );
+      // Signed out, b has no account to reach: its hub socket is
+      // stopped (not backing off toward a redial), every direct
+      // session is closed from its own side, its roster is empty, and
+      // the forward it ran is gone with them.
+      await b.waitFor(
+        "b's hub socket to stop and its direct sessions to close",
+        "window.api.hub.status().then((s) => s.socket.phase === 'stopped' && Object.keys(s.peerAppVersions).length === 0 && s.onlineDeviceIds.length === 0)",
+        30_000,
+      );
+      const forwards = await b.evaluate<{ forwards: { forwardId: string }[] }>(
+        "window.api.portForward.list()",
+      );
+      assert.ok(
+        !forwards.forwards.some((f) => f.forwardId === forward.forwardId),
+        "b's port forward survived its sign-out",
+      );
+      await b.waitFor(
+        "b's device tabs to go with the account",
+        'document.querySelectorAll(\'[role="tablist"][aria-label="Device"]\').length === 0',
+        30_000,
       );
     });
     await shoot("end");

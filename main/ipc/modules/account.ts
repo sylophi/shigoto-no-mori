@@ -219,6 +219,13 @@ export function accountServiceConfigured(): boolean {
   return isConfigured(serviceConfig());
 }
 
+// Whether this device holds an account credential, for the same
+// callers: signed out, there is no account to stay available to
+// either, so liveness treats it like an unconfigured build.
+export function accountSignedIn(): boolean {
+  return signedInService() !== null;
+}
+
 // The renderer's half of the Clerk mount decision: the resolved
 // publishable key rides the window's argv (main/index.ts) so the
 // provider can mount synchronously at boot. Empty when unconfigured.

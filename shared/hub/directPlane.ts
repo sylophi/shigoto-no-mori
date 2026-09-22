@@ -209,24 +209,20 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
       // close direct sessions for peers no longer in a LIVE roster and
       // hand the roster to the keeper as its desired set (which dials
       // newly present peers at once). The rule itself (including the
-      // do-nothing-when-our-hub-is-down gate) lives in
+      // do-nothing-when-our-hub-is-down gate, and the close-everything
+      // verdict of a stopped or revoked socket) lives in
       // directPresence.ts, where the direct-plane check pins it. The
       // host half is narrowed once here, so its absence (the web
       // bridge) passes plain undefined through.
       const host = deps.host;
-      applyDirectPresence(
-        current.socket.phase === "connected",
-        current.onlineDeviceIds,
-        {
-          closeHostPeersNotIn:
-            host === undefined
-              ? undefined
-              : (online) => host.closeHostPeersNotIn(online),
-          dropClientPeersNotIn: (online) =>
-            handlers.dropDirectPeersNotIn(online),
-          reconcilePeers: (online) => keeper.reconcile(online),
-        },
-      );
+      applyDirectPresence(current.socket, current.onlineDeviceIds, {
+        closeHostPeersNotIn:
+          host === undefined
+            ? undefined
+            : (online) => host.closeHostPeersNotIn(online),
+        dropClientPeersNotIn: (online) => handlers.dropDirectPeersNotIn(online),
+        reconcilePeers: (online) => keeper.reconcile(online),
+      });
     },
     probe: () => {
       handlers.probeDirectPeers();

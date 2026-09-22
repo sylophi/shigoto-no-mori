@@ -24,16 +24,21 @@ import {
   readJsonOrNullSync,
 } from "@host/lib/util/jsonFile";
 import { readClientConfigSync } from "./clientConfig";
-import { accountServiceConfigured } from "../ipc/modules/account";
+import {
+  accountServiceConfigured,
+  accountSignedIn,
+} from "../ipc/modules/account";
 import { scheduleRelaunch } from "./relaunch";
 import { CRASH_LOOP, decide, FATAL_RELAUNCH } from "../core/liveness/rateLimit";
 
 function keepReachableEnabled(): boolean {
-  // Inert on a build with no account service: the setting exists so a
-  // machine stays available TO the account, its UI is unreachable when
-  // the account service env is absent, and boot's reconcile clears a
-  // login item left behind by a previously configured build.
-  if (!accountServiceConfigured()) return false;
+  // Inert on a build with no account service, and while signed out:
+  // the setting exists so a machine stays available TO the account,
+  // its UI is unreachable when the account service env is absent or
+  // the device is not enrolled, and the reconcile (boot, every
+  // account change) clears a login item left behind by a previously
+  // configured build or by a sign-out.
+  if (!accountServiceConfigured() || !accountSignedIn()) return false;
   try {
     return keepReachableOn(readClientConfigSync());
   } catch (error) {
