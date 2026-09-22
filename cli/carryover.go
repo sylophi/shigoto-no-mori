@@ -306,15 +306,16 @@ func applyOneCarryOver(sources []worktreeIdentity, destPath string, entry carryO
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return &carryOverFailure{Path: entry.Path, Reason: err.Error()}, "", source
 	}
+	// No overwrite of files git just laid down.
+	if _, err := os.Lstat(dst); err == nil {
+		return &carryOverFailure{Path: entry.Path, Reason: "Destination already exists"}, "", source
+	}
 	// Symlinks only ever target the primary: a sibling worktree can be
 	// torn down, which would leave every link into it dangling. A
 	// symlink entry found only in a sibling is copied instead.
 	if entry.Mode == "symlink" && source.IsPrimary {
 		// Absolute target so the link survives moving the worktree dir.
 		if err := os.Symlink(src, dst); err != nil {
-			if errors.Is(err, os.ErrExist) {
-				return &carryOverFailure{Path: entry.Path, Reason: "Destination already exists"}, "", source
-			}
 			return &carryOverFailure{Path: entry.Path, Reason: err.Error()}, "", source
 		}
 		// Only directory symlinks are hidden from git (file symlinks
@@ -324,19 +325,30 @@ func applyOneCarryOver(sources []worktreeIdentity, destPath string, entry carryO
 		}
 		return nil, "", source
 	}
-	// Copy mode, no overwrite of files git just laid down. cp -R is the
-	// pragmatic stand-in for node's fs.cp(recursive, force:false):
-	// -n refuses overwrites silently, so pre-check the destination to
-	// report the same "already exists" failure the app does.
-	if _, err := os.Lstat(dst); err == nil {
-		return &carryOverFailure{Path: entry.Path, Reason: "Destination already exists"}, "", source
-	}
-	cmd := exec.Command("cp", "-R", "-P", src, dst)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		reason := cmp.Or(strings.TrimSpace(string(output)), err.Error())
-		return &carryOverFailure{Path: entry.Path, Reason: reason}, "", source
+	if err := copyTree(src, dst); err != nil {
+		return &carryOverFailure{Path: entry.Path, Reason: err.Error()}, "", source
 	}
 	return nil, "", source
+}
+
+// Copies src to an absent dst as a copy-on-write clone where the
+// platform can (see cloneTree), else with cp -R -P, the pragmatic
+// stand-in for node's fs.cp(recursive).
+func copyTree(src, dst string) error {
+	err := cloneTree(src, dst)
+	if err == nil || errors.Is(err, os.ErrExist) {
+		return err
+	}
+	// dst was absent before the clone, so anything here is its leftover.
+	// cp would otherwise copy into it.
+	if err := os.RemoveAll(dst); err != nil {
+		return err
+	}
+	output, err := exec.Command("cp", "-R", "-P", src, dst).CombinedOutput()
+	if err != nil {
+		return errors.New(cmp.Or(strings.TrimSpace(string(output)), err.Error()))
+	}
+	return nil
 }
 
 // --- .git/info/exclude ---

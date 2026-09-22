@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -94,6 +95,9 @@ func TestApplyCarryOverFallsThroughSources(t *testing.T) {
 	if f := report.Failures[0]; f.Path != ".env.taken" || f.Source != "otter" || f.Reason != "Destination already exists" {
 		t.Fatalf("taken failure = %+v", f)
 	}
+	if got := readFileT(t, filepath.Join(dest, ".env.taken")); got != "already here\n" {
+		t.Fatalf("taken destination was touched: %q", got)
+	}
 	if f := report.Failures[1]; f.Path != ".env.nowhere" || f.Source != "" || f.Reason != "Source missing in every checkout" {
 		t.Fatalf("missing failure = %+v", f)
 	}
@@ -142,5 +146,52 @@ func TestCreateLifecycleCarriesOverFromSiblingWorktree(t *testing.T) {
 		if got := readFileT(t, filepath.Join(wt.Path, ".env.include")); got != "INC=1\n" {
 			t.Fatalf("%s (base %s): .env.include = %q", tc.name, tc.base, got)
 		}
+	}
+}
+
+// A copy entry lands the same tree whether the clone works or fails
+// partway and falls back to cp.
+func TestCopyTreeClonesOrFallsBack(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "node_modules")
+	writeFileT(t, filepath.Join(src, "pkg", "index.js"), "module.exports = 1\n")
+	if err := os.Chmod(filepath.Join(src, "pkg", "index.js"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("pkg", filepath.Join(src, "alias")); err != nil {
+		t.Fatal(err)
+	}
+	check := func(name, dst string) {
+		t.Helper()
+		if got := readFileT(t, filepath.Join(dst, "pkg", "index.js")); got != "module.exports = 1\n" {
+			t.Fatalf("%s: index.js = %q", name, got)
+		}
+		if info, err := os.Stat(filepath.Join(dst, "pkg", "index.js")); err != nil || info.Mode()&0o100 == 0 {
+			t.Fatalf("%s: exec bit lost (%v, %v)", name, info, err)
+		}
+		if target, err := os.Readlink(filepath.Join(dst, "alias")); err != nil || target != "pkg" {
+			t.Fatalf("%s: alias should stay a symlink to pkg (%q, %v)", name, target, err)
+		}
+	}
+
+	dst := filepath.Join(t.TempDir(), "node_modules")
+	if err := copyTree(src, dst); err != nil {
+		t.Fatal(err)
+	}
+	check("native", dst)
+
+	native := cloneTree
+	t.Cleanup(func() { cloneTree = native })
+	// A clone that dies partway (another volume, a non-APFS disk).
+	cloneTree = func(_, dst string) error {
+		writeFileT(t, filepath.Join(dst, "partial"), "")
+		return errors.ErrUnsupported
+	}
+	dst = filepath.Join(t.TempDir(), "node_modules")
+	if err := copyTree(src, dst); err != nil {
+		t.Fatal(err)
+	}
+	check("fallback", dst)
+	if _, err := os.Stat(filepath.Join(dst, "partial")); !os.IsNotExist(err) {
+		t.Fatal("clone leftover survived the fallback")
 	}
 }
