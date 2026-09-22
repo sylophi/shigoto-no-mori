@@ -3,18 +3,13 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SectionHeading } from "@/components/ui/section-heading";
 import type { Theme } from "@shared/schemas";
 import { ToggleRow } from "@/components/shared/ToggleRow";
+import { batterySupported } from "@/hooks/ui/usePauseAnimationsOnBattery";
 
 const THEMES: { value: Theme; label: string; Icon: typeof Sun }[] = [
   { value: "light", label: "Light", Icon: Sun },
   { value: "dark", label: "Dark", Icon: Moon },
   { value: "system", label: "System", Icon: SunMoon },
 ];
-
-// The battery pause reads the power source through the Battery Status
-// API (usePauseAnimationsOnBattery), which Chromium has and Safari and
-// Firefox do not, so a browser without it gets no toggle.
-const batterySupported =
-  typeof navigator !== "undefined" && "getBattery" in navigator;
 
 interface AppearanceSectionProps {
   theme: Theme;
@@ -65,10 +60,13 @@ export function AppearanceSection({
         label="Doubutsu mode"
         description="Bold, color-blocked Animal Crossing inspired theme. Layers on top of light and dark; turn off for the plain, neutral look."
       />
+      {/* A browser without the Battery Status API has nothing to pause
+          on, and neither does the plain look: the wallpaper is doubutsu's. */}
       {batterySupported && (
         <ToggleRow
           checked={pauseAnimationsOnBattery}
           onCheckedChange={onPauseAnimationsOnBatteryChange}
+          disabled={!doubutsu}
           label="Pause always-on animations on battery"
           description="The drifting wallpaper redraws the window every frame, even when nothing else is happening. Pausing it while this machine runs on battery saves energy, and it picks up again when plugged in."
         />

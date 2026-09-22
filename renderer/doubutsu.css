@@ -882,15 +882,13 @@
 
 /* Nobody is looking (boot.tsx keeps `.unfocused` on <html>), or the
    machine is on battery (usePauseAnimationsOnBattery keeps
-   `.battery-saver`): pause the drift rather than remove it, so it
+   `.battery-pause`): pause the drift rather than remove it, so it
    resumes where it was instead of snapping to frame one. The layer
    stays promoted, since dropping it would repaint the whole surface on
    every flip. The hover stripes only run under a pointer, so they are
    left alone. (The spinners' unfocused pause is in index.css, and
    stays off battery: a frozen spinner in view reads as a hang.) */
-.doubutsu.unfocused [data-doubutsu-zone="main"]::before,
-.doubutsu.unfocused [data-slot="launcher"]::before,
-.doubutsu.battery-saver [data-doubutsu-zone="main"]::before,
-.doubutsu.battery-saver [data-slot="launcher"]::before {
+.doubutsu:is(.unfocused, .battery-pause) [data-doubutsu-zone="main"]::before,
+.doubutsu:is(.unfocused, .battery-pause) [data-slot="launcher"]::before {
   animation-play-state: paused;
 }

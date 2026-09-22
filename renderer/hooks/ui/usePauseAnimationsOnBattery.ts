@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import { useClientConfig } from "../config/useClientConfig";
 
-// Keeps `.battery-saver` on <html> while this machine runs on battery
+// Whether this browser can tell battery from AC. Gates both the pause
+// itself and the Settings toggle for it, so the two cannot disagree.
+export const batterySupported =
+  typeof navigator !== "undefined" && navigator.getBattery !== undefined;
+
+// Keeps `.battery-pause` on <html> while this machine runs on battery
 // and the user has not switched the pause off. doubutsu.css pauses the
 // wallpaper drift under it the same way it does under `.unfocused`
 // (boot.tsx): the drift asks the compositor for a frame every vsync,
@@ -15,28 +20,23 @@ export function usePauseAnimationsOnBattery(): void {
 
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.toggle("battery-saver", enabled && onBattery);
-    return () => root.classList.remove("battery-saver");
+    root.classList.toggle("battery-pause", enabled && onBattery);
+    return () => root.classList.remove("battery-pause");
   }, [enabled, onBattery]);
 }
 
-// The Battery Status API: `charging` means plugged in (also when the
-// battery is full), and a machine without a battery reports true, so
-// only a real battery ever reads as on battery. A browser without the
-// API never does either.
+// `charging` means plugged in (also when the battery is full), and a
+// machine without a battery reports true, so only a real battery ever
+// reads as on battery. A browser without the API never does either.
 function useOnBattery(): boolean {
   const [onBattery, setOnBattery] = useState(false);
   useEffect(() => {
-    // Not in TypeScript's DOM lib, hence the local shape.
-    const getBattery = (
-      navigator as { getBattery?: () => Promise<BatteryManager> }
-    ).getBattery;
-    if (getBattery === undefined) return;
+    if (!batterySupported) return;
     let battery: BatteryManager | undefined;
     let live = true;
     const sync = () => setOnBattery(battery?.charging === false);
-    void getBattery
-      .call(navigator)
+    void navigator
+      .getBattery?.()
       .then((b) => {
         if (!live) return;
         battery = b;
@@ -51,8 +51,4 @@ function useOnBattery(): boolean {
     };
   }, []);
   return onBattery;
-}
-
-interface BatteryManager extends EventTarget {
-  readonly charging: boolean;
 }
