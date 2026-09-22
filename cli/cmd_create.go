@@ -59,6 +59,10 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
+	// Here rather than in createWorktree: this command is where a
+	// worktree is new (adopt reuses createWorktree for one that
+	// already existed and carries its marks over instead).
+	markAutoPullIfNew(readGlobalConfigHints(), worktree.ID, false)
 	if jsonMode {
 		emit(map[string]any{"event": "created", "worktree": worktree})
 	} else {

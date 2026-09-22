@@ -4,9 +4,10 @@
 // ever follow the remote, the primary checkout above all, so it stops
 // drifting behind between visits. Stored in the global registry.json
 // beside the shelf for the same reason: it is a per-user, per-machine
-// choice, not a property of the repo. App-only: the CLI preserves the
-// key without reading it, so the app drops the mark on its own delete
-// and a mark left by an `sm rm` in a terminal matches nothing.
+// choice, not a property of the repo. Shared with the CLI, which seeds
+// and retires marks as worktrees come and go (cli/state.go
+// worktreeMarkKeys), so the app's own delete, which runs the CLI, has
+// nothing to clean up.
 import { AUTO_PULL_KEY } from "../config/store";
 import { makeRegistryIdSet } from "./registryIdSet";
 

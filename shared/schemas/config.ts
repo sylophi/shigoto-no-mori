@@ -183,6 +183,15 @@ export const GlobalConfigSchema = z.object({
   // script with `<detected-pm> install`. Only fires at project-add
   // time; existing projects are untouched.
   autoPopulateInstall: z.boolean().optional(),
+  // When true, a new worktree, and the primary checkout of a newly
+  // added project, start out with auto-pull on
+  // (host/lib/worktrees/autoPull.ts). Only fires at create and add
+  // time, in the CLI (cli/state.go markAutoPullIfNew). Existing
+  // worktrees keep their footer toggle as they are.
+  autoPullNew: z.boolean().optional(),
+  // When true, autoPullNew covers only the primary checkout of a newly
+  // added project. Nothing on its own.
+  autoPullPrimaryOnly: z.boolean().optional(),
   // When true, projects with a valid port-pool.config.json run
   // `port-pool provision` after setup at create and
   // `port-pool release` before teardown at delete.
@@ -290,6 +299,8 @@ export const DeviceSettingsPatchSchema = z.strictObject(
     launchScripts: true,
     deleteBranchOnRemove: true,
     autoPopulateInstall: true,
+    autoPullNew: true,
+    autoPullPrimaryOnly: true,
     portPool: true,
     terrier: true,
     githubCli: true,

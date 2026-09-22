@@ -214,6 +214,8 @@ type globalConfig struct {
 	PortPool             *bool             `json:"portPool"`
 	Terrier              *bool             `json:"terrier"`
 	AutoPopulateInstall  *bool             `json:"autoPopulateInstall"`
+	AutoPullNew          *bool             `json:"autoPullNew"`
+	AutoPullPrimaryOnly  *bool             `json:"autoPullPrimaryOnly"`
 	Launchers            []launcherCommand `json:"launchers"`
 	HiddenLaunchers      []string          `json:"hiddenLaunchers"`
 }
@@ -287,18 +289,30 @@ func noteNewerSchema(path string, raw []byte) {
 		path, doc.SchemaVersion, schemaVersion)))
 }
 
-// The registry's two keys. The app names the same two in
-// host/lib/config/store.ts.
+// The registry keys this CLI writes. The app names the same ones in
+// host/lib/config/store.ts. autoPullKey holds the worktree ids the app
+// fast-forwards on its fetch cadence (host/lib/worktrees/autoPull.ts):
+// the app flips it from the detail footer, and the CLI seeds it for a
+// new worktree or project when the autoPullNew setting says so
+// (markAutoPullIfNew).
 const (
 	projectsKey = "projects"
 	shelvedKey  = "shelvedWorktrees"
+	autoPullKey = "autoPullWorktrees"
 )
+
+// Every `{ worktreeId: true }` map in the registry. A worktree's id is
+// derived from its path, so the flows that retire an id (rm, project
+// remove) clear it from each of these through dropWorktreeMarks, and a
+// new mark only has to be added to this list. The app keeps the same
+// list in host/lib/worktrees/marks.ts.
+var worktreeMarkKeys = []string{shelvedKey, autoPullKey}
 
 // deviceId (app-written, host/lib/config/deviceId.ts) is deliberately
 // absent: this list drives only the state.json→registry.json split,
-// which deviceId postdates. So is sharedSettings
-// (host/lib/sharedSettings/store.ts), app-written the same way. The
-// CLI reads neither and carries both through every registry write.
+// which deviceId postdates. So are sharedSettings
+// (host/lib/sharedSettings/store.ts) and autoPullKey, which postdate
+// it the same way and ride through every registry write.
 var registryKeys = []string{projectsKey, shelvedKey}
 
 // Every path under the data dir in one place, so a layout change never
@@ -503,18 +517,23 @@ func loadProjects() ([]project, error) {
 }
 
 func readShelvedSet() map[string]bool {
-	shelved := map[string]bool{}
+	return readRegistryMarkSet(shelvedKey)
+}
+
+// The ids marked under one worktreeMarkKeys entry.
+func readRegistryMarkSet(key string) map[string]bool {
+	marked := map[string]bool{}
 	var m map[string]bool
-	if err := decodeKey(registryPath(), shelvedKey, readRegistryHints()[shelvedKey], &m); err != nil {
+	if err := decodeKey(registryPath(), key, readRegistryHints()[key], &m); err != nil {
 		noteRegistryTrouble(err)
-		return shelved
+		return marked
 	}
 	for id, v := range m {
 		if v {
-			shelved[id] = true
+			marked[id] = true
 		}
 	}
-	return shelved
+	return marked
 }
 
 // updateFileKey mirrors store.ts updateKey: read-modify-write of one
@@ -668,25 +687,109 @@ func splitLocked() error {
 
 // Flips the id in the shelved map (store.ts writeKey semantics).
 func setShelved(worktreeID string, shelved bool) error {
-	return updateRegistryKey(shelvedKey, func(raw json.RawMessage) (any, error) {
+	return setRegistryMark(shelvedKey, worktreeID, shelved)
+}
+
+func dropShelved(worktreeID string) error {
+	return setShelved(worktreeID, false)
+}
+
+// The auto-pull mark (autoPullKey). Same map shape as the shelf, and
+// the same helper as the app's registryIdSet.ts.
+func setAutoPull(worktreeID string, on bool) error {
+	return setRegistryMark(autoPullKey, worktreeID, on)
+}
+
+// The autoPullNew setting, applied to a worktree the CLI just created
+// or the primary checkout of a project it just added: autoPullNew
+// opts in, autoPullPrimaryOnly narrows it to primaries. Best-effort,
+// like the config seed beside it: a missing mark is a click in the
+// footer away.
+func markAutoPullIfNew(global globalConfig, worktreeID string, isPrimary bool) {
+	on := func(b *bool) bool { return b != nil && *b }
+	if !on(global.AutoPullNew) || (on(global.AutoPullPrimaryOnly) && !isPrimary) {
+		return
+	}
+	if err := setAutoPull(worktreeID, true); err != nil {
+		vlog("[state] set auto-pull: %v", err)
+	}
+}
+
+// Clears an id from every worktreeMarkKeys map in one pass under the
+// registry lock, for an id that is going away. Best-effort: the
+// worktree is already gone, and a leftover mark matches nothing until
+// a checkout reappears at the same path.
+func dropWorktreeMarks(worktreeID string) {
+	err := ensureRegistrySplit()
+	if err == nil {
+		err = withFileLock(registryPath(), func() error {
+			all, err := readJSONObject(registryPath())
+			if err != nil {
+				return err
+			}
+			changed := false
+			for _, key := range worktreeMarkKeys {
+				m := map[string]bool{}
+				if err := decodeKey(registryPath(), key, all[key], &m); err != nil {
+					return err
+				}
+				if _, ok := m[worktreeID]; !ok {
+					continue
+				}
+				delete(m, worktreeID)
+				encoded, err := json.Marshal(m)
+				if err != nil {
+					return err
+				}
+				all[key] = encoded
+				changed = true
+			}
+			if !changed {
+				return nil
+			}
+			return writeJSONObject(registryPath(), all)
+		})
+	}
+	if err != nil {
+		vlog("[state] drop worktree marks: %v", err)
+	}
+}
+
+// Carries one mark from a retired id to the id that replaces it (an
+// adopt moves the checkout, so its id changes with its path). A no-op
+// when `from` is unmarked.
+func moveRegistryMark(key, from, to string) error {
+	return updateRegistryKey(key, func(raw json.RawMessage) (any, error) {
 		m := map[string]bool{}
-		if err := decodeKey(registryPath(), shelvedKey, raw, &m); err != nil {
+		if err := decodeKey(registryPath(), key, raw, &m); err != nil {
 			return nil, err
 		}
-		if m[worktreeID] == shelved {
+		if !m[from] {
 			return nil, nil
 		}
-		if shelved {
+		delete(m, from)
+		m[to] = true
+		return m, nil
+	})
+}
+
+// Sets or clears one id in a worktreeMarkKeys map.
+func setRegistryMark(key, worktreeID string, on bool) error {
+	return updateRegistryKey(key, func(raw json.RawMessage) (any, error) {
+		m := map[string]bool{}
+		if err := decodeKey(registryPath(), key, raw, &m); err != nil {
+			return nil, err
+		}
+		if m[worktreeID] == on {
+			return nil, nil
+		}
+		if on {
 			m[worktreeID] = true
 		} else {
 			delete(m, worktreeID)
 		}
 		return m, nil
 	})
-}
-
-func dropShelved(worktreeID string) error {
-	return setShelved(worktreeID, false)
 }
 
 // Missing reads as defaults. A file that exists but can't be read or

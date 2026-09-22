@@ -10,3 +10,10 @@ const worktreeMarks = [shelvedMarks, autoPullMarks];
 export function moveWorktreeMarks(from: string, to: string): void {
   for (const marks of worktreeMarks) marks.move(from, to);
 }
+
+// For a worktree the app removes without the CLI (which retires marks
+// itself on rm). A leftover mark would greet the next worktree at the
+// same path.
+export function dropWorktreeMarks(worktreeId: string): void {
+  for (const marks of worktreeMarks) marks.drop(worktreeId);
+}
