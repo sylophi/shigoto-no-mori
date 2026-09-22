@@ -6,7 +6,7 @@
 import { focusManager } from "@tanstack/react-query";
 import { documentFocused } from "@/lib/focus";
 import { remoteDeviceStore } from "./devices";
-import { apiFor, onSessionLanded } from "./remoteDeviceSync";
+import { apiFor, onAccountLeft, onSessionLanded } from "./remoteDeviceSync";
 
 export function startRemoteSweepRequests(): void {
   const renewals = new Map<string, ReturnType<typeof setTimeout>>();
@@ -29,18 +29,25 @@ export function startRemoteSweepRequests(): void {
       .catch(() => undefined);
   };
 
+  const stopRenewing = (): void => {
+    for (const timer of renewals.values()) clearTimeout(timer);
+    renewals.clear();
+  };
+
   focusManager.subscribe((next) => {
     if (next === focused) return;
     focused = next;
-    if (focused) {
-      for (const device of remoteDeviceStore.getSnapshot()) {
-        if (device.status.phase === "connected") request(device.deviceId);
-      }
-    } else {
-      for (const timer of renewals.values()) clearTimeout(timer);
-      renewals.clear();
+    if (!focused) {
+      stopRenewing();
+      return;
+    }
+    for (const device of remoteDeviceStore.getSnapshot()) {
+      if (device.status.phase === "connected") request(device.deviceId);
     }
   });
+  // Signing out drops every peer api. A renewal firing after that
+  // would rebuild one just to be refused.
+  onAccountLeft(stopRenewing);
   // Hears the sessions already up at boot as landings too, so this is
   // the boot-time ask as well. A landed session's first reads come
   // from the host's caches, as old as the last time anyone looked.
