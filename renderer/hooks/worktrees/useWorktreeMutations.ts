@@ -9,7 +9,7 @@ import type {
   Worktree,
 } from "@shared/schemas";
 import { hostKeyDeviceId } from "@/lib/queryKeys";
-import { useHostScope } from "@/hooks/remote/useHostScope";
+import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 
 interface CreateWorktreeInput {
@@ -225,46 +225,81 @@ export function useIsDeletingWorktree(
   );
 }
 
-interface SetShelvedInput {
-  projectId: string;
-  worktreeId: string;
-  shelved: boolean;
-}
-
-export function useSetShelved() {
+// The two per-worktree flags (shelf, auto-pull) share one mutation
+// shape: an optimistic flip so the row and the sidebar group update
+// before the IPC round-trip lands, then a splice of the server's row
+// instead of a refetch of the whole project's list (the handler
+// already returns the refreshed Worktree, so cache state stays
+// accurate without an N-git-call round trip), and a rollback to truth
+// on error.
+function useSetWorktreeFlag<K extends "shelved" | "autoPull">(
+  field: K,
+  call: (
+    api: HostApi,
+    input: { projectId: string; worktreeId: string } & Record<K, boolean>,
+  ) => Promise<Worktree>,
+  errorTitle: string,
+  onSettled?: (
+    api: HostApi,
+    input: { projectId: string; worktreeId: string } & Record<K, boolean>,
+  ) => void,
+) {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
-  return useMutation<Worktree, Error, SetShelvedInput>({
-    mutationFn: (input) => api.worktrees.setShelved(input),
+  return useMutation<
+    Worktree,
+    Error,
+    { projectId: string; worktreeId: string } & Record<K, boolean>
+  >({
+    mutationFn: (input) => call(api, input),
     onMutate: (vars) => {
-      // Optimistic flip so the row's appearance and the sidebar group
-      // both update before the IPC round-trip lands.
       queryClient.setQueryData<Worktree[]>(
         keys.worktrees(vars.projectId),
         (current) =>
           current
             ? current.map((w) =>
-                w.id === vars.worktreeId ? { ...w, shelved: vars.shelved } : w,
+                w.id === vars.worktreeId ? { ...w, [field]: vars[field] } : w,
               )
             : current,
       );
     },
     onSuccess: (data, vars) => {
-      // Splice in the server's row instead of refetching the whole
-      // project's list. The handler already returns the refreshed
-      // Worktree so cache state stays accurate without an N-git-call
-      // round trip.
       queryClient.setQueryData<Worktree[]>(
         keys.worktrees(vars.projectId),
         (current) => current?.map((w) => (w.id === data.id ? data : w)),
       );
+      onSettled?.(api, vars);
     },
     onError: (_err, vars) => {
-      // Roll the stuck-optimistic row back to truth.
       void queryClient.invalidateQueries({
         queryKey: keys.worktrees(vars.projectId),
       });
     },
-    meta: { errorTitle: "Couldn't update shelved state" },
+    meta: { errorTitle },
   });
+}
+
+export function useSetShelved() {
+  return useSetWorktreeFlag(
+    "shelved",
+    (api, input) => api.worktrees.setShelved(input),
+    "Couldn't update shelved state",
+  );
+}
+
+// Marking a worktree is followed by a project refresh: its auto-pull
+// pass fast-forwards the newly marked worktree right away when it
+// qualifies (instead of on the minute sweep), and announces the change
+// to every row and viewer the way any pull does. Fire and forget: the
+// mark itself already landed, and the fetch path reports its own
+// failures.
+export function useSetAutoPull() {
+  return useSetWorktreeFlag(
+    "autoPull",
+    (api, input) => api.worktrees.setAutoPull(input),
+    "Couldn't update auto-pull",
+    (api, input) => {
+      if (input.autoPull) void api.git.refreshProject(input.projectId);
+    },
+  );
 }

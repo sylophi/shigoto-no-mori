@@ -22,6 +22,7 @@ import {
   ResetSoftPayloadSchema,
   ResetSoftResultSchema,
   RestoreDiscardPayloadSchema,
+  SetAutoPullPayloadSchema,
   SetShelvedPayloadSchema,
   SetStagedPayloadSchema,
   WorktreeCarryOverCompleteSchema,
@@ -79,6 +80,14 @@ export const worktreesContract = defineContract("host", {
   setShelved: invoke(
     "worktrees:setShelved",
     SetShelvedPayloadSchema,
+    WorktreeSchema,
+    { tracksProjectUsage: true, remote: true, mutating: true },
+  ),
+  // A flag flip. The renderer follows a mark with git:refreshProject,
+  // whose auto-pull pass answers the "Pull N commits" pill right away.
+  setAutoPull: invoke(
+    "worktrees:setAutoPull",
+    SetAutoPullPayloadSchema,
     WorktreeSchema,
     { tracksProjectUsage: true, remote: true, mutating: true },
   ),

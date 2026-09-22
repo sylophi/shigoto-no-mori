@@ -958,10 +958,10 @@ async function main() {
       assert.equal(worktreesContract.calls.list.mutating, false);
       assert.equal(worktreesContract.calls.push.mutating, true);
       assert.equal(scriptsContract.calls.run.mutating, true);
-      // A fetch of remote-tracking refs refreshes a cache the host keeps
-      // for itself and is bounded by its freshness window, so the git
-      // refresh pair is read-class despite spawning git.
-      assert.equal(gitContract.calls.refreshProject.mutating, false);
+      assert.equal(gitContract.calls.refreshProject.mutating, true);
+      // The sweep is the host's own scheduled pass. A peer's request
+      // only decides when it runs, so it is read-class despite the git
+      // and gh it spawns.
       assert.equal(gitContract.calls.sweep.mutating, false);
       assert.equal(globalConfigContract.calls.read.mutating, false);
       // The step-6 flips (v2 slice B). Every fs call is remote AND

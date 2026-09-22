@@ -195,6 +195,15 @@ pre-commit:
     clone:
       glob: "{host/lib/git/clone.ts,shared/cloneUrl.ts,shared/schemas/project.ts,shared/git/repoIdentity.mts,test/clone.mjs,test/lib/checkKit.mjs}"
       run: pnpm test clone
+    # Drives auto-pull against a REAL repository with a remote: a clean,
+    # strictly-behind worktree fast-forwards, and every state that would
+    # make the pull anything else (a local commit, a modified or
+    # untracked file, a detached HEAD, no upstream, a running script)
+    # leaves it untouched. Also the sweep's marked-only selection and
+    # the mark's registry.json round trip.
+    auto-pull:
+      glob: "{host/lib/worktrees/autoPull.ts,host/lib/worktrees/autoPullSweep.ts,host/lib/git/sync.ts,host/lib/git/core.ts,host/lib/config/store.ts,test/auto-pull.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test auto-pull
     # Drives the electron-free account layer (main/core/account/*,
     # shared/account/*) end to end with stubs: the hub client's
     # route/method/auth-tier discipline against the shared schemas

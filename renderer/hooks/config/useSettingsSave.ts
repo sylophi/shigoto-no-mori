@@ -26,6 +26,8 @@ export interface SettingsFormState {
   launchScripts: boolean;
   deleteBranchOnRemove: boolean;
   autoPopulateInstall: boolean;
+  autoPullNew: boolean;
+  autoPullPrimaryOnly: boolean;
   portPool: boolean;
   terrier: boolean;
   githubCli: boolean;
@@ -50,6 +52,8 @@ export function fromConfig(
     launchScripts: config.launchScripts ?? true,
     deleteBranchOnRemove: config.deleteBranchOnRemove ?? true,
     autoPopulateInstall: config.autoPopulateInstall ?? false,
+    autoPullNew: config.autoPullNew ?? false,
+    autoPullPrimaryOnly: config.autoPullPrimaryOnly ?? false,
     portPool: config.portPool ?? false,
     terrier: config.terrier ?? false,
     githubCli: config.githubCli ?? true,
@@ -77,6 +81,8 @@ function managedDeviceConfig(state: SettingsFormState): GlobalConfig {
     deleteBranchOnRemove: state.deleteBranchOnRemove ? undefined : false,
     // Default is false; only persist when explicitly enabled.
     autoPopulateInstall: state.autoPopulateInstall ? true : undefined,
+    autoPullNew: state.autoPullNew ? true : undefined,
+    autoPullPrimaryOnly: state.autoPullPrimaryOnly ? true : undefined,
     portPool: state.portPool ? true : undefined,
     terrier: state.terrier ? true : undefined,
     // Default is true; same opt-out serialization as deleteBranchOnRemove.
@@ -110,6 +116,8 @@ export function toDeviceSettingsPatch(
   return {
     deleteBranchOnRemove: state.deleteBranchOnRemove,
     autoPopulateInstall: state.autoPopulateInstall,
+    autoPullNew: state.autoPullNew,
+    autoPullPrimaryOnly: state.autoPullPrimaryOnly,
     portPool: state.portPool,
     terrier: state.terrier,
     githubCli: state.githubCli,

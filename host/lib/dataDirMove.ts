@@ -41,7 +41,7 @@ import {
   isENOENT,
   legacyDataDirPointerPath,
 } from "./util/paths";
-import { dropShelved, isShelved, setShelved } from "./worktrees/shelved";
+import { moveWorktreeMarks } from "./worktrees/marks";
 
 type MovedWorktree = { oldId: string; newId: string; newPath: string };
 
@@ -234,9 +234,9 @@ export async function moveDataDir(
   }
 }
 
-// Carries each moved worktree's shelf flag and data file from its old
-// id to its new one (or back, on `reverse`). The relocate flow does
-// the same for a single worktree (worktrees/relocate.ts).
+// Carries each moved worktree's marks (shelf, auto-pull) and data file
+// from its old id to its new one (or back, on `reverse`). The relocate
+// flow does the same for a single worktree (worktrees/relocate.ts).
 async function rekeyWorktrees(
   targets: { project: { id: string }; moved: MovedWorktree[] }[],
   reverse: boolean,
@@ -244,10 +244,7 @@ async function rekeyWorktrees(
   for (const { project, moved } of targets) {
     for (const m of moved) {
       const [from, to] = reverse ? [m.newId, m.oldId] : [m.oldId, m.newId];
-      if (isShelved(from)) {
-        dropShelved(from);
-        setShelved(to, true);
-      }
+      moveWorktreeMarks(from, to);
       // oxlint-disable-next-line no-await-in-loop -- each step is a read-modify-write on the same files
       const data = await readWorktreeData(project.id, from);
       if (data) {

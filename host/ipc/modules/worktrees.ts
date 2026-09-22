@@ -39,6 +39,7 @@ import {
   getRunningScriptWorktrees,
   withDeleteInflight,
 } from "@host/lib/scripts";
+import { setAutoPull } from "@host/lib/worktrees/autoPull";
 import { relocateWorktreeToManagedPath } from "@host/lib/worktrees/relocate";
 import { scriptEventNotifier } from "../scriptRun";
 import {
@@ -115,6 +116,7 @@ export const worktreesHandlers: Handlers<
     }
     // The CLI can't see the app's script registry, so the delete runs
     // under the shared tombstone protocol (see withDeleteInflight).
+    // The CLI drops the shelf and auto-pull marks with the worktree.
     return withDeleteInflight(
       worktreeId,
       "This worktree is already being removed.",
@@ -131,6 +133,15 @@ export const worktreesHandlers: Handlers<
     mutateAndDescribe({ projectId, worktreeId }, (_target, project) =>
       setShelvedViaCli(project, worktreeId, shelved),
     ),
+
+  // A flag flip only, like setShelved. The pull itself has one entry
+  // point, the fetch scheduler's sweep (main/electron/fetch.ts): the
+  // renderer follows a mark with git:refreshProject so the first pull
+  // happens right away, through the same path as every later one.
+  setAutoPull: ({ projectId, worktreeId, autoPull }) =>
+    mutateAndDescribe({ projectId, worktreeId }, async () => {
+      setAutoPull(worktreeId, autoPull);
+    }),
 
   renameBranch: (input) =>
     mutateAndDescribe(input, (wt) => renameBranch(wt.path, input.newBranch)),

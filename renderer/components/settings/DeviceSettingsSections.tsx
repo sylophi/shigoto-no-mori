@@ -45,6 +45,28 @@ export function DeviceToggleSections({
           label="Delete branch when removing worktree"
           description="Force-deletes the local branch the worktree had checked out. Remote branches aren't touched. Skipped when the branch is still in use elsewhere or is the repo's primary HEAD."
         />
+        <ToggleRow
+          checked={form.autoPullNew}
+          onCheckedChange={(v) =>
+            setForm((prev) => ({ ...prev, autoPullNew: v }))
+          }
+          label="Start new worktrees with auto-pull on"
+          description="Applies to worktrees you create from now on, and to the primary checkout of projects you add. Existing worktrees aren't changed, and each worktree's own auto-pull toggle still wins."
+        />
+        {/* A sub-option of the row above: indented past its switch so
+            the nesting reads without the disabled state doing the
+            talking. pl-11 is the switch width plus the row gap. */}
+        <div className="pl-11">
+          <ToggleRow
+            checked={form.autoPullNew && form.autoPullPrimaryOnly}
+            onCheckedChange={(v) =>
+              setForm((prev) => ({ ...prev, autoPullPrimaryOnly: v }))
+            }
+            disabled={!form.autoPullNew}
+            label="Primary checkouts only"
+            description="Only the primary checkout of a newly added project starts with auto-pull on. Other new worktrees start with it off."
+          />
+        </div>
       </section>
 
       <section className="space-y-3">

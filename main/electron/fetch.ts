@@ -20,6 +20,9 @@ import {
   refreshProjectPullRequests,
 } from "@host/lib/githubCli/pullRequests";
 import { loadProjects } from "@host/lib/projects";
+import { runningScriptWorktreeIds } from "@host/lib/scripts";
+import { sweepAutoPull } from "@host/lib/worktrees/autoPullSweep";
+import { announceProjectChanged } from "../ipc/handlers";
 import { broadcastAll } from "../ipc/register";
 
 // Skip if a fetch finished within this window. Short enough that rapid
@@ -40,20 +43,26 @@ const SWEEP_INTERVAL_MS = 60_000;
 const ATTENTION_LEASE_MS = 2 * SWEEP_INTERVAL_MS;
 
 const lastFetchedAt = new Map<string, number>();
-const fetchInFlight = new Map<string, Promise<void>>();
+const fetchInFlight = new Map<string, Promise<boolean>>();
 const lastPullRequestSweepAt = new Map<string, number>();
 // Projects whose last fetch attempt failed, so a run of failures warns once.
 const failingProjects = new Set<string>();
+// Per project, the worktrees whose auto-pull failed on the last sweep,
+// so a run of failures warns once. Replaced whole on every sweep: a
+// worktree that stops failing (pulled, skipped, unmarked, removed)
+// drops out, and its next failure warns again.
+const failingAutoPulls = new Map<string, ReadonlySet<string>>();
 let sweepHandle: NodeJS.Timeout | null = null;
 let attendedUntil = 0;
 
+// Resolves to whether a fetch ran (false inside the freshness window).
 export function maybeFetchProject(
   projectId: string,
   projectPath: string,
   maxAgeMs = FRESHNESS_MS,
-): Promise<void> {
+): Promise<boolean> {
   const ts = lastFetchedAt.get(projectId) ?? 0;
-  if (Date.now() - ts < maxAgeMs) return Promise.resolve();
+  if (Date.now() - ts < maxAgeMs) return Promise.resolve(false);
   // A request landing while a fetch is running joins it rather than
   // spawning a second git behind the same network round trip.
   const running = fetchInFlight.get(projectId);
@@ -68,7 +77,7 @@ export function maybeFetchProject(
 async function fetchProject(
   projectId: string,
   projectPath: string,
-): Promise<void> {
+): Promise<boolean> {
   broadcastAll(gitContract, "fetchActive", { projectId, active: true });
   try {
     const before = await snapshotRemoteRefs(projectPath);
@@ -79,6 +88,11 @@ async function fetchProject(
     if (before !== after) {
       broadcastAll(gitContract, "refsRefreshed", { projectId });
     }
+    // After every successful fetch, not only one that moved a ref: a
+    // marked worktree that was dirty or busy at the last pass and is
+    // clean now has the same upstream and still wants pulling.
+    await autoPullProject(projectId, projectPath);
+    return true;
   } catch (error) {
     // Leave refs stale and let the next attempt retry. Warn only on the way
     // into the failed state: lastFetchedAt advances on success only, so a
@@ -93,6 +107,52 @@ async function fetchProject(
     }
   } finally {
     broadcastAll(gitContract, "fetchActive", { projectId, active: false });
+  }
+  return false;
+}
+
+// The explicit git:refreshProject request. Unlike the focus and timer
+// paths it always ends in an auto-pull pass: the renderer sends it
+// right after marking a worktree, and a fetch skipped as fresh must
+// not leave that first pull waiting for the minute sweep.
+export async function refreshProject(
+  projectId: string,
+  projectPath: string,
+): Promise<void> {
+  const fetched = await maybeFetchProject(projectId, projectPath);
+  if (!fetched) await autoPullProject(projectId, projectPath);
+}
+
+// Fast-forward the project's auto-pull worktrees (autoPullSweep.ts).
+// The merge is an app-run git command, so the git-directory watcher
+// drops its ref move as the app's own: the project-scoped announcement
+// the watcher would have made for an external pull comes from here.
+// Never throws: a failed pull is one worktree's problem and must not
+// read as a failed fetch.
+async function autoPullProject(
+  projectId: string,
+  projectPath: string,
+): Promise<void> {
+  try {
+    const { pulled, failed } = await sweepAutoPull(
+      projectId,
+      projectPath,
+      runningScriptWorktreeIds(),
+    );
+    for (const { worktree, commits } of pulled) {
+      console.log(
+        `[auto-pull] ${worktree.path}: fast-forwarded ${commits} commit(s)`,
+      );
+    }
+    const wasFailing = failingAutoPulls.get(projectId);
+    for (const { worktree, message } of failed) {
+      if (wasFailing?.has(worktree.id)) continue;
+      console.warn(`[auto-pull] ${worktree.path}: ${message}`);
+    }
+    failingAutoPulls.set(projectId, new Set(failed.map((f) => f.worktree.id)));
+    if (pulled.length > 0) announceProjectChanged(projectId);
+  } catch (error) {
+    console.warn(`[auto-pull] ${projectPath}: ${errorMessageOf(error)}`);
   }
 }
 

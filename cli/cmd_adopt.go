@@ -76,6 +76,12 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return 1, err
 	}
+	// The checkout moved, so its id did too. Auto-pull is the user's
+	// choice for this branch's checkout, not for its old path, so the
+	// mark follows it (the app's relocate does the same).
+	if err := moveRegistryMark(autoPullKey, id.ID, worktree.ID); err != nil {
+		vlog("[state] move auto-pull: %v", err)
+	}
 	if jsonMode {
 		emit(map[string]any{"event": "created", "worktree": worktree})
 	} else {

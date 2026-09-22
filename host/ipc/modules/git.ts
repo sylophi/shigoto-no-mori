@@ -6,7 +6,7 @@ import { findProjectOrThrow } from "@host/lib/projects";
 // The fetch scheduler itself stays in main/electron because it
 // broadcasts through the Electron transport binding.
 type GitImpl = {
-  maybeFetchProject: (projectId: string, projectPath: string) => Promise<void>;
+  refreshProject: (projectId: string, projectPath: string) => Promise<void>;
   sweepForPeer: () => { leaseMs: number };
 };
 
@@ -26,7 +26,7 @@ function gitImpl(): GitImpl {
 export const gitHandlers: Handlers<typeof gitContract> = {
   refreshProject: async ({ projectId }) => {
     const project = findProjectOrThrow(projectId);
-    await gitImpl().maybeFetchProject(project.id, project.path);
+    await gitImpl().refreshProject(project.id, project.path);
   },
   sweep: async () => gitImpl().sweepForPeer(),
 };

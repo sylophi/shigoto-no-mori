@@ -116,6 +116,7 @@ export function worktree(
     isExternal: false,
     detached: false,
     shelved: false,
+    autoPull: false,
     ...base,
   };
 }
@@ -515,6 +516,8 @@ export const labGlobalConfig = {
   launchScripts: true,
   deleteBranchOnRemove: true,
   autoPopulateInstall: true,
+  autoPullNew: false,
+  autoPullPrimaryOnly: false,
   portPool: true,
   terrier: false,
   githubCli: true,

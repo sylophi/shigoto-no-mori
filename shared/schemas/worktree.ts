@@ -112,6 +112,13 @@ export const WorktreeSchema = z.object({
   // list by default but recoverable via the per-project "Show shelved"
   // toggle. The worktree itself is untouched on disk.
   shelved: z.boolean(),
+  // User-driven "follow the remote" flag. While it is set, the app
+  // fast-forwards this worktree onto its upstream after each of its
+  // background fetches, as long as the worktree has no local commits,
+  // no uncommitted or untracked changes and no app-started process.
+  // Meant for the primary checkout and other branches only ever read
+  // here. Defaults so a row from an older peer or CLI still parses.
+  autoPull: z.boolean().default(false),
 });
 export type Worktree = z.infer<typeof WorktreeSchema>;
 
@@ -313,6 +320,10 @@ export const RenameBranchPayloadSchema = WorktreeScopedPayloadSchema.extend({
 
 export const SetShelvedPayloadSchema = WorktreeScopedPayloadSchema.extend({
   shelved: z.boolean(),
+});
+
+export const SetAutoPullPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  autoPull: z.boolean(),
 });
 
 export const CheckoutBranchPayloadSchema = WorktreeScopedPayloadSchema.extend({

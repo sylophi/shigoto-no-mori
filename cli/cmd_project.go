@@ -170,6 +170,9 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 		}
 	} else {
 		_ = removeProjectState(proj.ID)
+		// The primary's marks are keyed by its path, not the project
+		// id, so they would outlive the state dir and greet a re-add.
+		dropWorktreeMarks(worktreeIDFromPath(proj.Path))
 	}
 
 	if jsonMode {
@@ -254,7 +257,7 @@ func cmdProjectAdd(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	seedProjectConfig(proj)
+	seedNewProject(proj)
 
 	if jsonMode {
 		emit(proj)
@@ -294,15 +297,18 @@ func registerProject(path string) (project, error) {
 	return proj, nil
 }
 
-// Best-effort config seed; bare repos / unborn HEADs just stay
-// unseeded until first configure (the scope's beforeWrite refuses to
-// write a defaultBranch-less document, which vlogs below).
-func seedProjectConfig(proj project) {
+// What a project gets at add time and only then: the config seed and,
+// per the autoPullNew setting, an auto-pull mark on its primary
+// checkout. Best-effort. Bare repos and unborn HEADs just stay unseeded
+// until first configure (the scope's beforeWrite refuses to write a
+// defaultBranch-less document, which vlogs below).
+func seedNewProject(proj project) {
+	global := readGlobalConfigHints()
+	markAutoPullIfNew(global, worktreeIDFromPath(proj.Path), true)
 	seeded := map[string]any{}
 	if defaultBranch := resolveDefaultBranch(proj.Path, ""); defaultBranch != "" {
 		seeded["defaultBranch"] = defaultBranch
 	}
-	global := readGlobalConfigHints()
 	if global.AutoPopulateInstall != nil && *global.AutoPopulateInstall {
 		if pm := detectPackageManager(proj.Path); pm != "" {
 			seeded["scripts.setup"] = pm + " install"
@@ -458,7 +464,7 @@ func cmdProjectAddAll(ctx cliContext, root string, yes bool) (int, error) {
 			note(fmt.Sprintf("warning: skipping %s: %s", repo, err))
 			continue
 		}
-		seedProjectConfig(proj)
+		seedNewProject(proj)
 		added = append(added, proj)
 		if !jsonMode {
 			out(greenOut(fmt.Sprintf("added %s (%s)", proj.Name, proj.Path)))

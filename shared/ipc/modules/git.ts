@@ -3,19 +3,22 @@ import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
 
 export const gitContract = defineContract("host", {
-  // Read-class: a fetch of remote-tracking refs refreshes a cache the
-  // host keeps for itself, and it is bounded by the host's freshness
-  // window (main/electron/fetch.ts). Nothing the user owns moves.
+  // mutating: beyond the fetch (a cache refresh, read-class on its
+  // own) it always ends in an auto-pull pass, which fast-forwards the
+  // project's marked worktrees, and it does so on every call.
   refreshProject: invoke(
     "git:refreshProject",
     ProjectScopedPayloadSchema,
     z.void(),
-    { remote: true, mutating: false },
+    { remote: true, mutating: true },
   ),
   // A peer saying it is looking at this host: runs the host's
   // background sweep (refs and PRs, every project) if it is stale, and
   // keeps the host's sweep timer ticking for the returned lease. The
   // peer renews within that lease while its window stays focused.
+  // Read-class: the sweep is the host's own scheduled pass, including
+  // the auto-pulls the host's user marked for it, and a request only
+  // decides when it runs, never more often than its interval.
   sweep: invoke("git:sweep", z.void(), z.object({ leaseMs: z.number() }), {
     remote: true,
     mutating: false,
