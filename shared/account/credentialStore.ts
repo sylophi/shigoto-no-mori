@@ -57,7 +57,7 @@ type SignedOutShape = {
 
 export type AccountStore = {
   read(): StoredAccount | null;
-  // Whether a credential is stored, without opening it (no decrypt).
+  // read() !== null, for callers that only need the verdict.
   signedIn(): boolean;
   write(account: StoredAccount): void;
   // Signs out: drops the credential, keeps the name (and any parked
@@ -175,20 +175,26 @@ export function createAccountStore(opts: {
     },
 
     signedIn() {
-      const doc = readDoc();
-      return doc !== null && !("signedOut" in doc);
+      return this.read() !== null;
     },
 
     clear() {
       const doc = readDoc();
-      if (doc === null) {
-        storage.removeRaw();
-        return;
+      // The remainder is a nicety; the sign-out is not. A remainder
+      // that cannot be written falls back to removing the document,
+      // which the backing swallows.
+      try {
+        if (doc !== null) {
+          setSignedOut(
+            typeof doc.deviceName === "string" ? doc.deviceName : "",
+            "signedOut" in doc ? doc.parked : undefined,
+          );
+          return;
+        }
+      } catch {
+        // Fall through to the removal.
       }
-      setSignedOut(
-        typeof doc.deviceName === "string" ? doc.deviceName : "",
-        "signedOut" in doc ? doc.parked : undefined,
-      );
+      storage.removeRaw();
     },
 
     rememberedDeviceName() {
@@ -198,10 +204,15 @@ export function createAccountStore(opts: {
     },
 
     park(account) {
-      setSignedOut(account.deviceName, {
-        ...encrypt(account.credential),
-        accountId: account.accountId,
-      });
+      // Like clear: a parking that cannot be written still signs out.
+      try {
+        setSignedOut(account.deviceName, {
+          ...encrypt(account.credential),
+          accountId: account.accountId,
+        });
+      } catch {
+        storage.removeRaw();
+      }
     },
 
     readParked() {

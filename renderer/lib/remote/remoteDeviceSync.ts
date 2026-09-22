@@ -168,6 +168,7 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
   // below, which would put the old account's device tabs back.
   if (directPresenceRule(current.socket) === "gone") {
     setRemoteDevices([]);
+    lastRoster = new Set();
     return;
   }
   // A reconnect can follow an enroll or a revoke that happened while
@@ -377,16 +378,23 @@ export function startRemoteDeviceSync(queryClient: QueryClient): void {
   // falls back to when a refetch fails), the per-device apis and
   // caches, and the followers' per-device state. A rename keeps it
   // all: same account, same peers.
+  // Unknown until the seed lands; a change to signed out is a
+  // departure whatever came before, and the seed never overwrites a
+  // change that beat it (null is a known value here).
   let syncedAccountId: string | null | undefined;
   window.api.account.onChanged(({ accountId }) => {
-    if (syncedAccountId !== undefined && accountId !== syncedAccountId) {
-      leaveAccount(queryClient);
-    }
+    const leaving =
+      syncedAccountId === undefined
+        ? accountId === null
+        : syncedAccountId !== null && accountId !== syncedAccountId;
     syncedAccountId = accountId;
+    if (leaving) leaveAccount(queryClient);
     refetchDeviceList();
   });
   void window.api.account.status().then((status) => {
-    syncedAccountId ??= status.signedIn ? status.accountId : null;
+    if (syncedAccountId === undefined) {
+      syncedAccountId = status.signedIn ? status.accountId : null;
+    }
   });
   // Every list change reconciles from here, this module's own refetches
   // included, alongside everyone else's landing in the shared cache (a

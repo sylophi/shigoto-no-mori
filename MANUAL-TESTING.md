@@ -238,9 +238,10 @@ cloning exists.
   the hub answers its dead credential with a typed "device revoked"
   (a tombstone, `hub/migrations/0002_revoked_credentials.sql`), and
   the app signs out exactly as if it had been online for the revoke.
-  Against a hub without that migration the device instead sits
-  "blocked: refused" with the raw credential error, signed in, until
-  signed out by hand.
+  Apply the migration before deploying the Worker; against a hub
+  without it a revoke still lands (without its tombstone) and the
+  offline device instead sits "blocked: refused" with the raw
+  credential error, signed in, until signed out by hand.
 - **Both profiles use the owner's real dev account.** Each enrolls on
   the dev hub and provisions a tunnel. This is intended: the hub,
   Clerk and tunnel provisioning are exercised for real.
@@ -397,8 +398,9 @@ it: the hub socket and the tunnel stop, every direct session closes,
 port forwards end, every mirror ends (its copy stays as an ordinary
 worktree, and the thread says why), the shared settings copy is
 dropped (the peers hand it back on the next sign-in), the login item
-is cleared, and the window shows no peers (no device tabs, no device
-filter) until the next sign-in. The devices that stay end their
+is cleared (packaged builds only: a dev run never installs one), and
+the window shows no peers (no device tabs, no device filter) until
+the next sign-in. The devices that stay end their
 mirrors with the removed one the next time they read the registry. A relaunch after `--fresh` is a new device. `pnpm test e2e/remote-smoke` cleans up its own
 `e2e-*` profiles unless run with `--keep`.
 

@@ -110,7 +110,8 @@ import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
 import { spawnFileSync } from "@host/fileSync/spawn";
 import { dataDir } from "@host/lib/util/paths";
 import { getDeviceId } from "@host/lib/config/deviceId";
-import { hubConnectInputs, makeAccountHandlers } from "./modules/account";
+import { accountSignedIn, makeAccountHandlers } from "./modules/account";
+import { hubConnectInputs } from "./modules/account";
 import { reconcileLaunchAtLogin } from "../electron/liveness";
 import { withoutPeerState } from "@shared/schemas/config";
 import {
@@ -254,49 +255,38 @@ const LEFT_ACCOUNT_DETAIL =
   "This device left the account. The copy stays as a worktree.";
 const sweptSessions = new Set<string>();
 function endMirrorsOfNoAccount(): void {
-  if (mirrorDaemon.status() !== "running" || hubConnectInputs() !== null) {
-    return;
-  }
+  if (mirrorDaemon.status() !== "running") return;
   const unswept = mirrorDaemon
     .sessions()
     .filter((raw) => !sweptSessions.has(raw.session));
-  if (unswept.length === 0) return;
+  // The sign-in check opens the credential (a keychain read), so it
+  // runs only when there is something new to ask about.
+  if (unswept.length === 0 || accountSignedIn()) return;
   for (const raw of unswept) sweptSessions.add(raw.session);
   void endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL, {
     transfers: true,
   });
 }
 
-// What a device leaving its account tears down, run once per account
-// transition (a sign-out, a sign-in under another account; never a
-// rename): everything that was a pairing with, or a pick about, the
-// account's peers. Resolves once the mirror sweep is done, bounded so
-// a stuck daemon request cannot hold the sign-out, because the hub
-// refresh that follows is what closes the sessions the sweep's
-// terminates ride.
-async function leaveAccount(): Promise<void> {
-  clearDirectTickets();
-  stopPortForwardsTo(() => false);
-  // The shared settings and the peer-keyed client config picks are the
-  // account's, not this machine's (withoutPeerState says which); the
-  // renderer re-reads its config copy off the changed fan-out.
-  sharedSettingsCopy.clear();
-  void writeClientConfig(withoutPeerState(readClientConfigSync())).catch(
-    (error: unknown) => {
-      console.warn(
-        `[account] could not drop the peer-keyed client config: ${errorMessageOf(error)}`,
-      );
-    },
-  );
-  // The login item keeps a machine reachable TO its account; signed
-  // out it comes off, and the next sign-in's fan-out puts it back.
-  reconcileLaunchAtLogin();
-  await Promise.race([
+// The mirror sweep of a device leaving its account, bounded so a stuck
+// daemon request cannot hold the sign-out: the hub refresh that
+// follows closes the sessions the sweep's terminates ride.
+function endAllMirrorsBounded(): Promise<unknown> {
+  return Promise.race([
     endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL, {
       transfers: true,
     }),
     new Promise((resolve) => setTimeout(resolve, 5_000).unref?.()),
   ]);
+}
+
+// A step of the account fan-out that must not take the rest with it.
+async function teardownStep(what: string, run: () => unknown): Promise<void> {
+  try {
+    await run();
+  } catch (error) {
+    console.warn(`[account] ${what} failed: ${errorMessageOf(error)}`);
+  }
 }
 // The git half of every session this device runs (host/mirror/
 // gitFollow.ts): reads the daemon's sessions, reaches the peer through
@@ -366,20 +356,42 @@ export function registerIpcHandlers(): void {
   registerContract(clientConfigContract, clientConfigHandlers);
   // The account the peer-facing state was built under, so a change
   // can tell a rename (same account, nothing to tear down) from a
-  // sign-out or an account switch.
-  let peerAccountId = hubConnectInputs()?.accountId ?? null;
+  // sign-out. Unknown until the first change: reading it here would
+  // open the credential store before app.ready, where safeStorage
+  // still reports encryption unavailable on Windows and Linux and the
+  // cipher it builds would write plaintext for the whole session. An
+  // unknown previous account leaves only one thing certain: a change
+  // to signed out is a departure.
+  let peerAccountId: string | null | undefined;
   let lastMembership = new Set<string>();
   // Client-scoped: sign-in drives the OS browser and writes an
   // OS-keychain credential on this machine, so it never rides the socket
   // wire. The changed broadcast fans out to every window after any
   // sign-in, sign-out or rename, and the hub socket re-reconciles
-  // against the fresh account state at the same moment.
+  // against the fresh account state at the same moment. A departure
+  // (a sign-out; a switch is refused by the hub without one) tears
+  // down what was the account's, in an order the pieces need: the
+  // mirror sweep and the config write before the windows are told
+  // (the sweep's terminates ride the sessions the hub refresh closes;
+  // the windows re-read their config off the broadcast), the shared
+  // settings after the refresh (a peer's push landing between the
+  // clear and the sessions closing would refill the copy). Every step
+  // is fenced so one failing cannot leave the remote plane up.
   const accountHandlers = makeAccountHandlers(
-    (accountId) => {
-      let teardown = Promise.resolve();
-      if (accountId !== peerAccountId) {
-        peerAccountId = accountId;
-        teardown = leaveAccount();
+    async (accountId) => {
+      const previous = peerAccountId;
+      peerAccountId = accountId;
+      const leaving =
+        previous === undefined
+          ? accountId === null
+          : previous !== null && accountId !== previous;
+      if (leaving) {
+        clearDirectTickets();
+        stopPortForwardsTo(() => false);
+        await teardownStep("the mirror sweep", endAllMirrorsBounded);
+        await teardownStep("dropping the peer-keyed client config", () =>
+          writeClientConfig(withoutPeerState(readClientConfigSync())),
+        );
       }
       broadcastAll(accountContract, "changed", { accountId });
       // A direct account switch that stays signed in changes the
@@ -393,7 +405,17 @@ export function registerIpcHandlers(): void {
       broadcastAll(remoteAccessContract, "commandAccessChanged", undefined);
       // Also reconciles the direct listener from its tail, which
       // follows the same enrollment condition.
-      void teardown.then(() => refreshHubConnection());
+      await refreshHubConnection();
+      if (leaving) {
+        await teardownStep("dropping the shared settings", () =>
+          sharedSettingsCopy.clear(),
+        );
+        // The login item keeps a machine reachable TO its account;
+        // signed out it comes off, and the next sign-in puts it back.
+        reconcileLaunchAtLogin();
+      } else if (previous === null || previous === undefined) {
+        reconcileLaunchAtLogin();
+      }
     },
     // The switch flipping fans out on its own channel so the toggle
     // does not thrash the account status and device queries. No hub

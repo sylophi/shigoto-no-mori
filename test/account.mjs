@@ -392,6 +392,56 @@ async function main() {
         fakeSessionJwt("user_abc"),
       );
       assert.equal(store.read().deviceName, "Renamed");
+      // The name outlives a sign-out into the next enrollment, and a
+      // parked revoke from that sign-out is delivered only when the hub
+      // refuses the enroll for it (a 409: the device is still on the
+      // old account), after which the enroll is tried once more.
+      store.park({
+        credential: "cred-1",
+        accountId: "user_abc",
+        deviceName: "Renamed",
+      });
+      assert.equal(store.read(), null);
+      let refusals = 0;
+      const { fetchImpl: conflicting, calls: conflictCalls } = recordingFetch(
+        (url, init) => {
+          if (init.method === "DELETE")
+            return new Response(null, { status: 204 });
+          refusals += 1;
+          return refusals === 1
+            ? json({ error: "enrolled under a different account" }, 409)
+            : json({ credential: "cred-2", device: DEVICE });
+        },
+      );
+      await enrollDevice(
+        {
+          config: CONFIG,
+          service: createAccountService({
+            baseUrl: CONFIG.hubUrl,
+            fetchImpl: conflicting,
+          }),
+          store,
+          deviceId: "device-uuid",
+          fallbackDeviceName: "Fallback Mac",
+          platform: "darwin",
+        },
+        fakeSessionJwt("user_other"),
+      );
+      assert.deepEqual(
+        conflictCalls.map((c) => c.init.method),
+        ["POST", "DELETE", "POST"],
+        "the parked revoke did not go between the refused and the retried enroll",
+      );
+      assert.equal(
+        conflictCalls[1].init.headers.authorization,
+        "Bearer cred-1",
+      );
+      assert.deepEqual(store.read(), {
+        credential: "cred-2",
+        accountId: "user_other",
+        deviceName: "Renamed",
+      });
+      assert.equal(store.readParked(), null);
 
       const before = calls.length;
       await assert.rejects(

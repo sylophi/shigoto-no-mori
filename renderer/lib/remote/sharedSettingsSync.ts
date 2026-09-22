@@ -76,12 +76,15 @@ export function mergePeerSharedSettings(doc: SharedSettingsDoc): void {
 // The one writer of the cached local copy. Merged in rather than set,
 // so a late arrival can never roll the cache back: the seeding read
 // resolving after a broadcast, or two broadcasts landing out of order,
-// both merge to nothing.
+// both merge to nothing. The one exception is an EMPTY copy, which
+// only a clear announces (a device leaving its account): that is a
+// roll-back on purpose, and a merge would learn nothing from it.
 function noteLocalCopy(queryClient: QueryClient, doc: SharedSettingsDoc): void {
   const key = queryKeys.sharedSettings();
   void queryClient.cancelQueries({ queryKey: key, exact: true });
+  const cleared = Object.keys(doc.entries).length === 0;
   queryClient.setQueryData<SharedSettingsDoc>(key, (held) =>
-    held === undefined ? doc : mergeSharedSettings(held, doc),
+    held === undefined || cleared ? doc : mergeSharedSettings(held, doc),
   );
 }
 

@@ -139,22 +139,31 @@ export async function deleteDevice(
   accountId: string,
   now: number = Date.now(),
 ): Promise<boolean> {
-  const [, deleted] = await db.batch([
-    db
-      .prepare(
-        `INSERT OR REPLACE INTO revoked_credentials (credential_hash, device_id, revoked_at)
-         SELECT credential_hash, device_id, ? FROM devices
-         WHERE device_id = ? AND account_id = ?`,
-      )
-      .bind(now, deviceId, accountId),
-    db
-      .prepare("DELETE FROM devices WHERE device_id = ? AND account_id = ?")
-      .bind(deviceId, accountId),
-    db
-      .prepare("DELETE FROM revoked_credentials WHERE revoked_at < ?")
-      .bind(now - REVOKED_CREDENTIAL_RETENTION_MS),
-  ]);
-  return deleted.meta.changes > 0;
+  const remove = db
+    .prepare("DELETE FROM devices WHERE device_id = ? AND account_id = ?")
+    .bind(deviceId, accountId);
+  try {
+    const [, deleted] = await db.batch([
+      db
+        .prepare(
+          `INSERT OR REPLACE INTO revoked_credentials (credential_hash, device_id, revoked_at)
+           SELECT credential_hash, device_id, ? FROM devices
+           WHERE device_id = ? AND account_id = ?`,
+        )
+        .bind(now, deviceId, accountId),
+      remove,
+      db
+        .prepare("DELETE FROM revoked_credentials WHERE revoked_at < ?")
+        .bind(now - REVOKED_CREDENTIAL_RETENTION_MS),
+    ]);
+    return deleted.meta.changes > 0;
+  } catch {
+    // A batch is all or nothing, so nothing has happened yet. A Worker
+    // deployed ahead of the tombstone migration must still revoke:
+    // the row goes without its tombstone (the revoked device then
+    // gets the plain refusal, as before the tombstones).
+    return (await remove.run()).meta.changes > 0;
+  }
 }
 
 // Whether a credential hash that matched no device is a revoked one:
@@ -164,13 +173,19 @@ export async function isRevokedCredentialHash(
   credentialHash: string,
   now: number = Date.now(),
 ): Promise<boolean> {
-  const row = await db
-    .prepare(
-      "SELECT 1 FROM revoked_credentials WHERE credential_hash = ? AND revoked_at >= ?",
-    )
-    .bind(credentialHash, now - REVOKED_CREDENTIAL_RETENTION_MS)
-    .first();
-  return row !== null;
+  try {
+    const row = await db
+      .prepare(
+        "SELECT 1 FROM revoked_credentials WHERE credential_hash = ? AND revoked_at >= ?",
+      )
+      .bind(credentialHash, now - REVOKED_CREDENTIAL_RETENTION_MS)
+      .first();
+    return row !== null;
+  } catch {
+    // No tombstone table yet (a Worker deployed ahead of its
+    // migration): the plain refusal, never a 500 for a bad token.
+    return false;
+  }
 }
 // Renames the device row, scoped to the account the worker authorized
 // like deleteDevice. Returns true when a row was actually renamed.

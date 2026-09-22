@@ -157,8 +157,12 @@ function holdsCredential(accountFile: string): boolean {
   try {
     const doc = JSON.parse(readFileSync(accountFile, "utf8")) as {
       signedOut?: boolean;
+      parked?: unknown;
     };
-    return doc.signedOut !== true;
+    // A parked revoke (a sign-out that never reached the hub) is an
+    // enrollment the hub still holds, and the wipe takes the one
+    // credential that could end it.
+    return doc.signedOut !== true || doc.parked !== undefined;
   } catch {
     return false;
   }

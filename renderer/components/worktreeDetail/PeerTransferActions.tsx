@@ -57,7 +57,8 @@ function TransferButtons({
   // progress keeps its progress, its finish-up step and its report
   // when the roster empties under it (a sign-out, a revoke), and says
   // what failed rather than vanishing mid-run.
-  if (targets.length === 0 && open === null) return null;
+  const canOpen = targets.length > 0;
+  if (!canOpen && open === null) return null;
   const dialog = {
     worktree,
     project,
@@ -68,7 +69,7 @@ function TransferButtons({
   return (
     <>
       {/* App only, like "Mirror here": the daemon lives in main. */}
-      {canForwardPorts && !mirrored && (
+      {canOpen && canForwardPorts && !mirrored && (
         <FooterActionButton
           icon={<RefreshCw />}
           label="Mirror to…"
@@ -76,12 +77,14 @@ function TransferButtons({
           onClick={() => setOpen("mirror")}
         />
       )}
-      <FooterActionButton
-        icon={<Shovel />}
-        label="Transplant to…"
-        title="Move this worktree to another device"
-        onClick={() => setOpen("transplant")}
-      />
+      {canOpen && (
+        <FooterActionButton
+          icon={<Shovel />}
+          label="Transplant to…"
+          title="Move this worktree to another device"
+          onClick={() => setOpen("transplant")}
+        />
+      )}
       {open === "mirror" && <MirrorToDialog {...dialog} />}
       {open === "transplant" && <TransplantToDialog {...dialog} />}
     </>

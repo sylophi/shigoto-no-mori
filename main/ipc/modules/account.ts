@@ -245,7 +245,10 @@ function statusOf(
     configured: isConfigured(serviceConfig()),
     signedIn: record !== null,
     accountId: record?.accountId ?? "",
-    deviceName: record?.deviceName ?? defaultName,
+    // Signed out, the name the device last enrolled under, which is
+    // what the next enrollment uses (enroll.ts).
+    deviceName:
+      record?.deviceName ?? store().rememberedDeviceName() ?? defaultName,
     // --clone-login leaves this beside the token store it copied
     // (scripts/lib/devProfile.mts cloneDevLogin).
     sharedSignIn: existsSync(
@@ -361,7 +364,7 @@ export async function retryParkedSignOut(): Promise<void> {
 }
 
 export function makeAccountHandlers(
-  emitChanged: (accountId: string | null) => void,
+  emitChanged: (accountId: string | null) => Promise<void> | void,
   emitCommandAccessChanged: () => void,
   // Hears every registry list the hub serves, for state that follows
   // the account's membership (a mirror with a removed peer).
@@ -371,9 +374,9 @@ export function makeAccountHandlers(
   // together, since any account transition (sign-in, sign-out, rename)
   // may change the answer (a new account scopes to its own switch,
   // sign-out turns it off).
-  const accountChanged = (): void => {
+  const accountChanged = (): Promise<void> => {
     invalidateGrantCache();
-    emitChanged(store().read()?.accountId ?? null);
+    return Promise.resolve(emitChanged(store().read()?.accountId ?? null));
   };
   // A device enrolled before the default learned to drop the hostname's
   // domain (and to prefer the macOS computer name) still stores the raw
@@ -473,9 +476,12 @@ export function makeAccountHandlers(
       if (signOutInFlight) return signOutInFlight;
       signOutInFlight = (async (): Promise<void> => {
         // The command-access switch is off from the first moment of
-        // the sign-out, not from the fan-out after the revoke: a peer's
-        // mutating invoke landing between the credential clear and
-        // accountChanged() must not read the cached grant.
+        // the sign-out, ahead of the revoke's round trip: the grant is
+        // this account's, and a peer's mutating invoke landing during
+        // the revoke must not find it. Dropped from disk too, so
+        // re-signing into the SAME account does not resurrect it from
+        // a lingering grants.json.
+        grantStore().clear();
         invalidateGrantCache();
         const config = serviceConfig();
         await signOutDevice({
@@ -495,13 +501,7 @@ export function makeAccountHandlers(
             );
           },
         });
-        // Drop this host's command-access switch too, so re-signing
-        // into the SAME account does not resurrect it from a lingering
-        // grants.json. accountChanged() below also invalidates the
-        // grant cache, so the in-memory mirror is dropped in the same
-        // breath.
-        grantStore().clear();
-        accountChanged();
+        await accountChanged();
       })();
       try {
         return await signOutInFlight;

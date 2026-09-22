@@ -32,13 +32,11 @@ import { scheduleRelaunch } from "./relaunch";
 import { CRASH_LOOP, decide, FATAL_RELAUNCH } from "../core/liveness/rateLimit";
 
 function keepReachableEnabled(): boolean {
-  // Inert on a build with no account service, and while signed out:
-  // the setting exists so a machine stays available TO the account,
-  // its UI is unreachable when the account service env is absent or
-  // the device is not enrolled, and the reconcile (boot, every
-  // account change) clears a login item left behind by a previously
-  // configured build or by a sign-out.
-  if (!accountServiceConfigured() || !accountSignedIn()) return false;
+  // Inert on a build with no account service: the setting exists so a
+  // machine stays available TO the account, its UI is unreachable when
+  // the account service env is absent, and boot's reconcile clears a
+  // login item left behind by a previously configured build.
+  if (!accountServiceConfigured()) return false;
   try {
     return keepReachableOn(readClientConfigSync());
   } catch (error) {
@@ -58,10 +56,13 @@ function keepReachableEnabled(): boolean {
 // the OS login item to match. Idempotent (setLoginItemSettings with the
 // same value is a no-op) and never throws: it is called at boot and on
 // every client-config write, and a liveness reconcile must not be able
-// to take the app down. Called from boot in main/index.ts and from the
-// clientConfig write handler.
+// to take the app down. Called from boot in main/index.ts, from the
+// clientConfig write handler, and from the account fan-out: the login
+// item is for staying reachable to an account, so a signed-out device
+// has none (the crash relaunch below keeps the plain setting: a
+// relaunch is this machine's business whatever the account).
 export function reconcileLaunchAtLogin(): void {
-  const keepReachable = keepReachableEnabled();
+  const keepReachable = keepReachableEnabled() && accountSignedIn();
   // setLoginItemSettings is a no-op on Linux in Electron, so registering
   // there would silently do nothing. Say so rather than pretend it took.
   const os = platform();
