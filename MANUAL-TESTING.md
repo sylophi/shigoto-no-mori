@@ -381,7 +381,10 @@ signed-out Devices page, while a profile that holds a cloned sign-in
 (`--clone-login` leaves a marker beside the token store) only drops
 the account layer, since its Clerk session is the plain dev app's and
 ending it would sign every window out. Such a profile re-enrolls if
-relaunched. A relaunch after `--fresh` is a new device. `pnpm test e2e/remote-smoke` cleans up its own
+relaunched. Either way the sign-out tears the remote setup down with
+it: the hub socket and the tunnel stop, every direct session closes,
+port forwards end, the login item is cleared, and the window shows no
+peers (no device tabs, no device filter) until the next sign-in. A relaunch after `--fresh` is a new device. `pnpm test e2e/remote-smoke` cleans up its own
 `e2e-*` profiles unless run with `--keep`.
 
 ## Unattended remote smoke
@@ -438,7 +441,7 @@ one was filtered out, so name both.
 | clone onto a peer | a asks b to clone a loopback `git://` remote into b's repos folder and register it. Refused with commands off (the folder listing too), and for an option-shaped string or a path as the URL. The checkout lands, lists with an identity, and its `cloneUrl` reads back, where the path-origin shared repo answers null. A second clone onto the folder is refused.                                                                                                     |
 | liveness     | b is killed with SIGKILL. a drops it from the roster. b relaunches and both reconnect.                                                                                                                                                                                                                                                                                                                                                                                      |
 | shared settings: offline catch-up | b is killed, a writes a value, b relaunches. b's copy takes the value once its session lands, with no server having held it. |
-| revoke       | a removes b from the account. a's roster and registry drop it, and b signs itself out of the account.                                                                                                                                                                                                                                                                                                                                                                               |
+| revoke       | a removes b from the account. a's roster and registry drop it, and b signs itself out of the account: its hub socket stops, its direct sessions close, the port forward it ran is gone, and no device tabs remain.                                                                                                                                                                                                                                                                 |
 
 Screenshots and logs go to a temp dir named in the output. A failing
 scenario screenshots both windows first.
