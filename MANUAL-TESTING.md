@@ -229,7 +229,18 @@ cloning exists.
 - **`--fresh` is local only.** A device the profile enrolled stays on
   the hub, with its tunnel, until revoked. Leftovers show on the
   Devices page of any device on the account and can be revoked there.
-  See "Cleaning up after a session".
+  See "Cleaning up after a session". A sign-out that could not reach
+  the hub (offline, hub down) parks its revoke in the signed-out
+  envelope and delivers it on the next launch or the next sign-in, so
+  a leftover from an offline sign-out clears itself once the profile
+  runs online again.
+- **A device revoked while it was off** learns it on its next launch:
+  the hub answers its dead credential with a typed "device revoked"
+  (a tombstone, `hub/migrations/0002_revoked_credentials.sql`), and
+  the app signs out exactly as if it had been online for the revoke.
+  Against a hub without that migration the device instead sits
+  "blocked: refused" with the raw credential error, signed in, until
+  signed out by hand.
 - **Both profiles use the owner's real dev account.** Each enrolls on
   the dev hub and provisions a tunnel. This is intended: the hub,
   Clerk and tunnel provisioning are exercised for real.
