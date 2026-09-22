@@ -123,7 +123,7 @@ export async function upsertDevice(
 // (hub/migrations/0002_revoked_credentials.sql): long enough for a
 // device put away for a couple of weeks to learn it was removed. After
 // that it gets the plain refusal and signs out by hand. Enforced on
-// the lookup; the rows themselves are pruned on each revoke.
+// the lookup. The rows themselves are pruned on each revoke.
 export const REVOKED_CREDENTIAL_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
 
 // Deletes the device row, scoped to the account the worker authorized.

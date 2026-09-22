@@ -171,7 +171,7 @@ export class ScriptRunsStore {
   }
 
   // Ends the event drain. A peer store is stopped when the account it
-  // belonged to is left (below); the local store never is.
+  // belonged to is left (below). The local store never is.
   stop(): void {
     for (const unsubscribe of this.unsubscribers) unsubscribe();
     this.unsubscribers = [];

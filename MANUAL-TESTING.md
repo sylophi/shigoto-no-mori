@@ -238,8 +238,8 @@ cloning exists.
   the hub answers its dead credential with a typed "device revoked"
   (a tombstone, `hub/migrations/0002_revoked_credentials.sql`), and
   the app signs out exactly as if it had been online for the revoke.
-  Apply the migration before deploying the Worker; against a hub
-  without it a revoke still lands (without its tombstone) and the
+  Apply the migration before deploying the Worker. Against a hub
+  without it a revoke still lands (without its tombstone), and the
   offline device instead sits "blocked: refused" with the raw
   credential error, signed in, until signed out by hand.
 - **Both profiles use the owner's real dev account.** Each enrolls on

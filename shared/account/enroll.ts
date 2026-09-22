@@ -65,7 +65,7 @@ export async function enrollDevice(
     // sign-out whose revoke never reached it: deliver that revoke and
     // try once more. Only here, so a parked revoke that cannot be
     // delivered (offline) never stalls a sign-in that would have
-    // worked; a re-enroll under the SAME account rotates the row and
+    // worked. A re-enroll under the SAME account rotates the row, and
     // the parked credential is dead either way (write() drops it).
     if (
       !(error instanceof HubRequestError && error.status === 409) ||
@@ -127,8 +127,8 @@ export async function signOutDevice(deps: {
 
 // Delivers the revoke a sign-out parked, if any: at boot (both
 // shells) and on an enrollment the hub refused for it. A delivered or
-// refused revoke clears the parking; anything else keeps it for the
-// next try. Never throws; resolves to whether the parking was cleared.
+// refused revoke clears the parking, anything else keeps it for the
+// next try. Never throws. Resolves to whether the parking was cleared.
 export async function retryParkedRevoke(deps: {
   config: AccountServiceConfig;
   service: AccountService;

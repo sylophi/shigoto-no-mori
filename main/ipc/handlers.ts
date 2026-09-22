@@ -249,7 +249,7 @@ const mirrorDaemon = createMirrorDaemon({
 // a boot that starts signed out, or a daemon that was down at the
 // sign-out, would otherwise resume mirroring with peers of an account
 // this device is not on. Each session is asked once (the
-// reapOrphanedTransfers idiom); the account fan-out's own sweep
+// reapOrphanedTransfers idiom). The account fan-out's own sweep
 // covers the daemon-was-up case.
 const LEFT_ACCOUNT_DETAIL =
   "This device left the account. The copy stays as a worktree.";
@@ -369,7 +369,7 @@ export function registerIpcHandlers(): void {
   // wire. The changed broadcast fans out to every window after any
   // sign-in, sign-out or rename, and the hub socket re-reconciles
   // against the fresh account state at the same moment. A departure
-  // (a sign-out; a switch is refused by the hub without one) tears
+  // (a sign-out, since the hub refuses a switch without one) tears
   // down what was the account's, in an order the pieces need: the
   // mirror sweep and the config write before the windows are told
   // (the sweep's terminates ride the sessions the hub refresh closes;

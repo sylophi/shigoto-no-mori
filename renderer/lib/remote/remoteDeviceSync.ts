@@ -378,7 +378,7 @@ export function startRemoteDeviceSync(queryClient: QueryClient): void {
   // falls back to when a refetch fails), the per-device apis and
   // caches, and the followers' per-device state. A rename keeps it
   // all: same account, same peers.
-  // Unknown until the seed lands; a change to signed out is a
+  // Unknown until the seed lands. A change to signed out is a
   // departure whatever came before, and the seed never overwrites a
   // change that beat it (null is a known value here).
   let syncedAccountId: string | null | undefined;
