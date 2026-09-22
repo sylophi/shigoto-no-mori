@@ -123,7 +123,15 @@ export function cloudflaredArgs(): string[] {
   // and replaces its own binary, which would break the signature of
   // the copy the app ships. The version is pinned in
   // shared/packaging/cloudflaredDist.mts and bumped with the app.
-  return ["tunnel", "--no-autoupdate", "run"];
+  //
+  // --ha-connections: the default four edge connections are for
+  // redundancy, not throughput (a stream rides one and dies with it
+  // either way), and their idle keepalives were most of the app's
+  // energy floor. One carries everything this tunnel does. If it
+  // drops, cloudflared reconnects and a peer's connect attempt in
+  // that window fails once and retries. A `tunnel` flag, so it goes
+  // before `run`.
+  return ["tunnel", "--no-autoupdate", "--ha-connections", "1", "run"];
 }
 
 export function cloudflaredEnv(
