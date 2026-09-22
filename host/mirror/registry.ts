@@ -219,3 +219,41 @@ export async function stopMirrorsForWorktree(
   // The worktree is gone, so its thread has no page left to show on.
   daemon.forgetHistory(localWorktreeId);
 }
+
+// Every mirror with a peer that `stillOnAccount` refuses, ended, the
+// copies kept. A mirror is a pairing between two devices of one
+// account, so it ends when either side leaves: this device signing
+// out (or into another account: nothing passes), or the peer being
+// removed from the registry. The copy stays as an ordinary worktree,
+// unlike mirror:stop's delete, because a delete is only safe against
+// a live peer that confirms nothing is held here alone, and the peer
+// is exactly what is gone. Each worktree's thread says so, and the
+// page offers the ordinary delete. Logged, not thrown, like
+// stopMirrorsForWorktree: the sign-out or the registry read that
+// triggered this must land whatever a stuck session does.
+export async function endMirrorsWithPeers(
+  stillOnAccount: (deviceId: string) => boolean,
+  detail: string,
+): Promise<void> {
+  const daemon = impl;
+  if (daemon === null) return;
+  const doomed = mirrorSessions(daemon).filter(
+    (raw) => !stillOnAccount(raw.deviceId),
+  );
+  await Promise.all(
+    doomed.map(async (raw) => {
+      try {
+        await daemon.terminate(raw.session);
+      } catch (error) {
+        console.warn(
+          `[mirror] could not end a mirror with a device that left the account: ${errorMessageOf(error)}`,
+        );
+        return;
+      }
+      const localWorktreeId = localWorktreeIdOf(raw);
+      if (localWorktreeId !== "") {
+        daemon.noteEvent(localWorktreeId, "stopped", detail);
+      }
+    }),
+  );
+}

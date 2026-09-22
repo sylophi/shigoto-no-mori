@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { app, safeStorage } from "electron";
 import { CLONED_LOGIN_MARKER } from "@shared/packaging/appName.mts";
 import { accountContract } from "@shared/ipc/modules/account";
-import type { TunnelProvisionResponse } from "@shared/hub/protocol";
+import type { DeviceInfo, TunnelProvisionResponse } from "@shared/hub/protocol";
 import type { AccountStatus } from "@shared/ipc/modules/account";
 import type { Handlers } from "@shared/ipc/types";
 import { getDeviceId } from "@host/lib/config/deviceId";
@@ -348,6 +348,9 @@ export function hubConnectInputs(): {
 export function makeAccountHandlers(
   emitChanged: () => void,
   emitCommandAccessChanged: () => void,
+  // Hears every registry list the hub serves, for state that follows
+  // the account's membership (a mirror with a removed peer).
+  onDeviceList: (devices: DeviceInfo[]) => void = () => {},
 ): Handlers<typeof accountContract> {
   // Fires the account-changed fan-out and invalidates the grant cache
   // together, since any account transition (sign-in, sign-out, rename)
@@ -518,7 +521,11 @@ export function makeAccountHandlers(
       const signedIn = signedInService();
       // Signed out or unconfigured has no registry to show.
       if (signedIn === null) return [];
-      return signedIn.service.listDevices(signedIn.record.credential);
+      const devices = await signedIn.service.listDevices(
+        signedIn.record.credential,
+      );
+      onDeviceList(devices);
+      return devices;
     },
 
     setDeviceName: (name) => {

@@ -383,8 +383,12 @@ the account layer, since its Clerk session is the plain dev app's and
 ending it would sign every window out. Such a profile re-enrolls if
 relaunched. Either way the sign-out tears the remote setup down with
 it: the hub socket and the tunnel stop, every direct session closes,
-port forwards end, the login item is cleared, and the window shows no
-peers (no device tabs, no device filter) until the next sign-in. A relaunch after `--fresh` is a new device. `pnpm test e2e/remote-smoke` cleans up its own
+port forwards end, every mirror ends (its copy stays as an ordinary
+worktree, and the thread says why), the shared settings copy is
+dropped (the peers hand it back on the next sign-in), the login item
+is cleared, and the window shows no peers (no device tabs, no device
+filter) until the next sign-in. The devices that stay end their
+mirrors with the removed one the next time they read the registry. A relaunch after `--fresh` is a new device. `pnpm test e2e/remote-smoke` cleans up its own
 `e2e-*` profiles unless run with `--keep`.
 
 ## Unattended remote smoke
@@ -441,7 +445,7 @@ one was filtered out, so name both.
 | clone onto a peer | a asks b to clone a loopback `git://` remote into b's repos folder and register it. Refused with commands off (the folder listing too), and for an option-shaped string or a path as the URL. The checkout lands, lists with an identity, and its `cloneUrl` reads back, where the path-origin shared repo answers null. A second clone onto the folder is refused.                                                                                                     |
 | liveness     | b is killed with SIGKILL. a drops it from the roster. b relaunches and both reconnect.                                                                                                                                                                                                                                                                                                                                                                                      |
 | shared settings: offline catch-up | b is killed, a writes a value, b relaunches. b's copy takes the value once its session lands, with no server having held it. |
-| revoke       | a removes b from the account. a's roster and registry drop it, and b signs itself out of the account: its hub socket stops, its direct sessions close, the port forward it ran is gone, and no device tabs remain.                                                                                                                                                                                                                                                                 |
+| revoke       | a removes b from the account. a's roster and registry drop it, and b signs itself out of the account: its hub socket stops, its direct sessions close, the port forward it ran is gone, its mirrors end (copies kept), its shared settings are dropped, and no device tabs remain. a ends its mirror with b too, once its registry read no longer lists b.                                                                                                                                                                                                                                                                 |
 
 Screenshots and logs go to a temp dir named in the output. A failing
 scenario screenshots both windows first.

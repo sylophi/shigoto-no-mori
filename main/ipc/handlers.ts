@@ -66,7 +66,11 @@ import {
   setMirrorImpl,
   setMirrorServingListener,
 } from "@host/ipc/modules/mirror";
-import { isOrphanedTransfer, mirrorSessions } from "@host/mirror/registry";
+import {
+  endMirrorsWithPeers,
+  isOrphanedTransfer,
+  mirrorSessions,
+} from "@host/mirror/registry";
 import { packageScriptsHandlers } from "@host/ipc/modules/packageScripts";
 import {
   portForwardHandlers,
@@ -80,6 +84,7 @@ import { remoteAccessHandlers } from "@host/ipc/modules/remoteAccess";
 import { runtimeHandlers } from "@host/ipc/modules/runtime";
 import { scriptsHandlers } from "@host/ipc/modules/scripts";
 import { sharedSettingsHandlers } from "@host/ipc/modules/sharedSettings";
+import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
 import { cliHandlers } from "@host/ipc/modules/cli";
 import { controlHandlers, setControlImpl } from "@host/ipc/modules/control";
 import { shellHandlers } from "./modules/shell";
@@ -318,6 +323,17 @@ export function registerIpcHandlers(): void {
         // to drop us (the direct sessions themselves close through the
         // presence rule when the hub socket stops below).
         stopAllPortForwards();
+        // A mirror pairs two devices of one account, and this device
+        // is no longer one of them: every mirror ends, its copy kept
+        // as a plain worktree (endMirrorsWithPeers says why kept).
+        void endMirrorsWithPeers(
+          () => false,
+          "This device left the account. The copy stays as a worktree.",
+        );
+        // The shared settings belong to the account's devices as a
+        // group, so the copy goes with the membership (clear says how
+        // they come back).
+        sharedSettingsCopy.clear();
         // The login item exists so a machine stays reachable TO its
         // account. Signed out there is none, so it is cleared here and
         // reinstalled by the next sign-in's fan-out (the setting
@@ -346,6 +362,18 @@ export function registerIpcHandlers(): void {
     () => {
       broadcastAll(accountContract, "commandAccessChanged", undefined);
       broadcastAll(remoteAccessContract, "commandAccessChanged", undefined);
+    },
+    // The registry as the hub last reported it is the one place this
+    // device learns a peer was removed from the account (the hub
+    // pushes no such thing, and an absent peer looks like an offline
+    // one on the roster). A mirror with a device no longer on the
+    // account ends here, the other half of the sign-out rule above.
+    (devices) => {
+      const onAccount = new Set(devices.map((device) => device.deviceId));
+      void endMirrorsWithPeers(
+        (deviceId) => onAccount.has(deviceId),
+        "The other device left the account. The copy stays as a worktree.",
+      );
     },
   );
   registerContract(accountContract, accountHandlers);
