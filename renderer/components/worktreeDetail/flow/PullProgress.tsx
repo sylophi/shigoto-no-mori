@@ -6,7 +6,7 @@
 // the run leaves out (setup switched off, a clean tree) is listed as
 // skipped rather than dropped. Also the failed view: the same list,
 // frozen where it stopped, with the error and a retry.
-import { AlertCircle, Check, Laptop, Minus, Monitor } from "lucide-react";
+import { AlertCircle, Check, Minus } from "lucide-react";
 import type { ReactNode } from "react";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import type { SyncPullProgress } from "@shared/ipc/modules/sync";
@@ -14,7 +14,13 @@ import type { CreatePhase, Project, Worktree } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { DestinationScope } from "@/hooks/remote/useHostScope";
+import { DeviceIcon } from "@/components/shared/DeviceIcon";
+import {
+  DestinationScope,
+  useDestinationScope,
+  useHostScope,
+} from "@/hooks/remote/useHostScope";
+import { useDeviceKind } from "@/hooks/remote/useRemoteDevices";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { formatBytes } from "@/lib/formatBytes";
 import { pluralize } from "@/lib/pluralize";
@@ -115,6 +121,11 @@ function ProgressView({
   landing = LANDS_HERE,
   phasesReported = true,
 }: Props) {
+  // The two ends as the devices they are: the dialog sits under the
+  // source's scope and the destination provider names where it lands
+  // (this machine unless a peer was picked).
+  const sourceKind = useDeviceKind(useHostScope().deviceId);
+  const destinationKind = useDeviceKind(useDestinationScope().deviceId);
   const plan = useCreatePlan(localProject);
   const failed = error !== undefined;
   const dirty = worktree.changedCount > 0;
@@ -222,7 +233,7 @@ function ProgressView({
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-4">
             <DeviceEnd
-              icon={<Monitor aria-hidden className="size-4" />}
+              icon={<DeviceIcon kind={sourceKind} className="size-4" />}
               name={sourceDeviceLabel}
               part={sourcePart}
             />
@@ -248,7 +259,7 @@ function ProgressView({
               </div>
             </div>
             <DeviceEnd
-              icon={<Laptop aria-hidden className="size-4" />}
+              icon={<DeviceIcon kind={destinationKind} className="size-4" />}
               name={thisDeviceLabel}
               part="destination"
               align="end"

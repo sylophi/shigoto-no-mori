@@ -69,6 +69,7 @@ export function TidyForest() {
   const shown: DeviceTab = picked ?? {
     deviceId: localDeviceId,
     label: "",
+    kind: "desktop",
     isThisDevice: true,
     hostsProjects: true,
     status: null,

@@ -8,6 +8,7 @@
 //
 // window.smLab carries the posing controls: flip a peer's presence,
 // change the socket phase, navigate the memory router.
+import type { DeviceKind } from "@shared/account/deviceKind";
 import { buildApi } from "@shared/ipc/client";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import type {
@@ -867,6 +868,8 @@ let acceptsCommands = true;
 // so the revoke handler records the id here and the list filters it.
 const revoked = new Set<string>();
 let deviceName = "Studio Mac";
+// The icon pick on this device's row: null is "what it detected".
+let deviceKind: DeviceKind | null = null;
 
 // The web-shell pose (lab/web-main.tsx): this page is an enrolled
 // BROWSER device, every machine forest (Studio Mac included) is a
@@ -962,6 +965,7 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
             deviceId: WEB_DEVICE_ID,
             name: "Chrome on MacBook",
             platform: WEB_PLATFORM,
+            kind: "browser",
             createdAt: Date.now() - 2 * 24 * 3_600_000,
             lastSeenAt: Date.now(),
             online: true,
@@ -975,6 +979,8 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
     signedIn: true,
     accountId: LAB_ACCOUNT_ID,
     deviceName: WEB_SHELL ? "Chrome on MacBook" : deviceName,
+    deviceKind: deviceKind ?? (WEB_SHELL ? "browser" : "mini"),
+    detectedDeviceKind: WEB_SHELL ? "browser" : "mini",
   });
 
   // The engine's forward table, mutated by start/stop so the switches
@@ -1010,6 +1016,11 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
     },
     "account:setDeviceName": (name: string) => {
       deviceName = name;
+      client.emit("account:changed", { accountId: accountStatus().accountId });
+      return accountStatus();
+    },
+    "account:setDeviceKind": (kind: DeviceKind | null) => {
+      deviceKind = kind;
       client.emit("account:changed", { accountId: accountStatus().accountId });
       return accountStatus();
     },

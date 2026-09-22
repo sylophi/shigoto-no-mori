@@ -85,13 +85,13 @@ export function revokeRequest(credential: string, deviceId: string): Request {
   });
 }
 
-export function renameRequest(
+export function updateRequest(
   credential: string,
   deviceId: string,
   body: unknown,
 ): Request {
-  return new Request(`${BASE}${HUB_ROUTES.renameDevice.path(deviceId)}`, {
-    method: HUB_ROUTES.renameDevice.method,
+  return new Request(`${BASE}${HUB_ROUTES.updateDevice.path(deviceId)}`, {
+    method: HUB_ROUTES.updateDevice.method,
     headers: { Authorization: `Bearer ${credential}` },
     body: JSON.stringify(body),
   });
@@ -117,12 +117,14 @@ export async function enroll(
   deviceId: string,
   name = "Test Device",
   platform = "darwin",
+  kind?: string,
 ): Promise<EnrollResponse> {
   const response = await call(
     enrollRequest(`${TEST_TOKEN_PREFIX}${accountId}`, {
       deviceId,
       name,
       platform,
+      ...(kind === undefined ? {} : { kind }),
     }),
   );
   expect(response.status).toBe(200);

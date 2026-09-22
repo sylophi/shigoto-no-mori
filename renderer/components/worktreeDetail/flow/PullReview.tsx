@@ -23,6 +23,7 @@ import {
   pullFolderCollision,
 } from "@shared/pullCollision";
 import { worktreeBaseFor } from "@shared/git/worktreeLayout";
+import { DeviceIcon } from "@/components/shared/DeviceIcon";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip-button";
 import { PathSpan } from "@/components/ui/path-span";
@@ -457,9 +458,9 @@ export function SourceCard({
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2 text-sm">
-        <Monitor
-          aria-hidden
-          className="size-4 shrink-0 text-muted-foreground"
+        <DeviceIcon
+          kind={device?.kind ?? "desktop"}
+          className="size-4 text-muted-foreground"
         />
         <span className="font-medium">{sourceDeviceLabel}</span>
         {status && (

@@ -29,16 +29,20 @@ import {
   isLegacyDefaultName,
   type DefaultDeviceName,
 } from "../../core/account/defaultDeviceName";
+import { detectDesktopDeviceKind } from "../../core/account/defaultDeviceKind";
 import {
   createGrantStore,
   type GrantStore,
 } from "../../core/account/grantStore";
 import {
+  effectiveDeviceKind,
   enrollDevice,
   renameDevice,
   retryParkedRevoke,
+  setDeviceKind,
   signOutDevice,
 } from "@shared/account/enroll";
+import type { DeviceKind } from "@shared/account/deviceKind";
 import {
   createAccountService,
   type AccountService,
@@ -206,10 +210,21 @@ async function defaultDeviceName(): Promise<DefaultDeviceName> {
   return { name, provisional: resolved.provisional };
 }
 
-// Starts the resolve at boot so it overlaps window creation instead of
-// gating the first status read. It cannot reject (the resolver falls
-// back to the hostname), so nothing awaits it.
+// What this machine looks like (defaultDeviceKind.ts), the kind it
+// enrolls under until its owner picks one. Detected once per process:
+// the probes shell out, and the answer cannot change while the app
+// runs. It cannot reject (the detector falls back to the platform).
+let detectedKindInFlight: Promise<DeviceKind> | null = null;
+function detectedDeviceKind(): Promise<DeviceKind> {
+  detectedKindInFlight ??= detectDesktopDeviceKind();
+  return detectedKindInFlight;
+}
+
+// Starts both resolves at boot so they overlap window creation instead
+// of gating the first status read. Neither can reject, so nothing
+// awaits them.
 void defaultDeviceName();
+void detectedDeviceKind();
 
 // Whether this build has an account service at all, for callers outside
 // the account module (liveness gates keepReachable on it: with no
@@ -240,6 +255,7 @@ export function clerkPublishableKey(): string {
 function statusOf(
   record: StoredAccount | null,
   defaultName: string,
+  detectedKind: DeviceKind,
 ): AccountStatus {
   return {
     configured: isConfigured(serviceConfig()),
@@ -249,6 +265,9 @@ function statusOf(
     // what the next enrollment uses (enroll.ts).
     deviceName:
       record?.deviceName ?? store().rememberedDeviceName() ?? defaultName,
+    // The kind by the same rule (a pick outlives a sign-out too).
+    deviceKind: effectiveDeviceKind(store(), detectedKind),
+    detectedDeviceKind: detectedKind,
     // --clone-login leaves this beside the token store it copied
     // (scripts/lib/devProfile.mts cloneDevLogin).
     sharedSignIn: existsSync(
@@ -258,7 +277,11 @@ function statusOf(
 }
 
 async function readStatus(): Promise<AccountStatus> {
-  return statusOf(store().read(), (await defaultDeviceName()).name);
+  return statusOf(
+    store().read(),
+    (await defaultDeviceName()).name,
+    await detectedDeviceKind(),
+  );
 }
 
 // The signed-in preamble most account-backed calls share: the resolved
@@ -435,6 +458,7 @@ export function makeAccountHandlers(
       return statusOf(
         migrateDefaultName(store().read(), defaultName),
         defaultName.name,
+        await detectedDeviceKind(),
       );
     },
 
@@ -459,6 +483,7 @@ export function makeAccountHandlers(
             fallbackDeviceName: (await defaultDeviceName()).name,
             // The device hub stores it as an opaque label.
             platform: platform(),
+            detectedKind: await detectedDeviceKind(),
           },
           token,
         );
@@ -560,6 +585,22 @@ export function makeAccountHandlers(
         name,
       );
       if (renamed) accountChanged();
+      return readStatus();
+    },
+
+    setDeviceKind: async (kind) => {
+      const config = serviceConfig();
+      const picked = setDeviceKind(
+        {
+          config,
+          service: createAccountService({ baseUrl: config.hubUrl }),
+          store: store(),
+          deviceId: getDeviceId(),
+          detectedKind: await detectedDeviceKind(),
+        },
+        kind,
+      );
+      if (picked) accountChanged();
       return readStatus();
     },
 

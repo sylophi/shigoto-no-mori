@@ -9,7 +9,10 @@ import {
   SettingsSaveError,
   useSettingsSave,
 } from "@/hooks/config/useSettingsSave";
-import { useLocalDeviceName } from "@/hooks/account/useAccount";
+import { useLocalDevice } from "@/hooks/account/useAccount";
+import { DeviceIcon } from "@/components/shared/DeviceIcon";
+import { THIS_DEVICE_VIEW } from "@/lib/remote/deviceStatus";
+import type { DeviceKind } from "@shared/account/deviceKind";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
 import { useStagedUpdates } from "@/hooks/system/useUpdater";
 import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
@@ -77,7 +80,7 @@ export function SettingsForm({
   const { setOverride } = useTheme();
   const { setOverride: setDoubutsuOverride } = useDoubutsu();
   const devices = useHostDevices();
-  const localName = useLocalDeviceName();
+  const local = useLocalDevice();
   const { activeTab, peer } = useActiveSettingsTab(devices);
 
   const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty } =
@@ -161,7 +164,7 @@ export function SettingsForm({
   const updates = useStagedUpdates();
   useStagedUpdateLanding(updates);
 
-  const heading = headingFor(activeTab, peer, localName, isSolo(devices));
+  const heading = headingFor(activeTab, peer, local, isSolo(devices));
 
   return (
     // The page marker picks the settings wallpaper (doubutsu.css), the
@@ -281,12 +284,12 @@ function ClientVersionSection() {
 
 // The header names the section the sidebar picked, the way a
 // sidebar-driven settings window does, so the pane never has to repeat
-// the list. A device's title carries its state pill: the one fact about
-// a machine worth showing above its settings.
+// the list. A device's title leads with its glyph and carries its state
+// pill: the one fact about a machine worth showing above its settings.
 function headingFor(
   activeTab: string,
   peer: RemoteDevice | undefined,
-  localName: string,
+  local: { name: string; kind: DeviceKind },
   // One machine on the account: no roster to place it in, so its
   // title carries neither the device eyebrow nor a presence pill.
   solo: boolean,
@@ -297,14 +300,18 @@ function headingFor(
   if (activeTab === LAUNCH_TAB) {
     return { eyebrow: "Settings", title: "Launch tools" };
   }
-  if (solo) return { eyebrow: "Settings", title: localName };
+  if (solo) return { eyebrow: "Settings", title: local.name };
   return {
     eyebrow: "Device settings",
     title: (
       <span className="inline-flex max-w-full items-center gap-2">
-        <span className="truncate">{peer?.label ?? localName}</span>
+        <DeviceIcon
+          kind={peer?.kind ?? local.kind}
+          className="size-5 text-muted-foreground"
+        />
+        <span className="truncate">{peer?.label ?? local.name}</span>
         {peer === undefined ? (
-          <DeviceStatusPill tone="emerald" label="This device" />
+          <DeviceStatusPill {...THIS_DEVICE_VIEW} />
         ) : (
           <DeviceStatusPill {...deviceStatusView(peer.status)} />
         )}

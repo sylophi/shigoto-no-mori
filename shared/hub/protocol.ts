@@ -31,6 +31,7 @@
 // To the app both are opaque strings: the credential rides in the
 // Authorization header and the ticket in the connect URL, unchanged.
 import { z } from "zod";
+import { DeviceKindSchema } from "../account/deviceKind";
 
 // Largest hub envelope the DO will forward, in bytes of the serialized
 // JSON. The device hub carries orchestration only:
@@ -126,11 +127,11 @@ export const HUB_ROUTES = {
     method: "DELETE",
     path: (deviceId: string) => `/devices/${encodeURIComponent(deviceId)}`,
   },
-  // Renames a device of the caller's account (the app renames itself
-  // through it after the local write), so the registry every other
-  // device lists carries the new name at once rather than at the
-  // device's next enrollment.
-  renameDevice: {
+  // Changes a device of the caller's account: its name, its kind, or
+  // both (the app updates itself through it after the local write), so
+  // the registry every other device lists carries the change at once
+  // rather than at the device's next enrollment.
+  updateDevice: {
     method: "PATCH",
     path: (deviceId: string) => `/devices/${encodeURIComponent(deviceId)}`,
   },
@@ -188,18 +189,37 @@ export const EnrollRequestSchema = z.object({
   deviceId: z.string().min(1).max(200),
   name: z.string().min(1).max(256),
   platform: z.string().min(1).max(64),
+  // What the device looks like (shared/account/deviceKind.ts). Optional
+  // so a device from before kinds still enrolls, and stored as given:
+  // the device resolved its own detection and its owner's pick before
+  // sending, so the hub never has to know which is which.
+  kind: DeviceKindSchema.optional(),
 });
 
-export const RenameDeviceRequestSchema = z.object({
-  name: EnrollRequestSchema.shape.name,
-});
+// PATCH /devices/:id: the fields a device may change after enrolling,
+// each optional so a rename and an icon pick ride the same route
+// without restating the other. At least one must be present.
+export const DevicePatchRequestSchema = z
+  .object({
+    name: EnrollRequestSchema.shape.name.optional(),
+    kind: DeviceKindSchema.optional(),
+  })
+  .refine((patch) => patch.name !== undefined || patch.kind !== undefined, {
+    message: "nothing to change",
+  });
+export type DevicePatch = z.infer<typeof DevicePatchRequestSchema>;
 
 // One device as the HTTP API reports it. Timestamps are epoch
 // milliseconds. lastSeenAt is null until the device first connects.
+// kind is null for a device that never reported one, and reads as
+// null on this side for a kind this build does not know (a newer
+// device's) or a Worker from before the column, so a client resolves
+// it through resolveDeviceKind rather than trusting the string.
 export const DeviceInfoSchema = z.object({
   deviceId: z.string(),
   name: z.string(),
   platform: z.string(),
+  kind: DeviceKindSchema.nullable().catch(null),
   createdAt: z.number().int(),
   lastSeenAt: z.number().int().nullable(),
   online: z.boolean(),

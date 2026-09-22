@@ -144,6 +144,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       revokeDevice: accountClient.revokeDevice,
       listDevices: accountClient.listDevices,
       setDeviceName: accountClient.setDeviceName,
+      setDeviceKind: accountClient.setDeviceKind,
       acceptsCommands: accountClient.acceptsCommands,
       setAcceptsCommands: accountClient.setAcceptsCommands,
       onChanged: accountClient.changed,

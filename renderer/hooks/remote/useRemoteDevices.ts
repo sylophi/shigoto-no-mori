@@ -5,6 +5,9 @@
 // settings UI and no scoped data live here, just the live snapshot the
 // scoped surfaces resolve their device from.
 import { useSyncExternalStore } from "react";
+import type { DeviceKind } from "@shared/account/deviceKind";
+import { useLocalDeviceKind } from "@/hooks/account/useAccount";
+import { localDeviceId } from "@/lib/queryKeys";
 import { hostsProjects } from "@/lib/remote/deviceTraits";
 import {
   type RemoteDevice,
@@ -56,6 +59,17 @@ export function useRemoteDeviceApi(
           .getSnapshot()
           .find((entry) => entry.deviceId === deviceId)?.api;
   return useSyncExternalStore(remoteDeviceStore.subscribe, select, select);
+}
+
+// What a device looks like, by id, this device included: the account's
+// answer for this machine, the registry's for a peer, and a desktop's
+// shape for an id the registry no longer knows (a revoked peer whose
+// flow is still on screen), so a glyph always draws.
+export function useDeviceKind(deviceId: string): DeviceKind {
+  const localKind = useLocalDeviceKind();
+  const remote = useRemoteDevice(deviceId);
+  if (deviceId === localDeviceId) return localKind;
+  return remote?.kind ?? "desktop";
 }
 
 // The device's name for prose ("on Thinkpad", "Thinkpad:3000"). Falls

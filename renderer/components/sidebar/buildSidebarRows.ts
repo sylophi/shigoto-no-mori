@@ -3,7 +3,11 @@ import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
 import type { Project, ProjectSortMode, Worktree } from "@shared/schemas";
 import type { SidebarDeviceBadge } from "./DeviceBadge";
-import type { SidebarRow, SidebarViewModel } from "./sidebarRow";
+import type {
+  RemoteProjectMember,
+  SidebarRow,
+  SidebarViewModel,
+} from "./sidebarRow";
 import { sortByProject } from "@/lib/sortProjects";
 
 interface BuildSidebarRowsArgs {
@@ -66,6 +70,7 @@ export function mirrorBadgeLookup(
       deviceBadges.get(peer) ?? {
         deviceId: peer,
         label: "another device",
+        kind: "desktop",
         tone: "slate",
         reachable: false,
       }
@@ -362,6 +367,7 @@ export function deviceBadgeOf(item: RemoteForestItem): SidebarDeviceBadge {
   return {
     deviceId: item.deviceId,
     label: item.deviceLabel,
+    kind: item.deviceKind,
     tone: item.tone,
     reachable: item.reachable,
   };
@@ -382,6 +388,7 @@ function pushRemoteWorktreeRows(
       worktree,
       deviceId: item.deviceId,
       deviceLabel: item.deviceLabel,
+      deviceKind: item.deviceKind,
       reachable: item.reachable,
       tone: item.tone,
       pr: item.pullRequests[worktree.branch],
@@ -393,18 +400,14 @@ function pushRemoteWorktreeRows(
 // The group's (device, project) pairs, in the order they were merged,
 // one per device like the badges: a device that registered the same
 // repo twice acts through its first registration.
-function membersOf(
-  items: readonly RemoteForestItem[],
-): { deviceId: string; deviceLabel: string; project: Project }[] {
-  const members = new Map<
-    string,
-    { deviceId: string; deviceLabel: string; project: Project }
-  >();
+function membersOf(items: readonly RemoteForestItem[]): RemoteProjectMember[] {
+  const members = new Map<string, RemoteProjectMember>();
   for (const item of items) {
     if (!members.has(item.deviceId)) {
       members.set(item.deviceId, {
         deviceId: item.deviceId,
         deviceLabel: item.deviceLabel,
+        deviceKind: item.deviceKind,
         project: item.project,
       });
     }

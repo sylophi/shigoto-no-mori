@@ -43,7 +43,9 @@ import {
 } from "@shared/sharedSettings";
 import {
   WEB_PLATFORM,
+  effectiveDeviceKind,
   enrollDevice,
+  setDeviceKind,
   renameDevice,
   retryParkedRevoke,
   signOutDevice,
@@ -52,6 +54,7 @@ import { createHubConnection } from "../hub/connection";
 import { webServiceConfig } from "../account/config";
 import { getWebDeviceId } from "../account/deviceId";
 import { defaultWebDeviceName, type BrowserHints } from "../account/deviceName";
+import { defaultWebDeviceKind } from "../account/deviceKind";
 import { createWebAccountStore } from "../account/store";
 import { readJsonKey, writeKey, type KeyValueStorage } from "../lib/kvStorage";
 import { createLoopbackWire } from "./loopback";
@@ -190,6 +193,10 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     return defaultWebDeviceName(deps.userAgent, deps.browserHints);
   }
 
+  // Read off the same user agent as the name, once: it cannot change
+  // while the page lives.
+  const detectedKind = defaultWebDeviceKind(deps.userAgent);
+
   function readStatus(): AccountStatus {
     const record = store.read();
     return {
@@ -197,6 +204,8 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       signedIn: record !== null,
       accountId: record?.accountId ?? "",
       deviceName: record?.deviceName ?? defaultDeviceName(),
+      deviceKind: effectiveDeviceKind(store, detectedKind),
+      detectedDeviceKind: detectedKind,
       sharedSignIn: false,
     };
   }
@@ -279,6 +288,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
             deviceId,
             fallbackDeviceName: defaultDeviceName(),
             platform: WEB_PLATFORM,
+            detectedKind,
           },
           token,
         );
@@ -317,6 +327,15 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
     setDeviceName: (name) => {
       if (renameDevice({ config, service, store, deviceId }, name)) {
+        accountChanged();
+      }
+      return readStatus();
+    },
+
+    setDeviceKind: (kind) => {
+      if (
+        setDeviceKind({ config, service, store, deviceId, detectedKind }, kind)
+      ) {
         accountChanged();
       }
       return readStatus();

@@ -12,6 +12,8 @@ import {
 } from "@tanstack/react-query";
 import type { AccountStatus } from "@shared/ipc/modules/account";
 import type { DeviceInfo } from "@shared/hub/protocol";
+import type { DeviceKind } from "@shared/account/deviceKind";
+import { hasLocalHost } from "@/lib/localHost";
 import { queryKeys } from "@/lib/queryKeys";
 
 // Account status: configured/signedIn plus this device's stored name.
@@ -36,6 +38,21 @@ export function useAccountStatus() {
 export function useLocalDeviceName(): string {
   const { data: account } = useAccountStatus();
   return account?.deviceName || "This device";
+}
+
+// Both at once, for the surfaces that draw this device's name beside
+// its glyph.
+export function useLocalDevice(): { name: string; kind: DeviceKind } {
+  return { name: useLocalDeviceName(), kind: useLocalDeviceKind() };
+}
+
+// What this device looks like, for its own marks: the account's
+// answer, or the platform's fallback until the status lands (a
+// desktop app is a machine, a hostless client a browser), so a mark
+// never waits on the read.
+export function useLocalDeviceKind(): DeviceKind {
+  const { data: account } = useAccountStatus();
+  return account?.deviceKind ?? (hasLocalHost ? "desktop" : "browser");
 }
 
 // The account's device registry from the device hub, as shared options
@@ -133,6 +150,15 @@ export function useSetDeviceName() {
   return useMutation<AccountStatus, Error, string>({
     mutationFn: (name) => window.api.account.setDeviceName(name),
     meta: { errorTitle: "Couldn't rename this device" },
+  });
+}
+
+// The icon pick, on the rename's pattern. Null drops the pick, so the
+// device goes back to what it detected.
+export function useSetDeviceKind() {
+  return useMutation<AccountStatus, Error, DeviceKind | null>({
+    mutationFn: (kind) => window.api.account.setDeviceKind(kind),
+    meta: { errorTitle: "Couldn't change this device's icon" },
   });
 }
 

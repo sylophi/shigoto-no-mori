@@ -28,7 +28,9 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useLocalDeviceName } from "@/hooks/account/useAccount";
+import type { DeviceKind } from "@shared/account/deviceKind";
+import { useLocalDevice } from "@/hooks/account/useAccount";
+import { DeviceIcon } from "@/components/shared/DeviceIcon";
 import {
   commandAccessOf,
   usePeerCommandAccess,
@@ -57,6 +59,7 @@ import type { RemoteProjectMember } from "./sidebarRow";
 export interface GroupMember {
   deviceId: string;
   deviceLabel: string;
+  deviceKind: DeviceKind;
   project: Project;
   // Undefined while the device has no session (a peer that is asleep),
   // or while it has not granted this device control: either way its
@@ -74,9 +77,9 @@ type LiveMember = GroupMember & { api: HostApi };
 // is assumed granted rather than flashing actions in and out).
 export function useGroupMembers(
   peers: readonly RemoteProjectMember[],
-  local: Project | undefined,
+  localProject: Project | undefined,
 ): GroupMember[] {
-  const localName = useLocalDeviceName();
+  const local = useLocalDevice();
   const registry = useRemoteDevices();
   const access = usePeerCommandAccess(registry);
   const apis = peers.map((member) =>
@@ -85,13 +88,14 @@ export function useGroupMembers(
       : undefined,
   );
   return [
-    ...(local === undefined
+    ...(localProject === undefined
       ? []
       : [
           {
             deviceId: localDeviceId,
-            deviceLabel: localName,
-            project: local,
+            deviceLabel: local.name,
+            deviceKind: local.kind,
+            project: localProject,
             api: window.api,
             isThisDevice: true,
           },
@@ -241,6 +245,7 @@ function RemoveSubmenu({
               variant="destructive"
               disabled
             >
+              <DeviceIcon kind={member.deviceKind} className="size-3.5" />
               {member.deviceLabel}
             </DropdownMenuItem>
           ) : (

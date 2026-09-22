@@ -1,11 +1,12 @@
-// The quiet "which machine is this" marker for device-scoped pages: a
-// status dot and the device's name, rendered only under a remote host
-// scope. The local pages stay chipless, since this machine is the default,
+// The quiet "which machine is this" marker for device-scoped pages: the
+// device's glyph, a status dot and its name, rendered only under a
+// remote host scope. The local pages stay chipless, since this machine is the default,
 // not a state worth announcing.
+import { DeviceIcon } from "@/components/shared/DeviceIcon";
 import { StatusDot } from "@/components/ui/status-dot";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
-import { deviceStatusView } from "@/lib/remote/deviceStatus";
+import { deviceStatusView, deviceTitle } from "@/lib/remote/deviceStatus";
 
 // The pill shape, shared with the device tabs (shared/DeviceTabs.tsx):
 // one string, so a chip and a tab naming the same machine are the
@@ -17,17 +18,18 @@ export function DeviceChip() {
   const { deviceId, remote } = useHostScope();
   const device = useRemoteDevice(deviceId);
   if (!remote || device === undefined) return null;
-  const { tone, label } = deviceStatusView(device.status);
+  const status = deviceStatusView(device.status);
   return (
     <span
       data-slot="device-chip"
       // The name is the chip. The connection state stays on the dot's
       // tone and the tooltip, so the header reads "on Thinkpad", not a
       // status report.
-      title={`${device.label} (${label})`}
+      title={deviceTitle(device.label, status)}
       className={DEVICE_PILL_CLASS}
     >
-      <StatusDot tone={tone} />
+      <DeviceIcon kind={device.kind} className="size-3.5" />
+      <StatusDot tone={status.tone} />
       <span className="max-w-32 truncate">{device.label}</span>
     </span>
   );

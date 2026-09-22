@@ -1,8 +1,9 @@
 // One machine on the account, as a row of the registry: its mark and
-// name, one line saying what state it is in and what it runs, the
-// projects it hosts, and -- on THIS device's row -- the two things it
-// exposes to the others: whether they may control it and whether it
-// stays reachable to them. A peer's row makes no decision about the
+// name (both changeable on THIS device's row: the mark opens the icon
+// picker, Rename the name), one line saying what state it is in and
+// what it runs, the projects it hosts, and -- on THIS device's row --
+// the two things it exposes to the others: whether they may control
+// it and whether it stays reachable to them. A peer's row makes no decision about the
 // peer: what a machine allows is decided on that machine, so a peer
 // row only reports the answer (read-only from here, or not) and holds
 // the forwards this machine has open against it.
@@ -17,6 +18,8 @@ import { useState } from "react";
 import { AlertTriangle, Trash2 } from "lucide-react";
 import type { TunnelState } from "@shared/ipc/modules/hub";
 import type { DeviceInfo } from "@shared/hub/protocol";
+import type { DeviceKind } from "@shared/account/deviceKind";
+import { DeviceMark } from "@/components/shared/DeviceIcon";
 import { Button } from "@/components/ui/button";
 import { RowTag } from "@/components/ui/row-tag";
 import { StatusDot, TONE_TEXT } from "@/components/ui/status-dot";
@@ -30,8 +33,8 @@ import { abbreviateId } from "@/lib/abbreviateId";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { cn } from "@/lib/utils";
 import { AcceptCommandsToggle } from "./AcceptCommandsToggle";
-import { DeviceAvatar } from "./DeviceAvatar";
 import { DeviceHosts } from "./DeviceHosts";
+import { DeviceKindPicker } from "./DeviceKindPicker";
 import { DeviceNameField, DeviceRenameButton } from "./DeviceNameField";
 import { KeepReachableToggle } from "./KeepReachableToggle";
 import { PortForwardSection } from "./PortForwardSection";
@@ -43,6 +46,8 @@ export function DeviceRegistryRow({
   device,
   isThisDevice,
   name,
+  kind,
+  detectedKind,
   showId,
   status,
   appVersion,
@@ -59,6 +64,13 @@ export function DeviceRegistryRow({
   // registry one. Resolved by the registry so its collision check and
   // the row agree on what a machine is called.
   name: string;
+  // What the row's mark draws: this device's own answer, a peer's
+  // registry one, resolved by the registry like the name.
+  kind: DeviceKind;
+  // What this device detected about itself, for its picker's "detected"
+  // entry. Unused on a peer's row, which offers no picker: a machine's
+  // icon is picked on that machine, like its name.
+  detectedKind: DeviceKind;
   // Another row wears the same name, so the id has to tell them apart.
   showId: boolean;
   // Derived once by the registry so the marks cannot disagree with
@@ -132,7 +144,16 @@ export function DeviceRegistryRow({
     // the sake of a column it does not belong to.
     <li className="flex flex-col gap-3 py-5 first:pt-1 last:pb-1">
       <div className="flex gap-3.5">
-        <DeviceAvatar name={name} tone={status.tone} />
+        {isThisDevice ? (
+          <DeviceKindPicker
+            kind={kind}
+            detectedKind={detectedKind}
+            tone={status.tone}
+            label={traits.selfLabel}
+          />
+        ) : (
+          <DeviceMark kind={kind} tone={status.tone} size="lg" />
+        )}
 
         <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-3 gap-y-2">
           <div className="flex min-w-0 flex-1 flex-col gap-1">

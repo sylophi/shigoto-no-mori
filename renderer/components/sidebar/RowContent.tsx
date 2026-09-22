@@ -48,6 +48,7 @@ export function RowContent({
           worktree={row.worktree}
           deviceId={row.deviceId}
           deviceLabel={row.deviceLabel}
+          deviceKind={row.deviceKind}
           reachable={row.reachable}
           tone={row.tone}
           pr={row.pr}

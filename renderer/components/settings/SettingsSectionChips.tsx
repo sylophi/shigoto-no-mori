@@ -4,7 +4,7 @@
 // the edge. The same store underneath, so the header and the panels
 // follow a pick here exactly as they follow the sidebar's.
 import { ChipButton } from "@/components/ui/chip-button";
-import { useLocalDeviceName } from "@/hooks/account/useAccount";
+import { useLocalDevice } from "@/hooks/account/useAccount";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import type { RemoteDevice } from "@/lib/remote/devices";
 import { cn } from "@/lib/utils";
@@ -26,9 +26,9 @@ export function SettingsSectionChips({
   updates: Readonly<Record<string, string>>;
 }) {
   const phone = usePhoneLayout();
-  const localName = useLocalDeviceName();
+  const local = useLocalDevice();
   if (!phone) return null;
-  const sections = settingsSections(devices, localName, updates);
+  const sections = settingsSections(devices, local, updates);
   return (
     <nav
       aria-label="Settings sections"

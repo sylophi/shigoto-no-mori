@@ -5,17 +5,18 @@
 //
 // Each pill is the outline button the New worktree button above it is,
 // so the row reads as one set of controls with it rather than a second
-// kind of chip. Pills carry the device's two-letter mark, the same one
-// its rows carry (DeviceBadge), so the bar stays one row however many
-// machines there are, and the picked pill spells its name out, so the
-// narrowed forest always says which machine it is showing. A radio
-// group: one pick at a time, arrows move it, the way the device tabs
-// do.
+// kind of chip. Pills carry the device's glyph, the same one its rows
+// carry (DeviceBadge), so the bar stays one row however many machines
+// there are, and the picked pill spells its name out, so the narrowed
+// forest always says which machine it is showing. A radio group: one
+// pick at a time, arrows move it, the way the device tabs do.
+import type { DeviceKind } from "@shared/account/deviceKind";
+import { DeviceIcon } from "@/components/shared/DeviceIcon";
 import type { DeviceRosterEntry } from "@/components/shared/DeviceTabs";
 import { Button } from "@/components/ui/button";
 import { StatusDot } from "@/components/ui/status-dot";
 import { useRovingPick } from "@/hooks/ui/useRovingPick";
-import { deviceAbbrev } from "@/lib/deviceAbbrev";
+import { deviceTitle } from "@/lib/remote/deviceStatus";
 import { cn } from "@/lib/utils";
 import { setDeviceFilter, type DeviceFilter } from "./deviceFilter";
 
@@ -24,11 +25,9 @@ const ALL = "all";
 function pillFor(choice: DeviceRosterEntry, checked: boolean) {
   return {
     id: choice.deviceId,
-    label: checked ? choice.label : deviceAbbrev(choice.label),
-    title:
-      choice.status === null
-        ? `${choice.label} (this device)`
-        : `${choice.label} (${choice.status.label})`,
+    kind: choice.kind as DeviceKind | null,
+    label: checked ? choice.label : null,
+    title: deviceTitle(choice.label, choice.status),
     tone: choice.status?.tone ?? null,
   };
 }
@@ -36,7 +35,7 @@ function pillFor(choice: DeviceRosterEntry, checked: boolean) {
 export function DeviceFilterBar({ choices, selected }: DeviceFilter) {
   const selectedId = selected?.deviceId ?? ALL;
   const pills = [
-    { id: ALL, label: "All", title: "Every device", tone: null },
+    { id: ALL, kind: null, label: "All", title: "Every device", tone: null },
     ...choices.map((choice) => pillFor(choice, choice.deviceId === selectedId)),
   ];
   const pick = (id: string) => setDeviceFilter(id === ALL ? null : id);
@@ -84,8 +83,11 @@ export function DeviceFilterBar({ choices, selected }: DeviceFilter) {
                 "border-transparent bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground",
             )}
           >
+            {pill.kind && <DeviceIcon kind={pill.kind} className="size-3.5" />}
             {pill.tone && <StatusDot tone={pill.tone} />}
-            <span className="max-w-32 truncate">{pill.label}</span>
+            {pill.label !== null && (
+              <span className="max-w-32 truncate">{pill.label}</span>
+            )}
           </Button>
         );
       })}

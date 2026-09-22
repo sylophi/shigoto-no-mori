@@ -17,6 +17,7 @@
 // the Durable Objects, Clerk). It cannot stop the Worker invocation
 // itself from being billed, only a WAF rule at the zone can, see
 // README.md (Abuse limits).
+import { isDeviceKind } from "../../shared/account/deviceKind";
 import {
   CONNECT_TICKET_PARAM,
   DEVICE_REVOKED_CODE,
@@ -24,7 +25,7 @@ import {
   type DeviceListResponse,
   type EnrollResponse,
   EnrollRequestSchema,
-  RenameDeviceRequestSchema,
+  DevicePatchRequestSchema,
   type ErrorBody,
   HUB_ROUTES,
   MAX_ACCOUNT_DEVICES,
@@ -47,7 +48,7 @@ import {
   getDeviceByCredentialHash,
   isRevokedCredentialHash,
   getDeviceById,
-  renameDevice,
+  updateDevice,
   listDevicesByCredentialHash,
   upsertDevice,
 } from "./db.ts";
@@ -217,6 +218,9 @@ function toDeviceInfo(row: DeviceRow, online: Set<string>): DeviceInfo {
     deviceId: row.device_id,
     name: row.name,
     platform: row.platform,
+    // The column is free text (a newer device's kind lands as is); the
+    // wire shape is the catalog, so an unknown one reads as none.
+    kind: isDeviceKind(row.kind) ? row.kind : null,
     createdAt: row.created_at,
     lastSeenAt: row.last_seen_at,
     online: online.has(row.device_id),
@@ -341,7 +345,7 @@ export function createWorker(deps: HubDeps): HubWorker {
     }
     const deviceMatch =
       request.method === HUB_ROUTES.revokeDevice.method ||
-      request.method === HUB_ROUTES.renameDevice.method
+      request.method === HUB_ROUTES.updateDevice.method
         ? DEVICE_PATH.exec(url.pathname)
         : null;
     if (deviceMatch !== null) {
@@ -357,8 +361,8 @@ export function createWorker(deps: HubDeps): HubWorker {
       if (request.method === HUB_ROUTES.revokeDevice.method) {
         return await revokeDevice(request, env, targetId, ctx);
       }
-      if (request.method === HUB_ROUTES.renameDevice.method) {
-        return await renameAccountDevice(request, env, targetId);
+      if (request.method === HUB_ROUTES.updateDevice.method) {
+        return await updateAccountDevice(request, env, targetId);
       }
     }
     if (
@@ -383,7 +387,7 @@ export function createWorker(deps: HubDeps): HubWorker {
     const body = EnrollRequestSchema.safeParse(await readJson(request));
     if (!body.success)
       return jsonError(400, { error: "invalid enroll request" });
-    const { deviceId, name, platform } = body.data;
+    const { deviceId, name, platform, kind = null } = body.data;
     const existing = await getDeviceById(env.DB, deviceId);
     if (existing !== null && existing.account_id !== login.accountId) {
       return jsonError(409, {
@@ -446,6 +450,7 @@ export function createWorker(deps: HubDeps): HubWorker {
       accountId: login.accountId,
       name,
       platform,
+      kind,
       credentialHash: await sha256Hex(credential),
       createdAt,
     });
@@ -469,6 +474,7 @@ export function createWorker(deps: HubDeps): HubWorker {
         deviceId,
         name,
         platform,
+        kind,
         createdAt,
         lastSeenAt: existing?.last_seen_at ?? null,
         online: online.has(deviceId),
@@ -547,26 +553,27 @@ export function createWorker(deps: HubDeps): HubWorker {
     return new Response(null, { status: 204 });
   }
 
-  // Renames a device of the caller's account. Scoped like revoke: the
-  // D1 update carries the account guard, so a device outside the
-  // account (or gone meanwhile) matches no row and reads as unknown.
-  async function renameAccountDevice(
+  // Changes a device of the caller's account (name, kind, or both).
+  // Scoped like revoke: the D1 update carries the account guard, so a
+  // device outside the account (or gone meanwhile) matches no row and
+  // reads as unknown.
+  async function updateAccountDevice(
     request: Request,
     env: Env,
     targetId: string,
   ) {
     const { device, hash } = await authDevice(request, env);
     if (device === null) return await refuseCredential(env, hash);
-    const parsed = RenameDeviceRequestSchema.safeParse(await readJson(request));
+    const parsed = DevicePatchRequestSchema.safeParse(await readJson(request));
     if (!parsed.success)
-      return jsonError(400, { error: "invalid rename request" });
-    const renamed = await renameDevice(
+      return jsonError(400, { error: "invalid device update" });
+    const updated = await updateDevice(
       env.DB,
       targetId,
       device.account_id,
-      parsed.data.name,
+      parsed.data,
     );
-    if (!renamed) return jsonError(404, { error: "unknown device" });
+    if (!updated) return jsonError(404, { error: "unknown device" });
     return new Response(null, { status: 204 });
   }
 

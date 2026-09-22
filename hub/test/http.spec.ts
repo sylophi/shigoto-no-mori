@@ -24,7 +24,7 @@ import {
   enrollRequest,
   mintTicket,
   provisionRequest,
-  renameRequest,
+  updateRequest,
   revoke,
   revokeRequest,
   ticketRequest,
@@ -61,12 +61,39 @@ describe("POST /devices/enroll", () => {
       deviceId: "dev-enroll",
       name: "MacBook",
       platform: "darwin",
+      kind: null,
       lastSeenAt: null,
       online: false,
     });
     // The credential authenticates against the device-tier endpoints.
     const list = await call(listRequest(credential));
     expect(list.status).toBe(200);
+  });
+
+  it("stores the kind a device reports, lists it, and refuses one outside the catalog", async () => {
+    const { credential, device } = await enroll(
+      "acct-kind",
+      "dev-kind",
+      "MacBook",
+      "darwin",
+      "laptop",
+    );
+    expect(device.kind).toBe("laptop");
+    const listed = (await (await call(listRequest(credential))).json()) as {
+      devices: { deviceId: string; kind: string | null }[];
+    };
+    expect(listed.devices.find((d) => d.deviceId === "dev-kind")?.kind).toBe(
+      "laptop",
+    );
+    const bogus = await call(
+      enrollRequest(`${TEST_TOKEN_PREFIX}acct-kind`, {
+        deviceId: "dev-kind-bogus",
+        name: "Toaster",
+        platform: "linux",
+        kind: "toaster",
+      }),
+    );
+    expect(bogus.status).toBe(400);
   });
 
   it("rejects a bad login token with 401", async () => {
@@ -242,7 +269,7 @@ describe("DELETE /devices/:deviceId", () => {
       listRequest(victim.credential),
       ticketRequest(victim.credential),
       provisionRequest(victim.credential, 4321),
-      renameRequest(victim.credential, "dev-tomb-victim", "Ghost"),
+      updateRequest(victim.credential, "dev-tomb-victim", "Ghost"),
       revokeRequest(victim.credential, "dev-tomb-keeper"),
     ]) {
       // oxlint-disable-next-line no-await-in-loop -- one route at a time reads better than a Promise.all of five
@@ -294,7 +321,7 @@ describe("PATCH /devices/:deviceId", () => {
     const self = await enroll("acct-ren", "dev-ren-self");
     const other = await enroll("acct-ren", "dev-ren-other");
     const response = await call(
-      renameRequest(self.credential, "dev-ren-self", { name: "Studio Mac" }),
+      updateRequest(self.credential, "dev-ren-self", { name: "Studio Mac" }),
     );
     expect(response.status).toBe(204);
     const listed = (await (
@@ -305,22 +332,51 @@ describe("PATCH /devices/:deviceId", () => {
     ).toBe("Studio Mac");
   });
 
+  it("changes a device's kind alone, leaving its name, and refuses an empty patch", async () => {
+    const self = await enroll("acct-kind-2", "dev-kind-2", "Mini", "darwin");
+    expect(
+      (
+        await call(
+          updateRequest(self.credential, "dev-kind-2", { kind: "mini" }),
+        )
+      ).status,
+    ).toBe(204);
+    const listed = (await (
+      await call(listRequest(self.credential))
+    ).json()) as {
+      devices: { deviceId: string; name: string; kind: string }[];
+    };
+    expect(
+      listed.devices.find((d) => d.deviceId === "dev-kind-2"),
+    ).toMatchObject({ name: "Mini", kind: "mini" });
+    expect(
+      (await call(updateRequest(self.credential, "dev-kind-2", {}))).status,
+    ).toBe(400);
+    expect(
+      (
+        await call(
+          updateRequest(self.credential, "dev-kind-2", { kind: "toaster" }),
+        )
+      ).status,
+    ).toBe(400);
+  });
+
   it("rejects a blank name and hides other accounts' devices behind 404", async () => {
     const self = await enroll("acct-ren-2", "dev-ren-2");
     const outsider = await enroll("acct-ren-outsider", "dev-ren-outsider");
     expect(
-      (await call(renameRequest(self.credential, "dev-ren-2", { name: "" })))
+      (await call(updateRequest(self.credential, "dev-ren-2", { name: "" })))
         .status,
     ).toBe(400);
     expect(
       (
         await call(
-          renameRequest(outsider.credential, "dev-ren-2", { name: "Taken" }),
+          updateRequest(outsider.credential, "dev-ren-2", { name: "Taken" }),
         )
       ).status,
     ).toBe(404);
     expect(
-      (await call(renameRequest("bogus", "dev-ren-2", { name: "Nope" })))
+      (await call(updateRequest("bogus", "dev-ren-2", { name: "Nope" })))
         .status,
     ).toBe(401);
   });

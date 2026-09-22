@@ -13,7 +13,8 @@
 import {
   DeviceListResponseSchema,
   EnrollRequestSchema,
-  RenameDeviceRequestSchema,
+  DevicePatchRequestSchema,
+  type DevicePatch,
   EnrollResponseSchema,
   ErrorBodySchema,
   HUB_ROUTES,
@@ -114,9 +115,14 @@ export type AccountService = {
     deviceId: string,
     signal?: AbortSignal,
   ): Promise<void>;
-  // Renames a device of the account on the hub, so the registry the
-  // other devices list carries the new name at once.
-  rename(credential: string, deviceId: string, name: string): Promise<void>;
+  // Changes a device of the account on the hub (its name, its kind, or
+  // both), so the registry the other devices list carries the change
+  // at once.
+  update(
+    credential: string,
+    deviceId: string,
+    patch: DevicePatch,
+  ): Promise<void>;
   // signal aborts the mint fetch on stop or on the caller's mint
   // timeout, so a black-holed route cannot hang the connect (C6).
   mintTicket(credential: string, signal?: AbortSignal): Promise<TicketResponse>;
@@ -226,12 +232,12 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
       );
     },
 
-    async rename(credential, deviceId, name) {
-      const body = RenameDeviceRequestSchema.parse({ name });
+    async update(credential, deviceId, patch) {
+      const body = DevicePatchRequestSchema.parse(patch);
       // 204 No Content on success, like revoke.
       await credentialed(
-        HUB_ROUTES.renameDevice,
-        HUB_ROUTES.renameDevice.path(deviceId),
+        HUB_ROUTES.updateDevice,
+        HUB_ROUTES.updateDevice.path(deviceId),
         credential,
         { body },
       );
