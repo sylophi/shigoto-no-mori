@@ -11,3 +11,5 @@ CREATE TABLE revoked_credentials (
   device_id TEXT NOT NULL,
   revoked_at INTEGER NOT NULL
 );
+
+CREATE INDEX revoked_credentials_revoked_at ON revoked_credentials (revoked_at);

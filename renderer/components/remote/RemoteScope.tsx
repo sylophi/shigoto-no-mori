@@ -61,7 +61,7 @@ function RemoteScopeGate({
 
 function unreachableLabel(
   device: RemoteDevice | undefined,
-  signedIn: boolean,
+  signedIn = true,
 ): string {
   if (device === undefined) {
     // A deep link or a page left open across a sign-out: signed out,
@@ -94,7 +94,7 @@ function UnreachableBanner({ device }: { device: RemoteDevice | undefined }) {
   return (
     <div className="flex shrink-0 items-center gap-3 border-b border-amber-500/30 bg-amber-500/10 px-6 py-2 text-xs text-amber-700 dark:text-amber-300">
       <span className="min-w-0 flex-1 select-text">
-        {unreachableLabel(device, true)} Showing the last state it sent.
+        {unreachableLabel(device)} Showing the last state it sent.
       </span>
       <OpenDevicesButton />
     </div>

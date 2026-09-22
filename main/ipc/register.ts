@@ -518,6 +518,14 @@ export async function refreshHubConnection(): Promise<void> {
 
 // Teardown for before-quit: closes the hub socket so the DO sees a
 // clean departure instead of waiting out a dead connection.
+// Tickets are account-scoped where the listener is not: the account
+// change restarts the listener (dropping every authed socket), and
+// this drops what could still auth one. Called from the account
+// fan-out's teardown (main/ipc/handlers.ts leaveAccount).
+export function clearDirectTickets(): void {
+  directTickets.clear();
+}
+
 export function stopHubConnection(): Promise<void> {
   return hubServer.stop();
 }
@@ -560,22 +568,10 @@ export function stopDirectHost(): Promise<void> {
 // field, so an account switch restarts the listener and drops every
 // socket authed under the old account. A failure degrades to a log
 // line like the other refresh functions.
-// The account the pending connect tickets were minted under, so a
-// refresh can tell an account change from a plain reconcile.
-let ticketsAccountId: string | null = null;
-
 export async function refreshDirectHost(): Promise<void> {
   try {
     await directWsServer.refresh(async () => {
       const inputs = hubConnectInputs();
-      // Tickets are account-scoped where the listener is not: the
-      // listener restart below drops every authed socket, and this
-      // drops what could still auth one.
-      const accountId = inputs?.accountId ?? null;
-      if (accountId !== ticketsAccountId) {
-        ticketsAccountId = accountId;
-        directTickets.clear();
-      }
       if (inputs === null) return null;
       // The device-scoped opt-out: absent means enrolled, explicit
       // false stops the listener (peers then get available:false and

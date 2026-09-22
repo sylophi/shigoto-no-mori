@@ -145,30 +145,40 @@ async function callObject<T>(
 // Resolves the presented device credential to its D1 row, null on any
 // miss. The prefix check is a cheap way to keep Clerk tokens and
 // credentials from ever hitting the wrong tier.
-async function authDevice(
-  request: Request,
-  env: Env,
-): Promise<DeviceRow | null> {
+// The presented device credential's hash, or null when the header
+// carries none. The one place the token is read off a request.
+async function credentialHashOf(request: Request): Promise<string | null> {
   const token = bearerToken(request);
   if (token === null || !token.startsWith(DEVICE_CREDENTIAL_PREFIX))
     return null;
-  return await getDeviceByCredentialHash(env.DB, await sha256Hex(token));
+  return await sha256Hex(token);
 }
 
-// The refusal for a credential that matched no device. A revoked
-// credential (its hash tombstoned by the revoke, db.ts deleteDevice)
-// gets the typed 403 the app reads as "this device was removed from
-// the account" and signs out on; a device that was offline at the
-// revoke learns it this way, since the socket close code that tells
-// a live device never reached it. Anything else (a garbage token, a
-// credential rotated away by a re-enroll, a tombstone past retention)
-// is the plain 401.
-async function refuseCredential(request: Request, env: Env): Promise<Response> {
-  const token = bearerToken(request);
+// The caller's device row and the hash it presented (for the refusal
+// when the row is null).
+async function authDevice(
+  request: Request,
+  env: Env,
+): Promise<{ device: DeviceRow | null; hash: string | null }> {
+  const hash = await credentialHashOf(request);
+  const device =
+    hash === null ? null : await getDeviceByCredentialHash(env.DB, hash);
+  return { device, hash };
+}
+
+// The refusal for a credential that matched no device. A revoked one
+// (its hash tombstoned by the revoke, db.ts deleteDevice) gets the
+// typed 403 the app signs out on, which is how a device that was
+// offline at the revoke learns of it. Anything else (a garbage token,
+// a credential rotated away by a re-enroll, a tombstone past
+// retention) is the plain 401.
+async function refuseCredential(
+  env: Env,
+  credentialHash: string | null,
+): Promise<Response> {
   if (
-    token !== null &&
-    token.startsWith(DEVICE_CREDENTIAL_PREFIX) &&
-    (await isRevokedCredentialHash(env.DB, await sha256Hex(token)))
+    credentialHash !== null &&
+    (await isRevokedCredentialHash(env.DB, credentialHash))
   ) {
     return jsonError(403, {
       error: "this device was removed from the account",
@@ -184,19 +194,22 @@ async function refuseCredential(request: Request, env: Env): Promise<Response> {
 // rather than throwing. The enroll case matters most: the upsert has
 // already committed the new credential, so a throw would strand the
 // client without the raw credential that now guards its row.
+async function accountPresence(
+  env: Env,
+  accountId: string,
+): Promise<Set<string>> {
+  const body = await callObject<PresenceResponse>(
+    accountStub(env, accountId),
+    INTERNAL_PRESENCE_PATH,
+  );
+  return new Set(body.online);
+}
+
 async function accountPresenceSafe(
   env: Env,
   accountId: string,
 ): Promise<Set<string>> {
-  try {
-    const body = await callObject<PresenceResponse>(
-      accountStub(env, accountId),
-      INTERNAL_PRESENCE_PATH,
-    );
-    return new Set(body.online);
-  } catch {
-    return new Set<string>();
-  }
+  return accountPresence(env, accountId).catch(() => new Set<string>());
 }
 
 function toDeviceInfo(row: DeviceRow, online: Set<string>): DeviceInfo {
@@ -397,11 +410,7 @@ export function createWorker(deps: HubDeps): HubWorker {
         // is a reason to refuse the enroll, not to revoke a device.
         let online: Set<string>;
         try {
-          const presence = await callObject<PresenceResponse>(
-            accountStub(env, login.accountId),
-            INTERNAL_PRESENCE_PATH,
-          );
-          online = new Set(presence.online);
+          online = await accountPresence(env, login.accountId);
         } catch {
           return jsonError(502, {
             error: "could not make room for the device",
@@ -469,18 +478,14 @@ export function createWorker(deps: HubDeps): HubWorker {
   }
 
   async function listAccountDevices(request: Request, env: Env) {
-    const token = bearerToken(request);
-    if (token === null || !token.startsWith(DEVICE_CREDENTIAL_PREFIX))
-      return await refuseCredential(request, env);
+    const hash = await credentialHashOf(request);
+    if (hash === null) return await refuseCredential(env, null);
     // Auth and list fold into one query: the subquery resolves the
     // account from the credential hash and the outer query returns that
     // account's devices. An empty result means the credential matched
     // nothing.
-    const rows = await listDevicesByCredentialHash(
-      env.DB,
-      await sha256Hex(token),
-    );
-    if (rows.length === 0) return await refuseCredential(request, env);
+    const rows = await listDevicesByCredentialHash(env.DB, hash);
+    if (rows.length === 0) return await refuseCredential(env, hash);
     // Every row shares the account, so the first row names the DO for
     // presence. Presence is advisory here, so a hub object hiccup
     // never blocks the device list. A failure defaults to all offline.
@@ -526,11 +531,11 @@ export function createWorker(deps: HubDeps): HubWorker {
   ) {
     // The caller auth and the target lookup are independent reads, so
     // they run together.
-    const [device, target] = await Promise.all([
+    const [{ device, hash }, target] = await Promise.all([
       authDevice(request, env),
       getDeviceById(env.DB, targetId),
     ]);
-    if (device === null) return await refuseCredential(request, env);
+    if (device === null) return await refuseCredential(env, hash);
     if (target === null || target.account_id !== device.account_id) {
       return jsonError(404, { error: "unknown device" });
     }
@@ -550,8 +555,8 @@ export function createWorker(deps: HubDeps): HubWorker {
     env: Env,
     targetId: string,
   ) {
-    const device = await authDevice(request, env);
-    if (device === null) return await refuseCredential(request, env);
+    const { device, hash } = await authDevice(request, env);
+    if (device === null) return await refuseCredential(env, hash);
     const parsed = RenameDeviceRequestSchema.safeParse(await readJson(request));
     if (!parsed.success)
       return jsonError(400, { error: "invalid rename request" });
@@ -572,8 +577,8 @@ export function createWorker(deps: HubDeps): HubWorker {
   // Unconfigured env answers the typed status so the app can gate
   // tunnels off without treating it as a failure.
   async function provisionDeviceTunnel(request: Request, env: Env) {
-    const device = await authDevice(request, env);
-    if (device === null) return await refuseCredential(request, env);
+    const { device, hash } = await authDevice(request, env);
+    if (device === null) return await refuseCredential(env, hash);
     const cf = tunnelEnvOf(env);
     if (cf === null) {
       return jsonError(TUNNEL_UNCONFIGURED_STATUS, {
@@ -602,8 +607,8 @@ export function createWorker(deps: HubDeps): HubWorker {
   }
 
   async function mintTicket(request: Request, env: Env) {
-    const device = await authDevice(request, env);
-    if (device === null) return await refuseCredential(request, env);
+    const { device, hash } = await authDevice(request, env);
+    if (device === null) return await refuseCredential(env, hash);
     const signingKey = env.TICKET_SIGNING_KEY ?? "";
     if (signingKey === "") {
       return jsonError(500, { error: "ticket signing is not configured" });

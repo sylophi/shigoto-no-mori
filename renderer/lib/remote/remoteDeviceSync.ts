@@ -41,6 +41,7 @@ import { buildApi } from "@shared/ipc/client";
 import type { HubStatus } from "@shared/ipc/modules/hub";
 import type { DeviceInfo } from "@shared/hub/protocol";
 import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
+import { directPresenceRule } from "@shared/hub/directPresence";
 import { publishHubStatus, seedHubStatus } from "@/hooks/remote/useHubStatus";
 import { hostKeyDeviceId, invalidateDeviceSession } from "@/lib/queryKeys";
 import {
@@ -160,16 +161,12 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
   const online = new Set(current.onlineDeviceIds);
   const reconnected = phase === "connected" && lastSocketPhase !== "connected";
   lastSocketPhase = phase;
-  // A stopped socket is main's word that this device is signed out
-  // (the hub refresh stops it exactly when the account inputs are
-  // gone, and restarts it under a new account's before this reads
-  // "stopped" for long). No account, no peers: the store empties by
-  // rule, not by trusting the device-list refetch to come back empty.
-  // That refetch does come back empty, but a refetch that fails
-  // instead falls back to the cached list below, and this is what
-  // keeps a stale list from putting the old account's device tabs
-  // back on a signed-out window.
-  if (phase === "stopped") {
+  // No account (the socket stopped by the sign-out, or blocked as
+  // revoked), no peers: the store empties by the direct plane's own
+  // rule rather than by trusting the device-list refetch to come back
+  // empty, since a refetch that fails falls back to the cached list
+  // below, which would put the old account's device tabs back.
+  if (directPresenceRule(current.socket) === "gone") {
     setRemoteDevices([]);
     return;
   }
@@ -194,18 +191,20 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
   // (status came in), never the pass a refetch's own landing queues:
   // a roster ghost the list will never explain would otherwise refetch
   // forever, while this way it re-asks once per hub event, as before.
-  const hasUnknownOnline = [...online].some(
-    (id) => id !== localDeviceId && !knownIds.has(id),
-  );
-  if (hasUnknownOnline && status !== undefined) refetchDeviceList();
   // A device that left the roster may have left the account (a
   // sign-out, a revoke on another device), which only the list can
   // say, and which main's own peer-side teardown (a mirror with that
   // device) hangs off the list landing. One HTTP call per departure,
-  // hub-driven passes only, like the unknown-online rule.
-  const someoneLeft = [...lastRoster].some((id) => !online.has(id));
-  if (phase === "connected") lastRoster = online;
-  if (someoneLeft && status !== undefined && phase === "connected") {
+  // like the unknown-online rule.
+  let someoneLeft = false;
+  if (phase === "connected") {
+    for (const id of lastRoster) if (!online.has(id)) someoneLeft = true;
+    lastRoster = online;
+  }
+  const hasUnknownOnline = [...online].some(
+    (id) => id !== localDeviceId && !knownIds.has(id),
+  );
+  if ((hasUnknownOnline || someoneLeft) && status !== undefined) {
     refetchDeviceList();
   }
   // This machine is not a remote device to itself, so it is skipped.
@@ -378,22 +377,16 @@ export function startRemoteDeviceSync(queryClient: QueryClient): void {
   // falls back to when a refetch fails), the per-device apis and
   // caches, and the followers' per-device state. A rename keeps it
   // all: same account, same peers.
-  let syncedAccountId: string | undefined;
-  window.api.account.onChanged(() => {
-    void window.api.account
-      .status()
-      .then((status) => {
-        const accountId = status.signedIn ? status.accountId : "";
-        if (syncedAccountId !== undefined && accountId !== syncedAccountId) {
-          leaveAccount(queryClient);
-        }
-        syncedAccountId = accountId;
-      })
-      .catch(() => undefined)
-      .finally(refetchDeviceList);
+  let syncedAccountId: string | null | undefined;
+  window.api.account.onChanged(({ accountId }) => {
+    if (syncedAccountId !== undefined && accountId !== syncedAccountId) {
+      leaveAccount(queryClient);
+    }
+    syncedAccountId = accountId;
+    refetchDeviceList();
   });
   void window.api.account.status().then((status) => {
-    syncedAccountId ??= status.signedIn ? status.accountId : "";
+    syncedAccountId ??= status.signedIn ? status.accountId : null;
   });
   // Every list change reconciles from here, this module's own refetches
   // included, alongside everyone else's landing in the shared cache (a

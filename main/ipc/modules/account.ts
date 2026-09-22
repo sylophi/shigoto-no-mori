@@ -224,7 +224,7 @@ export function accountServiceConfigured(): boolean {
 // callers: signed out, there is no account to stay available to
 // either, so liveness treats it like an unconfigured build.
 export function accountSignedIn(): boolean {
-  return signedInService() !== null;
+  return accountServiceConfigured() && store().signedIn();
 }
 
 // The renderer's half of the Clerk mount decision: the resolved
@@ -361,7 +361,7 @@ export async function retryParkedSignOut(): Promise<void> {
 }
 
 export function makeAccountHandlers(
-  emitChanged: () => void,
+  emitChanged: (accountId: string | null) => void,
   emitCommandAccessChanged: () => void,
   // Hears every registry list the hub serves, for state that follows
   // the account's membership (a mirror with a removed peer).
@@ -373,7 +373,7 @@ export function makeAccountHandlers(
   // sign-out turns it off).
   const accountChanged = (): void => {
     invalidateGrantCache();
-    emitChanged();
+    emitChanged(store().read()?.accountId ?? null);
   };
   // A device enrolled before the default learned to drop the hostname's
   // domain (and to prefer the macOS computer name) still stores the raw

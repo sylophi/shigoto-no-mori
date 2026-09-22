@@ -57,6 +57,8 @@ type SignedOutShape = {
 
 export type AccountStore = {
   read(): StoredAccount | null;
+  // Whether a credential is stored, without opening it (no decrypt).
+  signedIn(): boolean;
   write(account: StoredAccount): void;
   // Signs out: drops the credential, keeps the name (and any parked
   // revoke).
@@ -138,7 +140,13 @@ export function createAccountStore(opts: {
     return doc !== null && "signedOut" in doc ? doc : null;
   }
 
-  function writeSignedOut(doc: SignedOutShape): void {
+  // The one writer of the signed-out remainder.
+  function setSignedOut(
+    deviceName: string,
+    parked?: SignedOutShape["parked"],
+  ): void {
+    const doc: SignedOutShape = { v: 1, signedOut: true, deviceName };
+    if (parked !== undefined) doc.parked = parked;
     storage.writeRaw(JSON.stringify(doc));
   }
 
@@ -166,21 +174,21 @@ export function createAccountStore(opts: {
       storage.writeRaw(JSON.stringify(doc));
     },
 
+    signedIn() {
+      const doc = readDoc();
+      return doc !== null && !("signedOut" in doc);
+    },
+
     clear() {
       const doc = readDoc();
       if (doc === null) {
         storage.removeRaw();
         return;
       }
-      const deviceName =
-        typeof doc.deviceName === "string" ? doc.deviceName : "";
-      const parked = "signedOut" in doc ? doc.parked : undefined;
-      writeSignedOut({
-        v: 1,
-        signedOut: true,
-        deviceName,
-        ...(parked === undefined ? {} : { parked }),
-      });
+      setSignedOut(
+        typeof doc.deviceName === "string" ? doc.deviceName : "",
+        "signedOut" in doc ? doc.parked : undefined,
+      );
     },
 
     rememberedDeviceName() {
@@ -190,14 +198,9 @@ export function createAccountStore(opts: {
     },
 
     park(account) {
-      writeSignedOut({
-        v: 1,
-        signedOut: true,
-        deviceName: account.deviceName,
-        parked: {
-          ...encrypt(account.credential),
-          accountId: account.accountId,
-        },
+      setSignedOut(account.deviceName, {
+        ...encrypt(account.credential),
+        accountId: account.accountId,
       });
     },
 
@@ -210,8 +213,7 @@ export function createAccountStore(opts: {
 
     clearParked() {
       const doc = signedOutDoc();
-      if (doc === null || doc.parked === undefined) return;
-      writeSignedOut({ v: 1, signedOut: true, deviceName: doc.deviceName });
+      if (doc?.parked !== undefined) setSignedOut(doc.deviceName);
     },
   };
 }

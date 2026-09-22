@@ -119,11 +119,12 @@ export async function upsertDevice(
   return result.meta.changes > 0;
 }
 
-// How long a revoked credential's tombstone is kept
-// (hub/migrations/0002_revoked_credentials.sql). Long enough for a
-// device that was put away for a season to learn it was removed;
-// after that it gets the plain refusal and signs out by hand.
-export const REVOKED_CREDENTIAL_RETENTION_MS = 180 * 24 * 60 * 60 * 1000;
+// How long a revoked credential's tombstone answers
+// (hub/migrations/0002_revoked_credentials.sql): long enough for a
+// device put away for a couple of weeks to learn it was removed. After
+// that it gets the plain refusal and signs out by hand. Enforced on
+// the lookup; the rows themselves are pruned on each revoke.
+export const REVOKED_CREDENTIAL_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
 
 // Deletes the device row, scoped to the account the worker authorized.
 // The account_id guard means a row concurrently re-enrolled under
@@ -161,13 +162,14 @@ export async function deleteDevice(
 export async function isRevokedCredentialHash(
   db: D1Database,
   credentialHash: string,
+  now: number = Date.now(),
 ): Promise<boolean> {
   const row = await db
     .prepare(
-      "SELECT device_id FROM revoked_credentials WHERE credential_hash = ?",
+      "SELECT 1 FROM revoked_credentials WHERE credential_hash = ? AND revoked_at >= ?",
     )
-    .bind(credentialHash)
-    .first<{ device_id: string }>();
+    .bind(credentialHash, now - REVOKED_CREDENTIAL_RETENTION_MS)
+    .first();
   return row !== null;
 }
 // Renames the device row, scoped to the account the worker authorized

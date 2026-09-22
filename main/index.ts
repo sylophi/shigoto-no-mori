@@ -469,9 +469,12 @@ app.on("ready", async () => {
   // main/ipc/handlers.ts), making this the boot-time pass only. The
   // direct data-plane listener follows the same
   // enrollment condition, so its reconcile rides this refresh's tail.
-  // A sign-out whose revoke never reached the hub is delivered first,
-  // so the hub's registry stops listing a device that left.
-  void retryParkedSignOut().then(() => refreshHubConnection());
+  void refreshHubConnection();
+  // A sign-out whose revoke never reached the hub is delivered
+  // alongside, never ahead of the socket: it can wait out its timeout
+  // on a dead network, and a parked revoke means this device is
+  // signed out, so the socket has nothing to learn from it.
+  void retryParkedSignOut();
   // Sleep is the one event that reliably kills every remote socket
   // without a close: on resume, probe the hub socket and every direct
   // session so the dead ones are found and redialed within seconds,

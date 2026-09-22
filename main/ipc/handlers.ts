@@ -75,7 +75,6 @@ import { packageScriptsHandlers } from "@host/ipc/modules/packageScripts";
 import {
   portForwardHandlers,
   setPortForwardEngine,
-  stopAllPortForwards,
   stopPortForwardsTo,
 } from "./modules/portForward";
 import { portPoolHandlers } from "@host/ipc/modules/portPool";
@@ -120,6 +119,7 @@ import {
 } from "../electron/clientConfig";
 import {
   broadcastAll,
+  clearDirectTickets,
   directHandlers,
   refreshHubConnection,
   registerContract,
@@ -245,28 +245,58 @@ const mirrorDaemon = createMirrorDaemon({
   },
 });
 // The engine persists its sessions, so they come back on every spawn:
-// a boot that starts signed out (a sign-out that never reached the
-// daemon, a credential removed by hand) or a daemon that was down at
-// the sign-out would otherwise resume mirroring with peers of an
-// account this device is not on. Every snapshot of a running daemon
-// re-asks, once per session set, and the account fan-out's own sweep
+// a boot that starts signed out, or a daemon that was down at the
+// sign-out, would otherwise resume mirroring with peers of an account
+// this device is not on. Each session is asked once (the
+// reapOrphanedTransfers idiom); the account fan-out's own sweep
 // covers the daemon-was-up case.
-let sweptSessionSet = "";
+const LEFT_ACCOUNT_DETAIL =
+  "This device left the account. The copy stays as a worktree.";
+const sweptSessions = new Set<string>();
 function endMirrorsOfNoAccount(): void {
-  if (mirrorDaemon.status() !== "running") return;
-  const signature = mirrorDaemon
+  if (mirrorDaemon.status() !== "running" || hubConnectInputs() !== null) {
+    return;
+  }
+  const unswept = mirrorDaemon
     .sessions()
-    .map((raw) => raw.session)
-    .toSorted()
-    .join("\n");
-  if (signature === "" || signature === sweptSessionSet) return;
-  sweptSessionSet = signature;
-  if (hubConnectInputs() !== null) return;
-  void endMirrorsWithPeers(
-    () => false,
-    "This device is signed out. The copy stays as a worktree.",
-    { transfers: true },
+    .filter((raw) => !sweptSessions.has(raw.session));
+  if (unswept.length === 0) return;
+  for (const raw of unswept) sweptSessions.add(raw.session);
+  void endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL, {
+    transfers: true,
+  });
+}
+
+// What a device leaving its account tears down, run once per account
+// transition (a sign-out, a sign-in under another account; never a
+// rename): everything that was a pairing with, or a pick about, the
+// account's peers. Resolves once the mirror sweep is done, bounded so
+// a stuck daemon request cannot hold the sign-out, because the hub
+// refresh that follows is what closes the sessions the sweep's
+// terminates ride.
+async function leaveAccount(): Promise<void> {
+  clearDirectTickets();
+  stopPortForwardsTo(() => false);
+  // The shared settings and the peer-keyed client config picks are the
+  // account's, not this machine's (withoutPeerState says which); the
+  // renderer re-reads its config copy off the changed fan-out.
+  sharedSettingsCopy.clear();
+  void writeClientConfig(withoutPeerState(readClientConfigSync())).catch(
+    (error: unknown) => {
+      console.warn(
+        `[account] could not drop the peer-keyed client config: ${errorMessageOf(error)}`,
+      );
+    },
   );
+  // The login item keeps a machine reachable TO its account; signed
+  // out it comes off, and the next sign-in's fan-out puts it back.
+  reconcileLaunchAtLogin();
+  await Promise.race([
+    endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL, {
+      transfers: true,
+    }),
+    new Promise((resolve) => setTimeout(resolve, 5_000).unref?.()),
+  ]);
 }
 // The git half of every session this device runs (host/mirror/
 // gitFollow.ts): reads the daemon's sessions, reaches the peer through
@@ -338,64 +368,20 @@ export function registerIpcHandlers(): void {
   // can tell a rename (same account, nothing to tear down) from a
   // sign-out or an account switch.
   let peerAccountId = hubConnectInputs()?.accountId ?? null;
+  let lastMembership = new Set<string>();
   // Client-scoped: sign-in drives the OS browser and writes an
   // OS-keychain credential on this machine, so it never rides the socket
   // wire. The changed broadcast fans out to every window after any
   // sign-in, sign-out or rename, and the hub socket re-reconciles
   // against the fresh account state at the same moment.
   const accountHandlers = makeAccountHandlers(
-    () => {
-      const accountId = hubConnectInputs()?.accountId ?? null;
-      // The mirror sweep is what needs the peer sessions still up (a
-      // terminate is local, but the daemon's own stream close is
-      // cleaner than the socket dying under it), so the hub refresh
-      // that stops them waits on it, bounded so a stuck daemon
-      // request cannot hold the sign-out.
-      let teardown: Promise<unknown> = Promise.resolve();
+    (accountId) => {
+      let teardown = Promise.resolve();
       if (accountId !== peerAccountId) {
         peerAccountId = accountId;
-        // Every port forward rides a session with a peer of the
-        // account this device just left: the loopback listeners would
-        // otherwise stay bound, forwarding into a peer that is about
-        // to drop us (the direct sessions themselves close through the
-        // presence rule when the hub socket stops below).
-        stopAllPortForwards();
-        // A mirror pairs two devices of one account, and this device
-        // is no longer one of them: every mirror ends, its copy kept
-        // as a plain worktree (endMirrorsWithPeers says why kept). The
-        // one-shot transfers in flight go too: a send half across to
-        // a peer of an account this device has left has no ending
-        // but this one.
-        teardown = Promise.race([
-          endMirrorsWithPeers(
-            () => false,
-            "This device left the account. The copy stays as a worktree.",
-            { transfers: true },
-          ),
-          new Promise((resolve) => setTimeout(resolve, 5_000).unref?.()),
-        ]);
-        // The shared settings belong to the account's devices as a
-        // group, so the copy goes with the membership (clear says how
-        // they come back).
-        sharedSettingsCopy.clear();
-        // The client config's peer-keyed picks go with it too
-        // (withoutPeerState says which). The renderer re-reads its
-        // copy off the account:changed fan-out below.
-        void writeClientConfig(withoutPeerState(readClientConfigSync())).catch(
-          (error: unknown) => {
-            console.warn(
-              `[account] could not drop the peer-keyed client config: ${errorMessageOf(error)}`,
-            );
-          },
-        );
-        // The login item exists so a machine stays reachable TO its
-        // account. Signed out there is none, so it is cleared here and
-        // reinstalled by the next sign-in's fan-out (the setting
-        // itself is kept: it is this machine's preference, not the
-        // account's).
-        reconcileLaunchAtLogin();
+        teardown = leaveAccount();
       }
-      broadcastAll(accountContract, "changed", undefined);
+      broadcastAll(accountContract, "changed", { accountId });
       // A direct account switch that stays signed in changes the
       // command-access answer, so refresh the renderer's switch query
       // too. Main's grant cache is already invalidated in
@@ -423,7 +409,14 @@ export function registerIpcHandlers(): void {
     // one on the roster). A mirror with a device no longer on the
     // account ends here, the other half of the sign-out rule above.
     (devices) => {
+      // Only a membership change sweeps: the list is read on every
+      // window focus, and the sweeps walk every session and forward.
       const onAccount = new Set(devices.map((device) => device.deviceId));
+      const same =
+        onAccount.size === lastMembership.size &&
+        [...onAccount].every((id) => lastMembership.has(id));
+      if (same) return;
+      lastMembership = onAccount;
       const stillOn = (deviceId: string) => onAccount.has(deviceId);
       void endMirrorsWithPeers(
         stillOn,

@@ -230,7 +230,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
         ),
       );
     }
-    broadcastAll(accountContract, "changed", undefined, clientWire.server);
+    broadcastAll(accountContract, "changed", { accountId }, clientWire.server);
     void refreshHub();
   }
 

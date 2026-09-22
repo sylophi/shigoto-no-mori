@@ -154,16 +154,14 @@ async function waitSettled(
       // No cycle yet after the connect ceiling, and either an error
       // or a side still not connected (a source that went away, which
       // reports no error at all): the session is not going to.
+      const connected = raw.local.connected && raw.remote.connected;
       if (
         raw.successfulCycles === 0 &&
         Date.now() - startedAt > CONNECT_CEILING_MS &&
-        (raw.lastError !== undefined ||
-          !raw.local.connected ||
-          !raw.remote.connected)
+        (raw.lastError !== undefined || !connected)
       ) {
         return failed(raw.lastError ?? "the other device could not be reached");
       }
-      const connected = raw.local.connected && raw.remote.connected;
       if (connected) {
         everConnected = true;
         disconnectedSince = null;

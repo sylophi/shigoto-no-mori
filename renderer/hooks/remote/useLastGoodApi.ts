@@ -11,12 +11,9 @@ import type { RemoteDevice, RemoteDeviceApi } from "@/lib/remote/devices";
 // hard-rejects them with "no direct connection", so the queries
 // beneath fail honestly, and the device's cache is refetched on the
 // next session landing. undefined until the device has ever had one,
-// and undefined again once the device itself is gone from the
-// registry (removed from the account, or the account left): a blip
-// keeps the device with no api, a departure drops the device, and
-// only the first is worth riding out. Without this the kept api would
-// outlive the account it was built under, and a device of a later
-// account with the same id would open on the old one's cache.
+// and again once the device is gone from the registry: a blip keeps
+// the device with no api, a departure drops the device, and only the
+// first is worth riding out.
 export function useLastGoodApi(
   device: RemoteDevice | undefined,
 ): RemoteDeviceApi | undefined {
