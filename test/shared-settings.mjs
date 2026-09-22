@@ -311,6 +311,18 @@ async function main() {
         assert.equal(onDisk.deviceId, KIWI);
         assert.deepEqual(onDisk.sharedSettings, newer);
 
+        // A device leaving the account drops its copy, announced like
+        // a change, and an already empty copy clears silently.
+        assert.deepEqual(sharedSettingsCopy.clear(), EMPTY_SHARED_SETTINGS);
+        assert.equal(announced.length, 3);
+        assert.deepEqual(sharedSettingsCopy.read(), EMPTY_SHARED_SETTINGS);
+        sharedSettingsCopy.clear();
+        assert.equal(announced.length, 3);
+        // What comes back from a peer is taken whole again: the clear
+        // wrote no tombstones to outrank it.
+        assert.deepEqual(sharedSettingsCopy.merge(newer), newer);
+        assert.equal(announced.length, 4);
+
         // Hand-mangled storage reads as empty instead of throwing, and
         // the next merge fills it back in.
         writeFileSync(

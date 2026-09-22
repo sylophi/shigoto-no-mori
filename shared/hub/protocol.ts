@@ -163,7 +163,17 @@ export const HUB_PONG = "pong";
 // ---- HTTP bodies ----
 
 // Every error response is `{ error }` with a meaningful status code.
-export const ErrorBodySchema = z.object({ error: z.string() });
+// `code` names the one refusal the app acts on rather than shows:
+// DEVICE_REVOKED_CODE rides a 403 from every credentialed route when
+// the credential is a revoked one (the hub tombstones them), and the
+// app signs itself out on it exactly as on the CLOSE_DEVICE_REVOKED
+// socket close, which only a device that was online at the revoke
+// ever sees.
+export const DEVICE_REVOKED_CODE = "device_revoked";
+export const ErrorBodySchema = z.object({
+  error: z.string(),
+  code: z.literal(DEVICE_REVOKED_CODE).optional(),
+});
 export type ErrorBody = z.infer<typeof ErrorBodySchema>;
 
 // POST /devices/enroll request, under a Clerk session token. deviceId

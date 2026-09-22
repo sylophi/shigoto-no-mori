@@ -14,7 +14,7 @@
 // HubConnectOpts.
 import type { ChannelMux } from "@shared/ipc/socket/channels";
 import { errorMessageOf } from "@shared/errors";
-import { isHubRefusal } from "@shared/account/service";
+import { isDeviceRevoked, isHubRefusal } from "@shared/account/service";
 import {
   HELLO_TIMEOUT_MS,
   TERMINATE_GRACE_MS,
@@ -262,11 +262,16 @@ export function createHubConnectionCore(
           // until the account changes, so it blocks the supervisor
           // (terminal until refresh restarts it on the next sign-in or
           // sign-out) instead of minting on the ladder forever. The
-          // message rides along so the UI can name it.
+          // message rides along so the UI can name it. A mint refused
+          // because the credential was REVOKED (the device was removed
+          // from the account while this socket was down, so it never
+          // saw the revoked close) carries the revoked close code, so
+          // the classifier blocks it as "revoked" and the app signs
+          // out exactly as it would have on the close.
           reject(
             new RemoteConnectError(
               `ticket mint failed: ${errorMessageOf(error)}`,
-              null,
+              isDeviceRevoked(error) ? CLOSE_DEVICE_REVOKED : null,
               isHubRefusal(error),
             ),
           );

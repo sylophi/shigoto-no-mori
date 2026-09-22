@@ -219,3 +219,42 @@ export async function stopMirrorsForWorktree(
   // The worktree is gone, so its thread has no page left to show on.
   daemon.forgetHistory(localWorktreeId);
 }
+
+// Ends every mirror with a peer `stillOnAccount` refuses (this device
+// signed out, or the peer was removed from the registry). The copy
+// stays as an ordinary worktree, unlike mirror:stop's delete: a
+// delete is only safe against a live peer confirming nothing is held
+// here alone, and the peer is exactly what is gone. The worktree's
+// thread says so. Failures are logged, not thrown, like
+// stopMirrorsForWorktree. With `transfers`, the one-shot transfer
+// sessions with such a peer go too: their tokens stay live, so the
+// orphan reaper never would, and their wait then fails the transfer.
+export async function endMirrorsWithPeers(
+  stillOnAccount: (deviceId: string) => boolean,
+  detail: string,
+  opts: { transfers?: boolean } = {},
+): Promise<void> {
+  const daemon = impl;
+  if (daemon === null) return;
+  const candidates = opts.transfers
+    ? daemon.sessions()
+    : mirrorSessions(daemon);
+  const doomed = candidates.filter((raw) => !stillOnAccount(raw.deviceId));
+  await Promise.all(
+    doomed.map(async (raw) => {
+      try {
+        await daemon.terminate(raw.session);
+      } catch (error) {
+        console.warn(
+          `[mirror] could not end a mirror with a device that left the account: ${errorMessageOf(error)}`,
+        );
+        return;
+      }
+      if (isTransferSession(raw)) return;
+      const localWorktreeId = localWorktreeIdOf(raw);
+      if (localWorktreeId !== "") {
+        daemon.noteEvent(localWorktreeId, "stopped", detail);
+      }
+    }),
+  );
+}

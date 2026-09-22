@@ -26,6 +26,7 @@ import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { hostsProjects } from "@shared/account/enroll";
+import { isHubRefusal } from "@shared/account/service";
 import { errorMessageOf } from "@shared/errors";
 import { pullWorktreeName } from "@shared/git/branches";
 import type { DeviceInfo } from "@shared/hub/protocol";
@@ -119,7 +120,19 @@ const nameOf = (device: DeviceInfo): string =>
 
 async function roster(): Promise<{ here: Named; peers: DeviceInfo[] }> {
   const { listDevices, thisDeviceId } = requireImpl();
-  const devices = await listDevices();
+  let devices: DeviceInfo[];
+  try {
+    devices = await listDevices();
+  } catch (error) {
+    // A credential the hub no longer honors (the device was removed
+    // from the account while the app held it) is the signed-out case
+    // with a reason, not a raw hub error for the CLI to print.
+    if (!isHubRefusal(error)) throw error;
+    throw new ControlError(
+      "signed-out",
+      "This device's access to the account was removed. Sign in again from the app.",
+    );
+  }
   const hereId = thisDeviceId();
   const here = devices.find((device) => device.deviceId === hereId);
   if (here === undefined) {

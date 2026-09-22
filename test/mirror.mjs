@@ -55,7 +55,10 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { buildClient } from "@shared/ipc/buildClient";
 import { forwardContract } from "@shared/ipc/modules/forward";
-import { mirrorContract } from "@shared/ipc/modules/mirror";
+import {
+  MIRROR_LABEL_TRANSFER,
+  mirrorContract,
+} from "@shared/ipc/modules/mirror";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
@@ -70,6 +73,10 @@ import {
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { createGitFollower } from "@host/mirror/gitFollow";
+import {
+  endMirrorsWithPeers,
+  MIRROR_LABEL_LOCAL_WORKTREE,
+} from "@host/mirror/registry";
 import { transferFilesOnce } from "@host/mirror/oneShot";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { initDataDirAt } from "@host/lib/util/paths";
@@ -726,6 +733,65 @@ async function main() {
     );
     ok(
       "one-shot transfer: the admitted file crosses, the rule holds, nothing flows back, the session ends itself",
+    );
+
+    // (6c) A device leaving the account ends the mirrors it had with
+    // it, copies kept (host/mirror/registry.ts endMirrorsWithPeers):
+    // this device signing out ends every mirror, a peer removed from
+    // the registry ends only the mirrors with that peer, a transfer
+    // session is not a mirror and stays, and every ended mirror's
+    // worktree thread hears why. A fake daemon, since the rule is
+    // about which sessions are picked, not the engine.
+    {
+      const live = new Map([
+        [
+          "s-with-a",
+          {
+            session: "s-with-a",
+            deviceId: "A",
+            labels: { [MIRROR_LABEL_LOCAL_WORKTREE]: "wt-a" },
+          },
+        ],
+        [
+          "s-with-c",
+          {
+            session: "s-with-c",
+            deviceId: "C",
+            labels: { [MIRROR_LABEL_LOCAL_WORKTREE]: "wt-c" },
+          },
+        ],
+        [
+          "t-with-a",
+          {
+            session: "t-with-a",
+            deviceId: "A",
+            labels: { [MIRROR_LABEL_TRANSFER]: "token" },
+          },
+        ],
+      ]);
+      const noted = [];
+      setMirrorImpl({
+        ...daemon,
+        sessions: () => [...live.values()],
+        terminate: async (id) => {
+          live.delete(id);
+        },
+        recreate: () => Promise.reject(new Error("not in this check")),
+        gitStatus: () => undefined,
+        history: () => [],
+        noteEvent: (worktreeId, kind, detail) =>
+          noted.push([worktreeId, kind, detail]),
+        forgetHistory: () => {},
+      });
+      await endMirrorsWithPeers((deviceId) => deviceId !== "A", "A left");
+      assert.deepEqual([...live.keys()], ["s-with-c", "t-with-a"]);
+      assert.deepEqual(noted, [["wt-a", "stopped", "A left"]]);
+      await endMirrorsWithPeers(() => false, "signed out");
+      assert.deepEqual([...live.keys()], ["t-with-a"]);
+      assert.deepEqual(noted.at(-1), ["wt-c", "stopped", "signed out"]);
+    }
+    ok(
+      "a device leaving the account ends the mirrors with it, copies kept, transfers untouched",
     );
 
     // (7) Stopping the daemon ends it cleanly.

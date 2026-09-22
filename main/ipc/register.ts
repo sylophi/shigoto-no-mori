@@ -518,6 +518,14 @@ export async function refreshHubConnection(): Promise<void> {
 
 // Teardown for before-quit: closes the hub socket so the DO sees a
 // clean departure instead of waiting out a dead connection.
+// Tickets are account-scoped where the listener is not: the account
+// change restarts the listener (dropping every authed socket), and
+// this drops what could still auth one. Called from the account
+// fan-out's teardown (main/ipc/handlers.ts leaveAccount).
+export function clearDirectTickets(): void {
+  directTickets.clear();
+}
+
 export function stopHubConnection(): Promise<void> {
   return hubServer.stop();
 }

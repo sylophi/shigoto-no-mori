@@ -72,6 +72,12 @@ export function useWatchAccountChanges(): void {
     () =>
       window.api.account.onChanged(() => {
         void queryClient.invalidateQueries({ queryKey: queryKeys.account() });
+        // A departure drops the peer-keyed client config picks on
+        // disk (main's fan-out, before this broadcast). The cached
+        // copy must follow, or the next write here puts them back.
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.clientConfig(),
+        });
       }),
     [queryClient],
   );

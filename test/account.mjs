@@ -37,7 +37,11 @@ import {
   parseDotenv,
   resolveServiceConfig,
 } from "../shared/account/serviceConfig.ts";
-import { enrollDevice, signOutDevice } from "../shared/account/enroll.ts";
+import {
+  enrollDevice,
+  retryParkedRevoke,
+  signOutDevice,
+} from "../shared/account/enroll.ts";
 import {
   HubRequestError,
   TunnelProvisionDeniedError,
@@ -388,6 +392,56 @@ async function main() {
         fakeSessionJwt("user_abc"),
       );
       assert.equal(store.read().deviceName, "Renamed");
+      // The name outlives a sign-out into the next enrollment, and a
+      // parked revoke from that sign-out is delivered only when the hub
+      // refuses the enroll for it (a 409: the device is still on the
+      // old account), after which the enroll is tried once more.
+      store.park({
+        credential: "cred-1",
+        accountId: "user_abc",
+        deviceName: "Renamed",
+      });
+      assert.equal(store.read(), null);
+      let refusals = 0;
+      const { fetchImpl: conflicting, calls: conflictCalls } = recordingFetch(
+        (url, init) => {
+          if (init.method === "DELETE")
+            return new Response(null, { status: 204 });
+          refusals += 1;
+          return refusals === 1
+            ? json({ error: "enrolled under a different account" }, 409)
+            : json({ credential: "cred-2", device: DEVICE });
+        },
+      );
+      await enrollDevice(
+        {
+          config: CONFIG,
+          service: createAccountService({
+            baseUrl: CONFIG.hubUrl,
+            fetchImpl: conflicting,
+          }),
+          store,
+          deviceId: "device-uuid",
+          fallbackDeviceName: "Fallback Mac",
+          platform: "darwin",
+        },
+        fakeSessionJwt("user_other"),
+      );
+      assert.deepEqual(
+        conflictCalls.map((c) => c.init.method),
+        ["POST", "DELETE", "POST"],
+        "the parked revoke did not go between the refused and the retried enroll",
+      );
+      assert.equal(
+        conflictCalls[1].init.headers.authorization,
+        "Bearer cred-1",
+      );
+      assert.deepEqual(store.read(), {
+        credential: "cred-2",
+        accountId: "user_other",
+        deviceName: "Renamed",
+      });
+      assert.equal(store.readParked(), null);
 
       const before = calls.length;
       await assert.rejects(
@@ -450,6 +504,63 @@ async function main() {
       });
       assert.equal(store.read(), null, "a failed revoke blocked the clear");
       assert.match(String(reported), /offline/);
+      // The undelivered revoke is parked with the credential it needs,
+      // and delivered by the retry: a 204 clears it, and so does a
+      // refusal (the hub already does not honor it), while an outage
+      // keeps it for the next try. A refusal at the sign-out itself is
+      // never parked.
+      assert.equal(store.readParked()?.credential, "cred-2");
+      await retryParkedRevoke({
+        config: CONFIG,
+        service: failing,
+        store,
+        deviceId: "device-uuid",
+      });
+      assert.equal(
+        store.readParked()?.credential,
+        "cred-2",
+        "an outage cleared the parking",
+      );
+      const { fetchImpl: okFetch, calls: retryCalls } = recordingFetch(
+        () => new Response(null, { status: 204 }),
+      );
+      await retryParkedRevoke({
+        config: CONFIG,
+        service: createAccountService({
+          baseUrl: CONFIG.hubUrl,
+          fetchImpl: okFetch,
+        }),
+        store,
+        deviceId: "device-uuid",
+      });
+      assert.equal(retryCalls[0].init.headers.authorization, "Bearer cred-2");
+      assert.equal(
+        store.readParked(),
+        null,
+        "a delivered revoke stayed parked",
+      );
+      const refusing = createAccountService({
+        baseUrl: CONFIG.hubUrl,
+        fetchImpl: () =>
+          Promise.resolve(
+            new Response(
+              JSON.stringify({ error: "invalid device credential" }),
+              {
+                status: 401,
+              },
+            ),
+          ),
+      });
+      store.write({ credential: "cred-3", accountId: "a", deviceName: "d" });
+      await signOutDevice({
+        config: CONFIG,
+        service: refusing,
+        store,
+        deviceId: "device-uuid",
+      });
+      assert.equal(store.readParked(), null, "a refused revoke was parked");
+      // The name outlives the sign-out into the next enrollment.
+      assert.equal(store.rememberedDeviceName(), "d");
     },
   );
 
@@ -574,7 +685,42 @@ async function main() {
           assert.equal(store.read(), null, "corrupt backing should read null");
           store.write({ credential: "c", accountId: "a", deviceName: "d" });
           store.clear();
-          assert.equal(stored, null, "clear should empty the backing");
+          // Clear signs out but keeps the name, so the next enrollment
+          // keeps calling the device what it was called.
+          assert.equal(store.read(), null, "clear should sign out");
+          assert.equal(store.rememberedDeviceName(), "d");
+          assert.equal(store.readParked(), null);
+          assert.equal(
+            JSON.parse(stored).credential,
+            undefined,
+            "clear left the credential in the backing",
+          );
+          // A parked credential is signed out too, readable only as
+          // parked, and encrypted the same way as a live one.
+          store.park({ credential: "dead", accountId: "a", deviceName: "d" });
+          assert.equal(store.read(), null, "a parked credential read as live");
+          assert.deepEqual(store.readParked(), {
+            credential: "dead",
+            accountId: "a",
+            deviceName: "d",
+          });
+          assert.equal(
+            JSON.parse(stored).parked.credential !== "dead",
+            available,
+            "the parked credential was not encrypted like a live one",
+          );
+          store.clear();
+          assert.deepEqual(
+            store.readParked()?.credential,
+            "dead",
+            "clear dropped the parked revoke",
+          );
+          store.clearParked();
+          assert.equal(store.readParked(), null);
+          assert.equal(store.rememberedDeviceName(), "d");
+          store.write({ credential: "c2", accountId: "a", deviceName: "d2" });
+          assert.equal(store.readParked(), null, "a sign-in kept the parking");
+          store.clear();
           assert.equal(store.read(), null, "a cleared store reads null");
         }
       },

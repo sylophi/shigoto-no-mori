@@ -14,7 +14,7 @@ import { join } from "node:path";
 import { app, safeStorage } from "electron";
 import { CLONED_LOGIN_MARKER } from "@shared/packaging/appName.mts";
 import { accountContract } from "@shared/ipc/modules/account";
-import type { TunnelProvisionResponse } from "@shared/hub/protocol";
+import type { DeviceInfo, TunnelProvisionResponse } from "@shared/hub/protocol";
 import type { AccountStatus } from "@shared/ipc/modules/account";
 import type { Handlers } from "@shared/ipc/types";
 import { getDeviceId } from "@host/lib/config/deviceId";
@@ -36,6 +36,7 @@ import {
 import {
   enrollDevice,
   renameDevice,
+  retryParkedRevoke,
   signOutDevice,
 } from "@shared/account/enroll";
 import {
@@ -219,6 +220,13 @@ export function accountServiceConfigured(): boolean {
   return isConfigured(serviceConfig());
 }
 
+// Whether this device holds an account credential, for the same
+// callers: signed out, there is no account to stay available to
+// either, so liveness treats it like an unconfigured build.
+export function accountSignedIn(): boolean {
+  return accountServiceConfigured() && store().signedIn();
+}
+
 // The renderer's half of the Clerk mount decision: the resolved
 // publishable key rides the window's argv (main/index.ts) so the
 // provider can mount synchronously at boot. Empty when unconfigured.
@@ -237,7 +245,10 @@ function statusOf(
     configured: isConfigured(serviceConfig()),
     signedIn: record !== null,
     accountId: record?.accountId ?? "",
-    deviceName: record?.deviceName ?? defaultName,
+    // Signed out, the name the device last enrolled under, which is
+    // what the next enrollment uses (enroll.ts).
+    deviceName:
+      record?.deviceName ?? store().rememberedDeviceName() ?? defaultName,
     // --clone-login leaves this beside the token store it copied
     // (scripts/lib/devProfile.mts cloneDevLogin).
     sharedSignIn: existsSync(
@@ -338,17 +349,34 @@ export function hubConnectInputs(): {
   };
 }
 
+// Delivers a revoke a sign-out could not (enroll.ts retryParkedRevoke),
+// at boot: a device that signed out offline is still on the hub's
+// registry until this lands.
+export async function retryParkedSignOut(): Promise<void> {
+  const config = serviceConfig();
+  if (!isConfigured(config)) return;
+  await retryParkedRevoke({
+    config,
+    service: createAccountService({ baseUrl: config.hubUrl }),
+    store: store(),
+    deviceId: getDeviceId(),
+  });
+}
+
 export function makeAccountHandlers(
-  emitChanged: () => void,
+  emitChanged: (accountId: string | null) => Promise<void> | void,
   emitCommandAccessChanged: () => void,
+  // Hears every registry list the hub serves, for state that follows
+  // the account's membership (a mirror with a removed peer).
+  onDeviceList: (devices: DeviceInfo[]) => void = () => {},
 ): Handlers<typeof accountContract> {
   // Fires the account-changed fan-out and invalidates the grant cache
   // together, since any account transition (sign-in, sign-out, rename)
   // may change the answer (a new account scopes to its own switch,
   // sign-out turns it off).
-  const accountChanged = (): void => {
+  const accountChanged = (): Promise<void> => {
     invalidateGrantCache();
-    emitChanged();
+    return Promise.resolve(emitChanged(store().read()?.accountId ?? null));
   };
   // A device enrolled before the default learned to drop the hostname's
   // domain (and to prefer the macOS computer name) still stores the raw
@@ -447,6 +475,14 @@ export function makeAccountHandlers(
     signOut: async () => {
       if (signOutInFlight) return signOutInFlight;
       signOutInFlight = (async (): Promise<void> => {
+        // The command-access switch is off from the first moment of
+        // the sign-out, ahead of the revoke's round trip: the grant is
+        // this account's, and a peer's mutating invoke landing during
+        // the revoke must not find it. Dropped from disk too, so
+        // re-signing into the SAME account does not resurrect it from
+        // a lingering grants.json.
+        grantStore().clear();
+        invalidateGrantCache();
         const config = serviceConfig();
         await signOutDevice({
           config,
@@ -465,13 +501,7 @@ export function makeAccountHandlers(
             );
           },
         });
-        // Drop this host's command-access switch too, so re-signing
-        // into the SAME account does not resurrect it from a lingering
-        // grants.json. accountChanged() below also invalidates the
-        // grant cache, so the in-memory mirror is dropped in the same
-        // breath.
-        grantStore().clear();
-        accountChanged();
+        await accountChanged();
       })();
       try {
         return await signOutInFlight;
@@ -511,7 +541,11 @@ export function makeAccountHandlers(
       const signedIn = signedInService();
       // Signed out or unconfigured has no registry to show.
       if (signedIn === null) return [];
-      return signedIn.service.listDevices(signedIn.record.credential);
+      const devices = await signedIn.service.listDevices(
+        signedIn.record.credential,
+      );
+      onDeviceList(devices);
+      return devices;
     },
 
     setDeviceName: (name) => {

@@ -1005,11 +1005,11 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
       // the account list and account:changed fans out the refetch.
       // Fixture presence is untouched, matching the device hub's lag.
       revoked.add(deviceId);
-      client.emit("account:changed", undefined);
+      client.emit("account:changed", { accountId: accountStatus().accountId });
     },
     "account:setDeviceName": (name: string) => {
       deviceName = name;
-      client.emit("account:changed", undefined);
+      client.emit("account:changed", { accountId: accountStatus().accountId });
       return accountStatus();
     },
     "account:enroll": () => accountStatus(),

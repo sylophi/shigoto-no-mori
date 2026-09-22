@@ -53,7 +53,12 @@ function TransferButtons({
   // A worktree already running a mirror has its Mirror button beside
   // these (LocalMirrorAction), which is where that one is managed.
   const mirrored = useWorktreeMirror(worktree).session !== undefined;
-  if (targets.length === 0) return null;
+  // The buttons need a target. An OPEN dialog does not: a run in
+  // progress keeps its progress, its finish-up step and its report
+  // when the roster empties under it (a sign-out, a revoke), and says
+  // what failed rather than vanishing mid-run.
+  const canOpen = targets.length > 0;
+  if (!canOpen && open === null) return null;
   const dialog = {
     worktree,
     project,
@@ -64,7 +69,7 @@ function TransferButtons({
   return (
     <>
       {/* App only, like "Mirror here": the daemon lives in main. */}
-      {canForwardPorts && !mirrored && (
+      {canOpen && canForwardPorts && !mirrored && (
         <FooterActionButton
           icon={<RefreshCw />}
           label="Mirror to…"
@@ -72,12 +77,14 @@ function TransferButtons({
           onClick={() => setOpen("mirror")}
         />
       )}
-      <FooterActionButton
-        icon={<Shovel />}
-        label="Transplant to…"
-        title="Move this worktree to another device"
-        onClick={() => setOpen("transplant")}
-      />
+      {canOpen && (
+        <FooterActionButton
+          icon={<Shovel />}
+          label="Transplant to…"
+          title="Move this worktree to another device"
+          onClick={() => setOpen("transplant")}
+        />
+      )}
       {open === "mirror" && <MirrorToDialog {...dialog} />}
       {open === "transplant" && <TransplantToDialog {...dialog} />}
     </>

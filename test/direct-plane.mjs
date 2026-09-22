@@ -1515,8 +1515,13 @@ async function main() {
   );
 
   await check(
-    "presence scopes the data plane: a peer leaving a LIVE roster loses its direct sessions on both sides, and our own hub link going down leaves them alone",
+    "presence scopes the data plane: a peer leaving a LIVE roster loses its direct sessions on both sides, our own hub link going down leaves them alone, and a stopped or revoked socket closes them all",
     async (track) => {
+      const CONNECTED = {
+        phase: "connected",
+        remoteDeviceId: "",
+        remoteAppVersion: "",
+      };
       const stub = await startStubHub();
       track(() => stub.close());
       const listener = await startDirectListener(track);
@@ -1546,7 +1551,11 @@ async function main() {
       // broker leg) so the post-reconnect roster reads as all-new
       // peers and redials whatever the outage cost, parked peers
       // included.
-      applyDirectPresence(false, [], presenceDeps);
+      applyDirectPresence(
+        { phase: "backoff", attempt: 1, delayMs: 1 },
+        [],
+        presenceDeps,
+      );
       assert.deepEqual(
         reconcileCalls.at(-1),
         [],
@@ -1563,12 +1572,12 @@ async function main() {
       );
       // A live roster still naming the peer: nothing closes, and the
       // keeper receives the roster as its desired set.
-      applyDirectPresence(true, ["A", "B"], presenceDeps);
+      applyDirectPresence(CONNECTED, ["A", "B"], presenceDeps);
       assert.deepEqual(Object.keys(bridge.directPeerVersions()), ["B"]);
       assert.deepEqual(reconcileCalls.at(-1), ["A", "B"]);
       // The peer leaves the live roster: the cached client session
       // drops at once.
-      applyDirectPresence(true, ["A"], presenceDeps);
+      applyDirectPresence(CONNECTED, ["A"], presenceDeps);
       assert.deepEqual(bridge.directPeerVersions(), {});
       // Host side: an inbound authed direct socket dies when ITS
       // deviceId leaves the roster, and survives while present.
@@ -1578,16 +1587,56 @@ async function main() {
         mintTickets(listener.tickets, "A", 1)[0],
         { onClose: () => (hostSideClosed = true) },
       );
-      applyDirectPresence(true, ["A"], presenceDeps);
+      applyDirectPresence(CONNECTED, ["A"], presenceDeps);
       assert.equal(
         await inbound.transport.invoke("test:echo", "still here"),
         "still here",
       );
-      applyDirectPresence(true, [], presenceDeps);
+      applyDirectPresence(CONNECTED, [], presenceDeps);
       await waitFor(
         () => hostSideClosed,
         "the off-roster peer's host-side socket to close",
       );
+      // A stopped socket (sign-out, account switch) is not an outage:
+      // this device has no account, so every session closes on both
+      // sides even though the stale link may still report a roster,
+      // and the keeper's desired set empties.
+      await bridge.dialPeer("B");
+      assert.deepEqual(Object.keys(bridge.directPeerVersions()), ["B"]);
+      let inboundClosed = false;
+      const inbound2 = await dialWith(
+        listener.port,
+        mintTickets(listener.tickets, "A", 1)[0],
+        { onClose: () => (inboundClosed = true) },
+      );
+      assert.equal(
+        await inbound2.transport.invoke("test:echo", "before stop"),
+        "before stop",
+      );
+      applyDirectPresence({ phase: "stopped" }, ["A", "B"], presenceDeps);
+      assert.deepEqual(bridge.directPeerVersions(), {});
+      assert.deepEqual(reconcileCalls.at(-1), []);
+      await waitFor(
+        () => inboundClosed,
+        "a stopped socket to close the host-side sockets",
+      );
+      // A revoked block is the same verdict from the hub's side.
+      await bridge.dialPeer("B");
+      assert.deepEqual(Object.keys(bridge.directPeerVersions()), ["B"]);
+      applyDirectPresence(
+        { phase: "blocked", reason: "revoked", message: "removed" },
+        ["B"],
+        presenceDeps,
+      );
+      assert.deepEqual(bridge.directPeerVersions(), {});
+      // Any other block is an outage: the sessions ride it out.
+      await bridge.dialPeer("B");
+      applyDirectPresence(
+        { phase: "blocked", reason: "refused", message: "401" },
+        [],
+        presenceDeps,
+      );
+      assert.deepEqual(Object.keys(bridge.directPeerVersions()), ["B"]);
     },
   );
 

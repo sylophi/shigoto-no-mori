@@ -5,6 +5,8 @@
 // in shared/account/credentialStore.ts. The web client reuses that same
 // core over a different backing, so the on-storage envelope stays
 // identical across platforms and the desktop file format is unchanged.
+import { errorMessageOf } from "@shared/errors";
+import { isENOENT } from "@host/lib/util/paths";
 import {
   mkdirSync,
   readFileSync,
@@ -27,6 +29,7 @@ export function createAccountStore(opts: {
   cipher: StoreCipher;
 }): AccountStore {
   const { filePath, cipher } = opts;
+  const tmpPath = `${filePath}.tmp`;
 
   return createCoreStore({
     cipher,
@@ -44,20 +47,28 @@ export function createAccountStore(opts: {
       writeRaw(text) {
         mkdirSync(dirname(filePath), { recursive: true });
         // Atomic write: a crash mid-write must not leave a half-written
-        // file that the next read parses as corrupt and drops. This write
-        // stays custom rather than using the shared atomicWriteJsonSync
-        // because that helper has no mode option and the mode:0o600 on the
-        // credential file is load-bearing.
-        const tmp = `${filePath}.tmp`;
-        writeFileSync(tmp, text, { mode: 0o600 });
-        renameSync(tmp, filePath);
+        // file that the next read parses as corrupt and drops. Custom
+        // rather than the shared JSON helper because the text is
+        // already an envelope, and mode 0o600 is load-bearing.
+        writeFileSync(tmpPath, text, { mode: 0o600 });
+        renameSync(tmpPath, filePath);
       },
       removeRaw() {
-        try {
-          unlinkSync(filePath);
-        } catch {
-          // Already gone is success, and no other failure (permissions and
-          // so on) is worth failing a sign-out over. Swallow it.
+        // The temp file too: a crash between its write and the rename
+        // leaves the envelope there.
+        for (const path of [filePath, tmpPath]) {
+          try {
+            unlinkSync(path);
+          } catch (error) {
+            // Already gone is success. No other failure is worth
+            // failing a sign-out over, but a credential that stayed is
+            // worth a line.
+            if (!isENOENT(error)) {
+              console.warn(
+                `[account] could not remove ${path}: ${errorMessageOf(error)}`,
+              );
+            }
+          }
         }
       },
     },

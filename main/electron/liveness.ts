@@ -24,7 +24,10 @@ import {
   readJsonOrNullSync,
 } from "@host/lib/util/jsonFile";
 import { readClientConfigSync } from "./clientConfig";
-import { accountServiceConfigured } from "../ipc/modules/account";
+import {
+  accountServiceConfigured,
+  accountSignedIn,
+} from "../ipc/modules/account";
 import { scheduleRelaunch } from "./relaunch";
 import { CRASH_LOOP, decide, FATAL_RELAUNCH } from "../core/liveness/rateLimit";
 
@@ -53,10 +56,13 @@ function keepReachableEnabled(): boolean {
 // the OS login item to match. Idempotent (setLoginItemSettings with the
 // same value is a no-op) and never throws: it is called at boot and on
 // every client-config write, and a liveness reconcile must not be able
-// to take the app down. Called from boot in main/index.ts and from the
-// clientConfig write handler.
+// to take the app down. Called from boot in main/index.ts, from the
+// clientConfig write handler, and from the account fan-out: the login
+// item is for staying reachable to an account, so a signed-out device
+// has none (the crash relaunch below keeps the plain setting: a
+// relaunch is this machine's business whatever the account).
 export function reconcileLaunchAtLogin(): void {
-  const keepReachable = keepReachableEnabled();
+  const keepReachable = keepReachableEnabled() && accountSignedIn();
   // setLoginItemSettings is a no-op on Linux in Electron, so registering
   // there would silently do nothing. Say so rather than pretend it took.
   const os = platform();

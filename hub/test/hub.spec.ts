@@ -393,7 +393,7 @@ describe("revocation", () => {
     await keeper.socket.untilPresence(["dev-rev-keeper"]);
     // The victim's credential is dead for every endpoint.
     const ticketAttempt = await call(ticketRequest(victim.credential));
-    expect(ticketAttempt.status).toBe(401);
+    expect(ticketAttempt.status).toBe(403);
   });
 
   it("purges the revoked device's unconsumed tickets", async () => {

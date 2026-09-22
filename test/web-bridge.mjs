@@ -408,7 +408,12 @@ async function main() {
         `${HUB_URL}/devices/${encodeURIComponent(bridge.api.deviceId)}`,
       );
       assert.equal(deletes[0].auth, "Bearer cred-stored");
-      assert.equal(localStorage.getItem("sm.web.account"), null);
+      // Signed out: the envelope keeps the name and nothing else.
+      assert.deepEqual(JSON.parse(localStorage.getItem("sm.web.account")), {
+        v: 1,
+        signedOut: true,
+        deviceName: "Stored browser",
+      });
       assert.equal((await bridge.api.account.status()).signedIn, false);
 
       // The failure path: revoke rejects, local sign-out still lands.
@@ -422,7 +427,32 @@ async function main() {
       );
       track(() => failing.stop());
       await failing.api.account.signOut();
-      assert.equal(second.getItem("sm.web.account"), null);
+      assert.equal((await failing.api.account.status()).signedIn, false);
+      // The undelivered revoke is parked with its credential, for the
+      // next boot's retry (a bridge over the same storage), which
+      // delivers it and clears the parking.
+      const parked = JSON.parse(second.getItem("sm.web.account"));
+      assert.equal(parked.signedOut, true);
+      assert.equal(parked.parked.credential, "cred-stored");
+      const retryDeletes = [];
+      const retried = createWebBridge(
+        makeDeps({
+          localStorage: second,
+          fetchImpl: async (input, init) => {
+            if (init?.method === "DELETE") retryDeletes.push(String(input));
+            return new Response(null, { status: 204 });
+          },
+        }),
+      );
+      track(() => retried.stop());
+      await waitFor(
+        () => retryDeletes.length === 1,
+        "the parked revoke to be delivered at boot",
+      );
+      await waitFor(
+        () => JSON.parse(second.getItem("sm.web.account")).parked === undefined,
+        "the parking to clear",
+      );
     },
   );
 
@@ -474,6 +504,34 @@ async function main() {
       await delay(1_300);
       assert.equal(mints, 1, "the blocked deployment was redialed");
       assert.equal((await socket()).phase, "blocked");
+      assert.equal((await socket()).reason, "refused");
+    },
+  );
+
+  await check(
+    "revoked: the hub's typed device_revoked refusal on the mint blocks as REVOKED, the verdict the app signs out on, exactly as the socket close would have",
+    async (track) => {
+      const localStorage = memoryStorage();
+      localStorage.setItem("sm.web.account", STORED_ENVELOPE);
+      const fetchImpl = async (input) => {
+        const url = String(input);
+        if (url === `${HUB_URL}/tickets`) {
+          return jsonResponse(403, {
+            error: "this device was removed from the account",
+            code: "device_revoked",
+          });
+        }
+        throw new Error(`unexpected fetch in revoked check: ${url}`);
+      };
+      const bridge = createWebBridge(makeDeps({ localStorage, fetchImpl }));
+      track(() => bridge.stop());
+      await bridge.refreshHub();
+      const socket = async () => (await bridge.api.hub.status()).socket;
+      await waitFor(
+        async () => (await socket()).phase === "blocked",
+        "the blocked socket phase",
+      );
+      assert.equal((await socket()).reason, "revoked");
     },
   );
 

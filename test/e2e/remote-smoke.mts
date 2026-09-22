@@ -2007,6 +2007,69 @@ async function main(): Promise<string[]> {
       // b the moment the credential cleared (the Sign out button ends
       // the Clerk session first, which a cloned window cannot). Revoked
       // from a, b keeps its dead credential and stays gone.
+      // b runs a port forward onto a first: the remote setup a device
+      // leaves behind, which its sign-out must tear down with it. The
+      // forward's open rides a's grant, which the boot leaves off, and
+      // the mirror onto b below rides b's.
+      await a.evaluate("window.api.account.setAcceptsCommands(true)");
+      await b.evaluate("window.api.account.setAcceptsCommands(true)");
+      const forward = await b.evaluate<{ forwardId: string }>(
+        `window.api.portForward.start(${JSON.stringify({ deviceId: idA, remotePort: 1 })})`,
+      );
+      // And mirrors both ways: one a runs onto b (its copy on b), one
+      // b runs from a (its copy on b). A mirror pairs two devices of
+      // the account, so both end with b's membership, the copies kept
+      // as plain worktrees. A shared setting picked on b goes with the
+      // membership too, while a's copy keeps it.
+      const own = await ownProjectOnA();
+      const { worktree: source } = await a.evaluate<{ worktree: Worktree }>(
+        `window.api.worktrees.create(${JSON.stringify({
+          projectId: own.id,
+          branchName: "edge/revoke-mirror",
+          worktreeName: "src-revoke-mirror",
+        })})`,
+      );
+      const toB = await a.evaluate<{ worktree: Worktree; session: string }>(
+        `window.api.mirror.startTo(${JSON.stringify({
+          targetDeviceId: idB,
+          projectId: own.id,
+          worktreeId: source.id,
+          runSetup: false,
+          ignoreMode: "everything",
+          ignores: [],
+        })})`,
+      );
+      const { worktree: source2 } = await a.evaluate<{ worktree: Worktree }>(
+        `window.api.worktrees.create(${JSON.stringify({
+          projectId: own.id,
+          branchName: "edge/revoke-mirror-from",
+          worktreeName: "src-revoke-mirror-from",
+        })})`,
+      );
+      const fromA = await b.evaluate<{ worktree: Worktree; session: string }>(
+        `window.api.mirror.start(${JSON.stringify({
+          sourceDeviceId: idA,
+          sourceProjectId: own.id,
+          sourceWorktreeId: source2.id,
+          sourceIdentity: own.identity,
+          branch: source2.branch,
+          runSetup: false,
+          ignoreMode: "everything",
+          ignores: [],
+        })})`,
+      );
+      await a.waitFor(
+        "a's mirror onto b to be watching",
+        `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${JSON.stringify(toB.session)} && s.status === "watching"))`,
+        90_000,
+      );
+      await b.waitFor(
+        "b's mirror from a to be watching",
+        `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${JSON.stringify(fromA.session)} && s.status === "watching"))`,
+        90_000,
+      );
+      await setSharedSetting(b, "picked-on-b-before-revoke");
+      await waitSharedSetting(a, "picked-on-b-before-revoke", "a to take b's");
       await a.evaluate(
         `window.api.account.revokeDevice(${JSON.stringify(idB)})`,
       );
@@ -2025,6 +2088,69 @@ async function main(): Promise<string[]> {
         "b to sign itself out of the account",
         "window.api.account.status().then((s) => !s.signedIn)",
         60_000,
+      );
+      // Signed out, b has no account to reach: its hub socket is
+      // stopped (not backing off toward a redial), every direct
+      // session is closed from its own side, its roster is empty, and
+      // the forward it ran is gone with them.
+      await b.waitFor(
+        "b's hub socket to stop and its direct sessions to close",
+        "window.api.hub.status().then((s) => s.socket.phase === 'stopped' && Object.keys(s.peerAppVersions).length === 0 && s.onlineDeviceIds.length === 0)",
+        30_000,
+      );
+      const forwards = await b.evaluate<{ forwards: { forwardId: string }[] }>(
+        "window.api.portForward.list()",
+      );
+      assert.ok(
+        !forwards.forwards.some((f) => f.forwardId === forward.forwardId),
+        "b's port forward survived its sign-out",
+      );
+      await b.waitFor(
+        "b's device tabs to go with the account",
+        'document.querySelectorAll(\'[role="tablist"][aria-label="Device"]\').length === 0',
+        30_000,
+      );
+      // The mirrors end on both sides: b's with its sign-out, a's off
+      // the registry read above that no longer lists b. Both copies on
+      // b stay as worktrees, and b's shared settings are gone while
+      // a's copy still holds the pick.
+      await b.waitFor(
+        "b's mirror to end with its sign-out",
+        "window.api.mirror.list().then((m) => m.sessions.length === 0)",
+        30_000,
+      );
+      await a.waitFor(
+        "a's mirror onto b to end once the registry no longer lists b",
+        `window.api.mirror.list().then((m) => !m.sessions.some((s) => s.session === ${JSON.stringify(toB.session)}))`,
+        30_000,
+      );
+      assert.ok(existsSync(toB.worktree.path), "a's copy on b was removed");
+      assert.ok(existsSync(fromA.worktree.path), "b's copy was removed");
+      const historyA = await a.evaluate<{
+        events: { kind: string; detail: string }[];
+      }>(
+        `window.api.mirror.history(${JSON.stringify({ localWorktreeId: source.id })})`,
+      );
+      assert.ok(
+        historyA.events.some(
+          (event) =>
+            event.kind === "stopped" &&
+            event.detail.includes("left the account"),
+        ),
+        "a's mirror thread does not say why it ended",
+      );
+      const docB = await b.evaluate<{ entries: Record<string, unknown> }>(
+        "window.api.sharedSettings.read()",
+      );
+      assert.equal(
+        docB.entries[SHARED_KEY],
+        undefined,
+        "b kept the account's shared settings after signing out",
+      );
+      await waitSharedSetting(
+        a,
+        "picked-on-b-before-revoke",
+        "a to keep the pick",
       );
     });
     await shoot("end");

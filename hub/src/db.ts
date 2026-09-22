@@ -119,22 +119,74 @@ export async function upsertDevice(
   return result.meta.changes > 0;
 }
 
+// How long a revoked credential's tombstone answers
+// (hub/migrations/0002_revoked_credentials.sql): long enough for a
+// device put away for a couple of weeks to learn it was removed. After
+// that it gets the plain refusal and signs out by hand. Enforced on
+// the lookup. The rows themselves are pruned on each revoke.
+export const REVOKED_CREDENTIAL_RETENTION_MS = 14 * 24 * 60 * 60 * 1000;
+
 // Deletes the device row, scoped to the account the worker authorized.
 // The account_id guard means a row concurrently re-enrolled under
-// another account cannot be deleted by a stale revoke. Returns true
-// when a row was actually removed.
+// another account cannot be deleted by a stale revoke. The row's
+// credential hash is tombstoned in the same batch, so a device that
+// presents the dead credential later is told it was revoked rather
+// than that its credential is unknown. Returns true when a row was
+// actually removed.
 export async function deleteDevice(
   db: D1Database,
   deviceId: string,
   accountId: string,
+  now: number = Date.now(),
 ): Promise<boolean> {
-  const result = await db
+  const remove = db
     .prepare("DELETE FROM devices WHERE device_id = ? AND account_id = ?")
-    .bind(deviceId, accountId)
-    .run();
-  return result.meta.changes > 0;
+    .bind(deviceId, accountId);
+  try {
+    const [, deleted] = await db.batch([
+      db
+        .prepare(
+          `INSERT OR REPLACE INTO revoked_credentials (credential_hash, device_id, revoked_at)
+           SELECT credential_hash, device_id, ? FROM devices
+           WHERE device_id = ? AND account_id = ?`,
+        )
+        .bind(now, deviceId, accountId),
+      remove,
+      db
+        .prepare("DELETE FROM revoked_credentials WHERE revoked_at < ?")
+        .bind(now - REVOKED_CREDENTIAL_RETENTION_MS),
+    ]);
+    return deleted.meta.changes > 0;
+  } catch {
+    // A batch is all or nothing, so nothing has happened yet. A Worker
+    // deployed ahead of the tombstone migration must still revoke:
+    // the row goes without its tombstone (the revoked device then
+    // gets the plain refusal, as before the tombstones).
+    return (await remove.run()).meta.changes > 0;
+  }
 }
 
+// Whether a credential hash that matched no device is a revoked one:
+// the tombstone deleteDevice wrote, still inside the retention window.
+export async function isRevokedCredentialHash(
+  db: D1Database,
+  credentialHash: string,
+  now: number = Date.now(),
+): Promise<boolean> {
+  try {
+    const row = await db
+      .prepare(
+        "SELECT 1 FROM revoked_credentials WHERE credential_hash = ? AND revoked_at >= ?",
+      )
+      .bind(credentialHash, now - REVOKED_CREDENTIAL_RETENTION_MS)
+      .first();
+    return row !== null;
+  } catch {
+    // No tombstone table yet (a Worker deployed ahead of its
+    // migration): the plain refusal, never a 500 for a bad token.
+    return false;
+  }
+}
 // Renames the device row, scoped to the account the worker authorized
 // like deleteDevice. Returns true when a row was actually renamed.
 export async function renameDevice(

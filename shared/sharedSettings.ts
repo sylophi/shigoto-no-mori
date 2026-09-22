@@ -204,6 +204,11 @@ export type SharedSettingsCopy = {
   read(): SharedSettingsDoc;
   set(key: string, value: SharedSettingValue): SharedSettingsDoc;
   merge(incoming: SharedSettingsDoc): SharedSettingsDoc;
+  // Drops the whole copy, for a device leaving the account (the peers
+  // hand it back on the first exchange after a re-sign-in). Announced
+  // like any change. Not tombstone writes: those would outrank the
+  // peers' entries and clear the account's picks everywhere.
+  clear(): SharedSettingsDoc;
 };
 
 // One device's copy, over whatever holds it. The rule every copy has to
@@ -239,6 +244,12 @@ export function createSharedSettingsCopy(
     read: () => storage.read(),
     merge: (incoming) =>
       update((current) => mergeSharedSettings(current, incoming)),
+    clear: () =>
+      update((current) =>
+        Object.keys(current.entries).length === 0
+          ? current
+          : EMPTY_SHARED_SETTINGS,
+      ),
     set: (key, value) => {
       // Resolved up front so `next` stays pure: it runs twice, the
       // second time inside the storage's lock.

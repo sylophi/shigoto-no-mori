@@ -35,3 +35,9 @@ export const portForwardHandlers: Handlers<typeof portForwardContract> = {
 export function stopAllPortForwards(): void {
   impl?.stopAll();
 }
+
+// The forwards onto devices no longer on the account, stopped (the
+// account fan-out's listDevices hook in main/ipc/handlers.ts).
+export function stopPortForwardsTo(keep: (deviceId: string) => boolean): void {
+  impl?.stopForwardsTo(keep);
+}

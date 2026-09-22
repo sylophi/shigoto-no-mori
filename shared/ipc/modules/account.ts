@@ -92,8 +92,13 @@ export const accountContract = defineContract("client", {
   ),
   // Fan-out after any sign-in, sign-out or rename so every window
   // re-reads status and the device list. Client-scoped, so it stays on
-  // the Electron wire only.
-  changed: broadcast("account:changed", z.void()),
+  // the Electron wire only. Carries the account now signed in (null
+  // when signed out) so a listener can tell a rename from a sign-out
+  // or an account switch without a status read of its own.
+  changed: broadcast(
+    "account:changed",
+    z.object({ accountId: z.string().nullable() }),
+  ),
   // Fan-out after the command-access switch flips, kept separate from
   // `changed` so the toggle does not thrash the account status and
   // device queries. The Devices page invalidates only the switch's

@@ -10,11 +10,18 @@ import type { RemoteDevice, RemoteDeviceApi } from "@/lib/remote/devices";
 // it with a note. Requests on the kept api do not hang: the hub bridge
 // hard-rejects them with "no direct connection", so the queries
 // beneath fail honestly, and the device's cache is refetched on the
-// next session landing. undefined until the device has ever had one.
+// next session landing. undefined until the device has ever had one,
+// and again once the device is gone from the registry: a blip keeps
+// the device with no api, a departure drops the device, and only the
+// first is worth riding out.
 export function useLastGoodApi(
   device: RemoteDevice | undefined,
 ): RemoteDeviceApi | undefined {
   const [api, setApi] = useState(device?.api);
-  if (device?.api !== undefined && device.api !== api) setApi(device.api);
+  if (device === undefined) {
+    if (api !== undefined) setApi(undefined);
+    return undefined;
+  }
+  if (device.api !== undefined && device.api !== api) setApi(device.api);
   return api;
 }

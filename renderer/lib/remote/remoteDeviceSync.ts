@@ -9,6 +9,10 @@
 //
 // Status mapping, chosen to lie the least given the
 // RemoteDeviceStatus vocabulary:
+//   - the hub socket stopped: no devices at all. The socket is stopped
+//     exactly while this device is signed out (main's hub refresh),
+//     and a signed-out window shows no peers, whatever the cached
+//     device list still says.
 //   - a direct session established (a peerAppVersions key): phase
 //     "connected" with the appVersion the session's welcome confirmed,
 //     WHATEVER the hub socket is doing. Data is direct or nothing (v2
@@ -37,8 +41,9 @@ import { buildApi } from "@shared/ipc/client";
 import type { HubStatus } from "@shared/ipc/modules/hub";
 import type { DeviceInfo } from "@shared/hub/protocol";
 import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
+import { directPresenceRule } from "@shared/hub/directPresence";
 import { publishHubStatus, seedHubStatus } from "@/hooks/remote/useHubStatus";
-import { invalidateDeviceSession } from "@/lib/queryKeys";
+import { hostKeyDeviceId, invalidateDeviceSession } from "@/lib/queryKeys";
 import {
   rejectingClientTransport,
   type RemoteDevice,
@@ -64,6 +69,11 @@ import { createHubClientTransport } from "./hubTransport";
 // The last phase the hub socket reported, kept so a transition INTO
 // connected can be spotted at all.
 let lastSocketPhase = "";
+
+// The last roster seen, so a device LEAVING it can be spotted: the
+// hub pushes no removal, and a peer that signed out or was revoked
+// looks exactly like one that went to sleep until the list is asked.
+let lastRoster: ReadonlySet<string> = new Set();
 
 // The queryHash of that one entry, so the cache subscription below can
 // tell its events from every other query's in one comparison.
@@ -151,6 +161,16 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
   const online = new Set(current.onlineDeviceIds);
   const reconnected = phase === "connected" && lastSocketPhase !== "connected";
   lastSocketPhase = phase;
+  // No account (the socket stopped by the sign-out, or blocked as
+  // revoked), no peers: the store empties by the direct plane's own
+  // rule rather than by trusting the device-list refetch to come back
+  // empty, since a refetch that fails falls back to the cached list
+  // below, which would put the old account's device tabs back.
+  if (directPresenceRule(current.socket) === "gone") {
+    setRemoteDevices([]);
+    lastRoster = new Set();
+    return;
+  }
   // A reconnect can follow an enroll or a revoke that happened while
   // the socket was down. This pass runs on the list as it stands, and
   // the refetch's landing runs the corrected one.
@@ -172,10 +192,22 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
   // (status came in), never the pass a refetch's own landing queues:
   // a roster ghost the list will never explain would otherwise refetch
   // forever, while this way it re-asks once per hub event, as before.
+  // A device that left the roster may have left the account (a
+  // sign-out, a revoke on another device), which only the list can
+  // say, and which main's own peer-side teardown (a mirror with that
+  // device) hangs off the list landing. One HTTP call per departure,
+  // like the unknown-online rule.
+  let someoneLeft = false;
+  if (phase === "connected") {
+    for (const id of lastRoster) if (!online.has(id)) someoneLeft = true;
+    lastRoster = online;
+  }
   const hasUnknownOnline = [...online].some(
     (id) => id !== localDeviceId && !knownIds.has(id),
   );
-  if (hasUnknownOnline && status !== undefined) refetchDeviceList();
+  if ((hasUnknownOnline || someoneLeft) && status !== undefined) {
+    refetchDeviceList();
+  }
   // This machine is not a remote device to itself, so it is skipped.
   const others = list.filter((info) => info.deviceId !== localDeviceId);
   const devices = others.map((info) => buildEntry(info, current, online));
@@ -221,6 +253,36 @@ const sessionLandedListeners = new Set<(deviceId: string) => void>();
 export function onSessionLanded(listener: (deviceId: string) => void): void {
   sessionLandedListeners.add(listener);
   for (const deviceId of liveSessions) listener(deviceId);
+}
+
+// Followers with per-device state of their own to drop when the
+// account is left (the script run stores). Boot-scoped like the
+// session-landed listeners.
+const accountLeftListeners = new Set<() => void>();
+
+export function onAccountLeft(listener: () => void): void {
+  accountLeftListeners.add(listener);
+}
+
+// Everything this window built under the account that is now gone:
+// the device store, the cached device list, every peer's api and every
+// cache keyed by a peer's id. The local host's caches stay, they are
+// this machine's whatever the account.
+function leaveAccount(queryClient: QueryClient): void {
+  setRemoteDevices([]);
+  apis.clear();
+  liveSessions = new Set();
+  queryClient.removeQueries({
+    queryKey: accountDevicesQueryOptions.queryKey,
+    exact: true,
+  });
+  queryClient.removeQueries({
+    predicate: (query) => {
+      const deviceId = hostKeyDeviceId(query.queryKey);
+      return deviceId !== undefined && deviceId !== window.api.deviceId;
+    },
+  });
+  for (const listener of accountLeftListeners) listener();
 }
 
 // Pure and synchronous: the peer's appVersion now rides the status
@@ -308,8 +370,32 @@ async function drainReconciles(): Promise<void> {
 // (renderer/boot.tsx, one for both shells) build their own.
 export function startRemoteDeviceSync(queryClient: QueryClient): void {
   boundQueryClient = queryClient;
-  // This process's own enroll, sign-out, rename or revoke.
-  window.api.account.onChanged(refetchDeviceList);
+  // This process's own enroll, sign-out, rename or revoke. A change of
+  // ACCOUNT (a sign-out, a sign-in under another account) also drops
+  // everything built under the old one, before the refetch, so what
+  // the new account's list lands on is empty rather than the old
+  // account's devices: the cached device list (which the reconcile
+  // falls back to when a refetch fails), the per-device apis and
+  // caches, and the followers' per-device state. A rename keeps it
+  // all: same account, same peers.
+  // Unknown until the seed lands. A change to signed out is a
+  // departure whatever came before, and the seed never overwrites a
+  // change that beat it (null is a known value here).
+  let syncedAccountId: string | null | undefined;
+  window.api.account.onChanged(({ accountId }) => {
+    const leaving =
+      syncedAccountId === undefined
+        ? accountId === null
+        : syncedAccountId !== null && accountId !== syncedAccountId;
+    syncedAccountId = accountId;
+    if (leaving) leaveAccount(queryClient);
+    refetchDeviceList();
+  });
+  void window.api.account.status().then((status) => {
+    if (syncedAccountId === undefined) {
+      syncedAccountId = status.signedIn ? status.accountId : null;
+    }
+  });
   // Every list change reconciles from here, this module's own refetches
   // included, alongside everyone else's landing in the shared cache (a
   // window focus, the devices page mounting, an invalidation from

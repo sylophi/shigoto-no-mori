@@ -24,6 +24,7 @@ import {
   type AccountStatus,
 } from "@shared/ipc/modules/account";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
+import { withoutPeerState } from "@shared/schemas/config";
 import { directContract } from "@shared/ipc/modules/direct";
 import { hubContract } from "@shared/ipc/modules/hub";
 import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
@@ -41,10 +42,11 @@ import {
   EMPTY_SHARED_SETTINGS,
 } from "@shared/sharedSettings";
 import {
+  WEB_PLATFORM,
   enrollDevice,
   renameDevice,
+  retryParkedRevoke,
   signOutDevice,
-  WEB_PLATFORM,
 } from "@shared/account/enroll";
 import { createHubConnection } from "../hub/connection";
 import { webServiceConfig } from "../account/config";
@@ -114,6 +116,9 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const clientWire = createLoopbackWire("client");
   const hostWire = createLoopbackWire("host");
   const registrarOpts = { validateOutputs: deps.isDev };
+  // A sign-out whose revoke never reached the hub is delivered at the
+  // next boot (enroll.ts retryParkedRevoke), the desktop's rule too.
+  void retryParkedRevoke({ config, service, store, deviceId });
 
   // ---- hub socket lifecycle ----
 
@@ -198,9 +203,34 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
   // Any account transition re-reconciles the hub socket and fans the
   // change out so every account query re-reads, matching the desktop's
-  // emitChanged wiring in main/ipc/handlers.ts.
+  // emitChanged wiring in main/ipc/handlers.ts. Like there, the account
+  // the copy of the shared settings was built under is tracked so a
+  // sign-out or an account switch drops it (a rename keeps it).
+  let settingsAccountId: string | null = store.read()?.accountId ?? null;
   function accountChanged(): void {
-    broadcastAll(accountContract, "changed", undefined, clientWire.server);
+    const accountId = store.read()?.accountId ?? null;
+    if (accountId !== settingsAccountId) {
+      settingsAccountId = accountId;
+      sharedSettingsCopy.clear();
+      // And the client config's peer-keyed picks (withoutPeerState):
+      // in localStorage they would outlive even the person, on a
+      // shared browser profile.
+      writeKey(
+        deps.localStorage,
+        CLIENT_CONFIG_KEY,
+        JSON.stringify(
+          withoutPeerState(
+            readJsonKey(
+              deps.localStorage,
+              CLIENT_CONFIG_KEY,
+              StoredClientConfigSchema,
+              {},
+            ),
+          ),
+        ),
+      );
+    }
+    broadcastAll(accountContract, "changed", { accountId }, clientWire.server);
     void refreshHub();
   }
 

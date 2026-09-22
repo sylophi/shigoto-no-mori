@@ -10,6 +10,7 @@
 // page (v2's core bet).
 import { useNavigate, useParams } from "@tanstack/react-router";
 import type { ComponentType, ReactElement } from "react";
+import { useAccountStatus } from "@/hooks/account/useAccount";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
@@ -58,9 +59,17 @@ function RemoteScopeGate({
   );
 }
 
-function unreachableLabel(device: RemoteDevice | undefined): string {
-  if (device === undefined)
-    return "This device isn't in the account's registry.";
+function unreachableLabel(
+  device: RemoteDevice | undefined,
+  signedIn = true,
+): string {
+  if (device === undefined) {
+    // A deep link or a page left open across a sign-out: signed out,
+    // nothing is in any registry.
+    return signedIn
+      ? "This device isn't in the account's registry."
+      : "Sign in to reach this account's devices.";
+  }
   if (device.status.phase === "blocked")
     return `Can't connect: ${device.status.message}.`;
   // The honest phase label ("Off", "Reconnecting", …), not a blanket
@@ -69,9 +78,10 @@ function unreachableLabel(device: RemoteDevice | undefined): string {
 }
 
 function UnreachableDevice({ device }: { device: RemoteDevice | undefined }) {
+  const { data: status } = useAccountStatus();
   return (
     <CenteredMessage className="flex-col gap-3">
-      {unreachableLabel(device)}
+      {unreachableLabel(device, status?.signedIn === true)}
       <OpenDevicesButton />
     </CenteredMessage>
   );

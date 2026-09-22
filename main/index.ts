@@ -42,7 +42,7 @@ import {
   startMirrorEngine,
   stopMirrorEngine,
 } from "./ipc/handlers";
-import { clerkPublishableKey } from "./ipc/modules/account";
+import { clerkPublishableKey, retryParkedSignOut } from "./ipc/modules/account";
 import { stopAllPortForwards } from "./ipc/modules/portForward";
 import { installHostImpls } from "./electron/hostImpls";
 import { buildAppMenu, installMenuImpl } from "./electron/menu";
@@ -437,8 +437,9 @@ app.on("ready", async () => {
   // Host liveness. Install the crash guards before
   // the window exists so an early fatal error is still caught, then
   // reconcile the login item to the saved keepReachable opt-in. The same
-  // reconcile reruns after every clientConfig write (the write handler),
-  // making this the boot-time pass only.
+  // reconcile reruns after every clientConfig write (the write handler)
+  // and every sign-in or sign-out (the account fan-out in
+  // ipc/handlers.ts), making this the boot-time pass only.
   installChildProcessLogging();
   installFatalRecovery({ isShuttingDown });
   createWindow();
@@ -469,6 +470,11 @@ app.on("ready", async () => {
   // direct data-plane listener follows the same
   // enrollment condition, so its reconcile rides this refresh's tail.
   void refreshHubConnection();
+  // A sign-out whose revoke never reached the hub is delivered
+  // alongside, never ahead of the socket: it can wait out its timeout
+  // on a dead network, and a parked revoke means this device is
+  // signed out, so the socket has nothing to learn from it.
+  void retryParkedSignOut();
   // Sleep is the one event that reliably kills every remote socket
   // without a close: on resume, probe the hub socket and every direct
   // session so the dead ones are found and redialed within seconds,

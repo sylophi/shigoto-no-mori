@@ -442,6 +442,13 @@ export function createCloudflaredRunner(
     }
   }
 
+  async function reapStaleOnce(): Promise<void> {
+    const pidFile = pidFilePathOf();
+    if (pidFile === null || stalePidReaped) return;
+    stalePidReaped = true;
+    await reapStaleChild(pidFile);
+  }
+
   function clearPidFile(): void {
     const path = pidFilePathOf();
     if (path !== null) {
@@ -563,12 +570,8 @@ export function createCloudflaredRunner(
       setStatus({ state: "no-binary", hostname: null });
       return;
     }
-    const pidFile = pidFilePathOf();
-    if (pidFile !== null && !stalePidReaped) {
-      stalePidReaped = true;
-      await reapStaleChild(pidFile);
-      if (stopped || wantedPort !== port) return;
-    }
+    await reapStaleOnce();
+    if (stopped || wantedPort !== port) return;
     const reusable =
       lastProvision !== null && lastProvision.port === port && lastChildReady;
     if (!reusable) {
@@ -587,6 +590,7 @@ export function createCloudflaredRunner(
     spawnedAt = clock.now();
     lastChildReady = false;
     setStatus({ state: "starting", hostname });
+    const pidFile = pidFilePathOf();
     if (pidFile !== null && next.pid !== undefined) {
       void writeFile(pidFile, `${next.pid}\n`, "utf8").catch(() => {});
     }
@@ -672,6 +676,12 @@ export function createCloudflaredRunner(
         // The quit latch outranks everything a queued reconcile might
         // want: a reconcile that drained from the queue after stop()
         // must not respawn a child mid-quit.
+        if (stopped) return;
+        // The connector a crashed run left behind is reaped on the
+        // first reconcile whatever it wants: a signed-out boot never
+        // reaches a start, and the orphan keeps fronting the hostname
+        // onto a port anything local may rebind.
+        await reapStaleOnce();
         if (stopped) return;
         if (wanted === null) {
           stopNow();

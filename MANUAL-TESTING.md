@@ -229,7 +229,19 @@ cloning exists.
 - **`--fresh` is local only.** A device the profile enrolled stays on
   the hub, with its tunnel, until revoked. Leftovers show on the
   Devices page of any device on the account and can be revoked there.
-  See "Cleaning up after a session".
+  See "Cleaning up after a session". A sign-out that could not reach
+  the hub (offline, hub down) parks its revoke in the signed-out
+  envelope and delivers it on the next launch or the next sign-in, so
+  a leftover from an offline sign-out clears itself once the profile
+  runs online again.
+- **A device revoked while it was off** learns it on its next launch:
+  the hub answers its dead credential with a typed "device revoked"
+  (a tombstone, `hub/migrations/0002_revoked_credentials.sql`), and
+  the app signs out exactly as if it had been online for the revoke.
+  Apply the migration before deploying the Worker. Against a hub
+  without it a revoke still lands (without its tombstone), and the
+  offline device instead sits "blocked: refused" with the raw
+  credential error, signed in, until signed out by hand.
 - **Both profiles use the owner's real dev account.** Each enrolls on
   the dev hub and provisions a tunnel. This is intended: the hub,
   Clerk and tunnel provisioning are exercised for real.
@@ -381,7 +393,15 @@ signed-out Devices page, while a profile that holds a cloned sign-in
 (`--clone-login` leaves a marker beside the token store) only drops
 the account layer, since its Clerk session is the plain dev app's and
 ending it would sign every window out. Such a profile re-enrolls if
-relaunched. A relaunch after `--fresh` is a new device. `pnpm test e2e/remote-smoke` cleans up its own
+relaunched. Either way the sign-out tears the remote setup down with
+it: the hub socket and the tunnel stop, every direct session closes,
+port forwards end, every mirror ends (its copy stays as an ordinary
+worktree, and the thread says why), the shared settings copy is
+dropped (the peers hand it back on the next sign-in), the login item
+is cleared (packaged builds only: a dev run never installs one), and
+the window shows no peers (no device tabs, no device filter) until
+the next sign-in. The devices that stay end their
+mirrors with the removed one the next time they read the registry. A relaunch after `--fresh` is a new device. `pnpm test e2e/remote-smoke` cleans up its own
 `e2e-*` profiles unless run with `--keep`.
 
 ## Unattended remote smoke
@@ -438,7 +458,7 @@ one was filtered out, so name both.
 | clone onto a peer | a asks b to clone a loopback `git://` remote into b's repos folder and register it. Refused with commands off (the folder listing too), and for an option-shaped string or a path as the URL. The checkout lands, lists with an identity, and its `cloneUrl` reads back, where the path-origin shared repo answers null. A second clone onto the folder is refused.                                                                                                     |
 | liveness     | b is killed with SIGKILL. a drops it from the roster. b relaunches and both reconnect.                                                                                                                                                                                                                                                                                                                                                                                      |
 | shared settings: offline catch-up | b is killed, a writes a value, b relaunches. b's copy takes the value once its session lands, with no server having held it. |
-| revoke       | a removes b from the account. a's roster and registry drop it, and b signs itself out of the account.                                                                                                                                                                                                                                                                                                                                                                               |
+| revoke       | a removes b from the account. a's roster and registry drop it, and b signs itself out of the account: its hub socket stops, its direct sessions close, the port forward it ran is gone, its mirrors end (copies kept), its shared settings are dropped, and no device tabs remain. a ends its mirror with b too, once its registry read no longer lists b.                                                                                                                                                                                                                                                                 |
 
 Screenshots and logs go to a temp dir named in the output. A failing
 scenario screenshots both windows first.

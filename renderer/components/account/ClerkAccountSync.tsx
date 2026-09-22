@@ -44,6 +44,7 @@ import {
 import { credentialRevoked } from "@shared/remote/supervisor";
 import { useClerkSignOut } from "@/hooks/account/useClerkAccount";
 import { useHubBlock } from "@/hooks/remote/useHubStatus";
+import { toast } from "@/lib/toast";
 
 export function ClerkAccountSync() {
   const { isLoaded, isSignedIn, userId, getToken } = useAuth();
@@ -67,8 +68,14 @@ export function ClerkAccountSync() {
   const block = useHubBlock();
   const revoked = block !== null && credentialRevoked(block);
   const sharedSignIn = status?.sharedSignIn === true;
-  const clerkSignOutMutate = useClerkSignOut().mutate;
+  const clerkSignOut = useClerkSignOut();
+  const clerkSignOutMutate = clerkSignOut.mutate;
   const signOutNow = sharedSignIn ? signOutMutate : clerkSignOutMutate;
+  // Either sign-out in flight. A self sign-out revokes THIS device on
+  // the hub, which closes this device's own socket as revoked before
+  // the local credential clears, so the block below is seen mid
+  // sign-out too, and must not read as a removal by someone else.
+  const signingOut = signOutPending || clerkSignOut.isPending;
   // Whether this block already got its sign-out: the socket stays
   // blocked while the sign-out runs, and leaves that phase once it has.
   const signedOutForBlock = useRef(false);
@@ -77,11 +84,19 @@ export function ClerkAccountSync() {
       signedOutForBlock.current = false;
       return;
     }
-    if (!enrolled || signedOutForBlock.current || signOutPending) return;
+    if (!enrolled || signedOutForBlock.current || signingOut) return;
     signedOutForBlock.current = true;
     if (sharedSignIn) armedFor.current = userId ?? null;
+    // The one word the user gets on why every peer just vanished: the
+    // registry's own banner says it too, but that page is replaced by
+    // the signed-out panel the moment the sign-out lands.
+    toast.warning("This device was removed from the account", {
+      id: "account:revoked",
+      description: "It has signed out. Sign in again to enroll it afresh.",
+      duration: 15_000,
+    });
     signOutNow();
-  }, [revoked, enrolled, sharedSignIn, signOutPending, signOutNow, userId]);
+  }, [revoked, enrolled, sharedSignIn, signingOut, signOutNow, userId]);
 
   useEffect(() => {
     if (!isLoaded || enrolled === undefined || !configured) return;
