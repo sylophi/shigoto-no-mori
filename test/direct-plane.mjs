@@ -2400,8 +2400,8 @@ async function main() {
       const args = cloudflaredArgs();
       // --no-autoupdate is load-bearing: the shipped copy must never
       // replace its own (signed) binary.
-      // --ha-connections trims the edge keepalives to one connection;
-      // it is a `tunnel` flag, so it must sit before `run`.
+      // --ha-connections trims the edge keepalives to one connection.
+      // It is a `tunnel` flag, so it must sit before `run`.
       assert.deepEqual(args, [
         "tunnel",
         "--no-autoupdate",
