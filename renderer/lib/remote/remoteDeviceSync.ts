@@ -42,7 +42,7 @@ import type { HubStatus } from "@shared/ipc/modules/hub";
 import type { DeviceInfo } from "@shared/hub/protocol";
 import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
 import { publishHubStatus, seedHubStatus } from "@/hooks/remote/useHubStatus";
-import { invalidateDeviceSession } from "@/lib/queryKeys";
+import { hostKeyDeviceId, invalidateDeviceSession } from "@/lib/queryKeys";
 import {
   rejectingClientTransport,
   type RemoteDevice,
@@ -240,6 +240,36 @@ export function onSessionLanded(listener: (deviceId: string) => void): void {
   for (const deviceId of liveSessions) listener(deviceId);
 }
 
+// Followers with per-device state of their own to drop when the
+// account is left (the script run stores). Boot-scoped like the
+// session-landed listeners.
+const accountLeftListeners = new Set<() => void>();
+
+export function onAccountLeft(listener: () => void): void {
+  accountLeftListeners.add(listener);
+}
+
+// Everything this window built under the account that is now gone:
+// the device store, the cached device list, every peer's api and every
+// cache keyed by a peer's id. The local host's caches stay, they are
+// this machine's whatever the account.
+function leaveAccount(queryClient: QueryClient): void {
+  setRemoteDevices([]);
+  apis.clear();
+  liveSessions = new Set();
+  queryClient.removeQueries({
+    queryKey: accountDevicesQueryOptions.queryKey,
+    exact: true,
+  });
+  queryClient.removeQueries({
+    predicate: (query) => {
+      const deviceId = hostKeyDeviceId(query.queryKey);
+      return deviceId !== undefined && deviceId !== window.api.deviceId;
+    },
+  });
+  for (const listener of accountLeftListeners) listener();
+}
+
 // Pure and synchronous: the peer's appVersion now rides the status
 // snapshot (current.peerAppVersions), so an entry no longer fires a
 // peerInfo IPC per device (M3). One lookup answers both questions: a
@@ -325,8 +355,31 @@ async function drainReconciles(): Promise<void> {
 // (renderer/boot.tsx, one for both shells) build their own.
 export function startRemoteDeviceSync(queryClient: QueryClient): void {
   boundQueryClient = queryClient;
-  // This process's own enroll, sign-out, rename or revoke.
-  window.api.account.onChanged(refetchDeviceList);
+  // This process's own enroll, sign-out, rename or revoke. A change of
+  // ACCOUNT (a sign-out, a sign-in under another account) also drops
+  // everything built under the old one, before the refetch, so what
+  // the new account's list lands on is empty rather than the old
+  // account's devices: the cached device list (which the reconcile
+  // falls back to when a refetch fails), the per-device apis and
+  // caches, and the followers' per-device state. A rename keeps it
+  // all: same account, same peers.
+  let syncedAccountId: string | undefined;
+  window.api.account.onChanged(() => {
+    void window.api.account
+      .status()
+      .then((status) => {
+        const accountId = status.signedIn ? status.accountId : "";
+        if (syncedAccountId !== undefined && accountId !== syncedAccountId) {
+          leaveAccount(queryClient);
+        }
+        syncedAccountId = accountId;
+      })
+      .catch(() => undefined)
+      .finally(refetchDeviceList);
+  });
+  void window.api.account.status().then((status) => {
+    syncedAccountId ??= status.signedIn ? status.accountId : "";
+  });
   // Every list change reconciles from here, this module's own refetches
   // included, alongside everyone else's landing in the shared cache (a
   // window focus, the devices page mounting, an invalidation from

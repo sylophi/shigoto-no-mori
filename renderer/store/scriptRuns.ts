@@ -17,7 +17,7 @@
 // changes, so mutating in place would silently skip re-renders.
 import type { RemovedWorktreeScripts, ScriptEvent } from "@shared/schemas";
 import { localDeviceId } from "@/lib/queryKeys";
-import { apiFor } from "@/lib/remote/remoteDeviceSync";
+import { apiFor, onAccountLeft } from "@/lib/remote/remoteDeviceSync";
 import { toast } from "@/lib/toast";
 import { assertNever } from "@/lib/utils";
 import type { RendererApi } from "@/window";
@@ -168,6 +168,13 @@ export class ScriptRunsStore {
         this.handleRemovedWorktree(info),
       ),
     );
+  }
+
+  // Ends the event drain. A peer store is stopped when the account it
+  // belonged to is left (below); the local store never is.
+  stop(): void {
+    for (const unsubscribe of this.unsubscribers) unsubscribe();
+    this.unsubscribers = [];
   }
 
   async run(input: StartInput): Promise<void> {
@@ -533,6 +540,15 @@ export const scriptRuns = new ScriptRunsStore(
 // subscription that rides the shared peerPush fan-out, so a store per
 // device costs one registry entry each and no IPC listener.
 const peerStores = new Map<string, ScriptRunsStore>();
+
+// The peer stores go with the account: a run state and a scrollback
+// are the peer's, and a device of a later account with the same id
+// (this machine on two accounts) must not open on them. Registered at
+// module load, like the stores themselves, and never unregistered.
+onAccountLeft(() => {
+  for (const store of peerStores.values()) store.stop();
+  peerStores.clear();
+});
 
 export function scriptRunsFor(deviceId: string): ScriptRunsStore {
   if (deviceId === localDeviceId) return scriptRuns;

@@ -23,8 +23,10 @@ import {
   enrollAndConnect,
   enrollRequest,
   mintTicket,
+  provisionRequest,
   renameRequest,
   revoke,
+  revokeRequest,
   ticketRequest,
 } from "./helpers.ts";
 
@@ -114,9 +116,9 @@ describe("POST /devices/enroll", () => {
     expect(rotated.credential).not.toBe(enrolled[1].credential);
     expect((await call(listRequest(enrolled[0].credential))).status).toBe(200);
     // A new device over the cap takes the place of the stalest one,
-    // whose credential dies with it.
+    // whose credential dies with it (a revoke, so it reads as one).
     expect((await call(overCapRequest())).status).toBe(200);
-    expect((await call(listRequest(enrolled[0].credential))).status).toBe(401);
+    expect((await call(listRequest(enrolled[0].credential))).status).toBe(403);
     const listed = await call(listRequest(rotated.credential));
     const { devices } = (await listed.json()) as { devices: unknown[] };
     expect(devices).toHaveLength(MAX_ACCOUNT_DEVICES);
@@ -224,7 +226,41 @@ describe("DELETE /devices/:deviceId", () => {
     const victim = await enroll("acct-del", "dev-del-victim");
     const response = await revoke(keeper.credential, "dev-del-victim");
     expect(response.status).toBe(204);
-    expect((await call(listRequest(victim.credential))).status).toBe(401);
+    expect((await call(listRequest(victim.credential))).status).toBe(403);
+  });
+
+  it("tells a revoked credential it was revoked on every credentialed route, and a garbage or rotated-away one nothing", async () => {
+    const keeper = await enroll("acct-tomb", "dev-tomb-keeper");
+    const victim = await enroll("acct-tomb", "dev-tomb-victim");
+    expect((await revoke(keeper.credential, "dev-tomb-victim")).status).toBe(
+      204,
+    );
+    // A device that was offline at the revoke presents the dead
+    // credential later: a typed 403 the app signs out on, not the
+    // plain 401 a garbage token gets.
+    for (const request of [
+      listRequest(victim.credential),
+      ticketRequest(victim.credential),
+      provisionRequest(victim.credential, 4321),
+      renameRequest(victim.credential, "dev-tomb-victim", "Ghost"),
+      revokeRequest(victim.credential, "dev-tomb-keeper"),
+    ]) {
+      // oxlint-disable-next-line no-await-in-loop -- one route at a time reads better than a Promise.all of five
+      const response = await call(request);
+      expect(response.status).toBe(403);
+      // oxlint-disable-next-line no-await-in-loop
+      expect(await response.json()).toMatchObject({ code: "device_revoked" });
+    }
+    expect((await call(listRequest("smdc_garbage"))).status).toBe(401);
+    // A credential rotated away by a re-enroll is unknown, not revoked.
+    const rotated = await enroll("acct-tomb", "dev-tomb-keeper");
+    expect((await call(listRequest(keeper.credential))).status).toBe(401);
+    expect((await call(listRequest(rotated.credential))).status).toBe(200);
+    // A re-enrolled victim is back with a working credential, and the
+    // old one still reads as revoked.
+    const back = await enroll("acct-tomb", "dev-tomb-victim");
+    expect((await call(listRequest(back.credential))).status).toBe(200);
+    expect((await call(listRequest(victim.credential))).status).toBe(403);
   });
 
   it("hides other accounts' devices behind 404", async () => {

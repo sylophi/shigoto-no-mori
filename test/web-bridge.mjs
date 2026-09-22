@@ -474,6 +474,34 @@ async function main() {
       await delay(1_300);
       assert.equal(mints, 1, "the blocked deployment was redialed");
       assert.equal((await socket()).phase, "blocked");
+      assert.equal((await socket()).reason, "refused");
+    },
+  );
+
+  await check(
+    "revoked: the hub's typed device_revoked refusal on the mint blocks as REVOKED, the verdict the app signs out on, exactly as the socket close would have",
+    async (track) => {
+      const localStorage = memoryStorage();
+      localStorage.setItem("sm.web.account", STORED_ENVELOPE);
+      const fetchImpl = async (input) => {
+        const url = String(input);
+        if (url === `${HUB_URL}/tickets`) {
+          return jsonResponse(403, {
+            error: "this device was removed from the account",
+            code: "device_revoked",
+          });
+        }
+        throw new Error(`unexpected fetch in revoked check: ${url}`);
+      };
+      const bridge = createWebBridge(makeDeps({ localStorage, fetchImpl }));
+      track(() => bridge.stop());
+      await bridge.refreshHub();
+      const socket = async () => (await bridge.api.hub.status()).socket;
+      await waitFor(
+        async () => (await socket()).phase === "blocked",
+        "the blocked socket phase",
+      );
+      assert.equal((await socket()).reason, "revoked");
     },
   );
 

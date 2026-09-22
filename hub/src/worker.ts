@@ -19,6 +19,7 @@
 // README.md (Abuse limits).
 import {
   CONNECT_TICKET_PARAM,
+  DEVICE_REVOKED_CODE,
   type DeviceInfo,
   type DeviceListResponse,
   type EnrollResponse,
@@ -44,6 +45,7 @@ import {
   type DeviceRow,
   listAccountDeviceIds,
   getDeviceByCredentialHash,
+  isRevokedCredentialHash,
   getDeviceById,
   renameDevice,
   listDevicesByCredentialHash,
@@ -151,6 +153,29 @@ async function authDevice(
   if (token === null || !token.startsWith(DEVICE_CREDENTIAL_PREFIX))
     return null;
   return await getDeviceByCredentialHash(env.DB, await sha256Hex(token));
+}
+
+// The refusal for a credential that matched no device. A revoked
+// credential (its hash tombstoned by the revoke, db.ts deleteDevice)
+// gets the typed 403 the app reads as "this device was removed from
+// the account" and signs out on; a device that was offline at the
+// revoke learns it this way, since the socket close code that tells
+// a live device never reached it. Anything else (a garbage token, a
+// credential rotated away by a re-enroll, a tombstone past retention)
+// is the plain 401.
+async function refuseCredential(request: Request, env: Env): Promise<Response> {
+  const token = bearerToken(request);
+  if (
+    token !== null &&
+    token.startsWith(DEVICE_CREDENTIAL_PREFIX) &&
+    (await isRevokedCredentialHash(env.DB, await sha256Hex(token)))
+  ) {
+    return jsonError(403, {
+      error: "this device was removed from the account",
+      code: DEVICE_REVOKED_CODE,
+    });
+  }
+  return jsonError(401, { error: "invalid device credential" });
 }
 
 // Presence is advisory at enroll and at the device list, so a hub
@@ -366,7 +391,22 @@ export function createWorker(deps: HubDeps): HubWorker {
     if (existing === null) {
       const stalestFirst = await listAccountDeviceIds(env.DB, login.accountId);
       if (stalestFirst.length >= MAX_ACCOUNT_DEVICES) {
-        const online = await accountPresenceSafe(env, login.accountId);
+        // NOT the advisory presence read: there it fails open to "all
+        // offline", which here would evict the stalest device whether
+        // or not it is online. A presence the hub object cannot answer
+        // is a reason to refuse the enroll, not to revoke a device.
+        let online: Set<string>;
+        try {
+          const presence = await callObject<PresenceResponse>(
+            accountStub(env, login.accountId),
+            INTERNAL_PRESENCE_PATH,
+          );
+          online = new Set(presence.online);
+        } catch {
+          return jsonError(502, {
+            error: "could not make room for the device",
+          });
+        }
         const evict = stalestFirst.find((id) => !online.has(id));
         if (evict === undefined) {
           return jsonError(409, {
@@ -431,7 +471,7 @@ export function createWorker(deps: HubDeps): HubWorker {
   async function listAccountDevices(request: Request, env: Env) {
     const token = bearerToken(request);
     if (token === null || !token.startsWith(DEVICE_CREDENTIAL_PREFIX))
-      return jsonError(401, { error: "invalid device credential" });
+      return await refuseCredential(request, env);
     // Auth and list fold into one query: the subquery resolves the
     // account from the credential hash and the outer query returns that
     // account's devices. An empty result means the credential matched
@@ -440,8 +480,7 @@ export function createWorker(deps: HubDeps): HubWorker {
       env.DB,
       await sha256Hex(token),
     );
-    if (rows.length === 0)
-      return jsonError(401, { error: "invalid device credential" });
+    if (rows.length === 0) return await refuseCredential(request, env);
     // Every row shares the account, so the first row names the DO for
     // presence. Presence is advisory here, so a hub object hiccup
     // never blocks the device list. A failure defaults to all offline.
@@ -491,8 +530,7 @@ export function createWorker(deps: HubDeps): HubWorker {
       authDevice(request, env),
       getDeviceById(env.DB, targetId),
     ]);
-    if (device === null)
-      return jsonError(401, { error: "invalid device credential" });
+    if (device === null) return await refuseCredential(request, env);
     if (target === null || target.account_id !== device.account_id) {
       return jsonError(404, { error: "unknown device" });
     }
@@ -513,8 +551,7 @@ export function createWorker(deps: HubDeps): HubWorker {
     targetId: string,
   ) {
     const device = await authDevice(request, env);
-    if (device === null)
-      return jsonError(401, { error: "invalid device credential" });
+    if (device === null) return await refuseCredential(request, env);
     const parsed = RenameDeviceRequestSchema.safeParse(await readJson(request));
     if (!parsed.success)
       return jsonError(400, { error: "invalid rename request" });
@@ -536,8 +573,7 @@ export function createWorker(deps: HubDeps): HubWorker {
   // tunnels off without treating it as a failure.
   async function provisionDeviceTunnel(request: Request, env: Env) {
     const device = await authDevice(request, env);
-    if (device === null)
-      return jsonError(401, { error: "invalid device credential" });
+    if (device === null) return await refuseCredential(request, env);
     const cf = tunnelEnvOf(env);
     if (cf === null) {
       return jsonError(TUNNEL_UNCONFIGURED_STATUS, {
@@ -567,8 +603,7 @@ export function createWorker(deps: HubDeps): HubWorker {
 
   async function mintTicket(request: Request, env: Env) {
     const device = await authDevice(request, env);
-    if (device === null)
-      return jsonError(401, { error: "invalid device credential" });
+    if (device === null) return await refuseCredential(request, env);
     const signingKey = env.TICKET_SIGNING_KEY ?? "";
     if (signingKey === "") {
       return jsonError(500, { error: "ticket signing is not configured" });

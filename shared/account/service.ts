@@ -22,6 +22,7 @@ import {
   TunnelProvisionRequestSchema,
   TunnelProvisionResponseSchema,
   type DeviceInfo,
+  DEVICE_REVOKED_CODE,
   type EnrollResponse,
   type TicketResponse,
   type TunnelProvisionResponse,
@@ -34,11 +35,24 @@ import {
 // keep working.
 export class HubRequestError extends Error {
   readonly status: number;
-  constructor(message: string, status: number) {
+  // The hub's typed refusal code when it sent one (protocol.ts
+  // ErrorBodySchema), undefined otherwise.
+  readonly code: string | undefined;
+  constructor(message: string, status: number, code?: string) {
     super(message);
     this.name = "HubRequestError";
     this.status = status;
+    this.code = code;
   }
+}
+
+// The device hub said this device's credential was REVOKED: the
+// device was removed from the account. The one refusal the app acts
+// on by signing out (a plain refusal is not a verdict on the account
+// and only parks the caller), so it is matched on the typed code, not
+// on the status.
+export function isDeviceRevoked(error: unknown): boolean {
+  return error instanceof HubRequestError && error.code === DEVICE_REVOKED_CODE;
 }
 
 // True when the device hub refused the call outright: 401 for a
@@ -95,7 +109,11 @@ type EnrollFields = {
 export type AccountService = {
   enroll(sessionToken: string, fields: EnrollFields): Promise<EnrollResponse>;
   listDevices(credential: string): Promise<DeviceInfo[]>;
-  revoke(credential: string, deviceId: string): Promise<void>;
+  revoke(
+    credential: string,
+    deviceId: string,
+    signal?: AbortSignal,
+  ): Promise<void>;
   // Renames a device of the account on the hub, so the registry the
   // other devices list carries the new name at once.
   rename(credential: string, deviceId: string, name: string): Promise<void>;
@@ -121,13 +139,17 @@ export type AccountService = {
 // code. The one place a failed hub call becomes an exception.
 async function fail(response: Response): Promise<never> {
   let message = `hub request failed with status ${response.status}`;
+  let code: string | undefined;
   try {
     const parsed = ErrorBodySchema.safeParse(await response.json());
-    if (parsed.success) message = parsed.data.error;
+    if (parsed.success) {
+      message = parsed.data.error;
+      code = parsed.data.code;
+    }
   } catch {
     // Non-JSON or unreadable body. The status-code message stands.
   }
-  throw new HubRequestError(message, response.status);
+  throw new HubRequestError(message, response.status, code);
 }
 
 export function createAccountService(deps: AccountServiceDeps): AccountService {
@@ -193,13 +215,14 @@ export function createAccountService(deps: AccountServiceDeps): AccountService {
       ).devices;
     },
 
-    async revoke(credential, deviceId) {
+    async revoke(credential, deviceId, signal) {
       // The device hub answers a successful revoke with 204 No Content.
       // Any other non-2xx is a real failure.
       await credentialed(
         HUB_ROUTES.revokeDevice,
         HUB_ROUTES.revokeDevice.path(deviceId),
         credential,
+        { signal },
       );
     },
 

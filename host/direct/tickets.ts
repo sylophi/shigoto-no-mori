@@ -61,6 +61,12 @@ export type ConnectTicketStore = {
     arrivedAs: DirectCandidateKind,
     matches: (ticket: string) => Promise<boolean>,
   ): Promise<string | null>;
+  // Drops every pending ticket. For an account change: a ticket is
+  // minted for a peer of the account this host is on, and a peer of
+  // the account it just left must not be able to spend one on the
+  // listener the next account gets (the tunnel candidate is the same
+  // stable hostname either side of the switch).
+  clear(): void;
 };
 
 export type ConnectTicketStoreOpts = {
@@ -111,6 +117,10 @@ export function createConnectTicketStore(
   }
 
   return {
+    clear() {
+      pending.clear();
+      byPeer.clear();
+    },
     mint(peerDeviceId, kinds) {
       sweepExpired();
       // Replacement first: a fresh connectInfo invalidates the same

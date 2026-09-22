@@ -60,6 +60,13 @@ export async function enrollDevice(
   });
 }
 
+// How long the sign-out waits on the hub's revoke before signing out
+// locally anyway. Everything the sign-out tears down (the listener,
+// the tunnel, the mirrors, the forwards) waits behind this call, so
+// on a black-holed network it must give up in seconds, not at the
+// platform's own fetch timeout minutes later.
+export const SIGN_OUT_REVOKE_TIMEOUT_MS = 10_000;
+
 // Best-effort revoke of THIS device on the device hub, then the local
 // credential clear. The revoke failure is reported, not thrown,
 // because local sign-out must always succeed, even offline.
@@ -73,7 +80,11 @@ export async function signOutDevice(deps: {
   const record = deps.store.read();
   if (record !== null && isConfigured(deps.config)) {
     try {
-      await deps.service.revoke(record.credential, deps.deviceId);
+      await deps.service.revoke(
+        record.credential,
+        deps.deviceId,
+        AbortSignal.timeout(SIGN_OUT_REVOKE_TIMEOUT_MS),
+      );
     } catch (error) {
       deps.onRevokeFailure?.(error);
     }
