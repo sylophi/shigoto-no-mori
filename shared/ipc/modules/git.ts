@@ -3,26 +3,20 @@ import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
 
 export const gitContract = defineContract("host", {
-  // mutating: it spawns git and performs a network fetch, so it counts
-  // as a command rather than a pure read even though the caller reads
-  // the refreshed refs afterward.
+  // Read-class: a fetch of remote-tracking refs refreshes a cache the
+  // host keeps for itself, and it is bounded by the host's freshness
+  // window (main/electron/fetch.ts). Nothing the user owns moves.
   refreshProject: invoke(
     "git:refreshProject",
     ProjectScopedPayloadSchema,
     z.void(),
-    { remote: true, mutating: true },
+    { remote: true, mutating: false },
   ),
-  // A peer asking this host to run its background sweep now (refs and
-  // PRs for every project), because the peer's window just focused or
-  // its session just landed. Read-class on purpose: the host runs the
-  // same sweep unprompted whenever its own window is focused, so a
-  // request moves it earlier and nothing else, the host's freshness
-  // window bounds the rate, and gating it on a command grant would
-  // leave a read-only viewer looking at whatever the host last saw.
-  // Resolves as soon as the sweep is started, not when it finishes.
-  // The results arrive as refsRefreshed and
-  // projectPullRequestsRefreshed pushes, like any other sweep's.
-  sweep: invoke("git:sweep", z.void(), z.void(), {
+  // A peer saying it is looking at this host: runs the host's
+  // background sweep (refs and PRs, every project) if it is stale, and
+  // keeps the host's sweep timer ticking for the returned lease. The
+  // peer renews within that lease while its window stays focused.
+  sweep: invoke("git:sweep", z.void(), z.object({ leaseMs: z.number() }), {
     remote: true,
     mutating: false,
   }),

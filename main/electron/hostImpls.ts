@@ -34,7 +34,7 @@ import {
   uninstallShellIntegration,
 } from "./cliShell";
 import { busyActionRemoteRefusal } from "./busyPrompt";
-import { maybeFetchProject, sweepProjects } from "./fetch";
+import { maybeFetchProject, sweepForPeer } from "./fetch";
 import { relaunchAppUnattended } from "./relaunch";
 import { stopStateWatcher } from "./stateWatcher";
 import { stopUpdaterBridge } from "./updaterBridge";
@@ -48,7 +48,7 @@ export function installHostImpls(): void {
     installShellIntegration,
     uninstallShellIntegration,
   });
-  setGitImpl({ maybeFetchProject, sweepProjects });
+  setGitImpl({ maybeFetchProject, sweepForPeer });
   // Reconcile the socket listeners on every config change, whatever
   // the path: the IPC write handler, an external CLI write picked up
   // by the state watcher, and nuke wiping config.json all fan out

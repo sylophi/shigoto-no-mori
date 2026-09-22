@@ -1,5 +1,6 @@
 [
   "direct:connectInfo",
+  "git:refreshProject",
   "git:sweep",
   "githubCli:projectPullRequests",
   "githubCli:pullRequestCandidates",

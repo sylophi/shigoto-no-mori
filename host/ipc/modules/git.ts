@@ -7,7 +7,7 @@ import { findProjectOrThrow } from "@host/lib/projects";
 // broadcasts through the Electron transport binding.
 type GitImpl = {
   maybeFetchProject: (projectId: string, projectPath: string) => Promise<void>;
-  sweepProjects: () => void;
+  sweepForPeer: () => { leaseMs: number };
 };
 
 let impl: GitImpl | null = null;
@@ -28,7 +28,5 @@ export const gitHandlers: Handlers<typeof gitContract> = {
     const project = findProjectOrThrow(projectId);
     await gitImpl().maybeFetchProject(project.id, project.path);
   },
-  sweep: async () => {
-    gitImpl().sweepProjects();
-  },
+  sweep: async () => gitImpl().sweepForPeer(),
 };

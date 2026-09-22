@@ -22,10 +22,10 @@ export function WorktreeDetail() {
   const worktree = worktrees.find((w) => w.id === worktreeId);
 
   useEffect(() => {
-    // Local-only page-open work: refreshProject is a mutating invoke
-    // (an ungranted peer would refuse it, and auto-fetching on a peer
-    // is chatty when push invalidation already keeps it fresh), and
-    // the recent-worktrees list is this window's own quick-switcher.
+    // Local-only page-open work: auto-fetching on a peer is chatty
+    // when push invalidation and the sweep requests already keep it
+    // fresh, and the recent-worktrees list is this window's own
+    // quick-switcher.
     if (remote) return;
     void window.api.git.refreshProject(projectId);
     recordRecentWorktree(projectId, worktreeId);
