@@ -3,6 +3,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SectionHeading } from "@/components/ui/section-heading";
 import type { Theme } from "@shared/schemas";
 import { ToggleRow } from "@/components/shared/ToggleRow";
+import { batterySupported } from "@/hooks/ui/usePauseAnimationsOnBattery";
 
 const THEMES: { value: Theme; label: string; Icon: typeof Sun }[] = [
   { value: "light", label: "Light", Icon: Sun },
@@ -15,6 +16,8 @@ interface AppearanceSectionProps {
   onPick: (theme: Theme) => void;
   doubutsu: boolean;
   onDoubutsuChange: (next: boolean) => void;
+  pauseAnimationsOnBattery: boolean;
+  onPauseAnimationsOnBatteryChange: (next: boolean) => void;
   // "Appearance" where the section stands alone (the web page). The
   // desktop's Appearance section already says that and names it "Theme".
   heading?: string;
@@ -25,6 +28,8 @@ export function AppearanceSection({
   onPick,
   doubutsu,
   onDoubutsuChange,
+  pauseAnimationsOnBattery,
+  onPauseAnimationsOnBatteryChange,
   heading = "Appearance",
 }: AppearanceSectionProps) {
   // A three-way pick, so it wears the house segmented control: the
@@ -55,6 +60,17 @@ export function AppearanceSection({
         label="Doubutsu mode"
         description="Bold, color-blocked Animal Crossing inspired theme. Layers on top of light and dark; turn off for the plain, neutral look."
       />
+      {/* A browser without the Battery Status API has nothing to pause
+          on, and neither does the plain look: the wallpaper is doubutsu's. */}
+      {batterySupported && (
+        <ToggleRow
+          checked={pauseAnimationsOnBattery}
+          onCheckedChange={onPauseAnimationsOnBatteryChange}
+          disabled={!doubutsu}
+          label="Pause always-on animations on battery"
+          description="The drifting wallpaper redraws the window every frame, even when nothing else is happening. Pausing it while this machine runs on battery saves energy, and it picks up again when plugged in."
+        />
+      )}
     </section>
   );
 }

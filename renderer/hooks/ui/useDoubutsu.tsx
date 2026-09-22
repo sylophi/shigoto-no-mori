@@ -1,5 +1,6 @@
 import { createContext, use, useEffect, useState, type ReactNode } from "react";
 import { useClientConfig } from "../config/useClientConfig";
+import { usePauseAnimationsOnBattery } from "./usePauseAnimationsOnBattery";
 import { readStored, writeStored } from "@/lib/localStorage";
 
 interface DoubutsuState {
@@ -36,6 +37,8 @@ export function DoubutsuProvider({ children }: { children: ReactNode }) {
     : (config?.doubutsu ?? true);
   const [override, setOverride] = useState<boolean | null>(null);
   const applied = override ?? saved;
+  // The wallpaper this pauses is doubutsu's, so the pause lives here.
+  usePauseAnimationsOnBattery();
 
   // Once a save lands and `saved` catches up to the staged override,
   // drop the override so future updates to `saved` flow.
