@@ -27,6 +27,7 @@ import {
   ClerkGate,
   type ClerkProviderComponent,
 } from "./components/account/ClerkGate";
+import { writeMirrorList } from "./hooks/remote/useMirrors";
 import { writeUpdaterState } from "./hooks/system/useUpdater";
 import { createAppQueryClient } from "./lib/queryClientOptions";
 import { hasLocalHost } from "./lib/localHost";
@@ -130,6 +131,13 @@ function startLocalHost(queryClient: QueryClient): void {
   // (remoteHostWatch mirrors the same channel for every peer).
   window.api.updater.onState((next) => {
     writeUpdaterState(queryClient, localDeviceId, next);
+  });
+
+  // The local mirror list the same way: every reader of it (the
+  // always-mounted sidebar's folds, a worktree page's pill and
+  // controls) sees the daemon's snapshot the moment it moves.
+  window.api.mirror.onChanged((list) => {
+    writeMirrorList(queryClient, localDeviceId, list);
   });
 
   // Scripts that survived a crash or a force quit are stopped by the

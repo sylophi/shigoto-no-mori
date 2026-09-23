@@ -5,7 +5,10 @@
 // becomes of the source ("Transplant"). Text buttons, since the footer
 // has room to say what they do. Ports is always there (reading the
 // list needs no grant) and is the same button the local page's footer
-// carries. The two transfers need command access, a real branch, and
+// carries. So is the running mirror's button, on a worktree already
+// part of one (mirror/MirrorAction.tsx), in place of "Mirror here": a
+// worktree holds one mirror, the rule the local footer's "Mirror to…"
+// follows. The two transfers need command access, a real branch, and
 // a local project sharing the repo identity (the handler re-verifies
 // that last one). A repo with no identity at all gets a line of
 // explanation instead of an empty footer. The peer's primary checkout
@@ -18,8 +21,10 @@ import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useLocalProjectForIdentity } from "@/hooks/remote/useLocalProjectForIdentity";
+import { useWorktreeMirrorLinks } from "@/hooks/remote/useMirrors";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { FooterActionButton } from "./FooterActionButton";
+import { MirrorAction } from "./mirror/MirrorAction";
 import { MirrorDialog } from "./mirror/MirrorDialog";
 import { PortsButton } from "./ports/PortsButton";
 import { TransplantDialog } from "./transplant/TransplantDialog";
@@ -37,6 +42,7 @@ export function RemoteWorktreeActions({
   return (
     <>
       <PortsButton worktree={worktree} />
+      <MirrorAction worktree={worktree} />
       {transferable && (
         <TransferActions worktree={worktree} project={project} />
       )}
@@ -143,7 +149,10 @@ function TransplantButton({
 // Mirror is a pull followed by a live two-way mirror between the new
 // local worktree and the remote one, driven by the mirror dialog. It
 // only exists in the app: the daemon and the gateway live in main, and
-// the web loopback refuses the mutation.
+// the web loopback refuses the mutation. A mirror withdraws the
+// button, not an OPEN dialog: the mirror it starts is what withdraws
+// it, and the dialog's last steps (the report, "Open here") must stay
+// up.
 function MirrorButton({
   worktree,
   project,
@@ -158,15 +167,18 @@ function MirrorButton({
   const [open, setOpen] = useState(false);
   const { deviceId } = useHostScope();
   const deviceLabel = useRemoteDeviceLabel(deviceId);
+  const mirrored = useWorktreeMirrorLinks(worktree).length > 0;
   if (!canForwardPorts) return null;
   return (
     <>
-      <FooterActionButton
-        icon={<RefreshCw />}
-        label="Mirror here"
-        title="Keep a live copy of this worktree here"
-        onClick={() => setOpen(true)}
-      />
+      {!mirrored && (
+        <FooterActionButton
+          icon={<RefreshCw />}
+          label="Mirror here"
+          title="Keep a live copy of this worktree here"
+          onClick={() => setOpen(true)}
+        />
+      )}
       {open && (
         <MirrorDialog
           worktree={worktree}

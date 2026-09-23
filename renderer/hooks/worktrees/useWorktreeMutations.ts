@@ -8,9 +8,10 @@ import type {
   DeleteWorktreeResult,
   Worktree,
 } from "@shared/schemas";
-import { hostKeyDeviceId } from "@/lib/queryKeys";
+import { hostKeyDeviceId, queryKeysFor } from "@/lib/queryKeys";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
+import { scriptRunsFor } from "@/store/scriptRuns";
 
 interface CreateWorktreeInput {
   projectId: string;
@@ -154,10 +155,20 @@ const deleteWorktreeMutationKey = (deviceId: string) =>
 // nothing can refetch or replay them. Shared by the delete and by a
 // mirror stop, which removes the copy the same way.
 export function useForgetDeletedWorktree() {
+  const { deviceId } = useHostScope();
+  const forgetOn = useForgetDeletedWorktreeOn();
+  return (projectId: string, worktreeId: string) =>
+    forgetOn(deviceId, projectId, worktreeId);
+}
+
+// The same, naming the device: for a caller mounted under one scope
+// whose stop removed a worktree on another (a mirror stop driven
+// through the peer running it, whose copy is here).
+export function useForgetDeletedWorktreeOn() {
   const queryClient = useQueryClient();
-  const { deviceId, keys } = useHostScope();
-  const scriptRuns = useScriptRuns();
-  return (projectId: string, worktreeId: string) => {
+  return (deviceId: string, projectId: string, worktreeId: string) => {
+    const keys = queryKeysFor(deviceId);
+    const scriptRuns = scriptRunsFor(deviceId);
     queryClient.setQueryData<Worktree[]>(keys.worktrees(projectId), (current) =>
       current ? current.filter((w) => w.id !== worktreeId) : current,
     );

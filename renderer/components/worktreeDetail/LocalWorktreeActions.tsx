@@ -1,7 +1,7 @@
 // This device's own worktree footer verbs, in the spots the remote
 // footer gives its Ports, Mirror and Transplant buttons.
 import type { Project, Worktree } from "@shared/schemas";
-import { LocalMirrorAction } from "./mirror/LocalMirrorAction";
+import { MirrorAction } from "./mirror/MirrorAction";
 import { PeerTransferActions } from "./PeerTransferActions";
 import { PortsButton } from "./ports/PortsButton";
 
@@ -15,7 +15,7 @@ export function LocalWorktreeActions({
   return (
     <>
       <PortsButton worktree={worktree} />
-      <LocalMirrorAction worktree={worktree} />
+      <MirrorAction worktree={worktree} />
       <PeerTransferActions worktree={worktree} project={project} />
     </>
   );

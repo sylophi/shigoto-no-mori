@@ -406,7 +406,9 @@ type controlMirror struct {
 }
 
 // unmirror [<name>] [-f] stops the mirror the worktree is part of and
-// removes the copy, whichever side that is. The original stays.
+// removes the copy, whichever side that is and whichever device runs
+// the session (the app reaches the other device for one it runs). The
+// original stays.
 func cmdUnmirror(ctx cliContext, args []string) (int, error) {
 	spec := worktreeTargetSpec()
 	spec.bools["force"] = []string{"f"}
@@ -460,7 +462,8 @@ func cmdUnmirror(ctx cliContext, args []string) (int, error) {
 	return 0, nil
 }
 
-// mirrors lists the mirrors this device runs.
+// mirrors lists the mirrors this device is part of, the ones it runs
+// and the ones its peers run against its worktrees.
 func cmdMirrors(_ cliContext, args []string) (int, error) {
 	if len(args) > 0 {
 		return 2, usageErrf("mirrors takes no arguments.")
