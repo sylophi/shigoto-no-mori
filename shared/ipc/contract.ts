@@ -29,7 +29,9 @@ export type InvokeDef<
   // the hub link's dispatch. Optional in the type because only
   // remote:true host invokes need it (the socket check enforces that a
   // remote invoke classifies itself), while client-scoped and
-  // remote:false calls never reach the grant check.
+  // remote:false calls never reach the grant check. A remote mutating
+  // call is something the grant hands to other devices, so it needs a
+  // line in the list AcceptCommandsToggle shows the user (GRANTS).
   mutating?: boolean;
   // Whether a resolved mutating call moved host state a remote viewer
   // caches. Defaults to true for mutating invokes: the registrar fires

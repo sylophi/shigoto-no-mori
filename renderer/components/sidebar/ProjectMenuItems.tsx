@@ -1,3 +1,5 @@
+import type { DeviceKind } from "@shared/account/deviceKind";
+import { DeviceIcon } from "@/components/shared/DeviceIcon";
 import {
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -129,9 +131,17 @@ export function ProjectRemoveMenuItem({
   removeArm,
   device,
 }: ProjectMenuItemsProps & {
-  device?: { id: string; label: string };
+  device?: { id: string; label: string; kind: DeviceKind };
 }) {
   const armKey = device?.id ?? "";
+  // The row is the device, so it leads with the device's glyph, like
+  // every other list that names one.
+  const deviceRow = device && (
+    <>
+      <DeviceIcon kind={device.kind} className="size-3.5" />
+      {device.label}
+    </>
+  );
   const removeProject = useRemoveProject();
   const armed = removeArm.armedKey === armKey;
   // A terrier-sourced project has nothing here to remove: its presence
@@ -142,7 +152,7 @@ export function ProjectRemoveMenuItem({
       <DropdownMenuItem disabled>Registered via terrier</DropdownMenuItem>
     ) : (
       <DropdownMenuItem variant="destructive" disabled>
-        {device.label}
+        {deviceRow}
         <span className="ml-auto pl-3">via terrier</span>
       </DropdownMenuItem>
     );
@@ -156,9 +166,7 @@ export function ProjectRemoveMenuItem({
         removeArm.trigger(armKey, () => removeProject.mutate(project.id));
       }}
     >
-      {armed
-        ? "Click again to confirm"
-        : (device?.label ?? LABELS[subject].remove)}
+      {armed ? "Click again to confirm" : (deviceRow ?? LABELS[subject].remove)}
     </DropdownMenuItem>
   );
 }

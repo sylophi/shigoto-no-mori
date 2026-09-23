@@ -25,6 +25,7 @@
 // push under backpressure would otherwise leave an always-mounted row
 // stale for good), gated by the stale window below so a quick alt-tab
 // does not re-list every peer.
+import type { DeviceKind } from "@shared/account/deviceKind";
 import { useQueries } from "@tanstack/react-query";
 import type { Project, PullRequest, Worktree } from "@shared/schemas";
 import type { StatusTone } from "@/components/ui/status-dot";
@@ -60,6 +61,8 @@ function remoteProjectsQueryOptions(
 export interface RemoteForestItem {
   deviceId: string;
   deviceLabel: string;
+  // What the device looks like, for its badge on the rows.
+  deviceKind: DeviceKind;
   // False when the device is not currently reachable: its rows are the
   // cache's last known state, and the tree fades them rather than
   // hiding work that still exists on that machine.
@@ -194,6 +197,7 @@ export function useRemoteForests(
       return {
         deviceId: device.deviceId,
         deviceLabel: device.label,
+        deviceKind: device.kind,
         reachable: status.reachable,
         tone: status.tone,
         project,

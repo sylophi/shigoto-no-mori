@@ -5,6 +5,12 @@
 // settings UI and no scoped data live here, just the live snapshot the
 // scoped surfaces resolve their device from.
 import { useSyncExternalStore } from "react";
+import {
+  MACHINE_FALLBACK_KIND,
+  type DeviceKind,
+} from "@shared/account/deviceKind";
+import { useLocalDeviceKind } from "@/hooks/account/useAccount";
+import { localDeviceId } from "@/lib/queryKeys";
 import { hostsProjects } from "@/lib/remote/deviceTraits";
 import {
   type RemoteDevice,
@@ -58,9 +64,37 @@ export function useRemoteDeviceApi(
   return useSyncExternalStore(remoteDeviceStore.subscribe, select, select);
 }
 
+// What a device looks like, by id, this device included: the account's
+// answer for this machine, the registry's for a peer, and the fallback
+// shape for an id the registry no longer knows (a revoked peer whose
+// flow is still on screen), so a glyph always draws. A selector like
+// useRemoteDeviceApi, so a peer's status churn leaves the string alone.
+export function useDeviceKind(deviceId: string): DeviceKind {
+  const localKind = useLocalDeviceKind();
+  const select = () =>
+    remoteDeviceStore.getSnapshot().find((entry) => entry.deviceId === deviceId)
+      ?.kind ?? MACHINE_FALLBACK_KIND;
+  const remoteKind = useSyncExternalStore(
+    remoteDeviceStore.subscribe,
+    select,
+    select,
+  );
+  return deviceId === localDeviceId ? localKind : remoteKind;
+}
+
 // The device's name for prose ("on Thinkpad", "Thinkpad:3000"). Falls
 // back to a neutral phrase rather than the raw id, which means nothing
 // to the reader.
 export function useRemoteDeviceLabel(deviceId: string): string {
   return useRemoteDevice(deviceId)?.label ?? "the device";
+}
+
+// Either party of a cross-device pair by name, where either may be
+// this machine, which the registry does not list: "this device" for
+// it, a peer's label, and a neutral phrase for an id the registry no
+// longer knows.
+export function useDeviceName(deviceId: string): string {
+  const label = useRemoteDevice(deviceId)?.label;
+  if (deviceId === localDeviceId) return "this device";
+  return label ?? "another device";
 }

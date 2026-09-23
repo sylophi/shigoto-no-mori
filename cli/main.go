@@ -87,7 +87,7 @@ var worktreeItems = []helpItem{
 		"send or bring that stays: files, commits, staging and branch moves follow each other both ways until unmirror. With --to (or neither) the copy lands on the other device. With --from, <name> is the other device's worktree and the copy lands here, at the path printed. Asking again answers with the running mirror. Takes --leave-out and --setup / --no-setup like send."},
 	{"worktrees unmirror [<name>] [-f]", "Stop mirroring and remove the copy",
 		"Removes the copy, wherever it is, and never the original. Refuses until both sides hold the same commits. -f stops anyway."},
-	{"worktrees mirrors", "List this device's mirrors", ""},
+	{"worktrees mirrors", "List the mirrors this device is part of", ""},
 	{"worktrees shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`, ""},
 	{"worktrees open [<tool>] [<name>]", "Launch a launcher-row tool in a worktree",
 		"Finder, editors, custom commands. With no tool, shows the row as a menu."},

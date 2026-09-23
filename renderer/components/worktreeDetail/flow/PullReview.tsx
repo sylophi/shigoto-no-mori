@@ -12,9 +12,6 @@ import {
   ArrowRight,
   ArrowUp,
   Check,
-  Laptop,
-  type LucideIcon,
-  Monitor,
 } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import type { Project, Worktree } from "@shared/schemas";
@@ -23,6 +20,8 @@ import {
   pullFolderCollision,
 } from "@shared/pullCollision";
 import { worktreeBaseFor } from "@shared/git/worktreeLayout";
+import type { DeviceKind } from "@shared/account/deviceKind";
+import { DeviceIcon } from "@/components/shared/DeviceIcon";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip-button";
 import { PathSpan } from "@/components/ui/path-span";
@@ -31,8 +30,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusDot } from "@/components/ui/status-dot";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useBranches } from "@/hooks/git/useBranches";
-import { DestinationScope, useHostScope } from "@/hooks/remote/useHostScope";
-import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
+import {
+  DestinationScope,
+  useDestinationScope,
+  useHostScope,
+} from "@/hooks/remote/useHostScope";
+import {
+  useDeviceKind,
+  useRemoteDevice,
+} from "@/hooks/remote/useRemoteDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
@@ -111,7 +117,7 @@ function useLocalCollision(
 function DeviceRow({
   className,
   mark,
-  icon: Icon,
+  kind,
   title,
   note,
   trailing,
@@ -125,7 +131,8 @@ function DeviceRow({
   soft?: boolean;
   // Absent on a row that is no pick at all (the source among targets).
   mark?: ReactNode;
-  icon: LucideIcon;
+  // What the device looks like (DeviceIcon), never a shape picked here.
+  kind: DeviceKind;
   title: string;
   note: string;
   trailing?: ReactNode;
@@ -136,10 +143,7 @@ function DeviceRow({
   const body = (
     <>
       {mark}
-      <Icon
-        aria-hidden
-        className={cn("size-4 shrink-0", soft && "opacity-70")}
-      />
+      <DeviceIcon kind={kind} className={cn("size-4", soft && "opacity-70")} />
       <span className="min-w-0 flex-1 leading-tight">
         <span className="block truncate font-medium">{title}</span>
         <span className={cn("block truncate text-2xs", soft && "opacity-70")}>
@@ -191,6 +195,9 @@ function DestinationRow({
   thisDeviceLabel: string;
   tag: string;
 }) {
+  // The destination as the devices column names it: this machine, or
+  // the peer a flow to a peer picked (DestinationProvider).
+  const destinationKind = useDeviceKind(useDestinationScope().deviceId);
   const { landingBranch, held, holder } = useLocalCollision(
     localProject,
     worktree,
@@ -219,7 +226,7 @@ function DestinationRow({
           )}
         </span>
       }
-      icon={Laptop}
+      kind={destinationKind}
       soft
       title={thisDeviceLabel}
       note={
@@ -260,7 +267,7 @@ function PeerTargetRow({
         ready ? "hover:bg-muted hover:text-foreground" : "opacity-60",
       )}
       mark={EMPTY_MARK}
-      icon={Monitor}
+      kind={target.kind}
       title={target.label}
       note={`has ${target.project.name}`}
       trailing={
@@ -306,6 +313,8 @@ export function ReviewDevicesColumn({
   thisDeviceLabel: string;
   pull: PullChoiceState;
 }) {
+  // The source is the device the dialog sits under.
+  const sourceKind = useDeviceKind(useHostScope().deviceId);
   const destination = localProject !== undefined && (
     <DestinationRow
       worktree={worktree}
@@ -355,7 +364,7 @@ export function ReviewDevicesColumn({
                   </span>
                 )
               }
-              icon={Monitor}
+              kind={sourceKind}
               title={sourceDeviceLabel}
               note={sourceNote}
               trailing={
@@ -466,9 +475,9 @@ export function SourceCard({
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2 text-sm">
-        <Monitor
-          aria-hidden
-          className="size-4 shrink-0 text-muted-foreground"
+        <DeviceIcon
+          kind={useDeviceKind(deviceId)}
+          className="size-4 text-muted-foreground"
         />
         <span className="font-medium">{sourceDeviceLabel}</span>
         {status && (

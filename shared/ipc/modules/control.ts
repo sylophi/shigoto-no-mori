@@ -103,7 +103,9 @@ const ControlPeerWorktreeSchema = z.strictObject({
 });
 export type ControlPeerWorktree = z.infer<typeof ControlPeerWorktreeSchema>;
 
-// A mirror this device runs, reduced to what a terminal says about it.
+// A mirror this device is part of, reduced to what a terminal says
+// about it, and seen from this device whichever side runs it: `local`
+// is this device's worktree, `device` the other one.
 const ControlMirrorSchema = z.strictObject({
   session: z.string(),
   device: z.strictObject({ deviceId: z.string(), name: z.string() }),
@@ -111,8 +113,8 @@ const ControlMirrorSchema = z.strictObject({
   localWorktreeId: z.string(),
   localRoot: z.string(),
   remoteRoot: z.string(),
-  // Which side is the copy a stop removes: "remote" for a mirror
-  // started to a peer, "local" for one brought here.
+  // Which side is the copy a stop removes: "remote" when it is on the
+  // other device, "local" when it is here.
   copySide: z.enum(["local", "remote"]),
   paused: z.boolean(),
   status: z.string(),

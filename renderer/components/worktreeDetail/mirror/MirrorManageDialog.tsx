@@ -1,9 +1,13 @@
-// A running mirror, from the footer button on the copy the mirror
-// landed: its state in four figures, anything that needs acting on,
+// A running mirror, from the footer button on either of its
+// worktrees: its state in four figures, anything that needs acting on,
 // what it leaves out (editable in place), the thread of what
 // happened, and the controls. The same frame as the start dialog, one
-// step long. Viewed from another device the dialog is read-only: the
-// controls are local by contract.
+// step long. Mounted under the scope of the device RUNNING the session
+// (mirror/MirrorAction.tsx), so every read and control here goes to
+// that device: the page it opened from may be that device's own, a
+// peer's viewed from here, or the far end's. The controls need that
+// device's command grant, like any mutation on a peer. Without it the
+// dialog is read-only and says whose switch it is.
 import { useState } from "react";
 import {
   AlertCircle,
@@ -23,10 +27,9 @@ import type {
 } from "@shared/ipc/modules/mirror";
 import {
   isMirrorStopUnconfirmed,
-  mirrorCopyIsRemote,
+  mirrorCopyOf,
   mirrorStopIsSafe,
 } from "@shared/ipc/modules/mirror";
-import type { Worktree } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { RelativeDate } from "@/components/ui/relative-date";
@@ -39,18 +42,21 @@ import {
   TONE_TEXT,
 } from "@/components/ui/status-dot";
 import { MirrorConflictsChip } from "@/components/worktreeDetail/MirrorConflicts";
+import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   useMirrorControls,
   useMirrorHistory,
   useSetMirrorIgnores,
 } from "@/hooks/remote/useMirrors";
-import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { useDeviceName } from "@/hooks/remote/useRemoteDevices";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 import {
   CONFIRM_DESTRUCTIVE_MS,
   useConfirmTwice,
 } from "@/hooks/ui/useConfirmTwice";
+import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { localDeviceId } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import { CARD, FlowHeader, FlowBody, FlowFooter } from "../flow/FlowChrome";
 import {
@@ -65,19 +71,34 @@ import { describeMirror, gitVerdict } from "./mirrorStatus";
 
 export function MirrorManageDialog({
   session,
-  worktree,
+  otherDeviceId,
   onClose,
+  onStopped,
 }: {
   session: MirrorSession;
-  // The local worktree the session runs on, in the surrounding scope:
-  // the copy, or the original when the mirror was started to a peer.
-  worktree: Worktree;
+  // The mirror's other party as the page it opened from sees it.
+  otherDeviceId: string;
   onClose: () => void;
+  // After a stop removed the copy: the opener knows whether the page
+  // it sits on was that copy.
+  onStopped: () => void;
 }) {
-  const { remote, deviceId } = useHostScope();
-  const canControl = !remote;
-  const hostLabel = useRemoteDeviceLabel(deviceId);
-  const peer = useRemoteDeviceLabel(session.deviceId);
+  // The scope is the runner's. `remote` says whether that is another
+  // machine, which is what the reveal (this machine's Finder) gates
+  // on. The controls gate on its grant.
+  const { remote, deviceId: runnerDeviceId } = useHostScope();
+  const { canCommand: canControl } = useCommandAccess();
+  const runner = useDeviceName(runnerDeviceId);
+  const other = useDeviceName(otherDeviceId);
+  // The worktree the session runs on, on the runner: the copy, or the
+  // original when the mirror was started to a peer. Its .gitignore
+  // files are the tracked ones both copies hold, so the ignore rule
+  // reads off it, and the history thread is keyed by it.
+  const worktree = {
+    projectId: session.localProjectId,
+    id: session.localWorktreeId,
+    path: session.localRoot,
+  };
   const view = describeMirror(session);
   const controls = useMirrorControls();
   const { armed, trigger } = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
@@ -86,11 +107,16 @@ export function MirrorManageDialog({
   // wording here instead of dead-ending on a raw error.
   const [refused, setRefused] = useState(false);
   const discarding = !mirrorStopIsSafe(session.git?.status) || refused;
-  // Where the copy a stop removes is: here, or on the peer for a
-  // mirror started to it, where this page's worktree stays.
-  const copyThere = mirrorCopyIsRemote(session);
-  const copyWhere = copyThere ? `on ${peer}` : "here";
-  // A session the host lists as stopping is past its controls: the
+  // Where the copy a stop removes is, and who keeps the original: on
+  // the peer for a mirror started to it, otherwise on the runner.
+  // Either may be this machine.
+  const copy = mirrorCopyOf(session, runnerDeviceId);
+  const keeperDeviceId =
+    copy.deviceId === runnerDeviceId ? session.deviceId : runnerDeviceId;
+  const copyName = useDeviceName(copy.deviceId);
+  const keeper = useDeviceName(keeperDeviceId);
+  const copyWhere = copy.deviceId === localDeviceId ? "here" : `on ${copyName}`;
+  // A session the runner lists as stopping is past its controls: the
   // engine has ended it and the copy is on its way out.
   const busy =
     session.stopping === true ||
@@ -106,7 +132,7 @@ export function MirrorManageDialog({
         tint={TONE_PILL[view.tone]}
         icon={RefreshCw}
         spin={view.spinning}
-        title={`Mirror with ${peer}`}
+        title={`Mirror with ${other}`}
         onClose={onClose}
       >
         <p className="flex min-w-0 items-center gap-1.5">
@@ -127,8 +153,15 @@ export function MirrorManageDialog({
       <FlowBody>
         <div className="grid gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <div className="flex min-w-0 flex-col gap-5">
-            <Stats session={session} />
-            <Notice session={session} view={view} canControl={canControl} />
+            <Stats
+              session={session}
+              filesLabel={
+                runnerDeviceId === localDeviceId
+                  ? "Files here"
+                  : `Files on ${runner}`
+              }
+            />
+            <Notice session={session} view={view} canReveal={!remote} />
             <Ignores
               session={session}
               worktree={worktree}
@@ -145,10 +178,10 @@ export function MirrorManageDialog({
       <FlowFooter
         note={
           !canControl
-            ? `Controlled from ${hostLabel}.`
+            ? peerReadOnlyNote(runner)
             : discarding
-              ? `Not confirmed in step with ${peer}. Stopping removes the copy ${copyWhere}, and anything it holds that ${copyThere ? "this device" : peer} has not received goes with it.`
-              : `Stopping removes the copy ${copyWhere}. ${copyThere ? "This device" : peer} keeps its own.`
+              ? `Not confirmed in step with ${other}. Stopping removes the copy ${copyWhere}, and anything it holds that ${keeper} has not received goes with it.`
+              : `Stopping removes the copy ${copyWhere}. ${keeperDeviceId === localDeviceId ? "This device" : keeper} keeps its own.`
         }
       >
         <Button variant="ghost" size="sm" onClick={onClose}>
@@ -189,16 +222,11 @@ export function MirrorManageDialog({
                     // warning has named what goes.
                     { session, force: discarding },
                     {
-                      // No success callback: the host lists the
-                      // session as stopping until the copy is gone,
-                      // and its removal reaches this window before
-                      // the stop replies. A copy here takes its page
-                      // (and this dialog) with it. A copy on the peer
-                      // leaves the original's page standing, and the
-                      // session's exit from the list closes the
-                      // dialog. A refusal arrives with the session
-                      // still running, so this one does fire: the
-                      // host knew something this page did not.
+                      onSuccess: () => {
+                        onClose();
+                        onStopped();
+                      },
+                      // The host knew something this page did not.
                       onError: (error) => {
                         if (isMirrorStopUnconfirmed(error)) setRefused(true);
                       },
@@ -221,12 +249,19 @@ export function MirrorManageDialog({
   );
 }
 
-// Four figures, one glance: how long, how many cycles, how much is
-// here, and whether git agrees. A paused session reports no cycles,
-// no files and git off, because the engine tears its scan down while
-// paused. Shown raw that reads as a mirror that lost everything, so
-// the three figures say "paused" until it resumes.
-function Stats({ session }: { session: MirrorSession }) {
+// Four figures, one glance: how long, how many cycles, how much the
+// runner's copy holds, and whether git agrees. A paused session
+// reports no cycles, no files and git off, because the engine tears
+// its scan down while paused. Shown raw that reads as a mirror that
+// lost everything, so the three figures say "paused" until it resumes.
+function Stats({
+  session,
+  filesLabel,
+}: {
+  session: MirrorSession;
+  // Names the runner's endpoint, whose file count this is.
+  filesLabel: string;
+}) {
   const git = gitVerdict(session.git);
   return (
     <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -240,7 +275,7 @@ function Stats({ session }: { session: MirrorSession }) {
       <Stat label="Cycles" paused={session.paused}>
         {session.successfulCycles.toLocaleString()}
       </Stat>
-      <Stat label="Files here" paused={session.paused}>
+      <Stat label={filesLabel} paused={session.paused}>
         {session.local.files.toLocaleString()}
       </Stat>
       <Stat label="Git" title={session.git?.detail} paused={session.paused}>
@@ -288,15 +323,16 @@ function Stat({
 
 // The thing to act on, when there is one: a halt, an error, a git
 // verdict, or the conflicts held still. Nothing when the mirror is
-// fine.
+// fine. A conflict reveals in this machine's Finder, so only while the
+// runner (whose copy the paths are under) is this machine.
 function Notice({
   session,
   view,
-  canControl,
+  canReveal,
 }: {
   session: MirrorSession;
   view: ReturnType<typeof describeMirror>;
-  canControl: boolean;
+  canReveal: boolean;
 }) {
   if (view.showConflicts) {
     return (
@@ -305,7 +341,7 @@ function Notice({
           session={session}
           tone={view.tone}
           label={view.label}
-          canReveal={canControl}
+          canReveal={canReveal}
         />
         <span className="text-xs text-muted-foreground">
           held still until one side matches the other
@@ -339,7 +375,7 @@ function Ignores({
   canControl,
 }: {
   session: MirrorSession;
-  worktree: Worktree;
+  worktree: { projectId: string; id: string; path: string };
   canControl: boolean;
 }) {
   const current = selectionOf(session);

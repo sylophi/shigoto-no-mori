@@ -1,19 +1,20 @@
-// Compact device attribution for the merged tree: a two-letter badge
-// per contributing device on project headers, and the single-badge form
-// on remote worktree rows. Tone is the device's connection tone
-// (deviceStatusView), the same one its dot carries on the devices page,
-// drawn through the shared TONE_PILL table so a badge and a dot can
-// never disagree about a machine.
-import { TONE_PILL, type StatusTone } from "@/components/ui/status-dot";
+// Compact device attribution for the merged tree: one mark per
+// contributing device on project headers, and the single-mark form on
+// remote worktree rows. The mark is the device's glyph on a tile in
+// its connection tone (shared/DeviceIcon.tsx DeviceMark), the same
+// tile its row wears on the devices page, so a badge and a dot can
+// never disagree about a machine, and the name rides the tooltip.
+import type { DeviceKind } from "@shared/account/deviceKind";
+import { DeviceMark } from "@/components/shared/DeviceIcon";
+import type { StatusTone } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
-import { deviceAbbrev } from "@/lib/deviceAbbrev";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
-import { cn } from "@/lib/utils";
 
 export interface SidebarDeviceBadge {
   deviceId: string;
   label: string;
+  kind: DeviceKind;
   tone: StatusTone;
   // Only for the tooltip's wording: an unreachable device's rows are
   // its last known state, which the tone alone doesn't say.
@@ -32,6 +33,7 @@ export function useDeviceBadges(): ReadonlyMap<string, SidebarDeviceBadge> {
     badges.set(device.deviceId, {
       deviceId: device.deviceId,
       label: device.label,
+      kind: device.kind,
       tone,
       reachable,
     });
@@ -44,14 +46,8 @@ export function DeviceBadge({ badge }: { badge: SidebarDeviceBadge }) {
     <SimpleTooltip
       tip={`${badge.label}${badge.reachable ? "" : " (not reachable right now, last known state)"}`}
     >
-      <span
-        className={cn(
-          "inline-flex shrink-0 items-center rounded px-1 py-px font-mono text-4xs font-semibold tracking-wide",
-          TONE_PILL[badge.tone],
-        )}
-        aria-label={`On ${badge.label}`}
-      >
-        {deviceAbbrev(badge.label)}
+      <span className="inline-flex shrink-0" aria-label={`On ${badge.label}`}>
+        <DeviceMark kind={badge.kind} tone={badge.tone} />
       </span>
     </SimpleTooltip>
   );

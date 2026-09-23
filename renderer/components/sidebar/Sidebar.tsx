@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Link, useLocation } from "@tanstack/react-router";
-import type { SidebarView, Worktree } from "@shared/schemas";
+import type { SidebarView } from "@shared/schemas";
 import {
   DndContext,
   DragOverlay,
@@ -31,7 +31,7 @@ import {
   useSidebarView,
   useSidebarViewHotkey,
 } from "@/hooks/projects/useSidebarView";
-import { useHeldMirrorLinks, useMirrorLinks } from "@/hooks/remote/useMirrors";
+import { useMirrorLinks } from "@/hooks/remote/useMirrors";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -228,21 +228,8 @@ function Forest({
     inboxFacts: inbox,
   });
   const configQueries = useAllProjectShigomoriConfigs(orderedProjects);
-  // This device's mirrored pairs, so a pair reads as one row, held
-  // together through a stop until the copy it removes is gone from
-  // whichever listing carries it. The scan runs only for a held pair,
-  // which is rare and brief.
-  const mirrors = useHeldMirrorLinks(useMirrorLinks(), (deviceId, worktreeId) =>
-    deviceId === localDeviceId
-      ? worktreeQueries.some((query) =>
-          ((query.data ?? []) as Worktree[]).some((w) => w.id === worktreeId),
-        )
-      : remoteItems.some(
-          (item) =>
-            item.deviceId === deviceId &&
-            item.worktrees.some((w) => w.id === worktreeId),
-        ),
-  );
+  // This device's mirrored pairs, so a pair reads as one row.
+  const mirrors = useMirrorLinks();
   // Off the registry, not the rows: a local row mirrored with a peer
   // the filter hides keeps naming it.
   const deviceBadges = useDeviceBadges();

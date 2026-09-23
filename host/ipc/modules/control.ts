@@ -17,15 +17,17 @@ import {
 } from "@shared/ipc/modules/control";
 import {
   mirrorCopyIsRemote,
+  mirrorCopyOf,
   type MirrorSession,
   isMirrorCopyStayed,
   isMirrorStopUnconfirmed,
+  mirrorContract,
 } from "@shared/ipc/modules/mirror";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
-import { hostsProjects } from "@shared/account/enroll";
+import { hostsProjects } from "@shared/account/platform";
 import { isHubRefusal } from "@shared/account/service";
 import { errorMessageOf } from "@shared/errors";
 import { pullWorktreeName } from "@shared/git/branches";
@@ -143,11 +145,16 @@ async function roster(): Promise<{ here: Named; peers: DeviceInfo[] }> {
   }
   return {
     here: { deviceId: hereId, name: nameOf(here) },
-    // A browser on the account is a device too, but hosts no forest.
-    peers: devices.filter(
-      (device) => device.deviceId !== hereId && hostsProjects(device.platform),
-    ),
+    peers: peersOf(devices, hereId),
   };
+}
+
+// The registry's other hosts. A browser on the account is a device
+// too, but hosts no forest.
+function peersOf(devices: DeviceInfo[], hereId: string): DeviceInfo[] {
+  return devices.filter(
+    (device) => device.deviceId !== hereId && hostsProjects(device.platform),
+  );
 }
 
 const GRANTED = { granted: true };
@@ -348,14 +355,15 @@ async function choiceFor(
   };
 }
 
+const nameFor = (deviceId: string, devices: Named[]): string =>
+  devices.find((device) => device.deviceId === deviceId)?.name ?? deviceId;
+
 function mirrorView(session: MirrorSession, devices: Named[]): ControlMirror {
   return {
     session: session.session,
     device: {
       deviceId: session.deviceId,
-      name:
-        devices.find((device) => device.deviceId === session.deviceId)?.name ??
-        session.deviceId,
+      name: nameFor(session.deviceId, devices),
     },
     localProjectId: session.localProjectId,
     localWorktreeId: session.localWorktreeId,
@@ -374,8 +382,7 @@ function mirrorView(session: MirrorSession, devices: Named[]): ControlMirror {
 
 // Names for the mirror views. A signed-out or unreachable registry
 // leaves the ids standing in, since a list must still answer.
-async function peerNames(): Promise<Named[]> {
-  const devices = await registryOrEmpty();
+function namesOf(devices: DeviceInfo[]): Named[] {
   return devices.map((device) => ({
     deviceId: device.deviceId,
     name: nameOf(device),
@@ -390,8 +397,82 @@ async function registryOrEmpty(): Promise<DeviceInfo[]> {
   }
 }
 
+// A session a peer runs against one of this device's worktrees, with
+// the peer and the client to drive it through.
+type PeerMirror = {
+  deviceId: string;
+  session: MirrorSession;
+  api: ReturnType<typeof peerMirrorApi>;
+};
+
+function peerMirrorApi(deviceId: string) {
+  return buildClient(mirrorContract, requireImpl().peerTransportFor(deviceId));
+}
+
+// The sessions peers run against this device's worktrees, found by
+// asking each connected peer of the registry for its list (a read,
+// ungated). A peer that does not answer in a probe's time, or an
+// older one without the call, holds nothing this device can drive
+// anyway. Signed out, the registry is empty, so the answer is empty
+// rather than a refusal: the device's own sessions were already
+// looked at.
+async function peerMirrors(registry: DeviceInfo[]): Promise<PeerMirror[]> {
+  const hereId = requireImpl().thisDeviceId();
+  const connected = new Set(await requireImpl().connectedDeviceIds());
+  const peers = peersOf(registry, hereId).filter((device) =>
+    connected.has(device.deviceId),
+  );
+  const found = await Promise.all(
+    peers.map(async (device): Promise<PeerMirror[]> => {
+      const api = peerMirrorApi(device.deviceId);
+      try {
+        const list = await within(api.list(), () => null);
+        if (list === null) return [];
+        return list.sessions
+          .filter((session) => session.deviceId === hereId)
+          .map((session) => ({ deviceId: device.deviceId, session, api }));
+      } catch {
+        return [];
+      }
+    }),
+  );
+  return found.flat();
+}
+
+async function peerMirrorOf(
+  target: { projectId: string; worktreeId: string },
+  registry: Promise<DeviceInfo[]>,
+): Promise<PeerMirror | undefined> {
+  return (await peerMirrors(await registry)).find(
+    ({ session }) =>
+      session.projectId === target.projectId &&
+      session.worktreeId === target.worktreeId,
+  );
+}
+
+// A peer's session as this device sees it: the runner's view with the
+// two sides swapped, the peer being the other device, and the copy a
+// stop removes local when it is here.
+function peerMirrorView(
+  { deviceId, session }: PeerMirror,
+  devices: Named[],
+): ControlMirror {
+  return {
+    ...mirrorView(session, devices),
+    device: { deviceId, name: nameFor(deviceId, devices) },
+    localProjectId: session.projectId,
+    localWorktreeId: session.worktreeId,
+    localRoot: session.remoteRoot,
+    remoteRoot: session.localRoot,
+    copySide:
+      mirrorCopyOf(session, deviceId).deviceId === deviceId
+        ? "remote"
+        : "local",
+  };
+}
+
 // The mirror one of this device's worktrees is part of, original or
-// copy.
+// copy, among the sessions this device runs.
 async function mirrorOf(
   ctx: HandlerContext,
   target: { projectId: string; worktreeId: string },
@@ -617,43 +698,94 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
       return { ...pulled, device: found.device, copySide: "local", source };
     },
 
+    // The mirrors this device is part of: the ones it runs, and the
+    // ones peers run against its worktrees, each seen from this side.
+    // One registry read serves the peer scan and the names.
     mirrors: async (_input, ctx) => {
-      const [{ daemon, sessions }, names] = await Promise.all([
+      const registry = registryOrEmpty();
+      const [{ daemon, sessions }, afar, names] = await Promise.all([
         mirrorHandlers.list(undefined, ctx),
-        peerNames(),
+        registry.then(peerMirrors),
+        registry.then(namesOf),
       ]);
       return {
         daemon,
-        mirrors: sessions.map((session) => mirrorView(session, names)),
+        mirrors: [
+          ...sessions.map((session) => mirrorView(session, names)),
+          ...afar.map((mirror) => peerMirrorView(mirror, names)),
+        ],
       };
     },
 
+    // Stops the mirror the worktree is part of, whichever device runs
+    // it: a session this device runs is stopped here, one a peer runs
+    // against the worktree is stopped through that peer (mirror:stop
+    // is served to peers on the runner's grant). The names are only
+    // for the answer, so the registry is read beside the stop and not
+    // after it, once for the peer scan too.
     mirrorStop: async ({ force, ...target }, ctx) => {
-      const session = await mirrorOf(ctx, target);
-      if (session === undefined) {
+      const registry = registryOrEmpty();
+      const answer = async (
+        mirror: (names: Named[]) => ControlMirror,
+        copyStayed: string | undefined,
+      ) => ({
+        mirror: mirror(namesOf(await registry)),
+        ...(copyStayed === undefined ? {} : { copyStayed }),
+      });
+      const own = await mirrorOf(ctx, target);
+      if (own !== undefined) {
+        const copyStayed = await stopMirror(() =>
+          mirrorHandlers.stop({ session: own.session, force }, ctx),
+        );
+        return answer((names) => mirrorView(own, names), copyStayed);
+      }
+      const afar = await peerMirrorOf(target, registry);
+      if (afar === undefined) {
         throw new ControlError("no-mirror", "That worktree isn't mirrored.");
       }
-      // The names are only for the answer, so they are read beside the
-      // stop and not after it.
-      const names = peerNames();
-      let copyStayed: string | undefined;
-      try {
-        await mirrorHandlers.stop({ session: session.session, force }, ctx);
-      } catch (error) {
-        if (isMirrorStopUnconfirmed(error)) {
-          throw new ControlError("stop-unconfirmed", errorMessageOf(error));
-        }
-        // Thrown with the session already gone, so the stop is the
-        // answer and the copy that stayed is a caveat on it.
-        if (!isMirrorCopyStayed(error)) throw error;
-        copyStayed = errorMessageOf(error);
+      let copyStayed = await stopMirror(() =>
+        afar.api.stop({ session: afar.session.session, force }),
+      );
+      // A copy the peer could not remove may be the one HERE: the peer
+      // removes it through this device's grant, which need not be on
+      // for a peer this device only asked something of. The session is
+      // gone either way, so this device's own forced delete finishes
+      // what the runner's stop would have.
+      const copy = mirrorCopyOf(afar.session, afar.deviceId);
+      if (
+        copyStayed !== undefined &&
+        copy.deviceId === requireImpl().thisDeviceId()
+      ) {
+        const removed = await worktreesHandlers.delete(
+          {
+            projectId: target.projectId,
+            worktreeId: target.worktreeId,
+            force: true,
+          },
+          ctx,
+        );
+        if (removed.ok) copyStayed = undefined;
       }
-      return {
-        mirror: mirrorView(session, await names),
-        ...(copyStayed === undefined ? {} : { copyStayed }),
-      };
+      return answer((names) => peerMirrorView(afar, names), copyStayed);
     },
   };
+
+// A stop's two refusals told apart, wherever it ran: the confirmation
+// rule is the CLI's typed error, and a copy that stayed comes back as
+// the caveat (thrown with the session already gone, so the stop is
+// the answer).
+async function stopMirror(run: () => unknown): Promise<string | undefined> {
+  try {
+    await run();
+    return undefined;
+  } catch (error) {
+    if (isMirrorStopUnconfirmed(error)) {
+      throw new ControlError("stop-unconfirmed", errorMessageOf(error));
+    }
+    if (!isMirrorCopyStayed(error)) throw error;
+    return errorMessageOf(error);
+  }
+}
 
 // A second "mirror it" for a worktree already mirrored is a question
 // about the first, not a new copy: the transfer would only be refused

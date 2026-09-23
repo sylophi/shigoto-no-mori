@@ -189,6 +189,12 @@ export function DestinationProvider({
   );
 }
 
+// The destination as it stands, for a piece that names it (the pull
+// flow's two ends) without re-pinning a subtree to it.
+export function useDestinationScope(): HostScope {
+  return use(DestinationContext);
+}
+
 export function DestinationScope({ children }: { children: ReactNode }) {
   return (
     <HostScopeContext value={use(DestinationContext)}>

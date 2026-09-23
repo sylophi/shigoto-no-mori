@@ -38,8 +38,10 @@ import {
   resolveServiceConfig,
 } from "../shared/account/serviceConfig.ts";
 import {
+  effectiveDeviceKind,
   enrollDevice,
   retryParkedRevoke,
+  setDeviceKind,
   signOutDevice,
 } from "../shared/account/enroll.ts";
 import {
@@ -53,6 +55,11 @@ import { createAccountStore } from "../main/core/account/credentialStore.ts";
 import { createAccountStore as createCoreAccountStore } from "../shared/account/credentialStore.ts";
 import { createGrantStore } from "../main/core/account/grantStore.ts";
 import { shortHostname } from "../main/core/account/defaultDeviceName.ts";
+import {
+  appleProductNameOf,
+  deviceKindFromAppleModel,
+  deviceKindFromDmi,
+} from "../main/core/account/defaultDeviceKind.ts";
 import {
   AccountStatusSchema,
   accountContract,
@@ -104,6 +111,9 @@ const DEVICE = {
   online: true,
 };
 
+const dmi = (chassisType, vendor = null, product = null) =>
+  deviceKindFromDmi({ chassisType, vendor, product });
+
 const { check, done, fail } = makeProof("account layer proof");
 
 async function main() {
@@ -141,7 +151,9 @@ async function main() {
         platform: "darwin",
       });
       assert.equal(result.credential, "device-credential");
-      assert.deepEqual(result.device, DEVICE);
+      // The fixture predates kinds, as a Worker from before the column
+      // would: the wire schema reads the missing field as null.
+      assert.deepEqual(result.device, { ...DEVICE, kind: null });
       assert.equal(calls[0].url, "https://hub.test" + HUB_ROUTES.enroll.path);
       assert.equal(calls[0].init.method, "POST");
       assert.equal(calls[0].init.headers.authorization, "Bearer session-token");
@@ -165,7 +177,7 @@ async function main() {
         fetchImpl,
       });
       const devices = await service.listDevices("device-credential");
-      assert.deepEqual(devices, [DEVICE]);
+      assert.deepEqual(devices, [{ ...DEVICE, kind: null }]);
       assert.equal(
         calls[0].url,
         "https://hub.test" + HUB_ROUTES.listDevices.path,
@@ -179,7 +191,7 @@ async function main() {
   );
 
   await check(
-    "service: rename PATCHes the per-device route with the name and tolerates a 204",
+    "service: update PATCHes the per-device route with the name and/or kind and tolerates a 204",
     async () => {
       const { fetchImpl, calls } = recordingFetch(
         () => new Response(null, { status: 204 }),
@@ -188,10 +200,12 @@ async function main() {
         baseUrl: "https://hub.test",
         fetchImpl,
       });
-      await service.rename("device-credential", "this device/id", "Studio");
+      await service.update("device-credential", "this device/id", {
+        name: "Studio",
+      });
       assert.equal(
         calls[0].url,
-        "https://hub.test" + HUB_ROUTES.renameDevice.path("this device/id"),
+        "https://hub.test" + HUB_ROUTES.updateDevice.path("this device/id"),
       );
       assert.equal(calls[0].init.method, "PATCH");
       assert.deepEqual(JSON.parse(calls[0].init.body), { name: "Studio" });
@@ -199,9 +213,19 @@ async function main() {
         calls[0].init.headers.authorization,
         "Bearer device-credential",
       );
+      await service.update("device-credential", "id", { kind: "mini" });
+      assert.deepEqual(JSON.parse(calls[1].init.body), { kind: "mini" });
       await assert.rejects(
-        () => service.rename("device-credential", "id", ""),
+        () => service.update("device-credential", "id", { name: "" }),
         "a blank name was sent to the hub",
+      );
+      await assert.rejects(
+        () => service.update("device-credential", "id", {}),
+        "an empty patch was sent to the hub",
+      );
+      await assert.rejects(
+        () => service.update("device-credential", "id", { kind: "" }),
+        "a blank kind was sent to the hub",
       );
     },
   );
@@ -369,6 +393,7 @@ async function main() {
           deviceId: "device-uuid",
           fallbackDeviceName: "Fallback Mac",
           platform: "darwin",
+          detectedKind: "laptop",
         },
         fakeSessionJwt("user_abc"),
       );
@@ -377,9 +402,15 @@ async function main() {
         accountId: "user_abc",
         deviceName: "Fallback Mac",
       });
+      // With no pick stored, the device enrolls under what it detected.
+      assert.equal(JSON.parse(calls[0].init.body).kind, "laptop");
       // A stored name survives re-enrollment. The fallback is only for
-      // a first sign-in.
-      store.write({ ...store.read(), deviceName: "Renamed" });
+      // a first sign-in. So does a stored icon pick, over the detection.
+      store.write({
+        ...store.read(),
+        deviceName: "Renamed",
+        deviceKind: "server",
+      });
       await enrollDevice(
         {
           config: CONFIG,
@@ -388,10 +419,13 @@ async function main() {
           deviceId: "device-uuid",
           fallbackDeviceName: "Fallback Mac",
           platform: "darwin",
+          detectedKind: "laptop",
         },
         fakeSessionJwt("user_abc"),
       );
       assert.equal(store.read().deviceName, "Renamed");
+      assert.equal(store.read().deviceKind, "server");
+      assert.equal(JSON.parse(calls[1].init.body).kind, "server");
       // The name outlives a sign-out into the next enrollment, and a
       // parked revoke from that sign-out is delivered only when the hub
       // refuses the enroll for it (a 409: the device is still on the
@@ -400,6 +434,7 @@ async function main() {
         credential: "cred-1",
         accountId: "user_abc",
         deviceName: "Renamed",
+        deviceKind: "server",
       });
       assert.equal(store.read(), null);
       let refusals = 0;
@@ -424,6 +459,7 @@ async function main() {
           deviceId: "device-uuid",
           fallbackDeviceName: "Fallback Mac",
           platform: "darwin",
+          detectedKind: "laptop",
         },
         fakeSessionJwt("user_other"),
       );
@@ -440,6 +476,7 @@ async function main() {
         credential: "cred-2",
         accountId: "user_other",
         deviceName: "Renamed",
+        deviceKind: "server",
       });
       assert.equal(store.readParked(), null);
 
@@ -454,12 +491,119 @@ async function main() {
               deviceId: "device-uuid",
               fallbackDeviceName: "Fallback Mac",
               platform: "darwin",
+              detectedKind: "laptop",
             },
             fakeSessionJwt("user_abc"),
           ),
         /not configured/,
       );
       assert.equal(calls.length, before, "an unconfigured enroll fetched");
+    },
+  );
+
+  await check(
+    "icon pick: setDeviceKind stores the pick and pushes it, null drops the pick and pushes the detection, and signed out there is nothing to pick",
+    async () => {
+      const { fetchImpl, calls } = recordingFetch(
+        () => new Response(null, { status: 204 }),
+      );
+      const service = createAccountService({
+        baseUrl: CONFIG.hubUrl,
+        fetchImpl,
+      });
+      const store = memoryStore();
+      const deps = {
+        config: CONFIG,
+        service,
+        store,
+        deviceId: "device-uuid",
+        detectedKind: "laptop",
+      };
+      assert.equal(setDeviceKind(deps, "mini"), false, "picked signed out");
+      assert.equal(calls.length, 0);
+      store.write({ credential: "c", accountId: "a", deviceName: "d" });
+      assert.equal(
+        effectiveDeviceKind(store.read(), store, "laptop"),
+        "laptop",
+      );
+      assert.equal(setDeviceKind(deps, "mini"), true);
+      assert.equal(store.read().deviceKind, "mini");
+      assert.equal(effectiveDeviceKind(store.read(), store, "laptop"), "mini");
+      // The current tile clicked again changes nothing, so nothing moves.
+      assert.equal(setDeviceKind(deps, "mini"), false);
+      // Dropping the pick removes the key outright, so the next
+      // enrollment sends whatever the machine detects by then.
+      assert.equal(setDeviceKind(deps, null), true);
+      assert.deepEqual(store.read(), {
+        credential: "c",
+        accountId: "a",
+        deviceName: "d",
+      });
+      // The push is fire-and-forget: give it a tick to land.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.deepEqual(
+        calls.map((c) => [c.init.method, JSON.parse(c.init.body)]),
+        [
+          ["PATCH", { kind: "mini" }],
+          ["PATCH", { kind: "laptop" }],
+        ],
+      );
+      // The pick outlives a sign-out, like the name.
+      store.write({ ...store.read(), deviceKind: "server" });
+      store.clear();
+      assert.equal(store.rememberedDeviceKind(), "server");
+      assert.equal(
+        effectiveDeviceKind(store.read(), store, "laptop"),
+        "server",
+      );
+      // A stored kind this build does not know reads as no pick.
+      const odd = createCoreAccountStore({
+        storage: {
+          readRaw: () =>
+            JSON.stringify({
+              v: 1,
+              enc: false,
+              credential: "c",
+              accountId: "a",
+              deviceName: "d",
+              deviceKind: "hologram",
+            }),
+          writeRaw: () => {},
+          removeRaw: () => {},
+        },
+        cipher: PLAINTEXT_CIPHER,
+      });
+      assert.equal(odd.read().deviceKind, undefined);
+      assert.equal(odd.rememberedDeviceKind(), null);
+    },
+  );
+
+  await check(
+    "device kind detection: Apple product names and model identifiers, DMI chassis codes, virtual machines",
+    () => {
+      assert.equal(deviceKindFromAppleModel("MacBook Pro"), "laptop");
+      assert.equal(deviceKindFromAppleModel("MacBookAir10,1"), "laptop");
+      assert.equal(deviceKindFromAppleModel("Mac mini (2024)"), "mini");
+      assert.equal(deviceKindFromAppleModel("Macmini9,1"), "mini");
+      assert.equal(deviceKindFromAppleModel("Mac Studio"), "mini");
+      assert.equal(deviceKindFromAppleModel("iMac21,1"), "desktop");
+      assert.equal(deviceKindFromAppleModel("Mac Pro"), "desktop");
+      // The bare Apple silicon identifier says nothing about the shape.
+      assert.equal(deviceKindFromAppleModel("Mac16,10"), null);
+      assert.equal(
+        appleProductNameOf(
+          '  |   "product-name" = <"Mac mini (2024)">\n  |   "target-type" = <"J773g">',
+        ),
+        "Mac mini (2024)",
+      );
+      assert.equal(appleProductNameOf("no product node here"), null);
+      assert.equal(dmi("10", "LENOVO", "20XW"), "laptop");
+      assert.equal(dmi("3"), "desktop");
+      assert.equal(dmi("23"), "server");
+      assert.equal(dmi("35"), "mini");
+      assert.equal(dmi("2"), null, "an Unknown chassis is no answer");
+      assert.equal(dmi("10", "QEMU", "Standard PC"), "server");
+      assert.equal(dmi("9", "Apple Inc.", "MacBookPro18,3"), "laptop");
     },
   );
 
@@ -875,6 +1019,8 @@ async function main() {
         signedIn: true,
         accountId: "acct-1",
         deviceName: "Mac",
+        deviceKind: "laptop",
+        detectedDeviceKind: "laptop",
         sharedSignIn: false,
       });
       assert.ok(

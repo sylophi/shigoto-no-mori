@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { DeviceIdSchema, DeviceInfoSchema } from "@shared/hub/protocol";
+import { DeviceKindSchema } from "@shared/account/deviceKind";
 
 // The hub account layer as the renderer sees it. Client-scoped on
 // purpose: enrollment writes an OS-keychain credential on the machine
@@ -21,6 +22,12 @@ export const AccountStatusSchema = z.object({
   signedIn: z.boolean(),
   accountId: z.string(),
   deviceName: z.string(),
+  // What this device looks like, as every surface draws it: the
+  // owner's pick where there is one, else what the device detected.
+  deviceKind: DeviceKindSchema,
+  // What it detected about itself, so the picker can mark that entry
+  // and picking it reads as "back to the default".
+  detectedDeviceKind: DeviceKindSchema,
   // The sign-in behind this device is a copy another window holds too
   // (a dev profile launched with --clone-login), so ending the Clerk
   // session here ends it there as well. Always false outside dev.
@@ -74,6 +81,15 @@ export const accountContract = defineContract("client", {
     // Bounded to match EnrollRequestSchema.name so a stored name can
     // never later fail enroll's schema or blank the device identity.
     z.string().min(1).max(256),
+    AccountStatusSchema,
+  ),
+  // Picks this device's kind (its icon everywhere), the rename's twin:
+  // the stored pick, then (best-effort) the device hub's registry. Null
+  // drops the pick, so the device reports what it detected again.
+  // Resolves to the updated status.
+  setDeviceKind: invoke(
+    "account:setDeviceKind",
+    DeviceKindSchema.nullable(),
     AccountStatusSchema,
   ),
   // Whether THIS host accepts commands from the account's other

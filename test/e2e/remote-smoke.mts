@@ -227,7 +227,13 @@ type PullResult = {
   files?: { crossed: boolean; conflicts: number; error?: string };
 };
 type MirrorList = {
-  sessions: { session: string; localWorktreeId: string; ignoreMode: string }[];
+  sessions: {
+    session: string;
+    localWorktreeId: string;
+    ignoreMode: string;
+    deviceId: string;
+    worktreeId: string;
+  }[];
   serving: { worktreeId: string }[];
 };
 
@@ -314,6 +320,33 @@ const waitSharedSetting = (w: AppWindow, value: string, what: string) =>
     what,
     30_000,
   );
+
+// The real CLI's JSON documents against one profile's app: every line
+// it printed, progress events and the final {ok} one.
+const smdDocsOn = (
+  profile: Parameters<typeof devProfileEnv>[0],
+  cwd: string,
+  ...args: string[]
+): { code: number; docs: unknown[] } => {
+  let stdout = "";
+  let code = 0;
+  try {
+    stdout = execFileSync(devCliPath(), ["--json", ...args], {
+      cwd,
+      env: { ...process.env, ...devProfileEnv(profile) },
+      stdio: ["ignore", "pipe", "pipe"],
+    }).toString();
+  } catch (error) {
+    const failed = error as { status?: number; stdout?: Buffer };
+    code = failed.status ?? -1;
+    stdout = failed.stdout?.toString() ?? "";
+  }
+  const docs = stdout
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => JSON.parse(line) as unknown);
+  return { code, docs };
+};
 
 // One call on a peer through a's bridge, as the renderer's hub
 // transport makes it (renderer/lib/remote/hubTransport.ts).
@@ -1266,31 +1299,13 @@ async function main(): Promise<string[]> {
         ok?: boolean;
         worktree?: Worktree;
       };
-      const smdDocs = (
-        ...args: string[]
-      ): { code: number; docs: unknown[] } => {
-        let stdout = "";
-        let code = 0;
-        try {
-          stdout = execFileSync(devCliPath(), ["--json", ...args], {
-            cwd: aRepo,
-            env: { ...process.env, ...devProfileEnv(fixture.a) },
-            stdio: ["ignore", "pipe", "pipe"],
-          }).toString();
-        } catch (error) {
-          const failed = error as { status?: number; stdout?: Buffer };
-          code = failed.status ?? -1;
-          stdout = failed.stdout?.toString() ?? "";
-        }
-        const docs = stdout
-          .split("\n")
-          .filter((line) => line.trim() !== "")
-          .map((line) => JSON.parse(line) as unknown);
-        return { code, docs };
-      };
+      const smdDocs = (...args: string[]) =>
+        smdDocsOn(fixture.a, aRepo, ...args);
       // A verb's final {ok} document, past its progress events.
-      const smd = (...args: string[]): { code: number; doc: Doc } => {
-        const { code, docs } = smdDocs(...args);
+      const finalOf = (
+        args: string[],
+        { code, docs }: { code: number; docs: unknown[] },
+      ): { code: number; doc: Doc } => {
         const doc = need(
           (docs as Doc[]).findLast(
             (candidate) => typeof candidate.ok === "boolean",
@@ -1299,6 +1314,13 @@ async function main(): Promise<string[]> {
         );
         return { code, doc };
       };
+      const smd = (...args: string[]) => finalOf(args, smdDocs(...args));
+      // The same CLI pointed at b's app, for the far end of a mirror.
+      const smdOnB = (...args: string[]) =>
+        finalOf(
+          args,
+          smdDocsOn(fixture.b, join(fixture.b.repos, "shared"), ...args),
+        );
 
       // b alone accepts commands, which is all either direction needs.
       await b.evaluate("window.api.account.setAcceptsCommands(true)");
@@ -1416,14 +1438,51 @@ async function main(): Promise<string[]> {
       );
       assert.equal(row.copySide, "remote");
       assert.equal(row.git, "synced");
-      const stopped = smd("worktrees", "unmirror", "cli-sent");
-      assert.equal(stopped.code, 0, JSON.stringify(stopped.doc));
+      // The far end sees the same mirror from its side (the copy is
+      // local to b, a is the other device) and stops it through a:
+      // refused while a accepts no commands, done once it does.
+      const onB = smdOnB("worktrees", "mirrors").doc as Doc & {
+        mirrors: {
+          session: string;
+          copySide: string;
+          device: { deviceId: string };
+        }[];
+      };
+      const mirrorOnB = need(
+        onB.mirrors.find((mirror) => mirror.session === session),
+        "the mirror in b's `smd worktrees mirrors`",
+      );
+      assert.equal(mirrorOnB.copySide, "local");
+      assert.equal(mirrorOnB.device.deviceId, idA);
+      const refusedOnB = smdOnB("worktrees", "unmirror", copy.path);
+      assert.notEqual(
+        refusedOnB.code,
+        0,
+        "b stopped a's mirror while a accepted no commands",
+      );
+      assert.ok(existsSync(copy.path), "the refused unmirror removed the copy");
+      await a.evaluate("window.api.account.setAcceptsCommands(true)");
+      try {
+        const stopped = smdOnB("worktrees", "unmirror", copy.path);
+        assert.equal(stopped.code, 0, JSON.stringify(stopped.doc));
+        assert.equal(
+          (stopped.doc.mirror as { copySide: string }).copySide,
+          "local",
+        );
+      } finally {
+        await a.evaluate("window.api.account.setAcceptsCommands(false)");
+      }
       await waitFor(
         () => !existsSync(copy.path),
-        "b's copy to go with the unmirror",
+        "b's copy to go with the unmirror from b",
         30_000,
       );
       assert.ok(existsSync(back.path), "the unmirror removed a's original");
+      await a.waitFor(
+        "a's session to end with b's unmirror",
+        `window.api.mirror.list().then((m) => !m.sessions.some((s) => s.session === ${JSON.stringify(session)}))`,
+        30_000,
+      );
 
       // mirror --from: one of b's worktrees is copied here and kept in
       // step, b named as a person would. The unmirror removes a's copy
@@ -1628,6 +1687,82 @@ async function main(): Promise<string[]> {
         "the copy to go with the stop",
         30_000,
       );
+    });
+
+    // The far end drives the session: b holds the original of a mirror
+    // a runs, and b's page controls it through a, whose controls
+    // (mirror:pause, resume, stop) are served to peers on a's grant.
+    // The boot leaves a's grant off, so the first ask is refused, and
+    // the grant is put back off after.
+    await scenario("mirror: controlled from the other device", async () => {
+      const source = await sourceOnB("mirror-ctl");
+      const started = await mirrorHere(source, {
+        runSetup: false,
+        ignoreMode: "everything",
+        ignores: [],
+      });
+      const local = started.worktree;
+      await waitMirror(
+        started.session,
+        "the mirror to be watching and in sync",
+        's.status === "watching" && s.git?.status === "synced"',
+      );
+      // b reads a's session off a's list, the way its page finds the
+      // session behind the stream it serves.
+      const onA = (await onPeer(b, idA, "mirror:list")) as MirrorList;
+      const seen = onA.sessions.find((s) => s.session === started.session);
+      assert.ok(
+        seen !== undefined &&
+          seen.deviceId === idB &&
+          seen.worktreeId === source.id,
+        "b did not see a's session against its own worktree",
+      );
+      const control = (op: "pause" | "resume" | "stop") =>
+        onPeer(b, idA, `mirror:${op}`, { session: started.session });
+      const refused = await refusalOf(control("pause"));
+      assert.ok(refused !== null, "a served b's pause with commands off");
+      assert.ok(
+        isCommandRefusedError(refused),
+        `unexpected refusal: ${errorMessageOf(refused)}`,
+      );
+      await a.evaluate("window.api.account.setAcceptsCommands(true)");
+      try {
+        await control("pause");
+        await waitMirror(started.session, "b's pause to land on a", "s.paused");
+        writeFileSync(join(source.path, "while-paused.txt"), "held\n");
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+        assert.ok(
+          !existsSync(join(local.path, "while-paused.txt")),
+          "a mirror paused from b still carried a file",
+        );
+        await control("resume");
+        await waitFor(
+          () => fileEquals(join(local.path, "while-paused.txt"), "held\n"),
+          "the held file to cross after b's resume",
+          60_000,
+        );
+        await waitMirror(
+          started.session,
+          "the pair to agree again",
+          's.git?.status === "synced"',
+        );
+        // Unforced: the pair agrees, so the stop passes the
+        // confirmation rule from b as it would from a.
+        await control("stop");
+        await waitFor(
+          () => !existsSync(local.path),
+          "a's copy to go with the stop from b",
+          30_000,
+        );
+        assert.ok(existsSync(source.path), "the stop removed b's original");
+        await b.waitFor(
+          "b's served stream to end with the stop",
+          `window.api.mirror.list().then((m) => !m.serving.some((s) => s.worktreeId === ${JSON.stringify(source.id)}))`,
+          30_000,
+        );
+      } finally {
+        await a.evaluate("window.api.account.setAcceptsCommands(false)");
+      }
     });
 
     // Both sides commit while the mirror is paused: the pair is

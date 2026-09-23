@@ -13,11 +13,12 @@
 // the row with one tab for it, ahead of the machines it spans.
 import { useState, type ReactNode } from "react";
 import { MonitorSmartphone } from "lucide-react";
+import type { DeviceKind } from "@shared/account/deviceKind";
 import { DEVICE_PILL_CLASS } from "@/components/shared/DeviceChip";
+import { DeviceGlyph } from "@/components/shared/DeviceIcon";
 import { hostsProjects } from "@/lib/remote/deviceTraits";
 import { EmptyPanel } from "@/components/ui/empty-panel";
-import { StatusDot } from "@/components/ui/status-dot";
-import { useLocalDeviceName } from "@/hooks/account/useAccount";
+import { useLocalDevice } from "@/hooks/account/useAccount";
 import {
   commandAccessOf,
   usePeerCommandAccess,
@@ -38,6 +39,7 @@ import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
 import {
   deviceStatusView,
+  deviceTitle,
   type DeviceStatusView,
 } from "@/lib/remote/deviceStatus";
 import { cn } from "@/lib/utils";
@@ -45,6 +47,8 @@ import { cn } from "@/lib/utils";
 export interface DeviceRosterEntry {
   deviceId: string;
   label: string;
+  // What it looks like (DeviceIcon), so every pick draws it.
+  kind: DeviceKind;
   isThisDevice: boolean;
   // Registers projects (deviceTraits): a browser on the account is a
   // device too, but hosts no forest.
@@ -69,12 +73,13 @@ export interface DeviceTab extends DeviceRosterEntry {
 // the sidebar's device filter reads it as is.
 export function useDeviceRoster(): DeviceRosterEntry[] {
   const devices = useRemoteDevices();
-  const localName = useLocalDeviceName();
+  const local = useLocalDevice();
   const here: DeviceRosterEntry[] = hasLocalHost
     ? [
         {
           deviceId: localDeviceId,
-          label: localName,
+          label: local.name,
+          kind: local.kind,
           isThisDevice: true,
           hostsProjects: true,
           status: null,
@@ -86,6 +91,7 @@ export function useDeviceRoster(): DeviceRosterEntry[] {
     (device): DeviceRosterEntry => ({
       deviceId: device.deviceId,
       label: device.label,
+      kind: device.kind,
       isThisDevice: false,
       hostsProjects: hostsProjects(device.platform),
       status: deviceStatusView(device.status),
@@ -170,10 +176,10 @@ export function DeviceTabBar({
       : []),
     ...tabs.map((tab) => ({
       id: tab.deviceId,
-      title: tab.isThisDevice
-        ? "This device"
-        : `${tab.label} (${tab.status?.label})`,
-      lead: tab.status && <StatusDot tone={tab.status.tone} />,
+      title: deviceTitle(tab.label, tab.status),
+      // The device's connection dot, then its glyph: this device has
+      // no connection to show and wears the glyph alone.
+      lead: <DeviceGlyph kind={tab.kind} tone={tab.status?.tone} />,
       label: tab.label,
     })),
   ];

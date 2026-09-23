@@ -288,20 +288,3 @@ export function useWorktreeRemoving(
     () => false,
   );
 }
-
-// The same question outside React (the sidebar's held mirror pairs),
-// and a subscription to its changes.
-export function worktreeRemoving(
-  deviceId: string,
-  worktreeId: string,
-): boolean {
-  return worktreeLifecycleFor(deviceId).isRemoving(worktreeId);
-}
-
-export function subscribeWorktreeLifecycle(
-  deviceId: string,
-  worktreeId: string,
-  cb: () => void,
-): () => void {
-  return worktreeLifecycleFor(deviceId).subscribe(worktreeId, cb);
-}

@@ -4,9 +4,10 @@ import { cn } from "@/lib/utils";
 interface ToggleRowProps {
   checked: boolean;
   onCheckedChange: (next: boolean) => void;
-  label: string;
+  label: React.ReactNode;
   description?: React.ReactNode;
   disabled?: boolean;
+  switchClassName?: string;
 }
 
 export function ToggleRow({
@@ -15,6 +16,7 @@ export function ToggleRow({
   label,
   description,
   disabled = false,
+  switchClassName,
 }: ToggleRowProps) {
   return (
     <label
@@ -28,6 +30,7 @@ export function ToggleRow({
           checked={checked}
           onCheckedChange={onCheckedChange}
           disabled={disabled}
+          className={switchClassName}
         />
       </span>
       <div className="flex min-w-0 flex-col">

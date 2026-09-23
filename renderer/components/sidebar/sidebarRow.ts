@@ -1,3 +1,4 @@
+import type { DeviceKind } from "@shared/account/deviceKind";
 import type { Project, PullRequest, Worktree } from "@shared/schemas";
 import type { StatusTone } from "@/components/ui/status-dot";
 import type { SidebarDeviceBadge } from "./DeviceBadge";
@@ -10,6 +11,7 @@ export type InboxShelf = "shelved" | "merged";
 export interface RemoteProjectMember {
   deviceId: string;
   deviceLabel: string;
+  deviceKind: DeviceKind;
   project: Project;
 }
 
@@ -74,6 +76,7 @@ export type SidebarRow =
       worktree: Worktree;
       deviceId: string;
       deviceLabel: string;
+      deviceKind: DeviceKind;
       // False renders the row faded: the device is off and this is its
       // last known state.
       reachable: boolean;

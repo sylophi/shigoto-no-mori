@@ -9,6 +9,7 @@
 // is a read, so any member with a session can answer it, including a
 // peer that won't take commands from here: bringing its repo to THIS
 // machine needs nothing of it but the URL.
+import { DeviceIcon } from "@/components/shared/DeviceIcon";
 import {
   DropdownMenuItem,
   DropdownMenuSub,
@@ -85,6 +86,7 @@ export function AddToDeviceSubmenu({
             disabled={tab.block !== undefined}
             onClick={() => void addTo(tab)}
           >
+            <DeviceIcon kind={tab.kind} className="size-3.5" />
             {tab.label}
           </DropdownMenuItem>
         ))}

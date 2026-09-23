@@ -3,7 +3,8 @@ import { WORKTREE_ROW_BUTTON } from "@/components/sidebar/WorktreeRow";
 import { BackButton } from "@/components/ui/back-button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusDot } from "@/components/ui/status-dot";
-import { useLocalDeviceName } from "@/hooks/account/useAccount";
+import { DeviceGlyph } from "@/components/shared/DeviceIcon";
+import { useLocalDevice } from "@/hooks/account/useAccount";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
 import { useStagedUpdates } from "@/hooks/system/useUpdater";
 import { hasLocalHost } from "@/lib/localHost";
@@ -16,6 +17,7 @@ import {
   useActiveSettingsTab,
   type SettingsSection,
 } from "./settingsNav";
+import { UpdateAllButton } from "./UpdateAllButton";
 
 // The Settings page's navigation, rendered by the app sidebar in place
 // of the project tree while /settings is open. Two labelled groups:
@@ -29,10 +31,10 @@ export function SettingsSidebarNav() {
   const navigate = useNavigate();
   const devices = useHostDevices();
   const { activeTab } = useActiveSettingsTab(devices);
-  const localName = useLocalDeviceName();
+  const local = useLocalDevice();
   const solo = isSolo(devices);
   const updates = useStagedUpdates();
-  const sections = settingsSections(devices, localName, updates);
+  const sections = settingsSections(devices, local, updates);
 
   return (
     <nav aria-label="Settings sections" className="flex flex-col px-2 pb-2">
@@ -56,7 +58,10 @@ export function SettingsSidebarNav() {
         ))}
       </NavGroup>
 
-      <NavGroup label={solo ? "Device" : "Devices"}>
+      <NavGroup
+        label={solo ? "Device" : "Devices"}
+        action={<UpdateAllButton updates={updates} />}
+      >
         {!hasLocalHost && devices.length === 0 && (
           <p className="px-2 py-1.5 text-xs text-muted-foreground/70">
             No devices on this account yet.
@@ -74,8 +79,9 @@ export function SettingsSidebarNav() {
   );
 }
 
-// A section's icon or presence dot and its name, the same in a sidebar
-// row and in a phone chip. A device holding a staged update trails the
+// A section's icon (a visual section's own, or a device's glyph), its
+// presence dot and its name, the same in a sidebar row and in a phone
+// chip. A device holding a staged update trails the
 // sidebar Settings dot's own mark, so the dot that brought the visitor
 // here points at the row it meant.
 export function SectionLabel({ section }: { section: SettingsSection }) {
@@ -83,7 +89,7 @@ export function SectionLabel({ section }: { section: SettingsSection }) {
   return (
     <>
       {Icon && <Icon aria-hidden className="size-3.5 shrink-0" />}
-      {section.tone && <StatusDot tone={section.tone} />}
+      {section.kind && <DeviceGlyph kind={section.kind} tone={section.tone} />}
       <span className="truncate">{section.label}</span>
       {section.update !== undefined && (
         <>
@@ -97,19 +103,25 @@ export function SectionLabel({ section }: { section: SettingsSection }) {
 
 // A labelled group of rows: the eyebrow is the scope, the page's own
 // section heading at the sidebar's size so it reads as structure
-// rather than as another row.
+// rather than as another row. An action for the whole group (the
+// devices' Update all) trails the label.
 function NavGroup({
   label,
+  action,
   children,
 }: {
   label: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <SectionHeading className="px-2 pt-3 pb-1 text-3xs text-muted-foreground/80">
-        {label}
-      </SectionHeading>
+      <div className="flex items-center justify-between gap-2 px-2 pt-3 pb-1">
+        <SectionHeading className="text-3xs text-muted-foreground/80">
+          {label}
+        </SectionHeading>
+        {action}
+      </div>
       {children}
     </div>
   );

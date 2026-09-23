@@ -15,9 +15,10 @@ import { errorMessageOf } from "@shared/errors";
 import { isHubRefusal } from "@shared/account/service";
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { resolveDeviceKind } from "@shared/account/deviceKind";
 import {
   useAccountDevices,
-  useLocalDeviceName,
+  useLocalDevice,
   useRevokeDevice,
   useWatchCommandAccessChanges,
 } from "@/hooks/account/useAccount";
@@ -46,7 +47,7 @@ import { deviceRowStatus } from "./deviceRegistryStatus";
 
 export function DeviceRegistry({ accountId }: { accountId: string }) {
   useWatchCommandAccessChanges();
-  const localDeviceName = useLocalDeviceName();
+  const local = useLocalDevice();
   const devicesQuery = useAccountDevices();
   const revokeDevice = useRevokeDevice();
   const hubDevices = useRemoteDevices();
@@ -94,10 +95,14 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
     return {
       device,
       isThisDevice,
-      // setDeviceName writes this device's name locally while the hub
-      // registry keeps the name it enrolled under. The local one is the
-      // truth the user just typed, so the row shows it.
-      name: isThisDevice ? localDeviceName : device.name,
+      // setDeviceName and setDeviceKind write this device's name and
+      // kind locally while the hub registry keeps what it enrolled
+      // under. The local ones are the truth the user just picked, so
+      // the row shows them.
+      name: isThisDevice ? local.name : device.name,
+      kind: isThisDevice
+        ? local.kind
+        : resolveDeviceKind(device.kind, device.platform),
       status: deviceRowStatus(device, isThisDevice, hubDevice, socket, now),
       access: commandAccessOf(peerAccess, device.deviceId),
       // This machine knows its own version synchronously. A peer
@@ -158,12 +163,21 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
       ) : (
         <ul className="divide-y divide-border">
           {rows.map(
-            ({ device, isThisDevice, name, status, access, appVersion }) => (
+            ({
+              device,
+              isThisDevice,
+              name,
+              kind,
+              status,
+              access,
+              appVersion,
+            }) => (
               <DeviceRegistryRow
                 key={device.deviceId}
                 device={device}
                 isThisDevice={isThisDevice}
                 name={name}
+                kind={kind}
                 showId={(nameCount.get(name) ?? 0) > 1}
                 status={status}
                 appVersion={appVersion}

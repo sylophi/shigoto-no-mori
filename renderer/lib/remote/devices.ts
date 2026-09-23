@@ -14,6 +14,7 @@ import { createExternalStore } from "@/store/externalStore";
 import type { buildApi } from "@shared/ipc/client";
 import type { ClientTransport } from "@shared/ipc/transport";
 import type { SupervisorStatus } from "@shared/remote/supervisor";
+import type { DeviceKind } from "@shared/account/deviceKind";
 
 // The per-device api buildApi returns. Same shape as window.api's
 // contract methods, minus the bridge-only extras (deviceId, appVersion).
@@ -38,6 +39,10 @@ export type RemoteDevice = {
   // The registry's platform string (deviceTraits reads it), so a
   // surface can leave out a browser without a second registry read.
   platform: string;
+  // What it looks like, resolved off the registry row (its own answer,
+  // or the platform fallback for a row that never gave one), so every
+  // mark for it draws through DeviceIcon with no second resolve.
+  kind: DeviceKind;
   status: RemoteDeviceStatus;
   // The remote host app's version, "" until the direct session's
   // welcome confirms it.
@@ -106,6 +111,7 @@ function sameDevice(a: RemoteDevice, b: RemoteDevice): boolean {
   return (
     a.deviceId === b.deviceId &&
     a.label === b.label &&
+    a.kind === b.kind &&
     a.appVersion === b.appVersion &&
     a.api === b.api &&
     sameStatus(a.status, b.status)

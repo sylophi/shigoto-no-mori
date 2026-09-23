@@ -175,8 +175,9 @@ export function isOwnDeletePending(
 // back of the mutation must not read the stale list during the
 // refetch), clear its script runs, and remove its no-longer-observed
 // queries so nothing can refetch or replay them. Run by this window's
-// own delete on success, and for every removal a host announces
-// (boot's worktrees:removal follower), whoever asked for it.
+// own delete on success, by a mirror stop, and for every removal a
+// host announces (boot's worktrees:removal follower), whoever asked
+// for it.
 export function forgetDeletedWorktree(
   queryClient: QueryClient,
   deviceId: string,
@@ -201,9 +202,18 @@ export function forgetDeletedWorktree(
 }
 
 export function useForgetDeletedWorktree() {
-  const queryClient = useQueryClient();
   const { deviceId } = useHostScope();
+  const forgetOn = useForgetDeletedWorktreeOn();
   return (projectId: string, worktreeId: string) =>
+    forgetOn(deviceId, projectId, worktreeId);
+}
+
+// The same, naming the device: for a caller mounted under one scope
+// whose stop removed a worktree on another (a mirror stop driven
+// through the peer running it, whose copy is here).
+export function useForgetDeletedWorktreeOn() {
+  const queryClient = useQueryClient();
+  return (deviceId: string, projectId: string, worktreeId: string) =>
     forgetDeletedWorktree(queryClient, deviceId, projectId, worktreeId);
 }
 

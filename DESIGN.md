@@ -86,3 +86,36 @@ Rules that keep that working:
 - When changing UI, check it at phone width as well. The UI lab's web
   flavor (`lab/README.md`) renders the phone layout at any viewport
   under 768px with no sign-in.
+
+## Devices: one identity, drawn one way
+
+A device is its name and its kind. The kind is one of the closed
+catalog in `shared/account/deviceKind.ts`: seven device shapes (laptop,
+desktop, mini, server, phone, tablet, browser) and a set of marks that
+are only ever picked (a leaf, a cat, a rocket), for telling two laptops
+apart. The device detects its own shape at
+enrollment (`main/core/account/defaultDeviceKind.ts` on a machine,
+`web/account/deviceKind.ts` in a browser), its owner can pick another
+on its Devices page row, and the hub stores the result beside the
+name so every device draws every other one the same way.
+
+Rules that keep a machine looking like itself everywhere:
+
+- **Every mark for a device goes through `shared/DeviceIcon.tsx`.**
+  `DeviceIcon` is the glyph, `DeviceMark` the glyph on a tile in the
+  device's connection tone. Never a lucide laptop or monitor picked at
+  a call site, and never a mark derived from the name.
+- **The kind comes off the device record**, never guessed: a
+  `RemoteDevice` and a `DeviceRosterEntry` carry `kind`, this device's
+  comes from `useLocalDeviceKind`, and `useDeviceKind(deviceId)`
+  answers for either.
+- **State stays on the dot and the tone.** A device's connection is
+  the `StatusDot` beside its glyph (or the tint of its mark), through
+  `deviceStatusView`. This device has no connection to show: it wears
+  the glyph alone, and where a surface tags it, the tag is
+  `THIS_DEVICE_VIEW` (a `RowTag` in a list, the emerald pill in the
+  settings header), never a lowercase aside.
+- **Tooltips use `deviceTitle`** ("Thinkpad, Connected", "Studio Mac,
+  This device"), so a pill, a tab and a badge naming the same machine
+  say the same thing on hover.
+

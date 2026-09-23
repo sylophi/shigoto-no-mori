@@ -10,7 +10,7 @@
 import { useState } from "react";
 import { RefreshCw, Shovel } from "lucide-react";
 import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
-import { useWorktreeMirror } from "@/hooks/remote/useMirrors";
+import { useWorktreeMirrorLinks } from "@/hooks/remote/useMirrors";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { FooterActionButton } from "./FooterActionButton";
 import { usePeerTargets } from "./flow/peerTargets";
@@ -51,9 +51,10 @@ function TransferButtons({
 }) {
   const [open, setOpen] = useState<"mirror" | "transplant" | null>(null);
   const targets = usePeerTargets(project);
-  // A worktree already running a mirror has its Mirror button beside
-  // these (LocalMirrorAction), which is where that one is managed.
-  const mirrored = useWorktreeMirror(worktree).session !== undefined;
+  // A worktree already part of a mirror, run here or by a peer, has
+  // its Mirror button beside these (MirrorAction), which is where that
+  // one is managed, and a worktree holds one mirror.
+  const mirrored = useWorktreeMirrorLinks(worktree).length > 0;
   // The buttons need a target. An OPEN dialog does not: a run in
   // progress keeps its progress, its finish-up step and its report
   // when the roster empties under it (a sign-out, a revoke), and says
