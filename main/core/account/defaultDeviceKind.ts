@@ -18,8 +18,8 @@ const execFileP = promisify(execFile);
 
 // Apple's product name ("Mac mini (2024)", "MacBook Pro") or model
 // identifier ("MacBookPro18,3", "Macmini9,1"), as ioreg and sysctl
-// report them. The family prefix is what places the machine; the rest
-// never matters here. Apple silicon machines report a bare "Mac16,10"
+// report them. The family prefix is what places the machine, and the
+// rest never matters here. Apple silicon machines report a bare "Mac16,10"
 // identifier, which says nothing about the shape, so the product name
 // is asked for first and the identifier is the fallback for the
 // machines that still spell a family into it.
@@ -36,7 +36,7 @@ export function deviceKindFromAppleModel(model: string): DeviceShape | null {
 
 // SMBIOS chassis types (System Management BIOS spec, table 17), as
 // /sys/class/dmi/id/chassis_type reports them. Only the codes that say
-// a shape are listed; the rest ("Other", "Unknown", docking stations)
+// a shape are listed. The rest ("Other", "Unknown", docking stations)
 // fall through.
 const DMI_CHASSIS_KIND: Record<string, DeviceShape> = {
   "3": "desktop", // Desktop

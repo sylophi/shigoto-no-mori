@@ -114,7 +114,7 @@ export const MACHINE_FALLBACK_KIND: DeviceShape = "desktop";
 
 // The kind a device of this platform reads as when it never said: a
 // device enrolled before kinds existed, or one whose hub row predates
-// the column. A browser is a browser; a machine is the fallback shape.
+// the column. A browser is a browser, and a machine is the fallback shape.
 export function fallbackDeviceKind(platform: string): DeviceShape {
   return platform === WEB_PLATFORM ? "browser" : MACHINE_FALLBACK_KIND;
 }

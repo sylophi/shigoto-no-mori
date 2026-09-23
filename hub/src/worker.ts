@@ -219,7 +219,7 @@ function toDeviceInfo(row: DeviceRow, online: Set<string>): DeviceInfo {
     name: row.name,
     platform: row.platform,
     // The column holds whatever the device sent (a newer device's kind
-    // lands as is); the wire shape is the catalog this Worker knows, so
+    // lands as is). The wire shape is the catalog this Worker knows, so
     // an unknown one reads as none.
     kind: isDeviceKind(row.kind) ? row.kind : null,
     createdAt: row.created_at,

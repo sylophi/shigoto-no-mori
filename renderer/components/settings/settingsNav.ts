@@ -103,8 +103,8 @@ export function landOnStagedUpdate(
 
 // One section of the page as a list draws it: its tab id, its label,
 // and either an icon (the visual sections) or the device's glyph and
-// a presence tone (the device sections; the tone is absent for a lone
-// device, which has no roster to be present in). A device section holding a staged update this window
+// a presence tone (the device sections, where the tone is absent for a
+// lone device, which has no roster to be present in). A device section holding a staged update this window
 // could install carries its version, which the list flags.
 export interface SettingsSection {
   id: string;
