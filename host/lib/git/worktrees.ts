@@ -9,7 +9,9 @@ import {
   type Worktree,
 } from "@shared/schemas";
 import { readAutoPullSet } from "../worktrees/autoPull";
+import { listBranches } from "./branches";
 import { readShelvedSet } from "../worktrees/shelved";
+import { readGlobalConfig } from "../config/global";
 import { readShigomoriConfig } from "../config/project";
 import { pickWorktreeName } from "../worktrees/names";
 import { isManagedPath, managedBasesFor } from "../worktrees/paths";
@@ -574,9 +576,19 @@ export async function pickAvailableWorktreeName(
   projectId: string,
   projectPath: string,
 ): Promise<string> {
-  const existing = await listWorktreeIdentities(projectId, projectPath);
-  const used = new Set(existing.map((w) => w.name.toLowerCase()));
-  return pickWorktreeName(used);
+  const [existing, branches, { doubutsuNames }] = await Promise.all([
+    listWorktreeIdentities(projectId, projectPath),
+    listBranches(projectPath),
+    readGlobalConfig(),
+  ]);
+  // The picked name seeds the branch name too, so a kept branch (a
+  // removed worktree's, say) takes its name out of the pool.
+  const used = new Set(
+    [...existing.map((w) => w.name), ...branches.local].map((name) =>
+      name.toLowerCase(),
+    ),
+  );
+  return pickWorktreeName(used, doubutsuNames ?? false);
 }
 
 async function removeWorktree(

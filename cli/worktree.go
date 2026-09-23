@@ -191,7 +191,14 @@ func createWorktree(proj project, requestedName, branchName, base string, checko
 	}
 	name := requestedName
 	if name == "" {
-		name = pickWorktreeName(used)
+		// The picked name doubles as the branch name, so skip names a
+		// kept branch already holds (a removed worktree's, say).
+		if scan, err := scanBranchRefs(proj.Path); err == nil {
+			for _, branch := range scan.locals {
+				used[strings.ToLower(branch)] = true
+			}
+		}
+		name = pickWorktreeName(used, doubutsuNamesEnabled(readGlobalConfigHints()))
 	}
 	config := readProjectConfig(proj.ID)
 	worktreePath := filepath.Join(resolveWorktreeBase(proj.Path, config), name)

@@ -57,7 +57,7 @@ export function AppearanceSection({
       <ToggleRow
         checked={doubutsu}
         onCheckedChange={onDoubutsuChange}
-        label="Doubutsu mode"
+        label="Doubutsu theme"
         description="Bold, color-blocked Animal Crossing inspired theme. Layers on top of light and dark; turn off for the plain, neutral look."
       />
       {/* A browser without the Battery Status API has nothing to pause

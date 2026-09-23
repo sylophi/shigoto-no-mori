@@ -1,6 +1,6 @@
 // Verifies that every hook renderer/doubutsu.css depends on still
 // exists, so a v1 refactor (or a dependency upgrade) can't silently
-// strip parts of doubutsu mode. Devs work in v1 by default, so without
+// strip parts of the doubutsu theme. Devs work in v1 by default, so without
 // this check a renamed data-slot or a Base UI attribute change would
 // only be noticed by someone running with the theme on.
 //
@@ -217,7 +217,7 @@ for (const [, name] of clerkSrc.matchAll(/var\((--[\w-]+)\)/g)) {
         failures.push(
           `clerkAppearance reads ${name} but doubutsu.css's ${label} block ` +
             "does not remap that step, so Clerk's UI would keep the raw " +
-            "hue in that doubutsu mode",
+            "hue in that doubutsu theme",
         );
       }
     }
