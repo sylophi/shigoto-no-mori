@@ -7,9 +7,10 @@ export interface DeviceRow {
   account_id: string;
   name: string;
   platform: string;
-  // hub/migrations/0003_device_kind.sql. NULL for a device that never
-  // reported one.
-  kind: string | null;
+  // What the device reports itself as (shared/account/deviceKind.ts),
+  // sent with every enrollment, so never NULL
+  // (hub/migrations/0004_device_kind_required.sql).
+  kind: string;
   credential_hash: string;
   created_at: number;
   last_seen_at: number | null;
@@ -95,7 +96,7 @@ export async function upsertDevice(
     accountId: string;
     name: string;
     platform: string;
-    kind: string | null;
+    kind: string;
     credentialHash: string;
     createdAt: number;
   },

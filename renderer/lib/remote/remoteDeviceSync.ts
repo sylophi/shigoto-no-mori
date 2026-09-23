@@ -36,7 +36,6 @@
 //     would render as "Connecting" (a lie, nothing is trying) and
 //     "blocked" as a rose error (alarming for a machine that is simply
 //     switched off), so the slate "Off" is the least-lying option.
-import { resolveDeviceKind } from "@shared/account/deviceKind";
 import { hashKey, type QueryClient } from "@tanstack/react-query";
 import { buildApi } from "@shared/ipc/client";
 import type { HubStatus } from "@shared/ipc/modules/hub";
@@ -331,7 +330,7 @@ function buildEntry(
     deviceId: info.deviceId,
     label: info.name,
     platform: info.platform,
-    kind: resolveDeviceKind(info.kind, info.platform),
+    kind: info.kind,
     status,
     appVersion: version ?? "",
     api,

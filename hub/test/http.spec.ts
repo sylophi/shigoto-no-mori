@@ -39,6 +39,7 @@ function overCapRequest(): Request {
     deviceId: "dev-cap-extra",
     name: "One too many",
     platform: "darwin",
+    kind: "laptop",
   });
 }
 
@@ -61,7 +62,7 @@ describe("POST /devices/enroll", () => {
       deviceId: "dev-enroll",
       name: "MacBook",
       platform: "darwin",
-      kind: null,
+      kind: "laptop",
       lastSeenAt: null,
       online: false,
     });
@@ -70,7 +71,7 @@ describe("POST /devices/enroll", () => {
     expect(list.status).toBe(200);
   });
 
-  it("stores the kind a device reports, lists it, and lists one outside the catalog as none", async () => {
+  it("stores the kind a device reports, lists it, and passes one outside the catalog through as sent", async () => {
     const { credential, device } = await enroll(
       "acct-kind",
       "dev-kind",
@@ -80,14 +81,14 @@ describe("POST /devices/enroll", () => {
     );
     expect(device.kind).toBe("laptop");
     const listed = (await (await call(listRequest(credential))).json()) as {
-      devices: { deviceId: string; kind: string | null }[];
+      devices: { deviceId: string; kind: string }[];
     };
     expect(listed.devices.find((d) => d.deviceId === "dev-kind")?.kind).toBe(
       "laptop",
     );
     // A kind this Worker's catalog lacks (a newer client's) must not
-    // block the enroll: it is kept, and read back as none until the
-    // Worker learns it.
+    // block the enroll: it is stored and listed as sent, and each
+    // reader maps it to the catalog it knows (DeviceInfoSchema).
     const newer = await call(
       enrollRequest(`${TEST_TOKEN_PREFIX}acct-kind`, {
         deviceId: "dev-kind-newer",
@@ -98,11 +99,16 @@ describe("POST /devices/enroll", () => {
     );
     expect(newer.status).toBe(200);
     const again = (await (await call(listRequest(credential))).json()) as {
-      devices: { deviceId: string; kind: string | null }[];
+      devices: { deviceId: string; kind: string }[];
     };
     expect(
       again.devices.find((d) => d.deviceId === "dev-kind-newer")?.kind,
-    ).toBe(null);
+    ).toBe("toaster");
+    expect(
+      DeviceListResponseSchema.parse(again).devices.find(
+        (d) => d.deviceId === "dev-kind-newer",
+      )?.kind,
+    ).toBe("desktop");
   });
 
   it("rejects a bad login token with 401", async () => {
@@ -120,6 +126,17 @@ describe("POST /devices/enroll", () => {
   it("rejects a malformed body with 400", async () => {
     const response = await call(
       enrollRequest(`${TEST_TOKEN_PREFIX}acct-badbody`, { deviceId: "" }),
+    );
+    expect(response.status).toBe(400);
+  });
+
+  it("rejects an enroll that names no kind with 400", async () => {
+    const response = await call(
+      enrollRequest(`${TEST_TOKEN_PREFIX}acct-nokind`, {
+        deviceId: "dev-nokind",
+        name: "Kindless",
+        platform: "darwin",
+      }),
     );
     expect(response.status).toBe(400);
   });
@@ -169,6 +186,7 @@ describe("POST /devices/enroll", () => {
         deviceId: "dev-conflict",
         name: "Thief",
         platform: "win32",
+        kind: "desktop",
       }),
     );
     expect(response.status).toBe(409);
@@ -187,6 +205,7 @@ describe("POST /devices/enroll", () => {
           deviceId,
           name: "A",
           platform: "darwin",
+          kind: "laptop",
         }),
       ),
       call(
@@ -194,6 +213,7 @@ describe("POST /devices/enroll", () => {
           deviceId,
           name: "B",
           platform: "linux",
+          kind: "laptop",
         }),
       ),
     ]);
@@ -216,6 +236,7 @@ describe("POST /devices/enroll", () => {
         deviceId: "d".repeat(300),
         name: "X",
         platform: "linux",
+        kind: "laptop",
       }),
     );
     expect(response.status).toBe(400);

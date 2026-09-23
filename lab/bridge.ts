@@ -8,7 +8,7 @@
 //
 // window.smLab carries the posing controls: flip a peer's presence,
 // change the socket phase, navigate the memory router.
-import { resolveDeviceKind, type DeviceKind } from "@shared/account/deviceKind";
+import type { DeviceKind } from "@shared/account/deviceKind";
 import { buildApi } from "@shared/ipc/client";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import type {
@@ -210,11 +210,8 @@ function hostHandlersFor(
   // lands on that same entry, as the peer's own hub push would.
   const registryEntry = accountDevices.find(
     (device) => device.deviceId === forest.deviceId,
-  );
-  const detectedHere = resolveDeviceKind(
-    registryEntry?.kind ?? null,
-    registryEntry?.platform ?? "darwin",
-  );
+  )!;
+  const detectedHere = registryEntry.kind;
   const findWorktree = (worktreeId: string) =>
     allWorktrees().find((worktree) => worktree.id === worktreeId);
   const branchesOf = () => [
@@ -339,7 +336,7 @@ function hostHandlersFor(
     "remoteAccess:commandAccess": () => ({ granted: forest.grantsCaller }),
     "device:detectedKind": () => detectedHere,
     "device:setKind": (kind: DeviceKind) => {
-      if (registryEntry !== undefined) registryEntry.kind = kind;
+      registryEntry.kind = kind;
       return kind;
     },
     // The stub's shape with a full create lifecycle on it (carry-over,

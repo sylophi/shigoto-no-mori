@@ -31,7 +31,7 @@
 // To the app both are opaque strings: the credential rides in the
 // Authorization header and the ticket in the connect URL, unchanged.
 import { z } from "zod";
-import { DeviceKindSchema } from "../account/deviceKind";
+import { fallbackDeviceKind, isDeviceKind } from "../account/deviceKind";
 
 // Largest hub envelope the DO will forward, in bytes of the serialized
 // JSON. The device hub carries orchestration only:
@@ -186,21 +186,21 @@ export type ErrorBody = z.infer<typeof ErrorBodySchema>;
 // bounded so an enroll cannot store unbounded strings under a Clerk
 // token.
 // The kind as it rides the wire: any short string. The catalog check
-// happens on read (DeviceInfoSchema below, toDeviceInfo in the Worker).
+// happens on read (DeviceInfoSchema below).
 const DeviceKindWireSchema = z.string().min(1).max(64);
 
 export const EnrollRequestSchema = z.object({
   deviceId: z.string().min(1).max(200),
   name: z.string().min(1).max(256),
   platform: z.string().min(1).max(64),
-  // What the device looks like (shared/account/deviceKind.ts). Optional
-  // so a device from before kinds still enrolls, and stored as given:
-  // the device resolved its own detection and its owner's pick before
-  // sending, so the hub never has to know which is which. Bounded, not
-  // checked against the catalog: a client whose catalog grew ahead of
-  // the Worker must still sign in, so the Worker stores what it is
-  // sent and each reader sanitizes to the catalog it knows.
-  kind: DeviceKindWireSchema.optional(),
+  // What the device looks like (shared/account/deviceKind.ts), sent
+  // with every enrollment and stored as given: the device resolved its
+  // own detection and its owner's pick before sending, so the hub
+  // never has to know which is which. Bounded, not checked against the
+  // catalog: a client whose catalog grew ahead of the Worker must still
+  // sign in, so the Worker stores what it is sent and each reader
+  // sanitizes to the catalog it knows.
+  kind: DeviceKindWireSchema,
 });
 
 // PATCH /devices/:id: the fields a device may change after enrolling,
@@ -218,20 +218,28 @@ export type DevicePatch = z.infer<typeof DevicePatchRequestSchema>;
 
 // One device as the HTTP API reports it. Timestamps are epoch
 // milliseconds. lastSeenAt is null until the device first connects.
-// kind is null for a device that never reported one, and reads as
-// null on this side for a kind this build does not know (a newer
-// device's) or a Worker from before the column, so a client resolves
-// it through resolveDeviceKind rather than trusting the string.
-export const DeviceInfoSchema = z.object({
+// Every device has a kind (its enrollment sent one), but the string
+// on the wire may be one this build's catalog lacks (a newer device's
+// pick, read through an older app), which reads as the shape its
+// platform is drawn as, so nothing past the parse ever holds a kind it
+// cannot draw.
+const DeviceInfoWireSchema = z.object({
   deviceId: z.string(),
   name: z.string(),
   platform: z.string(),
-  kind: DeviceKindSchema.nullable().catch(null),
+  kind: z.string(),
   createdAt: z.number().int(),
   lastSeenAt: z.number().int().nullable(),
   online: z.boolean(),
 });
-export type DeviceInfo = z.infer<typeof DeviceInfoSchema>;
+export const DeviceInfoSchema = DeviceInfoWireSchema.transform((info) => ({
+  ...info,
+  kind: isDeviceKind(info.kind) ? info.kind : fallbackDeviceKind(info.platform),
+}));
+export type DeviceInfo = z.output<typeof DeviceInfoSchema>;
+// The same device as the Worker writes it: the kind still the string
+// it stored, before the reader's catalog check above.
+export type DeviceInfoWire = z.input<typeof DeviceInfoSchema>;
 
 // POST /devices/enroll response. `credential` is the only time the
 // raw credential ever leaves the Worker.
@@ -240,12 +248,14 @@ export const EnrollResponseSchema = z.object({
   device: DeviceInfoSchema,
 });
 export type EnrollResponse = z.infer<typeof EnrollResponseSchema>;
+export type EnrollResponseWire = z.input<typeof EnrollResponseSchema>;
 
 // GET /devices response, scoped to the calling credential's account.
 export const DeviceListResponseSchema = z.object({
   devices: z.array(DeviceInfoSchema),
 });
 export type DeviceListResponse = z.infer<typeof DeviceListResponseSchema>;
+export type DeviceListResponseWire = z.input<typeof DeviceListResponseSchema>;
 
 // POST /tickets response. The ticket string is opaque to clients: the
 // app puts it in the connect URL unchanged, only the worker mints and

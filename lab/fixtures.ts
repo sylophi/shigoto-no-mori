@@ -73,8 +73,7 @@ export const accountDevices: DeviceInfo[] = [
     deviceId: WORKPC_ID,
     name: "Work PC",
     platform: "win32",
-    // Enrolled by a build from before kinds: drawn by its platform.
-    kind: null,
+    kind: "desktop",
     createdAt: now - 9 * DAY,
     lastSeenAt: now - 6 * DAY,
     online: false,

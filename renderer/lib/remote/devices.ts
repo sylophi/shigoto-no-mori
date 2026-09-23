@@ -39,9 +39,8 @@ export type RemoteDevice = {
   // The registry's platform string (deviceTraits reads it), so a
   // surface can leave out a browser without a second registry read.
   platform: string;
-  // What it looks like, resolved off the registry row (its own answer,
-  // or the platform fallback for a row that never gave one), so every
-  // mark for it draws through DeviceIcon with no second resolve.
+  // What it looks like, off the registry row (every row has one), so
+  // every mark for it draws through DeviceIcon with no second resolve.
   kind: DeviceKind;
   status: RemoteDeviceStatus;
   // The remote host app's version, "" until the direct session's

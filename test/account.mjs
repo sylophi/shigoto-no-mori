@@ -106,6 +106,7 @@ const DEVICE = {
   deviceId: "device-uuid",
   name: "Test Mac",
   platform: "darwin",
+  kind: "laptop",
   createdAt: 1_700_000_000_000,
   lastSeenAt: null,
   online: true,
@@ -149,11 +150,10 @@ async function main() {
         deviceId: "device-uuid",
         name: "Test Mac",
         platform: "darwin",
+        kind: "laptop",
       });
       assert.equal(result.credential, "device-credential");
-      // The fixture predates kinds, as a Worker from before the column
-      // would: the wire schema reads the missing field as null.
-      assert.deepEqual(result.device, { ...DEVICE, kind: null });
+      assert.deepEqual(result.device, DEVICE);
       assert.equal(calls[0].url, "https://hub.test" + HUB_ROUTES.enroll.path);
       assert.equal(calls[0].init.method, "POST");
       assert.equal(calls[0].init.headers.authorization, "Bearer session-token");
@@ -162,6 +162,7 @@ async function main() {
         deviceId: "device-uuid",
         name: "Test Mac",
         platform: "darwin",
+        kind: "laptop",
       });
     },
   );
@@ -177,7 +178,7 @@ async function main() {
         fetchImpl,
       });
       const devices = await service.listDevices("device-credential");
-      assert.deepEqual(devices, [{ ...DEVICE, kind: null }]);
+      assert.deepEqual(devices, [DEVICE]);
       assert.equal(
         calls[0].url,
         "https://hub.test" + HUB_ROUTES.listDevices.path,
@@ -300,6 +301,7 @@ async function main() {
         deviceId: "device-uuid",
         name: "Test Mac",
         platform: "darwin",
+        kind: "laptop",
       });
       await service.listDevices("device-credential");
       const enrollAuth = calls[0].init.headers.authorization;
@@ -1039,11 +1041,7 @@ async function main() {
       // DeviceInfo is the per-device shape the device hub reports and
       // the renderer lists. The credential belongs only to the enroll
       // response, never to a listed device.
-      assert.ok(
-        !("credential" in DeviceInfoSchema.shape),
-        "DeviceInfoSchema exposes a credential field",
-      );
-      const device = DeviceInfoSchema.parse(DEVICE);
+      const device = DeviceInfoSchema.parse({ ...DEVICE, credential: "c" });
       assert.ok(!("credential" in device), "a DeviceInfo carries a credential");
     },
   );

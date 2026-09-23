@@ -28,6 +28,7 @@ import {
   type TicketResponse,
   type TunnelProvisionResponse,
 } from "@shared/hub/protocol";
+import type { DeviceKind } from "./deviceKind";
 
 // A hub call answered non-2xx. Carries the HTTP status so callers that
 // classify outcomes (the tunnel provision path) can read it off the
@@ -105,6 +106,7 @@ type EnrollFields = {
   deviceId: string;
   name: string;
   platform: string;
+  kind: DeviceKind;
 };
 
 export type AccountService = {
