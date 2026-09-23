@@ -43,10 +43,10 @@ export function createAppQueryClient(): QueryClient {
         refetchOnMount: true,
         staleTime: 0,
         // An entity-gone failure (project/worktree deleted out from under
-        // an in-flight query) is deterministic; retrying only delays the
-        // toast until well after the UI has moved on. So is a command
-        // refusal: the grant moves on the host's push, never on a
-        // retry. Keep the default three retries for everything else.
+        // an in-flight query) is deterministic, so retrying only keeps the
+        // page waiting on an answer that cannot change. A command refusal
+        // is deterministic too: the grant moves on the host's push, never
+        // on a retry. Keep the default three retries for everything else.
         retry: (failureCount, error) =>
           failureCount < 3 &&
           !isEntityGoneError(error) &&
@@ -61,6 +61,12 @@ export function createAppQueryClient(): QueryClient {
         // again. The registry shows that, and remoteDeviceSync refetches
         // on the landing, so a toast per query per focus would only shout.
         if (isNoDirectConnectionError(err)) return;
+        // A project or worktree deleted out from under an open page
+        // (here, on the peer holding it, from the CLI) fails every
+        // query the page had, each under its own title. Each page
+        // renders its own missing state, so a toast per query would
+        // only repeat that as errors.
+        if (isEntityGoneError(err)) return;
         notifyError(query.meta?.errorTitle ?? "Something went wrong", err);
       },
     }),
