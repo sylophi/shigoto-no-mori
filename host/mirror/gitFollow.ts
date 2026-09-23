@@ -32,6 +32,14 @@
 // is the reference. This side is the reference when the peer's tip is an
 // ancestor of the local one. Anything else is diverged from the start.
 //
+// A primary checkout's mirror (the session's mirrorBranch label) has
+// its copy on mirror/<branch> for whatever branch the original is on
+// (shared/git/branches.ts). The follower reads the peer's state with
+// the branch renamed into this side's name and sends this side's
+// renamed into the peer's, so everything else here (agreement,
+// divergence, the apply) works on one name per side. The transfers
+// still name each side's own branch.
+//
 // Signals: the local git-directory watcher (a project ping), a local
 // index watcher per session, the peer's git:projectChanged and
 // mirror:gitChanged pushes, every daemon snapshot whose session set
@@ -44,7 +52,9 @@ import {
   type MirrorGitStatus,
   MirrorApplyGitStateResultSchema,
   mirrorCopyIsRemote,
+  mirrorOnMirrorBranch,
 } from "@shared/ipc/modules/mirror";
+import { mirrorBranchFor, originalBranchOf } from "@shared/git/branches";
 import { SyncHasCommitsResultSchema } from "@shared/ipc/modules/sync";
 import { hasCommit, isAncestor, localBranchTips } from "@host/lib/git/refs";
 import { findProjectOrThrow } from "@host/lib/projects";
@@ -81,6 +91,36 @@ export type AgreedStore = {
   load(): Record<string, GitStateCore>;
   save(entries: Record<string, GitStateCore>): void;
 };
+
+// How a session's branch names translate between its two sides: the
+// original's branch is the copy's mirror branch, and back. Identity
+// for a session with no mirror branch. Null when the copy's branch has
+// no mirror/ prefix, which the follower reports rather than follows.
+type BranchNames = {
+  toLocal: (head: GitHead) => GitHead | null;
+  toPeer: (head: GitHead) => GitHead | null;
+};
+const SAME_NAMES: BranchNames = {
+  toLocal: (head) => head,
+  toPeer: (head) => head,
+};
+const rename =
+  (map: (branch: string) => string | null) =>
+  (head: GitHead): GitHead | null => {
+    if (head.kind !== "branch") return head;
+    const branch = map(head.branch);
+    return branch === null ? null : { kind: "branch", branch };
+  };
+const OFF_MIRROR_BRANCH =
+  "the copy is on a branch without the mirror/ prefix. Check out a mirror/ branch there to keep following";
+
+function branchNamesOf(session: FollowableSession): BranchNames {
+  if (!mirrorOnMirrorBranch(session)) return SAME_NAMES;
+  // The copy is on the peer (startTo): the original is here.
+  return mirrorCopyIsRemote(session)
+    ? { toLocal: rename(originalBranchOf), toPeer: rename(mirrorBranchFor) }
+    : { toLocal: rename(mirrorBranchFor), toPeer: rename(originalBranchOf) };
+}
 
 // The label keys mirror:start writes.
 const LABEL_LOCAL_PROJECT = MIRROR_LABEL_LOCAL_PROJECT;
@@ -227,6 +267,7 @@ export function createGitFollower(deps: {
     const localWorktree = { id: localWorktreeId, path: session.localRoot };
     const peerSync = deps.peerSyncApiFor(session.deviceId);
     const peerMirror = deps.peerMirrorApiFor(session.deviceId);
+    const names = branchNamesOf(session);
     try {
       // Independent reads, so the local git work hides under the peer
       // round trip. The apply's compare-and-set covers either side
@@ -238,7 +279,18 @@ export function createGitFollower(deps: {
           worktreeId: session.worktreeId,
         }),
       ]);
-      const peer = GitStateSchema.parse(peerRaw);
+      const peerAsIs = GitStateSchema.parse(peerRaw);
+      // Each side's head in the other's names: the peer's is what
+      // agreement, divergence and the apply are judged on, this side's
+      // is what a push carries. A copy that left the mirror/ rule has
+      // no name on the other side, and is reported, not followed.
+      const peerHead = names.toLocal(peerAsIs.head);
+      const headThere = names.toPeer(local.head);
+      if (peerHead === null || headThere === null) {
+        setStatus(record, { status: "blocked", detail: OFF_MIRROR_BRANCH });
+        return;
+      }
+      const peer: GitState = { ...peerAsIs, head: peerHead };
       if (sameState(local, peer)) {
         setAgreed(record, core(peer));
         setStatus(record, { status: "synced", detail: "" });
@@ -269,8 +321,24 @@ export function createGitFollower(deps: {
 
       const outcome =
         direction === "pull"
-          ? await pull(project, localWorktree, session, peerSync, local, peer)
-          : await push(project, session, peerSync, peerMirror, local, peer);
+          ? await pull(
+              project,
+              localWorktree,
+              session,
+              peerSync,
+              local,
+              peer,
+              peerAsIs.head,
+            )
+          : await push(
+              project,
+              session,
+              peerSync,
+              peerMirror,
+              local,
+              peer,
+              headThere,
+            );
       if (outcome.applied) {
         setAgreed(record, direction === "pull" ? core(peer) : core(local));
         setStatus(record, { status: "synced", detail: "" });
@@ -341,7 +409,9 @@ export function createGitFollower(deps: {
     return parts.join(", ") || "both sides changed";
   }
 
-  // Carry the peer's state here.
+  // Carry the peer's state here. `peer` is in this side's names and is
+  // what lands. `peerHead` is the peer's own, which the bundle is asked
+  // for.
   async function pull(
     project: Project,
     localWorktree: { id: string; path: string },
@@ -349,6 +419,7 @@ export function createGitFollower(deps: {
     peerSync: PeerSyncApi,
     local: GitState,
     peer: GitState,
+    peerHead: GitHead,
   ): Promise<Outcome> {
     const wantRefs: string[] = [];
     const sweep: string[] = [];
@@ -359,15 +430,15 @@ export function createGitFollower(deps: {
         : hasCommit(project.path, peer.indexCommit),
     ]);
     if (!tipIsLocal) {
-      if (peer.head.kind !== "branch") {
+      if (peerHead.kind !== "branch") {
         return {
           applied: false,
           reason:
             "the other device is on a detached HEAD at a commit not present here",
         };
       }
-      wantRefs.push(`refs/heads/${peer.head.branch}`);
-      sweep.push(`refs/shigomori/incoming/${peer.head.branch}`);
+      wantRefs.push(`refs/heads/${peerHead.branch}`);
+      sweep.push(`refs/shigomori/incoming/${peerHead.branch}`);
     }
     if (!indexCommitIsLocal) {
       wantRefs.push(indexRefFor(session.worktreeId));
@@ -392,7 +463,10 @@ export function createGitFollower(deps: {
     });
   }
 
-  // Carry this side's state to the peer.
+  // Carry this side's state to the peer. The bundle names this side's
+  // branch (it lands under the peer's incoming namespace by that name),
+  // and the state applied there carries `headThere`, this side's head
+  // in the peer's names.
   async function push(
     project: Project,
     session: FollowableSession,
@@ -400,6 +474,7 @@ export function createGitFollower(deps: {
     peerMirror: PeerMirrorApi,
     local: GitState,
     peer: GitState,
+    headThere: GitHead,
   ): Promise<Outcome> {
     const probe = [
       local.tip,
@@ -443,7 +518,7 @@ export function createGitFollower(deps: {
         projectId: session.projectId,
         worktreeId: session.worktreeId,
         expect: { tip: peer.tip, indexTree: peer.indexTree },
-        state: core(local),
+        state: { ...core(local), head: headThere },
         sweep,
       }),
     );

@@ -67,6 +67,14 @@ export function DeviceToggleSections({
             description="Only the primary checkout of a newly added project starts with auto-pull on. Other new worktrees start with it off."
           />
         </div>
+        <ToggleRow
+          checked={form.doubutsuNames}
+          onCheckedChange={(v) =>
+            setForm((prev) => ({ ...prev, doubutsuNames: v }))
+          }
+          label="Doubutsu names"
+          description="Name new worktrees after Animal Crossing villagers and characters, like raymond, instead of adjective-animal pairs like snug-otter."
+        />
       </section>
 
       <section className="space-y-3">

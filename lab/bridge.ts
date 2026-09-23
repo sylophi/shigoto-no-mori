@@ -30,6 +30,7 @@ import {
   summarizeIgnores,
 } from "@shared/ipc/modules/mirror";
 import { pullBringsIgnoredFiles } from "@shared/ipc/modules/sync";
+import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
 import type {
   MirrorEvent,
   MirrorServing,
@@ -610,14 +611,22 @@ async function labMirrorStart(
 ) {
   // The rule is the session's, not the pull's: a mirror start brings
   // the files through its own session, so the pull poses no files step.
-  const landed = await labSyncPull(local, emit, {
-    ...input,
-    ignoreMode: undefined,
-  });
   const source = forests[input.sourceDeviceId];
   const sourceWorktree = (source?.worktrees[input.sourceProjectId] ?? []).find(
     (entry) => entry.id === input.sourceWorktreeId,
   );
+  // A primary's copy lands on its mirror branch and folder, as the
+  // real start decides off the peer's list.
+  const landed = await labSyncPull(local, emit, {
+    ...input,
+    ignoreMode: undefined,
+    ...(sourceWorktree?.isPrimary
+      ? {
+          landBranch: pullLandingBranch(sourceWorktree),
+          worktreeName: pullWorktreeName(sourceWorktree),
+        }
+      : {}),
+  });
   const tip = sourceWorktree?.recentCommits[0]?.hash.slice(0, 7) ?? "58c21fe";
   const session: MirrorSession = {
     session: `sync_${labSessionSerial++}`,
@@ -699,6 +708,9 @@ async function labSyncPull(
     sourceWorktreeId: string;
     sourceIdentity: string;
     branch: string;
+    // The copy's branch and folder when they are not the source's.
+    landBranch?: string;
+    worktreeName?: string;
     runSetup?: boolean;
     ignoreMode?: MirrorSession["ignoreMode"];
   },
@@ -753,13 +765,13 @@ async function labSyncPull(
   const sourceWorktree = sourceList.find(
     (entry) => entry.id === input.sourceWorktreeId,
   );
-  const name = sourceWorktree?.name ?? "tender-tanuki";
+  const name = input.worktreeName ?? sourceWorktree?.name ?? "tender-tanuki";
   const landed = worktreeFixture({
     ...sourceWorktree,
     id: "fedcba987654",
     projectId: project.id,
     name,
-    branch: input.branch,
+    branch: input.landBranch ?? input.branch,
     path: `/Users/rin/.sm/worktrees/${project.name}/${name}`,
     ahead: sourceWorktree?.ahead ?? 0,
     behind: 0,

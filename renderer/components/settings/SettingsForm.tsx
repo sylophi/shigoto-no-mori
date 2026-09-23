@@ -338,9 +338,7 @@ function SettingsPanel({
   if (active && !shown) setShown(true);
   return (
     <div id={settingsPanelId(id)} hidden={!active} className={PAGE_BODY}>
-      {shown && (
-        <div className="flex max-w-3xl flex-col gap-10">{children}</div>
-      )}
+      {shown && <div className="flex flex-col gap-10">{children}</div>}
     </div>
   );
 }

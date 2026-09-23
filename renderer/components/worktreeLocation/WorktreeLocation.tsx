@@ -57,7 +57,7 @@ function LocationBody({ project }: { project: Project }) {
 function LocationPane({ children }: { children: ReactNode }) {
   return (
     <div className={PAGE_BODY}>
-      <div className="flex max-w-3xl flex-col gap-6">{children}</div>
+      <div className="flex flex-col gap-6">{children}</div>
     </div>
   );
 }

@@ -1,19 +1,24 @@
 package main
 
-// Adjective + animal pairs for naming worktree directories. The word
-// lists are embedded from embed/name-words.json, which the app's
-// host/lib/worktrees/names.ts imports too. One pool, two consumers,
-// nothing to keep in sync by hand.
+// Names for worktree directories: adjective + animal pairs, or Animal
+// Crossing character names with doubutsuNames on. The pools are
+// embedded from embed/, which the app's host/lib/worktrees/names.ts
+// imports too. One pool each, two consumers, nothing to keep in sync
+// by hand.
 
 import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
 	"math/rand/v2"
+	"sync"
 )
 
 //go:embed embed/name-words.json
 var nameWordsJSON []byte
+
+//go:embed embed/doubutsu-names.json
+var doubutsuNamesJSON []byte
 
 var nameWords struct {
 	Adjectives []string `json:"adjectives"`
@@ -26,21 +31,46 @@ func init() {
 	}
 }
 
-func pickWorktreeName(used map[string]bool) string {
-	adjectives, animals := nameWords.Adjectives, nameWords.Animals
+// Parsed on first use: only a create without a name needs it.
+var doubutsuNames = sync.OnceValue(func() []string {
+	var doc struct {
+		Names []string `json:"names"`
+	}
+	if err := json.Unmarshal(doubutsuNamesJSON, &doc); err != nil {
+		panic("embedded doubutsu-names.json is invalid: " + err.Error())
+	}
+	return doc.Names
+})
+
+func doubutsuNamesEnabled(global globalConfig) bool {
+	return global.DoubutsuNames != nil && *global.DoubutsuNames
+}
+
+func namePool(doubutsu bool) []string {
+	if doubutsu {
+		return doubutsuNames()
+	}
+	pairs := make([]string, 0, len(nameWords.Adjectives)*len(nameWords.Animals))
+	for _, adj := range nameWords.Adjectives {
+		for _, animal := range nameWords.Animals {
+			pairs = append(pairs, adj+"-"+animal)
+		}
+	}
+	return pairs
+}
+
+func pickWorktreeName(used map[string]bool, doubutsu bool) string {
+	pool := namePool(doubutsu)
 	var candidates []string
-	for _, adj := range adjectives {
-		for _, animal := range animals {
-			name := adj + "-" + animal
-			if !used[name] {
-				candidates = append(candidates, name)
-			}
+	for _, name := range pool {
+		if !used[name] {
+			candidates = append(candidates, name)
 		}
 	}
 	if len(candidates) > 0 {
 		return candidates[rand.IntN(len(candidates))]
 	}
-	base := adjectives[rand.IntN(len(adjectives))] + "-" + animals[rand.IntN(len(animals))]
+	base := pool[rand.IntN(len(pool))]
 	for i := 2; ; i++ {
 		candidate := fmt.Sprintf("%s-%d", base, i)
 		if !used[candidate] {

@@ -218,6 +218,7 @@ type Worktree = {
   name: string;
   branch: string;
   path: string;
+  isPrimary: boolean;
 };
 type PullResult = {
   worktree: Worktree;
@@ -680,6 +681,132 @@ async function main(): Promise<string[]> {
         existsSync(source.path),
         "the source worktree vanished on stop",
       );
+    });
+
+    // A primary checkout mirrored here: its copy is a worktree on
+    // mirror/<branch> beside a's own primary, which never moves, and the
+    // pair follows b's primary onto another branch and back. Stop is
+    // unforced, the confirmation rule's own path.
+    await scenario("mirror: primary checkout", async () => {
+      const project = need(bProject, "the remote read");
+      const onB = (await onPeer(a, idB, "worktrees:list", {
+        projectId: project.id,
+      })) as Worktree[];
+      const bPrimary = need(
+        onB.find((w) => w.isPrimary),
+        "b's primary checkout",
+      );
+      assert.equal(bPrimary.branch, "main");
+      const aRepo = join(fixture.a.repos, "shared");
+      const aMainBefore = gitOut(aRepo, "rev-parse", "HEAD");
+      const started = await a.evaluate<{
+        worktree: Worktree;
+        session: string;
+      }>(
+        `window.api.mirror.start(${JSON.stringify({
+          sourceDeviceId: idB,
+          sourceProjectId: project.id,
+          sourceWorktreeId: bPrimary.id,
+          sourceIdentity: project.identity,
+          branch: bPrimary.branch,
+          worktreeName: `mirror-${bPrimary.name}`,
+          runSetup: false,
+          ignoreMode: "everything",
+          ignores: [],
+        })})`,
+      );
+      const local = started.worktree;
+      assert.equal(local.branch, "mirror/main");
+      assert.equal(local.isPrimary, false);
+      assert.ok(
+        local.name.startsWith("mirror-"),
+        `the copy's folder is not mirror-<name>: ${local.name}`,
+      );
+      const session = JSON.stringify(started.session);
+      const synced = (what: string) =>
+        a.waitFor(
+          what,
+          `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${session} && s.status === "watching" && s.git?.status === "synced"))`,
+          90_000,
+        );
+      await synced("the primary's mirror to be watching with git in sync");
+      // A commit on b's primary lands on the copy, on mirror/main. a's
+      // own primary stays where it was.
+      writeFileSync(join(bPrimary.path, "from-primary.txt"), "b primary\n");
+      await waitFor(
+        () => fileEquals(join(local.path, "from-primary.txt"), "b primary\n"),
+        "b's file to reach the copy",
+        30_000,
+      );
+      git(bPrimary.path, "add", "from-primary.txt");
+      git(bPrimary.path, "commit", "-q", "-m", "on b's primary");
+      const tipB = gitOut(bPrimary.path, "rev-parse", "HEAD");
+      await waitFor(
+        () => gitOut(local.path, "rev-parse", "HEAD") === tipB,
+        "the copy to follow b's primary",
+        60_000,
+      );
+      assert.equal(
+        gitOut(local.path, "symbolic-ref", "HEAD"),
+        "refs/heads/mirror/main",
+      );
+      assert.equal(gitOut(aRepo, "rev-parse", "HEAD"), aMainBefore);
+      assert.equal(gitOut(aRepo, "symbolic-ref", "HEAD"), "refs/heads/main");
+      // A commit on the copy lands on b's primary, which stays on main.
+      await synced("synced after b's commit");
+      writeFileSync(join(local.path, "from-copy.txt"), "a copy\n");
+      await waitFor(
+        () => fileEquals(join(bPrimary.path, "from-copy.txt"), "a copy\n"),
+        "the copy's file to reach b's primary",
+        30_000,
+      );
+      git(local.path, "add", "from-copy.txt");
+      git(local.path, "commit", "-q", "-m", "on a's copy");
+      const tipA = gitOut(local.path, "rev-parse", "HEAD");
+      await waitFor(
+        () => gitOut(bPrimary.path, "rev-parse", "HEAD") === tipA,
+        "b's primary to follow the copy",
+        60_000,
+      );
+      assert.equal(
+        gitOut(bPrimary.path, "symbolic-ref", "HEAD"),
+        "refs/heads/main",
+      );
+      // b's primary switches branch: the copy follows onto the branch's
+      // mirror, and back.
+      await synced("synced after the copy's commit");
+      git(bPrimary.path, "checkout", "-q", "-b", "feat/from-primary");
+      await waitFor(
+        () =>
+          gitOut(local.path, "symbolic-ref", "HEAD") ===
+          "refs/heads/mirror/feat/from-primary",
+        "the copy to follow b's primary onto the new branch",
+        60_000,
+      );
+      git(bPrimary.path, "checkout", "-q", "main");
+      await waitFor(
+        () =>
+          gitOut(local.path, "symbolic-ref", "HEAD") ===
+          "refs/heads/mirror/main",
+        "the copy to follow b's primary back",
+        60_000,
+      );
+      // Stop, unforced once synced: the copy goes, both primaries stay.
+      await synced("synced after the switch back");
+      await a.evaluate(`window.api.mirror.stop(${session})`);
+      await a.waitFor(
+        "the primary's mirror session to be gone",
+        `window.api.mirror.list().then((m) => !m.sessions.some((s) => s.session === ${session}))`,
+        30_000,
+      );
+      await waitFor(
+        () => !existsSync(local.path),
+        "the copy to leave the disk",
+        30_000,
+      );
+      assert.ok(existsSync(bPrimary.path), "b's primary vanished on stop");
+      assert.equal(gitOut(aRepo, "rev-parse", "HEAD"), aMainBefore);
+      assert.equal(gitOut(bPrimary.path, "rev-parse", "HEAD"), tipA);
     });
 
     await scenario("transplant", async () => {

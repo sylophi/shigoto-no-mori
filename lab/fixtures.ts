@@ -523,6 +523,7 @@ export const labGlobalConfig = {
   autoPopulateInstall: true,
   autoPullNew: false,
   autoPullPrimaryOnly: false,
+  doubutsuNames: false,
   portPool: true,
   terrier: false,
   githubCli: true,

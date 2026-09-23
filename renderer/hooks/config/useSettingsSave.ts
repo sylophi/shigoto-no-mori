@@ -29,6 +29,7 @@ export interface SettingsFormState {
   autoPopulateInstall: boolean;
   autoPullNew: boolean;
   autoPullPrimaryOnly: boolean;
+  doubutsuNames: boolean;
   portPool: boolean;
   terrier: boolean;
   githubCli: boolean;
@@ -56,6 +57,7 @@ export function fromConfig(
     autoPopulateInstall: config.autoPopulateInstall ?? false,
     autoPullNew: config.autoPullNew ?? false,
     autoPullPrimaryOnly: config.autoPullPrimaryOnly ?? false,
+    doubutsuNames: config.doubutsuNames ?? false,
     portPool: config.portPool ?? false,
     terrier: config.terrier ?? false,
     githubCli: config.githubCli ?? true,
@@ -85,6 +87,7 @@ function managedDeviceConfig(state: SettingsFormState): GlobalConfig {
     autoPopulateInstall: state.autoPopulateInstall ? true : undefined,
     autoPullNew: state.autoPullNew ? true : undefined,
     autoPullPrimaryOnly: state.autoPullPrimaryOnly ? true : undefined,
+    doubutsuNames: state.doubutsuNames ? true : undefined,
     portPool: state.portPool ? true : undefined,
     terrier: state.terrier ? true : undefined,
     // Default is true; same opt-out serialization as deleteBranchOnRemove.
@@ -120,6 +123,7 @@ export function toDeviceSettingsPatch(
     autoPopulateInstall: state.autoPopulateInstall,
     autoPullNew: state.autoPullNew,
     autoPullPrimaryOnly: state.autoPullPrimaryOnly,
+    doubutsuNames: state.doubutsuNames,
     portPool: state.portPool,
     terrier: state.terrier,
     githubCli: state.githubCli,

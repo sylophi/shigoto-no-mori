@@ -8,7 +8,9 @@
 // carries. The two transfers need command access, a real branch, and
 // a local project sharing the repo identity (the handler re-verifies
 // that last one). A repo with no identity at all gets a line of
-// explanation instead of an empty footer.
+// explanation instead of an empty footer. The peer's primary checkout
+// can only be mirrored: a transplant would have to tear the project
+// itself down.
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { useState } from "react";
 import { RefreshCw, Shovel } from "lucide-react";
@@ -31,10 +33,7 @@ export function RemoteWorktreeActions({
 }) {
   const { granted } = useCommandAccess();
   const transferable =
-    granted &&
-    !worktree.isPrimary &&
-    !worktree.detached &&
-    isRealBranch(worktree.branch);
+    granted && !worktree.detached && isRealBranch(worktree.branch);
   return (
     <>
       <PortsButton worktree={worktree} />
@@ -71,12 +70,14 @@ function TransferActions({
         sourceIdentity={project.identity}
         localProject={localProject}
       />
-      <TransplantButton
-        worktree={worktree}
-        project={project}
-        sourceIdentity={project.identity}
-        localProject={localProject}
-      />
+      {!worktree.isPrimary && (
+        <TransplantButton
+          worktree={worktree}
+          project={project}
+          sourceIdentity={project.identity}
+          localProject={localProject}
+        />
+      )}
     </>
   );
 }

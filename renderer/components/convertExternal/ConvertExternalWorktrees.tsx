@@ -113,7 +113,7 @@ function ConvertExternalBody({ project }: { project: Project }) {
 
   return (
     <div className={PAGE_BODY}>
-      <div className="flex max-w-3xl flex-col gap-6">
+      <div className="flex flex-col gap-6">
         <ErrorBanner>
           <p className="text-2xs font-semibold tracking-wide uppercase">
             This is destructive

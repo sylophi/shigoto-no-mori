@@ -6,8 +6,12 @@
 // The flow runs both ways: MirrorDialog copies a peer's worktree here,
 // MirrorToDialog copies one of this device's to a peer (under that
 // peer's DestinationProvider). The session runs on this device either
-// way, and its Mirror button sits on this device's worktree page.
+// way, and its Mirror button sits on this device's worktree page. A
+// primary checkout takes the same flow, its copy on a branch of its
+// own (shared/git/branches.ts), which the words below say when the
+// two names differ.
 import { ArrowRight, RefreshCw } from "lucide-react";
+import { pullLandingBranch } from "@shared/git/branches";
 import type { UseMutationResult } from "@tanstack/react-query";
 import type { MirrorSession } from "@shared/ipc/modules/mirror";
 import type { Project, Worktree } from "@shared/schemas";
@@ -176,6 +180,8 @@ function MirrorFlow({
     onClose,
   });
   const summary = selectionSummary(pull.selection);
+  const landingBranch = pullLandingBranch(worktree);
+  const renamed = landingBranch !== worktree.branch;
 
   return (
     <PullFlowFrame
@@ -189,13 +195,21 @@ function MirrorFlow({
       onClose={onClose}
       headline={
         <>
-          {stage === "review" && (
-            <>
-              A live copy of{" "}
-              <span className="font-mono">{worktree.branch}</span> {landing.on},
-              kept in step with {sourceDeviceLabel}.
-            </>
-          )}
+          {stage === "review" &&
+            (renamed ? (
+              <>
+                A live copy of {sourceDeviceLabel}'s primary checkout{" "}
+                {landing.on}, on{" "}
+                <span className="font-mono">{landingBranch}</span>, kept in step
+                with its <span className="font-mono">{worktree.branch}</span>.
+              </>
+            ) : (
+              <>
+                A live copy of{" "}
+                <span className="font-mono">{worktree.branch}</span>{" "}
+                {landing.on}, kept in step with {sourceDeviceLabel}.
+              </>
+            ))}
           {stage === "running" &&
             (progress.frame === null
               ? landing.onPeer
@@ -205,12 +219,20 @@ function MirrorFlow({
                 ? "Opening the mirror."
                 : `${stepHeadline(progress.frame, sourceDeviceLabel, landing)}.`)}
           {stage === "failed" && `Nothing on ${sourceDeviceLabel} changed.`}
-          {stage === "done" && (
-            <>
-              <span className="font-mono">{worktree.branch}</span> is on both
-              devices and stays in step.
-            </>
-          )}
+          {stage === "done" &&
+            (renamed ? (
+              <>
+                <span className="font-mono">{landingBranch}</span> {landing.on}{" "}
+                follows {sourceDeviceLabel}'s{" "}
+                <span className="font-mono">{worktree.branch}</span> and stays
+                in step.
+              </>
+            ) : (
+              <>
+                <span className="font-mono">{worktree.branch}</span> is on both
+                devices and stays in step.
+              </>
+            ))}
         </>
       }
     >
@@ -259,7 +281,7 @@ function MirrorFlow({
           <MirrorLive
             session={mirror.data.session}
             landed={mirror.data.worktree}
-            branch={worktree.branch}
+            branch={landingBranch}
             sourceDeviceLabel={sourceDeviceLabel}
             thisDeviceLabel={thisDeviceLabel}
             landing={landing}

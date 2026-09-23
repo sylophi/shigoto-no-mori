@@ -12,7 +12,7 @@ import { PAGE_BODY } from "@/components/shared/PageShell";
 export function ConfigureShared({ project }: { project: Project }) {
   return (
     <div className={PAGE_BODY}>
-      <div className="flex max-w-3xl flex-col gap-10">
+      <div className="flex flex-col gap-10">
         <CreateOnSection project={project} />
         <LeaveOutSection project={project} />
       </div>

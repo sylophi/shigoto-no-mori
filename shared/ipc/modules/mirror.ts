@@ -76,6 +76,18 @@ export function mirrorCopyIsRemote(session: {
 }): boolean {
   return session.labels[MIRROR_LABEL_COPY_SIDE] === "remote";
 }
+// A primary checkout's mirror: the copy sits on mirror/<branch> for
+// whatever branch the original is on (shared/git/branches.ts
+// mirrorBranchFor), since the copy's device holds the original's
+// branch in its own primary. The git follower reads the two names as
+// one branch. The label says so, and copySide says which side is the
+// copy.
+export const MIRROR_LABEL_MIRROR_BRANCH = "mirrorBranch";
+export function mirrorOnMirrorBranch(session: {
+  labels: Record<string, string>;
+}): boolean {
+  return session.labels[MIRROR_LABEL_MIRROR_BRANCH] === "1";
+}
 export function isTransferSession(session: {
   labels: Record<string, string>;
 }): boolean {

@@ -216,6 +216,7 @@ type globalConfig struct {
 	AutoPopulateInstall  *bool             `json:"autoPopulateInstall"`
 	AutoPullNew          *bool             `json:"autoPullNew"`
 	AutoPullPrimaryOnly  *bool             `json:"autoPullPrimaryOnly"`
+	DoubutsuNames        *bool             `json:"doubutsuNames"`
 	Launchers            []launcherCommand `json:"launchers"`
 	HiddenLaunchers      []string          `json:"hiddenLaunchers"`
 }

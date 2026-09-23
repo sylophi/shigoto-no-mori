@@ -87,6 +87,8 @@ var globalConfigKeys = []configKey{
 		desc: "Start new worktrees (and added projects' primaries) with auto-pull on"},
 	{name: "autoPullPrimaryOnly", kind: boolKind, def: false,
 		desc: "autoPullNew applies to added projects' primaries only"},
+	{name: "doubutsuNames", kind: boolKind, def: false,
+		desc: "Name new worktrees after Animal Crossing characters"},
 	{name: "portPool", kind: boolKind, def: false,
 		desc: "Provision/release port-pool ports with worktrees"},
 	{name: "terrier", kind: boolKind, def: false,
