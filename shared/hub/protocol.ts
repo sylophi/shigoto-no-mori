@@ -185,6 +185,10 @@ export type ErrorBody = z.infer<typeof ErrorBodySchema>;
 // throws past it, so it stays well under that. name and platform are
 // bounded so an enroll cannot store unbounded strings under a Clerk
 // token.
+// The kind as it rides the wire: any short string. The catalog check
+// happens on read (DeviceInfoSchema below, toDeviceInfo in the Worker).
+const DeviceKindWireSchema = z.string().min(1).max(64);
+
 export const EnrollRequestSchema = z.object({
   deviceId: z.string().min(1).max(200),
   name: z.string().min(1).max(256),
@@ -192,8 +196,11 @@ export const EnrollRequestSchema = z.object({
   // What the device looks like (shared/account/deviceKind.ts). Optional
   // so a device from before kinds still enrolls, and stored as given:
   // the device resolved its own detection and its owner's pick before
-  // sending, so the hub never has to know which is which.
-  kind: DeviceKindSchema.optional(),
+  // sending, so the hub never has to know which is which. Bounded, not
+  // checked against the catalog: a client whose catalog grew ahead of
+  // the Worker must still sign in, so the Worker stores what it is
+  // sent and each reader sanitizes to the catalog it knows.
+  kind: DeviceKindWireSchema.optional(),
 });
 
 // PATCH /devices/:id: the fields a device may change after enrolling,
@@ -202,7 +209,7 @@ export const EnrollRequestSchema = z.object({
 export const DevicePatchRequestSchema = z
   .object({
     name: EnrollRequestSchema.shape.name.optional(),
-    kind: DeviceKindSchema.optional(),
+    kind: DeviceKindWireSchema.optional(),
   })
   .refine((patch) => patch.name !== undefined || patch.kind !== undefined, {
     message: "nothing to change",

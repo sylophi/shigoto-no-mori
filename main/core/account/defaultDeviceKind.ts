@@ -75,7 +75,6 @@ const VIRTUAL_MARKERS = [
   "virtualbox",
   "xen",
   "hyper-v",
-  "microsoft corporation",
   "parallels",
   "amazon ec2",
   "google compute engine",

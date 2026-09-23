@@ -70,7 +70,7 @@ describe("POST /devices/enroll", () => {
     expect(list.status).toBe(200);
   });
 
-  it("stores the kind a device reports, lists it, and refuses one outside the catalog", async () => {
+  it("stores the kind a device reports, lists it, and lists one outside the catalog as none", async () => {
     const { credential, device } = await enroll(
       "acct-kind",
       "dev-kind",
@@ -85,15 +85,24 @@ describe("POST /devices/enroll", () => {
     expect(listed.devices.find((d) => d.deviceId === "dev-kind")?.kind).toBe(
       "laptop",
     );
-    const bogus = await call(
+    // A kind this Worker's catalog lacks (a newer client's) must not
+    // block the enroll: it is kept, and read back as none until the
+    // Worker learns it.
+    const newer = await call(
       enrollRequest(`${TEST_TOKEN_PREFIX}acct-kind`, {
-        deviceId: "dev-kind-bogus",
+        deviceId: "dev-kind-newer",
         name: "Toaster",
         platform: "linux",
         kind: "toaster",
       }),
     );
-    expect(bogus.status).toBe(400);
+    expect(newer.status).toBe(200);
+    const again = (await (await call(listRequest(credential))).json()) as {
+      devices: { deviceId: string; kind: string | null }[];
+    };
+    expect(
+      again.devices.find((d) => d.deviceId === "dev-kind-newer")?.kind,
+    ).toBe(null);
   });
 
   it("rejects a bad login token with 401", async () => {
@@ -353,11 +362,8 @@ describe("PATCH /devices/:deviceId", () => {
       (await call(updateRequest(self.credential, "dev-kind-2", {}))).status,
     ).toBe(400);
     expect(
-      (
-        await call(
-          updateRequest(self.credential, "dev-kind-2", { kind: "toaster" }),
-        )
-      ).status,
+      (await call(updateRequest(self.credential, "dev-kind-2", { kind: "" })))
+        .status,
     ).toBe(400);
   });
 

@@ -224,8 +224,8 @@ async function main() {
         "an empty patch was sent to the hub",
       );
       await assert.rejects(
-        () => service.update("device-credential", "id", { kind: "toaster" }),
-        "a kind outside the catalog was sent to the hub",
+        () => service.update("device-credential", "id", { kind: "" }),
+        "a blank kind was sent to the hub",
       );
     },
   );

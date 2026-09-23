@@ -218,8 +218,9 @@ function toDeviceInfo(row: DeviceRow, online: Set<string>): DeviceInfo {
     deviceId: row.device_id,
     name: row.name,
     platform: row.platform,
-    // The column is free text (a newer device's kind lands as is); the
-    // wire shape is the catalog, so an unknown one reads as none.
+    // The column holds whatever the device sent (a newer device's kind
+    // lands as is); the wire shape is the catalog this Worker knows, so
+    // an unknown one reads as none.
     kind: isDeviceKind(row.kind) ? row.kind : null,
     createdAt: row.created_at,
     lastSeenAt: row.last_seen_at,
@@ -474,7 +475,8 @@ export function createWorker(deps: HubDeps): HubWorker {
         deviceId,
         name,
         platform,
-        kind,
+        // Read back through the same catalog check the list applies.
+        kind: isDeviceKind(kind) ? kind : null,
         createdAt,
         lastSeenAt: existing?.last_seen_at ?? null,
         online: online.has(deviceId),
