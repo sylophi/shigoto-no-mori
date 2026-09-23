@@ -1,8 +1,7 @@
 // Receiver side of the device-sync transfer plumbing: drives a peer's
 // sync:bundleStart / sync:bundleChunk surface into a local temp file,
-// then unpacks it into this device's repo via the CLI (or, for a repo
-// the CLI cannot address yet, here). Exported for the sync
-// orchestration (slice C); no UI here.
+// then unpacks it into this device's repo via the CLI. Exported for
+// the sync orchestration (slice C); no UI here.
 import { type FileHandle, mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,11 +11,7 @@ import {
 } from "@shared/ipc/modules/sync";
 import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
 import type { Client } from "@shared/ipc/types";
-import { errorMessageOf } from "@shared/errors";
-import type { Project } from "@shared/schemas";
 import { bundleUnpackViaCli } from "@host/ipc/cliDelegate";
-import { run } from "@host/lib/git/core";
-import { refTip } from "@host/lib/git/refs";
 import { findProjectOrThrow } from "@host/lib/projects";
 import {
   type ChunkWindow,
@@ -24,10 +19,10 @@ import {
   createChunkWindow,
 } from "./chunkWindow";
 
-// Where the bundle unpacks: a project in THIS device's registry,
-// through the CLI, or a repository at a path not registered yet (the
-// clone from a peer, cloneFromPeer.ts, which registers it once it is a
-// checkout), unpacked here under the CLI's own rule.
+// Where the bundle unpacks: a project in THIS device's registry, or a
+// repository at a path not registered yet (the clone from a peer,
+// cloneFromPeer.ts, which registers it once it is a checkout). The CLI
+// takes either.
 type UnpackTarget = { targetProjectId: string } | { repoPath: string };
 
 export type FetchBundleInput = UnpackTarget & {
@@ -45,6 +40,12 @@ export type FetchBundleInput = UnpackTarget & {
   onProgress?: (bytes: number, totalBytes: number) => void;
 };
 
+// Where a fetched branch lands locally, and where the orchestrations
+// look for it: never the branch itself.
+export function incomingRefFor(branch: string): string {
+  return `refs/shigomori/incoming/${branch}`;
+}
+
 // Where a fetched ref lands locally: capture refs keep their name,
 // branch refs land under refs/shigomori/incoming/<branch>. Never a
 // local branch -- `sm bundle unpack` enforces the refs/shigomori/
@@ -52,7 +53,7 @@ export type FetchBundleInput = UnpackTarget & {
 export function landingRefspec(ref: string): string {
   const dst = ref.startsWith("refs/shigomori/")
     ? ref
-    : `refs/shigomori/incoming/${ref.slice("refs/heads/".length)}`;
+    : incomingRefFor(ref.slice("refs/heads/".length));
   return `${ref}:${dst}`;
 }
 
@@ -143,74 +144,6 @@ export async function receiveBundleChunks(
   }
 }
 
-type Unpack = (
-  bundlePath: string,
-  refspecs: string[],
-) => Promise<{ fetched: { ref: string; commit: string }[] }>;
-
-const unpackViaCli =
-  (project: Project): Unpack =>
-  (bundlePath, refspecs) =>
-    bundleUnpackViaCli(project, bundlePath, refspecs);
-
-// The CLI's unpack (cli/cmd_bundle.go unpackBundle) run here, for a
-// repository the CLI cannot address yet. Same rules, for the same
-// reasons: every destination under refs/shigomori/ (checked before
-// git runs, so a peer-supplied bundle structurally cannot move a
-// branch), the bundle verified first, the fetch forced (the namespace
-// is this app's own) and --no-tags (the bundle's tag advertisements
-// would otherwise land refs/tags/* outside that namespace). The
-// refspecs are this device's own (landingRefspec), so a bad one here
-// is a bug, not an attack.
-const unpackAt =
-  (repoPath: string): Unpack =>
-  async (bundlePath, refspecs) => {
-    const specs: string[] = [];
-    const dsts: string[] = [];
-    for (const spec of refspecs) {
-      const [src, dst] = spec.split(":");
-      if (
-        src === undefined ||
-        dst === undefined ||
-        !dst.startsWith(SHIGOMORI_REFS)
-      ) {
-        throw new Error(
-          `Invalid refspec ${spec}: need <src>:<dst> with dst under ${SHIGOMORI_REFS}`,
-        );
-      }
-      specs.push(`+${src}:${dst}`);
-      dsts.push(dst);
-    }
-    await run(repoPath, [
-      "bundle",
-      "verify",
-      "--end-of-options",
-      bundlePath,
-    ]).catch((error: unknown) => {
-      throw new Error(`Not a valid git bundle: ${errorMessageOf(error)}`);
-    });
-    await run(repoPath, [
-      "fetch",
-      "--no-tags",
-      "--no-write-fetch-head",
-      "--quiet",
-      "--end-of-options",
-      bundlePath,
-      ...specs,
-    ]);
-    const fetched: { ref: string; commit: string }[] = [];
-    for (const ref of dsts) {
-      // oxlint-disable-next-line no-await-in-loop -- one cheap probe per ref
-      const commit = await refTip(repoPath, ref);
-      if (commit === null)
-        throw new Error(`${ref} did not land from the bundle`);
-      fetched.push({ ref, commit });
-    }
-    return { fetched };
-  };
-
-const SHIGOMORI_REFS = "refs/shigomori/";
-
 // Abort on any error (best effort -- the host's idle sweep is the
 // backstop), temp file always removed. The peer parameter is the
 // transfer slice of a peer's sync client (a subset of
@@ -223,10 +156,10 @@ export async function fetchBundleFromPeer(
   >,
   input: FetchBundleInput,
 ): Promise<{ fetched: { ref: string; commit: string }[] }> {
-  const unpack =
+  const target =
     "targetProjectId" in input
-      ? unpackViaCli(findProjectOrThrow(input.targetProjectId))
-      : unpackAt(input.repoPath);
+      ? findProjectOrThrow(input.targetProjectId)
+      : { path: input.repoPath };
   // Re-parsed here because the byte count flows into the progress
   // frames' strict schema and bounds the loop below: the peer's own
   // output validation is not this device's wall.
@@ -248,7 +181,8 @@ export async function fetchBundleFromPeer(
     } finally {
       await handle.close();
     }
-    return await unpack(path, input.refs.map(landingRefspec));
+    const refspecs = input.refs.map(landingRefspec);
+    return await bundleUnpackViaCli(target, path, refspecs);
   } catch (error) {
     // On the success path the host already dropped the transfer at
     // eof; this only tells it a giving-up receiver is done. Best

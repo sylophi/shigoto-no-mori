@@ -46,8 +46,8 @@ import { tildify } from "@/lib/projectPaths";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { cn } from "@/lib/utils";
 import {
-  type CloneDestination,
   CloneDestinationSection,
+  type LandingTarget,
 } from "./cloneDestination";
 import type { PullChoiceState } from "./ignoreChoice";
 import { SetupToggle } from "./SetupToggle";
@@ -188,14 +188,16 @@ const EMPTY_MARK = (
   />
 );
 
+// The landing device, filled: it has the repo, or gets it (the clone
+// the flow makes first, which has no branches to collide with yet).
 function DestinationRow({
   worktree,
-  localProject,
+  target,
   thisDeviceLabel,
   tag,
 }: {
   worktree: Worktree;
-  localProject: Project;
+  target: LandingTarget;
   thisDeviceLabel: string;
   tag: string;
 }) {
@@ -203,9 +205,12 @@ function DestinationRow({
   // the peer a flow to a peer picked (DestinationProvider).
   const destinationKind = useDeviceKind(useDestinationScope().deviceId);
   const { landingBranch, held, holder } = useLocalCollision(
-    localProject,
+    target.project,
     worktree,
   );
+  const holds = target.project
+    ? `has ${target.project.name}`
+    : `gets ${target.clone.projectName}`;
   return (
     <DeviceRow
       className={
@@ -239,8 +244,8 @@ function DestinationRow({
             ? `already has ${landingBranch}`
             : `already has ${landingBranch} in ${holder.name}`
           : landingBranch !== worktree.branch
-            ? `has ${localProject.name}, copy on ${landingBranch}`
-            : `has ${localProject.name}`
+            ? `${holds}, copy on ${landingBranch}`
+            : holds
       }
       trailing={
         <StatusDot
@@ -301,8 +306,7 @@ export function ReviewDevicesColumn({
   sourceKeeps = false,
   toPeer,
   worktree,
-  localProject,
-  clone,
+  target,
   sourceDeviceLabel,
   thisDeviceLabel,
   pull,
@@ -312,35 +316,23 @@ export function ReviewDevicesColumn({
   sourceKeeps?: boolean;
   toPeer?: DestinationPick;
   worktree: Worktree;
-  // Absent while a flow to a peer has no destination picked, and on a
-  // flow here with no checkout of the repo on this machine, where the
-  // clone stands in for it.
-  localProject: Project | undefined;
-  clone?: CloneDestination;
+  // Where the flow lands (flow/cloneDestination.tsx). Null while a
+  // flow to a peer has no destination picked.
+  target: LandingTarget | null;
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
   pull: PullChoiceState;
 }) {
   // The source is the device the dialog sits under.
   const sourceKind = useDeviceKind(useHostScope().deviceId);
-  const cloning = localProject === undefined && clone !== undefined;
-  const destination =
-    localProject !== undefined ? (
-      <DestinationRow
-        worktree={worktree}
-        localProject={localProject}
-        thisDeviceLabel={thisDeviceLabel}
-        tag={toPeer ? "destination" : "this device"}
-      />
-    ) : (
-      cloning && (
-        <CloneRow
-          clone={clone}
-          worktree={worktree}
-          thisDeviceLabel={thisDeviceLabel}
-        />
-      )
-    );
+  const destination = target !== null && (
+    <DestinationRow
+      worktree={worktree}
+      target={target}
+      thisDeviceLabel={thisDeviceLabel}
+      tag={toPeer ? "destination" : "this device"}
+    />
+  );
   return (
     <DestinationScope>
       <div className="flex min-w-0 flex-col gap-5">
@@ -353,13 +345,13 @@ export function ReviewDevicesColumn({
           >
             {toPeer === undefined
               ? destination
-              : toPeer.targets.map((target) =>
-                  target.deviceId === toPeer.pickedId ? (
-                    <Fragment key={target.deviceId}>{destination}</Fragment>
+              : toPeer.targets.map((candidate) =>
+                  candidate.deviceId === toPeer.pickedId ? (
+                    <Fragment key={candidate.deviceId}>{destination}</Fragment>
                   ) : (
                     <PeerTargetRow
-                      key={target.deviceId}
-                      target={target}
+                      key={candidate.deviceId}
+                      target={candidate}
                       onPick={toPeer.onPick}
                     />
                   ),
@@ -394,16 +386,16 @@ export function ReviewDevicesColumn({
           </ul>
         </section>
 
-        {localProject !== undefined && (
+        {target?.project && (
           <>
             <DestinationFolder
-              localProject={localProject}
+              localProject={target.project}
               thisDeviceLabel={thisDeviceLabel}
               name={pullWorktreeName(worktree)}
             />
 
             <SetupToggle
-              localProject={localProject}
+              localProject={target.project}
               thisDeviceLabel={thisDeviceLabel}
               checked={pull.runSetup}
               onChange={pull.setRunSetup}
@@ -411,57 +403,14 @@ export function ReviewDevicesColumn({
             />
           </>
         )}
-        {cloning && (
+        {target?.clone && (
           <CloneDestinationSection
-            clone={clone}
+            clone={target.clone}
             thisDeviceLabel={thisDeviceLabel}
           />
         )}
       </div>
     </DestinationScope>
-  );
-}
-
-// This machine as the destination when it has no checkout of the
-// repo: filled like the destination row, since the clone makes it
-// one, and saying so.
-function CloneRow({
-  clone,
-  worktree,
-  thisDeviceLabel,
-}: {
-  clone: CloneDestination;
-  worktree: Worktree;
-  thisDeviceLabel: string;
-}) {
-  const destinationKind = useDeviceKind(useDestinationScope().deviceId);
-  const landingBranch = pullLandingBranch(worktree);
-  return (
-    <DeviceRow
-      className="bg-accent text-accent-foreground"
-      mark={
-        <span
-          aria-hidden
-          className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
-        >
-          <Check className="size-2.5" />
-        </span>
-      }
-      kind={destinationKind}
-      soft
-      title={thisDeviceLabel}
-      note={
-        landingBranch !== worktree.branch
-          ? `gets ${clone.projectName}, copy on ${landingBranch}`
-          : `gets ${clone.projectName}`
-      }
-      trailing={
-        <StatusDot
-          tone="emerald"
-          label={<span className="text-xs">this device</span>}
-        />
-      }
-    />
   );
 }
 
@@ -472,8 +421,7 @@ function CloneRow({
 // has nothing to check, and the band asks for the pick.
 export function PullReviewFooter({
   worktree,
-  localProject,
-  cloning = false,
+  target,
   landing,
   waiting,
   blocked,
@@ -483,10 +431,9 @@ export function PullReviewFooter({
   onStart,
 }: {
   worktree: Worktree;
-  localProject: Project | undefined;
-  // A landing here with no checkout, which the pull clones first: no
-  // project to check for collisions, and nothing to pick.
-  cloning?: boolean;
+  // Where the flow lands, null while unpicked. A clone has no project
+  // to check for collisions in yet.
+  target: LandingTarget | null;
   landing?: Landing;
   // The gitignored rule resolves over the ignored list: no start
   // before it lands, or the files step would bring everything.
@@ -498,8 +445,8 @@ export function PullReviewFooter({
   onCancel: () => void;
   onStart: () => void;
 }) {
-  const { refusal } = useLocalCollision(localProject, worktree, landing);
-  const unpicked = localProject === undefined && !cloning;
+  const { refusal } = useLocalCollision(target?.project, worktree, landing);
+  const unpicked = target === null;
   return (
     <FlowFooter
       note={

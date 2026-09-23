@@ -27,6 +27,7 @@ import {
   WorktreeSchema,
 } from "@shared/schemas";
 import { unknownProjectError, unknownWorktreeError } from "@shared/errors";
+import { forgetRepoIdentity } from "@host/lib/git/repoIdentity";
 import { shellQuote } from "@host/lib/scripts/process";
 
 // One NDJSON document from the CLI's --json stream. `event` is set on
@@ -343,6 +344,10 @@ export async function projectsAddViaCli(path: string): Promise<Project> {
   if (result.code !== 0 || doc === undefined) {
     throw cliFailure(result, "sm projects add failed");
   }
+  // A registration is the one moment a path's identity may have
+  // changed under the cache: a project removed and cloned again at the
+  // same path within the TTL would otherwise read as the old one.
+  forgetRepoIdentity(path);
   return ProjectSchema.parse(doc);
 }
 
@@ -516,22 +521,25 @@ export async function bundleCreateViaCli(
     .parse(final);
 }
 
+// Into a registered project, or into a repository by path: the clone
+// from a peer (host/lib/sync/cloneFromPeer.ts) unpacks into a folder
+// it registers only once it is a checkout.
 export async function bundleUnpackViaCli(
-  project: Project,
+  target: Project | { path: string },
   inPath: string,
   refspecs: string[],
 ): Promise<{ fetched: { ref: string; commit: string }[] }> {
+  const project = "id" in target ? target : undefined;
   const result = await runner().runCli([
     "bundle",
     "unpack",
-    "--project-id",
-    project.id,
+    ...(project ? ["--project-id", project.id] : ["--repo", target.path]),
     "--in",
     inPath,
     ...refspecs.flatMap((spec) => ["--refspec", spec]),
   ]);
   const final = finalOkDoc(result, "sm bundle unpack failed", {
-    projectId: project.id,
+    projectId: project?.id,
   });
   return z.object({ fetched: z.array(RefTipDocSchema) }).parse(final);
 }

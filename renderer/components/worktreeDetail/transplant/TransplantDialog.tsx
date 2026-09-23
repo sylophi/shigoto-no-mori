@@ -8,7 +8,6 @@
 // stage. The flow runs both ways: TransplantDialog brings a peer's
 // worktree here (the pull), TransplantToDialog sends one of this
 // device's to a peer (the send, under that peer's DestinationProvider).
-import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import type { UseMutationResult } from "@tanstack/react-query";
 import {
@@ -26,10 +25,7 @@ import {
   useTeardownSource,
 } from "@/hooks/remote/usePullWorktree";
 import { DestinationProvider } from "@/hooks/remote/useHostScope";
-import {
-  type CloneDestination,
-  useCloneDestination,
-} from "../flow/cloneDestination";
+import { useLandingTarget } from "../flow/cloneDestination";
 import { modeOf, selectionSummary, usePullChoice } from "../flow/ignoreChoice";
 import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
 import type { DestinationPick } from "../flow/PullReview";
@@ -78,18 +74,12 @@ export function TransplantDialog({
   });
   const teardown = useTeardownSource({ worktree, sourceProjectId: project.id });
   const thisDeviceLabel = useLocalDeviceName();
-  // Read once: the pull's own clone registers a project mid-run, which
-  // would otherwise turn the running view into a flow that never
-  // cloned anything.
-  const [landing] = useState(localProject);
-  const clone = useCloneDestination(project);
   return (
     <TransplantFlow
       worktree={worktree}
       project={project}
       sourceIdentity={sourceIdentity}
-      localProject={landing}
-      clone={landing === undefined ? clone : undefined}
+      localProject={localProject}
       sourceDeviceLabel={sourceDeviceLabel}
       thisDeviceLabel={thisDeviceLabel}
       pull={pull}
@@ -140,7 +130,6 @@ function TransplantFlow({
   project,
   sourceIdentity,
   localProject,
-  clone,
   sourceDeviceLabel,
   thisDeviceLabel,
   landing = LANDS_HERE,
@@ -156,9 +145,8 @@ function TransplantFlow({
   // (flow/PullReview.tsx says why): this machine, or the picked peer.
   // Absent on the review of a flow to a peer with none picked yet,
   // which Start waits on, and on a flow here with no checkout of the
-  // repo, where `clone` says where the pull makes one.
+  // repo, which the pull clones first (flow/cloneDestination.tsx).
   localProject: Project | undefined;
-  clone?: CloneDestination;
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
   // A flow to a peer: the words for landing there, and the pick of
@@ -175,10 +163,16 @@ function TransplantFlow({
   const choice = usePullChoice(project.id, worktree.id, sourceIdentity);
   const mode = modeOf(choice.selection);
   const bringsFiles = pullBringsIgnoredFiles(mode);
+  const target = useLandingTarget({
+    localProject,
+    sourceProject: project,
+    toPeer: toPeer !== undefined,
+    submitted: pull.variables,
+  });
   const { stage, elapsed, progress, start, open } = usePullFlow({
     mutation: pull,
     sourceWorktreeId: worktree.id,
-    choice: { ...choice.choice, cloneInto: clone?.cloneInto },
+    choice: { ...choice.choice, cloneInto: target?.clone?.cloneInto },
     destinationDeviceId: toPeer?.pickedId ?? undefined,
     onClose,
   });
@@ -218,8 +212,7 @@ function TransplantFlow({
         <TransplantReview
           worktree={worktree}
           project={project}
-          localProject={localProject}
-          clone={clone}
+          target={target}
           sourceDeviceLabel={sourceDeviceLabel}
           thisDeviceLabel={thisDeviceLabel}
           landing={landing}
@@ -229,35 +222,33 @@ function TransplantFlow({
           onStart={start}
         />
       )}
-      {(stage === "running" || stage === "failed") &&
-        (localProject || clone) && (
-          <PullProgress
-            frame={progress.frame}
-            phasesSeen={progress.phasesSeen}
-            sourceDeviceLabel={sourceDeviceLabel}
-            thisDeviceLabel={thisDeviceLabel}
-            worktree={worktree}
-            localProject={localProject}
-            cloning={clone}
-            runSetup={choice.runSetup}
-            landing={landing}
-            phasesReported={!landing.onPeer}
-            failedNote={
-              landing.onPeer
-                ? `The copy here is untouched. If the worktree already landed ${landing.on}, open it from the sidebar instead of retrying.`
-                : undefined
-            }
-            error={stage === "failed" ? pull.error : undefined}
-            onClose={onClose}
-            onRetry={start}
-            filesDetail={
-              bringsFiles
-                ? (selectionSummary(choice.selection) ??
-                  "everything ignored, too")
-                : undefined
-            }
-          />
-        )}
+      {(stage === "running" || stage === "failed") && target && (
+        <PullProgress
+          frame={progress.frame}
+          phasesSeen={progress.phasesSeen}
+          sourceDeviceLabel={sourceDeviceLabel}
+          thisDeviceLabel={thisDeviceLabel}
+          worktree={worktree}
+          target={target}
+          runSetup={choice.runSetup}
+          landing={landing}
+          phasesReported={!landing.onPeer}
+          failedNote={
+            landing.onPeer
+              ? `The copy here is untouched. If the worktree already landed ${landing.on}, open it from the sidebar instead of retrying.`
+              : undefined
+          }
+          error={stage === "failed" ? pull.error : undefined}
+          onClose={onClose}
+          onRetry={start}
+          filesDetail={
+            bringsFiles
+              ? (selectionSummary(choice.selection) ??
+                "everything ignored, too")
+              : undefined
+          }
+        />
+      )}
       {stage === "done" && pull.data && (
         <TransplantFinish
           result={pull.data}

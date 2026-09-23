@@ -9,8 +9,7 @@
 // included, which is why the register waits for the checkout). Up to
 // the register everything is undone on failure: the folder is this
 // call's own, made here.
-import { mkdir, rm, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, rm } from "node:fs/promises";
 import { errorMessageOf } from "@shared/errors";
 import {
   type SyncCloneInto,
@@ -19,43 +18,30 @@ import {
 import { GitRefNameSchema, type Project } from "@shared/schemas";
 import { projectsAddViaCli } from "@host/ipc/cliDelegate";
 import type { PeerProjectsApi, PeerSyncApi } from "@host/ipc/peerSync";
+import { checkCloneDestination } from "@host/lib/git/clone";
 import { run } from "@host/lib/git/core";
 import { deleteRef, updateRef } from "@host/lib/git/refs";
-import { forgetRepoIdentity } from "@host/lib/git/repoIdentity";
-import { expandHome, isENOENT, pathExists } from "@host/lib/util/paths";
-import { fetchBundleFromPeer, landingRefspec } from "./fetchBundle";
+import { expandHome } from "@host/lib/util/paths";
+import { fetchBundleFromPeer, incomingRefFor } from "./fetchBundle";
 
 export async function cloneProjectFromPeer(
   peer: { sync: PeerSyncApi; projects: PeerProjectsApi },
   sourceProjectId: string,
-  { parentDir: rawParentDir, name }: SyncCloneInto,
+  { parentDir, name }: SyncCloneInto,
   onProgress?: (bytes: number, totalBytes: number) => void,
 ): Promise<Project> {
-  // The same two checks the URL clone makes (host/lib/git/clone.ts),
-  // for the same reason: git would refuse either, in words about its
-  // own argv.
-  const parentDir = expandHome(rawParentDir);
-  const parent = await stat(parentDir).catch((error: unknown) => {
-    if (isENOENT(error)) return null;
-    throw error;
-  });
-  if (!parent?.isDirectory()) {
-    throw new Error(`${parentDir} is not a folder`);
-  }
-  const dest = join(parentDir, name);
-  if (await pathExists(dest)) {
-    throw new Error(`${dest} already exists`);
-  }
-
   // The peer's default branch is what the checkout is made of, so the
   // clone reads as the repo (its identity is the root of that branch,
   // shared/git/repoIdentity.mts) and not as one worktree of it.
   // Re-parsed: it flows into refs and argv here.
-  const branch = GitRefNameSchema.parse(
-    await peer.projects.defaultBranch({ projectId: sourceProjectId }),
-  );
+  const [dest, branch] = await Promise.all([
+    checkCloneDestination(expandHome(parentDir), name),
+    peer.projects
+      .defaultBranch({ projectId: sourceProjectId })
+      .then((answer) => GitRefNameSchema.parse(answer)),
+  ]);
   const branchRef = SyncBundleRefSchema.parse(`refs/heads/${branch}`);
-  const incomingRef = landingRefspec(branchRef).split(":")[1] ?? "";
+  const incomingRef = incomingRefFor(branch);
 
   await mkdir(dest);
   try {
@@ -82,9 +68,6 @@ export async function cloneProjectFromPeer(
     await rm(dest, { recursive: true, force: true }).catch(() => {});
     throw error;
   }
-  // Read while empty, the folder would have cached as "no identity"
-  // for the rest of the TTL, and the pull that follows matches by it.
-  forgetRepoIdentity(dest);
   // The checkout stays if registering fails, so the error says where
   // it is: a retry would only find the folder taken.
   return projectsAddViaCli(dest).catch((error: unknown) => {

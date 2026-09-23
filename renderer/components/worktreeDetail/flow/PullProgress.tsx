@@ -10,7 +10,7 @@ import { AlertCircle, Check, Minus } from "lucide-react";
 import type { ReactNode } from "react";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import type { SyncPullProgress } from "@shared/ipc/modules/sync";
-import type { CreatePhase, Project, Worktree } from "@shared/schemas";
+import type { CreatePhase, Worktree } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
@@ -26,7 +26,7 @@ import { formatBytes } from "@/lib/formatBytes";
 import { pluralize } from "@/lib/pluralize";
 import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
 import { cn } from "@/lib/utils";
-import type { CloneDestination } from "./cloneDestination";
+import type { LandingTarget } from "./cloneDestination";
 import { useCreatePlan } from "./createPlan";
 import { FlowBody, FlowFooter } from "./FlowChrome";
 import {
@@ -59,11 +59,9 @@ type Props = {
   phasesSeen: ReadonlySet<CreatePhase>;
   // The source worktree being brought here.
   worktree: Worktree;
-  // The project it lands in, whose carry-over, setup script and ports
-  // the create's rows name. Absent when the run makes it (`cloning`).
-  localProject: Project | undefined;
-  // The clone the run opens with, when this machine had no checkout.
-  cloning?: CloneDestination;
+  // Where it lands: the project whose carry-over, setup script and
+  // ports the create's rows name, or the clone the run opens with.
+  target: LandingTarget;
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
   // The review's setup switch.
@@ -108,8 +106,7 @@ function ProgressView({
   frame,
   phasesSeen,
   worktree,
-  localProject,
-  cloning,
+  target,
   sourceDeviceLabel,
   thisDeviceLabel,
   runSetup,
@@ -130,8 +127,10 @@ function ProgressView({
   // (this machine unless a peer was picked).
   const sourceKind = useDeviceKind(useHostScope().deviceId);
   const destinationKind = useDeviceKind(useDestinationScope().deviceId);
-  const plan = useCreatePlan(localProject);
-  const projectName = localProject?.name ?? cloning?.projectName ?? "";
+  const plan = useCreatePlan(target.project);
+  const projectName = target.project
+    ? target.project.name
+    : target.clone.projectName;
   const failed = error !== undefined;
   const dirty = worktree.changedCount > 0;
   const folder = pullWorktreeName(worktree);
@@ -148,7 +147,7 @@ function ProgressView({
 
   const at = pullDone
     ? AFTER_PULL_POSITION
-    : framePosition(frame, cloning !== undefined);
+    : framePosition(frame, target.clone !== undefined);
   // The create's phases are listed from the plan, which is a reading
   // of the project made before the create ran, and settled by what the
   // run reports: a phase it reports gets its row even unplanned, and a
@@ -171,10 +170,10 @@ function ProgressView({
   // ports are listed when the project has them, setup whenever it has
   // a script (skipped with the switch off), the re-apply always.
   const rows: Row[] = [
-    ...rowIf(cloning !== undefined, {
+    ...rowIf(target.clone !== undefined, {
       title: `Clone ${projectName} to ${thisDeviceLabel}`,
       detail: cloneCaption ?? (
-        <span className="font-mono">{cloning?.dest}</span>
+        <span className="font-mono">{target.clone?.dest}</span>
       ),
       position: stepPosition("clone"),
     }),

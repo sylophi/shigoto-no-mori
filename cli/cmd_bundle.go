@@ -207,6 +207,7 @@ func cmdBundle(ctx cliContext, args []string) (int, error) {
 		strings: map[string][]string{
 			"project":    {"p"},
 			"project-id": {},
+			"repo":       {},
 			"out":        {},
 			"in":         {},
 		},
@@ -220,12 +221,25 @@ func cmdBundle(ctx cliContext, args []string) (int, error) {
 	verb := parsed.positional(0)
 	if verb != "create" && verb != "unpack" {
 		return 2, usageErrf(
-			"Usage: %s bundle create --out <path> --ref <fullRef>... [--have <sha>...] | %s bundle unpack --in <path> --refspec <src>:<dst>...",
+			"Usage: %s bundle create --out <path> --ref <fullRef>... [--have <sha>...] | %s bundle unpack [--repo <path>] --in <path> --refspec <src>:<dst>...",
 			binaryName, binaryName)
 	}
-	proj, err := resolveProjectArgs(ctx, parsed)
-	if err != nil {
-		return exitCodeOf(err), err
+	// unpack alone takes the repository by path: the app's clone from a
+	// peer (host/lib/sync/cloneFromPeer.ts) unpacks into a folder it has
+	// just made and registers afterwards, so there is no project to name
+	// yet. The refspec wall below is the same either way.
+	var projectPath string
+	if repo := parsed.strings["repo"]; repo != "" {
+		if verb != "unpack" || strings.HasPrefix(repo, "-") {
+			return 2, usageErrf("--repo <path> is for unpack.")
+		}
+		projectPath = toAbsolute(repo)
+	} else {
+		proj, err := resolveProjectArgs(ctx, parsed)
+		if err != nil {
+			return exitCodeOf(err), err
+		}
+		projectPath = proj.Path
 	}
 
 	if verb == "create" {
@@ -234,7 +248,7 @@ func cmdBundle(ctx cliContext, args []string) (int, error) {
 		if outPath == "" || strings.HasPrefix(outPath, "-") || len(refs) == 0 {
 			return 2, usageErrf("Usage: %s bundle create --out <path> --ref <fullRef>... [--have <sha>...]", binaryName)
 		}
-		res, err := createBundle(proj.Path, outPath, refs, parsed.lists["have"])
+		res, err := createBundle(projectPath, outPath, refs, parsed.lists["have"])
 		if err != nil {
 			return exitCodeOf(err), err
 		}
@@ -257,7 +271,7 @@ func cmdBundle(ctx cliContext, args []string) (int, error) {
 	if in == "" || strings.HasPrefix(in, "-") || len(refspecs) == 0 {
 		return 2, usageErrf("Usage: %s bundle unpack --in <path> --refspec <src>:<dst>...", binaryName)
 	}
-	res, err := unpackBundle(proj.Path, in, refspecs)
+	res, err := unpackBundle(projectPath, in, refspecs)
 	if err != nil {
 		return exitCodeOf(err), err
 	}

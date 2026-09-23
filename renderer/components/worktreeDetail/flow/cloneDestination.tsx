@@ -1,26 +1,36 @@
-// Where the repo goes when this machine has no checkout of it: the
-// pulls that land here (a transplant, a mirror) clone it first, into
-// a folder the review names and the user can change. The default
+// Where a pull lands when this machine has no checkout of the repo:
+// the pulls that land here (a transplant, a mirror) clone it first,
+// into a folder the review names and the user can change. The default
 // mirrors the source's own layout, the peer's path with its home
 // swapped for this one's, so the two machines end up alike without a
 // pick; a path outside the peer's home falls back to where this
 // device keeps its repos (addProject/cloneDestination.ts). The
 // mutation gets the pair as the pull's `cloneInto`.
+//
+// The landing target is the one fact every piece of a flow reads:
+// the project the copy lands in, or the clone that makes one, or
+// nothing yet (a flow to a peer with no device picked, which Start
+// waits on). Made once per flow (useLandingTarget) and handed down.
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FolderInput, GitBranch } from "lucide-react";
 import type { SyncCloneInto } from "@shared/ipc/modules/sync";
-import type { Project, RuntimeInfo } from "@shared/schemas";
+import type { Project } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
 import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { defaultCloneParent } from "@/components/addProject/cloneDestination";
 import { projectsQueryOptions } from "@/hooks/projects/useProjects";
-import { LocalHostScope } from "@/hooks/remote/useHostScope";
-import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { ensureTrailingSep, tildify } from "@/lib/projectPaths";
-import { queryKeys } from "@/lib/queryKeys";
+import { LocalHostScope, useHostScope } from "@/hooks/remote/useHostScope";
+import { runtimeInfoQueryOptions } from "@/hooks/system/useRuntimeInfo";
+import {
+  ensureTrailingSep,
+  getBrowseLeafSegment,
+  getBrowseParentPath,
+  normalizeForSubmit,
+  tildify,
+} from "@/lib/projectPaths";
 import { CARD } from "./FlowChrome";
 
 export type CloneDestination = {
@@ -31,57 +41,81 @@ export type CloneDestination = {
   cloneInto: SyncCloneInto;
   // The whole path, for display.
   dest: string;
-  changeParent: () => void;
-  // The picker, mounted by the section while it is up.
-  picker: { open: boolean; close: () => void; pick: (parent: string) => void };
+  setParent: (chosen: string) => void;
 };
 
-// This machine's home, whichever scope the caller sits under: the
-// dialog is under the source's, and the peer's home is what
-// useRuntimeInfo answers there.
-function useLocalHome(): string | null {
-  const { data } = useQuery<RuntimeInfo>({
-    queryKey: queryKeys.runtimeInfo(),
-    queryFn: () => window.api.runtime.info(),
-    staleTime: Number.POSITIVE_INFINITY,
+export type LandingTarget =
+  | { project: Project; clone?: undefined }
+  | { project?: undefined; clone: CloneDestination };
+
+// The clone the flow would make, computed only while it is the
+// landing (`enabled`): the reads behind it are this machine's home
+// and projects and the peer's home, none of which a flow into a
+// checkout already here needs.
+function useCloneDestination(
+  sourceProject: Project,
+  enabled: boolean,
+): CloneDestination {
+  // The dialog sits under the source's scope, so its runtime info is
+  // the peer's home. This machine's comes from the local scope.
+  const { data: peerRuntime } = useQuery({
+    ...runtimeInfoQueryOptions(useHostScope()),
+    enabled,
   });
-  return data?.homedir ?? null;
-}
-
-export function useCloneDestination(sourceProject: Project): CloneDestination {
-  const { data: peerRuntime } = useRuntimeInfo();
-  const localHome = useLocalHome();
-  const { data: localProjects = [] } = useQuery(projectsQueryOptions({}));
+  const { data: localRuntime } = useQuery({
+    ...runtimeInfoQueryOptions({}),
+    enabled,
+  });
+  const { data: localProjects = [] } = useQuery({
+    ...projectsQueryOptions({}),
+    enabled,
+  });
   const [picked, setPicked] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
 
-  const path = sourceProject.path;
-  const slash = path.lastIndexOf("/");
-  const name = slash === -1 ? path : path.slice(slash + 1);
-  const peerHome = peerRuntime?.homedir;
-  const peerParent = slash > 0 ? path.slice(0, slash) : null;
+  const localHome = localRuntime?.homedir ?? null;
+  const name = getBrowseLeafSegment(sourceProject.path);
+  const peerParent = getBrowseParentPath(sourceProject.path);
   const alike =
-    peerHome !== undefined &&
-    peerParent !== null &&
-    (peerParent === peerHome || peerParent.startsWith(`${peerHome}/`))
-      ? ensureTrailingSep(tildify(peerParent, peerHome))
-      : null;
+    peerParent === null ? null : tildify(peerParent, peerRuntime?.homedir);
   const parent =
-    picked ?? alike ?? defaultCloneParent(localProjects, localHome);
+    picked ??
+    (alike?.startsWith("~") ? alike : null) ??
+    (enabled ? defaultCloneParent(localProjects, localHome) : "~/");
   return {
     projectName: sourceProject.name,
-    cloneInto: { parentDir: parent.replace(/\/+$/, "") || "/", name },
+    cloneInto: { parentDir: normalizeForSubmit(parent), name },
     dest: `${parent}${name}`,
-    changeParent: () => setOpen(true),
-    picker: {
-      open,
-      close: () => setOpen(false),
-      pick: (chosen) => {
-        setPicked(ensureTrailingSep(tildify(chosen, localHome)));
-        setOpen(false);
-      },
-    },
+    setParent: (chosen) =>
+      setPicked(ensureTrailingSep(tildify(chosen, localHome))),
   };
+}
+
+// Where a flow lands, decided once: the picked or held project, or
+// the clone when this machine holds none. A run reads it off what it
+// was submitted with rather than the live project list, since the
+// clone registers a project mid-run and a live read would turn the
+// running view into a flow that never cloned anything. A flow to a
+// peer never clones: the peer must hold the repo.
+export function useLandingTarget({
+  localProject,
+  sourceProject,
+  toPeer,
+  submitted,
+}: {
+  localProject: Project | undefined;
+  sourceProject: Project;
+  toPeer: boolean;
+  // The running (or finished) mutation's input, absent on the review.
+  submitted: { cloneInto?: SyncCloneInto } | undefined;
+}): LandingTarget | null {
+  const cloning =
+    !toPeer &&
+    (submitted === undefined
+      ? localProject === undefined
+      : submitted.cloneInto !== undefined);
+  const clone = useCloneDestination(sourceProject, cloning);
+  if (cloning) return { clone };
+  return localProject === undefined ? null : { project: localProject };
 }
 
 // The review's clone section, in place of the folder and setup cards
@@ -94,6 +128,7 @@ export function CloneDestinationSection({
   clone: CloneDestination;
   thisDeviceLabel: string;
 }) {
+  const [picking, setPicking] = useState(false);
   return (
     <section className="space-y-2">
       <SectionHeading>Clone on {thisDeviceLabel}</SectionHeading>
@@ -115,7 +150,7 @@ export function CloneDestinationSection({
             type="button"
             variant="outline"
             size="xs"
-            onClick={clone.changeParent}
+            onClick={() => setPicking(true)}
           >
             Change folder
           </Button>
@@ -126,14 +161,17 @@ export function CloneDestinationSection({
           it.
         </p>
       </div>
-      {clone.picker.open && (
+      {picking && (
         <LocalHostScope>
           <FolderPickerModal
             initialPath={clone.cloneInto.parentDir}
             title="Clone into"
             hint={`${clone.projectName} becomes a new folder inside the one you pick.`}
-            onPick={clone.picker.pick}
-            onClose={clone.picker.close}
+            onPick={(chosen) => {
+              clone.setParent(chosen);
+              setPicking(false);
+            }}
+            onClose={() => setPicking(false)}
           />
         </LocalHostScope>
       )}

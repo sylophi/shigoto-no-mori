@@ -15,7 +15,7 @@ import { changeEntries } from "@/lib/patchFiles";
 import { DestinationScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
 import { cn } from "@/lib/utils";
-import type { CloneDestination } from "../flow/cloneDestination";
+import type { LandingTarget } from "../flow/cloneDestination";
 import type { PullChoiceState } from "../flow/ignoreChoice";
 import type { Landing } from "../flow/pullSteps";
 import { PullLeaveOut } from "../flow/PullLeaveOut";
@@ -37,8 +37,7 @@ import {
 export function TransplantReview({
   worktree,
   project,
-  localProject,
-  clone,
+  target,
   sourceDeviceLabel,
   thisDeviceLabel,
   landing,
@@ -49,12 +48,10 @@ export function TransplantReview({
 }: {
   worktree: Worktree;
   project: Project;
-  // The landing project and device: this machine's, or the picked
-  // peer's when the transplant goes to one (`toPeer`), absent until
-  // one is picked. Absent too when this machine has no checkout, and
-  // `clone` says where the pull makes one.
-  localProject: Project | undefined;
-  clone?: CloneDestination;
+  // Where it lands (flow/cloneDestination.tsx): this machine's
+  // project or the clone that makes one, or the picked peer's when the
+  // transplant goes to one (`toPeer`), null until one is picked.
+  target: LandingTarget | null;
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
   landing?: Landing;
@@ -104,10 +101,10 @@ export function TransplantReview({
               }}
             />
 
-            {localProject !== undefined && (
+            {target?.project && (
               <DestinationScope>
                 <CarryOverList
-                  localProject={localProject}
+                  localProject={target.project}
                   thisDeviceLabel={thisDeviceLabel}
                 />
               </DestinationScope>
@@ -119,8 +116,7 @@ export function TransplantReview({
             sourceNote="where it is now"
             toPeer={toPeer}
             worktree={worktree}
-            localProject={localProject}
-            clone={clone}
+            target={target}
             sourceDeviceLabel={sourceDeviceLabel}
             thisDeviceLabel={thisDeviceLabel}
             pull={pull}
@@ -131,8 +127,7 @@ export function TransplantReview({
       <DestinationScope>
         <PullReviewFooter
           worktree={worktree}
-          localProject={localProject}
-          cloning={localProject === undefined && clone !== undefined}
+          target={target}
           landing={landing}
           waiting={pull.waiting}
           blocked={pull.blocked}

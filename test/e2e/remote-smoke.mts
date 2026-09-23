@@ -457,6 +457,16 @@ async function main(): Promise<string[]> {
       );
     });
 
+    // b's `lone` repo (prepareFixture): no remote, and nothing on a
+    // until a scenario clones it over the device link.
+    const loneOnB = async (): Promise<Project> => {
+      const projects = (await onPeer(a, idB, "projects:list")) as Project[];
+      return need(
+        projects.find((p) => p.name === "lone"),
+        "b's lone project",
+      );
+    };
+
     let bProject: Project | undefined;
     await scenario("remote read", async () => {
       const projects = (await onPeer(a, idB, "projects:list")) as Project[];
@@ -858,11 +868,7 @@ async function main(): Promise<string[]> {
     // lands the primary's copy beside it. The stop removes the copy
     // alone: the clone stays as an ordinary project.
     await scenario("mirror: onto a device with no checkout", async () => {
-      const projects = (await onPeer(a, idB, "projects:list")) as Project[];
-      const lone = need(
-        projects.find((p) => p.name === "lone"),
-        "b's lone project",
-      );
+      const lone = await loneOnB();
       const identity = need(lone.identity ?? undefined, "lone's identity");
       const onB = (await onPeer(a, idB, "worktrees:list", {
         projectId: lone.id,
@@ -2067,11 +2073,7 @@ async function main(): Promise<string[]> {
     await scenario(
       "dialog: mirror onto a device with no checkout",
       async () => {
-        const projects = (await onPeer(a, idB, "projects:list")) as Project[];
-        const lone = need(
-          projects.find((p) => p.name === "lone"),
-          "b's lone project",
-        );
+        const lone = await loneOnB();
         const before = await a.evaluate<Project[]>(
           "window.api.projects.list()",
         );
@@ -2161,11 +2163,7 @@ async function main(): Promise<string[]> {
     // a's clone from the mirror above away, so this device holds no
     // checkout again.
     await scenario("transplant: onto a device with no checkout", async () => {
-      const projects = (await onPeer(a, idB, "projects:list")) as Project[];
-      const lone = need(
-        projects.find((p) => p.name === "lone"),
-        "b's lone project",
-      );
+      const lone = await loneOnB();
       const identity = need(lone.identity ?? undefined, "lone's identity");
       const held = (
         await a.evaluate<Project[]>("window.api.projects.list()")

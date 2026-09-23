@@ -9,7 +9,6 @@ import { join } from "node:path";
 import type { z } from "zod";
 import {
   SyncCaptureDirtyResultSchema,
-  type SyncCloneInto,
   SyncHasCommitsResultSchema,
   SyncLandCheckResultSchema,
   SyncLandWorktreeResultSchema,
@@ -89,7 +88,10 @@ import {
   NO_PROJECT_OF_IDENTITY,
 } from "@host/lib/projects";
 import { cloneProjectFromPeer } from "@host/lib/sync/cloneFromPeer";
-import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
+import {
+  fetchBundleFromPeer,
+  incomingRefFor,
+} from "@host/lib/sync/fetchBundle";
 import { pushBundleToPeer } from "@host/lib/sync/pushBundle";
 import { notifierFor, worktreesHandlers } from "./worktrees";
 
@@ -418,7 +420,7 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
     ctx,
   ) => {
     const project = await findProjectByIdentityOrThrow(identity);
-    const incomingRef = `refs/shigomori/incoming/${branch}`;
+    const incomingRef = incomingRefFor(branch);
     const landing = landBranch ?? branch;
     try {
       await refuseLandingCollision(project, landing, worktreeName);
@@ -688,22 +690,6 @@ async function refuseLandingCollision(
   }
 }
 
-// The pull's landing project: the checkout this device has of the
-// repo, or the one the pull makes when it has none and was told where
-// (cloneFromPeer.ts). A checkout it has wins over a place named for a
-// new one: the dialog that named it was reading a stale list, and a
-// second clone of a repo already here is not what anyone asked for.
-async function landingProject(
-  identity: string,
-  cloneInto: SyncCloneInto | undefined,
-  clone: (into: SyncCloneInto) => Promise<Project>,
-): Promise<{ project: Project; cloned: boolean }> {
-  const held = await findProjectByIdentity(identity);
-  if (held !== undefined) return { project: held, cloned: false };
-  if (cloneInto === undefined) throw new Error(NO_PROJECT_OF_IDENTITY);
-  return { project: await clone(cloneInto), cloned: true };
-}
-
 // The landing proper, shared the same way: the worktree created on the
 // incoming ref, then the capture re-applied in it. The caller owns the
 // incoming ref and its sweep. `branch` is the one the copy is created
@@ -834,21 +820,24 @@ export async function runPullWorktree(
 
   // 1. The local target repo, re-resolved by identity from disk, or
   // made now: with none, and a place named for one, the repo is
-  // cloned from the peer first and the copy lands in that.
+  // cloned from the peer first (cloneFromPeer.ts) and the copy lands
+  // in that. A checkout this device has wins over the place named: the
+  // dialog that named it was reading a stale list, and a second clone
+  // of a repo already here is not what anyone asked for.
   const peer = peerSyncApiFor(sourceDeviceId);
-  const { project, cloned } = await landingProject(
-    sourceIdentity,
-    cloneInto,
-    (into) => {
-      progress({ step: "clone" });
-      return cloneProjectFromPeer(
-        { sync: peer, projects: peerProjectsApiFor(sourceDeviceId) },
-        sourceProjectId,
-        into,
-        (bytes, totalBytes) => progress({ step: "clone", bytes, totalBytes }),
-      );
-    },
-  );
+  let cloned: Project | undefined;
+  let project = await findProjectByIdentity(sourceIdentity);
+  if (project === undefined) {
+    if (cloneInto === undefined) throw new Error(NO_PROJECT_OF_IDENTITY);
+    progress({ step: "clone" });
+    cloned = await cloneProjectFromPeer(
+      { sync: peer, projects: peerProjectsApiFor(sourceDeviceId) },
+      sourceProjectId,
+      cloneInto,
+      (bytes, totalBytes) => progress({ step: "clone", bytes, totalBytes }),
+    );
+    project = cloned;
+  }
 
   // 2. Refuse up front what the create would refuse after the bundle
   // crossed.
@@ -889,7 +878,7 @@ export async function runPullWorktree(
     ...(tipIsLocal ? [] : [branchRef]),
     ...(capture.captured ? [sourceDirtyRef] : []),
   ];
-  const incomingRef = `refs/shigomori/incoming/${branch}`;
+  const incomingRef = incomingRefFor(branch);
   try {
     if (wantRefs.length > 0) {
       // The fetch opens the transfer step itself with its (0, total)
@@ -989,7 +978,7 @@ export async function runPullWorktree(
       captured: capture.captured,
       dirtyApplied,
       files,
-      ...(cloned ? { cloned: project } : {}),
+      cloned,
     };
   } finally {
     // Sweep the landing ref success or fail. A survivor is not
