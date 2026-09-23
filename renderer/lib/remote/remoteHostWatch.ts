@@ -26,7 +26,7 @@
 // while a session was down, so this subscription never needs to know a
 // session's lifecycle.
 //
-// Deliberately NOT mirrored, so this stays seven channels:
+// Deliberately NOT mirrored, so this stays eight channels:
 // - projects:usageBumped drives the local sidebar's usage sorts, which
 //   a peer's rows don't drive.
 // - git:fetchActive feeds the device-blind fetch-spinner store, which
@@ -36,8 +36,10 @@ import { gitContract } from "@shared/ipc/modules/git";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
 import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
+import { mirrorContract } from "@shared/ipc/modules/mirror";
 import { updaterContract } from "@shared/ipc/modules/updater";
 import { invalidateBranchState } from "@/hooks/git/useBranches";
+import { writeMirrorList } from "@/hooks/remote/useMirrors";
 import { writeUpdaterState } from "@/hooks/system/useUpdater";
 import { mergePeerSharedSettings } from "./sharedSettingsSync";
 import {
@@ -53,6 +55,7 @@ const COMMAND_ACCESS_CHANGED = remoteAccessContract.calls.commandAccessChanged;
 const PULL_REQUESTS_REFRESHED =
   githubCliContract.calls.projectPullRequestsRefreshed;
 const UPDATER_STATE = updaterContract.calls.state;
+const MIRROR_CHANGED = mirrorContract.calls.changed;
 const SHARED_SETTINGS_CHANGED = sharedSettingsContract.calls.changed;
 
 // Boot wiring: subscribe once for the life of the window, never
@@ -112,6 +115,17 @@ export function startRemoteHostWatch(queryClient: QueryClient): void {
       const parsed = UPDATER_STATE.payload.safeParse(payload);
       if (!parsed.success) return;
       writeUpdaterState(queryClient, deviceId, parsed.data);
+      return;
+    }
+    // The peer's mirrors moved, the list riding the push whole (an
+    // older peer sends none, and its list is re-asked). Always on, so
+    // the sidebar's folds and a far end's page (a peer's session
+    // against a worktree here: hooks/remote/useMirrors.ts) follow a
+    // peer whose pages were never opened.
+    if (channel === MIRROR_CHANGED.channel) {
+      const parsed = MIRROR_CHANGED.payload.safeParse(payload);
+      if (!parsed.success) return;
+      writeMirrorList(queryClient, deviceId, parsed.data);
       return;
     }
     // The peer's copy of the shared settings moved, riding the push

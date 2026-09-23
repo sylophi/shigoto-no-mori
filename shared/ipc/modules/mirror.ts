@@ -27,13 +27,16 @@ import {
 // peers mirroring FROM here.
 //
 // Host-scoped: a device's mirrors are facts about that device, and a
-// remote viewer sees them (list is a read). The mutations are local
+// remote viewer sees them (list is a read). The starts are local
 // orchestrators like sync:pullWorktree: start pulls the peer's
 // worktree here first (branch, commits, uncommitted changes, through
 // the existing transfer) and then opens the mirror on top, so the
 // first cycle has little to move and git agrees on both sides from the
-// first second. Controlling another device's mirrors from afar is not
-// offered yet, so stop/pause/resume are remote:false.
+// first second. The controls (stop, pause, resume, setIgnores) act on
+// a session this device runs, and are offered to peers too: a mirror
+// pairs two devices, and either side's page controls it, the far end
+// through the device that runs the session. They ride that device's
+// command grant like every other mutation.
 
 // Mutagen mints session identifiers ("sync_" plus a base62 body). The
 // daemon echoes them verbatim, so the shape is pinned only loosely.
@@ -87,6 +90,34 @@ export function mirrorOnMirrorBranch(session: {
   labels: Record<string, string>;
 }): boolean {
   return session.labels[MIRROR_LABEL_MIRROR_BRANCH] === "1";
+}
+
+// Where the copy a mirror made is (the worktree a stop removes), given
+// the device running the session: on its peer for a mirror started to
+// it, otherwise on the runner. The same reading on the host (the CLI's
+// view from either side) and in the renderer (the dialog's words).
+export function mirrorCopyOf(
+  session: {
+    labels: Record<string, string>;
+    deviceId: string;
+    projectId: string;
+    worktreeId: string;
+    localProjectId: string;
+    localWorktreeId: string;
+  },
+  runnerDeviceId: string,
+): { deviceId: string; projectId: string; worktreeId: string } {
+  return mirrorCopyIsRemote(session)
+    ? {
+        deviceId: session.deviceId,
+        projectId: session.projectId,
+        worktreeId: session.worktreeId,
+      }
+    : {
+        deviceId: runnerDeviceId,
+        projectId: session.localProjectId,
+        worktreeId: session.localWorktreeId,
+      };
 }
 export function isTransferSession(session: {
   labels: Record<string, string>;
@@ -457,23 +488,29 @@ export const mirrorContract = defineContract("host", {
       mutating: true,
     },
   ),
+  // The controls, served to peers on the command grant: the device at
+  // the far end of a mirror drives the session from its own page
+  // through the device running it (renderer/hooks/remote/useMirrors.ts
+  // useWorktreeMirrorLinks). Stop moves a worktree (the copy goes),
+  // and every one of them moves the list, so all keep the host-state
+  // ping.
   stop: invoke("mirror:stop", MirrorStopPayloadSchema, z.void(), {
-    remote: false,
+    remote: true,
     mutating: true,
   }),
   pause: invoke("mirror:pause", MirrorSessionPayloadSchema, z.void(), {
-    remote: false,
+    remote: true,
     mutating: true,
   }),
   resume: invoke("mirror:resume", MirrorSessionPayloadSchema, z.void(), {
-    remote: false,
+    remote: true,
     mutating: true,
   }),
   setIgnores: invoke(
     "mirror:setIgnores",
     MirrorSetIgnoresPayloadSchema,
     z.strictObject({ session: MirrorSessionIdSchema }),
-    { remote: false, mutating: true },
+    { remote: true, mutating: true },
   ),
   // Host-scoped like list: a peer viewing this device's mirror reads
   // the same thread. Nothing here moves state.

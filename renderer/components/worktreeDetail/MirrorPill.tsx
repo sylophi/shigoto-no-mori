@@ -1,28 +1,28 @@
 // The worktree header's mirror line: what this worktree's live mirror
-// is doing, if it has one. Two shapes, both quiet when there is
-// nothing to say:
-//   - this worktree is the local side of a session this device runs
-//     (the copy of a peer's worktree, or the original of a copy made
-//     on a peer): status, conflicts and problems. The details
-//     and the controls live in the dialog behind the footer's Mirror
-//     button (mirror/MirrorManageDialog.tsx).
-//   - this worktree is being mirrored BY peers (streams this device
-//     serves): one chip naming them.
+// is doing, if it has one. One line per mirror the worktree is part
+// of, on either side of it (hooks/remote/useMirrors.ts
+// useWorktreeMirrorLinks): status, conflicts and problems, and the
+// other device by name. A peer's mirror whose session is not in hand
+// yet is named alone. Quiet when there is nothing to say. The details
+// and the controls live in the dialog behind the footer's Mirror
+// button (mirror/MirrorAction.tsx), which drives the session through
+// the device running it.
 // Built on the shared chip (ui/chip-button.tsx) and the status tones
 // (ui/status-dot.tsx): emerald for a settled live mirror, sky while
 // cycles run, amber for conflicts and reconnects, rose for a halt or
 // an error, slate for paused.
 import { RefreshCw } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
-import type { MirrorSession } from "@shared/ipc/modules/mirror";
 import type { Worktree } from "@shared/schemas";
 import { Chip } from "@/components/ui/chip-button";
 import { type StatusTone, TONE_TEXT } from "@/components/ui/status-dot";
 import { MirrorConflictsChip } from "@/components/worktreeDetail/MirrorConflicts";
 import { describeMirror } from "@/components/worktreeDetail/mirror/mirrorStatus";
-import { useHostScope } from "@/hooks/remote/useHostScope";
-import { useWorktreeMirror } from "@/hooks/remote/useMirrors";
-import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import {
+  useWorktreeMirrorLinks,
+  type WorktreeMirrorLink,
+} from "@/hooks/remote/useMirrors";
+import { useDeviceName } from "@/hooks/remote/useRemoteDevices";
 import { localDeviceId } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 
@@ -53,54 +53,34 @@ function StatusChip({
   );
 }
 
-// The other party by name: a peer's label, or "this device" when the
-// worktree being viewed is served TO the machine showing it (a remote
-// worktree page on the device that mirrors it).
-function PeerName({ deviceId }: { deviceId: string }) {
-  const label = useRemoteDeviceLabel(deviceId);
-  if (deviceId === localDeviceId) return <>this device</>;
-  return <>{label || "another device"}</>;
-}
-
 export function MirrorPill({ worktree }: { worktree: Worktree }) {
-  const { remote } = useHostScope();
-  const { session, serving } = useWorktreeMirror(worktree);
-  if (session === undefined && serving.length === 0) return null;
+  const links = useWorktreeMirrorLinks(worktree);
+  if (links.length === 0) return null;
   return (
     <div className="flex flex-wrap items-center gap-1 text-xs">
-      {session !== undefined && (
-        <SessionLine session={session} canControl={!remote} />
-      )}
-      {serving.length > 0 && (
-        <>
-          <StatusChip
-            tone="emerald"
-            icon={RefreshCw}
-            label="Mirrored"
-            title="A peer keeps a live copy of this worktree"
-          />
-          <span className="text-muted-foreground">
-            to{" "}
-            {serving.map((stream, index) => (
-              <span key={stream.channelId}>
-                {index > 0 && ", "}
-                <PeerName deviceId={stream.peerDeviceId} />
-              </span>
-            ))}
-          </span>
-        </>
-      )}
+      {links.map((link) => (
+        <SessionLine key={link.runnerDeviceId} link={link} />
+      ))}
     </div>
   );
 }
 
-function SessionLine({
-  session,
-  canControl,
-}: {
-  session: MirrorSession;
-  canControl: boolean;
-}) {
+function SessionLine({ link }: { link: WorktreeMirrorLink }) {
+  const other = useDeviceName(link.otherDeviceId);
+  const { session } = link;
+  if (session === undefined) {
+    return (
+      <>
+        <StatusChip
+          tone="emerald"
+          icon={RefreshCw}
+          label="Mirrored"
+          title="A peer keeps a live copy of this worktree"
+        />
+        <span className="text-muted-foreground">to {other}</span>
+      </>
+    );
+  }
   const view = describeMirror(session);
   return (
     <>
@@ -109,7 +89,9 @@ function SessionLine({
           session={session}
           tone={view.tone}
           label={view.label}
-          canReveal={canControl}
+          // Revealing is this machine's Finder, under the runner's
+          // copy.
+          canReveal={link.runnerDeviceId === localDeviceId}
         />
       ) : (
         <StatusChip
@@ -120,9 +102,7 @@ function SessionLine({
           spinning={view.spinning}
         />
       )}
-      <span className="text-muted-foreground">
-        with <PeerName deviceId={session.deviceId} />
-      </span>
+      <span className="text-muted-foreground">with {other}</span>
     </>
   );
 }
