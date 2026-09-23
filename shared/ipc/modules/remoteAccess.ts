@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 
 // The remote execution surface's preflight: "does
@@ -18,8 +18,8 @@ import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 export const remoteAccessContract = defineContract("host", {
   commandAccess: invoke(
     "remoteAccess:commandAccess",
-    z.void(),
-    z.object({ granted: z.boolean() }),
+    Schema.Undefined,
+    Schema.Struct({ granted: Schema.Boolean }),
     { remote: true, mutating: false },
   ),
   // Fan-out to every connected peer when this host's command-access
@@ -29,7 +29,7 @@ export const remoteAccessContract = defineContract("host", {
   // verdict.
   commandAccessChanged: broadcast(
     "remoteAccess:commandAccessChanged",
-    z.void(),
+    Schema.Undefined,
     { remote: true },
   ),
 });

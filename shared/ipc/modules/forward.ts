@@ -1,7 +1,8 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
-import { PortNumberZod } from "@shared/schemas";
+import { PortNumberSchema } from "@shared/schemas";
+import { strictStruct } from "@shared/schemas/strict";
 
 // Port forwarding over byte channels: a
 // forwarded TCP connection crosses the direct websocket as raw binary
@@ -34,13 +35,13 @@ const ChannelIdSchema = HexId32Schema;
 // engine's start probe lets that one through), ChannelOpenRefused from
 // the channel layer (the forward UI words too-many-conns inline).
 
-const ForwardOpenPayloadSchema = z.strictObject({
-  port: PortNumberZod,
+const ForwardOpenPayloadSchema = strictStruct({
+  port: PortNumberSchema,
   channelId: ChannelIdSchema,
 });
 
 export const forwardContract = defineContract("host", {
-  open: invoke("forward:open", ForwardOpenPayloadSchema, z.void(), {
+  open: invoke("forward:open", ForwardOpenPayloadSchema, Schema.Undefined, {
     remote: true,
     mutating: true,
     movesHostState: false,

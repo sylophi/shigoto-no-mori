@@ -4,11 +4,12 @@
 // the local branch, worktrees.create takes over through the ordinary
 // `checkout` path, so the bundled CLI stays the create engine and knows
 // nothing about PRs.
-import { z } from "zod";
-import type {
-  PullRequestCandidate,
-  PullRequestCandidateList,
-  PullRequestCheckoutRef,
+import { Option, Schema } from "effect";
+import {
+  type PullRequestCandidate,
+  type PullRequestCandidateList,
+  type PullRequestCheckoutRef,
+  PullRequestSchema,
 } from "@shared/schemas";
 import { forkBranchCandidates } from "@shared/git/branches";
 import { errorMessageOf } from "@shared/errors";
@@ -24,30 +25,41 @@ import { ghUnavailableReason } from "./readiness";
 // this one is a list a human scrolls.
 const PR_CANDIDATE_LIMIT = 50;
 
-const GhPrCandidateSchema = z.object({
-  number: z.number().int().positive(),
-  url: z.url(),
-  title: z.string(),
-  isDraft: z.boolean(),
-  headRefName: z.string().min(1),
-  updatedAt: z.string(),
-  author: z.looseObject({ login: z.string().optional() }).nullish(),
-  isCrossRepository: z.boolean(),
-  headRepository: z
-    .looseObject({
-      name: z.string().optional(),
-      nameWithOwner: z.string().optional(),
-    })
-    .nullish(),
-  headRepositoryOwner: z
-    .looseObject({ login: z.string().optional() })
-    .nullish(),
+// gh's nested objects, read loosely: absent, null, or an object whose
+// other keys ride along untouched.
+const looseNullish = <Fields extends Schema.Struct.Fields>(fields: Fields) =>
+  Schema.optional(
+    Schema.NullOr(
+      Schema.StructWithRest(Schema.Struct(fields), [
+        Schema.Record(Schema.String, Schema.Unknown),
+      ]),
+    ),
+  );
+const GhLoginSchema = looseNullish({ login: Schema.optional(Schema.String) });
+
+const GhPrCandidateSchema = Schema.Struct({
+  number: Schema.Int.check(Schema.isGreaterThan(0)),
+  url: PullRequestSchema.fields.url,
+  title: Schema.String,
+  isDraft: Schema.Boolean,
+  headRefName: Schema.NonEmptyString,
+  updatedAt: Schema.String,
+  author: GhLoginSchema,
+  isCrossRepository: Schema.Boolean,
+  headRepository: looseNullish({
+    name: Schema.optional(Schema.String),
+    nameWithOwner: Schema.optional(Schema.String),
+  }),
+  headRepositoryOwner: GhLoginSchema,
 });
-type GhPrCandidate = z.infer<typeof GhPrCandidateSchema>;
+type GhPrCandidate = typeof GhPrCandidateSchema.Type;
+const decodeGhPrCandidates = Schema.decodeUnknownSync(
+  Schema.Array(GhPrCandidateSchema),
+);
 
 // Derived from the schema that parses the response, so the two can't
 // drift into "asked for a field we don't read" or the reverse.
-const CANDIDATE_JSON_FIELDS = Object.keys(GhPrCandidateSchema.shape).join(",");
+const CANDIDATE_JSON_FIELDS = Object.keys(GhPrCandidateSchema.fields).join(",");
 
 // Open PRs only: the mode exists to start a review, and checking out a
 // merged or closed head is the "check out source" mode's job.
@@ -73,7 +85,7 @@ export async function listPullRequestCandidates(
       ],
       { cwd },
     );
-    const rows = z.array(GhPrCandidateSchema).parse(JSON.parse(stdout));
+    const rows = decodeGhPrCandidates(JSON.parse(stdout));
     // gh already returns newest-first, which is the order a reviewer wants.
     return { status: "ok", pullRequests: rows.map(toCandidate) };
   } catch {
@@ -105,16 +117,16 @@ function toCandidate(row: GhPrCandidate): PullRequestCandidate {
   };
 }
 
-const GhPrHeadSchema = z.object({
+const GhPrHeadSchema = Schema.Struct({
   // The repo half of this URL is the repo gh resolved the number
   // against, which is the one we have to fetch from.
-  url: z.url(),
-  headRefName: z.string().min(1),
-  isCrossRepository: z.boolean(),
-  headRepositoryOwner: z
-    .looseObject({ login: z.string().optional() })
-    .nullish(),
+  url: PullRequestSchema.fields.url,
+  headRefName: Schema.NonEmptyString,
+  isCrossRepository: Schema.Boolean,
+  headRepositoryOwner: GhLoginSchema,
 });
+type GhPrHead = typeof GhPrHeadSchema.Type;
+const decodeGhPrHead = Schema.decodeUnknownOption(GhPrHeadSchema);
 
 // Re-read the head from gh instead of trusting a number the renderer
 // carried across the wire: the picker's list can be minutes stale, and
@@ -123,7 +135,7 @@ const GhPrHeadSchema = z.object({
 async function readPullRequestHead(
   cwd: string,
   number: number,
-): Promise<z.infer<typeof GhPrHeadSchema>> {
+): Promise<GhPrHead> {
   let stdout: string;
   try {
     ({ stdout } = await execGh(
@@ -143,11 +155,11 @@ async function readPullRequestHead(
       { cause: err },
     );
   }
-  const parsed = GhPrHeadSchema.safeParse(JSON.parse(stdout));
-  if (!parsed.success) {
+  const parsed = decodeGhPrHead(JSON.parse(stdout));
+  if (Option.isNone(parsed)) {
     throw new Error(`Unexpected gh pr view output for #${number}`);
   }
-  return parsed.data;
+  return parsed.value;
 }
 
 export async function resolvePullRequestCheckout(
@@ -218,7 +230,7 @@ async function resolveForkHead(
   cwd: string,
   remote: string,
   number: number,
-  head: z.infer<typeof GhPrHeadSchema>,
+  head: GhPrHead,
 ): Promise<PullRequestCheckoutRef> {
   const pullRef = `refs/pull/${number}/head`;
   const branch = await pickForkBranchName(cwd, number, head);
@@ -259,7 +271,7 @@ async function resolveForkHead(
 async function pickForkBranchName(
   cwd: string,
   number: number,
-  head: z.infer<typeof GhPrHeadSchema>,
+  head: GhPrHead,
 ): Promise<string> {
   const pullRef = `refs/pull/${number}/head`;
   const candidates = forkBranchCandidates(

@@ -16,7 +16,7 @@ import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { isAbsolute } from "node:path";
 import { promisify } from "node:util";
-import { z } from "zod";
+import { Result, Schema } from "effect";
 import type { TerrierReadiness } from "@shared/schemas";
 import { readGlobalConfig } from "./config/global";
 import { expandHome } from "./util/paths";
@@ -51,11 +51,12 @@ const TERRIER_SUPPORTED_MINOR = 1;
 // githubCli/pullRequests.ts). The path is allowed to be empty here and
 // filtered below, so one blank row costs that row rather than the
 // whole document, matching how the Go engine reads the same output.
-const TerrierListingSchema = z.object({ path: z.string() });
-const TerrierLsSchema = z.object({
-  projects: z.array(TerrierListingSchema),
+const TerrierListingSchema = Schema.Struct({ path: Schema.String });
+const TerrierLsSchema = Schema.Struct({
+  projects: Schema.Array(TerrierListingSchema),
 });
-export type TerrierListing = z.infer<typeof TerrierListingSchema>;
+export type TerrierListing = typeof TerrierListingSchema.Type;
+const decodeTerrierLs = Schema.decodeUnknownResult(TerrierLsSchema);
 
 const READINESS_CACHE_TTL_MS = 30_000;
 const LIST_CACHE_TTL_MS = 15_000;
@@ -104,9 +105,12 @@ async function fetchListings(): Promise<TerrierListing[]> {
   if (!readiness.installed || !readiness.compatible) return [];
   try {
     const { stdout } = await execTerrier(["ls", "--json"]);
-    const parsed = TerrierLsSchema.safeParse(JSON.parse(stdout));
-    if (!parsed.success) {
-      console.warn("[terrier] unrecognized ls --json shape:", parsed.error);
+    const parsed = decodeTerrierLs(JSON.parse(stdout));
+    if (Result.isFailure(parsed)) {
+      console.warn(
+        "[terrier] unrecognized ls --json shape:",
+        parsed.failure.message,
+      );
       return [];
     }
     // Home-expanded and required to be absolute, never resolved
@@ -114,7 +118,7 @@ async function fetchListings(): Promise<TerrierListing[]> {
     // two engines could mint different ids for the same relative row.
     // Mirrors the filter in cli/terrier.go's listing read.
     const listings: TerrierListing[] = [];
-    for (const row of parsed.data.projects) {
+    for (const row of parsed.success.projects) {
       const path = expandHome(row.path);
       if (path === "" || !isAbsolute(path)) continue;
       listings.push({ path });

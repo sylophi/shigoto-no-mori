@@ -138,7 +138,7 @@ import { createServer, connect as netConnect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocket as WsClient, WebSocketServer } from "ws";
-import { Clock, ManagedRuntime } from "effect";
+import { Clock, ManagedRuntime, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import {
   CLOSE_AUTH_FAILED,
@@ -1056,7 +1056,7 @@ async function main() {
       ];
       for (const candidate of refused) {
         assert.equal(
-          DirectCandidateSchema.safeParse(candidate).success,
+          Schema.is(DirectCandidateSchema)(candidate),
           false,
           `schema admitted ${candidate.kind} ${candidate.url}`,
         );
@@ -1068,7 +1068,7 @@ async function main() {
       ];
       for (const candidate of admitted) {
         assert.equal(
-          DirectCandidateSchema.safeParse(candidate).success,
+          Schema.is(DirectCandidateSchema)(candidate),
           true,
           `schema refused ${candidate.kind} ${candidate.url}`,
         );

@@ -11,6 +11,7 @@ import {
   TUNNEL_UNCONFIGURED_STATUS,
   TunnelProvisionResponseSchema,
 } from "../../shared/hub/protocol.ts";
+import { decodeWith } from "../../shared/ipc/codec.ts";
 import { sha256Hex } from "../src/crypto.ts";
 import type { Env } from "../src/env.ts";
 import {
@@ -174,7 +175,10 @@ describe("POST /tunnel", () => {
       worker,
     );
     expect(response.status).toBe(200);
-    const body = TunnelProvisionResponseSchema.parse(await response.json());
+    const body = decodeWith(
+      TunnelProvisionResponseSchema,
+      await response.json(),
+    );
     // Deterministic name: sm- plus 32 hex under the configured domain.
     expect(body.hostname).toMatch(/^sm-[0-9a-f]{32}\.sm\.example\.test$/);
     expect(stub.liveTunnels()).toHaveLength(1);
@@ -213,14 +217,20 @@ describe("POST /tunnel", () => {
       worker,
     );
     expect(first.status).toBe(200);
-    const firstBody = TunnelProvisionResponseSchema.parse(await first.json());
+    const firstBody = decodeWith(
+      TunnelProvisionResponseSchema,
+      await first.json(),
+    );
     const second = await call(
       provisionRequest(credential, 9999),
       tunnelEnv(),
       worker,
     );
     expect(second.status).toBe(200);
-    const secondBody = TunnelProvisionResponseSchema.parse(await second.json());
+    const secondBody = decodeWith(
+      TunnelProvisionResponseSchema,
+      await second.json(),
+    );
     // Same tunnel, same hostname, same DNS record: nothing duplicated.
     // Only the first provision created the record.
     expect(secondBody.hostname).toBe(firstBody.hostname);

@@ -4,10 +4,10 @@
 //
 // PROTOCOL INVARIANT: a field whose value is undefined is OMITTED from
 // the frame. JSON.stringify already drops undefined object properties,
-// and a reader sees the absent field as undefined again, so z.void()
+// and a reader sees the absent field as undefined again, so void
 // inputs, outputs and broadcast payloads survive the wire unchanged:
-// the registrar's `def.input.parse(undefined)` behaves exactly as it
-// does on the Electron wire.
+// the registrar's decode of undefined behaves exactly as it does on the
+// Electron wire.
 //
 // Frame size: the server caps INBOUND frames at 1 MiB (server.ts
 // maxPayload, MAX_INBOUND_FRAME_BYTES below). That bound is about the
@@ -18,8 +18,9 @@
 // (sync bundles, port-forward streams) still crosses in bounded
 // chunks (WIRE_CHUNK_BYTES below) for flow control, and so an uplink
 // req carrying a chunk stays under the inbound cap.
-import { z } from "zod";
+import { Effect, Schema } from "effect";
 import { errorTagOf } from "../../errorOf.ts";
+import { type AnyCodec, type CodecOut, safeDecodeWith } from "../codec.ts";
 import { WireErrorShapeSchema } from "../wireError.ts";
 import { HANDSHAKE_NONCE_PATTERN } from "./proof";
 
@@ -51,10 +52,10 @@ const WIRE_CHUNK_B64_MAX = Math.ceil(WIRE_CHUNK_BYTES / 3) * 4;
 // for every bulk-data field on both chunked wires (sync's bundleChunk result and pushChunk payload), so an uplink
 // write can never exceed what a downlink chunk may carry and vice
 // versa.
-export const ChunkB64Schema = z
-  .string()
-  .max(WIRE_CHUNK_B64_MAX)
-  .regex(/^[A-Za-z0-9+/]*={0,2}$/);
+export const ChunkB64Schema = Schema.String.check(
+  Schema.isMaxLength(WIRE_CHUNK_B64_MAX),
+  Schema.isPattern(/^[A-Za-z0-9+/]*={0,2}$/),
+);
 
 // Deadline for the first frame (a valid hello) after a socket opens.
 // A shared two-sided protocol fact: slice B's client must send within
@@ -150,28 +151,30 @@ export const CLOSE_OVER_CAPACITY = 1013;
 // reads `token`, the direct data plane reads `nonce` and `proof`
 // (shared/ipc/socket/proof.ts). Both are optional so one schema serves
 // both wires, and each listener fails closed without its own.
-const HelloFrameSchema = z.object({
-  t: z.literal("hello"),
-  token: z.string().optional(),
-  deviceId: z.string(),
-  appVersion: z.string(),
+const HelloFrameSchema = Schema.Struct({
+  t: Schema.Literal("hello"),
+  token: Schema.optional(Schema.String),
+  deviceId: Schema.String,
+  appVersion: Schema.String,
   // The client's nonce, and its HMAC of both nonces under the ticket.
-  nonce: z.string().regex(HANDSHAKE_NONCE_PATTERN).optional(),
-  proof: z.string().optional(),
+  nonce: Schema.optional(
+    Schema.String.check(Schema.isPattern(HANDSHAKE_NONCE_PATTERN)),
+  ),
+  proof: Schema.optional(Schema.String),
   // The client can read deflated frames (deflatedFrame.ts), so the host
   // may send them. Absent from an old client, ignored by an old host.
-  deflate: z.boolean().optional(),
+  deflate: Schema.optional(Schema.Boolean),
 });
 
-export const ReqFrameSchema = z.object({
-  t: z.literal("req"),
+export const ReqFrameSchema = Schema.Struct({
+  t: Schema.Literal("req"),
   // Client-assigned correlation id, echoed on the matching res.
-  id: z.number().int(),
-  channel: z.string(),
+  id: Schema.Int,
+  channel: Schema.String,
   // The contract input wire shape. Absent when the input is void.
-  input: z.unknown().optional(),
+  input: Schema.optional(Schema.Unknown),
 });
-export type ReqFrame = z.infer<typeof ReqFrameSchema>;
+export type ReqFrame = typeof ReqFrameSchema.Type;
 
 // Sent by a client peer when it closes its side on purpose. The device hub carries no per-peer socket close, so without
 // this a host would keep a hostSession for a departed peer until the
@@ -180,8 +183,8 @@ export type ReqFrame = z.infer<typeof ReqFrameSchema>;
 // parse the frame and drops it, so the session then dies on presence
 // exactly as before. The direct and LAN sockets have a real socket
 // close, so they never need it and ignore it.
-const ByeFrameSchema = z.object({
-  t: z.literal("bye"),
+const ByeFrameSchema = Schema.Struct({
+  t: Schema.Literal("bye"),
 });
 
 // The liveness pair (see HEARTBEAT_INTERVAL_MS): the client sends
@@ -193,42 +196,42 @@ const ByeFrameSchema = z.object({
 // ping), while a new client against an old host sees no pongs and
 // redials it once a minute until that host updates, the soft
 // degradation the owner's own rollout accepts elsewhere.
-const PingFrameSchema = z.object({ t: z.literal("ping") });
-const PongFrameSchema = z.object({ t: z.literal("pong") });
+const PingFrameSchema = Schema.Struct({ t: Schema.Literal("ping") });
+const PongFrameSchema = Schema.Struct({ t: Schema.Literal("pong") });
 
-export const ClientFrameSchema = z.discriminatedUnion("t", [
+export const ClientFrameSchema = Schema.Union([
   HelloFrameSchema,
   ReqFrameSchema,
   ByeFrameSchema,
   PingFrameSchema,
 ]);
-export type ClientFrame = z.infer<typeof ClientFrameSchema>;
+export type ClientFrame = typeof ClientFrameSchema.Type;
 
 // Sent once in response to a valid hello. Here deviceId names the
 // HOST's shigomori root (what a client keys its caches on) and
 // appVersion is the host app's version.
-const WelcomeFrameSchema = z.object({
-  t: z.literal("welcome"),
-  deviceId: z.string(),
-  appVersion: z.string(),
+const WelcomeFrameSchema = Schema.Struct({
+  t: Schema.Literal("welcome"),
+  deviceId: Schema.String,
+  appVersion: Schema.String,
   // The host's half of the mutual proof, direct data plane only. A
   // proof-mode client refuses a welcome without it.
-  proof: z.string().optional(),
+  proof: Schema.optional(Schema.String),
 });
 
 // Opens the direct data plane's handshake. Only the host's nonce, no
 // secret, so it goes to an unauthenticated socket.
-const ChallengeFrameSchema = z.object({
-  t: z.literal("challenge"),
-  nonce: z.string().regex(HANDSHAKE_NONCE_PATTERN),
+const ChallengeFrameSchema = Schema.Struct({
+  t: Schema.Literal("challenge"),
+  nonce: Schema.String.check(Schema.isPattern(HANDSHAKE_NONCE_PATTERN)),
 });
 
-const ResOkFrameSchema = z.object({
-  t: z.literal("res"),
-  id: z.number().int(),
-  ok: z.literal(true),
+const ResOkFrameSchema = Schema.Struct({
+  t: Schema.Literal("res"),
+  id: Schema.Int,
+  ok: Schema.Literal(true),
   // The contract output wire shape. Absent when the output is void.
-  result: z.unknown().optional(),
+  result: Schema.optional(Schema.Unknown),
 });
 
 // The one refusal code either remote gate stamps on a res error today:
@@ -291,33 +294,39 @@ export function isCommandRefusedError(error: unknown): boolean {
 // degrades to absent rather than failing the frame: a dropped res
 // would leave the caller's invoke pending forever, since no wire has a
 // per-call timeout, where a message-only answer rejects it at once.
-const ResErrFrameSchema = z.object({
-  t: z.literal("res"),
-  id: z.number().int(),
-  ok: z.literal(false),
-  message: z.string(),
-  code: z.string().optional(),
-  error: WireErrorShapeSchema.optional().catch(undefined),
+// An absent `error` stays absent; a present one that does not decode
+// becomes an own undefined, which every reader takes as absent (the
+// output this frame has always decoded to, pinned by schema-port).
+const ResErrFrameSchema = Schema.Struct({
+  t: Schema.Literal("res"),
+  id: Schema.Int,
+  ok: Schema.Literal(false),
+  message: Schema.String,
+  code: Schema.optional(Schema.String),
+  error: Schema.optional(WireErrorShapeSchema).pipe(
+    Schema.catchDecoding(() => Effect.succeedSome(undefined)),
+  ),
 });
 
-const PushFrameSchema = z.object({
-  t: z.literal("push"),
-  channel: z.string(),
+const PushFrameSchema = Schema.Struct({
+  t: Schema.Literal("push"),
+  channel: Schema.String,
   // The broadcast payload wire shape. Absent when the payload is void.
-  payload: z.unknown().optional(),
+  payload: Schema.optional(Schema.Unknown),
 });
 
-// Discriminated on `t` so a push (the hot arm) never pays a failed
-// welcome parse first. The two res forms share `t` and split on `ok`
-// in a nested discriminated union.
-export const ServerFrameSchema = z.discriminatedUnion("t", [
+// A union of literal-tagged structs, so the decode tries only the arms
+// whose `t` matches: a push (the hot arm) never pays a failed welcome
+// parse first. The two res forms share `t` and split on `ok`.
+export const ServerFrameSchema = Schema.Union([
   WelcomeFrameSchema,
   ChallengeFrameSchema,
-  z.discriminatedUnion("ok", [ResOkFrameSchema, ResErrFrameSchema]),
+  ResOkFrameSchema,
+  ResErrFrameSchema,
   PushFrameSchema,
   PongFrameSchema,
 ]);
-export type ServerFrame = z.infer<typeof ServerFrameSchema>;
+export type ServerFrame = typeof ServerFrameSchema.Type;
 
 // The one sanctioned serializer for both directions, so the
 // omit-undefined invariant above has a single owner.
@@ -331,13 +340,16 @@ export function encodeFrame(frame: ClientFrame | ServerFrame): string {
 // bad message must not tear down a socket carrying live traffic. Each
 // side passes its own inbound schema (ServerFrameSchema on the client,
 // ClientFrameSchema on the host).
-export function decodeFrame<T>(text: string, schema: z.ZodType<T>): T | null {
+export function decodeFrame<C extends AnyCodec>(
+  text: string,
+  schema: C,
+): CodecOut<C> | null {
   let raw: unknown;
   try {
     raw = JSON.parse(text);
   } catch {
     return null;
   }
-  const parsed = schema.safeParse(raw);
+  const parsed = safeDecodeWith(schema, raw);
   return parsed.success ? parsed.data : null;
 }

@@ -60,7 +60,7 @@ export async function transferFilesOnce(
     sourceWorktreeId: string;
     remoteRoot: string;
     name: string;
-    ignores: string[];
+    ignores: readonly string[];
     // Which way the files flow. Absent, a pull: the peer's come here.
     direction?: "pull" | "push";
   },

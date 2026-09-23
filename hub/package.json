@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@clerk/backend": "^3.16.0",
-    "zod": "^4.4.0"
+    "effect": "4.0.0-rc.114"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.21.0",

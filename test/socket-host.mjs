@@ -44,7 +44,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocket, WebSocketServer } from "ws";
-import { ManagedRuntime } from "effect";
+import { ManagedRuntime, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import {
   CLOSE_AUTH_FAILED,
@@ -69,7 +69,6 @@ import { WireError } from "@shared/ipc/wireError";
 import { DEFLATED_FRAME_KIND } from "@shared/ipc/socket/deflatedFrame";
 import { connectDevice } from "@shared/ipc/socket/wsClientTransport";
 import { rendererSchemeOrigins } from "@shared/packaging/rendererScheme.mts";
-import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { registerContract } from "@shared/ipc/registerContract";
 import { createWsServerBinding } from "@host/socket/server";
@@ -1025,25 +1024,35 @@ async function main() {
         broadcastAll: () => {},
       };
       const pingContract = defineContract("host", {
-        mutate: invoke("pingtest:mutate", z.void(), z.void(), {
+        mutate: invoke("pingtest:mutate", Schema.Undefined, Schema.Undefined, {
           remote: true,
           mutating: true,
         }),
-        read: invoke("pingtest:read", z.void(), z.void(), {
+        read: invoke("pingtest:read", Schema.Undefined, Schema.Undefined, {
           remote: true,
           mutating: false,
         }),
-        failMutate: invoke("pingtest:failMutate", z.void(), z.void(), {
-          remote: true,
-          mutating: true,
-        }),
+        failMutate: invoke(
+          "pingtest:failMutate",
+          Schema.Undefined,
+          Schema.Undefined,
+          {
+            remote: true,
+            mutating: true,
+          },
+        ),
         // A command whose effects are invisible to remote viewers, the
         // forward-verb shape: still grant-gated, never pinged.
-        shuttle: invoke("pingtest:shuttle", z.void(), z.void(), {
-          remote: true,
-          mutating: true,
-          movesHostState: false,
-        }),
+        shuttle: invoke(
+          "pingtest:shuttle",
+          Schema.Undefined,
+          Schema.Undefined,
+          {
+            remote: true,
+            mutating: true,
+            movesHostState: false,
+          },
+        ),
       });
       let resolved = 0;
       let resolvedCtx = null;

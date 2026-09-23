@@ -44,8 +44,19 @@
 //     rest, the first 512 readable entries in the document's own order
 //     are kept, and a `__proto__` key is dropped with the prototype
 //     untouched, since every device must run the same rule;
-//   - the zod copies left for wave 3 (the `...Zod` exports) give the
-//     same verdicts and outputs as the Schema they mirror;
+//   - wave 3 (the wire layer: the sync, mirror, control, forward,
+//     portForward, direct and remoteAccess contracts, the socket frames,
+//     the wire error shape, the hub protocol's HTTP bodies and envelopes,
+//     the hex id, account's device list and hub's invokePeer, and the
+//     shared leave-out preset): every row of RECORDED_WAVE3 decodes, or
+//     is refused, exactly as zod did. That includes each strict payload
+//     refusing an undeclared key by name (at any depth it rides), the
+//     ref, landing-ref and refspec allowlists with their messages, the
+//     chunk charset and bound, the candidate URL-matches-kind refine, a
+//     `res` frame whose `error` is malformed still parsing with `error`
+//     undefined, an old peer's `res` with `code` alone, every envelope
+//     arm (a nack included), the preset reading a bad path as left out,
+//     and each void slot taking undefined alone;
 //   - strictStruct (shared/schemas/strict.ts) is z.strictObject: an
 //     undeclared key at its level is refused with the key named, a
 //     nested plain struct still strips, optional keys and the decoded
@@ -92,11 +103,22 @@ import { projectsContract } from "@shared/ipc/modules/projects";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { terrierContract } from "@shared/ipc/modules/terrier";
 import * as schemas from "@shared/schemas";
+import * as protocol from "@shared/hub/protocol";
+import { HexId32Schema } from "@shared/ipc/hexId";
+import { controlContract } from "@shared/ipc/modules/control";
+import * as directModule from "@shared/ipc/modules/direct";
+import { forwardContract } from "@shared/ipc/modules/forward";
+import * as mirrorModule from "@shared/ipc/modules/mirror";
+import { portForwardContract } from "@shared/ipc/modules/portForward";
+import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
+import * as syncModule from "@shared/ipc/modules/sync";
+import * as frames from "@shared/ipc/socket/frames";
+import { WireErrorShapeSchema } from "@shared/ipc/wireError";
+import { parseLeaveOutPreset } from "@shared/sharedSettings";
 import {
   DirectoryListingSchema,
   PickFolderPayloadSchema,
   PortNumberSchema,
-  PortNumberZod,
   ShellOpenExternalPayloadSchema,
   TerrierReadinessSchema,
   WorktreePortsResultSchema,
@@ -2239,15 +2261,1683 @@ function wave2Codec(label) {
   return WAVE2_CONTRACTS[module].calls[call][slot];
 }
 
-// The zod copies the unported embedders still hold, beside the Schema
-// each mirrors (Phase 4 wave 3 deletes them).
-const ZOD_COPIES = [
-  ["GitRefNameZod", "GitRefNameSchema"],
-  ["CommitHashZod", "CommitHashSchema"],
-  ["CreatePhaseZod", "CreatePhaseSchema"],
-  ["WorktreeZod", "WorktreeSchema"],
-  ["WorktreeIdZod", "WorktreeIdSchema"],
+// Wave 3's fixtures and recorded table (the wire layer), in the same
+// form as wave 2's.
+const wt3 = "0123456789ab";
+const hex = "0123456789abcdef0123456789abcdef";
+const c1 = "abc1234";
+const tree40 = "a".repeat(40);
+const dev = "dev-1";
+const mainRef = "refs/heads/main";
+const landing = "refs/shigomori/sync/main";
+const B64_MAX = 853_336;
+const IGNORES_MAX = 512;
+const pw = { projectId: "p", worktreeId: wt3 };
+const gitCore = {
+  head: { kind: "branch", branch: "main" },
+  tip: c1,
+  indexTree: tree40,
+};
+const endpoint = {
+  connected: true,
+  scanned: true,
+  directories: 1,
+  files: 2,
+  symbolicLinks: 0,
+  totalFileSize: 10,
+  problems: [{ path: "a", error: "e" }],
+  excludedProblems: 0,
+};
+const session = {
+  session: "sync_abc",
+  name: "n",
+  labels: { copySide: "remote" },
+  localRoot: "/l",
+  localProjectId: "p",
+  localWorktreeId: wt3,
+  deviceId: dev,
+  projectId: "q",
+  worktreeId: wt3,
+  remoteRoot: "/r",
+  paused: false,
+  ignores: ["/dist"],
+  ignoreMode: "custom",
+  createdAt: 1,
+  status: "watching",
+  statusText: "Watching",
+  successfulCycles: 3,
+  conflicts: [
+    {
+      root: "r",
+      localChanges: [{ path: "a", kind: "modified" }],
+      remoteChanges: [],
+    },
+  ],
+  excludedConflicts: 0,
+  local: endpoint,
+  remote: {
+    ...endpoint,
+    staging: {
+      path: "s",
+      receivedFiles: 1,
+      expectedFiles: 2,
+      receivedSize: 3,
+      expectedSize: 4,
+    },
+  },
+};
+const serving = {
+  channelId: hex,
+  projectId: "p",
+  worktreeId: wt3,
+  peerDeviceId: "",
+  since: 5,
+};
+const pullBase = {
+  sourceDeviceId: dev,
+  sourceProjectId: "p",
+  sourceWorktreeId: wt3,
+  sourceIdentity: "github.com/a/b",
+  branch: "main",
+};
+const sendBase = { targetDeviceId: dev, projectId: "p", worktreeId: wt3 };
+const pulled = { worktree, captured: true, dirtyApplied: false };
+const controlMirror = {
+  session: "s",
+  device: { deviceId: "d", name: "n" },
+  localProjectId: "p",
+  localWorktreeId: wt3,
+  localRoot: "/l",
+  remoteRoot: "/r",
+  copySide: "local",
+  paused: false,
+  status: "watching",
+  statusText: "W",
+  conflicts: 0,
+};
+const deviceInfo = {
+  deviceId: dev,
+  name: "Mac",
+  platform: "darwin",
+  createdAt: 1,
+  lastSeenAt: null,
+  online: true,
+};
+const lanCandidate = { kind: "lan", url: "ws://192.168.1.2:4000", ticket: "t" };
+const tunnelCandidate = {
+  kind: "tunnel",
+  url: "wss://a.example.com",
+  ticket: "t",
+};
+const resErr = { t: "res", id: 1, ok: false, message: "m" };
+const events = (count) =>
+  Array.from({ length: count }, () => ({
+    at: 1,
+    kind: "git-synced",
+    detail: "d",
+  }));
+
+const RECORDED_WAVE3 = {
+  HexId32Schema: [
+    [hex, same],
+    [hex.toUpperCase(), refuse()],
+    [hex.slice(1), refuse()],
+    [`${hex}0`, refuse()],
+    ["", refuse()],
+    [5, refuse()],
+  ],
+  ChunkB64Schema: [
+    ["QUJD", same],
+    ["", same],
+    ["QQ==", same],
+    ["QUI=", same],
+    ["a+/b", same],
+    ["QQ===", refuse()],
+    ["Q=Q=", refuse()],
+    ["a b", refuse()],
+    ["a\nb", refuse()],
+    ["-_", refuse()],
+    ["A".repeat(B64_MAX), same],
+    ["A".repeat(B64_MAX + 1), refuse()],
+    [5, refuse()],
+  ],
+  SyncLandingRefSchema: [
+    [landing, same],
+    ["refs/shigomori/dirty/0123456789ab", same],
+    ["refs/shigomori/x.lock/", same],
+    [mainRef, refuse()],
+    ["refs/shigomori/a..b", refuse("Ref outside the app's namespace")],
+    ["refs/shigomori/a//b", refuse("Ref outside the app's namespace")],
+    ["refs/shigomori/-x", refuse()],
+    ["", refuse()],
+    [5, refuse()],
+  ],
+  "sync.refTips.input": [
+    [{ projectId: "p", refs: [mainRef] }, same],
+    [
+      {
+        projectId: "p",
+        refs: [
+          "refs/shigomori/dirty/0123456789ab",
+          "refs/shigomori/index/0123456789ab",
+          "refs/heads/feat/x.y_z-1",
+          "refs/heads/main.lock",
+          "refs/heads/a/",
+        ],
+      },
+      same,
+    ],
+    [{ projectId: "p", refs: Array(64).fill(mainRef) }, same],
+    [
+      { projectId: "p", refs: [mainRef], extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+    [{ projectId: "", refs: [mainRef] }, refuse()],
+    [{ projectId: "p", refs: [] }, refuse()],
+    [{ projectId: "p", refs: Array(65).fill(mainRef) }, refuse()],
+    [
+      { projectId: "p", refs: ["refs/tags/v1"] },
+      refuse("Ref outside the sync allowlist"),
+    ],
+    [
+      { projectId: "p", refs: ["refs/heads/a..b"] },
+      refuse("Ref outside the sync allowlist"),
+    ],
+    [
+      { projectId: "p", refs: ["refs/heads//a"] },
+      refuse("Ref outside the sync allowlist"),
+    ],
+    [
+      { projectId: "p", refs: ["refs/heads/-x"] },
+      refuse("Ref outside the sync allowlist"),
+    ],
+    [
+      { projectId: "p", refs: ["refs/shigomori/dirty/0123456789AB"] },
+      refuse("Ref outside the sync allowlist"),
+    ],
+    [
+      { projectId: "p", refs: ["refs/shigomori/sync/x"] },
+      refuse("Ref outside the sync allowlist"),
+    ],
+    [
+      { projectId: "p", refs: [` ${mainRef}`] },
+      refuse("Ref outside the sync allowlist"),
+    ],
+    [null, refuse()],
+  ],
+  SyncRefTipsResultSchema: [
+    [{ tips: [] }, same],
+    [{ tips: [{ ref: mainRef, commit: c1 }] }, same],
+    [
+      { tips: [{ ref: mainRef, commit: c1, x: 1 }] },
+      refuse('Unexpected key "x"'),
+    ],
+    [{ tips: [], x: 1 }, refuse('Unexpected key "x"')],
+    [
+      { tips: [{ ref: "refs/tags/v1", commit: c1 }] },
+      refuse("Ref outside the sync allowlist"),
+    ],
+    [
+      { tips: [{ ref: mainRef, commit: "XYZ" }] },
+      refuse("Invalid commit hash"),
+    ],
+    [{}, refuse()],
+  ],
+  "sync.captureDirty.input": [
+    [pw, same],
+    [{ ...pw, extra: 1 }, refuse('Unexpected key "extra"')],
+    [{ projectId: "p", worktreeId: "0123456789AB" }, refuse()],
+    [{ projectId: "p", worktreeId: "abc" }, refuse()],
+    [{ projectId: "", worktreeId: wt3 }, refuse()],
+    [{ projectId: "p" }, refuse()],
+  ],
+  SyncCaptureDirtyResultSchema: [
+    [{ captured: true, commit: c1 }, same],
+    [{ captured: false }, same],
+    [{ captured: false, commit: undefined }, same],
+    [{ captured: true, commit: "zz" }, refuse("Invalid commit hash")],
+    [{ captured: "yes" }, refuse()],
+    [{ captured: true, extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  "sync.worktreeFolder.input": [
+    [{ ...pw, relative: "" }, same],
+    [{ ...pw, relative: "src/lib" }, same],
+    [{ ...pw, relative: "../x" }, refuse("Path must stay within the worktree")],
+    [
+      { ...pw, relative: "a/../../x" },
+      refuse("Path must stay within the worktree"),
+    ],
+    [{ ...pw, relative: "/abs" }, refuse("Path must stay within the worktree")],
+    [{ ...pw, relative: "a\0b" }, refuse("Path must stay within the worktree")],
+    [{ ...pw, relative: "src", extra: 1 }, refuse('Unexpected key "extra"')],
+    [pw, refuse()],
+  ],
+  "sync.worktreeFolder.output": [
+    [[], same],
+    [[{ name: "a", isDirectory: true, ignored: false }], same],
+    [[{ name: "", isDirectory: true, ignored: false }], refuse()],
+    [
+      [{ name: "a", isDirectory: true, ignored: false, extra: 1 }],
+      refuse('Unexpected key "extra"'),
+    ],
+    [[{ name: "a", isDirectory: true }], refuse()],
+    [{}, refuse()],
+  ],
+  "sync.ignoredPaths.input": [
+    [pw, same],
+    [{ ...pw, extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  SyncIgnoredPathsResultSchema: [
+    [{ paths: [], total: 0, patterns: [] }, same],
+    [
+      {
+        paths: Array(32).fill("a/"),
+        total: 40,
+        patterns: Array(IGNORES_MAX).fill("dist"),
+      },
+      same,
+    ],
+    [{ paths: Array(33).fill("a/"), total: 40, patterns: [] }, refuse()],
+    [
+      { paths: [], total: 0, patterns: Array(IGNORES_MAX + 1).fill("d") },
+      refuse(),
+    ],
+    [{ paths: [], total: -1, patterns: [] }, refuse()],
+    [{ paths: [], total: 1.5, patterns: [] }, refuse()],
+    [{ paths: [], total: 0 }, refuse()],
+    [
+      { paths: [], total: 0, patterns: [], extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  "sync.bundleStart.input": [
+    [{ projectId: "p", refs: [mainRef], haves: [] }, same],
+    [{ projectId: "p", refs: [mainRef], haves: Array(256).fill(c1) }, same],
+    [{ projectId: "p", refs: [mainRef], haves: Array(257).fill(c1) }, refuse()],
+    [
+      { projectId: "p", refs: [mainRef], haves: ["XYZ"] },
+      refuse("Invalid commit hash"),
+    ],
+    [{ projectId: "p", refs: [mainRef] }, refuse()],
+    [
+      { projectId: "p", refs: [mainRef], haves: [], extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  SyncBundleStartResultSchema: [
+    [{ transferId: hex, bytes: 0 }, same],
+    [{ transferId: hex.toUpperCase(), bytes: 0 }, refuse()],
+    [{ transferId: hex.slice(1), bytes: 0 }, refuse()],
+    [{ transferId: hex, bytes: -1 }, refuse()],
+    [{ transferId: hex, bytes: 0, extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  "sync.bundleChunk.input": [
+    [{ transferId: hex, offset: 0 }, same],
+    [{ transferId: hex, offset: 1.5 }, refuse()],
+    [{ transferId: hex, offset: -1 }, refuse()],
+    [{ transferId: "x", offset: 0 }, refuse()],
+    [
+      { transferId: hex, offset: 0, extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  "sync.bundleChunk.output": [
+    [{ dataB64: "QUJD", eof: false }, same],
+    [{ dataB64: "", eof: true }, same],
+    [{ dataB64: "QQ===", eof: false }, refuse()],
+    [{ dataB64: "A".repeat(B64_MAX + 1), eof: false }, refuse()],
+    [
+      { dataB64: "QUJD", eof: false, extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  "sync.bundleAbort.input": [
+    [{ transferId: hex }, same],
+    [{ transferId: hex, extra: 1 }, refuse('Unexpected key "extra"')],
+    [{}, refuse()],
+  ],
+  "sync.pushStart.input": [
+    [{ projectId: "p", bytes: 0 }, same],
+    [{ projectId: "p", bytes: -1 }, refuse()],
+    [{ projectId: "p", bytes: 0, extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  "sync.pushStart.output": [
+    [{ transferId: hex }, same],
+    [{ transferId: hex, pipelined: true }, same],
+    [{ transferId: hex, pipelined: false }, refuse()],
+    [{ transferId: hex, extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  "sync.pushChunk.input": [
+    [{ transferId: hex, offset: 0, dataB64: "QUJD" }, same],
+    [{ transferId: hex, offset: 0, dataB64: "a b" }, refuse()],
+    [
+      { transferId: hex, offset: 0, dataB64: "QUJD", extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  "sync.pushFinish.input": [
+    [{ transferId: hex, refspecs: [`${mainRef}:${landing}`] }, same],
+    [
+      {
+        transferId: hex,
+        refspecs: [
+          "refs/shigomori/dirty/0123456789ab:refs/shigomori/dirty/0123456789ab",
+        ],
+      },
+      same,
+    ],
+    [
+      { transferId: hex, refspecs: Array(64).fill(`${mainRef}:${landing}`) },
+      same,
+    ],
+    [{ transferId: hex, refspecs: [] }, refuse()],
+    [
+      { transferId: hex, refspecs: Array(65).fill(`${mainRef}:${landing}`) },
+      refuse(),
+    ],
+    [
+      { transferId: hex, refspecs: [mainRef] },
+      refuse("Refspec outside the sync allowlist"),
+    ],
+    [
+      { transferId: hex, refspecs: [`:${landing}`] },
+      refuse("Refspec outside the sync allowlist"),
+    ],
+    [
+      { transferId: hex, refspecs: [`refs/tags/v1:${landing}`] },
+      refuse("Refspec outside the sync allowlist"),
+    ],
+    [
+      { transferId: hex, refspecs: [`${mainRef}:${mainRef}`] },
+      refuse("Refspec outside the sync allowlist"),
+    ],
+    [
+      { transferId: hex, refspecs: [`${mainRef}:refs/shigomori/a:b`] },
+      refuse("Refspec outside the sync allowlist"),
+    ],
+    [
+      { transferId: hex, refspecs: [`${mainRef}:refs/shigomori/a..b`] },
+      refuse("Refspec outside the sync allowlist"),
+    ],
+    [
+      {
+        transferId: hex,
+        refspecs: [`${mainRef}:refs/shigomori/${"a".repeat(512)}`],
+      },
+      refuse(),
+    ],
+    [
+      { transferId: hex, refspecs: [`${mainRef}:${landing}`], extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  "sync.pushFinish.output": [
+    [{ fetched: [] }, same],
+    [{ fetched: [{ ref: "anything", commit: c1 }] }, same],
+    [
+      { fetched: [{ ref: "x", commit: c1, extra: 1 }] },
+      refuse('Unexpected key "extra"'),
+    ],
+    [{ fetched: [{ ref: "x", commit: "zz" }] }, refuse("Invalid commit hash")],
+    [{ fetched: [], extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  "sync.hasCommits.input": [
+    [{ projectId: "p", commits: [c1] }, same],
+    [{ projectId: "p", commits: Array(64).fill(c1) }, same],
+    [{ projectId: "p", commits: [] }, refuse()],
+    [{ projectId: "p", commits: Array(65).fill(c1) }, refuse()],
+    [{ projectId: "p", commits: ["zz"] }, refuse("Invalid commit hash")],
+    [
+      { projectId: "p", commits: [c1], extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  SyncHasCommitsResultSchema: [
+    [{ present: [] }, same],
+    [{ present: [c1, "d".repeat(64)] }, same],
+    [{ present: ["zz"] }, refuse("Invalid commit hash")],
+    [{ present: [], extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  "sync.landCheck.input": [
+    [{ identity: "github.com/a/b", branch: "main" }, same],
+    [
+      { identity: "github.com/a/b", branch: "feat/x", worktreeName: "fox" },
+      same,
+    ],
+    [{ identity: "i", branch: "main", worktreeName: undefined }, same],
+    [{ identity: "i", branch: "main", worktreeName: "" }, refuse()],
+    [
+      { identity: "i", branch: "main", worktreeName: ".." },
+      refuse("Not a valid folder name"),
+    ],
+    [
+      { identity: "i", branch: "main", worktreeName: "a/b" },
+      refuse("Not a valid folder name"),
+    ],
+    [
+      { identity: "i", branch: "-x" },
+      refuse("Branch names cannot start with '-'"),
+    ],
+    [
+      { identity: "i", branch: "a..b" },
+      refuse("Branch name outside the sync allowlist"),
+    ],
+    [
+      { identity: "i", branch: "a b" },
+      refuse("Branch name outside the sync allowlist"),
+    ],
+    [{ identity: "i", branch: "" }, refuse()],
+    [{ identity: "", branch: "main" }, refuse()],
+    [
+      { identity: "i", branch: "main", extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  SyncLandCheckResultSchema: [
+    [{ projectId: "p" }, same],
+    [{ projectId: "" }, refuse()],
+    [{ projectId: "p", extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  SyncLandWorktreePayloadSchema: [
+    [{ identity: "i", branch: "main", branchTip: c1 }, same],
+    [
+      {
+        identity: "i",
+        branch: "main",
+        worktreeName: "fox",
+        branchTip: c1,
+        runSetup: true,
+        capture: { sourceWorktreeId: wt3, commit: c1 },
+      },
+      same,
+    ],
+    [
+      {
+        identity: "i",
+        branch: "main",
+        branchTip: c1,
+        capture: { sourceWorktreeId: wt3, commit: c1, x: 1 },
+      },
+      refuse('Unexpected key "x"'),
+    ],
+    [
+      {
+        identity: "i",
+        branch: "main",
+        branchTip: c1,
+        capture: { sourceWorktreeId: "w", commit: c1 },
+      },
+      refuse(),
+    ],
+    [
+      { identity: "i", branch: "main", branchTip: "zz" },
+      refuse("Invalid commit hash"),
+    ],
+    [{ identity: "i", branch: "main" }, refuse()],
+    [
+      { identity: "i", branch: "main", branchTip: c1, extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  SyncLandWorktreeResultSchema: [
+    [
+      { worktree, dirtyApplied: false },
+      ok({ worktree: { ...worktree, autoPull: false }, dirtyApplied: false }),
+    ],
+    [{ worktree: { ...worktree, autoPull: true }, dirtyApplied: true }, same],
+    [
+      { worktree: { ...worktree, junk: 1 }, dirtyApplied: true },
+      ok({ worktree: { ...worktree, autoPull: false }, dirtyApplied: true }),
+    ],
+    [
+      { worktree, dirtyApplied: false, extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+    [{ worktree: { ...worktree, ahead: -1 }, dirtyApplied: false }, refuse()],
+  ],
+  MirrorIgnoreModeSchema: [
+    ["everything", same],
+    ["gitignored", same],
+    ["custom", same],
+    ["bring", same],
+    ["nothing", refuse()],
+    [undefined, refuse()],
+  ],
+  MirrorIgnoresSchema: [
+    [[], same],
+    [["/dist", "!keep", "*.log"], same],
+    [Array(IGNORES_MAX).fill("a"), same],
+    [Array(IGNORES_MAX + 1).fill("a"), refuse()],
+    [[""], refuse()],
+    [["a\nb"], refuse("Ignore pattern must be one line")],
+    [["a\rb"], refuse("Ignore pattern must be one line")],
+    [["x".repeat(1024)], same],
+    [["x".repeat(1025)], refuse()],
+    [[5], refuse()],
+  ],
+  SyncPullWorktreePayloadSchema: [
+    [pullBase, same],
+    [
+      {
+        ...pullBase,
+        branch: "feat/x",
+        worktreeName: "fox",
+        runSetup: false,
+        ignoreMode: "custom",
+        ignores: ["/dist"],
+      },
+      same,
+    ],
+    [{ ...pullBase, ignoreMode: undefined, ignores: undefined }, same],
+    [{ ...pullBase, ignoreMode: "other" }, refuse()],
+    [
+      { ...pullBase, ignores: ["a\nb"] },
+      refuse("Ignore pattern must be one line"),
+    ],
+    [{ ...pullBase, ignores: [""] }, refuse()],
+    [{ ...pullBase, sourceDeviceId: "" }, refuse()],
+    [{ ...pullBase, sourceDeviceId: "x".repeat(200) }, same],
+    [{ ...pullBase, sourceDeviceId: "x".repeat(201) }, refuse()],
+    [{ ...pullBase, sourceWorktreeId: "w" }, refuse()],
+    [{ ...pullBase, sourceIdentity: "" }, refuse()],
+    [
+      { ...pullBase, branch: "a..b" },
+      refuse("Branch name outside the sync allowlist"),
+    ],
+    [
+      { ...pullBase, branch: "-x" },
+      refuse("Branch names cannot start with '-'"),
+    ],
+    [
+      { ...pullBase, branch: "a b" },
+      refuse("Branch name outside the sync allowlist"),
+    ],
+    [{ ...pullBase, worktreeName: "a/b" }, refuse("Not a valid folder name")],
+    [{ ...pullBase, extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  SyncPullStepSchema: [
+    ["capture", same],
+    ["files", same],
+    ["other", refuse()],
+    [1, refuse()],
+  ],
+  "sync.pullProgress.payload": [
+    [{ sourceWorktreeId: wt3, step: "capture" }, same],
+    [
+      { sourceWorktreeId: wt3, step: "transfer", bytes: 10, totalBytes: 20 },
+      same,
+    ],
+    [{ sourceWorktreeId: wt3, step: "create", createPhase: "setup" }, same],
+    [{ sourceWorktreeId: wt3, step: "create", createPhase: "idle" }, refuse()],
+    [{ sourceWorktreeId: wt3, step: "transfer", bytes: -1 }, refuse()],
+    [
+      { sourceWorktreeId: wt3, step: "capture", extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  SyncPullWorktreeResultSchema: [
+    [
+      pulled,
+      ok({
+        worktree: { ...worktree, autoPull: false },
+        captured: true,
+        dirtyApplied: false,
+      }),
+    ],
+    [
+      { ...pulled, files: { crossed: true, conflicts: 0 } },
+      ok({
+        worktree: { ...worktree, autoPull: false },
+        captured: true,
+        dirtyApplied: false,
+        files: { crossed: true, conflicts: 0 },
+      }),
+    ],
+    [
+      { ...pulled, files: { crossed: false, conflicts: 2, error: "e" } },
+      ok({
+        worktree: { ...worktree, autoPull: false },
+        captured: true,
+        dirtyApplied: false,
+        files: { crossed: false, conflicts: 2, error: "e" },
+      }),
+    ],
+    [
+      { ...pulled, files: { crossed: true, conflicts: 0, x: 1 } },
+      refuse('Unexpected key "x"'),
+    ],
+    [{ ...pulled, files: { crossed: true, conflicts: -1 } }, refuse()],
+    [{ ...pulled, extra: 1 }, refuse('Unexpected key "extra"')],
+    [{ worktree, captured: true }, refuse()],
+  ],
+  SyncSendWorktreePayloadSchema: [
+    [sendBase, same],
+    [
+      { ...sendBase, runSetup: true, ignoreMode: "bring", ignores: ["x"] },
+      same,
+    ],
+    [
+      { ...sendBase, ignores: ["a\nb"] },
+      refuse("Ignore pattern must be one line"),
+    ],
+    [{ ...sendBase, worktreeId: "w" }, refuse()],
+    [{ ...sendBase, extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  SyncTeardownSourcePayloadSchema: [
+    [
+      { sourceDeviceId: dev, sourceProjectId: "p", sourceWorktreeId: wt3 },
+      same,
+    ],
+    [
+      { sourceDeviceId: dev, sourceProjectId: "p", sourceWorktreeId: "w" },
+      refuse(),
+    ],
+    [
+      {
+        sourceDeviceId: dev,
+        sourceProjectId: "p",
+        sourceWorktreeId: wt3,
+        extra: 1,
+      },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  "sync.teardownSource.output": [
+    [{ sourceRemoved: true }, same],
+    [{ sourceRemoved: false, sourceError: "scripts-running" }, same],
+    [{ sourceRemoved: true, extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  SyncTeardownSentPayloadSchema: [
+    [sendBase, same],
+    [{ ...sendBase, targetDeviceId: "" }, refuse()],
+    [{ ...sendBase, extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  GitStateCoreSchema: [
+    [gitCore, same],
+    [{ ...gitCore, head: { kind: "detached" } }, same],
+    [{ ...gitCore, indexTree: "b".repeat(64) }, same],
+    [{ ...gitCore, head: { kind: "branch" } }, refuse()],
+    [
+      { ...gitCore, head: { kind: "detached", branch: "x" } },
+      refuse('Unexpected key "branch"'),
+    ],
+    [{ ...gitCore, head: { kind: "other" } }, refuse()],
+    [
+      { ...gitCore, head: { kind: "branch", branch: "-x" } },
+      refuse("Branch names cannot start with '-'"),
+    ],
+    [{ ...gitCore, indexTree: "a".repeat(39) }, refuse()],
+    [{ ...gitCore, indexTree: "a".repeat(65) }, refuse()],
+    [{ ...gitCore, tip: "zz" }, refuse("Invalid commit hash")],
+    [{ ...gitCore, indexCommit: null }, refuse('Unexpected key "indexCommit"')],
+  ],
+  GitStateSchema: [
+    [{ ...gitCore, indexCommit: c1 }, same],
+    [{ ...gitCore, indexCommit: null }, same],
+    [gitCore, refuse()],
+    [{ ...gitCore, indexCommit: "zz" }, refuse("Invalid commit hash")],
+    [
+      { ...gitCore, indexCommit: null, extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  MirrorWorktreePayloadSchema: [
+    [pw, same],
+    [{ ...pw, extra: 1 }, refuse('Unexpected key "extra"')],
+    [{ projectId: "p", worktreeId: "w" }, refuse()],
+    [{ projectId: "", worktreeId: wt3 }, refuse()],
+  ],
+  "mirror.applyGitState.input": [
+    [{ ...pw, expect: { tip: c1, indexTree: tree40 }, state: gitCore }, same],
+    [
+      {
+        ...pw,
+        expect: { tip: c1, indexTree: tree40 },
+        state: gitCore,
+        sweep: [landing],
+      },
+      same,
+    ],
+    [
+      {
+        ...pw,
+        expect: { tip: c1, indexTree: tree40 },
+        state: gitCore,
+        sweep: [mainRef],
+      },
+      refuse(),
+    ],
+    [
+      {
+        ...pw,
+        expect: { tip: c1, indexTree: tree40 },
+        state: gitCore,
+        sweep: Array(9).fill(landing),
+      },
+      refuse(),
+    ],
+    [
+      { ...pw, expect: { tip: c1, indexTree: tree40, x: 1 }, state: gitCore },
+      refuse('Unexpected key "x"'),
+    ],
+    [
+      {
+        ...pw,
+        expect: { tip: c1, indexTree: tree40 },
+        state: { ...gitCore, indexCommit: null },
+      },
+      refuse('Unexpected key "indexCommit"'),
+    ],
+    [
+      {
+        ...pw,
+        expect: { tip: c1, indexTree: tree40 },
+        state: gitCore,
+        extra: 1,
+      },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  MirrorApplyGitStateResultSchema: [
+    [{ applied: true }, same],
+    [{ applied: false, reason: "r" }, same],
+    [{ applied: true, extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  MirrorSessionSchema: [
+    [session, same],
+    [{ ...session, git: { status: "synced", detail: "" } }, same],
+    [{ ...session, lastError: "e" }, same],
+    [{ ...session, git: { status: "bogus", detail: "" } }, refuse()],
+    [
+      { ...session, git: { status: "synced", detail: "", x: 1 } },
+      refuse('Unexpected key "x"'),
+    ],
+    [{ ...session, status: "bogus" }, refuse()],
+    [{ ...session, ignoreMode: "nothing" }, refuse()],
+    [{ ...session, createdAt: -1 }, refuse()],
+    [{ ...session, labels: { a: 1 } }, refuse()],
+    [{ ...session, session: "" }, refuse()],
+    [{ ...session, session: "s".repeat(129) }, refuse()],
+    [
+      { ...session, local: { ...endpoint, x: 1 } },
+      refuse('Unexpected key "x"'),
+    ],
+    [
+      {
+        ...session,
+        conflicts: [
+          {
+            root: "r",
+            localChanges: [{ path: "a", kind: "renamed" }],
+            remoteChanges: [],
+          },
+        ],
+      },
+      refuse(),
+    ],
+    [{ ...session, extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  "mirror.list.output": [
+    [{ daemon: "running", sessions: [session], serving: [serving] }, same],
+    [
+      {
+        daemon: "stopped",
+        sessions: [],
+        serving: [{ ...serving, peerWorktreeId: wt3 }],
+      },
+      same,
+    ],
+    [{ daemon: "other", sessions: [], serving: [] }, refuse()],
+    [
+      {
+        daemon: "running",
+        sessions: [],
+        serving: [{ ...serving, channelId: "x" }],
+      },
+      refuse(),
+    ],
+    [
+      { daemon: "running", sessions: [], serving: [{ ...serving, x: 1 }] },
+      refuse('Unexpected key "x"'),
+    ],
+    [
+      { daemon: "running", sessions: [], serving: [], extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  "mirror.changed.payload": [
+    [undefined, same],
+    [{ daemon: "unavailable", sessions: [], serving: [] }, same],
+    [null, refuse()],
+    [{}, refuse()],
+  ],
+  MirrorStartPayloadSchema: [
+    [{ ...pullBase, ignoreMode: "everything", ignores: [] }, same],
+    [{ ...pullBase, ignores: [] }, refuse()],
+    [{ ...pullBase, ignoreMode: "everything" }, refuse()],
+    [
+      { ...pullBase, ignoreMode: "everything", ignores: [], extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  "mirror.start.output": [
+    [
+      { ...pulled, session: "sync_x" },
+      ok({
+        worktree: { ...worktree, autoPull: false },
+        captured: true,
+        dirtyApplied: false,
+        session: "sync_x",
+      }),
+    ],
+    [pulled, refuse()],
+    [{ ...pulled, session: "" }, refuse()],
+    [
+      { ...pulled, session: "sync_x", extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  MirrorStartToPayloadSchema: [
+    [{ ...sendBase, ignoreMode: "gitignored", ignores: [] }, same],
+    [sendBase, refuse()],
+    [
+      { ...sendBase, ignoreMode: "gitignored", ignores: [], extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  "mirror.stop.input": [
+    [{ session: "s" }, same],
+    [{ session: "s", force: true }, same],
+    [{ session: "" }, refuse()],
+    [{ session: "s", extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  "mirror.pause.input": [
+    [{ session: "s" }, same],
+    [{}, refuse()],
+    [{ session: "s", force: true }, refuse('Unexpected key "force"')],
+  ],
+  "mirror.setIgnores.input": [
+    [{ session: "s", ignoreMode: "gitignored", ignores: [] }, same],
+    [{ session: "s", ignoreMode: "gitignored" }, refuse()],
+    [
+      { session: "s", ignoreMode: "gitignored", ignores: [], extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  "mirror.setIgnores.output": [
+    [{ session: "s" }, same],
+    [{ session: "s", extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  "mirror.history.input": [
+    [{ localWorktreeId: wt3 }, same],
+    [{ localWorktreeId: "w" }, refuse()],
+    [{ localWorktreeId: wt3, extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  "mirror.history.output": [
+    [{ events: [] }, same],
+    [{ events: [{ at: 1, kind: "started", detail: "" }] }, same],
+    [{ events: events(100) }, same],
+    [{ events: events(101) }, refuse()],
+    [{ events: [{ at: 1, kind: "other", detail: "" }] }, refuse()],
+    [{ events: [{ at: -1, kind: "started", detail: "" }] }, refuse()],
+    [
+      { events: [{ at: 1, kind: "started", detail: "", x: 1 }] },
+      refuse('Unexpected key "x"'),
+    ],
+    [{ events: [], extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  "mirror.openStream.input": [
+    [{ ...pw, channelId: hex }, same],
+    [{ ...pw, channelId: hex, peerWorktreeId: wt3 }, same],
+    [{ ...pw, channelId: hex, peerWorktreeId: "w" }, refuse()],
+    [{ ...pw, channelId: "x" }, refuse()],
+    [{ ...pw, channelId: hex, extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  "control.devices.input": [
+    [{}, same],
+    [{ projectId: "p" }, same],
+    [{ projectId: "" }, refuse()],
+    [{ extra: 1 }, refuse('Unexpected key "extra"')],
+    [undefined, refuse()],
+  ],
+  "control.devices.output": [
+    [{ thisDevice: { deviceId: "d", name: "n" }, devices: [] }, same],
+    [
+      {
+        thisDevice: { deviceId: "d", name: "n" },
+        devices: [
+          {
+            deviceId: dev,
+            name: "Mac",
+            platform: "darwin",
+            block: "no-grant",
+            projectId: "p",
+          },
+          { deviceId: dev, name: "Mac", platform: "darwin" },
+        ],
+      },
+      same,
+    ],
+    [
+      {
+        thisDevice: { deviceId: "d", name: "n" },
+        devices: [{ deviceId: dev, name: "M", platform: "p", block: "x" }],
+      },
+      refuse(),
+    ],
+    [
+      {
+        thisDevice: { deviceId: "d", name: "n" },
+        devices: [{ deviceId: "", name: "M", platform: "p" }],
+      },
+      refuse(),
+    ],
+    [
+      {
+        thisDevice: { deviceId: "d", name: "n" },
+        devices: [{ deviceId: dev, name: "M", platform: "p", x: 1 }],
+      },
+      refuse('Unexpected key "x"'),
+    ],
+    [
+      { thisDevice: { deviceId: "d", name: "n", x: 1 }, devices: [] },
+      refuse('Unexpected key "x"'),
+    ],
+  ],
+  "control.peerWorktrees.input": [
+    [{ projectId: "p" }, same],
+    [{ projectId: "p", device: "Mac" }, same],
+    [{ projectId: "p", device: "" }, refuse()],
+    [{ projectId: "p", device: "d".repeat(256) }, same],
+    [{ projectId: "p", device: "d".repeat(257) }, refuse()],
+    [{ projectId: "p", extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  "control.peerWorktrees.output": [
+    [{ worktrees: [], unreachable: [] }, same],
+    [
+      {
+        worktrees: [
+          { device: { deviceId: dev, name: "n" }, projectId: "p", worktree },
+        ],
+        unreachable: ["Other"],
+      },
+      ok({
+        worktrees: [
+          {
+            device: { deviceId: "dev-1", name: "n" },
+            projectId: "p",
+            worktree: { ...worktree, autoPull: false },
+          },
+        ],
+        unreachable: ["Other"],
+      }),
+    ],
+    [
+      {
+        worktrees: [
+          {
+            device: { deviceId: dev, name: "n" },
+            projectId: "p",
+            worktree,
+            x: 1,
+          },
+        ],
+        unreachable: [],
+      },
+      refuse('Unexpected key "x"'),
+    ],
+    [
+      { worktrees: [], unreachable: [], extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  "control.send.input": [
+    [pw, same],
+    [
+      {
+        ...pw,
+        device: "Mac",
+        mirror: true,
+        leaveOut: "gitignored",
+        setup: false,
+        source: "teardown",
+      },
+      same,
+    ],
+    [{ ...pw, leaveOut: "everything" }, refuse()],
+    [{ ...pw, source: "x" }, refuse()],
+    [{ ...pw, device: "" }, refuse()],
+    [{ ...pw, extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  "control.bring.input": [
+    [{ projectId: "p", worktree: "fox" }, same],
+    [
+      { projectId: "p", worktree: "fox", leaveOut: "nothing", source: "keep" },
+      same,
+    ],
+    [{ projectId: "p", worktree: "" }, refuse()],
+    [{ projectId: "p", worktree: "w".repeat(513) }, refuse()],
+    [
+      { projectId: "p", worktree: "fox", extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  "control.send.output": [
+    [
+      { ...pulled, device: { deviceId: dev, name: "n" }, copySide: "remote" },
+      ok({
+        worktree: { ...worktree, autoPull: false },
+        captured: true,
+        dirtyApplied: false,
+        device: { deviceId: "dev-1", name: "n" },
+        copySide: "remote",
+      }),
+    ],
+    [
+      {
+        ...pulled,
+        device: { deviceId: dev, name: "n" },
+        copySide: "local",
+        session: "s",
+        alreadyMirrored: true,
+        source: { fate: "shelve", done: false, error: "e" },
+      },
+      ok({
+        worktree: { ...worktree, autoPull: false },
+        captured: true,
+        dirtyApplied: false,
+        device: { deviceId: "dev-1", name: "n" },
+        copySide: "local",
+        session: "s",
+        alreadyMirrored: true,
+        source: { fate: "shelve", done: false, error: "e" },
+      }),
+    ],
+    [
+      { ...pulled, device: { deviceId: dev, name: "n" }, copySide: "x" },
+      refuse(),
+    ],
+    [
+      {
+        ...pulled,
+        device: { deviceId: dev, name: "n", x: 1 },
+        copySide: "remote",
+      },
+      refuse('Unexpected key "x"'),
+    ],
+    [
+      {
+        ...pulled,
+        device: { deviceId: dev, name: "n" },
+        copySide: "remote",
+        source: { fate: "keep", done: true, x: 1 },
+      },
+      refuse('Unexpected key "x"'),
+    ],
+    [
+      {
+        ...pulled,
+        device: { deviceId: dev, name: "n" },
+        copySide: "remote",
+        extra: 1,
+      },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  "control.mirrors.output": [
+    [{ daemon: "running", mirrors: [controlMirror] }, same],
+    [
+      {
+        daemon: "running",
+        mirrors: [{ ...controlMirror, git: "synced", gitDetail: "" }],
+      },
+      same,
+    ],
+    [
+      { daemon: "running", mirrors: [{ ...controlMirror, conflicts: -1 }] },
+      refuse(),
+    ],
+    [
+      { daemon: "running", mirrors: [{ ...controlMirror, x: 1 }] },
+      refuse('Unexpected key "x"'),
+    ],
+    [
+      { daemon: "running", mirrors: [], extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  "control.mirrorStop.input": [
+    [pw, same],
+    [{ ...pw, force: true }, same],
+    [{ ...pw, extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  "control.mirrorStop.output": [
+    [{ mirror: controlMirror }, same],
+    [{ mirror: controlMirror, copyStayed: "busy" }, same],
+    [{ mirror: controlMirror, extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  "forward.open.input": [
+    [{ port: 3000, channelId: hex }, same],
+    [{ port: 0, channelId: hex }, refuse()],
+    [{ port: 65536, channelId: hex }, refuse()],
+    [{ port: 1.5, channelId: hex }, refuse()],
+    [{ port: 3000, channelId: "x" }, refuse()],
+    [
+      { port: 3000, channelId: hex, extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  "portForward.start.input": [
+    [{ deviceId: dev, remotePort: 3000 }, same],
+    [{ deviceId: dev, remotePort: 3000, localPort: 3001 }, same],
+    [{ deviceId: dev, remotePort: 3000, localPort: 0 }, refuse()],
+    [{ deviceId: "", remotePort: 3000 }, refuse()],
+    [
+      { deviceId: dev, remotePort: 3000, extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  "portForward.start.output": [
+    [{ forwardId: hex, localPort: 3001 }, same],
+    [
+      { forwardId: hex, localPort: 3001, extra: 1 },
+      refuse('Unexpected key "extra"'),
+    ],
+  ],
+  "portForward.stop.input": [
+    [{ forwardId: hex }, same],
+    [{ forwardId: "x" }, refuse()],
+    [{ forwardId: hex, extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  "portForward.list.output": [
+    [{ forwards: [] }, same],
+    [
+      {
+        forwards: [
+          {
+            forwardId: hex,
+            deviceId: dev,
+            remotePort: 3000,
+            localPort: 3001,
+            connCount: 0,
+          },
+        ],
+      },
+      same,
+    ],
+    [
+      {
+        forwards: [
+          {
+            forwardId: hex,
+            deviceId: dev,
+            remotePort: 3000,
+            localPort: 3001,
+            connCount: -1,
+          },
+        ],
+      },
+      refuse(),
+    ],
+    [{ forwards: [], extra: 1 }, refuse('Unexpected key "extra"')],
+  ],
+  DirectCandidateSchema: [
+    [lanCandidate, same],
+    [{ ...lanCandidate, url: "ws://[::1]:4000" }, same],
+    [tunnelCandidate, same],
+    [
+      { ...lanCandidate, extra: 1 },
+      ok({ kind: "lan", url: "ws://192.168.1.2:4000", ticket: "t" }),
+    ],
+    [
+      { ...lanCandidate, url: "wss://192.168.1.2:4000" },
+      refuse("candidate url does not match its kind"),
+    ],
+    [
+      { ...lanCandidate, url: "ws://192.168.1.2" },
+      refuse("candidate url does not match its kind"),
+    ],
+    [
+      { ...lanCandidate, url: "ws://host.local:4000" },
+      refuse("candidate url does not match its kind"),
+    ],
+    [
+      { ...tunnelCandidate, url: "wss://1.2.3.4" },
+      refuse("candidate url does not match its kind"),
+    ],
+    [
+      { ...tunnelCandidate, url: "wss://a.example.com:8443" },
+      refuse("candidate url does not match its kind"),
+    ],
+    [
+      { ...tunnelCandidate, url: "ws://a.example.com" },
+      refuse("candidate url does not match its kind"),
+    ],
+    [
+      { ...lanCandidate, url: "not a url" },
+      refuse("candidate url does not match its kind"),
+    ],
+    [{ ...lanCandidate, kind: "x" }, refuse()],
+    [{ kind: "lan", url: "ws://192.168.1.2:4000" }, refuse()],
+  ],
+  DirectConnectInfoSchema: [
+    [{ available: false }, same],
+    [{ available: true, candidates: [lanCandidate, tunnelCandidate] }, same],
+    [
+      { available: true, candidates: [{ ...lanCandidate, kind: "tunnel" }] },
+      refuse("candidate url does not match its kind"),
+    ],
+    [{ available: false, extra: 1 }, ok({ available: false })],
+    [{}, refuse()],
+  ],
+  "direct.connectInfo.input": [
+    [undefined, same],
+    [{}, same],
+    [{ dialableKinds: ["tunnel"] }, same],
+    [{ dialableKinds: ["lan", "tunnel"] }, same],
+    [{ dialableKinds: ["x"] }, refuse()],
+    [{ extra: 1 }, ok({})],
+    [null, refuse()],
+  ],
+  "remoteAccess.commandAccess.output": [
+    [{ granted: true }, same],
+    [{ granted: false, extra: 1 }, ok({ granted: false })],
+    [{}, refuse()],
+  ],
+  ReqFrameSchema: [
+    [{ t: "req", id: 1, channel: "c" }, same],
+    [{ t: "req", id: 1, channel: "c", input: { a: 1 } }, same],
+    [{ t: "req", id: 1, channel: "c", input: undefined }, same],
+    [
+      { t: "req", id: 1, channel: "c", extra: 1 },
+      ok({ t: "req", id: 1, channel: "c" }),
+    ],
+    [{ t: "req", id: 1.5, channel: "c" }, refuse()],
+    [{ t: "req", id: 1 }, refuse()],
+    [{ t: "res", id: 1, channel: "c" }, refuse()],
+  ],
+  ClientFrameSchema: [
+    [{ t: "hello", deviceId: "d", appVersion: "1" }, same],
+    [{ t: "hello", token: "k", deviceId: "d", appVersion: "1" }, same],
+    [
+      {
+        t: "hello",
+        deviceId: "d",
+        appVersion: "1",
+        nonce: hex,
+        proof: "p",
+        deflate: true,
+      },
+      same,
+    ],
+    [
+      { t: "hello", deviceId: "d", appVersion: "1", extra: 1 },
+      ok({ t: "hello", deviceId: "d", appVersion: "1" }),
+    ],
+    [{ t: "hello", deviceId: "d", appVersion: "1", nonce: "x" }, refuse()],
+    [{ t: "hello", appVersion: "1" }, refuse()],
+    [{ t: "req", id: 2, channel: "c", input: [1] }, same],
+    [{ t: "bye" }, same],
+    [{ t: "bye", extra: 1 }, ok({ t: "bye" })],
+    [{ t: "ping" }, same],
+    [{ t: "pong" }, refuse()],
+    [{ t: "welcome", deviceId: "d", appVersion: "1" }, refuse()],
+    [{ t: "x" }, refuse()],
+    [{}, refuse()],
+    [null, refuse()],
+  ],
+  ServerFrameSchema: [
+    [{ t: "welcome", deviceId: "d", appVersion: "1" }, same],
+    [{ t: "welcome", deviceId: "d", appVersion: "1", proof: "p" }, same],
+    [{ t: "challenge", nonce: hex }, same],
+    [{ t: "challenge", nonce: "x" }, refuse()],
+    [{ t: "res", id: 1, ok: true }, same],
+    [{ t: "res", id: 1, ok: true, result: { a: [1] } }, same],
+    [
+      { t: "res", id: 1, ok: true, extra: 1 },
+      ok({ t: "res", id: 1, ok: true }),
+    ],
+    [resErr, same],
+    [{ ...resErr, code: "command-refused" }, same],
+    [{ ...resErr, error: { _tag: "T", message: "m", extra: 1 } }, same],
+    [
+      { ...resErr, error: { _tag: "", message: "m" } },
+      ok({ t: "res", id: 1, ok: false, message: "m", error: undefined }),
+    ],
+    [
+      { ...resErr, error: { _tag: "T" } },
+      ok({ t: "res", id: 1, ok: false, message: "m", error: undefined }),
+    ],
+    [
+      { ...resErr, error: 5 },
+      ok({ t: "res", id: 1, ok: false, message: "m", error: undefined }),
+    ],
+    [
+      { ...resErr, error: null },
+      ok({ t: "res", id: 1, ok: false, message: "m", error: undefined }),
+    ],
+    [{ ...resErr, error: undefined }, same],
+    [
+      { ...resErr, code: "c", error: "x" },
+      ok({
+        t: "res",
+        id: 1,
+        ok: false,
+        message: "m",
+        code: "c",
+        error: undefined,
+      }),
+    ],
+    [{ ...resErr, code: 5 }, refuse()],
+    [{ t: "res", id: 1, ok: false }, refuse()],
+    [{ t: "res", id: 1, ok: "yes" }, refuse()],
+    [{ t: "res", id: 1.5, ok: true }, refuse()],
+    [{ t: "res", id: 1 }, refuse()],
+    [{ t: "push", channel: "c" }, same],
+    [
+      { t: "push", channel: "c", payload: { a: 1 }, extra: 1 },
+      ok({ t: "push", channel: "c", payload: { a: 1 } }),
+    ],
+    [{ t: "pong" }, same],
+    [{ t: "ping" }, refuse()],
+    [{ t: "hello", deviceId: "d", appVersion: "1" }, refuse()],
+    [{ t: "x" }, refuse()],
+    [null, refuse()],
+  ],
+  WireErrorShapeSchema: [
+    [{ _tag: "T", message: "m" }, same],
+    [
+      { _tag: "T", message: "m", worktreeId: "w1", n: 2, nested: { a: [1] } },
+      same,
+    ],
+    [{ _tag: "", message: "m" }, refuse()],
+    [{ message: "m" }, refuse()],
+    [{ _tag: 3, message: "m" }, refuse()],
+    [{ _tag: "T" }, refuse()],
+    [{ _tag: "T", message: 3 }, refuse()],
+    [null, refuse()],
+    ["T", refuse()],
+  ],
+  DeviceIdSchema: [
+    ["d", same],
+    ["x".repeat(200), same],
+    ["", refuse()],
+    ["x".repeat(201), refuse()],
+    [5, refuse()],
+  ],
+  ErrorBodySchema: [
+    [{ error: "e" }, same],
+    [{ error: "e", code: "device_revoked" }, same],
+    [{ error: "e", code: "other" }, refuse()],
+    [{ error: "e", extra: 1 }, ok({ error: "e" })],
+    [{}, refuse()],
+  ],
+  EnrollRequestSchema: [
+    [{ deviceId: dev, name: "Mac", platform: "darwin" }, same],
+    [
+      {
+        deviceId: "x".repeat(200),
+        name: "n".repeat(256),
+        platform: "p".repeat(64),
+      },
+      same,
+    ],
+    [{ deviceId: "x".repeat(201), name: "n", platform: "p" }, refuse()],
+    [{ deviceId: dev, name: "n".repeat(257), platform: "p" }, refuse()],
+    [{ deviceId: dev, name: "n", platform: "p".repeat(65) }, refuse()],
+    [{ deviceId: dev, name: "", platform: "p" }, refuse()],
+    [{ deviceId: "", name: "n", platform: "p" }, refuse()],
+    [
+      { deviceId: dev, name: "n", platform: "p", extra: 1 },
+      ok({ deviceId: "dev-1", name: "n", platform: "p" }),
+    ],
+    [{ deviceId: dev, name: "n" }, refuse()],
+  ],
+  RenameDeviceRequestSchema: [
+    [{ name: "n" }, same],
+    [{ name: "n".repeat(257) }, refuse()],
+    [{ name: "" }, refuse()],
+    [{ name: "n", extra: 1 }, ok({ name: "n" })],
+  ],
+  DeviceInfoSchema: [
+    [deviceInfo, same],
+    [{ ...deviceInfo, lastSeenAt: 2 }, same],
+    [
+      { ...deviceInfo, credential: "secret" },
+      ok({
+        deviceId: "dev-1",
+        name: "Mac",
+        platform: "darwin",
+        createdAt: 1,
+        lastSeenAt: null,
+        online: true,
+      }),
+    ],
+    [{ ...deviceInfo, createdAt: 1.5 }, refuse()],
+    [{ ...deviceInfo, lastSeenAt: undefined }, refuse()],
+    [{ ...deviceInfo, online: undefined }, refuse()],
+  ],
+  EnrollResponseSchema: [
+    [{ credential: "c", device: deviceInfo }, same],
+    [
+      { credential: "c", device: { ...deviceInfo, x: 1 }, extra: 1 },
+      ok({
+        credential: "c",
+        device: {
+          deviceId: "dev-1",
+          name: "Mac",
+          platform: "darwin",
+          createdAt: 1,
+          lastSeenAt: null,
+          online: true,
+        },
+      }),
+    ],
+    [{ device: deviceInfo }, refuse()],
+  ],
+  DeviceListResponseSchema: [
+    [{ devices: [] }, same],
+    [
+      { devices: [deviceInfo, { ...deviceInfo, x: 1 }] },
+      ok({
+        devices: [
+          {
+            deviceId: "dev-1",
+            name: "Mac",
+            platform: "darwin",
+            createdAt: 1,
+            lastSeenAt: null,
+            online: true,
+          },
+          {
+            deviceId: "dev-1",
+            name: "Mac",
+            platform: "darwin",
+            createdAt: 1,
+            lastSeenAt: null,
+            online: true,
+          },
+        ],
+      }),
+    ],
+    [{ devices: {} }, refuse()],
+  ],
+  TicketResponseSchema: [
+    [{ ticket: "t", expiresInMs: 60000 }, same],
+    [{ ticket: "t", expiresInMs: 1.5 }, refuse()],
+    [
+      { ticket: "t", expiresInMs: 60000, extra: 1 },
+      ok({ ticket: "t", expiresInMs: 60000 }),
+    ],
+    [{ ticket: "t" }, refuse()],
+  ],
+  TunnelProvisionRequestSchema: [
+    [{ port: 3000 }, same],
+    [{ port: 1 }, same],
+    [{ port: 65535 }, same],
+    [{ port: 0 }, refuse()],
+    [{ port: 65536 }, refuse()],
+    [{ port: 1.5 }, refuse()],
+    [{ port: "3000" }, refuse()],
+    [{ port: 3000, extra: 1 }, ok({ port: 3000 })],
+  ],
+  TunnelProvisionResponseSchema: [
+    [{ hostname: "h", connectorToken: "t" }, same],
+    [{ hostname: "h", connectorToken: "t", dnsCreated: true }, same],
+    [{ hostname: "", connectorToken: "t" }, refuse()],
+    [{ hostname: "h", connectorToken: "" }, refuse()],
+    [
+      { hostname: "h", connectorToken: "t", extra: 1 },
+      ok({ hostname: "h", connectorToken: "t" }),
+    ],
+  ],
+  DeviceEnvelopeSchema: [
+    [{ t: "relay", to: dev, frame: { a: 1 } }, same],
+    [{ t: "relay", to: dev }, refuse()],
+    [
+      { t: "relay", to: dev, frame: null, extra: 1 },
+      ok({ t: "relay", to: "dev-1", frame: null }),
+    ],
+    [{ t: "relay", to: "", frame: 1 }, refuse()],
+    [{ t: "relay", to: "x".repeat(201), frame: 1 }, refuse()],
+    [{ t: "nack", to: dev, reason: "offline" }, refuse()],
+    [null, refuse()],
+  ],
+  ServerEnvelopeSchema: [
+    [{ t: "relay", from: dev, frame: { epoch: 1, sm: { t: "bye" } } }, same],
+    [{ t: "relay", from: dev }, refuse()],
+    [{ t: "relay", from: "x".repeat(201), frame: 1 }, refuse()],
+    [{ t: "presence", online: [] }, same],
+    [{ t: "presence", online: Array(64).fill(dev) }, same],
+    [{ t: "presence", online: Array(65).fill(dev) }, refuse()],
+    [{ t: "presence", online: [""] }, refuse()],
+    [{ t: "nack", to: dev, reason: "offline" }, same],
+    [
+      { t: "nack", to: dev, reason: "too-large", extra: 1 },
+      ok({ t: "nack", to: "dev-1", reason: "too-large" }),
+    ],
+    [{ t: "nack", to: dev, reason: "x" }, refuse()],
+    [{ t: "nack", to: "", reason: "offline" }, refuse()],
+    [{ t: "x" }, refuse()],
+    [null, refuse()],
+  ],
+  "account.listDevices.output": [
+    [[], same],
+    [
+      [deviceInfo, { ...deviceInfo, x: 1 }],
+      ok([
+        {
+          deviceId: "dev-1",
+          name: "Mac",
+          platform: "darwin",
+          createdAt: 1,
+          lastSeenAt: null,
+          online: true,
+        },
+        {
+          deviceId: "dev-1",
+          name: "Mac",
+          platform: "darwin",
+          createdAt: 1,
+          lastSeenAt: null,
+          online: true,
+        },
+      ]),
+    ],
+    [[{ ...deviceInfo, online: "yes" }], refuse()],
+  ],
+  "hub.invokePeer.input": [
+    [{ deviceId: dev, channel: "c" }, same],
+    [{ deviceId: dev, channel: "c", input: { a: 1 } }, same],
+    [{ deviceId: dev, channel: "c", input: undefined }, same],
+    [{ deviceId: dev, channel: "" }, refuse()],
+    [{ deviceId: "x".repeat(201), channel: "c" }, refuse()],
+    [
+      { deviceId: dev, channel: "c", extra: 1 },
+      ok({ deviceId: "dev-1", channel: "c" }),
+    ],
+  ],
+};
+
+// Each wave-3 void slot answered undefined, and refused everything else.
+const VOID_SLOTS_WAVE3 = [
+  "sync.bundleAbort.output",
+  "sync.pushChunk.output",
+  "mirror.list.input",
+  "mirror.stop.output",
+  "mirror.pause.output",
+  "mirror.resume.output",
+  "mirror.openStream.output",
+  "control.mirrors.input",
+  "forward.open.output",
+  "portForward.stop.output",
+  "portForward.list.input",
+  "portForward.changed.payload",
+  "remoteAccess.commandAccess.input",
+  "remoteAccess.commandAccessChanged.payload",
 ];
+
+// The shared leave-out preset, read through parseLeaveOutPreset: a bad
+// path is dropped and the rest kept, anything else unreadable is the
+// dialogs' default.
+const LEAVE_OUT_PRESETS = [
+  [
+    '{"base":"everything"}',
+    ok({ base: "everything", leftOut: [], brought: [] }),
+  ],
+  [
+    '{"base":"gitignored","brought":["dist",".env"]}',
+    ok({ base: "gitignored", leftOut: [], brought: ["dist", ".env"] }),
+  ],
+  [
+    '{"base":"everything","leftOut":["dist","../x","/abs","a\\nb",5,"",null,"ok/y"],"brought":["b"]}',
+    ok({ base: "everything", leftOut: ["dist", "ok/y"], brought: ["b"] }),
+  ],
+  [
+    '{"base":"everything","leftOut":[],"extra":1}',
+    ok({ base: "everything", leftOut: [], brought: [] }),
+  ],
+  ['{"base":"nothing"}', ok({ base: "everything", leftOut: [], brought: [] })],
+  [
+    '{"base":"everything","leftOut":null}',
+    ok({ base: "everything", leftOut: [], brought: [] }),
+  ],
+  [
+    '{"base":"everything","leftOut":"dist"}',
+    ok({ base: "everything", leftOut: [], brought: [] }),
+  ],
+  ["[]", ok({ base: "everything", leftOut: [], brought: [] })],
+  ["null", ok({ base: "everything", leftOut: [], brought: [] })],
+  ["not json", ok({ base: "everything", leftOut: [], brought: [] })],
+  [undefined, ok({ base: "everything", leftOut: [], brought: [] })],
+];
+
+const WAVE3_EXPORTS = {
+  ...syncModule,
+  ...mirrorModule,
+  ...directModule,
+  ...protocol,
+  ...frames,
+  WireErrorShapeSchema,
+  HexId32Schema,
+};
+const WAVE3_CONTRACTS = {
+  sync: syncModule.syncContract,
+  mirror: mirrorModule.mirrorContract,
+  control: controlContract,
+  forward: forwardContract,
+  portForward: portForwardContract,
+  direct: directModule.directContract,
+  remoteAccess: remoteAccessContract,
+  account: accountContract,
+  hub: hubContract,
+};
+
+function wave3Codec(label) {
+  if (label in WAVE3_EXPORTS) return WAVE3_EXPORTS[label];
+  const [module, call, slot] = label.split(".");
+  return WAVE3_CONTRACTS[module].calls[call][slot];
+}
 
 // Whether a Schema decodes the input, for the construct checks.
 const decodes = (schema, input, options) =>
@@ -2446,14 +4136,6 @@ async function main() {
         want,
         `PortNumberSchema on ${raw}`,
       );
-      // The zod copy still embedded by the forward and portForward
-      // contracts must agree with the Schema form while both exist.
-      const viaZod = PortNumberZod.safeParse(Number(raw));
-      assert.equal(
-        viaZod.success ? viaZod.data : undefined,
-        want,
-        `PortNumberZod on ${raw}`,
-      );
     }
   });
 
@@ -2478,6 +4160,121 @@ async function main() {
       assertCases(codec, VOID_ROWS);
     }
   });
+
+  for (const [label, rows] of Object.entries(RECORDED_WAVE3)) {
+    // oxlint-disable-next-line no-await-in-loop -- one named check per schema, in table order
+    await check(`${label} matches zod`, () => {
+      assertCases(wave3Codec(label), rows);
+    });
+  }
+
+  await check("wave 3's void slots take undefined alone", () => {
+    for (const label of VOID_SLOTS_WAVE3) {
+      const codec = wave3Codec(label);
+      assert.equal(codec, Schema.Undefined, `${label} is Schema.Undefined`);
+      assertCases(codec, VOID_ROWS);
+    }
+  });
+
+  await check("the leave-out preset reads as zod read it", () => {
+    for (const [value, recorded] of LEAVE_OUT_PRESETS) {
+      assert.deepStrictEqual(
+        parseLeaveOutPreset(value),
+        recorded.ok,
+        `preset ${describe(value)}`,
+      );
+    }
+  });
+
+  await check(
+    "the wire's strict payloads refuse an undeclared key by name, through Schema.is too",
+    () => {
+      const pull = syncModule.SyncPullWorktreePayloadSchema;
+      const base = {
+        sourceDeviceId: "d",
+        sourceProjectId: "p",
+        sourceWorktreeId: "0123456789ab",
+        sourceIdentity: "i",
+        branch: "main",
+      };
+      assert.equal(
+        safeDecodeWith(pull, { ...base, sneaky: 1 }).error?.message,
+        'Unexpected key "sneaky"\n  at ["sneaky"]',
+      );
+      assert.equal(Schema.is(pull)({ ...base, sneaky: 1 }), false);
+      assert.equal(Schema.is(pull)(base), true);
+      // A strict struct built by spreading another's fields is strict
+      // too (zod's .extend kept the strictness).
+      assert.equal(
+        safeDecodeWith(mirrorModule.MirrorStartPayloadSchema, {
+          ...base,
+          ignoreMode: "everything",
+          ignores: [],
+          sneaky: 1,
+        }).error?.message,
+        'Unexpected key "sneaky"\n  at ["sneaky"]',
+      );
+      // Nested: the landing capture is strict at its own level.
+      assert.match(
+        String(
+          safeDecodeWith(syncModule.SyncLandWorktreePayloadSchema, {
+            identity: "i",
+            branch: "main",
+            branchTip: "abc1234",
+            capture: {
+              sourceWorktreeId: "0123456789ab",
+              commit: "abc1234",
+              sneaky: 1,
+            },
+          }).error?.message,
+        ),
+        /Unexpected key "sneaky"\n {2}at \["capture"\]\["sneaky"\]/,
+      );
+    },
+  );
+
+  await check(
+    "a res frame keeps parsing whatever its error field holds",
+    () => {
+      const Server = frames.ServerFrameSchema;
+      // An old peer: the message, maybe a code, no typed error.
+      const old = decodeWith(Server, {
+        t: "res",
+        id: 1,
+        ok: false,
+        message: "m",
+        code: "command-refused",
+      });
+      assert.equal(Object.hasOwn(old, "error"), false);
+      assert.equal(old.code, "command-refused");
+      // A newer peer's shape this build cannot read degrades to
+      // undefined, and the frame is still the caller's answer.
+      for (const error of [{ _tag: "", message: "m" }, 5, null, "x", []]) {
+        const degraded = decodeWith(Server, {
+          t: "res",
+          id: 1,
+          ok: false,
+          message: "m",
+          error,
+        });
+        assert.equal(degraded.error, undefined, describe(error));
+        assert.equal(degraded.message, "m");
+      }
+      // Through the one frame reader, from text, the same.
+      const text = JSON.stringify({
+        t: "res",
+        id: 9,
+        ok: false,
+        message: "m",
+        error: { _tag: 3 },
+      });
+      const read = frames.decodeFrame(text, Server);
+      assert.equal(read?.t, "res");
+      assert.equal(read?.error, undefined);
+      assert.equal(frames.decodeFrame("{", Server), null);
+      assert.equal(frames.decodeFrame('{"t":"res"}', Server), null);
+    },
+  );
 
   await check(
     "the remote device-settings patch refuses socketHost by name",
@@ -2610,23 +4407,6 @@ async function main() {
     },
   );
 
-  await check("the zod copies agree with the Schema they mirror", () => {
-    for (const [copyName, schemaName] of ZOD_COPIES) {
-      const copy = schemas[copyName];
-      assert.equal(isZodCodec(copy), true, `${copyName} is zod`);
-      const rows = RECORDED[schemaName] ?? RECORDED_WAVE2[schemaName];
-      for (const [input] of rows) {
-        const viaCopy = copy.safeParse(input);
-        const viaSchema = safeDecodeWith(schemas[schemaName], input);
-        const label = `${copyName} on ${describe(input)}`;
-        assert.equal(viaCopy.success, viaSchema.success, label);
-        if (viaCopy.success) {
-          assert.deepStrictEqual(viaCopy.data, viaSchema.data, label);
-        }
-      }
-    }
-  });
-
   await check("wave 1's inline contract slots match zod", () => {
     assertCases(gitContract.calls.fetchActive.payload, [
       [
@@ -2741,6 +4521,13 @@ async function main() {
         sharedSettingsContract.calls.read.output,
         cliContract.calls.shellStatus.output,
         accountContract.calls.status.output,
+        // Wave 3's reads the zod walker built ({ events: [] } and
+        // { available: false }): no stub until the walker reads
+        // SchemaAST. The web's grant preflight has a real handler
+        // instead (web/ipc/register.ts), so it never needs one.
+        mirrorModule.mirrorContract.calls.history.output,
+        directModule.directContract.calls.connectInfo.output,
+        remoteAccessContract.calls.commandAccess.output,
       ]) {
         assert.equal(stubValueFor(output, structural), NO_STRUCTURAL_STUB);
       }

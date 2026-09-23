@@ -7,6 +7,7 @@
 // sessions the renderer uses, and registers the lot in
 // registerIpcHandlers, which main/index.ts calls once at boot.
 import { join } from "node:path";
+import { Effect, Schema } from "effect";
 import { accountContract } from "@shared/ipc/modules/account";
 import { branchesContract } from "@shared/ipc/modules/branches";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
@@ -20,7 +21,6 @@ import { globalConfigContract } from "@shared/ipc/modules/globalConfig";
 import { hygieneContract } from "@shared/ipc/modules/hygiene";
 import { launchersContract } from "@shared/ipc/modules/launchers";
 import { menuContract } from "@shared/ipc/modules/menu";
-import { z } from "zod";
 import { coalesce } from "@host/lib/util/coalesce";
 import {
   GitStateCoreSchema,
@@ -178,15 +178,20 @@ const broadcastMirrorChanged = coalesce(() => {
 const fileSyncDir = () => join(dataDir(), "file-sync");
 // The git follower's agreed states, one file beside the engine's data.
 const gitFollowStorePath = () => join(fileSyncDir(), "git-follow.json");
-const GitFollowStoreSchema = z.object({
-  agreed: z.record(z.string(), GitStateCoreSchema).default({}),
+const GitFollowStoreSchema = Schema.Struct({
+  agreed: Schema.Record(Schema.String, GitStateCoreSchema).pipe(
+    Schema.withDecodingDefault(Effect.succeed({})),
+  ),
 });
 // The mirrors' event threads (main/core/mirror/history.ts), one file
 // beside the follower's, fed by every daemon snapshot and follower
 // verdict below and by the handlers' control ops.
 const mirrorHistoryPath = () => join(fileSyncDir(), "mirror-history.json");
-const MirrorHistoryStoreSchema = z.object({
-  events: z.record(z.string(), z.array(MirrorEventSchema)).default({}),
+const MirrorHistoryStoreSchema = Schema.Struct({
+  events: Schema.Record(
+    Schema.String,
+    Schema.mutable(Schema.Array(MirrorEventSchema)),
+  ).pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 });
 const mirrorHistory = createMirrorHistory({
   store: {
@@ -577,7 +582,7 @@ export function registerIpcHandlers(): void {
         gitFollower.onPeerProjectChanged(push.deviceId, parsed.data.projectId);
       }
     } else if (push.channel === "mirror:gitChanged") {
-      const parsed = MirrorWorktreePayloadSchema.safeParse(push.payload);
+      const parsed = safeDecodeWith(MirrorWorktreePayloadSchema, push.payload);
       if (parsed.success) {
         gitFollower.onPeerWorktreeChanged(
           push.deviceId,

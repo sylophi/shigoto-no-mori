@@ -27,6 +27,7 @@ import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
 import { withoutPeerState } from "@shared/schemas/config";
 import { directContract } from "@shared/ipc/modules/direct";
 import { hubContract } from "@shared/ipc/modules/hub";
+import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
 import { shellContract } from "@shared/ipc/modules/shell";
 import { broadcastAll, registerContract } from "@shared/ipc/registerContract";
@@ -397,6 +398,17 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     merge: ({ doc }) => sharedSettingsCopy.merge(doc),
   };
 
+  // ---- remoteAccess module ----
+
+  // The preflight grant read, answered by a handler rather than the
+  // stub walker: the loopback's caller is this page, and a refuse-all
+  // host never grants it commands (the same closed answer
+  // acceptsCommands gives), so the verdict is written down here and
+  // never derived from the output schema.
+  const remoteAccessHandlers: Handlers<typeof remoteAccessContract> = {
+    commandAccess: () => ({ granted: false }),
+  };
+
   // ---- shell module ----
 
   const shellHandlers: Handlers<typeof shellContract> = {
@@ -431,6 +443,12 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     shellContract,
     shellHandlers,
     clientWire.server,
+    registrarOpts,
+  );
+  registerContract(
+    remoteAccessContract,
+    remoteAccessHandlers,
+    hostWire.server,
     registrarOpts,
   );
 

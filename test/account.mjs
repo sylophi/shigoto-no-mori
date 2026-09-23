@@ -886,10 +886,10 @@ async function main() {
       // the renderer lists. The credential belongs only to the enroll
       // response, never to a listed device.
       assert.ok(
-        !("credential" in DeviceInfoSchema.shape),
+        !("credential" in DeviceInfoSchema.fields),
         "DeviceInfoSchema exposes a credential field",
       );
-      const device = DeviceInfoSchema.parse(DEVICE);
+      const device = decodeWith(DeviceInfoSchema, DEVICE);
       assert.ok(!("credential" in device), "a DeviceInfo carries a credential");
     },
   );

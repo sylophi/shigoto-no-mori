@@ -11,11 +11,14 @@ parses. The wire contract lives in `../shared/hub/protocol.ts`.
 This directory is a standalone pnpm project (like `cli/` is a
 standalone Go module) with its own lockfile. Install and run its
 scripts from `hub/`. One caveat on isolation: the shared contract it
-imports (`../shared/hub/protocol.ts` and the `frames.ts` that file
-re-exports) lives outside `hub/`, so its `zod` import resolves from
-the repo-root `node_modules`, not `hub/node_modules`. Both installs
-pin the same zod, so a repo-root install is a prerequisite for building
-or deploying the shared half.
+imports (`../shared/hub/protocol.ts`, the `frames.ts` that file
+re-exports, and the `../shared/ipc/codec.ts` the Worker decodes
+request bodies with) lives outside `hub/`, so its `effect` import
+resolves from the repo-root `node_modules`, not `hub/node_modules`.
+Both installs pin the same `effect`, so a repo-root install is a
+prerequisite for building or deploying the shared half, and the
+Worker imports no `effect` of its own, which keeps one copy in the
+bundle.
 
 ## Domains (production)
 

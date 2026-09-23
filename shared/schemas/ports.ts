@@ -1,5 +1,4 @@
 import { Schema } from "effect";
-import { z } from "zod";
 
 // One bound for every port number the app models: the forward engine's
 // payloads, a worktree's user-added ports, the local-port preference.
@@ -9,11 +8,6 @@ const PORT_MAX = 65535;
 export const PortNumberSchema = Schema.Int.check(
   Schema.isBetween({ minimum: PORT_MIN, maximum: PORT_MAX }),
 );
-
-// The zod form, for the zod schemas that still embed a port (the
-// forward and portForward contracts): a zod object cannot hold a Schema
-// field. Phase 4 wave 3 removes this.
-export const PortNumberZod = z.number().int().min(PORT_MIN).max(PORT_MAX);
 
 export const PORT_LABEL_MAX = 32;
 // Cap on user-added ports per worktree. Well above what a dev setup

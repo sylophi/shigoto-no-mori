@@ -1,5 +1,4 @@
 import { Schema } from "effect";
-import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { DeviceIdSchema } from "@shared/hub/protocol";
 import type { SupervisorStatus } from "@shared/remote/supervisor";
@@ -110,19 +109,15 @@ export const hubContract = defineContract("client", {
   // so this NEVER dials -- it rides the session the keeper holds
   // (joining an in-flight dial), and with none it rejects at once with
   // the keeper's last failure folded in. Errors ride each wire's error
-  // serialization.
-  //
-  // The input stays zod for DeviceIdSchema, which shared/hub/protocol.ts
-  // owns for the hub Worker too (Phase 4 wave 3 ports it). The output is
-  // whatever the peer answered.
+  // serialization. The output is whatever the peer answered.
   invokePeer: invoke(
     "hub:invokePeer",
-    z.object({
+    Schema.Struct({
       // Routed to a peer session keyed by this id (M6), so it carries the
       // shared device-id bound.
       deviceId: DeviceIdSchema,
-      channel: z.string().min(1),
-      input: z.unknown().optional(),
+      channel: Schema.NonEmptyString,
+      input: Schema.optional(Schema.Unknown),
     }),
     Schema.Unknown,
   ),

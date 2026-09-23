@@ -85,6 +85,7 @@
 // Pure browser-global-plus-shared code: no node builtins, no electron,
 // so the direct-plane check drives it headlessly under node (whose
 // global WebSocket serves connectDevice, as in the LAN client checks).
+import { Schema } from "effect";
 import {
   ALL_DIRECT_CANDIDATE_KINDS,
   candidateUrlMatchesKind,
@@ -490,7 +491,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       const input: DirectConnectInfoInput = {
         dialableKinds: [...dialableKinds],
       };
-      info = DirectConnectInfoSchema.parse(
+      info = Schema.decodeUnknownSync(DirectConnectInfoSchema)(
         await Promise.race([broker.brokerInvoke(input), deadline]),
       );
     } catch (error) {

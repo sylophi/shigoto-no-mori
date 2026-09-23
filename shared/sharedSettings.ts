@@ -7,8 +7,7 @@
 // associative and idempotent, so copies may exchange entries in any
 // order, any number of times, over any path, and still agree: there is
 // no sync session to complete and nothing to resume.
-import { Schema } from "effect";
-import { z } from "zod";
+import { Effect, Option, Schema, SchemaGetter } from "effect";
 import { isSafeRelPath } from "@shared/git/gitPaths";
 import {
   MAX_SHARED_SETTING_ENTRIES,
@@ -44,24 +43,28 @@ export const sharedSettingKeys = {
 // not hand the engine (it leaves the root, or is more than one line) is
 // dropped and the rest of the rule still holds. It came off another
 // device, and a bad one would fail every pull of the repo at Start.
-const PresetPathsSchema = z
-  .array(z.unknown())
-  .transform((paths) =>
-    paths.filter(
-      (path): path is string =>
-        typeof path === "string" &&
-        path.length > 0 &&
-        isSafeRelPath(path) &&
-        !/[\r\n]/.test(path),
-    ),
-  )
-  .default([]);
-const LeaveOutPresetSchema = z.object({
-  base: z.enum(["everything", "gitignored"]),
+// Absent (or undefined) reads as no paths; a list keeps its readable
+// ones; anything else fails the preset.
+const isPresetPath = (path: unknown): path is string =>
+  typeof path === "string" &&
+  path.length > 0 &&
+  isSafeRelPath(path) &&
+  !/[\r\n]/.test(path);
+const PresetPathsSchema = Schema.Array(Schema.Unknown).pipe(
+  Schema.decodeTo(Schema.Array(Schema.String), {
+    decode: SchemaGetter.transform((paths) => paths.filter(isPresetPath)),
+    // The kept paths are already a list of unknowns.
+    encode: SchemaGetter.transform((paths) => paths),
+  }),
+  Schema.withDecodingDefault(Effect.succeed([])),
+);
+const LeaveOutPresetSchema = Schema.Struct({
+  base: Schema.Literals(["everything", "gitignored"]),
   leftOut: PresetPathsSchema,
   brought: PresetPathsSchema,
 });
-export type LeaveOutPreset = z.infer<typeof LeaveOutPresetSchema>;
+export type LeaveOutPreset = typeof LeaveOutPresetSchema.Type;
+const decodeLeaveOutPreset = Schema.decodeUnknownOption(LeaveOutPresetSchema);
 export type LeaveOutPresetBase = LeaveOutPreset["base"];
 
 // The dialogs' own default, nothing left out: what a repo with no
@@ -75,8 +78,10 @@ export const NO_LEAVE_OUT_PRESET: LeaveOutPreset = {
 export function parseLeaveOutPreset(value: string | undefined): LeaveOutPreset {
   if (value === undefined) return NO_LEAVE_OUT_PRESET;
   try {
-    const parsed = LeaveOutPresetSchema.safeParse(JSON.parse(value));
-    return parsed.success ? parsed.data : NO_LEAVE_OUT_PRESET;
+    return Option.getOrElse(
+      decodeLeaveOutPreset(JSON.parse(value)),
+      () => NO_LEAVE_OUT_PRESET,
+    );
   } catch {
     return NO_LEAVE_OUT_PRESET;
   }

@@ -310,7 +310,7 @@ export type ApplyGitStateInput = {
   state: GitStateCore;
   // App-owned refs to drop once the state landed (a landed incoming
   // branch, a consumed index carrier). Best effort.
-  sweep?: string[];
+  sweep?: readonly string[];
 };
 
 export type ApplyGitStateResult =

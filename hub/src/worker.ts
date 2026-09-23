@@ -33,6 +33,7 @@ import {
   type TunnelProvisionResponse,
   TunnelProvisionRequestSchema,
 } from "../../shared/hub/protocol.ts";
+import { safeDecodeWith } from "../../shared/ipc/codec.ts";
 import { provisionTunnel, teardownTunnel, tunnelEnvOf } from "./tunnel.ts";
 import {
   DEVICE_CREDENTIAL_PREFIX,
@@ -380,7 +381,7 @@ export function createWorker(deps: HubDeps): HubWorker {
     const token = bearerToken(request);
     const login = token === null ? null : await deps.verifyLogin(token, env);
     if (login === null) return jsonError(401, { error: "invalid login token" });
-    const body = EnrollRequestSchema.safeParse(await readJson(request));
+    const body = safeDecodeWith(EnrollRequestSchema, await readJson(request));
     if (!body.success)
       return jsonError(400, { error: "invalid enroll request" });
     const { deviceId, name, platform } = body.data;
@@ -557,7 +558,10 @@ export function createWorker(deps: HubDeps): HubWorker {
   ) {
     const { device, hash } = await authDevice(request, env);
     if (device === null) return await refuseCredential(env, hash);
-    const parsed = RenameDeviceRequestSchema.safeParse(await readJson(request));
+    const parsed = safeDecodeWith(
+      RenameDeviceRequestSchema,
+      await readJson(request),
+    );
     if (!parsed.success)
       return jsonError(400, { error: "invalid rename request" });
     const renamed = await renameDevice(
@@ -585,7 +589,8 @@ export function createWorker(deps: HubDeps): HubWorker {
         error: "tunnel provisioning is not configured",
       });
     }
-    const body = TunnelProvisionRequestSchema.safeParse(
+    const body = safeDecodeWith(
+      TunnelProvisionRequestSchema,
       await readJson(request),
     );
     if (!body.success)

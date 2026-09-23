@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import type { RepoMergeConfig } from "@shared/schemas";
 import { ttlMapCache } from "../util/ttlCache";
 import { execGh } from "./exec";
@@ -8,10 +8,10 @@ import { ghReadyForRepo } from "./remote";
 // practice; cached for an hour so reopening the section is free.
 const REPO_MERGE_CONFIG_TTL_MS = 60 * 60_000;
 
-const GhRepoMergeConfigSchema = z.object({
-  mergeCommitAllowed: z.boolean(),
-  squashMergeAllowed: z.boolean(),
-  rebaseMergeAllowed: z.boolean(),
+const GhRepoMergeConfigSchema = Schema.Struct({
+  mergeCommitAllowed: Schema.Boolean,
+  squashMergeAllowed: Schema.Boolean,
+  rebaseMergeAllowed: Schema.Boolean,
 });
 
 // The loader throws on gh failure or a malformed response so only
@@ -29,7 +29,9 @@ const repoMergeConfigCache = ttlMapCache<string, RepoMergeConfig>(
       ],
       { cwd },
     );
-    const parsed = GhRepoMergeConfigSchema.parse(JSON.parse(stdout));
+    const parsed = Schema.decodeUnknownSync(GhRepoMergeConfigSchema)(
+      JSON.parse(stdout),
+    );
     return {
       merge: parsed.mergeCommitAllowed,
       squash: parsed.squashMergeAllowed,

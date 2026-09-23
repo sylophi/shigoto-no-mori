@@ -16,7 +16,6 @@
 // move. The peer's root path is read off its own worktree list over
 // the grant-gated wire, never taken from the caller.
 import { Schema } from "effect";
-import type { z } from "zod";
 import {
   MIRROR_LABEL_COPY_SIDE,
   MIRROR_COPY_STAYED,
@@ -138,7 +137,7 @@ function annotateMirrorSession(
   raw: MirrorSessionRaw,
   git?: MirrorGitStatus,
 ): MirrorSession {
-  return MirrorSessionSchema.parse({
+  return Schema.decodeUnknownSync(MirrorSessionSchema)({
     ...raw,
     localProjectId: raw.labels[MIRROR_LABEL_LOCAL_PROJECT] ?? "",
     localWorktreeId: raw.labels[MIRROR_LABEL_LOCAL_WORKTREE] ?? "",
@@ -192,7 +191,7 @@ export function currentMirrorList(): MirrorListResult | undefined {
 export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
   list: () => mirrorListOf(engine()),
 
-  start: async (input: z.infer<typeof MirrorStartPayloadSchema>, ctx) => {
+  start: async (input: typeof MirrorStartPayloadSchema.Type, ctx) => {
     // Every precondition before the pull, so a refusal creates
     // nothing: the engine must be up, and the peer's worktree must
     // exist (its root path is read off the peer's own list, because
@@ -254,7 +253,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
   // rides the peer's grant alone. No leave-out rule goes to the send:
   // the session opened next carries the ignored files and keeps
   // carrying them, as in start.
-  startTo: async (input: z.infer<typeof MirrorStartToPayloadSchema>, ctx) => {
+  startTo: async (input: typeof MirrorStartToPayloadSchema.Type, ctx) => {
     const daemon = requireRunningEngine();
     const { ignoreMode, ignores, ...sendInput } = input;
     const { source: worktree, result: sent } = await sendWorktree(

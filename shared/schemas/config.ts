@@ -1,5 +1,4 @@
 import { Schema, Struct } from "effect";
-import { z } from "zod";
 import { isSafeRelPath } from "../git/gitPaths";
 import { ProjectScopedPayloadSchema } from "./payloads";
 import { MergeMethodSchema } from "./pullRequest";
@@ -448,11 +447,6 @@ const WORKTREE_ID_PATTERN = /^[0-9a-f]{12}$/;
 export const WorktreeIdSchema = Schema.String.check(
   Schema.isPattern(WORKTREE_ID_PATTERN),
 );
-
-// The zod form of WorktreeIdSchema, for the sync, mirror and control
-// wire contracts that still embed it: a zod object cannot hold a
-// Schema field. Phase 4 wave 3 removes this.
-export const WorktreeIdZod = z.string().regex(WORKTREE_ID_PATTERN);
 
 export const ReadWorktreeDataPayloadSchema = Schema.Struct({
   ...ProjectScopedPayloadSchema.fields,

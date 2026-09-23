@@ -133,9 +133,12 @@ function assertMatchers(error, want, label) {
   }
 }
 
+const decodeShape = Schema.decodeUnknownSync(WireErrorShapeSchema);
+const decodeServerFrame = Schema.decodeUnknownSync(ServerFrameSchema);
+
 // A shape WireErrorShapeSchema must refuse, and why.
 function refuses(value, why) {
-  assert.equal(WireErrorShapeSchema.safeParse(value).success, false, why);
+  assert.equal(Schema.is(WireErrorShapeSchema)(value), false, why);
 }
 
 // A typed error of some other tag whose message carries a matcher's
@@ -294,7 +297,7 @@ async function main() {
       assert.equal(Object.getPrototypeOf(direct), WireError.prototype);
       assert.equal(direct.polluted, undefined);
       assert.equal(direct.name, "Hostile");
-      const rebuilt = new WireError(WireErrorShapeSchema.parse(shape));
+      const rebuilt = new WireError(decodeShape(shape));
       assert.equal(Object.getPrototypeOf(rebuilt), WireError.prototype);
       assert.equal(rebuilt.polluted, undefined);
       assert.equal({}.polluted, undefined, "Object.prototype polluted");
@@ -343,18 +346,18 @@ async function main() {
       refuses({ _tag: "T" }, "a missing message");
       refuses({ _tag: "T", message: 3 }, "a non-string message");
       const extra = { _tag: "T", message: "m", worktreeId: "w1", n: 2 };
-      assert.deepEqual(WireErrorShapeSchema.parse(extra), extra);
+      assert.deepEqual(decodeShape(extra), extra);
 
       // The res frame: an old peer's message-only answer still parses,
       // a new one keeps its error with every field.
-      const old = ServerFrameSchema.parse({
+      const old = decodeServerFrame({
         t: "res",
         id: 1,
         ok: false,
         message: "boom",
       });
       assert.equal("error" in old, false);
-      const typed = ServerFrameSchema.parse({
+      const typed = decodeServerFrame({
         t: "res",
         id: 2,
         ok: false,
@@ -363,20 +366,20 @@ async function main() {
       });
       assert.deepEqual(typed.error, CASES[1].shape);
       assert.equal(
-        ServerFrameSchema.safeParse({
+        Schema.decodeUnknownExit(ServerFrameSchema)({
           t: "res",
           id: 3,
           ok: false,
           message: "m",
           error: { _tag: "", message: "m" },
-        }).success,
-        true,
+        })._tag,
+        "Success",
         "a res with a malformed error was dropped",
       );
       // The malformed typed form degrades to absent, so the caller's
       // invoke rejects on the message instead of pending forever on a
       // dropped frame (a NEWER peer's shape this build cannot read).
-      const degraded = ServerFrameSchema.parse({
+      const degraded = decodeServerFrame({
         t: "res",
         id: 1,
         ok: false,

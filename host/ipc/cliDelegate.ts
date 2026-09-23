@@ -421,7 +421,7 @@ export function cliRunScriptSpawn(args: {
 // Whole-document config writes through the CLI's plumbing `write
 // --data` verbs, so both surfaces run one write path (validation,
 // lock+atomic merge, and the in-project exclude side effect for
-// project config). The payloads were already zod-parsed at the
+// project config). The payloads were already decoded at the
 // IPC boundary. The CLI's merge is NOT a plain overlay: for every
 // REGISTERED key the payload omits it CLEARS that key on disk (that is
 // how a settings save serializes a default by omission), so only
@@ -465,7 +465,7 @@ export async function shigomoriWriteViaCli(
 }
 
 // The device-sync verbs. Each shells the CLI and
-// re-validates the crossing document with a zod schema, like every
+// re-validates the crossing document with a Schema, like every
 // other Go/TS boundary in this file. The paths handed to bundle
 // create/unpack are ALWAYS app-chosen temp paths (the sync host module
 // and fetchBundle own them); the CLI writes/reads exactly where told,
@@ -534,16 +534,15 @@ const RefTipDocSchema = Schema.Struct({
   ref: Schema.String,
   commit: CommitHashSchema,
 });
-// Mutable: the sync contract these lists feed is still zod, whose
-// output types hold plain arrays.
-const RefTipDocsSchema = Schema.mutable(Schema.Array(RefTipDocSchema));
+const RefTipDocsSchema = Schema.Array(RefTipDocSchema);
+type RefTipDocs = typeof RefTipDocsSchema.Type;
 
 export async function bundleCreateViaCli(
   project: Project,
   outPath: string,
-  refs: string[],
-  haves: string[],
-): Promise<{ bytes: number; refs: { ref: string; commit: string }[] }> {
+  refs: readonly string[],
+  haves: readonly string[],
+): Promise<{ bytes: number; refs: RefTipDocs }> {
   const result = await runner().runCli([
     "bundle",
     "create",
@@ -565,8 +564,8 @@ export async function bundleCreateViaCli(
 export async function bundleUnpackViaCli(
   project: Project,
   inPath: string,
-  refspecs: string[],
-): Promise<{ fetched: { ref: string; commit: string }[] }> {
+  refspecs: readonly string[],
+): Promise<{ fetched: RefTipDocs }> {
   const result = await runner().runCli([
     "bundle",
     "unpack",

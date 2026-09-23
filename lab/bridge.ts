@@ -34,6 +34,7 @@ import type {
   MirrorServing,
   MirrorSession,
 } from "@shared/ipc/modules/mirror";
+import type { Types } from "effect";
 import type { ClientTransport } from "@shared/ipc/transport";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
 import { invokeIndexFor } from "../web/ipc/loopback";
@@ -544,8 +545,11 @@ const LAB_TREE: Record<
 // forest's wire is remembered so mirror:changed reaches the local page
 // through its own wire and a peer's page through the client wire's
 // peer push, exactly as the real bridge delivers it.
+// The lab moves its posed sessions along in place, so it holds them
+// writable (the contract's decoded session is readonly).
+type LabMirrorSession = Types.Mutable<MirrorSession>;
 const labMirrors: {
-  sessions: MirrorSession[];
+  sessions: LabMirrorSession[];
   serving: (MirrorServing & { deviceId: string })[];
   history: Record<string, MirrorEvent[]>;
 } = { sessions: [], serving: [], history: {} };
@@ -570,7 +574,7 @@ function noteMirrorEvent(
   labMirrors.history[localWorktreeId] = thread.slice(0, MIRROR_HISTORY_LIMIT);
 }
 
-function findLabSession(session: string): MirrorSession | undefined {
+function findLabSession(session: string): LabMirrorSession | undefined {
   return labMirrors.sessions.find((s) => s.session === session);
 }
 
@@ -618,7 +622,7 @@ async function labMirrorStart(
     (entry) => entry.id === input.sourceWorktreeId,
   );
   const tip = sourceWorktree?.recentCommits[0]?.hash.slice(0, 7) ?? "58c21fe";
-  const session: MirrorSession = {
+  const session: LabMirrorSession = {
     session: `sync_${labSessionSerial++}`,
     name: `sm-${landed.worktree.id}`,
     labels: {},

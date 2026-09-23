@@ -19,7 +19,7 @@ import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
-import { z } from "zod";
+import { Schema } from "effect";
 import type { OrphanScriptReport } from "@shared/schemas";
 import { atomicWriteJsonSync } from "../util/jsonFile";
 import { withFileLock } from "../util/lockFile";
@@ -42,17 +42,19 @@ const START_TOLERANCE_MS = 5_000;
 const ORPHAN_GRACE_MS = 2_000;
 const EXIT_POLL_MS = 100;
 
-const PersistedScriptSchema = z.object({
-  runId: z.string().min(1),
+const PidSchema = Schema.Int.check(Schema.isGreaterThanOrEqualTo(2));
+
+const PersistedScriptSchema = Schema.Struct({
+  runId: Schema.NonEmptyString,
   // gte(2): the sweep signals the record's process *group* as -pid, and
   // kill(-1, ...) is "every process you may signal". No real child ever
   // has pid 1, but this file is untrusted input everywhere else, so the
   // one value that would broadcast a signal is refused at the schema.
-  pid: z.number().int().gte(2),
-  projectId: z.string().min(1),
-  worktreeId: z.string().min(1),
-  startedAt: z.number().int().positive(),
-  command: z.string(),
+  pid: PidSchema,
+  projectId: Schema.NonEmptyString,
+  worktreeId: Schema.NonEmptyString,
+  startedAt: Schema.Int.check(Schema.isGreaterThan(0)),
+  command: Schema.String,
 });
 
 // ownerPid is the app instance that wrote the file. Two instances
@@ -60,16 +62,16 @@ const PersistedScriptSchema = z.object({
 // aimed at the packaged data dir) would otherwise have the second one's
 // boot sweep kill the first one's live scripts out from under its
 // window.
-const SnapshotSchema = z.object({
+const SnapshotSchema = Schema.Struct({
   // Same floor as the script pids: pid 1 is launchd, which is always
   // alive, so an ownerPid of 1 would read as a live sibling instance
   // and permanently disable the boot sweep.
-  ownerPid: z.number().int().gte(2),
-  scripts: z.array(PersistedScriptSchema),
+  ownerPid: PidSchema,
+  scripts: Schema.Array(PersistedScriptSchema),
 });
 
-export type PersistedScript = z.infer<typeof PersistedScriptSchema>;
-type Snapshot = z.infer<typeof SnapshotSchema>;
+export type PersistedScript = typeof PersistedScriptSchema.Type;
+type Snapshot = typeof SnapshotSchema.Type;
 
 function filePath(): string {
   return join(dataDir(), FILE);
@@ -118,7 +120,7 @@ function readSnapshot(): Snapshot | null {
     return null;
   }
   try {
-    return SnapshotSchema.parse(JSON.parse(raw));
+    return Schema.decodeUnknownSync(SnapshotSchema)(JSON.parse(raw));
   } catch (error) {
     console.warn(
       `[scripts] ignoring unusable ${FILE}: ${errorMessageOf(error)}`,
@@ -263,7 +265,7 @@ async function killOrphan(record: PersistedScript): Promise<boolean> {
 // UI shows is what is running. Killing also frees the ports the next
 // run of the same script needs.
 async function reapOrphans(
-  records: PersistedScript[],
+  records: readonly PersistedScript[],
 ): Promise<OrphanScriptReport> {
   if (records.length === 0) return { stopped: 0 };
   const table = await readProcessTable(records.map((r) => r.pid));
@@ -285,7 +287,7 @@ async function reapOrphans(
 // the claim, not after: writing first would overwrite a live sibling
 // instance's record of its own running scripts before we've confirmed
 // they aren't ours to touch.
-function claimOrphanRecords(): PersistedScript[] {
+function claimOrphanRecords(): readonly PersistedScript[] {
   const previous = readSnapshot();
   if (
     previous &&

@@ -7,7 +7,6 @@ import { type FileHandle, mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Schema } from "effect";
-import type { z } from "zod";
 import {
   SyncCaptureDirtyResultSchema,
   SyncHasCommitsResultSchema,
@@ -94,7 +93,7 @@ import { notifierFor, worktreesHandlers } from "./worktrees";
 const dirtyRefFor = (worktreeId: string) =>
   `refs/shigomori/dirty/${worktreeId}`;
 
-type SourceRef = z.infer<typeof SyncTeardownSourcePayloadSchema>;
+type SourceRef = typeof SyncTeardownSourcePayloadSchema.Type;
 
 // What each pull captured and applied, by source worktree, for the
 // teardown that may follow. Written by the pull itself and read by the
@@ -133,7 +132,7 @@ function remember<Receipt>(
 // worktree and the peer is where it went. The tip and the capture's
 // tree are this repo's, so the teardown's proof never leaves the
 // machine.
-type SentRef = z.infer<typeof SyncTeardownSentPayloadSchema>;
+type SentRef = typeof SyncTeardownSentPayloadSchema.Type;
 type SendReceipt = Omit<PullReceipt, "targetProjectId">;
 const sendReceipts = new Map<string, SendReceipt>();
 const sentKey = (sent: SentRef) =>
@@ -502,7 +501,7 @@ async function sourceChangedSince(
 ): Promise<string | undefined> {
   const peer = peerSyncApiFor(source.sourceDeviceId);
   const branchRef = `refs/heads/${receipt.branch}`;
-  const { tips } = SyncRefTipsResultSchema.parse(
+  const { tips } = Schema.decodeUnknownSync(SyncRefTipsResultSchema)(
     await peer.refTips({
       projectId: source.sourceProjectId,
       refs: [branchRef],
@@ -511,7 +510,7 @@ async function sourceChangedSince(
   if (tips.find((tip) => tip.ref === branchRef)?.commit !== receipt.branchTip) {
     return "the branch on the source device moved after it was brought here.";
   }
-  const fresh = SyncCaptureDirtyResultSchema.parse(
+  const fresh = Schema.decodeUnknownSync(SyncCaptureDirtyResultSchema)(
     await peer.captureDirty({
       projectId: source.sourceProjectId,
       worktreeId: source.sourceWorktreeId,
@@ -773,7 +772,7 @@ export async function runPullWorktree(
     runSetup,
     ignoreMode,
     ignores,
-  }: z.infer<typeof SyncPullWorktreePayloadSchema>,
+  }: typeof SyncPullWorktreePayloadSchema.Type,
   ctx: HandlerContext,
 ) {
   // Running commentary back to the caller, keyed by the source id (the
@@ -800,7 +799,7 @@ export async function runPullWorktree(
   // Both answers are re-parsed here because their hashes flow into
   // LOCAL git argv: the peer's own dev-build output validation is not
   // this device's wall.
-  const { tips } = SyncRefTipsResultSchema.parse(
+  const { tips } = Schema.decodeUnknownSync(SyncRefTipsResultSchema)(
     await peer.refTips({
       projectId: sourceProjectId,
       refs: [branchRef],
@@ -811,7 +810,7 @@ export async function runPullWorktree(
     throw new Error(`${branch} no longer exists on the source device.`);
   }
   progress({ step: "capture" });
-  const capture = SyncCaptureDirtyResultSchema.parse(
+  const capture = Schema.decodeUnknownSync(SyncCaptureDirtyResultSchema)(
     await peer.captureDirty({
       projectId: sourceProjectId,
       worktreeId: sourceWorktreeId,
@@ -963,7 +962,7 @@ export async function sendWorktree(
     runSetup,
     ignoreMode,
     ignores,
-  }: z.infer<typeof SyncSendWorktreePayloadSchema>,
+  }: typeof SyncSendWorktreePayloadSchema.Type,
   ctx: HandlerContext,
 ) {
   const notifyProgress = ctx.notifier(syncContract, "pullProgress");
@@ -995,9 +994,9 @@ export async function sendWorktree(
   // 2. The peer's refusals, before a byte moves. Its answers are
   // re-parsed like the pull's: they flow into the push below.
   const peer = peerSyncApiFor(targetDeviceId);
-  const { projectId: peerProjectId } = SyncLandCheckResultSchema.parse(
-    await fromPeer(peer.landCheck({ identity, branch, worktreeName })),
-  );
+  const { projectId: peerProjectId } = Schema.decodeUnknownSync(
+    SyncLandCheckResultSchema,
+  )(await fromPeer(peer.landCheck({ identity, branch, worktreeName })));
 
   // 3. The tip, then the capture, with the peer asked meanwhile which
   // of this repo's tips it holds: the branch's own, and the other
@@ -1017,7 +1016,9 @@ export async function sendWorktree(
     }),
   ]);
   const captured = capture.captured && capture.commit !== undefined;
-  const { present } = SyncHasCommitsResultSchema.parse(held);
+  const { present } = Schema.decodeUnknownSync(SyncHasCommitsResultSchema)(
+    held,
+  );
 
   // 4. Push what the peer lacks. The pull's tip rule from the other
   // side: a branch whose tip the peer holds must not be named, or
@@ -1045,7 +1046,7 @@ export async function sendWorktree(
 
   // 5. The landing, on the peer.
   progress({ step: "create" });
-  const landed = SyncLandWorktreeResultSchema.parse(
+  const landed = Schema.decodeUnknownSync(SyncLandWorktreeResultSchema)(
     await fromPeer(
       peer.landWorktree({
         identity,

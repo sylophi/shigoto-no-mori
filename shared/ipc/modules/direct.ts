@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { defineContract, invoke } from "@shared/ipc/contract";
 
 // Brokering surface for the direct data plane: a
@@ -79,24 +79,27 @@ export function candidateUrlMatchesKind(
   );
 }
 
-export const DirectCandidateSchema = z
-  .object({
-    kind: z.enum(["lan", "tunnel"]),
-    url: z.string(),
-    ticket: z.string(),
-  })
-  .refine(
-    (candidate) => candidateUrlMatchesKind(candidate.kind, candidate.url),
+const DirectCandidateKindSchema = Schema.Literals(["lan", "tunnel"]);
+
+export const DirectCandidateSchema = Schema.Struct({
+  kind: DirectCandidateKindSchema,
+  url: Schema.String,
+  ticket: Schema.String,
+}).check(
+  Schema.makeFilter(
+    (candidate: { readonly kind: "lan" | "tunnel"; readonly url: string }) =>
+      candidateUrlMatchesKind(candidate.kind, candidate.url),
     { message: "candidate url does not match its kind" },
-  );
-export type DirectCandidate = z.infer<typeof DirectCandidateSchema>;
+  ),
+);
+export type DirectCandidate = typeof DirectCandidateSchema.Type;
 export type DirectCandidateKind = DirectCandidate["kind"];
 
 // Every candidate kind, derived from the schema so the vocabulary has
 // one owner: the dialer's race-everything default and the host's
 // absent-field skew tolerance both read this.
 export const ALL_DIRECT_CANDIDATE_KINDS: readonly DirectCandidateKind[] =
-  DirectCandidateSchema.shape.kind.options;
+  DirectCandidateKindSchema.literals;
 
 // The caller's dial capability, carried in the connectInfo INPUT so
 // the host mints only tickets the caller can actually spend: a web
@@ -104,23 +107,21 @@ export const ALL_DIRECT_CANDIDATE_KINDS: readonly DirectCandidateKind[] =
 // ticket per interface address on every broker call. Optional both
 // ways for version skew: an old caller sends nothing and an old host
 // ignores the field, and absence means all kinds.
-const DirectConnectInfoInputSchema = z
-  .object({
-    dialableKinds: z.array(DirectCandidateSchema.shape.kind).optional(),
-  })
-  .optional();
-export type DirectConnectInfoInput = z.infer<
-  typeof DirectConnectInfoInputSchema
->;
+const DirectConnectInfoInputSchema = Schema.UndefinedOr(
+  Schema.Struct({
+    dialableKinds: Schema.optional(Schema.Array(DirectCandidateKindSchema)),
+  }),
+);
+export type DirectConnectInfoInput = typeof DirectConnectInfoInputSchema.Type;
 
-export const DirectConnectInfoSchema = z.object({
-  available: z.boolean(),
+export const DirectConnectInfoSchema = Schema.Struct({
+  available: Schema.Boolean,
   // Present exactly when available is true, and never empty then: a
   // host with nothing dialable (for this caller's declared kinds)
   // answers available:false instead.
-  candidates: z.array(DirectCandidateSchema).optional(),
+  candidates: Schema.optional(Schema.Array(DirectCandidateSchema)),
 });
-export type DirectConnectInfo = z.infer<typeof DirectConnectInfoSchema>;
+export type DirectConnectInfo = typeof DirectConnectInfoSchema.Type;
 
 export const directContract = defineContract("host", {
   connectInfo: invoke(

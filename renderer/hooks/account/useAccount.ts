@@ -47,7 +47,7 @@ export function useLocalDeviceName(): string {
 // could only ever be corrected by this process's own account:changed
 // fan-out, which says nothing about a peer renaming itself or being
 // removed from the account elsewhere: the hub pushes neither.
-export const accountDevicesQueryOptions = queryOptions<DeviceInfo[]>({
+export const accountDevicesQueryOptions = queryOptions<readonly DeviceInfo[]>({
   queryKey: queryKeys.accountDevices(),
   queryFn: () => window.api.account.listDevices(),
   // The registry renders the failure inline (DeviceRegistry), so no

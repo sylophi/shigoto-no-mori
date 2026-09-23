@@ -24,12 +24,13 @@
 // cannot allocate a host session, and per-peer size and in-flight
 // caps.
 //
-// Pure on purpose: zod, the shared frame and envelope schemas, and an
+// Pure on purpose: Schema, the shared frame and envelope schemas, and an
 // injected send function. No node builtins, no ws, no electron, so the
 // hub-link check drives it headlessly and main wraps it around a
 // real socket.
-import { z } from "zod";
+import { Schema } from "effect";
 import { errorMessageOf } from "@shared/errors";
+import { safeDecodeWith } from "@shared/ipc/codec";
 import {
   type ClientFrame,
   ClientFrameSchema,
@@ -59,7 +60,7 @@ import { encodeWireError, rebuildWireError } from "@shared/ipc/wireError";
 export const MAX_HUB_IN_FLIGHT_PER_PEER = 4;
 
 // The inner frame union both roles decode from a delivered envelope.
-const InnerFrameSchema = z.union([ClientFrameSchema, ServerFrameSchema]);
+const InnerFrameSchema = Schema.Union([ClientFrameSchema, ServerFrameSchema]);
 
 // Every sm frame the device hub carries is wrapped with the session
 // epoch. The wrapper lives in the hub layer only, so frames.ts and the
@@ -71,11 +72,11 @@ const InnerFrameSchema = z.union([ClientFrameSchema, ServerFrameSchema]);
 // frame whose epoch is not its current one. A redial mints a new epoch,
 // so late frames from the prior pairing are dropped rather than
 // mis-matched.
-const HubFrameSchema = z.object({
-  epoch: z.number().int(),
+const HubFrameSchema = Schema.Struct({
+  epoch: Schema.Int,
   sm: InnerFrameSchema,
 });
-type HubFrame = z.infer<typeof HubFrameSchema>;
+type HubFrame = typeof HubFrameSchema.Type;
 
 // The addressed peer has no socket on the device hub (an offline nack,
 // or a presence list it vanished from). In-flight calls to it reject
@@ -160,7 +161,7 @@ export type HubBrokerSession = {
   // and result are both unknown at this layer: the dialer owns the
   // contract types on either end (it builds the input and parses the
   // answer against the contract schema), so the link stays a plain
-  // frames-plus-zod core.
+  // frames-plus-Schema core.
   brokerInvoke(input: unknown): Promise<unknown>;
   close(): void;
   remoteDeviceId: string;
@@ -785,7 +786,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
         handleNack(envelope.to, envelope.reason);
         return;
       }
-      const parsed = HubFrameSchema.safeParse(envelope.frame);
+      const parsed = safeDecodeWith(HubFrameSchema, envelope.frame);
       if (!parsed.success) {
         warnDrop(
           () => `dropping unparseable frame from ${truncateId(envelope.from)}`,

@@ -17,11 +17,11 @@ import { type CreatePhase, CreatePhaseSchema } from "@shared/schemas";
 // here, and whatever follows the pull (a mirror's session open) sits
 // past the end.
 type TimelineStop = SyncPullStep | CreatePhase;
-const createAt = SyncPullStepSchema.options.indexOf("create") + 1;
+const createAt = SyncPullStepSchema.literals.indexOf("create") + 1;
 const TIMELINE: TimelineStop[] = [
-  ...SyncPullStepSchema.options.slice(0, createAt),
+  ...SyncPullStepSchema.literals.slice(0, createAt),
   ...CreatePhaseSchema.literals,
-  ...SyncPullStepSchema.options.slice(createAt),
+  ...SyncPullStepSchema.literals.slice(createAt),
 ];
 export function stepPosition(stop: TimelineStop): number {
   return TIMELINE.indexOf(stop);

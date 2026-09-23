@@ -1,5 +1,4 @@
 import { Effect, Schema } from "effect";
-import { z } from "zod";
 import { isValidWorktreeDirName } from "../git/branches";
 import {
   ProjectScopedPayloadSchema,
@@ -367,51 +366,3 @@ export const DeleteWorktreeResultSchema = Schema.Union([
   }),
 ]);
 export type DeleteWorktreeResult = typeof DeleteWorktreeResultSchema.Type;
-
-// The zod forms of the leaves the sync and control wire contracts
-// still embed (a zod object cannot hold a Schema field). Each mirrors
-// the Schema above it field for field, and test/schema-port.mjs holds
-// the pairs to the same verdicts. Phase 4 wave 3 removes these.
-export const CommitHashZod = z
-  .string()
-  .regex(COMMIT_HASH_RE, { message: "Invalid commit hash" });
-
-export const CreatePhaseZod = z.enum(CREATE_PHASES);
-
-const CommitSummaryZod = z.object({
-  hash: CommitHashZod,
-  subject: z.string(),
-  author: z.string(),
-  date: z.string(),
-  additions: z.number().int().nonnegative(),
-  deletions: z.number().int().nonnegative(),
-});
-
-// Typed as the Schema's own Type and Encoded, so a Worktree decoded by
-// WorktreeSchema (readonly arrays) and one parsed by this copy are the
-// same TypeScript type on both sides of a zod contract.
-export const WorktreeZod: z.ZodType<Worktree, typeof WorktreeSchema.Encoded> =
-  z.object({
-    id: z.string(),
-    projectId: z.string().min(1),
-    name: z.string(),
-    branch: z.string(),
-    path: z.string(),
-    ahead: z.number().int().nonnegative(),
-    behind: z.number().int().nonnegative(),
-    hasUpstream: z.boolean(),
-    hasRemote: z.boolean(),
-    divergedClean: z.boolean(),
-    behindPrimary: z.number().int().nonnegative(),
-    unpushedCount: z.number().int().nonnegative(),
-    primaryRef: z.string().optional(),
-    mergedIntoPrimary: z.boolean(),
-    changedCount: z.number().int().nonnegative(),
-    lastChangeAt: z.number().int().nonnegative().optional(),
-    recentCommits: z.array(CommitSummaryZod),
-    isPrimary: z.boolean(),
-    isExternal: z.boolean(),
-    detached: z.boolean(),
-    shelved: z.boolean(),
-    autoPull: z.boolean().default(false),
-  });

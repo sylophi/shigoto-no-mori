@@ -1,5 +1,4 @@
 import { Schema } from "effect";
-import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { DeviceIdSchema, DeviceInfoSchema } from "@shared/hub/protocol";
 
@@ -66,13 +65,10 @@ export const accountContract = defineContract("client", {
   // The account's device registry from the device hub, under the stored
   // credential. Element shape is the shared hub DeviceInfo so the app
   // and the Worker cannot drift. Empty when signed out or unconfigured.
-  // Stays zod with DeviceInfoSchema, like revokeDevice's DeviceIdSchema
-  // input: shared/hub/protocol.ts is what the hub Worker compiles, and
-  // it ports with the wire contracts (Phase 4 wave 3).
   listDevices: invoke(
     "account:listDevices",
     Schema.Undefined,
-    z.array(DeviceInfoSchema),
+    Schema.Array(DeviceInfoSchema),
   ),
   // Renames this device: the stored metadata, then (best-effort) the
   // device hub's registry, so the other devices list the new name at

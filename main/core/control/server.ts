@@ -37,9 +37,9 @@ import {
   FiberSet,
   Iterable,
   Option,
+  Schema,
   Scope,
 } from "effect";
-import { z } from "zod";
 import { errorCodeOf, errorMessageOf } from "@shared/errors";
 import { noHandlerMessage } from "@shared/hub/link";
 import { isControlErrorCode } from "@shared/ipc/modules/control";
@@ -78,7 +78,10 @@ export type ControlFile = {
 // dozens.
 export const MAX_CONNECTIONS = 16;
 
-const HelloSchema = z.object({ t: z.literal("hello"), token: z.string() });
+const HelloSchema = Schema.Struct({
+  t: Schema.Literal("hello"),
+  token: Schema.String,
+});
 
 type Handler = (ctx: HandlerContext, raw: unknown) => Promise<unknown>;
 

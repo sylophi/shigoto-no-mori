@@ -37,6 +37,7 @@
 // mirror:gitChanged pushes, every daemon snapshot whose session set
 // changed, and a slow periodic sweep as the backstop. Reconciles are
 // coalesced per session: one in flight, one queued.
+import { Schema } from "effect";
 import type { Project } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
 import {
@@ -238,7 +239,7 @@ export function createGitFollower(deps: {
           worktreeId: session.worktreeId,
         }),
       ]);
-      const peer = GitStateSchema.parse(peerRaw);
+      const peer = Schema.decodeUnknownSync(GitStateSchema)(peerRaw);
       if (sameState(local, peer)) {
         setAgreed(record, core(peer));
         setStatus(record, { status: "synced", detail: "" });
@@ -405,7 +406,7 @@ export function createGitFollower(deps: {
       local.tip,
       ...(local.indexCommit === null ? [] : [local.indexCommit]),
     ];
-    const { present } = SyncHasCommitsResultSchema.parse(
+    const { present } = Schema.decodeUnknownSync(SyncHasCommitsResultSchema)(
       await peerSync.hasCommits({
         projectId: session.projectId,
         commits: probe,
@@ -438,7 +439,7 @@ export function createGitFollower(deps: {
         haves: peerHas.has(local.tip) ? [local.tip] : [peer.tip],
       });
     }
-    const result = MirrorApplyGitStateResultSchema.parse(
+    const result = Schema.decodeUnknownSync(MirrorApplyGitStateResultSchema)(
       await peerMirror.applyGitState({
         projectId: session.projectId,
         worktreeId: session.worktreeId,

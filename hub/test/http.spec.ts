@@ -9,6 +9,7 @@ import {
   HUB_ROUTES,
   MAX_ACCOUNT_DEVICES,
 } from "../../shared/hub/protocol.ts";
+import { decodeWith } from "../../shared/ipc/codec.ts";
 import {
   DEVICE_CREDENTIAL_PREFIX,
   TICKET_PREFIX,
@@ -167,10 +168,10 @@ describe("POST /devices/enroll", () => {
     expect(await loser.json()).toMatchObject({ error: expect.any(String) });
     // The winner's credential authenticates and lists exactly its own
     // device, never a foreign account's.
-    const winnerBody = EnrollResponseSchema.parse(await winner.json());
+    const winnerBody = decodeWith(EnrollResponseSchema, await winner.json());
     const list = await call(listRequest(winnerBody.credential));
     expect(list.status).toBe(200);
-    const body = DeviceListResponseSchema.parse(await list.json());
+    const body = decodeWith(DeviceListResponseSchema, await list.json());
     expect(body.devices.map((device) => device.deviceId)).toEqual([deviceId]);
   });
 
@@ -199,7 +200,7 @@ describe("GET /devices", () => {
     await socket.untilPresence(["dev-list-a2-online"]);
     const response = await call(listRequest(a1.credential));
     expect(response.status).toBe(200);
-    const body = DeviceListResponseSchema.parse(await response.json());
+    const body = decodeWith(DeviceListResponseSchema, await response.json());
     const byId = new Map(
       body.devices.map((device) => [device.deviceId, device]),
     );

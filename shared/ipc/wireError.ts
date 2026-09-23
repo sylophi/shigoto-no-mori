@@ -9,16 +9,22 @@
 // optional `error` field next to the `message` every wire already
 // carries. An older peer sends no `error`, and a reader falls back to
 // the message text.
-import { z } from "zod";
+import { Schema } from "effect";
 import { errorMessageOf, errorTagOf } from "../errorOf.ts";
 
 // A tag plus any JSON fields. Loose so a newer peer's extra fields
-// survive the parse and land on the WireError.
-export const WireErrorShapeSchema = z.looseObject({
-  _tag: z.string().min(1),
-  message: z.string(),
-});
-export type WireErrorShape = z.infer<typeof WireErrorShapeSchema>;
+// survive the parse and land on the WireError: the rest record carries
+// every undeclared own key through (a `__proto__` key lands as an own
+// property, never the prototype, and the WireError constructor skips
+// it with the other reserved keys).
+export const WireErrorShapeSchema = Schema.StructWithRest(
+  Schema.Struct({
+    _tag: Schema.NonEmptyString,
+    message: Schema.String,
+  }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+);
+export type WireErrorShape = typeof WireErrorShapeSchema.Type;
 
 // Keys an Error owns for itself, never copied as fields, plus the
 // method names a field must not shadow (a `toString` field would make

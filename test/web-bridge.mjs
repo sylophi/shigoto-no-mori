@@ -28,7 +28,7 @@
 // imports resolve. Run: pnpm test web-bridge.
 import assert from "node:assert/strict";
 import { buildApi } from "@shared/ipc/client";
-import { DeviceIdSchema } from "@shared/hub/protocol";
+import { isDeviceId } from "@shared/hub/protocol";
 import { NoDirectConnection, isNoDirectConnectionError } from "@shared/errors";
 import { createWebBridge } from "../web/ipc/register.ts";
 import { defaultWebDeviceName } from "../web/account/deviceName.ts";
@@ -144,7 +144,7 @@ async function main() {
       const first = createWebBridge(makeDeps({ localStorage }));
       const second = createWebBridge(makeDeps({ localStorage }));
       assert.equal(first.api.deviceId, second.api.deviceId);
-      assert.equal(DeviceIdSchema.safeParse(first.api.deviceId).success, true);
+      assert.equal(isDeviceId(first.api.deviceId), true);
       assert.match(
         first.api.deviceId,
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
@@ -156,7 +156,7 @@ async function main() {
       localStorage.setItem("sm.web.deviceId", "not-a-uuid");
       const healed = createWebBridge(makeDeps({ localStorage }));
       assert.notEqual(healed.api.deviceId, "not-a-uuid");
-      assert.equal(DeviceIdSchema.safeParse(healed.api.deviceId).success, true);
+      assert.equal(isDeviceId(healed.api.deviceId), true);
     },
   );
 
@@ -293,10 +293,9 @@ async function main() {
         refused,
       );
       // The preflight grant read is the permission-shaped query the
-      // stub walker exists to protect: it may answer, but ONLY the
-      // structural (never fabricated) verdict, and structural emptiness
-      // for { granted: boolean } is granted:false. A web loopback must
-      // never manufacture a grant.
+      // stub walker exists to protect, so a real refuse-all handler
+      // answers it: granted:false, the structural verdict. A web
+      // loopback must never manufacture a grant.
       assert.deepEqual(await bridge.api.remoteAccess.commandAccess(), {
         granted: false,
       });

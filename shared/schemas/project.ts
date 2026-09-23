@@ -1,5 +1,4 @@
 import { Schema } from "effect";
-import { z } from "zod";
 import { isCloneableRemote } from "@shared/cloneUrl";
 import { ProjectScopedPayloadSchema } from "./payloads";
 
@@ -21,14 +20,6 @@ const hasNoLeadingDash = (value: string): boolean => !value.startsWith("-");
 export const GitRefNameSchema = Schema.NonEmptyString.check(
   Schema.makeFilter(hasNoLeadingDash, { message: GIT_REF_LEADING_DASH }),
 );
-
-// The zod form of GitRefNameSchema, for the sync and mirror wire
-// contracts that still embed it: a zod object cannot hold a Schema
-// field. Phase 4 wave 3 removes this.
-export const GitRefNameZod = z
-  .string()
-  .min(1)
-  .refine(hasNoLeadingDash, { message: GIT_REF_LEADING_DASH });
 
 const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 

@@ -1,8 +1,9 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import { DeviceIdSchema } from "@shared/hub/protocol";
-import { PortNumberZod } from "@shared/schemas";
+import { PortNumberSchema } from "@shared/schemas";
+import { strictStruct } from "@shared/schemas/strict";
 
 // Client-scoped control surface for the port-forward engine. The engine
 // binds real TCP listeners on THIS machine's loopback
@@ -19,32 +20,32 @@ import { PortNumberZod } from "@shared/schemas";
 // a forward it was told about.
 const ForwardIdSchema = HexId32Schema;
 
-const PortForwardStartPayloadSchema = z.strictObject({
+const PortForwardStartPayloadSchema = strictStruct({
   deviceId: DeviceIdSchema,
-  remotePort: PortNumberZod,
+  remotePort: PortNumberSchema,
   // Omitted means an ephemeral local port, the common case.
-  localPort: PortNumberZod.optional(),
+  localPort: Schema.optional(PortNumberSchema),
 });
 
-const PortForwardStartResultSchema = z.strictObject({
+const PortForwardStartResultSchema = strictStruct({
   forwardId: ForwardIdSchema,
-  localPort: PortNumberZod,
+  localPort: PortNumberSchema,
 });
 
-const PortForwardStopPayloadSchema = z.strictObject({
+const PortForwardStopPayloadSchema = strictStruct({
   forwardId: ForwardIdSchema,
 });
 
-const PortForwardSummarySchema = z.strictObject({
+const PortForwardSummarySchema = strictStruct({
   forwardId: ForwardIdSchema,
   deviceId: DeviceIdSchema,
-  remotePort: PortNumberZod,
-  localPort: PortNumberZod,
-  connCount: z.number().int().min(0),
+  remotePort: PortNumberSchema,
+  localPort: PortNumberSchema,
+  connCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 
-const PortForwardListResultSchema = z.strictObject({
-  forwards: z.array(PortForwardSummarySchema),
+const PortForwardListResultSchema = strictStruct({
+  forwards: Schema.Array(PortForwardSummarySchema),
 });
 
 export const portForwardContract = defineContract("client", {
@@ -53,10 +54,18 @@ export const portForwardContract = defineContract("client", {
     PortForwardStartPayloadSchema,
     PortForwardStartResultSchema,
   ),
-  stop: invoke("portForward:stop", PortForwardStopPayloadSchema, z.void()),
-  list: invoke("portForward:list", z.void(), PortForwardListResultSchema),
+  stop: invoke(
+    "portForward:stop",
+    PortForwardStopPayloadSchema,
+    Schema.Undefined,
+  ),
+  list: invoke(
+    "portForward:list",
+    Schema.Undefined,
+    PortForwardListResultSchema,
+  ),
   // Fired by the engine whenever the forward or conn set changes, so
   // the list query refreshes without polling. Payload-free on purpose:
   // the list read is cheap and one signal shape cannot drift.
-  changed: broadcast("portForward:changed", z.void()),
+  changed: broadcast("portForward:changed", Schema.Undefined),
 });

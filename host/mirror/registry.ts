@@ -6,6 +6,7 @@
 // can stop a worktree's mirrors without importing that module (which
 // reaches sync, which reaches worktrees).
 import { randomUUID } from "node:crypto";
+import { Schema } from "effect";
 import {
   isTransferSession,
   MIRROR_LABEL_TRANSFER,
@@ -17,6 +18,8 @@ import {
   type MirrorSession,
 } from "@shared/ipc/modules/mirror";
 import { errorMessageOf } from "@shared/errors";
+
+const isMirrorIgnoreMode = Schema.is(MirrorIgnoreModeSchema);
 
 // The label keys the start orchestration writes on a session, lifted
 // back out for the renderer by annotate below. Labels are the one
@@ -52,7 +55,7 @@ export type MirrorCreateInput = {
   // a label the engine would have to know the key of.
   localWorktreeId: string;
   labels: Record<string, string>;
-  ignores: string[];
+  ignores: readonly string[];
   // A pull (file-sync/engine.go mirrorRequest.pull): files flow one
   // way, remote to local, and nothing here reaches the peer. The
   // transplant's one-shot transfer. Absent, a two-way mirror.
@@ -95,10 +98,8 @@ export function localWorktreeIdOf(raw: MirrorSessionRaw | undefined): string {
 
 // The ignore mode a session's labels carry, "everything" when none.
 export function ignoreModeOf(labels: Record<string, string>): MirrorIgnoreMode {
-  const mode = MirrorIgnoreModeSchema.safeParse(
-    labels[MIRROR_LABEL_IGNORE_MODE],
-  );
-  return mode.success ? mode.data : "everything";
+  const mode = labels[MIRROR_LABEL_IGNORE_MODE];
+  return isMirrorIgnoreMode(mode) ? mode : "everything";
 }
 
 let impl: MirrorImpl | null = null;

@@ -2,8 +2,9 @@
 // device/ticket endpoints, the hub socket envelopes, and the
 // constants both sides must agree on. Imported by the app (a later
 // slice) and by hub/, so the same rules as
-// shared/ipc/socket/frames.ts apply: zod only, no node builtins, no
-// electron.
+// shared/ipc/socket/frames.ts apply: effect's Schema only, no node
+// builtins, no electron, and relative imports (hub/ has no path
+// aliases).
 //
 // The device hub never parses sm traffic. The `frame` field of a hub
 // envelope is opaque to the Worker. It carries only the broker-surface
@@ -30,7 +31,7 @@
 // Ticket and credential string mechanics live in hub/src/ticket.ts.
 // To the app both are opaque strings: the credential rides in the
 // Authorization header and the ticket in the connect URL, unchanged.
-import { z } from "zod";
+import { Schema } from "effect";
 
 // Largest hub envelope the DO will forward, in bytes of the serialized
 // JSON. The device hub carries orchestration only:
@@ -105,7 +106,10 @@ export const CLOSE_SUPERSEDED = 4103;
 // limit (workerd hard-caps a websocket accept tag at 256 chars, so this
 // stays well under it). The single source for the several wire and IPC
 // sites that route or grant against a device id.
-export const DeviceIdSchema = z.string().min(1).max(200);
+export const DeviceIdSchema = Schema.NonEmptyString.check(
+  Schema.isMaxLength(200),
+);
+export const isDeviceId = Schema.is(DeviceIdSchema);
 
 // ---- HTTP routes ----
 
@@ -170,11 +174,11 @@ export const HUB_PONG = "pong";
 // socket close, which only a device that was online at the revoke
 // ever sees.
 export const DEVICE_REVOKED_CODE = "device_revoked";
-export const ErrorBodySchema = z.object({
-  error: z.string(),
-  code: z.literal(DEVICE_REVOKED_CODE).optional(),
+export const ErrorBodySchema = Schema.Struct({
+  error: Schema.String,
+  code: Schema.optional(Schema.Literal(DEVICE_REVOKED_CODE)),
 });
-export type ErrorBody = z.infer<typeof ErrorBodySchema>;
+export type ErrorBody = typeof ErrorBodySchema.Type;
 
 // POST /devices/enroll request, under a Clerk session token. deviceId
 // is the app's per-data-dir UUID, so re-enrolling the same data dir rotates
@@ -184,57 +188,57 @@ export type ErrorBody = z.infer<typeof ErrorBodySchema>;
 // throws past it, so it stays well under that. name and platform are
 // bounded so an enroll cannot store unbounded strings under a Clerk
 // token.
-export const EnrollRequestSchema = z.object({
-  deviceId: z.string().min(1).max(200),
-  name: z.string().min(1).max(256),
-  platform: z.string().min(1).max(64),
+export const EnrollRequestSchema = Schema.Struct({
+  deviceId: Schema.NonEmptyString.check(Schema.isMaxLength(200)),
+  name: Schema.NonEmptyString.check(Schema.isMaxLength(256)),
+  platform: Schema.NonEmptyString.check(Schema.isMaxLength(64)),
 });
 
-export const RenameDeviceRequestSchema = z.object({
-  name: EnrollRequestSchema.shape.name,
+export const RenameDeviceRequestSchema = Schema.Struct({
+  name: EnrollRequestSchema.fields.name,
 });
 
 // One device as the HTTP API reports it. Timestamps are epoch
 // milliseconds. lastSeenAt is null until the device first connects.
-export const DeviceInfoSchema = z.object({
-  deviceId: z.string(),
-  name: z.string(),
-  platform: z.string(),
-  createdAt: z.number().int(),
-  lastSeenAt: z.number().int().nullable(),
-  online: z.boolean(),
+export const DeviceInfoSchema = Schema.Struct({
+  deviceId: Schema.String,
+  name: Schema.String,
+  platform: Schema.String,
+  createdAt: Schema.Int,
+  lastSeenAt: Schema.NullOr(Schema.Int),
+  online: Schema.Boolean,
 });
-export type DeviceInfo = z.infer<typeof DeviceInfoSchema>;
+export type DeviceInfo = typeof DeviceInfoSchema.Type;
 
 // POST /devices/enroll response. `credential` is the only time the
 // raw credential ever leaves the Worker.
-export const EnrollResponseSchema = z.object({
-  credential: z.string(),
+export const EnrollResponseSchema = Schema.Struct({
+  credential: Schema.String,
   device: DeviceInfoSchema,
 });
-export type EnrollResponse = z.infer<typeof EnrollResponseSchema>;
+export type EnrollResponse = typeof EnrollResponseSchema.Type;
 
 // GET /devices response, scoped to the calling credential's account.
-export const DeviceListResponseSchema = z.object({
-  devices: z.array(DeviceInfoSchema),
+export const DeviceListResponseSchema = Schema.Struct({
+  devices: Schema.Array(DeviceInfoSchema),
 });
-export type DeviceListResponse = z.infer<typeof DeviceListResponseSchema>;
+export type DeviceListResponse = typeof DeviceListResponseSchema.Type;
 
 // POST /tickets response. The ticket string is opaque to clients: the
 // app puts it in the connect URL unchanged, only the worker mints and
 // parses it (hub/src/ticket.ts). expiresInMs is relative so the
 // client does not need a synchronized clock.
-export const TicketResponseSchema = z.object({
-  ticket: z.string(),
-  expiresInMs: z.number().int(),
+export const TicketResponseSchema = Schema.Struct({
+  ticket: Schema.String,
+  expiresInMs: Schema.Int,
 });
-export type TicketResponse = z.infer<typeof TicketResponseSchema>;
+export type TicketResponse = typeof TicketResponseSchema.Type;
 
 // POST /tunnel request: the direct listener's currently bound loopback
 // port the tunnel ingress should front. Re-provisioning with a new
 // port only rewrites the ingress config.
-export const TunnelProvisionRequestSchema = z.object({
-  port: z.number().int().min(1).max(65535),
+export const TunnelProvisionRequestSchema = Schema.Struct({
+  port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })),
 });
 
 // POST /tunnel response. `hostname` is the public tunnel hostname
@@ -243,18 +247,16 @@ export const TunnelProvisionRequestSchema = z.object({
 // secret. The app keeps it in memory and passes it to the cloudflared
 // child via env, never argv, and it must never reach logs, status
 // objects or the renderer.
-export const TunnelProvisionResponseSchema = z.object({
-  hostname: z.string().min(1),
-  connectorToken: z.string().min(1),
+export const TunnelProvisionResponseSchema = Schema.Struct({
+  hostname: Schema.NonEmptyString,
+  connectorToken: Schema.NonEmptyString,
   // True when this call created the tunnel and wrote its DNS record,
   // so the hostname may take a while to resolve (the runner probes it
   // patiently). A reused tunnel resolved before and is repaired by
   // re-provisioning instead. Additive: an older Worker omits it.
-  dnsCreated: z.boolean().optional(),
+  dnsCreated: Schema.optional(Schema.Boolean),
 });
-export type TunnelProvisionResponse = z.infer<
-  typeof TunnelProvisionResponseSchema
->;
+export type TunnelProvisionResponse = typeof TunnelProvisionResponseSchema.Type;
 
 // The typed "not configured" answer for POST /tunnel: the Worker runs
 // without the Cloudflare tunnel env (see hub/src/tunnel.ts), so
@@ -270,62 +272,62 @@ export const TUNNEL_UNCONFIGURED_STATUS = 501;
 // the consumed ticket already binds the connection to a deviceId. `to`
 // is bounded to match a deviceId, since it is fed straight to
 // getWebSockets on the device hub hot path.
-const HubSendEnvelopeSchema = z.object({
-  t: z.literal("relay"),
+const HubSendEnvelopeSchema = Schema.Struct({
+  t: Schema.Literal("relay"),
   to: DeviceIdSchema,
-  frame: z.unknown(),
+  frame: Schema.Unknown,
 });
 
 // The union of everything a device may send. A one-armed union today,
 // kept as a union so later client envelopes are an addition, not a
 // reshape.
-export const DeviceEnvelopeSchema = z.discriminatedUnion("t", [
-  HubSendEnvelopeSchema,
-]);
-export type DeviceEnvelope = z.infer<typeof DeviceEnvelopeSchema>;
+export const DeviceEnvelopeSchema = Schema.Union([HubSendEnvelopeSchema]);
+export type DeviceEnvelope = typeof DeviceEnvelopeSchema.Type;
 
 // DO to device: a frame forwarded from another device. The device hub
 // copies `frame` verbatim, it never parses or rewrites it.
-const HubDeliverEnvelopeSchema = z.object({
-  t: z.literal("relay"),
+const HubDeliverEnvelopeSchema = Schema.Struct({
+  t: Schema.Literal("relay"),
   // Bounded like HubSendEnvelopeSchema.to: a hostile DO can forge this,
   // and it is fed straight into per-peer routing and log lines, so it is
   // never left unbounded.
-  from: z.string().min(1).max(200),
-  frame: z.unknown(),
+  from: Schema.NonEmptyString.check(Schema.isMaxLength(200)),
+  frame: Schema.Unknown,
 });
 
 // DO to device: the full list of the account's online deviceIds
 // (including the receiver). Sent to a socket right after it is
 // accepted and rebroadcast to everyone on every join and leave, so a
 // client only ever replaces its copy, never merges deltas.
-const PresenceEnvelopeSchema = z.object({
-  t: z.literal("presence"),
+const PresenceEnvelopeSchema = Schema.Struct({
+  t: Schema.Literal("presence"),
   // Each entry is a deviceId, bounded like HubSendEnvelopeSchema.to,
   // and the roster length is capped so a hostile DO cannot force an
   // unbounded allocation from one presence envelope. The DO always names
   // real account devices, so both bounds are additive tightenings it
   // already satisfies.
-  online: z.array(z.string().min(1).max(200)).max(MAX_ONLINE_DEVICES),
+  online: Schema.Array(
+    Schema.NonEmptyString.check(Schema.isMaxLength(200)),
+  ).check(Schema.isMaxLength(MAX_ONLINE_DEVICES)),
 });
 
 // DO to device: a send could not be delivered. `offline` means no
 // socket is connected for `to`. `too-large` means the serialized
 // forward exceeded MAX_HUB_MESSAGE_BYTES.
-const NackEnvelopeSchema = z.object({
-  t: z.literal("nack"),
+const NackEnvelopeSchema = Schema.Struct({
+  t: Schema.Literal("nack"),
   // Echoes the `to` the sender used, already bounded on send, so the
   // same bound applies coming back.
-  to: z.string().min(1).max(200),
-  reason: z.enum(["offline", "too-large"]),
+  to: Schema.NonEmptyString.check(Schema.isMaxLength(200)),
+  reason: Schema.Literals(["offline", "too-large"]),
 });
 
-export const ServerEnvelopeSchema = z.discriminatedUnion("t", [
+export const ServerEnvelopeSchema = Schema.Union([
   HubDeliverEnvelopeSchema,
   PresenceEnvelopeSchema,
   NackEnvelopeSchema,
 ]);
-export type ServerEnvelope = z.infer<typeof ServerEnvelopeSchema>;
+export type ServerEnvelope = typeof ServerEnvelopeSchema.Type;
 
 // The one sanctioned serializer, mirroring frames.ts: undefined
 // fields are omitted and come back as undefined, so an opaque frame

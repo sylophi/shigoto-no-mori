@@ -22,11 +22,11 @@ export interface PushBundleInput {
   // Allowlisted full refs to ship. They land on the peer under the
   // same names fetchBundleFromPeer uses (branches under
   // refs/shigomori/incoming/, app refs as they are).
-  refs: string[];
+  refs: readonly string[];
   // Tips the peer already holds, thinning the bundle. The caller must
   // not name a ref whose tip is covered by a have: `git bundle create`
   // drops such a ref silently and the unpack would then miss it.
-  haves: string[];
+  haves: readonly string[];
   // Byte progress, as fetchBundleFromPeer reports it: once with 0 when
   // the size is known, then as chunks are answered.
   onProgress?: (bytes: number, totalBytes: number) => void;
@@ -93,7 +93,12 @@ export async function pushBundleToPeer(
     "pushStart" | "pushChunk" | "pushFinish"
   >,
   input: PushBundleInput,
-): Promise<{ fetched: { ref: string; commit: string }[] }> {
+): Promise<{
+  readonly fetched: readonly {
+    readonly ref: string;
+    readonly commit: string;
+  }[];
+}> {
   const dir = await mkdtemp(join(tmpdir(), "sm-sync-push-"));
   try {
     const path = join(dir, "push.bundle");

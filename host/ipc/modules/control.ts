@@ -72,7 +72,7 @@ import { worktreesHandlers } from "./worktrees";
 // is the shared cached direct session, both main's.
 type ControlImpl = {
   // The account's device registry. Empty when signed out.
-  listDevices: () => Promise<DeviceInfo[]>;
+  listDevices: () => Promise<readonly DeviceInfo[]>;
   thisDeviceId: () => string;
   // The devices a direct session is established to, the only ones a
   // call can reach.
@@ -119,9 +119,12 @@ async function within<T>(asked: Promise<T>, late: () => T): Promise<T> {
 const nameOf = (device: DeviceInfo): string =>
   device.name.trim() === "" ? device.deviceId : device.name;
 
-async function roster(): Promise<{ here: Named; peers: DeviceInfo[] }> {
+async function roster(): Promise<{
+  here: Named;
+  peers: readonly DeviceInfo[];
+}> {
   const { listDevices, thisDeviceId } = requireImpl();
-  let devices: DeviceInfo[];
+  let devices: readonly DeviceInfo[];
   try {
     devices = await listDevices();
   } catch (error) {
@@ -160,7 +163,7 @@ const GRANTED = { granted: true };
 // read fresh off the peers themselves. A read skips the grant ask,
 // since reads are ungated.
 async function standingsOf(
-  devices: DeviceInfo[],
+  devices: readonly DeviceInfo[],
   identity: string | null,
   { grant }: { grant: boolean },
 ): Promise<ControlDevice[]> {
@@ -223,7 +226,10 @@ const BLOCK_REASON: Record<NonNullable<ControlDevice["block"]>, string> = {
   "no-grant": "doesn't accept commands (turn it on from its Devices page)",
 };
 
-function matchDevices(peers: DeviceInfo[], query: string): DeviceInfo[] {
+function matchDevices(
+  peers: readonly DeviceInfo[],
+  query: string,
+): DeviceInfo[] {
   const wanted = query.trim().toLowerCase();
   const byId = peers.filter((device) => device.deviceId === query);
   if (byId.length > 0) return byId;
@@ -387,7 +393,7 @@ async function peerNames(): Promise<Named[]> {
   }));
 }
 
-async function registryOrEmpty(): Promise<DeviceInfo[]> {
+async function registryOrEmpty(): Promise<readonly DeviceInfo[]> {
   try {
     return await within(requireImpl().listDevices(), () => []);
   } catch {

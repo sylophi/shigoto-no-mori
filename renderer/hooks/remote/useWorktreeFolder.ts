@@ -13,7 +13,7 @@ export function useWorktreeFolder(
   relative: string,
 ) {
   const { api, keys } = useHostScope();
-  return useQuery<SyncWorktreeFolderEntry[]>({
+  return useQuery<readonly SyncWorktreeFolderEntry[]>({
     queryKey: keys.worktreeFolder(projectId, worktreeId, relative),
     queryFn: () => api.sync.worktreeFolder({ projectId, worktreeId, relative }),
     staleTime: 15_000,

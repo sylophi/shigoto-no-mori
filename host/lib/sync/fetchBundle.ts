@@ -2,6 +2,7 @@
 // sync:bundleStart / sync:bundleChunk surface into a local temp file,
 // then unpacks it into this device's repo via the CLI. Exported for
 // the sync orchestration (slice C); no UI here.
+import { Schema } from "effect";
 import { type FileHandle, mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,9 +29,9 @@ export interface FetchBundleInput {
   // Allowlisted full refs to request (refs/heads/<branch> or
   // refs/shigomori/dirty/<worktreeId>); validated peer-side by the
   // contract schema and again by the CLI.
-  refs: string[];
+  refs: readonly string[];
   // Local tips the peer may thin the bundle against.
-  haves: string[];
+  haves: readonly string[];
   // Byte progress for a caller that reports it: once with 0 when the
   // peer announces the size, then coalesced (chunkWindow.ts).
   onProgress?: (bytes: number, totalBytes: number) => void;
@@ -145,12 +146,17 @@ export async function fetchBundleFromPeer(
     "bundleStart" | "bundleChunk" | "bundleAbort"
   >,
   input: FetchBundleInput,
-): Promise<{ fetched: { ref: string; commit: string }[] }> {
+): Promise<{
+  readonly fetched: readonly {
+    readonly ref: string;
+    readonly commit: string;
+  }[];
+}> {
   const project = findProjectOrThrow(input.targetProjectId);
   // Re-parsed here because the byte count flows into the progress
   // frames' strict schema and bounds the loop below: the peer's own
   // output validation is not this device's wall.
-  const start = SyncBundleStartResultSchema.parse(
+  const start = Schema.decodeUnknownSync(SyncBundleStartResultSchema)(
     await peer.bundleStart({
       projectId: input.sourceProjectId,
       refs: input.refs,

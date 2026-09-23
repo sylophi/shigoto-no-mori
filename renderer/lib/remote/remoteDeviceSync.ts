@@ -141,7 +141,7 @@ function refetchDeviceList(): void {
 // The list as the shared cache holds it, refetching only when it is
 // missing or invalidated (staleTime Infinity says so, and fetchQuery
 // honours an invalidation regardless of it).
-function fetchDeviceList(): Promise<DeviceInfo[]> {
+function fetchDeviceList(): Promise<readonly DeviceInfo[]> {
   return boundClient().fetchQuery({
     ...accountDevicesQueryOptions,
     staleTime: Infinity,
@@ -175,7 +175,7 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
   // the socket was down. This pass runs on the list as it stands, and
   // the refetch's landing runs the corrected one.
   if (reconnected) refetchDeviceList();
-  let list: DeviceInfo[];
+  let list: readonly DeviceInfo[];
   try {
     list = await fetchDeviceList();
   } catch {

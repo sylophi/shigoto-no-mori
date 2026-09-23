@@ -368,7 +368,7 @@ export function makeAccountHandlers(
   emitCommandAccessChanged: () => void,
   // Hears every registry list the hub serves, for state that follows
   // the account's membership (a mirror with a removed peer).
-  onDeviceList: (devices: DeviceInfo[]) => void = () => {},
+  onDeviceList: (devices: readonly DeviceInfo[]) => void = () => {},
 ): Handlers<typeof accountContract> {
   // Fires the account-changed fan-out and invalidates the grant cache
   // together, since any account transition (sign-in, sign-out, rename)

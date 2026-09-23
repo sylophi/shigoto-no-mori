@@ -167,7 +167,7 @@ export function useStartMirrorTo(
 // sits under the mirrors prefix the list's invalidation sweeps.
 export function useMirrorHistory(localWorktreeId: string) {
   const { api, keys } = useHostScope();
-  return useQuery<MirrorEvent[]>({
+  return useQuery<readonly MirrorEvent[]>({
     queryKey: keys.mirrorHistory(localWorktreeId),
     queryFn: async () => (await api.mirror.history({ localWorktreeId })).events,
     meta: { silentError: true },

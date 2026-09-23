@@ -21,6 +21,7 @@ import {
   decodeEnvelope,
   encodeEnvelope,
 } from "../../shared/hub/protocol.ts";
+import { decodeWith } from "../../shared/ipc/codec.ts";
 import type { Env } from "../src/env.ts";
 import { createWorker, type HubDeps } from "../src/worker.ts";
 
@@ -126,7 +127,7 @@ export async function enroll(
     }),
   );
   expect(response.status).toBe(200);
-  return EnrollResponseSchema.parse(await response.json());
+  return decodeWith(EnrollResponseSchema, await response.json());
 }
 
 export async function mintTicket(
@@ -135,7 +136,7 @@ export async function mintTicket(
 ): Promise<TicketResponse> {
   const response = await call(ticketRequest(credential), testEnv);
   expect(response.status).toBe(200);
-  return TicketResponseSchema.parse(await response.json());
+  return decodeWith(TicketResponseSchema, await response.json());
 }
 
 export function sleep(ms: number): Promise<void> {
