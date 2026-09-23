@@ -128,6 +128,20 @@ async function main() {
     await b.adjust(1_000);
     await settle();
     assert.equal(b.batches.length, 1);
+    // A read inside the window does not restart it: the batch still
+    // goes out 16 ms after its first read (a debounce would hold it
+    // until 16 ms after the last).
+    b.data("a");
+    await settle();
+    await b.adjust(10);
+    b.data("b");
+    await settle();
+    await b.adjust(5);
+    await settle();
+    assert.equal(b.batches.length, 1, "flushed before the first read's frame");
+    await b.adjust(1);
+    await settle();
+    assert.deepEqual(b.batches[1], { data: "ab", closedBy: null });
   });
 
   await check(

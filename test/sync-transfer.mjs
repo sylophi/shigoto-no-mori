@@ -84,6 +84,7 @@ import { initDataDirAt } from "@host/lib/util/paths";
 import {
   cliFailureMessage,
   createCliRunner,
+  delay,
   makeProof,
   makeTracker,
 } from "./lib/checkKit.mjs";
@@ -96,6 +97,11 @@ const cliDir = join(import.meta.dirname, "..", "cli");
 // temp tree. realpath because worktree ids derive from git's resolved
 // paths (/var/folders is a symlink on macOS).
 const sandbox = realpathSync(mkdtempSync(join(tmpdir(), "sm-sync-check-")));
+// Every temp file of the run (a transfer's bundles, the CLI's) goes
+// under the sandbox, so a transfer the check leaves open on purpose
+// leaves nothing in the real temp dir.
+process.env.TMPDIR = join(sandbox, "tmp");
+mkdirSync(process.env.TMPDIR);
 const dataDir = join(sandbox, "data");
 const smBinary = join(sandbox, "sm");
 
@@ -845,15 +851,20 @@ async function main() {
         [],
         "a temp bundle outlived its departed caller by a second",
       );
-      assert.equal(
-        await refExists(targetRepo, "refs/shigomori/incoming/feature-depart"),
-        false,
-        "the departed pull left its incoming ref",
-      );
+      // The held chunks go through now. A pull that had only parked
+      // (rather than ended) would take them and land; an ended one
+      // lands nothing, however long the chunks are allowed.
+      for (const release of held.splice(0)) release();
+      await delay(500);
       assert.equal(
         await refExists(targetRepo, "refs/heads/feature-depart"),
         false,
         "the departed pull landed a branch",
+      );
+      assert.equal(
+        await refExists(targetRepo, "refs/shigomori/incoming/feature-depart"),
+        false,
+        "the departed pull left its incoming ref",
       );
     } finally {
       // The held requests go through now, to a transfer already gone.
@@ -867,7 +878,7 @@ async function main() {
       await provide();
     }
     ok(
-      "a pull whose caller leaves mid-transfer leaves no temp bundle on either side within a second, lands nothing, and sweeps its incoming ref",
+      "a pull whose caller leaves mid-transfer leaves no temp bundle on either side within a second and lands nothing, even once the chunks it waited on arrive",
     );
 
     // A caller that leaves DURING the landing. The create has begun, so
@@ -945,6 +956,12 @@ async function main() {
           await refExists(targetRepo, "refs/heads/feature-land"),
           true,
           "the landing did not finish for the caller that left",
+        );
+        // The pull's finalizer swept its incoming ref on the way out.
+        assert.equal(
+          await refExists(targetRepo, "refs/shigomori/incoming/feature-land"),
+          false,
+          "the interrupted pull left its incoming ref",
         );
         assert.equal(
           created.length,

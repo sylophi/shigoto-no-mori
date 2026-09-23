@@ -877,7 +877,14 @@ async function main() {
       await waitFor(() => polls >= 3, "the transfer to be polling", 5_000);
       const stuckSession = stuck;
       leaving.abort();
-      assert.equal(await waited, "left", "the wait outlived its caller");
+      assert.equal(
+        await Promise.race([
+          waited,
+          delay(10_000).then(() => "still waiting after 10 s"),
+        ]),
+        "left",
+        "the wait outlived its caller",
+      );
       const pollsAtLeave = polls;
       assert.deepEqual(ended, ["stuck"], "the session was not ended");
       assert.equal(

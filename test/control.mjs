@@ -111,6 +111,7 @@ import {
 import {
   cliFailureMessage,
   createCliRunner,
+  delay,
   makeProof,
   makeTracker,
   scrubbedGitEnv,
@@ -945,11 +946,10 @@ async function main() {
         "the temp bundles to go with the departed CLI",
         1_000,
       );
-      assert.equal(
-        resOf(cli).length,
-        0,
-        "the departed bring answered a closed socket",
-      );
+      // The held chunks go through now: a bring that had only parked
+      // would take them and land.
+      for (const release of heldChunks.splice(0)) release();
+      await delay(500);
       await git(targetRepo, [
         "rev-parse",
         "--verify",

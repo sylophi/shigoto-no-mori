@@ -173,10 +173,14 @@ function repo(track) {
   return dir;
 }
 
-function register(dir) {
-  const project = { id: `p${sandboxes}`, name: `p${sandboxes}`, path: dir };
-  registryStore.writeKey(PROJECTS_KEY, [project]);
-  return project;
+function register(...dirs) {
+  const projects = dirs.map((dir, i) => ({
+    id: `p${sandboxes}-${i}`,
+    name: `p${sandboxes}-${i}`,
+    path: dir,
+  }));
+  registryStore.writeKey(PROJECTS_KEY, projects);
+  return projects.length === 1 ? projects[0] : projects;
 }
 
 async function main() {
@@ -238,24 +242,42 @@ async function main() {
   );
 
   await check(
-    "a caller leaving worktrees:list interrupts the row probes: every git they started dies, nothing starts after, and at most six rows probe at once",
+    "a caller leaving worktrees:list interrupts the row probes: every git they started dies, nothing starts after, at most six rows probe at once across two lists, and the window is whole again after",
     async (track) => {
       resetShim(track);
       reapHeld(track);
       const dir = repo(track);
-      const project = register(dir);
-      for (let i = 0; i < 12; i++) {
+      const other = repo(track);
+      const [project, second] = register(dir, other);
+      for (let i = 0; i < 8; i++) {
         git(dir, "worktree", "add", "-q", "-b", `wt${i}`, join(dir, `.wt${i}`));
+        git(
+          other,
+          "worktree",
+          "add",
+          "-q",
+          "-b",
+          `o${i}`,
+          join(other, `.o${i}`),
+        );
       }
       // The row probes hold; the identity listing and the project-level
-      // reads run through.
+      // reads run through. Two lists at once: the window is the
+      // process's, not each call's (each call bounds itself to six as
+      // well, so one list alone would not tell the two apart).
       process.env.SM_SHIM_HOLD = "status log rev-list merge-tree";
       const controller = new AbortController();
       const began = performance.now();
-      const pending = worktreesHandlers.list(
-        { projectId: project.id },
-        ctxFor(controller.signal),
-      );
+      const pending = Promise.all([
+        worktreesHandlers.list(
+          { projectId: project.id },
+          ctxFor(controller.signal),
+        ),
+        worktreesHandlers.list(
+          { projectId: second.id },
+          ctxFor(controller.signal),
+        ),
+      ]);
       const held = () =>
         shimLines()
           .filter((line) => line.startsWith("hold "))
@@ -285,6 +307,14 @@ async function main() {
         before,
         "git started after the caller left",
       );
+      // The permits the interrupted probes held came back: a fresh
+      // list of nine rows runs through with nothing held.
+      delete process.env.SM_SHIM_HOLD;
+      const fresh = await worktreesHandlers.list(
+        { projectId: project.id },
+        ctxFor(),
+      );
+      assert.equal(fresh.length, 9, "a list after the abort came up short");
     },
   );
 
@@ -297,19 +327,25 @@ async function main() {
       git(dir, "remote", "add", "origin", "ssh://stub.invalid/repo.git");
       const sshLog = join(root, "ssh.log");
       writeFileSync(sshLog, "");
-      process.env.GIT_SSH_COMMAND = `sh -c 'echo x >> "${sshLog}"; sleep \${SM_SSH_SLEEP:-0.5}; exit 1' ssh-stub`;
+      // The stub waits SM_SSH_TENTHS tenths of a second, in steps, and
+      // only while its git (the parent) is alive: a killed fetch takes
+      // the stub with it rather than leaving a sleep behind. "done"
+      // is logged only when the wait ran its course, so a caller's
+      // outcome can be told from a kill.
+      process.env.GIT_SSH_COMMAND = `sh -c 'echo x >> "${sshLog}"; n=0; while [ $n -lt \${SM_SSH_TENTHS:-5} ] && kill -0 $PPID 2>/dev/null; do sleep 0.1; n=$((n+1)); done; [ $n -ge \${SM_SSH_TENTHS:-5} ] && echo done >> "${sshLog}"; exit 1' ssh-stub`;
       // Plain ssh semantics, so git runs the command once per fetch
       // rather than probing its flavor with a first run.
       process.env.GIT_SSH_VARIANT = "simple";
       track(() => {
         delete process.env.GIT_SSH_COMMAND;
         delete process.env.GIT_SSH_VARIANT;
-        delete process.env.SM_SSH_SLEEP;
+        delete process.env.SM_SSH_TENTHS;
       });
       const fetches = () =>
         shimLines().filter((line) => line.split(" ")[2] === "fetch");
-      const sshRuns = () =>
-        readFileSync(sshLog, "utf8").split("\n").filter(Boolean).length;
+      const sshLines = () => readFileSync(sshLog, "utf8").split("\n");
+      const sshRuns = () => sshLines().filter((line) => line === "x").length;
+      const sshDone = () => sshLines().filter((line) => line === "done").length;
 
       // Three at once: one git, one ssh, and all three see its failure.
       const settled = await Promise.allSettled([
@@ -331,7 +367,7 @@ async function main() {
 
       // Two callers join; the first leaves; the second still gets the
       // one fetch's own outcome, not an interruption.
-      process.env.SM_SSH_SLEEP = "0.6";
+      process.env.SM_SSH_TENTHS = "6";
       const first = Effect.runFork(fetchAllRemotesEffect(dir));
       const second = Effect.runFork(Effect.flip(fetchAllRemotesEffect(dir)));
       await waitFor(() => fetches().length === 3, "the joined fetch to start");
@@ -339,9 +375,10 @@ async function main() {
       const outcome = await Effect.runPromise(Fiber.join(second));
       assert.equal(outcome._tag, "GitError", `second got ${outcome}`);
       assert.equal(fetches().length, 3, "the leaving caller forked a fetch");
+      assert.equal(sshDone(), 3, "the shared fetch did not run its course");
 
       // A lone caller leaving takes the fetch with it: its git dies.
-      process.env.SM_SSH_SLEEP = "30";
+      process.env.SM_SSH_TENTHS = "300";
       const lone = Effect.runFork(fetchAllRemotesEffect(dir));
       await waitFor(() => fetches().length === 4, "the lone fetch to start");
       const pid = Number(fetches().at(-1).split(" ")[1]);
@@ -349,6 +386,8 @@ async function main() {
       assert.ok(alive(pid), "the fetch's git is not running");
       await Effect.runPromise(Fiber.interrupt(lone));
       await waitFor(() => !alive(pid), "the abandoned fetch's git to be gone");
+      await delay(300);
+      assert.equal(sshDone(), 3, "the killed fetch's ssh ran its course");
     },
   );
 
