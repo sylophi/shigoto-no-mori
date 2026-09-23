@@ -66,7 +66,7 @@ import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktre
 import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
 import { killAllCli, cliChildCount } from "./electron/cliRunner";
-import { installAppRuntime } from "./services";
+import { installHostRuntime } from "@host/runtime";
 import { runtime } from "./runtime";
 import { applyUserShellPath } from "./core/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
@@ -182,7 +182,7 @@ initDataDir(app.isPackaged);
 // synchronous, and a future one that is not would fail right here
 // with an async-boundary defect), which creates the runners and
 // starts the mirror gateway's bind.
-installAppRuntime(runtime);
+installHostRuntime(runtime);
 registerIpcHandlers();
 // The mirror daemon resumes persisted sessions the moment it is up, so
 // it starts with the app rather than with the first mirror the user

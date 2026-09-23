@@ -242,3 +242,83 @@ export const isPortInUseError = taggedMatcher(PORT_IN_USE_TAG, (message) =>
 export const isPortDeniedError = taggedMatcher(PORT_DENIED_TAG, (message) =>
   message.includes("EACCES"),
 );
+
+// mirror:stop's refusal of a copy it cannot confirm in step with the
+// other device (host/ipc/modules/mirror.ts stopMirror, the check
+// mirrorStopIsSafe in shared/ipc/modules/mirror.ts): the renderer
+// offers discard-and-stop on it, and the control op answers it as its
+// own refusal. The message keeps the leading text an older peer sends
+// and matches on.
+export const MIRROR_STOP_UNCONFIRMED_TAG = "MirrorStopUnconfirmed";
+const MIRROR_STOP_UNCONFIRMED_PREFIX =
+  "The copy is not confirmed in step with the other device";
+
+export class MirrorStopUnconfirmed extends Schema.TaggedError<MirrorStopUnconfirmed>()(
+  MIRROR_STOP_UNCONFIRMED_TAG,
+  // The git follower's verdict, "starting" before it has one.
+  { status: Schema.String },
+) {
+  override get message(): string {
+    return `${MIRROR_STOP_UNCONFIRMED_PREFIX} (${this.status}), so it may hold commits that exist nowhere else. Resume or reconnect the mirror to let it catch up, or stop it anyway to discard them.`;
+  }
+}
+
+export const isMirrorStopUnconfirmed = taggedMatcher(
+  MIRROR_STOP_UNCONFIRMED_TAG,
+  (message) => message.includes(MIRROR_STOP_UNCONFIRMED_PREFIX),
+);
+
+// mirror:stop's other failure, raised once the session is already
+// gone: the mirror did stop and only the copy's removal failed. Told
+// apart so a caller that reports the stop (the CLI's unmirror) does
+// not report a failure to stop.
+export const MIRROR_COPY_STAYED_TAG = "MirrorCopyStayed";
+const MIRROR_COPY_STAYED_PREFIX = "The mirror stopped, but the copy";
+
+export class MirrorCopyStayed extends Schema.TaggedError<MirrorCopyStayed>()(
+  MIRROR_COPY_STAYED_TAG,
+  {
+    // Where the copy is: on the other device (a mirror started to it),
+    // or here.
+    onPeer: Schema.Boolean,
+    reason: Schema.String,
+  },
+) {
+  override get message(): string {
+    return `${MIRROR_COPY_STAYED_PREFIX} ${this.onPeer ? "on the other device" : "here"} stayed: ${this.reason}. Delete it from its page.`;
+  }
+}
+
+export const isMirrorCopyStayed = taggedMatcher(
+  MIRROR_COPY_STAYED_TAG,
+  (message) => message.includes(MIRROR_COPY_STAYED_PREFIX),
+);
+
+// A worktree delete that refuses outright because the app's registry
+// shows scripts running in it (host/ipc/modules/worktrees.ts, the
+// refuseRunningScripts flag the transplant's teardown sets). The
+// teardown answers it as a kept source rather than a throw, so its
+// reader sees the message and the tag beside it (the teardown result's
+// sourceError and sourceErrorTag). The message keeps the
+// "scripts-running" marker an older peer sends and matches on.
+export const SCRIPTS_RUNNING_TAG = "ScriptsRunning";
+const SCRIPTS_RUNNING_MARKER = "scripts-running";
+
+export class ScriptsRunning extends Schema.TaggedError<ScriptsRunning>()(
+  SCRIPTS_RUNNING_TAG,
+  { scriptCount: Schema.Int },
+) {
+  override get message(): string {
+    return `${SCRIPTS_RUNNING_MARKER}: ${this.scriptCount} script(s) are running in this worktree`;
+  }
+}
+
+// The same reading as taggedMatcher's, for a failure a host already
+// turned into an answer: its message, and its tag when it had one.
+export function isScriptsRunningReason(
+  message: string,
+  tag: string | undefined,
+): boolean {
+  if (tag !== undefined) return tag === SCRIPTS_RUNNING_TAG;
+  return message.includes(SCRIPTS_RUNNING_MARKER);
+}

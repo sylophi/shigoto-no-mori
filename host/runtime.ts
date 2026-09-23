@@ -9,7 +9,7 @@
 // This file must stay Electron free (pnpm test host-boundary): it
 // declares what the host needs, never how a binding provides it.
 import { Context, Effect, type ManagedRuntime, Option } from "effect";
-import { fromEffectWith } from "@shared/ipc/effectHandler";
+import type { RuntimeOf } from "@shared/remote/supervisor";
 import type { CliRunner } from "@host/ipc/cliDelegate";
 import type { PeerApis } from "@host/ipc/peerSync";
 import type { CliTools } from "@host/ipc/modules/cli";
@@ -42,26 +42,29 @@ export type HostServices =
   | MirrorGitChangedListener
   | FileSyncSpawn;
 
-// What the host runs on: a ManagedRuntime, or anything shaped like
-// one. `R` is what it provides, so a binding with services of its own
-// on the same runtime (main's runners) reads them through a wider view.
-export type RuntimeOf<R> = Pick<
-  ManagedRuntime.ManagedRuntime<R, never>,
-  "runPromise" | "runFork" | "runSync"
->;
+// The services the installed runtime provides, by who declares them.
+// The host's are here. A binding whose runtime carries services of its
+// own (main's runners) adds an entry by augmenting this interface
+// (main/services.ts), so the one install demands them and hostService
+// reads them typed.
+export interface InstalledServices {
+  host: HostServices;
+}
 
-export type HostRuntime = RuntimeOf<HostServices>;
+export type InstalledService = InstalledServices[keyof InstalledServices];
 
 // Effect's default services, for a proof that drives a host module
 // with no binding. Every host service reads as absent on it, so a
 // module reaching for one fails with its own "invoked before" message.
-const defaultRuntime = {
-  runPromise: Effect.runPromise,
-  runFork: Effect.runFork,
-  runSync: Effect.runSync,
-} as HostRuntime;
+const defaultInstall = {
+  runtime: {
+    runPromise: Effect.runPromise,
+    runFork: Effect.runFork,
+  } as RuntimeOf<InstalledService>,
+  services: Context.empty() as Context.Context<InstalledService>,
+};
 
-let installed: HostRuntime | null = null;
+let installed: typeof defaultInstall | null = null;
 
 // Called once at boot by the binding, before any handler runs. A
 // second install is a composition bug and throws, like a second
@@ -77,26 +80,54 @@ let installed: HostRuntime | null = null;
 // way the setter slots kept their impls until the process exited,
 // while the runtime's scope still owns the finalizers.
 export function installHostRuntime(
-  runtime: Pick<ManagedRuntime.ManagedRuntime<HostServices, never>, "runSync">,
+  runtime: Pick<
+    ManagedRuntime.ManagedRuntime<InstalledService, never>,
+    "runSync"
+  >,
 ): void {
   if (installed !== null) {
     throw new Error("host runtime installed twice");
   }
-  const services = runtime.runSync(Effect.context<HostServices>());
+  const services = runtime.runSync(Effect.context<InstalledService>());
   installed = {
-    runPromise: Effect.runPromiseWith(services),
-    runFork: Effect.runForkWith(services),
-    runSync: Effect.runSyncWith(services),
+    runtime: {
+      runPromise: Effect.runPromiseWith(services),
+      runFork: Effect.runForkWith(services),
+    },
+    services,
   };
 }
 
-export function hostRuntime(): HostRuntime {
-  return installed ?? defaultRuntime;
+export function hostRuntime(): RuntimeOf<InstalledService> {
+  return (installed ?? defaultInstall).runtime;
 }
 
 // For a proof's teardown, so the next check can install its own.
 export function resetHostRuntime(): void {
   installed = null;
+}
+
+// A contract handler written as an Effect, adapted to the Promise the
+// registrar (registerContract.ts) awaits from every handler. It runs
+// with the caller's signal as the fiber's interruption, so a departed
+// caller (a page that navigated, a peer whose socket dropped, a CLI
+// that was killed) cancels the work at its next step instead of
+// letting it run to the end. Its failures are the typed errors the
+// wires carry (shared/errors.ts); a defect rejects like any thrown bug
+// did. The runtime is read at call time, so a host handler's
+// requirements are met by whatever the binding installed.
+export function fromEffectWith<I, O, R, Ctx extends { signal: AbortSignal }>(
+  runtime: () => Pick<RuntimeOf<R>, "runPromise">,
+  handle: (input: I, ctx: Ctx) => Effect.Effect<O, unknown, R>,
+): (input: I, ctx: Ctx) => Promise<O> {
+  return (input, ctx) => {
+    // A caller already gone starts nothing: runPromise would evaluate
+    // the effect's first step before honoring the signal.
+    if (ctx.signal.aborted) {
+      return Promise.reject(new Error("the caller is gone"));
+    }
+    return runtime().runPromise(handle(input, ctx), { signal: ctx.signal });
+  };
 }
 
 // A contract handler written as an Effect that may require the host's
@@ -131,53 +162,28 @@ export const requireService = <I, S>(
       : Effect.die(new Error(missing));
   });
 
-// Any runtime can answer a lookup that requires nothing.
-type Lookup = {
-  runSync<A, E>(effect: Effect.Effect<A, E, never>): A;
-};
-
-const resolved = new WeakMap<Lookup, Map<string, unknown>>();
-
-// One service off a runtime, or undefined when it does not provide it,
-// for a module whose body stays Promise-side (a delegate, a slot other
-// modules call, a handler map too large to convert). Memoized per
-// runtime: every service here is a plain object the binding built
-// once, and a read that lands while the runtime is disposing (a timer
-// firing mid-quit) must still find it, the way a setter slot kept its
-// impl until the process exited. Absence is not memoized.
-export function serviceFrom<I, S>(
-  runtime: Lookup,
+// One of the installed services, for a module whose body stays
+// Promise-side (a delegate, a slot other modules call, a handler map
+// too large to convert). Read off the services captured at install, so
+// a read that lands while the runtime is disposing (a timer firing
+// mid-quit) still finds it. Absent, it throws `missing`, the message
+// the module's setter slot threw before it was wired.
+export function hostService<I extends InstalledService, S>(
   tag: Context.Key<I, S>,
-): S | undefined {
-  let memo = resolved.get(runtime);
-  if (memo === undefined) {
-    memo = new Map();
-    resolved.set(runtime, memo);
-  }
-  if (memo.has(tag.key)) return memo.get(tag.key) as S;
-  const found = runtime.runSync(Effect.serviceOption(tag));
-  if (Option.isNone(found)) return undefined;
-  memo.set(tag.key, found.value);
-  return found.value;
-}
-
-// A host service off the installed runtime. Absent, it throws
-// `missing`, the message the module's setter slot threw before it was
-// wired.
-export function hostService<I extends HostServices, S>(
-  tag: Context.Key<I, S>,
-  missing: string,
+  missing = `${tag.key} read before the runtime provided it`,
 ): S {
-  const found = serviceFrom(hostRuntime(), tag);
-  if (found === undefined) throw new Error(missing);
+  const found = hostServiceOrNull(tag);
+  if (found === null) throw new Error(missing);
   return found;
 }
 
-// A host service a module has a sensible answer without (nothing is
+// A service a module has a sensible answer without (nothing is
 // mirroring on a surface that never mounts the daemon; a change nobody
 // listens for goes unannounced).
-export function hostServiceOrNull<I extends HostServices, S>(
+export function hostServiceOrNull<I extends InstalledService, S>(
   tag: Context.Key<I, S>,
 ): S | null {
-  return serviceFrom(hostRuntime(), tag) ?? null;
+  return Option.getOrNull(
+    Context.getOption((installed ?? defaultInstall).services, tag),
+  );
 }

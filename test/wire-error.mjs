@@ -117,7 +117,7 @@ const CASES = [
   {
     // Not an Effect class: a plain Error subclass with a `_tag` field
     // and an own `name`, which must not ride.
-    error: new CommandRefusedError(COMMAND_REFUSED_MESSAGE),
+    error: new CommandRefusedError({ message: COMMAND_REFUSED_MESSAGE }),
     shape: { _tag: COMMAND_REFUSED_TAG, message: COMMAND_REFUSED_MESSAGE },
     matcher: "isCommandRefusedError",
   },

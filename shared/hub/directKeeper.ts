@@ -60,7 +60,7 @@ import {
   STABLE_CONNECTION_MS,
   defaultSupervisorRuntime,
   superviseLadder,
-  type SupervisorRuntime,
+  type RuntimeOf,
 } from "@shared/remote/supervisor";
 import { isTerminalDialError } from "./directDial";
 import { errorMessageOf } from "@shared/errors";
@@ -76,7 +76,7 @@ type DirectKeeperDeps = {
   // the stable threshold are NOT seams -- they are the shared
   // supervisor constants, and the check asserts against those same
   // constants on purpose.
-  runtime?: SupervisorRuntime;
+  runtime?: RuntimeOf<never>;
 };
 
 export type DirectKeeper = {

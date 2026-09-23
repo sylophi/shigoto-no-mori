@@ -1,7 +1,7 @@
 // Durable proof for the git runner (host/lib/git/core.ts) as an
 // Effect: a run that never finishes is killed at its timeout and fails
 // typed, a caller's cancellation (the signal a contract handler runs
-// under, shared/ipc/effectHandler.ts) kills it at once, git that
+// under, host/runtime.ts) kills it at once, git that
 // cannot start fails as GitSpawnError with Node's errno, and the
 // Promise form still rejects with the same classes. Real git, real
 // child processes: the hang is `git ls-remote` over an ssh command that
@@ -20,7 +20,7 @@ import {
   runEffect,
   runLenient,
 } from "@host/lib/git/core";
-import { fromEffectWith } from "@shared/ipc/effectHandler";
+import { fromEffectWith } from "@host/runtime";
 import {
   alive,
   makeProof,

@@ -31,7 +31,7 @@ import {
 } from "@shared/hub/directKeeper";
 import { applyDirectPresence } from "@shared/hub/directPresence";
 import type { OpenClientSocket } from "@shared/ipc/socket/wsClientTransport";
-import type { SupervisorRuntime } from "@shared/remote/supervisor";
+import type { RuntimeOf } from "@shared/remote/supervisor";
 
 // The slice of a hub connection the plane composes over, common to
 // the node connection (host/hub/connection.ts) and the browser one
@@ -73,7 +73,7 @@ type DirectPlaneDeps = {
   // check passes a TestClock runtime and drives retries with
   // TestClock.adjust instead of sleeping the real ladder out. Real
   // owners omit it and take Effect's default services.
-  keeper?: { runtime?: SupervisorRuntime };
+  keeper?: { runtime?: RuntimeOf<never> };
   // The host half, absent on platforms that only ever dial out: the
   // direct listener's targeted roster close, and this device's own
   // tunnel endpoint state for the status snapshot.

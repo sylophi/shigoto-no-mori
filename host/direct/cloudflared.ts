@@ -58,7 +58,7 @@ import {
   ranAtLeast,
   STABLE_CONNECTION_MS,
   superviseLadder,
-  type SupervisorRuntime,
+  type RuntimeOf,
 } from "@shared/remote/supervisor";
 import { containedSync } from "@shared/util/contained";
 import { createLimiter } from "@shared/util/limit";
@@ -273,7 +273,7 @@ export type CloudflaredRunnerDeps = {
   // Where the runner's fibers run. Real callers take Effect's default
   // services; the direct-plane check passes a ManagedRuntime built on
   // TestClock.layer() and walks the ladders with TestClock.adjust.
-  runtime?: SupervisorRuntime;
+  runtime?: RuntimeOf<never>;
 };
 
 export type CloudflaredRunner = {

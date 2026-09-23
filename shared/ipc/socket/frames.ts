@@ -253,30 +253,26 @@ export const COMMAND_REFUSED_CODE = "command-refused";
 export const COMMAND_REFUSED_MESSAGE =
   "this device is not permitted to run commands on the remote machine";
 
+export const COMMAND_REFUSED_TAG = "CommandRefused";
+
 // The typed client-side surface of a command refusal, minted by both
 // client roles (the LAN socket client transport and the hub link's
 // client role) when a res error carries COMMAND_REFUSED_CODE. The
 // message is preserved verbatim so every message-text matcher keeps
-// behaving as before.
-export const COMMAND_REFUSED_TAG = "CommandRefused";
-
-export class CommandRefusedError extends Error {
-  // The tag the wire codec encodes (shared/ipc/wireError.ts), so the
-  // refusal crosses a hop (main forwarding a peer's answer to the
-  // renderer) as a WireError carrying this tag.
-  readonly _tag = COMMAND_REFUSED_TAG;
-  constructor(message: string) {
-    super(message);
-    this.name = "CommandRefusedError";
-  }
-}
+// behaving as before. Its tag is what the wire codec encodes
+// (shared/ipc/wireError.ts), so the refusal crosses a hop (main
+// forwarding a peer's answer to the renderer) as a WireError carrying
+// this tag.
+export class CommandRefusedError extends Schema.TaggedError<CommandRefusedError>()(
+  COMMAND_REFUSED_TAG,
+  { message: Schema.String },
+) {}
 
 // Matcher for every form a refusal arrives in: the instance a client
-// role minted, the WireError a hop rebuilt from the tag, and the bare
-// message an OLD peer sends with no code or tag at all. Each means
-// "ask that machine to allow commands".
+// role minted and the WireError a hop rebuilt, both by their tag, and
+// the bare message an OLD peer sends with no code or tag at all. Each
+// means "ask that machine to allow commands".
 export function isCommandRefusedError(error: unknown): boolean {
-  if (error instanceof CommandRefusedError) return true;
   // The tag wins: a typed error of another kind is not a refusal
   // however its message reads. Only an untagged error is read by text.
   const tag = errorTagOf(error);

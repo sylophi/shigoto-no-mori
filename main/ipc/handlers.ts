@@ -132,7 +132,8 @@ import {
   hubHandlers,
   onPeerPush,
 } from "./register";
-import { appRuntime, appService, runner } from "../services";
+import { hostRuntime, hostService } from "@host/runtime";
+import { runner } from "../services";
 
 // The pull/transplant orchestrations' and the port-forward engine's
 // peer reach, routed through the SAME invokePeer path (and so the same
@@ -434,7 +435,7 @@ export const MirrorEngineLive = Layer.effectContext(
 // bound the sign-out stops waiting (the timer is the fiber's, gone with
 // it); the terminates already sent are the daemon's to answer.
 function endAllMirrorsBounded(): Promise<unknown> {
-  return appRuntime().runPromise(
+  return hostRuntime().runPromise(
     Effect.promise(() =>
       endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL, {
         transfers: true,
@@ -453,7 +454,7 @@ async function teardownStep(what: string, run: () => unknown): Promise<void> {
 }
 
 export function notifyLocalProjectChanged(projectId: string): void {
-  appService(GitFollower).onLocalProjectChanged(projectId);
+  hostService(GitFollower).onLocalProjectChanged(projectId);
 }
 
 // "This project's git state moved on this machine": the project-scoped
@@ -471,18 +472,18 @@ export function announceProjectChanged(projectId: string): void {
 // The daemon starts once the gateway's first bind attempt settled,
 // bound or not (a failed bind keeps retrying in the gateway's layer).
 export async function startMirrorEngine(): Promise<void> {
-  const { firstBind } = appService(MirrorGateway);
+  const { firstBind } = hostService(MirrorGateway);
   await Effect.runPromise(firstBind);
-  appService(MirrorDaemon).start();
-  appService(GitFollower).start();
+  hostService(MirrorDaemon).start();
+  hostService(GitFollower).start();
 }
 
 // The quit path gets the same stops, in the same order, from the
 // layers' finalizers when main/index.ts disposes the runtime.
 export function stopMirrorEngine(): void {
-  appService(GitFollower).stop();
-  appService(MirrorDaemon).stop();
-  appService(MirrorGateway).stop();
+  hostService(GitFollower).stop();
+  hostService(MirrorDaemon).stop();
+  hostService(MirrorGateway).stop();
 }
 
 // The account handlers, one instance for the account contract and the
@@ -629,7 +630,7 @@ export function registerIpcHandlers(): void {
   registerContract(clientConfigContract, clientConfigHandlers);
   // The account fan-out lives with the handlers' layer (AccountHandlers
   // above).
-  registerContract(accountContract, appService(AccountHandlers));
+  registerContract(accountContract, hostService(AccountHandlers));
   // Client-scoped bridge onto the main-process hub socket: status,
   // invokes over the keeper-held direct sessions, and the
   // peerPush/statusChanged fan-outs. The
@@ -657,7 +658,7 @@ export function registerIpcHandlers(): void {
   // serves for peers) fans out on the same changed signal.
   // The follower's peer-side signals: a peer's git state moved (its
   // git-directory watcher) or a served worktree's index did.
-  const gitFollower = appService(GitFollower);
+  const gitFollower = hostService(GitFollower);
   onPeerPush((push) => {
     if (push.channel === "git:projectChanged") {
       const parsed = safeDecodeWith(ProjectScopedPayloadSchema, push.payload);

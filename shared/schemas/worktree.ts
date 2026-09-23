@@ -309,8 +309,8 @@ export const DeleteWorktreePayloadSchema = Schema.Struct({
   ...WorktreeScopedPayloadSchema.fields,
   force: Schema.optional(Schema.Boolean),
   skipCleanup: Schema.optional(Schema.Boolean),
-  // Refuse the delete outright (stable "scripts-running" message
-  // marker) when the app's registry shows live scripts in the worktree,
+  // Refuse the delete outright (the tagged ScriptsRunning error,
+  // shared/errors.ts) when the app's registry shows live scripts in the worktree,
   // instead of the default kill-then-delete. Set by the transplant
   // orchestrator, which must never take down work still running on the
   // source device. App-registry-only, so it never reaches `sm rm`.

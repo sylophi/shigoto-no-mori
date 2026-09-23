@@ -40,6 +40,7 @@ import {
   RemoteConnectError,
 } from "@shared/ipc/socket/wsClientTransport";
 import { CLOSE_AUTH_FAILED } from "@shared/ipc/socket/frames";
+import type { HubSocketStatus } from "@shared/ipc/modules/hub";
 import { containedSync } from "@shared/util/contained";
 
 // Backoff delays in milliseconds, capped at the last rung. Fixed and
@@ -58,13 +59,10 @@ export const STABLE_CONNECTION_MS = 30_000;
 // registry's "tunnel starting" note quotes the same figure.
 export const TUNNEL_PROBE_DEADLINE_FRESH_MS = 45 * 60_000;
 
-export type SupervisorStatus =
-  | { phase: "idle" }
-  | { phase: "connecting" }
-  | { phase: "connected"; remoteDeviceId: string; remoteAppVersion: string }
-  | { phase: "backoff"; attempt: number; delayMs: number }
-  | { phase: "blocked"; reason: BlockReason; message: string }
-  | { phase: "stopped" };
+// The loop's phases, typed off the hub contract's schema, which
+// validates them across the Electron wire (a type-only import: the
+// contract adds nothing to this module's bundle).
+export type SupervisorStatus = HubSocketStatus;
 
 // The hello facts and target for one device, minus the callbacks the
 // supervisor owns.
@@ -92,14 +90,12 @@ export type ConnectFn = (
 // Every classifier here is an ALLOWLIST of blocking codes, so an
 // unrecognized code retries rather than wedging a device in a blocked
 // state this build cannot explain.
-// Why a blocked socket is blocked. Only "revoked" is the hub's verdict
-// on this device (its close code says the device was removed from the
-// account), which is what a device signs itself out on. "refused" is a
-// ticket mint the hub would not serve, any 401/403, which a misdeployed
-// hub produces for every device at once and which recovers on its own.
-// "superseded" is another instance of this device taking the socket
-// over, and "auth" is the LAN path's bad token.
-export type BlockReason = "revoked" | "superseded" | "refused" | "auth";
+// Why a blocked socket is blocked (the contract's schema says what
+// each reason means).
+export type BlockReason = Extract<
+  SupervisorStatus,
+  { phase: "blocked" }
+>["reason"];
 
 // The one block a device acts on by leaving the account.
 export function credentialRevoked(status: SupervisorStatus): boolean {
@@ -154,16 +150,19 @@ type SupervisorOptions = {
   // Where the loop's fiber runs. Real callers take Effect's default
   // services; a test passes a ManagedRuntime built on TestClock.layer()
   // and drives the ladder with TestClock.adjust.
-  runtime?: SupervisorRuntime;
+  runtime?: RuntimeOf<never>;
 };
 
-export type SupervisorRuntime = Pick<
-  ManagedRuntime.ManagedRuntime<never, never>,
+// What Effect code runs on from a Promise-side owner: a ManagedRuntime,
+// or anything shaped like one, providing `R`. The runners' seam here
+// and the host's installed runtime (host/runtime.ts) are both one.
+export type RuntimeOf<R> = Pick<
+  ManagedRuntime.ManagedRuntime<R, never>,
   "runFork" | "runPromise"
 >;
 
 // Effect's default services, the runtime every real caller runs on.
-export const defaultSupervisorRuntime: SupervisorRuntime = {
+export const defaultSupervisorRuntime: RuntimeOf<never> = {
   runFork: Effect.runFork,
   runPromise: Effect.runPromise,
 };

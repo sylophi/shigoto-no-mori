@@ -158,8 +158,7 @@ export function TransplantFinish({
   // pick another fate.
   const kept =
     teardown.data !== undefined && !teardown.data.sourceRemoved
-      ? (keptSourceReason(teardown.data.sourceError) ??
-        "its teardown was refused.")
+      ? (keptSourceReason(teardown.data) ?? "its teardown was refused.")
       : null;
   const branch = result.worktree.branch;
 

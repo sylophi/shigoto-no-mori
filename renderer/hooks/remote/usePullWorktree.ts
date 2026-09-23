@@ -15,20 +15,28 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import type { MirrorStartPayload } from "@shared/ipc/modules/mirror";
-import type { SyncPullWorktreeResult } from "@shared/ipc/modules/sync";
+import type {
+  SyncPullWorktreeResult,
+  SyncTeardownSourceResult,
+} from "@shared/ipc/modules/sync";
+import { isScriptsRunningReason } from "@shared/errors";
 import type { MirrorIgnoreChoice } from "@shared/leaveOutRule";
 import type { Worktree } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { invalidateHostDevice, queryKeys } from "@/lib/queryKeys";
 
-// The teardown reports a kept source with its raw reason. scripts-running
-// is the one code worth spelling out, and every surface that reports a
-// kept source says it from here. Phrased for mid-sentence use, which is
-// where both callers put it.
-export function keptSourceReason(
-  sourceError: string | undefined,
-): string | undefined {
-  return sourceError !== undefined && sourceError.includes("scripts-running")
+// The teardown reports a kept source with its raw reason. Scripts
+// still running is the one worth spelling out, and every surface that
+// reports a kept source says it from here. Phrased for mid-sentence
+// use, which is where both callers put it.
+export function keptSourceReason({
+  sourceError,
+  sourceErrorTag,
+}: Pick<SyncTeardownSourceResult, "sourceError" | "sourceErrorTag">):
+  | string
+  | undefined {
+  return sourceError !== undefined &&
+    isScriptsRunningReason(sourceError, sourceErrorTag)
     ? "scripts are still running there."
     : sourceError;
 }

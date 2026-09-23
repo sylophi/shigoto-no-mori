@@ -20,6 +20,7 @@ import { execGh, GhError, trimGhError } from "./exec";
 import { getGithubRepoInfo, remoteNameForUrl } from "./remote";
 import { ghUnavailableReason } from "./readiness";
 import { looseStruct } from "@shared/schemas/strict";
+import { decodeWith } from "@shared/ipc/codec";
 
 // Enough to fill a picker without paging. Deliberately below the
 // sidebar sweep's 200: that one indexes every branch in the project,
@@ -49,9 +50,11 @@ const GhPrCandidateSchema = Schema.Struct({
   headRepositoryOwner: GhLoginSchema,
 });
 type GhPrCandidate = typeof GhPrCandidateSchema.Type;
-const decodeGhPrCandidates = Schema.decodeUnknownSync(
-  Schema.Array(GhPrCandidateSchema),
-);
+// Through the decode seam: gh's rows keep their undeclared keys, so
+// an own __proto__ in them is dropped before the decode.
+const decodeGhPrCandidates = (raw: unknown) =>
+  decodeWith(GhPrCandidatesSchema, raw);
+const GhPrCandidatesSchema = Schema.Array(GhPrCandidateSchema);
 
 // Derived from the schema that parses the response, so the two can't
 // drift into "asked for a field we don't read" or the reverse.

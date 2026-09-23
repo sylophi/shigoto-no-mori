@@ -360,27 +360,8 @@ export function mirrorStopIsSafe(
   return status === "synced";
 }
 
-// The refusal's leading text, which the renderer matches to offer
-// discard-and-stop. Text rather than a code because Electron's IPC
-// flattens an error to its message (see COMMAND_REFUSED_MESSAGE).
-export const MIRROR_STOP_UNCONFIRMED =
-  "The copy is not confirmed in step with the other device";
-
-export function isMirrorStopUnconfirmed(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes(MIRROR_STOP_UNCONFIRMED);
-}
-
-// mirror:stop's other failure, thrown once the session is already
-// gone: the mirror did stop and only the copy's removal failed. Text
-// for the same reason, and told apart so a caller that reports the
-// stop (the CLI's unmirror) does not report a failure to stop.
-export const MIRROR_COPY_STAYED = "The mirror stopped, but the copy";
-
-export function isMirrorCopyStayed(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return message.includes(MIRROR_COPY_STAYED);
-}
+// A stop refused on this, and a stop whose copy stayed, fail with
+// MirrorStopUnconfirmed and MirrorCopyStayed (shared/errors.ts).
 
 // The mirror stream's open: the caller has attached its end of a byte
 // channel under this id on the calling connection (shared/ipc/socket/

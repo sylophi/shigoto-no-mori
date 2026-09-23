@@ -1,8 +1,14 @@
 import { Effect } from "effect";
+import { ScriptsRunning } from "@shared/errors";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
-import type { Project } from "@shared/schemas";
+import {
+  type DeleteWorktreePayloadSchema,
+  type Project,
+  type ProjectScopedPayloadSchema,
+  type SetShelvedPayloadSchema,
+} from "@shared/schemas";
 import { projectConfigOrNull } from "@host/lib/config/project";
 import {
   checkoutBranchEffect,
@@ -69,15 +75,74 @@ export function notifierFor(ctx: HandlerContext) {
 const worktreeOf = (projectId: string, worktreeId: string) =>
   Effect.map(findProjectAndWorktree(projectId, worktreeId), (r) => r.worktree);
 
+// The programs other modules run inside their own (the mirror's stop,
+// a send's teardown, the control ops), exported as Effects so the
+// caller's interruption, and any step it marked uninterruptible,
+// reaches them directly rather than through a signal.
+export const listWorktrees = ({
+  projectId,
+}: typeof ProjectScopedPayloadSchema.Type) =>
+  Effect.flatMap(findProject(projectId), (project) =>
+    listWorktreesEffect(project.id, project.path),
+  );
+
+export const deleteWorktree = (
+  {
+    projectId,
+    worktreeId,
+    force,
+    skipCleanup,
+    refuseRunningScripts,
+  }: typeof DeleteWorktreePayloadSchema.Type,
+  ctx: HandlerContext,
+) =>
+  Effect.flatMap(findProject(projectId), (project) =>
+    hostAttempt(() => {
+      // Local delete kills scripts by design (withDeleteInflight
+      // reaps them). The transplant orchestrator refuses instead,
+      // since its teardown must never take down work still running
+      // on the source device. The lookup is app-registry-only, so
+      // the CLI stays ignorant of the flag. The refusal is typed
+      // (ScriptsRunning), and the UI matches its tag.
+      if (refuseRunningScripts) {
+        const running = getRunningScriptWorktrees().find(
+          (entry) => entry.worktreeId === worktreeId,
+        );
+        if (running !== undefined) {
+          throw new ScriptsRunning({ scriptCount: running.scriptCount });
+        }
+      }
+      // The CLI can't see the app's script registry, so the delete
+      // runs under the shared tombstone protocol (see
+      // withDeleteInflight). The CLI drops the shelf and auto-pull
+      // marks with the worktree.
+      return withDeleteInflight(
+        worktreeId,
+        "This worktree is already being removed.",
+        () =>
+          deleteViaCli(
+            project,
+            { worktreeId, force, skipCleanup },
+            notifierFor(ctx),
+          ),
+      );
+    }),
+  );
+
+export const setShelvedWorktree = ({
+  projectId,
+  worktreeId,
+  shelved,
+}: typeof SetShelvedPayloadSchema.Type) =>
+  mutateAndDescribe({ projectId, worktreeId }, (_target, project) =>
+    hostAttempt(() => setShelvedViaCli(project, worktreeId, shelved)),
+  );
+
 export const worktreesHandlers: Handlers<
   typeof worktreesContract,
   HandlerContext
 > = {
-  list: hostHandler(({ projectId }) =>
-    Effect.flatMap(findProject(projectId), (project) =>
-      listWorktreesEffect(project.id, project.path),
-    ),
-  ),
+  list: hostHandler(listWorktrees),
 
   // Lifecycle mutations route through the bundled CLI so the app and a
   // terminal run the same engine. Each is one step: a caller that
@@ -109,53 +174,9 @@ export const worktreesHandlers: Handlers<
     ),
   ),
 
-  delete: hostHandler(
-    (
-      { projectId, worktreeId, force, skipCleanup, refuseRunningScripts },
-      ctx,
-    ) =>
-      Effect.flatMap(findProject(projectId), (project) =>
-        hostAttempt(() => {
-          // Local delete kills scripts by design (withDeleteInflight
-          // reaps them). The transplant orchestrator refuses instead,
-          // since its teardown must never take down work still running
-          // on the source device. The lookup is app-registry-only, so
-          // the CLI stays ignorant of the flag. "scripts-running" is a
-          // stable marker the orchestrator and the UI match on, not
-          // prose.
-          if (refuseRunningScripts) {
-            const running = getRunningScriptWorktrees().find(
-              (entry) => entry.worktreeId === worktreeId,
-            );
-            if (running !== undefined) {
-              throw new Error(
-                `scripts-running: ${running.scriptCount} script(s) are running in this worktree`,
-              );
-            }
-          }
-          // The CLI can't see the app's script registry, so the delete
-          // runs under the shared tombstone protocol (see
-          // withDeleteInflight). The CLI drops the shelf and auto-pull
-          // marks with the worktree.
-          return withDeleteInflight(
-            worktreeId,
-            "This worktree is already being removed.",
-            () =>
-              deleteViaCli(
-                project,
-                { worktreeId, force, skipCleanup },
-                notifierFor(ctx),
-              ),
-          );
-        }),
-      ),
-  ),
+  delete: hostHandler(deleteWorktree),
 
-  setShelved: hostHandler(({ projectId, worktreeId, shelved }) =>
-    mutateAndDescribe({ projectId, worktreeId }, (_target, project) =>
-      hostAttempt(() => setShelvedViaCli(project, worktreeId, shelved)),
-    ),
-  ),
+  setShelved: hostHandler(setShelvedWorktree),
 
   // A flag flip only, like setShelved. The pull itself has one entry
   // point, the fetch scheduler's sweep (main/electron/fetch.ts): the

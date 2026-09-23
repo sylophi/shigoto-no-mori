@@ -55,7 +55,7 @@ import {
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
 import {
   defaultSupervisorRuntime,
-  type SupervisorRuntime,
+  type RuntimeOf,
 } from "@shared/remote/supervisor";
 import { mintHexId } from "@host/lib/idleRegistry";
 import { atomicWriteJsonSync } from "@host/lib/util/jsonFile";
@@ -126,7 +126,7 @@ export function createControlServer(deps: {
   // Where the run's fibers live. Real callers take Effect's default
   // services; a test passes a ManagedRuntime built on TestClock.layer()
   // and moves the hello deadline with TestClock.adjust.
-  runtime?: SupervisorRuntime;
+  runtime?: RuntimeOf<never>;
 }) {
   const runtime = deps.runtime ?? defaultSupervisorRuntime;
   const handlers = new Map<string, Handler>();

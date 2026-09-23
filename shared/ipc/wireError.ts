@@ -45,29 +45,9 @@ const RESERVED = new Set([
   "then",
 ]);
 
-function isJsonValue(value: unknown, depth = 0): boolean {
-  if (depth > 8) return false;
-  if (value === null) return true;
-  switch (typeof value) {
-    case "string":
-    case "boolean":
-      return true;
-    case "number":
-      return Number.isFinite(value);
-    case "object":
-      break;
-    default:
-      return false;
-  }
-  if (Array.isArray(value)) {
-    return value.every((item) => isJsonValue(item, depth + 1));
-  }
-  const proto = Object.getPrototypeOf(value);
-  if (proto !== Object.prototype && proto !== null) return false;
-  return Object.values(value as object).every((item) =>
-    isJsonValue(item, depth + 1),
-  );
-}
+// A field rides only as JSON: finite numbers, plain objects and arrays,
+// no cycles.
+const isJsonValue = Schema.is(Schema.Json);
 
 // The most of one string field that rides the wire. A field is for a
 // matcher or a short note (a port, a reason, git's stderr), never a

@@ -1,21 +1,16 @@
-// The desktop binding's view of the one runtime main/index.ts installs
-// (main/runtime.ts builds it from AppLive): the host's services plus
-// main's own, the runners and the Electron-side seams. The host reads
-// the same runtime through host/runtime.ts; main reads it here, wider.
+// The services main provides beside the host's, on the one runtime
+// main/index.ts installs (main/runtime.ts builds it from AppLive): the
+// runners and the Electron-side seams. They join the host's install by
+// augmenting host/runtime.ts's InstalledServices, so the install
+// demands them and main reads them with the host's own hostService.
 //
 // A leaf on purpose: the service classes are only type-imported, so
 // any module that declares or reads one can import this without an
 // import cycle, and main/runtime.ts stays the one module that pulls
 // every layer together.
-import { type Context, Effect, type ManagedRuntime } from "effect";
+import { Effect } from "effect";
 import { errorMessageOf } from "@shared/errors";
-import {
-  hostRuntime,
-  type HostServices,
-  installHostRuntime,
-  type RuntimeOf,
-  serviceFrom,
-} from "@host/runtime";
+import type { HostServices } from "@host/runtime";
 import type {
   AccountHandlers,
   GitFollower,
@@ -58,41 +53,10 @@ export type MainServices =
 
 export type AppServices = HostServices | MainServices;
 
-// The one install, typed: the runtime AppLive built (main/runtime.ts)
-// provides the host's services and main's, so the host's slot holds
-// one that provides them all, and a runtime missing a main service
-// fails here at the type level rather than at the first read.
-export function installAppRuntime(
-  runtime: ManagedRuntime.ManagedRuntime<AppServices, never>,
-): void {
-  installHostRuntime(runtime);
-}
-
-// The installed runtime, typed with main's services (installAppRuntime
-// is the only install main makes, so the widening holds).
-export function appRuntime(): RuntimeOf<AppServices> {
-  return hostRuntime() as unknown as RuntimeOf<AppServices>;
-}
-
-// One of the app's services off the installed runtime, memoized like
-// the host's (host/runtime.ts serviceFrom says why). Absent, it throws
-// `missing`, the message the module's setter slot threw before it was
-// wired.
-export function appService<I extends AppServices, S>(
-  tag: Context.Key<I, S>,
-  missing = `${tag.key} read before the app runtime was installed`,
-): S {
-  const found = serviceFrom(appRuntime(), tag);
-  if (found === undefined) throw new Error(missing);
-  return found;
-}
-
-// For a caller with a sensible answer when the runtime has none (a
-// proof that installed a runtime without this service).
-export function appServiceOrNull<I extends AppServices, S>(
-  tag: Context.Key<I, S>,
-): S | null {
-  return serviceFrom(appRuntime(), tag) ?? null;
+declare module "@host/runtime" {
+  interface InstalledServices {
+    main: MainServices;
+  }
 }
 
 // How long one runner's stop may take before the quit moves on

@@ -22,10 +22,10 @@ import type {
   MirrorSession,
 } from "@shared/ipc/modules/mirror";
 import {
-  isMirrorStopUnconfirmed,
   mirrorCopyIsRemote,
   mirrorStopIsSafe,
 } from "@shared/ipc/modules/mirror";
+import { isMirrorStopUnconfirmed } from "@shared/errors";
 import type { Worktree } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
 import { ModalShell } from "@/components/ui/modal-shell";

@@ -23,8 +23,6 @@ import {
 import {
   mirrorCopyIsRemote,
   type MirrorSession,
-  isMirrorCopyStayed,
-  isMirrorStopUnconfirmed,
 } from "@shared/ipc/modules/mirror";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
@@ -32,7 +30,11 @@ import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { hostsProjects } from "@shared/account/enroll";
 import { isHubRefusal } from "@shared/account/service";
-import { errorMessageOf } from "@shared/errors";
+import {
+  errorMessageOf,
+  isMirrorCopyStayed,
+  isMirrorStopUnconfirmed,
+} from "@shared/errors";
 import { pullWorktreeName } from "@shared/git/branches";
 import {
   type DeviceId,
@@ -73,7 +75,7 @@ import {
   teardownSent,
   teardownSource,
 } from "./sync";
-import { worktreesHandlers } from "./worktrees";
+import { listWorktrees, setShelvedWorktree } from "./worktrees";
 
 // The Electron layer provides the account and the peer reach
 // (main/electron/hostImpls.ts), like the other peer seams
@@ -542,7 +544,7 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
         if (mirror) {
           const running = yield* mirrorOf(input);
           if (running !== undefined) {
-            return yield* alreadyMirrored(ctx, running, input.device);
+            return yield* alreadyMirrored(running, input.device);
           }
         }
         const { identity, target } = yield* pickDevice(project, input.device);
@@ -568,14 +570,13 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
           };
           return result;
         }
-        const { result: sent } = yield* sendWorktree(payload, ctx);
+        const sent = yield* sendWorktree(payload, ctx);
         const source = yield* settleSource(input.source ?? "keep", {
-          shelve: hostAttempt(() =>
-            worktreesHandlers.setShelved(
-              { projectId: project.id, worktreeId: worktree.id, shelved: true },
-              ctx,
-            ),
-          ),
+          shelve: setShelvedWorktree({
+            projectId: project.id,
+            worktreeId: worktree.id,
+            shelved: true,
+          }),
           teardown: teardownSent(
             {
               targetDeviceId: target.deviceId,
@@ -656,7 +657,7 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
               candidate.worktreeId === found.worktree.id,
           );
           if (running !== undefined) {
-            return yield* alreadyMirrored(ctx, running, undefined);
+            return yield* alreadyMirrored(running, undefined);
           }
           const { session, ...pulled } = yield* startMirror(payload, ctx);
           const result: ControlTransferResult = {
@@ -751,11 +752,7 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
 // about the first, not a new copy: the transfer would only be refused
 // over the branch or the folder the copy holds. Answered with the
 // running session and its copy, whichever side that is on.
-const alreadyMirrored = (
-  ctx: HandlerContext,
-  session: MirrorSession,
-  device: string | undefined,
-) =>
+const alreadyMirrored = (session: MirrorSession, device: string | undefined) =>
   Effect.gen(function* () {
     const registry = yield* registryOrEmpty;
     const view = mirrorView(
@@ -781,9 +778,9 @@ const alreadyMirrored = (
           session.projectId,
           session.worktreeId,
         )
-      : (yield* hostAttempt(() =>
-          worktreesHandlers.list({ projectId: session.localProjectId }, ctx),
-        )).find((worktree) => worktree.id === session.localWorktreeId);
+      : (yield* listWorktrees({ projectId: session.localProjectId })).find(
+          (worktree) => worktree.id === session.localWorktreeId,
+        );
     if (copy === undefined) {
       // Not a reason to start a second session beside the first.
       return yield* new ControlError({

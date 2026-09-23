@@ -13,6 +13,7 @@ import { readGlobalConfig } from "./config/global";
 import { binaryOnPath } from "./util/binaries";
 import { ttlMapCache, ttlValueCache } from "./util/ttlCache";
 import { looseStruct } from "@shared/schemas/strict";
+import { decodeWith } from "@shared/ipc/codec";
 
 const INSTALLED_CACHE_TTL_MS = 30_000;
 // The ports dialog polls every few seconds while open. A TTL past
@@ -114,7 +115,8 @@ const allocationsCache = ttlMapCache<string, Map<string, PoolPort[]>>(
     const byDir = new Map<string, PoolPort[]>();
     let state;
     try {
-      state = Schema.decodeUnknownSync(PortPoolStateSchema)(
+      state = decodeWith(
+        PortPoolStateSchema,
         JSON.parse(await readFile(statePath, "utf8")),
       );
     } catch {

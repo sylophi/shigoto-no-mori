@@ -73,7 +73,7 @@ pre-commit:
     # at once, git that cannot start fails as GitSpawnError, and the
     # Promise form rejects with the same classes.
     git-runner:
-      glob: "{host/lib/git/core.ts,shared/ipc/effectHandler.ts,test/git-runner.mjs,test/lib/checkKit.mjs}"
+      glob: "{host/lib/git/core.ts,host/runtime.ts,test/git-runner.mjs,test/lib/checkKit.mjs}"
       run: pnpm test git-runner
     # The git library as Effects against real sandbox repositories:
     # BranchNotMerged through the branches handler and onto the wire, a

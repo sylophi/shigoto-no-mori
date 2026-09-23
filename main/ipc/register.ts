@@ -73,7 +73,8 @@ import {
 } from "./modules/account";
 import { settleEnvelope } from "@shared/ipc/wireError";
 import { followPubSub } from "@shared/util/contained";
-import { appRuntime, appService, runner } from "../services";
+import { hostRuntime, hostService } from "@host/runtime";
+import { runner } from "../services";
 
 // Gates OUTPUT validation only. Input parsing in the shared registrar
 // is unconditional in every build. In dev we re-run handler results
@@ -261,12 +262,12 @@ function follow<A>(
     pubsub,
     `[ipc] a ${what} listener threw`,
     listener,
-    (effect) => appRuntime().runFork(effect),
+    (effect) => hostRuntime().runFork(effect),
   );
 }
 
 export function onPeerPush(listener: PeerPushListener): () => void {
-  return follow(appService(PeerPushes), "peer push", listener);
+  return follow(hostService(PeerPushes), "peer push", listener);
 }
 
 // The hub connection, the direct plane and the tunnel runner, which
@@ -455,7 +456,7 @@ export const RemotePlaneLive = Layer.effectContext(
 export function hubHandlers(): ReturnType<
   typeof createDirectPlane
 >["handlers"] {
-  return appService(DirectPlane).handlers;
+  return hostService(DirectPlane).handlers;
 }
 
 // The remote wires (LAN socket, direct listener), looped wherever a
@@ -465,8 +466,8 @@ export function hubHandlers(): ReturnType<
 // surface registered above, and host broadcasts and viewer pings reach
 // remote peers over their direct sessions alone.
 const remoteWires = (): readonly ServerTransport[] => [
-  appService(SocketHost),
-  appService(DirectListener).server,
+  hostService(SocketHost),
+  hostService(DirectListener).server,
 ];
 
 // Host-scoped calls are served on every wire that may carry them.
@@ -541,7 +542,7 @@ export class MutationsSettled extends Context.Service<
   );
 }
 export function onHostMutationSettled(listener: () => void): void {
-  follow(appService(MutationsSettled), "mutation-settled", listener);
+  follow(hostService(MutationsSettled), "mutation-settled", listener);
 }
 const flushMutationPing = coalesce(() => {
   const pingLocal = mutationPingLocal;
@@ -557,7 +558,7 @@ const flushMutationPing = coalesce(() => {
   );
   for (const wire of remoteWires()) wire.broadcastAll(channel, parsed);
   if (pingLocal) electronServer.broadcastAll(channel, parsed);
-  PubSub.publishUnsafe(appService(MutationsSettled), undefined);
+  PubSub.publishUnsafe(hostService(MutationsSettled), undefined);
 }, MUTATION_PING_MS);
 function pingViewers(ctx: HandlerContext): void {
   if (isRemoteCaller(ctx)) mutationPingLocal = true;
@@ -597,7 +598,7 @@ export function registerControlContract<M extends ContractModule>(
   module: M,
   handlers: Handlers<M, HandlerContext>,
 ): void {
-  registerContractCore(module, handlers, appService(ControlServer).transport, {
+  registerContractCore(module, handlers, hostService(ControlServer).transport, {
     validateOutputs: VALIDATE_OUTPUTS,
     onMutationResolved: () => {
       mutationPingLocal = true;
@@ -611,7 +612,7 @@ export function registerControlContract<M extends ContractModule>(
 // then report the app as unreachable.
 export async function startControlHost(): Promise<void> {
   try {
-    await appService(ControlServer).start();
+    await hostService(ControlServer).start();
   } catch (error) {
     console.warn(
       `[control] listener failed to start: ${errorMessageOf(error)}`,
@@ -625,12 +626,12 @@ export async function startControlHost(): Promise<void> {
 // this is for a data-dir move, whose control.json must not carry this
 // process's address into the new folder.
 export function stopControlHost(): void {
-  appService(ControlServer).stop();
+  hostService(ControlServer).stop();
 }
 
 // After a data wipe took control.json along with the data dir.
 export function republishControlHost(): void {
-  appService(ControlServer).republish();
+  hostService(ControlServer).republish();
 }
 
 // Single-window broadcast for client-scoped window and menu events. A
@@ -671,7 +672,7 @@ export function broadcastAll<
 // it, so it degrades to a log line (the binding also records status).
 export async function refreshSocketHost(): Promise<void> {
   try {
-    await appService(SocketHost).refresh(async () => {
+    await hostService(SocketHost).refresh(async () => {
       // Secure by default at enable time: generate and persist a token
       // if hosting is on without one. ensureSocketHostToken drops the
       // module cache itself, so the read below sees the fresh document.
@@ -704,7 +705,7 @@ export async function refreshSocketHost(): Promise<void> {
 // connect problem must never fail the account write that triggered it.
 export async function refreshHubConnection(): Promise<void> {
   try {
-    await appService(HubConnection).refresh(async () => {
+    await hostService(HubConnection).refresh(async () => {
       const inputs = hubConnectInputs();
       if (inputs === null) return null;
       return {
@@ -735,14 +736,14 @@ export async function refreshHubConnection(): Promise<void> {
 // this drops what could still auth one. Called from the account
 // fan-out's teardown (main/ipc/handlers.ts leaveAccount).
 export function clearDirectTickets(): void {
-  appService(DirectListener).tickets.clear();
+  hostService(DirectListener).tickets.clear();
 }
 
 // Closes the hub socket so the DO sees a clean departure instead of
 // waiting out a dead connection. The quit path gets this from the
 // remote plane layer's finalizer.
 export function stopHubConnection(): Promise<void> {
-  return appService(HubConnection).stop();
+  return hostService(HubConnection).stop();
 }
 
 // The wake-time liveness probe for both remote planes (the hub socket
@@ -752,8 +753,8 @@ export function stopHubConnection(): Promise<void> {
 // instead of reading as connected until the next heartbeat tick or,
 // without heartbeats, until the OS gave up on the dead flow.
 export function probeRemoteConnections(): void {
-  appService(HubConnection).probe();
-  appService(DirectPlane).probe();
+  hostService(HubConnection).probe();
+  hostService(DirectPlane).probe();
 }
 
 // Teardown alongside stopHubConnection: closes the direct listener so
@@ -765,12 +766,12 @@ export function probeRemoteConnections(): void {
 // in the order that matters). The quit path gets the same stops, in
 // the same order, from the layers' finalizers.
 export function stopDirectHost(): Promise<void> {
-  appService(DirectPlane).stop();
+  hostService(DirectPlane).stop();
   // The cloudflared child stops with the listener it fronts, so quit
   // never leaves an orphan tunnel process behind.
   return Promise.all([
-    appService(TunnelRunner).stop(),
-    appService(DirectListener).server.stop(),
+    hostService(TunnelRunner).stop(),
+    hostService(DirectListener).server.stop(),
   ]).then(() => undefined);
 }
 
@@ -787,7 +788,7 @@ export function stopDirectHost(): Promise<void> {
 // line like the other refresh functions.
 export async function refreshDirectHost(): Promise<void> {
   try {
-    const directWsServer = appService(DirectListener).server;
+    const directWsServer = hostService(DirectListener).server;
     await directWsServer.refresh(async () => {
       const inputs = hubConnectInputs();
       if (inputs === null) return null;
@@ -823,8 +824,8 @@ export async function refreshDirectHost(): Promise<void> {
   // if that classification ever leaks: a tunnel problem must not fail
   // the config write or account change that triggered the refresh.
   try {
-    const listener = appService(DirectListener).server.status();
-    await appService(TunnelRunner).reconcile(
+    const listener = hostService(DirectListener).server.status();
+    await hostService(TunnelRunner).reconcile(
       listener.listening && listener.port !== null
         ? { port: listener.port }
         : null,
@@ -837,5 +838,5 @@ export async function refreshDirectHost(): Promise<void> {
 // The direct broker (direct:connectInfo), built with the remote plane
 // above, for the contract registration in main/ipc/handlers.ts.
 export function directHandlers(): ReturnType<typeof makeDirectHandlers> {
-  return appService(DirectBroker);
+  return hostService(DirectBroker);
 }

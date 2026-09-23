@@ -97,7 +97,7 @@ import { answerCall, containedSync } from "@shared/util/contained";
 import { createLimiter } from "@shared/util/limit";
 import {
   defaultSupervisorRuntime,
-  type SupervisorRuntime,
+  type RuntimeOf,
 } from "@shared/remote/supervisor";
 import {
   createChannelMux,
@@ -377,7 +377,7 @@ type WsServerBindingDeps = {
   // services; a test passes a ManagedRuntime built on TestClock.layer()
   // and moves the hello deadline, the liveness sweep and the lockout
   // window with TestClock.adjust.
-  runtime?: SupervisorRuntime;
+  runtime?: RuntimeOf<never>;
 };
 
 const isClosed = (scope: Scope.Scope): boolean => scope.state._tag === "Closed";

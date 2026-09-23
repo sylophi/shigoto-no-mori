@@ -212,8 +212,12 @@ export const runtime = ManagedRuntime.make(AppLive)
   `Effect.runPromiseWith(services)` / `runForkWith` / `runSyncWith`, so
   a handler or a stop that runs while the `ManagedRuntime` is being
   disposed still has its services (a `ManagedRuntime` refuses runs
-  after `dispose()` begins). `hostHandler` is the phase 3 wrapper over
-  that slot, under the caller's signal.
+  after `dispose()` begins). There is one install: a binding's own
+  services join the host's through the `InstalledServices` interface
+  (`main/services.ts` augments it), and the Promise side reads a
+  service with `hostService`/`hostServiceOrNull`. `hostHandler`, in the
+  same file, is the phase 3 wrapper over that slot, under the caller's
+  signal.
 - The `host-boundary` test keeps its rules. Effect core is
   platform-neutral, so `shared/` may import `effect` but not
   `@effect/platform-node`; only `host/` and `main/` may.
@@ -775,12 +779,14 @@ and the hub worker; `shared/ipc/codec.ts` is the one decode seam
 stripping own `__proto__` keys before any decode), `shared/schemas/strict.ts`
 gives the strict-object recipe (`strictStruct`, and the pick recipe
 for subsets), and `test/schema-port.mjs` replays 249 recorded zod
-accept/reject rows against the ported schemas. Deviations: the
-`SocketStatusMatchesSupervisor` type trick in `hub.ts` stays, because
-deriving the status from the supervisor's schema would pull the ws
-client into the preload bundle; `Schema.TaggedError` puts `_tag` on the
-instance (not the prototype), so every matcher reads a tag constant
-and the lint config allows `_tag`.
+accept/reject rows against the ported schemas. The
+`SocketStatusMatchesSupervisor` type trick is gone: the hub contract's
+schema owns the status shape and the supervisor takes its type through
+a type-only import, which costs the preload bundle nothing (the
+earlier worry was a value import of the ws client). Deviation:
+`Schema.TaggedError` puts `_tag` on the instance (not the prototype),
+so every matcher reads a tag constant and the lint config allows
+`_tag`.
 
 **Phase 5** is decided: neither `effect/rpc` nor `@effect/atom-react`
 (the reasoning is under Phase 5 above).

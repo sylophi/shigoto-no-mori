@@ -644,7 +644,7 @@ export function openDevice(
         // distinguish "that machine will not run commands from here"
         // from a real handler failure. An old host sends no code and
         // falls through to the plain Error.
-        entry.reject(new CommandRefusedError(frame.message));
+        entry.reject(new CommandRefusedError({ message: frame.message }));
       } else {
         // The handler's tag and fields when they rode along, so the
         // shared/errors.ts matchers read the tag on this wire as they

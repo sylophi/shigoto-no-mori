@@ -425,11 +425,14 @@ export const SyncLandWorktreeResultSchema = strictStruct({
 // The teardown's fate. A refused or failed teardown never fails the
 // call: by then the pull succeeded and the state is safe on both
 // sides, so the caller learns via sourceRemoved:false with sourceError
-// carrying the stable marker or message ("scripts-running", a
-// cleanup-script failure, a dirty state that did not land here).
+// carrying the message (scripts still running, a cleanup-script
+// failure, a dirty state that did not land here), and sourceErrorTag
+// the tag of the failure behind it when it had one (ScriptsRunning,
+// shared/errors.ts), which is what a reader matches on.
 const SyncTeardownSourceResultSchema = strictStruct({
   sourceRemoved: Schema.Boolean,
   sourceError: Schema.optional(Schema.String),
+  sourceErrorTag: Schema.optional(Schema.String),
 });
 export type SyncTeardownSourceResult =
   typeof SyncTeardownSourceResultSchema.Type;

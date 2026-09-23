@@ -1,7 +1,6 @@
 import { Schema } from "effect";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { DeviceIdSchema } from "@shared/hub/protocol";
-import type { SupervisorStatus } from "@shared/remote/supervisor";
 
 // The renderer's bridge onto the main-process hub socket. The single hub socket lives in main, because the Durable
 // Object supersedes a duplicate socket per deviceId, so the renderer
@@ -11,10 +10,11 @@ import type { SupervisorStatus } from "@shared/remote/supervisor";
 // (main/ipc/register.ts mounts client contracts on the Electron
 // binding only), so the bridge can never be served back to a peer.
 
-// Mirror of the shared supervisor's SupervisorStatus, as a schema so
-// the bridge validates what crosses the Electron wire. On "connected"
-// the remote identity fields are empty strings: the hub socket has
-// no sm welcome of its own.
+// The shared supervisor's status (shared/remote/supervisor.ts), owned
+// here as a schema so the bridge validates what crosses the Electron
+// wire: the supervisor types its SupervisorStatus off this, so the two
+// sides cannot drift. On "connected" the remote identity fields are
+// empty strings: the hub socket has no sm welcome of its own.
 const HubSocketStatusSchema = Schema.Union([
   Schema.Struct({ phase: Schema.Literal("idle") }),
   Schema.Struct({ phase: Schema.Literal("connecting") }),
@@ -30,24 +30,20 @@ const HubSocketStatusSchema = Schema.Union([
   }),
   Schema.Struct({
     phase: Schema.Literal("blocked"),
+    // Why a blocked socket is blocked. Only "revoked" is the hub's
+    // verdict on this device (its close code says the device was
+    // removed from the account), which is what a device signs itself
+    // out on. "refused" is a ticket mint the hub would not serve, any
+    // 401/403, which a misdeployed hub produces for every device at
+    // once and which recovers on its own. "superseded" is another
+    // instance of this device taking the socket over, and "auth" is the
+    // LAN path's bad token.
     reason: Schema.Literals(["revoked", "superseded", "refused", "auth"]),
     message: Schema.String,
   }),
   Schema.Struct({ phase: Schema.Literal("stopped") }),
 ]);
-
-// Compile-time pin (Q3): the wire schema must infer exactly the
-// supervisor's status union, both directions, so a new phase added to
-// one side without the other is a build error here rather than a runtime
-// schema miss. `unknown` on a match (intersecting away to nothing) and
-// `never` on drift, applied to the exported HubStatus below so it is
-// referenced and its collapse surfaces at build time.
-type SocketStatusMatchesSupervisor =
-  typeof HubSocketStatusSchema.Type extends SupervisorStatus
-    ? SupervisorStatus extends typeof HubSocketStatusSchema.Type
-      ? unknown
-      : never
-    : never;
+export type HubSocketStatus = typeof HubSocketStatusSchema.Type;
 
 // THIS device's tunnel endpoint state vocabulary. The wire schema is the single owner: the cloudflared runner
 // (host/direct/cloudflared.ts) types its state off this so the two
@@ -86,8 +82,7 @@ export const HubStatusSchema = Schema.Struct({
   // always the same build. Never carries the hostname or any secret.
   tunnel: Schema.optional(TunnelStateSchema),
 });
-export type HubStatus = typeof HubStatusSchema.Type &
-  SocketStatusMatchesSupervisor;
+export type HubStatus = typeof HubStatusSchema.Type;
 
 // A push frame received from a peer, fanned out to every window. The
 // renderer filters by deviceId and channel, so main forwards every
