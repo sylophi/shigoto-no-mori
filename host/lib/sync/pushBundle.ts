@@ -14,7 +14,7 @@ import type { Project } from "@shared/schemas";
 import { bundleCreateViaCli } from "@host/ipc/cliDelegate";
 import { hostAttempt } from "@host/runtime";
 import { coalescedProgress, pumpChunks } from "./chunkWindow";
-import { landingRefspec } from "./fetchBundle";
+import { type Fetched, landingRefspec } from "./fetchBundle";
 import { scopedFile, scopedTempDir } from "./scopedFiles";
 
 export interface PushBundleInput {
@@ -115,13 +115,6 @@ type PushBundlePeer = Pick<
   Client<typeof syncContract>,
   "pushStart" | "pushChunk" | "pushFinish"
 >;
-
-type Fetched = {
-  readonly fetched: readonly {
-    readonly ref: string;
-    readonly commit: string;
-  }[];
-};
 
 // The bundle is built into a temp dir this fiber owns (scopedFiles.ts),
 // gone the moment the push ends however it ended. The peer's half of

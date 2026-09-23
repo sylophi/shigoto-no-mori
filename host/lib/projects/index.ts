@@ -1,12 +1,14 @@
 // Shared helpers for reading projects from the store.
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
-import { unknownProjectError } from "@shared/errors";
+import { Effect } from "effect";
+import { UnknownProject, unknownProjectError } from "@shared/errors";
 import type { Project } from "@shared/schemas";
 import { isSameOrInside } from "@shared/git/worktreeLayout";
 import { PROJECTS_KEY, registryStore } from "../config/store";
 import { getRepoIdentity } from "../git/repoIdentity";
 import {
+  findWorktreeIdentityEffect,
   findWorktreeIdentityOrThrow,
   type WorktreeIdentity,
 } from "../git/worktrees";
@@ -129,8 +131,41 @@ export function findProjectOrThrow(projectId: string): Project {
   return project;
 }
 
+// The project a handler names, failing typed (UnknownProject) when the
+// registry has no such id. Anything else the lookup throws (an
+// unreadable registry) is a defect, which rejects the call as the throw
+// did.
+export const findProject = (
+  projectId: string,
+): Effect.Effect<Project, UnknownProject> =>
+  Effect.try({
+    try: () => findProjectOrThrow(projectId),
+    catch: (error) => error,
+  }).pipe(
+    Effect.catchIf(
+      (error): error is UnknownProject => error instanceof UnknownProject,
+      Effect.fail,
+      Effect.die,
+    ),
+  );
+
 // The preamble every worktree-scoped IPC handler opens with, so a change
-// to how a worktree is resolved lands in one place.
+// to how a worktree is resolved lands in one place: UnknownProject, then
+// UnknownWorktree.
+export const findProjectAndWorktree = Effect.fnUntraced(function* (
+  projectId: string,
+  worktreeId: string,
+) {
+  const project = yield* findProject(projectId);
+  const worktree = yield* findWorktreeIdentityEffect(
+    project.id,
+    project.path,
+    worktreeId,
+  );
+  return { project, worktree };
+});
+
+// The same preamble for the handlers that are not Effects yet.
 export async function findProjectAndWorktreeOrThrow(
   projectId: string,
   worktreeId: string,

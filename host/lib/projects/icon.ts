@@ -7,12 +7,14 @@ import { readFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import type { Stats } from "node:fs";
 import { isAbsolute, join, posix, relative, resolve } from "node:path";
-import { Cache, Duration, Effect, type Fiber, Queue } from "effect";
+import { Effect, Queue } from "effect";
 import type { ProjectIcon } from "@shared/schemas";
+import { contained } from "@shared/util/contained";
 import { listProjectFiles } from "../git/files";
 import { atomicWriteJsonSync } from "../util/jsonFile";
 import { withFileLock } from "../util/lockFile";
 import { isENOENT, dataDir } from "../util/paths";
+import { singleFlight } from "../util/ttlCache";
 
 // Icon candidates per location bucket. Bucket priority roughly tracks
 // how canonical each location is for "the project's primary icon":
@@ -425,39 +427,25 @@ function persistDirtySync(map: Map<string, IconCacheEntry>): void {
   }
 }
 
-// Persisting is write-behind: a mutation offers the map to a sliding
-// queue of one and returns, and one fiber drains it, one merge per
-// wake. Offers that land while a merge runs (or before the drainer
-// wakes) collapse into the single queued wake, and the merge after it
-// covers every key dirtied meanwhile, since they all mutate the shared
-// memoryCache and dirty sets. The fan-out of N parallel IPCs from the
-// sidebar's first render therefore contends on the file lock a handful
-// of times, not once per entry. A queue rather than a shared promise:
-// no caller needs the write to have landed (the icon it answers comes
-// from the source file), and the promise-based coalescer this replaced
-// never cleared itself (the merge is synchronous, so its `finally` ran
-// before the promise was stored), which left every persist after the
-// first a no-op. A failed merge is logged and its keys stay dirty
-// (persistDirtySync puts them back) for the next wake.
+// Write-behind: a mutation offers the map and returns, and one fiber
+// merges once per wake. The queue slides, so every offer that lands
+// while a merge runs (or before the fiber wakes) collapses into one
+// more merge after it, which covers every key dirtied meanwhile. A
+// failed merge keeps its keys dirty for the next wake.
 const persistWake = Effect.runSync(
   Queue.sliding<Map<string, IconCacheEntry>>(1),
 );
-let persistDrainer: Fiber.Fiber<never> | null = null;
-
-function persistCache(map: Map<string, IconCacheEntry>): void {
-  persistDrainer ??= Effect.runFork(
-    Effect.forever(
-      Effect.flatMap(Queue.take(persistWake), (latest) =>
-        Effect.sync(() => {
-          try {
-            persistDirtySync(latest);
-          } catch (error) {
-            console.warn("[icon-cache] failed to persist index:", error);
-          }
-        }),
+Effect.runFork(
+  Effect.forever(
+    Effect.flatMap(Queue.take(persistWake), (latest) =>
+      contained("[icon-cache] failed to persist index", () =>
+        persistDirtySync(latest),
       ),
     ),
-  );
+  ),
+);
+
+function persistCache(map: Map<string, IconCacheEntry>): void {
   Queue.offerUnsafe(persistWake, map);
 }
 
@@ -550,22 +538,15 @@ async function revalidateAndRead(
 // the same path, which computes the same value. Project paths are
 // few; the capacity only bounds the settled entries the cache sweeps
 // lazily.
-const lookups = Effect.runSync(
-  Cache.makeWith<string, ProjectIcon | null, unknown, never>(
-    (projectPath) =>
-      Effect.tryPromise({
-        try: () => readProjectIconInner(projectPath),
-        catch: (error) => error,
-      }),
-    { capacity: 1_000, timeToLive: () => Duration.zero },
-  ),
-);
-
-export function readProjectIconEffect(
+export const readProjectIconEffect: (
   projectPath: string,
-): Effect.Effect<ProjectIcon | null, unknown> {
-  return Cache.get(lookups, projectPath);
-}
+) => Effect.Effect<ProjectIcon | null, unknown> = singleFlight(
+  (projectPath: string) =>
+    Effect.tryPromise({
+      try: () => readProjectIconInner(projectPath),
+      catch: (error) => error,
+    }),
+);
 
 export function readProjectIcon(
   projectPath: string,

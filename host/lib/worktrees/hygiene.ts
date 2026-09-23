@@ -6,7 +6,7 @@
 // all-git and fast enough to block the list render; `measureWorktreeDisk`
 // walks the whole directory (node_modules and all) and is fetched
 // per-row so a slow disk never holds up the page.
-import { Cache, Duration, Effect, Exit, Semaphore } from "effect";
+import { Duration, Effect, Semaphore } from "effect";
 import { unknownWorktreeError } from "@shared/errors";
 import { isSameOrInside } from "@shared/git/worktreeLayout";
 import {
@@ -14,8 +14,8 @@ import {
   type WorktreeDiskUsage,
   type WorktreeHygiene,
 } from "@shared/schemas";
-import { readShigomoriConfig } from "../config/project";
-import { runEffect, runGit, runLenientEffect } from "../git/core";
+import { projectConfigOrNull } from "../config/project";
+import { type GitFailure, runEffect, runLenientEffect } from "../git/core";
 import {
   listRemotesEffect,
   localBranchExistsEffect,
@@ -27,6 +27,7 @@ import {
   type WorktreeIdentity,
 } from "../git/worktrees";
 import { measureDirectoryEffect } from "../util/dirSize";
+import { getCached, makeTtlCache } from "../util/ttlCache";
 
 interface HeadCommit {
   // Epoch ms of the worktree's HEAD commit.
@@ -38,7 +39,7 @@ interface HeadCommit {
 
 // The commit HEAD points at. Both fields null for an empty repo.
 const getHeadCommit = Effect.fnUntraced(
-  function* (worktreePath: string) {
+  function* (worktreePath: string): Effect.fn.Return<HeadCommit, GitFailure> {
     const stdout = yield* runEffect(worktreePath, [
       "log",
       "-1",
@@ -46,13 +47,12 @@ const getHeadCommit = Effect.fnUntraced(
     ]);
     const [seconds, hash] = stdout.trim().split("\n");
     const at = Number(seconds);
-    const head: HeadCommit = {
+    return {
       // Floored to a whole millisecond: the IPC schema takes safe ints,
       // so a malformed %ct must not reach the boundary as a float.
       at: Number.isFinite(at) ? Math.floor(at * 1000) : null,
       hash: hash?.trim() || null,
     };
-    return head;
   },
   Effect.orElseSucceed((): HeadCommit => ({ at: null, hash: null })),
 );
@@ -291,7 +291,7 @@ export const collectProjectHygieneEffect = Effect.fn(
   const [identities, config, remotes] = yield* Effect.all(
     [
       projectIdentities(projectId, projectPath),
-      Effect.promise(() => readShigomoriConfig(projectId).catch(() => null)),
+      projectConfigOrNull(projectId),
       listRemotesEffect(projectPath),
     ],
     { concurrency: "unbounded" },
@@ -324,22 +324,6 @@ export const collectProjectHygieneEffect = Effect.fn(
   );
 });
 
-export function collectProjectHygiene(
-  projectId: string,
-  projectPath: string,
-): Promise<WorktreeHygiene[]> {
-  return runGit(collectProjectHygieneEffect(projectId, projectPath));
-}
-
-// Keys are few (projects, worktrees), never a hostile stream, so the
-// capacity is a safety bound rather than a budget. A failed load is
-// never kept (its time to live is zero), so the next ask retries.
-const CACHE_CAPACITY = 10_000;
-const keepSuccessFor =
-  (ttl: Duration.Duration) =>
-  <A, E>(exit: Exit.Exit<A, E>): Duration.Duration =>
-    Exit.isSuccess(exit) ? ttl : Duration.zero;
-
 // The worktree list, cached for long enough to serve one page load.
 //
 // The renderer asks for disk usage one worktree at a time, and each of
@@ -349,21 +333,13 @@ const keepSuccessFor =
 // before the first lookup has resolved, so the cache's join of an
 // in-flight load is what makes it one `git worktree list` per project
 // rather than one per row.
-const identityCache = Effect.runSync(
-  Cache.makeWith(
-    (key: string) => {
-      const [projectId = "", projectPath = ""] = key.split("\u0000");
-      return listWorktreeIdentitiesEffect(projectId, projectPath);
-    },
-    {
-      capacity: CACHE_CAPACITY,
-      timeToLive: keepSuccessFor(Duration.seconds(10)),
-    },
-  ),
-);
+const identityCache = makeTtlCache((key: string) => {
+  const [projectId = "", projectPath = ""] = key.split("\u0000");
+  return listWorktreeIdentitiesEffect(projectId, projectPath);
+}, Duration.seconds(10));
 
 function projectIdentities(projectId: string, projectPath: string) {
-  return Cache.get(identityCache, `${projectId}\u0000${projectPath}`);
+  return getCached(identityCache, `${projectId}\u0000${projectPath}`);
 }
 
 // Fails with UnknownWorktree when the project has no worktree by that id.
@@ -375,14 +351,6 @@ export const findWorktreeForDiskEffect = Effect.fn(
   if (!found) return yield* Effect.fail(unknownWorktreeError(worktreeId));
   return found;
 });
-
-export function findWorktreeForDisk(
-  projectId: string,
-  projectPath: string,
-  worktreeId: string,
-): Promise<WorktreeIdentity> {
-  return runGit(findWorktreeForDiskEffect(projectId, projectPath, worktreeId));
-}
 
 // Three walks at a time, across every call: the renderer asks for each
 // row's size in its own call. Each walk already runs its own pool of
@@ -402,18 +370,10 @@ const diskWalks = Semaphore.makeUnsafe(3);
 // went away. Cache lookups sit inside the slot so a queued worktree
 // whose walk landed in the meantime returns from cache instead of
 // re-walking.
-const diskCache = Effect.runSync(
-  Cache.makeWith(
-    (key: string) => {
-      const [root = "", ...excluded] = key.split("\u0000");
-      return measureDirectoryEffect(root, new Set(excluded));
-    },
-    {
-      capacity: CACHE_CAPACITY,
-      timeToLive: keepSuccessFor(Duration.seconds(60)),
-    },
-  ),
-);
+const diskCache = makeTtlCache((key: string) => {
+  const [root = "", ...excluded] = key.split("\u0000");
+  return measureDirectoryEffect(root, new Set(excluded));
+}, Duration.seconds(60));
 
 export const measureWorktreeDiskEffect = Effect.fn(
   "hygiene.measureWorktreeDisk",
@@ -421,7 +381,7 @@ export const measureWorktreeDiskEffect = Effect.fn(
   projectId: string,
   projectPath: string,
   worktree: WorktreeIdentity,
-) {
+): Effect.fn.Return<WorktreeDiskUsage, GitFailure> {
   const worktreePath = worktree.path;
   // Under the in-project layout a project's worktrees live inside its
   // primary checkout. Each one is measured as its own row, so the
@@ -434,21 +394,7 @@ export const measureWorktreeDiskEffect = Effect.fn(
     )
     .toSorted();
   const { bytes, lastActivityAt, partial } = yield* diskWalks.withPermits(1)(
-    Cache.get(diskCache, [worktreePath, ...nested].join("\u0000")),
+    getCached(diskCache, [worktreePath, ...nested].join("\u0000")),
   );
-  const usage: WorktreeDiskUsage = {
-    worktreeId: worktree.id,
-    bytes,
-    lastActivityAt,
-    partial,
-  };
-  return usage;
+  return { worktreeId: worktree.id, bytes, lastActivityAt, partial };
 });
-
-export function measureWorktreeDisk(
-  projectId: string,
-  projectPath: string,
-  worktree: WorktreeIdentity,
-): Promise<WorktreeDiskUsage> {
-  return runGit(measureWorktreeDiskEffect(projectId, projectPath, worktree));
-}

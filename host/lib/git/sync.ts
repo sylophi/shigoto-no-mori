@@ -7,7 +7,7 @@
 // a rebase and its abort) runs uninterruptible: killing git halfway
 // through one leaves a checkout nobody asked for.
 import { Effect } from "effect";
-import { chunked, runEffect, runGit, runLenientEffect, splitZ } from "./core";
+import { chunked, runEffect, runLenientEffect, splitZ } from "./core";
 import { fetchAllRemotesEffect, listRemotesEffect } from "./remotes";
 
 export const pushFastForwardEffect = Effect.fn("sync.pushFastForward")(
@@ -15,10 +15,6 @@ export const pushFastForwardEffect = Effect.fn("sync.pushFastForward")(
     yield* runEffect(worktreePath, ["push"]);
   },
 );
-
-export function pushFastForward(worktreePath: string): Promise<void> {
-  return runGit(pushFastForwardEffect(worktreePath));
-}
 
 // A fetch, then the fast-forward. `git pull --ff-only` does the same in
 // one process, but as one process the whole thing would have to be
@@ -32,19 +28,11 @@ export const pullFastForwardEffect = Effect.fn("sync.pullFastForward")(
   },
 );
 
-export function pullFastForward(worktreePath: string): Promise<void> {
-  return runGit(pullFastForwardEffect(worktreePath));
-}
-
 export const pushForceWithLeaseEffect = Effect.fn("sync.pushForceWithLease")(
   function* (worktreePath: string) {
     yield* runEffect(worktreePath, ["push", "--force-with-lease"]);
   },
 );
-
-export function pushForceWithLease(worktreePath: string): Promise<void> {
-  return runGit(pushForceWithLeaseEffect(worktreePath));
-}
 
 // Fast-forward onto the already-fetched upstream, no network. What the
 // auto-pull sweep runs right after the app's own fetch, where a `pull`
@@ -58,10 +46,6 @@ export const fastForwardToUpstreamEffect = Effect.fn(
     runEffect(worktreePath, ["merge", "--ff-only", "@{u}"]),
   );
 });
-
-export function fastForwardToUpstream(worktreePath: string): Promise<void> {
-  return runGit(fastForwardToUpstreamEffect(worktreePath));
-}
 
 // Uncommitted changes, untracked files included. Pinned to
 // `--untracked-files=normal` against a user-level
@@ -83,12 +67,6 @@ export const hasUncommittedOrUntrackedEffect = Effect.fnUntraced(function* (
   ]);
   return status.trim().length > 0;
 });
-
-export function hasUncommittedOrUntracked(
-  worktreePath: string,
-): Promise<boolean> {
-  return runGit(hasUncommittedOrUntrackedEffect(worktreePath));
-}
 
 // "Overwrite": throw away the local divergence and snap to the upstream.
 // Fetch first so `@{u}` reflects the current remote tip, then re-check
@@ -171,10 +149,6 @@ export const overwriteFromUpstreamEffect = Effect.fn(
   );
 });
 
-export function overwriteFromUpstream(worktreePath: string): Promise<void> {
-  return runGit(overwriteFromUpstreamEffect(worktreePath));
-}
-
 // Publish: push the current branch to the first configured remote with
 // upstream tracking. `HEAD` resolves to whatever's checked out, and `-u`
 // wires up `branch.<name>.{remote,merge}` so subsequent pulls/pushes
@@ -189,13 +163,6 @@ export const publishCurrentBranchEffect = Effect.fn(
   }
   yield* runEffect(worktreePath, ["push", "-u", first, "HEAD"]);
 });
-
-export function publishCurrentBranch(
-  worktreePath: string,
-  projectPath: string,
-): Promise<void> {
-  return runGit(publishCurrentBranchEffect(worktreePath, projectPath));
-}
 
 // Try rebase first for linear history; on a per-commit conflict abort
 // and fall back to a whole-tree merge. Both abort paths swallow the
@@ -241,10 +208,6 @@ export const pullRebaseOrMergeAndPushEffect = Effect.fn(
   yield* runEffect(worktreePath, ["push"]);
 });
 
-export function pullRebaseOrMergeAndPush(worktreePath: string): Promise<void> {
-  return runGit(pullRebaseOrMergeAndPushEffect(worktreePath));
-}
-
 // Fetch *all* remotes from the project root, not the worktree's tracked
 // upstream: primaryRef can live on a different remote than the branch
 // tracks (e.g. branch tracks fork/feat while primary is origin/main), so
@@ -256,11 +219,3 @@ export const syncWithPrimaryEffect = Effect.fn("sync.syncWithPrimary")(
     yield* rebaseOrMergeAgainst(worktreePath, primaryRef);
   },
 );
-
-export function syncWithPrimary(
-  worktreePath: string,
-  projectPath: string,
-  primaryRef: string,
-): Promise<void> {
-  return runGit(syncWithPrimaryEffect(worktreePath, projectPath, primaryRef));
-}

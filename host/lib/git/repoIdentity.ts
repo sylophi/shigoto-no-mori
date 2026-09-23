@@ -8,38 +8,30 @@
 // interrupted (its git killed) once every caller waiting on it has
 // gone. A root commit and a remote URL essentially never change, so
 // the TTL is the whole staleness rule.
-import { Cache, Duration, Effect, Exit } from "effect";
+import { Duration, Effect } from "effect";
 import { computeRepoIdentity } from "@shared/git/repoIdentity.mts";
+import { getCached, makeTtlCache } from "../util/ttlCache";
 import { promiseRunner, runGit, runUnder } from "./core";
 import { resolveDefaultRefEffect } from "./remotes";
 
-const IDENTITY_TTL = Duration.seconds(60);
-
-const identities = Effect.runSync(
-  Cache.makeWith<string, string | null, unknown>(
-    (projectPath) =>
-      Effect.tryPromise({
-        try: (signal) =>
-          computeRepoIdentity(projectPath, {
-            run: promiseRunner(signal),
-            resolveDefaultRef: (path) =>
-              runUnder(resolveDefaultRefEffect(path), signal),
-          }),
-        catch: (error) => error,
-      }).pipe(Effect.withSpan("repoIdentity.getRepoIdentity")),
-    {
-      // Repositories are few; a safety bound, not a budget.
-      capacity: 10_000,
-      timeToLive: (exit) =>
-        Exit.isSuccess(exit) ? IDENTITY_TTL : Duration.zero,
-    },
-  ),
+const identities = makeTtlCache(
+  (projectPath: string) =>
+    Effect.tryPromise({
+      try: (signal): Promise<string | null> =>
+        computeRepoIdentity(projectPath, {
+          run: promiseRunner(signal),
+          resolveDefaultRef: (path) =>
+            runUnder(resolveDefaultRefEffect(path), signal),
+        }),
+      catch: (error) => error,
+    }).pipe(Effect.withSpan("repoIdentity.getRepoIdentity")),
+  Duration.seconds(60),
 );
 
 export function getRepoIdentityEffect(
   projectPath: string,
 ): Effect.Effect<string | null, unknown> {
-  return Cache.get(identities, projectPath);
+  return getCached(identities, projectPath);
 }
 
 export function getRepoIdentity(projectPath: string): Promise<string | null> {

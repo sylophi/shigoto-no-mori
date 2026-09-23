@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { isCloneableRemote } from "@shared/cloneUrl";
 import { ProjectScopedPayloadSchema } from "./payloads";
+import { NonNegativeInt } from "./ints";
 
 // Sentinel returned by `deriveBranch` when a worktree has no branch and
 // no detached HEAD we can read. Treated as "not a real branch" by every
@@ -20,8 +21,6 @@ const hasNoLeadingDash = (value: string): boolean => !value.startsWith("-");
 export const GitRefNameSchema = Schema.NonEmptyString.check(
   Schema.makeFilter(hasNoLeadingDash, { message: GIT_REF_LEADING_DASH }),
 );
-
-const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 export const ProjectSchema = Schema.Struct({
   id: Schema.String,

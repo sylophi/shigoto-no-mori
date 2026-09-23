@@ -12,6 +12,7 @@ import type { PoolPort } from "@shared/ports/mergeWorktreePorts";
 import { readGlobalConfig } from "./config/global";
 import { binaryOnPath } from "./util/binaries";
 import { ttlMapCache, ttlValueCache } from "./util/ttlCache";
+import { looseStruct } from "@shared/schemas/strict";
 
 const INSTALLED_CACHE_TTL_MS = 30_000;
 // The ports dialog polls every few seconds while open. A TTL past
@@ -84,12 +85,9 @@ const AllocationSchema = Schema.Struct({
 });
 const decodeAllocation = Schema.decodeUnknownOption(AllocationSchema);
 
-const PortPoolStateSchema = Schema.StructWithRest(
-  Schema.Struct({
-    allocations: Schema.optional(Schema.Array(Schema.Unknown)),
-  }),
-  [Schema.Record(Schema.String, Schema.Unknown)],
-);
+const PortPoolStateSchema = looseStruct({
+  allocations: Schema.optional(Schema.Array(Schema.Unknown)),
+});
 
 function portPoolStatePath(): string {
   const dataHome =

@@ -59,36 +59,37 @@ import {
   dirtyApplyViaCli,
   dirtyCaptureViaCli,
 } from "@host/ipc/cliDelegate";
-import { peerApis, peerWorktree } from "@host/ipc/peerSync";
+import { peerApis, type PeerSyncApi, peerWorktree } from "@host/ipc/peerSync";
 import {
   isCommandRefusedError,
   WIRE_CHUNK_BYTES,
 } from "@shared/ipc/socket/frames";
 import { createIdleRegistry } from "@host/lib/idleRegistry";
-import { listBranches } from "@host/lib/git/branches";
-import { readShigomoriConfig } from "@host/lib/config/project";
+import { listBranchesEffect } from "@host/lib/git/branches";
+import { projectConfigOrNull } from "@host/lib/config/project";
 import { pathExists } from "@host/lib/util/paths";
 import { worktreePathForProject } from "@host/lib/worktrees/paths";
-import { listIgnoreRules } from "@host/lib/git/ignoreRules";
+import { listIgnoreRulesEffect } from "@host/lib/git/ignoreRules";
 import {
   cachedIgnoredPaths,
   listWorktreeFolder,
 } from "@host/lib/worktrees/carryOver";
-import { getRepoIdentity } from "@host/lib/git/repoIdentity";
+import { getRepoIdentityEffect } from "@host/lib/git/repoIdentity";
 import {
-  listWorktreeIdentities,
+  listWorktreeIdentitiesEffect,
   type WorktreeIdentity,
 } from "@host/lib/git/worktrees";
 import {
-  deleteRef,
-  hasCommit,
-  localBranchTips,
-  refTip,
-  treeOf,
-  updateRef,
+  deleteRefEffect,
+  hasCommitEffect,
+  localBranchTipsEffect,
+  refTipEffect,
+  treeOfEffect,
+  updateRefEffect,
 } from "@host/lib/git/refs";
 import {
-  findProjectAndWorktreeOrThrow,
+  findProject,
+  findProjectAndWorktree,
   findProjectByIdentityOrThrow,
   findProjectOrThrow,
 } from "@host/lib/projects";
@@ -251,7 +252,7 @@ const dropTransfer = (transferId: string) =>
 // stale incoming/foo blocks any later incoming/foo/bar at git's
 // directory/file ref boundary.
 const sweepRef = (repo: string, ref: string) =>
-  Effect.promise(() => deleteRef(repo, ref).catch(() => {}));
+  Effect.ignore(deleteRefEffect(repo, ref));
 
 // The ignored files a capture leaves behind (see the contract note):
 // listed against the worktree, not the project, so a peer's
@@ -264,15 +265,15 @@ export const ignoredPathsOf = ({
   projectId: string;
   worktreeId: string;
 }) =>
-  hostAttempt(async () => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
+  Effect.gen(function* () {
+    const { worktree } = yield* findProjectAndWorktree(projectId, worktreeId);
+    const [paths, patterns] = yield* Effect.all(
+      [
+        hostAttempt(() => cachedIgnoredPaths(worktree.path)),
+        listIgnoreRulesEffect(worktree.path),
+      ],
+      { concurrency: "unbounded" },
     );
-    const [paths, patterns] = await Promise.all([
-      cachedIgnoredPaths(worktree.path),
-      listIgnoreRules(worktree.path),
-    ]);
     return {
       paths: paths.slice(0, SYNC_IGNORED_PATHS_LIMIT),
       total: paths.length,
@@ -288,7 +289,7 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
   pushStart: hostHandler(({ projectId, bytes }) =>
     Effect.scoped(
       Effect.gen(function* () {
-        yield* hostAttempt(() => findProjectOrThrow(projectId));
+        yield* findProject(projectId);
         const dir = yield* scopedTempDir("sm-sync-recv-");
         const path = join(dir.value, "push.bundle");
         const handle = yield* scopedFile(path, "w");
@@ -358,10 +359,10 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
 
   hasCommits: hostHandler(({ projectId, commits }) =>
     Effect.gen(function* () {
-      const project = yield* hostAttempt(() => findProjectOrThrow(projectId));
+      const project = yield* findProject(projectId);
       const present: string[] = [];
       for (const commit of commits) {
-        if (yield* hostAttempt(() => hasCommit(project.path, commit))) {
+        if (yield* hasCommitEffect(project.path, commit)) {
           present.push(commit);
         }
       }
@@ -371,10 +372,10 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
 
   refTips: hostHandler(({ projectId, refs }) =>
     Effect.gen(function* () {
-      const project = yield* hostAttempt(() => findProjectOrThrow(projectId));
+      const project = yield* findProject(projectId);
       const tips: { ref: string; commit: string }[] = [];
       for (const ref of refs) {
-        const commit = yield* hostAttempt(() => refTip(project.path, ref));
+        const commit = yield* refTipEffect(project.path, ref);
         if (commit !== null) tips.push({ ref, commit });
       }
       return { tips };
@@ -382,19 +383,17 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
   ),
 
   captureDirty: hostHandler(({ projectId, worktreeId }) =>
-    hostAttempt(() =>
-      dirtyCaptureViaCli(findProjectOrThrow(projectId), worktreeId),
+    Effect.flatMap(findProject(projectId), (project) =>
+      hostAttempt(() => dirtyCaptureViaCli(project, worktreeId)),
     ),
   ),
 
   worktreeFolder: hostHandler(({ projectId, worktreeId, relative }) =>
-    hostAttempt(async () => {
-      const { worktree } = await findProjectAndWorktreeOrThrow(
-        projectId,
-        worktreeId,
-      );
-      return listWorktreeFolder(worktree.path, relative);
-    }),
+    Effect.flatMap(
+      findProjectAndWorktree(projectId, worktreeId),
+      ({ worktree }) =>
+        hostAttempt(() => listWorktreeFolder(worktree.path, relative)),
+    ),
   ),
 
   ignoredPaths: hostHandler(ignoredPathsOf),
@@ -406,7 +405,7 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
   bundleStart: hostHandler(({ projectId, refs, haves }) =>
     Effect.scoped(
       Effect.gen(function* () {
-        const project = yield* hostAttempt(() => findProjectOrThrow(projectId));
+        const project = yield* findProject(projectId);
         // refs/haves passed the contract's fail-closed allowlist schemas
         // already; the CLI re-validates with its own complementary shape
         // (see the gate note in shared/ipc/modules/sync.ts) before argv.
@@ -519,15 +518,13 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
           yield* refuseLandingCollision(project, branch, worktreeName);
           const expected = [branchTip, ...(capture ? [capture.commit] : [])];
           for (const commit of expected) {
-            if (!(yield* hostAttempt(() => hasCommit(project.path, commit)))) {
+            if (!(yield* hasCommitEffect(project.path, commit))) {
               return yield* Effect.fail(
                 new Error(`${branch} did not arrive whole on this device.`),
               );
             }
           }
-          yield* hostAttempt(() =>
-            updateRef(project.path, incomingRef, branchTip),
-          );
+          yield* updateRefEffect(project.path, incomingRef, branchTip);
           return yield* landIncoming(
             project,
             { branch, incomingRef, worktreeName, runSetup, capture },
@@ -629,27 +626,18 @@ export const teardownSource = (source: SourceRef) =>
 const sourceChangedSince = (source: SourceRef, receipt: PullReceipt) =>
   Effect.gen(function* () {
     const peer = (yield* peerApis).syncApiFor(source.sourceDeviceId);
-    const branchRef = `refs/heads/${receipt.branch}`;
-    const { tips } = yield* hostAttempt(async () =>
-      Schema.decodeUnknownSync(SyncRefTipsResultSchema)(
-        await peer.refTips({
-          projectId: source.sourceProjectId,
-          refs: [branchRef],
-        }),
-      ),
+    const tip = yield* peerBranchTip(
+      peer,
+      source.sourceProjectId,
+      `refs/heads/${receipt.branch}`,
     );
-    if (
-      tips.find((tip) => tip.ref === branchRef)?.commit !== receipt.branchTip
-    ) {
+    if (tip !== receipt.branchTip) {
       return "the branch on the source device moved after it was brought here.";
     }
-    const fresh = yield* hostAttempt(async () =>
-      Schema.decodeUnknownSync(SyncCaptureDirtyResultSchema)(
-        await peer.captureDirty({
-          projectId: source.sourceProjectId,
-          worktreeId: source.sourceWorktreeId,
-        }),
-      ),
+    const fresh = yield* peerCapture(
+      peer,
+      source.sourceProjectId,
+      source.sourceWorktreeId,
     );
     const changedSince =
       "the source worktree changed after its uncommitted work was captured.";
@@ -657,9 +645,7 @@ const sourceChangedSince = (source: SourceRef, receipt: PullReceipt) =>
     if (!receipt.captured || receipt.captureTree === undefined) {
       return "the source worktree has uncommitted changes that were never brought here.";
     }
-    const project = yield* hostAttempt(() =>
-      findProjectOrThrow(receipt.targetProjectId),
-    );
+    const project = yield* findProject(receipt.targetProjectId);
     const dirtyRef = dirtyRefFor(source.sourceWorktreeId);
     return yield* Effect.gen(function* () {
       yield* fetchBundle(peer, {
@@ -668,9 +654,7 @@ const sourceChangedSince = (source: SourceRef, receipt: PullReceipt) =>
         refs: [dirtyRef],
         haves: [receipt.branchTip],
       });
-      const tree = yield* hostAttempt(() =>
-        treeOf(project.path, fresh.commit ?? ""),
-      );
+      const tree = yield* treeOfEffect(project.path, fresh.commit ?? "");
       return tree === receipt.captureTree ? undefined : changedSince;
     }).pipe(Effect.ensuring(sweepRef(project.path, dirtyRef)));
   });
@@ -680,11 +664,10 @@ const sourceChangedSince = (source: SourceRef, receipt: PullReceipt) =>
 // send captured.
 const sentSourceChangedSince = (sent: SentRef, receipt: SendReceipt) =>
   Effect.gen(function* () {
-    const project = yield* hostAttempt(() =>
-      findProjectOrThrow(sent.projectId),
-    );
-    const tip = yield* hostAttempt(() =>
-      refTip(project.path, `refs/heads/${receipt.branch}`),
+    const project = yield* findProject(sent.projectId);
+    const tip = yield* refTipEffect(
+      project.path,
+      `refs/heads/${receipt.branch}`,
     );
     if (tip !== receipt.branchTip) {
       return "the branch moved after it was sent.";
@@ -703,7 +686,7 @@ const sentSourceChangedSince = (sent: SentRef, receipt: SendReceipt) =>
     ) {
       return "the worktree has uncommitted changes that were never sent.";
     }
-    const tree = yield* hostAttempt(() => treeOf(project.path, commit));
+    const tree = yield* treeOfEffect(project.path, commit);
     return tree === receipt.captureTree ? undefined : changedSince;
   });
 
@@ -751,11 +734,7 @@ const tearDown = (
   // refuseRunningScripts is the app-side guard the local
   // kill-then-delete path deliberately lacks.
   return remove(pulled.captured).pipe(
-    Effect.flatMap((answer) =>
-      hostAttempt(() =>
-        Schema.decodeUnknownSync(DeleteWorktreeResultSchema)(answer),
-      ),
-    ),
+    Effect.flatMap(Schema.decodeUnknownEffect(DeleteWorktreeResultSchema)),
     Effect.map(
       (removed): SyncTeardownSourceResult =>
         removed.ok
@@ -778,6 +757,30 @@ const tearDown = (
   );
 };
 
+// A peer's answers are re-parsed here, not trusted: their hashes flow
+// into LOCAL git argv, and the peer's own dev-build output validation
+// is not this device's wall. The tip of one branch on the peer, or
+// undefined when it has none.
+const peerBranchTip = (
+  peer: PeerSyncApi,
+  projectId: string,
+  branchRef: string,
+) =>
+  hostAttempt(() => peer.refTips({ projectId, refs: [branchRef] })).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(SyncRefTipsResultSchema)),
+    Effect.map(({ tips }) => tips.find((tip) => tip.ref === branchRef)?.commit),
+  );
+
+// A fresh capture of a peer worktree's uncommitted state.
+const peerCapture = (
+  peer: PeerSyncApi,
+  projectId: string,
+  worktreeId: string,
+) =>
+  hostAttempt(() => peer.captureDirty({ projectId, worktreeId })).pipe(
+    Effect.flatMap(Schema.decodeUnknownEffect(SyncCaptureDirtyResultSchema)),
+  );
+
 // Where a landing would refuse, shared by the pull and by the
 // receiving half of a send. Updating an existing branch is out of
 // scope, so a held one refuses with the state the user can act on.
@@ -789,8 +792,8 @@ const refuseLandingCollision = (
   Effect.gen(function* () {
     const [{ local }, existing] = yield* Effect.all(
       [
-        hostAttempt(() => listBranches(project.path)),
-        hostAttempt(() => listWorktreeIdentities(project.id, project.path)),
+        listBranchesEffect(project.path),
+        listWorktreeIdentitiesEffect(project.id, project.path),
       ],
       { concurrency: "unbounded" },
     );
@@ -809,9 +812,7 @@ const refuseLandingCollision = (
     // two checks here refuse before a byte moves.
     if (worktreeName !== undefined) {
       const wanted = worktreeName.toLowerCase();
-      const config = yield* hostAttempt(() =>
-        readShigomoriConfig(project.id),
-      ).pipe(Effect.orElseSucceed(() => null));
+      const config = yield* projectConfigOrNull(project.id);
       const target = worktreePathForProject(project.path, config, worktreeName);
       if (
         existing.some((w) => w.name.toLowerCase() === wanted) ||
@@ -904,11 +905,9 @@ const landIncoming = (
       if (capture === undefined) return { worktree, dirtyApplied: false };
       const sourceDirtyRef = dirtyRefFor(capture.sourceWorktreeId);
       const localDirtyRef = dirtyRefFor(worktree.id);
-      yield* hostAttempt(() =>
-        updateRef(project.path, localDirtyRef, capture.commit),
-      );
+      yield* updateRefEffect(project.path, localDirtyRef, capture.commit);
       if (localDirtyRef !== sourceDirtyRef) {
-        yield* hostAttempt(() => deleteRef(project.path, sourceDirtyRef));
+        yield* deleteRefEffect(project.path, sourceDirtyRef);
       }
       const dirtyApplied = yield* hostAttempt(() =>
         dirtyApplyViaCli(project, worktree.id),
@@ -999,39 +998,20 @@ export const runPullWorktree = (
     // 3. Tip negotiation, then capture. The tip decides whether the
     // branch needs transferring at all: `git bundle create` silently
     // drops a ref covered by a have, so requesting a branch whose tip
-    // we already hold would corrupt the transfer, not thin it.
-    // Both answers are re-parsed here because their hashes flow into
-    // LOCAL git argv: the peer's own dev-build output validation is not
-    // this device's wall.
-    const { tips } = yield* hostAttempt(async () =>
-      Schema.decodeUnknownSync(SyncRefTipsResultSchema)(
-        await peer.refTips({
-          projectId: sourceProjectId,
-          refs: [branchRef],
-        }),
-      ),
-    );
-    const branchTip = tips.find((tip) => tip.ref === branchRef)?.commit;
+    // we already hold would corrupt the transfer, not thin it. Both
+    // answers are re-parsed (see peerBranchTip).
+    const branchTip = yield* peerBranchTip(peer, sourceProjectId, branchRef);
     if (branchTip === undefined) {
       return yield* Effect.fail(
         new Error(`${branch} no longer exists on the source device.`),
       );
     }
     progress({ step: "capture" });
-    const capture = yield* hostAttempt(async () =>
-      Schema.decodeUnknownSync(SyncCaptureDirtyResultSchema)(
-        await peer.captureDirty({
-          projectId: sourceProjectId,
-          worktreeId: sourceWorktreeId,
-        }),
-      ),
-    );
+    const capture = yield* peerCapture(peer, sourceProjectId, sourceWorktreeId);
 
     // 4. Fetch what's missing. Tip already here + clean worktree means
     // nothing crosses at all.
-    const tipIsLocal = yield* hostAttempt(() =>
-      hasCommit(project.path, branchTip),
-    );
+    const tipIsLocal = yield* hasCommitEffect(project.path, branchTip);
     const sourceDirtyRef = dirtyRefFor(sourceWorktreeId);
     const wantRefs = [
       ...(tipIsLocal ? [] : [branchRef]),
@@ -1053,7 +1033,7 @@ export const runPullWorktree = (
         // error before anything is mutated, never as silent corruption.
         const haves = tipIsLocal
           ? [branchTip]
-          : yield* hostAttempt(() => localBranchTips(project.path));
+          : yield* localBranchTipsEffect(project.path);
         yield* fetchBundle(peer, {
           sourceProjectId,
           targetProjectId: project.id,
@@ -1066,9 +1046,7 @@ export const runPullWorktree = (
         progress({ step: "transfer" });
       }
       if (tipIsLocal) {
-        yield* hostAttempt(() =>
-          updateRef(project.path, incomingRef, branchTip),
-        );
+        yield* updateRefEffect(project.path, incomingRef, branchTip);
       }
 
       // 5 and 6. The create on the incoming ref, then the capture
@@ -1109,9 +1087,7 @@ export const runPullWorktree = (
               captureTree:
                 captureCommit === undefined
                   ? undefined
-                  : yield* hostAttempt(() =>
-                      treeOf(project.path, captureCommit),
-                    ),
+                  : yield* treeOfEffect(project.path, captureCommit),
             },
           );
           hooks.onLanded?.(landed.worktree);
@@ -1207,8 +1183,9 @@ export const sendWorktree = (
 
     // 1. The local source. A primary checkout is the project itself,
     // and a detached head has no branch to land.
-    const { project, worktree } = yield* hostAttempt(() =>
-      findProjectAndWorktreeOrThrow(projectId, worktreeId),
+    const { project, worktree } = yield* findProjectAndWorktree(
+      projectId,
+      worktreeId,
     );
     if (
       worktree.isPrimary ||
@@ -1219,9 +1196,9 @@ export const sendWorktree = (
         new Error("Only a worktree on a branch of its own can be sent."),
       );
     }
-    const identity = yield* hostAttempt(() =>
-      getRepoIdentity(project.path),
-    ).pipe(Effect.orElseSucceed(() => null));
+    const identity = yield* getRepoIdentityEffect(project.path).pipe(
+      Effect.orElseSucceed(() => null),
+    );
     if (identity === null) {
       return yield* Effect.fail(
         new Error(
@@ -1238,22 +1215,18 @@ export const sendWorktree = (
     const { projectId: peerProjectId } = yield* fromPeer(
       hostAttempt(() => peer.landCheck({ identity, branch, worktreeName })),
     ).pipe(
-      Effect.flatMap((answer) =>
-        hostAttempt(() =>
-          Schema.decodeUnknownSync(SyncLandCheckResultSchema)(answer),
-        ),
-      ),
+      Effect.flatMap(Schema.decodeUnknownEffect(SyncLandCheckResultSchema)),
     );
 
     // 3. The tip, then the capture, with the peer asked meanwhile which
     // of this repo's tips it holds: the branch's own, and the other
     // local branches' for thinning. One round trip answers both.
     const branchRef = `refs/heads/${branch}`;
-    const branchTip = yield* hostAttempt(() => refTip(project.path, branchRef));
+    const branchTip = yield* refTipEffect(project.path, branchRef);
     if (branchTip === null) {
       return yield* Effect.fail(new Error(`${branch} no longer exists.`));
     }
-    const otherTips = (yield* hostAttempt(() => localBranchTips(project.path)))
+    const otherTips = (yield* localBranchTipsEffect(project.path))
       .filter((tip) => tip !== branchTip)
       .slice(0, SYNC_HAS_COMMITS_LIMIT - 1);
     progress({ step: "capture" });
@@ -1271,9 +1244,9 @@ export const sendWorktree = (
     );
     const captureCommit = capture.captured ? capture.commit : undefined;
     const captured = captureCommit !== undefined;
-    const { present } = yield* hostAttempt(() =>
-      Schema.decodeUnknownSync(SyncHasCommitsResultSchema)(held),
-    );
+    const { present } = yield* Schema.decodeUnknownEffect(
+      SyncHasCommitsResultSchema,
+    )(held);
 
     // 4. Push what the peer lacks. The pull's tip rule from the other
     // side: a branch whose tip the peer holds must not be named, or
@@ -1324,10 +1297,8 @@ export const sendWorktree = (
             }),
           ),
         ).pipe(
-          Effect.flatMap((answer) =>
-            hostAttempt(() =>
-              Schema.decodeUnknownSync(SyncLandWorktreeResultSchema)(answer),
-            ),
+          Effect.flatMap(
+            Schema.decodeUnknownEffect(SyncLandWorktreeResultSchema),
           ),
         );
         remember(
@@ -1341,7 +1312,7 @@ export const sendWorktree = (
             captureTree:
               captureCommit === undefined
                 ? undefined
-                : yield* hostAttempt(() => treeOf(project.path, captureCommit)),
+                : yield* treeOfEffect(project.path, captureCommit),
           },
         );
         hooks.onLanded?.(answered.worktree, worktree);

@@ -22,6 +22,7 @@
 import { Clock, Deferred, Effect, Fiber } from "effect";
 import type { StreamChild } from "@host/fileSync/spawn";
 import { errorMessageOf } from "@shared/errors";
+import { containedSync } from "@shared/util/contained";
 import type {
   MirrorCreateInput,
   MirrorSessionRaw,
@@ -30,8 +31,9 @@ import { lineSplitter } from "@host/lib/util/ndjson";
 import { MIRROR_GATEWAY_TOKEN_ENV } from "./gateway";
 import {
   BACKOFF_LADDER_MS,
-  backoffDelayMs,
+  ranAtLeast,
   STABLE_CONNECTION_MS,
+  superviseLadder,
 } from "@shared/remote/supervisor";
 
 export type MirrorDaemonStatus =
@@ -98,11 +100,7 @@ export function createMirrorDaemon(deps: {
   // child's stream callbacks; a throw from it must not end the loop
   // (a defect nothing reports) or the child's reader.
   function notifyChange(): void {
-    try {
-      deps.onChange?.();
-    } catch (error) {
-      log(`[mirror] onChange threw: ${errorMessageOf(error)}`);
-    }
+    containedSync("[mirror] onChange threw", () => deps.onChange?.(), log);
   }
 
   function setStatus(next: MirrorDaemonStatus): void {
@@ -207,27 +205,15 @@ export function createMirrorDaemon(deps: {
     });
     const code = yield* Deferred.await(exited);
     log(`[mirror] daemon exited unexpectedly (code ${code}), restarting`);
-    const stable =
-      (yield* Clock.currentTimeMillis) - spawnedAt >= STABLE_RUN_MS;
+    const stable = yield* ranAtLeast(spawnedAt, STABLE_RUN_MS);
     setStatus("starting");
     notifyChange();
     return { stable };
   });
 
-  const supervise: Effect.Effect<void> = Effect.gen(function* () {
-    let rung = 0;
-    while (true) {
-      const { stable } = yield* runOnce;
-      if (stable) rung = 0;
-      const delay = backoffDelayMs(RESTART_LADDER_MS, rung);
-      rung += 1;
-      yield* Effect.sleep(delay);
-    }
-  });
-
   function start(): void {
     if (loop !== null) return;
-    loop = Effect.runFork(supervise);
+    loop = Effect.runFork(superviseLadder(RESTART_LADDER_MS, runOnce));
   }
 
   // Closes the control pipe (the daemon's exit signal) and, as a

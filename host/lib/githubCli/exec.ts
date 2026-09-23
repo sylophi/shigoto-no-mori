@@ -3,6 +3,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { Effect, Schema } from "effect";
+import { classifyExecFailure } from "../util/execFailure";
 
 const execFileP = promisify(execFile);
 
@@ -57,52 +58,28 @@ export class GhSpawnError extends Schema.TaggedError<GhSpawnError>()(
 
 export type GhFailure = GhError | GhSpawnError;
 
-// execFile's rejection, as the promisified form hands it over.
-interface ExecFileFailure {
-  code?: unknown;
-  signal?: unknown;
-  killed?: unknown;
-  stdout?: unknown;
-  stderr?: unknown;
-  message?: unknown;
-}
-
-function asText(value: unknown): string {
-  if (typeof value === "string") return value;
-  return Buffer.isBuffer(value) ? value.toString("utf8") : "";
-}
-
-// The typed form of an execFile rejection, on the rules of the git
-// runner (host/lib/git/core.ts): a numeric `code` is gh's exit status,
-// a signal is a kill (`killed` marks Node's own, the timeout; a
-// cancelled run's rejection is never read, its fiber is interrupted),
-// Node's maxBuffer kill is gh output the app can't hold, and anything
-// else is gh never starting.
+// The typed form of an execFile rejection (host/lib/util/execFailure.ts
+// sorts it). Node's maxBuffer kill is gh output the app can't hold.
 function ghFailure(err: unknown): GhFailure {
-  const failure =
-    typeof err === "object" && err !== null ? (err as ExecFileFailure) : {};
-  const { code, signal, killed, stdout, stderr } = failure;
-  if (code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
-    return new GhError({
-      stderr: "gh produced more output than the app can hold.",
-      stdout: asText(stdout),
-      exitCode: null,
-      timedOut: false,
-    });
+  const failure = classifyExecFailure(err);
+  switch (failure.kind) {
+    case "truncated":
+      return new GhError({
+        stderr: "gh produced more output than the app can hold.",
+        stdout: failure.stdout,
+        exitCode: null,
+        timedOut: false,
+      });
+    case "exit":
+      return new GhError({
+        stderr: failure.stderr,
+        stdout: failure.stdout,
+        exitCode: failure.exitCode,
+        timedOut: failure.killed,
+      });
+    case "spawn":
+      return new GhSpawnError({ code: failure.code, message: failure.message });
   }
-  if (typeof code === "number" || typeof signal === "string") {
-    return new GhError({
-      stderr: asText(stderr),
-      stdout: asText(stdout),
-      exitCode: typeof code === "number" ? code : null,
-      timedOut: killed === true,
-    });
-  }
-  return new GhSpawnError({
-    code: typeof code === "string" ? code : null,
-    message:
-      typeof failure.message === "string" ? failure.message : String(err),
-  });
 }
 
 // One gh run as an Effect: its output, or a typed failure. The fiber's

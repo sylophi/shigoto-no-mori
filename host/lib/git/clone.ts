@@ -2,7 +2,7 @@ import { stat } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { isENOENT, pathExists } from "@host/lib/util/paths";
-import { GitError, runEffect, runGit } from "./core";
+import { GitError, promiseStep, runEffect, runGit } from "./core";
 
 // Clones `url` into `parentDir/name` and returns the new checkout's
 // path. The payload schema has already held the URL to a real remote
@@ -13,15 +13,12 @@ export const cloneRepoEffect = Effect.fn("clone.cloneRepo")(function* (
   parentDir: string,
   name: string,
 ) {
-  const parent = yield* Effect.tryPromise({
-    try: () =>
-      stat(parentDir).catch((error: unknown) => {
-        if (isENOENT(error)) return null;
-        throw error;
-      }),
-    catch: (error) =>
-      error instanceof Error ? error : new Error(String(error)),
-  });
+  const parent = yield* promiseStep(() =>
+    stat(parentDir).catch((error: unknown) => {
+      if (isENOENT(error)) return null;
+      throw error;
+    }),
+  );
   if (!parent?.isDirectory()) {
     return yield* Effect.fail(new Error(`${parentDir} is not a folder`));
   }

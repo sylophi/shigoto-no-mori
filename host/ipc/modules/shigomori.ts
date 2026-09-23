@@ -8,7 +8,7 @@ import {
   readWorktreeData,
   writeWorktreeData,
 } from "@host/lib/config/project";
-import { findProjectOrThrow } from "@host/lib/projects";
+import { findProject } from "@host/lib/projects";
 import { hostAttempt, hostHandler } from "@host/runtime";
 import { shigomoriWriteViaCli } from "../cliDelegate";
 
@@ -18,7 +18,7 @@ export const shigomoriHandlers: Handlers<
 > = {
   read: hostHandler(({ projectId }) =>
     Effect.gen(function* () {
-      const project = yield* hostAttempt(() => findProjectOrThrow(projectId));
+      const project = yield* findProject(projectId);
       return yield* hostAttempt(() => readShigomoriConfig(project.id));
     }),
   ),
@@ -42,7 +42,7 @@ export const shigomoriHandlers: Handlers<
       // Validate projectId against the in-memory project list before
       // any path construction, so a bogus id can't read outside
       // projects/.
-      yield* hostAttempt(() => findProjectOrThrow(projectId));
+      yield* findProject(projectId);
       return yield* hostAttempt(() => readWorktreeData(projectId, worktreeId));
     }),
   ),
@@ -52,10 +52,10 @@ export const shigomoriHandlers: Handlers<
       // The renderer only surfaces a notes UI for managed worktrees and
       // the primary checkout, so we don't re-verify here. Enforcing the
       // "no external state" rule would mean shelling out to `git
-      // worktree list` on every save. findProjectOrThrow + the
+      // worktree list` on every save. findProject + the
       // WorktreeIdSchema regex keep the path-build safe against
       // malformed input.
-      yield* hostAttempt(() => findProjectOrThrow(projectId));
+      yield* findProject(projectId);
       yield* hostAttempt(() => writeWorktreeData(projectId, worktreeId, data));
       return undefined;
     }),

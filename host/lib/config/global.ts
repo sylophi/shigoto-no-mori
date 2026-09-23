@@ -4,19 +4,11 @@
 // (use logs, sort and collapse preferences) and the per-project configs
 // at <dataDir>/projects/<projectId>.json. Appearance is client
 // config and lives in main/electron/clientConfig.ts instead.
-import {
-  Effect,
-  Exit,
-  Fiber,
-  PubSub,
-  Scope,
-  Semaphore,
-  Stream,
-  type Types,
-} from "effect";
+import { Effect, PubSub, type Types } from "effect";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
-import { errorMessageOf } from "@shared/errors";
+import { followPubSub } from "@shared/util/contained";
+import { createLimiter } from "@shared/util/limit";
 import { safeDecodeWith } from "@shared/ipc/codec";
 import { DEFAULT_SOCKET_PORT } from "@shared/ipc/socket/frames";
 import {
@@ -78,34 +70,10 @@ export async function readGlobalConfigFresh(): Promise<GlobalConfig> {
 // document, and the renderer writeChain that serializes local writes never
 // sees the remote path.
 //
-// One permit, so it is mutual exclusion and nothing more. Effect's
-// semaphore is not a FIFO: a release wakes the waiters and whichever
-// resumes first takes the permit, so two queued writes may run in the
-// opposite order they arrived. That is safe here because nothing orders
-// two writes that are waiting at the same time. A caller whose write
-// must land after another's (the renderer's writeChain, a peer's Save
-// button, disabled while its patch is pending) sends it only once the
-// first one answered, so it can never be queued beside it; two writes
-// queued together come from sources that did not see each other, and
-// either order is one the same two sources could have produced by
-// arriving a moment apart. What the lock guarantees, that no write's
-// read-then-write straddles another write, holds in every order: each
-// read-modify-write reads its base (a fresh read, or the ensure path's
-// locked file read) inside the permit.
-const configWriteLock = Semaphore.makeUnsafe(1);
-
-export function withGlobalConfigWriteLock<T>(
-  task: () => Promise<T>,
-): Promise<T> {
-  // A rejected task releases the permit (withPermits runs the release
-  // on every exit), so one failure does not wedge later writes, and the
-  // caller sees the task's own rejection.
-  return Effect.runPromise(
-    configWriteLock.withPermits(1)(
-      Effect.tryPromise({ try: task, catch: (error) => error }),
-    ),
-  );
-}
+// A FIFO limiter (shared/util/limit.ts), so queued writes land in the
+// order they arrived. A rejected task frees the slot, and the caller
+// sees the task's own rejection.
+export const withGlobalConfigWriteLock = createLimiter(1);
 
 // Config-change reconcilers. Every change path (the IPC write, an
 // external CLI write picked up by the state watcher, and nuke wiping
@@ -124,50 +92,16 @@ export function withGlobalConfigWriteLock<T>(
 type ConfigChangeListener = () => void;
 const configChanges = Effect.runSync(PubSub.unbounded<void>());
 
-// The changes as a Stream, for a consumer written as an Effect.
-export const globalConfigChanges: Stream.Stream<void> =
-  Stream.fromPubSub(configChanges);
-
+// Subscribed before it returns (followPubSub), so an invalidate right
+// after reaches the new listener.
 export function onGlobalConfigChange(
   listener: ConfigChangeListener,
 ): () => void {
-  // Subscribed here, synchronously, so an invalidate right after this
-  // returns is already delivered to the new listener. The subscription
-  // lives in its own scope, closed on unsubscribe.
-  const scope = Scope.makeUnsafe();
-  const subscription = Effect.runSync(
-    PubSub.subscribe(configChanges).pipe(Scope.provide(scope)),
+  return followPubSub(
+    configChanges,
+    "[config] change listener failed",
+    listener,
   );
-  let active = true;
-  const fiber = Effect.runFork(
-    Stream.fromSubscription(subscription).pipe(
-      Stream.runForEach(() =>
-        Effect.sync(() => {
-          // A change already queued when the caller unsubscribed is
-          // not delivered.
-          if (!active) return;
-          // Contained: a throw would end this subscriber for good, with
-          // a defect nothing reports.
-          try {
-            listener();
-          } catch (error) {
-            console.warn(
-              `[config] change listener failed: ${errorMessageOf(error)}`,
-            );
-          }
-        }),
-      ),
-    ),
-  );
-  return () => {
-    if (!active) return;
-    active = false;
-    Effect.runFork(
-      Fiber.interrupt(fiber).pipe(
-        Effect.andThen(Scope.close(scope, Exit.void)),
-      ),
-    );
-  };
 }
 
 // For callers that delete config.json out from under the cache (nuke):

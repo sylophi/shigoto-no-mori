@@ -16,7 +16,7 @@ import {
 } from "@shared/schemas";
 import { readGlobalConfig } from "@host/lib/config/global";
 import { readShigomoriConfig } from "@host/lib/config/project";
-import { stateStore } from "@host/lib/config/store";
+import { LAUNCHER_USE_LOG_KEY, stateStore } from "@host/lib/config/store";
 import {
   deepLinkFor,
   type DetectedApp,
@@ -26,11 +26,12 @@ import {
   launchDetected,
 } from "@host/lib/launchers";
 import { getGithubRepoInfo, githubRepoUrl } from "@host/lib/githubCli/remote";
+import { findProject, findProjectAndWorktreeOrThrow } from "@host/lib/projects";
 import {
-  findProjectAndWorktreeOrThrow,
-  findProjectOrThrow,
-} from "@host/lib/projects";
-import { countWithin, pruneAndPush } from "@host/lib/util/useLog";
+  bumpBestEffort,
+  countWithin,
+  pruneAndPush,
+} from "@host/lib/util/useLog";
 import { hostAttempt, hostHandler, requireService } from "@host/runtime";
 
 // The electron layer provides shell.openExternal. Keeping it behind a
@@ -51,7 +52,6 @@ const launchersImpl = requireService(
 // Rolling-window usage so the launcher row adapts when the user switches
 // tools. Each entry in the log is a launch timestamp; the score is the
 // count of timestamps within the window.
-const USE_LOG_KEY = "launcherUseLog";
 
 type UseLogMap = Record<string, number[]>;
 
@@ -106,7 +106,7 @@ const webEntriesFor = (projectPath: string) =>
 // order stays put while the user interacts. It only re-sorts when they
 // navigate away and back (or the cache goes stale).
 const getLaunchersForProject = Effect.fnUntraced(function* (projectId: string) {
-  const project = yield* hostAttempt(() => findProjectOrThrow(projectId));
+  const project = yield* findProject(projectId);
   const [detected, projectConfig, globalConfig, web] = yield* Effect.all(
     [
       hostAttempt(() => detectApps()),
@@ -129,7 +129,7 @@ const getLaunchersForProject = Effect.fnUntraced(function* (projectId: string) {
   const hidden = new Set(globalConfig.hiddenLaunchers ?? []);
   const entries = resolvable.filter((e) => !hidden.has(e.id));
 
-  const log = stateStore.readHint<UseLogMap>(USE_LOG_KEY, {});
+  const log = stateStore.readHint<UseLogMap>(LAUNCHER_USE_LOG_KEY, {});
   const now = Date.now();
   return {
     entries: entries.toSorted((a, b) => {
@@ -141,26 +141,17 @@ const getLaunchersForProject = Effect.fnUntraced(function* (projectId: string) {
   };
 });
 
-// Best-effort: the app has already opened by the time this runs, and a
-// malformed use log (which the strict read refuses as a whole) must not
-// report that launch as failed. Logged once per run, as the project use
-// log does (projects/usage.ts).
-let bumpFailureLogged = false;
+// Best-effort: the app has already opened by the time this runs.
 function bumpUseCount(launcherId: string): void {
-  try {
+  bumpBestEffort("launchers", () => {
     // updateKey, not readKey + writeKey: the CLI (`sm open`) bumps the
     // same key under the state lock, and a read taken outside it would
     // silently clobber a concurrent terminal-side bump.
-    stateStore.updateKey<UseLogMap>(USE_LOG_KEY, {}, (log) => {
+    stateStore.updateKey<UseLogMap>(LAUNCHER_USE_LOG_KEY, {}, (log) => {
       log[launcherId] = pruneAndPush(log[launcherId] ?? [], Date.now());
       return log;
     });
-  } catch (error) {
-    if (!bumpFailureLogged) {
-      bumpFailureLogged = true;
-      console.warn("[launchers] use log not recorded:", error);
-    }
-  }
+  });
 }
 
 async function launch(

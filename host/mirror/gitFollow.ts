@@ -44,6 +44,7 @@
 import { Effect, Exit, Fiber, Queue, Schema, Scope } from "effect";
 import type { Project } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
+import { contained, containedSync } from "@shared/util/contained";
 import {
   GitStateSchema,
   type MirrorGitStatus,
@@ -95,11 +96,8 @@ type FollowRecord = {
   session: FollowableSession;
   status: MirrorGitStatus;
   agreed: GitStateCore | null;
-  // The session's reconcile queue, set by its drain fiber as it
-  // starts, and whether a signal came before then (the fiber queues it
-  // once it has the queue).
-  queue: Queue.Queue<void> | null;
-  early: boolean;
+  // The session's reconcile signals, drained by its fiber.
+  queue: Queue.Queue<void>;
   drain: Fiber.Fiber<void> | null;
   stopIndexWatch: (() => void) | null;
 };
@@ -130,8 +128,7 @@ type Outcome = { applied: true } | { applied: false; reason: string };
 // Asks for a reconcile. One in flight, one queued: the queue slides,
 // so a signal while one is already waiting is absorbed by it.
 function trigger(record: FollowRecord): void {
-  if (record.queue === null) record.early = true;
-  else Queue.offerUnsafe(record.queue, undefined);
+  Queue.offerUnsafe(record.queue, undefined);
 }
 
 export function createGitFollower(deps: {
@@ -162,13 +159,12 @@ export function createGitFollower(deps: {
   function loadStored(): void {
     if (loaded) return;
     loaded = true;
-    try {
-      stored = deps.agreedStore?.load() ?? {};
-    } catch (error) {
-      log(
-        `[mirror] git follow: agreed store unreadable: ${errorMessageOf(error)}`,
-      );
-    }
+    stored =
+      containedSync(
+        "[mirror] git follow: agreed store unreadable",
+        () => deps.agreedStore?.load(),
+        log,
+      ) ?? {};
   }
 
   function setStatus(record: FollowRecord, status: MirrorGitStatus): void {
@@ -183,13 +179,11 @@ export function createGitFollower(deps: {
   }
 
   function persist(): void {
-    try {
-      deps.agreedStore?.save(stored);
-    } catch (error) {
-      log(
-        `[mirror] git follow: agreed store unwritable: ${errorMessageOf(error)}`,
-      );
-    }
+    containedSync(
+      "[mirror] git follow: agreed store unwritable",
+      () => deps.agreedStore?.save(stored),
+      log,
+    );
   }
 
   function setAgreed(record: FollowRecord, agreed: GitStateCore): void {
@@ -221,15 +215,7 @@ export function createGitFollower(deps: {
     );
     record.drain = Fiber.runIn(
       Effect.runFork(
-        Effect.gen(function* () {
-          const queue = yield* Queue.sliding<void>(1);
-          record.queue = queue;
-          if (record.early) yield* Queue.offer(queue, undefined);
-          while (true) {
-            yield* Queue.take(queue);
-            yield* reconcileOnce;
-          }
-        }),
+        Effect.forever(Effect.andThen(Queue.take(record.queue), reconcileOnce)),
       ),
       followScope(),
     );
@@ -519,8 +505,7 @@ export function createGitFollower(deps: {
         session,
         status: { status: "off", detail: "" },
         agreed: stored[id] ?? null,
-        queue: null,
-        early: false,
+        queue: Effect.runSync(Queue.sliding<void>(1)),
         drain: null,
         stopIndexWatch: null,
       };
@@ -555,15 +540,9 @@ export function createGitFollower(deps: {
         sweeper = Fiber.runIn(
           Effect.runFork(
             Effect.sleep(every).pipe(
+              // Contained, for the drain's reason.
               Effect.andThen(
-                Effect.sync(() => {
-                  // Contained, for the drain's reason.
-                  try {
-                    reconcileAll();
-                  } catch (error) {
-                    log(`[mirror] git follow sweep: ${errorMessageOf(error)}`);
-                  }
-                }),
+                contained("[mirror] git follow sweep", reconcileAll, log),
               ),
               Effect.forever,
             ),

@@ -55,6 +55,7 @@ import {
   type SupervisorRuntime,
   type SupervisorStatus,
 } from "@shared/remote/supervisor";
+import { containedSync } from "@shared/util/contained";
 import { createLimiter } from "@shared/util/limit";
 
 // The deadline for one dial phase: the ticket mint, and separately the
@@ -343,13 +344,9 @@ export function createHubConnectionCore(
         if (text === HUB_PONG) return;
         // Wrap so a throw cannot escape into the platform's event
         // delivery and become an uncaught exception (M4).
-        try {
-          nextLink.handleMessage(text);
-        } catch (error) {
-          console.warn(
-            `[hub] inbound message handler threw: ${errorMessageOf(error)}`,
-          );
-        }
+        containedSync("[hub] inbound message handler threw", () =>
+          nextLink.handleMessage(text),
+        );
       });
       // The post-close terminate grace (armed by the connection's
       // close below): cleared once the platform close lands, and never

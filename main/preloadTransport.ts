@@ -14,7 +14,7 @@
 // broadcasts buildApi would have exposed as methods, and nothing else
 // that happens to ride ipcRenderer.
 import { ipcRenderer } from "electron";
-import { allContractModules } from "@shared/ipc/client";
+import { BROADCAST_CHANNELS, INVOKE_CHANNELS } from "@shared/ipc/channels";
 import type { InvokeEnvelope } from "@shared/ipc/wireError";
 
 // ipcMain.handle resolves the envelope itself, so a rejection here is
@@ -25,15 +25,10 @@ import type { InvokeEnvelope } from "@shared/ipc/wireError";
 // else. The second group is the error's class name, whatever it is.
 const INVOKE_WRAPPER = /^Error invoking remote method '[^']*': (?:\w+: )?/;
 
-const invokeChannels = new Set<string>();
-const broadcastChannels = new Set<string>();
-for (const module of allContractModules) {
-  for (const def of Object.values(module.calls)) {
-    (def.kind === "invoke" ? invokeChannels : broadcastChannels).add(
-      def.channel,
-    );
-  }
-}
+// The schema-free lists (shared/ipc/channels.ts): the preload must not
+// carry every contract schema for two sets of names.
+const invokeChannels = new Set(INVOKE_CHANNELS);
+const broadcastChannels = new Set(BROADCAST_CHANNELS);
 
 export type ElectronBridgeTransport = {
   invoke(channel: string, input: unknown): Promise<InvokeEnvelope>;

@@ -1,10 +1,9 @@
 import { Effect } from "effect";
-import { UnknownProject } from "@shared/errors";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import type { Project } from "@shared/schemas";
-import { readShigomoriConfig } from "@host/lib/config/project";
+import { projectConfigOrNull } from "@host/lib/config/project";
 import {
   checkoutBranchEffect,
   renameBranchEffect,
@@ -36,7 +35,7 @@ import {
   listWorktreesEffect,
   type WorktreeIdentity,
 } from "@host/lib/git/worktrees";
-import { findProjectOrThrow } from "@host/lib/projects";
+import { findProject, findProjectAndWorktree } from "@host/lib/projects";
 import {
   getRunningScriptWorktrees,
   withDeleteInflight,
@@ -66,50 +65,16 @@ export function notifierFor(ctx: HandlerContext) {
   };
 }
 
-// The project a handler names, failing typed (UnknownProject) when the
-// registry has no such id. Anything else the lookup throws (an
-// unreadable registry) is a defect, which rejects the call as the throw
-// did. Shared with the branches and hygiene handlers.
-export function projectEffect(
-  projectId: string,
-): Effect.Effect<Project, UnknownProject> {
-  return Effect.suspend(() => {
-    try {
-      return Effect.succeed(findProjectOrThrow(projectId));
-    } catch (error) {
-      return error instanceof UnknownProject
-        ? Effect.fail(error)
-        : Effect.die(error);
-    }
-  });
-}
-
-// The preamble every worktree-scoped handler opens with (the Effect
-// form of findProjectAndWorktreeOrThrow): UnknownProject, then
-// UnknownWorktree.
-const projectAndWorktree = Effect.fnUntraced(function* (
-  projectId: string,
-  worktreeId: string,
-) {
-  const project = yield* projectEffect(projectId);
-  const worktree = yield* findWorktreeIdentityEffect(
-    project.id,
-    project.path,
-    worktreeId,
-  );
-  return { project, worktree };
-});
-
 // The worktree a read-only handler asks about.
 const worktreeOf = (projectId: string, worktreeId: string) =>
-  Effect.map(projectAndWorktree(projectId, worktreeId), (r) => r.worktree);
+  Effect.map(findProjectAndWorktree(projectId, worktreeId), (r) => r.worktree);
 
 export const worktreesHandlers: Handlers<
   typeof worktreesContract,
   HandlerContext
 > = {
   list: hostHandler(({ projectId }) =>
-    Effect.flatMap(projectEffect(projectId), (project) =>
+    Effect.flatMap(findProject(projectId), (project) =>
       listWorktreesEffect(project.id, project.path),
     ),
   ),
@@ -119,7 +84,7 @@ export const worktreesHandlers: Handlers<
   // leaves stops waiting, never the lifecycle halfway.
   create: hostHandler(
     ({ projectId, worktreeName, branchName, base, checkout }, ctx) =>
-      Effect.flatMap(projectEffect(projectId), (project) =>
+      Effect.flatMap(findProject(projectId), (project) =>
         hostAttempt(() =>
           createViaCli(
             project,
@@ -131,13 +96,13 @@ export const worktreesHandlers: Handlers<
   ),
 
   convertExternal: hostHandler(({ projectId, worktreeId }, ctx) =>
-    Effect.flatMap(projectEffect(projectId), (project) =>
+    Effect.flatMap(findProject(projectId), (project) =>
       hostAttempt(() => adoptViaCli(project, worktreeId, notifierFor(ctx))),
     ),
   ),
 
   relocate: hostHandler(({ projectId, worktreeId, destinationPath }) =>
-    Effect.flatMap(projectEffect(projectId), (project) =>
+    Effect.flatMap(findProject(projectId), (project) =>
       hostAttempt(() =>
         relocateWorktreeToManagedPath(project, worktreeId, destinationPath),
       ),
@@ -149,7 +114,7 @@ export const worktreesHandlers: Handlers<
       { projectId, worktreeId, force, skipCleanup, refuseRunningScripts },
       ctx,
     ) =>
-      Effect.flatMap(projectEffect(projectId), (project) =>
+      Effect.flatMap(findProject(projectId), (project) =>
         hostAttempt(() => {
           // Local delete kills scripts by design (withDeleteInflight
           // reaps them). The transplant orchestrator refuses instead,
@@ -325,7 +290,7 @@ export const worktreesHandlers: Handlers<
     ),
   ),
   switchToPrimaryAndDeleteBranch: hostHandler((input) =>
-    Effect.flatMap(projectEffect(input.projectId), (project) =>
+    Effect.flatMap(findProject(input.projectId), (project) =>
       hostAttempt(() => doneViaCli(project, input.worktreeId)),
     ),
   ),
@@ -336,9 +301,7 @@ const resolvePrimaryRef = Effect.fnUntraced(function* (
   projectId: string,
   projectPath: string,
 ) {
-  const config = yield* Effect.promise(() =>
-    readShigomoriConfig(projectId).catch(() => null),
-  );
+  const config = yield* projectConfigOrNull(projectId);
   return yield* resolveDefaultBranchEffect(projectPath, config?.defaultBranch);
 });
 
@@ -356,7 +319,7 @@ function mutateAndDescribeWith<A, E>(
   ) => Effect.Effect<A, E, HostServices>,
 ) {
   return Effect.gen(function* () {
-    const { project, worktree } = yield* projectAndWorktree(
+    const { project, worktree } = yield* findProjectAndWorktree(
       projectId,
       worktreeId,
     );

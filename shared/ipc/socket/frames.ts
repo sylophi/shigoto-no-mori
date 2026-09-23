@@ -20,7 +20,12 @@
 // req carrying a chunk stays under the inbound cap.
 import { Effect, Schema } from "effect";
 import { errorTagOf } from "../../errorOf.ts";
-import { type AnyCodec, type CodecOut, safeDecodeWith } from "../codec.ts";
+import {
+  type AnyCodec,
+  type CodecOut,
+  parseWireJson,
+  safeDecodeWith,
+} from "../codec.ts";
 import { WireErrorShapeSchema } from "../wireError.ts";
 import { HANDSHAKE_NONCE_PATTERN } from "./proof";
 
@@ -346,7 +351,7 @@ export function decodeFrame<C extends AnyCodec>(
 ): CodecOut<C> | null {
   let raw: unknown;
   try {
-    raw = JSON.parse(text);
+    raw = parseWireJson(text);
   } catch {
     return null;
   }

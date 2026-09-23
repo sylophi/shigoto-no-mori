@@ -5,6 +5,7 @@
 // files exist for managed worktrees and the primary checkout (the main repo
 // root); other external worktrees deliberately have no persisted state.
 import { join } from "node:path";
+import { Effect } from "effect";
 import { decodeWith } from "@shared/ipc/codec";
 import {
   type ShigomoriConfig,
@@ -65,6 +66,14 @@ export async function readShigomoriConfig(
   projectId: string,
 ): Promise<ShigomoriConfig | null> {
   return configCache.get(projectId);
+}
+
+// The project's config, or null when it can't be read, for the readers
+// that fall back to the defaults.
+export function projectConfigOrNull(
+  projectId: string,
+): Effect.Effect<ShigomoriConfig | null> {
+  return Effect.promise(() => readShigomoriConfig(projectId).catch(() => null));
 }
 
 export async function readWorktreeData(

@@ -52,7 +52,13 @@ import {
   HUB_ROUTES,
 } from "@shared/hub/protocol";
 import { STABLE_CONNECTION_MS } from "@shared/remote/supervisor";
-import { makeProof, waitFor } from "./lib/checkKit.mjs";
+import {
+  captureWarnings,
+  makeProof,
+  promptly,
+  settle as settleTurns,
+  waitFor,
+} from "./lib/checkKit.mjs";
 
 const { check, done, fail } = makeProof("hub-dial proof");
 
@@ -80,29 +86,9 @@ const presence = (...online) => JSON.stringify({ t: "presence", online });
 // encoding and not only the presence of the ticket.
 const ticketFor = (n) => `tk/${n} +=?&`;
 
-// The forked loop runs on Effect's scheduler, which dispatches on
-// setImmediate, and the mint is a promise the dial awaits. A few turns
-// let a woken fiber reach its next status before an assertion reads it.
-async function settle() {
-  for (let i = 0; i < 8; i += 1) {
-    // oxlint-disable-next-line no-await-in-loop -- turns are sequential by nature
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-}
-
-// Fails the check instead of hanging the process when a promise that
-// should settle at once (a stop() under a frozen clock) never does.
-async function promptly(promise, what) {
-  let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${what} did not settle`)), 500);
-  });
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
+// The mint is a promise the dial awaits, so a woken fiber needs a few
+// more turns here than elsewhere.
+const settle = () => settleTurns(8);
 
 // One fake HubSocketAdapter per openSocket call, kept so a check can
 // deliver text, fire the close and count what the core did to it.
@@ -251,17 +237,6 @@ const SUPERSEDED = {
   reason: "superseded",
   message: "another instance of this device took over the device hub",
 };
-
-// Swaps console.warn for a recorder for the rest of the check.
-function captureWarnings(track) {
-  const warned = [];
-  const warn = console.warn;
-  console.warn = (...args) => warned.push(args.map(String).join(" "));
-  track(() => {
-    console.warn = warn;
-  });
-  return warned;
-}
 
 async function main() {
   const began = performance.now();

@@ -39,7 +39,7 @@ import {
 } from "@shared/ipc/socket/channels";
 import type { ClientTransport } from "@shared/ipc/transport";
 import { createLimiter } from "@shared/util/limit";
-import { rebuildWireError } from "../wireError.ts";
+import { rebuildWireFailure } from "../wireError.ts";
 
 // A connect attempt failed before the welcome landed. `code` is the
 // close code when the failure came from a socket close (null on a
@@ -635,23 +635,21 @@ export function openDevice(
       pending.delete(frame.id);
       if (frame.ok) {
         entry.resolve(frame.result);
-      } else if (frame.error !== undefined) {
-        // The typed form: the handler's tag and fields, rebuilt so
-        // the shared/errors.ts matchers read the tag on this wire as
-        // they do in-process.
-        entry.reject(rebuildWireError(frame.error, frame.message));
-      } else if (frame.code === COMMAND_REFUSED_CODE) {
+      } else if (
+        frame.error === undefined &&
+        frame.code === COMMAND_REFUSED_CODE
+      ) {
         // The host's gate refused the command (the LAN wire is
         // read-only). Typed, message preserved, so a caller can
         // distinguish "that machine will not run commands from here"
         // from a real handler failure. An old host sends no code and
-        // falls through to the plain Error below.
+        // falls through to the plain Error.
         entry.reject(new CommandRefusedError(frame.message));
       } else {
-        // A plain Error carrying the host's message text, so the
-        // shared/errors.ts matchers degrade a remote handler failure
-        // exactly as they do an Electron IPC one.
-        entry.reject(new Error(frame.message));
+        // The handler's tag and fields when they rode along, so the
+        // shared/errors.ts matchers read the tag on this wire as they
+        // do in-process.
+        entry.reject(rebuildWireFailure(frame));
       }
       return;
     }

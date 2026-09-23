@@ -56,9 +56,10 @@
 import { Clock, Deferred, Effect, Exit, FiberMap, Scope } from "effect";
 import {
   BACKOFF_LADDER_MS,
-  backoffDelayMs,
+  ranAtLeast,
   STABLE_CONNECTION_MS,
   defaultSupervisorRuntime,
+  superviseLadder,
   type SupervisorRuntime,
 } from "@shared/remote/supervisor";
 import { isTerminalDialError } from "./directDial";
@@ -129,12 +130,11 @@ export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
         dropped: Deferred.makeUnsafe<void>(),
       };
       peers.set(deviceId, state);
-      // Ladder position for the current failure streak, supervisor
-      // style: advanced on every backoff, reset only by a stable
-      // session's drop. Local to the fiber, so roster re-entry (a new
-      // fiber) starts at the bottom.
-      let rung = 0;
-      while (true) {
+      // One dial, and the hold on the session it made until it drops.
+      // The ladder climbs on every backoff and resets only on a stable
+      // session's drop; roster re-entry (a new fiber) starts at the
+      // bottom.
+      const attempt = Effect.gen(function* () {
         state.dropped = Deferred.makeUnsafe<void>();
         const dialed = yield* Effect.tryPromise({
           try: () => deps.dial(deviceId),
@@ -151,38 +151,38 @@ export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
             console.info(`[direct] session to ${deviceId} established`);
           }
           state.lastFailure = null;
-          // The rung is NOT reset here: only a drop after a STABLE run
-          // resets the ladder, so a connect-then-die flapper keeps
-          // climbing instead of hammering at the bottom rung.
+          // The ladder is NOT reset here: only a drop after a STABLE run
+          // resets it, so a connect-then-die flapper keeps climbing
+          // instead of hammering at the bottom rung.
           yield* Deferred.await(state.dropped);
-          const openMs = (yield* Clock.currentTimeMillis) - connectedAt;
-          if (openMs >= STABLE_CONNECTION_MS) rung = 0;
-        } else {
-          const message = errorMessageOf(dialed.error);
-          // One line per DISTINCT reason, not per rung: the ladder
-          // redials forever, and a reason unchanged since the last
-          // attempt says nothing new. This is the only place a failed
-          // dial is logged at all (the renderer learns of it only when
-          // it asks, through the no-session rejection), so without it a
-          // peer that never connects leaves no trace in the log.
-          if (message !== state.lastFailure) {
-            console.warn(`[direct] dial to ${deviceId} failed: ${message}`);
-          }
-          state.lastFailure = message;
-          if (isTerminalDialError(dialed.error)) {
-            // Park. Redialing cannot change it and WOULD feed the
-            // host's failed-auth lockout, so the fiber waits with its
-            // reason recorded and nothing on a timer: this peer's next
-            // dial comes from its roster re-entry (see the header),
-            // which starts a fresh fiber. Waiting rather than ending
-            // keeps the peer in the map, so a steady roster does not
-            // restart it.
-            return yield* Effect.never;
-          }
+          return {
+            stable: yield* ranAtLeast(connectedAt, STABLE_CONNECTION_MS),
+          };
         }
-        yield* Effect.sleep(backoffDelayMs(BACKOFF_LADDER_MS, rung));
-        rung += 1;
-      }
+        const message = errorMessageOf(dialed.error);
+        // One line per DISTINCT reason, not per rung: the ladder
+        // redials forever, and a reason unchanged since the last
+        // attempt says nothing new. This is the only place a failed
+        // dial is logged at all (the renderer learns of it only when
+        // it asks, through the no-session rejection), so without it a
+        // peer that never connects leaves no trace in the log.
+        if (message !== state.lastFailure) {
+          console.warn(`[direct] dial to ${deviceId} failed: ${message}`);
+        }
+        state.lastFailure = message;
+        if (isTerminalDialError(dialed.error)) {
+          // Park. Redialing cannot change it and WOULD feed the
+          // host's failed-auth lockout, so the fiber waits with its
+          // reason recorded and nothing on a timer: this peer's next
+          // dial comes from its roster re-entry (see the header),
+          // which starts a fresh fiber. Waiting rather than ending
+          // keeps the peer in the map, so a steady roster does not
+          // restart it.
+          return yield* Effect.never;
+        }
+        return { stable: false };
+      });
+      yield* superviseLadder(BACKOFF_LADDER_MS, attempt);
     }).pipe(
       Effect.ensuring(
         Effect.sync(() => {

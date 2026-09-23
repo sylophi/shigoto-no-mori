@@ -1,6 +1,13 @@
-import { Cache, Duration, Effect } from "effect";
+import { Effect } from "effect";
 import * as policy from "@shared/git/defaultBranch.mts";
-import { type GitFailure, promiseRunner, runEffect, runGit } from "./core";
+import { singleFlight } from "../util/ttlCache";
+import {
+  type GitFailure,
+  promiseRunner,
+  promiseStep,
+  runEffect,
+  runGit,
+} from "./core";
 
 // Default-branch policy lives in shared/git/defaultBranch.mts so the
 // identity parity harness resolves through the same code. These bind
@@ -12,14 +19,8 @@ function withPolicy<A>(
   return Effect.promise((signal) => use(promiseRunner(signal)));
 }
 
-export const localBranchExistsEffect = Effect.fnUntraced(function* (
-  projectPath: string,
-  branch: string,
-) {
-  return yield* withPolicy((run) =>
-    policy.localBranchExists(run, projectPath, branch),
-  );
-});
+export const localBranchExistsEffect = (projectPath: string, branch: string) =>
+  withPolicy((run) => policy.localBranchExists(run, projectPath, branch));
 
 export function localBranchExists(
   projectPath: string,
@@ -28,31 +29,11 @@ export function localBranchExists(
   return runGit(localBranchExistsEffect(projectPath, branch));
 }
 
-export const remoteRefExistsEffect = Effect.fnUntraced(function* (
-  projectPath: string,
-  ref: string,
-) {
-  return yield* withPolicy((run) =>
-    policy.remoteRefExists(run, projectPath, ref),
-  );
-});
+export const remoteRefExistsEffect = (projectPath: string, ref: string) =>
+  withPolicy((run) => policy.remoteRefExists(run, projectPath, ref));
 
-export function remoteRefExists(
-  projectPath: string,
-  ref: string,
-): Promise<boolean> {
-  return runGit(remoteRefExistsEffect(projectPath, ref));
-}
-
-export const listRemotesEffect = Effect.fnUntraced(function* (
-  projectPath: string,
-) {
-  return yield* withPolicy((run) => policy.listRemotes(run, projectPath));
-});
-
-export function listRemotes(projectPath: string): Promise<string[]> {
-  return runGit(listRemotesEffect(projectPath));
-}
+export const listRemotesEffect = (projectPath: string) =>
+  withPolicy((run) => policy.listRemotes(run, projectPath));
 
 // Every row of `git remote -v` as a name + URL pair. git emits two rows
 // per remote, fetch and push. Both are kept because a remote can push
@@ -88,12 +69,9 @@ export function listRemoteEntries(
 export const resolveDefaultBranchEffect = Effect.fn(
   "remotes.resolveDefaultBranch",
 )(function* (projectPath: string, override?: string) {
-  return yield* Effect.tryPromise({
-    try: (signal) =>
-      policy.resolveDefaultBranch(promiseRunner(signal), projectPath, override),
-    catch: (error) =>
-      error instanceof Error ? error : new Error(String(error)),
-  });
+  return yield* promiseStep((signal) =>
+    policy.resolveDefaultBranch(promiseRunner(signal), projectPath, override),
+  );
 });
 
 export function resolveDefaultBranch(
@@ -113,37 +91,20 @@ export const resolveDefaultRefEffect = Effect.fn("remotes.resolveDefaultRef")(
   },
 );
 
-export function resolveDefaultRef(
-  projectPath: string,
-  override?: string,
-): Promise<string | null> {
-  return runGit(resolveDefaultRefEffect(projectPath, override));
-}
-
 // Overlapping callers join a single in-flight fetch per project, so the
 // focus-driven sweep and the periodic refresh can't dogpile a slow
 // remote. Nothing outlives the run: a settled fetch, success or
 // failure, is never served to a later caller (time to live zero), and
 // once every caller waiting on a fetch has gone the fetch is
 // interrupted, which kills its git.
-const fetches = Effect.runSync(
-  Cache.make<string, void, GitFailure>({
-    // Projects are few; a safety bound, not a budget.
-    capacity: 10_000,
-    lookup: (projectPath) =>
-      runEffect(projectPath, ["fetch", "--all", "--quiet", "--prune"]).pipe(
-        Effect.asVoid,
-        Effect.withSpan("remotes.fetchAllRemotes"),
-      ),
-    timeToLive: Duration.zero,
-  }),
-);
-
-export function fetchAllRemotesEffect(
+export const fetchAllRemotesEffect: (
   projectPath: string,
-): Effect.Effect<void, GitFailure> {
-  return Cache.get(fetches, projectPath);
-}
+) => Effect.Effect<void, GitFailure> = singleFlight((projectPath: string) =>
+  runEffect(projectPath, ["fetch", "--all", "--quiet", "--prune"]).pipe(
+    Effect.asVoid,
+    Effect.withSpan("remotes.fetchAllRemotes"),
+  ),
+);
 
 export function fetchAllRemotes(projectPath: string): Promise<void> {
   return runGit(fetchAllRemotesEffect(projectPath));

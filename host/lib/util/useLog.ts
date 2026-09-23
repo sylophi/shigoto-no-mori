@@ -32,3 +32,23 @@ export function pruneAndPush(
   fresh.push(now);
   return fresh;
 }
+
+// A use-count bump that never fails the action it follows: the store
+// refuses a malformed log as a whole, and the launch, script run or
+// project action has already happened by the time the bump runs.
+// Logged once per label per app run, since these run after roughly
+// every click and an unreadable file would otherwise log on each.
+const bumpFailureLogged = new Set<string>();
+
+export function bumpBestEffort(label: string, bump: () => void): boolean {
+  try {
+    bump();
+    return true;
+  } catch (error) {
+    if (!bumpFailureLogged.has(label)) {
+      bumpFailureLogged.add(label);
+      console.warn(`[${label}] use log not recorded:`, error);
+    }
+    return false;
+  }
+}

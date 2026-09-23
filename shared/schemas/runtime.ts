@@ -1,6 +1,5 @@
 import { Schema } from "effect";
-
-const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+import { NonNegativeInt } from "./ints";
 
 export const RuntimeInfoSchema = Schema.Struct({
   // The data dir: where worktrees, configs and state live.

@@ -47,7 +47,8 @@ import {
   ServerEnvelopeSchema,
   utf8ByteLength,
 } from "./protocol";
-import { encodeWireError, rebuildWireError } from "@shared/ipc/wireError";
+import { rebuildWireFailure, wireFailure } from "@shared/ipc/wireError";
+import { containedSync } from "@shared/util/contained";
 
 // The device hub's own per-peer in-flight bound. Legitimate broker
 // concurrency is ~1 (one connectInfo exchange per dial), so this is a
@@ -493,14 +494,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
         // The message plus, for a typed error, its tag and fields
         // (shared/ipc/wireError.ts), so shared/errors.ts matchers
         // behave the same on every wire.
-        const encoded = encodeWireError(error);
-        answer = {
-          t: "res",
-          id: frame.id,
-          ok: false,
-          message: errorMessageOf(error),
-          ...(encoded === undefined ? {} : { error: encoded }),
-        };
+        answer = { t: "res", id: frame.id, ok: false, ...wireFailure(error) };
       }
     }
     // A re-hello or a presence drop between admission and completion
@@ -695,10 +689,10 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       peer.pending.delete(frame.id);
       if (frame.ok) {
         entry.resolve(frame.result);
-      } else if (frame.error !== undefined) {
-        // The typed form, rebuilt with its tag and fields.
-        entry.reject(rebuildWireError(frame.error, frame.message));
-      } else if (frame.message === noHandlerMessage(deps.broker.channel)) {
+      } else if (
+        frame.error === undefined &&
+        frame.message === noHandlerMessage(deps.broker.channel)
+      ) {
         // The one answer that is a STRUCTURAL fact about the peer
         // rather than a failure of this call, so it is re-typed here
         // instead of being handed on as prose. The channel is not read
@@ -707,10 +701,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
         // this verdict is about.
         entry.reject(new HubNoHandlerError(deps.broker.channel));
       } else {
-        // A plain Error carrying the host's message text, so the
-        // shared/errors.ts matchers degrade a remote handler failure
-        // exactly as they do an Electron IPC one.
-        entry.reject(new Error(frame.message));
+        entry.reject(rebuildWireFailure(frame));
       }
       return;
     }
@@ -737,13 +728,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     for (const deviceId of hostSessions.keys()) {
       if (!online.has(deviceId)) dropHostSession(deviceId);
     }
-    if (deps.onPresence !== undefined) {
-      try {
-        deps.onPresence([...list]);
-      } catch (error) {
-        console.warn(`[hub] onPresence threw: ${errorMessageOf(error)}`);
-      }
-    }
+    containedSync("[hub] onPresence threw", () => deps.onPresence?.([...list]));
   }
 
   function handleNack(to: string, reason: "offline" | "too-large"): void {
@@ -830,13 +815,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       }
       if (online.size > 0) {
         online = new Set();
-        if (deps.onPresence !== undefined) {
-          try {
-            deps.onPresence([]);
-          } catch (err) {
-            console.warn(`[hub] onPresence threw: ${errorMessageOf(err)}`);
-          }
-        }
+        containedSync("[hub] onPresence threw", () => deps.onPresence?.([]));
       }
     },
   };

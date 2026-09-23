@@ -13,7 +13,7 @@
 // callers that shared the load (unavoidable), but never back into the
 // cache. The Promise surface stays for the callers that are not
 // Effects yet.
-import { Cache, Duration, Effect, Exit } from "effect";
+import { Cache, Cause, Duration, Effect, Exit } from "effect";
 
 export interface TtlMapCache<K, V> {
   get(key: K): Promise<V>;
@@ -26,19 +26,70 @@ export interface TtlMapCache<K, V> {
 // so the capacity is a safety bound rather than a budget.
 const CAPACITY = 10_000;
 
+// The same Cache for a lookup that is an Effect: a success is kept for
+// `ttl`, a failure never (its time to live is zero), so the next ask
+// retries.
+export function makeTtlCache<K, A, E>(
+  lookup: (key: K) => Effect.Effect<A, E>,
+  ttl: Duration.Duration,
+): Cache.Cache<K, A, E> {
+  return Effect.runSync(
+    Cache.makeWith(lookup, {
+      capacity: CAPACITY,
+      timeToLive: (exit) => (Exit.isSuccess(exit) ? ttl : Duration.zero),
+    }),
+  );
+}
+
+// Cache.get with an exit the cache will not serve again dropped from
+// the map at once. An entry whose time to live is zero is expired the
+// moment it lands, but Cache keeps expired entries until its capacity
+// sweep, so a failure per key (or every settled single flight) would
+// otherwise sit in memory for nothing. An interrupted get drops
+// nothing: the lookup may still be serving the callers that stayed.
+function dropped<K, A, E>(
+  cache: Cache.Cache<K, A, E>,
+  key: K,
+  exit: Exit.Exit<A, E>,
+): Effect.Effect<void> {
+  return Exit.isSuccess(exit) || !Cause.hasInterrupts(exit.cause)
+    ? Cache.invalidate(cache, key)
+    : Effect.void;
+}
+
+// A get on a TTL cache: a success is served for its TTL, a failure is
+// dropped as soon as it has been handed out.
+export function getCached<K, A, E>(
+  cache: Cache.Cache<K, A, E>,
+  key: K,
+): Effect.Effect<A, E> {
+  return Cache.get(cache, key).pipe(
+    Effect.onExit((exit) =>
+      Exit.isSuccess(exit) ? Effect.void : dropped(cache, key, exit),
+    ),
+  );
+}
+
+// A single flight per key: concurrent gets share one lookup, and
+// nothing outlives it (success or failure alike). Once every caller
+// waiting on a lookup has gone the lookup is interrupted.
+export function singleFlight<K, A, E>(
+  lookup: (key: K) => Effect.Effect<A, E>,
+): (key: K) => Effect.Effect<A, E> {
+  const cache = makeTtlCache(lookup, Duration.zero);
+  return (key) =>
+    Cache.get(cache, key).pipe(
+      Effect.onExit((exit) => dropped(cache, key, exit)),
+    );
+}
+
 function makeCache<K, V>(
   ttlMs: number,
   load: (key: K) => Promise<V>,
 ): Cache.Cache<K, V, unknown> {
-  return Effect.runSync(
-    Cache.makeWith<K, V, unknown, never>(
-      (key) => Effect.tryPromise({ try: () => load(key), catch: (e) => e }),
-      {
-        capacity: CAPACITY,
-        timeToLive: (exit) =>
-          Exit.isSuccess(exit) ? Duration.millis(ttlMs) : Duration.zero,
-      },
-    ),
+  return makeTtlCache(
+    (key: K) => Effect.tryPromise({ try: () => load(key), catch: (e) => e }),
+    Duration.millis(ttlMs),
   );
 }
 
@@ -48,7 +99,7 @@ export function ttlMapCache<K, V>(
 ): TtlMapCache<K, V> {
   const cache = makeCache(ttlMs, load);
   return {
-    get: (key) => Effect.runPromise(Cache.get(cache, key)),
+    get: (key) => Effect.runPromise(getCached(cache, key)),
     invalidate: (key) => Effect.runSync(Cache.invalidate(cache, key)),
     clear: () => Effect.runSync(Cache.invalidateAll(cache)),
   };

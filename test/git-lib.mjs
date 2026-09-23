@@ -32,6 +32,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect, Fiber } from "effect";
 import {
+  alive,
   delay,
   makeProof,
   sandboxGit,
@@ -139,15 +140,6 @@ function resetShim(track) {
     delete process.env.SM_SHIM_HOLD;
     delete process.env.SM_SHIM_SLOW;
   });
-}
-
-function alive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 // Whatever a check held, gone by its end, however the check went.

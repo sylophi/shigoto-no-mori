@@ -3,9 +3,7 @@ import {
   ProjectScopedPayloadSchema,
   WorktreeScopedPayloadSchema,
 } from "./payloads";
-
-const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
-const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0));
+import { NonNegativeInt, PositiveInt } from "./ints";
 
 const ScriptNameSchema = Schema.Literals([
   "setup",

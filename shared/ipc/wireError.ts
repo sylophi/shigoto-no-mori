@@ -113,6 +113,28 @@ export function rebuildWireError(
   return new WireError({ ...shape, message });
 }
 
+// A failed answer's body on every wire: the message, plus the typed
+// form when the error has one.
+export type WireFailure = { message: string; error?: WireErrorShape };
+
+export function wireFailure(error: unknown): WireFailure {
+  const encoded = encodeWireError(error);
+  return {
+    message: errorMessageOf(error),
+    ...(encoded === undefined ? {} : { error: encoded }),
+  };
+}
+
+// Its rebuild on the calling side: the typed form when it rode along,
+// else a plain Error carrying the message, which is how an older peer's
+// failure (and a plain Error's) reads, so the shared/errors.ts
+// matchers degrade exactly as they do on an Electron IPC one.
+export function rebuildWireFailure(failure: WireFailure): Error {
+  return failure.error === undefined
+    ? new Error(failure.message)
+    : rebuildWireError(failure.error, failure.message);
+}
+
 // The calling side's rebuild: an Error whose `_tag` and fields are the
 // ones the handler's error carried. Fields land as own enumerable
 // properties (through defineProperty, so a hostile key like __proto__
@@ -141,7 +163,7 @@ export class WireError extends Error {
 // renderer unwraps it where custom properties survive.
 export type InvokeEnvelope =
   | { ok: true; value: unknown }
-  | { ok: false; message: string; error?: WireErrorShape };
+  | ({ ok: false } & WireFailure);
 
 export async function settleEnvelope(
   run: () => Promise<unknown>,
@@ -149,18 +171,11 @@ export async function settleEnvelope(
   try {
     return { ok: true, value: await run() };
   } catch (error) {
-    const encoded = encodeWireError(error);
-    return {
-      ok: false,
-      message: errorMessageOf(error),
-      ...(encoded === undefined ? {} : { error: encoded }),
-    };
+    return { ok: false, ...wireFailure(error) };
   }
 }
 
 export function unwrapEnvelope(envelope: InvokeEnvelope): unknown {
   if (envelope.ok) return envelope.value;
-  throw envelope.error === undefined
-    ? new Error(envelope.message)
-    : rebuildWireError(envelope.error, envelope.message);
+  throw rebuildWireFailure(envelope);
 }

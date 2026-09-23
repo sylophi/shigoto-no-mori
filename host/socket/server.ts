@@ -93,6 +93,7 @@ import {
 } from "@shared/ipc/socket/deflatedFrame";
 import type { DirectCandidateKind } from "@shared/ipc/modules/direct";
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
+import { answerCall, containedSync } from "@shared/util/contained";
 import { createLimiter } from "@shared/util/limit";
 import {
   defaultSupervisorRuntime,
@@ -104,7 +105,7 @@ import {
 } from "@shared/ipc/socket/channels";
 import type { RawData } from "ws";
 import { toBytes, toText } from "./rawData";
-import { encodeWireError } from "@shared/ipc/wireError";
+import { wireFailure } from "@shared/ipc/wireError";
 
 // Ticket-mode auth for the direct data plane: a
 // SECOND binding instance serves device-to-device data over direct
@@ -430,15 +431,13 @@ const deflatingWriter = Effect.fnUntraced(function* (
     const data = yield* Queue.take(frames);
     const text = deflatable(data);
     const bytes = text === null ? null : yield* deflated(text);
-    try {
+    // A send that threw (the socket dying under it) loses this frame
+    // only, not the ones queued behind it.
+    containedSync("[socket] queued send failed", () =>
       write(
         bytes === null ? data : Buffer.concat([DEFLATED_FRAME_PREFIX, bytes]),
-      );
-    } catch (error) {
-      // A send that threw (the socket dying under it) loses this frame
-      // only, not the ones queued behind it.
-      console.warn(`[socket] queued send failed: ${errorMessageOf(error)}`);
-    }
+      ),
+    );
     queued -= 1;
   });
   yield* FiberSet.run(tasks, Effect.forever(writeNext));
@@ -464,14 +463,7 @@ function send(conn: Conn, frame: ServerFrame): void {
 // and fields (shared/ipc/wireError.ts), so the shared/errors.ts
 // matchers behave the same on both wires.
 function failedRes(id: ReqFrame["id"], error: unknown): ServerFrame {
-  const encoded = encodeWireError(error);
-  return {
-    t: "res",
-    id,
-    ok: false,
-    message: errorMessageOf(error),
-    ...(encoded === undefined ? {} : { error: encoded }),
-  };
+  return { t: "res", id, ok: false, ...wireFailure(error) };
 }
 
 // close() alone is advisory: ws keeps delivering inbound frames for up
@@ -539,23 +531,11 @@ function closeServer(wss: WebSocketServer): Effect.Effect<void> {
 // from the owner's predicate is contained and reads as not granted:
 // the gate fails closed, and a socket callback never throws on it.
 function commandGranted(ticketAuth: WsServerTicketAuth): boolean {
-  try {
-    return ticketAuth.isCommandGranted();
-  } catch (error) {
-    console.warn(`[socket] isCommandGranted threw: ${errorMessageOf(error)}`);
-    return false;
-  }
-}
-
-// A fiber's failure that is not its interruption, logged: a defect in
-// a forked fiber is reported nowhere else.
-function logFailure(what: string) {
-  return (cause: Cause.Cause<unknown>): Effect.Effect<void> =>
-    Cause.hasInterruptsOnly(cause)
-      ? Effect.interrupt
-      : Effect.sync(() => {
-          console.warn(`[socket] ${what}: ${Cause.pretty(cause)}`);
-        });
+  return (
+    containedSync("[socket] isCommandGranted threw", () =>
+      ticketAuth.isCommandGranted(),
+    ) ?? false
+  );
 }
 
 export function createWsServerBinding(
@@ -608,11 +588,10 @@ export function createWsServerBinding(
     bindAddress: null,
     error: null,
   };
-  // Serializes start/stop/refresh IN CALL ORDER, so a fast settings
-  // double-toggle cannot interleave one refresh's stop with another's
-  // start, and the last call made is the state that stands (an Effect
-  // Semaphore hands its permit to whichever waiter the scheduler wakes
-  // first, which is not that).
+  // Serializes start/stop/refresh IN CALL ORDER (shared/util/limit.ts
+  // says why not a Semaphore), so a fast settings double-toggle cannot
+  // interleave one refresh's stop with another's start, and the last
+  // call made is the state that stands.
   const lifecycle = createLimiter(1);
 
   function isLockedOut(ip: string, now: number): boolean {
@@ -666,21 +645,12 @@ export function createWsServerBinding(
     frame: ReqFrame,
     fn: (ctx: HandlerContext, raw: unknown) => Promise<unknown>,
   ): Effect.Effect<void> =>
-    Effect.tryPromise({
-      try: () => fn(ctx, frame.input),
-      catch: (error) => error,
-    }).pipe(
-      Effect.flatMap((result) =>
-        Effect.try({
-          try: () => send(conn, { t: "res", id: frame.id, ok: true, result }),
-          catch: (error) => error,
-        }),
-      ),
-      Effect.catch((error) =>
-        Effect.sync(() => send(conn, failedRes(frame.id, error))),
-      ),
-      Effect.catchCause(logFailure("a call failed")),
-    );
+    answerCall({
+      run: () => fn(ctx, frame.input),
+      ok: (result) => send(conn, { t: "res", id: frame.id, ok: true, result }),
+      failed: (error) => send(conn, failedRes(frame.id, error)),
+      label: "[socket] a call failed",
+    });
 
   // One accepted connection, from its first frame to its end, in its
   // own scope (a child of the listener's). The scope is the
@@ -765,13 +735,9 @@ export function createWsServerBinding(
           // ctx.signal is connection scoped: one controller per socket,
           // aborted exactly here.
           controller.abort();
-          try {
-            channels.closeAll();
-          } catch (error) {
-            console.warn(
-              `[socket] resetting channels threw: ${errorMessageOf(error)}`,
-            );
-          }
+          containedSync("[socket] resetting channels threw", () =>
+            channels.closeAll(),
+          );
           if (closing !== null) {
             return closeThenTerminate(
               live,

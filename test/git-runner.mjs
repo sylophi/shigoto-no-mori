@@ -20,8 +20,14 @@ import {
   runEffect,
   runLenient,
 } from "@host/lib/git/core";
-import { fromEffect } from "@shared/ipc/effectHandler";
-import { makeProof, sandboxGit, scrubbedGitEnv } from "./lib/checkKit.mjs";
+import { fromEffectWith } from "@shared/ipc/effectHandler";
+import {
+  alive,
+  makeProof,
+  sandboxGit,
+  scrubbedGitEnv,
+  waitFor,
+} from "./lib/checkKit.mjs";
 
 // The runner reads process.env: this check runs from the pre-commit
 // hook, whose GIT_* variables would point every git below at the
@@ -62,24 +68,6 @@ function hang(dir) {
   };
 }
 
-function alive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function until(predicate, what, timeoutMs = 3_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (!predicate()) {
-    if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
-    // oxlint-disable-next-line no-await-in-loop -- a poll
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-}
-
 function sandbox(track) {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "sm-git-runner-")));
   track(() => rmSync(dir, { recursive: true, force: true }));
@@ -118,7 +106,7 @@ async function main() {
       // timeout is named first either way.
       assert.match(outcome.message, /^git did not finish within/);
       assert.ok(took < 5_000, `the timeout did not end the run (${took}ms)`);
-      await until(() => !alive(hung.pid()), "git to be gone");
+      await waitFor(() => !alive(hung.pid()), "git to be gone");
     },
   );
 
@@ -129,14 +117,15 @@ async function main() {
       const hung = hang(dir);
       reap(track, hung);
       const controller = new AbortController();
-      const handler = fromEffect(() =>
-        runEffect(dir, hung.args, { env: hung.env, timeoutMs: 20_000 }),
+      const handler = fromEffectWith(
+        () => ({ runPromise: Effect.runPromise }),
+        () => runEffect(dir, hung.args, { env: hung.env, timeoutMs: 20_000 }),
       );
       const began = performance.now();
       const pending = handler(undefined, { signal: controller.signal });
       // Abort once git is provably running (the stub has written its
       // pid), so the kill is of a live process, not a race with spawn.
-      await until(() => {
+      await waitFor(() => {
         const pid = hung.pid();
         return pid !== null && alive(pid);
       }, "git to start");
@@ -150,7 +139,7 @@ async function main() {
       );
       // The rejection is the fiber giving up on the promise; the kill
       // is what the signal did to git, proven by the pid.
-      await until(() => !alive(pid), "the cancelled git to be gone");
+      await waitFor(() => !alive(pid), "the cancelled git to be gone");
       // A caller already gone never starts a run.
       await assert.rejects(
         handler(undefined, { signal: AbortSignal.abort() }),

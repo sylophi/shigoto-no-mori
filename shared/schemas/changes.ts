@@ -2,8 +2,7 @@ import { Schema } from "effect";
 import { isSafeRelPath } from "../git/gitPaths";
 import { WorktreeScopedPayloadSchema } from "./payloads";
 import { CommitHashSchema, WorktreeSchema } from "./worktree";
-
-const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+import { NonNegativeInt } from "./ints";
 
 // How much of a changed file is in the index, i.e. what a commit right
 // now would take from it. The changes page draws this as a checkbox:

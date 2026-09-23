@@ -67,6 +67,21 @@ export function unknownWorktreeError(worktreeId: string): UnknownWorktree {
   return new UnknownWorktree({ worktreeId });
 }
 
+// Every matcher reads the same way: a tag when the error carries one
+// (a typed error, or a wire frame that brought its tag along), else
+// the message text an older peer sends. A tag that is there and is
+// another error's is a no, whatever the text says.
+function taggedMatcher(
+  tag: string,
+  legacy: (message: string) => boolean,
+): (error: unknown) => boolean {
+  return (error) => {
+    const found = errorTagOf(error);
+    if (found !== undefined) return found === tag;
+    return legacy(errorMessageOf(error));
+  };
+}
+
 const ENTITY_GONE_TAGS: ReadonlySet<string> = new Set([
   UNKNOWN_PROJECT_TAG,
   UNKNOWN_WORKTREE_TAG,
@@ -104,11 +119,10 @@ export class NoDirectConnection extends Schema.TaggedError<NoDirectConnection>()
   }
 }
 
-export function isNoDirectConnectionError(error: unknown): boolean {
-  const tag = errorTagOf(error);
-  if (tag !== undefined) return tag === NO_DIRECT_CONNECTION_TAG;
-  return errorMessageOf(error).startsWith(NO_DIRECT_CONNECTION_PREFIX);
-}
+export const isNoDirectConnectionError = taggedMatcher(
+  NO_DIRECT_CONNECTION_TAG,
+  (message) => message.startsWith(NO_DIRECT_CONNECTION_PREFIX),
+);
 
 // Safe branch delete (`git branch -d`) refused because the branch has
 // commits unreachable from other refs. The renderer swaps its confirm
@@ -131,11 +145,10 @@ export function branchNotMergedError(name: string): BranchNotMerged {
   return new BranchNotMerged({ branch: name });
 }
 
-export function isBranchNotMergedError(error: unknown): boolean {
-  const tag = errorTagOf(error);
-  if (tag !== undefined) return tag === BRANCH_NOT_MERGED_TAG;
-  return errorMessageOf(error).includes(BRANCH_NOT_MERGED_MARKER);
-}
+export const isBranchNotMergedError = taggedMatcher(
+  BRANCH_NOT_MERGED_TAG,
+  (message) => message.includes(BRANCH_NOT_MERGED_MARKER),
+);
 
 // A forward:open whose loopback dial on the host failed: nothing
 // answered on the port, or it was out of range
@@ -155,11 +168,10 @@ export class ForwardConnectFailed extends Schema.TaggedError<ForwardConnectFaile
   }
 }
 
-export function isForwardConnectFailedError(error: unknown): boolean {
-  const tag = errorTagOf(error);
-  if (tag !== undefined) return tag === FORWARD_CONNECT_FAILED_TAG;
-  return errorMessageOf(error).startsWith(FORWARD_CONNECT_FAILED_PREFIX);
-}
+export const isForwardConnectFailedError = taggedMatcher(
+  FORWARD_CONNECT_FAILED_TAG,
+  (message) => message.startsWith(FORWARD_CONNECT_FAILED_PREFIX),
+);
 
 // A byte-stream open (forward:open, mirror:openStream) the host's
 // channel layer refused (host/socket/channelStreams.ts): the
@@ -223,14 +235,10 @@ export class PortDenied extends Schema.TaggedError<PortDenied>()(
   }
 }
 
-export function isPortInUseError(error: unknown): boolean {
-  const tag = errorTagOf(error);
-  if (tag !== undefined) return tag === PORT_IN_USE_TAG;
-  return errorMessageOf(error).includes("EADDRINUSE");
-}
+export const isPortInUseError = taggedMatcher(PORT_IN_USE_TAG, (message) =>
+  message.includes("EADDRINUSE"),
+);
 
-export function isPortDeniedError(error: unknown): boolean {
-  const tag = errorTagOf(error);
-  if (tag !== undefined) return tag === PORT_DENIED_TAG;
-  return errorMessageOf(error).includes("EACCES");
-}
+export const isPortDeniedError = taggedMatcher(PORT_DENIED_TAG, (message) =>
+  message.includes("EACCES"),
+);

@@ -16,13 +16,15 @@
 // element is one poke. The watch handles live in the stream's scope,
 // so stopping is interrupting the fiber, and a debounce pending at the
 // stop goes with it instead of firing into a moved data dir.
-import { type FSWatcher, mkdirSync, watch } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { Effect, Fiber, Queue, Stream } from "effect";
+import { Effect, Fiber, Stream } from "effect";
 import { invalidateGlobalConfigCache } from "@host/lib/config/global";
 import { invalidateAllProjectConfigCaches } from "@host/lib/config/project";
 import { dataDir } from "@host/lib/util/paths";
 import { selfWroteWithin } from "@host/lib/util/selfWrite";
+import { contained } from "@shared/util/contained";
+import { watchEvents } from "../core/watchEvents";
 import { cliChildCount } from "./cliRunner";
 
 const DEBOUNCE_MS = 300;
@@ -68,51 +70,25 @@ function relevant(file: string | null, maxDepth: number | undefined): boolean {
   return true;
 }
 
-// The relevant, unechoed events of one directory. A directory that
-// cannot be watched (missing on a fresh data dir; bootstrap creates it
-// before anything writes) or that vanishes later (nuke) contributes
-// nothing more, and the other watches carry on.
+// The relevant, unechoed events of one directory (watchEvents). A
+// directory that cannot be watched (missing on a fresh data dir;
+// bootstrap creates it before anything writes) or that vanishes later
+// (nuke) contributes nothing more, and the other watches carry on.
 function dirEvents(
   dir: string,
   recursive: boolean,
   maxDepth?: number,
 ): Stream.Stream<string | null> {
-  return Stream.callback<string | null>((queue) =>
-    Effect.acquireRelease(
-      // A synchronous throw from fs.watch is the missing-directory
-      // case, so it is caught here: inside Effect.sync it would be a
-      // defect, which no catch below would see, and it would end the
-      // merged stream for the other directories too.
-      Effect.sync(() => {
-        const onEvent = (_eventType: string, file: string | null): void => {
-          if (!relevant(file, maxDepth)) return;
-          // Self-echo check at event time, not after the debounce: a
-          // self-write arriving after an external event must not
-          // cancel the pending refresh that external event deserves.
-          if (cliChildCount() > 0 || selfWroteWithin(SELF_ECHO_MS)) return;
-          Queue.offerUnsafe(queue, file);
-        };
-        let watcher: FSWatcher;
-        try {
-          watcher = watch(dir, { recursive, persistent: false }, onEvent);
-        } catch {
-          return null;
-        }
-        watcher.on("error", () => {
-          Queue.endUnsafe(queue);
-        });
-        return watcher;
-      }),
-      (watcher) =>
-        Effect.sync(() => {
-          if (watcher === null) Queue.endUnsafe(queue);
-          else watcher.close();
-        }),
-    ).pipe(
-      Effect.flatMap((watcher) =>
-        watcher === null ? Queue.end(queue) : Effect.succeed(true),
-      ),
-    ),
+  return watchEvents(
+    dir,
+    { recursive },
+    (file) =>
+      relevant(file, maxDepth) &&
+      // Self-echo check at event time, not after the debounce: a
+      // self-write arriving after an external event must not cancel
+      // the pending refresh that external event deserves.
+      cliChildCount() === 0 &&
+      !selfWroteWithin(SELF_ECHO_MS),
   );
 }
 
@@ -146,17 +122,12 @@ export function startStateWatcher(poke: () => void): void {
   running = Effect.runFork(
     events.pipe(
       Stream.debounce(DEBOUNCE_MS),
+      // Contained: a throw would end every watch.
       Stream.runForEach(() =>
-        Effect.sync(() => {
-          // Contained: a throw would end every watch with a defect
-          // nothing reports.
-          try {
-            invalidateGlobalConfigCache();
-            invalidateAllProjectConfigCaches();
-            poke();
-          } catch (error) {
-            console.warn(`[state-watcher] poke threw: ${String(error)}`);
-          }
+        contained("[state-watcher] poke threw", () => {
+          invalidateGlobalConfigCache();
+          invalidateAllProjectConfigCaches();
+          poke();
         }),
       ),
     ),

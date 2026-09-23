@@ -17,6 +17,7 @@ import { isUntracked } from "@shared/schemas";
 import {
   chunked,
   type GitFailure,
+  promiseStep,
   runEffect,
   runGit,
   runLenientEffect,
@@ -47,15 +48,6 @@ function runChunked(
       options,
     ),
   );
-}
-
-// A filesystem step, failing with the Error node rejected with.
-function fsStep<A>(step: () => Promise<A>): Effect.Effect<A, Error> {
-  return Effect.tryPromise({
-    try: step,
-    catch: (error) =>
-      error instanceof Error ? error : new Error(String(error)),
-  });
 }
 
 // --- status ------------------------------------------------------------
@@ -95,11 +87,10 @@ function kindOf(x: string, y: string): ChangeKind {
 // three concurrent mutations, so the order they run in is the state
 // the index ends up in. A chain of turns per worktree path: each
 // caller waits for the previous caller's turn to end, and its own
-// turn ends when its task settles. (An Effect Semaphore would not do:
-// it wakes waiters in scheduler order, so a newcomer arriving as a
-// permit is released runs ahead of the queue.) A path's chain is
-// dropped once the last turn on it ends. A failed task ends its turn
-// like any other.
+// turn ends when its task settles. (Not an Effect Semaphore, which
+// does not wake waiters in call order; see shared/util/limit.ts.) A
+// path's chain is dropped once the last turn on it ends. A failed task
+// ends its turn like any other.
 //
 // Waiting for the turn is interruptible, so a caller that leaves while
 // queued never writes; its turn then ends when the one it was waiting
@@ -312,13 +303,6 @@ export const listChangedFilesEffect = Effect.fnUntraced(function* (
   return options.counts ? yield* countsFor(worktreePath, files) : files;
 });
 
-export function listChangedFiles(
-  worktreePath: string,
-  options: { untracked?: "all"; counts?: boolean } = {},
-): Promise<ChangedFile[]> {
-  return runGit(listChangedFilesEffect(worktreePath, options));
-}
-
 // What the changes page reads: every file as its own row, with counts.
 export const listChangesForPageEffect = Effect.fn("changes.listChangesForPage")(
   function* (worktreePath: string) {
@@ -328,12 +312,6 @@ export const listChangesForPageEffect = Effect.fn("changes.listChangesForPage")(
     });
   },
 );
-
-export function listChangesForPage(
-  worktreePath: string,
-): Promise<ChangedFile[]> {
-  return runGit(listChangesForPageEffect(worktreePath));
-}
 
 // --- staging -----------------------------------------------------------
 
@@ -345,25 +323,19 @@ export function listChangesForPage(
 //
 // Answers with a fresh status from the same lock turn, so two quick
 // ticks resolve in order and the later answer is the complete one.
-export const setStagedEffect = Effect.fn("changes.setStaged")(function* (
-  worktreePath: string,
-  paths: readonly string[],
-  staged: boolean,
-) {
-  return yield* onIndex(
-    worktreePath,
-    Effect.gen(function* () {
-      yield* runChunked(
-        worktreePath,
-        staged ? ["add", "-A"] : ["reset", "-q"],
-        paths,
-      );
-      // No counts: staging moves the index, and the counts compare the
-      // working tree against HEAD. The page keeps the ones it has.
-      return yield* listChangedFilesEffect(worktreePath, { untracked: "all" });
-    }),
-  );
-});
+export const setStagedEffect = Effect.fn("changes.setStaged")(
+  function* (worktreePath: string, paths: readonly string[], staged: boolean) {
+    yield* runChunked(
+      worktreePath,
+      staged ? ["add", "-A"] : ["reset", "-q"],
+      paths,
+    );
+    // No counts: staging moves the index, and the counts compare the
+    // working tree against HEAD. The page keeps the ones it has.
+    return yield* listChangedFilesEffect(worktreePath, { untracked: "all" });
+  },
+  (effect, worktreePath) => onIndex(worktreePath, effect),
+);
 
 export function setStaged(
   worktreePath: string,
@@ -388,44 +360,35 @@ export interface CommitRequest {
 // `stagePaths` are added first, in the same lock turn: that is what
 // "nothing ticked" means to the commit button. `amend` folds the index
 // into HEAD under the new message instead of adding a commit.
-export const commitStagedEffect = Effect.fn("changes.commitStaged")(function* (
-  worktreePath: string,
-  message: CommitRequest,
-) {
-  return yield* onIndex(
-    worktreePath,
-    Effect.gen(function* () {
-      if (message.stagePaths && message.stagePaths.length > 0) {
-        yield* runChunked(worktreePath, ["add", "-A"], message.stagePaths);
-      }
-      const args = ["commit", "--quiet"];
-      if (message.amend) args.push("--amend");
-      args.push("-m", message.summary);
-      const body = message.description?.trim();
-      if (body) args.push("-m", body);
-      yield* runEffect(worktreePath, args);
-      const hash = yield* runEffect(worktreePath, [
-        "rev-parse",
-        "--short",
-        "HEAD",
-      ]);
-      return hash.trim();
-    }),
-  );
-});
-
-export function commitStaged(
-  worktreePath: string,
-  message: CommitRequest,
-): Promise<string> {
-  return runGit(commitStagedEffect(worktreePath, message));
-}
+export const commitStagedEffect = Effect.fn("changes.commitStaged")(
+  function* (worktreePath: string, message: CommitRequest) {
+    if (message.stagePaths && message.stagePaths.length > 0) {
+      yield* runChunked(worktreePath, ["add", "-A"], message.stagePaths);
+    }
+    const args = ["commit", "--quiet"];
+    if (message.amend) args.push("--amend");
+    args.push("-m", message.summary);
+    const body = message.description?.trim();
+    if (body) args.push("-m", body);
+    yield* runEffect(worktreePath, args);
+    const hash = yield* runEffect(worktreePath, [
+      "rev-parse",
+      "--short",
+      "HEAD",
+    ]);
+    return hash.trim();
+  },
+  (effect, worktreePath) => onIndex(worktreePath, effect),
+);
 
 // A commit's message split the way the composer holds it. `%s` and `%b`
 // are git's own split, and a NUL between them survives any subject a
 // human could type.
 export const readCommitMessageEffect = Effect.fn("changes.readCommitMessage")(
-  function* (worktreePath: string, hash: string) {
+  function* (
+    worktreePath: string,
+    hash: string,
+  ): Effect.fn.Return<CommitMessage, GitFailure> {
     const stdout = yield* runEffect(worktreePath, [
       "show",
       "-s",
@@ -435,23 +398,14 @@ export const readCommitMessageEffect = Effect.fn("changes.readCommitMessage")(
       "--",
     ]);
     const cut = stdout.indexOf("\0");
-    const message: CommitMessage =
-      cut < 0
-        ? { summary: stdout.trim(), description: "" }
-        : {
-            summary: stdout.slice(0, cut).trim(),
-            description: stdout.slice(cut + 1).trim(),
-          };
-    return message;
+    return cut < 0
+      ? { summary: stdout.trim(), description: "" }
+      : {
+          summary: stdout.slice(0, cut).trim(),
+          description: stdout.slice(cut + 1).trim(),
+        };
   },
 );
-
-export function readCommitMessage(
-  worktreePath: string,
-  hash: string,
-): Promise<CommitMessage> {
-  return runGit(readCommitMessageEffect(worktreePath, hash));
-}
 
 // --- undo --------------------------------------------------------------
 
@@ -494,71 +448,59 @@ function isAncestor(
 // as edits, which is nothing anyone means by "undo".
 //
 // Returns where HEAD was, for the redo.
-export const resetSoftEffect = Effect.fn("changes.resetSoft")(function* (
-  worktreePath: string,
-  target: string,
-  expectHead: string | undefined,
-) {
-  return yield* onIndex(
-    worktreePath,
-    Effect.gen(function* () {
-      const [head, expected] = yield* Effect.all(
-        [
-          revParse(worktreePath, "HEAD"),
-          expectHead
-            ? revParse(worktreePath, expectHead)
-            : Effect.succeed(undefined),
-        ],
-        { concurrency: 2 },
+export const resetSoftEffect = Effect.fn("changes.resetSoft")(
+  function* (
+    worktreePath: string,
+    target: string,
+    expectHead: string | undefined,
+  ) {
+    const [head, expected] = yield* Effect.all(
+      [
+        revParse(worktreePath, "HEAD"),
+        expectHead
+          ? revParse(worktreePath, expectHead)
+          : Effect.succeed(undefined),
+      ],
+      { concurrency: 2 },
+    );
+    if (expected !== undefined && head !== expected) {
+      return yield* Effect.fail(
+        new Error(
+          "The branch has moved on since this was loaded. Reload and try again.",
+        ),
       );
-      if (expected !== undefined && head !== expected) {
-        return yield* Effect.fail(
-          new Error(
-            "The branch has moved on since this was loaded. Reload and try again.",
-          ),
-        );
-      }
-      const backwards = yield* isAncestor(worktreePath, target, head);
-      const forwards =
-        !backwards && expectHead !== undefined
-          ? yield* isAncestor(worktreePath, head, target)
-          : false;
-      if (!backwards && !forwards) {
-        return yield* Effect.fail(
-          new Error("That commit isn't on this branch's history."),
-        );
-      }
-      const [older, newer] = backwards ? [target, head] : [head, target];
-      const merges = (yield* runEffect(worktreePath, [
-        "rev-list",
-        "--merges",
-        "--count",
-        "--end-of-options",
-        `${older}..${newer}`,
-      ])).trim();
-      if (merges !== "0") {
-        return yield* Effect.fail(
-          new Error("Can't undo across a merge commit."),
-        );
-      }
-      yield* runEffect(worktreePath, [
-        "reset",
-        "--soft",
-        "--end-of-options",
-        target,
-      ]);
-      return head;
-    }),
-  );
-});
-
-export function resetSoft(
-  worktreePath: string,
-  target: string,
-  expectHead: string | undefined,
-): Promise<string> {
-  return runGit(resetSoftEffect(worktreePath, target, expectHead));
-}
+    }
+    const backwards = yield* isAncestor(worktreePath, target, head);
+    const forwards =
+      !backwards && expectHead !== undefined
+        ? yield* isAncestor(worktreePath, head, target)
+        : false;
+    if (!backwards && !forwards) {
+      return yield* Effect.fail(
+        new Error("That commit isn't on this branch's history."),
+      );
+    }
+    const [older, newer] = backwards ? [target, head] : [head, target];
+    const merges = (yield* runEffect(worktreePath, [
+      "rev-list",
+      "--merges",
+      "--count",
+      "--end-of-options",
+      `${older}..${newer}`,
+    ])).trim();
+    if (merges !== "0") {
+      return yield* Effect.fail(new Error("Can't undo across a merge commit."));
+    }
+    yield* runEffect(worktreePath, [
+      "reset",
+      "--soft",
+      "--end-of-options",
+      target,
+    ]);
+    return head;
+  },
+  (effect, worktreePath) => onIndex(worktreePath, effect),
+);
 
 // --- discard -----------------------------------------------------------
 
@@ -574,7 +516,7 @@ const snapshotPaths = Effect.fnUntraced(function* (
   paths: readonly string[],
 ) {
   return yield* Effect.acquireUseRelease(
-    fsStep(() => mkdtemp(join(tmpdir(), "shigomori-discard-"))),
+    promiseStep(() => mkdtemp(join(tmpdir(), "shigomori-discard-"))),
     (scratch) =>
       Effect.gen(function* () {
         const env = {
@@ -662,55 +604,40 @@ const pruneDiscardSnapshots = Effect.fnUntraced(
 // `clean` ignores paths it does.
 export const discardChangesEffect = Effect.fn("changes.discardChanges")(
   function* (worktreePath: string, paths: readonly string[]) {
-    return yield* onIndex(
-      worktreePath,
-      Effect.gen(function* () {
-        const snapshot = yield* snapshotPaths(worktreePath, paths);
-        yield* runChunked(worktreePath, ["reset", "-q"], paths);
-        const tracked = new Set(
-          (yield* runChunked(worktreePath, ["ls-files", "-z"], paths)).flatMap(
-            splitZ,
+    const snapshot = yield* snapshotPaths(worktreePath, paths);
+    yield* runChunked(worktreePath, ["reset", "-q"], paths);
+    const tracked = new Set(
+      (yield* runChunked(worktreePath, ["ls-files", "-z"], paths)).flatMap(
+        splitZ,
+      ),
+    );
+    const untracked = paths.filter((p) => !tracked.has(p));
+    if (tracked.size > 0) {
+      yield* runChunked(worktreePath, ["restore", "--worktree"], [...tracked]);
+    }
+    if (untracked.length > 0) {
+      // -d: an untracked path can be the last file in a fresh directory.
+      yield* runChunked(worktreePath, ["clean", "-fdq"], untracked);
+      // `clean` walks past a nested repository without a word, and the
+      // snapshot holds only its gitlink, so "discarded" would be a lie
+      // there. Say what stayed instead.
+      const left = (yield* runChunked(
+        worktreePath,
+        ["ls-files", "-z", "--others", "--exclude-standard"],
+        untracked,
+      )).flatMap(splitZ);
+      if (left.length > 0) {
+        return yield* Effect.fail(
+          new Error(
+            `Couldn't remove ${left.slice(0, 3).join(", ")}${left.length > 3 ? ` (+${left.length - 3} more)` : ""}. A nested git repository has to be removed by hand.`,
           ),
         );
-        const untracked = paths.filter((p) => !tracked.has(p));
-        if (tracked.size > 0) {
-          yield* runChunked(
-            worktreePath,
-            ["restore", "--worktree"],
-            [...tracked],
-          );
-        }
-        if (untracked.length > 0) {
-          // -d: an untracked path can be the last file in a fresh directory.
-          yield* runChunked(worktreePath, ["clean", "-fdq"], untracked);
-          // `clean` walks past a nested repository without a word, and the
-          // snapshot holds only its gitlink, so "discarded" would be a lie
-          // there. Say what stayed instead.
-          const left = (yield* runChunked(
-            worktreePath,
-            ["ls-files", "-z", "--others", "--exclude-standard"],
-            untracked,
-          )).flatMap(splitZ);
-          if (left.length > 0) {
-            return yield* Effect.fail(
-              new Error(
-                `Couldn't remove ${left.slice(0, 3).join(", ")}${left.length > 3 ? ` (+${left.length - 3} more)` : ""}. A nested git repository has to be removed by hand.`,
-              ),
-            );
-          }
-        }
-        return snapshot;
-      }),
-    );
+      }
+    }
+    return snapshot;
   },
+  (effect, worktreePath) => onIndex(worktreePath, effect),
 );
-
-export function discardChanges(
-  worktreePath: string,
-  paths: readonly string[],
-): Promise<string> {
-  return runGit(discardChangesEffect(worktreePath, paths));
-}
 
 // Put a discard back. The snapshot's diff against its parent is the
 // exact set of paths that went: additions and edits are checked out
@@ -719,54 +646,44 @@ export function discardChanges(
 // unstaged, the same as if it had been edited by hand.
 export const restoreDiscardEffect = Effect.fn("changes.restoreDiscard")(
   function* (worktreePath: string, snapshot: string) {
-    yield* onIndex(
-      worktreePath,
-      Effect.gen(function* () {
-        // `--root` makes a parentless snapshot (an unborn-branch discard)
-        // diff against the empty tree instead of printing nothing.
-        // `--no-commit-id` keeps the hash out of the output.
-        const stdout = yield* runEffect(worktreePath, [
-          "diff-tree",
-          "-r",
-          "-z",
-          "--root",
-          "--no-commit-id",
-          "--no-renames",
-          "--name-status",
-          "--end-of-options",
-          snapshot,
-          "--",
-        ]);
-        const fields = splitZ(stdout);
-        const restore: string[] = [];
-        const remove: string[] = [];
-        for (let i = 0; i + 1 < fields.length; i += 2) {
-          const status = fields[i];
-          const path = fields[i + 1];
-          if (!status || !path) continue;
-          if (status.startsWith("D")) remove.push(path);
-          else restore.push(path);
-        }
-        if (restore.length > 0) {
-          yield* runChunked(
-            worktreePath,
-            ["restore", "--worktree", `--source=${snapshot}`],
-            restore,
-          );
-        }
-        yield* Effect.forEach(
-          remove,
-          (path) => fsStep(() => rm(join(worktreePath, path), { force: true })),
-          { concurrency: "unbounded", discard: true },
-        );
-      }),
+    // `--root` makes a parentless snapshot (an unborn-branch discard)
+    // diff against the empty tree instead of printing nothing.
+    // `--no-commit-id` keeps the hash out of the output.
+    const stdout = yield* runEffect(worktreePath, [
+      "diff-tree",
+      "-r",
+      "-z",
+      "--root",
+      "--no-commit-id",
+      "--no-renames",
+      "--name-status",
+      "--end-of-options",
+      snapshot,
+      "--",
+    ]);
+    const fields = splitZ(stdout);
+    const restore: string[] = [];
+    const remove: string[] = [];
+    for (let i = 0; i + 1 < fields.length; i += 2) {
+      const status = fields[i];
+      const path = fields[i + 1];
+      if (!status || !path) continue;
+      if (status.startsWith("D")) remove.push(path);
+      else restore.push(path);
+    }
+    if (restore.length > 0) {
+      yield* runChunked(
+        worktreePath,
+        ["restore", "--worktree", `--source=${snapshot}`],
+        restore,
+      );
+    }
+    yield* Effect.forEach(
+      remove,
+      (path) =>
+        promiseStep(() => rm(join(worktreePath, path), { force: true })),
+      { concurrency: "unbounded", discard: true },
     );
   },
+  (effect, worktreePath) => onIndex(worktreePath, effect),
 );
-
-export function restoreDiscard(
-  worktreePath: string,
-  snapshot: string,
-): Promise<void> {
-  return runGit(restoreDiscardEffect(worktreePath, snapshot));
-}

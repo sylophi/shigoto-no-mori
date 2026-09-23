@@ -115,6 +115,51 @@ export function makeTracker() {
 // wait on a predicate whose timeout names what it waited for.
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Effect's scheduler dispatches on setImmediate. A few turns let a
+// fiber woken by a start, a close, a settled promise or a clock
+// adjustment reach its next status before an assertion reads it.
+export async function settle(turns = 5) {
+  for (let i = 0; i < turns; i += 1) {
+    // oxlint-disable-next-line no-await-in-loop -- turns are sequential by nature
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
+// Fails the check instead of hanging the process when a promise that
+// should settle at once (a stop() under a frozen clock) never does.
+export async function promptly(promise, what, ms = 500) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${what} did not settle`)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Whether a pid is still running.
+export function alive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Swaps console.warn for a recorder for the rest of the check.
+export function captureWarnings(track) {
+  const warned = [];
+  const warn = console.warn;
+  console.warn = (...args) => warned.push(args.map(String).join(" "));
+  track(() => {
+    console.warn = warn;
+  });
+  return warned;
+}
+
 // Polls a predicate, sync or async, until it holds.
 export async function waitFor(predicate, what, timeoutMs = 5_000) {
   const deadline = Date.now() + timeoutMs;

@@ -18,13 +18,8 @@ import {
 import { mergeViaCli } from "../cliDelegate";
 import { getGithubCliReadiness } from "@host/lib/githubCli/readiness";
 import { getRepoMergeConfig } from "@host/lib/githubCli/repoConfig";
-import { findProjectOrThrow } from "@host/lib/projects";
+import { findProject } from "@host/lib/projects";
 import { hostAttempt, hostHandler } from "@host/runtime";
-
-// The project a handler is about, as its first step: an unknown id
-// fails with the very UnknownProject findProjectOrThrow throws.
-const projectOf = (projectId: string) =>
-  hostAttempt(() => findProjectOrThrow(projectId));
 
 export const githubCliHandlers: Handlers<
   typeof githubCliContract,
@@ -34,7 +29,7 @@ export const githubCliHandlers: Handlers<
 
   projectPullRequests: hostHandler(({ projectId }) =>
     Effect.gen(function* () {
-      const project = yield* projectOf(projectId);
+      const project = yield* findProject(projectId);
       const map = yield* hostAttempt(() =>
         listProjectPullRequests(project.path),
       );
@@ -45,7 +40,7 @@ export const githubCliHandlers: Handlers<
 
   worktreePullRequest: hostHandler(({ projectId, branch }) =>
     Effect.gen(function* () {
-      const project = yield* projectOf(projectId);
+      const project = yield* findProject(projectId);
       return yield* hostAttempt(() =>
         getWorktreePullRequest(project.path, branch),
       );
@@ -54,14 +49,14 @@ export const githubCliHandlers: Handlers<
 
   pullRequestCandidates: hostHandler(({ projectId }) =>
     Effect.gen(function* () {
-      const project = yield* projectOf(projectId);
+      const project = yield* findProject(projectId);
       return yield* hostAttempt(() => listPullRequestCandidates(project.path));
     }),
   ),
 
   resolvePullRequestCheckout: hostHandler(({ projectId, number }) =>
     Effect.gen(function* () {
-      const project = yield* projectOf(projectId);
+      const project = yield* findProject(projectId);
       return yield* hostAttempt(() =>
         resolvePullRequestCheckout(project.path, number),
       );
@@ -70,14 +65,14 @@ export const githubCliHandlers: Handlers<
 
   repoMergeConfig: hostHandler(({ projectId }) =>
     Effect.gen(function* () {
-      const project = yield* projectOf(projectId);
+      const project = yield* findProject(projectId);
       return yield* hostAttempt(() => getRepoMergeConfig(project.path));
     }),
   ),
 
   mergePullRequest: hostHandler(({ projectId, number, method }) =>
     Effect.gen(function* () {
-      const project = yield* projectOf(projectId);
+      const project = yield* findProject(projectId);
       // One step, so a caller that leaves mid-merge stops waiting, not
       // the eviction that must follow a merge.
       yield* hostAttempt(async () => {
@@ -93,7 +88,7 @@ export const githubCliHandlers: Handlers<
 
   pullRequestDiff: hostHandler(({ projectId, number }) =>
     Effect.gen(function* () {
-      const project = yield* projectOf(projectId);
+      const project = yield* findProject(projectId);
       return yield* hostAttempt(() =>
         getPullRequestDiff({ cwd: project.path, number }),
       );
@@ -102,7 +97,7 @@ export const githubCliHandlers: Handlers<
 
   setPullRequestDraft: hostHandler(({ projectId, number, draft }) =>
     Effect.gen(function* () {
-      const project = yield* projectOf(projectId);
+      const project = yield* findProject(projectId);
       yield* hostAttempt(() =>
         setPullRequestDraft({ cwd: project.path, number, draft }),
       );

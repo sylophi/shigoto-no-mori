@@ -16,11 +16,11 @@ export type CodecIn<S> = S extends AnyCodec ? S["Encoded"] : never;
 // a spread that writes key by key) would then make its value the
 // object's prototype. Dropped before any decode, at every depth. The
 // input is copied only where such a key exists.
-function withoutProtoKeys(value: unknown): unknown {
+function dropProtoKeys(value: unknown): unknown {
   if (Array.isArray(value)) {
     let copy: unknown[] | null = null;
     for (let i = 0; i < value.length; i += 1) {
-      const item = withoutProtoKeys(value[i]);
+      const item = dropProtoKeys(value[i]);
       if (item !== value[i] && copy === null) copy = value.slice();
       if (copy !== null) copy[i] = item;
     }
@@ -36,13 +36,44 @@ function withoutProtoKeys(value: unknown): unknown {
       delete copy[key];
       continue;
     }
-    const item = withoutProtoKeys(record[key]);
+    const item = dropProtoKeys(record[key]);
     if (item !== record[key]) {
       copy ??= { ...record };
       copy[key] = item;
     }
   }
   return copy ?? value;
+}
+
+// The walk is a visit of every node, so it runs once per value: a
+// value it produced, or a parse of text that cannot spell the key, is
+// remembered here and passed through by later decodes (a frame decoded
+// on the wire and its input decoded again by the registrar, a hub
+// envelope and the frame inside it).
+const protoFree = new WeakSet<object>();
+
+function withoutProtoKeys(value: unknown): unknown {
+  if (typeof value !== "object" || value === null) return value;
+  if (protoFree.has(value)) return value;
+  const clean = dropProtoKeys(value);
+  if (typeof clean === "object" && clean !== null) protoFree.add(clean);
+  return clean;
+}
+
+// JSON.parse for a wire frame. Text that spells neither the key nor a
+// unicode escape (which could spell it letter by letter) parses to a
+// value with no such key at any depth, so that value skips the walk.
+export function parseWireJson(text: string): unknown {
+  const raw: unknown = JSON.parse(text);
+  if (
+    typeof raw === "object" &&
+    raw !== null &&
+    !text.includes("__proto__") &&
+    !text.includes("\\u")
+  ) {
+    protoFree.add(raw);
+  }
+  return raw;
 }
 
 // Decode or throw: the registrar's unconditional input wall.
@@ -64,9 +95,17 @@ export function validateWith(codec: AnyCodec, value: unknown): unknown {
   // The type-side schema alone: a copy holding only the declared keys
   // (a producer's spread of an internal record must not reach a peer),
   // with no transform run, and the issue naming what is wrong when the
-  // value does not fit.
-  return Schema.decodeUnknownSync(Schema.toType(codec))(value);
+  // value does not fit. Built once per codec: the dev-only output check
+  // runs it on every handler answer.
+  let validate = validators.get(codec);
+  if (validate === undefined) {
+    validate = Schema.decodeUnknownSync(Schema.toType(codec));
+    validators.set(codec, validate);
+  }
+  return validate(value);
 }
+
+const validators = new WeakMap<AnyCodec, (value: unknown) => unknown>();
 
 export type SafeDecode<T = unknown> =
   | { success: true; data: T }

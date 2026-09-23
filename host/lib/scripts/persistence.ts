@@ -19,7 +19,7 @@ import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { promisify } from "node:util";
-import { Effect, Schema } from "effect";
+import { Schema } from "effect";
 import type { OrphanScriptReport } from "@shared/schemas";
 import { atomicWriteJsonSync } from "../util/jsonFile";
 import { withFileLock } from "../util/lockFile";
@@ -302,9 +302,9 @@ function claimOrphanRecords(): readonly PersistedScript[] {
   return previous?.scripts ?? [];
 }
 
-// The sweep's one run, memoized: started at boot, and awaited (never
-// rerun) by the report below, which joins it if it is still going.
-let sweep: Effect.Effect<OrphanScriptReport> | null = null;
+// The sweep's one run: started at boot, and awaited (never rerun) by
+// the report below, which joins it if it is still going.
+let sweep: Promise<OrphanScriptReport> | null = null;
 let reported = false;
 
 // Call once at boot, before any script can spawn. The claim is sync so
@@ -313,24 +313,10 @@ let reported = false;
 export function startOrphanScriptSweep(): void {
   if (sweep) return;
   const records = claimOrphanRecords();
-  sweep = Effect.runSync(
-    Effect.cached(
-      Effect.tryPromise({
-        try: () => reapOrphans(records),
-        catch: (error) => error,
-      }).pipe(
-        Effect.catch((error) =>
-          Effect.sync((): OrphanScriptReport => {
-            console.warn(
-              `[scripts] orphan sweep failed: ${errorMessageOf(error)}`,
-            );
-            return { stopped: 0 };
-          }),
-        ),
-      ),
-    ),
-  );
-  Effect.runFork(sweep);
+  sweep = reapOrphans(records).catch((error: unknown) => {
+    console.warn(`[scripts] orphan sweep failed: ${errorMessageOf(error)}`);
+    return { stopped: 0 };
+  });
 }
 
 // One-shot drain for the renderer's notice. Awaits the sweep rather
@@ -340,5 +326,5 @@ export function startOrphanScriptSweep(): void {
 export async function takeOrphanSweepReport(): Promise<OrphanScriptReport> {
   if (!sweep || reported) return { stopped: 0 };
   reported = true;
-  return Effect.runPromise(sweep);
+  return sweep;
 }

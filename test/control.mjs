@@ -115,6 +115,7 @@ import {
   makeProof,
   makeTracker,
   scrubbedGitEnv,
+  waitFor,
 } from "./lib/checkKit.mjs";
 import { bootDirectWire } from "./lib/directBoot.mjs";
 
@@ -222,17 +223,7 @@ function rawClient(port) {
 // The answers a raw client has heard.
 const resOf = (client) => client.frames.filter((frame) => frame.t === "res");
 
-const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// Polls until the condition holds, failing with `what` after a while.
-async function waitFor(condition, what, ms = 3_000) {
-  const deadline = Date.now() + ms;
-  while (!condition()) {
-    if (Date.now() > deadline) throw new Error(`timed out waiting: ${what}`);
-    // oxlint-disable-next-line no-await-in-loop -- polling is sequential
-    await pause(10);
-  }
-}
+const pause = delay;
 
 // The listener's bounds, on a server of their own whose fibers run on
 // a TestClock, so the hello deadline moves only when told to.

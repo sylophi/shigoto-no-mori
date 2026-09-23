@@ -27,7 +27,8 @@
 // Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
 // imports resolve. Run: pnpm test web-bridge.
 import assert from "node:assert/strict";
-import { buildApi } from "@shared/ipc/client";
+import { allContractModules, buildApi } from "@shared/ipc/client";
+import { BROADCAST_CHANNELS, INVOKE_CHANNELS } from "@shared/ipc/channels";
 import { isDeviceId } from "@shared/hub/protocol";
 import { NoDirectConnection, isNoDirectConnectionError } from "@shared/errors";
 import { createWebBridge } from "../web/ipc/register.ts";
@@ -86,6 +87,12 @@ const STORED_ENVELOPE = JSON.stringify({
 // ---- harness (test/lib/checkKit.mjs) ----
 
 const { check, done, fail } = makeProof("web bridge proof");
+
+// The names in one list and not the other.
+const diff = (want, have) => ({
+  missing: want.filter((name) => !have.includes(name)),
+  stale: have.filter((name) => !want.includes(name)),
+});
 
 async function main() {
   console.log("web bridge proof\n");
@@ -651,6 +658,29 @@ async function main() {
           brave: false,
         }),
         "Chrome on macOS",
+      );
+    },
+  );
+
+  await check(
+    "the preload's schema-free channel lists name exactly the contracts' channels",
+    async () => {
+      const invokes = [];
+      const broadcasts = [];
+      for (const module of allContractModules) {
+        for (const def of Object.values(module.calls)) {
+          (def.kind === "invoke" ? invokes : broadcasts).push(def.channel);
+        }
+      }
+      assert.deepEqual(
+        diff(invokes, INVOKE_CHANNELS),
+        { missing: [], stale: [] },
+        "shared/ipc/channels.ts INVOKE_CHANNELS is out of step with the contracts",
+      );
+      assert.deepEqual(
+        diff(broadcasts, BROADCAST_CHANNELS),
+        { missing: [], stale: [] },
+        "shared/ipc/channels.ts BROADCAST_CHANNELS is out of step with the contracts",
       );
     },
   );

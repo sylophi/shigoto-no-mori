@@ -4,8 +4,7 @@ import { DeviceIdSchema } from "@shared/hub/protocol";
 import { SyncPullWorktreeResultSchema } from "@shared/ipc/modules/sync";
 import { WorktreeIdSchema, WorktreeSchema } from "@shared/schemas";
 import { strictStruct } from "@shared/schemas/strict";
-
-const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+import { NonNegativeInt } from "@shared/schemas/ints";
 
 // What the CLI asks of the running app: the cross-device verbs (`sm
 // worktrees send|bring|mirror|unmirror|mirrors`, `sm devices`). Reaching

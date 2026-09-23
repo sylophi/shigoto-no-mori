@@ -17,8 +17,7 @@ import {
   WorktreeIdSchema,
 } from "@shared/schemas";
 import { strictStruct } from "@shared/schemas/strict";
-
-const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+import { NonNegativeInt } from "@shared/schemas/ints";
 
 // Continuous worktree mirroring (PRODUCT.md, "Three ways to reach
 // remote work"): a worktree kept identical on two devices, every file,

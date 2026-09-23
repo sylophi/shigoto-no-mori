@@ -8,19 +8,19 @@ import {
   measureWorktreeDiskEffect,
 } from "@host/lib/worktrees/hygiene";
 import { hostHandler } from "@host/runtime";
-import { projectEffect } from "./worktrees";
+import { findProject } from "@host/lib/projects";
 
 export const hygieneHandlers: Handlers<typeof hygieneContract, HandlerContext> =
   {
     list: hostHandler(({ projectId }) =>
-      Effect.flatMap(projectEffect(projectId), (project) =>
+      Effect.flatMap(findProject(projectId), (project) =>
         collectProjectHygieneEffect(project.id, project.path),
       ),
     ),
 
     diskUsage: hostHandler(({ projectId, worktreeId }) =>
       Effect.gen(function* () {
-        const project = yield* projectEffect(projectId);
+        const project = yield* findProject(projectId);
         const worktree = yield* findWorktreeForDiskEffect(
           project.id,
           project.path,

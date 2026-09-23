@@ -194,7 +194,7 @@ import {
   TunnelUnconfiguredError,
 } from "@shared/account/service";
 import { createHubConnection as createWebConnection } from "../web/hub/connection.ts";
-import { makeProof } from "./lib/checkKit.mjs";
+import { makeProof, settle } from "./lib/checkKit.mjs";
 import {
   bootBrokeredPair as bootPair,
   makeDirectBridge,
@@ -281,17 +281,6 @@ function fakeBrokerDialer(answer, opts = {}) {
     deadlineMs: opts.deadlineMs ?? 4000,
   });
   return { dialer, brokerCalls: () => brokerCalls };
-}
-
-// Effect's scheduler dispatches on setImmediate, so a few turns let a
-// keeper fiber woken by a reconcile, a settled dial or a clock
-// adjustment reach its next sleep or dial before an assertion reads
-// the dial log.
-async function settle() {
-  for (let i = 0; i < 5; i += 1) {
-    // oxlint-disable-next-line no-await-in-loop -- turns are sequential by nature
-    await new Promise((resolve) => setImmediate(resolve));
-  }
 }
 
 // A TestClock runtime for the keeper's fibers, disposed with the

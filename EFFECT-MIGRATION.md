@@ -190,8 +190,7 @@ One `ManagedRuntime` per process, built from one application Layer.
 
 ```ts
 // main/runtime.ts
-export const appMemoMap = Layer.makeMemoMapUnsafe()
-export const runtime = ManagedRuntime.make(AppLive, { memoMap: appMemoMap })
+export const runtime = ManagedRuntime.make(AppLive)
 ```
 
 - `AppLive` is composed in `main/runtime.ts` from the runner services
@@ -752,8 +751,8 @@ and `requireService` dying with the old "not installed" message; the
 five that stayed plain (`direct`, `sharedSettings`, `globalConfig`,
 `packageScripts`, `scripts`) delegate to services that are already
 Effects or do only synchronous reads. The hand-rolled concurrency is
-gone: per-worktree index locks are an `RcMap` of semaphores, the
-fetch, identity and icon single-flights are `Cache`s, the sync chunk
+gone: per-worktree index locks are a call-ordered chain of turns per
+path, the fetch, identity and icon single-flights are `Cache`s, the sync chunk
 pump is a `Queue`, temp files are scoped, the PTY output batcher and
 the CLI's NDJSON are `Stream`s, the fetch and updater loops are
 `Schedule.spaced` fibers in their Layers, and the global config write

@@ -31,7 +31,12 @@ import {
 } from "@shared/remote/supervisor";
 import { RemoteConnectError } from "@shared/ipc/socket/wsClientTransport";
 import { CLOSE_AUTH_FAILED } from "@shared/ipc/socket/frames";
-import { makeProof } from "./lib/checkKit.mjs";
+import {
+  captureWarnings,
+  makeProof,
+  promptly,
+  settle,
+} from "./lib/checkKit.mjs";
 
 const { check, done, fail } = makeProof("supervisor proof");
 
@@ -46,30 +51,6 @@ const PARAMS = {
 // a dropped network produces).
 const CLOSE_ABNORMAL = 1006;
 const CLOSE_REVOKED = 4100;
-
-// The forked loop runs on Effect's scheduler, which dispatches on
-// setImmediate. A few turns let a fiber woken by start(), a close or a
-// clock adjustment reach its next status before an assertion reads it.
-async function settle() {
-  for (let i = 0; i < 5; i += 1) {
-    // oxlint-disable-next-line no-await-in-loop -- turns are sequential by nature
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-}
-
-// Fails the check instead of hanging the process when a promise that
-// should settle at once (a stop() under a frozen clock) never does.
-async function promptly(promise, what) {
-  let timer;
-  const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`${what} did not settle`)), 500);
-  });
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 function fakeConnection(remoteDeviceId) {
   const connection = {
@@ -183,12 +164,7 @@ async function main() {
   await check(
     "defect: a dial that dies (a thrown bug, not a typed failure) backs off like a failed dial instead of ending the loop in connecting",
     async (track) => {
-      const warned = [];
-      const warn = console.warn;
-      console.warn = (line) => warned.push(String(line));
-      track(() => {
-        console.warn = warn;
-      });
+      const warned = captureWarnings(track);
       const h = harness(track, {
         script: [
           () => Effect.die(new Error("dial bug")),

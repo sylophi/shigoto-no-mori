@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Schema, Struct } from "effect";
 import { MIRROR_IGNORES_LIMIT } from "@shared/mirrorIgnores";
 import { isValidWorktreeDirName } from "@shared/git/branches";
 import { isSafeRelPath } from "@shared/git/gitPaths";
@@ -14,8 +14,8 @@ import {
   WorktreeSchema,
 } from "@shared/schemas";
 import { strictStruct } from "@shared/schemas/strict";
+import { NonNegativeInt } from "@shared/schemas/ints";
 
-const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const ProjectIdSchema = Schema.NonEmptyString;
 
 // Device-sync transfer plumbing: git bundles move
@@ -494,11 +494,13 @@ export const SyncHasCommitsResultSchema = strictStruct({
   present: Schema.Array(CommitHashSchema),
 });
 
-export const SyncTeardownSourcePayloadSchema = strictStruct({
-  sourceDeviceId: DeviceIdSchema,
-  sourceProjectId: ProjectIdSchema,
-  sourceWorktreeId: WorktreeIdSchema,
-});
+export const SyncTeardownSourcePayloadSchema = strictStruct(
+  Struct.pick(SyncPullWorktreePayloadSchema.fields, [
+    "sourceDeviceId",
+    "sourceProjectId",
+    "sourceWorktreeId",
+  ]),
+);
 
 // The sent worktree's teardown: which peer it went to and which local
 // worktree that was. Like teardownSource, what the send captured and

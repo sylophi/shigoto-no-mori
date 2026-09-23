@@ -29,6 +29,7 @@ import {
 } from "../util/jsonFile";
 import { withFileLock } from "../util/lockFile";
 import { dataDir, isENOENT, REGISTRY_FILE, STATE_FILE } from "../util/paths";
+import { loose } from "@shared/schemas/strict";
 
 // The registry's keys live here rather than in their feature modules
 // so the accessors and the split below can't drift apart. cli/state.go
@@ -93,10 +94,8 @@ const REGISTRY_KEYS = [PROJECTS_KEY, SHELVED_KEY];
 //   refusing would turn a repairable value into a stuck error.
 
 // A project row as stored: the declared fields decode, every other key
-// rides through (config.ts's loose()).
-const StoredProjectSchema = Schema.StructWithRest(ProjectSchema, [
-  Schema.Record(Schema.String, Schema.Unknown),
-]);
+// rides through.
+const StoredProjectSchema = loose(ProjectSchema);
 // A worktree id set (the shelf, the auto-pull marks). Written as
 // id -> true; cli/state.go reads it as map[string]bool.
 const IdMarksSchema = Schema.Record(Schema.String, Schema.Boolean);

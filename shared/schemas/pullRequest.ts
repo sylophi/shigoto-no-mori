@@ -1,8 +1,6 @@
 import { Schema } from "effect";
 import { ProjectScopedPayloadSchema } from "./payloads";
-
-const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0));
-const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+import { NonNegativeInt, PositiveInt } from "./ints";
 
 // zod's z.url(): the value trimmed, then held to what the URL
 // constructor parses. The decoded value is the trimmed string.

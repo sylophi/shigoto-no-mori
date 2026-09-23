@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { PATCH_MAX_BUFFER, runGit, runLenientEffect } from "./core";
+import { PATCH_MAX_BUFFER, runLenientEffect } from "./core";
 
 // The diff of one file in the working tree, read as the changes page
 // picks files. Nothing here can go stale against a list built somewhere
@@ -54,14 +54,6 @@ export const getFileDiffEffect = Effect.fn("diff.getFileDiff")(function* (
   });
 });
 
-export function getFileDiff(
-  worktreePath: string,
-  paths: readonly string[],
-  untracked: boolean,
-): Promise<string> {
-  return runGit(getFileDiffEffect(worktreePath, paths, untracked));
-}
-
 // Unified patch of a single commit, with the commit metadata stripped
 // (`--format=`) so the output feeds straight into @pierre/diffs'
 // `parsePatchFiles`. Returns empty for commits without diffs (e.g. an
@@ -80,10 +72,3 @@ export const getCommitDiffEffect = Effect.fn("diff.getCommitDiff")(function* (
     { maxBuffer: PATCH_MAX_BUFFER },
   );
 });
-
-export function getCommitDiff(
-  worktreePath: string,
-  hash: string,
-): Promise<string> {
-  return runGit(getCommitDiffEffect(worktreePath, hash));
-}

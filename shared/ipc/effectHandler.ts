@@ -7,11 +7,10 @@
 // end. Its failures are the typed errors the wires carry
 // (shared/errors.ts); a defect rejects like any thrown bug did.
 //
-// `fromEffect` runs on Effect's default services (requirements are
-// `never`); `fromEffectWith` runs on a runtime the caller names, read
-// at call time, so a host handler's requirements are met by whatever
-// the binding installed (host/runtime.ts).
-import { Effect } from "effect";
+// The runtime is named by the caller and read at call time, so a host
+// handler's requirements are met by whatever the binding installed
+// (host/runtime.ts).
+import type { Effect } from "effect";
 
 export type HandlerRuntime<R> = {
   runPromise: <A, E>(
@@ -32,14 +31,4 @@ export function fromEffectWith<I, O, R, Ctx extends { signal: AbortSignal }>(
     }
     return runtime().runPromise(handle(input, ctx), { signal: ctx.signal });
   };
-}
-
-const defaultRuntime: HandlerRuntime<never> = {
-  runPromise: (effect, options) => Effect.runPromise(effect, options),
-};
-
-export function fromEffect<I, O, Ctx extends { signal: AbortSignal }>(
-  handle: (input: I, ctx: Ctx) => Effect.Effect<O, unknown, never>,
-): (input: I, ctx: Ctx) => Promise<O> {
-  return fromEffectWith(() => defaultRuntime, handle);
 }

@@ -83,3 +83,16 @@ export function strictStruct<const Fields extends Schema.Struct.Fields>(
   const schema = open.check(refuseUndeclared);
   return Schema.make<StrictStruct<Fields>>(schema.ast, { fields });
 }
+
+// zod's .loose() for Effect Schema: the declared fields decode as
+// declared and every other own key rides through as it was, for a
+// document read from disk or a tool's JSON whose other keys this
+// build does not model. `loose` takes a struct, `looseStruct` fields.
+export const loose = <S extends Schema.Struct<Schema.Struct.Fields>>(
+  struct: S,
+) =>
+  Schema.StructWithRest(struct, [Schema.Record(Schema.String, Schema.Unknown)]);
+
+export const looseStruct = <const Fields extends Schema.Struct.Fields>(
+  fields: Fields,
+) => loose(Schema.Struct(fields));

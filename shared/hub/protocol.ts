@@ -106,9 +106,8 @@ export const CLOSE_SUPERSEDED = 4103;
 // limit (workerd hard-caps a websocket accept tag at 256 chars, so this
 // stays well under it). The single source for the several wire and IPC
 // sites that route or grant against a device id.
-export const DeviceIdSchema = Schema.NonEmptyString.check(
-  Schema.isMaxLength(200),
-).pipe(Schema.brand("DeviceId"));
+const BoundedDeviceId = Schema.NonEmptyString.check(Schema.isMaxLength(200));
+export const DeviceIdSchema = BoundedDeviceId.pipe(Schema.brand("DeviceId"));
 export type DeviceId = typeof DeviceIdSchema.Type;
 export const isDeviceId = Schema.is(DeviceIdSchema);
 
@@ -190,7 +189,7 @@ export type ErrorBody = typeof ErrorBodySchema.Type;
 // bounded so an enroll cannot store unbounded strings under a Clerk
 // token.
 export const EnrollRequestSchema = Schema.Struct({
-  deviceId: Schema.NonEmptyString.check(Schema.isMaxLength(200)),
+  deviceId: BoundedDeviceId,
   name: Schema.NonEmptyString.check(Schema.isMaxLength(256)),
   platform: Schema.NonEmptyString.check(Schema.isMaxLength(64)),
 });
@@ -294,7 +293,7 @@ const HubDeliverEnvelopeSchema = Schema.Struct({
   // Bounded like HubSendEnvelopeSchema.to: a hostile DO can forge this,
   // and it is fed straight into per-peer routing and log lines, so it is
   // never left unbounded.
-  from: Schema.NonEmptyString.check(Schema.isMaxLength(200)),
+  from: BoundedDeviceId,
   frame: Schema.Unknown,
 });
 
@@ -309,9 +308,9 @@ const PresenceEnvelopeSchema = Schema.Struct({
   // unbounded allocation from one presence envelope. The DO always names
   // real account devices, so both bounds are additive tightenings it
   // already satisfies.
-  online: Schema.Array(
-    Schema.NonEmptyString.check(Schema.isMaxLength(200)),
-  ).check(Schema.isMaxLength(MAX_ONLINE_DEVICES)),
+  online: Schema.Array(BoundedDeviceId).check(
+    Schema.isMaxLength(MAX_ONLINE_DEVICES),
+  ),
 });
 
 // DO to device: a send could not be delivered. `offline` means no
@@ -321,7 +320,7 @@ const NackEnvelopeSchema = Schema.Struct({
   t: Schema.Literal("nack"),
   // Echoes the `to` the sender used, already bounded on send, so the
   // same bound applies coming back.
-  to: Schema.NonEmptyString.check(Schema.isMaxLength(200)),
+  to: BoundedDeviceId,
   reason: Schema.Literals(["offline", "too-large"]),
 });
 

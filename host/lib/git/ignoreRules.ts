@@ -12,7 +12,7 @@
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Effect } from "effect";
-import { runEffect, runGit } from "./core";
+import { runEffect } from "./core";
 
 export const IGNORE_RULES_LIMIT = 512;
 
@@ -92,7 +92,3 @@ export const listIgnoreRulesEffect = Effect.fn("ignoreRules.listIgnoreRules")(
     return [...new Set(rules)].slice(0, IGNORE_RULES_LIMIT);
   },
 );
-
-export function listIgnoreRules(worktreePath: string): Promise<string[]> {
-  return runGit(listIgnoreRulesEffect(worktreePath));
-}

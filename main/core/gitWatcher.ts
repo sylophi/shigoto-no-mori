@@ -34,11 +34,13 @@
 // debounced, and each element is one change signal. The watch handle
 // is owned by the stream's scope, so dropping a project is interrupting
 // its fiber and there is no timer to clear.
-import { type FSWatcher, readFileSync, statSync, watch } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { Effect, Fiber, Queue, Stream } from "effect";
+import { Effect, Fiber, Stream } from "effect";
 import type { Project } from "@shared/schemas";
 import { loadProjects } from "@host/lib/projects";
+import { contained } from "@shared/util/contained";
+import { watchEvents } from "./watchEvents";
 
 const DEBOUNCE_MS = 300;
 
@@ -111,54 +113,23 @@ export type GitWatcherDeps = {
 const watched = new Map<string, Watched>();
 let deps: GitWatcherDeps | null = null;
 
-// The relevant, unsuppressed events of one git directory, as they
-// land. The watch handle lives in the stream's scope: it opens when
-// the stream starts and closes when the stream ends, however it ends.
-// A watch that cannot open (vanished between the stat and the watch,
-// or a platform without recursive watches), or that errors later (the
-// repository deleted or unmounted), ends the stream, and a later
-// reconcile tries again.
+// The relevant, unsuppressed events of one git directory
+// (watchEvents). A watch that cannot open or errors later ends the
+// stream, and a later reconcile tries again.
 function gitDirEvents(
   gitDir: string,
   suppressed: (gitDir: string) => boolean,
-): Stream.Stream<string> {
-  return Stream.callback<string>((queue) =>
-    Effect.acquireRelease(
-      // A synchronous throw from fs.watch is the "not watchable" case,
-      // so it is caught here: inside Effect.sync it would be a defect,
-      // which no catch below would see.
-      Effect.sync(() => {
-        let watcher: FSWatcher;
-        try {
-          watcher = watch(gitDir, { recursive: true, persistent: false });
-        } catch {
-          return null;
-        }
-        watcher.on("change", (_eventType, file) => {
-          if (typeof file !== "string" || !isRelevantGitPath(file)) return;
-          // Checked at event time, not after the debounce, mirroring
-          // the state watcher: a CLI child finishing right after an
-          // external commit must not swallow the refresh that commit
-          // deserves.
-          if (suppressed(gitDir)) return;
-          Queue.offerUnsafe(queue, file);
-        });
-        watcher.on("error", () => {
-          Queue.endUnsafe(queue);
-        });
-        return watcher;
-      }),
-      (watcher) =>
-        Effect.sync(() => {
-          if (watcher === null) Queue.endUnsafe(queue);
-          else watcher.close();
-        }),
-    ).pipe(
-      // A watch that never opened ends the stream at once.
-      Effect.flatMap((watcher) =>
-        watcher === null ? Queue.end(queue) : Effect.succeed(true),
-      ),
-    ),
+): Stream.Stream<string | null> {
+  return watchEvents(
+    gitDir,
+    { recursive: true },
+    (file) =>
+      file !== null &&
+      isRelevantGitPath(file) &&
+      // Checked at event time, not after the debounce, mirroring the
+      // state watcher: a CLI child finishing right after an external
+      // commit must not swallow the refresh that commit deserves.
+      !suppressed(gitDir),
   );
 }
 
@@ -169,16 +140,11 @@ function watchProject(
 ): Effect.Effect<void> {
   return gitDirEvents(gitDir, current.suppressed).pipe(
     Stream.debounce(DEBOUNCE_MS),
+    // Contained: a throw would end this project's watch.
     Stream.runForEach(() =>
-      Effect.sync(() => {
-        // Contained: a throw would end this project's watch with a
-        // defect nothing reports.
-        try {
-          current.onChange(projectId);
-        } catch (error) {
-          console.warn(`[git-watcher] onChange threw: ${String(error)}`);
-        }
-      }),
+      contained("[git-watcher] onChange threw", () =>
+        current.onChange(projectId),
+      ),
     ),
   );
 }

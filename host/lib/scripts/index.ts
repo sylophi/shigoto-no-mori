@@ -23,6 +23,8 @@ import {
   Stream,
 } from "effect";
 import { errorMessageOf } from "@shared/errors";
+import { containedSync } from "@shared/util/contained";
+import { hostAttempt } from "@host/runtime";
 import { stopMirrorsForWorktree } from "@host/mirror/registry";
 import type { Project, ScriptEvent } from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
@@ -106,9 +108,28 @@ export function batchScriptOutput(
   events: ScriptOutputQueue,
 ): Stream.Stream<OutputBatch> {
   let opened = 0;
+  // One take per burst: everything queued is drained at once and handed
+  // out from here, so a firehose of reads costs one fiber wake per
+  // burst rather than one per read. The drained events keep their
+  // order, and a burst that spans a batch boundary carries over.
+  let drained: ReadonlyArray<ScriptOutput | OutputTick> = [];
+  let handed = 0;
+  const nextEvent: Effect.Effect<ScriptOutput | OutputTick, Cause.Done> =
+    Effect.suspend(() => {
+      if (handed < drained.length) {
+        return Effect.succeed(drained[handed++] as ScriptOutput | OutputTick);
+      }
+      return Queue.takeAll(events).pipe(
+        Effect.map((items) => {
+          drained = items;
+          handed = 1;
+          return items[0];
+        }),
+      );
+    });
   const nextBatch = Effect.gen(function* () {
-    let first = yield* Queue.take(events);
-    while (first.kind === "tick") first = yield* Queue.take(events);
+    let first = yield* nextEvent;
+    while (first.kind === "tick") first = yield* nextEvent;
     if (first.kind !== "data") {
       return [{ data: "", closedBy: first }] as const;
     }
@@ -124,7 +145,7 @@ export function batchScriptOutput(
       // Done here is the queue ending without an exit in front of it
       // (the check's teardown): the batch goes out, and the next pull
       // ends the stream.
-      const next = yield* Queue.take(events).pipe(
+      const next = yield* nextEvent.pipe(
         Effect.catch(() => Effect.succeed(null)),
       );
       if (next === null) break;
@@ -177,14 +198,16 @@ interface RunRecord {
   // is one of the facts that proves a surviving pid is still ours.
   command: string;
   startedAt: number;
-  exited: boolean;
   cancelling: boolean;
-  // Completed once the exit event has gone out.
+  // Completed once the exit event has gone out: the run has exited.
   done: Deferred.Deferred<void>;
   // The run's output stream (batchScriptOutput). Everything the run
   // emits goes through it, so it all reaches the renderer in order.
   output: ScriptOutputQueue;
 }
+
+const hasExited = (record: RunRecord): boolean =>
+  Deferred.isDoneUnsafe(record.done);
 
 const runningScripts = new Map<string, RunRecord>();
 
@@ -254,11 +277,6 @@ function deleteMark(
   );
 }
 
-// A Promise step inside an Effect body. Its rejection stays the very
-// object thrown, so a caller of the Promise surface sees what it saw.
-const attempt = <A>(run: () => PromiseLike<A> | A) =>
-  Effect.tryPromise({ try: async () => run(), catch: (error) => error });
-
 // The one place the tombstone protocol is spelled out: refuse a
 // concurrent mutation of the same worktree, mark the id so a still-
 // running create lifecycle can't spawn steps into a directory that is
@@ -284,9 +302,9 @@ export function withDeleteInflight<T>(
     Effect.scoped(
       Effect.gen(function* () {
         yield* deleteMark(worktreeId, busyMessage);
-        yield* attempt(() => killScriptsForWorktree(worktreeId));
-        const result = yield* attempt(run);
-        yield* attempt(() => stopMirrorsForWorktree(worktreeId));
+        yield* hostAttempt(() => killScriptsForWorktree(worktreeId));
+        const result = yield* hostAttempt(run);
+        yield* hostAttempt(() => stopMirrorsForWorktree(worktreeId));
         return result;
       }),
     ),
@@ -342,7 +360,7 @@ export interface RunningScriptWorktree {
 export function getRunningScriptWorktrees(): RunningScriptWorktree[] {
   const byWorktree = new Map<string, RunningScriptWorktree>();
   for (const record of runningScripts.values()) {
-    if (record.exited) continue;
+    if (hasExited(record)) continue;
     const existing = byWorktree.get(record.worktreeId);
     if (existing) {
       existing.scriptCount++;
@@ -397,7 +415,7 @@ const killRecord = Effect.fnUntraced(function* (
   record: RunRecord,
   opts: KillOptions,
 ) {
-  if (record.exited) return;
+  if (hasExited(record)) return;
   if (record.cancelling) {
     // Another caller is already escalating. Wait for it, but bounded
     // so an unkillable child doesn't wedge this caller's chain too.
@@ -413,11 +431,11 @@ const killRecord = Effect.fnUntraced(function* (
     });
   }
 
-  yield* attempt(() => signalTree(record.pid, "SIGTERM"));
+  yield* hostAttempt(() => signalTree(record.pid, "SIGTERM"));
   const graceMs = opts.graceMs ?? DEFAULT_GRACE_MS;
   if (yield* exitedWithin(record, graceMs)) return;
 
-  yield* attempt(() => signalTree(record.pid, "SIGKILL"));
+  yield* hostAttempt(() => signalTree(record.pid, "SIGKILL"));
   if (!(yield* exitedWithin(record, UNKILLABLE_WAIT_MS))) {
     // Give up rather than hanging the caller forever. The record stays
     // live on purpose: the process really is still running, so the busy
@@ -511,7 +529,6 @@ export function startScript(args: RunArgs): string {
     scriptName: args.scriptName,
     command: args.command,
     startedAt: Date.now(),
-    exited: false,
     cancelling: false,
     done: Deferred.makeUnsafe<void>(),
     output,
@@ -560,13 +577,9 @@ export function startScript(args: RunArgs): string {
   // a throw from a notify would end it with a defect nothing reports,
   // leaving the exit unsent and every kill waiting out its deadline.
   const notify = (payload: ScriptEvent) => {
-    try {
-      args.notify(payload);
-    } catch (error) {
-      console.warn(
-        `[scripts] "${record.scriptName}" event not delivered: ${errorMessageOf(error)}`,
-      );
-    }
+    containedSync(`[scripts] "${record.scriptName}" event not delivered`, () =>
+      args.notify(payload),
+    );
   };
   const settle = (event: ScriptOutput) => {
     switch (event.kind) {
@@ -579,7 +592,6 @@ export function startScript(args: RunArgs): string {
         return;
       case "exit":
         notify({ runId, kind: "exit", code: event.code });
-        record.exited = true;
         Deferred.doneUnsafe(record.done, Effect.void);
         runningScripts.delete(runId);
         persistSnapshot();
@@ -650,7 +662,7 @@ async function killMatching(
   opts: KillOptions = {},
 ): Promise<void> {
   const targets = Array.from(runningScripts.values()).filter(
-    (r) => !r.exited && predicate(r),
+    (r) => !hasExited(r) && predicate(r),
   );
   if (targets.length === 0) return;
   await Promise.all(targets.map((r) => runKill(r, { reason, ...opts })));
@@ -679,7 +691,7 @@ export async function killAllScripts(opts: KillOptions = {}): Promise<void> {
 // Electron tears the main process down.
 export function signalAllScriptsBestEffort(signal: NodeJS.Signals): void {
   for (const record of runningScripts.values()) {
-    if (record.exited) continue;
+    if (hasExited(record)) continue;
     signalTreeBestEffort(record.pid, signal);
   }
 }

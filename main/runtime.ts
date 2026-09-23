@@ -27,10 +27,6 @@ import {
 } from "./ipc/register";
 import type { AppServices } from "./services";
 
-// Shared across every ManagedRuntime this process builds so a layer is
-// memoized once even when a second runtime provides it.
-export const appMemoMap = Layer.makeMemoMapUnsafe();
-
 // The layer graph, bottom up. Each tier is provided to everything
 // above it, so it is acquired first and released last:
 //
@@ -71,4 +67,4 @@ export const AppLive: Layer.Layer<AppServices> = HostImplsLive.pipe(
   Layer.provideMerge(WiresLive),
 );
 
-export const runtime = ManagedRuntime.make(AppLive, { memoMap: appMemoMap });
+export const runtime = ManagedRuntime.make(AppLive);

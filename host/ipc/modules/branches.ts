@@ -8,7 +8,7 @@ import {
   renameAnyLocalBranchEffect,
 } from "@host/lib/git/branches";
 import { hostHandler } from "@host/runtime";
-import { projectEffect } from "./worktrees";
+import { findProject } from "@host/lib/projects";
 
 export const branchesHandlers: Handlers<
   typeof branchesContract,
@@ -16,7 +16,7 @@ export const branchesHandlers: Handlers<
 > = {
   create: hostHandler(({ projectId, name, base }) =>
     Effect.gen(function* () {
-      const project = yield* projectEffect(projectId);
+      const project = yield* findProject(projectId);
       yield* createLocalBranchEffect(project.path, name, base);
       return undefined;
     }),
@@ -24,7 +24,7 @@ export const branchesHandlers: Handlers<
 
   rename: hostHandler(({ projectId, oldName, newName }) =>
     Effect.gen(function* () {
-      const project = yield* projectEffect(projectId);
+      const project = yield* findProject(projectId);
       yield* renameAnyLocalBranchEffect(project.path, oldName, newName);
       return undefined;
     }),
@@ -34,7 +34,7 @@ export const branchesHandlers: Handlers<
   // tag the renderer matches to offer the force retry.
   delete: hostHandler(({ projectId, name, force }) =>
     Effect.gen(function* () {
-      const project = yield* projectEffect(projectId);
+      const project = yield* findProject(projectId);
       yield* deleteAnyLocalBranchEffect(project.path, name, force ?? false);
       return undefined;
     }),

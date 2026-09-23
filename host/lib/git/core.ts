@@ -4,6 +4,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { Effect, Schema } from "effect";
+import { classifyExecFailure } from "../util/execFailure";
 import { beginGitSelfWrite } from "../util/selfWrite";
 
 const execFileP = promisify(execFile);
@@ -174,53 +175,25 @@ export class GitSpawnError extends Schema.TaggedError<GitSpawnError>()(
 
 export type GitFailure = GitError | GitOutputTruncated | GitSpawnError;
 
-// execFile's rejection, as the promisified form hands it over.
-interface ExecFileFailure {
-  code?: unknown;
-  signal?: unknown;
-  killed?: unknown;
-  stdout?: unknown;
-  stderr?: unknown;
-  message?: unknown;
-}
-
-function asText(value: unknown): string {
-  if (typeof value === "string") return value;
-  return Buffer.isBuffer(value) ? value.toString("utf8") : "";
-}
-
-// The typed form of an execFile rejection. A numeric `code` is git's
-// exit status; a string one is an errno from the spawn or Node's
-// maxBuffer kill; neither with a signal set is a kill (the timeout, or
-// the caller's cancellation).
+// The typed form of an execFile rejection (host/lib/util/execFailure.ts
+// sorts it).
 function gitFailure(err: unknown, timeoutMs: number): GitFailure {
-  const failure =
-    typeof err === "object" && err !== null ? (err as ExecFileFailure) : {};
-  const { code, signal, killed, stdout, stderr } = failure;
-  if (code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
-    return new GitOutputTruncated();
+  const failure = classifyExecFailure(err);
+  if (failure.kind === "truncated") return new GitOutputTruncated();
+  if (failure.kind === "spawn") {
+    return new GitSpawnError({ code: failure.code, message: failure.message });
   }
-  if (typeof code === "number" || typeof signal === "string") {
-    const text = asText(stderr);
-    // `killed` is Node's own kill: the timeout (a cancelled run's
-    // rejection is never read, its fiber is interrupted). Git may
-    // still exit with a code and a message on the signal, so the
-    // timeout is named ahead of whatever it said.
-    const stopped =
-      killed === true
-        ? `git did not finish within ${Math.round(timeoutMs / 60_000)} minutes and was stopped.`
-        : "";
-    return new GitError({
-      stderr:
-        stopped === "" ? text : text === "" ? stopped : `${stopped}\n${text}`,
-      stdout: asText(stdout),
-      exitCode: typeof code === "number" ? code : null,
-    });
-  }
-  return new GitSpawnError({
-    code: typeof code === "string" ? code : null,
-    message:
-      typeof failure.message === "string" ? failure.message : String(err),
+  const text = failure.stderr;
+  // Git may still exit with a code and a message on the timeout's
+  // signal, so the timeout is named ahead of whatever it said.
+  const stopped = failure.killed
+    ? `git did not finish within ${Math.round(timeoutMs / 60_000)} minutes and was stopped.`
+    : "";
+  return new GitError({
+    stderr:
+      stopped === "" ? text : text === "" ? stopped : `${stopped}\n${text}`,
+    stdout: failure.stdout,
+    exitCode: failure.exitCode,
   });
 }
 
@@ -267,9 +240,10 @@ export function runEffect(
 }
 
 // The Promise face of a git Effect, for the callers that are not
-// Effects yet: every `export async function` in this folder is one of
-// these over its `...Effect` form. Git needs no service, so it runs on
-// Effect's default services rather than the installed host runtime,
+// Effects yet: the Promise-returning exports left in this folder are
+// each one of these over its `...Effect` form, kept while a Promise
+// caller (or a proof) still uses it. Git needs no service, so it runs
+// on Effect's default services rather than the installed host runtime,
 // and the library's proofs run it with no runtime installed.
 export function runGit<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
   return Effect.runPromise(effect);
@@ -341,6 +315,19 @@ export function runLenient(
   return runGit(runLenientEffect(cwd, args, options));
 }
 
+// A Promise step inside a git Effect (a filesystem call, a shared
+// policy), failing with the Error it rejected with, or with one
+// wrapping whatever else it threw.
+export function promiseStep<A>(
+  step: (signal: AbortSignal) => PromiseLike<A>,
+): Effect.Effect<A, Error> {
+  return Effect.tryPromise({
+    try: step,
+    catch: (error) =>
+      error instanceof Error ? error : new Error(String(error)),
+  });
+}
+
 // Pathspecs travel as argv, and a big refactor can carry enough paths
 // to brush the OS arg-length limit. Callers run one git process per
 // chunk.
@@ -365,8 +352,4 @@ export function isGitRepoEffect(path: string): Effect.Effect<boolean> {
     Effect.as(true),
     Effect.orElseSucceed(() => false),
   );
-}
-
-export function isGitRepo(path: string): Promise<boolean> {
-  return runGit(isGitRepoEffect(path));
 }

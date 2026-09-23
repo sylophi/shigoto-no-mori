@@ -44,7 +44,7 @@ import {
 import { readProjectIcon } from "@host/lib/projects/icon";
 import { measureDirectory } from "@host/lib/util/dirSize";
 import { initDataDirAt } from "@host/lib/util/paths";
-import { delay, makeProof, waitFor } from "./lib/checkKit.mjs";
+import { alive, delay, makeProof, waitFor } from "./lib/checkKit.mjs";
 
 // The icon lookup asks git for the project's files: the pre-commit
 // hook's GIT_* variables would point it at the commit in progress.
@@ -70,15 +70,6 @@ function sandbox(track, prefix) {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
   track(() => rmSync(dir, { recursive: true, force: true }));
   return dir;
-}
-
-function alive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 // An Effect's failure as a value, or "succeeded".

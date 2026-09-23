@@ -19,6 +19,7 @@ import { localBranchExists } from "../git/remotes";
 import { execGh, GhError, trimGhError } from "./exec";
 import { getGithubRepoInfo, remoteNameForUrl } from "./remote";
 import { ghUnavailableReason } from "./readiness";
+import { looseStruct } from "@shared/schemas/strict";
 
 // Enough to fill a picker without paging. Deliberately below the
 // sidebar sweep's 200: that one indexes every branch in the project,
@@ -27,14 +28,9 @@ const PR_CANDIDATE_LIMIT = 50;
 
 // gh's nested objects, read loosely: absent, null, or an object whose
 // other keys ride along untouched.
-const looseNullish = <Fields extends Schema.Struct.Fields>(fields: Fields) =>
-  Schema.optional(
-    Schema.NullOr(
-      Schema.StructWithRest(Schema.Struct(fields), [
-        Schema.Record(Schema.String, Schema.Unknown),
-      ]),
-    ),
-  );
+const looseNullish = <const Fields extends Schema.Struct.Fields>(
+  fields: Fields,
+) => Schema.optional(Schema.NullOr(looseStruct(fields)));
 const GhLoginSchema = looseNullish({ login: Schema.optional(Schema.String) });
 
 const GhPrCandidateSchema = Schema.Struct({

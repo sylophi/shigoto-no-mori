@@ -12,6 +12,7 @@ import { NodeStream } from "@effect/platform-node";
 import { Deferred, Effect, Fiber, Option, Stream } from "effect";
 import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
 import { decodeWith } from "@shared/ipc/codec";
+import { containedSync } from "@shared/util/contained";
 import { app } from "electron";
 import { registerInflightContributor } from "@host/lib/scripts";
 import { noteSelfWrite } from "@host/lib/util/selfWrite";
@@ -227,11 +228,7 @@ export async function runCli(
   const deliver = (doc: CliDoc) =>
     Effect.sync(() => {
       docs.push(doc);
-      try {
-        onDoc?.(doc);
-      } catch (error) {
-        console.warn("[cli] document handler threw:", error);
-      }
+      containedSync("[cli] document handler threw", () => onDoc?.(doc));
     });
 
   // The close, bounded by timeoutMs: past it the group is SIGKILLed and

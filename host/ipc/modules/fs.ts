@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { fsContract } from "@shared/ipc/modules/fs";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
-import { isGitRepo } from "@host/lib/git/core";
+import { isGitRepoEffect } from "@host/lib/git/core";
 import { toAbsolute } from "@host/lib/util/paths";
 import { hostAttempt, hostHandler } from "@host/runtime";
 
@@ -105,9 +105,7 @@ export const fsHandlers: Handlers<typeof fsContract, HandlerContext> = {
 
   // `git rev-parse --git-dir` validates a real working repo: catches
   // missing/corrupted .git, bare repos, and linked worktrees alike.
-  isGitRepo: hostHandler(({ path }) =>
-    hostAttempt(() => isGitRepo(toAbsolute(path))),
-  ),
+  isGitRepo: hostHandler(({ path }) => isGitRepoEffect(toAbsolute(path))),
 
   scanForGitRepos: hostHandler(({ path }) => scanForGitRepos(toAbsolute(path))),
 };

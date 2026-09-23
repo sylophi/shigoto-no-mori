@@ -33,13 +33,10 @@ import {
 } from "@shared/errors";
 import type { forwardContract } from "@shared/ipc/modules/forward";
 import type { Client } from "@shared/ipc/types";
-import {
-  defaultSupervisorRuntime,
-  type SupervisorRuntime,
-} from "@shared/remote/supervisor";
 import { mintHexId } from "@host/lib/idleRegistry";
 import type { DeviceId } from "@shared/hub/protocol";
 import type { HexId32 } from "@shared/ipc/hexId";
+import { containedSync } from "@shared/util/contained";
 import { bridgedConn, loopbackListener, type PeerChannels } from "./bridge";
 
 export type ForwardApi = Client<typeof forwardContract>;
@@ -111,16 +108,6 @@ function typedBindError(error: unknown, port: number): unknown {
   }
 }
 
-// The owner's change callback runs off the coalesce timer, where a
-// throw would be an uncaught exception. Contained and logged instead.
-function guarded(what: string, run: () => void): void {
-  try {
-    run();
-  } catch (error) {
-    console.warn(`[port-forward] ${what} threw: ${String(error)}`);
-  }
-}
-
 // Probe the peer before binding anything: one channel opened and
 // reset at once, so a revoked grant or an offline peer rejects the
 // start with its coded error instead of minting a listener whose
@@ -163,16 +150,20 @@ const probePeer = Effect.fnUntraced(function* (
   );
 });
 
+// Closed as of now (listForwards and a re-entrant close see it at
+// once), its finalizers run synchronously. Closing a closed scope is a
+// no-op.
+function closeNow(target: Scope.Closeable): void {
+  const finalize = Scope.closeUnsafe(target, Exit.void);
+  if (finalize !== undefined) Effect.runFork(finalize);
+}
+
 export function createPortForwardEngine(deps: {
   forwardApiFor: (deviceId: string) => ForwardApi;
   // The peer session's byte channels (bridge.ts PeerChannels).
   channelsFor: (deviceId: string) => PeerChannels;
   onChange?: () => void;
-  // Where the engine's effects run. Real callers take Effect's default
-  // services.
-  runtime?: SupervisorRuntime;
 }) {
-  const runtime = deps.runtime ?? defaultSupervisorRuntime;
   // The engine's lifetime: every forward's scope and every start's
   // fiber lives in it, and stopAll closes it.
   const scope = Scope.makeUnsafe();
@@ -182,18 +173,13 @@ export function createPortForwardEngine(deps: {
   // the engine's life (a handful), so a forward being moved and its
   // replacement can never count against two different ones.
   const caps = new Map<string, Semaphore.Semaphore>();
+  // The owner's callback runs off the coalesce timer, where a throw
+  // would be an uncaught exception, so it is contained.
   const changed = coalesce(
-    () => guarded("onChange", () => deps.onChange?.()),
+    () =>
+      containedSync("[port-forward] onChange threw", () => deps.onChange?.()),
     CHANGE_COALESCE_MS,
   );
-
-  // Closed as of now (listForwards and a re-entrant close see it at
-  // once), its finalizers run on the runtime, synchronously on the
-  // default one. Closing a closed scope is a no-op.
-  function closeNow(target: Scope.Closeable): void {
-    const finalize = Scope.closeUnsafe(target, Exit.void);
-    if (finalize !== undefined) runtime.runFork(finalize);
-  }
 
   function capFor(deviceId: string): Semaphore.Semaphore {
     let cap = caps.get(deviceId);
@@ -294,7 +280,7 @@ export function createPortForwardEngine(deps: {
       channels,
     };
     const bound = yield* loopbackListener(input.localPort ?? 0, (socket) => {
-      runtime.runFork(accept(forward, socket));
+      Effect.runFork(accept(forward, socket));
     }).pipe(
       Effect.mapError((error) => typedBindError(error, input.localPort ?? 0)),
       Scope.provide(forward.scope),
@@ -324,7 +310,7 @@ export function createPortForwardEngine(deps: {
     remotePort: number;
     localPort?: number;
   }): Promise<{ forwardId: HexId32; localPort: number }> {
-    return runtime.runPromise(
+    return Effect.runPromise(
       Effect.forkIn(start(input), scope).pipe(
         Effect.flatMap(Fiber.join),
         // Interrupted means stopAll won: in flight, or after (a fork

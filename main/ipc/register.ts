@@ -10,7 +10,7 @@ import { devDialKinds } from "../electron/devDialKinds";
 import { coalesce } from "@host/lib/util/coalesce";
 import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
-import { Context, Effect, Fiber, Layer, PubSub, Stream } from "effect";
+import { Context, Effect, Layer, PubSub } from "effect";
 import { WebSocket as WsWebSocket } from "ws";
 import { errorMessageOf } from "@shared/errors";
 import type { ContractModule } from "@shared/ipc/contract";
@@ -72,6 +72,7 @@ import {
   hubConnectInputs,
 } from "./modules/account";
 import { settleEnvelope } from "@shared/ipc/wireError";
+import { followPubSub } from "@shared/util/contained";
 import { appRuntime, appService, runner } from "../services";
 
 // Gates OUTPUT validation only. Input parsing in the shared registrar
@@ -249,33 +250,19 @@ export class PeerPushes extends Context.Service<
   );
 }
 
-// A subscriber fiber on the app runtime, handing each item to a plain
-// callback. A throw from the callback is contained and logged: a defect
-// in a forked fiber is reported nowhere, and it would end the
-// subscription for good. Returns the unsubscribe.
+// A subscriber fiber on the app runtime (followPubSub). Returns the
+// unsubscribe.
 function follow<A>(
   pubsub: PubSub.PubSub<A>,
   what: string,
   listener: (item: A) => void,
 ): () => void {
-  const fiber = appRuntime().runFork(
-    Stream.fromPubSub(pubsub).pipe(
-      Stream.runForEach((item) =>
-        Effect.sync(() => {
-          try {
-            listener(item);
-          } catch (error) {
-            console.warn(
-              `[ipc] a ${what} listener threw: ${errorMessageOf(error)}`,
-            );
-          }
-        }),
-      ),
-    ),
+  return followPubSub(
+    pubsub,
+    `[ipc] a ${what} listener threw`,
+    listener,
+    (effect) => appRuntime().runFork(effect),
   );
-  return () => {
-    Effect.runFork(Fiber.interrupt(fiber));
-  };
 }
 
 export function onPeerPush(listener: PeerPushListener): () => void {

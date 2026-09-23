@@ -5,9 +5,7 @@
 // registry file exists to prevent. The toggle is a read-modify-write
 // against disk, not a whole-list replace, so a stale renderer cache can
 // never wipe collapse state it didn't know about.
-import { stateStore } from "../config/store";
-
-const KEY = "projectsCollapsed";
+import { PROJECTS_COLLAPSED_KEY as KEY, stateStore } from "../config/store";
 
 // state.json is hand-editable; a corrupt value must degrade to
 // "nothing collapsed", not crash the sidebar render (packaged builds

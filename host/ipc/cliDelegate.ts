@@ -29,6 +29,8 @@ import {
 import { unknownProjectError, unknownWorktreeError } from "@shared/errors";
 import { shellQuote } from "@host/lib/scripts/process";
 import { hostService } from "@host/runtime";
+import { looseStruct } from "@shared/schemas/strict";
+import { NonNegativeInt } from "@shared/schemas/ints";
 
 // One NDJSON document from the CLI's --json stream. `event` is set on
 // streamed progress documents (created/phase/carryOver/script/done);
@@ -42,10 +44,9 @@ export interface CliDoc {
 // The shape every line of that stream decodes against before it is a
 // CliDoc: a JSON object whose `event`, when present, is a string. The
 // rest of its keys ride through for the per-command schemas below.
-export const CliDocSchema = Schema.StructWithRest(
-  Schema.Struct({ event: Schema.optional(Schema.String) }),
-  [Schema.Record(Schema.String, Schema.Unknown)],
-);
+export const CliDocSchema = looseStruct({
+  event: Schema.optional(Schema.String),
+});
 
 export interface CliResult {
   code: number;
@@ -492,20 +493,22 @@ export async function dirtyCaptureViaCli(
   // A capture doc carries its commit; a clean worktree omits it. The
   // refine makes a captured:true document WITHOUT a commit an engine
   // drift error here, never a silent "clean" report.
-  const doc = Schema.decodeUnknownSync(
-    Schema.Struct({
-      captured: Schema.Boolean,
-      commit: Schema.optional(Schema.String),
-    }).check(
-      Schema.makeFilter((d) => !d.captured || d.commit !== undefined, {
-        message: "captured without a commit",
-      }),
-    ),
-  )(final);
+  const doc = decodeDirtyCaptured(final);
   return doc.captured
     ? { captured: true, commit: doc.commit }
     : { captured: false };
 }
+
+const decodeDirtyCaptured = Schema.decodeUnknownSync(
+  Schema.Struct({
+    captured: Schema.Boolean,
+    commit: Schema.optional(Schema.String),
+  }).check(
+    Schema.makeFilter((d) => !d.captured || d.commit !== undefined, {
+      message: "captured without a commit",
+    }),
+  ),
+);
 
 // Mirrors dirtyCaptureViaCli: replays refs/shigomori/dirty/<id> onto
 // the worktree and consumes the ref (`sm dirty apply`, cli/cmd_dirty.go).
@@ -526,8 +529,6 @@ export async function dirtyApplyViaCli(
   const final = finalOkDoc(result, "sm dirty apply failed", { worktreeId });
   return Schema.decodeUnknownSync(DirtyApplyDocSchema)(final);
 }
-
-const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 const DirtyApplyDocSchema = Schema.Struct({
   applied: Schema.Literal(true),
@@ -561,10 +562,15 @@ export async function bundleCreateViaCli(
   const final = finalOkDoc(result, "sm bundle create failed", {
     projectId: project.id,
   });
-  return Schema.decodeUnknownSync(
-    Schema.Struct({ bytes: NonNegativeInt, refs: RefTipDocsSchema }),
-  )(final);
+  return decodeBundleCreated(final);
 }
+
+const decodeBundleCreated = Schema.decodeUnknownSync(
+  Schema.Struct({ bytes: NonNegativeInt, refs: RefTipDocsSchema }),
+);
+const decodeBundleUnpacked = Schema.decodeUnknownSync(
+  Schema.Struct({ fetched: RefTipDocsSchema }),
+);
 
 export async function bundleUnpackViaCli(
   project: Project,
@@ -583,9 +589,7 @@ export async function bundleUnpackViaCli(
   const final = finalOkDoc(result, "sm bundle unpack failed", {
     projectId: project.id,
   });
-  return Schema.decodeUnknownSync(Schema.Struct({ fetched: RefTipDocsSchema }))(
-    final,
-  );
+  return decodeBundleUnpacked(final);
 }
 
 // Registry removal and per-project state deletion only; the app-side

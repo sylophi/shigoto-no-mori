@@ -12,7 +12,7 @@ import {
 import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
 import type { Client } from "@shared/ipc/types";
 import { bundleUnpackViaCli } from "@host/ipc/cliDelegate";
-import { findProjectOrThrow } from "@host/lib/projects";
+import { findProject } from "@host/lib/projects";
 import { hostAttempt } from "@host/runtime";
 import { coalescedProgress, pumpChunks } from "./chunkWindow";
 import { scopedFile, scopedTempDir } from "./scopedFiles";
@@ -150,12 +150,8 @@ type FetchBundlePeer = Pick<
   "bundleStart" | "bundleChunk" | "bundleAbort"
 >;
 
-type Fetched = {
-  readonly fetched: readonly {
-    readonly ref: string;
-    readonly commit: string;
-  }[];
-};
+// What an unpack answers, here or on the peer: the refs it landed.
+export type Fetched = Awaited<ReturnType<typeof bundleUnpackViaCli>>;
 
 // Abort on any error (best effort -- the host's idle sweep is the
 // backstop), temp file always removed, at once when the caller leaves:
@@ -168,9 +164,7 @@ export const fetchBundle = (
   input: FetchBundleInput,
 ): Effect.Effect<Fetched, unknown> =>
   Effect.gen(function* () {
-    const project = yield* hostAttempt(() =>
-      findProjectOrThrow(input.targetProjectId),
-    );
+    const project = yield* findProject(input.targetProjectId);
     return yield* Effect.scoped(
       Effect.gen(function* () {
         // Re-parsed here because the byte count flows into the progress

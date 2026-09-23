@@ -11,6 +11,7 @@
 import { BrowserWindow } from "electron";
 import { Effect, Exit, Layer, Schedule, Scope } from "effect";
 import { errorMessageOf } from "@shared/errors";
+import { contained } from "@shared/util/contained";
 import { gitContract } from "@shared/ipc/modules/git";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
 import type { Project } from "@shared/schemas";
@@ -223,13 +224,7 @@ function sweepIfAttended(): void {
 const sweepLoop = Effect.sleep(SWEEP_INTERVAL_MS).pipe(
   Effect.andThen(
     Effect.repeat(
-      Effect.sync(() => {
-        try {
-          sweepIfAttended();
-        } catch (error) {
-          console.warn(`[fetch] sweep failed: ${errorMessageOf(error)}`);
-        }
-      }),
+      contained("[fetch] sweep failed", sweepIfAttended),
       Schedule.spaced(SWEEP_INTERVAL_MS),
     ),
   ),

@@ -24,13 +24,6 @@ export const renameBranchEffect = Effect.fn("branches.renameBranch")(function* (
   );
 });
 
-export function renameBranch(
-  worktreePath: string,
-  newBranch: string,
-): Promise<void> {
-  return runGit(renameBranchEffect(worktreePath, newBranch));
-}
-
 // Switch a worktree to a different branch. Callers may hand us a
 // remote-tracking ref like `origin/main` (e.g. when the primary branch
 // resolves to a remote ref). `git checkout origin/main` would land on a
@@ -91,14 +84,6 @@ export const checkoutBranchEffect = Effect.fn("branches.checkoutBranch")(
 
 function checkout(worktreePath: string, args: readonly string[]) {
   return Effect.uninterruptible(runEffect(worktreePath, ["checkout", ...args]));
-}
-
-export function checkoutBranch(
-  worktreePath: string,
-  branch: string,
-  remotes?: readonly string[],
-): Promise<void> {
-  return runGit(checkoutBranchEffect(worktreePath, branch, remotes));
 }
 
 // The "delete the local branch after the worktree is gone" policy for
@@ -169,14 +154,6 @@ export const renameAnyLocalBranchEffect = Effect.fn(
 )(function* (projectPath: string, oldName: string, newName: string) {
   yield* runEffect(projectPath, ["branch", "-m", "--", oldName, newName]);
 });
-
-export function renameAnyLocalBranch(
-  projectPath: string,
-  oldName: string,
-  newName: string,
-): Promise<void> {
-  return runGit(renameAnyLocalBranchEffect(projectPath, oldName, newName));
-}
 
 // Delete a local branch. Without `force` this is git's safe delete
 // (`-d`), whose "not fully merged" refusal fails as BranchNotMerged so
@@ -274,7 +251,7 @@ export function listUntrackedMatchingExcludeFile(
 // remote branch and would show up twice.
 export const listBranchesEffect = Effect.fn("branches.listBranches")(function* (
   projectPath: string,
-) {
+): Effect.fn.Return<BranchList, GitFailure> {
   const stdout = yield* runEffect(projectPath, [
     "for-each-ref",
     "--format=%(refname)\t%(refname:short)\t%(symref)",
@@ -290,10 +267,5 @@ export const listBranchesEffect = Effect.fn("branches.listBranches")(function* (
     if (full.startsWith("refs/heads/")) local.push(short);
     else if (full.startsWith("refs/remotes/")) remote.push(short);
   }
-  const list: BranchList = { local, remote };
-  return list;
+  return { local, remote };
 });
-
-export function listBranches(projectPath: string): Promise<BranchList> {
-  return runGit(listBranchesEffect(projectPath));
-}

@@ -4,7 +4,7 @@
 // --end-of-options pins them to the revision slot anyway, matching the
 // house argv discipline (see captureDirtyState in cli/cmd_dirty.go).
 import { Effect } from "effect";
-import { runEffect, runGit } from "./core";
+import { type GitFailure, runEffect, runGit } from "./core";
 
 // The ref must not exist, in update-ref's compare-and-set vocabulary.
 export const ZERO_SHA = "0".repeat(40);
@@ -45,7 +45,10 @@ export function deleteRef(projectPath: string, ref: string): Promise<void> {
 
 // The commit a ref resolves to, or null when it does not exist.
 export const refTipEffect = Effect.fnUntraced(
-  function* (cwd: string, ref: string) {
+  function* (
+    cwd: string,
+    ref: string,
+  ): Effect.fn.Return<string | null, GitFailure> {
     const out = yield* runEffect(cwd, [
       "rev-parse",
       "--verify",
@@ -53,8 +56,7 @@ export const refTipEffect = Effect.fnUntraced(
       "--end-of-options",
       ref,
     ]);
-    const tip: string | null = out.trim();
-    return tip;
+    return out.trim();
   },
   Effect.orElseSucceed(() => null),
 );

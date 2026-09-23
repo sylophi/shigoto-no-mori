@@ -1,8 +1,7 @@
 import { Schema } from "effect";
 import { isRealBranch } from "./project";
 import type { Worktree } from "./worktree";
-
-const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+import { NonNegativeInt } from "./ints";
 
 // Extra facts the "tidy the forest" surface needs about one worktree.
 // Deliberately narrow: everything already on `Worktree` (changedCount,

@@ -62,7 +62,8 @@ import { atomicWriteJsonSync } from "@host/lib/util/jsonFile";
 import { lineSplitter } from "@host/lib/util/ndjson";
 import { secretsMatch } from "@host/lib/util/secretCompare";
 import { listenLoopback } from "../portForward/bridge";
-import { encodeWireError } from "@shared/ipc/wireError";
+import { wireFailure } from "@shared/ipc/wireError";
+import { answerCall, containedSync } from "@shared/util/contained";
 
 // cli/control.go reads this exact name and shape.
 export const CONTROL_FILE_NAME = "control.json";
@@ -107,14 +108,12 @@ function refuse(socket: Socket, code: string, message: string): void {
 // Node errno riding an error would otherwise become a CLI error kind.
 function failedRes(id: unknown, error: unknown): Record<string, unknown> {
   const code = errorCodeOf(error);
-  const encoded = encodeWireError(error);
   return {
     t: "res",
     id,
     ok: false,
-    message: errorMessageOf(error),
+    ...wireFailure(error),
     ...(isControlErrorCode(code) ? { code } : {}),
-    ...(encoded === undefined ? {} : { error: encoded }),
   };
 }
 
@@ -142,11 +141,9 @@ export function createControlServer(deps: {
   // a throw from it is contained here rather than crashing a callback
   // or ending a fiber with a defect nothing reports.
   function log(message: string): void {
-    try {
-      (deps.log ?? console.warn)(message);
-    } catch (error) {
-      console.warn(`[control] log threw: ${String(error)}`);
-    }
+    containedSync("[control] log threw", () =>
+      (deps.log ?? console.warn)(message),
+    );
   }
 
   // One call, as a fiber of its connection's scope: the Promise handler
@@ -159,32 +156,13 @@ export function createControlServer(deps: {
     fn: Handler,
     input: unknown,
   ): Effect.Effect<void> =>
-    Effect.tryPromise({
-      try: () => fn(ctx, input),
-      catch: (error) => error,
-    }).pipe(
-      Effect.flatMap((result) =>
-        // A result that will not serialize (a cycle, a BigInt) is
-        // answered as a failure, like a throwing handler, so the CLI
-        // is never left waiting on the id.
-        Effect.try({
-          try: () => send(socket, { t: "res", id, ok: true, result }),
-          catch: (error) => error,
-        }),
-      ),
-      Effect.catch((error) =>
-        Effect.sync(() => send(socket, failedRes(id, error))),
-      ),
-      // Anything past that is a bug, not a reason to end the fiber with
-      // a defect nothing reports.
-      Effect.catchCause((cause) =>
-        Cause.hasInterruptsOnly(cause)
-          ? Effect.failCause(cause)
-          : Effect.sync(() =>
-              log(`[control] a call failed: ${Cause.pretty(cause)}`),
-            ),
-      ),
-    );
+    answerCall({
+      run: () => fn(ctx, input),
+      ok: (result) => send(socket, { t: "res", id, ok: true, result }),
+      failed: (error) => send(socket, failedRes(id, error)),
+      label: "[control] a call failed",
+      log,
+    });
 
   // One connection, from accept to close, inside its own scope. The
   // scope closes when the socket does, when the hello deadline passes

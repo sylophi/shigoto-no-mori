@@ -11,7 +11,7 @@ import { readWorktreeData } from "@host/lib/config/project";
 import { findWorktreeIdentityOrThrow } from "@host/lib/git/worktrees";
 import { isLoopbackPortListening } from "@host/lib/net";
 import { isPortPoolActive, poolPortsFor } from "@host/lib/portPool";
-import { findProjectOrThrow } from "@host/lib/projects";
+import { findProject, findProjectOrThrow } from "@host/lib/projects";
 import { ttlMapCache } from "@host/lib/util/ttlCache";
 import { hostAttempt, hostHandler } from "@host/runtime";
 
@@ -44,7 +44,7 @@ export const portsHandlers: Handlers<typeof portsContract, HandlerContext> = {
   list: hostHandler(({ projectId, worktreeId }) =>
     Effect.gen(function* () {
       // Validated first so a bogus project id never builds a path.
-      yield* hostAttempt(() => findProjectOrThrow(projectId));
+      yield* findProject(projectId);
       // The pool chain hangs off the path alone, so it runs beside the
       // data-file read rather than behind it.
       const [pool, data] = yield* Effect.all(

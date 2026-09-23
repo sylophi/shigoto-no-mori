@@ -48,24 +48,21 @@ import {
   setupDefaultFor,
 } from "@shared/leaveOutRule";
 import { PROBE_TIMEOUT_MS } from "@shared/ipc/socket/frames";
-import {
-  isRealBranch,
-  type Project,
-  type Worktree,
-  WorktreeSchema,
-} from "@shared/schemas";
-import { Context, Effect, Fiber, Option, Schema } from "effect";
+import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
+import { Context, Effect, Fiber, Option } from "effect";
 import {
   parseLeaveOutPreset,
   sharedSettingKeys,
   sharedStringSetting,
 } from "@shared/sharedSettings";
-import { peerApis, peerWorktree } from "@host/ipc/peerSync";
-import { getRepoIdentity } from "@host/lib/git/repoIdentity";
 import {
-  findProjectAndWorktreeOrThrow,
-  findProjectOrThrow,
-} from "@host/lib/projects";
+  type PeerApis,
+  peerApis,
+  peerWorktree,
+  peerWorktreeList,
+} from "@host/ipc/peerSync";
+import { getRepoIdentityEffect } from "@host/lib/git/repoIdentity";
+import { findProject, findProjectAndWorktree } from "@host/lib/projects";
 import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
 import { hostAttempt, hostHandler, requireService } from "@host/runtime";
 import { mirrorList, startMirror, startMirrorTo, stopMirror } from "./mirror";
@@ -261,9 +258,7 @@ const listed = (devices: { name: string }[]): string =>
 // A checkout git can't read (its folder moved away) has no identity
 // to match on, the same as one with no shared identity.
 const repoIdentityOf = (project: Project) =>
-  hostAttempt(() => getRepoIdentity(project.path)).pipe(
-    Effect.orElseSucceed(() => null),
-  );
+  getRepoIdentityEffect(project.path).pipe(Effect.orElseSucceed(() => null));
 
 // The peers a transfer of this repo could run against: the named one,
 // or every one. Each comes back with its standing, blocked or not,
@@ -501,7 +496,7 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
             ),
           };
         }
-        const project = yield* hostAttempt(() => findProjectOrThrow(projectId));
+        const project = yield* findProject(projectId);
         const identity = yield* repoIdentityOf(project);
         return {
           thisDevice: here,
@@ -512,7 +507,7 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
 
     peerWorktrees: hostHandler(({ projectId, device }) =>
       Effect.gen(function* () {
-        const project = yield* hostAttempt(() => findProjectOrThrow(projectId));
+        const project = yield* findProject(projectId);
         const { standings } = yield* candidates(project, device, {
           grant: false,
         });
@@ -539,8 +534,9 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
 
     send: hostHandler((input, ctx: HandlerContext) =>
       Effect.gen(function* () {
-        const { project, worktree } = yield* hostAttempt(() =>
-          findProjectAndWorktreeOrThrow(input.projectId, input.worktreeId),
+        const { project, worktree } = yield* findProjectAndWorktree(
+          input.projectId,
+          input.worktreeId,
         );
         const mirror = input.mirror === true;
         if (mirror) {
@@ -601,9 +597,7 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
 
     bring: hostHandler((input, ctx: HandlerContext) =>
       Effect.gen(function* () {
-        const project = yield* hostAttempt(() =>
-          findProjectOrThrow(input.projectId),
-        );
+        const project = yield* findProject(input.projectId);
         const { identity, standings } = yield* candidates(
           project,
           input.device,
@@ -819,8 +813,6 @@ const alreadyMirrored = (
     return result;
   });
 
-const decodeWorktrees = Schema.decodeUnknownSync(Schema.Array(WorktreeSchema));
-
 // Every worktree of the repo that could move, on the peers that hold
 // it, beside the peers that hold it and did not answer. A
 // blocked-for-commands peer still lists (reads are ungated), so a bring
@@ -829,44 +821,41 @@ const decodeWorktrees = Schema.decodeUnknownSync(Schema.Array(WorktreeSchema));
 // list is re-parsed because its branch goes on into git here.
 const worktreesOn = (standings: ControlDevice[]) =>
   Effect.gen(function* () {
-    const apis = yield* peerApis;
     const unanswered: ControlDevice[] = [];
     const lists = yield* Effect.all(
-      standings.map((device): Effect.Effect<ControlPeerWorktree[]> => {
-        const { projectId } = device;
-        if (projectId === undefined) return Effect.succeed([]);
-        return withinProbe(
-          hostAttempt(() =>
-            apis.worktreesApiFor(device.deviceId).list({ projectId }),
-          ),
-        ).pipe(
-          Effect.flatMap((answer) =>
-            Option.isNone(answer)
-              ? Effect.fail(new Error("no answer"))
-              : hostAttempt(() => decodeWorktrees(answer.value)),
-          ),
-          Effect.map((worktrees) =>
-            worktrees
-              .filter(
-                (worktree) =>
-                  !worktree.isPrimary &&
-                  !worktree.detached &&
-                  isRealBranch(worktree.branch),
-              )
-              .map((worktree) => ({
-                device: { deviceId: device.deviceId, name: device.name },
-                projectId,
-                worktree,
-              })),
-          ),
-          Effect.catch(() =>
-            Effect.sync(() => {
-              unanswered.push(device);
-              return [];
-            }),
-          ),
-        );
-      }),
+      standings.map(
+        (device): Effect.Effect<ControlPeerWorktree[], never, PeerApis> => {
+          const { projectId } = device;
+          if (projectId === undefined) return Effect.succeed([]);
+          return withinProbe(peerWorktreeList(device.deviceId, projectId)).pipe(
+            Effect.flatMap((answer) =>
+              Option.isNone(answer)
+                ? Effect.fail(new Error("no answer"))
+                : Effect.succeed(answer.value),
+            ),
+            Effect.map((worktrees) =>
+              worktrees
+                .filter(
+                  (worktree) =>
+                    !worktree.isPrimary &&
+                    !worktree.detached &&
+                    isRealBranch(worktree.branch),
+                )
+                .map((worktree) => ({
+                  device: { deviceId: device.deviceId, name: device.name },
+                  projectId,
+                  worktree,
+                })),
+            ),
+            Effect.catch(() =>
+              Effect.sync(() => {
+                unanswered.push(device);
+                return [];
+              }),
+            ),
+          );
+        },
+      ),
       { concurrency: "unbounded" },
     );
     return { worktrees: lists.flat(), unanswered };

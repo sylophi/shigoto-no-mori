@@ -40,6 +40,7 @@ import {
   RemoteConnectError,
 } from "@shared/ipc/socket/wsClientTransport";
 import { CLOSE_AUTH_FAILED } from "@shared/ipc/socket/frames";
+import { containedSync } from "@shared/util/contained";
 
 // Backoff delays in milliseconds, capped at the last rung. Fixed and
 // jitter-free so a test asserts the exact sequence.
@@ -186,24 +187,44 @@ export function backoffDelayMs(
   return ladder[index];
 }
 
+// Whether a connection or child that came up at `since` has held long
+// enough (`ms`) to count as healthy, which sends its supervisor's
+// ladder back to the bottom.
+export const ranAtLeast = (since: number, ms: number): Effect.Effect<boolean> =>
+  Effect.map(Clock.currentTimeMillis, (now) => now - since >= ms);
+
+// The loop every supervised child shares (this supervisor, the
+// cloudflared runner, the mirror daemon, the direct keeper): run an
+// attempt and, unless it says stop, sleep one rung and go again. An
+// attempt that reports stable resets the ladder first. The rung is
+// local to the loop, so a fresh loop starts at the bottom. onBackoff
+// sees each sleep before it starts, with its delay and its 1-based
+// count since the last reset.
+export function superviseLadder<A extends { stable: boolean }>(
+  ladder: readonly number[],
+  attempt: Effect.Effect<A | "stop">,
+  onBackoff?: (outcome: A, delayMs: number, count: number) => void,
+): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    let rung = 0;
+    while (true) {
+      const outcome = yield* attempt;
+      if (outcome === "stop") return;
+      if (outcome.stable) rung = 0;
+      const delayMs = backoffDelayMs(ladder, rung);
+      rung += 1;
+      onBackoff?.(outcome, delayMs, rung);
+      yield* Effect.sleep(delayMs);
+    }
+  });
+}
+
 // What one attempt (a dial, then holding the socket until it drops)
 // ends in: a block, which ends the loop, or a backoff, which climbs
 // the ladder unless the socket had been up long enough to reset it.
 type AttemptOutcome =
   | { kind: "blocked"; reason: BlockReason; message: string }
-  | { kind: "backoff"; resetLadder: boolean };
-
-// The owner's callbacks run inside the loop's fiber, so a throw from
-// one would end the loop with a defect nothing reports. Contained and
-// logged instead: the old timer-driven loop crashed the process on the
-// same throw, which was louder but no more useful.
-function guarded(what: string, run: () => void): void {
-  try {
-    run();
-  } catch (error) {
-    console.warn(`[supervisor] ${what} threw: ${String(error)}`);
-  }
-}
+  | { kind: "backoff"; stable: boolean };
 
 export function createSupervisor(options: SupervisorOptions): Supervisor {
   const connect = options.connect ?? connectDeviceEffect;
@@ -215,11 +236,17 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
 
   function setStatus(next: SupervisorStatus): void {
     status = next;
-    guarded("onStatus", () => options.onStatus?.(next));
+    // The owner's callbacks run inside the loop's fiber, so they are
+    // contained (shared/util/contained.ts).
+    containedSync("[supervisor] onStatus threw", () =>
+      options.onStatus?.(next),
+    );
   }
 
   function reportConnection(connection: DeviceConnection | null): void {
-    guarded("onConnection", () => options.onConnection?.(connection));
+    containedSync("[supervisor] onConnection threw", () =>
+      options.onConnection?.(connection),
+    );
   }
 
   // One dial and one hold. Never fails: every way the attempt can end
@@ -298,7 +325,7 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
           };
           return { kind: "blocked", ...verdict };
         }
-        return { kind: "backoff", resetLadder: false };
+        return { kind: "backoff", stable: false };
       }
       const connection = dialed.connection;
       const connectedAt = yield* Clock.currentTimeMillis;
@@ -317,35 +344,31 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
       reportConnection(null);
       const verdict = classifyClose(code);
       if (verdict !== null) return { kind: "blocked", ...verdict };
-      const openMs = (yield* Clock.currentTimeMillis) - connectedAt;
-      return { kind: "backoff", resetLadder: openMs >= STABLE_CONNECTION_MS };
+      return {
+        kind: "backoff",
+        stable: yield* ranAtLeast(connectedAt, STABLE_CONNECTION_MS),
+      };
     });
 
   // The loop: attempt, then either end blocked or sleep one rung and
-  // go again. The rung is local to the loop, so a new start() begins
-  // at the bottom.
-  const supervise: Effect.Effect<void> = Effect.gen(function* () {
-    let rung = 0;
-    while (true) {
-      const outcome = yield* attempt;
-      if (outcome.kind === "blocked") {
-        // Terminal until inputs change: the owner drops and recreates
-        // the supervisor when the url or token changes, which is what
-        // unblocks.
-        setStatus({
-          phase: "blocked",
-          reason: outcome.reason,
-          message: outcome.message,
-        });
-        return;
-      }
-      if (outcome.resetLadder) rung = 0;
-      const delayMs = backoffDelayMs(BACKOFF_LADDER_MS, rung);
-      rung += 1;
-      setStatus({ phase: "backoff", attempt: rung, delayMs });
-      yield* Effect.sleep(delayMs);
-    }
-  });
+  // go again. A block is terminal until inputs change: the owner drops
+  // and recreates the supervisor when the url or token changes, which
+  // is what unblocks.
+  const supervise: Effect.Effect<void> = superviseLadder(
+    BACKOFF_LADDER_MS,
+    Effect.map(attempt, (outcome) => {
+      if (outcome.kind === "backoff") return outcome;
+      setStatus({
+        phase: "blocked",
+        reason: outcome.reason,
+        message: outcome.message,
+      });
+      return "stop" as const;
+    }),
+    (_outcome, delayMs, count) => {
+      setStatus({ phase: "backoff", attempt: count, delayMs });
+    },
+  );
 
   return {
     start(): void {

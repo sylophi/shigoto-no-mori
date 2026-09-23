@@ -8,13 +8,16 @@ import type { Handlers } from "@shared/ipc/types";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { readShigomoriConfig } from "@host/lib/config/project";
 import { PROJECTS_KEY, registryStore } from "@host/lib/config/store";
-import { listBranches } from "@host/lib/git/branches";
+import { listBranchesEffect } from "@host/lib/git/branches";
 import { cloneRepo } from "@host/lib/git/clone";
-import { isGitRepo } from "@host/lib/git/core";
-import { listRemoteEntries, resolveDefaultBranch } from "@host/lib/git/remotes";
-import { pickAvailableWorktreeName } from "@host/lib/git/worktrees";
+import { isGitRepoEffect } from "@host/lib/git/core";
 import {
-  findProjectOrThrow,
+  listRemoteEntriesEffect,
+  resolveDefaultBranchEffect,
+} from "@host/lib/git/remotes";
+import { pickAvailableWorktreeNameEffect } from "@host/lib/git/worktrees";
+import {
+  findProject,
   listProjectsWithStatus,
   loadProjects,
 } from "@host/lib/projects";
@@ -46,11 +49,6 @@ import {
 import { expandHome } from "@host/lib/util/paths";
 import { hostAttempt, hostHandler } from "@host/runtime";
 import { projectsAddViaCli, projectsRemoveViaCli } from "../cliDelegate";
-
-// The project a handler is about, as its first step: an unknown id
-// fails with the very UnknownProject findProjectOrThrow throws.
-const projectOf = (projectId: string) =>
-  hostAttempt(() => findProjectOrThrow(projectId));
 
 // Clone, then register the checkout. One step: a caller that leaves
 // mid-clone stops waiting, never the pair, so a finished clone is
@@ -129,7 +127,7 @@ export const projectsHandlers: Handlers<
   add: hostHandler(({ path: rawPath }) =>
     Effect.gen(function* () {
       const path = expandHome(rawPath);
-      if (!(yield* hostAttempt(() => isGitRepo(path)))) {
+      if (!(yield* isGitRepoEffect(path))) {
         return yield* Effect.fail(new Error(`${path} is not a git repository`));
       }
       // Same engine as `sm projects add`: registration and the config
@@ -183,41 +181,40 @@ export const projectsHandlers: Handlers<
 
   defaultBranch: hostHandler(({ projectId }) =>
     Effect.gen(function* () {
-      const project = yield* projectOf(projectId);
+      const project = yield* findProject(projectId);
       const config = yield* hostAttempt(() => readShigomoriConfig(project.id));
-      return yield* hostAttempt(() =>
-        resolveDefaultBranch(project.path, config?.defaultBranch),
+      return yield* resolveDefaultBranchEffect(
+        project.path,
+        config?.defaultBranch,
       );
     }),
   ),
 
   cloneUrl: hostHandler(({ projectId }) =>
     Effect.gen(function* () {
-      const project = yield* projectOf(projectId);
-      const remotes = yield* hostAttempt(() => listRemoteEntries(project.path));
+      const project = yield* findProject(projectId);
+      const remotes = yield* listRemoteEntriesEffect(project.path);
       return pickCloneUrl(remotes);
     }),
   ),
 
   listBranches: hostHandler(({ projectId }) =>
     Effect.gen(function* () {
-      const project = yield* projectOf(projectId);
-      return yield* hostAttempt(() => listBranches(project.path));
+      const project = yield* findProject(projectId);
+      return yield* listBranchesEffect(project.path);
     }),
   ),
 
   pickWorktreeName: hostHandler(({ projectId }) =>
     Effect.gen(function* () {
-      const project = yield* projectOf(projectId);
-      return yield* hostAttempt(() =>
-        pickAvailableWorktreeName(project.id, project.path),
-      );
+      const project = yield* findProject(projectId);
+      return yield* pickAvailableWorktreeNameEffect(project.id, project.path);
     }),
   ),
 
   worktreeIncludeStatus: hostHandler(({ projectId }) =>
     Effect.gen(function* () {
-      const project = yield* projectOf(projectId);
+      const project = yield* findProject(projectId);
       return yield* hostAttempt(() =>
         readWorktreeIncludeStatus(project.id, project.path),
       );
@@ -226,7 +223,7 @@ export const projectsHandlers: Handlers<
 
   carryOverListing: hostHandler(({ projectId, relative, ruleIgnored }) =>
     Effect.gen(function* () {
-      const project = yield* projectOf(projectId);
+      const project = yield* findProject(projectId);
       return yield* hostAttempt(() =>
         listCarryOverCandidates(project.id, project.path, relative, {
           ruleIgnored,
@@ -237,7 +234,7 @@ export const projectsHandlers: Handlers<
 
   carryOverStats: hostHandler(({ projectId, paths }) =>
     Effect.gen(function* () {
-      const project = yield* projectOf(projectId);
+      const project = yield* findProject(projectId);
       return yield* hostAttempt(() =>
         statCarryOverPaths(project.id, project.path, paths),
       );
@@ -249,7 +246,7 @@ export const projectsHandlers: Handlers<
   // icon.ts), and it is interrupted once every caller has left.
   icon: hostHandler(({ projectId }) =>
     Effect.gen(function* () {
-      const project = yield* projectOf(projectId);
+      const project = yield* findProject(projectId);
       return yield* readProjectIconEffect(project.path);
     }),
   ),

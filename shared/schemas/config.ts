@@ -4,16 +4,10 @@ import { ProjectScopedPayloadSchema } from "./payloads";
 import { MergeMethodSchema } from "./pullRequest";
 import { CustomPortSchema, MAX_CUSTOM_PORTS, PortNumberSchema } from "./ports";
 import { SidebarViewSchema } from "./project";
-import { strictStruct } from "./strict";
+import { strictStruct, loose } from "./strict";
 
 const ThemeSchema = Schema.Literals(["light", "dark", "system"]);
 export type Theme = typeof ThemeSchema.Type;
-
-// A document read from disk keeps the keys this build does not model
-// (zod's .loose()): the struct's own keys decode as declared, and every
-// other own key rides through as it was.
-const loose = <S extends Schema.Struct<Schema.Struct.Fields>>(struct: S) =>
-  Schema.StructWithRest(struct, [Schema.Record(Schema.String, Schema.Unknown)]);
 
 export const LauncherCommandSchema = Schema.Struct({
   id: Schema.NonEmptyString,

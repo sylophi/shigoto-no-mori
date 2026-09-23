@@ -5,8 +5,7 @@ import {
   WorktreeScopedPayloadSchema,
 } from "./payloads";
 import { GitRefNameSchema, isRealBranch } from "./project";
-
-const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+import { NonNegativeInt } from "./ints";
 
 // Abbreviated commit hashes are produced by `git log %h` and travel back
 // down into git argv (`git show <hash>`). Pinning them to hex is what

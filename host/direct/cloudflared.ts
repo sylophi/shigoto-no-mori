@@ -23,8 +23,8 @@
 // and clears its pid file, so interrupting the fiber (a port change,
 // reconcile(null), quit) is the whole teardown: a probe or a backoff
 // sleep in flight is cancelled with it, and no continuation is left to
-// ask whether its port is still wanted. Reconciles are serialized by a
-// one-permit semaphore. Every fiber, the reconciles' included, is
+// ask whether its port is still wanted. Reconciles are serialized in
+// call order (createLimiter). Every fiber, the reconciles' included, is
 // forked into the runner's scope, and stop() closes that scope: what is
 // in flight is interrupted, what is queued never runs, and a scope that
 // is closed refuses every later fork, which is the quit latch.
@@ -55,9 +55,12 @@ import {
   BACKOFF_LADDER_MS,
   backoffDelayMs,
   defaultSupervisorRuntime,
+  ranAtLeast,
   STABLE_CONNECTION_MS,
+  superviseLadder,
   type SupervisorRuntime,
 } from "@shared/remote/supervisor";
+import { containedSync } from "@shared/util/contained";
 import { createLimiter } from "@shared/util/limit";
 import { killWithGrace } from "@host/lib/scripts/process";
 import { resolveOnPath } from "@host/lib/util/binaries";
@@ -415,7 +418,7 @@ type ProvisionCache = {
 // bottom when the child had run stably.
 type AttemptOutcome =
   | { kind: "park"; wakeable: boolean }
-  | { kind: "retry"; detail: string; resetLadder: boolean };
+  | { kind: "retry"; detail: string; stable: boolean };
 
 // What a reconcile shares with the port fiber it started.
 type PortControl = {
@@ -448,12 +451,11 @@ export function createCloudflaredRunner(
   // it runs, so a reconcile that arrives or drains after quit began
   // does nothing, whatever it was asked to do.
   const scope = Scope.makeUnsafe();
-  // Serializes reconciles IN CALL ORDER, so a fast toggle cannot
-  // interleave one reconcile's teardown with another's start, and the
-  // last call made is the state that stands (an Effect Semaphore hands
-  // its permit to whichever waiter the scheduler wakes first, which is
-  // not that). stop() does not take it: quit must never park behind an
-  // in-flight provision.
+  // Serializes reconciles IN CALL ORDER (shared/util/limit.ts says why
+  // not a Semaphore), so a fast toggle cannot interleave one
+  // reconcile's teardown with another's start, and the last call made
+  // is the state that stands. stop() does not take it: quit must never
+  // park behind an in-flight provision.
   const lifecycle = createLimiter(1);
 
   let status: TunnelStatus = { state: "off", hostname: null };
@@ -475,11 +477,7 @@ export function createCloudflaredRunner(
       next.state !== status.state || next.hostname !== status.hostname;
     status = next;
     if (!changed) return;
-    try {
-      deps.onChange?.();
-    } catch (error) {
-      console.warn(`[tunnel] onChange threw: ${errorMessageOf(error)}`);
-    }
+    containedSync("[tunnel] onChange threw", () => deps.onChange?.());
   }
 
   function pidFilePathOf(): string | null {
@@ -626,17 +624,16 @@ export function createCloudflaredRunner(
           return {
             kind: "retry" as const,
             detail: `tunnel at ${hostname} never became routable`,
-            resetLadder: false,
+            stable: false,
           };
         }
         // Stable-reset rule, like the socket supervisor's: a child that
         // held the tunnel past the stable window broke the failure
         // streak, anything shorter climbs the ladder.
-        const ranMs = (yield* Clock.currentTimeMillis) - spawnedAt;
         return {
           kind: "retry" as const,
           detail: ended.detail,
-          resetLadder: ranMs >= TUNNEL_STABLE_MS,
+          stable: yield* ranAtLeast(spawnedAt, TUNNEL_STABLE_MS),
         };
       }),
     );
@@ -722,7 +719,7 @@ export function createCloudflaredRunner(
         return Effect.succeed({
           kind: "retry",
           detail: `tunnel start failed: ${errorMessageOf(error)}`,
-          resetLadder: false,
+          stable: false,
         });
       }),
     );
@@ -738,31 +735,32 @@ export function createCloudflaredRunner(
     const signalSettled = (): void => {
       Deferred.doneUnsafe(control.settled, Effect.void);
     };
-    return Effect.gen(function* () {
-      const cache: ProvisionCache = { provision: null, ready: false };
-      let rung = 0;
+    const cache: ProvisionCache = { provision: null, ready: false };
+    // Attempts until one asks for a retry. A park holds the rung where
+    // it is: a woken fiber attempts again at once.
+    const untilRetry = Effect.gen(function* () {
       while (true) {
         const outcome = yield* attempt(port, cache, signalSettled);
-        if (outcome.kind === "park") {
-          if (!outcome.wakeable) {
-            signalSettled();
-            return yield* Effect.never;
-          }
-          const wake = Deferred.makeUnsafe<void>();
-          control.wake = wake;
+        if (outcome.kind === "retry") return outcome;
+        if (!outcome.wakeable) {
           signalSettled();
-          yield* Deferred.await(wake);
-          continue;
+          return yield* Effect.never;
         }
-        if (outcome.resetLadder) rung = 0;
-        const delayMs = backoffDelayMs(TUNNEL_BACKOFF_LADDER_MS, rung);
-        rung += 1;
+        const wake = Deferred.makeUnsafe<void>();
+        control.wake = wake;
+        signalSettled();
+        yield* Deferred.await(wake);
+      }
+    });
+    return superviseLadder(
+      TUNNEL_BACKOFF_LADDER_MS,
+      untilRetry,
+      (outcome, delayMs) => {
         setStatus({ state: "error", hostname: null });
         console.warn(`[tunnel] ${outcome.detail}, retrying in ${delayMs}ms`);
         signalSettled();
-        yield* Effect.sleep(delayMs);
-      }
-    }).pipe(Effect.ensuring(Effect.sync(signalSettled)));
+      },
+    ).pipe(Effect.ensuring(Effect.sync(signalSettled)));
   };
 
   // Interrupts the current port's fiber, which kills its child (the

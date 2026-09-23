@@ -43,6 +43,7 @@ import {
   stopUpdaterBridge,
 } from "./updaterBridge";
 import { errorMessageOf } from "@shared/errors";
+import { contained } from "@shared/util/contained";
 import { runner } from "../services";
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
@@ -64,9 +65,8 @@ const MAX_BACKOFF_TICKS = 6;
 const STAGE_TIMEOUT_MS = 30 * 60 * 1000;
 
 let state: UpdaterState = { kind: "idle" };
-let started = false;
 // The scope the check timers are forked into, from startUpdater until
-// stopUpdater.
+// stopUpdater. Non-null is what "started" means.
 let timers: Scope.Closeable | null = null;
 let installing = false;
 let checkInFlight = false;
@@ -133,7 +133,7 @@ export function checkForUpdates(): void {
 // terminal `sm update` racing this check is also safe. The loser
 // reports "update-in-progress" and is treated as a skip, not an error.
 async function runCheck(): Promise<void> {
-  if (!started || checkInFlight) return;
+  if (timers === null || checkInFlight) return;
   if (state.kind === "downloading" || state.kind === "ready") return;
   checkInFlight = true;
   setState({ kind: "checking" });
@@ -267,23 +267,13 @@ export const updaterImpl: Updater["Service"] = {
   install: installUpdate,
 };
 
-// A timer body, contained: a throw would end the fiber, and with it
-// every later check, with a defect nothing reports.
-const contained = (what: string, body: () => void) =>
-  Effect.sync(() => {
-    try {
-      body();
-    } catch (error) {
-      console.warn(`[updater] ${what} failed: ${errorMessageOf(error)}`);
-    }
-  });
-
 // Every CHECK_INTERVAL_MS, the first one interval after the start, a
-// check unless the backoff says not yet.
+// check unless the backoff says not yet. Contained: a throw would end
+// the fiber, and with it every later check.
 const checkLoop = Effect.sleep(CHECK_INTERVAL_MS).pipe(
   Effect.andThen(
     Effect.repeat(
-      contained("scheduled check", () => {
+      contained("[updater] scheduled check failed", () => {
         if (Date.now() >= nextAutoCheckAt) checkForUpdates();
       }),
       Schedule.spaced(CHECK_INTERVAL_MS),
@@ -292,14 +282,13 @@ const checkLoop = Effect.sleep(CHECK_INTERVAL_MS).pipe(
 );
 
 export function startUpdater(): void {
-  if (started) return;
+  if (timers !== null) return;
   if (!app.isPackaged) {
     // Publishes the state file too, so `sm update` reads "unsupported"
     // instead of waiting on a bridge that will never start.
     setState({ kind: "unsupported" });
     return;
   }
-  started = true;
   const scope = Scope.makeUnsafe();
   timers = scope;
   // The only bridge request is "install" (UpdateRequestSchema). The
@@ -321,7 +310,9 @@ export function startUpdater(): void {
     if (timers !== scope) return;
     Effect.runSync(
       Effect.sleep(FIRST_CHECK_DELAY_MS).pipe(
-        Effect.andThen(contained("first check", checkForUpdates)),
+        Effect.andThen(
+          contained("[updater] first check failed", checkForUpdates),
+        ),
         Effect.forkIn(scope),
       ),
     );
@@ -336,7 +327,6 @@ export function stopUpdater(): Promise<void> {
   const scope = timers;
   timers = null;
   if (scope === null) return Promise.resolve();
-  started = false;
   stopUpdaterBridge();
   return Effect.runPromise(Scope.close(scope, Exit.void));
 }

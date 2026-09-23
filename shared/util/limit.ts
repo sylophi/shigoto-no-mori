@@ -3,18 +3,11 @@
 // electron), so it lives in shared/ and the host and the web client
 // use the one implementation.
 //
-// Kept on purpose. The fan-out users it once served (the tidy
-// surface's git probes and directory walks, the worktree row probes)
-// moved to Effect (`Effect.forEach` with `concurrency`, a Semaphore
-// for the directory reads). What is left are single-slot lifecycle
-// serializers whose correctness is call order: a `stop` queued behind
-// a `start` must run after it, never before. An Effect Semaphore
-// cannot stand in for them, because it wakes its waiters in scheduler
-// order, not in the order they queued. The users, and the only ones it
-// should have: the cloudflared runner (host/direct/cloudflared.ts), the
-// socket host (host/socket/server.ts), the ws client transport's
-// in-order sends (shared/ipc/socket/wsClientTransport.ts) and the hub
-// connection core (shared/hub/connection.ts).
+// For serializers whose correctness is call order: a `stop` queued
+// behind a `start` must run after it, never before. An Effect
+// Semaphore cannot stand in for one, because it wakes its waiters in
+// scheduler order, not in the order they queued. A fan-out wants
+// `Effect.forEach` with `concurrency` instead.
 type Limiter = <T>(task: () => Promise<T>) => Promise<T>;
 
 export function createLimiter(limit: number): Limiter {

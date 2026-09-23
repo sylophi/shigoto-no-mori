@@ -4,11 +4,17 @@
 // app. Stored in the global state.json, since sort and usage are
 // app-managed UI state, not the user-editable per-project shigomori config.
 import type { ProjectSortMode } from "@shared/schemas";
-import { stateStore } from "../config/store";
-import { countWithin, maxTimestamp, pruneAndPush } from "../util/useLog";
-
-const USE_LOG_KEY = "projectUseLog";
-const SORT_KEY = "projectsSort";
+import {
+  PROJECT_USE_LOG_KEY as USE_LOG_KEY,
+  PROJECTS_SORT_KEY as SORT_KEY,
+  stateStore,
+} from "../config/store";
+import {
+  bumpBestEffort,
+  countWithin,
+  maxTimestamp,
+  pruneAndPush,
+} from "../util/useLog";
 
 type UseLog = Record<string, number[]>;
 
@@ -64,13 +70,6 @@ function hasStringProjectId(input: unknown): input is { projectId: string } {
   );
 }
 
-// The store throws when state.json can't be read, and this runs after
-// roughly every action, so an unreadable file would log on every click.
-// One line per app run is enough to point at the cause, and the user's
-// next real action (adding a project, shelving a worktree) goes through
-// the same store and surfaces the error in the UI.
-let usageFailureLogged = false;
-
 // Called from the IPC registrar after an action whose contract entry sets
 // `tracksProjectUsage` succeeds. Bumps the project named by the payload and
 // returns its id so the caller can notify the renderer to refresh its
@@ -78,16 +77,8 @@ let usageFailureLogged = false;
 // Best-effort: never let a stats write break the handler.
 export function recordProjectActionUsage(input: unknown): string | null {
   if (!hasStringProjectId(input)) return null;
-  try {
-    bumpProjectUseCount(input.projectId);
-    return input.projectId;
-  } catch (error) {
-    // Usage tracking is best-effort, so the action the user asked for
-    // still counts as a success. Log rather than swallow outright.
-    if (!usageFailureLogged) {
-      usageFailureLogged = true;
-      console.warn("[usage] project use log not recorded:", error);
-    }
-    return null;
-  }
+  const { projectId } = input;
+  return bumpBestEffort("usage", () => bumpProjectUseCount(projectId))
+    ? projectId
+    : null;
 }

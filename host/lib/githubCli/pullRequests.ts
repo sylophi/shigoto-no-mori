@@ -12,9 +12,7 @@ import {
 } from "@shared/schemas";
 import { execGh } from "./exec";
 import { ghReadyForRepo } from "./remote";
-
-const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0));
-const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+import { NonNegativeInt, PositiveInt } from "@shared/schemas/ints";
 
 const GhPrListItemSchema = Schema.Struct({
   number: PositiveInt,

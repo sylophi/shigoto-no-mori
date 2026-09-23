@@ -121,22 +121,15 @@ function notRunning(daemon: MirrorImpl): Error | null {
   );
 }
 
-// The engine when it can take a session, or the reason it cannot:
-// the mirror start and the transplant's file transfer both begin here.
-export function requireRunningEngine(): MirrorImpl {
-  const daemon = engine();
-  const refusal = notRunning(daemon);
-  if (refusal !== null) throw refusal;
-  return daemon;
-}
-
 // The daemon for a handler written as an Effect.
 export const mirrorEngine: Effect.Effect<MirrorImpl, never, MirrorEngine> =
   requireService(MirrorEngine, MISSING_ENGINE);
 
-// requireRunningEngine as an Effect. A runtime with no engine at all
-// fails with the same "invoked before" message rather than dying, so
-// the transplant's file step reports it as its outcome.
+// The engine when it can take a session, or the reason it cannot:
+// the mirror start and the transplant's file transfer both begin here.
+// A runtime with no engine at all fails with the same "invoked before"
+// message rather than dying, so the transplant's file step reports it
+// as its outcome.
 export const runningEngine: Effect.Effect<MirrorImpl, Error, MirrorEngine> =
   Effect.flatMap(Effect.serviceOption(MirrorEngine), (found) => {
     if (Option.isNone(found)) return Effect.fail(new Error(MISSING_ENGINE));
