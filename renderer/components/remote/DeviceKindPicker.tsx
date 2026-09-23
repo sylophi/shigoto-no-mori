@@ -1,5 +1,5 @@
-// This device's icon, picked in place: the mark on its Devices page
-// row is the trigger, and the menu lays out every kind the catalog has
+// A device's icon, picked in place: the mark on its Devices page row
+// is the trigger, and the menu lays out every kind the catalog has
 // (shared/account/deviceKind.ts) as one grid of tiles: the device
 // shapes as the first row, with what the device detected about itself
 // named as such, then under a hairline the marks that are only ever
@@ -10,6 +10,10 @@
 // no override that a later, better detection could not move. The pick
 // rides the same path a rename does, so every other device sees the new
 // mark on its next registry read.
+//
+// This device's row picks for itself. A peer's row picks for the peer
+// when the peer allows control from here: the pick is still the peer's
+// own, made through its host api (shared/ipc/modules/device.ts).
 import { ChevronDown } from "lucide-react";
 import {
   DEVICE_KIND_LABELS,
@@ -27,6 +31,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { StatusTone } from "@/components/ui/status-dot";
 import { useAccountStatus, useSetDeviceKind } from "@/hooks/account/useAccount";
+import type { HostApi } from "@/hooks/remote/useHostScope";
+import { useSetPeerDeviceKind } from "@/hooks/remote/usePeerDeviceKind";
 import { cn } from "@/lib/utils";
 
 export function DeviceKindPicker({
@@ -44,19 +50,75 @@ export function DeviceKindPicker({
   // "back to the default". The kind worn now until the status lands,
   // moments before the picker re-renders with the real answer.
   const detectedKind = useAccountStatus().data?.detectedDeviceKind ?? kind;
-  const pick = (next: DeviceKind) =>
-    setDeviceKind.mutate(next === detectedKind ? null : next);
+  return (
+    <KindPickerMenu
+      kind={kind}
+      tone={tone}
+      label={label}
+      detected={detectedKind}
+      pending={setDeviceKind.isPending}
+      onPick={(next) => setDeviceKind.mutate(next)}
+    />
+  );
+}
+
+export function PeerDeviceKindPicker({
+  deviceId,
+  api,
+  kind,
+  detected,
+  tone,
+  // The peer's name, for the control's accessible name and the error.
+  name,
+}: {
+  deviceId: string;
+  api: HostApi;
+  kind: DeviceKind;
+  // What the peer detected about itself (usePeerDetectedKind), read by
+  // the row, which offers this picker only once the peer answered.
+  detected: DeviceKind;
+  tone: StatusTone;
+  name: string;
+}) {
+  const setPeerKind = useSetPeerDeviceKind(deviceId, api, name);
+  return (
+    <KindPickerMenu
+      kind={kind}
+      tone={tone}
+      label={name}
+      detected={detected}
+      pending={setPeerKind.isPending}
+      onPick={(next) => setPeerKind.mutate(next)}
+    />
+  );
+}
+
+function KindPickerMenu({
+  kind,
+  tone,
+  label,
+  detected,
+  pending,
+  onPick,
+}: {
+  kind: DeviceKind;
+  tone: StatusTone;
+  label: string;
+  detected: DeviceKind | undefined;
+  pending: boolean;
+  onPick: (kind: DeviceKind) => void;
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={`${label} icon: ${DEVICE_KIND_LABELS[kind]}. Change`}
         title="Change icon"
-        disabled={setDeviceKind.isPending}
+        disabled={pending}
         className="group relative shrink-0 rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60"
       >
         <DeviceMark kind={kind} tone={tone} size="lg" />
         {/* A small cue that the mark opens something, kept off the
-            peers' marks, which open nothing. */}
+            marks that open nothing. */}
         <span className="absolute -right-1 -bottom-1 flex size-3.5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground group-hover:text-foreground">
           <ChevronDown aria-hidden className="size-2.5" />
         </span>
@@ -65,15 +127,15 @@ export function DeviceKindPicker({
         <KindTiles
           kinds={DEVICE_SHAPES}
           picked={kind}
-          detected={detectedKind}
-          onPick={pick}
+          detected={detected}
+          onPick={onPick}
         />
         <DropdownMenuSeparator />
         <KindTiles
           kinds={DEVICE_MARKS}
           picked={kind}
-          detected={detectedKind}
-          onPick={pick}
+          detected={detected}
+          onPick={onPick}
         />
       </DropdownMenuContent>
     </DropdownMenu>
@@ -93,7 +155,7 @@ function KindTiles({
 }: {
   kinds: readonly DeviceKind[];
   picked: DeviceKind;
-  detected: DeviceKind;
+  detected: DeviceKind | undefined;
   onPick: (kind: DeviceKind) => void;
 }) {
   return (

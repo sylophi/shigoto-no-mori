@@ -42,6 +42,7 @@ export type HostApi = Pick<
   RemoteDeviceApi,
   | "branches"
   | "cli"
+  | "device"
   | "forward"
   | "fs"
   | "git"

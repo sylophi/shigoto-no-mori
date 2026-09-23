@@ -215,7 +215,7 @@ async function defaultDeviceName(): Promise<DefaultDeviceName> {
 // the probes shell out, and the answer cannot change while the app
 // runs. It cannot reject (the detector falls back to the platform).
 let detectedKindInFlight: Promise<DeviceKind> | null = null;
-function detectedDeviceKind(): Promise<DeviceKind> {
+export function detectedDeviceKind(): Promise<DeviceKind> {
   detectedKindInFlight ??= detectDesktopDeviceKind();
   return detectedKindInFlight;
 }
