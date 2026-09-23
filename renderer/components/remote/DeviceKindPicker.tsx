@@ -1,29 +1,33 @@
 // This device's icon, picked in place: the mark on its Devices page
-// row is the trigger, and the menu lists every kind the catalog has
-// (shared/account/deviceKind.ts), each with its glyph, with what the
-// device detected about itself marked as such. Picking the detected
-// one drops the pick (the store's rule: no pick means "what I
-// detected"), so a device put back to its default carries no override
-// that a later, better detection could not move. The pick rides the
-// same path a rename does, so every other device sees the new mark on
-// its next registry read.
+// row is the trigger, and the menu lays out every kind the catalog has
+// (shared/account/deviceKind.ts) as tiles, in its two families: the
+// device shapes first, with what the device detected about itself
+// marked, then the marks that are only ever picked (a leaf, a cat, a
+// rocket), which tell two laptops apart the way a shape never can.
+// Picking the detected shape drops the pick (the store's rule: no pick
+// means "what I detected"), so a device put back to its default carries
+// no override that a later, better detection could not move. The pick
+// rides the same path a rename does, so every other device sees the new
+// mark on its next registry read.
 import { ChevronDown } from "lucide-react";
 import {
-  DEVICE_KINDS,
   DEVICE_KIND_LABELS,
+  DEVICE_MARKS,
+  DEVICE_SHAPES,
   type DeviceKind,
 } from "@shared/account/deviceKind";
 import { DeviceIcon, DeviceMark } from "@/components/shared/DeviceIcon";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { StatusTone } from "@/components/ui/status-dot";
 import { useSetDeviceKind } from "@/hooks/account/useAccount";
+import { cn } from "@/lib/utils";
 
 export function DeviceKindPicker({
   kind,
@@ -38,6 +42,8 @@ export function DeviceKindPicker({
   label: string;
 }) {
   const setDeviceKind = useSetDeviceKind();
+  const pick = (next: DeviceKind) =>
+    setDeviceKind.mutate(next === detectedKind ? null : next);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -53,29 +59,73 @@ export function DeviceKindPicker({
           <ChevronDown aria-hidden className="size-2.5" />
         </span>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start">
-        {/* The label is a group part, so it sits inside the group. */}
-        <DropdownMenuRadioGroup
-          value={kind}
-          onValueChange={(next) => {
-            const picked = next as DeviceKind;
-            setDeviceKind.mutate(picked === detectedKind ? null : picked);
-          }}
-        >
-          <DropdownMenuLabel>Icon</DropdownMenuLabel>
-          {DEVICE_KINDS.map((option) => (
-            <DropdownMenuRadioItem key={option} value={option}>
-              <DeviceIcon kind={option} className="size-3.5" />
-              {DEVICE_KIND_LABELS[option]}
-              {option === detectedKind && (
-                <span className="ml-auto pl-3 text-2xs text-muted-foreground">
-                  detected
-                </span>
-              )}
-            </DropdownMenuRadioItem>
-          ))}
-        </DropdownMenuRadioGroup>
+      <DropdownMenuContent align="start" className="w-64">
+        <KindTiles
+          heading="Device"
+          kinds={DEVICE_SHAPES}
+          picked={kind}
+          detected={detectedKind}
+          onPick={pick}
+        />
+        <KindTiles
+          heading="Or a mark of your own"
+          kinds={DEVICE_MARKS}
+          picked={kind}
+          detected={detectedKind}
+          onPick={pick}
+        />
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+// One family as a grid of square tiles: the glyph alone, named in the
+// tooltip and to assistive tech. The picked tile wears the accent fill
+// every selection in the app wears, and the detected one says so in
+// its name, since it is the entry that means "back to the default".
+function KindTiles({
+  heading,
+  kinds,
+  picked,
+  detected,
+  onPick,
+}: {
+  heading: string;
+  kinds: readonly DeviceKind[];
+  picked: DeviceKind;
+  detected: DeviceKind;
+  onPick: (kind: DeviceKind) => void;
+}) {
+  return (
+    <DropdownMenuGroup>
+      <DropdownMenuLabel>{heading}</DropdownMenuLabel>
+      <div className="grid grid-cols-6 gap-0.5 px-1 pb-1">
+        {kinds.map((option) => {
+          // The tile's whole name: the kind, and whether it is the
+          // one worn now or the one the device detected.
+          const name = [
+            DEVICE_KIND_LABELS[option],
+            option === picked ? "(current)" : null,
+            option === detected ? "(detected)" : null,
+          ]
+            .filter((part) => part !== null)
+            .join(" ");
+          return (
+            <DropdownMenuItem
+              key={option}
+              aria-label={name}
+              title={name}
+              onClick={() => onPick(option)}
+              className={cn(
+                "size-9 justify-center p-0",
+                option === picked && "bg-accent text-accent-foreground",
+              )}
+            >
+              <DeviceIcon kind={option} className="size-4" />
+            </DropdownMenuItem>
+          );
+        })}
+      </div>
+    </DropdownMenuGroup>
   );
 }

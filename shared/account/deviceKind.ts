@@ -6,10 +6,15 @@
 // protocol, both enroll paths (desktop and web), the lab and every
 // renderer surface, so the set cannot drift between them. Pure, like
 // the rest of shared/account/: no node, no DOM.
+//
+// Two families. The shapes are what a device can detect itself to be,
+// and what it reads as until its owner picks. The marks are picked
+// only: a leaf, a cat, a rocket, things that tell two laptops apart at
+// a glance, which a shape never can.
 import { z } from "zod";
 import { WEB_PLATFORM } from "./platform";
 
-export const DEVICE_KINDS = [
+export const DEVICE_SHAPES = [
   "laptop",
   "desktop",
   "mini",
@@ -19,7 +24,38 @@ export const DEVICE_KINDS = [
   "browser",
 ] as const;
 
-export type DeviceKind = (typeof DEVICE_KINDS)[number];
+export const DEVICE_MARKS = [
+  "leaf",
+  "sprout",
+  "flower",
+  "clover",
+  "pine",
+  "mountain",
+  "cat",
+  "dog",
+  "rabbit",
+  "squirrel",
+  "turtle",
+  "snail",
+  "fish",
+  "bird",
+  "bug",
+  "star",
+  "moon",
+  "sun",
+  "flame",
+  "heart",
+  "ghost",
+  "rocket",
+  "coffee",
+  "gamepad",
+] as const;
+
+export const DEVICE_KINDS = [...DEVICE_SHAPES, ...DEVICE_MARKS] as const;
+
+export type DeviceShape = (typeof DEVICE_SHAPES)[number];
+export type DeviceMark = (typeof DEVICE_MARKS)[number];
+export type DeviceKind = DeviceShape | DeviceMark;
 
 export const DeviceKindSchema = z.enum(DEVICE_KINDS);
 
@@ -32,6 +68,30 @@ export const DEVICE_KIND_LABELS: Record<DeviceKind, string> = {
   phone: "Phone",
   tablet: "Tablet",
   browser: "Browser",
+  leaf: "Leaf",
+  sprout: "Sprout",
+  flower: "Flower",
+  clover: "Clover",
+  pine: "Pine",
+  mountain: "Mountain",
+  cat: "Cat",
+  dog: "Dog",
+  rabbit: "Rabbit",
+  squirrel: "Squirrel",
+  turtle: "Turtle",
+  snail: "Snail",
+  fish: "Fish",
+  bird: "Bird",
+  bug: "Bug",
+  star: "Star",
+  moon: "Moon",
+  sun: "Sun",
+  flame: "Flame",
+  heart: "Heart",
+  ghost: "Ghost",
+  rocket: "Rocket",
+  coffee: "Coffee",
+  gamepad: "Gamepad",
 };
 
 export function isDeviceKind(value: unknown): value is DeviceKind {
@@ -42,7 +102,7 @@ export function isDeviceKind(value: unknown): value is DeviceKind {
 // device enrolled before kinds existed, or one whose hub row predates
 // the column. A browser is a browser; a machine is drawn as a desktop,
 // the shape that claims the least.
-export function fallbackDeviceKind(platform: string): DeviceKind {
+export function fallbackDeviceKind(platform: string): DeviceShape {
   return platform === WEB_PLATFORM ? "browser" : "desktop";
 }
 

@@ -5,9 +5,9 @@
 // purpose: a phone, a tablet, or a browser on something bigger is all
 // the device list needs to tell apart, and the owner can pick another
 // kind afterwards.
-import type { DeviceKind } from "@shared/account/deviceKind";
+import type { DeviceShape } from "@shared/account/deviceKind";
 
-export function defaultWebDeviceKind(userAgent: string): DeviceKind {
+export function defaultWebDeviceKind(userAgent: string): DeviceShape {
   if (/iPad/.test(userAgent)) return "tablet";
   if (/iPhone/.test(userAgent)) return "phone";
   // Android phones carry "Mobile" in the UA and tablets leave it out.

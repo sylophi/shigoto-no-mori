@@ -11,7 +11,7 @@ import { platform } from "node:os";
 import { promisify } from "node:util";
 import {
   fallbackDeviceKind,
-  type DeviceKind,
+  type DeviceShape,
 } from "@shared/account/deviceKind";
 
 const execFileP = promisify(execFile);
@@ -23,7 +23,7 @@ const execFileP = promisify(execFile);
 // identifier, which says nothing about the shape, so the product name
 // is asked for first and the identifier is the fallback for the
 // machines that still spell a family into it.
-export function deviceKindFromAppleModel(model: string): DeviceKind | null {
+export function deviceKindFromAppleModel(model: string): DeviceShape | null {
   const normalized = model.replace(/[\s-]/g, "").toLowerCase();
   if (normalized.startsWith("macbook")) return "laptop";
   if (normalized.startsWith("macmini")) return "mini";
@@ -38,7 +38,7 @@ export function deviceKindFromAppleModel(model: string): DeviceKind | null {
 // /sys/class/dmi/id/chassis_type reports them. Only the codes that say
 // a shape are listed; the rest ("Other", "Unknown", docking stations)
 // fall through.
-const DMI_CHASSIS_KIND: Record<string, DeviceKind> = {
+const DMI_CHASSIS_KIND: Record<string, DeviceShape> = {
   "3": "desktop", // Desktop
   "4": "desktop", // Low profile desktop
   "5": "desktop", // Pizza box
@@ -90,7 +90,7 @@ export function deviceKindFromDmi(dmi: {
   chassisType: string | null;
   vendor: string | null;
   product: string | null;
-}): DeviceKind | null {
+}): DeviceShape | null {
   const vendorProduct =
     `${dmi.vendor ?? ""} ${dmi.product ?? ""}`.toLowerCase();
   if (VIRTUAL_MARKERS.some((marker) => vendorProduct.includes(marker))) {
@@ -129,7 +129,7 @@ async function run(file: string, args: readonly string[]): Promise<string> {
   return stdout;
 }
 
-async function macKind(): Promise<DeviceKind | null> {
+async function macKind(): Promise<DeviceShape | null> {
   try {
     const name = appleProductNameOf(
       await run("/usr/sbin/ioreg", ["-rd1", "-n", "product"]),
@@ -148,7 +148,7 @@ async function macKind(): Promise<DeviceKind | null> {
   }
 }
 
-async function linuxKind(): Promise<DeviceKind | null> {
+async function linuxKind(): Promise<DeviceShape | null> {
   // WSL has no chassis, and a Windows machine's shape is unknown from
   // inside it: leave it to the fallback.
   const release = await readTrimmed("/proc/sys/kernel/osrelease");
@@ -163,7 +163,7 @@ async function linuxKind(): Promise<DeviceKind | null> {
 
 // The kind this desktop device detects itself to be. Never rejects:
 // an unreadable probe lands on the platform fallback.
-export async function detectDesktopDeviceKind(): Promise<DeviceKind> {
+export async function detectDesktopDeviceKind(): Promise<DeviceShape> {
   const fallback = fallbackDeviceKind(platform());
   try {
     switch (platform()) {

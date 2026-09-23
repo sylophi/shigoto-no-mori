@@ -90,8 +90,10 @@ Rules that keep that working:
 ## Devices: one identity, drawn one way
 
 A device is its name and its kind. The kind is one of the closed
-catalog in `shared/account/deviceKind.ts` (laptop, desktop, mini,
-server, phone, tablet, browser): the device detects its own at
+catalog in `shared/account/deviceKind.ts`: seven device shapes (laptop,
+desktop, mini, server, phone, tablet, browser) and a set of marks that
+are only ever picked (a leaf, a cat, a rocket), for telling two laptops
+apart. The device detects its own shape at
 enrollment (`main/core/account/defaultDeviceKind.ts` on a machine,
 `web/account/deviceKind.ts` in a browser), its owner can pick another
 on its Devices page row, and the hub stores the result beside the
