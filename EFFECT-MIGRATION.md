@@ -761,7 +761,8 @@ path, the fetch, identity and icon single-flights are `Cache`s, the sync chunk
 pump is a `Queue`, temp files are scoped, the PTY output batcher and
 the CLI's NDJSON are `Stream`s, the fetch and updater loops are
 `Schedule.spaced` fibers in their Layers, and the global config write
-lock is a `Semaphore` with `PubSub` listeners. Deviations:
+lock is a call-ordered `createLimiter(1)` with `PubSub` listeners.
+Deviations:
 
 - `runGit` is `Effect.runPromise`, not the host runtime: the git
   effects need no service, and the proofs run them without a runtime.
