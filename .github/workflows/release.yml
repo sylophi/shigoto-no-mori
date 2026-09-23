@@ -148,3 +148,26 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: pnpm exec electron-forge publish --from-dry-run
+
+  # Vercel deploys app.shigomori.com from web-client-prod
+  # (hub/README.md). The ref update refuses a non-fast-forward, so a
+  # branch moved by hand fails here instead of being overwritten. The
+  # job token triggers no workflow run, but Vercel's GitHub app still
+  # sees the push.
+  web-client-prod:
+    needs: release-mac
+    if: github.event.release.prerelease == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fast-forward web-client-prod to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          STATUS="$(gh api "repos/$GITHUB_REPOSITORY/compare/web-client-prod...$SHA" --jq .status)"
+          if [[ "$STATUS" == identical || "$STATUS" == behind ]]; then
+            echo "web-client-prod already contains $TAG. Nothing to move."
+            exit 0
+          fi
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/web-client-prod" -f sha="$SHA"
