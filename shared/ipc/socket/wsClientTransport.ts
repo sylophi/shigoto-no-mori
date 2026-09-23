@@ -39,7 +39,7 @@ import {
 } from "@shared/ipc/socket/channels";
 import type { ClientTransport } from "@shared/ipc/transport";
 import { createLimiter } from "@shared/util/limit";
-import { WireError } from "../wireError";
+import { WireError } from "../wireError.ts";
 
 // A connect attempt failed before the welcome landed. `code` is the
 // close code when the failure came from a socket close (null on a

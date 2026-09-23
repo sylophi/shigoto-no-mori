@@ -14,22 +14,32 @@
 // fallbacks go when no supported peer version sends message-only
 // errors.
 import { Schema } from "effect";
-import { errorMessageOf, errorTagOf } from "./errorOf";
+import { errorMessageOf, errorTagOf } from "./errorOf.ts";
 
 // The class-free readers live in shared/errorOf.ts (the hub Worker
 // compiles the frame schemas that need them and must not load
 // effect); re-exported here so callers have one module to import.
+// Extension spelled out: scripts/ imports this module under plain
+// node, which resolves no extensionless specifier.
 export {
   errorCodeOf,
   errorFieldOf,
   errorMessageOf,
   errorTagOf,
-} from "./errorOf";
+} from "./errorOf.ts";
 
 // "Entity gone": a project or worktree was deleted out from under a
 // call (worktree delete, project removal, nuke racing a renderer poll).
+// The tags are named once here, and the classes and matchers below
+// share them: `_tag` is an own property of an instance, not of the
+// class, so a matcher cannot read it off the prototype.
+export const UNKNOWN_PROJECT_TAG = "UnknownProject";
+export const UNKNOWN_WORKTREE_TAG = "UnknownWorktree";
+export const NO_DIRECT_CONNECTION_TAG = "NoDirectConnection";
+export const BRANCH_NOT_MERGED_TAG = "BranchNotMerged";
+
 export class UnknownProject extends Schema.TaggedError<UnknownProject>()(
-  "UnknownProject",
+  UNKNOWN_PROJECT_TAG,
   { projectId: Schema.String },
 ) {
   override get message(): string {
@@ -38,7 +48,7 @@ export class UnknownProject extends Schema.TaggedError<UnknownProject>()(
 }
 
 export class UnknownWorktree extends Schema.TaggedError<UnknownWorktree>()(
-  "UnknownWorktree",
+  UNKNOWN_WORKTREE_TAG,
   { worktreeId: Schema.String },
 ) {
   override get message(): string {
@@ -55,8 +65,8 @@ export function unknownWorktreeError(worktreeId: string): UnknownWorktree {
 }
 
 const ENTITY_GONE_TAGS: ReadonlySet<string> = new Set([
-  UnknownProject.prototype._tag,
-  UnknownWorktree.prototype._tag,
+  UNKNOWN_PROJECT_TAG,
+  UNKNOWN_WORKTREE_TAG,
 ]);
 const ENTITY_GONE_PREFIXES = ["Unknown project:", "Unknown worktree:"];
 
@@ -76,7 +86,7 @@ export function isEntityGoneError(error: unknown): boolean {
 export const NO_DIRECT_CONNECTION_PREFIX = "no direct connection to ";
 
 export class NoDirectConnection extends Schema.TaggedError<NoDirectConnection>()(
-  "NoDirectConnection",
+  NO_DIRECT_CONNECTION_TAG,
   {
     deviceId: Schema.String,
     // Why the keeper has no session right now, when it can say.
@@ -93,7 +103,7 @@ export class NoDirectConnection extends Schema.TaggedError<NoDirectConnection>()
 
 export function isNoDirectConnectionError(error: unknown): boolean {
   const tag = errorTagOf(error);
-  if (tag !== undefined) return tag === NoDirectConnection.prototype._tag;
+  if (tag !== undefined) return tag === NO_DIRECT_CONNECTION_TAG;
   return errorMessageOf(error).startsWith(NO_DIRECT_CONNECTION_PREFIX);
 }
 
@@ -106,7 +116,7 @@ export function isNoDirectConnectionError(error: unknown): boolean {
 const BRANCH_NOT_MERGED_MARKER = "has unmerged commits";
 
 export class BranchNotMerged extends Schema.TaggedError<BranchNotMerged>()(
-  "BranchNotMerged",
+  BRANCH_NOT_MERGED_TAG,
   { branch: Schema.String },
 ) {
   override get message(): string {
@@ -120,6 +130,6 @@ export function branchNotMergedError(name: string): BranchNotMerged {
 
 export function isBranchNotMergedError(error: unknown): boolean {
   const tag = errorTagOf(error);
-  if (tag !== undefined) return tag === BranchNotMerged.prototype._tag;
+  if (tag !== undefined) return tag === BRANCH_NOT_MERGED_TAG;
   return errorMessageOf(error).includes(BRANCH_NOT_MERGED_MARKER);
 }

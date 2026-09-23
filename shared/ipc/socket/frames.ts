@@ -19,8 +19,8 @@
 // chunks (WIRE_CHUNK_BYTES below) for flow control, and so an uplink
 // req carrying a chunk stays under the inbound cap.
 import { z } from "zod";
-import { errorTagOf } from "../../errorOf";
-import { WireErrorShapeSchema } from "../wireError";
+import { errorTagOf } from "../../errorOf.ts";
+import { WireErrorShapeSchema } from "../wireError.ts";
 import { HANDSHAKE_NONCE_PATTERN } from "./proof";
 
 // One well-known default keeps the app listener and a client's connect

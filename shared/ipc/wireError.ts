@@ -10,7 +10,7 @@
 // carries. An older peer sends no `error`, and a reader falls back to
 // the message text.
 import { z } from "zod";
-import { errorMessageOf, errorTagOf } from "../errorOf";
+import { errorMessageOf, errorTagOf } from "../errorOf.ts";
 
 // A tag plus any JSON fields. Loose so a newer peer's extra fields
 // survive the parse and land on the WireError.
