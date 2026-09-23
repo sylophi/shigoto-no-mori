@@ -6,10 +6,11 @@
 // Each pill is the outline button the New worktree button above it is,
 // so the row reads as one set of controls with it rather than a second
 // kind of chip. Each pill is the device's dot, glyph and name, the
-// lead every device row shares, and the row scrolls sideways past the
-// edge rather than shrinking a pill to its glyph, so every machine
-// stays named. A radio group: one pick at a time, arrows move it, the
-// way the device tabs do.
+// lead every device row shares, at the bar's own small size. The bar
+// wraps onto more rows rather than scrolling a machine out of sight
+// or shrinking a pill to its glyph, so every machine stays named and
+// in view. A radio group: one pick at a time, arrows move it, the way
+// the device tabs do.
 import type { DeviceKind } from "@shared/account/deviceKind";
 import { DeviceGlyph } from "@/components/shared/DeviceIcon";
 import type { DeviceRosterEntry } from "@/components/shared/DeviceTabs";
@@ -53,9 +54,7 @@ export function DeviceFilterBar({ choices, selected }: DeviceFilter) {
       role="radiogroup"
       aria-label="Show worktrees on"
       data-slot="sidebar-device-filter"
-      // Scrolls sideways past the edge rather than wrapping, so the
-      // list below keeps its place however many machines there are.
-      className="flex shrink-0 [scrollbar-width:none] gap-1 overflow-x-auto px-2 pb-1.5"
+      className="flex shrink-0 flex-wrap gap-1 px-2 pb-1.5"
     >
       {pills.map((pill) => {
         const checked = pill.id === selectedId;
@@ -82,8 +81,10 @@ export function DeviceFilterBar({ choices, selected }: DeviceFilter) {
                 "border-transparent bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground",
             )}
           >
-            {pill.kind && <DeviceGlyph kind={pill.kind} tone={pill.tone} />}
-            <span className="max-w-32 truncate">{pill.label}</span>
+            {pill.kind && (
+              <DeviceGlyph kind={pill.kind} tone={pill.tone} size="xs" />
+            )}
+            <span className="max-w-24 truncate">{pill.label}</span>
           </Button>
         );
       })}

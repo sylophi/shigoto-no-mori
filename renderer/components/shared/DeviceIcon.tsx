@@ -135,18 +135,29 @@ export function DeviceIcon({
 export function DeviceGlyph({
   kind,
   tone,
+  size = "sm",
   className,
 }: {
   kind: DeviceKind;
   tone?: StatusTone | null;
+  // "xs" for a lead inside an xs control (the sidebar's filter pills),
+  // where the row's own glyphs are a step smaller.
+  size?: "xs" | "sm";
   className?: string;
 }) {
   return (
     <span
-      className={cn("inline-flex shrink-0 items-center gap-1.5", className)}
+      className={cn(
+        "inline-flex shrink-0 items-center",
+        size === "xs" ? "gap-1" : "gap-1.5",
+        className,
+      )}
     >
       {tone && <StatusDot tone={tone} />}
-      <DeviceIcon kind={kind} className="size-3.5" />
+      <DeviceIcon
+        kind={kind}
+        className={size === "xs" ? "size-3" : "size-3.5"}
+      />
     </span>
   );
 }
