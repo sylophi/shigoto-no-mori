@@ -2154,6 +2154,78 @@ async function main(): Promise<string[]> {
       },
     );
 
+    // A transplant onto a device with no checkout: one of b's ordinary
+    // worktrees of the lone repo, dirty, comes to a, which clones the
+    // repo first and lands the branch with the edits, and the source is
+    // torn down on b afterwards like any transplant's. Starts by taking
+    // a's clone from the mirror above away, so this device holds no
+    // checkout again.
+    await scenario("transplant: onto a device with no checkout", async () => {
+      const projects = (await onPeer(a, idB, "projects:list")) as Project[];
+      const lone = need(
+        projects.find((p) => p.name === "lone"),
+        "b's lone project",
+      );
+      const identity = need(lone.identity ?? undefined, "lone's identity");
+      const held = (
+        await a.evaluate<Project[]>("window.api.projects.list()")
+      ).filter((p) => p.name === "lone");
+      await Promise.all(
+        held.map((p) =>
+          a.evaluate(`window.api.projects.remove(${JSON.stringify(p.id)})`),
+        ),
+      );
+      for (const p of held) rmSync(p.path, { recursive: true, force: true });
+      const { worktree: source } = (await onPeer(a, idB, "worktrees:create", {
+        projectId: lone.id,
+        branchName: "feat/lone-transplant",
+        worktreeName: "src-lone",
+      })) as { worktree: Worktree };
+      writeFileSync(join(source.path, "draft.txt"), "drafted on b\n");
+      const result = await a.evaluate<PullResult & { cloned?: Project }>(
+        `window.api.sync.pullWorktree(${JSON.stringify({
+          sourceDeviceId: idB,
+          sourceProjectId: lone.id,
+          sourceWorktreeId: source.id,
+          sourceIdentity: identity,
+          branch: source.branch,
+          worktreeName: source.name,
+          runSetup: false,
+          cloneInto: { parentDir: fixture.a.repos, name: "lone" },
+        })})`,
+      );
+      const cloned = need(result.cloned, "the pull's clone");
+      assert.equal(
+        realpathSync(cloned.path),
+        realpathSync(join(fixture.a.repos, "lone")),
+      );
+      assert.equal(
+        gitOut(cloned.path, "symbolic-ref", "HEAD"),
+        "refs/heads/main",
+      );
+      const local = result.worktree;
+      assert.equal(local.projectId, cloned.id);
+      assert.equal(local.branch, "feat/lone-transplant");
+      assert.ok(result.captured && result.dirtyApplied, "the edits were lost");
+      assert.equal(
+        readFileSync(join(local.path, "draft.txt"), "utf8"),
+        "drafted on b\n",
+      );
+      const torn = await a.evaluate<{
+        sourceRemoved: boolean;
+        sourceError?: string;
+      }>(
+        `window.api.sync.teardownSource(${JSON.stringify({
+          sourceDeviceId: idB,
+          sourceProjectId: lone.id,
+          sourceWorktreeId: source.id,
+        })})`,
+      );
+      assert.ok(torn.sourceRemoved, `source kept: ${torn.sourceError}`);
+      assert.ok(!existsSync(source.path), "source worktree still on disk");
+      assert.ok(existsSync(local.path), "the transplanted worktree vanished");
+    });
+
     // The transplant dialog with the switch pinned against the rule:
     // Gitignored turns it on, the user turns it off, and it stays off
     // through further rule changes and into the create.
