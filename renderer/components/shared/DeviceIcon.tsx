@@ -8,9 +8,12 @@
 // answer (shared/account/deviceKind.ts), never from guessing at the
 // name or the platform here.
 import {
+  Apple,
   Bird,
   Bug,
   Cat,
+  Cherry,
+  Cloud,
   Clover,
   Coffee,
   Dog,
@@ -38,6 +41,7 @@ import {
   Tablet,
   TreePine,
   Turtle,
+  Zap,
   type LucideProps,
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -82,6 +86,10 @@ const GLYPH: Record<DeviceKind, ComponentType<LucideProps>> = {
   clover: Clover,
   pine: TreePine,
   mountain: Mountain,
+  cloud: Cloud,
+  zap: Zap,
+  apple: Apple,
+  cherry: Cherry,
   cat: Cat,
   dog: Dog,
   rabbit: Rabbit,
