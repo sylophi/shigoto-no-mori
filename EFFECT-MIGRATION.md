@@ -801,12 +801,37 @@ by a separate read-only reviewer against the previous behavior, and
 the app was booted, driven over CDP and quit for real after phase 1,
 after step 7 and after phase 3.
 
+**After the phases**, two cleanup passes and a correctness review ran
+over the whole diff, each with separate read-only reviewers and the
+fixes applied: the handlers yield the git library's Effects instead of
+wrapping its Promise twins (the 38 twins with no caller are gone, and
+one typed project lookup replaced fourteen inline ones); the idioms
+copied per module (the contained callback, the watch adapter, the
+backoff ladder, the wire failure body and answer, the PubSub follower,
+the execFile classifier, the TTL cache setup, the loose struct, the
+integer schemas, the tag matcher) are one helper each; modules yield
+each other's programs rather than calling handlers back through the
+Promise boundary; a mirror start opens its session inside the pull's
+landing step; there is one runtime install and one service reader; the
+hub contract owns the socket status type; the last three untyped errors
+are tagged; the PTY batcher, the wire frame walk (once per value, none
+when the text cannot spell `__proto__`, and never recursive), the
+preload's channel gate and the zero-TTL cache entries stop paying per
+event; and the correctness review's findings (a send's finish and
+landing as one step, a get that lands on a lookup being torn down, the
+branch writes, a throwing error encode, a failed continuation's
+receipt) are fixed with proofs. What the reviews raised and was left
+as is: runners keep their own scopes under the layers (a documented
+deviation), the config store's string-keyed reads, the wire error's
+`RESERVED` list, the directory walk's fiber per directory, and the
+proofs' few fixed sleeps.
+
 Measures at this point (the section 9 table's "now" column was taken
 before the work began):
 
 | Measure | Before | Now |
 |---|---|---|
-| `throw new Error(` in `main/` + `host/` | 142 | 89 |
+| `throw new Error(` in `main/` + `host/` | 142 | 86 |
 | message-text error matchers with no tag path | 8 | 0 |
 | child-process calls with no timeout | git: all | git: none |
 | hand-rolled ladder and clock code | 5 files | 1 (the shared `backoffDelayMs`) |
