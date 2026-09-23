@@ -300,6 +300,15 @@ own plist, so the packaged app's `shigomori://` registration
 social providers against a packaged build before a release that
 touches it.
 
+The production web client deploys from the `web-client-prod` branch,
+Vercel's production branch for the project. The release workflow
+fast-forwards it to the tagged commit at the end of every full
+(non-prerelease) release, once the desktop assets are uploaded, so the
+web client ships the same source as the `.app` without a push by hand.
+A push by hand is still fine for a web-only fix between releases: the
+workflow leaves a branch that is already past the tag alone, and goes
+red rather than overwrite one that has diverged from it.
+
 The web deploy's CSP (vercel.json) allowlists both Clerk script
 hosts: `https://*.clerk.accounts.dev` for the development instance and
 `https://clerk.shigomori.com`, the production (`pk_live`) instance's own
