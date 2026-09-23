@@ -5,7 +5,7 @@
 import { lstat, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { Effect, RcMap, Scope, Semaphore } from "effect";
+import { Effect } from "effect";
 import type {
   ChangeCounts,
   ChangedFile,
@@ -88,31 +88,54 @@ function kindOf(x: string, y: string): ChangeKind {
 
 // --- index lock ------------------------------------------------------
 
-// Writes to one worktree's index run one after another. Git takes
-// index.lock for each, so two quick ticks, or a tick racing a commit,
-// would otherwise fail on the lock instead of waiting. One permit per
-// worktree path, held in a map that drops a path's semaphore once
-// nobody holds or waits on it. A failed task releases its permit like
-// any other.
+// Writes to one worktree's index run one after another, IN CALL
+// ORDER. Git takes index.lock for each, so two quick ticks, or a tick
+// racing a commit, would otherwise fail on the lock instead of
+// waiting; and the renderer fires a tick, untick, tick on one file as
+// three concurrent mutations, so the order they run in is the state
+// the index ends up in. A chain of turns per worktree path: each
+// caller waits for the previous caller's turn to end, and its own
+// turn ends when its task settles. (An Effect Semaphore would not do:
+// it wakes waiters in scheduler order, so a newcomer arriving as a
+// permit is released runs ahead of the queue.) A path's chain is
+// dropped once the last turn on it ends. A failed task ends its turn
+// like any other.
 //
 // Waiting for the turn is interruptible, so a caller that leaves while
-// queued never writes. The write itself is not: once git starts
-// rewriting the index or the working tree, it finishes, and a caller
-// leaving mid-commit or mid-discard never leaves half of one behind.
-const indexLocks = Effect.runSync(
-  RcMap.make({
-    lookup: (_worktreePath: string) => Semaphore.make(1),
-  }).pipe(Scope.provide(Scope.makeUnsafe())),
-);
+// queued never writes; its turn then ends when the one it was waiting
+// on ends, so the callers behind it keep their order. The write itself
+// is not interruptible: once git starts rewriting the index or the
+// working tree, it finishes, and a caller leaving mid-commit or
+// mid-discard never leaves half of one behind.
+const indexTurns = new Map<string, Promise<void>>();
 
 function onIndex<A, E>(
   worktreePath: string,
   task: Effect.Effect<A, E>,
 ): Effect.Effect<A, E> {
-  return Effect.scoped(
-    Effect.flatMap(RcMap.get(indexLocks, worktreePath), (lock) =>
-      lock.withPermits(1)(Effect.uninterruptible(task)),
-    ),
+  return Effect.uninterruptibleMask((restore) =>
+    Effect.suspend(() => {
+      const previous = indexTurns.get(worktreePath) ?? Promise.resolve();
+      let end!: () => void;
+      const mine = new Promise<void>((resolve) => {
+        end = resolve;
+      });
+      indexTurns.set(worktreePath, mine);
+      const finish = () => {
+        end();
+        if (indexTurns.get(worktreePath) === mine) {
+          indexTurns.delete(worktreePath);
+        }
+      };
+      return restore(Effect.promise(() => previous)).pipe(
+        Effect.onInterrupt(() =>
+          Effect.sync(() => {
+            void previous.then(finish);
+          }),
+        ),
+        Effect.flatMap(() => Effect.ensuring(task, Effect.sync(finish))),
+      );
+    }),
   );
 }
 

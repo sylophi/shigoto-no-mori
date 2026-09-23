@@ -11,7 +11,9 @@
 //   and an unknown field on a project row, survive a read-modify-write;
 //   a malformed file or value fails the strict read, refuses the write
 //   and reads as the fallback on the lenient one; a malformed device id
-//   reads as absent so it can be re-minted;
+//   reads as absent so it can be re-minted; a mangled mark set degrades
+//   on its display reads and refuses its writes; a stray collapsed
+//   entry costs only itself;
 // - readGlobalConfigFresh bypasses the 5 s TTL that readGlobalConfig
 //   serves from.
 //
@@ -45,6 +47,11 @@ const {
   stateStore,
   PROJECTS_SORT_KEY,
 } = await import("../host/lib/config/store.ts");
+
+const { makeRegistryIdSet } =
+  await import("../host/lib/worktrees/registryIdSet.ts");
+const { readCollapsedProjects, toggleCollapsedProject } =
+  await import("../host/lib/projects/collapsed.ts");
 
 const { check, done, fail } = makeProof("config-store proof");
 
@@ -220,6 +227,33 @@ async function main() {
       const id = "0b0e3c52-5a2c-4a7e-9d8f-3f1a2b3c4d5e";
       writeJson(registryPath, { [DEVICE_ID_KEY]: id });
       assert.equal(registryStore.readKey(DEVICE_ID_KEY, ""), id);
+    },
+  );
+
+  await check(
+    "a mangled mark set costs its badges, not the worktree list, and a stray collapsed entry costs only itself",
+    async () => {
+      // The shelf's display reads (has, readSet) answer empty, the
+      // way the CLI's readRegistryMarkSet does, so a worktree list can
+      // still be built; the writes stay on the strict read and refuse.
+      // Only ids marked true count.
+      writeJson(registryPath, { [SHELVED_KEY]: { w1: 1 } });
+      const shelf = makeRegistryIdSet(SHELVED_KEY);
+      assert.equal(shelf.has("w1"), false);
+      assert.deepEqual([...shelf.readSet()], []);
+      assert.throws(() => shelf.set("w2", true), /"shelvedWorktrees"/);
+      assert.deepEqual(readJson(registryPath), { [SHELVED_KEY]: { w1: 1 } });
+      writeJson(registryPath, { [SHELVED_KEY]: { w1: true, w2: false } });
+      assert.deepEqual([...shelf.readSet()], ["w1"]);
+      assert.equal(shelf.has("w2"), false);
+
+      // A collapsed list with one non-string entry keeps its strings
+      // through a toggle, rather than reading as absent and rewriting
+      // the list from nothing.
+      writeJson(statePath, { projectsCollapsed: ["a", 1] });
+      assert.deepEqual(readCollapsedProjects(), ["a"]);
+      assert.deepEqual(toggleCollapsedProject("b"), ["a", "b"]);
+      assert.deepEqual(readJson(statePath).projectsCollapsed, ["a", "b"]);
     },
   );
 

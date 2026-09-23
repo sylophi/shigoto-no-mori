@@ -141,14 +141,26 @@ const getLaunchersForProject = Effect.fnUntraced(function* (projectId: string) {
   };
 });
 
+// Best-effort: the app has already opened by the time this runs, and a
+// malformed use log (which the strict read refuses as a whole) must not
+// report that launch as failed. Logged once per run, as the project use
+// log does (projects/usage.ts).
+let bumpFailureLogged = false;
 function bumpUseCount(launcherId: string): void {
-  // updateKey, not readKey + writeKey: the CLI (`sm open`) bumps the
-  // same key under the state lock, and a read taken outside it would
-  // silently clobber a concurrent terminal-side bump.
-  stateStore.updateKey<UseLogMap>(USE_LOG_KEY, {}, (log) => {
-    log[launcherId] = pruneAndPush(log[launcherId] ?? [], Date.now());
-    return log;
-  });
+  try {
+    // updateKey, not readKey + writeKey: the CLI (`sm open`) bumps the
+    // same key under the state lock, and a read taken outside it would
+    // silently clobber a concurrent terminal-side bump.
+    stateStore.updateKey<UseLogMap>(USE_LOG_KEY, {}, (log) => {
+      log[launcherId] = pruneAndPush(log[launcherId] ?? [], Date.now());
+      return log;
+    });
+  } catch (error) {
+    if (!bumpFailureLogged) {
+      bumpFailureLogged = true;
+      console.warn("[launchers] use log not recorded:", error);
+    }
+  }
 }
 
 async function launch(

@@ -11,12 +11,17 @@ import {
 import type { WorktreeIdentity } from "./worktrees";
 
 // Rename the branch currently checked out in a worktree.
-// `git branch -m <new>` renames the current HEAD branch.
+// `git branch -m <new>` renames the current HEAD branch. Not
+// interruptible: git renames the ref, then its config section, and a
+// caller leaving between the two would leave the branch without its
+// upstream.
 export const renameBranchEffect = Effect.fn("branches.renameBranch")(function* (
   worktreePath: string,
   newBranch: string,
 ) {
-  yield* runEffect(worktreePath, ["branch", "-m", "--", newBranch]);
+  yield* Effect.uninterruptible(
+    runEffect(worktreePath, ["branch", "-m", "--", newBranch]),
+  );
 });
 
 export function renameBranch(
@@ -38,6 +43,12 @@ export function renameBranch(
 // `--end-of-options` pins the name to the revision slot and the trailing
 // `--` keeps it out of the pathspec slot, so no caller-supplied name can
 // be read as a flag or as a file.
+//
+// The lookups before the checkout are interruptible; the checkout is
+// not. It rewrites the working tree, and a caller leaving partway
+// (a dropped peer socket, a page reload) would kill git with the tree
+// half rewritten and HEAD and the index unchanged, which shows up as
+// hundreds of phantom modifications. Once it starts, it finishes.
 export const checkoutBranchEffect = Effect.fn("branches.checkoutBranch")(
   function* (
     worktreePath: string,
@@ -46,12 +57,7 @@ export const checkoutBranchEffect = Effect.fn("branches.checkoutBranch")(
   ) {
     // An exact local branch (including the rare literal "remote/thing") wins.
     if (yield* localBranchExistsEffect(worktreePath, branch)) {
-      yield* runEffect(worktreePath, [
-        "checkout",
-        "--end-of-options",
-        branch,
-        "--",
-      ]);
+      yield* checkout(worktreePath, ["--end-of-options", branch, "--"]);
       return;
     }
     const split = splitRemoteRefSync(
@@ -65,8 +71,7 @@ export const checkoutBranchEffect = Effect.fn("branches.checkoutBranch")(
       split &&
       !(yield* localBranchExistsEffect(worktreePath, split.branch))
     ) {
-      yield* runEffect(worktreePath, [
-        "checkout",
+      yield* checkout(worktreePath, [
         "--track",
         "--end-of-options",
         branch,
@@ -76,14 +81,17 @@ export const checkoutBranchEffect = Effect.fn("branches.checkoutBranch")(
     }
     // Either a plain name git can DWIM, or the stripped local branch already
     // exists, so switch to it.
-    yield* runEffect(worktreePath, [
-      "checkout",
+    yield* checkout(worktreePath, [
       "--end-of-options",
       split ? split.branch : branch,
       "--",
     ]);
   },
 );
+
+function checkout(worktreePath: string, args: readonly string[]) {
+  return Effect.uninterruptible(runEffect(worktreePath, ["checkout", ...args]));
+}
 
 export function checkoutBranch(
   worktreePath: string,

@@ -81,7 +81,11 @@ const REGISTRY_KEYS = [PROJECTS_KEY, SHELVED_KEY];
 //   lock) throws, naming the file and the key, and readHint answers its
 //   fallback. A write must never rebuild the value out of a fallback,
 //   because the fallback is "nothing": the CLI's decodeKey refuses the
-//   same way (cli/state.go).
+//   same way (cli/state.go), with one gap: Go reads a project row's
+//   missing `name` or `path` as "", where the row schema here wants
+//   the string. A row without a path is unusable by either, so the
+//   stricter side names the file rather than showing a project that
+//   opens nothing.
 // - "absent": the value reads as missing, on every path. For keys whose
 //   owner already self-heals a bad value on its next write (the device
 //   id is re-minted under the lock, the shared settings refill from the
@@ -124,7 +128,10 @@ const STATE_RULES: Readonly<Record<string, KeyRule>> = {
   [PACKAGE_SCRIPT_SORT_KEY]: refuse(
     Schema.Record(Schema.String, PackageScriptSortModeSchema),
   ),
-  [PROJECTS_COLLAPSED_KEY]: absent(Schema.Array(Schema.String)),
+  // Any list: collapsed.ts keeps the string entries and drops the rest,
+  // so one stray element does not unfold every project on the next
+  // toggle's rewrite.
+  [PROJECTS_COLLAPSED_KEY]: absent(Schema.Array(Schema.Unknown)),
 };
 
 const RULES: Readonly<Record<string, Readonly<Record<string, KeyRule>>>> = {
@@ -135,11 +142,13 @@ const RULES: Readonly<Record<string, Readonly<Record<string, KeyRule>>>> = {
 // A key's value as read, decoded against its rule. `found` is false
 // when the key is missing, or holds a malformed "absent" value; a
 // malformed "refuse" value throws. A key with no rule is handed over as
-// stored.
+// stored. `forWrite` says whether the read fronts a write, so the
+// message can say the write did not happen.
 function decodeKey(
   file: string,
   all: Record<string, unknown>,
   key: string,
+  forWrite = false,
 ): { found: false } | { found: true; value: unknown } {
   if (!(key in all)) return { found: false };
   const rule = RULES[file]?.[key];
@@ -149,7 +158,8 @@ function decodeKey(
   if (rule.malformed === "absent") return { found: false };
   throw new Error(
     `${filePath(file)} holds a malformed "${key}" value ` +
-      `(${errorMessageOf(decoded.error)}). Nothing was written. ` +
+      `(${errorMessageOf(decoded.error)}). ` +
+      (forWrite ? "Nothing was written. " : "") +
       "Fix the file or move it aside, then try again.",
     { cause: decoded.error },
   );
@@ -236,7 +246,7 @@ function updateKeyIn<T>(
 ): void {
   withStoreLock(file, () => {
     const all = readAll(file);
-    const read = decodeKey(file, all, key);
+    const read = decodeKey(file, all, key, true);
     const current = read.found ? (read.value as T) : fallback;
     const next = update(current);
     if (next === undefined) return;

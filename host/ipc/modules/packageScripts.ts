@@ -19,6 +19,9 @@ import type { HandlerContext } from "@shared/ipc/transport";
 import { cliRunScriptSpawn } from "../cliDelegate";
 import { prepareScriptRun, scriptEventNotifier } from "../scriptRun";
 
+// Logged once per run, as the project use log does (projects/usage.ts).
+let bumpFailureLogged = false;
+
 export const packageScriptsHandlers: Handlers<
   typeof packageScriptsContract,
   HandlerContext
@@ -79,7 +82,16 @@ export const packageScriptsHandlers: Handlers<
       defaultBranch: ctx.defaultBranch,
       notify: scriptEventNotifier(handlerCtx),
     });
-    bumpScriptUseCount(project.id, scriptName);
+    // The script is already running; a malformed use log must not
+    // report the run as failed.
+    try {
+      bumpScriptUseCount(project.id, scriptName);
+    } catch (error) {
+      if (!bumpFailureLogged) {
+        bumpFailureLogged = true;
+        console.warn("[packageScripts] use log not recorded:", error);
+      }
+    }
     return { runId };
   },
 };

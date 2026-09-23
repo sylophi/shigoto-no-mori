@@ -7,6 +7,9 @@ import { registryStore } from "../config/store";
 
 type IdMap = Record<string, true>;
 
+const isMarked = (map: Record<string, boolean>, worktreeId: string) =>
+  map[worktreeId] === true;
+
 export interface RegistryIdSet {
   has(worktreeId: string): boolean;
   // Bulk lookup form: read the file once for callers that check many
@@ -21,7 +24,14 @@ export interface RegistryIdSet {
 }
 
 export function makeRegistryIdSet(key: string): RegistryIdSet {
-  const readMap = () => registryStore.readKey<IdMap>(key, {});
+  // The display read: a hand-mangled mark set costs the badges it
+  // holds, not the worktree list of every project (the key is global,
+  // and the list build reads it for each row). The CLI's
+  // readRegistryMarkSet degrades the same way. The writers below read
+  // under the strict rule, so a write never rebuilds the key out of
+  // the fallback. Only ids marked true count, as in the CLI.
+  const readMap = () =>
+    registryStore.readHint<Record<string, boolean>>(key, {});
   // updateKey so the current map is read under the cross-process lock.
   // The CLI rewrites registry.json too (its own keys, preserving the
   // rest), and a read-outside-the-lock version would clobber that.
@@ -37,8 +47,11 @@ export function makeRegistryIdSet(key: string): RegistryIdSet {
     });
   };
   return {
-    has: (worktreeId) => readMap()[worktreeId] === true,
-    readSet: () => new Set(Object.keys(readMap())),
+    has: (worktreeId) => isMarked(readMap(), worktreeId),
+    readSet: () => {
+      const map = readMap();
+      return new Set(Object.keys(map).filter((id) => isMarked(map, id)));
+    },
     set,
     drop: (worktreeId) => set(worktreeId, false),
     move: (from, to) => {

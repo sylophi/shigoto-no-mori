@@ -80,6 +80,7 @@ for arg in "$@"; do
   esac
 done
 where=$(pwd -P)
+for last in "$@"; do :; done
 case " $SM_SHIM_HOLD " in
   *" $sub "*)
     echo "hold $$ $sub $where" >> "${shimLog}"
@@ -87,11 +88,11 @@ case " $SM_SHIM_HOLD " in
 esac
 case " $SM_SHIM_SLOW " in
   *" $sub "*)
-    echo "start $$ $sub $where" >> "${shimLog}"
+    echo "start $$ $sub $where $last" >> "${shimLog}"
     sleep 0.4
     "${realGit}" "$@"
     code=$?
-    echo "end $$ $sub $where" >> "${shimLog}"
+    echo "end $$ $sub $where $last" >> "${shimLog}"
     exit $code ;;
 esac
 echo "run $$ $sub $where" >> "${shimLog}"
@@ -405,6 +406,32 @@ async function main() {
         `writes on two worktrees ran one after the other: ${kinds}`,
       );
       assert.equal(new Set(adds().map((a) => a.where)).size, 2);
+
+      // Writes on one worktree run in the order they were called: a
+      // write that arrives while earlier ones are still queued goes to
+      // the back, even when it arrives in the instant a turn ends (a
+      // permit-style lock would let it jump the queue, and a tick,
+      // untick, tick on one file would land unticked).
+      writeFileSync(shimLog, "");
+      for (const name of ["f.txt", "g.txt", "h.txt", "i.txt"]) {
+        writeFileSync(join(dir, name), `${name}\n`);
+      }
+      const queued = ["f.txt", "g.txt", "h.txt"].map((name) =>
+        setStaged(dir, [name], true),
+      );
+      await waitFor(
+        () => shimLines().some((line) => line.startsWith("end ")),
+        "the first queued add to end",
+      );
+      await Promise.all([...queued, setStaged(dir, ["i.txt"], true)]);
+      assert.deepEqual(
+        shimLines()
+          .map((line) => line.split(" "))
+          .filter(([kind, , sub]) => kind === "start" && sub === "add")
+          .map(([, , , , last]) => last),
+        ["f.txt", "g.txt", "h.txt", "i.txt"],
+        "index writes ran out of call order",
+      );
 
       // A write that fails releases the lock for the next one.
       delete process.env.SM_SHIM_SLOW;

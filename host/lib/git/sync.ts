@@ -20,11 +20,15 @@ export function pushFastForward(worktreePath: string): Promise<void> {
   return runGit(pushFastForwardEffect(worktreePath));
 }
 
+// A fetch, then the fast-forward. `git pull --ff-only` does the same in
+// one process, but as one process the whole thing would have to be
+// uninterruptible for the sake of the merge step, and a caller who
+// left could not end the network wait. Split, the fetch stops with the
+// caller and only the merge, which rewrites the tree, runs to the end.
 export const pullFastForwardEffect = Effect.fn("sync.pullFastForward")(
   function* (worktreePath: string) {
-    yield* Effect.uninterruptible(
-      runEffect(worktreePath, ["pull", "--ff-only"]),
-    );
+    yield* runEffect(worktreePath, ["fetch"]);
+    yield* fastForwardToUpstreamEffect(worktreePath);
   },
 );
 
@@ -225,7 +229,10 @@ function rebaseOrMergeAgainst(worktreePath: string, ref: string) {
 // Combined resolution for the "diverged but mergeable" state. The
 // `merge-tree --write-tree` probe (gating this state) already validated
 // the whole-tree merge as clean, which is what makes the merge fallback
-// safe. fetch, then rebase/merge, then push: sequential by nature.
+// safe. fetch, then rebase/merge, then push: sequential by nature. The
+// rebase or merge is the uninterruptible step; the push is a network
+// wait a caller who left may end, and a branch rebased but not yet
+// pushed is the ordinary "ahead" state the next sync resolves.
 export const pullRebaseOrMergeAndPushEffect = Effect.fn(
   "sync.pullRebaseOrMergeAndPush",
 )(function* (worktreePath: string) {

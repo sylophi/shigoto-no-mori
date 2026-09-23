@@ -170,15 +170,21 @@ function walk(
   // a shared queue has the opposite failure: every worker but the first
   // finds the queue empty on the tick it starts, returns, and the walk
   // runs single-file for the rest of its life. readDir never rejects.
+  // The read is uninterruptible so a walk that is abandoned mid-read
+  // keeps its slot until the readdir settles: the promise cannot be
+  // cancelled, and freeing the slot early would let a newer walk push
+  // the directory reads in flight past the limit.
   const descend = (entry: PendingDir): Effect.Effect<void> =>
-    readSlots.withPermit(Effect.promise(() => readDir(entry))).pipe(
-      Effect.flatMap((children) =>
-        Effect.forEach(children, descend, {
-          concurrency: "unbounded",
-          discard: true,
-        }),
-      ),
-    );
+    readSlots
+      .withPermit(Effect.uninterruptible(Effect.promise(() => readDir(entry))))
+      .pipe(
+        Effect.flatMap((children) =>
+          Effect.forEach(children, descend, {
+            concurrency: "unbounded",
+            discard: true,
+          }),
+        ),
+      );
 
   // Floored for the same reason as the mtime above: the IPC schema takes
   // whole integers, and a platform reporting fractional blocks would
