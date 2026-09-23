@@ -9,20 +9,41 @@
 //
 // Supervision follows the repo's existing discipline rather than new
 // machinery: the backoff ladder, its lookup and the stable-reset rule
-// come straight from shared/remote/supervisor.ts (whose clock seam
+// come straight from shared/remote/supervisor.ts (whose runtime seam
 // this reuses), and the give-up-vs-retry split mirrors
 // main/core/liveness/rateLimit.ts in being driven headlessly by the
 // direct-plane check. Stop conditions are the caller's: main
 // reconciles this runner alongside the direct listener, so sign-out,
 // an account switch and the directConnections opt-out all land here as
-// reconcile(null), while quit alone calls stop() (a terminal latch,
-// see below).
+// reconcile(null), while quit alone calls stop() (terminal, see below).
+//
+// One Effect fiber per wanted port runs the whole lifecycle: provision,
+// spawn, probe until routable, hold until the child exits, sleep one
+// rung, again. The child is a scoped resource whose finalizer kills it
+// and clears its pid file, so interrupting the fiber (a port change,
+// reconcile(null), quit) is the whole teardown: a probe or a backoff
+// sleep in flight is cancelled with it, and no continuation is left to
+// ask whether its port is still wanted. Reconciles are serialized by a
+// one-permit semaphore. Every fiber, the reconciles' included, is
+// forked into the runner's scope, and stop() closes that scope: what is
+// in flight is interrupted, what is queued never runs, and a scope that
+// is closed refuses every later fork, which is the quit latch.
 //
 // This file must stay Electron free (pnpm test host-boundary). Node
 // builtins are fine here.
 import { execFile, spawn } from "node:child_process";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
+import {
+  Cause,
+  Clock,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Option,
+  Scope,
+} from "effect";
 import { errorMessageOf } from "@shared/errors";
 import {
   TunnelProvisionDeniedError,
@@ -33,10 +54,9 @@ import {
   TUNNEL_PROBE_DEADLINE_FRESH_MS,
   BACKOFF_LADDER_MS,
   backoffDelayMs,
-  defaultSupervisorClock,
+  defaultSupervisorRuntime,
   STABLE_CONNECTION_MS,
-  type SupervisorClock,
-  type SupervisorTimer,
+  type SupervisorRuntime,
 } from "@shared/remote/supervisor";
 import { createLimiter } from "@shared/util/limit";
 import { killWithGrace } from "@host/lib/scripts/process";
@@ -110,8 +130,8 @@ export const TUNNEL_PROBE_SLOW_MS = 60_000;
 export const TUNNEL_PROBE_DEADLINE_MS = 60_000;
 export { TUNNEL_PROBE_DEADLINE_FRESH_MS };
 
-// One probe attempt's own fetch bound, so a black-holed edge cannot
-// wedge the probe chain.
+// One probe attempt's own bound, so a black-holed edge cannot wedge the
+// probe chain. The attempt's fetch is aborted with it.
 const PROBE_ATTEMPT_TIMEOUT_MS = 5_000;
 
 // The child's argv and env, pure so the check can pin the secret
@@ -236,8 +256,10 @@ export type CloudflaredRunnerDeps = {
   // One readiness probe attempt: true when the hostname routes from
   // the edge to the local listener. The default GETs the hostname over
   // HTTPS and reads any edge answer that the LISTENER produced (the
-  // 426 a ws server earns for a non-upgrade GET) as routable.
-  probeTunnel?: (hostname: string) => Promise<boolean>;
+  // 426 a ws server earns for a non-upgrade GET) as routable. The
+  // signal aborts an attempt the runner gave up on (its own bound, the
+  // deadline, a teardown).
+  probeTunnel?: (hostname: string, signal: AbortSignal) => Promise<boolean>;
   // Where the live child's pid is recorded so a crashed Electron's
   // orphaned cloudflared can be reaped on the next launch. A getter
   // because the userData path is an app-ready fact. When absent
@@ -245,7 +267,10 @@ export type CloudflaredRunnerDeps = {
   pidFilePath?: () => string;
   // Fired on every state transition so the owner can fan status out.
   onChange?: () => void;
-  clock?: SupervisorClock;
+  // Where the runner's fibers run. Real callers take Effect's default
+  // services; the direct-plane check passes a ManagedRuntime built on
+  // TestClock.layer() and walks the ladders with TestClock.adjust.
+  runtime?: SupervisorRuntime;
 };
 
 export type CloudflaredRunner = {
@@ -260,7 +285,8 @@ export type CloudflaredRunner = {
   // no-binary (a config write may have just named a usable
   // cloudflaredPath) and a provision-denied park (the reconcile
   // trigger IS its recovery path: a re-sign-in or a Worker redeploy
-  // arrives here).
+  // arrives here). Resolves once the attempt it started has spawned
+  // a child (and is probing it), parked, or scheduled a retry.
   reconcile(wanted: { port: number } | null): Promise<void>;
   stop(): Promise<void>;
   status(): TunnelStatus;
@@ -315,11 +341,12 @@ function spawnCloudflared(
 // the edge. A tunnel the edge cannot route yet answers 5xx (CF 530
 // "no connector") or times out. Dependency-free on purpose: fetch is
 // the platform global.
-async function probeTunnelEdge(hostname: string): Promise<boolean> {
+async function probeTunnelEdge(
+  hostname: string,
+  signal: AbortSignal,
+): Promise<boolean> {
   try {
-    const response = await fetch(`https://${hostname}`, {
-      signal: AbortSignal.timeout(PROBE_ATTEMPT_TIMEOUT_MS),
-    });
+    const response = await fetch(`https://${hostname}`, { signal });
     return response.status < 500;
   } catch {
     return false;
@@ -361,84 +388,97 @@ async function reapStaleChild(pidFilePath: string): Promise<void> {
   await rm(pidFilePath, { force: true }).catch(() => {});
 }
 
-export function createCloudflaredRunner(
-  deps: CloudflaredRunnerDeps,
-): CloudflaredRunner {
-  const clock = deps.clock ?? defaultSupervisorClock;
-  const spawnTunnel = deps.spawnTunnel ?? spawnCloudflared;
-  const probeTunnel = deps.probeTunnel ?? probeTunnelEdge;
-  // Serializes reconcile/stop so a fast toggle cannot interleave one
-  // reconcile's teardown with another's start, mirroring the ws
-  // binding's lifecycle limiter. stopNow is the one mutator allowed to
-  // run OUTSIDE the slot (the quit pre-empt below): it nulls
-  // wantedPort and (from stop) sets the terminal `stopped` latch,
-  // which every queued lifecycle task checks first, so neither a
-  // parked start nor a reconcile QUEUED behind an in-flight provision
-  // can spawn under a stopped runner.
-  const lifecycle = createLimiter(1);
-
-  let status: TunnelStatus = { state: "off", hostname: null };
-  // The port the owner currently wants fronted, null when stopped.
-  let wantedPort: number | null = null;
-  // The terminal quit latch. stop() has exactly one caller, main's
-  // before-quit path via stopDirectHost (config-off and account-off
-  // arrive as reconcile(null) instead), so once set it never clears:
-  // a task that drains from the lifecycle queue after quit began must
-  // do nothing, whatever it was queued to do.
-  let stopped = false;
-  let child: TunnelChild | null = null;
-  // When the live child was spawned, for the stable-reset rule.
-  let spawnedAt = 0;
-  // Ladder position for the current failure streak.
-  let attempt = 0;
-  let retryTimer: SupervisorTimer | null = null;
-  let readyTimer: SupervisorTimer | null = null;
-  // The last successful provision, held in memory only (the token is a
-  // bearer secret: it goes into a child's env and never anywhere
-  // observable), so a crash restart re-spawns without a Worker round
-  // trip while the port is unchanged. Reuse requires the PREVIOUS
-  // child to have reached probed readiness (lastChildReady below): a
-  // child that died without ever becoming routable may be holding a
-  // dead token, so its successor re-provisions. The cache dies with
-  // stopNow.
-  let lastProvision: {
-    port: number;
+// The last successful provision for one port's fiber, held in memory
+// only (the token is a bearer secret: it goes into a child's env and
+// never anywhere observable), so a crash restart re-spawns without a
+// Worker round trip. Fiber-local, so it dies with the port's fiber: a
+// later start under a new port, or after a stop under a possibly
+// different account, never fronts stale credentials.
+type ProvisionCache = {
+  provision: {
     hostname: string;
     connectorToken: string;
     dnsCreated: boolean;
-  } | null = null;
+  } | null;
   // Whether the most recently spawned child passed the readiness
   // probe. Reset on every spawn, so it always describes the child
-  // whose crash a restart is recovering from.
-  let lastChildReady = false;
+  // whose crash a restart is recovering from. Reuse requires it: a
+  // child that died without ever becoming routable may be holding a
+  // dead token, so its successor re-provisions.
+  ready: boolean;
+};
+
+// How one start attempt ended. A park waits for the next reconcile
+// trigger when that trigger can change the verdict (no binary, a
+// denied provision), and for nothing at all when it cannot (the
+// cached unconfigured verdict). A retry climbs the ladder, from the
+// bottom when the child had run stably.
+type AttemptOutcome =
+  | { kind: "park"; wakeable: boolean }
+  | { kind: "retry"; detail: string; resetLadder: boolean };
+
+// What a reconcile shares with the port fiber it started.
+type PortControl = {
+  // Completed when the fiber's current attempt has spawned (and is
+  // probing), parked, or scheduled a retry, and when the fiber ends,
+  // which is what the reconcile that triggered the attempt awaits. A
+  // wake replaces it first, so the waking reconcile awaits the attempt
+  // it caused.
+  settled: Deferred.Deferred<void>;
+  // Set while the fiber is parked on a verdict the next reconcile
+  // trigger can change. Completing it re-runs the attempt, with the
+  // fiber's ladder position and provision cache intact.
+  wake: Deferred.Deferred<void> | null;
+};
+
+type PortRun = {
+  port: number;
+  fiber: Fiber.Fiber<void>;
+  control: PortControl;
+};
+
+export function createCloudflaredRunner(
+  deps: CloudflaredRunnerDeps,
+): CloudflaredRunner {
+  const runtime = deps.runtime ?? defaultSupervisorRuntime;
+  const spawnTunnel = deps.spawnTunnel ?? spawnCloudflared;
+  const probeTunnel = deps.probeTunnel ?? probeTunnelEdge;
+  // The runner's lifetime: every fiber is forked here, and stop()
+  // closes it. Closed is terminal: a fork into it is interrupted before
+  // it runs, so a reconcile that arrives or drains after quit began
+  // does nothing, whatever it was asked to do.
+  const scope = Scope.makeUnsafe();
+  // Serializes reconciles IN CALL ORDER, so a fast toggle cannot
+  // interleave one reconcile's teardown with another's start, and the
+  // last call made is the state that stands (an Effect Semaphore hands
+  // its permit to whichever waiter the scheduler wakes first, which is
+  // not that). stop() does not take it: quit must never park behind an
+  // in-flight provision.
+  const lifecycle = createLimiter(1);
+
+  let status: TunnelStatus = { state: "off", hostname: null };
+  // The port being fronted and the fiber fronting it, null when off.
+  let run: PortRun | null = null;
   // The Worker answering "no tunnel env" is a deployment fact, cached
   // for the process lifetime: reconciles cannot change it, so they
   // must not keep paying the provision round trip to re-learn it.
   let workerUnconfigured = false;
-  // Set when a provision was DENIED (4xx: revoked credential, older
-  // Worker deploy). No retry timer runs. The next reconcile trigger
-  // re-enters instead, because only changed inputs (a re-sign-in, a
-  // redeploy) can change the answer.
-  let provisionDenied = false;
   // A previous app instance's recorded child is reaped once per
   // process, before the first spawn.
   let stalePidReaped = false;
 
+  // One onChange per real transition. The owner's callback runs inside
+  // a fiber, where a throw would be a defect nothing reports, so it is
+  // contained and logged.
   function setStatus(next: TunnelStatus): void {
     const changed =
       next.state !== status.state || next.hostname !== status.hostname;
     status = next;
-    if (changed) deps.onChange?.();
-  }
-
-  function clearTimers(): void {
-    if (retryTimer !== null) {
-      clock.clearTimeout(retryTimer);
-      retryTimer = null;
-    }
-    if (readyTimer !== null) {
-      clock.clearTimeout(readyTimer);
-      readyTimer = null;
+    if (!changed) return;
+    try {
+      deps.onChange?.();
+    } catch (error) {
+      console.warn(`[tunnel] onChange threw: ${errorMessageOf(error)}`);
     }
   }
 
@@ -450,290 +490,359 @@ export function createCloudflaredRunner(
     }
   }
 
-  async function reapStaleOnce(): Promise<void> {
+  const reapStaleOnce: Effect.Effect<void> = Effect.suspend(() => {
     const pidFile = pidFilePathOf();
-    if (pidFile === null || stalePidReaped) return;
+    if (pidFile === null || stalePidReaped) return Effect.void;
     stalePidReaped = true;
-    await reapStaleChild(pidFile);
-  }
+    return Effect.promise(() => reapStaleChild(pidFile));
+  });
 
-  function clearPidFile(): void {
-    const path = pidFilePathOf();
-    if (path !== null) {
-      void rm(path, { force: true }).catch(() => {});
-    }
-  }
+  const writePidFile = (pid: number | undefined): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      const pidFile = pidFilePathOf();
+      if (pidFile === null || pid === undefined) return Effect.void;
+      return Effect.promise(() =>
+        writeFile(pidFile, `${pid}\n`, "utf8").catch(() => {}),
+      );
+    });
 
-  function killChild(): void {
-    if (child !== null) {
-      const dying = child;
-      child = null;
-      dying.kill();
-      clearPidFile();
-    }
-  }
+  const clearPidFile: Effect.Effect<void> = Effect.suspend(() => {
+    const pidFile = pidFilePathOf();
+    if (pidFile === null) return Effect.void;
+    return Effect.promise(() => rm(pidFile, { force: true }).catch(() => {}));
+  });
 
-  function scheduleRestart(detail: string): void {
-    const delayMs = backoffDelayMs(TUNNEL_BACKOFF_LADDER_MS, attempt);
-    attempt += 1;
-    setStatus({ state: "error", hostname: null });
-    console.warn(`[tunnel] ${detail}, retrying in ${delayMs}ms`);
-    retryTimer = clock.setTimeout(() => {
-      retryTimer = null;
-      // The port is read when the timer FIRES: a stop that beat the
-      // timer nulled it, and the queued task must not re-read state
-      // that may have moved on by the time the limiter drains.
-      const port = wantedPort;
-      if (port !== null && !stopped) {
-        void lifecycle(() => startNow(port));
-      }
-    }, delayMs);
-  }
+  // One readiness probe attempt, bounded on its own. A rejection, a
+  // throw and a timeout all read as not routable.
+  const probeOnce = (hostname: string): Effect.Effect<boolean> =>
+    Effect.tryPromise({
+      try: (signal) => probeTunnel(hostname, signal),
+      catch: () => false,
+    }).pipe(
+      Effect.timeoutOption(PROBE_ATTEMPT_TIMEOUT_MS),
+      Effect.map(Option.getOrElse(() => false)),
+      Effect.orElseSucceed(() => false),
+    );
 
   // The readiness probe chain for a freshly spawned child: attempts on
-  // the probe ladder until routable, then advertise. A child that is
-  // merely not routable yet is kept and probed on (the ladder's note),
-  // up to the deadline. Deliberately NOT re-run after "up": the child
-  // process exiting is the down signal, and a liveness poll against
-  // the edge would spend a request per interval to learn what the
-  // exit handler already tells us.
-  function beginProbe(
-    next: TunnelChild,
-    port: number,
+  // the probe ladder until one passes. A child that is merely not
+  // routable yet is kept and probed on (the ladder's note); the caller
+  // bounds the chain with the deadline. Deliberately NOT re-run after
+  // "up": the child process exiting is the down signal, and a liveness
+  // poll against the edge would spend a request per interval to learn
+  // what the exit already tells us.
+  const probeUntilRoutable = (
     hostname: string,
     fresh: boolean,
-  ): void {
-    const deadlineMs = fresh
-      ? TUNNEL_PROBE_DEADLINE_FRESH_MS
-      : TUNNEL_PROBE_DEADLINE_MS;
-    const delaysMs = fresh
-      ? TUNNEL_PROBE_DELAYS_MS
-      : TUNNEL_PROBE_DELAYS_REUSED_MS;
-    const startedAt = clock.now();
-    let probeAttempt = 0;
-    let warned = false;
-    const live = (): boolean =>
-      !stopped && child === next && wantedPort === port;
-    const finish = (routable: boolean): void => {
-      if (!live()) return;
-      if (routable) {
-        lastChildReady = true;
-        // The hostname resolves now, so a later child of the same
-        // provision is held to the short deadline.
-        if (lastProvision !== null) lastProvision.dnsCreated = false;
-        setStatus({ state: "up", hostname });
-        console.info(`[tunnel] up at ${hostname}`);
-        return;
-      }
-      if (clock.now() - startedAt >= deadlineMs) {
-        killChild();
-        scheduleRestart(`tunnel at ${hostname} never became routable`);
-        return;
-      }
-      if (!warned && clock.now() - startedAt >= TUNNEL_PROBE_WARN_MS) {
-        warned = true;
-        console.warn(
-          `[tunnel] ${hostname} is still not routable after ` +
-            `${Math.round(TUNNEL_PROBE_WARN_MS / 1000)}s, probing on ` +
-            "(a fresh hostname resolves once DNS catches up)",
+  ): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      const delaysMs = fresh
+        ? TUNNEL_PROBE_DELAYS_MS
+        : TUNNEL_PROBE_DELAYS_REUSED_MS;
+      const startedAt = yield* Clock.currentTimeMillis;
+      let warned = false;
+      for (let attempt = 0; ; attempt += 1) {
+        yield* Effect.sleep(
+          warned ? TUNNEL_PROBE_SLOW_MS : backoffDelayMs(delaysMs, attempt),
         );
+        if (yield* probeOnce(hostname)) return;
+        const elapsedMs = (yield* Clock.currentTimeMillis) - startedAt;
+        if (!warned && elapsedMs >= TUNNEL_PROBE_WARN_MS) {
+          warned = true;
+          console.warn(
+            `[tunnel] ${hostname} is still not routable after ` +
+              `${Math.round(TUNNEL_PROBE_WARN_MS / 1000)}s, probing on ` +
+              "(a fresh hostname resolves once DNS catches up)",
+          );
+        }
       }
-      scheduleNext();
-    };
-    const scheduleNext = (): void => {
-      readyTimer = clock.setTimeout(
-        () => {
-          readyTimer = null;
-          if (!live()) return;
-          probeTunnel(hostname).then(finish, () => finish(false));
-        },
-        warned ? TUNNEL_PROBE_SLOW_MS : backoffDelayMs(delaysMs, probeAttempt),
-      );
-      probeAttempt += 1;
-    };
-    scheduleNext();
-  }
-
-  // The body of one start attempt, running inside the lifecycle
-  // limiter. Throws are caught and classified by startNow, so an
-  // unexpected rejection (resolveBinary, the pid reap) lands on the
-  // same retry-or-park rails as a provision failure instead of
-  // unwinding through the caller as an unhandled rejection.
-  async function startBody(port: number): Promise<void> {
-    if (workerUnconfigured) {
-      setStatus({ state: "unconfigured", hostname: null });
-      return;
-    }
-    const binaryPath = await deps.resolveBinary();
-    if (stopped || wantedPort !== port) return;
-    if (binaryPath === null) {
-      // Logged on the transition into no-binary only, not once per
-      // reconcile.
-      if (status.state !== "no-binary") {
-        console.info(
-          "[tunnel] no usable cloudflared (the cloudflaredPath config " +
-            "key, the bundled copy, PATH), tunnel endpoints are off",
-        );
-      }
-      setStatus({ state: "no-binary", hostname: null });
-      return;
-    }
-    await reapStaleOnce();
-    if (stopped || wantedPort !== port) return;
-    const reusable =
-      lastProvision !== null && lastProvision.port === port && lastChildReady;
-    if (!reusable) {
-      const provisioned = await deps.provision(port);
-      if (stopped || wantedPort !== port) return;
-      lastProvision = {
-        port,
-        hostname: provisioned.hostname,
-        connectorToken: provisioned.connectorToken,
-        dnsCreated: provisioned.dnsCreated === true,
-      };
-    }
-    const { hostname, connectorToken, dnsCreated } = lastProvision!;
-    const next = spawnTunnel(binaryPath, connectorToken);
-    child = next;
-    spawnedAt = clock.now();
-    lastChildReady = false;
-    setStatus({ state: "starting", hostname });
-    const pidFile = pidFilePathOf();
-    if (pidFile !== null && next.pid !== undefined) {
-      void writeFile(pidFile, `${next.pid}\n`, "utf8").catch(() => {});
-    }
-    next.onExit((detail) => {
-      if (child !== next) return;
-      child = null;
-      clearPidFile();
-      if (readyTimer !== null) {
-        clock.clearTimeout(readyTimer);
-        readyTimer = null;
-      }
-      if (stopped || wantedPort === null) return;
-      // Stable-reset rule, inline like the socket supervisor's
-      // scheduleBackoff: a child that held the tunnel past the stable
-      // window broke the failure streak, anything shorter climbs the
-      // ladder.
-      if (clock.now() - spawnedAt >= TUNNEL_STABLE_MS) attempt = 0;
-      scheduleRestart(detail);
     });
-    beginProbe(next, port, hostname, dnsCreated);
-  }
 
-  // One start attempt for the given port. Runs inside the lifecycle
-  // limiter only. The stopped/wantedPort guards after each await cover
-  // the pre-empting stop() and reconcile(null).
-  async function startNow(port: number): Promise<void> {
-    if (stopped || wantedPort !== port) return;
-    clearTimers();
-    // Downgrade BEFORE killing: from here to a successful probe the
-    // connector is not serving, and "starting" (which reads as
-    // tunnelUrl() null) must never advertise a dead child through the
-    // binary/provision awaits below.
-    setStatus({ state: "starting", hostname: null });
-    killChild();
-    provisionDenied = false;
-    try {
-      await startBody(port);
-    } catch (error) {
-      if (stopped || wantedPort !== port) return;
-      if (error instanceof TunnelUnconfiguredError) {
-        // A deployment fact, not a failure: cached so no later
-        // reconcile retries it either.
-        workerUnconfigured = true;
-        setStatus({ state: "unconfigured", hostname: null });
-        return;
-      }
-      if (error instanceof TunnelProvisionDeniedError) {
-        // Refused outright (a revoked credential's 401, an older
-        // Worker deploy's 404): a timed retry re-presents the same
-        // request, so park with NO retry scheduled. The next
-        // reconcile trigger re-enters, which is exactly when the
-        // inputs can have changed.
-        provisionDenied = true;
-        setStatus({ state: "error", hostname: null });
-        console.warn(
-          `[tunnel] provisioning denied (${errorMessageOf(error)}), ` +
-            "waiting for the next account or config change",
+  // One child, from spawn to its end: exited on its own, or killed at
+  // the probe deadline. The child is the scope's resource, so the kill
+  // and the pid-file cleanup run however the scope closes, an
+  // interrupt included.
+  const runChild = (
+    binaryPath: string,
+    provision: NonNullable<ProvisionCache["provision"]>,
+    cache: ProvisionCache,
+    signalSettled: () => void,
+  ): Effect.Effect<AttemptOutcome, unknown> =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { hostname } = provision;
+        const exited = Deferred.makeUnsafe<string>();
+        yield* Effect.acquireRelease(
+          Effect.gen(function* () {
+            const child = yield* Effect.try({
+              try: () => spawnTunnel(binaryPath, provision.connectorToken),
+              catch: (error) => error,
+            });
+            child.onExit((detail) => {
+              Deferred.doneUnsafe(exited, Effect.succeed(detail));
+            });
+            yield* writePidFile(child.pid);
+            return child;
+          }),
+          (child) =>
+            Effect.sync(() => {
+              if (!Deferred.isDoneUnsafe(exited)) child.kill();
+            }).pipe(Effect.andThen(clearPidFile)),
         );
+        const spawnedAt = yield* Clock.currentTimeMillis;
+        cache.ready = false;
+        setStatus({ state: "starting", hostname });
+        signalSettled();
+        // Past the deadline the child is treated exactly like one that
+        // died, except that it is killed first (the scope's release).
+        const deadlineMs = provision.dnsCreated
+          ? TUNNEL_PROBE_DEADLINE_FRESH_MS
+          : TUNNEL_PROBE_DEADLINE_MS;
+        const ended = yield* Effect.raceFirst(
+          Deferred.await(exited).pipe(
+            Effect.map((detail) => ({ kind: "exited" as const, detail })),
+          ),
+          probeUntilRoutable(hostname, provision.dnsCreated).pipe(
+            Effect.as(true),
+            Effect.timeoutOrElse({
+              duration: deadlineMs,
+              orElse: () => Effect.succeed(false),
+            }),
+            Effect.flatMap((routable) =>
+              routable
+                ? Effect.sync(() => {
+                    cache.ready = true;
+                    // The hostname resolves now, so a later child of
+                    // the same provision is held to the short deadline.
+                    provision.dnsCreated = false;
+                    setStatus({ state: "up", hostname });
+                    console.info(`[tunnel] up at ${hostname}`);
+                  }).pipe(Effect.andThen(Effect.never))
+                : Effect.succeed({ kind: "deadline" as const }),
+            ),
+          ),
+        );
+        if (ended.kind === "deadline") {
+          return {
+            kind: "retry" as const,
+            detail: `tunnel at ${hostname} never became routable`,
+            resetLadder: false,
+          };
+        }
+        // Stable-reset rule, like the socket supervisor's: a child that
+        // held the tunnel past the stable window broke the failure
+        // streak, anything shorter climbs the ladder.
+        const ranMs = (yield* Clock.currentTimeMillis) - spawnedAt;
+        return {
+          kind: "retry" as const,
+          detail: ended.detail,
+          resetLadder: ranMs >= TUNNEL_STABLE_MS,
+        };
+      }),
+    );
+
+  // One start attempt for a port. Never fails: a typed refusal parks,
+  // anything else (a provision error, a throwing spawn, a dying step)
+  // retries on the ladder, and only an interrupt passes through.
+  const attempt = (
+    port: number,
+    cache: ProvisionCache,
+    signalSettled: () => void,
+  ): Effect.Effect<AttemptOutcome> =>
+    Effect.gen(function* () {
+      if (workerUnconfigured) {
+        setStatus({ state: "unconfigured", hostname: null });
+        return { kind: "park", wakeable: false } as const;
+      }
+      const binaryPath = yield* Effect.tryPromise({
+        try: () => deps.resolveBinary(),
+        catch: (error) => error,
+      });
+      if (binaryPath === null) {
+        // Logged on the transition into no-binary only, not once per
+        // reconcile that re-enters it.
+        if (status.state !== "no-binary") {
+          console.info(
+            "[tunnel] no usable cloudflared (the cloudflaredPath config " +
+              "key, the bundled copy, PATH), tunnel endpoints are off",
+          );
+        }
+        setStatus({ state: "no-binary", hostname: null });
+        return { kind: "park", wakeable: true } as const;
+      }
+      // Not advertised from here until a probe passes: "starting"
+      // reads as tunnelUrl() null through the awaits below.
+      setStatus({ state: "starting", hostname: null });
+      yield* reapStaleOnce;
+      let provision = cache.ready ? cache.provision : null;
+      if (provision === null) {
+        const provisioned = yield* Effect.tryPromise({
+          try: () => deps.provision(port),
+          catch: (error) => error,
+        });
+        provision = {
+          hostname: provisioned.hostname,
+          connectorToken: provisioned.connectorToken,
+          dnsCreated: provisioned.dnsCreated === true,
+        };
+        cache.provision = provision;
+      }
+      return yield* runChild(binaryPath, provision, cache, signalSettled);
+    }).pipe(
+      Effect.catchCause((cause): Effect.Effect<AttemptOutcome> => {
+        // Any interruption in the cause is stop() or a port change at
+        // work, even beside a defect from a release: let it through.
+        if (Cause.hasInterrupts(cause)) {
+          return Effect.failCause(cause as Cause.Cause<never>);
+        }
+        const error = Cause.squash(cause);
+        if (error instanceof TunnelUnconfiguredError) {
+          // A deployment fact, not a failure: cached so no later
+          // reconcile retries it either.
+          workerUnconfigured = true;
+          setStatus({ state: "unconfigured", hostname: null });
+          return Effect.succeed({ kind: "park", wakeable: false });
+        }
+        if (error instanceof TunnelProvisionDeniedError) {
+          // Refused outright (a revoked credential's 401, an older
+          // Worker deploy's 404): a timed retry re-presents the same
+          // request, so park with NO retry scheduled. The next
+          // reconcile trigger re-enters, which is exactly when the
+          // inputs can have changed.
+          setStatus({ state: "error", hostname: null });
+          console.warn(
+            `[tunnel] provisioning denied (${errorMessageOf(error)}), ` +
+              "waiting for the next account or config change",
+          );
+          return Effect.succeed({ kind: "park", wakeable: true });
+        }
+        if (Cause.hasDies(cause)) {
+          console.warn(`[tunnel] start attempt died: ${Cause.pretty(cause)}`);
+        }
+        return Effect.succeed({
+          kind: "retry",
+          detail: `tunnel start failed: ${errorMessageOf(error)}`,
+          resetLadder: false,
+        });
+      }),
+    );
+
+  // One port's supervision, from the reconcile that wanted it until it
+  // is interrupted. The ladder position and the provision cache are
+  // local, so a new port (a new fiber) starts from the bottom with no
+  // cached credentials.
+  const supervisePort = (
+    port: number,
+    control: PortControl,
+  ): Effect.Effect<void> => {
+    const signalSettled = (): void => {
+      Deferred.doneUnsafe(control.settled, Effect.void);
+    };
+    return Effect.gen(function* () {
+      const cache: ProvisionCache = { provision: null, ready: false };
+      let rung = 0;
+      while (true) {
+        const outcome = yield* attempt(port, cache, signalSettled);
+        if (outcome.kind === "park") {
+          if (!outcome.wakeable) {
+            signalSettled();
+            return yield* Effect.never;
+          }
+          const wake = Deferred.makeUnsafe<void>();
+          control.wake = wake;
+          signalSettled();
+          yield* Deferred.await(wake);
+          continue;
+        }
+        if (outcome.resetLadder) rung = 0;
+        const delayMs = backoffDelayMs(TUNNEL_BACKOFF_LADDER_MS, rung);
+        rung += 1;
+        setStatus({ state: "error", hostname: null });
+        console.warn(`[tunnel] ${outcome.detail}, retrying in ${delayMs}ms`);
+        signalSettled();
+        yield* Effect.sleep(delayMs);
+      }
+    }).pipe(Effect.ensuring(Effect.sync(signalSettled)));
+  };
+
+  // Interrupts the current port's fiber, which kills its child (the
+  // child scope's release) and cancels whatever it was waiting on.
+  const endRun: Effect.Effect<void> = Effect.suspend(() => {
+    const ending = run;
+    run = null;
+    return ending === null ? Effect.void : Fiber.interrupt(ending.fiber);
+  });
+
+  const reconcileNow = (wanted: { port: number } | null): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      // The connector a crashed run left behind is reaped on the first
+      // reconcile whatever it wants: a signed-out boot never reaches a
+      // start, and the orphan keeps fronting the hostname onto a port
+      // anything local may rebind.
+      yield* reapStaleOnce;
+      if (wanted === null) {
+        yield* endRun;
+        setStatus({ state: "off", hostname: null });
         return;
       }
-      scheduleRestart(`tunnel start failed: ${errorMessageOf(error)}`);
-    }
-  }
-
-  // Synchronous and idempotent, so both the serialized reconcile(null)
-  // path and the pre-empting stop() below may call it freely.
-  function stopNow(): void {
-    wantedPort = null;
-    clearTimers();
-    killChild();
-    attempt = 0;
-    provisionDenied = false;
-    // The cached provision dies with the stop: a later start under a
-    // possibly different account must never front stale credentials.
-    lastProvision = null;
-    lastChildReady = false;
-    setStatus({ state: "off", hostname: null });
-  }
+      const current = run;
+      if (current !== null && current.port === wanted.port) {
+        // No-op unless the fiber is parked on a verdict this trigger
+        // can change: a live child, a scheduled retry and the cached
+        // unconfigured verdict are all already the right response to
+        // this port, and restarting here would reset a failing
+        // runner's backoff on every unrelated config write.
+        const wake = current.control.wake;
+        if (wake === null) return;
+        current.control.wake = null;
+        const settled = Deferred.makeUnsafe<void>();
+        current.control.settled = settled;
+        Deferred.doneUnsafe(wake, Effect.void);
+        yield* Deferred.await(settled);
+        return;
+      }
+      // Downgrade BEFORE killing: from here to a successful probe the
+      // connector is not serving, and "starting" (which reads as
+      // tunnelUrl() null) must never advertise a dead child. The
+      // cached unconfigured verdict stays as it is.
+      if (!workerUnconfigured) setStatus({ state: "starting", hostname: null });
+      yield* endRun;
+      const control: PortControl = {
+        settled: Deferred.makeUnsafe<void>(),
+        wake: null,
+      };
+      const fiber = yield* Effect.forkIn(
+        supervisePort(wanted.port, control),
+        scope,
+      );
+      run = { port: wanted.port, fiber, control };
+      yield* Deferred.await(control.settled);
+    });
 
   return {
     reconcile: (wanted) =>
-      lifecycle(async () => {
-        // The quit latch outranks everything a queued reconcile might
-        // want: a reconcile that drained from the queue after stop()
-        // must not respawn a child mid-quit.
-        if (stopped) return;
-        // The connector a crashed run left behind is reaped on the
-        // first reconcile whatever it wants: a signed-out boot never
-        // reaches a start, and the orphan keeps fronting the hostname
-        // onto a port anything local may rebind.
-        await reapStaleOnce();
-        if (stopped) return;
-        if (wanted === null) {
-          stopNow();
-          return;
-        }
-        // No-op whenever the port is unchanged and the runner is not
-        // "off": a live child, a scheduled retry and the cached
-        // unconfigured verdict are all already the right response to
-        // this port, and re-entering startNow here is what used to
-        // reset a failing runner's backoff to rung 0 on every
-        // unrelated config write. Two states do re-enter: "no-binary"
-        // (a config write may have just named a usable
-        // cloudflaredPath, and re-resolving is a probe with no Worker
-        // round trip and no ladder to disturb) and a provision-denied
-        // park, whose ONLY recovery path is the next reconcile
-        // trigger.
-        if (
-          wanted.port === wantedPort &&
-          status.state !== "off" &&
-          status.state !== "no-binary" &&
-          !provisionDenied
-        ) {
-          return;
-        }
-        const portChanged = wanted.port !== wantedPort;
-        wantedPort = wanted.port;
-        // The failure streak belongs to the OLD port's attempts.
-        if (portChanged) attempt = 0;
-        await startNow(wanted.port);
-      }),
+      lifecycle(() =>
+        runtime.runPromise(
+          Effect.forkIn(reconcileNow(wanted), scope).pipe(
+            Effect.flatMap(Fiber.join),
+            // Interrupted means stop() won: in flight, queued, or after
+            // (a fork into the closed scope is interrupted at once).
+            Effect.catchCause((cause) =>
+              Cause.hasInterrupts(cause)
+                ? Effect.void
+                : Effect.failCause(cause),
+            ),
+          ),
+        ),
+      ),
     stop: () => {
-      // Pre-empt, do not queue: quit must never park behind an
-      // in-flight provision holding the limiter. The latch plus
-      // stopNow mark stopped synchronously and kill the child, a
-      // parked start's guards make it bail, and any reconcile still
-      // QUEUED behind the in-flight slot sees the latch and does
-      // nothing. The queued stopNow keeps the resolved promise
-      // ordered after any in-flight slot, and is a no-op by
-      // idempotence.
-      stopped = true;
-      stopNow();
-      return lifecycle(async () => {
-        stopNow();
-      });
+      // Pre-empt, do not queue: the status goes off now, and closing
+      // the scope interrupts an in-flight reconcile (a provision it was
+      // waiting on included), every queued one, and the port's fiber,
+      // whose child is killed on the way out. Resolves once all of them
+      // are gone. Idempotent: closing a closed scope does nothing.
+      setStatus({ state: "off", hostname: null });
+      return runtime.runPromise(Scope.close(scope, Exit.void));
     },
     status: () => ({ ...status }),
     tunnelUrl: () =>

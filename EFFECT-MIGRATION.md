@@ -648,6 +648,83 @@ hand:
   found to be the thing in the way, which nothing in the survey
   suggests.
 
+## Status (updated as phases land)
+
+What is on the branch, in commit order, and what each step changed
+about the plan above.
+
+**Phase 0** landed: `effect` and `@effect/platform-node` at
+`4.0.0-rc.114` (exact), `CLAUDE.md` with the official skill's rule to
+read `node_modules/effect/AGENTS.md`, `main/runtime.ts` with an empty
+`ManagedRuntime` the quit path disposes.
+
+**Phase 1** landed. Every error a renderer or peer matches on is a
+`Schema.TaggedError` with a tag constant beside its matcher in
+`shared/errors.ts`; git raises `GitError`, `GitOutputTruncated` and
+`GitSpawnError` from `host/lib/git/core.ts`; the CLI delegate raises
+`CliFailed`; `ControlError` carries its code as a field. The wire
+codec is `shared/ipc/wireError.ts`: an additive `error` field beside
+`message` on the socket, hub and control frames, and an envelope on the
+Electron wire. Two deviations from the plan:
+
+- The preload cannot rebuild the error (contextBridge copies a thrown
+  Error as message and stack only), so the renderer builds `window.api`
+  from the preload's raw bridge and rebuilds it on its side
+  (`renderer/electronApi.ts`), the way the web shell already installs
+  its bridge. The raw bridge is gated to the contract channels.
+- `shared/errors.ts` imports `effect`, so the renderer bundle carries
+  Schema. The measured cost on the web build's main chunk was 0.13 kB.
+  The Effect-free readers (`errorMessageOf`, `errorTagOf`) live in
+  `shared/errorOf.ts` so a frame reader need not load Effect.
+
+The in-process client errors (`RemoteConnectError`, the hub link
+errors, `HubRequestError`) were left as plain classes: they never cross
+a wire, and their modules are converted in Phase 2.
+
+**Phase 2** landed for steps 1, 2, 3, 4 and 6: the reconnect
+supervisor, the hub dial, the direct keeper, the cloudflared runner,
+the mirror daemon, the git watcher and the state watcher run as Effect
+fibers; interruption is the cancel path; the clock seams are gone and
+their proofs run under `TestClock`. Deviations:
+
+- The ladder is driven by an explicit loop with `Effect.sleep` and the
+  shared `backoffDelayMs`, not by `Schedule.retry`: the `attempt` and
+  `delayMs` the status reports, and the "stable resets the ladder, then
+  waits one rung" rule, are exact contracts the proofs pin, and a
+  `Schedule` reproduces them less directly than the loop does.
+- The runners still fork with `Effect.runFork` behind a `runtime` seam
+  rather than living in a Layer, because their owners start and stop
+  them synchronously from Promise-side code. Step 7 (AppLive) moves
+  them. Until then a throw from an owner callback inside a fiber is
+  contained and logged, since a defect in a forked fiber is reported
+  nowhere.
+- Steps 5 (the control server, the socket host, the port-forward
+  engine) and 7 (AppLive, the `set*Impl` slots, the quit sequence) are
+  not started.
+
+**Phase 3** has its seam: `shared/ipc/effectHandler.ts` adapts an
+Effect handler to the registrar under the caller's signal, and
+`host/lib/git/core.ts` exposes `runEffect` (the Promise `run` is a
+thin `runPromise` over it), which gives every git run a timeout and
+makes it interruptible. No handler module is converted yet.
+
+**Phases 4 and 5** are not started.
+
+New proofs: `wire-error`, `supervisor`, `hub-dial`, `git-runner`; the
+`direct-plane` keeper and cloudflared checks run under `TestClock`.
+
+Measures at this point (the section 9 table's "now" column was taken
+before the work began):
+
+| Measure | Before | Now |
+|---|---|---|
+| `throw new Error(` in `main/` + `host/` | 142 | 137 |
+| message-text error matchers with no tag path | 8 | 0 |
+| child-process calls with no timeout | git: all | git: none |
+| hand-rolled ladder and clock code | 5 files | 1 (the shared `backoffDelayMs`) |
+| `set*Impl` slots | 14 | 11 |
+| `fakeClock` proof harnesses | 12 sites | 0 |
+
 ## 7. Conventions for the code that gets written
 
 These mirror `node_modules/effect/AGENTS.md` and are what reviews hold

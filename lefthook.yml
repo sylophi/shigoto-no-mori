@@ -53,6 +53,20 @@ pre-commit:
     supervisor:
       glob: "{shared/remote/supervisor.ts,shared/ipc/socket/wsClientTransport.ts,test/supervisor.mjs,test/lib/checkKit.mjs}"
       run: pnpm test supervisor
+    # Drives the git runner's Effect form against real git: the timeout
+    # kills a run that never finishes, a caller's cancellation kills it
+    # at once, git that cannot start fails as GitSpawnError, and the
+    # Promise form rejects with the same classes.
+    git-runner:
+      glob: "{host/lib/git/core.ts,shared/ipc/effectHandler.ts,test/git-runner.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test git-runner
+    # The hub connection core's dial and lifecycle under TestClock, pure
+    # (a fake socket adapter, a scripted ticket mint): the mint and
+    # accept deadlines, close-code verdicts, redial with a fresh ticket,
+    # stop() at every phase, refresh(), and the heartbeat kill.
+    hub-dial:
+      glob: "{shared/hub/connection.ts,shared/remote/supervisor.ts,shared/hub/link.ts,shared/ipc/socket/heartbeat.ts,test/hub-dial.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test hub-dial
     # Typechecks the hub Worker package and runs its vitest suite
     # inside workerd (real D1, Durable Object and websocket bindings)
     # against the shared app-to-worker protocol, so enrollment, ticket,

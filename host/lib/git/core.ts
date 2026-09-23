@@ -3,7 +3,7 @@
 // shell out to git directly.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { beginGitSelfWrite } from "../util/selfWrite";
 
 const execFileP = promisify(execFile);
@@ -99,7 +99,18 @@ export interface RunOptions {
   // Output cap for this run, over DEFAULT_MAX_BUFFER. Only the patch
   // reads raise it (see PATCH_MAX_BUFFER).
   maxBuffer?: number;
+  // How long the run may take before git is killed, over
+  // DEFAULT_TIMEOUT_MS.
+  timeoutMs?: number;
 }
+
+// No git command the app runs should take this long. A fetch against
+// a remote that never answers, or a hook that waits on a prompt, would
+// otherwise hold its caller (and, through the in-flight join, every
+// later caller of the same fetch) forever. Generous, because a clone or
+// a fetch of a large repository over a slow link is a legitimate long
+// run.
+export const DEFAULT_TIMEOUT_MS = 30 * 60_000;
 
 // Every run is buffered, so a command that never stops printing can't
 // take the host process with it. This covers any status, log or ref
@@ -115,8 +126,8 @@ export const PATCH_MAX_BUFFER = 64 * 1024 * 1024;
 // git ran and failed: a non-zero exit, or a kill by signal (exitCode
 // null). Callers that need to tell failures apart read `stderr` or
 // `exitCode`, never the message. A failure to start git at all (no
-// binary, a missing cwd) is not one of these: it stays Node's own
-// errno error, whose "spawn git ENOENT" is the useful part.
+// binary, a missing cwd) is not one of these: that is GitSpawnError,
+// carrying Node's errno.
 export class GitError extends Schema.TaggedError<GitError>()("GitError", {
   stderr: Schema.String,
   // What git printed before it failed. runLenient answers with it.
@@ -150,12 +161,27 @@ export class GitOutputTruncated extends Schema.TaggedError<GitOutputTruncated>()
   }
 }
 
+// git never ran: no binary on the PATH, a cwd that is not there. Node's
+// errno is the useful part, kept as a field (and as an own property,
+// so errorCodeOf reads it as before).
+export class GitSpawnError extends Schema.TaggedError<GitSpawnError>()(
+  "GitSpawnError",
+  {
+    code: Schema.NullOr(Schema.String),
+    message: Schema.String,
+  },
+) {}
+
+export type GitFailure = GitError | GitOutputTruncated | GitSpawnError;
+
 // execFile's rejection, as the promisified form hands it over.
 interface ExecFileFailure {
   code?: unknown;
   signal?: unknown;
+  killed?: unknown;
   stdout?: unknown;
   stderr?: unknown;
+  message?: unknown;
 }
 
 function asText(value: unknown): string {
@@ -163,61 +189,89 @@ function asText(value: unknown): string {
   return Buffer.isBuffer(value) ? value.toString("utf8") : "";
 }
 
-// The typed form of an execFile rejection, or the rejection itself when
-// git never ran. A numeric `code` is git's exit status; a string one is
-// an errno from the spawn or Node's maxBuffer kill; neither with a
-// signal set is a kill.
-function gitFailure(err: unknown): unknown {
-  if (typeof err !== "object" || err === null) return err;
-  const { code, signal, stdout, stderr } = err as ExecFileFailure;
+// The typed form of an execFile rejection. A numeric `code` is git's
+// exit status; a string one is an errno from the spawn or Node's
+// maxBuffer kill; neither with a signal set is a kill (the timeout, or
+// the caller's cancellation).
+function gitFailure(err: unknown, timeoutMs: number): GitFailure {
+  const failure =
+    typeof err === "object" && err !== null ? (err as ExecFileFailure) : {};
+  const { code, signal, killed, stdout, stderr } = failure;
   if (code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
     return new GitOutputTruncated();
   }
-  if (typeof code !== "number" && typeof signal !== "string") return err;
-  return new GitError({
-    stderr: asText(stderr),
-    stdout: asText(stdout),
-    exitCode: typeof code === "number" ? code : null,
+  if (typeof code === "number" || typeof signal === "string") {
+    const text = asText(stderr);
+    // `killed` is Node's own kill: the timeout (a cancelled run's
+    // rejection is never read, its fiber is interrupted). Git may
+    // still exit with a code and a message on the signal, so the
+    // timeout is named ahead of whatever it said.
+    const stopped =
+      killed === true
+        ? `git did not finish within ${Math.round(timeoutMs / 60_000)} minutes and was stopped.`
+        : "";
+    return new GitError({
+      stderr:
+        stopped === "" ? text : text === "" ? stopped : `${stopped}\n${text}`,
+      stdout: asText(stdout),
+      exitCode: typeof code === "number" ? code : null,
+    });
+  }
+  return new GitSpawnError({
+    code: typeof code === "string" ? code : null,
+    message:
+      typeof failure.message === "string" ? failure.message : String(err),
   });
 }
 
-async function exec(
+// One git run as an Effect: the stdout, or a typed failure. The fiber's
+// interruption kills the child (execFile's signal), so a handler that
+// runs this under its caller's signal stops git when the caller goes,
+// and the timeout bounds a run whose caller never does.
+export function runEffect(
+  cwd: string,
   args: string[],
-  options: { cwd: string } & RunOptions,
-): Promise<{ stdout: string }> {
-  // In flight for the command's whole run, then an echo window after
-  // it: the git-directory watcher checks at event time.
-  const endSelfWrite = mutatesRepo(args)
-    ? beginGitSelfWrite(options.cwd)
-    : null;
-  const { env: overlay, ...execOptions } = options;
-  try {
-    // LC_ALL=C pins git's messages to English: deleteAnyLocalBranch and
-    // removeWorktreeForce match on stderr text, which gettext would
-    // otherwise translate.
-    const result = await execFileP("git", args, {
-      env: { ...process.env, ...overlay, LC_ALL: "C" },
-      ...execOptions,
-    });
-    return { stdout: result.stdout };
-  } catch (err) {
-    throw gitFailure(err);
-  } finally {
-    endSelfWrite?.();
-  }
+  options?: RunOptions,
+): Effect.Effect<string, GitFailure> {
+  return Effect.suspend(() => {
+    const {
+      env: overlay,
+      timeoutMs = DEFAULT_TIMEOUT_MS,
+      maxBuffer = DEFAULT_MAX_BUFFER,
+    } = options ?? {};
+    // In flight for the command's whole run, then an echo window after
+    // it: the git-directory watcher checks at event time.
+    const endSelfWrite = mutatesRepo(args) ? beginGitSelfWrite(cwd) : null;
+    return Effect.tryPromise({
+      try: (signal) =>
+        // LC_ALL=C pins git's messages to English: deleteAnyLocalBranch
+        // and removeWorktreeForce match on stderr text, which gettext
+        // would otherwise translate.
+        execFileP("git", args, {
+          cwd,
+          env: { ...process.env, ...overlay, LC_ALL: "C" },
+          maxBuffer,
+          timeout: timeoutMs,
+          signal,
+        }),
+      catch: (err) => gitFailure(err, timeoutMs),
+    }).pipe(
+      Effect.map((result) => result.stdout),
+      Effect.ensuring(
+        Effect.sync(() => {
+          endSelfWrite?.();
+        }),
+      ),
+    );
+  });
 }
 
-export async function run(
+export function run(
   cwd: string,
   args: string[],
   options?: RunOptions,
 ): Promise<string> {
-  const { stdout } = await exec(args, {
-    cwd,
-    maxBuffer: DEFAULT_MAX_BUFFER,
-    ...options,
-  });
-  return stdout;
+  return Effect.runPromise(runEffect(cwd, args, options));
 }
 
 // Like `run`, but tolerates non-zero exit (e.g. `git diff --no-index`,
@@ -236,8 +290,12 @@ export async function runLenient(
   try {
     return await run(cwd, args, options);
   } catch (err) {
-    if (err instanceof GitError) return err.stdout;
-    if (err instanceof GitOutputTruncated) throw err;
+    // A run killed by the timeout is the same silent prefix as a
+    // truncation, so it is not swallowed either.
+    if (err instanceof GitError && err.exitCode !== null) return err.stdout;
+    if (err instanceof GitError || err instanceof GitOutputTruncated) {
+      throw err;
+    }
     return "";
   }
 }
@@ -261,11 +319,11 @@ export function splitZ(stdout: string): string[] {
   return stdout.split("\0").filter((entry) => entry.length > 0);
 }
 
-export async function isGitRepo(path: string): Promise<boolean> {
-  try {
-    await exec(["rev-parse", "--git-dir"], { cwd: path });
-    return true;
-  } catch {
-    return false;
-  }
+export function isGitRepo(path: string): Promise<boolean> {
+  return Effect.runPromise(
+    runEffect(path, ["rev-parse", "--git-dir"]).pipe(
+      Effect.as(true),
+      Effect.catch(() => Effect.succeed(false)),
+    ),
+  );
 }

@@ -243,7 +243,10 @@ export function createHubConnectionCore(
           new RemoteConnectError(
             `ticket mint failed: ${errorMessageOf(error)}`,
             isDeviceRevoked(error) ? CLOSE_DEVICE_REVOKED : null,
-            isHubRefusal(error),
+            // A revoked credential blocks whatever status carried the
+            // verdict; the Worker answers 403 today, but the code is
+            // the contract.
+            isHubRefusal(error) || isDeviceRevoked(error),
           ),
       }).pipe(
         Effect.timeoutOrElse({
@@ -348,8 +351,16 @@ export function createHubConnectionCore(
           );
         }
       });
+      // The post-close terminate grace (armed by the connection's
+      // close below): cleared once the platform close lands, and never
+      // what keeps a process alive.
+      let terminateGrace: ReturnType<typeof setTimeout> | null = null;
       socket.onClose((code) => {
         dead = true;
+        if (terminateGrace !== null) {
+          clearTimeout(terminateGrace);
+          terminateGrace = null;
+        }
         heartbeat.stop();
         tearDownLink();
         if (!established) {
@@ -430,7 +441,11 @@ export function createHubConnectionCore(
           // a stalled device hub. Where the adapter can terminate,
           // arm a short grace so it cannot.
           if (socket.terminate !== undefined) {
-            setTimeout(() => socket.terminate?.(), TERMINATE_GRACE_MS);
+            terminateGrace = setTimeout(() => {
+              terminateGrace = null;
+              socket.terminate?.();
+            }, TERMINATE_GRACE_MS);
+            terminateGrace.unref?.();
           }
         },
         probe: heartbeat.probe,

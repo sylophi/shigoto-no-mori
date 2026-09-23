@@ -194,7 +194,7 @@ import {
   TunnelUnconfiguredError,
 } from "@shared/account/service";
 import { createHubConnection as createWebConnection } from "../web/hub/connection.ts";
-import { fakeClock, makeProof } from "./lib/checkKit.mjs";
+import { makeProof } from "./lib/checkKit.mjs";
 import {
   bootBrokeredPair as bootPair,
   makeDirectBridge,
@@ -307,6 +307,22 @@ function keeperRuntime(track) {
     adjust: async (ms) => {
       await rt.runPromise(TestClock.adjust(ms));
       await settle();
+    },
+  };
+}
+
+// The cloudflared runner on a TestClock. A child's exit and a
+// reconcile's probe chain reach their next sleep a few scheduler turns
+// after the call that caused them, so adjust() also settles BEFORE it
+// moves the clock: a sleep not registered yet would start from the
+// adjusted time and miss the step meant to fire it.
+function tunnelRuntime(track) {
+  const { runtime, adjust } = keeperRuntime(track);
+  return {
+    runtime,
+    adjust: async (ms) => {
+      await settle();
+      await adjust(ms);
     },
   };
 }
@@ -2480,8 +2496,8 @@ async function main() {
 
   await check(
     "cloudflared runner: no-binary and unconfigured are typed terminal states, and the unconfigured verdict is cached for the process lifetime",
-    async () => {
-      const clock = fakeClock();
+    async (track) => {
+      const { runtime, adjust } = tunnelRuntime(track);
       // Missing binary: reported, and provisioning never even runs.
       let binaryPath = null;
       let provisions = 0;
@@ -2493,8 +2509,9 @@ async function main() {
         },
         spawnTunnel: () => ({ onExit() {}, kill() {} }),
         probeTunnel: async () => true,
-        clock,
+        runtime,
       });
+      track(() => noBinary.stop());
       await noBinary.reconcile({ port: 40100 });
       assert.equal(noBinary.status().state, "no-binary");
       assert.equal(noBinary.tunnelUrl(), null);
@@ -2518,11 +2535,12 @@ async function main() {
         },
         spawnTunnel: () => assert.fail("spawned while unconfigured"),
         probeTunnel: async () => true,
-        clock,
+        runtime,
       });
+      track(() => unconfigured.stop());
       await unconfigured.reconcile({ port: 40100 });
       assert.equal(unconfigured.status().state, "unconfigured");
-      await clock.advance(10 * 60_000);
+      await adjust(10 * 60_000);
       assert.equal(
         unconfiguredCalls,
         1,
@@ -2544,13 +2562,14 @@ async function main() {
 
   await check(
     "cloudflared runner: the readiness probe gates advertising (a failed attempt retries on the probe ladder), a post-ready crash restarts from the cached provision on the capped backoff, a port change re-provisions, stop kills the child cleanly, and the token never reaches a status object",
-    async () => {
-      const clock = fakeClock();
+    async (track) => {
+      const { runtime, adjust } = tunnelRuntime(track);
       const token = "connector-token-must-not-leak";
       const spawned = [];
       const provisionPorts = [];
       const probeAnswers = [false, true];
       let statusChanges = 0;
+      const snapshots = [];
       const runner = createCloudflaredRunner({
         resolveBinary: async () => "/stub/cloudflared",
         provision: async (port) => {
@@ -2582,14 +2601,14 @@ async function main() {
         },
         onChange: () => {
           statusChanges += 1;
-          // The secret must never surface on ANY observable snapshot.
-          assert.ok(
-            !JSON.stringify(runner.status()).includes(token),
-            "the connector token leaked into a status object",
-          );
+          // Recorded, not asserted, here: the runner contains a throw
+          // from its owner's callback, so an assert would only be
+          // logged. Checked below against every snapshot taken.
+          snapshots.push(JSON.stringify(runner.status()));
         },
-        clock,
+        runtime,
       });
+      track(() => runner.stop());
       await runner.reconcile({ port: 40100 });
       assert.deepEqual(provisionPorts, [40100]);
       assert.equal(spawned.length, 1);
@@ -2598,10 +2617,10 @@ async function main() {
       assert.equal(runner.tunnelUrl(), null);
       // First probe attempt answers not-routable: still starting, the
       // chain retries on the next rung instead of advertising.
-      await clock.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
+      await adjust(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
       assert.equal(runner.status().state, "starting");
       assert.equal(runner.tunnelUrl(), null);
-      await clock.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[1]);
+      await adjust(TUNNEL_PROBE_DELAYS_REUSED_MS[1]);
       assert.equal(runner.status().state, "up");
       assert.equal(runner.tunnelUrl(), "wss://sm-feedfacecafe.sm.example.test");
       assert.ok(statusChanges > 0);
@@ -2612,7 +2631,7 @@ async function main() {
       // The child dies: not advertised anymore, restart scheduled on
       // the ladder.
       spawned[0].exit("cloudflared exited (code 1)");
-      await clock.settle();
+      await settle();
       assert.equal(runner.status().state, "error");
       assert.equal(runner.tunnelUrl(), null);
       // A same-port reconcile while the retry is scheduled is a no-op
@@ -2620,7 +2639,7 @@ async function main() {
       await runner.reconcile({ port: 40100 });
       assert.equal(runner.status().state, "error");
       assert.deepEqual(provisionPorts, [40100]);
-      await clock.advance(TUNNEL_BACKOFF_LADDER_MS[0]);
+      await adjust(TUNNEL_BACKOFF_LADDER_MS[0]);
       assert.equal(spawned.length, 2, "no respawn after the backoff delay");
       // The crash restart reused the cached provision (the dead child
       // HAD passed the probe): no Worker round trip for an unchanged
@@ -2630,7 +2649,7 @@ async function main() {
         [40100],
         "a post-ready crash restart re-provisioned an unchanged port",
       );
-      await clock.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
+      await adjust(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
       assert.equal(runner.status().state, "up");
       // A listener restart on a NEW ephemeral port kills the old child
       // and re-provisions against the new port.
@@ -2645,15 +2664,20 @@ async function main() {
       assert.equal(spawned[2].killed, true);
       assert.equal(runner.status().state, "off");
       assert.equal(runner.tunnelUrl(), null);
-      await clock.advance(10 * 60_000);
+      await adjust(10 * 60_000);
       assert.equal(spawned.length, 3, "a stopped runner respawned");
+      // The secret never surfaced on ANY observable snapshot.
+      assert.ok(
+        snapshots.every((snapshot) => !snapshot.includes(token)),
+        "the connector token leaked into a status object",
+      );
     },
   );
 
   await check(
     "cloudflared runner: a never-ready child's restart re-provisions (its token may be dead), a probed-ready child's crash reuses the cache, a stable run resets the ladder, and a not-yet-routable child of a FRESH record is kept and probed on until the long deadline, while a reused tunnel that never routes is killed and re-provisioned at the short one",
-    async () => {
-      const clock = fakeClock();
+    async (track) => {
+      const { runtime, adjust } = tunnelRuntime(track);
       const spawned = [];
       let provisions = 0;
       let routable = false;
@@ -2681,15 +2705,16 @@ async function main() {
           return child;
         },
         probeTunnel: async () => routable,
-        clock,
+        runtime,
       });
+      track(() => runner.stop());
       await runner.reconcile({ port: 40100 });
       assert.equal(provisions, 1);
       // The child dies BEFORE any probe passed: the cached provision
       // is not trusted (the token may be dead), so the restart pays a
       // fresh Worker round trip.
       spawned.at(-1).exit("cloudflared exited (code 1)");
-      await clock.advance(TUNNEL_BACKOFF_LADDER_MS[0]);
+      await adjust(TUNNEL_BACKOFF_LADDER_MS[0]);
       assert.equal(spawned.length, 2, "no respawn after the backoff");
       assert.equal(
         provisions,
@@ -2700,11 +2725,11 @@ async function main() {
       // restart reuses the cache (no third provision) and starts from
       // the ladder's bottom rung again.
       routable = true;
-      await clock.advance(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
+      await adjust(TUNNEL_PROBE_DELAYS_REUSED_MS[0]);
       assert.equal(runner.status().state, "up");
-      await clock.advance(TUNNEL_STABLE_MS);
+      await adjust(TUNNEL_STABLE_MS);
       spawned.at(-1).exit("cloudflared exited (code 1)");
-      await clock.advance(TUNNEL_BACKOFF_LADDER_MS[0]);
+      await adjust(TUNNEL_BACKOFF_LADDER_MS[0]);
       assert.equal(
         spawned.length,
         3,
@@ -2722,7 +2747,7 @@ async function main() {
       // for as long as the child lives. It is never killed, nothing is
       // re-provisioned, the status stays "starting", and the moment a
       // probe passes the tunnel is advertised on the same child.
-      const lateClock = fakeClock();
+      const late = tunnelRuntime(track);
       const lateSpawns = [];
       let lateProvisions = 0;
       let lateRoutable = false;
@@ -2748,8 +2773,9 @@ async function main() {
           return child;
         },
         probeTunnel: async () => lateRoutable,
-        clock: lateClock,
+        runtime: late.runtime,
       });
+      track(() => notYetRoutable.stop());
       await notYetRoutable.reconcile({ port: 40100 });
       assert.equal(lateSpawns.length, 1);
       // Walk well past the warning threshold: the capped rung up to it,
@@ -2757,11 +2783,11 @@ async function main() {
       const step = TUNNEL_PROBE_DELAYS_MS.at(-1);
       for (let walked = 0; walked <= TUNNEL_PROBE_WARN_MS; walked += step) {
         // oxlint-disable-next-line no-await-in-loop -- the probe chain advances serially by design
-        await lateClock.advance(step);
+        await late.adjust(step);
       }
       for (let i = 0; i < 3; i += 1) {
         // oxlint-disable-next-line no-await-in-loop -- see above
-        await lateClock.advance(TUNNEL_PROBE_SLOW_MS);
+        await late.adjust(TUNNEL_PROBE_SLOW_MS);
       }
       assert.equal(notYetRoutable.status().state, "starting");
       assert.equal(notYetRoutable.tunnelUrl(), null);
@@ -2783,7 +2809,7 @@ async function main() {
       // DNS catches up: the next (slow-rung) probe advertises the same
       // child.
       lateRoutable = true;
-      await lateClock.advance(TUNNEL_PROBE_SLOW_MS);
+      await late.adjust(TUNNEL_PROBE_SLOW_MS);
       assert.equal(notYetRoutable.status().state, "up");
       assert.equal(notYetRoutable.tunnelUrl(), "wss://h.example.test");
       assert.equal(lateSpawns.length, 1);
@@ -2792,7 +2818,7 @@ async function main() {
       // A reused tunnel that NEVER becomes routable (a deleted record,
       // a stale ingress): past the short deadline it is killed and the
       // restart re-provisions, since it never reached readiness.
-      const deadClock = fakeClock();
+      const dead = tunnelRuntime(track);
       const deadSpawns = [];
       let deadProvisions = 0;
       const neverRoutable = createCloudflaredRunner({
@@ -2813,25 +2839,30 @@ async function main() {
           return child;
         },
         probeTunnel: async () => false,
-        clock: deadClock,
+        runtime: dead.runtime,
       });
+      track(() => neverRoutable.stop());
       await neverRoutable.reconcile({ port: 40100 });
-      for (
-        let walked = 0;
-        walked <= TUNNEL_PROBE_DEADLINE_MS + step &&
-        neverRoutable.status().state === "starting";
-        walked += step
-      ) {
+      // Probed on the capped rung right up to the deadline, and kept
+      // until it: the deadline is a hard bound from the spawn, so the
+      // walk stops short of it and then steps onto it exactly (an
+      // overshoot would also cross the first backoff rung and respawn).
+      let walked = 0;
+      while (walked + step < TUNNEL_PROBE_DEADLINE_MS) {
         // oxlint-disable-next-line no-await-in-loop -- see above
-        await deadClock.advance(step);
+        await dead.adjust(step);
+        walked += step;
       }
+      assert.equal(neverRoutable.status().state, "starting");
+      assert.equal(deadSpawns[0].killed, false, "killed before the deadline");
+      await dead.adjust(TUNNEL_PROBE_DEADLINE_MS - walked);
       assert.ok(
         TUNNEL_PROBE_DEADLINE_FRESH_MS > TUNNEL_PROBE_DEADLINE_MS,
         "a fresh record must get the longer deadline",
       );
       assert.equal(neverRoutable.status().state, "error");
       assert.equal(deadSpawns[0].killed, true, "not killed at the deadline");
-      await deadClock.advance(TUNNEL_BACKOFF_LADDER_MS.at(-1));
+      await dead.adjust(TUNNEL_BACKOFF_LADDER_MS.at(-1));
       assert.equal(deadSpawns.length, 2, "no respawn after the deadline");
       assert.equal(
         deadProvisions,
@@ -2844,8 +2875,8 @@ async function main() {
 
   await check(
     "cloudflared runner: a denied provision (401/404) parks with NO scheduled retry, and the next reconcile trigger is its recovery path",
-    async () => {
-      const clock = fakeClock();
+    async (track) => {
+      const { runtime, adjust } = tunnelRuntime(track);
       let provisions = 0;
       let denied = true;
       const spawns = [];
@@ -2864,14 +2895,15 @@ async function main() {
           return child;
         },
         probeTunnel: async () => true,
-        clock,
+        runtime,
       });
+      track(() => runner.stop());
       await runner.reconcile({ port: 40100 });
       assert.equal(runner.status().state, "error");
       assert.equal(provisions, 1);
       // Parked: time passing schedules NOTHING (a timed retry would
       // re-present the same refused request forever).
-      await clock.advance(30 * 60_000);
+      await adjust(30 * 60_000);
       assert.equal(provisions, 1, "a denied provision retried on a timer");
       assert.equal(spawns.length, 0);
       // The next reconcile trigger re-enters even on the same port:
@@ -2888,8 +2920,8 @@ async function main() {
 
   await check(
     "cloudflared runner: stop pre-empts an in-flight provision AND latches, so a reconcile queued behind that provision spawns nothing during quit",
-    async () => {
-      const clock = fakeClock();
+    async (track) => {
+      const { runtime } = tunnelRuntime(track);
       let releaseProvision;
       const spawns = [];
       const hung = createCloudflaredRunner({
@@ -2904,10 +2936,11 @@ async function main() {
           return child;
         },
         probeTunnel: async () => true,
-        clock,
+        runtime,
       });
+      track(() => hung.stop());
       const reconciling = hung.reconcile({ port: 40100 });
-      await clock.settle();
+      await settle();
       // A second reconcile queues behind the in-flight provision. Its
       // slot drains AFTER stop below: without the terminal latch it
       // would re-set wantedPort and respawn mid-quit.

@@ -65,25 +65,6 @@ export type SupervisorStatus =
   | { phase: "blocked"; reason: BlockReason; message: string }
   | { phase: "stopped" };
 
-// Opaque timer handle: a number in the browser, a Timeout object under
-// node. Only handed back to clearTimeout.
-export type SupervisorTimer = unknown;
-
-// Injected time source for the runners that still schedule their own
-// timers (the direct keeper, the cloudflared runner). The supervisor
-// itself reads Effect's Clock. Goes with those runners' conversion.
-export type SupervisorClock = {
-  now(): number;
-  setTimeout(fn: () => void, ms: number): SupervisorTimer;
-  clearTimeout(timer: SupervisorTimer): void;
-};
-
-export const defaultSupervisorClock: SupervisorClock = {
-  now: () => Date.now(),
-  setTimeout: (fn, ms) => setTimeout(fn, ms),
-  clearTimeout: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
-};
-
 // The hello facts and target for one device, minus the callbacks the
 // supervisor owns.
 type SupervisorParams = {
@@ -290,7 +271,7 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
           // An interruption is stop() at work: let it through untouched.
           // An interrupt-only cause carries no failure, hence the
           // narrowing.
-          if (Cause.hasInterruptsOnly(cause)) {
+          if (Cause.hasInterrupts(cause)) {
             return Effect.failCause(cause as Cause.Cause<never>);
           }
           if (Cause.hasDies(cause)) {
