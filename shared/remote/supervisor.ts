@@ -1,8 +1,8 @@
 // Reconnect supervisor for one remote connection (in shared/ so the main-process hub socket reuses
 // it). It is the SINGLE owner of retry for a connection: nothing else
 // drives the connect function for it, so there is exactly one backoff
-// ladder and one timer per connection, never a fan of overlapping
-// reconnect loops.
+// ladder and one sleeping fiber per connection, never a fan of
+// overlapping reconnect loops.
 //
 // State machine, copying t3's discipline:
 //   idle -> connecting -> connected -> backoff -> connecting -> ...
@@ -14,10 +14,18 @@
 // further retry: those failures must block rather than spin into a
 // hammering loop. Every other close backs off.
 //
+// One Effect fiber runs the whole loop. stop() interrupts it, which
+// cancels a dial in flight (the connect function's AbortSignal fires),
+// a sleep on the ladder, or a wait on the live socket, and the
+// interruption closes the connection it was holding. There is no
+// running flag to check after each step: an interrupted fiber does not
+// take the next one.
+//
 // Deterministic on purpose: the ladder is fixed with no random jitter
-// (the renderer runtime forbids Math.random anyway), and time is read
-// through an injected clock so a test can advance it and assert the
-// ladder and the reset without sleeping real seconds.
+// (the renderer runtime forbids Math.random anyway), and time comes
+// from Effect's Clock, so a test can run the loop under a TestClock
+// and assert the ladder and the reset without sleeping real seconds.
+import { Clock, Deferred, Effect, Fiber, type ManagedRuntime } from "effect";
 import {
   connectDevice,
   type ConnectDeviceOptions,
@@ -51,12 +59,12 @@ export type SupervisorStatus =
   | { phase: "stopped" };
 
 // Opaque timer handle: a number in the browser, a Timeout object under
-// node. The supervisor only ever hands it back to clearTimeout.
+// node. Only handed back to clearTimeout.
 export type SupervisorTimer = unknown;
 
-// Injected time source. The default binds the platform globals, and
-// tests pass a controllable clock to advance time and fire timers by
-// hand.
+// Injected time source for the runners that still schedule their own
+// timers (the direct keeper, the cloudflared runner). The supervisor
+// itself reads Effect's Clock. Goes with those runners' conversion.
 export type SupervisorClock = {
   now(): number;
   setTimeout(fn: () => void, ms: number): SupervisorTimer;
@@ -78,11 +86,13 @@ type SupervisorParams = {
   localDeviceId: string;
 };
 
-// The connect function, injectable so a test drives a stub instead of a
-// real socket. Defaults to the real connectDevice.
+// The connect function: one dial attempt as an Effect, so stop()
+// interrupts it and a failure carries the transport's error. The
+// default wraps the real connectDevice; the hub connection supplies
+// its own dial.
 export type ConnectFn = (
   opts: ConnectDeviceOptions,
-) => Promise<DeviceConnection>;
+) => Effect.Effect<DeviceConnection, unknown>;
 
 // The block-vs-retry verdict for a close code, injectable because each
 // wire has its own terminal codes. A non-null verdict blocks with its
@@ -125,10 +135,15 @@ const lanCloseClassifier: CloseClassifier = (code) =>
     ? { reason: "auth", message: AUTH_FAILED_MESSAGE }
     : null;
 
+const connectDeviceEffect: ConnectFn = (opts) =>
+  Effect.tryPromise({
+    try: () => connectDevice(opts),
+    catch: (error) => error,
+  });
+
 type SupervisorOptions = {
   params: SupervisorParams;
   connect?: ConnectFn;
-  clock?: SupervisorClock;
   classifyClose?: CloseClassifier;
   // Status observer for a device registry / a live UI.
   onStatus?: (status: SupervisorStatus) => void;
@@ -137,11 +152,28 @@ type SupervisorOptions = {
   // per-device api against it.
   onConnection?: (connection: DeviceConnection | null) => void;
   helloTimeoutMs?: number;
+  // Where the loop's fiber runs. Real callers take Effect's default
+  // services; a test passes a ManagedRuntime built on TestClock.layer()
+  // and drives the ladder with TestClock.adjust.
+  runtime?: SupervisorRuntime;
+};
+
+export type SupervisorRuntime = Pick<
+  ManagedRuntime.ManagedRuntime<never, never>,
+  "runFork" | "runPromise"
+>;
+
+const defaultRuntime: SupervisorRuntime = {
+  runFork: Effect.runFork,
+  runPromise: Effect.runPromise,
 };
 
 export type Supervisor = {
   start(): void;
-  stop(): void;
+  // Resolves once the loop's fiber is gone: a dial in flight
+  // cancelled, a held connection closed.
+  stop(): Promise<void>;
+  status(): SupervisorStatus;
 };
 
 // The ladder lookup, clamped at both ends. Exported with the ladder as
@@ -155,140 +187,127 @@ export function backoffDelayMs(
   return ladder[index];
 }
 
+// What one attempt (a dial, then holding the socket until it drops)
+// ends in: a block, which ends the loop, or a backoff, which climbs
+// the ladder unless the socket had been up long enough to reset it.
+type AttemptOutcome =
+  | { kind: "blocked"; reason: BlockReason; message: string }
+  | { kind: "backoff"; resetLadder: boolean };
+
 export function createSupervisor(options: SupervisorOptions): Supervisor {
-  const connect = options.connect ?? connectDevice;
-  const clock = options.clock ?? defaultSupervisorClock;
+  const connect = options.connect ?? connectDeviceEffect;
   const classifyClose = options.classifyClose ?? lanCloseClassifier;
+  const runtime = options.runtime ?? defaultRuntime;
 
   let status: SupervisorStatus = { phase: "idle" };
-  // True between start() and stop(). Guards every async continuation so
-  // a connect resolving after stop() cannot revive a torn-down device.
-  let running = false;
-  // Ladder position for the current failure streak. Reset to 0 on a
-  // stable disconnect, advanced on every scheduled backoff.
-  let attempt = 0;
-  let connection: DeviceConnection | null = null;
-  // When the live connection opened, by the injected clock, so a close
-  // can measure how long it stayed up.
-  let connectedAt = 0;
-  let retryTimer: SupervisorTimer | null = null;
+  let fiber: Fiber.Fiber<void> | null = null;
 
   function setStatus(next: SupervisorStatus): void {
     status = next;
     options.onStatus?.(next);
   }
 
-  function clearRetry(): void {
-    if (retryTimer !== null) {
-      clock.clearTimeout(retryTimer);
-      retryTimer = null;
-    }
-  }
-
-  function block(reason: BlockReason, message: string): void {
-    // Terminal until inputs change: the owner drops and recreates the
-    // supervisor when the url or token changes, which is what unblocks.
-    connection = null;
-    setStatus({ phase: "blocked", reason, message });
-  }
-
-  function scheduleBackoff(resetLadder: boolean): void {
-    // Clear any live retry first so this is the ONLY timer: the module
-    // header promises exactly one backoff ladder, and two overlapping
-    // schedules would fan into parallel connect attempts (C3).
-    clearRetry();
-    if (resetLadder) attempt = 0;
-    const delayMs = backoffDelayMs(BACKOFF_LADDER_MS, attempt);
-    attempt += 1;
-    setStatus({ phase: "backoff", attempt, delayMs });
-    retryTimer = clock.setTimeout(() => {
-      retryTimer = null;
-      if (running) attemptConnect();
-    }, delayMs);
-  }
-
-  function handleClose(code: number | null): void {
-    // Fires only for a socket that dropped on its own: the transport
-    // suppresses this for an owner-initiated close.
-    if (!running) return;
-    connection = null;
-    options.onConnection?.(null);
-    const verdict = classifyClose(code);
-    if (verdict !== null) {
-      block(verdict.reason, verdict.message);
-      return;
-    }
-    const openMs = clock.now() - connectedAt;
-    scheduleBackoff(openMs >= STABLE_CONNECTION_MS);
-  }
-
-  function onConnected(next: DeviceConnection): void {
-    if (!running) {
-      // Torn down while the handshake was in flight. Close the orphan so
-      // it does not leak a live socket.
-      next.close();
-      return;
-    }
-    connection = next;
-    connectedAt = clock.now();
-    setStatus({
-      phase: "connected",
-      remoteDeviceId: next.remoteDeviceId,
-      remoteAppVersion: next.remoteAppVersion,
-    });
-    options.onConnection?.(next);
-  }
-
-  function onConnectError(error: unknown): void {
-    if (!running) return;
-    // The transport tags a blocking close as blocked. Anything else
-    // (hello timeout, host restart, network blip) is retryable, and a
-    // failed attempt never counts as a stable connection.
-    if (error instanceof RemoteConnectError && error.blocked) {
-      // A blocking close names itself through the classifier. A
-      // blocking failure with no close code (a refused ticket mint)
-      // names itself in the error.
-      const verdict = classifyClose(error.code) ?? {
-        reason: "refused" as const,
-        message: error.message,
-      };
-      block(verdict.reason, verdict.message);
-      return;
-    }
-    scheduleBackoff(false);
-  }
-
-  function attemptConnect(): void {
+  // One dial and one hold. Never fails: every way the attempt can end
+  // is an outcome the loop reads.
+  const attempt: Effect.Effect<AttemptOutcome> = Effect.gen(function* () {
     setStatus({ phase: "connecting" });
-    connect({
+    // Completed by the transport's close callback for a socket that
+    // dropped on its own (the transport suppresses it for an owner
+    // close), so the hold below wakes exactly then.
+    const closed = Deferred.makeUnsafe<number | null>();
+    const dialed = yield* connect({
       url: options.params.url,
       token: options.params.token,
       appVersion: options.params.appVersion,
       localDeviceId: options.params.localDeviceId,
-      onClose: handleClose,
+      onClose: (code) => {
+        Deferred.doneUnsafe(closed, Effect.succeed(code));
+      },
       helloTimeoutMs: options.helloTimeoutMs,
-    })
-      .then(onConnected)
-      .catch(onConnectError);
-  }
+    }).pipe(
+      Effect.map((connection) => ({ ok: true as const, connection })),
+      Effect.catch((error) => Effect.succeed({ ok: false as const, error })),
+    );
+    if (!dialed.ok) {
+      // The transport tags a blocking close as blocked. Anything else
+      // (hello timeout, host restart, network blip) is retryable, and a
+      // failed attempt never counts as a stable connection.
+      const error = dialed.error;
+      if (error instanceof RemoteConnectError && error.blocked) {
+        // A blocking close names itself through the classifier. A
+        // blocking failure with no close code (a refused ticket mint)
+        // names itself in the error.
+        const verdict = classifyClose(error.code) ?? {
+          reason: "refused" as const,
+          message: error.message,
+        };
+        return { kind: "blocked", ...verdict };
+      }
+      return { kind: "backoff", resetLadder: false };
+    }
+    const connection = dialed.connection;
+    const connectedAt = yield* Clock.currentTimeMillis;
+    setStatus({
+      phase: "connected",
+      remoteDeviceId: connection.remoteDeviceId,
+      remoteAppVersion: connection.remoteAppVersion,
+    });
+    options.onConnection?.(connection);
+    // Hold the socket until it drops. stop() interrupts the hold, and
+    // the interruption closes the socket, so no orphan stays live.
+    const code = yield* Deferred.await(closed).pipe(
+      Effect.onInterrupt(() =>
+        Effect.sync(() => {
+          connection.close();
+        }),
+      ),
+    );
+    options.onConnection?.(null);
+    const verdict = classifyClose(code);
+    if (verdict !== null) return { kind: "blocked", ...verdict };
+    const openMs = (yield* Clock.currentTimeMillis) - connectedAt;
+    return { kind: "backoff", resetLadder: openMs >= STABLE_CONNECTION_MS };
+  });
+
+  // The loop: attempt, then either end blocked or sleep one rung and
+  // go again. The rung is local to the loop, so a new start() begins
+  // at the bottom.
+  const supervise: Effect.Effect<void> = Effect.gen(function* () {
+    let rung = 0;
+    while (true) {
+      const outcome = yield* attempt;
+      if (outcome.kind === "blocked") {
+        // Terminal until inputs change: the owner drops and recreates
+        // the supervisor when the url or token changes, which is what
+        // unblocks.
+        setStatus({
+          phase: "blocked",
+          reason: outcome.reason,
+          message: outcome.message,
+        });
+        return;
+      }
+      if (outcome.resetLadder) rung = 0;
+      const delayMs = backoffDelayMs(BACKOFF_LADDER_MS, rung);
+      rung += 1;
+      setStatus({ phase: "backoff", attempt: rung, delayMs });
+      yield* Effect.sleep(delayMs);
+    }
+  });
 
   return {
     start(): void {
-      if (running) return;
-      running = true;
-      attempt = 0;
-      attemptConnect();
+      if (fiber !== null) return;
+      fiber = runtime.runFork(supervise);
     },
-    stop(): void {
-      if (!running && status.phase === "stopped") return;
-      running = false;
-      clearRetry();
-      if (connection !== null) {
-        connection.close();
-        connection = null;
-      }
+    async stop(): Promise<void> {
+      if (fiber === null && status.phase === "stopped") return;
+      const running = fiber;
+      fiber = null;
+      if (running !== null) await runtime.runPromise(Fiber.interrupt(running));
       options.onConnection?.(null);
       setStatus({ phase: "stopped" });
     },
+    status: () => status,
   };
 }
