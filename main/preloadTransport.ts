@@ -20,7 +20,7 @@ import type { InvokeEnvelope } from "@shared/ipc/wireError";
 // ipcMain.handle resolves the envelope itself, so a rejection here is
 // Electron's own (no handler registered for the channel, a payload
 // that failed to clone). ipcRenderer.invoke wraps it as "Error
-// invoking remote method '<channel>': Error: <message>"; the wrapper
+// invoking remote method '<channel>': Error: <message>". The wrapper
 // is minted here and nowhere else, so it is removed here and nowhere
 // else. The second group is the error's class name, whatever it is.
 const INVOKE_WRAPPER = /^Error invoking remote method '[^']*': (?:\w+: )?/;

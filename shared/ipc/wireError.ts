@@ -1,6 +1,6 @@
 // How a typed error crosses a wire. A handler raises an Effect tagged
-// error (shared/errors.ts); the serving side encodes its tag and
-// JSON-safe fields beside the message; the calling side rebuilds a
+// error (shared/errors.ts). The serving side encodes its tag and
+// JSON-safe fields beside the message. The calling side rebuilds a
 // WireError that carries the same tag and fields, so the matchers in
 // shared/errors.ts behave identically on every wire and on both sides
 // of it.
@@ -56,7 +56,7 @@ const isJsonValue = Schema.is(Schema.Json);
 // one failure into an answer the caller never receives.
 export const MAX_WIRE_FIELD_CHARS = 4_096;
 
-// A string field is cut to the bound; a nested value rides only when
+// A string field is cut to the bound. A nested value rides only when
 // its JSON is within it (no catalogued error nests anything, and a
 // peer's rebuilt error could nest a great deal), else it is left out.
 function bounded(value: unknown): { keep: boolean; value: unknown } {
@@ -164,7 +164,7 @@ export class WireError extends Error {
 
 // The Electron wire's answer shape. ipcMain.handle resolves one of
 // these instead of rejecting, because contextBridge copies a thrown
-// Error as message and stack only, dropping the tag and fields; the
+// Error as message and stack only, dropping the tag and fields. The
 // renderer unwraps it where custom properties survive.
 export type InvokeEnvelope =
   | { ok: true; value: unknown }

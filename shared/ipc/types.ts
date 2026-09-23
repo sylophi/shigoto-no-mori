@@ -18,7 +18,7 @@ type BroadcastKeysOf<C extends Contract> = {
 }[keyof C];
 
 // Inputs flow through the codec's decode. Producers (renderer client,
-// broadcast caller) provide the wire shape (a Schema's Encoded);
+// broadcast caller) provide the wire shape (a Schema's Encoded).
 // consumers (handler, broadcast subscriber) see the decoded shape (its
 // Type). For plain object schemas the two collapse, but they diverge
 // for defaults and transforms.

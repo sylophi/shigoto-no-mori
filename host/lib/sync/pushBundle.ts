@@ -118,7 +118,7 @@ type PushBundlePeer = Pick<
 
 // The push in two steps: the bundle is built into a temp dir this
 // fiber owns (scopedFiles.ts), gone the moment the staging ends
-// however it ended, and every chunk is sent; then the finish, which
+// however it ended, and every chunk is sent, then the finish, which
 // the peer answers by unpacking the bundle under refs/shigomori/. The
 // finish is handed back rather than run here so a caller can run it
 // inside the same uninterruptible step as the landing that consumes

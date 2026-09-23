@@ -852,7 +852,7 @@ async function main() {
         "a temp bundle outlived its departed caller by a second",
       );
       // The held chunks go through now. A pull that had only parked
-      // (rather than ended) would take them and land; an ended one
+      // (rather than ended) would take them and land. An ended one
       // lands nothing, however long the chunks are allowed.
       for (const release of held.splice(0)) release();
       await delay(500);

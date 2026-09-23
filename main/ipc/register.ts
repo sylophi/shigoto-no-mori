@@ -622,7 +622,7 @@ export async function startControlHost(): Promise<void> {
 
 // Synchronous: unpublishes first, so a CLI run that starts meanwhile
 // reads "not running" instead of dialing a closing listener. The quit
-// path gets the same stop from the control server's layer finalizer;
+// path gets the same stop from the control server's layer finalizer.
 // this is for a data-dir move, whose control.json must not carry this
 // process's address into the new folder.
 export function stopControlHost(): void {

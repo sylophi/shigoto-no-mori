@@ -171,7 +171,7 @@ const GATEWAY_RETRY_MS = 30_000;
 // and to the renderer's changed signal exactly like the port-forward
 // engine. The gateway binds as its layer is built, retrying inside the
 // layer's scope, so the retry dies with the runtime instead of running
-// on an untracked timer; the daemon starts from main/index.ts once
+// on an untracked timer. The daemon starts from main/index.ts once
 // that first attempt settled, and both stop when the runtime is
 // disposed. A boot without the engine binary (a dev run before
 // file-sync:build) reports "unavailable" and keeps retrying.
@@ -443,7 +443,7 @@ export const MirrorEngineLive = Layer.effectContext(
 // daemon request cannot hold the sign-out: the hub refresh that
 // follows closes the sessions the sweep's terminates ride. Past the
 // bound the sign-out stops waiting (the timer is the fiber's, gone with
-// it); the terminates already sent are the daemon's to answer.
+// it). The terminates already sent are the daemon's to answer.
 function endAllMirrorsBounded(): Promise<unknown> {
   return hostRuntime().runPromise(
     Effect.promise(() =>
@@ -524,7 +524,7 @@ export class AccountHandlers extends Context.Service<
     // (a sign-out, since the hub refuses a switch without one) tears
     // down what was the account's, in an order the pieces need: the
     // mirror sweep and the config write before the windows are told
-    // (the sweep's terminates ride the sessions the hub refresh closes;
+    // (the sweep's terminates ride the sessions the hub refresh closes.
     // the windows re-read their config off the broadcast), the shared
     // settings after the refresh (a peer's push landing between the
     // clear and the sessions closing would refill the copy). Every step
@@ -562,7 +562,7 @@ export class AccountHandlers extends Context.Service<
           await teardownStep("dropping the shared settings", () =>
             sharedSettingsCopy.clear(),
           );
-          // The login item keeps a machine reachable TO its account;
+          // The login item keeps a machine reachable TO its account.
           // signed out it comes off, and the next sign-in puts it back.
           reconcileLaunchAtLogin();
         } else if (previous === null || previous === undefined) {
@@ -714,7 +714,7 @@ export function registerIpcHandlers(): void {
   // The CLI's cross-device verbs, on the control wire alone
   // (shared/ipc/modules/control.ts). The device registry rides the
   // stored credential and the peer reach is peerTransportVia above,
-  // the one cached session per peer everything else rides; both are
+  // the one cached session per peer everything else rides. Both are
   // provided as ControlReach (main/electron/hostImpls.ts).
   registerControlContract(controlContract, controlHandlers);
   registerContract(shigomoriContract, shigomoriHandlers);

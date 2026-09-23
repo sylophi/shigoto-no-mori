@@ -24,7 +24,7 @@
 // Typed errors: a handler's Effect tagged error answers with its
 // message AND the additive `error` field (tag plus fields,
 // shared/ipc/wireError.ts), which the client transport rebuilds as a
-// WireError the shared/errors.ts matchers read by tag; a plain Error
+// WireError the shared/errors.ts matchers read by tag. A plain Error
 // answers with the message alone, as it always has. A stand-in host
 // replays an old peer's message-only answer (still matched by its
 // text) and a new peer's answer carrying both the refusal code and the

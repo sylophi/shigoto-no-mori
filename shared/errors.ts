@@ -17,7 +17,7 @@ import { Schema } from "effect";
 import { errorFieldOf, errorMessageOf, errorTagOf } from "./errorOf.ts";
 
 // The class-free readers live in shared/errorOf.ts, effect-free so a
-// frame reader need not load effect; re-exported here so callers have
+// frame reader need not load effect. Re-exported here so callers have
 // one module to import. Extension spelled out: scripts/ imports this
 // module under plain node, which resolves no extensionless specifier.
 export {
@@ -178,7 +178,7 @@ export const isForwardConnectFailedError = taggedMatcher(
 // connection carries no byte channels, the caller's channel id is
 // already attached, or the per-connection cap is full. The message is
 // the bare reason, which is what an older peer sends as the whole
-// message; the reason names live beside the channel layer as
+// message. The reason names live beside the channel layer as
 // CHANNEL_OPEN_* in shared/ipc/socket/channels.ts.
 export const CHANNEL_OPEN_REFUSED_REASONS = [
   "no-byte-channels",
@@ -213,7 +213,7 @@ export function isChannelOpenRefused(
 
 // A forward's local listener could not bind (main/core/portForward/
 // engine.ts): the port is taken, or it is privileged. Only these two
-// errnos are typed, since a person can act on them; any other bind
+// errnos are typed, since a person can act on them. Any other bind
 // failure passes through as node said it. The messages keep node's
 // errno, which is what the fallback below matches in a message from a
 // build that passed node's error through untyped.

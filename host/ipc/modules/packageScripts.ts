@@ -80,7 +80,7 @@ export const packageScriptsHandlers: Handlers<
       defaultBranch: ctx.defaultBranch,
       notify: scriptEventNotifier(handlerCtx),
     });
-    // The script is already running; a malformed use log must not
+    // The script is already running. A malformed use log must not
     // report the run as failed.
     bumpBestEffort("packageScripts", () =>
       bumpScriptUseCount(project.id, scriptName),

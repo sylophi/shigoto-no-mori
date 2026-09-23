@@ -97,7 +97,7 @@ export function createMirrorDaemon(deps: {
   const log = deps.log ?? ((message: string) => console.warn(message));
 
   // The owner's onChange runs inside the loop's fiber and from the
-  // child's stream callbacks; a throw from it must not end the loop
+  // child's stream callbacks. A throw from it must not end the loop
   // (a defect nothing reports) or the child's reader.
   function notifyChange(): void {
     containedSync("[mirror] onChange threw", () => deps.onChange?.(), log);

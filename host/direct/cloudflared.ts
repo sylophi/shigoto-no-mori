@@ -271,7 +271,7 @@ export type CloudflaredRunnerDeps = {
   // Fired on every state transition so the owner can fan status out.
   onChange?: () => void;
   // Where the runner's fibers run. Real callers take Effect's default
-  // services; the direct-plane check passes a ManagedRuntime built on
+  // services. The direct-plane check passes a ManagedRuntime built on
   // TestClock.layer() and walks the ladders with TestClock.adjust.
   runtime?: RuntimeOf<never>;
 };
@@ -524,7 +524,7 @@ export function createCloudflaredRunner(
 
   // The readiness probe chain for a freshly spawned child: attempts on
   // the probe ladder until one passes. A child that is merely not
-  // routable yet is kept and probed on (the ladder's note); the caller
+  // routable yet is kept and probed on (the ladder's note). The caller
   // bounds the chain with the deadline. Deliberately NOT re-run after
   // "up": the child process exiting is the down signal, and a liveness
   // poll against the edge would spend a request per interval to learn

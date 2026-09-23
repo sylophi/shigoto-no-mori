@@ -3,17 +3,17 @@
 //
 // - the global-config write lock (a Semaphore of one) serializes two
 //   concurrent read-modify-writes so neither update is lost, and the
-//   same two writes without it do lose one (so the check can fail);
+//   same two writes without it do lose one (so the check can fail).
 // - onGlobalConfigChange (a PubSub subscriber per listener) fires on
 //   every invalidate, survives a throwing sibling, and stops on
-//   unsubscribe;
+//   unsubscribe.
 // - registry.json keys decode against their schemas: an unknown key,
-//   and an unknown field on a project row, survive a read-modify-write;
+//   and an unknown field on a project row, survive a read-modify-write.
 //   a malformed file or value fails the strict read, refuses the write
-//   and reads as the fallback on the lenient one; a malformed device id
-//   reads as absent so it can be re-minted; a mangled mark set degrades
-//   on its display reads and refuses its writes; a stray collapsed
-//   entry costs only itself;
+//   and reads as the fallback on the lenient one. A malformed device id
+//   reads as absent so it can be re-minted. A mangled mark set degrades
+//   on its display reads and refuses its writes. A stray collapsed
+//   entry costs only itself.
 // - readGlobalConfigFresh bypasses the 5 s TTL that readGlobalConfig
 //   serves from.
 //
@@ -235,7 +235,7 @@ async function main() {
     async () => {
       // The shelf's display reads (has, readSet) answer empty, the
       // way the CLI's readRegistryMarkSet does, so a worktree list can
-      // still be built; the writes stay on the strict read and refuse.
+      // still be built. The writes stay on the strict read and refuse.
       // Only ids marked true count.
       writeJson(registryPath, { [SHELVED_KEY]: { w1: 1 } });
       const shelf = makeRegistryIdSet(SHELVED_KEY);

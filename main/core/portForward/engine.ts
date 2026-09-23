@@ -14,7 +14,7 @@
 // file owns the listeners, the per-device conn cap and the forward
 // registry.
 //
-// Lifetimes are Effect scopes. The engine has one; each forward is a
+// Lifetimes are Effect scopes. The engine has one. Each forward is a
 // child scope holding its listener, and each accepted conn a child of
 // its forward's scope holding its cap permit and its bridged socket. So
 // stopForward is closing the forward's scope (the listener closes, and

@@ -78,7 +78,7 @@ export const receiveChunks = (
         );
         const data = Buffer.from(chunk.dataB64, "base64");
         // A peer that stops making progress or overshoots its own
-        // announced size is broken; bail instead of looping/growing.
+        // announced size is broken. Bail instead of looping/growing.
         if (!chunk.eof && data.length === 0) {
           return yield* Effect.fail(
             new Error("bundle transfer stalled (empty non-final chunk)"),
@@ -183,7 +183,7 @@ export const fetchBundle = (
         // transfer was minted. On the success path the host already
         // dropped the transfer at eof. Best effort: abort is idempotent
         // and the idle sweep backstops it. A failure waits for the
-        // answer; a caller that left does not wait on the peer.
+        // answer. A caller that left does not wait on the peer.
         const pendingStart = yield* Effect.acquireRelease(
           Effect.sync(() =>
             peer

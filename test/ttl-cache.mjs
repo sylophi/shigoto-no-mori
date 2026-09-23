@@ -1,9 +1,9 @@
 // Durable proof for the TTL caches (host/lib/util/ttlCache.ts) over
 // Effect's Cache: the rules the config stores rely on. Gets that miss
-// while a load runs share that load; a rejection is never cached; an
+// while a load runs share that load. A rejection is never cached. An
 // invalidate during a load discards that load's result (and the value
-// cache's peek() never adopts it); expire() keeps peek() serving while
-// the next get() reloads; a value past its TTL reloads. Real time,
+// cache's peek() never adopts it). Expire() keeps peek() serving while
+// the next get() reloads. A value past its TTL reloads. Real time,
 // short TTLs.
 //
 // Runs under test/lib/register-ts-alias.mjs. Run: pnpm test ttl-cache.
@@ -199,7 +199,7 @@ async function main() {
           return `${key}#${lookups}`;
         });
       const flight = singleFlight(lookup);
-      // A burst shares one lookup; the next caller after it looks up
+      // A burst shares one lookup. The next caller after it looks up
       // again, since a settled single flight is never served twice.
       const [a, b] = await Promise.all([
         Effect.runPromise(flight("k")),
@@ -209,7 +209,7 @@ async function main() {
       assert.equal(b, "k#1");
       assert.equal(lookups, 1, "a burst spawned two lookups");
       assert.equal(await Effect.runPromise(flight("k")), "k#2");
-      // The lone caller leaves; the lookup it started is being torn
+      // The lone caller leaves. The lookup it started is being torn
       // down (40 ms of it cannot be interrupted). A caller arriving in
       // that window is not handed the interruption: it looks up anew.
       const abandoned = Effect.runFork(flight("k"));

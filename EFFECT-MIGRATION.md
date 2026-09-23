@@ -55,7 +55,7 @@ should start. All paths are relative to the repo root.
 
 ### Errors are message strings
 
-- 142 `throw new Error(...)` sites in `main/` and `host/`; 106 calls to
+- 142 `throw new Error(...)` sites in `main/` and `host/`. 106 calls to
   `errorMessageOf`.
 - Electron IPC keeps only the message, so `shared/errors.ts` recognizes
   errors by text: `isEntityGoneError` (`"Unknown project:"`),
@@ -125,8 +125,8 @@ should start. All paths are relative to the repo root.
 
 | Primitive | Hand-rolled copies |
 |---|---|
-| Semaphore / mutex | `createLimiter(n)` (`shared/util/limit.ts`) used as a 1-slot mutex in three lifecycles and as a 3/6/8 cap elsewhere; `withGlobalConfigWriteLock` promise chain; per-key `indexQueues`; `MAX_IN_FLIGHT_PER_PEER` counters |
-| Backoff schedule | `BACKOFF_LADDER_MS` + `backoffDelayMs` (`shared/remote/supervisor.ts`), reused by the direct keeper, extended by `TUNNEL_BACKOFF_LADDER_MS` and `RESTART_LADDER_MS`; the updater's linear backoff; the cloudflared probe ladders with deadline and slow-down |
+| Semaphore / mutex | `createLimiter(n)` (`shared/util/limit.ts`) used as a 1-slot mutex in three lifecycles and as a 3/6/8 cap elsewhere. `withGlobalConfigWriteLock` promise chain. Per-key `indexQueues`. `MAX_IN_FLIGHT_PER_PEER` counters |
+| Backoff schedule | `BACKOFF_LADDER_MS` + `backoffDelayMs` (`shared/remote/supervisor.ts`), reused by the direct keeper, extended by `TUNNEL_BACKOFF_LADDER_MS` and `RESTART_LADDER_MS`. The updater's linear backoff. The cloudflared probe ladders with deadline and slow-down |
 | Test clock | `SupervisorClock` interface and `fakeClock()` in `test/lib/checkKit.mjs:193-219` |
 | Status ref with change stream | `let status` + `setStatus` + `onChange` in every factory (`cloudflared.ts:427`, `daemon.ts:92`, `supervisor.ts:176`) |
 | PubSub | `peerPushListeners`, `mutationSettledListeners`, `configChangeListeners`, `createSubscriberRegistry`, `KeyedSubscribers` |
@@ -179,8 +179,8 @@ Packages:
 | Package | Where | Why |
 |---|---|---|
 | `effect` | root, and `hub/` once the shared protocol schemas move (phase 4) | core: Effect, Layer, Schema, Schedule, Stream, Scope |
-| `@effect/platform-node` | root | `NodeServices.layer` for `ChildProcessSpawner`, `FileSystem`, `Path`; `NodeSocket` if the ws adapter moves |
-| `@effect/vitest` | not now | the repo has no root test framework; see section 4.9 |
+| `@effect/platform-node` | root | `NodeServices.layer` for `ChildProcessSpawner`, `FileSystem`, `Path`. `NodeSocket` if the ws adapter moves |
+| `@effect/vitest` | not now | the repo has no root test framework. See section 4.9 |
 
 ## 4. Target architecture
 
@@ -220,7 +220,7 @@ export const runtime = ManagedRuntime.make(AppLive)
   signal.
 - The `host-boundary` test keeps its rules. Effect core is
   platform-neutral, so `shared/` may import `effect` but not
-  `@effect/platform-node`; only `host/` and `main/` may.
+  `@effect/platform-node`. Only `host/` and `main/` may.
 
 ### 4.2 Services and Layers
 
@@ -246,7 +246,7 @@ export class Git extends Context.Service<Git, {
 The `set*Impl` seams become services with two layers each: the real one
 in `main/electron/`, and the layer tests already build by hand. The
 `test/host-boundary.mjs` rule that `host/` never imports Electron stays
-true because `host/` only declares the service; `main/` provides it.
+true because `host/` only declares the service. `main/` provides it.
 
 Service inventory, grouped by the file that owns the logic today:
 
@@ -267,7 +267,7 @@ Service inventory, grouped by the file that owns the logic today:
 | `GitWatcher`, `StateWatcher` | `main/core/gitWatcher.ts`, `main/electron/stateWatcher.ts` | main |
 | `BackgroundFetch`, `Updater` | `main/electron/fetch.ts`, `updater.ts` | main |
 | `AccountService`, `AccountStore` | `shared/account/*` | shared core, main and web adapters |
-| `Clock`-dependent things | `SupervisorClock` | Effect's built-in `Clock`; tests use `TestClock` |
+| `Clock`-dependent things | `SupervisorClock` | Effect's built-in `Clock`. Tests use `TestClock` |
 
 ### 4.3 Errors
 
@@ -315,7 +315,7 @@ rule (new fields are optional, readers fall back to message text).
 | Electron IPC (`main/preloadTransport.ts`) | rejection keeps message only | Handlers resolve an envelope `{ ok: true, value } \| { ok: false, error: EncodedTaggedError, message }`. The preload passes it through unchanged (contextBridge copies a thrown Error as message and stack only, so the preload cannot rebuild it) and the renderer builds `window.api` from the raw bridge and rebuilds the error on its side (`renderer/electronApi.ts`). Same process, both sides ship together, so no skew concern. |
 | LAN and direct websocket (`shared/ipc/socket/frames.ts`) | `res { ok:false, message, code? }` | Add optional `error` (the encoded tagged error). Readers prefer `error`, fall back to `code`, then to `message`. |
 | Hub broker (`shared/hub/link.ts`) | message only | Same `error` field on the broker's `res`. |
-| Control wire (`main/core/control/server.ts`) | `code` for `ControlError` only | `ControlError` becomes a tagged error with `code` as a field; the `error` field is added; the Go CLI keeps reading `code`. |
+| Control wire (`main/core/control/server.ts`) | `code` for `ControlError` only | `ControlError` becomes a tagged error with `code` as a field. The `error` field is added. The Go CLI keeps reading `code`. |
 | Go CLI NDJSON (`host/ipc/cliDelegate.ts`) | `{ ok:false, error, code }` documents | Unchanged. `cliDelegate` maps `code` to tagged errors, which it half does today (`unknown-project`, `unknown-worktree`). |
 
 The `WireError` schema is a `Schema.Union` of every error declared in
@@ -337,17 +337,17 @@ positive statement that is easy to audit.
 |---|---|---|
 | `createLimiter(1)` as lifecycle mutex | `Semaphore.make(1)` and `withPermits(1)` | `refresh`/`stop` serialization in the hub core, cloudflared, socket host |
 | `createLimiter(3/6/8)` | `Effect.forEach(items, f, { concurrency: n })` | hygiene probes, worktree rows, dir walks |
-| `withGlobalConfigWriteLock`, `indexQueues` | one `Semaphore` per config store; a `Semaphore` keyed by worktree via `RcMap` | |
+| `withGlobalConfigWriteLock`, `indexQueues` | one `Semaphore` per config store. A `Semaphore` keyed by worktree via `RcMap` | |
 | in-flight Maps (`fetchInflight`, icon `inflight`, `enrollInFlight`) | `Effect.cached` or a `Cache` with `capacity` and `timeToLive` | `Cache` also replaces `ttlMapCache`/`ttlValueCache` and their generation counters |
 | do/while `pending` rerun loops | a `Queue.sliding(1)` drained by one forked fiber | `gitFollow.trigger`, `persistCache`, `updaterBridge.consume` |
 | listener Sets | `PubSub` exposed as `Stream` | `peerPushListeners`, `mutationSettledListeners`, `configChangeListeners` |
 | `status` + `setStatus` + `onChange` | `SubscriptionRef` with `SubscriptionRef.changes` | supervisor, tunnel, daemon, updater, socket host |
-| `BACKOFF_LADDER_MS` + `backoffDelayMs` + stable reset | `Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("16 seconds")])`, wrapped in `Effect.retry`; the "stable for 30 s resets the ladder" rule is a `Schedule` reset on success | tunnel and daemon extend it with `Schedule.min` against a longer cap |
+| `BACKOFF_LADDER_MS` + `backoffDelayMs` + stable reset | `Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("16 seconds")])`, wrapped in `Effect.retry`. The "stable for 30 s resets the ladder" rule is a `Schedule` reset on success | tunnel and daemon extend it with `Schedule.min` against a longer cap |
 | `setTimeout` deadlines, `Promise.race`, `AbortSignal.timeout` | `Effect.timeout`, `Effect.race` | the loser is interrupted, which closes the leak class in section 2 |
 | `fs.watch` + debounce timer | `Stream.callback` then `Stream.debounce("300 millis")`, forked in the layer scope | git watcher, state watcher, index-file watcher |
-| PTY output 16 ms / 64 KiB batching | `Stream.groupedWithin(64 KiB worth of chunks, "16 millis")` | node-pty stays; only the batching moves |
+| PTY output 16 ms / 64 KiB batching | `Stream.groupedWithin(64 KiB worth of chunks, "16 millis")` | node-pty stays. Only the batching moves |
 | CLI NDJSON | `spawner.spawn` then `Stream.decodeText`, `Stream.splitLines`, `Stream.mapEffect(Schema.decodeUnknown(Doc))` | replaces `lineSplitter` and the `JSON.parse(line) as X` casts |
-| child processes (`git`, `gh`, `cloudflared`, `file-sync`, `sm`) | `ChildProcessSpawner` from `effect/unstable/process`; `spawner.string`, `spawner.lines`, `spawner.spawn` with `Effect.scoped` | timeouts become `Effect.timeout`; the process is killed on interruption. Detached process-group kills (`killTrees`) stay as an explicit finalizer where the tree matters |
+| child processes (`git`, `gh`, `cloudflared`, `file-sync`, `sm`) | `ChildProcessSpawner` from `effect/unstable/process`. `spawner.string`, `spawner.lines`, `spawner.spawn` with `Effect.scoped` | timeouts become `Effect.timeout`. The process is killed on interruption. Detached process-group kills (`killTrees`) stay as an explicit finalizer where the tree matters |
 | the quit sequence | `runtime.dispose()` | order comes from Layer dependencies |
 | `fakeClock()` | `TestClock` from `effect/testing` | `TestClock.adjust("16 seconds")` drives a `Schedule` deterministically |
 
@@ -367,11 +367,11 @@ Roughly 400 zod schemas exist, 284 of them top-level in `shared/`.
 - Current zod idioms have direct equivalents: `z.strictObject` is
   `strictStruct` (`shared/schemas/strict.ts`: v4 has no per-schema
   strictness, and `onExcessProperty: "error"` is only a decode-call
-  option, so the helper refuses an undeclared key by name);
+  option, so the helper refuses an undeclared key by name).
   `discriminatedUnion("t", ...)` is `Schema.Union` of `Schema.Struct`
-  with `Schema.Literal` tags (or `Schema.TaggedStruct`); `.refine` is
-  `Schema.check(Schema.filter(...))`; `.max()` bounds are
-  `Schema.check(Schema.maxLength(n))`; the `SharedSettingsDocSchema`
+  with `Schema.Literal` tags (or `Schema.TaggedStruct`). `.refine` is
+  `Schema.check(Schema.filter(...))`. `.max()` bounds are
+  `Schema.check(Schema.maxLength(n))`. The `SharedSettingsDocSchema`
   per-entry lenient transform is a `Schema.decodeTo` with a
   `SchemaGetter`.
 - Ids get brands: `HexId32`, `DeviceId`, `WorktreeId`, `ProjectId`.
@@ -382,7 +382,7 @@ Roughly 400 zod schemas exist, 284 of them top-level in `shared/`.
   instance checks.
 - `hub/` compiles `shared/hub/protocol.ts`, so the Worker gains `effect`
   as a dependency for Schema alone. The core package tree-shakes to
-  about 15 KB with Schema. The Worker's own routing stays plain; there
+  about 15 KB with Schema. The Worker's own routing stays plain. There
   is no requirement to write the Worker in Effect.
 - `Schema.toStandardSchemaV1` exists if any third-party surface wants a
   Standard Schema object during the transition. None does today.
@@ -390,7 +390,7 @@ Roughly 400 zod schemas exist, 284 of them top-level in `shared/`.
 zod and Schema coexist during phase 4 only through a private
 `Codec` interface in `contract.ts` (`decodeUnknown` and `encode`
 functions) that both can satisfy. It is deleted with zod at the end of
-the phase; it is not a permanent compatibility layer.
+the phase. It is not a permanent compatibility layer.
 
 ### 4.7 Observability
 
@@ -399,7 +399,7 @@ the phase; it is not a permanent compatibility layer.
   The default logger prints the same bracketed line, so the log format
   the dev workflow reads does not change.
 - Warn-once sets, transition-only logs and modulo throttles stay as
-  small helpers; Effect has no built-in "log once per state entry".
+  small helpers. Effect has no built-in "log once per state entry".
 - `Effect.fn("Git.run")` gives every service method a span. No exporter
   is wired in this migration. If one is ever wanted,
   `effect/unstable/observability` Otlp layers slot in without touching
@@ -418,7 +418,7 @@ the phase; it is not a permanent compatibility layer.
   duplicated `enrollInFlight`/`signOutInFlight` logic moves into the
   shared `AccountService` as `Effect.cached` and disappears from both
   bindings.
-- `lab/bridge.ts` stays a fixture `window.api`; it only changes with the
+- `lab/bridge.ts` stays a fixture `window.api`. It only changes with the
   schema walk in 4.6.
 
 ### 4.9 Testing
@@ -451,7 +451,7 @@ real git, the real CLI) and never mock modules. That style is kept:
 - **Rewriting the hub Worker's routing in Effect.** It is 1.6k lines,
   tested inside workerd, and orchestration only. It takes `effect` for
   Schema in phase 4 and nothing else.
-- **Replacing `defineContract` with `RpcGroup`.** Deferred; see phase 5.
+- **Replacing `defineContract` with `RpcGroup`.** Deferred. See phase 5.
 - **Telemetry exporters, metrics.** Not built.
 - **Replacing node-pty, `ws`, or the `Atomics.wait` cross-process lock.**
   They stay. Effect wraps them.
@@ -493,10 +493,10 @@ Scope:
   naming (`layer`, `layerTest`), where errors live, and the `unstable`
   import rule (only in adapter files).
 - Confirm `oxlint` and `oxfmt` accept generator-heavy code with no rule
-  changes (the spike suggests they do; verify on the real tree).
+  changes (the spike suggests they do. Verify on the real tree).
 
-Exit: type-check and all proofs green; bundle builds for main, preload
-and web; app boots. Nothing else changes.
+Exit: type-check and all proofs green. Bundle builds for main, preload
+and web. App boots. Nothing else changes.
 
 ### Phase 1: Typed errors and wire encoding
 
@@ -514,7 +514,7 @@ Scope:
   stderr }`, `GitOutputTruncated`, `CliFailed { code, message }`,
   `PortInUse { port }`, `PortDenied { port }`.
 - `WireError` union and the additive `error` field on the socket,
-  broker and control `res` frames; the envelope on the Electron wire.
+  broker and control `res` frames. The envelope on the Electron wire.
 - `errorMessageOf` stays. `errorCodeOf` becomes `errorTagOf`.
 - Renderer matchers read `_tag` first, message second.
 - `host/lib/git/core.ts` throws `GitError` with `stderr` as a field.
@@ -526,8 +526,8 @@ Deletes: message-text construction in `shared/errors.ts`, the
 `noHandlerMessage` text comparison in `link.ts`, the `INVOKE_WRAPPER`
 regex in `preloadTransport.ts`.
 
-Exit: every `shared/errors.ts` matcher has a `_tag` path; `socket-host`,
-`hub-link`, `control` proofs assert the `error` field round-trips;
+Exit: every `shared/errors.ts` matcher has a `_tag` path. `socket-host`,
+`hub-link`, `control` proofs assert the `error` field round-trips.
 `throw new Error` count in `main/`+`host/` drops by the number of
 catalogued cases (target: under 100 from 142).
 
@@ -539,33 +539,33 @@ inject their dependencies, converting each to a `Context.Service` with a
 
 1. `shared/remote/supervisor.ts` and `shared/hub/connection.ts` with
    `host/hub/connection.ts` and `web/hub/connection.ts`. The
-   `SupervisorStatus` union stays as the value of a `SubscriptionRef`;
-   the ladder becomes a `Schedule`; `refresh`/`stop` become
-   `Semaphore.withPermits(1)`; `dial()`'s `settled`/`established`/
+   `SupervisorStatus` union stays as the value of a `SubscriptionRef`.
+   the ladder becomes a `Schedule`. `refresh`/`stop` become
+   `Semaphore.withPermits(1)`. `dial()`'s `settled`/`established`/
    `ownerClosed`/`dead` flags become one scoped `Deferred` plus
    interruption. `fakeClock` becomes `TestClock` in `hub-link` and
    `web-hub`.
 2. `shared/hub/directKeeper.ts`, `directDial.ts`, `directPlane.ts`,
    `bridgeHandlers.ts`. Per-peer state becomes a `FiberMap` keyed by
-   device id; "park on terminal error" is `Schedule.while` on the
-   error; the candidate race is `Effect.raceAll` with the serialized
-   hello as a `Semaphore`; the bridge's promise cache is a `Cache`.
+   device id. "park on terminal error" is `Schedule.while` on the
+   error. The candidate race is `Effect.raceAll` with the serialized
+   hello as a `Semaphore`. The bridge's promise cache is a `Cache`.
 3. `host/direct/cloudflared.ts`. Restart ladder, probe ladders,
-   deadline and slow-down are Schedules; the pid-file orphan reaper is
-   a finalizer; retry-versus-park is a `catchTag` table.
+   deadline and slow-down are Schedules. The pid-file orphan reaper is
+   a finalizer. Retry-versus-park is a `catchTag` table.
 4. `main/core/mirror/daemon.ts`, `gateway.ts`, `history.ts`,
    `host/mirror/gitFollow.ts`. The untracked gateway retry timer becomes
    `Effect.retry` inside the layer scope, which closes leak 1.
 5. `main/core/control/server.ts`, `host/socket/server.ts`, the port
-   forward engine. Listeners are `Effect.acquireRelease`; per-connection
-   state is a scope; the liveness sweep is a forked `Schedule.spaced`.
+   forward engine. Listeners are `Effect.acquireRelease`. Per-connection
+   state is a scope. The liveness sweep is a forked `Schedule.spaced`.
 6. `main/core/gitWatcher.ts`, `main/electron/stateWatcher.ts`,
    `host/mirror/gitState.ts` index watcher, `main/electron/fetch.ts`,
    `main/electron/updater.ts`. Watchers are `Stream.callback` plus
-   `Stream.debounce`; intervals are `Schedule.spaced` forked in scope.
+   `Stream.debounce`. Intervals are `Schedule.spaced` forked in scope.
    Closes leaks 2 and 3.
 7. `main/ipc/register.ts` and `main/ipc/handlers.ts` compose `AppLive`
-   from the above; `main/index.ts` boot becomes `runtime.runPromise` of
+   from the above. `main/index.ts` boot becomes `runtime.runPromise` of
    a boot effect and quit becomes `runtime.dispose()`. `set*Impl` slots
    for these runners are deleted.
 
@@ -576,7 +576,7 @@ quit sequence, the listener Sets those files own.
 
 Exit: the leak list in section 2 is closed for items 1, 2, 3, 5 and 7;
 `direct-plane`, `hub-link`, `web-hub`, `port-forward`, `control`,
-`mirror` proofs pass with `TestClock`; a fresh count shows no
+`mirror` proofs pass with `TestClock`. A fresh count shows no
 `setTimeout`/`setInterval` in the converted files except inside the
 `Stream.callback` adapters.
 
@@ -585,7 +585,7 @@ Exit: the leak list in section 2 is closed for items 1, 2, 3, 5 and 7;
 Scope:
 
 - `Handlers<M, Ctx>` in `shared/ipc/types.ts` accepts
-  `Effect.Effect<Out, E, R>` as a handler return; `wrapContractCall`
+  `Effect.Effect<Out, E, R>` as a handler return. `wrapContractCall`
   runs it with `runtime.runPromise(effect, { signal: ctx.signal })`,
   encodes a typed failure as `WireError`, and rethrows a defect. The
   Promise-returning form stays accepted during the phase so modules
@@ -597,8 +597,8 @@ Scope:
 - Host services convert module by module. Suggested order by pain:
   `Git` (adds timeouts and interruption, closes leak 4), `CliRunner`
   (NDJSON as a Stream), `GlobalConfig`/`RegistryStore` (semaphores
-  replace promise chains; registry reads gain a schema), `ScriptRunner`
-  (batching as a Stream; `withDeleteInflight` as a scoped semaphore),
+  replace promise chains. Registry reads gain a schema), `ScriptRunner`
+  (batching as a Stream. `withDeleteInflight` as a scoped semaphore),
   then the orchestrations in `host/ipc/modules/sync.ts`, `mirror.ts`,
   `control.ts`, `worktrees.ts`, which is where ignored `ctx.signal`
   costs the most (leak 6). `oneShot.waitSettled` becomes
@@ -610,9 +610,9 @@ Deletes: `createLimiter`, `coalesce`, `ttlCache`, `withGlobalConfigWriteLock`,
 `indexQueues`, the in-flight Maps, `lineSplitter`, `waitWithTimeout`,
 `within`, `endAllMirrorsBounded`, the remaining `set*Impl` slots.
 
-Exit: `ctx.signal` is consumed by every handler (by construction);
+Exit: `ctx.signal` is consumed by every handler (by construction).
 `shared/util/limit.ts` and `host/lib/util/{coalesce,ttlCache}.ts` are
-gone; `sync-transfer` and `control` proofs include an interruption
+gone. `sync-transfer` and `control` proofs include an interruption
 case (a caller departs mid-transfer and the temp file is gone
 immediately, not after the 10 minute idle sweep).
 
@@ -620,7 +620,7 @@ immediately, not after the 10 minute idle sweep).
 
 Scope, in this order:
 
-1. `contract.ts` takes `Schema.Top`; the private `Codec` shim admits
+1. `contract.ts` takes `Schema.Top`. The private `Codec` shim admits
    zod for the duration.
 2. `shared/schemas/*` port file by file, smallest first
    (`fs`, `shell`, `terrier`, `ports`, `runtime`, `launchers`,
@@ -634,8 +634,8 @@ Scope, in this order:
    decode through Schema, including the ones read by cast today.
 6. Remove zod from both `package.json` files and delete the shim.
 
-Exit: `grep -r "from \"zod\""` is empty; `web-bridge`, `socket-host`
-(read-surface golden unchanged), `shared-settings`, `hub` proofs pass;
+Exit: `grep -r "from \"zod\""` is empty. `web-bridge`, `socket-host`
+(read-surface golden unchanged), `shared-settings`, `hub` proofs pass.
 the `SocketStatusMatchesSupervisor` type trick in `hub.ts` is replaced
 by deriving the type from the schema.
 
@@ -646,12 +646,12 @@ hand:
 
 - **`effect/rpc` for the contract layer.** The mapping is clean on
   paper: each `InvokeDef` is an `Rpc.make` with `payload`, `success`,
-  `error`; `remote`/`mutating`/`movesHostState`/`tracksProjectUsage` are
-  Rpc annotations; the grant gate and usage tracking are
-  `RpcMiddleware`; the Electron and hub-broker wires implement the
+  `error`. `remote`/`mutating`/`movesHostState`/`tracksProjectUsage` are
+  Rpc annotations. The grant gate and usage tracking are
+  `RpcMiddleware`. The Electron and hub-broker wires implement the
   `RpcServer.Protocol` and `RpcClient.Protocol` service interfaces
-  (`run`, `send`, `end`, `disconnects`, `clientIds`); the LAN and
-  direct listeners use `layerProtocolSocketServer`; byte channels stay
+  (`run`, `send`, `end`, `disconnects`, `clientIds`). The LAN and
+  direct listeners use `layerProtocolSocketServer`. Byte channels stay
   a separate multiplexer as they are now. The cost is rewriting
   `buildClient`, `buildApi`, the frame schemas, the golden test and the
   lab bridge at once. Do it only if the phase 3 handler wrapper turns
@@ -684,9 +684,9 @@ read `node_modules/effect/AGENTS.md`, `main/runtime.ts` with an empty
 
 **Phase 1** landed. Every error a renderer or peer matches on is a
 `Schema.TaggedError` with a tag constant beside its matcher in
-`shared/errors.ts`; git raises `GitError`, `GitOutputTruncated` and
-`GitSpawnError` from `host/lib/git/core.ts`; the CLI delegate raises
-`CliFailed`; `ControlError` carries its code as a field. The wire
+`shared/errors.ts`. Git raises `GitError`, `GitOutputTruncated` and
+`GitSpawnError` from `host/lib/git/core.ts`. The CLI delegate raises
+`CliFailed`. `ControlError` carries its code as a field. The wire
 codec is `shared/ipc/wireError.ts`: an additive `error` field beside
 `message` on the socket, hub and control frames, and an envelope on the
 Electron wire. Two deviations from the plan:
@@ -709,7 +709,7 @@ a wire, and their modules are converted in Phase 2.
 the hub dial, the direct keeper, the cloudflared runner, the mirror
 daemon, the git watcher, the state watcher, the control server, the
 socket host and the port-forward engine (with its bridge) run as
-Effect fibers under scopes; interruption is the cancel path; the clock
+Effect fibers under scopes. Interruption is the cancel path. The clock
 seams are gone and their proofs run under `TestClock`. Step 7: `AppLive`
 lives in `main/runtime.ts` (section 4.1), every `set*Impl` slot is
 gone, the runners are Layers (`SocketHost`, `DirectListener`,
@@ -718,7 +718,7 @@ gone, the runners are Layers (`SocketHost`, `DirectListener`,
 `MirrorDaemon`, `MirrorHistory`, `GitFollower`, `AccountHandlers`,
 `PortForwardEngineLive`, `BackgroundFetchLive`, `UpdaterLive`,
 `HostImplsLive`), and the normal quit awaits `runtime.dispose()` beside
-the script reap inside the existing 15 s backstop; the install/relaunch
+the script reap inside the existing 15 s backstop. The install/relaunch
 branch stops the control host, the mirror engine, the hub connection
 and the direct host and disposes the runtime without waiting.
 Deviations:
@@ -731,7 +731,7 @@ Deviations:
 - Runners whose owners start and stop them synchronously from
   Promise-side code (the supervisor, the hub connection, the daemon)
   still fork with `runFork` behind a runtime seam that the Layer
-  supplies; a throw from an owner callback inside a fiber is contained
+  supplies. A throw from an owner callback inside a fiber is contained
   and logged, since a defect in a forked fiber is reported nowhere.
 - `createLimiter` (`shared/util/limit.ts`) stays for the call-ordered
   lifecycles (cloudflared reconciles, the socket host's start, stop
@@ -741,18 +741,18 @@ Deviations:
   the cloudflared proof caught the reconcile-order regression when it
   was swapped in.
 - The status refs stayed as each runner's own `SubscriptionRef`-like
-  pair where the runner has one subscriber; no shared status type was
+  pair where the runner has one subscriber. No shared status type was
   introduced beyond `SupervisorStatus`.
 
 **Phase 3** landed. `host/lib/git/core.ts` exposes `runEffect` (every
-git run has a timeout, 30 min by default, and is interruptible; a
+git run has a timeout, 30 min by default, and is interruptible. A
 write that must not stop halfway is marked `uninterruptible` at the
 call site, in `sync.ts`, `changes.ts` and the sync, mirror and forward
 handlers) and the git library exposes an `*Effect` form beside each
 Promise form. Twenty of the twenty-five handler modules are
 `hostHandler` Effects under the caller's signal, with `hostAttempt`
 keeping each rejection the same error object the wire matched before
-and `requireService` dying with the old "not installed" message; the
+and `requireService` dying with the old "not installed" message. The
 five that stayed plain (`direct`, `sharedSettings`, `globalConfig`,
 `packageScripts`, `scripts`) delegate to services that are already
 Effects or do only synchronous reads. The hand-rolled concurrency is
@@ -767,16 +767,16 @@ Deviations:
 - `runGit` is `Effect.runPromise`, not the host runtime: the git
   effects need no service, and the proofs run them without a runtime.
 - The `waitSettled` and the kill-escalation timings were kept to the
-  millisecond (missing 10 s, connect 60 s, settle 30 min; SIGTERM grace
+  millisecond (missing 10 s, connect 60 s, settle 30 min, then SIGTERM grace
   then SIGKILL then a 5 s give-up), pinned by the new proofs.
 - A mangled `registry.json` value (a `projects` entry that is not a
   list, say) now fails decoding with a named error where the old reader
   passed the garbage through. The ready handler's existing try/catch
   turns it into the boot error dialog, the same path a file that is not
-  JSON already took; only a genuinely absent file reads as empty.
+  JSON already took. Only a genuinely absent file reads as empty.
 
 **Phase 4** landed. `zod` is gone from the app, the web shell, the lab
-and the hub worker; `shared/ipc/codec.ts` is the one decode seam
+and the hub worker. `shared/ipc/codec.ts` is the one decode seam
 (`decodeWith`, `safeDecodeWith`, `validateWith`, and `withoutProtoKeys`
 stripping own `__proto__` keys before any decode), `shared/schemas/strict.ts`
 gives the strict-object recipe (`strictStruct`, and the pick recipe
@@ -795,7 +795,7 @@ so every matcher reads a tag constant and the lint config allows
 
 New proofs: `wire-error`, `supervisor`, `hub-dial`, `git-runner`,
 `git-lib`, `ttl-cache`, `schema-port`, `config-store`, `scripts`,
-`host-libs`, and `test/types/strict-struct.mts`; the `direct-plane`
+`host-libs`, and `test/types/strict-struct.mts`. The `direct-plane`
 keeper and cloudflared checks, the control server, the socket host and
 the script runner's kill escalation run under `TestClock`. Each phase was reviewed
 by a separate read-only reviewer against the previous behavior, and
@@ -806,19 +806,19 @@ after step 7 and after phase 3.
 over the whole diff, each with separate read-only reviewers and the
 fixes applied: the handlers yield the git library's Effects instead of
 wrapping its Promise twins (the 38 twins with no caller are gone, and
-one typed project lookup replaced fourteen inline ones); the idioms
+one typed project lookup replaced fourteen inline ones). The idioms
 copied per module (the contained callback, the watch adapter, the
 backoff ladder, the wire failure body and answer, the PubSub follower,
 the execFile classifier, the TTL cache setup, the loose struct, the
-integer schemas, the tag matcher) are one helper each; modules yield
+integer schemas, the tag matcher) are one helper each. Modules yield
 each other's programs rather than calling handlers back through the
-Promise boundary; a mirror start opens its session inside the pull's
-landing step; there is one runtime install and one service reader; the
-hub contract owns the socket status type; the last three untyped errors
-are tagged; the PTY batcher, the wire frame walk (once per value, none
+Promise boundary. A mirror start opens its session inside the pull's
+landing step. There is one runtime install and one service reader. The
+hub contract owns the socket status type. The last three untyped errors
+are tagged. The PTY batcher, the wire frame walk (once per value, none
 when the text cannot spell `__proto__`, and never recursive), the
 preload's channel gate and the zero-TTL cache entries stop paying per
-event; and the correctness review's findings (a send's finish and
+event, and the correctness review's findings (a send's finish and
 landing as one step, a get that lands on a lookup being torn down, the
 branch writes, a throwing error encode, a failed continuation's
 receipt) are fixed with proofs. What the reviews raised and was left
@@ -846,22 +846,22 @@ before the work began):
 These mirror `node_modules/effect/AGENTS.md` and are what reviews hold
 to:
 
-- `Effect.gen` inline; `Effect.fn("Service.method")` for reusable
-  functions on a service; `Effect.fnUntraced` in hot paths (frame
+- `Effect.gen` inline. `Effect.fn("Service.method")` for reusable
+  functions on a service. `Effect.fnUntraced` in hot paths (frame
   decoding, PTY batching). No function that only wraps an `Effect.gen`.
 - Extra behavior on an `Effect.fn` goes in its trailing arguments, not
   in a `.pipe` after it.
-- Errors: `Schema.TaggedError`; `return yield* new X(...)` when raising.
-  `Effect.catchTag`/`catchTags` to recover; `Effect.catch` only at a
+- Errors: `Schema.TaggedError`. `return yield* new X(...)` when raising.
+  `Effect.catchTag`/`catchTags` to recover. `Effect.catch` only at a
   boundary that maps to a wire or a log.
 - Services: `Context.Service<Self, Shape>()("sm/area/Name")`, a
   `static readonly layer`, `Self.of({...})`, dependencies via
   `Layer.provide`. Prefer `yield* Service` in a generator over
   `Service.use`.
 - Resources: `Effect.acquireRelease` or `Effect.addFinalizer` inside
-  the layer; background work is `Effect.forkScoped`; never a bare
+  the layer. Background work is `Effect.forkScoped`. Never a bare
   `setTimeout` outside a `Stream.callback` adapter.
-- Time: `Effect.sleep`, `Schedule`, `Clock`, `DateTime`; never
+- Time: `Effect.sleep`, `Schedule`, `Clock`, `DateTime`. Never
   `Date.now()` or `setTimeout` in service code, so `TestClock` works.
 - Predicates: the `Predicate` module, never a local `isRecord`.
 - Validation: `Schema`, never a hand-written `typeof` walk.
@@ -875,15 +875,15 @@ to:
 
 | Risk | Mitigation |
 |---|---|
-| RC churn before stable | Pin exact; bump on a schedule; the unstable-path rename is one commit confined to adapter files |
-| The library's learning curve for a one-person project | The shipped `AGENTS.md` and `ai-docs` examples are the reference; phase 0 installs the rule that agents read them first; the conventions in section 7 are short enough to hold in the head |
-| A phase adds more than it deletes | Each phase names its deletions and is measured (section 9); stop and reassess if a phase lands net-positive in lines |
+| RC churn before stable | Pin exact. Bump on a schedule. The unstable-path rename is one commit confined to adapter files |
+| The library's learning curve for a one-person project | The shipped `AGENTS.md` and `ai-docs` examples are the reference. Phase 0 installs the rule that agents read them first. The conventions in section 7 are short enough to hold in the head |
+| A phase adds more than it deletes | Each phase names its deletions and is measured (section 9). Stop and reassess if a phase lands net-positive in lines |
 | Version skew between a user's devices during phase 1 | Every wire change is an optional field with message fallback, the rule the codebase already follows |
-| `shared/` bundle in the web client grows | Core is tree-shakeable; measure the web bundle in phase 2 step 1 and record the number |
-| Electron main fiber runtime versus node-pty and `ws` callbacks | Both are plain Node; interop is `runFork` from their callbacks; the spike exercised `ChildProcessSpawner` under Node 22 |
-| The synchronous `Atomics.wait` file lock and `execFileSync` keychain calls | Stay synchronous, wrapped in `Effect.sync`; they are short and documented |
+| `shared/` bundle in the web client grows | Core is tree-shakeable. Measure the web bundle in phase 2 step 1 and record the number |
+| Electron main fiber runtime versus node-pty and `ws` callbacks | Both are plain Node. Interop is `runFork` from their callbacks. The spike exercised `ChildProcessSpawner` under Node 22 |
+| The synchronous `Atomics.wait` file lock and `execFileSync` keychain calls | Stay synchronous, wrapped in `Effect.sync`. They are short and documented |
 | React Compiler | Not applicable while no Effect runs in the renderer |
-| `oxlint`/`oxfmt` and TypeScript 7 | TS verified by the spike; lint and format are checked in phase 0 on the real tree |
+| `oxlint`/`oxfmt` and TypeScript 7 | TS verified by the spike. Lint and format are checked in phase 0 on the real tree |
 
 ## 9. How to know it is working
 

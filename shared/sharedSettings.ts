@@ -43,8 +43,8 @@ export const sharedSettingKeys = {
 // not hand the engine (it leaves the root, or is more than one line) is
 // dropped and the rest of the rule still holds. It came off another
 // device, and a bad one would fail every pull of the repo at Start.
-// Absent (or undefined) reads as no paths; a list keeps its readable
-// ones; anything else fails the preset.
+// Absent (or undefined) reads as no paths. A list keeps its readable
+// ones. Anything else fails the preset.
 const isPresetPath = (path: unknown): path is string =>
   typeof path === "string" &&
   path.length > 0 &&

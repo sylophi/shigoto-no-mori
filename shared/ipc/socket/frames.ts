@@ -295,7 +295,7 @@ export function isCommandRefusedError(error: unknown): boolean {
 // degrades to absent rather than failing the frame: a dropped res
 // would leave the caller's invoke pending forever, since no wire has a
 // per-call timeout, where a message-only answer rejects it at once.
-// An absent `error` stays absent; a present one that does not decode
+// An absent `error` stays absent. A present one that does not decode
 // becomes an own undefined, which every reader takes as absent (the
 // output this frame has always decoded to, pinned by schema-port).
 const ResErrFrameSchema = Schema.Struct({

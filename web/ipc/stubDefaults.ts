@@ -20,7 +20,7 @@
 // It walks the schema's SchemaAST, a node at a time:
 //
 //   1. The candidates below are decoded through the node, cheapest
-//      first; the first one the node accepts is the answer (decoded, so
+//      first. The first one the node accepts is the answer (decoded, so
 //      a decoding default or a lenient read supplies its own value).
 //   2. A struct (an Objects node with declared properties) is built from
 //      its members' stubs: an optional key is left out, any member with

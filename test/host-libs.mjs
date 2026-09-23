@@ -53,7 +53,7 @@ for (const key of Object.keys(process.env)) {
 }
 
 // The fs spies. Each hook sees the real function and the call's
-// arguments; unset, the call goes straight through.
+// arguments. Unset, the call goes straight through.
 const real = { opendir: fsp.opendir, readFile: fsp.readFile };
 const hooks = { opendir: null, readFile: null };
 fsp.opendir = (...args) =>
@@ -104,7 +104,7 @@ async function main() {
         writeFileSync(join(other, "favicon.png"), "png");
         const favicon = join(project, "favicon.svg");
 
-        // Every read of the icon source is a resolution's; slowed so
+        // Every read of the icon source is a resolution's. Slowed so
         // the concurrent lookups provably overlap.
         let reads = 0;
         let failNext = null;

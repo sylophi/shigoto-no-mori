@@ -14,7 +14,7 @@
 //     dial, however far the clock runs.
 //   - stop() cancels a hanging dial, closes a held connection once,
 //     cuts a backoff sleep short, and marks a never-started supervisor
-//     stopped; onConnection sees the connection and its loss.
+//     stopped. OnConnection sees the connection and its loss.
 //   - start() is idempotent, and a start() after stop() begins at the
 //     bottom rung.
 //   - no real time passes.

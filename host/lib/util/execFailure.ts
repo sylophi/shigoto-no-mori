@@ -17,7 +17,7 @@ export type ExecFailure =
   // a prefix of the real output, never the whole of it.
   | { kind: "truncated"; stdout: string }
   // The program ran and failed: a non-zero exit, or a kill by signal
-  // (exitCode null). `killed` marks Node's own kill, the timeout; a
+  // (exitCode null). `killed` marks Node's own kill, the timeout. A
   // cancelled run's rejection is never read, its fiber is interrupted.
   | {
       kind: "exit";
@@ -35,8 +35,8 @@ function asText(value: unknown): string {
   return Buffer.isBuffer(value) ? value.toString("utf8") : "";
 }
 
-// A numeric `code` is the exit status; a string one is an errno from
-// the spawn or Node's maxBuffer kill; neither with a signal set is a
+// A numeric `code` is the exit status. A string one is an errno from
+// the spawn or Node's maxBuffer kill. Neither with a signal set is a
 // kill.
 export function classifyExecFailure(err: unknown): ExecFailure {
   const failure =

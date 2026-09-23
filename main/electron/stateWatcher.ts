@@ -42,7 +42,7 @@ export function stopStateWatcher(): void {
 }
 
 // Whether an event names a file the watcher reacts to. Atomic-write
-// temp files and the advisory lock churn on every write cycle; only the
+// temp files and the advisory lock churn on every write cycle. Only the
 // final renames matter. The updater bridge's control files
 // (updaterBridge.ts) are app<->CLI plumbing, not user state: reacting
 // to them would turn every updater transition and every `sm update`
@@ -52,7 +52,7 @@ export function stopStateWatcher(): void {
 // every script spawn and exit, and so is the control wire's address
 // (core/control/server.ts). The depth cap is for the worktrees/ watch:
 // worktree checkouts get heavy content churn (dev servers, builds) 3+
-// levels deep; only project/worktree directory events matter there.
+// levels deep. Only project/worktree directory events matter there.
 function relevant(file: string | null, maxDepth: number | undefined): boolean {
   if (file === null) return true;
   if (file.includes(".tmp") || file.endsWith(".lock")) return false;
@@ -71,7 +71,7 @@ function relevant(file: string | null, maxDepth: number | undefined): boolean {
 }
 
 // The relevant, unechoed events of one directory (watchEvents). A
-// directory that cannot be watched (missing on a fresh data dir;
+// directory that cannot be watched (missing on a fresh data dir.
 // bootstrap creates it before anything writes) or that vanishes later
 // (nuke) contributes nothing more, and the other watches carry on.
 function dirEvents(
@@ -109,7 +109,7 @@ export function startStateWatcher(poke: () => void): void {
   try {
     mkdirSync(worktreesDir, { recursive: true });
   } catch {
-    // Best effort; the watch tolerates a missing dir.
+    // Best effort. The watch tolerates a missing dir.
   }
   const events = Stream.mergeAll(
     [

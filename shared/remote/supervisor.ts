@@ -75,7 +75,7 @@ type SupervisorParams = {
 
 // The connect function: one dial attempt as an Effect, so stop()
 // interrupts it and a failure carries the transport's error. The
-// default wraps the real connectDevice; the hub connection supplies
+// default wraps the real connectDevice. The hub connection supplies
 // its own dial.
 export type ConnectFn = (
   opts: ConnectDeviceOptions,
@@ -148,7 +148,7 @@ type SupervisorOptions = {
   onConnection?: (connection: DeviceConnection | null) => void;
   helloTimeoutMs?: number;
   // Where the loop's fiber runs. Real callers take Effect's default
-  // services; a test passes a ManagedRuntime built on TestClock.layer()
+  // services. A test passes a ManagedRuntime built on TestClock.layer()
   // and drives the ladder with TestClock.adjust.
   runtime?: RuntimeOf<never>;
 };

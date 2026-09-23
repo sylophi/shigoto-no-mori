@@ -169,7 +169,7 @@ const MirrorEngineImplLive = Layer.effect(
       status: () => mirrorDaemon.status(),
       sessions: () => mirrorDaemon.sessions(),
       create: (input) => {
-        // A start's long leg (the copy across) can straddle a sign-out;
+        // A start's long leg (the copy across) can straddle a sign-out.
         // the sweep that ran meanwhile found nothing, so this is the
         // last gate before a session with a peer of no account.
         if (hubConnectInputs() === null) {

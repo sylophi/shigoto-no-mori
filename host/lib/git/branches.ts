@@ -37,7 +37,7 @@ export const renameBranchEffect = Effect.fn("branches.renameBranch")(function* (
 // `--` keeps it out of the pathspec slot, so no caller-supplied name can
 // be read as a flag or as a file.
 //
-// The lookups before the checkout are interruptible; the checkout is
+// The lookups before the checkout are interruptible. The checkout is
 // not. It rewrites the working tree, and a caller leaving partway
 // (a dropped peer socket, a page reload) would kill git with the tree
 // half rewritten and HEAD and the index unchanged, which shows up as

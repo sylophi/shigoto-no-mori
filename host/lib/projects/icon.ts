@@ -533,10 +533,10 @@ async function revalidateAndRead(
 // alike): every lookup after that revalidates against the source file,
 // and a failure never answers a later lookup. When every caller of a
 // resolution has gone (a handler's caller that left), the cache drops
-// the entry; the read itself has no abort signal and runs its course
+// the entry. The read itself has no abort signal and runs its course
 // untracked, so a caller arriving right then starts a second read of
 // the same path, which computes the same value. Project paths are
-// few; the capacity only bounds the settled entries the cache sweeps
+// few. The capacity only bounds the settled entries the cache sweeps
 // lazily.
 export const readProjectIconEffect: (
   projectPath: string,

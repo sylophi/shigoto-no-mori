@@ -374,7 +374,7 @@ type HelloFrame = Extract<ClientFrame, { t: "hello" }>;
 
 type WsServerBindingDeps = {
   // Where the listener's fibers run. Real callers take Effect's default
-  // services; a test passes a ManagedRuntime built on TestClock.layer()
+  // services. A test passes a ManagedRuntime built on TestClock.layer()
   // and moves the hello deadline, the liveness sweep and the lockout
   // window with TestClock.adjust.
   runtime?: RuntimeOf<never>;
@@ -572,7 +572,7 @@ export function createWsServerBinding(
   const authedByDevice = new Map<string, Conn>();
   // The binding's lifetime, the parent of every listener's scope. A
   // listener stops and starts again under it, so nothing closes it
-  // today; it is what the app runtime's scope takes over once the
+  // today. It is what the app runtime's scope takes over once the
   // binding lives in a Layer (EFFECT-MIGRATION.md, Phase 2 step 7).
   const runnerScope = Scope.makeUnsafe();
   let listener: Live | null = null;

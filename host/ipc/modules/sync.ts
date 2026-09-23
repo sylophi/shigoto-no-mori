@@ -407,7 +407,7 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
       Effect.gen(function* () {
         const project = yield* findProject(projectId);
         // refs/haves passed the contract's fail-closed allowlist schemas
-        // already; the CLI re-validates with its own complementary shape
+        // already. The CLI re-validates with its own complementary shape
         // (see the gate note in shared/ipc/modules/sync.ts) before argv.
         const dir = yield* scopedTempDir("sm-sync-");
         const path = join(dir.value, "transfer.bundle");
@@ -437,7 +437,7 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
       // family (unknown-conn, conn-closed): the id resolves to no live
       // transfer, which after a valid start means it was dropped
       // (eof-finished or idle-swept), NOT a malformed request. Asserted
-      // by the sync check; no client branches on it yet.
+      // by the sync check. No client branches on it yet.
       if (transfer === undefined) {
         return yield* Effect.fail(new Error("unknown-transfer"));
       }
@@ -1284,7 +1284,7 @@ export const sendWorktreeThen = <S>(
       ...(tipIsThere ? [] : [branchRef]),
       ...(captured ? [dirtyRef] : []),
     ];
-    // The chunks cross interruptibly; the finish (the peer's unpack)
+    // The chunks cross interruptibly. The finish (the peer's unpack)
     // waits for the landing's step below, which consumes what it
     // unpacks.
     let finishPush: Effect.Effect<unknown, unknown> = Effect.void;
@@ -1306,7 +1306,7 @@ export const sendWorktreeThen = <S>(
     // pull's reason, and because the landing is what sweeps the ref
     // the finish unpacks (a caller leaving between the two would leave
     // that ref on the peer). A caller that leaves while the peer
-    // creates the copy waits for the answer; the peer finishes the copy
+    // creates the copy waits for the answer. The peer finishes the copy
     // either way, and only with the answer can the send be finished (or
     // a start on it rolled back) rather than the copy left behind
     // unknown. The caller's own step (see sendWorktreeThen) closes it,

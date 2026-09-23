@@ -1,12 +1,12 @@
 // Durable proof for the git library as Effects (host/lib/git/*,
 // host/lib/worktrees/hygiene.ts) and the handlers over it, against REAL
 // sandbox repositories: git's "not fully merged" refusal fails typed as
-// BranchNotMerged through the branches handler and `force` deletes; a
+// BranchNotMerged through the branches handler and `force` deletes. A
 // caller leaving a worktrees:list interrupts the row probes and kills
-// every git they started, with the process-wide row window holding;
+// every git they started, with the process-wide row window holding.
 // overlapping fetchAllRemotes calls on one project share one git, a
 // caller leaving does not stop it for the others, the last one leaving
-// kills it, and a failure is never served to a later caller; index
+// kills it, and a failure is never served to a later caller. Index
 // writes on one worktree run one after another while writes on two
 // worktrees run at once, and a failed write frees the turn.
 //
@@ -253,7 +253,7 @@ async function main() {
           join(other, `.o${i}`),
         );
       }
-      // The row probes hold; the identity listing and the project-level
+      // The row probes hold. The identity listing and the project-level
       // reads run through. Two lists at once: the window is the
       // process's, not each call's (each call bounds itself to six as
       // well, so one list alone would not tell the two apart).
@@ -357,7 +357,7 @@ async function main() {
       await assert.rejects(fetchAllRemotes(dir));
       assert.equal(fetches().length, 2, "a failed fetch was served again");
 
-      // Two callers join; the first leaves; the second still gets the
+      // Two callers join. The first leaves. The second still gets the
       // one fetch's own outcome, not an interruption.
       process.env.SM_SSH_TENTHS = "6";
       const first = Effect.runFork(fetchAllRemotesEffect(dir));

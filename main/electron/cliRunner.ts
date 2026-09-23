@@ -209,14 +209,14 @@ export async function runCli(
   });
   child.on("close", (code) => {
     release();
-    // The CLI's writes into the data dir are the app's own doing; mark
+    // The CLI's writes into the data dir are the app's own doing. Mark
     // them so the state watcher doesn't refetch-storm on the echo.
     // (While the child runs, the watcher checks cliChildCount().)
     noteSelfWrite();
     Deferred.doneUnsafe(closed, Effect.succeed(code));
   });
 
-  // Human diagnostics land on stderr; keep a tail for error surfaces.
+  // Human diagnostics land on stderr. Keep a tail for error surfaces.
   let stderrTail = "";
   child.stderr.on("data", (chunk: Buffer) => {
     stderrTail = (stderrTail + chunk.toString("utf8")).slice(-4000);

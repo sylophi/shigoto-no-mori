@@ -245,7 +245,7 @@ export function createHubConnectionCore(
             `ticket mint failed: ${errorMessageOf(error)}`,
             isDeviceRevoked(error) ? CLOSE_DEVICE_REVOKED : null,
             // A revoked credential blocks whatever status carried the
-            // verdict; the Worker answers 403 today, but the code is
+            // verdict. The Worker answers 403 today, but the code is
             // the contract.
             isHubRefusal(error) || isDeviceRevoked(error),
           ),

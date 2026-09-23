@@ -74,7 +74,7 @@ export type ScriptOutput =
 
 // A batch's window closing: the timer a batch starts offers this into
 // the same queue, so the window closes in order with the output around
-// it. Only the batch that started it honors it (`batch` is its number);
+// it. Only the batch that started it honors it (`batch` is its number).
 // a tick that outlived its batch (closed early by the byte cap or an
 // event) is dropped.
 type OutputTick = { kind: "tick"; batch: number };
@@ -96,7 +96,7 @@ export const makeScriptOutputQueue = (): ScriptOutputQueue =>
 // The batching rule as a Stream over a run's output queue: a read opens
 // a batch, which goes out 16 ms after that read, or the moment it holds
 // 64 KiB, or the moment one of our own events arrives, whichever is
-// first; an idle run holds no timer. Stream.groupedWithin would count
+// first. An idle run holds no timer. Stream.groupedWithin would count
 // elements rather than bytes and flush on a fixed tick that runs while
 // the script is idle, so the window is this pull instead: the timer is a
 // child fiber that offers a tick into the queue, which means no take is
@@ -515,7 +515,7 @@ export function startScript(args: RunArgs): string {
 
   // The run's output stream. The queue exists, and the PTY's listeners
   // feed it, before this function returns, so no read can land ahead of
-  // them; the pump below drains it on its own fiber.
+  // them. The pump below drains it on its own fiber.
   const output = makeScriptOutputQueue();
 
   const record: RunRecord = {

@@ -615,13 +615,13 @@ app.on("before-quit", (event) => {
   killAllCli();
   // The runtime's finalizers (main/runtime.ts) run alongside the script
   // reaping, in its layers' dependency order: the port forwards first,
-  // so their close frames ride the hub socket while it is still up;
+  // so their close frames ride the hub socket while it is still up.
   // the control listener unpublishes, so a CLI run that starts now
-  // reads "not running"; the mirror engine stops; then the direct
+  // reads "not running". The mirror engine stops, then the direct
   // plane, the hub socket (the DO sees a clean departure), the tunnel,
   // and the direct and LAN listeners (peers see a clean going-away).
   // Awaited with the reap, so the exit below waits for both. A runner's
-  // stop that fails is logged in its finalizer; the catch keeps a
+  // stop that fails is logged in its finalizer. The catch keeps a
   // dispose failure from surfacing as an unhandled rejection before
   // the reap gets to it.
   const disposed = runtime.dispose().catch(() => undefined);

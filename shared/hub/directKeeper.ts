@@ -132,7 +132,7 @@ export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
       peers.set(deviceId, state);
       // One dial, and the hold on the session it made until it drops.
       // The ladder climbs on every backoff and resets only on a stable
-      // session's drop; roster re-entry (a new fiber) starts at the
+      // session's drop. Roster re-entry (a new fiber) starts at the
       // bottom.
       const attempt = Effect.gen(function* () {
         state.dropped = Deferred.makeUnsafe<void>();

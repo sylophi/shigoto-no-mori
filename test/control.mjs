@@ -1129,7 +1129,7 @@ async function main() {
 
     // ---- (8b) Typed errors on the control wire. The CLI keys on the
     // top-level code, so a ControlError must keep it there whatever else
-    // rides; and the typed `error` field beside the message is additive,
+    // rides, and the typed `error` field beside the message is additive,
     // so the Go reader must ignore it and still print the message.
     const devicesRes = async () =>
       (

@@ -97,7 +97,7 @@ const REGISTRY_KEYS = [PROJECTS_KEY, SHELVED_KEY];
 // rides through.
 const StoredProjectSchema = loose(ProjectSchema);
 // A worktree id set (the shelf, the auto-pull marks). Written as
-// id -> true; cli/state.go reads it as map[string]bool.
+// id -> true. cli/state.go reads it as map[string]bool.
 const IdMarksSchema = Schema.Record(Schema.String, Schema.Boolean);
 // id -> action timestamps, the rolling window util/useLog.ts keeps.
 const UseLogSchema = Schema.Record(Schema.String, Schema.Array(Schema.Number));
@@ -139,7 +139,7 @@ const RULES: Readonly<Record<string, Readonly<Record<string, KeyRule>>>> = {
 };
 
 // A key's value as read, decoded against its rule. `found` is false
-// when the key is missing, or holds a malformed "absent" value; a
+// when the key is missing, or holds a malformed "absent" value. A
 // malformed "refuse" value throws. A key with no rule is handed over as
 // stored. `forWrite` says whether the read fronts a write, so the
 // message can say the write did not happen.

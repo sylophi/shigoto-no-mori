@@ -113,7 +113,7 @@ export function resetHostRuntime(): void {
 // caller (a page that navigated, a peer whose socket dropped, a CLI
 // that was killed) cancels the work at its next step instead of
 // letting it run to the end. Its failures are the typed errors the
-// wires carry (shared/errors.ts); a defect rejects like any thrown bug
+// wires carry (shared/errors.ts). A defect rejects like any thrown bug
 // did. The runtime is read at call time, so a host handler's
 // requirements are met by whatever the binding installed.
 export function fromEffectWith<I, O, R, Ctx extends { signal: AbortSignal }>(
@@ -178,7 +178,7 @@ export function hostService<I extends InstalledService, S>(
 }
 
 // A service a module has a sensible answer without (nothing is
-// mirroring on a surface that never mounts the daemon; a change nobody
+// mirroring on a surface that never mounts the daemon. A change nobody
 // listens for goes unannounced).
 export function hostServiceOrNull<I extends InstalledService, S>(
   tag: Context.Key<I, S>,

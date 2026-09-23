@@ -5,8 +5,8 @@
 // Effect's Cache underneath, which owns the rules this file used to
 // keep by hand: gets that miss while a load for the same key is running
 // share that load (settled values and rejections alike) instead of each
-// spawning their own; a rejection is never cached and never wedges the
-// key (its time to live is zero); and an invalidate during a load
+// spawning their own. A rejection is never cached and never wedges the
+// key (its time to live is zero), and an invalidate during a load
 // discards that load's result once it lands, so a load that started
 // before a write can never re-cache the pre-write value for a fresh
 // TTL after the writer invalidated. The stale value still goes to the
@@ -43,7 +43,7 @@ export function makeTtlCache<K, A, E>(
 
 // Cache.get, twice over if need be. When the last caller waiting on a
 // lookup leaves, Cache interrupts the lookup but keeps its entry until
-// the lookup's fiber has exited; a get arriving in that window joins
+// the lookup's fiber has exited. A get arriving in that window joins
 // the dying fiber and ends with an interruption that was never this
 // caller's. One more get then finds the entry gone and starts afresh.
 // A caller that was itself interrupted is interrupted again on that

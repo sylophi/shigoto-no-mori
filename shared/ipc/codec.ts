@@ -120,7 +120,7 @@ export function decodeWith<C extends AnyCodec>(
 // payload at its producer): the type-side check alone, so a transform
 // is never run a second time on a decoded value and the wire keeps
 // carrying the decoded shape the renderer reads. Contract outputs are
-// JSON-shaped by rule (Type equals Encoded); a Schema whose wire form
+// JSON-shaped by rule (Type equals Encoded). A Schema whose wire form
 // differs belongs behind an explicit encode, not here.
 export function validateWith(codec: AnyCodec, value: unknown): unknown {
   // The type-side schema alone: a copy holding only the declared keys

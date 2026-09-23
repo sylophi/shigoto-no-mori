@@ -197,7 +197,7 @@ function rebaseOrMergeAgainst(worktreePath: string, ref: string) {
 // `merge-tree --write-tree` probe (gating this state) already validated
 // the whole-tree merge as clean, which is what makes the merge fallback
 // safe. fetch, then rebase/merge, then push: sequential by nature. The
-// rebase or merge is the uninterruptible step; the push is a network
+// rebase or merge is the uninterruptible step. The push is a network
 // wait a caller who left may end, and a branch rebased but not yet
 // pushed is the ordinary "ahead" state the next sync resolves.
 export const pullRebaseOrMergeAndPushEffect = Effect.fn(

@@ -5,7 +5,7 @@
 // Asserts:
 //   - encodeWireError of each tagged error carries `_tag`, the message
 //     getter's text and the JSON fields, and nothing else (no stack,
-//     name or cause); a plain Error encodes to undefined; a field that
+//     name or cause). A plain Error encodes to undefined. A field that
 //     is not JSON-safe is dropped.
 //   - new WireError(shape) is an Error named by its tag, with the
 //     fields as own enumerable properties, and every matcher reads it
@@ -14,7 +14,7 @@
 //     cannot pollute or rename the instance.
 //   - re-encoding a WireError (a hop) yields the same shape.
 //   - WireErrorShapeSchema needs a non-empty `_tag` and a message and
-//     keeps a newer peer's extra fields; the res frame schema carries
+//     keeps a newer peer's extra fields. The res frame schema carries
 //     the `error` field and still reads an old peer's res without one.
 //   - the tag wins over the message text, and a message-only Error from
 //     an older peer still matches.

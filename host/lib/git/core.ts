@@ -1,5 +1,5 @@
 // Single chokepoint for every git invocation. Other modules in this
-// folder build on `runEffect` / `runLenientEffect`; nothing else in the
+// folder build on `runEffect` / `runLenientEffect`. Nothing else in the
 // codebase should shell out to git directly.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -282,7 +282,7 @@ export function run(
 
 // Like `runEffect`, but tolerates non-zero exit (e.g. `git diff
 // --no-index`, which exits 1 whenever there's a diff to print).
-// Answers with whatever stdout was produced before exit; git that
+// Answers with whatever stdout was produced before exit. Git that
 // could not start answers empty.
 //
 // Truncation is the one failure it won't swallow. A run killed at

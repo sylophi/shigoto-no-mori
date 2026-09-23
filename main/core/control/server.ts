@@ -124,7 +124,7 @@ export function createControlServer(deps: {
   filePath: () => string;
   log?: (message: string) => void;
   // Where the run's fibers live. Real callers take Effect's default
-  // services; a test passes a ManagedRuntime built on TestClock.layer()
+  // services. A test passes a ManagedRuntime built on TestClock.layer()
   // and moves the hello deadline with TestClock.adjust.
   runtime?: RuntimeOf<never>;
 }) {
@@ -166,7 +166,7 @@ export function createControlServer(deps: {
 
   // One connection, from accept to close, inside its own scope. The
   // scope closes when the socket does, when the hello deadline passes
-  // without a hello, or when stop() closes the run; closing it
+  // without a hello, or when stop() closes the run. Closing it
   // interrupts the calls still running, aborts the context's signal
   // and destroys the socket.
   const serveConnection = (
@@ -231,7 +231,7 @@ export function createControlServer(deps: {
 
       // Completed by a good hello, which lifts the deadline.
       const hello = Deferred.makeUnsafe<void>();
-      // The first line is the hello; what the later ones mean depends
+      // The first line is the hello. What the later ones mean depends
       // on how it went.
       let onLine = (line: string): void => {
         const frame = decodeFrame(line, HelloSchema);
@@ -398,7 +398,7 @@ export function createControlServer(deps: {
   }
 
   // Synchronous so every quit path can call it on its way out. The file
-  // goes first, so a CLI run that starts now reads "not running"; then
+  // goes first, so a CLI run that starts now reads "not running". Then
   // the run's scope closes, which on the default runtime closes the
   // listener and every connection before this returns.
   function stop(): void {

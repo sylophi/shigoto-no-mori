@@ -9,22 +9,22 @@
 //
 // Asserts, through the wires' own decode (shared/ipc/codec.ts,
 // decodeWith and safeDecodeWith, which must agree):
-//   - each ported schema is a Schema;
+//   - each ported schema is a Schema.
 //   - valid inputs decode to the zod output: unknown keys stripped at
 //     every level, an optional key absent stays absent and an explicit
-//     undefined stays an own key, url input trimmed;
+//     undefined stays an own key, url input trimmed.
 //   - invalid inputs are refused: wrong types, missing keys, empty
 //     strings under a min length, ports out of range or fractional, an
 //     enum value outside the set, a non-web URL (with the refine's
-//     message);
-//   - a void input decodes undefined and nothing else;
+//     message).
+//   - a void input decodes undefined and nothing else.
 //   - wave 1 (payloads, project, worktree, hygiene, changes,
 //     pullRequest, ports, launchers, scripts and the contract slots built
 //     inline beside them): every row of RECORDED decodes, or is refused,
 //     exactly as zod did, including each refine's message (a leading
 //     dash on a git ref, a path leaving the worktree, a commit hash, a
 //     clone URL or folder name), each bound, each default and each
-//     discriminated union's pick;
+//     discriminated union's pick.
 //   - wave 2 (config, runtime, sharedSettings and every contract slot
 //     that embeds them or held zod: globalConfig, runtime,
 //     sharedSettings, updater, clientConfig, projectLauncher, cli, nav,
@@ -33,16 +33,16 @@
 //     exactly as zod did, including the carry-over path refine's
 //     message, every bound, the loose stored documents keeping unknown
 //     keys at their own level only, and each void slot taking undefined
-//     alone;
+//     alone.
 //   - the remote device-settings patch refuses `socketHost` (and every
 //     other key the Settings form does not manage) by name, at every
 //     level it rides, and through Schema.is, while its picked keys are
-//     the full config's own field schemas;
+//     the full config's own field schemas.
 //   - the shared settings document reads entry by entry as the zod
 //     transform did: a bad key or entry is left out without costing the
 //     rest, the first 512 readable entries in the document's own order
 //     are kept, and a `__proto__` key is dropped with the prototype
-//     untouched, since every device must run the same rule;
+//     untouched, since every device must run the same rule.
 //   - wave 3 (the wire layer: the sync, mirror, control, forward,
 //     portForward, direct and remoteAccess contracts, the socket frames,
 //     the wire error shape, the hub protocol's HTTP bodies and envelopes,
@@ -55,18 +55,18 @@
 //     `res` frame whose `error` is malformed still parsing with `error`
 //     undefined, an old peer's `res` with `code` alone, every envelope
 //     arm (a nack included), the preset reading a bad path as left out,
-//     and each void slot taking undefined alone;
+//     and each void slot taking undefined alone.
 //   - strictStruct (shared/schemas/strict.ts) is z.strictObject: an
 //     undeclared key at its level is refused with the key named, a
 //     nested plain struct still strips, optional keys and the decoded
 //     key set are Schema.Struct's, Schema.is refuses excess keys too,
 //     and a `__proto__` key is refused rather than acted on (its types
-//     are pinned by test/types/strict-struct.mts under pnpm typecheck);
+//     are pinned by test/types/strict-struct.mts under pnpm typecheck).
 //   - the v4 constructs the mapping relies on keep the semantics it
 //     assumes (Void versus Undefined, Number versus Finite, the two
 //     decoding defaults, excess keys stripped by default and refused
 //     under onExcessProperty "error", withDecodingDefault's placement,
-//     catchDecoding as zod's .catch);
+//     catchDecoding as zod's .catch).
 //   - the web stub walker (now over SchemaAST) gives every contract read
 //     the answer the zod walker gave, structural and fabricated.
 //
@@ -4000,7 +4000,7 @@ async function main() {
         { url: "http://localhost:3000/x?y=1" },
         ok({ url: "http://localhost:3000/x?y=1" }),
       ],
-      // zod's url check trimmed its output; the handler opens the trimmed URL.
+      // zod's url check trimmed its output. The handler opens the trimmed URL.
       [{ url: "  https://example.com  " }, ok({ url: "https://example.com" })],
       [
         { url: "\thttps://example.com/\n" },
@@ -4710,13 +4710,13 @@ async function main() {
       // zod skipped an own `__proto__` key (JSON.parse makes one) and
       // accepted. The codec drops it before any decode (an own
       // `__proto__` is never data), so through decodeWith the strict
-      // struct accepts the rest, as zod did; the struct itself, asked
+      // struct accepts the rest, as zod did. The struct itself, asked
       // directly, refuses the key (the Schema.is check below).
       [
         JSON.parse('{"name":"n","__proto__":{"polluted":true}}'),
         ok({ name: "n" }),
       ],
-      // zod's for-in also refused an inherited enumerable key; only own
+      // zod's for-in also refused an inherited enumerable key. Only own
       // keys arrive over a wire, and the decoded value is a fresh object
       // with none of the prototype's keys.
       [
@@ -4816,7 +4816,7 @@ async function main() {
       false,
     );
 
-    // `fields` is the input, and survives a rebuild; the strictness
+    // `fields` is the input, and survives a rebuild. The strictness
     // survives an annotation.
     const annotated = Strict.annotate({ title: "Strict" });
     assert.equal(annotated.fields, Strict.fields);
@@ -4855,7 +4855,7 @@ async function main() {
         assert.equal(decodes(Schema.Finite, n), false, `Finite refuses ${n}`);
         assert.equal(decodes(Schema.Int, n), false, `Int refuses ${n}`);
       }
-      // z.object strips unknown keys; so does a Struct under the default
+      // z.object strips unknown keys, so does a Struct under the default
       // parse options, and onExcessProperty "error" is z.strictObject.
       const struct = Schema.Struct({ a: Schema.String });
       assert.deepStrictEqual(
@@ -4901,7 +4901,7 @@ async function main() {
       });
       assert.equal(decodes(withDirectDefault, { a: null }), false);
       // zod's .catch(x) replaces any failure, a missing key included.
-      // catchDecoding alone does not see a missing key; a decoding
+      // catchDecoding alone does not see a missing key. A decoding
       // default beside it does.
       const caught = Schema.Literals(["A", "Z"]).pipe(
         Schema.catchDecoding(() => Effect.succeedSome("Z")),
@@ -4915,7 +4915,7 @@ async function main() {
       assert.deepStrictEqual(decode(caughtOrMissing)({}), { m: "Z" });
       assert.deepStrictEqual(decode(caughtOrMissing)({ m: null }), { m: "Z" });
       assert.deepStrictEqual(decode(caughtOrMissing)({ m: "A" }), { m: "A" });
-      // .optional() on a key is Schema.optional (absent or undefined);
+      // .optional() on a key is Schema.optional (absent or undefined).
       // Schema.optionalKey refuses an explicit undefined.
       const optionalKey = Schema.Struct({
         a: Schema.optionalKey(Schema.String),

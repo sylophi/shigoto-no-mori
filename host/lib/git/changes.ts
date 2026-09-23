@@ -83,17 +83,17 @@ function kindOf(x: string, y: string): ChangeKind {
 // Writes to one worktree's index run one after another, IN CALL
 // ORDER. Git takes index.lock for each, so two quick ticks, or a tick
 // racing a commit, would otherwise fail on the lock instead of
-// waiting; and the renderer fires a tick, untick, tick on one file as
+// waiting, and the renderer fires a tick, untick, tick on one file as
 // three concurrent mutations, so the order they run in is the state
 // the index ends up in. A chain of turns per worktree path: each
 // caller waits for the previous caller's turn to end, and its own
 // turn ends when its task settles. (Not an Effect Semaphore, which
-// does not wake waiters in call order; see shared/util/limit.ts.) A
+// does not wake waiters in call order. See shared/util/limit.ts.) A
 // path's chain is dropped once the last turn on it ends. A failed task
 // ends its turn like any other.
 //
 // Waiting for the turn is interruptible, so a caller that leaves while
-// queued never writes; its turn then ends when the one it was waiting
+// queued never writes. Its turn then ends when the one it was waiting
 // on ends, so the callers behind it keep their order. The write itself
 // is not interruptible: once git starts rewriting the index or the
 // working tree, it finishes, and a caller leaving mid-commit or

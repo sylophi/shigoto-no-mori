@@ -3,12 +3,12 @@
 // - the output batching rule, on the Stream the runner drains, under
 //   TestClock: a read opens a batch that goes out 16 ms after it, or
 //   the moment it holds 64 KiB, or the moment one of the runner's own
-//   events arrives, and an idle run holds no timer;
+//   events arrives, and an idle run holds no timer.
 // - the same rule end to end against a REAL pty (node-pty, headless):
 //   two reads a frame apart go out as two events, two back to back as
-//   one, and a 200 KB burst arrives whole;
+//   one, and a 200 KB burst arrives whole.
 // - a kill escalates SIGTERM, then SIGKILL once the grace runs out, and
-//   a script that honors SIGTERM goes without waiting the grace out;
+//   a script that honors SIGTERM goes without waiting the grace out.
 // - withDeleteInflight refuses a script start for its worktree (and a
 //   second mutation of it) while it holds the mark, and always clears
 //   the mark, even when the mutation fails.

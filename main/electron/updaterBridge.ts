@@ -57,7 +57,7 @@ export function publishUpdaterState(state: UpdaterState): Promise<void> {
 }
 
 // One consume pass: claim the request file, read it, drop it, act on
-// it. Resolves either way; a failed pass is a dropped request, and the
+// it. Resolves either way. A failed pass is a dropped request, and the
 // CLI times out and says so.
 async function consumeOnce(
   handle: (action: UpdateRequest["action"]) => void,

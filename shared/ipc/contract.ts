@@ -1,6 +1,6 @@
 import type { AnyCodec } from "./codec";
 
-// Every schema slot takes an Effect Schema; the wires decode through
+// Every schema slot takes an Effect Schema. The wires decode through
 // shared/ipc/codec.ts.
 export type InvokeDef<
   I extends AnyCodec = AnyCodec,

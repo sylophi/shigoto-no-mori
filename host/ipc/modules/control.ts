@@ -789,7 +789,7 @@ const alreadyMirrored = (session: MirrorSession, device: string | undefined) =>
       });
     }
     // The session's peer is one this device dialed, so its id should
-    // be well formed; a malformed one (an engine store edited by hand,
+    // be well formed. A malformed one (an engine store edited by hand,
     // say) is the op's refusal, named, rather than a schema failure.
     const deviceId = view.device.deviceId;
     if (!isDeviceId(deviceId)) {

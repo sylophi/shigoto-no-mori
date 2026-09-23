@@ -321,7 +321,7 @@ export function startUpdater(): void {
 }
 
 // Stops the check timers and the CLI bridge (a check already running
-// finishes on its own; checks stay off until the next launch). The
+// finishes on its own. Checks stay off until the next launch). The
 // app's runtime calls it on quit, through UpdaterLive.
 export function stopUpdater(): Promise<void> {
   const scope = timers;

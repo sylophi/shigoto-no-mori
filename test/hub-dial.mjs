@@ -10,10 +10,10 @@
 //     roster), probe() pings the live socket, and a pong is not an
 //     envelope.
 //   - the mint deadline aborts a hanging mint and backs off without
-//     opening a socket; a refused or revoked mint blocks and never
+//     opening a socket. A refused or revoked mint blocks and never
 //     redials.
 //   - the accept deadline terminates a half-open socket and redials
-//     with a fresh ticket; a close before the accept blocks on the
+//     with a fresh ticket. A close before the accept blocks on the
 //     revoked and superseded codes and retries on anything else.
 //   - a drop after the accept tears the link down and redials, and one
 //     after STABLE_CONNECTION_MS resets the ladder.
@@ -240,7 +240,7 @@ const SUPERSEDED = {
 
 async function main() {
   const began = performance.now();
-  // The heartbeat check runs on real timers; its time is not the
+  // The heartbeat check runs on real timers. Its time is not the
   // TestClock's to save, so it comes off the wall-clock budget.
   let realTimeMs = 0;
 

@@ -57,7 +57,7 @@ function hang(dir) {
       ...gitEnv,
       GIT_SSH_COMMAND: `sh -c 'echo $PPID > "${pidFile}"; while kill -0 $PPID 2>/dev/null; do sleep 0.1; done' ssh-stub`,
     },
-    // The git pid the stub wrote, once it has; null before.
+    // The git pid the stub wrote, once it has. Null before.
     pid: () => {
       try {
         return Number(readFileSync(pidFile, "utf8").trim());
@@ -102,7 +102,7 @@ async function main() {
       );
       const took = performance.now() - began;
       assert.ok(outcome instanceof GitError, `not a GitError: ${outcome}`);
-      // Git may answer the kill with its own exit code and message; the
+      // Git may answer the kill with its own exit code and message. The
       // timeout is named first either way.
       assert.match(outcome.message, /^git did not finish within/);
       assert.ok(took < 5_000, `the timeout did not end the run (${took}ms)`);
@@ -137,7 +137,7 @@ async function main() {
         took < 5_000,
         `the cancellation did not end the run (${took}ms)`,
       );
-      // The rejection is the fiber giving up on the promise; the kill
+      // The rejection is the fiber giving up on the promise. The kill
       // is what the signal did to git, proven by the pid.
       await waitFor(() => !alive(pid), "the cancelled git to be gone");
       // A caller already gone never starts a run.
