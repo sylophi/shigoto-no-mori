@@ -15,17 +15,24 @@
 // hammering loop. Every other close backs off.
 //
 // One Effect fiber runs the whole loop. stop() interrupts it, which
-// cancels a dial in flight (the connect function's AbortSignal fires),
-// a sleep on the ladder, or a wait on the live socket, and the
-// interruption closes the connection it was holding. There is no
-// running flag to check after each step: an interrupted fiber does not
-// take the next one.
+// cancels a dial in flight (the connect effect is interrupted, and a
+// promise-backed one sees its AbortSignal fire), a sleep on the
+// ladder, or a wait on the live socket, and the interruption closes the
+// connection it was holding. There is no running flag to check after
+// each step: an interrupted fiber does not take the next one.
 //
 // Deterministic on purpose: the ladder is fixed with no random jitter
 // (the renderer runtime forbids Math.random anyway), and time comes
 // from Effect's Clock, so a test can run the loop under a TestClock
 // and assert the ladder and the reset without sleeping real seconds.
-import { Clock, Deferred, Effect, Fiber, type ManagedRuntime } from "effect";
+import {
+  Cause,
+  Clock,
+  Deferred,
+  Effect,
+  Fiber,
+  type ManagedRuntime,
+} from "effect";
 import {
   connectDevice,
   type ConnectDeviceOptions,
@@ -135,10 +142,20 @@ const lanCloseClassifier: CloseClassifier = (code) =>
     ? { reason: "auth", message: AUTH_FAILED_MESSAGE }
     : null;
 
+// The signal is the fiber's interruption: a dial that lands after
+// stop() is closed here, in the same turn it lands, so it cannot leak
+// a live socket.
 const connectDeviceEffect: ConnectFn = (opts) =>
-  Effect.tryPromise({
-    try: () => connectDevice(opts),
-    catch: (error) => error,
+  Effect.callback<DeviceConnection, unknown>((resume, signal) => {
+    connectDevice(opts).then(
+      (connection) => {
+        if (signal.aborted) connection.close();
+        else resume(Effect.succeed(connection));
+      },
+      (error: unknown) => {
+        resume(Effect.fail(error));
+      },
+    );
   });
 
 type SupervisorOptions = {
@@ -163,7 +180,8 @@ export type SupervisorRuntime = Pick<
   "runFork" | "runPromise"
 >;
 
-const defaultRuntime: SupervisorRuntime = {
+// Effect's default services, the runtime every real caller runs on.
+export const defaultSupervisorRuntime: SupervisorRuntime = {
   runFork: Effect.runFork,
   runPromise: Effect.runPromise,
 };
@@ -194,80 +212,133 @@ type AttemptOutcome =
   | { kind: "blocked"; reason: BlockReason; message: string }
   | { kind: "backoff"; resetLadder: boolean };
 
+// The owner's callbacks run inside the loop's fiber, so a throw from
+// one would end the loop with a defect nothing reports. Contained and
+// logged instead: the old timer-driven loop crashed the process on the
+// same throw, which was louder but no more useful.
+function guarded(what: string, run: () => void): void {
+  try {
+    run();
+  } catch (error) {
+    console.warn(`[supervisor] ${what} threw: ${String(error)}`);
+  }
+}
+
 export function createSupervisor(options: SupervisorOptions): Supervisor {
   const connect = options.connect ?? connectDeviceEffect;
   const classifyClose = options.classifyClose ?? lanCloseClassifier;
-  const runtime = options.runtime ?? defaultRuntime;
+  const runtime = options.runtime ?? defaultSupervisorRuntime;
 
   let status: SupervisorStatus = { phase: "idle" };
   let fiber: Fiber.Fiber<void> | null = null;
 
   function setStatus(next: SupervisorStatus): void {
     status = next;
-    options.onStatus?.(next);
+    guarded("onStatus", () => options.onStatus?.(next));
+  }
+
+  function reportConnection(connection: DeviceConnection | null): void {
+    guarded("onConnection", () => options.onConnection?.(connection));
   }
 
   // One dial and one hold. Never fails: every way the attempt can end
-  // is an outcome the loop reads.
-  const attempt: Effect.Effect<AttemptOutcome> = Effect.gen(function* () {
-    setStatus({ phase: "connecting" });
-    // Completed by the transport's close callback for a socket that
-    // dropped on its own (the transport suppresses it for an owner
-    // close), so the hold below wakes exactly then.
-    const closed = Deferred.makeUnsafe<number | null>();
-    const dialed = yield* connect({
-      url: options.params.url,
-      token: options.params.token,
-      appVersion: options.params.appVersion,
-      localDeviceId: options.params.localDeviceId,
-      onClose: (code) => {
-        Deferred.doneUnsafe(closed, Effect.succeed(code));
-      },
-      helloTimeoutMs: options.helloTimeoutMs,
+  // is an outcome the loop reads. The connection is recorded in the
+  // same step the dial lands, and the interrupt hook wraps the whole
+  // attempt, so a stop() that arrives at any point after the dial,
+  // even re-entrantly from the connected status callback, closes it.
+  const attempt: Effect.Effect<AttemptOutcome> = Effect.suspend(() => {
+    let held: DeviceConnection | null = null;
+    return attemptWith((connection) => {
+      held = connection;
     }).pipe(
-      Effect.map((connection) => ({ ok: true as const, connection })),
-      Effect.catch((error) => Effect.succeed({ ok: false as const, error })),
-    );
-    if (!dialed.ok) {
-      // The transport tags a blocking close as blocked. Anything else
-      // (hello timeout, host restart, network blip) is retryable, and a
-      // failed attempt never counts as a stable connection.
-      const error = dialed.error;
-      if (error instanceof RemoteConnectError && error.blocked) {
-        // A blocking close names itself through the classifier. A
-        // blocking failure with no close code (a refused ticket mint)
-        // names itself in the error.
-        const verdict = classifyClose(error.code) ?? {
-          reason: "refused" as const,
-          message: error.message,
-        };
-        return { kind: "blocked", ...verdict };
-      }
-      return { kind: "backoff", resetLadder: false };
-    }
-    const connection = dialed.connection;
-    const connectedAt = yield* Clock.currentTimeMillis;
-    setStatus({
-      phase: "connected",
-      remoteDeviceId: connection.remoteDeviceId,
-      remoteAppVersion: connection.remoteAppVersion,
-    });
-    options.onConnection?.(connection);
-    // Hold the socket until it drops. stop() interrupts the hold, and
-    // the interruption closes the socket, so no orphan stays live.
-    const code = yield* Deferred.await(closed).pipe(
       Effect.onInterrupt(() =>
         Effect.sync(() => {
-          connection.close();
+          held?.close();
+          held = null;
         }),
       ),
     );
-    options.onConnection?.(null);
-    const verdict = classifyClose(code);
-    if (verdict !== null) return { kind: "blocked", ...verdict };
-    const openMs = (yield* Clock.currentTimeMillis) - connectedAt;
-    return { kind: "backoff", resetLadder: openMs >= STABLE_CONNECTION_MS };
   });
+
+  const attemptWith = (
+    hold: (connection: DeviceConnection | null) => void,
+  ): Effect.Effect<AttemptOutcome> =>
+    Effect.gen(function* () {
+      setStatus({ phase: "connecting" });
+      // Completed by the transport's close callback for a socket that
+      // dropped on its own (the transport suppresses it for an owner
+      // close), so the hold below wakes exactly then.
+      const closed = Deferred.makeUnsafe<number | null>();
+      const dialed = yield* connect({
+        url: options.params.url,
+        token: options.params.token,
+        appVersion: options.params.appVersion,
+        localDeviceId: options.params.localDeviceId,
+        onClose: (code) => {
+          Deferred.doneUnsafe(closed, Effect.succeed(code));
+        },
+        helloTimeoutMs: options.helloTimeoutMs,
+      }).pipe(
+        Effect.map((connection) => {
+          hold(connection);
+          return { ok: true as const, connection };
+        }),
+        // The whole cause, not only a typed failure: a connect effect
+        // that dies (a thrown bug) must back off like a failed dial, not
+        // end the loop silently in "connecting".
+        Effect.catchCause((cause) => {
+          // An interruption is stop() at work: let it through untouched.
+          // An interrupt-only cause carries no failure, hence the
+          // narrowing.
+          if (Cause.hasInterruptsOnly(cause)) {
+            return Effect.failCause(cause as Cause.Cause<never>);
+          }
+          if (Cause.hasDies(cause)) {
+            console.warn(`[supervisor] dial died: ${Cause.pretty(cause)}`);
+          }
+          return Effect.succeed({
+            ok: false as const,
+            error: Cause.squash(cause),
+          });
+        }),
+      );
+      if (!dialed.ok) {
+        // The transport tags a blocking close as blocked. Anything else
+        // (hello timeout, host restart, network blip) is retryable, and a
+        // failed attempt never counts as a stable connection.
+        const error = dialed.error;
+        if (error instanceof RemoteConnectError && error.blocked) {
+          // A blocking close names itself through the classifier. A
+          // blocking failure with no close code (a refused ticket mint)
+          // names itself in the error.
+          const verdict = classifyClose(error.code) ?? {
+            reason: "refused" as const,
+            message: error.message,
+          };
+          return { kind: "blocked", ...verdict };
+        }
+        return { kind: "backoff", resetLadder: false };
+      }
+      const connection = dialed.connection;
+      const connectedAt = yield* Clock.currentTimeMillis;
+      setStatus({
+        phase: "connected",
+        remoteDeviceId: connection.remoteDeviceId,
+        remoteAppVersion: connection.remoteAppVersion,
+      });
+      reportConnection(connection);
+      // Hold the socket until it drops. stop() interrupts the hold, and
+      // the interrupt hook around the attempt closes the socket, so no
+      // orphan stays live.
+      const code = yield* Deferred.await(closed);
+      // Dropped on its own: nothing left to close on an interrupt.
+      hold(null);
+      reportConnection(null);
+      const verdict = classifyClose(code);
+      if (verdict !== null) return { kind: "blocked", ...verdict };
+      const openMs = (yield* Clock.currentTimeMillis) - connectedAt;
+      return { kind: "backoff", resetLadder: openMs >= STABLE_CONNECTION_MS };
+    });
 
   // The loop: attempt, then either end blocked or sleep one rung and
   // go again. The rung is local to the loop, so a new start() begins
@@ -305,7 +376,9 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
       const running = fiber;
       fiber = null;
       if (running !== null) await runtime.runPromise(Fiber.interrupt(running));
-      options.onConnection?.(null);
+      // A start() that landed during the interrupt owns the status now.
+      if (fiber !== null) return;
+      reportConnection(null);
       setStatus({ phase: "stopped" });
     },
     status: () => status,

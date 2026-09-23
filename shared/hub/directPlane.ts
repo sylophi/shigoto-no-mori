@@ -30,7 +30,7 @@ import {
 } from "@shared/hub/directKeeper";
 import { applyDirectPresence } from "@shared/hub/directPresence";
 import type { OpenClientSocket } from "@shared/ipc/socket/wsClientTransport";
-import type { SupervisorClock } from "@shared/remote/supervisor";
+import type { SupervisorRuntime } from "@shared/remote/supervisor";
 
 // The slice of a hub connection the plane composes over, common to
 // the node connection (host/hub/connection.ts) and the browser one
@@ -68,10 +68,11 @@ type DirectPlaneDeps = {
   // shrink it so failure scenarios settle fast, real owners omit it
   // and take the dialer's HELLO_TIMEOUT_MS default.
   deadlineMs?: number;
-  // The keeper's clock, a check seam too: the direct-plane check
-  // drives retries with a fake clock instead of sleeping the real
-  // ladder out. Real owners omit it and take real time.
-  keeper?: { clock?: SupervisorClock };
+  // Where the keeper's fibers run, a check seam too: the direct-plane
+  // check passes a TestClock runtime and drives retries with
+  // TestClock.adjust instead of sleeping the real ladder out. Real
+  // owners omit it and take Effect's default services.
+  keeper?: { runtime?: SupervisorRuntime };
   // The host half, absent on platforms that only ever dial out: the
   // direct listener's targeted roster close, and this device's own
   // tunnel endpoint state for the status snapshot.
@@ -103,12 +104,12 @@ type DirectPlane = {
   // connection's own probe when the machine resumes or the page comes
   // back, so both planes get their verdict in seconds.
   probe(): void;
-  // Tears the whole plane down (quit, tab teardown): latches the
+  // Tears the whole plane down (quit, tab teardown): stops the
   // keeper, then closes every cached direct session. The ORDER is the
   // point and it lives here rather than in each owner: the keeper
-  // supervises a session per rostered peer with pending redial timers,
-  // and an unlatched timer firing during the close would dial fresh
-  // sessions into a teardown. Owners call this alone -- both halves
+  // supervises a session per rostered peer with a fiber that may be
+  // sleeping on the ladder, and one still running during the close
+  // would dial fresh sessions into a teardown. Owners call this alone -- both halves
   // are here, so neither can forget one.
   stop(): void;
 };

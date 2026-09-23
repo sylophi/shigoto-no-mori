@@ -46,6 +46,13 @@ pre-commit:
     wire-error:
       glob: "{shared/errors.ts,shared/errorOf.ts,shared/ipc/wireError.ts,shared/ipc/socket/frames.ts,test/wire-error.mjs,test/lib/checkKit.mjs}"
       run: pnpm test wire-error
+    # The reconnect supervisor under Effect's TestClock, pure: the exact
+    # backoff ladder and its cap, the stable-connection reset, blocked
+    # verdicts that never redial, and stop() cancelling a dial, a held
+    # socket or a sleep.
+    supervisor:
+      glob: "{shared/remote/supervisor.ts,shared/ipc/socket/wsClientTransport.ts,test/supervisor.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test supervisor
     # Typechecks the hub Worker package and runs its vitest suite
     # inside workerd (real D1, Durable Object and websocket bindings)
     # against the shared app-to-worker protocol, so enrollment, ticket,

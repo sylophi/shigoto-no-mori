@@ -52,6 +52,7 @@ import {
   type ConnectFn,
   createSupervisor,
   type Supervisor,
+  type SupervisorRuntime,
   type SupervisorStatus,
 } from "@shared/remote/supervisor";
 import { createLimiter } from "@shared/util/limit";
@@ -117,6 +118,9 @@ type HubConnectionCoreDeps = {
   // Test seams for the liveness heartbeat (shared/ipc/socket/heartbeat.ts,
   // the rule the direct sockets follow too).
   heartbeat?: HeartbeatOptions;
+  // Where the supervisor's fiber runs (shared/remote/supervisor.ts):
+  // Effect's default services, or a TestClock runtime in a proof.
+  runtime?: SupervisorRuntime;
 };
 
 // The lifecycle surface both platform bindings re-expose unchanged.
@@ -466,6 +470,7 @@ export function createHubConnectionCore(
       onConnection: (connection) => {
         live = connection;
       },
+      runtime: deps.runtime,
     });
     current = { supervisor, opts };
     supervisor.start();

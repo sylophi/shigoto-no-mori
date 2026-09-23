@@ -152,8 +152,8 @@ export function makeDirectBridge(client, opts = {}) {
     // of Node's global.
     openSocket: (url) => new WsClient(url),
     deadlineMs: opts.deadlineMs ?? 3000,
-    // The keeper's clock/ladder seam, so retry scenarios advance a
-    // fake clock instead of sleeping the real ladder out.
+    // The keeper's runtime seam, so retry scenarios advance a
+    // TestClock instead of sleeping the real ladder out.
     keeper: opts.keeper,
   });
   return { plane, bridge: plane.handlers };

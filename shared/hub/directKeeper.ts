@@ -12,7 +12,7 @@
 // somebody clicked it.
 //
 // Retry discipline, same rails as shared/remote/supervisor.ts (whose
-// ladder, stable threshold and clock this reuses rather than copying):
+// ladder and stable threshold this reuses rather than copying):
 // forever-retry with capped backoff for transient failures, a stable
 // reset so a healthy session that blips does not inherit a punishing
 // delay, and TERMINAL verdicts schedule NOTHING rather than spin.
@@ -41,17 +41,25 @@
 // no-op), so keeper state and the bridge's session cache cannot
 // drift: sessions appear via keeper dials, and disappear via the
 // transport's self-close (peerDropped below), the roster sweep (which
-// also deletes the keeper's entry), or quit (stop's latch).
+// also interrupts the peer's fiber), or quit (stop).
+//
+// One Effect fiber per rostered peer, held in a FiberMap keyed by
+// device id: dial, hold until the session drops, sleep one rung, go
+// again. Removing a peer from the roster interrupts its fiber, which
+// cancels a sleep on the ladder or abandons a dial in flight, so no
+// continuation is left to ask whether it is still wanted. stop()
+// closes the map: every fiber is interrupted, and a closed FiberMap
+// refuses new fibers outright, which is the quit latch.
 //
 // Pure shared code (no node builtins, no electron), driven headlessly
-// by the direct-plane check with a fake clock and a stub dial.
+// by the direct-plane check under a TestClock runtime and a stub dial.
+import { Clock, Deferred, Effect, Exit, FiberMap, Scope } from "effect";
 import {
   BACKOFF_LADDER_MS,
   backoffDelayMs,
-  defaultSupervisorClock,
   STABLE_CONNECTION_MS,
-  type SupervisorClock,
-  type SupervisorTimer,
+  defaultSupervisorRuntime,
+  type SupervisorRuntime,
 } from "@shared/remote/supervisor";
 import { isTerminalDialError } from "./directDial";
 import { errorMessageOf } from "@shared/errors";
@@ -61,11 +69,13 @@ type DirectKeeperDeps = {
   // means an established session (or one already cached), rejecting
   // means the attempt failed with the dialer's typed error.
   dial(deviceId: string): Promise<unknown>;
-  // The one test seam: the check drives the ladder with a fake clock
-  // instead of sleeping it out. The ladder and the stable threshold
-  // are NOT seams -- they are the shared supervisor constants, and the
-  // check asserts against those same constants on purpose.
-  clock?: SupervisorClock;
+  // The one test seam: where the peers' fibers run. The check passes a
+  // ManagedRuntime built on TestClock.layer() and drives the ladder
+  // with TestClock.adjust instead of sleeping it out. The ladder and
+  // the stable threshold are NOT seams -- they are the shared
+  // supervisor constants, and the check asserts against those same
+  // constants on purpose.
+  runtime?: SupervisorRuntime;
 };
 
 export type DirectKeeper = {
@@ -84,161 +94,150 @@ export type DirectKeeper = {
   // dial failure, cleared the moment a dial succeeds), for the
   // bridge's no-session rejection. Null when none applies.
   unavailableReason(deviceId: string): string | null;
-  // Quit latch: cancel every timer and ignore everything after, so a
-  // pending retry cannot dial mid-teardown.
+  // Quit: interrupt every peer's fiber and ignore everything after, so
+  // a pending retry cannot dial mid-teardown.
   stop(): void;
 };
 
+// What the rest of the keeper reads about a peer while its fiber
+// runs. The fiber owns it: it is added when the fiber starts and
+// removed when the fiber ends, so membership here is exactly "has a
+// fiber", which is "was in the last live roster".
 type PeerState = {
-  // Ladder position for the current failure streak, supervisor-style:
-  // advanced on every scheduled backoff, reset only by a stable
-  // session's drop or the peer's roster re-entry (a fresh state).
-  attempt: number;
-  // When the live session was established, by the injected clock, so a
-  // drop can measure stability.
-  connectedAt: number;
-  timer: SupervisorTimer | null;
   lastFailure: string | null;
+  // Completed by peerDropped. A fresh one per attempt, made BEFORE the
+  // dial, so a drop that lands while the dial's result is still on its
+  // way back is not lost.
+  dropped: Deferred.Deferred<void>;
 };
 
 export function createDirectKeeper(deps: DirectKeeperDeps): DirectKeeper {
-  const clock = deps.clock ?? defaultSupervisorClock;
+  const runtime = deps.runtime ?? defaultSupervisorRuntime;
+  const peers = new Map<string, PeerState>();
+  // The map's scope is the keeper's lifetime: stop() closes it.
+  const scope = Scope.makeUnsafe();
+  const fibers = Effect.runSync(
+    FiberMap.make<string>().pipe(Scope.provide(scope)),
+  );
 
-  // Membership here IS "was in the last live roster": reconcile prunes
-  // and seeds it, so an offline-to-online transition always lands on a
-  // fresh state (attempt 0, dialing at once) without a second roster
-  // copy.
-  const states = new Map<string, PeerState>();
-  // Set by stop(), which also CLEARS states. Only reconcile reads it:
-  // every other path is already guarded by the state-identity check
-  // below, which a cleared map fails on its own. See stop().
-  let stopped = false;
-
-  // The one liveness question every async continuation asks: is this
-  // still the state the map holds for this peer? A continuation
-  // landing after the peer left the roster (state deleted or
-  // replaced), or after stop() cleared the map, must change nothing.
-  function isCurrent(deviceId: string, state: PeerState): boolean {
-    return states.get(deviceId) === state;
-  }
-
-  function clearTimer(state: PeerState): void {
-    if (state.timer !== null) {
-      clock.clearTimeout(state.timer);
-      state.timer = null;
-    }
-  }
-
-  function dialNow(deviceId: string, state: PeerState): void {
-    deps.dial(deviceId).then(
-      () => {
-        if (!isCurrent(deviceId, state)) return;
-        state.connectedAt = clock.now();
-        if (state.lastFailure !== null) {
-          console.info(`[direct] session to ${deviceId} established`);
+  // One peer's supervision, from roster entry until it is interrupted.
+  // Never fails: every way a dial can end is read below.
+  const keepPeer = (deviceId: string): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      const state: PeerState = {
+        lastFailure: null,
+        dropped: Deferred.makeUnsafe<void>(),
+      };
+      peers.set(deviceId, state);
+      // Ladder position for the current failure streak, supervisor
+      // style: advanced on every backoff, reset only by a stable
+      // session's drop. Local to the fiber, so roster re-entry (a new
+      // fiber) starts at the bottom.
+      let rung = 0;
+      while (true) {
+        state.dropped = Deferred.makeUnsafe<void>();
+        const dialed = yield* Effect.tryPromise({
+          try: () => deps.dial(deviceId),
+          catch: (error) => error,
+        }).pipe(
+          Effect.as({ ok: true as const }),
+          Effect.catch((error) =>
+            Effect.succeed({ ok: false as const, error }),
+          ),
+        );
+        if (dialed.ok) {
+          const connectedAt = yield* Clock.currentTimeMillis;
+          if (state.lastFailure !== null) {
+            console.info(`[direct] session to ${deviceId} established`);
+          }
+          state.lastFailure = null;
+          // The rung is NOT reset here: only a drop after a STABLE run
+          // resets the ladder, so a connect-then-die flapper keeps
+          // climbing instead of hammering at the bottom rung.
+          yield* Deferred.await(state.dropped);
+          const openMs = (yield* Clock.currentTimeMillis) - connectedAt;
+          if (openMs >= STABLE_CONNECTION_MS) rung = 0;
+        } else {
+          const message = errorMessageOf(dialed.error);
+          // One line per DISTINCT reason, not per rung: the ladder
+          // redials forever, and a reason unchanged since the last
+          // attempt says nothing new. This is the only place a failed
+          // dial is logged at all (the renderer learns of it only when
+          // it asks, through the no-session rejection), so without it a
+          // peer that never connects leaves no trace in the log.
+          if (message !== state.lastFailure) {
+            console.warn(`[direct] dial to ${deviceId} failed: ${message}`);
+          }
+          state.lastFailure = message;
+          if (isTerminalDialError(dialed.error)) {
+            // Park. Redialing cannot change it and WOULD feed the
+            // host's failed-auth lockout, so the fiber waits with its
+            // reason recorded and nothing on a timer: this peer's next
+            // dial comes from its roster re-entry (see the header),
+            // which starts a fresh fiber. Waiting rather than ending
+            // keeps the peer in the map, so a steady roster does not
+            // restart it.
+            return yield* Effect.never;
+          }
         }
-        state.lastFailure = null;
-        // attempt is NOT reset here: only a drop after a STABLE run
-        // resets the ladder (peerDropped), so a connect-then-die
-        // flapper keeps climbing instead of hammering at the bottom
-        // rung.
-      },
-      (error: unknown) => {
-        if (!isCurrent(deviceId, state)) return;
-        const message = errorMessageOf(error);
-        // One line per DISTINCT reason, not per rung: the ladder
-        // redials forever, and a reason unchanged since the last
-        // attempt says nothing new. This is the only place a failed
-        // dial is logged at all (the renderer learns of it only when
-        // it asks, through the no-session rejection), so without it a
-        // peer that never connects leaves no trace in the log.
-        if (message !== state.lastFailure) {
-          console.warn(`[direct] dial to ${deviceId} failed: ${message}`);
-        }
-        state.lastFailure = message;
-        if (isTerminalDialError(error)) {
-          // Redialing cannot change it and WOULD feed the host's
-          // failed-auth lockout, so schedule nothing: this peer's next
-          // dial comes from its roster re-entry (see the header),
-          // which seeds a fresh state.
-          return;
-        }
-        scheduleRedial(deviceId, state);
-      },
+        yield* Effect.sleep(backoffDelayMs(BACKOFF_LADDER_MS, rung));
+        rung += 1;
+      }
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          peers.delete(deviceId);
+        }),
+      ),
     );
-  }
-
-  // The one backoff rule: delay from the current rung, then advance,
-  // exactly the supervisor's scheduleBackoff.
-  function scheduleRedial(deviceId: string, state: PeerState): void {
-    clearTimer(state);
-    const delayMs = backoffDelayMs(BACKOFF_LADDER_MS, state.attempt);
-    state.attempt += 1;
-    state.timer = clock.setTimeout(() => {
-      state.timer = null;
-      if (!isCurrent(deviceId, state)) return;
-      dialNow(deviceId, state);
-    }, delayMs);
-  }
 
   return {
     reconcile(online) {
-      // The ONE place the latch does real work: reconcile SEEDS the
-      // map, so a roster feed arriving after stop() would re-add peers
-      // and dial them into a teardown. Every other path only ever
-      // reads an existing entry, which stop() already deleted.
-      if (stopped) return;
       const live = new Set(online);
-      for (const [deviceId, state] of states) {
-        if (!live.has(deviceId)) {
+      const departed = [...peers.keys()].filter((id) => !live.has(id));
+      runtime.runFork(
+        Effect.gen(function* () {
           // The peer left the roster (or our own link went down and
-          // the caller fed []). Cancel its schedule and forget it.
-          // Closing its sessions is the presence sweep's job, and the
-          // gate that keeps sessions alive through OUR OWN hub
-          // outage lives there too (directPresence.ts).
-          clearTimer(state);
-          states.delete(deviceId);
-        }
-      }
-      for (const deviceId of live) {
-        if (states.has(deviceId)) continue;
-        // New to the roster: dial at once. The bridge's cache makes
-        // this a no-op resolve for a session that survived a device hub
-        // blip, so a reconnect's full-roster diff costs nothing for
-        // peers still connected.
-        const state: PeerState = {
-          attempt: 0,
-          connectedAt: 0,
-          timer: null,
-          lastFailure: null,
-        };
-        states.set(deviceId, state);
-        dialNow(deviceId, state);
-      }
+          // the caller fed []). Interrupting its fiber cancels its
+          // schedule and forgets it. Closing its sessions is the
+          // presence sweep's job, and the gate that keeps sessions
+          // alive through OUR OWN hub outage lives there too
+          // (directPresence.ts).
+          for (const deviceId of departed) {
+            yield* FiberMap.remove(fibers, deviceId);
+          }
+          // New to the roster: dial at once. A peer already in the map
+          // keeps its fiber (onlyIfMissing), so a steady roster leaves
+          // a backoff in progress alone. The bridge's cache makes a
+          // fresh dial a no-op resolve for a session that survived a
+          // device hub blip, so a reconnect's full-roster diff costs
+          // nothing for peers still connected. After stop() the map is
+          // closed and run adds nothing.
+          for (const deviceId of live) {
+            yield* FiberMap.run(fibers, deviceId, keepPeer(deviceId), {
+              onlyIfMissing: true,
+            });
+          }
+        }),
+      );
     },
 
     peerDropped(deviceId) {
       // A live roster entry is the whole condition: the bridge fires
       // this only for a session it had ESTABLISHED and that closed on
-      // its own, a peer already swept from the roster (or stopped) has
-      // no entry, and scheduleRedial clears whatever timer the entry
-      // held first, so a redundant call cannot stack schedules.
-      const state = states.get(deviceId);
-      if (state === undefined) return;
-      if (clock.now() - state.connectedAt >= STABLE_CONNECTION_MS) {
-        state.attempt = 0;
-      }
-      scheduleRedial(deviceId, state);
+      // its own, and a peer already swept from the roster (or stopped)
+      // has no entry. Completing an already completed signal is a
+      // no-op, so a redundant call cannot stack redials.
+      const state = peers.get(deviceId);
+      if (state !== undefined) Deferred.doneUnsafe(state.dropped, Effect.void);
     },
 
     unavailableReason(deviceId) {
-      return states.get(deviceId)?.lastFailure ?? null;
+      return peers.get(deviceId)?.lastFailure ?? null;
     },
 
     stop() {
-      stopped = true;
-      for (const state of states.values()) clearTimer(state);
-      states.clear();
+      runtime.runFork(Scope.close(scope, Exit.void));
     },
   };
 }

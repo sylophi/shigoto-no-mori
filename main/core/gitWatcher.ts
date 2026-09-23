@@ -29,8 +29,14 @@
 // child, the echo window after an app-run mutating git command) and
 // those are skipped exactly like the state watcher skips the app's
 // own root writes: their callers already invalidate their targets.
+//
+// One fiber per watched project: the fs.watch events feed a Stream,
+// debounced, and each element is one change signal. The watch handle
+// is owned by the stream's scope, so dropping a project is interrupting
+// its fiber and there is no timer to clear.
 import { type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
+import { Effect, Fiber, Queue, Stream } from "effect";
 import type { Project } from "@shared/schemas";
 import { loadProjects } from "@host/lib/projects";
 
@@ -87,8 +93,7 @@ export function gitDirOf(projectPath: string): string | null {
 
 type Watched = {
   gitDir: string;
-  watcher: FSWatcher;
-  timer: NodeJS.Timeout | null;
+  fiber: Fiber.Fiber<void>;
 };
 
 export type GitWatcherDeps = {
@@ -106,41 +111,103 @@ export type GitWatcherDeps = {
 const watched = new Map<string, Watched>();
 let deps: GitWatcherDeps | null = null;
 
-function closeWatched(projectId: string, entry: Watched): void {
-  if (entry.timer !== null) clearTimeout(entry.timer);
-  entry.watcher.close();
-  if (watched.get(projectId) === entry) watched.delete(projectId);
+// The relevant, unsuppressed events of one git directory, as they
+// land. The watch handle lives in the stream's scope: it opens when
+// the stream starts and closes when the stream ends, however it ends.
+// A watch that cannot open (vanished between the stat and the watch,
+// or a platform without recursive watches), or that errors later (the
+// repository deleted or unmounted), ends the stream, and a later
+// reconcile tries again.
+function gitDirEvents(
+  gitDir: string,
+  suppressed: (gitDir: string) => boolean,
+): Stream.Stream<string> {
+  return Stream.callback<string>((queue) =>
+    Effect.acquireRelease(
+      // A synchronous throw from fs.watch is the "not watchable" case,
+      // so it is caught here: inside Effect.sync it would be a defect,
+      // which no catch below would see.
+      Effect.sync(() => {
+        let watcher: FSWatcher;
+        try {
+          watcher = watch(gitDir, { recursive: true, persistent: false });
+        } catch {
+          return null;
+        }
+        watcher.on("change", (_eventType, file) => {
+          if (typeof file !== "string" || !isRelevantGitPath(file)) return;
+          // Checked at event time, not after the debounce, mirroring
+          // the state watcher: a CLI child finishing right after an
+          // external commit must not swallow the refresh that commit
+          // deserves.
+          if (suppressed(gitDir)) return;
+          Queue.offerUnsafe(queue, file);
+        });
+        watcher.on("error", () => {
+          Queue.endUnsafe(queue);
+        });
+        return watcher;
+      }),
+      (watcher) =>
+        Effect.sync(() => {
+          if (watcher === null) Queue.endUnsafe(queue);
+          else watcher.close();
+        }),
+    ).pipe(
+      // A watch that never opened ends the stream at once.
+      Effect.flatMap((watcher) =>
+        watcher === null ? Queue.end(queue) : Effect.succeed(true),
+      ),
+    ),
+  );
 }
 
-function openWatched(projectId: string, gitDir: string): void {
-  let watcher: FSWatcher;
-  try {
-    watcher = watch(gitDir, { recursive: true, persistent: false });
-  } catch {
-    // Not watchable right now (vanished between the stat and the
-    // watch, or a platform without recursive watches). The next
-    // reconcile tries again.
-    return;
-  }
-  const entry: Watched = { gitDir, watcher, timer: null };
-  watcher.on("change", (_eventType, file) => {
-    if (deps === null || typeof file !== "string" || !isRelevantGitPath(file))
-      return;
-    // Checked at event time, not timer time, mirroring the state
-    // watcher: a CLI child finishing right after an external commit
-    // must not swallow the refresh that commit deserves.
-    if (deps.suppressed(gitDir)) return;
-    if (entry.timer !== null) clearTimeout(entry.timer);
-    entry.timer = setTimeout(() => {
-      entry.timer = null;
-      deps?.onChange(projectId);
-    }, DEBOUNCE_MS);
-  });
-  watcher.on("error", () => {
-    // The repository went away (deleted, unmounted). Drop the watch.
-    // A later reconcile re-adds it if it comes back.
-    closeWatched(projectId, entry);
-  });
+function watchProject(
+  projectId: string,
+  gitDir: string,
+  current: GitWatcherDeps,
+): Effect.Effect<void> {
+  return gitDirEvents(gitDir, current.suppressed).pipe(
+    Stream.debounce(DEBOUNCE_MS),
+    Stream.runForEach(() =>
+      Effect.sync(() => {
+        // Contained: a throw would end this project's watch with a
+        // defect nothing reports.
+        try {
+          current.onChange(projectId);
+        } catch (error) {
+          console.warn(`[git-watcher] onChange threw: ${String(error)}`);
+        }
+      }),
+    ),
+  );
+}
+
+function closeWatched(projectId: string, entry: Watched): void {
+  if (watched.get(projectId) === entry) watched.delete(projectId);
+  Effect.runFork(Fiber.interrupt(entry.fiber));
+}
+
+function openWatched(
+  projectId: string,
+  gitDir: string,
+  current: GitWatcherDeps,
+): void {
+  const entry: Watched = {
+    gitDir,
+    fiber: Effect.runFork(
+      watchProject(projectId, gitDir, current).pipe(
+        // However the stream ends (the watch failed to open, the
+        // repository went away), the entry goes with it so the next
+        // reconcile can open it again.
+        Effect.ensuring(
+          Effect.sync(() => {
+            if (watched.get(projectId) === entry) watched.delete(projectId);
+          }),
+        ),
+      ),
+    ),
+  };
   watched.set(projectId, entry);
 }
 
@@ -153,9 +220,10 @@ function openWatched(projectId: string, gitDir: string): void {
 // together cover every way a project is added, removed or relocated.
 export function reconcileGitWatchers(): void {
   if (deps === null) return;
+  const current = deps;
   let projects: Project[];
   try {
-    projects = (deps.projects ?? loadProjects)();
+    projects = (current.projects ?? loadProjects)();
   } catch {
     // The registry is unreadable right now, so keep what is watched.
     return;
@@ -169,7 +237,7 @@ export function reconcileGitWatchers(): void {
     if (wanted.get(projectId) !== entry.gitDir) closeWatched(projectId, entry);
   }
   for (const [projectId, gitDir] of wanted) {
-    if (!watched.has(projectId)) openWatched(projectId, gitDir);
+    if (!watched.has(projectId)) openWatched(projectId, gitDir, current);
   }
 }
 

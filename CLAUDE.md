@@ -32,4 +32,9 @@ that hold across all of them:
 - Imports from `effect/unstable/*` are confined to adapter files, since
   the stable release drops the `unstable` segment.
 - Bridge into Effect with `runtime.runPromise(effect, { signal })` at
-  the non-Effect edge (`main/runtime.ts`), nowhere else.
+  the non-Effect edge (`main/runtime.ts`). A runner that must start and
+  stop synchronously from Promise-side code (the supervisor, the
+  keeper, the mirror daemon, the watchers) forks with `Effect.runFork`
+  behind a `runtime` seam until AppLive owns it (Phase 2 step 7); a
+  throw from an owner callback inside such a fiber must be contained
+  and logged, since a defect in a forked fiber is reported nowhere.

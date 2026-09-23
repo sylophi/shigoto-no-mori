@@ -11,9 +11,15 @@
 // (file-sync/main.go, watchParent), so a host that dies uncleanly
 // takes its daemon and every serve child down with it.
 //
+// The restart loop is one Effect fiber: spawn, wait for the child to
+// exit, sleep one rung of the ladder, spawn again. stop() ends the
+// child's pipe and interrupts the fiber, so there is no restart timer
+// to clear and no stopping flag to check after each step.
+//
 // Electron-free on purpose: the spawn is injected (main/electron owns
 // the binary path and the quit-time reaping), so the mirror check
 // drives this exact supervisor against a freshly built engine.
+import { Clock, Deferred, Effect, Fiber } from "effect";
 import type { StreamChild } from "@host/fileSync/spawn";
 import { errorMessageOf } from "@shared/errors";
 import type {
@@ -83,17 +89,26 @@ export function createMirrorDaemon(deps: {
   let child: StreamChild | null = null;
   let status: MirrorDaemonStatus = "stopped";
   let sessions: MirrorSessionRaw[] = [];
-  let stopping = false;
-  let restartTimer: ReturnType<typeof setTimeout> | null = null;
-  let restarts = 0;
+  let loop: Fiber.Fiber<void> | null = null;
   let nextRequestId = 1;
   const pending = new Map<string, Pending>();
   const log = deps.log ?? ((message: string) => console.warn(message));
 
+  // The owner's onChange runs inside the loop's fiber and from the
+  // child's stream callbacks; a throw from it must not end the loop
+  // (a defect nothing reports) or the child's reader.
+  function notifyChange(): void {
+    try {
+      deps.onChange?.();
+    } catch (error) {
+      log(`[mirror] onChange threw: ${errorMessageOf(error)}`);
+    }
+  }
+
   function setStatus(next: MirrorDaemonStatus): void {
     if (status === next) return;
     status = next;
-    deps.onChange?.();
+    notifyChange();
   }
 
   function rejectAllPending(reason: string): void {
@@ -119,7 +134,7 @@ export function createMirrorDaemon(deps: {
       sessions = Array.isArray(doc.sessions)
         ? (doc.sessions as MirrorSessionRaw[])
         : [];
-      deps.onChange?.();
+      notifyChange();
       return;
     }
     if (doc.event === "error") {
@@ -138,8 +153,11 @@ export function createMirrorDaemon(deps: {
       log(`[mirror] daemon refused a request: ${doc.error}`);
   }
 
-  function spawnNow(): void {
-    if (stopping) return;
+  // One run of the child, from spawn to exit. Resolves to whether the
+  // run was long enough to count as healthy, which restarts the ladder
+  // from the bottom. A spawn that cannot happen yet (no gateway, no
+  // binary) is a short run that keeps climbing.
+  const runOnce: Effect.Effect<{ stable: boolean }> = Effect.gen(function* () {
     // The gateway binds on its own retry schedule. Until it has, the
     // daemon has nothing to dial and waits, which is not the engine
     // being missing.
@@ -149,8 +167,7 @@ export function createMirrorDaemon(deps: {
     } catch (error) {
       log(`[mirror] daemon waiting for the gateway: ${errorMessageOf(error)}`);
       setStatus("starting");
-      scheduleRestart();
-      return;
+      return { stable: false };
     }
     let spawned: StreamChild | null;
     try {
@@ -167,11 +184,10 @@ export function createMirrorDaemon(deps: {
     }
     if (spawned === null) {
       setStatus("unavailable");
-      scheduleRestart();
-      return;
+      return { stable: false };
     }
     child = spawned;
-    const spawnedAt = Date.now();
+    const spawnedAt = yield* Clock.currentTimeMillis;
     setStatus("starting");
     spawned.stream.on("data", lineSplitter(handleLine));
     spawned.stream.on("error", () => {});
@@ -179,48 +195,48 @@ export function createMirrorDaemon(deps: {
       const text = chunk.toString("utf8").trim();
       if (text !== "") log(`[mirror] daemon: ${text}`);
     });
+    // Completed by the child's exit. A child stop() already let go of
+    // (child cleared first) completes nothing: its loop is interrupted.
+    const exited = Deferred.makeUnsafe<number | null>();
     spawned.onExit((code) => {
       if (child !== spawned) return;
       child = null;
       sessions = [];
       rejectAllPending("mirror daemon exited");
-      if (stopping) {
-        setStatus("stopped");
-        return;
-      }
-      log(`[mirror] daemon exited unexpectedly (code ${code}), restarting`);
-      if (Date.now() - spawnedAt >= STABLE_RUN_MS) restarts = 0;
-      setStatus("starting");
-      deps.onChange?.();
-      scheduleRestart();
+      Deferred.doneUnsafe(exited, Effect.succeed(code));
     });
-  }
+    const code = yield* Deferred.await(exited);
+    log(`[mirror] daemon exited unexpectedly (code ${code}), restarting`);
+    const stable =
+      (yield* Clock.currentTimeMillis) - spawnedAt >= STABLE_RUN_MS;
+    setStatus("starting");
+    notifyChange();
+    return { stable };
+  });
 
-  function scheduleRestart(): void {
-    if (stopping || restartTimer !== null) return;
-    const delay = backoffDelayMs(RESTART_LADDER_MS, restarts);
-    restarts++;
-    restartTimer = setTimeout(() => {
-      restartTimer = null;
-      spawnNow();
-    }, delay);
-    restartTimer.unref?.();
-  }
+  const supervise: Effect.Effect<void> = Effect.gen(function* () {
+    let rung = 0;
+    while (true) {
+      const { stable } = yield* runOnce;
+      if (stable) rung = 0;
+      const delay = backoffDelayMs(RESTART_LADDER_MS, rung);
+      rung += 1;
+      yield* Effect.sleep(delay);
+    }
+  });
 
   function start(): void {
-    stopping = false;
-    if (child !== null || restartTimer !== null) return;
-    spawnNow();
+    if (loop !== null) return;
+    loop = Effect.runFork(supervise);
   }
 
   // Closes the control pipe (the daemon's exit signal) and, as a
-  // backstop, kills a child that ignores it. Idempotent.
+  // backstop, kills a child that ignores it. Synchronous on purpose:
+  // the quit path calls it and moves on, so the pipe closes now and
+  // only the loop's interruption is deferred. Idempotent.
   function stop(): void {
-    stopping = true;
-    if (restartTimer !== null) {
-      clearTimeout(restartTimer);
-      restartTimer = null;
-    }
+    const running = loop;
+    loop = null;
     const current = child;
     child = null;
     sessions = [];
@@ -231,6 +247,7 @@ export function createMirrorDaemon(deps: {
       killer.unref?.();
       current.onExit(() => clearTimeout(killer));
     }
+    if (running !== null) Effect.runFork(Fiber.interrupt(running));
     setStatus("stopped");
   }
 

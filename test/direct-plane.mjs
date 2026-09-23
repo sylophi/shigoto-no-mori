@@ -107,8 +107,8 @@
 //     loop cannot pace dials.
 //   - a dead direct socket is redialed by the keeper on the shared
 //     backoff ladder with no ensure/invoke involved.
-//   - the keeper's retry discipline against a stub dial and a fake
-//     clock: eager dial on roster entry, the exact shared ladder on
+//   - the keeper's retry discipline against a stub dial and a
+//     TestClock: eager dial on roster entry, the exact shared ladder on
 //     transient failures (capped, forever), stable reset, roster exit
 //     cancels the schedule, hub-down reconciles to empty without
 //     touching sessions, and TERMINAL verdicts (blocked ticket, the
@@ -138,6 +138,8 @@ import { createServer, connect as netConnect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocket as WsClient, WebSocketServer } from "ws";
+import { Clock, ManagedRuntime } from "effect";
+import { TestClock } from "effect/testing";
 import {
   CLOSE_AUTH_FAILED,
   CLOSE_AUTH_LOCKED_OUT,
@@ -281,26 +283,55 @@ function fakeBrokerDialer(answer, opts = {}) {
   return { dialer, brokerCalls: () => brokerCalls };
 }
 
-// The keeper on a fake clock over a stub dial, the scaffolding the two
+// Effect's scheduler dispatches on setImmediate, so a few turns let a
+// keeper fiber woken by a reconcile, a settled dial or a clock
+// adjustment reach its next sleep or dial before an assertion reads
+// the dial log.
+async function settle() {
+  for (let i = 0; i < 5; i += 1) {
+    // oxlint-disable-next-line no-await-in-loop -- turns are sequential by nature
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
+// A TestClock runtime for the keeper's fibers, disposed with the
+// check. adjust() moves the clock and then settles, so the fibers it
+// woke have dialed (and, on a failure, gone back to sleep on the next
+// rung) by the time it resolves.
+function keeperRuntime(track) {
+  const rt = ManagedRuntime.make(TestClock.layer());
+  track(() => rt.dispose());
+  return {
+    runtime: { runFork: rt.runFork, runPromise: rt.runPromise },
+    now: () => rt.runSync(Clock.currentTimeMillis),
+    adjust: async (ms) => {
+      await rt.runPromise(TestClock.adjust(ms));
+      await settle();
+    },
+  };
+}
+
+// The keeper on a TestClock over a stub dial, the scaffolding the two
 // supervision scenarios below share: they differ only in what a failed
 // dial rejects with (transient vs terminal), which is the whole point
 // of running both. Dials fail until succeed() flips them, so a
 // scenario can walk a failure streak into an established session
 // without rebuilding the keeper.
-function stubKeeper(rejectWith) {
-  const clock = fakeClock();
+function stubKeeper(track, rejectWith) {
+  const { runtime, now, adjust } = keeperRuntime(track);
   const dials = [];
   let dialSucceeds = false;
   const keeper = createDirectKeeper({
-    clock,
+    runtime,
     dial: (deviceId) => {
-      dials.push({ deviceId, at: clock.now() });
+      dials.push({ deviceId, at: now() });
       return dialSucceeds ? Promise.resolve() : Promise.reject(rejectWith);
     },
   });
+  track(() => keeper.stop());
   return {
     keeper,
-    clock,
+    adjust,
     dials,
     succeed: () => {
       dialSucceeds = true;
@@ -792,11 +823,11 @@ async function main() {
       // The whole point: the ladder, so the peer comes back on its own
       // when the window expires. A park would outlive the lockout with
       // no roster transition to unpark on.
-      const { keeper, clock, dials } = stubKeeper(verdict);
+      const { keeper, adjust, dials } = stubKeeper(track, verdict);
       keeper.reconcile(["B"]);
-      await clock.settle();
+      await settle();
       assert.equal(dials.length, 1);
-      await clock.advance(BACKOFF_LADDER_MS[0]);
+      await adjust(BACKOFF_LADDER_MS[0]);
       assert.equal(
         dials.length,
         2,
@@ -835,11 +866,11 @@ async function main() {
       assert.equal(verdict.code, CLOSE_AUTH_FAILED);
       assert.equal(verdict.blocked, true, "a refused ticket was not blocked");
       assert.equal(isTerminalDialError(verdict), true);
-      const { keeper, clock, dials } = stubKeeper(verdict);
+      const { keeper, adjust, dials } = stubKeeper(track, verdict);
       keeper.reconcile(["B"]);
-      await clock.settle();
+      await settle();
       assert.equal(dials.length, 1);
-      await clock.advance(BACKOFF_LADDER_MS.at(-1) * 100);
+      await adjust(BACKOFF_LADDER_MS.at(-1) * 100);
       assert.equal(
         dials.length,
         1,
@@ -976,11 +1007,11 @@ async function main() {
       assert.equal(isTerminalDialError(verdict), false);
       // What the keeper then does with it, which is the whole point:
       // the ladder, not a park.
-      const { keeper, clock, dials } = stubKeeper(verdict);
+      const { keeper, adjust, dials } = stubKeeper(track, verdict);
       keeper.reconcile(["B"]);
-      await clock.settle();
+      await settle();
       assert.equal(dials.length, 1);
-      await clock.advance(BACKOFF_LADDER_MS[0]);
+      await adjust(BACKOFF_LADDER_MS[0]);
       assert.equal(
         dials.length,
         2,
@@ -1686,15 +1717,15 @@ async function main() {
       const listener = await startDirectListener(track);
       // The plane's presence path wired to the client connection
       // exactly as production wires it (late-bound plus one catch-up
-      // call), with the keeper on a fake clock so the ladder is
+      // call), with the keeper on a TestClock so the ladder is
       // advanced by hand instead of slept out.
       let onPlaneChange = null;
       const { client } = await bootPair(stub, track, listener, {
         clientOnChange: () => onPlaneChange?.(),
       });
-      const clock = fakeClock();
+      const { runtime, adjust } = keeperRuntime(track);
       const { plane, bridge } = makeDirectBridge(client, {
-        keeper: { clock },
+        keeper: { runtime },
       });
       track(() => bridge.closeDirectPeers());
       onPlaneChange = () => plane.handleConnectionChange();
@@ -1714,11 +1745,11 @@ async function main() {
         "the dropped session to leave the cache",
       );
       // Nothing redials before the ladder's first rung...
-      await clock.settle();
+      await settle();
       assert.deepEqual(bridge.directPeerVersions(), {});
       // ...and the keeper redials at it, with no ensure/invoke: the
       // drop was a self-close, so supervision owns the recovery.
-      await clock.advance(BACKOFF_LADDER_MS[0]);
+      await adjust(BACKOFF_LADDER_MS[0]);
       await waitFor(
         () => bridge.directPeerVersions().B !== undefined,
         "the keeper to redial the dropped session",
@@ -1738,7 +1769,7 @@ async function main() {
       plane.stop();
       assert.deepEqual(bridge.directPeerVersions(), {});
       listener.binding.closePeersNotIn([]);
-      await clock.advance(BACKOFF_LADDER_MS.at(-1) * 4);
+      await adjust(BACKOFF_LADDER_MS.at(-1) * 4);
       await delay(50);
       assert.deepEqual(
         bridge.directPeerVersions(),
@@ -2249,15 +2280,15 @@ async function main() {
       // Parked with no timer, and the roster round trip is the only
       // thing that redials it -- the right lifecycle for a tab that
       // may later become a host.
-      const { keeper, clock, dials } = stubKeeper(verdict);
+      const { keeper, adjust, dials } = stubKeeper(track, verdict);
       keeper.reconcile(["B"]);
-      await clock.settle();
+      await settle();
       assert.equal(dials.length, 1);
-      await clock.advance(BACKOFF_LADDER_MS.at(-1) * 100);
+      await adjust(BACKOFF_LADDER_MS.at(-1) * 100);
       assert.equal(dials.length, 1, "a refuse-all peer redialed on the ladder");
       keeper.reconcile([]);
       keeper.reconcile(["B"]);
-      await clock.settle();
+      await settle();
       assert.equal(dials.length, 2, "the roster round trip did not redial");
       keeper.stop();
     },
@@ -2265,18 +2296,19 @@ async function main() {
 
   await check(
     "keeper discipline: eager dial on roster entry, the exact shared ladder on transient failures (capped, forever), roster exit cancels, and a stable session's drop resets the ladder",
-    async () => {
-      const { keeper, clock, dials, succeed } = stubKeeper(
+    async (track) => {
+      const { keeper, adjust, dials, succeed } = stubKeeper(
+        track,
         new Error("listener down"),
       );
       // Eager: the peer entering the roster dials at once, and a
       // steady roster re-fed dials nothing new.
       keeper.reconcile(["B"]);
-      await clock.settle();
+      await settle();
       assert.equal(dials.length, 1);
       assert.deepEqual(dials[0], { deviceId: "B", at: 0 });
       keeper.reconcile(["B"]);
-      await clock.settle();
+      await settle();
       assert.equal(dials.length, 1, "a steady roster re-dialed");
       // Transient failures walk the EXACT shared ladder and cap at its
       // top forever (the forever-retry rule).
@@ -2287,10 +2319,10 @@ async function main() {
       for (const [i, delayMs] of expected.entries()) {
         const before = dials.length;
         // oxlint-disable-next-line no-await-in-loop -- the ladder is sequential by nature
-        await clock.advance(delayMs - 1);
+        await adjust(delayMs - 1);
         assert.equal(dials.length, before, `rung ${i} fired early`);
         // oxlint-disable-next-line no-await-in-loop -- the ladder is sequential by nature
-        await clock.advance(1);
+        await adjust(1);
         assert.equal(dials.length, before + 1, `rung ${i} never fired`);
       }
       // The keeper's last failure is the no-session explanation the
@@ -2298,15 +2330,15 @@ async function main() {
       assert.equal(keeper.unavailableReason("B"), "listener down");
       // Roster exit cancels the schedule outright.
       keeper.reconcile([]);
-      await clock.advance(BACKOFF_LADDER_MS.at(-1) * 4);
+      await adjust(BACKOFF_LADDER_MS.at(-1) * 4);
       const settled = dials.length;
       assert.equal(settled, 1 + expected.length, "a swept peer kept dialing");
       // Re-entry starts fresh at the bottom rung: dial now, and a
       // failure waits ladder[0], not the inherited cap.
       keeper.reconcile(["B"]);
-      await clock.settle();
+      await settle();
       assert.equal(dials.length, settled + 1);
-      await clock.advance(BACKOFF_LADDER_MS[0]);
+      await adjust(BACKOFF_LADDER_MS[0]);
       assert.equal(
         dials.length,
         settled + 2,
@@ -2315,13 +2347,13 @@ async function main() {
       // A session that connects and stays up past the stable threshold
       // resets the ladder: its drop redials at the bottom rung.
       succeed();
-      await clock.advance(BACKOFF_LADDER_MS[1]);
+      await adjust(BACKOFF_LADDER_MS[1]);
       const connectedAt = dials.length;
       assert.equal(connectedAt, settled + 3);
       assert.equal(keeper.unavailableReason("B"), null);
-      await clock.advance(STABLE_CONNECTION_MS);
+      await adjust(STABLE_CONNECTION_MS);
       keeper.peerDropped("B");
-      await clock.advance(BACKOFF_LADDER_MS[0]);
+      await adjust(BACKOFF_LADDER_MS[0]);
       assert.equal(
         dials.length,
         connectedAt + 1,
@@ -2330,40 +2362,50 @@ async function main() {
       // An UNSTABLE drop keeps climbing instead: rung 1 next, so a
       // connect-then-die flapper cannot hammer at the bottom.
       keeper.peerDropped("B");
-      await clock.advance(BACKOFF_LADDER_MS[0]);
+      await adjust(BACKOFF_LADDER_MS[0]);
       assert.equal(
         dials.length,
         connectedAt + 1,
         "an unstable drop redialed at the bottom rung",
       );
-      await clock.advance(BACKOFF_LADDER_MS[1] - BACKOFF_LADDER_MS[0]);
+      await adjust(BACKOFF_LADDER_MS[1] - BACKOFF_LADDER_MS[0]);
       assert.equal(
         dials.length,
         connectedAt + 2,
         "the unstable drop never redialed",
       );
+      // Quit latches: stop() ends the peer's supervision, so neither a
+      // drop landing after it nor a roster feed queued behind it dials
+      // anything, however long the clock runs.
       keeper.stop();
+      const stoppedAt = dials.length;
+      keeper.peerDropped("B");
+      keeper.reconcile(["B", "C"]);
+      await adjust(BACKOFF_LADDER_MS.at(-1) * 4);
+      assert.equal(dials.length, stoppedAt, "a stopped keeper dialed");
+      assert.equal(keeper.unavailableReason("B"), null);
     },
   );
 
   await check(
     "keeper parks on terminal verdicts with NO timer (the lockout-protection rule), and the peer's roster round trip is what redials it",
-    async () => {
-      const { keeper, clock, dials, succeed } = stubKeeper(
+    async (track) => {
+      const { keeper, adjust, dials, succeed } = stubKeeper(
+        track,
         new RemoteConnectError("ticket refused", CLOSE_AUTH_FAILED, true),
       );
       keeper.reconcile(["B"]);
-      await clock.settle();
+      await settle();
       assert.equal(dials.length, 1);
       // Parked: no amount of time redials a blocked verdict, so eager
       // supervision can never feed the host's failed-auth lockout a
       // second refused ticket on a timer.
-      await clock.advance(BACKOFF_LADDER_MS.at(-1) * 100);
+      await adjust(BACKOFF_LADDER_MS.at(-1) * 100);
       assert.equal(dials.length, 1, "a parked peer redialed on a timer");
       assert.equal(keeper.unavailableReason("B"), "ticket refused");
       // A steady roster does not unpark either...
       keeper.reconcile(["B"]);
-      await clock.advance(BACKOFF_LADDER_MS.at(-1));
+      await adjust(BACKOFF_LADDER_MS.at(-1));
       assert.equal(dials.length, 1, "a steady roster unparked a blocked peer");
       // ...but the peer's offline-to-online transition does (its app
       // restarted, or our own link came back: both reset the roster
@@ -2371,7 +2413,7 @@ async function main() {
       succeed();
       keeper.reconcile([]);
       keeper.reconcile(["B"]);
-      await clock.settle();
+      await settle();
       assert.equal(dials.length, 2, "the roster round trip did not redial");
       assert.equal(keeper.unavailableReason("B"), null);
       keeper.stop();
