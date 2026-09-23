@@ -58,7 +58,11 @@ import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
 import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
-import { syncHandlers } from "@host/ipc/modules/sync";
+import {
+  runPullWorktree,
+  sendWorktree,
+  syncHandlers,
+} from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import {
   getRunningScriptWorktrees,
@@ -1032,6 +1036,103 @@ async function main() {
     assert.equal(existsSync(wt7Path), false);
     ok(
       "sendWorktree: a dirty worktree lands on the peer with its commit and its uncommitted work, a repeat is refused by the peer, and teardownSent removes the local source only while it still matches what was sent",
+    );
+
+    // ---- A primary checkout, landing on its mirror branch
+    // (landBranch): the copy is an ordinary worktree on mirror/main
+    // carrying main's commits and uncommitted work, and the target's
+    // own primary (on main) is untouched. The source's primary is on
+    // main, one commit ahead of the target's after this.
+    writeFileSync(join(sourceRepo, "ff.txt"), "from main\n");
+    await git(sourceRepo, ["add", "-A"]);
+    await git(sourceRepo, ["commit", "-qm", "main moves on"]);
+    const mainTip = await gitOut(sourceRepo, "rev-parse", "HEAD");
+    writeFileSync(join(sourceRepo, "primary-draft.txt"), "primary draft\n");
+    const targetMainBefore = await gitOut(targetRepo, "rev-parse", "HEAD");
+    // The landing branch is the mirror start's to decide (off the
+    // peer's list), not the wire's: the orchestration takes it as an
+    // option.
+    const primaryPulled = await runPullWorktree(
+      {
+        sourceDeviceId: "A",
+        sourceProjectId,
+        sourceWorktreeId: worktreeIdFromPath(sourceRepo),
+        sourceIdentity: identity,
+        branch: "main",
+        worktreeName: "pulled-primary",
+      },
+      pullCtx,
+      { landBranch: "mirror/main" },
+    );
+    assert.equal(primaryPulled.worktree.isPrimary, false);
+    assert.equal(primaryPulled.worktree.branch, "mirror/main");
+    assert.equal(primaryPulled.dirtyApplied, true);
+    assert.equal(
+      await gitOut(primaryPulled.worktree.path, "rev-parse", "HEAD"),
+      mainTip,
+    );
+    assert.equal(
+      readFileSync(
+        join(primaryPulled.worktree.path, "primary-draft.txt"),
+        "utf8",
+      ),
+      "primary draft\n",
+    );
+    assert.equal(
+      await gitOut(targetRepo, "rev-parse", "HEAD"),
+      targetMainBefore,
+      "the target's own primary must not move",
+    );
+    assert.equal(
+      await gitOut(targetRepo, "rev-parse", "--abbrev-ref", "HEAD"),
+      "main",
+    );
+    assert.equal(
+      await refExists(targetRepo, "refs/shigomori/incoming/main"),
+      false,
+    );
+    ok(
+      "pullWorktree of a primary: lands as a worktree on mirror/main with main's tip and uncommitted work, leaving the target's primary alone",
+    );
+
+    // The same from the other side: the send reads the mirror branch
+    // off the source being a primary. On a fresh branch here, so the
+    // copy above does not hold the name.
+    rmSync(join(sourceRepo, "primary-draft.txt"));
+    await git(sourceRepo, ["checkout", "-q", "-b", "primary-branch"]);
+    writeFileSync(join(sourceRepo, "sent-draft.txt"), "sent from primary\n");
+    const primarySend = {
+      targetDeviceId: "A",
+      projectId: sourceProjectId,
+      worktreeId: worktreeIdFromPath(sourceRepo),
+    };
+    // A plain send refuses the primary (it is the project itself). The
+    // mirror start's send takes it.
+    await assert.rejects(
+      () => syncHandlers.sendWorktree(primarySend, pullCtx),
+      /primary checkout can be mirrored but not sent/,
+    );
+    const { result: primarySent } = await sendWorktree(primarySend, pullCtx, {
+      mirror: true,
+    });
+    assert.equal(primarySent.worktree.isPrimary, false);
+    assert.equal(primarySent.worktree.branch, "mirror/primary-branch");
+    assert.equal(primarySent.dirtyApplied, true);
+    assert.equal(
+      await gitOut(primarySent.worktree.path, "rev-parse", "HEAD"),
+      mainTip,
+    );
+    assert.equal(
+      readFileSync(join(primarySent.worktree.path, "sent-draft.txt"), "utf8"),
+      "sent from primary\n",
+    );
+    assert.equal(
+      await gitOut(targetRepo, "rev-parse", "--abbrev-ref", "HEAD"),
+      "main",
+      "the peer's primary stays on its branch",
+    );
+    ok(
+      "sendWorktree from a primary: lands on the peer as a worktree on mirror/<branch> with the uncommitted work, its primary untouched",
     );
   } finally {
     // Reverse creation order via the shared tracker: the direct

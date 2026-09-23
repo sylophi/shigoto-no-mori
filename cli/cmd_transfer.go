@@ -251,9 +251,11 @@ func transferHeadline(result controlTransferResult, mirror bool, sent bool) stri
 }
 
 // One of this device's worktrees to another device: moved, or with
-// mirror kept in step there.
+// mirror kept in step there. The primary checkout is on the menu for
+// a mirror alone (its copy lands on mirror/<branch> there). A send
+// would have to move the project itself.
 func runSend(ctx cliContext, parsed parsedArgs, mirror bool) (int, error) {
-	target, err := resolveWorktreeArgs(ctx, parsed, false)
+	target, err := resolveWorktreeArgs(ctx, parsed, mirror)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -412,7 +414,7 @@ func cmdUnmirror(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	target, err := resolveWorktreeArgs(ctx, parsed, false)
+	target, err := resolveWorktreeArgs(ctx, parsed, true)
 	if err != nil {
 		return exitCodeOf(err), err
 	}

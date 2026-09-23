@@ -4,7 +4,9 @@
 // to…"), or moving it there ("Transplant to…"). Both wait on what the
 // remote pair waits on (a real branch of its own, a repo identity) and
 // on a peer holding the same repo. Which peer is the dialog's question
-// (flow/peerTargets.ts), so the buttons only open it.
+// (flow/peerTargets.ts), so the buttons only open it. The primary
+// checkout can be mirrored but not transplanted: it is the project
+// itself and cannot be torn down.
 import { useState } from "react";
 import { RefreshCw, Shovel } from "lucide-react";
 import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
@@ -23,7 +25,6 @@ export function PeerTransferActions({
   project: Project;
 }) {
   if (
-    worktree.isPrimary ||
     worktree.detached ||
     !isRealBranch(worktree.branch) ||
     project.identity == null
@@ -77,7 +78,7 @@ function TransferButtons({
           onClick={() => setOpen("mirror")}
         />
       )}
-      {canOpen && (
+      {canOpen && !worktree.isPrimary && (
         <FooterActionButton
           icon={<Shovel />}
           label="Transplant to…"

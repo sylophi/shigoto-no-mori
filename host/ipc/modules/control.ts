@@ -553,6 +553,14 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
           `"${found.device.name}" ${BLOCK_REASON[standing.block]}.`,
         );
       }
+      // The primary is the project itself: a mirror can take it (as a
+      // worktree on mirror/<branch> here), a bring cannot.
+      if (found.worktree.isPrimary && input.mirror !== true) {
+        throw new ControlError(
+          "no-worktree",
+          `${found.worktree.name} is "${found.device.name}"'s primary checkout, which can be mirrored but not brought (sm worktrees mirror --from).`,
+        );
+      }
       if (identity === null) {
         // Unreachable past pickWorktree (a null identity matches no
         // peer, so none listed a worktree), kept so the payload below
@@ -706,7 +714,8 @@ async function alreadyMirrored(
 // blocked-for-commands peer still lists (reads are ungated), so a bring
 // can say which device to unblock. A worktree with no branch of its own
 // can't be moved (sync:sendWorktree refuses one the same way), and the
-// list is re-parsed because its branch goes on into git here.
+// list is re-parsed because its branch goes on into git here. A
+// primary is listed: a mirror can take it, and a bring says why not.
 async function worktreesOn(standings: ControlDevice[]): Promise<{
   worktrees: ControlPeerWorktree[];
   unanswered: ControlDevice[];
@@ -725,10 +734,7 @@ async function worktreesOn(standings: ControlDevice[]): Promise<{
         return WorktreeSchema.array()
           .parse(answer)
           .filter(
-            (worktree) =>
-              !worktree.isPrimary &&
-              !worktree.detached &&
-              isRealBranch(worktree.branch),
+            (worktree) => !worktree.detached && isRealBranch(worktree.branch),
           )
           .map((worktree) => ({
             device: { deviceId: device.deviceId, name: device.name },

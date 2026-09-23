@@ -32,7 +32,9 @@
 //   - commits on both sides since they agreed report diverged and move
 //     nothing, and resolving on B brings the session back to synced,
 //   - a checkout on A to a branch another worktree on B holds is
-//     refused with the path, and checking back restores sync.
+//     refused with the path, and checking back restores sync,
+//   - A's primary checkout mirrored to a mirror/main worktree on B
+//     carries commits both ways, and B's own main never moves.
 //
 // Both "devices" share one node process and one sandboxed
 // SHIGOMORI_DATA_DIR. What separates them is the direct wire between them,
@@ -56,6 +58,7 @@ import { promisify } from "node:util";
 import { buildClient } from "@shared/ipc/buildClient";
 import { forwardContract } from "@shared/ipc/modules/forward";
 import {
+  MIRROR_LABEL_MIRROR_BRANCH,
   MIRROR_LABEL_TRANSFER,
   mirrorContract,
 } from "@shared/ipc/modules/mirror";
@@ -653,6 +656,107 @@ async function main() {
       "the git follower rode the device hub instead of the direct socket",
     );
     ok("git: checking back on A restores sync, with the device hub still flat");
+
+    // (G7) A primary checkout's mirror: A's repo-a itself, mirrored to
+    // B as a worktree on mirror/main (the session's mirrorBranch
+    // label), beside B's own primary on main. The follower reads the
+    // two names as one: a commit on A's main lands on B's mirror/main,
+    // one there lands on A's main, and B's main never moves.
+    const rootB2 = join(sandbox, "wt-b-primary");
+    await git(repoB, [
+      "worktree",
+      "add",
+      "-q",
+      "-b",
+      "mirror/main",
+      rootB2,
+      "origin/main",
+    ]);
+    const worktreeIdB2 = worktreeIdFromPath(rootB2);
+    const mainBefore = await gitOut(repoB, "rev-parse", "HEAD");
+    const session2 = await daemon.create({
+      localRoot: rootB2,
+      deviceId: "A",
+      projectId: projectIdA,
+      worktreeId: worktreeIdFromPath(repoA),
+      remoteRoot: repoA,
+      name: "main",
+      localWorktreeId: worktreeIdB2,
+      labels: {
+        localWorktreeId: worktreeIdB2,
+        localProjectId: projectIdB,
+        [MIRROR_LABEL_MIRROR_BRANCH]: "1",
+      },
+      ignores: [],
+    });
+    // The daemon's snapshot names the session a moment after the
+    // create answers. In the app every snapshot pokes the follower;
+    // here the poke is by hand once the session is on the list.
+    await waitFor(
+      () => daemon.sessions().some((s) => s.session === session2),
+      "the primary's session to reach the state stream",
+    );
+    follower.sessionsChanged();
+    const waitGit2 = (status, what) =>
+      waitFor(
+        () => follower.statusOf(session2)?.status === status,
+        what,
+        30_000,
+      );
+    await waitGit2("synced", "the primary's mirror to report synced");
+    writeFileSync(join(repoA, "primary-a.txt"), "a\n");
+    await waitFor(
+      () => fileEquals(join(rootB2, "primary-a.txt"), "a\n"),
+      "primary-a.txt to mirror",
+      30_000,
+    );
+    await git(repoA, ["add", "primary-a.txt"]);
+    await git(repoA, ["commit", "-qm", "on A's primary"]);
+    const tipA3 = await gitOut(repoA, "rev-parse", "HEAD");
+    follower.onPeerProjectChanged("A", projectIdA);
+    await waitFor(
+      async () => (await gitOut(rootB2, "rev-parse", "HEAD")) === tipA3,
+      "B's mirror/main to follow A's primary",
+      30_000,
+    );
+    assert.equal(
+      await gitOut(rootB2, "symbolic-ref", "HEAD"),
+      "refs/heads/mirror/main",
+    );
+    await waitGit2("synced", "synced after A's primary committed");
+    writeFileSync(join(rootB2, "primary-b.txt"), "b\n");
+    await waitFor(
+      () => fileEquals(join(repoA, "primary-b.txt"), "b\n"),
+      "primary-b.txt to mirror",
+      30_000,
+    );
+    await git(rootB2, ["add", "primary-b.txt"]);
+    await git(rootB2, ["commit", "-qm", "on B's mirror/main"]);
+    const tipB3 = await gitOut(rootB2, "rev-parse", "HEAD");
+    follower.onLocalProjectChanged(projectIdB);
+    await waitFor(
+      async () => (await gitOut(repoA, "rev-parse", "HEAD")) === tipB3,
+      "A's primary to follow B's mirror/main",
+      30_000,
+    );
+    assert.equal(
+      await gitOut(repoA, "symbolic-ref", "HEAD"),
+      "refs/heads/main",
+    );
+    await waitGit2("synced", "synced after B's mirror/main committed");
+    assert.equal(
+      await gitOut(repoB, "rev-parse", "HEAD"),
+      mainBefore,
+      "B's own primary must not move",
+    );
+    await daemon.terminate(session2);
+    await waitFor(
+      () => daemon.sessions().every((s) => s.session !== session2),
+      "the primary's session to leave the state stream",
+    );
+    ok(
+      "git: a primary mirrored to a mirror/main worktree carries commits both ways, with B's own main untouched",
+    );
     follower.stop();
 
     // (6) Terminate: the session is gone, A's stream dropped, the serve

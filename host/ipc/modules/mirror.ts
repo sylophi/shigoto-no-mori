@@ -15,9 +15,15 @@
 // between that worktree and the peer's, with almost nothing left to
 // move. The peer's root path is read off its own worktree list over
 // the grant-gated wire, never taken from the caller.
+//
+// A primary checkout is mirrored the same way, its copy on
+// mirror/<branch> in a mirror-<name> folder (shared/git/branches.ts),
+// and the session labelled so the git follower reads the two branch
+// names as one. Both primaries keep what they had.
 import type { z } from "zod";
 import {
   MIRROR_LABEL_COPY_SIDE,
+  MIRROR_LABEL_MIRROR_BRANCH,
   MIRROR_COPY_STAYED,
   MIRROR_STOP_UNCONFIRMED,
   mirrorCopyIsRemote,
@@ -36,6 +42,7 @@ import { DeleteWorktreeResultSchema } from "@shared/schemas";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { errorMessageOf, unknownWorktreeError } from "@shared/errors";
+import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
 import { spawnFileSync } from "@host/fileSync/spawn";
 import {
   peerWorktreeOrUndefined,
@@ -206,8 +213,23 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     if (source === undefined)
       throw unknownWorktreeError(input.sourceWorktreeId);
 
+    // Where a primary's copy lands is decided by what the source is,
+    // off the peer's list, not by the caller. The branch is the
+    // caller's, like the commits fetched under it: the peer may have
+    // switched since it was listed.
     const { ignoreMode, ignores, ...pullInput } = input;
-    const pulled = await runPullWorktree(pullInput, ctx);
+    const pulled = await runPullWorktree(
+      source.isPrimary
+        ? { ...pullInput, worktreeName: pullWorktreeName(source) }
+        : pullInput,
+      ctx,
+      {
+        landBranch: pullLandingBranch({
+          branch: input.branch,
+          isPrimary: source.isPrimary,
+        }),
+      },
+    );
     let session: string;
     try {
       session = await daemon.create({
@@ -222,6 +244,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
           [MIRROR_LABEL_LOCAL_PROJECT]: pulled.worktree.projectId,
           [MIRROR_LABEL_LOCAL_WORKTREE]: pulled.worktree.id,
           [MIRROR_LABEL_IGNORE_MODE]: ignoreMode,
+          ...(source.isPrimary ? { [MIRROR_LABEL_MIRROR_BRANCH]: "1" } : {}),
         },
         ignores,
       });
@@ -259,6 +282,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     const { source: worktree, result: sent } = await sendWorktree(
       sendInput,
       ctx,
+      { mirror: true },
     );
     const copy = {
       projectId: sent.worktree.projectId,
@@ -280,6 +304,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
           [MIRROR_LABEL_LOCAL_WORKTREE]: worktree.id,
           [MIRROR_LABEL_IGNORE_MODE]: ignoreMode,
           [MIRROR_LABEL_COPY_SIDE]: "remote",
+          ...(worktree.isPrimary ? { [MIRROR_LABEL_MIRROR_BRANCH]: "1" } : {}),
         },
         ignores,
       });

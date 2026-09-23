@@ -560,11 +560,17 @@ async function main() {
     assert.ok(peerRow, `the remote list: ${listing.map((wt) => wt.branch)}`);
     assert.equal(peerRow.path, peerPath);
     assert.ok(listing.every((wt) => wt.device.name === "Studio Mac"));
-    assert.ok(
-      listing.every((wt) => !wt.isPrimary),
-      "a primary checkout is nothing to bring",
-    );
+    // The peer's primary checkout is listed (a mirror of it lands on
+    // mirror/<branch> here), and a bring of it is refused by name.
+    const primaryRow = listing.find((wt) => wt.isPrimary);
+    assert.ok(primaryRow, "the remote list names the peer's primary checkout");
+    assert.equal(primaryRow.branch, "main");
     assert.deepEqual(await remoteList("--from", "Studio Mac"), listing);
+    await refused(
+      ["worktrees", "bring", primaryRow.name, "-p", "target"],
+      "no-worktree",
+      /primary checkout, which can be mirrored but not brought/,
+    );
     // The away machine: said on stderr beside the list, and a refusal
     // when it is the one asked for.
     const withAway = await sm("worktrees", "list", "--remote", "-p", "target");
