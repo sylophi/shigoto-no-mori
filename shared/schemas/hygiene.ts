@@ -1,6 +1,8 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { isRealBranch } from "./project";
 import type { Worktree } from "./worktree";
+
+const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 // Extra facts the "tidy the forest" surface needs about one worktree.
 // Deliberately narrow: everything already on `Worktree` (changedCount,
@@ -11,16 +13,16 @@ import type { Worktree } from "./worktree";
 // remove lives in `deriveHygieneVerdict` below, so the same rules run in
 // the list, the summary and the confirm step. It is the same split
 // `deriveRemoteSyncState` already uses for remote state.
-export const WorktreeHygieneSchema = z.object({
-  worktreeId: z.string(),
+export const WorktreeHygieneSchema = Schema.Struct({
+  worktreeId: Schema.String,
   // Epoch ms of the worktree's HEAD commit. Null for an empty repo or a
   // ref we couldn't read.
-  lastCommitAt: z.number().int().nonnegative().nullable(),
+  lastCommitAt: Schema.NullOr(NonNegativeInt),
   // The commit these facts were taken against, abbreviated the same way
   // `Worktree.recentCommits` abbreviates. The facts and the worktree
   // list are separate queries with separate lifetimes, and this is what
   // lets the verdict notice it is reading them from different moments.
-  headHash: z.string().nullable(),
+  headHash: Schema.NullOr(Schema.String),
   // Commits on this worktree's HEAD that the primary ref doesn't have.
   // 0 means the branch is fully contained in primary, the classic
   // "already merged" case.
@@ -29,49 +31,49 @@ export const WorktreeHygieneSchema = z.object({
   // whose directory is gone, a corrupt repo, an unreadable ref. It has
   // to be distinguishable from 0, because 0 is the one value that gets
   // a row ticked for deletion on the user's behalf.
-  uniqueCommits: z.number().int().nonnegative().nullable(),
+  uniqueCommits: Schema.NullOr(NonNegativeInt),
   // True when merging this worktree into the primary ref would change
   // nothing, i.e. its content is already there. Catches the squash- and
   // rebase-merged branches that `uniqueCommits > 0` misses, since those
   // keep commits primary never took verbatim. False whenever the probe
   // failed or conflicted, so it fails safe.
-  contentAlreadyInPrimary: z.boolean(),
+  contentAlreadyInPrimary: Schema.Boolean,
   // The primary ref every comparison above was made against, e.g.
   // "main" or "origin/main". Null when it couldn't be resolved, which
   // downgrades the verdict to "unknown".
-  primaryRef: z.string().nullable(),
+  primaryRef: Schema.NullOr(Schema.String),
   // True when this worktree has the project's own default branch
   // checked out. Removal deletes the local branch (see
   // deleteBranchOnRemove), and that branch is the one thing in the repo
   // nothing else can restore. Merged or not, it is never ticked.
-  holdsPrimaryBranch: z.boolean(),
+  holdsPrimaryBranch: Schema.Boolean,
   // True when the worktree has untracked files that `changedCount`
   // didn't see. `git status` honours the user's
   // status.showUntrackedFiles setting, so under `-uno` a tree full of
   // uncommitted new files reports clean. This is checked separately for
   // exactly the rows that would otherwise be auto-ticked.
-  untracked: z.boolean(),
+  untracked: Schema.Boolean,
 });
-export type WorktreeHygiene = z.infer<typeof WorktreeHygieneSchema>;
+export type WorktreeHygiene = typeof WorktreeHygieneSchema.Type;
 
 // Disk footprint of one worktree directory. Split from the facts above
 // because measuring it walks the entire tree (node_modules included) and
 // must never hold up the fast git-derived list.
-export const WorktreeDiskUsageSchema = z.object({
-  worktreeId: z.string(),
+export const WorktreeDiskUsageSchema = Schema.Struct({
+  worktreeId: Schema.String,
   // Bytes occupied on disk (block-based, matching `du`), not the sum of
   // apparent file sizes.
-  bytes: z.number().int().nonnegative(),
+  bytes: NonNegativeInt,
   // Epoch ms of the newest file modification found while walking, with
   // dependency and build directories skipped so an install doesn't make
   // an abandoned worktree look freshly worked on. Null when the walk
   // found nothing datable.
-  lastActivityAt: z.number().int().nonnegative().nullable(),
+  lastActivityAt: Schema.NullOr(NonNegativeInt),
   // True when the walk hit unreadable entries, making the total a floor
   // rather than an exact figure. The UI prefixes these with "~".
-  partial: z.boolean(),
+  partial: Schema.Boolean,
 });
-export type WorktreeDiskUsage = z.infer<typeof WorktreeDiskUsageSchema>;
+export type WorktreeDiskUsage = typeof WorktreeDiskUsageSchema.Type;
 
 // How safe it is to remove a worktree. The tidy list preselects
 // `merged` and `absorbed` only. Everything else takes a deliberate

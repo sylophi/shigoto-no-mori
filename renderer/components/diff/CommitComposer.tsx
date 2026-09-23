@@ -32,7 +32,7 @@ export function CommitComposer({
   onCommit,
 }: {
   worktree: Worktree;
-  files: ChangedFile[];
+  files: readonly ChangedFile[];
   draft: CommitDraft;
   onDraftChange: (next: CommitDraft) => void;
   pending: boolean;

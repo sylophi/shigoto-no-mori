@@ -35,9 +35,28 @@ export function isZodCodec(codec: AnyCodec): codec is z.ZodTypeAny {
 }
 
 // Decode or throw: the registrar's unconditional input wall.
-export function decodeWith(codec: AnyCodec, raw: unknown): unknown {
-  if (isZodCodec(codec)) return codec.parse(raw);
-  return Schema.decodeUnknownSync(codec)(raw);
+export function decodeWith<C extends AnyCodec>(
+  codec: C,
+  raw: unknown,
+): CodecOut<C> {
+  if (isZodCodec(codec)) return codec.parse(raw) as CodecOut<C>;
+  return Schema.decodeUnknownSync(codec)(raw) as CodecOut<C>;
+}
+
+// Validate a value the program already holds in its decoded shape (a
+// handler's result under the dev-only output check, a broadcast
+// payload at its producer). For zod that is `.parse`, which also
+// applies defaults, as it always did; for a Schema it is the type-side
+// check alone, so a transform is never run a second time on a decoded
+// value and the wire keeps carrying the decoded shape the renderer
+// reads. Contract outputs are JSON-shaped by rule (Type equals
+// Encoded); a Schema whose wire form differs belongs behind an explicit
+// encode, not here.
+export function validateWith(codec: AnyCodec, value: unknown): unknown {
+  if (isZodCodec(codec)) return codec.parse(value);
+  if (Schema.is(codec)(value)) return value;
+  // Decode for the issue's sake: it names what is wrong.
+  return Schema.decodeUnknownSync(codec)(value);
 }
 
 export type SafeDecode<T = unknown> =
@@ -46,10 +65,16 @@ export type SafeDecode<T = unknown> =
 
 // Decode or report: for a reader that drops a malformed value rather
 // than failing on it (a push payload, a frame).
-export function safeDecodeWith(codec: AnyCodec, raw: unknown): SafeDecode {
-  if (isZodCodec(codec)) return codec.safeParse(raw);
+export function safeDecodeWith<C extends AnyCodec>(
+  codec: C,
+  raw: unknown,
+): SafeDecode<CodecOut<C>> {
+  if (isZodCodec(codec)) {
+    return codec.safeParse(raw) as SafeDecode<CodecOut<C>>;
+  }
   try {
-    return { success: true, data: Schema.decodeUnknownSync(codec)(raw) };
+    const data = Schema.decodeUnknownSync(codec)(raw) as CodecOut<C>;
+    return { success: true, data };
   } catch (error) {
     return { success: false, error };
   }

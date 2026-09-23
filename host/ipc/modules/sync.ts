@@ -6,6 +6,7 @@
 import { type FileHandle, mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Schema } from "effect";
 import type { z } from "zod";
 import {
   SyncCaptureDirtyResultSchema,
@@ -609,7 +610,7 @@ async function tearDown(
     // transplants because git refuses non-forced removal of them.
     // refuseRunningScripts is the app-side guard the local
     // kill-then-delete path deliberately lacks.
-    const removed = DeleteWorktreeResultSchema.parse(
+    const removed = Schema.decodeUnknownSync(DeleteWorktreeResultSchema)(
       await remove(pulled.captured),
     );
     if (removed.ok) return { sourceRemoved: true };

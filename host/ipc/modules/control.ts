@@ -45,6 +45,7 @@ import {
   type Worktree,
   WorktreeSchema,
 } from "@shared/schemas";
+import { Schema } from "effect";
 import {
   parseLeaveOutPreset,
   sharedSettingKeys,
@@ -712,6 +713,8 @@ async function alreadyMirrored(
   };
 }
 
+const decodeWorktrees = Schema.decodeUnknownSync(Schema.Array(WorktreeSchema));
+
 // Every worktree of the repo that could move, on the peers that hold
 // it, beside the peers that hold it and did not answer. A
 // blocked-for-commands peer still lists (reads are ungated), so a bring
@@ -733,8 +736,7 @@ async function worktreesOn(standings: ControlDevice[]): Promise<{
           () => null,
         );
         if (answer === null) throw new Error("no answer");
-        return WorktreeSchema.array()
-          .parse(answer)
+        return decodeWorktrees(answer)
           .filter(
             (worktree) =>
               !worktree.isPrimary &&

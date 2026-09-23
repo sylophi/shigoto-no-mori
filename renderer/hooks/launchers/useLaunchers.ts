@@ -4,7 +4,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 
 export function useDetectedLaunchers() {
   const { api, keys } = useHostScope();
-  return useQuery<DetectedLauncher[]>({
+  return useQuery<readonly DetectedLauncher[]>({
     queryKey: keys.detectedLaunchers(),
     queryFn: () => api.launchers.detect(),
     // Detection spawns ~15 `which` calls; cache for the session. The
@@ -15,7 +15,7 @@ export function useDetectedLaunchers() {
 }
 
 interface LauncherForProjectResult {
-  entries: LauncherEntry[];
+  entries: readonly LauncherEntry[];
   // Resolvable entries the user hid in Settings. Only used to explain an
   // otherwise-empty row.
   hiddenCount: number;

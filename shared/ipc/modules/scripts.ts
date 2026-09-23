@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   CancelScriptPayloadSchema,
@@ -14,13 +14,13 @@ export const scriptsContract = defineContract("host", {
   run: invoke(
     "scripts:run",
     RunScriptPayloadSchema,
-    z.object({ runId: z.string() }),
+    Schema.Struct({ runId: Schema.String }),
     { tracksProjectUsage: true, remote: true, mutating: true },
   ),
   cancel: invoke(
     "scripts:cancel",
     CancelScriptPayloadSchema,
-    z.object({ cancelled: z.boolean() }),
+    Schema.Struct({ cancelled: Schema.Boolean }),
     { remote: true, mutating: true },
   ),
   // Console input and viewport size for a run the app spawned. Both are
@@ -29,16 +29,21 @@ export const scriptsContract = defineContract("host", {
   // treats those runs as output-only. Keystrokes change nothing a
   // remote viewer caches (the output comes back over `event`), so
   // they don't ping the viewer cache.
-  write: invoke("scripts:write", WriteScriptPayloadSchema, z.void(), {
+  write: invoke("scripts:write", WriteScriptPayloadSchema, Schema.Undefined, {
     remote: true,
     mutating: true,
     movesHostState: false,
   }),
-  resize: invoke("scripts:resize", ResizeScriptPayloadSchema, z.void(), {
-    remote: true,
-    mutating: true,
-    movesHostState: false,
-  }),
+  resize: invoke(
+    "scripts:resize",
+    ResizeScriptPayloadSchema,
+    Schema.Undefined,
+    {
+      remote: true,
+      mutating: true,
+      movesHostState: false,
+    },
+  ),
   event: broadcast("scripts:event", ScriptEventSchema, { remote: true }),
   // The worktree these scripts ran in was removed outside the app, so
   // the app reaped them (see host/lib/scripts/removedWorktrees.ts). The
@@ -54,7 +59,7 @@ export const scriptsContract = defineContract("host", {
   // a crash.
   orphanReport: invoke(
     "scripts:orphanReport",
-    z.void(),
+    Schema.Undefined,
     OrphanScriptReportSchema,
     { remote: true, mutating: false },
   ),

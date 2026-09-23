@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   PathPayloadSchema,
@@ -9,11 +9,11 @@ export const shellContract = defineContract("client", {
   openExternal: invoke(
     "shell:openExternal",
     ShellOpenExternalPayloadSchema,
-    z.void(),
+    Schema.Undefined,
   ),
   showItemInFolder: invoke(
     "shell:showItemInFolder",
     PathPayloadSchema,
-    z.void(),
+    Schema.Undefined,
   ),
 });

@@ -92,7 +92,7 @@ export function PullRequestPicker({
   worktreeByBranch,
   disabled,
 }: {
-  pullRequests: PullRequestCandidate[];
+  pullRequests: readonly PullRequestCandidate[];
   selected: PullRequestCandidate | null;
   onSelect: (pr: PullRequestCandidate) => void;
   // Head branch -> the worktree already sitting on it, when there is one.

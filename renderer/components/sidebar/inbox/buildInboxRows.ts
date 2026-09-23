@@ -19,7 +19,7 @@ import type { SidebarDeviceBadge } from "../DeviceBadge";
 import type { InboxShelf, SidebarRow, SidebarViewModel } from "../sidebarRow";
 
 interface BuildInboxRowsArgs {
-  projects: Project[];
+  projects: readonly Project[];
   // All three positionally aligned with `projects`.
   worktreeQueries: ProjectWorktreeQueries;
   pullRequestQueries: ProjectPullRequestQueries;

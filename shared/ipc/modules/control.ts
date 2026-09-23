@@ -3,7 +3,7 @@ import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { DeviceIdSchema } from "@shared/hub/protocol";
 import { SyncPullWorktreeResultSchema } from "@shared/ipc/modules/sync";
-import { WorktreeIdSchema, WorktreeSchema } from "@shared/schemas";
+import { WorktreeIdSchema, WorktreeZod } from "@shared/schemas";
 
 // What the CLI asks of the running app: the cross-device verbs (`sm
 // worktrees send|bring|mirror|unmirror|mirrors`, `sm devices`). Reaching
@@ -100,7 +100,7 @@ export type ControlTransferResult = z.infer<typeof ControlTransferResultSchema>;
 const ControlPeerWorktreeSchema = z.strictObject({
   device: z.strictObject({ deviceId: DeviceIdSchema, name: z.string() }),
   projectId: z.string(),
-  worktree: WorktreeSchema,
+  worktree: WorktreeZod,
 });
 export type ControlPeerWorktree = z.infer<typeof ControlPeerWorktreeSchema>;
 

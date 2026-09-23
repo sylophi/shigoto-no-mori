@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
-import { PortNumberSchema } from "@shared/schemas";
+import { PortNumberZod } from "@shared/schemas";
 
 // Port forwarding over byte channels: a
 // forwarded TCP connection crosses the direct websocket as raw binary
@@ -35,7 +35,7 @@ const ChannelIdSchema = HexId32Schema;
 // the channel layer (the forward UI words too-many-conns inline).
 
 const ForwardOpenPayloadSchema = z.strictObject({
-  port: PortNumberSchema,
+  port: PortNumberZod,
   channelId: ChannelIdSchema,
 });
 

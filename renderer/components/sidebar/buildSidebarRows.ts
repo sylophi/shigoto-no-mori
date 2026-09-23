@@ -7,7 +7,7 @@ import type { SidebarRow, SidebarViewModel } from "./sidebarRow";
 import { sortByProject } from "@/lib/sortProjects";
 
 interface BuildSidebarRowsArgs {
-  projects: Project[];
+  projects: readonly Project[];
   // Positionally aligned with `projects`.
   worktreeQueries: ProjectWorktreeQueries;
   // Folded group ids: local project ids and peer-only group ids alike.

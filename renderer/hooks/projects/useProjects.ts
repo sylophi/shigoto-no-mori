@@ -25,7 +25,7 @@ import {
 // never name different devices. The scope rule is resolveForestScope's.
 export function projectsQueryOptions(scope: HostForestScope = {}) {
   const { deviceId, api } = resolveForestScope(scope);
-  return queryOptions<Project[]>({
+  return queryOptions<readonly Project[]>({
     queryKey: queryKeysFor(deviceId).projects(),
     queryFn: () => (api ? api.projects.list() : []),
     // Local: api and id are always present, so this stays always-enabled.

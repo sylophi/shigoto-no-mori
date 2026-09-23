@@ -4,11 +4,10 @@
 // create/adopt/delete/done/merge, the shelved flag, and project
 // add/remove. Each function translates the CLI's NDJSON stream into
 // the notifier calls the renderer already understands. Every document
-// crossing the Go/TS boundary is validated against the shared zod
+// crossing the Go/TS boundary is validated against the shared
 // schemas, so drift fails loudly here instead of surfacing as
 // undefined-flavored breakage in the renderer.
 import { Schema } from "effect";
-import { z } from "zod";
 import {
   CarryOverReportSchema,
   CleanupErrorSchema,
@@ -84,7 +83,14 @@ interface WorktreeOperationNotifiers {
   notifyScript: (payload: ScriptEvent) => void;
 }
 
-const PhaseSchema = z.union([CreatePhaseSchema, z.literal("idle")]);
+const decodePhase = Schema.decodeUnknownSync(
+  Schema.Union([CreatePhaseSchema, Schema.Literal("idle")]),
+);
+const decodeWorktree = Schema.decodeUnknownSync(WorktreeSchema);
+const decodeCarryOverReport = Schema.decodeUnknownSync(CarryOverReportSchema);
+const decodeScriptEvent = Schema.decodeUnknownSync(ScriptEventSchema);
+const decodeCleanupError = Schema.decodeUnknownSync(CleanupErrorSchema);
+const decodeProject = Schema.decodeUnknownSync(ProjectSchema);
 
 // A CLI run that produced no ok result. The message is the CLI's own
 // text (its error document's `error`, else the fallback and the exit
@@ -168,7 +174,7 @@ function runStreamingCreate(
     const onDoc = (doc: CliDoc) => {
       switch (doc.event) {
         case "created": {
-          created = WorktreeSchema.parse(doc["worktree"]);
+          created = decodeWorktree(doc["worktree"]);
           if (resolveOn === "created") resolve({ worktree: created });
           break;
         }
@@ -177,7 +183,7 @@ function runStreamingCreate(
           notify.notifyPhase({
             projectId: project.id,
             worktreeId: created.id,
-            phase: PhaseSchema.parse(doc["phase"]),
+            phase: decodePhase(doc["phase"]),
           });
           break;
         }
@@ -186,13 +192,13 @@ function runStreamingCreate(
           notify.notifyCarryOverComplete({
             projectId: project.id,
             worktreeId: created.id,
-            report: CarryOverReportSchema.parse(doc["report"]),
+            report: decodeCarryOverReport(doc["report"]),
           });
           break;
         }
         case "script": {
           const { event: _event, ...scriptEvent } = doc;
-          notify.notifyScript(ScriptEventSchema.parse(scriptEvent));
+          notify.notifyScript(decodeScriptEvent(scriptEvent));
           break;
         }
       }
@@ -297,7 +303,7 @@ export async function deleteViaCli(
   const result = await runner().runCli(args, (doc) => {
     if (doc.event === "script") {
       const { event: _event, ...scriptEvent } = doc;
-      notify.notifyScript(ScriptEventSchema.parse(scriptEvent));
+      notify.notifyScript(decodeScriptEvent(scriptEvent));
     }
   });
   const final = result.docs.findLast((doc) => typeof doc["ok"] === "boolean");
@@ -305,7 +311,7 @@ export async function deleteViaCli(
   if (final?.["ok"] === false && final["cleanupError"] !== undefined) {
     return {
       ok: false,
-      cleanupError: CleanupErrorSchema.parse(final["cleanupError"]),
+      cleanupError: decodeCleanupError(final["cleanupError"]),
     };
   }
   throw cliFailure(result, "sm rm failed", { worktreeId: input.worktreeId });
@@ -326,7 +332,7 @@ export async function doneViaCli(
     "--force",
   ]);
   const final = finalOkDoc(result, "sm done failed", { worktreeId });
-  return WorktreeSchema.parse(final["worktree"]);
+  return decodeWorktree(final["worktree"]);
 }
 
 export async function mergeViaCli(
@@ -374,7 +380,7 @@ export async function projectsAddViaCli(path: string): Promise<Project> {
   if (result.code !== 0 || doc === undefined) {
     throw cliFailure(result, "sm projects add failed");
   }
-  return ProjectSchema.parse(doc);
+  return decodeProject(doc);
 }
 
 // The command that runs a package.json script through the CLI
@@ -481,12 +487,16 @@ export async function dirtyCaptureViaCli(
   // A capture doc carries its commit; a clean worktree omits it. The
   // refine makes a captured:true document WITHOUT a commit an engine
   // drift error here, never a silent "clean" report.
-  const doc = z
-    .object({ captured: z.boolean(), commit: z.string().optional() })
-    .refine((d) => !d.captured || d.commit !== undefined, {
-      message: "captured without a commit",
-    })
-    .parse(final);
+  const doc = Schema.decodeUnknownSync(
+    Schema.Struct({
+      captured: Schema.Boolean,
+      commit: Schema.optional(Schema.String),
+    }).check(
+      Schema.makeFilter((d) => !d.captured || d.commit !== undefined, {
+        message: "captured without a commit",
+      }),
+    ),
+  )(final);
   return doc.captured
     ? { captured: true, commit: doc.commit }
     : { captured: false };
@@ -509,16 +519,24 @@ export async function dirtyApplyViaCli(
     worktreeId,
   ]);
   const final = finalOkDoc(result, "sm dirty apply failed", { worktreeId });
-  return z
-    .object({
-      applied: z.literal(true),
-      commit: CommitHashSchema,
-      changedFiles: z.number().int().nonnegative(),
-    })
-    .parse(final);
+  return Schema.decodeUnknownSync(DirtyApplyDocSchema)(final);
 }
 
-const RefTipDocSchema = z.object({ ref: z.string(), commit: CommitHashSchema });
+const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
+const DirtyApplyDocSchema = Schema.Struct({
+  applied: Schema.Literal(true),
+  commit: CommitHashSchema,
+  changedFiles: NonNegativeInt,
+});
+
+const RefTipDocSchema = Schema.Struct({
+  ref: Schema.String,
+  commit: CommitHashSchema,
+});
+// Mutable: the sync contract these lists feed is still zod, whose
+// output types hold plain arrays.
+const RefTipDocsSchema = Schema.mutable(Schema.Array(RefTipDocSchema));
 
 export async function bundleCreateViaCli(
   project: Project,
@@ -539,12 +557,9 @@ export async function bundleCreateViaCli(
   const final = finalOkDoc(result, "sm bundle create failed", {
     projectId: project.id,
   });
-  return z
-    .object({
-      bytes: z.number().int().nonnegative(),
-      refs: z.array(RefTipDocSchema),
-    })
-    .parse(final);
+  return Schema.decodeUnknownSync(
+    Schema.Struct({ bytes: NonNegativeInt, refs: RefTipDocsSchema }),
+  )(final);
 }
 
 export async function bundleUnpackViaCli(
@@ -564,7 +579,9 @@ export async function bundleUnpackViaCli(
   const final = finalOkDoc(result, "sm bundle unpack failed", {
     projectId: project.id,
   });
-  return z.object({ fetched: z.array(RefTipDocSchema) }).parse(final);
+  return Schema.decodeUnknownSync(Schema.Struct({ fetched: RefTipDocsSchema }))(
+    final,
+  );
 }
 
 // Registry removal and per-project state deletion only; the app-side

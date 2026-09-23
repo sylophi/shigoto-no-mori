@@ -160,12 +160,20 @@ export function createControlServer(deps: {
       try: () => fn(ctx, input),
       catch: (error) => error,
     }).pipe(
-      Effect.match({
-        onSuccess: (result) => send(socket, { t: "res", id, ok: true, result }),
-        onFailure: (error) => send(socket, failedRes(id, error)),
-      }),
-      // A result that will not serialize is a bug, not a reason to end
-      // the fiber with a defect nothing reports.
+      Effect.flatMap((result) =>
+        // A result that will not serialize (a cycle, a BigInt) is
+        // answered as a failure, like a throwing handler, so the CLI
+        // is never left waiting on the id.
+        Effect.try({
+          try: () => send(socket, { t: "res", id, ok: true, result }),
+          catch: (error) => error,
+        }),
+      ),
+      Effect.catch((error) =>
+        Effect.sync(() => send(socket, failedRes(id, error))),
+      ),
+      // Anything past that is a bug, not a reason to end the fiber with
+      // a defect nothing reports.
       Effect.catchCause((cause) =>
         Cause.hasInterruptsOnly(cause)
           ? Effect.failCause(cause)

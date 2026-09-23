@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   DetectedLauncherSchema,
@@ -15,8 +15,8 @@ import {
 export const launchersContract = defineContract("host", {
   detect: invoke(
     "launchers:detect",
-    z.void(),
-    z.array(DetectedLauncherSchema),
+    Schema.Undefined,
+    Schema.Array(DetectedLauncherSchema),
     {
       remote: true,
       mutating: false,
@@ -25,18 +25,18 @@ export const launchersContract = defineContract("host", {
   forProject: invoke(
     "launchers:forProject",
     ProjectScopedPayloadSchema,
-    z.object({
-      entries: z.array(LauncherEntrySchema),
+    Schema.Struct({
+      entries: Schema.Array(LauncherEntrySchema),
       // How many resolvable entries the user's hidden list filtered out.
       // Lets the row tell "nothing installed" apart from "you hid it all"
       // without re-deriving the filter in the renderer.
-      hiddenCount: z.number().int().nonnegative(),
+      hiddenCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     }),
     { remote: true, mutating: false },
   ),
   // launch is remote false: it spawns an arbitrary shell command from
   // config, the one clear remote code execution vector. Detection is safe to serve, launching is not.
-  launch: invoke("launchers:launch", LaunchPayloadSchema, z.void(), {
+  launch: invoke("launchers:launch", LaunchPayloadSchema, Schema.Undefined, {
     tracksProjectUsage: true,
     remote: false,
   }),

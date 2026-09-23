@@ -45,7 +45,7 @@ import { NotesSection } from "./NotesSection";
 interface InnerProps {
   worktree: Worktree;
   project: Project;
-  siblings: Worktree[];
+  siblings: readonly Worktree[];
 }
 
 // Split from WorktreeDetail so per-worktree hooks (teardown state,

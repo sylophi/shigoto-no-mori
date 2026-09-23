@@ -32,6 +32,7 @@
 // - git:fetchActive feeds the device-blind fetch-spinner store, which
 //   would misattribute a remote host's sweep to the local forest.
 import type { QueryClient } from "@tanstack/react-query";
+import { safeDecodeWith } from "@shared/ipc/codec";
 import { gitContract } from "@shared/ipc/modules/git";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
 import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
@@ -68,7 +69,7 @@ export function startRemoteHostWatch(queryClient: QueryClient): void {
     // The bridge forwards pushes wholesale, so a payload is parsed
     // here against the contract's own schema rather than trusted.
     if (channel === PROJECT_CHANGED.channel) {
-      const parsed = PROJECT_CHANGED.payload.safeParse(payload);
+      const parsed = safeDecodeWith(PROJECT_CHANGED.payload, payload);
       if (!parsed.success) return;
       invalidateHostProject(queryClient, deviceId, parsed.data.projectId);
       return;
@@ -94,7 +95,7 @@ export function startRemoteHostWatch(queryClient: QueryClient): void {
     // peer's rows and inbox entries refresh off this alone, the way the
     // local map refreshes off the same broadcast on the local wire.
     if (channel === PULL_REQUESTS_REFRESHED.channel) {
-      const parsed = PULL_REQUESTS_REFRESHED.payload.safeParse(payload);
+      const parsed = safeDecodeWith(PULL_REQUESTS_REFRESHED.payload, payload);
       if (!parsed.success) return;
       void queryClient.invalidateQueries({
         queryKey: queryKeysFor(deviceId).projectPullRequests(
@@ -124,7 +125,7 @@ export function startRemoteHostWatch(queryClient: QueryClient): void {
       return;
     }
     if (channel === REFS_REFRESHED.channel) {
-      const parsed = REFS_REFRESHED.payload.safeParse(payload);
+      const parsed = safeDecodeWith(REFS_REFRESHED.payload, payload);
       if (!parsed.success) return;
       invalidateBranchState(
         queryClient,

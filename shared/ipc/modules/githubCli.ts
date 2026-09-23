@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   GithubCliPullRequestDiffPayloadSchema,
@@ -16,20 +16,25 @@ import {
 } from "@shared/schemas";
 
 export const githubCliContract = defineContract("host", {
-  readiness: invoke("githubCli:readiness", z.void(), GithubCliReadinessSchema, {
-    remote: true,
-    mutating: false,
-  }),
+  readiness: invoke(
+    "githubCli:readiness",
+    Schema.Undefined,
+    GithubCliReadinessSchema,
+    {
+      remote: true,
+      mutating: false,
+    },
+  ),
   projectPullRequests: invoke(
     "githubCli:projectPullRequests",
     ProjectScopedPayloadSchema,
-    z.record(z.string(), PullRequestSchema),
+    Schema.Record(Schema.String, PullRequestSchema),
     { remote: true, mutating: false },
   ),
   worktreePullRequest: invoke(
     "githubCli:worktreePullRequest",
     GithubCliWorktreePullRequestPayloadSchema,
-    PullRequestDetailSchema.nullable(),
+    Schema.NullOr(PullRequestDetailSchema),
     { remote: true, mutating: false },
   ),
   // Open PRs offered as a source in the new-worktree form. Uncached and
@@ -53,25 +58,25 @@ export const githubCliContract = defineContract("host", {
   repoMergeConfig: invoke(
     "githubCli:repoMergeConfig",
     ProjectScopedPayloadSchema,
-    RepoMergeConfigSchema.nullable(),
+    Schema.NullOr(RepoMergeConfigSchema),
     { remote: true, mutating: false },
   ),
   mergePullRequest: invoke(
     "githubCli:mergePullRequest",
     MergePullRequestPayloadSchema,
-    z.void(),
+    Schema.Undefined,
     { tracksProjectUsage: true, remote: true, mutating: true },
   ),
   pullRequestDiff: invoke(
     "githubCli:pullRequestDiff",
     GithubCliPullRequestDiffPayloadSchema,
-    z.string(),
+    Schema.String,
     { remote: true, mutating: false },
   ),
   setPullRequestDraft: invoke(
     "githubCli:setPullRequestDraft",
     SetPullRequestDraftPayloadSchema,
-    z.void(),
+    Schema.Undefined,
     { tracksProjectUsage: true, remote: true, mutating: true },
   ),
   projectPullRequestsRefreshed: broadcast(

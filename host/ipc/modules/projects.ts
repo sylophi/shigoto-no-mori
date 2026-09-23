@@ -133,7 +133,9 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
 
   getSort: () => readProjectSort(),
 
-  setSort: ({ mode }) => writeProjectSort(mode),
+  setSort: ({ mode }) => {
+    writeProjectSort(mode);
+  },
 
   getCollapsed: () => readCollapsedProjects(),
 

@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { isSafeRelPath } from "../git/gitPaths";
-import { ProjectScopedPayloadSchema } from "./payloads";
-import { MergeMethodSchema } from "./pullRequest";
-import { CustomPortSchema, MAX_CUSTOM_PORTS, PortNumberSchema } from "./ports";
-import { SidebarViewSchema } from "./project";
+import { ProjectScopedPayloadZod } from "./payloads";
+import { MergeMethodZod } from "./pullRequest";
+import { CustomPortZod, MAX_CUSTOM_PORTS, PortNumberZod } from "./ports";
+import { SidebarViewZod } from "./project";
 
 const ThemeSchema = z.enum(["light", "dark", "system"]);
 export type Theme = z.infer<typeof ThemeSchema>;
@@ -65,7 +65,7 @@ export const ShigomoriConfigSchema = z.object({
   // button's primary action so each repo remembers its house style.
   // Falls back to whatever the repo allows when the saved value is
   // disabled at GitHub.
-  lastMergeMethod: MergeMethodSchema.optional(),
+  lastMergeMethod: MergeMethodZod.optional(),
   // When true, the inbox view lists this project's primary checkout
   // alongside its worktrees (always live, never shelved or merged).
   // Per project because the primary means different things in
@@ -99,7 +99,7 @@ export type WorktreeIncludeStatus = z.infer<typeof WorktreeIncludeStatusSchema>;
 // The carry-over picker reads a union of the primary and every
 // worktree: entries are root-relative, so any checkout can hold them
 // and the CLI copies from whichever has the file at creation.
-export const CarryOverListingPayloadSchema = ProjectScopedPayloadSchema.extend({
+export const CarryOverListingPayloadSchema = ProjectScopedPayloadZod.extend({
   // Folder being browsed, root-relative, with "" for the root.
   relative: z.union([z.literal(""), CarryOverEntrySchema.shape.path]),
   // Also call a folder ignored when a rule names it though it holds a
@@ -121,7 +121,7 @@ export const CarryOverCandidateSchema = z.object({
 });
 export type CarryOverCandidate = z.infer<typeof CarryOverCandidateSchema>;
 
-export const CarryOverStatsPayloadSchema = ProjectScopedPayloadSchema.extend({
+export const CarryOverStatsPayloadSchema = ProjectScopedPayloadZod.extend({
   paths: z.array(CarryOverEntrySchema.shape.path),
 });
 
@@ -141,7 +141,7 @@ export const ShigomoriWorktreeDataSchema = z.object({
   // Ports the user added beside port-pool's (see shared/schemas/ports.ts).
   // The write is a full replace, so every renderer writer goes through
   // useWorktreeDataWrite, which merges a patch over the stored document.
-  ports: z.array(CustomPortSchema).max(MAX_CUSTOM_PORTS).optional(),
+  ports: z.array(CustomPortZod).max(MAX_CUSTOM_PORTS).optional(),
 });
 export type ShigomoriWorktreeData = z.infer<typeof ShigomoriWorktreeDataSchema>;
 
@@ -348,7 +348,7 @@ export const ClientConfigSchema = z.object({
   // dedupes on the same pair). Only preferences that differ from the
   // default (the remote port itself) are stored, so the map stays as
   // small as the user's overrides.
-  forwardLocalPorts: z.record(z.string(), PortNumberSchema).optional(),
+  forwardLocalPorts: z.record(z.string(), PortNumberZod).optional(),
   // Legacy: the create-device picks, from before they became a shared
   // setting (shared/sharedSettings.ts, quickCreateDevice). Nothing
   // reads it but the one-time move in
@@ -359,7 +359,7 @@ export const ClientConfigSchema = z.object({
   // flat cross-project inbox. A preference of the window rather than
   // of a host, so a hostless client keeps one too. Absent means the
   // tree.
-  sidebarView: SidebarViewSchema.optional(),
+  sidebarView: SidebarViewZod.optional(),
   // The sidebar's folded projects that have no checkout on this
   // machine, by group key (repo identity, or `${deviceId}/${projectId}`
   // for an identity-less one). A local project's fold is its host's
@@ -404,7 +404,7 @@ export const WriteClientConfigPayloadSchema = z.object({
   config: ClientConfigSchema,
 });
 
-export const WriteShigomoriPayloadSchema = ProjectScopedPayloadSchema.extend({
+export const WriteShigomoriPayloadSchema = ProjectScopedPayloadZod.extend({
   config: ShigomoriConfigSchema,
 });
 
@@ -418,7 +418,7 @@ export const WriteShigomoriPayloadSchema = ProjectScopedPayloadSchema.extend({
 // payload that names one.
 export const WorktreeIdSchema = z.string().regex(/^[0-9a-f]{12}$/);
 
-export const ReadWorktreeDataPayloadSchema = ProjectScopedPayloadSchema.extend({
+export const ReadWorktreeDataPayloadSchema = ProjectScopedPayloadZod.extend({
   worktreeId: WorktreeIdSchema,
 });
 

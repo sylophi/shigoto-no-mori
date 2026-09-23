@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Effect, Option, Schema } from "effect";
 import {
   type PullRequest,
   type PullRequestCheck,
@@ -6,21 +6,28 @@ import {
   type PullRequestChecksSummary,
   type PullRequestDetail,
   PullRequestMergeStateSchema,
+  PullRequestSchema,
   PullRequestStateSchema,
   pullRequestsEqual,
 } from "@shared/schemas";
 import { execGh } from "./exec";
 import { ghReadyForRepo } from "./remote";
 
-const GhPrListItemSchema = z.object({
-  number: z.number().int().positive(),
-  url: z.url(),
-  title: z.string(),
+const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0));
+const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
+const GhPrListItemSchema = Schema.Struct({
+  number: PositiveInt,
+  url: PullRequestSchema.fields.url,
+  title: Schema.String,
   state: PullRequestStateSchema,
-  isDraft: z.boolean(),
-  headRefName: z.string(),
+  isDraft: Schema.Boolean,
+  headRefName: Schema.String,
 });
-type GhPrListItem = z.infer<typeof GhPrListItemSchema>;
+type GhPrListItem = typeof GhPrListItemSchema.Type;
+const decodeGhPrList = Schema.decodeUnknownOption(
+  Schema.Array(GhPrListItemSchema),
+);
 
 const PR_CACHE_TTL_MS = 5 * 60_000;
 const PR_LIST_LIMIT = 200;
@@ -34,7 +41,7 @@ const prCache = new Map<
 async function runGhPrList(
   cwd: string,
   extraArgs: string[],
-): Promise<GhPrListItem[] | null> {
+): Promise<readonly GhPrListItem[] | null> {
   try {
     const { stdout } = await execGh(
       [
@@ -49,8 +56,7 @@ async function runGhPrList(
       { cwd },
     );
     const parsed: unknown = JSON.parse(stdout);
-    const validated = z.array(GhPrListItemSchema).safeParse(parsed);
-    return validated.success ? validated.data : null;
+    return Option.getOrNull(decodeGhPrList(parsed));
   } catch {
     return null;
   }
@@ -138,33 +144,47 @@ function cacheAndReturn(
 // schema permissive (loose object + every field optional) because gh
 // occasionally inlines extra typenames and we'd rather degrade
 // gracefully than reject the whole list.
-const StatusCheckRollupItemSchema = z.looseObject({
-  __typename: z.string().optional(),
-  name: z.string().optional(),
-  context: z.string().optional(),
-  status: z.string().optional(),
-  conclusion: z.string().optional(),
-  state: z.string().optional(),
-  detailsUrl: z.string().optional(),
-  targetUrl: z.string().optional(),
+// Only the declared keys are read, so the rest of gh's item (it varies
+// by __typename) is dropped rather than carried.
+const StatusCheckRollupItemSchema = Schema.Struct({
+  __typename: Schema.optional(Schema.String),
+  name: Schema.optional(Schema.String),
+  context: Schema.optional(Schema.String),
+  status: Schema.optional(Schema.String),
+  conclusion: Schema.optional(Schema.String),
+  state: Schema.optional(Schema.String),
+  detailsUrl: Schema.optional(Schema.String),
+  targetUrl: Schema.optional(Schema.String),
 });
-type StatusCheckRollupItem = z.infer<typeof StatusCheckRollupItemSchema>;
+type StatusCheckRollupItem = typeof StatusCheckRollupItemSchema.Type;
 
-const GhPrDetailSchema = z.object({
-  number: z.number().int().positive(),
-  url: z.url(),
-  title: z.string(),
+const GhPrDetailSchema = Schema.Struct({
+  number: PositiveInt,
+  url: PullRequestSchema.fields.url,
+  title: Schema.String,
   state: PullRequestStateSchema,
-  isDraft: z.boolean(),
-  mergeStateStatus: PullRequestMergeStateSchema.catch("UNKNOWN"),
-  baseRefName: z.string(),
-  author: z.looseObject({ login: z.string().optional() }).nullish(),
-  updatedAt: z.string(),
-  additions: z.number().int().nonnegative(),
-  deletions: z.number().int().nonnegative(),
-  changedFiles: z.number().int().nonnegative(),
-  statusCheckRollup: z.array(StatusCheckRollupItemSchema).default([]),
+  isDraft: Schema.Boolean,
+  // A merge state this build doesn't know, or none at all, reads as
+  // UNKNOWN rather than failing the whole lookup (zod's .catch).
+  mergeStateStatus: PullRequestMergeStateSchema.pipe(
+    Schema.catchDecoding(() => Effect.succeedSome("UNKNOWN" as const)),
+    Schema.withDecodingDefault(Effect.succeed("UNKNOWN" as const)),
+  ),
+  baseRefName: Schema.String,
+  author: Schema.optional(
+    Schema.NullOr(Schema.Struct({ login: Schema.optional(Schema.String) })),
+  ),
+  updatedAt: Schema.String,
+  additions: NonNegativeInt,
+  deletions: NonNegativeInt,
+  changedFiles: NonNegativeInt,
+  statusCheckRollup: Schema.Array(StatusCheckRollupItemSchema).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
 });
+const decodeGhPrDetails = Schema.decodeUnknownSync(
+  Schema.Array(GhPrDetailSchema),
+);
 
 const PASSED_CONCLUSIONS = new Set(["SUCCESS"]);
 const NEUTRAL_CONCLUSIONS = new Set(["NEUTRAL"]);
@@ -214,9 +234,10 @@ function toCheckUrl(value: string | undefined): string | undefined {
   }
 }
 
-function summarizeChecks(checks: PullRequestCheck[]): PullRequestChecksSummary {
-  const summary: PullRequestChecksSummary = {
-    total: checks.length,
+function summarizeChecks(
+  checks: readonly PullRequestCheck[],
+): PullRequestChecksSummary {
+  const counts: Record<PullRequestCheckBucket, number> = {
     passed: 0,
     failing: 0,
     pending: 0,
@@ -224,9 +245,9 @@ function summarizeChecks(checks: PullRequestCheck[]): PullRequestChecksSummary {
     skipped: 0,
   };
   for (const c of checks) {
-    summary[c.bucket] += 1;
+    counts[c.bucket] += 1;
   }
-  return summary;
+  return { total: checks.length, ...counts };
 }
 
 // Single-branch lookup for the currently open worktree page. Uncached,
@@ -270,13 +291,16 @@ async function runGhPrListDetail(
     { cwd },
   );
   const parsed: unknown = JSON.parse(stdout);
-  const validated = z.array(GhPrDetailSchema).safeParse(parsed);
-  if (!validated.success) {
+  let rows: readonly (typeof GhPrDetailSchema.Type)[];
+  try {
+    rows = decodeGhPrDetails(parsed);
+  } catch (error) {
     throw new Error(
-      `Unexpected gh pr list output for ${branch}: ${validated.error.message}`,
+      `Unexpected gh pr list output for ${branch}: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
     );
   }
-  const first = validated.data[0];
+  const first = rows[0];
   if (!first) return null;
   const checkList: PullRequestCheck[] = first.statusCheckRollup.map((item) => ({
     name: item.name ?? item.context ?? "check",

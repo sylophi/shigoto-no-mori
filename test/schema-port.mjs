@@ -19,6 +19,15 @@
 //     enum value outside the set, a non-web URL (with the refine's
 //     message);
 //   - a void input decodes undefined and nothing else;
+//   - wave 1 (payloads, project, worktree, hygiene, changes,
+//     pullRequest, ports, launchers, scripts and the contract slots built
+//     inline beside them): every row of RECORDED decodes, or is refused,
+//     exactly as zod did, including each refine's message (a leading
+//     dash on a git ref, a path leaving the worktree, a commit hash, a
+//     clone URL or folder name), each bound, each default and each
+//     discriminated union's pick;
+//   - the zod copies left for waves 2 and 3 (the `...Zod` exports) give
+//     the same verdicts and outputs as the Schema they mirror;
 //   - strictStruct (shared/schemas/strict.ts) is z.strictObject: an
 //     undeclared key at its level is refused with the key named, a
 //     nested plain struct still strips, optional keys and the decoded
@@ -28,23 +37,35 @@
 //   - the v4 constructs the mapping relies on keep the semantics it
 //     assumes (Void versus Undefined, Number versus Finite, the two
 //     decoding defaults, excess keys stripped by default and refused
-//     under onExcessProperty "error").
+//     under onExcessProperty "error", withDecodingDefault's placement,
+//     catchDecoding as zod's .catch);
+//   - the web stub walker answers a Schema output from its structural
+//     candidates, as it did the zod one.
 //
 // Runs under test/lib/register-ts-alias.mjs. Run: pnpm test schema-port.
 import assert from "node:assert/strict";
 import { Effect, Schema, Struct } from "effect";
 import { decodeWith, isZodCodec, safeDecodeWith } from "@shared/ipc/codec";
+import { branchesContract } from "@shared/ipc/modules/branches";
+import { gitContract } from "@shared/ipc/modules/git";
+import { githubCliContract } from "@shared/ipc/modules/githubCli";
+import { launchersContract } from "@shared/ipc/modules/launchers";
+import { projectsContract } from "@shared/ipc/modules/projects";
+import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { terrierContract } from "@shared/ipc/modules/terrier";
+import * as schemas from "@shared/schemas";
 import {
   DirectoryListingSchema,
   PickFolderPayloadSchema,
   PortNumberSchema,
+  PortNumberZod,
   ShellOpenExternalPayloadSchema,
   TerrierReadinessSchema,
   WorktreePortsResultSchema,
   parsePortNumber,
 } from "@shared/schemas";
 import { strictStruct } from "@shared/schemas/strict";
+import { NO_STRUCTURAL_STUB, stubValueFor } from "../web/ipc/stubDefaults.ts";
 import { makeProof } from "./lib/checkKit.mjs";
 
 const { check, done, fail } = makeProof("schema-port proof");
@@ -64,7 +85,8 @@ function describe(value) {
 // One schema against its recorded zod results, through both codec calls.
 function assertCases(codec, cases) {
   assert.equal(isZodCodec(codec), false, "the schema is still zod");
-  for (const [input, want] of cases) {
+  for (const [input, recorded] of cases) {
+    const want = recorded.same ? ok(input) : recorded;
     const label = describe(input);
     const safe = safeDecodeWith(codec, input);
     if (want.refuse) {
@@ -97,6 +119,1082 @@ const hasOwn = (value, key) => Object.hasOwn(value, key);
 
 // A one-row port list.
 const row = (fields) => ({ ports: [fields] });
+
+// Wave 1's recorded table: each schema's rows, inputs first, over these
+// fixtures. `same` means zod decoded the input to an equal value (no
+// key stripped, none added).
+const same = { same: true };
+
+const P = { projectId: "p" };
+const W = { projectId: "p", worktreeId: "w" };
+const H = "abcd1234";
+const commit = {
+  hash: "abc1234",
+  subject: "s",
+  author: "a",
+  date: "2026-01-01",
+  additions: 1,
+  deletions: 0,
+};
+const worktree = {
+  id: "w",
+  projectId: "p",
+  name: "fox",
+  branch: "main",
+  path: "/x",
+  ahead: 0,
+  behind: 0,
+  hasUpstream: true,
+  hasRemote: true,
+  divergedClean: false,
+  behindPrimary: 0,
+  unpushedCount: 0,
+  mergedIntoPrimary: false,
+  changedCount: 0,
+  recentCommits: [commit],
+  isPrimary: false,
+  isExternal: false,
+  detached: false,
+  shelved: false,
+};
+const pr = {
+  number: 1,
+  url: "https://github.com/a/b/pull/1",
+  title: "t",
+  state: "OPEN",
+  isDraft: false,
+};
+const checks = {
+  total: 1,
+  passed: 1,
+  failing: 0,
+  pending: 0,
+  neutral: 0,
+  skipped: 0,
+};
+const detail = {
+  ...pr,
+  mergeState: "CLEAN",
+  baseRefName: "main",
+  authorLogin: "me",
+  updatedAt: "2026",
+  additions: 1,
+  deletions: 2,
+  changedFiles: 1,
+  checks,
+  checkList: [
+    { name: "ci", bucket: "passed", url: "https://ci.example/1" },
+    { name: "lint", bucket: "skipped" },
+  ],
+};
+const candidate = {
+  number: 2,
+  url: "https://github.com/a/b/pull/2",
+  title: "t",
+  isDraft: true,
+  headRefName: "feat",
+  authorLogin: "x",
+  fromFork: true,
+  headRepo: null,
+  updatedAt: "2026",
+};
+const hyg = {
+  worktreeId: "w",
+  lastCommitAt: 1,
+  headHash: "abcd",
+  uniqueCommits: 0,
+  contentAlreadyInPrimary: false,
+  primaryRef: "main",
+  holdsPrimaryBranch: false,
+  untracked: false,
+};
+
+const RECORDED = {
+  ProjectScopedPayloadSchema: [
+    [P, same],
+    [{ projectId: "p", extra: 1 }, ok({ projectId: "p" })],
+    [{ projectId: "" }, refuse()],
+    [{}, refuse()],
+    [{ projectId: 1 }, refuse()],
+    [null, refuse()],
+  ],
+  WorktreeScopedPayloadSchema: [
+    [W, same],
+    [{ ...W, extra: 1 }, ok({ projectId: "p", worktreeId: "w" })],
+    [P, refuse()],
+    [{ ...W, worktreeId: "" }, refuse()],
+    [{ ...W, projectId: "" }, refuse()],
+  ],
+  PathPayloadSchema: [
+    [{ path: "/a" }, same],
+    [{ path: "/a", x: 1 }, ok({ path: "/a" })],
+    [{ path: "" }, refuse()],
+    [{}, refuse()],
+  ],
+  GitRefNameSchema: [
+    ["main", same],
+    ["feat/x", same],
+    ["a-b", same],
+    ["", refuse()],
+    ["-D", refuse("Branch names cannot start with '-'")],
+    ["--track", refuse("Branch names cannot start with '-'")],
+    [" -x", same],
+    [5, refuse()],
+  ],
+  ProjectSchema: [
+    [{ id: "p", name: "n", path: "/p" }, same],
+    [
+      {
+        id: "p",
+        name: "n",
+        path: "/p",
+        pathExists: false,
+        identity: null,
+        lastUsed: 0,
+        recentCount: 3,
+        source: "terrier",
+        extra: 1,
+      },
+      ok({
+        id: "p",
+        name: "n",
+        path: "/p",
+        pathExists: false,
+        identity: null,
+        lastUsed: 0,
+        recentCount: 3,
+        source: "terrier",
+      }),
+    ],
+    [{ id: "p", name: "n", path: "/p", identity: "github.com/a/b" }, same],
+    [
+      {
+        id: "p",
+        name: "n",
+        path: "/p",
+        identity: undefined,
+        pathExists: undefined,
+      },
+      same,
+    ],
+    [{ id: "", name: "", path: "" }, same],
+    [{ id: "p", name: "n", path: "/p", lastUsed: -1 }, refuse()],
+    [{ id: "p", name: "n", path: "/p", recentCount: 1.5 }, refuse()],
+    [{ id: "p", name: "n", path: "/p", lastUsed: Infinity }, refuse()],
+    [{ id: "p", name: "n", path: "/p", source: "registry" }, refuse()],
+    [{ id: "p", name: "n" }, refuse()],
+  ],
+  ProjectSortModeSchema: [
+    ["alphabetical", same],
+    ["recent", same],
+    ["frequent", same],
+    ["manual", same],
+    ["name", refuse()],
+    ["", refuse()],
+  ],
+  SidebarViewSchema: [
+    ["projects", same],
+    ["inbox", same],
+    ["tree", refuse()],
+  ],
+  SetProjectSortPayloadSchema: [
+    [{ mode: "recent" }, same],
+    [{ mode: "x" }, refuse()],
+  ],
+  ToggleCollapsedProjectPayloadSchema: [
+    [P, same],
+    [{ projectId: "" }, refuse()],
+  ],
+  CloneProjectPayloadSchema: [
+    [{ url: "https://github.com/a/b.git", parentDir: "/p" }, same],
+    [
+      {
+        url: "  git@github.com:a/b.git  ",
+        parentDir: "/p",
+        name: "  foo  ",
+        extra: 1,
+      },
+      ok({ url: "git@github.com:a/b.git", parentDir: "/p", name: "foo" }),
+    ],
+    [{ url: "https://github.com/a/b", parentDir: "/p", name: undefined }, same],
+    [{ url: "/local/repo", parentDir: "/p" }, refuse("Not a git remote URL")],
+    [{ url: "file:///x/y", parentDir: "/p" }, refuse("Not a git remote URL")],
+    [{ url: "-u", parentDir: "/p" }, refuse("Not a git remote URL")],
+    [{ url: "https://github.com/a/b", parentDir: "" }, refuse()],
+    [
+      { url: "https://github.com/a/b", parentDir: "/p", name: "a/b" },
+      refuse("The folder name must be a single path segment"),
+    ],
+    [
+      { url: "https://github.com/a/b", parentDir: "/p", name: "a\\b" },
+      refuse("The folder name must be a single path segment"),
+    ],
+    [
+      { url: "https://github.com/a/b", parentDir: "/p", name: "." },
+      refuse("The folder name must be a single path segment"),
+    ],
+    [
+      { url: "https://github.com/a/b", parentDir: "/p", name: " .. " },
+      refuse("The folder name must be a single path segment"),
+    ],
+    [{ url: "https://github.com/a/b", parentDir: "/p", name: "   " }, refuse()],
+  ],
+  RemoveProjectPayloadSchema: [
+    [{ id: "p" }, same],
+    [{ id: "" }, refuse()],
+  ],
+  ReorderProjectsPayloadSchema: [
+    [{ draggedId: "a", targetId: "b", position: "before" }, same],
+    [{ draggedId: "a", targetId: "b", position: "middle" }, refuse()],
+    [{ draggedId: "", targetId: "b", position: "after" }, refuse()],
+  ],
+  ProjectIconSchema: [
+    [{ mime: "image/png", base64: "AA==" }, same],
+    [{ mime: "image/png" }, refuse()],
+  ],
+  BranchListSchema: [
+    [{ local: ["a"], remote: [] }, same],
+    [{ local: [1], remote: [] }, refuse()],
+  ],
+  CreateBranchPayloadSchema: [
+    [{ ...P, name: "x" }, same],
+    [{ ...P, name: "x", base: "main" }, same],
+    [{ ...P, name: "-x" }, refuse("Branch names cannot start with '-'")],
+    [
+      { ...P, name: "x", base: "-b" },
+      refuse("Branch names cannot start with '-'"),
+    ],
+    [{ name: "x" }, refuse()],
+  ],
+  RenameAnyBranchPayloadSchema: [
+    [{ ...P, oldName: "a", newName: "b" }, same],
+    [
+      { ...P, oldName: "a", newName: "-b" },
+      refuse("Branch names cannot start with '-'"),
+    ],
+  ],
+  DeleteBranchPayloadSchema: [
+    [{ ...P, name: "a", force: true }, same],
+    [{ ...P, name: "--force" }, refuse("Branch names cannot start with '-'")],
+    [{ ...P, name: "a", force: "yes" }, refuse()],
+  ],
+  CommitHashSchema: [
+    ["abcd", same],
+    [H, same],
+    ["a".repeat(40), same],
+    ["a".repeat(64), same],
+    ["a".repeat(65), refuse("Invalid commit hash")],
+    ["abc", refuse("Invalid commit hash")],
+    ["ABCD", refuse("Invalid commit hash")],
+    ["--output=/tmp/x", refuse("Invalid commit hash")],
+    [" abcd", refuse("Invalid commit hash")],
+    ["", refuse("Invalid commit hash")],
+  ],
+  CommitSummarySchema: [
+    [commit, same],
+    [{ ...commit, hash: "zzzz" }, refuse("Invalid commit hash")],
+    [{ ...commit, additions: -1 }, refuse()],
+    [
+      { ...commit, extra: 1 },
+      ok({
+        hash: "abc1234",
+        subject: "s",
+        author: "a",
+        date: "2026-01-01",
+        additions: 1,
+        deletions: 0,
+      }),
+    ],
+  ],
+  WorktreeSchema: [
+    [
+      worktree,
+      ok({
+        id: "w",
+        projectId: "p",
+        name: "fox",
+        branch: "main",
+        path: "/x",
+        ahead: 0,
+        behind: 0,
+        hasUpstream: true,
+        hasRemote: true,
+        divergedClean: false,
+        behindPrimary: 0,
+        unpushedCount: 0,
+        mergedIntoPrimary: false,
+        changedCount: 0,
+        recentCommits: [
+          {
+            hash: "abc1234",
+            subject: "s",
+            author: "a",
+            date: "2026-01-01",
+            additions: 1,
+            deletions: 0,
+          },
+        ],
+        isPrimary: false,
+        isExternal: false,
+        detached: false,
+        shelved: false,
+        autoPull: false,
+      }),
+    ],
+    [
+      {
+        ...worktree,
+        autoPull: undefined,
+        primaryRef: "origin/main",
+        lastChangeAt: 5,
+        extra: 1,
+      },
+      ok({
+        id: "w",
+        projectId: "p",
+        name: "fox",
+        branch: "main",
+        path: "/x",
+        ahead: 0,
+        behind: 0,
+        hasUpstream: true,
+        hasRemote: true,
+        divergedClean: false,
+        behindPrimary: 0,
+        unpushedCount: 0,
+        primaryRef: "origin/main",
+        mergedIntoPrimary: false,
+        changedCount: 0,
+        lastChangeAt: 5,
+        recentCommits: [
+          {
+            hash: "abc1234",
+            subject: "s",
+            author: "a",
+            date: "2026-01-01",
+            additions: 1,
+            deletions: 0,
+          },
+        ],
+        isPrimary: false,
+        isExternal: false,
+        detached: false,
+        shelved: false,
+        autoPull: false,
+      }),
+    ],
+    [{ ...worktree, autoPull: true, recentCommits: [] }, same],
+    [{ ...worktree, projectId: "" }, refuse()],
+    [{ ...worktree, ahead: -1 }, refuse()],
+    [{ ...worktree, behind: 0.5 }, refuse()],
+    [
+      { ...worktree, recentCommits: [{ ...commit, hash: "--x" }] },
+      refuse("Invalid commit hash"),
+    ],
+    [{ ...worktree, autoPull: null }, refuse()],
+    [{ ...worktree, shelved: undefined }, refuse()],
+  ],
+  CreateWorktreePayloadSchema: [
+    [P, same],
+    [
+      {
+        ...P,
+        worktreeName: "fox",
+        branchName: "feat/x",
+        base: "main",
+        checkout: true,
+      },
+      same,
+    ],
+    [{ ...P, worktreeName: "root" }, refuse("Not a valid folder name")],
+    [{ ...P, worktreeName: ".." }, refuse("Not a valid folder name")],
+    [{ ...P, worktreeName: "a/b" }, refuse("Not a valid folder name")],
+    // zod reported the min and the refine; Schema stops at the first
+    // failed check, the empty string's.
+    [{ ...P, worktreeName: "" }, refuse()],
+    [{ ...P, branchName: "-x" }, refuse("Branch names cannot start with '-'")],
+    [{ ...P, base: "--orphan" }, refuse("Branch names cannot start with '-'")],
+  ],
+  CarryOverReportSchema: [
+    [{ applied: 0, failures: [] }, same],
+    [
+      {
+        applied: 2,
+        failures: [{ path: "a", reason: "r", source: "s", x: 1 }],
+        includeFailures: [],
+        sourced: [{ path: "a", source: "b", copiedInstead: true }],
+      },
+      ok({
+        applied: 2,
+        failures: [{ path: "a", reason: "r", source: "s" }],
+        includeFailures: [],
+        sourced: [{ path: "a", source: "b", copiedInstead: true }],
+      }),
+    ],
+    [{ applied: -1, failures: [] }, refuse()],
+    [{ applied: 0 }, refuse()],
+  ],
+  CreateWorktreeResultSchema: [
+    [
+      { worktree },
+      ok({
+        worktree: {
+          id: "w",
+          projectId: "p",
+          name: "fox",
+          branch: "main",
+          path: "/x",
+          ahead: 0,
+          behind: 0,
+          hasUpstream: true,
+          hasRemote: true,
+          divergedClean: false,
+          behindPrimary: 0,
+          unpushedCount: 0,
+          mergedIntoPrimary: false,
+          changedCount: 0,
+          recentCommits: [
+            {
+              hash: "abc1234",
+              subject: "s",
+              author: "a",
+              date: "2026-01-01",
+              additions: 1,
+              deletions: 0,
+            },
+          ],
+          isPrimary: false,
+          isExternal: false,
+          detached: false,
+          shelved: false,
+          autoPull: false,
+        },
+      }),
+    ],
+    [{ worktree: { ...worktree, id: 1 } }, refuse()],
+  ],
+  CreatePhaseSchema: [
+    ["carryOver", same],
+    ["setup", same],
+    ["portPoolProvision", same],
+    ["idle", refuse()],
+  ],
+  WorktreeLifecyclePhaseSchema: [
+    [{ ...W, phase: "idle" }, same],
+    [{ ...W, phase: "setup" }, same],
+    [{ ...W, phase: "other" }, refuse()],
+  ],
+  WorktreeCarryOverCompleteSchema: [
+    [{ ...W, report: { applied: 0, failures: [] } }, same],
+    [
+      {
+        ...W,
+        report: { applied: 0, failures: [] },
+        removedCarryOverPaths: ["x"],
+      },
+      same,
+    ],
+    [{ ...W }, refuse()],
+  ],
+  RelocateWorktreePayloadSchema: [
+    [{ ...W, destinationPath: "/d" }, same],
+    [{ ...W, destinationPath: "" }, refuse()],
+  ],
+  DeleteWorktreePayloadSchema: [
+    [W, same],
+    [
+      { ...W, force: true, skipCleanup: false, refuseRunningScripts: true },
+      same,
+    ],
+    [{ ...W, force: 1 }, refuse()],
+  ],
+  RenameBranchPayloadSchema: [
+    [{ ...W, newBranch: "x" }, same],
+    [{ ...W, newBranch: "-x" }, refuse("Branch names cannot start with '-'")],
+  ],
+  SetShelvedPayloadSchema: [
+    [{ ...W, shelved: true }, same],
+    [W, refuse()],
+  ],
+  SetAutoPullPayloadSchema: [
+    [{ ...W, autoPull: false }, same],
+    [W, refuse()],
+  ],
+  CheckoutBranchPayloadSchema: [
+    [{ ...W, branch: "main" }, same],
+    [{ ...W, branch: "-main" }, refuse("Branch names cannot start with '-'")],
+  ],
+  CommitDiffPayloadSchema: [
+    [{ ...W, hash: H }, same],
+    [{ ...W, hash: "HEAD" }, refuse("Invalid commit hash")],
+  ],
+  ListCommitsPayloadSchema: [
+    [{ ...W, skip: 0, count: 200 }, same],
+    [{ ...W, skip: -1, count: 1 }, refuse()],
+    [{ ...W, skip: 0, count: 0 }, refuse()],
+    [{ ...W, skip: 0, count: 201 }, refuse()],
+    [{ ...W, skip: 0.5, count: 1 }, refuse()],
+  ],
+  CleanupErrorSchema: [
+    [{ phase: "teardown", exitCode: 1, runId: "r" }, same],
+    [{ phase: "portPoolRelease", exitCode: null, runId: "r" }, same],
+    [{ phase: "teardown", exitCode: 1.5, runId: "r" }, same],
+    [{ phase: "teardown", exitCode: NaN, runId: "r" }, refuse()],
+    [{ phase: "setup", exitCode: 1, runId: "r" }, refuse()],
+    [{ phase: "teardown", exitCode: 1, runId: "" }, refuse()],
+  ],
+  DeleteWorktreeResultSchema: [
+    [{ ok: true }, same],
+    [
+      {
+        ok: true,
+        cleanupError: { phase: "teardown", exitCode: 1, runId: "r" },
+      },
+      ok({ ok: true }),
+    ],
+    [
+      {
+        ok: false,
+        cleanupError: { phase: "teardown", exitCode: null, runId: "r" },
+      },
+      same,
+    ],
+    [{ ok: false }, refuse()],
+    [{ ok: "true" }, refuse()],
+    [{}, refuse()],
+  ],
+  WorktreeHygieneSchema: [
+    [hyg, same],
+    [
+      {
+        ...hyg,
+        lastCommitAt: null,
+        headHash: null,
+        uniqueCommits: null,
+        primaryRef: null,
+      },
+      same,
+    ],
+    [{ ...hyg, uniqueCommits: -1 }, refuse()],
+    [{ ...hyg, lastCommitAt: undefined }, refuse()],
+  ],
+  WorktreeDiskUsageSchema: [
+    [{ worktreeId: "w", bytes: 10, lastActivityAt: null, partial: true }, same],
+    [
+      { worktreeId: "w", bytes: -1, lastActivityAt: 1, partial: false },
+      refuse(),
+    ],
+  ],
+  StagedStateSchema: [
+    ["none", same],
+    ["partial", same],
+    ["all", same],
+    ["some", refuse()],
+  ],
+  ChangeKindSchema: [
+    ["added", same],
+    ["copied", refuse()],
+  ],
+  ChangedFileSchema: [
+    [{ path: "a", kind: "modified", staged: "none" }, same],
+    [
+      {
+        path: "a",
+        kind: "renamed",
+        staged: "all",
+        prevPath: "b",
+        counts: { additions: 1, deletions: 2 },
+        conflicted: true,
+        x: 1,
+      },
+      ok({
+        path: "a",
+        kind: "renamed",
+        counts: { additions: 1, deletions: 2 },
+        prevPath: "b",
+        staged: "all",
+        conflicted: true,
+      }),
+    ],
+    [{ path: "a", kind: "added", staged: "none", conflicted: false }, refuse()],
+    [{ path: "", kind: "added", staged: "none" }, refuse()],
+    [
+      { path: "a", kind: "added", staged: "none", counts: { additions: 1 } },
+      refuse(),
+    ],
+  ],
+  FileDiffPayloadSchema: [
+    [{ ...W, paths: ["a/b.ts"], untracked: false }, same],
+    [{ ...W, paths: ["old", "new"], untracked: true }, same],
+    [{ ...W, paths: [], untracked: false }, refuse()],
+    [
+      { ...W, paths: ["../x"], untracked: false },
+      refuse("Path must stay within the worktree"),
+    ],
+    [
+      { ...W, paths: ["a/../../x"], untracked: false },
+      refuse("Path must stay within the worktree"),
+    ],
+    [
+      { ...W, paths: ["/etc/passwd"], untracked: false },
+      refuse("Path must stay within the worktree"),
+    ],
+    [
+      { ...W, paths: ["a\\..\\b"], untracked: false },
+      refuse("Path must stay within the worktree"),
+    ],
+    [
+      { ...W, paths: ["a\0b"], untracked: false },
+      refuse("Path must stay within the worktree"),
+    ],
+    [{ ...W, paths: [""], untracked: false }, refuse()],
+    [{ ...W, paths: ["-x"], untracked: false }, same],
+  ],
+  SetStagedPayloadSchema: [
+    [{ ...W, paths: ["a"], staged: true }, same],
+    [
+      { ...W, paths: ["../a"], staged: true },
+      refuse("Path must stay within the worktree"),
+    ],
+  ],
+  CommitChangesPayloadSchema: [
+    [
+      { ...W, summary: "  fix  " },
+      ok({ projectId: "p", worktreeId: "w", summary: "fix" }),
+    ],
+    [
+      { ...W, summary: "s", description: "d", stagePaths: [], amend: true },
+      same,
+    ],
+    [{ ...W, summary: "s", stagePaths: ["a", "b"] }, same],
+    [{ ...W, summary: "   " }, refuse()],
+    [
+      { ...W, summary: "s", stagePaths: ["../x"] },
+      refuse("Path must stay within the worktree"),
+    ],
+  ],
+  CommitMessageSchema: [
+    [{ summary: "s", description: "" }, same],
+    [{ summary: "s" }, refuse()],
+  ],
+  ResetSoftPayloadSchema: [
+    [{ ...W, target: H }, same],
+    [{ ...W, target: H, expectHead: "abcd" }, same],
+    [{ ...W, target: "HEAD~1" }, refuse("Invalid commit hash")],
+    [{ ...W, target: H, expectHead: "-x" }, refuse("Invalid commit hash")],
+  ],
+  ResetSoftResultSchema: [
+    [
+      { previousHead: H, worktree },
+      ok({
+        previousHead: "abcd1234",
+        worktree: {
+          id: "w",
+          projectId: "p",
+          name: "fox",
+          branch: "main",
+          path: "/x",
+          ahead: 0,
+          behind: 0,
+          hasUpstream: true,
+          hasRemote: true,
+          divergedClean: false,
+          behindPrimary: 0,
+          unpushedCount: 0,
+          mergedIntoPrimary: false,
+          changedCount: 0,
+          recentCommits: [
+            {
+              hash: "abc1234",
+              subject: "s",
+              author: "a",
+              date: "2026-01-01",
+              additions: 1,
+              deletions: 0,
+            },
+          ],
+          isPrimary: false,
+          isExternal: false,
+          detached: false,
+          shelved: false,
+          autoPull: false,
+        },
+      }),
+    ],
+    [{ previousHead: "x", worktree }, refuse("Invalid commit hash")],
+  ],
+  CommitChangesResultSchema: [
+    [
+      { hash: H, worktree },
+      ok({
+        hash: "abcd1234",
+        worktree: {
+          id: "w",
+          projectId: "p",
+          name: "fox",
+          branch: "main",
+          path: "/x",
+          ahead: 0,
+          behind: 0,
+          hasUpstream: true,
+          hasRemote: true,
+          divergedClean: false,
+          behindPrimary: 0,
+          unpushedCount: 0,
+          mergedIntoPrimary: false,
+          changedCount: 0,
+          recentCommits: [
+            {
+              hash: "abc1234",
+              subject: "s",
+              author: "a",
+              date: "2026-01-01",
+              additions: 1,
+              deletions: 0,
+            },
+          ],
+          isPrimary: false,
+          isExternal: false,
+          detached: false,
+          shelved: false,
+          autoPull: false,
+        },
+      }),
+    ],
+  ],
+  DiscardChangesPayloadSchema: [
+    [{ ...W, paths: ["a"] }, same],
+    [{ ...W, paths: [] }, refuse()],
+    [{ ...W, paths: ["/a"] }, refuse("Path must stay within the worktree")],
+  ],
+  DiscardChangesResultSchema: [
+    [
+      { snapshot: H, worktree },
+      ok({
+        snapshot: "abcd1234",
+        worktree: {
+          id: "w",
+          projectId: "p",
+          name: "fox",
+          branch: "main",
+          path: "/x",
+          ahead: 0,
+          behind: 0,
+          hasUpstream: true,
+          hasRemote: true,
+          divergedClean: false,
+          behindPrimary: 0,
+          unpushedCount: 0,
+          mergedIntoPrimary: false,
+          changedCount: 0,
+          recentCommits: [
+            {
+              hash: "abc1234",
+              subject: "s",
+              author: "a",
+              date: "2026-01-01",
+              additions: 1,
+              deletions: 0,
+            },
+          ],
+          isPrimary: false,
+          isExternal: false,
+          detached: false,
+          shelved: false,
+          autoPull: false,
+        },
+      }),
+    ],
+    [{ snapshot: "", worktree }, refuse("Invalid commit hash")],
+  ],
+  RestoreDiscardPayloadSchema: [
+    [{ ...W, snapshot: H }, same],
+    [{ ...W, snapshot: "zz" }, refuse("Invalid commit hash")],
+  ],
+  PullRequestSchema: [
+    [pr, same],
+    [
+      { ...pr, url: "  https://github.com/a/b/pull/1  ", extra: 1 },
+      ok({
+        number: 1,
+        url: "https://github.com/a/b/pull/1",
+        title: "t",
+        state: "OPEN",
+        isDraft: false,
+      }),
+    ],
+    [{ ...pr, url: "mailto:a@b.c" }, same],
+    [{ ...pr, url: "not a url" }, refuse()],
+    [{ ...pr, url: "http://" }, refuse()],
+    [{ ...pr, number: 0 }, refuse()],
+    [{ ...pr, number: 1.5 }, refuse()],
+    [{ ...pr, state: "DRAFT" }, refuse()],
+  ],
+  PullRequestCheckSchema: [
+    [{ name: "c", bucket: "failing" }, same],
+    [
+      { name: "c", bucket: "failing", url: " https://x.y/z " },
+      ok({ name: "c", bucket: "failing", url: "https://x.y/z" }),
+    ],
+    [{ name: "c", bucket: "failing", url: "" }, refuse()],
+    [{ name: "c", bucket: "red" }, refuse()],
+  ],
+  PullRequestChecksSummarySchema: [
+    [checks, same],
+    [{ ...checks, total: -1 }, refuse()],
+  ],
+  PullRequestDetailSchema: [
+    [detail, same],
+    [{ ...detail, mergeState: "WHATEVER" }, refuse()],
+    [
+      { ...detail, checkList: [{ name: "c", bucket: "passed", url: "nope" }] },
+      refuse(),
+    ],
+    [pr, refuse()],
+  ],
+  MergeMethodSchema: [
+    ["merge", same],
+    ["squash", same],
+    ["rebase", same],
+    ["ff", refuse()],
+  ],
+  RepoMergeConfigSchema: [
+    [{ merge: true, squash: false, rebase: true }, same],
+    [{ merge: true }, refuse()],
+  ],
+  GithubCliReadinessSchema: [
+    [{ installed: true, authed: false }, same],
+    [{ installed: true }, refuse()],
+  ],
+  PullRequestCandidateSchema: [
+    [candidate, same],
+    [{ ...candidate, headRepo: "me/fork", fromFork: true }, same],
+    [{ ...candidate, headRefName: "" }, refuse()],
+    [{ ...candidate, url: "x" }, refuse()],
+  ],
+  GhUnavailableReasonSchema: [
+    ["integration-off", same],
+    ["gh-missing", same],
+    ["gh-signed-out", same],
+    ["gh-failed", refuse()],
+  ],
+  PullRequestSourceUnavailableSchema: [
+    ["integration-off", same],
+    ["gh-missing", same],
+    ["gh-signed-out", same],
+    ["no-github-remote", same],
+    ["gh-failed", same],
+    ["other", refuse()],
+  ],
+  PullRequestCandidateListSchema: [
+    [{ status: "ok", pullRequests: [candidate] }, same],
+    [
+      { status: "ok", pullRequests: [], reason: "gh-failed" },
+      ok({ status: "ok", pullRequests: [] }),
+    ],
+    [{ status: "unavailable", reason: "no-github-remote" }, same],
+    [{ status: "unavailable", reason: "nope" }, refuse()],
+    [{ status: "ok" }, refuse()],
+    [{ status: "other" }, refuse()],
+  ],
+  ResolvePullRequestCheckoutPayloadSchema: [
+    [{ ...P, number: 3 }, same],
+    [{ ...P, number: 0 }, refuse()],
+    [{ number: 3 }, refuse()],
+  ],
+  PullRequestCheckoutRefSchema: [
+    [{ branch: "pr/3" }, same],
+    [{ branch: "" }, refuse()],
+  ],
+  GithubCliWorktreePullRequestPayloadSchema: [
+    [{ ...P, branch: "b" }, same],
+    [{ ...P, branch: "" }, refuse()],
+  ],
+  GithubCliPullRequestDiffPayloadSchema: [
+    [{ ...P, number: 1 }, same],
+    [{ ...P, number: -1 }, refuse()],
+  ],
+  MergePullRequestPayloadSchema: [
+    [{ ...P, number: 1, method: "squash" }, same],
+    [{ ...P, number: 1, method: "fast-forward" }, refuse()],
+  ],
+  SetPullRequestDraftPayloadSchema: [
+    [{ ...P, number: 1, draft: true }, same],
+    [{ ...P, number: 1 }, refuse()],
+  ],
+  CustomPortSchema: [
+    [{ port: 3000 }, same],
+    [{ port: 3000, label: "  api  ", x: 1 }, ok({ port: 3000, label: "api" })],
+    [{ port: 3000, label: "a".repeat(32) }, same],
+    [{ port: 3000, label: "a".repeat(33) }, refuse()],
+    [{ port: 3000, label: "   " }, refuse()],
+    [{ port: 0 }, refuse()],
+    [{ port: 3000.5 }, refuse()],
+    [{ port: 3000, label: undefined }, same],
+  ],
+  DetectedLauncherSchema: [
+    [{ kind: "detected", id: "code", label: "Code", available: true }, same],
+    [{ kind: "detected", id: "code", label: "Code" }, refuse()],
+  ],
+  LauncherEntrySchema: [
+    [
+      { kind: "detected", id: "code", label: "Code", available: false, x: 1 },
+      ok({ kind: "detected", id: "code", label: "Code", available: false }),
+    ],
+    [{ kind: "custom", id: "c", label: "C" }, same],
+    [{ kind: "web", id: "web:github", label: "GitHub" }, same],
+    [
+      { kind: "custom", id: "c", label: "C", available: true },
+      ok({ kind: "custom", id: "c", label: "C" }),
+    ],
+    [{ kind: "app", id: "a", label: "A" }, refuse()],
+    [{ kind: "detected", id: "code", label: "Code" }, refuse()],
+  ],
+  LaunchPayloadSchema: [
+    [{ ...W, launcherId: "app:code" }, same],
+    [{ ...W, launcherId: "" }, refuse()],
+  ],
+  SetLaunchToolsEnabledPayloadSchema: [
+    [{ enabled: false }, same],
+    [
+      { enabled: true, entries: [{ id: "a", label: "A", x: 1 }] },
+      ok({ enabled: true, entries: [{ id: "a", label: "A" }] }),
+    ],
+    [{ enabled: true, entries: [{ id: "a" }] }, refuse()],
+  ],
+  RunScriptPayloadSchema: [
+    [{ ...W, script: "setup" }, same],
+    [{ ...W, script: "port-pool-release" }, same],
+    [{ ...W, script: "dev" }, refuse()],
+  ],
+  PackageScriptsResultSchema: [
+    [
+      {
+        scripts: { dev: "vite" },
+        packageManager: "pnpm",
+        usage: { dev: { lastUsed: 0, recentCount: 0 } },
+      },
+      same,
+    ],
+    [{ scripts: {}, packageManager: "deno", usage: {} }, refuse()],
+    [{ scripts: { dev: 1 }, packageManager: "pnpm", usage: {} }, refuse()],
+    [
+      {
+        scripts: {},
+        packageManager: "bun",
+        usage: { dev: { lastUsed: -1, recentCount: 0 } },
+      },
+      refuse(),
+    ],
+  ],
+  PackageScriptSortModeSchema: [
+    ["manifest", same],
+    ["alphabetical", same],
+    ["recent", same],
+    ["frequent", same],
+    ["manual", refuse()],
+  ],
+  RunPackageScriptPayloadSchema: [
+    [{ ...W, scriptName: "dev" }, same],
+    [{ ...W, scriptName: "" }, refuse()],
+  ],
+  SetPackageScriptSortPayloadSchema: [
+    [{ ...P, mode: "manifest" }, same],
+    [{ ...P, mode: "manual" }, refuse()],
+  ],
+  CancelScriptPayloadSchema: [
+    [{ runId: "r" }, same],
+    [{ runId: "" }, refuse()],
+  ],
+  WriteScriptPayloadSchema: [
+    [{ runId: "r", data: "" }, same],
+    [{ runId: "r" }, refuse()],
+  ],
+  ResizeScriptPayloadSchema: [
+    [{ runId: "r", cols: 80, rows: 24 }, same],
+    [{ runId: "r", cols: 0, rows: 24 }, refuse()],
+    [{ runId: "r", cols: 80.5, rows: 24 }, refuse()],
+  ],
+  ScriptEventSchema: [
+    [{ runId: "r", kind: "data", data: "x" }, same],
+    [{ runId: "r", kind: "exit", code: null }, same],
+    [{ runId: "r", kind: "exit", code: 0 }, same],
+    [{ runId: "r", kind: "error", data: "boom" }, same],
+    [
+      {
+        runId: "r",
+        kind: "started",
+        projectId: "p",
+        worktreeId: "w",
+        slot: { kind: "setup" },
+      },
+      same,
+    ],
+    [
+      {
+        runId: "r",
+        kind: "started",
+        projectId: "p",
+        worktreeId: "w",
+        slot: { kind: "portPool", phase: "release", x: 1 },
+      },
+      ok({
+        runId: "r",
+        kind: "started",
+        projectId: "p",
+        worktreeId: "w",
+        slot: { kind: "portPool", phase: "release" },
+      }),
+    ],
+    [
+      {
+        runId: "r",
+        kind: "started",
+        projectId: "p",
+        worktreeId: "w",
+        slot: { kind: "portPool" },
+      },
+      refuse(),
+    ],
+    [
+      {
+        runId: "r",
+        kind: "started",
+        projectId: "p",
+        worktreeId: "w",
+        slot: { kind: "dev" },
+      },
+      refuse(),
+    ],
+    [{ runId: "r", kind: "exit" }, refuse()],
+    [{ runId: "r", kind: "stdout", data: "x" }, refuse()],
+    [
+      { runId: "r", kind: "data", data: "x", code: 1 },
+      ok({ runId: "r", kind: "data", data: "x" }),
+    ],
+  ],
+  RemovedWorktreeScriptsSchema: [
+    [{ worktreeId: "w", worktreeName: "n", scriptCount: 1 }, same],
+    [{ worktreeId: "w", worktreeName: "n", scriptCount: 0 }, refuse()],
+  ],
+  OrphanScriptReportSchema: [
+    [{ stopped: 0 }, same],
+    [{ stopped: -1 }, refuse()],
+  ],
+};
+
+// The zod copies the unported embedders still hold, beside the Schema
+// each mirrors (Phase 4 waves 2 and 3 delete them).
+const ZOD_COPIES = [
+  ["ProjectScopedPayloadZod", "ProjectScopedPayloadSchema"],
+  ["GitRefNameZod", "GitRefNameSchema"],
+  ["SidebarViewZod", "SidebarViewSchema"],
+  ["CommitHashZod", "CommitHashSchema"],
+  ["CreatePhaseZod", "CreatePhaseSchema"],
+  ["WorktreeZod", "WorktreeSchema"],
+  ["MergeMethodZod", "MergeMethodSchema"],
+  ["CustomPortZod", "CustomPortSchema"],
+];
 
 // Whether a Schema decodes the input, for the construct checks.
 const decodes = (schema, input, options) =>
@@ -289,16 +1387,143 @@ async function main() {
     };
     for (const [raw, want] of Object.entries(recorded)) {
       assert.equal(parsePortNumber(raw), want, `parsePortNumber(${raw})`);
-      // The zod form still embedded by config.ts and the forward
+      const viaSchema = safeDecodeWith(PortNumberSchema, Number(raw));
+      assert.equal(
+        viaSchema.success ? viaSchema.data : undefined,
+        want,
+        `PortNumberSchema on ${raw}`,
+      );
+      // The zod copy still embedded by config.ts and the forward
       // contracts must agree with the Schema form while both exist.
-      const viaZod = PortNumberSchema.safeParse(Number(raw));
+      const viaZod = PortNumberZod.safeParse(Number(raw));
       assert.equal(
         viaZod.success ? viaZod.data : undefined,
         want,
-        `zod PortNumberSchema on ${raw}`,
+        `PortNumberZod on ${raw}`,
       );
     }
   });
+
+  for (const [name, rows] of Object.entries(RECORDED)) {
+    // oxlint-disable-next-line no-await-in-loop -- one named check per schema, in table order
+    await check(`${name} matches zod`, () => {
+      assertCases(schemas[name], rows);
+    });
+  }
+
+  await check("the zod copies agree with the Schema they mirror", () => {
+    for (const [copyName, schemaName] of ZOD_COPIES) {
+      const copy = schemas[copyName];
+      assert.equal(isZodCodec(copy), true, `${copyName} is zod`);
+      for (const [input] of RECORDED[schemaName]) {
+        const viaCopy = copy.safeParse(input);
+        const viaSchema = safeDecodeWith(schemas[schemaName], input);
+        const label = `${copyName} on ${describe(input)}`;
+        assert.equal(viaCopy.success, viaSchema.success, label);
+        if (viaCopy.success) {
+          assert.deepStrictEqual(viaCopy.data, viaSchema.data, label);
+        }
+      }
+    }
+  });
+
+  await check("wave 1's inline contract slots match zod", () => {
+    assertCases(gitContract.calls.fetchActive.payload, [
+      [
+        { projectId: "p", active: true, x: 1 },
+        ok({ projectId: "p", active: true }),
+      ],
+      [{ projectId: "p" }, refuse()],
+      [{ projectId: "", active: false }, refuse()],
+    ]);
+    assertCases(gitContract.calls.sweep.output, [
+      [{ leaseMs: 5 }, same],
+      [{ leaseMs: Number.NaN }, refuse()],
+      [{}, refuse()],
+    ]);
+    assertCases(gitContract.calls.sweep.input, [
+      [undefined, ok(undefined)],
+      [null, refuse()],
+      [{}, refuse()],
+    ]);
+    assertCases(branchesContract.calls.create.output, [
+      [undefined, ok(undefined)],
+      [null, refuse()],
+    ]);
+    assertCases(launchersContract.calls.forProject.output, [
+      [
+        { entries: [{ kind: "custom", id: "c", label: "C" }], hiddenCount: 0 },
+        same,
+      ],
+      [{ entries: [], hiddenCount: -1 }, refuse()],
+      [{ entries: [], hiddenCount: 1.5 }, refuse()],
+    ]);
+    assertCases(githubCliContract.calls.projectPullRequests.output, [
+      [{}, same],
+      [{ main: pr }, same],
+      [{ main: { ...pr, extra: 1 } }, ok({ main: pr })],
+      [{ main: {} }, refuse()],
+    ]);
+    assertCases(githubCliContract.calls.worktreePullRequest.output, [
+      [null, same],
+      [detail, same],
+      [undefined, refuse()],
+    ]);
+    assertCases(projectsContract.calls.icon.output, [
+      [null, same],
+      [{ mime: "m", base64: "b" }, same],
+      [undefined, refuse()],
+    ]);
+    assertCases(projectsContract.calls.cloneUrl.output, [
+      [null, same],
+      ["x", same],
+      [undefined, refuse()],
+    ]);
+    assertCases(projectsContract.calls.list.output, [
+      [[], same],
+      [
+        [{ id: "p", name: "n", path: "/p", extra: 1 }],
+        ok([{ id: "p", name: "n", path: "/p" }]),
+      ],
+      [{}, refuse()],
+    ]);
+    assertCases(scriptsContract.calls.cancel.output, [
+      [{ cancelled: true }, same],
+      [{}, refuse()],
+    ]);
+  });
+
+  await check(
+    "the web stub walker answers a Schema output structurally",
+    () => {
+      const structural = { fabricateArms: false };
+      assert.deepStrictEqual(
+        stubValueFor(projectsContract.calls.list.output, structural),
+        [],
+      );
+      assert.equal(
+        stubValueFor(projectsContract.calls.icon.output, structural),
+        null,
+      );
+      assert.equal(
+        stubValueFor(branchesContract.calls.create.output, structural),
+        undefined,
+      );
+      // A struct with required members is the zod walker's recursive
+      // build, which does not read Schema yet (wave 4): no stub rather
+      // than an invented one.
+      assert.equal(
+        stubValueFor(schemas.GithubCliReadinessSchema, structural),
+        NO_STRUCTURAL_STUB,
+      );
+      assert.equal(
+        stubValueFor(schemas.PullRequestCandidateListSchema, {
+          fabricateArms: true,
+        }),
+        NO_STRUCTURAL_STUB,
+      );
+    },
+  );
 
   await check("strictStruct refuses what z.strictObject refused", () => {
     const Strict = strictStruct({
@@ -508,6 +1733,33 @@ async function main() {
       assert.equal(decodes(withDefault, { a: null }), false);
       assert.deepStrictEqual(decode(withKeyDefault)({}), { a: "d" });
       assert.equal(decodes(withKeyDefault, { a: undefined }), false);
+      // withDecodingDefault straight on the field decodes the same. It
+      // is the form the ports use: after Schema.optional the decoded
+      // TYPE keeps the key optional (`a?: string`), where zod's
+      // .default() made it required.
+      const withDirectDefault = Schema.Struct({
+        a: Schema.String.pipe(Schema.withDecodingDefault(Effect.succeed("d"))),
+      });
+      assert.deepStrictEqual(decode(withDirectDefault)({}), { a: "d" });
+      assert.deepStrictEqual(decode(withDirectDefault)({ a: undefined }), {
+        a: "d",
+      });
+      assert.equal(decodes(withDirectDefault, { a: null }), false);
+      // zod's .catch(x) replaces any failure, a missing key included.
+      // catchDecoding alone does not see a missing key; a decoding
+      // default beside it does.
+      const caught = Schema.Literals(["A", "Z"]).pipe(
+        Schema.catchDecoding(() => Effect.succeedSome("Z")),
+      );
+      const caughtStruct = Schema.Struct({ m: caught });
+      assert.deepStrictEqual(decode(caughtStruct)({ m: "nope" }), { m: "Z" });
+      assert.equal(decodes(caughtStruct, {}), false);
+      const caughtOrMissing = Schema.Struct({
+        m: caught.pipe(Schema.withDecodingDefault(Effect.succeed("Z"))),
+      });
+      assert.deepStrictEqual(decode(caughtOrMissing)({}), { m: "Z" });
+      assert.deepStrictEqual(decode(caughtOrMissing)({ m: null }), { m: "Z" });
+      assert.deepStrictEqual(decode(caughtOrMissing)({ m: "A" }), { m: "A" });
       // .optional() on a key is Schema.optional (absent or undefined);
       // Schema.optionalKey refuses an explicit undefined.
       const optionalKey = Schema.Struct({

@@ -1,3 +1,4 @@
+import { Effect, Schema } from "effect";
 import { z } from "zod";
 import { isValidWorktreeDirName } from "../git/branches";
 import {
@@ -5,6 +6,8 @@ import {
   WorktreeScopedPayloadSchema,
 } from "./payloads";
 import { GitRefNameSchema, isRealBranch } from "./project";
+
+const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
 // Abbreviated commit hashes are produced by `git log %h` and travel back
 // down into git argv (`git show <hash>`). Pinning them to hex is what
@@ -20,107 +23,111 @@ const COMMIT_HASH_RE = /^[0-9a-f]{4,64}$/;
 export const isCommitHash = (value: string): boolean =>
   COMMIT_HASH_RE.test(value);
 
-export const CommitHashSchema = z
-  .string()
-  .regex(COMMIT_HASH_RE, { message: "Invalid commit hash" });
+export const CommitHashSchema = Schema.String.check(
+  Schema.isPattern(COMMIT_HASH_RE, { message: "Invalid commit hash" }),
+);
 
-export const CommitSummarySchema = z.object({
+export const CommitSummarySchema = Schema.Struct({
   hash: CommitHashSchema,
-  subject: z.string(),
-  author: z.string(),
-  date: z.string(),
+  subject: Schema.String,
+  author: Schema.String,
+  date: Schema.String,
   // Net additions/deletions across all files in this commit, parsed
   // from `git log --shortstat`. Zero for empty/merge commits.
-  additions: z.number().int().nonnegative(),
-  deletions: z.number().int().nonnegative(),
+  additions: NonNegativeInt,
+  deletions: NonNegativeInt,
 });
-export type CommitSummary = z.infer<typeof CommitSummarySchema>;
+export type CommitSummary = typeof CommitSummarySchema.Type;
 
-export const WorktreeSchema = z.object({
-  id: z.string(),
-  projectId: z.string().min(1),
+export const WorktreeSchema = Schema.Struct({
+  id: Schema.String,
+  projectId: Schema.NonEmptyString,
   // The worktree's identity, the directory basename. Stable across branch
   // checkouts/renames; for shigomori-created worktrees it's a randomly
   // picked animal name.
-  name: z.string(),
+  name: Schema.String,
   // The currently checked-out branch. A *property* of the worktree, not
   // its identity. May change via `git checkout` / `git branch -m`.
-  branch: z.string(),
-  path: z.string(),
+  branch: Schema.String,
+  path: Schema.String,
   // Commits this worktree has that its upstream doesn't, and vice versa.
   // Both 0 when synced, when there's no upstream, or when HEAD is
   // detached. Consumers should check `hasUpstream` to disambiguate.
-  ahead: z.number().int().nonnegative(),
-  behind: z.number().int().nonnegative(),
+  ahead: NonNegativeInt,
+  behind: NonNegativeInt,
   // True when the branch has an upstream configured AND that upstream
   // still resolves (i.e. `@{u}` works). False for detached HEAD, brand-
   // new local branches, or branches whose tracked remote was deleted.
-  hasUpstream: z.boolean(),
+  hasUpstream: Schema.Boolean,
   // True when the project has at least one git remote configured. Drives
   // whether "Publish" is offered as an action versus only as a hint.
-  hasRemote: z.boolean(),
+  hasRemote: Schema.Boolean,
   // Only meaningful when ahead > 0 && behind > 0. True when a merge
   // probe (`git merge-tree --write-tree`) reports no conflicts. The
   // Pull-and-push action tries `git rebase @{u}` first (linear history)
   // and falls back to `git merge @{u}` if a per-commit replay would
   // conflict. The probe guarantees the merge will land.
-  divergedClean: z.boolean(),
+  divergedClean: Schema.Boolean,
   // Commits the project's primary branch (resolved via the same logic
   // as the "default branch" picker) has that this worktree's HEAD does
   // not. 0 for the primary worktree, detached HEAD, or when the primary
   // ref can't be resolved. The UI uses > 0 as the gate for offering
   // the "Sync from primary" action.
-  behindPrimary: z.number().int().nonnegative(),
+  behindPrimary: NonNegativeInt,
   // How many of HEAD's newest commits exist on no remote-tracking ref
   // at all. Bounds what amend and undo may rewrite. Distinct from
   // `ahead`, which only measures the configured upstream.
-  unpushedCount: z.number().int().nonnegative(),
+  unpushedCount: NonNegativeInt,
   // The ref the "Sync from primary" action rebases onto, the same ref
   // `behindPrimary` is measured against. Carries the remote prefix when
   // the primary resolves to a remote-tracking ref (e.g. "origin/main"),
   // so the renderer can show it on the pill without implying the source
   // is a local branch.
-  primaryRef: z.string().optional(),
+  primaryRef: Schema.optional(Schema.String),
   // True when this branch's work is already in the primary branch. See
   // landedOnPrimary in host/lib/git/worktrees.ts for what does and
   // doesn't count. Notably a local fast-forward merge doesn't, since
   // its history is indistinguishable from a worktree that never
   // committed. False for the primary worktree and for detached HEAD.
-  mergedIntoPrimary: z.boolean(),
-  changedCount: z.number().int().nonnegative(),
+  mergedIntoPrimary: Schema.Boolean,
+  changedCount: NonNegativeInt,
   // Newest mtime across the worktree's uncommitted changes, epoch ms.
   // Absent when the tree is clean (or when the scan couldn't stat
   // anything). Exists so "recently worked in" can account for edits that
   // were never committed, not just the commit log.
-  lastChangeAt: z.number().int().nonnegative().optional(),
+  lastChangeAt: Schema.optional(NonNegativeInt),
   // Most-recent first. Empty when the worktree has no commits yet.
   // Bounded by the backend (currently 4) so the IPC payload stays
   // small: 3 for the teaser plus 1 extra to signal "more available".
-  recentCommits: z.array(CommitSummarySchema),
+  recentCommits: Schema.Array(CommitSummarySchema),
   // The repo's primary checkout. Shown in the UI for context but never
   // removable, since deleting it would mean detaching the project itself.
-  isPrimary: z.boolean(),
+  isPrimary: Schema.Boolean,
   // True when the worktree lives outside shigomori's managed worktrees dir
   // (i.e. created manually or by another tool). Primary checkouts are also
   // technically external; the UI tags only non-primary externals.
-  isExternal: z.boolean(),
+  isExternal: Schema.Boolean,
   // True when HEAD points at a commit rather than a branch. In this case
   // `branch` holds the short commit hash, not a real branch name, so
   // rename is impossible and the UI styles it as a hash, not a branch.
-  detached: z.boolean(),
+  detached: Schema.Boolean,
   // User-driven "out of focus" flag. Filtered out of the sidebar's main
   // list by default but recoverable via the per-project "Show shelved"
   // toggle. The worktree itself is untouched on disk.
-  shelved: z.boolean(),
+  shelved: Schema.Boolean,
   // User-driven "follow the remote" flag. While it is set, the app
   // fast-forwards this worktree onto its upstream after each of its
   // background fetches, as long as the worktree has no local commits,
   // no uncommitted or untracked changes and no app-started process.
   // Meant for the primary checkout and other branches only ever read
   // here. Defaults so a row from an older peer or CLI still parses.
-  autoPull: z.boolean().default(false),
+  // (withDecodingDefault straight on the field, not after
+  // Schema.optional: that order leaves the decoded key optional too.)
+  autoPull: Schema.Boolean.pipe(
+    Schema.withDecodingDefault(Effect.succeed(false)),
+  ),
 });
-export type Worktree = z.infer<typeof WorktreeSchema>;
+export type Worktree = typeof WorktreeSchema.Type;
 
 // A worktree's relationship to its upstream, derived from the raw counts
 // on Worktree. The renderer switches on `kind` to pick the right pill;
@@ -213,143 +220,198 @@ export function hasWorktreeData(
   return !worktree.isExternal || worktree.isPrimary;
 }
 
-export const CreateWorktreePayloadSchema = ProjectScopedPayloadSchema.extend({
+export const CreateWorktreePayloadSchema = Schema.Struct({
+  ...ProjectScopedPayloadSchema.fields,
   // Optional: caller-picked animal dirname. Falls back to the backend's
   // own pick when omitted or when the requested name is already in use.
   // The refine backstops the renderer's sanitizing so reserved names
   // ("root", "..") never reach `git worktree add`.
-  worktreeName: z
-    .string()
-    .min(1)
-    .refine(isValidWorktreeDirName, { message: "Not a valid folder name" })
-    .optional(),
+  worktreeName: Schema.optional(
+    Schema.NonEmptyString.check(
+      Schema.makeFilter(isValidWorktreeDirName, {
+        message: "Not a valid folder name",
+      }),
+    ),
+  ),
   // Optional: when omitted, the worktree's auto-picked animal name is
   // used as the branch name too (the quick-create shortcut).
-  branchName: GitRefNameSchema.optional(),
-  base: GitRefNameSchema.optional(),
+  branchName: Schema.optional(GitRefNameSchema),
+  base: Schema.optional(GitRefNameSchema),
   // When true: check out `base` as the worktree's branch (no -b, no new
   // branch). Requires `base` to be set and not already checked out
   // elsewhere. Ignores `branchName`.
-  checkout: z.boolean().optional(),
+  checkout: Schema.optional(Schema.Boolean),
 });
 
-const CarryOverFailureSchema = z.object({
-  path: z.string(),
-  reason: z.string(),
+const CarryOverFailureSchema = Schema.Struct({
+  path: Schema.String,
+  reason: Schema.String,
   // The checkout the failure is about when it isn't the primary (a
   // sibling worktree's broken .worktreeinclude).
-  source: z.string().optional(),
+  source: Schema.optional(Schema.String),
 });
 
-export const CarryOverReportSchema = z.object({
-  applied: z.number().int().nonnegative(),
-  failures: z.array(CarryOverFailureSchema),
+export const CarryOverReportSchema = Schema.Struct({
+  applied: NonNegativeInt,
+  failures: Schema.Array(CarryOverFailureSchema),
   // .worktreeinclude resolution errors. Not carry-over entries, so they
   // are reported separately from the per-entry failures above.
-  includeFailures: z.array(CarryOverFailureSchema).optional(),
+  includeFailures: Schema.optional(Schema.Array(CarryOverFailureSchema)),
   // Entries taken from a worktree other than the primary (the CLI looks
   // in the base ref's worktree first, then the primary, then the rest).
   // copiedInstead: a symlink entry copied because links only ever
   // target the primary. Absent when everything came from the primary.
-  sourced: z
-    .array(
-      z.object({
-        path: z.string(),
-        source: z.string(),
-        copiedInstead: z.boolean().optional(),
+  sourced: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        path: Schema.String,
+        source: Schema.String,
+        copiedInstead: Schema.optional(Schema.Boolean),
       }),
-    )
-    .optional(),
+    ),
+  ),
 });
 
-export const CreateWorktreeResultSchema = z.object({
+export const CreateWorktreeResultSchema = Schema.Struct({
   worktree: WorktreeSchema,
 });
-export type CreateWorktreeResult = z.infer<typeof CreateWorktreeResultSchema>;
+export type CreateWorktreeResult = typeof CreateWorktreeResultSchema.Type;
 
 // Phases the create lifecycle steps through, in order. Skipped if the
 // phase has no work (no carry-over entries, no setup script, port-pool
 // disabled). "idle" is the terminal sentinel emitted from `finally`.
-export const CreatePhaseSchema = z.enum([
-  "carryOver",
-  "setup",
-  "portPoolProvision",
-]);
-export type CreatePhase = z.infer<typeof CreatePhaseSchema>;
+const CREATE_PHASES = ["carryOver", "setup", "portPoolProvision"] as const;
+export const CreatePhaseSchema = Schema.Literals(CREATE_PHASES);
+export type CreatePhase = typeof CreatePhaseSchema.Type;
 
-export const WorktreeLifecyclePhaseSchema = WorktreeScopedPayloadSchema.extend({
-  phase: z.union([CreatePhaseSchema, z.literal("idle")]),
+export const WorktreeLifecyclePhaseSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  phase: Schema.Literals([...CREATE_PHASES, "idle"]),
 });
-export type WorktreeLifecyclePhase = z.infer<
-  typeof WorktreeLifecyclePhaseSchema
->;
+export type WorktreeLifecyclePhase = typeof WorktreeLifecyclePhaseSchema.Type;
 
-export const WorktreeCarryOverCompleteSchema =
-  WorktreeScopedPayloadSchema.extend({
-    report: CarryOverReportSchema,
-    // Manual carry-over entries auto-removed because .worktreeinclude now
-    // covers them. Absent when reconciliation removed nothing.
-    removedCarryOverPaths: z.array(z.string()).optional(),
-  });
-export type WorktreeCarryOverComplete = z.infer<
-  typeof WorktreeCarryOverCompleteSchema
->;
+export const WorktreeCarryOverCompleteSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  report: CarryOverReportSchema,
+  // Manual carry-over entries auto-removed because .worktreeinclude now
+  // covers them. Absent when reconciliation removed nothing.
+  removedCarryOverPaths: Schema.optional(Schema.Array(Schema.String)),
+});
+export type WorktreeCarryOverComplete =
+  typeof WorktreeCarryOverCompleteSchema.Type;
 
-export const RelocateWorktreePayloadSchema = WorktreeScopedPayloadSchema.extend(
-  {
-    // Absolute target directory for the moved worktree (parent is
-    // created if it doesn't exist).
-    destinationPath: z.string().min(1),
-  },
-);
+export const RelocateWorktreePayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  // Absolute target directory for the moved worktree (parent is
+  // created if it doesn't exist).
+  destinationPath: Schema.NonEmptyString,
+});
 
-export const DeleteWorktreePayloadSchema = WorktreeScopedPayloadSchema.extend({
-  force: z.boolean().optional(),
-  skipCleanup: z.boolean().optional(),
+export const DeleteWorktreePayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  force: Schema.optional(Schema.Boolean),
+  skipCleanup: Schema.optional(Schema.Boolean),
   // Refuse the delete outright (stable "scripts-running" message
   // marker) when the app's registry shows live scripts in the worktree,
   // instead of the default kill-then-delete. Set by the transplant
   // orchestrator, which must never take down work still running on the
   // source device. App-registry-only, so it never reaches `sm rm`.
-  refuseRunningScripts: z.boolean().optional(),
+  refuseRunningScripts: Schema.optional(Schema.Boolean),
 });
 
-export const RenameBranchPayloadSchema = WorktreeScopedPayloadSchema.extend({
+export const RenameBranchPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
   newBranch: GitRefNameSchema,
 });
 
-export const SetShelvedPayloadSchema = WorktreeScopedPayloadSchema.extend({
-  shelved: z.boolean(),
+export const SetShelvedPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  shelved: Schema.Boolean,
 });
 
-export const SetAutoPullPayloadSchema = WorktreeScopedPayloadSchema.extend({
-  autoPull: z.boolean(),
+export const SetAutoPullPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  autoPull: Schema.Boolean,
 });
 
-export const CheckoutBranchPayloadSchema = WorktreeScopedPayloadSchema.extend({
+export const CheckoutBranchPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
   branch: GitRefNameSchema,
 });
 
-export const CommitDiffPayloadSchema = WorktreeScopedPayloadSchema.extend({
+export const CommitDiffPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
   hash: CommitHashSchema,
 });
 
-export const ListCommitsPayloadSchema = WorktreeScopedPayloadSchema.extend({
+export const ListCommitsPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
   // `git log --skip=N -n COUNT`; the renderer pages through with skip
   // = pageIndex * count and stops when fewer than `count` come back.
-  skip: z.number().int().nonnegative(),
-  count: z.number().int().positive().max(200),
+  skip: NonNegativeInt,
+  count: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 200 })),
 });
 
-export const CleanupErrorSchema = z.object({
-  phase: z.enum(["teardown", "portPoolRelease"]),
-  exitCode: z.number().nullable(),
-  runId: z.string().min(1),
+export const CleanupErrorSchema = Schema.Struct({
+  phase: Schema.Literals(["teardown", "portPoolRelease"]),
+  exitCode: Schema.NullOr(Schema.Finite),
+  runId: Schema.NonEmptyString,
 });
-export type CleanupError = z.infer<typeof CleanupErrorSchema>;
+export type CleanupError = typeof CleanupErrorSchema.Type;
 
-export const DeleteWorktreeResultSchema = z.discriminatedUnion("ok", [
-  z.object({ ok: z.literal(true) }),
-  z.object({ ok: z.literal(false), cleanupError: CleanupErrorSchema }),
+export const DeleteWorktreeResultSchema = Schema.Union([
+  Schema.Struct({ ok: Schema.Literal(true) }),
+  Schema.Struct({
+    ok: Schema.Literal(false),
+    cleanupError: CleanupErrorSchema,
+  }),
 ]);
-export type DeleteWorktreeResult = z.infer<typeof DeleteWorktreeResultSchema>;
+export type DeleteWorktreeResult = typeof DeleteWorktreeResultSchema.Type;
+
+// The zod forms of the leaves the sync and control wire contracts
+// still embed (a zod object cannot hold a Schema field). Each mirrors
+// the Schema above it field for field, and test/schema-port.mjs holds
+// the pairs to the same verdicts. Phase 4 wave 3 removes these.
+export const CommitHashZod = z
+  .string()
+  .regex(COMMIT_HASH_RE, { message: "Invalid commit hash" });
+
+export const CreatePhaseZod = z.enum(CREATE_PHASES);
+
+const CommitSummaryZod = z.object({
+  hash: CommitHashZod,
+  subject: z.string(),
+  author: z.string(),
+  date: z.string(),
+  additions: z.number().int().nonnegative(),
+  deletions: z.number().int().nonnegative(),
+});
+
+// Typed as the Schema's own Type and Encoded, so a Worktree decoded by
+// WorktreeSchema (readonly arrays) and one parsed by this copy are the
+// same TypeScript type on both sides of a zod contract.
+export const WorktreeZod: z.ZodType<Worktree, typeof WorktreeSchema.Encoded> =
+  z.object({
+    id: z.string(),
+    projectId: z.string().min(1),
+    name: z.string(),
+    branch: z.string(),
+    path: z.string(),
+    ahead: z.number().int().nonnegative(),
+    behind: z.number().int().nonnegative(),
+    hasUpstream: z.boolean(),
+    hasRemote: z.boolean(),
+    divergedClean: z.boolean(),
+    behindPrimary: z.number().int().nonnegative(),
+    unpushedCount: z.number().int().nonnegative(),
+    primaryRef: z.string().optional(),
+    mergedIntoPrimary: z.boolean(),
+    changedCount: z.number().int().nonnegative(),
+    lastChangeAt: z.number().int().nonnegative().optional(),
+    recentCommits: z.array(CommitSummaryZod),
+    isPrimary: z.boolean(),
+    isExternal: z.boolean(),
+    detached: z.boolean(),
+    shelved: z.boolean(),
+    autoPull: z.boolean().default(false),
+  });

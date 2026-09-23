@@ -34,7 +34,7 @@ interface StartDeps {
   onCarryOverReconciled?: (projectId: string) => void;
 }
 
-function clippedLines(lines: string[], max: number): string {
+function clippedLines(lines: readonly string[], max: number): string {
   const shown = lines.slice(0, max);
   const more = lines.length - shown.length;
   return shown.join("\n") + (more > 0 ? `\n...and ${more} more` : "");

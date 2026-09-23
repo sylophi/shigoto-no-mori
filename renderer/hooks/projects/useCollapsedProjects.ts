@@ -9,7 +9,7 @@ import { useHostScope } from "@/hooks/remote/useHostScope";
 
 export function useCollapsedProjects() {
   const { api, keys } = useHostScope();
-  return useQuery<string[]>({
+  return useQuery<readonly string[]>({
     queryKey: keys.projectsCollapsed(),
     queryFn: () => api.projects.getCollapsed(),
     staleTime: Number.POSITIVE_INFINITY,
@@ -20,16 +20,18 @@ export function useCollapsedProjects() {
 export function useToggleCollapsedProject() {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
-  return useMutation<string[], Error, string>({
+  return useMutation<readonly string[], Error, string>({
     mutationFn: (projectId) => api.projects.toggleCollapsed(projectId),
     onMutate: async (projectId) => {
       await queryClient.cancelQueries({
         queryKey: keys.projectsCollapsed(),
       });
-      queryClient.setQueryData<string[]>(keys.projectsCollapsed(), (old = []) =>
-        old.includes(projectId)
-          ? old.filter((id) => id !== projectId)
-          : [...old, projectId],
+      queryClient.setQueryData<readonly string[]>(
+        keys.projectsCollapsed(),
+        (old = []) =>
+          old.includes(projectId)
+            ? old.filter((id) => id !== projectId)
+            : [...old, projectId],
       );
     },
     onSuccess: (list) => {

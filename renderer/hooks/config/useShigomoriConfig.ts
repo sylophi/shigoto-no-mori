@@ -37,7 +37,7 @@ export function useShigomoriConfig(projectId: string | null) {
 // reaches the sidebar through the same invalidation. That is also why
 // these never refetch on their own: every writer invalidates the key,
 // and the external-change broadcast covers CLI edits.
-export function useAllProjectShigomoriConfigs(projects: Project[]) {
+export function useAllProjectShigomoriConfigs(projects: readonly Project[]) {
   const scope = useHostScope();
   return useQueries({
     queries: projects.map((project) => ({

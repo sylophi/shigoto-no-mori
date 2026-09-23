@@ -7,11 +7,11 @@ import { HexId32Schema } from "@shared/ipc/hexId";
 import { ChunkB64Schema } from "@shared/ipc/socket/frames";
 import { DeviceIdSchema } from "@shared/hub/protocol";
 import {
-  CommitHashSchema,
-  CreatePhaseSchema,
-  GitRefNameSchema,
+  CommitHashZod,
+  CreatePhaseZod,
+  GitRefNameZod,
   WorktreeIdSchema,
-  WorktreeSchema,
+  WorktreeZod,
 } from "@shared/schemas";
 
 // Device-sync transfer plumbing: git bundles move
@@ -112,7 +112,7 @@ const TransferIdSchema = HexId32Schema;
 
 const SyncRefTipSchema = z.strictObject({
   ref: SyncBundleRefSchema,
-  commit: CommitHashSchema,
+  commit: CommitHashZod,
 });
 
 const SyncCaptureDirtyPayloadSchema = z.strictObject({
@@ -142,7 +142,7 @@ const SyncBundleStartPayloadSchema = z.strictObject({
   refs: z.array(SyncBundleRefSchema).min(1).max(64),
   // Tips the receiver already holds, thinning the bundle. Hex-pinned
   // like every hash that travels toward git argv.
-  haves: z.array(CommitHashSchema).max(256),
+  haves: z.array(CommitHashZod).max(256),
 });
 
 const SyncBundleChunkPayloadSchema = z.strictObject({
@@ -156,7 +156,7 @@ const SyncBundleAbortPayloadSchema = z.strictObject({
 
 export const SyncCaptureDirtyResultSchema = z.strictObject({
   captured: z.boolean(),
-  commit: CommitHashSchema.optional(),
+  commit: CommitHashZod.optional(),
 });
 
 // What a capture leaves behind. The dirty capture has `git add -A`
@@ -277,7 +277,7 @@ export const SyncPullWorktreePayloadSchema = z.strictObject({
   sourceProjectId: z.string().min(1),
   sourceWorktreeId: WorktreeIdSchema,
   sourceIdentity: z.string().min(1),
-  branch: GitRefNameSchema.refine(
+  branch: GitRefNameZod.refine(
     (name) => SyncBundleRefSchema.safeParse(`refs/heads/${name}`).success,
     { message: "Branch name outside the sync allowlist" },
   ),
@@ -329,12 +329,12 @@ const SyncPullProgressSchema = z.strictObject({
   step: SyncPullStepSchema,
   bytes: z.number().int().nonnegative().optional(),
   totalBytes: z.number().int().nonnegative().optional(),
-  createPhase: CreatePhaseSchema.optional(),
+  createPhase: CreatePhaseZod.optional(),
 });
 export type SyncPullProgress = z.infer<typeof SyncPullProgressSchema>;
 
 export const SyncPullWorktreeResultSchema = z.strictObject({
-  worktree: WorktreeSchema,
+  worktree: WorktreeZod,
   // captured && !dirtyApplied is the partial-success case: the source
   // had uncommitted changes, the worktree landed, but the apply was
   // refused. The capture stays parked under the local worktree id and
@@ -390,17 +390,17 @@ export const SyncLandCheckResultSchema = z.strictObject({
 // already held the tip of never crossed, and the capture by its commit
 // and the SENDER's worktree id, the key its ref arrived under.
 export const SyncLandWorktreePayloadSchema = SyncLandTargetSchema.extend({
-  branchTip: CommitHashSchema,
+  branchTip: CommitHashZod,
   runSetup: SyncPullWorktreePayloadSchema.shape.runSetup,
   capture: z
     .strictObject({
       sourceWorktreeId: WorktreeIdSchema,
-      commit: CommitHashSchema,
+      commit: CommitHashZod,
     })
     .optional(),
 });
 export const SyncLandWorktreeResultSchema = z.strictObject({
-  worktree: WorktreeSchema,
+  worktree: WorktreeZod,
   dirtyApplied: z.boolean(),
 });
 
@@ -462,11 +462,11 @@ const SyncPushFinishResultSchema = z.strictObject({
 export const SYNC_HAS_COMMITS_LIMIT = 64;
 const SyncHasCommitsPayloadSchema = z.strictObject({
   projectId: z.string().min(1),
-  commits: z.array(CommitHashSchema).min(1).max(SYNC_HAS_COMMITS_LIMIT),
+  commits: z.array(CommitHashZod).min(1).max(SYNC_HAS_COMMITS_LIMIT),
 });
 
 export const SyncHasCommitsResultSchema = z.strictObject({
-  present: z.array(CommitHashSchema),
+  present: z.array(CommitHashZod),
 });
 
 export const SyncTeardownSourcePayloadSchema = z.strictObject({

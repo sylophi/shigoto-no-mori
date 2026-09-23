@@ -1,4 +1,4 @@
-import { decodeWith } from "./codec";
+import { decodeWith, validateWith } from "./codec";
 import type { CallDef, ContractModule, InvokeDef } from "./contract";
 import type { HandlerContext, ServerTransport } from "./transport";
 import type {
@@ -66,7 +66,7 @@ export function wrapContractCall<Ctx>(
     const result = await handler(input, ctx);
     onSuccess?.(input);
     onMutated?.(ctx);
-    return opts.validateOutputs ? decodeWith(def.output, result) : result;
+    return opts.validateOutputs ? validateWith(def.output, result) : result;
   };
 }
 
@@ -131,7 +131,7 @@ export function resolveBroadcast<
   }
   return {
     channel: def.channel,
-    parsed: decodeWith(def.payload, payload),
+    parsed: validateWith(def.payload, payload),
     remote: def.remote === true,
   };
 }

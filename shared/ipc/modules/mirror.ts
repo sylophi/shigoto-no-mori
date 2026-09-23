@@ -12,8 +12,8 @@ import {
   SyncSendWorktreePayloadSchema,
 } from "@shared/ipc/modules/sync";
 import {
-  CommitHashSchema,
-  GitRefNameSchema,
+  CommitHashZod,
+  GitRefNameZod,
   WorktreeIdSchema,
 } from "@shared/schemas";
 
@@ -177,7 +177,7 @@ const MirrorEndpointStateSchema = z.strictObject({
 // The git half of a mirror (host/mirror/gitState.ts): HEAD, the tip and
 // the staged tree, as one document either side can produce and apply.
 const GitHeadSchema = z.discriminatedUnion("kind", [
-  z.strictObject({ kind: z.literal("branch"), branch: GitRefNameSchema }),
+  z.strictObject({ kind: z.literal("branch"), branch: GitRefNameZod }),
   z.strictObject({ kind: z.literal("detached") }),
 ]);
 
@@ -185,14 +185,14 @@ const TreeHashSchema = z.string().regex(/^[0-9a-f]{40,64}$/);
 
 export const GitStateCoreSchema = z.strictObject({
   head: GitHeadSchema,
-  tip: CommitHashSchema,
+  tip: CommitHashZod,
   indexTree: TreeHashSchema,
 });
 
 export const GitStateSchema = GitStateCoreSchema.extend({
   // The carrier commit for a staged index (refs/shigomori/index/<id>
   // on the reporting device), or null when nothing is staged.
-  indexCommit: CommitHashSchema.nullable(),
+  indexCommit: CommitHashZod.nullable(),
 });
 
 export const MirrorWorktreePayloadSchema = z.strictObject({
@@ -202,7 +202,7 @@ export const MirrorWorktreePayloadSchema = z.strictObject({
 
 const MirrorApplyGitStatePayloadSchema = MirrorWorktreePayloadSchema.extend({
   expect: z.strictObject({
-    tip: CommitHashSchema,
+    tip: CommitHashZod,
     indexTree: TreeHashSchema,
   }),
   state: GitStateCoreSchema,

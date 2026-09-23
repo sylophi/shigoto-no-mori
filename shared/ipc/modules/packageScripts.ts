@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   PackageScriptSortModeSchema,
@@ -13,13 +13,13 @@ export const packageScriptsContract = defineContract("host", {
   list: invoke(
     "packageScripts:list",
     WorktreeScopedPayloadSchema,
-    PackageScriptsResultSchema.nullable(),
+    Schema.NullOr(PackageScriptsResultSchema),
     { remote: true, mutating: false },
   ),
   run: invoke(
     "packageScripts:run",
     RunPackageScriptPayloadSchema,
-    z.object({ runId: z.string() }),
+    Schema.Struct({ runId: Schema.String }),
     { tracksProjectUsage: true, remote: true, mutating: true },
   ),
   getSort: invoke(
@@ -31,7 +31,7 @@ export const packageScriptsContract = defineContract("host", {
   setSort: invoke(
     "packageScripts:setSort",
     SetPackageScriptSortPayloadSchema,
-    z.void(),
+    Schema.Undefined,
     { remote: true, mutating: true },
   ),
 });

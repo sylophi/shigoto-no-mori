@@ -26,12 +26,12 @@ const MAX_LAUNCH_TOOL_SHORTCUTS = 9;
 // (it ships whatever the visible LauncherRow is showing) so the menu and
 // the row can never disagree. The click handler sends the id (not the
 // index) so the renderer can't drift out of sync with the menu.
-let currentLaunchToolEntries: LaunchToolMenuEntry[] = [];
+let currentLaunchToolEntries: readonly LaunchToolMenuEntry[] = [];
 let currentLaunchToolsEnabled = false;
 
 function entriesEqual(
-  a: LaunchToolMenuEntry[],
-  b: LaunchToolMenuEntry[],
+  a: readonly LaunchToolMenuEntry[],
+  b: readonly LaunchToolMenuEntry[],
 ): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) {
@@ -42,7 +42,7 @@ function entriesEqual(
 
 export function setLaunchToolsEnabled(
   enabled: boolean,
-  entries?: LaunchToolMenuEntry[],
+  entries?: readonly LaunchToolMenuEntry[],
 ): void {
   // No entries means "just toggle the enabled flag on whatever we last
   // displayed", so unmount cleanups can grey out the shortcuts without

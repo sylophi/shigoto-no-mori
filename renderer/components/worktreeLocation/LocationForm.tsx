@@ -40,7 +40,7 @@ interface LocationFormProps {
   projectPath: string;
   dataDir: string;
   home: string;
-  worktrees: Worktree[];
+  worktrees: readonly Worktree[];
   config: ShigomoriConfig | null;
   resolvedDefaultBranch: string;
 }

@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
@@ -20,7 +21,7 @@ import {
 } from "@shared/schemas";
 
 export const projectsContract = defineContract("host", {
-  list: invoke("projects:list", z.void(), z.array(ProjectSchema), {
+  list: invoke("projects:list", Schema.Undefined, Schema.Array(ProjectSchema), {
     remote: true,
     mutating: false,
   }),
@@ -34,31 +35,51 @@ export const projectsContract = defineContract("host", {
     remote: true,
     mutating: true,
   }),
-  remove: invoke("projects:remove", RemoveProjectPayloadSchema, z.void(), {
-    remote: true,
-    mutating: true,
-  }),
-  reorder: invoke("projects:reorder", ReorderProjectsPayloadSchema, z.void(), {
-    remote: true,
-    mutating: true,
-  }),
-  getSort: invoke("projects:getSort", z.void(), ProjectSortModeSchema, {
+  remove: invoke(
+    "projects:remove",
+    RemoveProjectPayloadSchema,
+    Schema.Undefined,
+    {
+      remote: true,
+      mutating: true,
+    },
+  ),
+  reorder: invoke(
+    "projects:reorder",
+    ReorderProjectsPayloadSchema,
+    Schema.Undefined,
+    {
+      remote: true,
+      mutating: true,
+    },
+  ),
+  getSort: invoke("projects:getSort", Schema.Undefined, ProjectSortModeSchema, {
     remote: true,
     mutating: false,
   }),
-  setSort: invoke("projects:setSort", SetProjectSortPayloadSchema, z.void(), {
-    remote: true,
-    mutating: true,
-  }),
-  getCollapsed: invoke("projects:getCollapsed", z.void(), z.array(z.string()), {
-    remote: true,
-    mutating: false,
-  }),
+  setSort: invoke(
+    "projects:setSort",
+    SetProjectSortPayloadSchema,
+    Schema.Undefined,
+    {
+      remote: true,
+      mutating: true,
+    },
+  ),
+  getCollapsed: invoke(
+    "projects:getCollapsed",
+    Schema.Undefined,
+    Schema.Array(Schema.String),
+    {
+      remote: true,
+      mutating: false,
+    },
+  ),
   // Returns the post-toggle list so the renderer can sync to disk truth.
   toggleCollapsed: invoke(
     "projects:toggleCollapsed",
     ToggleCollapsedProjectPayloadSchema,
-    z.array(z.string()),
+    Schema.Array(Schema.String),
     { remote: true, mutating: true },
   ),
   // Emitted after an action bumps a project's usage so the renderer can
@@ -69,7 +90,7 @@ export const projectsContract = defineContract("host", {
   defaultBranch: invoke(
     "projects:defaultBranch",
     ProjectScopedPayloadSchema,
-    z.string(),
+    Schema.String,
     { remote: true, mutating: false },
   ),
   // The remote another device would clone to get this repo, or null
@@ -77,7 +98,7 @@ export const projectsContract = defineContract("host", {
   cloneUrl: invoke(
     "projects:cloneUrl",
     ProjectScopedPayloadSchema,
-    z.string().nullable(),
+    Schema.NullOr(Schema.String),
     { remote: true, mutating: false },
   ),
   listBranches: invoke(
@@ -89,7 +110,7 @@ export const projectsContract = defineContract("host", {
   pickWorktreeName: invoke(
     "projects:pickWorktreeName",
     ProjectScopedPayloadSchema,
-    z.string(),
+    Schema.String,
     { remote: true, mutating: false },
   ),
   worktreeIncludeStatus: invoke(
@@ -101,6 +122,8 @@ export const projectsContract = defineContract("host", {
   // Named for its first caller. The leave-out preset's picker reads it
   // too, on every device holding the repo, so the name stays for the
   // peers that know it.
+  // The two carry-over outputs embed config.ts's zod schemas, so they
+  // stay zod until it ports (Phase 4 wave 2).
   carryOverListing: invoke(
     "projects:carryOverListing",
     CarryOverListingPayloadSchema,
@@ -116,7 +139,7 @@ export const projectsContract = defineContract("host", {
   icon: invoke(
     "projects:icon",
     ProjectScopedPayloadSchema,
-    ProjectIconSchema.nullable(),
+    Schema.NullOr(ProjectIconSchema),
     { remote: true, mutating: false },
   ),
 });

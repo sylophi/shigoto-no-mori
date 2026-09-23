@@ -16,7 +16,15 @@
 // permission-shaped query can never silently answer "granted". Only a
 // channel on the bridge's explicit allowlist (where the arm choice has
 // been judged harmless) may pass fabricateArms to opt back in.
+//
+// During the zod-to-Schema port (EFFECT-MIGRATION.md, Phase 4) the
+// scalar candidates run through the wires' own decode, so they serve a
+// zod schema and an Effect Schema alike. The recursive object build and
+// the fabrication below still read zod's runtime shape: an Effect
+// Schema that no candidate satisfies yields NO_STRUCTURAL_STUB until
+// the walker moves to SchemaAST.
 import { z } from "zod";
+import { type AnyCodec, isZodCodec, safeDecodeWith } from "@shared/ipc/codec";
 
 // Distinct from every legal stub value (undefined included), so the
 // caller can tell "no safe stub exists" from "the stub is undefined".
@@ -36,17 +44,18 @@ export type StubOptions = {
 };
 
 export function stubValueFor(
-  schema: z.ZodType,
+  schema: AnyCodec,
   opts: StubOptions,
 ): unknown | typeof NO_STRUCTURAL_STUB {
   for (const candidate of SCALAR_CANDIDATES) {
-    const result = schema.safeParse(candidate);
+    const result = safeDecodeWith(schema, candidate);
     if (result.success) return result.data;
   }
-  const asArray = schema.safeParse([]);
+  const asArray = safeDecodeWith(schema, []);
   if (asArray.success) return asArray.data;
-  const asObject = schema.safeParse({});
+  const asObject = safeDecodeWith(schema, {});
   if (asObject.success) return asObject.data;
+  if (!isZodCodec(schema)) return NO_STRUCTURAL_STUB;
 
   // Objects with required members are built recursively from the same
   // rules, so a nested enum still blocks the whole stub unless

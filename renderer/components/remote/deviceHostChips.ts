@@ -45,7 +45,7 @@ export type HostChipIndex = {
 
 export function useHostChipIndex(localDeviceId: string): HostChipIndex {
   const projectsQuery = useProjects();
-  const localProjects: Project[] = projectsQuery.data ?? [];
+  const localProjects: readonly Project[] = projectsQuery.data ?? [];
   // Positionally aligned with localProjects, which is the contract
   // useAllProjectWorktrees documents.
   const localWorktrees = useAllProjectWorktrees(

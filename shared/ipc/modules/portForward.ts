@@ -2,7 +2,7 @@ import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import { DeviceIdSchema } from "@shared/hub/protocol";
-import { PortNumberSchema } from "@shared/schemas";
+import { PortNumberZod } from "@shared/schemas";
 
 // Client-scoped control surface for the port-forward engine. The engine
 // binds real TCP listeners on THIS machine's loopback
@@ -21,14 +21,14 @@ const ForwardIdSchema = HexId32Schema;
 
 const PortForwardStartPayloadSchema = z.strictObject({
   deviceId: DeviceIdSchema,
-  remotePort: PortNumberSchema,
+  remotePort: PortNumberZod,
   // Omitted means an ephemeral local port, the common case.
-  localPort: PortNumberSchema.optional(),
+  localPort: PortNumberZod.optional(),
 });
 
 const PortForwardStartResultSchema = z.strictObject({
   forwardId: ForwardIdSchema,
-  localPort: PortNumberSchema,
+  localPort: PortNumberZod,
 });
 
 const PortForwardStopPayloadSchema = z.strictObject({
@@ -38,8 +38,8 @@ const PortForwardStopPayloadSchema = z.strictObject({
 const PortForwardSummarySchema = z.strictObject({
   forwardId: ForwardIdSchema,
   deviceId: DeviceIdSchema,
-  remotePort: PortNumberSchema,
-  localPort: PortNumberSchema,
+  remotePort: PortNumberZod,
+  localPort: PortNumberZod,
   connCount: z.number().int().min(0),
 });
 

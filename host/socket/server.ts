@@ -1108,6 +1108,10 @@ export function createWsServerBinding(
       const scope = yield* Scope.fork(live.scope);
       yield* serveConnection(live, socket, ip, arrivalKind).pipe(
         Scope.provide(scope),
+        // A setup that fails past the fork closes the scope it opened,
+        // so its pre-auth slot and its maps do not stay taken until
+        // the listener stops.
+        Effect.onError(() => Scope.close(scope, Exit.void)),
       );
     }).pipe(
       Effect.catchCause((cause) =>

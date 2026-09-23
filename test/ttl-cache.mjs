@@ -140,6 +140,41 @@ async function main() {
     },
   );
 
+  await check(
+    "value: a load that expire() overtook never puts its older value back into peek() when it lands after the newer one",
+    async () => {
+      // Two loads in flight at once: the loader hands out one release
+      // per load, so this check tracks them by hand.
+      const releases = [];
+      let loads = 0;
+      const cache = ttlValueCache(60_000, () => {
+        loads += 1;
+        return new Promise((resolve) => releases.push(resolve));
+      });
+      const first = cache.get();
+      await delay(5);
+      cache.expire();
+      const second = cache.get();
+      await delay(5);
+      assert.equal(loads, 2, "expire() did not start a fresh load");
+      releases[1]("post-write");
+      assert.equal(await second, "post-write");
+      assert.equal(cache.peek(), "post-write");
+      releases[0]("pre-write");
+      assert.equal(await first, "pre-write", "the sharer lost its answer");
+      assert.equal(
+        cache.peek(),
+        "post-write",
+        "peek went back to the old value",
+      );
+      assert.equal(
+        await cache.get(),
+        "post-write",
+        "the old value was re-cached",
+      );
+    },
+  );
+
   done();
 }
 

@@ -106,6 +106,7 @@ import {
   readJsonOrNullSync,
   withSchemaVersion,
 } from "@host/lib/util/jsonFile";
+import { safeDecodeWith } from "@shared/ipc/codec";
 import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
 import { spawnFileSync } from "@host/fileSync/spawn";
 import { dataDir } from "@host/lib/util/paths";
@@ -571,7 +572,7 @@ export function registerIpcHandlers(): void {
   // git-directory watcher) or a served worktree's index did.
   onPeerPush((push) => {
     if (push.channel === "git:projectChanged") {
-      const parsed = ProjectScopedPayloadSchema.safeParse(push.payload);
+      const parsed = safeDecodeWith(ProjectScopedPayloadSchema, push.payload);
       if (parsed.success) {
         gitFollower.onPeerProjectChanged(push.deviceId, parsed.data.projectId);
       }

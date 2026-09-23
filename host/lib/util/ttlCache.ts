@@ -77,8 +77,10 @@ export function ttlValueCache<V>(
   // The one value, under the one key. `last` is what peek() serves: the
   // latest value a load produced, kept past the TTL and past expire(),
   // dropped by invalidate(). The Cache already discards a load that
-  // invalidate() overtook; `last` must not adopt it either, so a load
-  // records its value only if no invalidate() ran since it started.
+  // invalidate() or expire() overtook; `last` must not adopt it either
+  // (a pre-write load landing after the post-write one would put the
+  // old value back into peek()), so a load records its value only if
+  // neither ran since it started.
   let last: V | null = null;
   let generation = 0;
   const cache = makeCache<null, V>(ttlMs, () => {
@@ -96,6 +98,9 @@ export function ttlValueCache<V>(
       generation += 1;
       Effect.runSync(Cache.invalidateAll(cache));
     },
-    expire: () => Effect.runSync(Cache.invalidateAll(cache)),
+    expire: () => {
+      generation += 1;
+      Effect.runSync(Cache.invalidateAll(cache));
+    },
   };
 }

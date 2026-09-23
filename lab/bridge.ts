@@ -58,7 +58,6 @@ import {
   projectIconFor,
   worktree as worktreeFixture,
 } from "./fixtures";
-import { isZodCodec } from "@shared/ipc/codec";
 
 type FixtureHandler = (input: any) => unknown;
 type FixtureHandlers = Record<string, FixtureHandler>;
@@ -94,9 +93,7 @@ function createFixtureWire(
             new Error(`[lab] no contract entry for ${channel}`),
           );
         }
-        const stub = isZodCodec(def.output)
-          ? stubValueFor(def.output, { fabricateArms: true })
-          : NO_STRUCTURAL_STUB;
+        const stub = stubValueFor(def.output, { fabricateArms: true });
         if (stub === NO_STRUCTURAL_STUB) {
           return Promise.reject(new Error(`[lab] no stub for ${channel}`));
         }

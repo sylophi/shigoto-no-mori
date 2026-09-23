@@ -37,12 +37,14 @@ const { pickCloneUrl, repoNameFromUrl, stripUrlCredentials } =
   await import("../shared/cloneUrl.ts");
 const { CloneProjectPayloadSchema } =
   await import("../shared/schemas/project.ts");
+const { safeDecodeWith } = await import("../shared/ipc/codec.ts");
 
 const git = sandboxGit(gitEnv);
 
 const { check, done, fail } = makeProof("clone proof");
 
-const accepts = (input) => CloneProjectPayloadSchema.safeParse(input).success;
+const accepts = (input) =>
+  safeDecodeWith(CloneProjectPayloadSchema, input).success;
 
 async function main() {
   await check("a remote URL in any of git's syntaxes is accepted", () => {

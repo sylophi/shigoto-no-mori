@@ -6,7 +6,7 @@ import type { ChangedFile } from "@shared/schemas";
 // as its own prop, so typing a message never changes this object's
 // identity.
 export interface DiffChangesControls {
-  files: ChangedFile[];
+  files: readonly ChangedFile[];
   onSetStaged: (paths: string[], staged: boolean) => void;
   onDiscard: (paths: string[]) => void;
   // The row whose diff is in the pane (patchFiles.changeKey), and how

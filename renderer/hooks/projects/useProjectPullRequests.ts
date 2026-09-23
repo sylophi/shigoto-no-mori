@@ -96,7 +96,7 @@ export function useProjectPullRequests(projectId: string) {
 // Positionally aligned with `projects`, like useAllProjectWorktrees, so
 // a caller walking both indexes them the same way.
 // Same combine as useAllProjectWorktrees, and for the same reason.
-export function useAllProjectPullRequests(projects: Project[]) {
+export function useAllProjectPullRequests(projects: readonly Project[]) {
   const scope = useHostScope();
   return useQueries({
     queries: projects.map((project) => ({

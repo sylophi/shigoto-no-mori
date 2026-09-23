@@ -234,7 +234,7 @@ export function resolveMergeMethod(
     squash: true,
     rebase: true,
   };
-  const allowed = MergeMethodSchema.options.filter((m) => allowedMap[m]);
+  const allowed = MergeMethodSchema.literals.filter((m) => allowedMap[m]);
   if (allowed.length === 0) return { primary: null, allowed: [] };
   const primary =
     lastPicked && allowed.includes(lastPicked) ? lastPicked : allowed[0];

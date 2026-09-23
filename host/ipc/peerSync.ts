@@ -10,6 +10,7 @@ import type { mirrorContract } from "@shared/ipc/modules/mirror";
 import type { syncContract } from "@shared/ipc/modules/sync";
 import type { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type { Client } from "@shared/ipc/types";
+import { Schema } from "effect";
 import { type Worktree, WorktreeSchema } from "@shared/schemas";
 
 // The remote verbs the orchestrations drive. Superset of the transfer
@@ -82,7 +83,7 @@ export async function peerWorktreeOrUndefined(
   projectId: string,
   worktreeId: string,
 ): Promise<Worktree | undefined> {
-  const worktrees = WorktreeSchema.array().parse(
+  const worktrees = Schema.decodeUnknownSync(Schema.Array(WorktreeSchema))(
     await peerWorktreesApiFor(deviceId).list({ projectId }),
   );
   return worktrees.find((worktree) => worktree.id === worktreeId);

@@ -15,6 +15,7 @@
 // between that worktree and the peer's, with almost nothing left to
 // move. The peer's root path is read off its own worktree list over
 // the grant-gated wire, never taken from the caller.
+import { Schema } from "effect";
 import type { z } from "zod";
 import {
   MIRROR_LABEL_COPY_SIDE,
@@ -344,7 +345,9 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
           force: true,
         })
         .then((result) => {
-          const removed = DeleteWorktreeResultSchema.parse(result);
+          const removed = Schema.decodeUnknownSync(DeleteWorktreeResultSchema)(
+            result,
+          );
           return removed.ok
             ? null
             : `its ${removed.cleanupError.phase} step failed`;

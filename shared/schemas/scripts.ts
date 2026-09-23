@@ -1,128 +1,137 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import {
   ProjectScopedPayloadSchema,
   WorktreeScopedPayloadSchema,
 } from "./payloads";
 
-const ScriptNameSchema = z.enum([
+const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0));
+
+const ScriptNameSchema = Schema.Literals([
   "setup",
   "teardown",
   "port-pool-provision",
   "port-pool-release",
 ]);
-export type ScriptName = z.infer<typeof ScriptNameSchema>;
+export type ScriptName = typeof ScriptNameSchema.Type;
 
-export const RunScriptPayloadSchema = WorktreeScopedPayloadSchema.extend({
+export const RunScriptPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
   script: ScriptNameSchema,
 });
 
-const PackageManagerSchema = z.enum(["bun", "pnpm", "yarn", "npm"]);
-export type PackageManager = z.infer<typeof PackageManagerSchema>;
+const PackageManagerSchema = Schema.Literals(["bun", "pnpm", "yarn", "npm"]);
+export type PackageManager = typeof PackageManagerSchema.Type;
 
-const PackageScriptUsageSchema = z.object({
+const PackageScriptUsageSchema = Schema.Struct({
   // Epoch ms of the most recent run; 0 when the script has never been run.
-  lastUsed: z.number().int().nonnegative(),
+  lastUsed: NonNegativeInt,
   // Number of runs within the rolling-frequency window (matches the
   // launcher's algorithm). 0 when the script has never been run inside
   // the window.
-  recentCount: z.number().int().nonnegative(),
+  recentCount: NonNegativeInt,
 });
-export type PackageScriptUsage = z.infer<typeof PackageScriptUsageSchema>;
+export type PackageScriptUsage = typeof PackageScriptUsageSchema.Type;
 
-export const PackageScriptsResultSchema = z.object({
-  scripts: z.record(z.string(), z.string()),
+export const PackageScriptsResultSchema = Schema.Struct({
+  scripts: Schema.Record(Schema.String, Schema.String),
   packageManager: PackageManagerSchema,
-  usage: z.record(z.string(), PackageScriptUsageSchema),
+  usage: Schema.Record(Schema.String, PackageScriptUsageSchema),
 });
-export type PackageScriptsResult = z.infer<typeof PackageScriptsResultSchema>;
+export type PackageScriptsResult = typeof PackageScriptsResultSchema.Type;
 
-export const PackageScriptSortModeSchema = z.enum([
+export const PackageScriptSortModeSchema = Schema.Literals([
   "manifest",
   "alphabetical",
   "recent",
   "frequent",
 ]);
-export type PackageScriptSortMode = z.infer<typeof PackageScriptSortModeSchema>;
+export type PackageScriptSortMode = typeof PackageScriptSortModeSchema.Type;
 
-export const RunPackageScriptPayloadSchema = WorktreeScopedPayloadSchema.extend(
-  {
-    scriptName: z.string().min(1),
-  },
-);
+export const RunPackageScriptPayloadSchema = Schema.Struct({
+  ...WorktreeScopedPayloadSchema.fields,
+  scriptName: Schema.NonEmptyString,
+});
 
-export const SetPackageScriptSortPayloadSchema =
-  ProjectScopedPayloadSchema.extend({
-    mode: PackageScriptSortModeSchema,
-  });
+export const SetPackageScriptSortPayloadSchema = Schema.Struct({
+  ...ProjectScopedPayloadSchema.fields,
+  mode: PackageScriptSortModeSchema,
+});
 
-export const CancelScriptPayloadSchema = z.object({
-  runId: z.string().min(1),
+export const CancelScriptPayloadSchema = Schema.Struct({
+  runId: Schema.NonEmptyString,
 });
 
 // Keystrokes the console forwards to the run's PTY, exactly as xterm
 // encodes them (control characters, escape sequences for arrows, ...).
-export const WriteScriptPayloadSchema = z.object({
-  runId: z.string().min(1),
-  data: z.string(),
+export const WriteScriptPayloadSchema = Schema.Struct({
+  runId: Schema.NonEmptyString,
+  data: Schema.String,
 });
 
 // The console's viewport in cells. The PTY window size follows it.
-export const ResizeScriptPayloadSchema = z.object({
-  runId: z.string().min(1),
-  cols: z.number().int().positive(),
-  rows: z.number().int().positive(),
+export const ResizeScriptPayloadSchema = Schema.Struct({
+  runId: Schema.NonEmptyString,
+  cols: PositiveInt,
+  rows: PositiveInt,
 });
 
 // "data" is the run's terminal output (stdout and stderr share the
 // PTY, so xterm renders them in true interleave order). "error" covers
 // spawn failures. "exit" is the final code (null if the process died
 // from a signal or we cancelled).
-export const ScriptEventSchema = z.discriminatedUnion("kind", [
-  z.object({ runId: z.string(), kind: z.literal("data"), data: z.string() }),
-  z.object({
-    runId: z.string(),
-    kind: z.literal("exit"),
-    code: z.number().nullable(),
+export const ScriptEventSchema = Schema.Union([
+  Schema.Struct({
+    runId: Schema.String,
+    kind: Schema.Literal("data"),
+    data: Schema.String,
   }),
-  z.object({ runId: z.string(), kind: z.literal("error"), data: z.string() }),
+  Schema.Struct({
+    runId: Schema.String,
+    kind: Schema.Literal("exit"),
+    code: Schema.NullOr(Schema.Finite),
+  }),
+  Schema.Struct({
+    runId: Schema.String,
+    kind: Schema.Literal("error"),
+    data: Schema.String,
+  }),
   // Emitted by the CLI when it initiates a lifecycle script (forwarded
   // by cliDelegate); lets the renderer bind runId -> slot before
   // data/exit arrive.
-  z.object({
-    runId: z.string(),
-    kind: z.literal("started"),
-    projectId: z.string(),
-    worktreeId: z.string(),
-    slot: z.discriminatedUnion("kind", [
-      z.object({ kind: z.literal("setup") }),
-      z.object({ kind: z.literal("teardown") }),
-      z.object({
-        kind: z.literal("portPool"),
-        phase: z.enum(["provision", "release"]),
+  Schema.Struct({
+    runId: Schema.String,
+    kind: Schema.Literal("started"),
+    projectId: Schema.String,
+    worktreeId: Schema.String,
+    slot: Schema.Union([
+      Schema.Struct({ kind: Schema.Literal("setup") }),
+      Schema.Struct({ kind: Schema.Literal("teardown") }),
+      Schema.Struct({
+        kind: Schema.Literal("portPool"),
+        phase: Schema.Literals(["provision", "release"]),
       }),
     ]),
   }),
 ]);
-export type ScriptEvent = z.infer<typeof ScriptEventSchema>;
+export type ScriptEvent = typeof ScriptEventSchema.Type;
 
 // Scripts the app had running in a worktree that disappeared from disk
 // while the app was watching (an `sm rm` in a terminal). The app kills
 // them and tells the renderer, which has no other way to explain why a
 // dev server went down.
-export const RemovedWorktreeScriptsSchema = z.object({
-  worktreeId: z.string(),
-  worktreeName: z.string(),
-  scriptCount: z.number().int().positive(),
+export const RemovedWorktreeScriptsSchema = Schema.Struct({
+  worktreeId: Schema.String,
+  worktreeName: Schema.String,
+  scriptCount: PositiveInt,
 });
-export type RemovedWorktreeScripts = z.infer<
-  typeof RemovedWorktreeScriptsSchema
->;
+export type RemovedWorktreeScripts = typeof RemovedWorktreeScriptsSchema.Type;
 
 // Result of the boot sweep for scripts a previous session left running
 // (host/lib/scripts/persistence.ts). Drained once by the renderer,
 // which is the only place those runs can still be reported: their
 // consoles died with the session that started them.
-export const OrphanScriptReportSchema = z.object({
-  stopped: z.number().int().nonnegative(),
+export const OrphanScriptReportSchema = Schema.Struct({
+  stopped: NonNegativeInt,
 });
-export type OrphanScriptReport = z.infer<typeof OrphanScriptReportSchema>;
+export type OrphanScriptReport = typeof OrphanScriptReportSchema.Type;

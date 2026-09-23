@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   ChangedFileSchema,
@@ -44,7 +44,7 @@ export const worktreesContract = defineContract("host", {
   list: invoke(
     "worktrees:list",
     ProjectScopedPayloadSchema,
-    z.array(WorktreeSchema),
+    Schema.Array(WorktreeSchema),
     { remote: true, mutating: false },
   ),
   create: invoke(
@@ -100,7 +100,7 @@ export const worktreesContract = defineContract("host", {
   // One file's working-tree diff, which is what the changes page reads
   // as you pick files. Per file rather than per worktree so the pane
   // can't be describing a different moment than the list beside it.
-  fileDiff: invoke("worktrees:fileDiff", FileDiffPayloadSchema, z.string(), {
+  fileDiff: invoke("worktrees:fileDiff", FileDiffPayloadSchema, Schema.String, {
     remote: true,
     mutating: false,
   }),
@@ -110,14 +110,14 @@ export const worktreesContract = defineContract("host", {
   changeStatus: invoke(
     "worktrees:changeStatus",
     WorktreeScopedPayloadSchema,
-    z.array(ChangedFileSchema),
+    Schema.Array(ChangedFileSchema),
     { remote: true, mutating: false },
   ),
   // Answers with the fresh status so a tick settles in one round trip.
   setStaged: invoke(
     "worktrees:setStaged",
     SetStagedPayloadSchema,
-    z.array(ChangedFileSchema),
+    Schema.Array(ChangedFileSchema),
     { remote: true, mutating: true },
   ),
   commit: invoke(
@@ -153,7 +153,7 @@ export const worktreesContract = defineContract("host", {
   commitDiff: invoke(
     "worktrees:commitDiff",
     CommitDiffPayloadSchema,
-    z.string(),
+    Schema.String,
     {
       remote: true,
       mutating: false,
@@ -162,7 +162,7 @@ export const worktreesContract = defineContract("host", {
   listCommits: invoke(
     "worktrees:listCommits",
     ListCommitsPayloadSchema,
-    z.array(CommitSummarySchema),
+    Schema.Array(CommitSummarySchema),
     { remote: true, mutating: false },
   ),
   push: worktreeMutation("worktrees:push"),

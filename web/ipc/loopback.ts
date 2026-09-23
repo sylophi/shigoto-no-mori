@@ -37,7 +37,6 @@ import type {
 } from "@shared/ipc/transport";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
 import { NO_STRUCTURAL_STUB, stubValueFor } from "./stubDefaults";
-import { isZodCodec } from "@shared/ipc/codec";
 
 // The hand-judged exceptions to the mutating:false rule. Every entry
 // must state why answering it with a stub is harmless. Keep this list
@@ -93,11 +92,7 @@ export function createLoopbackWire(scope: ContractScope): LoopbackWire {
         refusal: `${channel} is not available in the browser`,
       };
     }
-    // The stub walker reads zod's shape; an output already moved to
-    // Schema gets no invented answer until the walker follows (Phase 4).
-    const stub = isZodCodec(def.output)
-      ? stubValueFor(def.output, { fabricateArms: allowlisted })
-      : NO_STRUCTURAL_STUB;
+    const stub = stubValueFor(def.output, { fabricateArms: allowlisted });
     if (stub === NO_STRUCTURAL_STUB) {
       // A read whose output demands a fabricated arm (an enum, a union,
       // a bounded scalar) gets no invented answer either.

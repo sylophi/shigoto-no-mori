@@ -201,17 +201,28 @@ export function bridgeSocket(
 
 // bridgeSocket as a scoped resource: the conn is torn down (channel
 // reset, socket destroyed) when the owning scope closes. A conn that
-// ends on its own first makes the release a no-op, since destroy is
-// idempotent.
+// ended on its own first (both directions done, onClosed fired) is
+// left alone by the release: destroying it then would throw away the
+// bytes still queued behind the earlier end() for a slow reader.
 export function bridgedConn(
   socket: Socket,
   opts: Parameters<typeof bridgeSocket>[1],
 ): Effect.Effect<BridgedConn, never, Scope.Scope> {
   return Effect.acquireRelease(
-    Effect.sync(() => bridgeSocket(socket, opts)),
-    (conn) =>
+    Effect.sync(() => {
+      let ended = false;
+      const conn = bridgeSocket(socket, {
+        ...opts,
+        onClosed: () => {
+          ended = true;
+          opts.onClosed?.();
+        },
+      });
+      return { conn, ended: () => ended };
+    }),
+    ({ conn, ended }) =>
       Effect.sync(() => {
-        conn.destroy();
+        if (!ended()) conn.destroy();
       }),
-  );
+  ).pipe(Effect.map(({ conn }) => conn));
 }

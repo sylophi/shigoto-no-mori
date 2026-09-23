@@ -24,7 +24,7 @@ export interface ProjectHygiene {
 
 function combineHygiene(
   results: readonly {
-    data: WorktreeHygiene[] | undefined;
+    data: readonly WorktreeHygiene[] | undefined;
     isPending: boolean;
   }[],
 ): ProjectHygiene {
@@ -35,7 +35,9 @@ function combineHygiene(
   return { byId, loading: results.some((result) => result.isPending) };
 }
 
-export function useAllProjectHygiene(projects: Project[]): ProjectHygiene {
+export function useAllProjectHygiene(
+  projects: readonly Project[],
+): ProjectHygiene {
   const { api, keys } = useHostScope();
   return useQueries({
     queries: projects.map((project) => ({

@@ -1,16 +1,32 @@
+import { Schema } from "effect";
 import { z } from "zod";
 import { ProjectScopedPayloadSchema } from "./payloads";
 
-export const PullRequestStateSchema = z.enum(["OPEN", "CLOSED", "MERGED"]);
+const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0));
+const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
-export const PullRequestSchema = z.object({
-  number: z.number().int().positive(),
-  url: z.url(),
-  title: z.string(),
+// zod's z.url(): the value trimmed, then held to what the URL
+// constructor parses. The decoded value is the trimmed string.
+const UrlSchema = Schema.Trim.check(
+  Schema.makeFilter((value: string) => URL.canParse(value), {
+    message: "Invalid URL",
+  }),
+);
+
+export const PullRequestStateSchema = Schema.Literals([
+  "OPEN",
+  "CLOSED",
+  "MERGED",
+]);
+
+export const PullRequestSchema = Schema.Struct({
+  number: PositiveInt,
+  url: UrlSchema,
+  title: Schema.String,
   state: PullRequestStateSchema,
-  isDraft: z.boolean(),
+  isDraft: Schema.Boolean,
 });
-export type PullRequest = z.infer<typeof PullRequestSchema>;
+export type PullRequest = typeof PullRequestSchema.Type;
 
 // Strip a PullRequestDetail to the slim PullRequest fields used by the
 // sidebar's project-wide map. Keep this in lockstep with
@@ -41,7 +57,7 @@ export function pullRequestsEqual(a: PullRequest, b: PullRequest): boolean {
 // GraphQL's PullRequest.mergeStateStatus, surfaced verbatim so the
 // renderer can pick the right reason text. UNKNOWN covers both "still
 // computing" and "gh didn't report it". The UI treats both the same.
-export const PullRequestMergeStateSchema = z.enum([
+export const PullRequestMergeStateSchema = Schema.Literals([
   "CLEAN",
   "BLOCKED",
   "BEHIND",
@@ -51,173 +67,173 @@ export const PullRequestMergeStateSchema = z.enum([
   "UNKNOWN",
   "UNSTABLE",
 ]);
-export type PullRequestMergeState = z.infer<typeof PullRequestMergeStateSchema>;
+export type PullRequestMergeState = typeof PullRequestMergeStateSchema.Type;
 
-export const PullRequestCheckBucketSchema = z.enum([
+export const PullRequestCheckBucketSchema = Schema.Literals([
   "passed",
   "failing",
   "pending",
   "neutral",
   "skipped",
 ]);
-export type PullRequestCheckBucket = z.infer<
-  typeof PullRequestCheckBucketSchema
->;
+export type PullRequestCheckBucket = typeof PullRequestCheckBucketSchema.Type;
 
-export const PullRequestCheckSchema = z.object({
-  name: z.string(),
+export const PullRequestCheckSchema = Schema.Struct({
+  name: Schema.String,
   bucket: PullRequestCheckBucketSchema,
-  url: z.url().optional(),
+  url: Schema.optional(UrlSchema),
 });
-export type PullRequestCheck = z.infer<typeof PullRequestCheckSchema>;
+export type PullRequestCheck = typeof PullRequestCheckSchema.Type;
 
-export const PullRequestChecksSummarySchema = z.object({
-  total: z.number().int().nonnegative(),
-  passed: z.number().int().nonnegative(),
-  failing: z.number().int().nonnegative(),
-  pending: z.number().int().nonnegative(),
-  neutral: z.number().int().nonnegative(),
-  skipped: z.number().int().nonnegative(),
+export const PullRequestChecksSummarySchema = Schema.Struct({
+  total: NonNegativeInt,
+  passed: NonNegativeInt,
+  failing: NonNegativeInt,
+  pending: NonNegativeInt,
+  neutral: NonNegativeInt,
+  skipped: NonNegativeInt,
 });
-export type PullRequestChecksSummary = z.infer<
-  typeof PullRequestChecksSummarySchema
->;
+export type PullRequestChecksSummary =
+  typeof PullRequestChecksSummarySchema.Type;
 
 // Rich projection of the open worktree's PR. Slim PullRequest is kept
 // for the project-wide sweep that feeds the sidebar dots, since the
 // extra fields make `gh pr list` materially slower.
-export const PullRequestDetailSchema = PullRequestSchema.extend({
+export const PullRequestDetailSchema = Schema.Struct({
+  ...PullRequestSchema.fields,
   mergeState: PullRequestMergeStateSchema,
   // The PR's target branch (e.g. "main"). Shown in the section so the
   // user can see what they're merging into without leaving the app.
-  baseRefName: z.string(),
+  baseRefName: Schema.String,
   // GitHub login of whoever opened the PR. Worktrees may be checked
   // out by teammates' branches, so the author isn't always the local user.
-  authorLogin: z.string(),
+  authorLogin: Schema.String,
   // ISO 8601 timestamp of the PR's last update (commit, comment, etc.).
-  updatedAt: z.string(),
-  additions: z.number().int().nonnegative(),
-  deletions: z.number().int().nonnegative(),
-  changedFiles: z.number().int().nonnegative(),
+  updatedAt: Schema.String,
+  additions: NonNegativeInt,
+  deletions: NonNegativeInt,
+  changedFiles: NonNegativeInt,
   checks: PullRequestChecksSummarySchema,
-  checkList: z.array(PullRequestCheckSchema),
+  checkList: Schema.Array(PullRequestCheckSchema),
 });
-export type PullRequestDetail = z.infer<typeof PullRequestDetailSchema>;
+export type PullRequestDetail = typeof PullRequestDetailSchema.Type;
 
-export const MergeMethodSchema = z.enum(["merge", "squash", "rebase"]);
-export type MergeMethod = z.infer<typeof MergeMethodSchema>;
+const MERGE_METHODS = ["merge", "squash", "rebase"] as const;
+export const MergeMethodSchema = Schema.Literals(MERGE_METHODS);
+export type MergeMethod = typeof MergeMethodSchema.Type;
+
+// The zod form of MergeMethodSchema, for config.ts's global config
+// that still embeds it. Phase 4 wave 2 removes this.
+export const MergeMethodZod = z.enum(MERGE_METHODS);
 
 // Per-repo merge button settings from `gh repo view`. All three may be
 // allowed, or only a subset (some teams squash-only). UI hides disabled
 // methods rather than disabling them.
-export const RepoMergeConfigSchema = z.object({
-  merge: z.boolean(),
-  squash: z.boolean(),
-  rebase: z.boolean(),
+export const RepoMergeConfigSchema = Schema.Struct({
+  merge: Schema.Boolean,
+  squash: Schema.Boolean,
+  rebase: Schema.Boolean,
 });
-export type RepoMergeConfig = z.infer<typeof RepoMergeConfigSchema>;
+export type RepoMergeConfig = typeof RepoMergeConfigSchema.Type;
 
-export const GithubCliReadinessSchema = z.object({
-  installed: z.boolean(),
-  authed: z.boolean(),
+export const GithubCliReadinessSchema = Schema.Struct({
+  installed: Schema.Boolean,
+  authed: Schema.Boolean,
 });
-export type GithubCliReadiness = z.infer<typeof GithubCliReadinessSchema>;
+export type GithubCliReadiness = typeof GithubCliReadinessSchema.Type;
 
 // One open PR offered as a worktree source in the create form. Slimmer
 // than PullRequestDetail on purpose: the picker only needs enough to
 // recognize the PR and resolve its head, and statusCheckRollup is the
 // field that makes `gh pr list` materially slower (same reason the
 // sidebar sweep skips it).
-export const PullRequestCandidateSchema = z.object({
-  number: z.number().int().positive(),
-  url: z.url(),
-  title: z.string(),
-  isDraft: z.boolean(),
-  headRefName: z.string().min(1),
-  authorLogin: z.string(),
+export const PullRequestCandidateSchema = Schema.Struct({
+  number: PositiveInt,
+  url: UrlSchema,
+  title: Schema.String,
+  isDraft: Schema.Boolean,
+  headRefName: Schema.NonEmptyString,
+  authorLogin: Schema.String,
   // Fork heads exist locally only as refs/pull/<n>/head, so the resolver
   // takes a different path for them, and a different set of local
   // branch names.
-  fromFork: z.boolean(),
+  fromFork: Schema.Boolean,
   // "owner/repo" of the fork, for the row's label. Null for a same-repo
   // PR, and also for a fork gh can't name any more (deleted fork), which
   // is why fork-ness rides on its own field.
-  headRepo: z.string().nullable(),
-  updatedAt: z.string(),
+  headRepo: Schema.NullOr(Schema.String),
+  updatedAt: Schema.String,
 });
-export type PullRequestCandidate = z.infer<typeof PullRequestCandidateSchema>;
+export type PullRequestCandidate = typeof PullRequestCandidateSchema.Type;
 
 // Why gh itself can't be used, independent of any one repo. This is
 // what the readiness gate answers.
-export const GhUnavailableReasonSchema = z.enum([
+export const GhUnavailableReasonSchema = Schema.Literals([
   "integration-off",
   "gh-missing",
   "gh-signed-out",
 ]);
-export type GhUnavailableReason = z.infer<typeof GhUnavailableReasonSchema>;
+export type GhUnavailableReason = typeof GhUnavailableReasonSchema.Type;
 
 // Why the PR source is unavailable for a project: the readiness reasons
 // plus the two that are about this repo. Kept as codes rather than prose
 // so the renderer owns the wording (and can point at the setting that
 // fixes it).
-export const PullRequestSourceUnavailableSchema = z.enum([
-  ...GhUnavailableReasonSchema.options,
+export const PullRequestSourceUnavailableSchema = Schema.Literals([
+  ...GhUnavailableReasonSchema.literals,
   "no-github-remote",
   "gh-failed",
 ]);
-export type PullRequestSourceUnavailable = z.infer<
-  typeof PullRequestSourceUnavailableSchema
->;
+export type PullRequestSourceUnavailable =
+  typeof PullRequestSourceUnavailableSchema.Type;
 
 // "no open PRs" (ok + empty list) is a different answer from "we can't
 // ask". The form disables the whole mode for the latter, so the two
 // can't collapse into an empty array.
-export const PullRequestCandidateListSchema = z.discriminatedUnion("status", [
-  z.object({
-    status: z.literal("ok"),
-    pullRequests: z.array(PullRequestCandidateSchema),
+export const PullRequestCandidateListSchema = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("ok"),
+    pullRequests: Schema.Array(PullRequestCandidateSchema),
   }),
-  z.object({
-    status: z.literal("unavailable"),
+  Schema.Struct({
+    status: Schema.Literal("unavailable"),
     reason: PullRequestSourceUnavailableSchema,
   }),
 ]);
-export type PullRequestCandidateList = z.infer<
-  typeof PullRequestCandidateListSchema
->;
+export type PullRequestCandidateList =
+  typeof PullRequestCandidateListSchema.Type;
 
-export const ResolvePullRequestCheckoutPayloadSchema =
-  ProjectScopedPayloadSchema.extend({
-    number: z.number().int().positive(),
-  });
+export const ResolvePullRequestCheckoutPayloadSchema = Schema.Struct({
+  ...ProjectScopedPayloadSchema.fields,
+  number: PositiveInt,
+});
 
-export const PullRequestCheckoutRefSchema = z.object({
+export const PullRequestCheckoutRefSchema = Schema.Struct({
   // Local branch the PR head now sits on. Feed it to worktrees.create as
   // `base` with `checkout: true`. From there it's an ordinary
   // check-out-existing-branch create.
-  branch: z.string().min(1),
+  branch: Schema.NonEmptyString,
 });
-export type PullRequestCheckoutRef = z.infer<
-  typeof PullRequestCheckoutRefSchema
->;
+export type PullRequestCheckoutRef = typeof PullRequestCheckoutRefSchema.Type;
 
-export const GithubCliWorktreePullRequestPayloadSchema =
-  ProjectScopedPayloadSchema.extend({
-    branch: z.string().min(1),
-  });
+export const GithubCliWorktreePullRequestPayloadSchema = Schema.Struct({
+  ...ProjectScopedPayloadSchema.fields,
+  branch: Schema.NonEmptyString,
+});
 
-export const GithubCliPullRequestDiffPayloadSchema =
-  ProjectScopedPayloadSchema.extend({
-    number: z.number().int().positive(),
-  });
+export const GithubCliPullRequestDiffPayloadSchema = Schema.Struct({
+  ...ProjectScopedPayloadSchema.fields,
+  number: PositiveInt,
+});
 
-export const MergePullRequestPayloadSchema = ProjectScopedPayloadSchema.extend({
-  number: z.number().int().positive(),
+export const MergePullRequestPayloadSchema = Schema.Struct({
+  ...ProjectScopedPayloadSchema.fields,
+  number: PositiveInt,
   method: MergeMethodSchema,
 });
 
-export const SetPullRequestDraftPayloadSchema =
-  ProjectScopedPayloadSchema.extend({
-    number: z.number().int().positive(),
-    draft: z.boolean(),
-  });
+export const SetPullRequestDraftPayloadSchema = Schema.Struct({
+  ...ProjectScopedPayloadSchema.fields,
+  number: PositiveInt,
+  draft: Schema.Boolean,
+});
