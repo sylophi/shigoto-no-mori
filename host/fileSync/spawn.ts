@@ -7,12 +7,14 @@
 // engine is not the CLI, nobody types its commands, and only this
 // process ever starts it.
 //
-// Electron-free: main/electron/fileSyncRunner.ts injects the binary
-// path and the quit-time child registration, the checks inject a
+// Electron-free: main/electron/fileSyncRunner.ts provides the binary
+// path and the quit-time child registration, the checks provide a
 // freshly built binary.
 import { type ChildProcess, spawn } from "node:child_process";
 import { Duplex, type Readable, type Writable } from "node:stream";
+import { Context } from "effect";
 import { signalTreeBestEffort } from "@host/lib/scripts/process";
+import { hostService } from "@host/runtime";
 
 // A child whose stdin/stdout are one duplex stream. stderr stays
 // separate for diagnostics.
@@ -76,18 +78,17 @@ type FileSyncSpawnImpl = (
   env?: NodeJS.ProcessEnv,
 ) => StreamChild | null;
 
-let impl: FileSyncSpawnImpl | null = null;
-
-export function setFileSyncSpawnImpl(next: FileSyncSpawnImpl): void {
-  impl = next;
-}
+export class FileSyncSpawn extends Context.Service<
+  FileSyncSpawn,
+  FileSyncSpawnImpl
+>()("sm/host/FileSyncSpawn") {}
 
 export function spawnFileSync(
   args: string[],
   env?: NodeJS.ProcessEnv,
 ): StreamChild | null {
-  if (impl === null) {
-    throw new Error("file-sync spawned before setFileSyncSpawnImpl ran");
-  }
-  return impl(args, env);
+  return hostService(
+    FileSyncSpawn,
+    "file-sync spawned before the host runtime provided FileSyncSpawn",
+  )(args, env);
 }

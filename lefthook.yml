@@ -53,7 +53,7 @@ pre-commit:
     # constructs the port's mapping relies on keep their semantics, and
     # the web stub walker answers every contract read as it did.
     schema-port:
-      glob: "{shared/schemas/**,shared/ipc/modules/**,shared/ipc/codec.ts,web/ipc/stubDefaults.ts,test/schema-port.mjs,test/lib/checkKit.mjs}"
+      glob: "{shared/schemas/**,shared/ipc/modules/**,shared/ipc/codec.ts,shared/ipc/hexId.ts,shared/ipc/wireError.ts,shared/ipc/socket/frames.ts,shared/hub/protocol.ts,shared/sharedSettings.ts,shared/git/**,shared/mirrorIgnores.ts,web/ipc/stubDefaults.ts,test/schema-port.mjs,test/lib/checkKit.mjs}"
       run: pnpm test schema-port
     # The reconnect supervisor under Effect's TestClock, pure: the exact
     # backoff ladder and its cap, the stable-connection reset, blocked
@@ -94,7 +94,7 @@ pre-commit:
     # The two installs pin the same effect, so a root install is a
     # prerequisite for those shared files.
     hub:
-      glob: "{hub/**,shared/hub/protocol.ts,shared/ipc/socket/frames.ts}"
+      glob: "{hub/**,shared/hub/protocol.ts,shared/ipc/socket/frames.ts,shared/ipc/codec.ts,shared/ipc/wireError.ts,shared/errorOf.ts}"
       run: pnpm -C hub install --frozen-lockfile --prefer-offline && pnpm -C hub run check
     # Boots a stub Durable Object (a node ws server speaking the hub
     # envelope protocol) and drives two REAL hub connections through the

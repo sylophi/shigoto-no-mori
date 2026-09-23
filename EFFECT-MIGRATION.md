@@ -355,7 +355,9 @@ Roughly 400 zod schemas exist, 284 of them top-level in `shared/`.
   unconditional input wall and `Schema.encodeSync(def.output)` for
   dev-build output checking, so behavior is unchanged.
 - Current zod idioms have direct equivalents: `z.strictObject` is
-  `Schema.Struct` with `onExcessProperty: "error"` at decode;
+  `strictStruct` (`shared/schemas/strict.ts`: v4 has no per-schema
+  strictness, and `onExcessProperty: "error"` is only a decode-call
+  option, so the helper refuses an undeclared key by name);
   `discriminatedUnion("t", ...)` is `Schema.Union` of `Schema.Struct`
   with `Schema.Literal` tags (or `Schema.TaggedStruct`); `.refine` is
   `Schema.check(Schema.filter(...))`; `.max()` bounds are

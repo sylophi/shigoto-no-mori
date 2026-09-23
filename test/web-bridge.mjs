@@ -224,6 +224,19 @@ async function main() {
         ),
         NO_STRUCTURAL_STUB,
       );
+      // The grant-shaped read the walker exists to protect: the only
+      // answer it may build is the refusal, in either mode. The real
+      // web handler answers it today, so this is the walker's own
+      // verdict, pinned in case a stubbed channel ever carries a grant.
+      const { remoteAccessContract } =
+        await import("@shared/ipc/modules/remoteAccess");
+      const grantOutput = remoteAccessContract.calls.commandAccess.output;
+      assert.deepEqual(stubValueFor(grantOutput, { fabricateArms: false }), {
+        granted: false,
+      });
+      assert.deepEqual(stubValueFor(grantOutput, { fabricateArms: true }), {
+        granted: false,
+      });
     },
   );
 

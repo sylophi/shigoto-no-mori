@@ -10,6 +10,7 @@ import { devDialKinds } from "../electron/devDialKinds";
 import { coalesce } from "@host/lib/util/coalesce";
 import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
+import { Context, Effect, Fiber, Layer, PubSub, Stream } from "effect";
 import { WebSocket as WsWebSocket } from "ws";
 import { errorMessageOf } from "@shared/errors";
 import type { ContractModule } from "@shared/ipc/contract";
@@ -47,9 +48,18 @@ import {
   createCloudflaredRunner,
   resolveCloudflaredBinary,
 } from "@host/direct/cloudflared";
-import { createConnectTicketStore } from "@host/direct/tickets";
-import { createHubConnection } from "@host/hub/connection";
-import { createWsServerBinding } from "@host/socket/server";
+import {
+  type ConnectTicketStore,
+  createConnectTicketStore,
+} from "@host/direct/tickets";
+import {
+  createHubConnection,
+  type HubConnectionBinding,
+} from "@host/hub/connection";
+import {
+  createWsServerBinding,
+  type WsServerBinding,
+} from "@host/socket/server";
 import { dataDir } from "@host/lib/util/paths";
 import { CONTROL_FILE_NAME, createControlServer } from "../core/control/server";
 import { directContract } from "@shared/ipc/modules/direct";
@@ -62,6 +72,7 @@ import {
   hubConnectInputs,
 } from "./modules/account";
 import { settleEnvelope } from "@shared/ipc/wireError";
+import { appRuntime, appService, runner } from "../services";
 
 // Gates OUTPUT validation only. Input parsing in the shared registrar
 // is unconditional in every build. In dev we re-run handler results
@@ -144,10 +155,27 @@ const electronServer: ServerTransport = {
   },
 };
 
+// The runners this module wires, each a service on the app runtime
+// (main/runtime.ts composes their layers into AppLive). Every one is
+// acquired by its factory when the runtime is built and released by
+// its stop when the runtime is disposed on quit, in reverse
+// acquisition order, which is the order the dependencies below give.
+
 // The websocket binding exists unconditionally so registration can
 // record handlers whether or not the device config ever enables the
 // listener. Listening itself is gated in refreshSocketHost below.
-const wsServer = createWsServerBinding();
+export class SocketHost extends Context.Service<SocketHost, WsServerBinding>()(
+  "sm/main/SocketHost",
+) {
+  static readonly layer = Layer.effect(
+    SocketHost,
+    runner(
+      "the LAN listener",
+      () => createWsServerBinding(),
+      (binding) => binding.stop(),
+    ),
+  );
+}
 
 // The direct data plane: a SECOND ws listener
 // instance in ticket mode. Auth consumes single-use connect tickets
@@ -158,124 +186,301 @@ const wsServer = createWsServerBinding();
 // other bindings so
 // registration records handlers at boot, while listening is gated on
 // enrollment in refreshDirectHost below.
-const directTickets = createConnectTicketStore();
-const directWsServer = createWsServerBinding({
-  matchTicket: (deviceId, arrivedAs, matches) =>
-    directTickets.consumeProven(deviceId, arrivedAs, matches),
-  isCommandGranted: acceptsPeerCommands,
-});
-
-// The tunnel endpoint: a supervised cloudflared
-// child fronting the direct listener's loopback port through this
-// device's named Cloudflare tunnel. Reconciled from refreshDirectHost
-// so it follows the listener exactly (a new ephemeral port
-// re-provisions, a stopped listener stops the child), and sign-out, an
-// account switch and directConnections off land here as
-// reconcile(null) through the same path. Quit alone calls stop() (the
-// runner's terminal latch, main/index.ts before-quit via
-// stopDirectHost). The connector token stays inside the runner, never
-// here.
-const tunnelRunner = createCloudflaredRunner({
-  // Resolved fresh per start attempt: the probe is one bounded
-  // execFile, already rate-limited by the runner's ladder and its
-  // reconcile no-op rules, and any memo here would leave the
-  // install-cloudflared recovery path (any config write re-probes)
-  // dead for the PATH case.
-  resolveBinary: async () => {
-    const config = await readGlobalConfig();
-    // The connector the app ships (shared/packaging/cloudflaredDist.mts,
-    // fetched by `pnpm start` in dev).
-    return resolveCloudflaredBinary(
-      config.cloudflaredPath,
-      bundledBinaryPath(CLOUDFLARED_DIST_DIR, CLOUDFLARED_BINARY_NAME),
-    );
-  },
-  provision: (port) => provisionDeviceTunnel(port),
-  // Orphan-reap bookkeeping: the live child's pid, recorded so a
-  // crashed Electron's leftover connector is killed on the next
-  // launch. A getter because userData is an app-ready fact.
-  pidFilePath: () => join(app.getPath("userData"), "cloudflared.pid"),
-  // Tunnel state rides the same status snapshot the device hub and
-  // direct transitions feed, so the devices page updates live.
-  onChange: () => directPlane.notifyStatusChanged(),
-});
+export class DirectListener extends Context.Service<
+  DirectListener,
+  { server: WsServerBinding; tickets: ConnectTicketStore }
+>()("sm/main/DirectListener") {
+  static readonly layer = Layer.effect(
+    DirectListener,
+    Effect.gen(function* () {
+      const tickets = createConnectTicketStore();
+      const server = yield* runner(
+        "the direct listener",
+        () =>
+          createWsServerBinding({
+            matchTicket: (deviceId, arrivedAs, matches) =>
+              tickets.consumeProven(deviceId, arrivedAs, matches),
+            isCommandGranted: acceptsPeerCommands,
+          }),
+        (binding) => binding.stop(),
+      );
+      return { server, tickets };
+    }),
+  );
+}
 
 // The control wire: the loopback listener the CLI drives the
 // cross-device verbs through (main/core/control/server.ts). A wire of
 // its own, outside hostServer's fan: it serves the control contract
 // and nothing else, so no app channel is reachable from a terminal
 // unless that contract names an op for it.
-const controlServer = createControlServer({
-  appVersion: () => app.getVersion(),
-  filePath: () => join(dataDir(), CONTROL_FILE_NAME),
-});
+export class ControlServer extends Context.Service<
+  ControlServer,
+  ReturnType<typeof createControlServer>
+>()("sm/main/ControlServer") {
+  static readonly layer = Layer.effect(
+    ControlServer,
+    runner(
+      "the control listener",
+      () =>
+        createControlServer({
+          appVersion: () => app.getVersion(),
+          filePath: () => join(dataDir(), CONTROL_FILE_NAME),
+        }),
+      // Synchronous, and the file goes first: a CLI run that starts
+      // during the quit reads "not running" instead of dialing a
+      // closing listener.
+      (server) => server.stop(),
+    ),
+  );
+}
 
 // Main-side consumers of peer pushes (the mirror's git follower reacts
 // to a peer's git:projectChanged and mirror:gitChanged), beside the
-// renderer fan-out. Returns the unsubscribe.
+// renderer fan-out. onPeerPush below subscribes.
 type PeerPushListener = (push: HubPeerPush) => void;
-const peerPushListeners = new Set<PeerPushListener>();
+export class PeerPushes extends Context.Service<
+  PeerPushes,
+  PubSub.PubSub<HubPeerPush>
+>()("sm/main/PeerPushes") {
+  static readonly layer = Layer.effect(
+    PeerPushes,
+    Effect.acquireRelease(PubSub.unbounded<HubPeerPush>(), PubSub.shutdown),
+  );
+}
 
-export function onPeerPush(listener: PeerPushListener): () => void {
-  peerPushListeners.add(listener);
+// A subscriber fiber on the app runtime, handing each item to a plain
+// callback. A throw from the callback is contained and logged: a defect
+// in a forked fiber is reported nowhere, and it would end the
+// subscription for good. Returns the unsubscribe.
+function follow<A>(
+  pubsub: PubSub.PubSub<A>,
+  what: string,
+  listener: (item: A) => void,
+): () => void {
+  const fiber = appRuntime().runFork(
+    Stream.fromPubSub(pubsub).pipe(
+      Stream.runForEach((item) =>
+        Effect.sync(() => {
+          try {
+            listener(item);
+          } catch (error) {
+            console.warn(
+              `[ipc] a ${what} listener threw: ${errorMessageOf(error)}`,
+            );
+          }
+        }),
+      ),
+    ),
+  );
   return () => {
-    peerPushListeners.delete(listener);
+    Effect.runFork(Fiber.interrupt(fiber));
   };
 }
 
-// The direct plane's shared composition (shared/hub/directPlane.ts):
-// the dialer, the renderer-facing bridge handlers, the status snapshot
-// and the presence reconcile, assembled identically for the web bridge.
-// This side supplies the Electron facts and the host half: the direct
-// listener's roster close and the tunnel runner's state.
-const directPlane = createDirectPlane({
-  connection: () => hubServer,
-  localDeviceId: () => getDeviceId(),
-  localAppVersion: () => app.getVersion(),
-  broadcastStatus: (status) =>
-    broadcastAll(hubContract, "statusChanged", status),
-  broadcastPeerPush: (push) => {
-    broadcastAll(hubContract, "peerPush", push);
-    for (const listener of peerPushListeners) listener(push);
-  },
-  // The candidate sockets ride the `ws` package so a failed dial names
-  // its errno (see ClientSocket in wsClientTransport.ts). Neither ws
-  // nor Node's global sends an Origin header, so the peer's upgrade
-  // gate reads the two identically.
-  openSocket: (url) => new WsWebSocket(url, { perMessageDeflate: false }),
-  dialableKinds: devDialKinds(),
-  host: {
-    closeHostPeersNotIn: (online) => directWsServer.closePeersNotIn(online),
-    tunnelState: () => tunnelRunner.status().state,
-  },
-});
+export function onPeerPush(listener: PeerPushListener): () => void {
+  return follow(appService(PeerPushes), "peer push", listener);
+}
 
-// The renderer-facing hub bridge, exported so index.ts can register
-// it on the contract and lend its invokePeer to the peer transports.
-export const hubHandlers = directPlane.handlers;
+// The hub connection, the direct plane and the tunnel runner, which
+// reference one another: the plane reads the connection's status and
+// roster, the connection hands every transition to the plane, and the
+// tunnel's state changes fan the plane's snapshot out. So the three
+// are built in ONE layer effect, through the lazy getters the
+// factories already take (the closures below read bindings that exist
+// by the time any of them fires), rather than as layers a
+// Layer.provide could order. Acquired tunnel, hub, plane, so on quit
+// the plane stops first, the hub socket closes after it, and the
+// tunnel goes before the direct listener it fronts (whose layer this
+// one depends on). The direct broker is built here too, since every
+// dep it reads is one of these.
+export class HubConnection extends Context.Service<
+  HubConnection,
+  HubConnectionBinding
+>()("sm/main/HubConnection") {}
 
-// The hub connection, unconditional like the listener bindings:
-// handler registration is recorded at boot, connecting itself is gated
-// in refreshHubConnection below (signed out or unconfigured means no
-// socket). Its onChange hands status transitions to the direct plane,
-// which fans a fresh snapshot out to every window through the
-// client-scoped hub contract and reconciles direct-session presence
-// on each transition. Peer pushes arrive over direct sessions only
-// (the dialer's onAnyPush inside the plane), never over the device hub.
-const hubServer = createHubConnection({
-  // The one channel the wire brokers, named at creation so the client
-  // role can dial before the handler pair below is registered.
-  brokerChannel: directContract.calls.connectInfo.channel,
-  onChange: () => directPlane.handleConnectionChange(),
-});
+export class DirectPlane extends Context.Service<
+  DirectPlane,
+  ReturnType<typeof createDirectPlane>
+>()("sm/main/DirectPlane") {}
+
+export class TunnelRunner extends Context.Service<
+  TunnelRunner,
+  ReturnType<typeof createCloudflaredRunner>
+>()("sm/main/TunnelRunner") {}
+
+export class DirectBroker extends Context.Service<
+  DirectBroker,
+  ReturnType<typeof makeDirectHandlers>
+>()("sm/main/DirectBroker") {}
+
+export const RemotePlaneLive = Layer.effectContext(
+  Effect.gen(function* () {
+    const { server: directWsServer, tickets: directTickets } =
+      yield* DirectListener;
+    const peerPushes = yield* PeerPushes;
+
+    // The tunnel endpoint: a supervised cloudflared
+    // child fronting the direct listener's loopback port through this
+    // device's named Cloudflare tunnel. Reconciled from refreshDirectHost
+    // so it follows the listener exactly (a new ephemeral port
+    // re-provisions, a stopped listener stops the child), and sign-out, an
+    // account switch and directConnections off land here as
+    // reconcile(null) through the same path. Quit alone calls stop() (the
+    // runner's terminal latch, this layer's finalizer when main/index.ts
+    // disposes the runtime). The connector token stays inside the runner,
+    // never here.
+    const tunnelRunner = yield* runner(
+      "the tunnel",
+      () =>
+        createCloudflaredRunner({
+          // Resolved fresh per start attempt: the probe is one bounded
+          // execFile, already rate-limited by the runner's ladder and its
+          // reconcile no-op rules, and any memo here would leave the
+          // install-cloudflared recovery path (any config write re-probes)
+          // dead for the PATH case.
+          resolveBinary: async () => {
+            const config = await readGlobalConfig();
+            // The connector the app ships (shared/packaging/cloudflaredDist.mts,
+            // fetched by `pnpm start` in dev).
+            return resolveCloudflaredBinary(
+              config.cloudflaredPath,
+              bundledBinaryPath(CLOUDFLARED_DIST_DIR, CLOUDFLARED_BINARY_NAME),
+            );
+          },
+          provision: (port) => provisionDeviceTunnel(port),
+          // Orphan-reap bookkeeping: the live child's pid, recorded so a
+          // crashed Electron's leftover connector is killed on the next
+          // launch. A getter because userData is an app-ready fact.
+          pidFilePath: () => join(app.getPath("userData"), "cloudflared.pid"),
+          // Tunnel state rides the same status snapshot the device hub and
+          // direct transitions feed, so the devices page updates live.
+          onChange: () => directPlane.notifyStatusChanged(),
+        }),
+      (tunnel) => tunnel.stop(),
+    );
+
+    // The hub connection, unconditional like the listener bindings:
+    // handler registration is recorded at boot, connecting itself is gated
+    // in refreshHubConnection below (signed out or unconfigured means no
+    // socket). Its onChange hands status transitions to the direct plane,
+    // which fans a fresh snapshot out to every window through the
+    // client-scoped hub contract and reconciles direct-session presence
+    // on each transition. Peer pushes arrive over direct sessions only
+    // (the dialer's onAnyPush inside the plane), never over the device hub.
+    // Its stop closes the socket so the DO sees a clean departure
+    // instead of waiting out a dead connection.
+    const hubServer = yield* runner(
+      "the hub connection",
+      () =>
+        createHubConnection({
+          // The one channel the wire brokers, named at creation so the client
+          // role can dial before the handler pair below is registered.
+          brokerChannel: directContract.calls.connectInfo.channel,
+          onChange: () => directPlane.handleConnectionChange(),
+        }),
+      (hub) => hub.stop(),
+    );
+
+    // The direct plane's shared composition (shared/hub/directPlane.ts):
+    // the dialer, the renderer-facing bridge handlers, the status snapshot
+    // and the presence reconcile, assembled identically for the web bridge.
+    // This side supplies the Electron facts and the host half: the direct
+    // listener's roster close and the tunnel runner's state. Its stop
+    // closes the cached outbound direct sessions (the keeper's latch
+    // first, then the sessions, in the order that matters), or each
+    // remote host would keep a dead socket in its per-device slot and
+    // land our relaunch on the supersede path instead of a clean
+    // reconnect.
+    const directPlane = yield* runner(
+      "the direct plane",
+      () =>
+        createDirectPlane({
+          connection: () => hubServer,
+          localDeviceId: () => getDeviceId(),
+          localAppVersion: () => app.getVersion(),
+          broadcastStatus: (status) =>
+            broadcastAll(hubContract, "statusChanged", status),
+          broadcastPeerPush: (push) => {
+            broadcastAll(hubContract, "peerPush", push);
+            PubSub.publishUnsafe(peerPushes, push);
+          },
+          // The candidate sockets ride the `ws` package so a failed dial names
+          // its errno (see ClientSocket in wsClientTransport.ts). Neither ws
+          // nor Node's global sends an Origin header, so the peer's upgrade
+          // gate reads the two identically.
+          openSocket: (url) =>
+            new WsWebSocket(url, { perMessageDeflate: false }),
+          dialableKinds: devDialKinds(),
+          host: {
+            closeHostPeersNotIn: (online) =>
+              directWsServer.closePeersNotIn(online),
+            tunnelState: () => tunnelRunner.status().state,
+          },
+        }),
+      (plane) => plane.stop(),
+    );
+
+    // The direct broker (direct:connectInfo), constructed here like the
+    // direct plane above because every dep is one of this layer's:
+    // main/ipc/handlers.ts only registers it on the contract. The roster
+    // predicate is what stops a peer that fell off the control plane
+    // (revoked, account switch) from re-minting tickets over its own
+    // still-open direct socket.
+    const directBroker = makeDirectHandlers({
+      listenerPort: () => {
+        const current = directWsServer.status();
+        return current.listening ? current.port : null;
+      },
+      mintTickets: (peerDeviceId, kinds) =>
+        directTickets.mint(peerDeviceId, kinds),
+      isPeerOnline: (peerDeviceId) =>
+        hubServer.status().onlineDeviceIds.includes(peerDeviceId),
+      // The tunnel candidate, advertised only while
+      // the cloudflared child is currently healthy (probed routable).
+      tunnelUrl: () => tunnelRunner.tunnelUrl(),
+    });
+
+    // The broker surface on the HUB wire: the binding exposes ONE slot
+    // (not a ServerTransport), so direct:connectInfo is the only channel
+    // it can ever serve and mounting anything else is a type error.
+    // brokerHandlerFor supplies the channel-plus-handler pair, built on
+    // the shared registrar's own per-call wrapper so the brokered path
+    // serves the same dispatch policy as every other wire. The handler
+    // registration still puts the same handlers on the Electron and
+    // remote wires, where connectInfo fails closed without an
+    // authenticated caller.
+    hubServer.registerBroker(
+      brokerHandlerFor(directBroker, { validateOutputs: VALIDATE_OUTPUTS }),
+    );
+
+    return Context.make(HubConnection, hubServer).pipe(
+      Context.add(DirectPlane, directPlane),
+      Context.add(TunnelRunner, tunnelRunner),
+      Context.add(DirectBroker, directBroker),
+    );
+  }),
+);
+
+// The renderer-facing hub bridge, for the contract registration in
+// main/ipc/handlers.ts, which also lends its invokePeer to the peer
+// transports.
+export function hubHandlers(): ReturnType<
+  typeof createDirectPlane
+>["handlers"] {
+  return appService(DirectPlane).handlers;
+}
 
 // The remote wires (LAN socket, direct listener), looped wherever a
 // channel or broadcast must reach them all so a new wire lands in one
 // place. The device hub is deliberately NOT here:
 // it is orchestration only, its wire serves nothing but the broker
-// surface registered below, and host broadcasts and viewer pings reach
+// surface registered above, and host broadcasts and viewer pings reach
 // remote peers over their direct sessions alone.
-const remoteWires: readonly ServerTransport[] = [wsServer, directWsServer];
+const remoteWires = (): readonly ServerTransport[] => [
+  appService(SocketHost),
+  appService(DirectListener).server,
+];
 
 // Host-scoped calls are served on every wire that may carry them.
 // Client-scoped calls stay structurally unreachable over the remote
@@ -300,7 +505,7 @@ const hostServer: ServerTransport = {
       // everything else (mutating, or untagged) is refused with the
       // shared command-refused code before its handler runs
       // (host/socket/server.ts).
-      for (const wire of remoteWires) {
+      for (const wire of remoteWires()) {
         wire.handle(channel, fn, { mutating: opts.mutating });
       }
     }
@@ -308,7 +513,7 @@ const hostServer: ServerTransport = {
   broadcastAll(channel, payload, opts) {
     electronServer.broadcastAll(channel, payload);
     if (opts?.remote === true) {
-      for (const wire of remoteWires) wire.broadcastAll(channel, payload);
+      for (const wire of remoteWires()) wire.broadcastAll(channel, payload);
     }
   },
 };
@@ -339,9 +544,17 @@ let mutationPingLocal = false;
 // registry through this, because an app-side project add or remove
 // runs as a CLI child whose registry write the state watcher drops as
 // the app's own.
-const mutationSettledListeners = new Set<() => void>();
+export class MutationsSettled extends Context.Service<
+  MutationsSettled,
+  PubSub.PubSub<void>
+>()("sm/main/MutationsSettled") {
+  static readonly layer = Layer.effect(
+    MutationsSettled,
+    Effect.acquireRelease(PubSub.unbounded<void>(), PubSub.shutdown),
+  );
+}
 export function onHostMutationSettled(listener: () => void): void {
-  mutationSettledListeners.add(listener);
+  follow(appService(MutationsSettled), "mutation-settled", listener);
 }
 const flushMutationPing = coalesce(() => {
   const pingLocal = mutationPingLocal;
@@ -355,9 +568,9 @@ const flushMutationPing = coalesce(() => {
     "externalChange",
     undefined,
   );
-  for (const wire of remoteWires) wire.broadcastAll(channel, parsed);
+  for (const wire of remoteWires()) wire.broadcastAll(channel, parsed);
   if (pingLocal) electronServer.broadcastAll(channel, parsed);
-  for (const listener of mutationSettledListeners) listener();
+  PubSub.publishUnsafe(appService(MutationsSettled), undefined);
 }, MUTATION_PING_MS);
 function pingViewers(ctx: HandlerContext): void {
   if (isRemoteCaller(ctx)) mutationPingLocal = true;
@@ -397,7 +610,7 @@ export function registerControlContract<M extends ContractModule>(
   module: M,
   handlers: Handlers<M, HandlerContext>,
 ): void {
-  registerContractCore(module, handlers, controlServer.transport, {
+  registerContractCore(module, handlers, appService(ControlServer).transport, {
     validateOutputs: VALIDATE_OUTPUTS,
     onMutationResolved: () => {
       mutationPingLocal = true;
@@ -411,7 +624,7 @@ export function registerControlContract<M extends ContractModule>(
 // then report the app as unreachable.
 export async function startControlHost(): Promise<void> {
   try {
-    await controlServer.start();
+    await appService(ControlServer).start();
   } catch (error) {
     console.warn(
       `[control] listener failed to start: ${errorMessageOf(error)}`,
@@ -419,16 +632,18 @@ export async function startControlHost(): Promise<void> {
   }
 }
 
-// Synchronous, for every quit path: unpublishes first, so a CLI run
-// that starts during the quit reads "not running" instead of dialing
-// a closing listener.
+// Synchronous: unpublishes first, so a CLI run that starts meanwhile
+// reads "not running" instead of dialing a closing listener. The quit
+// path gets the same stop from the control server's layer finalizer;
+// this is for a data-dir move, whose control.json must not carry this
+// process's address into the new folder.
 export function stopControlHost(): void {
-  controlServer.stop();
+  appService(ControlServer).stop();
 }
 
 // After a data wipe took control.json along with the data dir.
 export function republishControlHost(): void {
-  controlServer.republish();
+  appService(ControlServer).republish();
 }
 
 // Single-window broadcast for client-scoped window and menu events. A
@@ -460,7 +675,7 @@ export function broadcastAll<
 
 // Reconciles the websocket listener with the device config. Runs at
 // boot (the ready handler) and on every config change (the host-side
-// onGlobalConfigChange subscriber, wired in installHostImpls), so
+// onGlobalConfigChange subscriber, wired in HostImplsLive), so
 // toggling the setting through the app, the CLI or a nuke needs no
 // relaunch. The config read runs INSIDE the binding's serialized
 // lifecycle (the resolver below), so a token rotation can never be
@@ -469,7 +684,7 @@ export function broadcastAll<
 // it, so it degrades to a log line (the binding also records status).
 export async function refreshSocketHost(): Promise<void> {
   try {
-    await wsServer.refresh(async () => {
+    await appService(SocketHost).refresh(async () => {
       // Secure by default at enable time: generate and persist a token
       // if hosting is on without one. ensureSocketHostToken drops the
       // module cache itself, so the read below sees the fresh document.
@@ -502,7 +717,7 @@ export async function refreshSocketHost(): Promise<void> {
 // connect problem must never fail the account write that triggered it.
 export async function refreshHubConnection(): Promise<void> {
   try {
-    await hubServer.refresh(async () => {
+    await appService(HubConnection).refresh(async () => {
       const inputs = hubConnectInputs();
       if (inputs === null) return null;
       return {
@@ -528,18 +743,19 @@ export async function refreshHubConnection(): Promise<void> {
   await refreshDirectHost();
 }
 
-// Teardown for before-quit: closes the hub socket so the DO sees a
-// clean departure instead of waiting out a dead connection.
 // Tickets are account-scoped where the listener is not: the account
 // change restarts the listener (dropping every authed socket), and
 // this drops what could still auth one. Called from the account
 // fan-out's teardown (main/ipc/handlers.ts leaveAccount).
 export function clearDirectTickets(): void {
-  directTickets.clear();
+  appService(DirectListener).tickets.clear();
 }
 
+// Closes the hub socket so the DO sees a clean departure instead of
+// waiting out a dead connection. The quit path gets this from the
+// remote plane layer's finalizer.
 export function stopHubConnection(): Promise<void> {
-  return hubServer.stop();
+  return appService(HubConnection).stop();
 }
 
 // The wake-time liveness probe for both remote planes (the hub socket
@@ -549,24 +765,26 @@ export function stopHubConnection(): Promise<void> {
 // instead of reading as connected until the next heartbeat tick or,
 // without heartbeats, until the OS gave up on the dead flow.
 export function probeRemoteConnections(): void {
-  hubServer.probe();
-  directPlane.probe();
+  appService(HubConnection).probe();
+  appService(DirectPlane).probe();
 }
 
-// Teardown for before-quit, alongside stopHubConnection: closes the
-// direct listener so connected peers see a clean going-away instead of
-// a dead socket, AND the cached outbound direct sessions, or each
-// remote host would keep a dead socket in its per-device slot and land
-// our relaunch on the supersede path instead of a clean reconnect.
-// The plane's own stop() owns both halves of that (the keeper's latch
-// and the session close, in the order that matters).
+// Teardown alongside stopHubConnection: closes the direct listener so
+// connected peers see a clean going-away instead of a dead socket, AND
+// the cached outbound direct sessions, or each remote host would keep
+// a dead socket in its per-device slot and land our relaunch on the
+// supersede path instead of a clean reconnect. The plane's own stop()
+// owns both halves of that (the keeper's latch and the session close,
+// in the order that matters). The quit path gets the same stops, in
+// the same order, from the layers' finalizers.
 export function stopDirectHost(): Promise<void> {
-  directPlane.stop();
+  appService(DirectPlane).stop();
   // The cloudflared child stops with the listener it fronts, so quit
   // never leaves an orphan tunnel process behind.
-  return Promise.all([tunnelRunner.stop(), directWsServer.stop()]).then(
-    () => undefined,
-  );
+  return Promise.all([
+    appService(TunnelRunner).stop(),
+    appService(DirectListener).server.stop(),
+  ]).then(() => undefined);
 }
 
 // Reconciles the direct data-plane listener with the account and
@@ -582,6 +800,7 @@ export function stopDirectHost(): Promise<void> {
 // line like the other refresh functions.
 export async function refreshDirectHost(): Promise<void> {
   try {
+    const directWsServer = appService(DirectListener).server;
     await directWsServer.refresh(async () => {
       const inputs = hubConnectInputs();
       if (inputs === null) return null;
@@ -617,8 +836,8 @@ export async function refreshDirectHost(): Promise<void> {
   // if that classification ever leaks: a tunnel problem must not fail
   // the config write or account change that triggered the refresh.
   try {
-    const listener = directWsServer.status();
-    await tunnelRunner.reconcile(
+    const listener = appService(DirectListener).server.status();
+    await appService(TunnelRunner).reconcile(
       listener.listening && listener.port !== null
         ? { port: listener.port }
         : null,
@@ -628,33 +847,8 @@ export async function refreshDirectHost(): Promise<void> {
   }
 }
 
-// The direct broker (direct:connectInfo), constructed here like the
-// direct plane above because every dep is owned by this module:
-// index.ts only registers it on the contract. The roster predicate is
-// what stops a peer that fell off the control plane (revoked, account
-// switch) from re-minting tickets over its own still-open direct
-// socket.
-export const directHandlers = makeDirectHandlers({
-  listenerPort: () => {
-    const current = directWsServer.status();
-    return current.listening ? current.port : null;
-  },
-  mintTickets: (peerDeviceId, kinds) => directTickets.mint(peerDeviceId, kinds),
-  isPeerOnline: (peerDeviceId) =>
-    hubServer.status().onlineDeviceIds.includes(peerDeviceId),
-  // The tunnel candidate, advertised only while
-  // the cloudflared child is currently healthy (probed routable).
-  tunnelUrl: () => tunnelRunner.tunnelUrl(),
-});
-
-// The broker surface on the HUB wire: the binding exposes ONE slot
-// (not a ServerTransport), so direct:connectInfo is the only channel
-// it can ever serve and mounting anything else is a type error.
-// brokerHandlerFor supplies the channel-plus-handler pair, built on
-// the shared registrar's own per-call wrapper so the brokered path
-// serves the same dispatch policy as every other wire. index.ts still
-// registers the same handlers on the Electron and remote wires, where
-// connectInfo fails closed without an authenticated caller.
-hubServer.registerBroker(
-  brokerHandlerFor(directHandlers, { validateOutputs: VALIDATE_OUTPUTS }),
-);
+// The direct broker (direct:connectInfo), built with the remote plane
+// above, for the contract registration in main/ipc/handlers.ts.
+export function directHandlers(): ReturnType<typeof makeDirectHandlers> {
+  return appService(DirectBroker);
+}

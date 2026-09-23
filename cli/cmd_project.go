@@ -795,7 +795,7 @@ func normalizeCarryOverPath(proj project, raw string) (string, error) {
 	return strings.Join(parts, "/"), nil
 }
 
-// The zod schema requires defaultBranch, and the app's reader throws
+// The app schema requires defaultBranch, and the app's reader throws
 // on a document missing it (readJsonOrNull is null only for a missing
 // file), so backfill it from the repo, and when that fails (bare
 // repo, unborn HEAD, moved path) refuse the write rather than land a

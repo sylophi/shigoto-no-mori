@@ -9,12 +9,48 @@ export type AnyCodec = Schema.Codec<unknown, unknown, never, never>;
 export type CodecOut<S> = S extends AnyCodec ? S["Type"] : never;
 export type CodecIn<S> = S extends AnyCodec ? S["Encoded"] : never;
 
+// An own `__proto__` key, which JSON.parse produces from a document
+// that spells one, is never data: a struct copies only its declared
+// keys, but a loose document or a record would carry it as an own key,
+// and the first copy made by assignment (a cache's structural sharing,
+// a spread that writes key by key) would then make its value the
+// object's prototype. Dropped before any decode, at every depth. The
+// input is copied only where such a key exists.
+function withoutProtoKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    let copy: unknown[] | null = null;
+    for (let i = 0; i < value.length; i += 1) {
+      const item = withoutProtoKeys(value[i]);
+      if (item !== value[i] && copy === null) copy = value.slice();
+      if (copy !== null) copy[i] = item;
+    }
+    return copy ?? value;
+  }
+  if (typeof value !== "object" || value === null) return value;
+  if (Object.getPrototypeOf(value) !== Object.prototype) return value;
+  const record = value as Record<string, unknown>;
+  let copy: Record<string, unknown> | null = null;
+  for (const key of Object.keys(record)) {
+    if (key === "__proto__") {
+      copy ??= { ...record };
+      delete copy[key];
+      continue;
+    }
+    const item = withoutProtoKeys(record[key]);
+    if (item !== record[key]) {
+      copy ??= { ...record };
+      copy[key] = item;
+    }
+  }
+  return copy ?? value;
+}
+
 // Decode or throw: the registrar's unconditional input wall.
 export function decodeWith<C extends AnyCodec>(
   codec: C,
   raw: unknown,
 ): CodecOut<C> {
-  return Schema.decodeUnknownSync(codec)(raw) as CodecOut<C>;
+  return Schema.decodeUnknownSync(codec)(withoutProtoKeys(raw)) as CodecOut<C>;
 }
 
 // Validate a value the program already holds in its decoded shape (a
@@ -25,9 +61,11 @@ export function decodeWith<C extends AnyCodec>(
 // JSON-shaped by rule (Type equals Encoded); a Schema whose wire form
 // differs belongs behind an explicit encode, not here.
 export function validateWith(codec: AnyCodec, value: unknown): unknown {
-  if (Schema.is(codec)(value)) return value;
-  // Decode for the issue's sake: it names what is wrong.
-  return Schema.decodeUnknownSync(codec)(value);
+  // The type-side schema alone: a copy holding only the declared keys
+  // (a producer's spread of an internal record must not reach a peer),
+  // with no transform run, and the issue naming what is wrong when the
+  // value does not fit.
+  return Schema.decodeUnknownSync(Schema.toType(codec))(value);
 }
 
 export type SafeDecode<T = unknown> =
@@ -41,7 +79,9 @@ export function safeDecodeWith<C extends AnyCodec>(
   raw: unknown,
 ): SafeDecode<CodecOut<C>> {
   try {
-    const data = Schema.decodeUnknownSync(codec)(raw) as CodecOut<C>;
+    const data = Schema.decodeUnknownSync(codec)(
+      withoutProtoKeys(raw),
+    ) as CodecOut<C>;
     return { success: true, data };
   } catch (error) {
     return { success: false, error };

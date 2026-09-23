@@ -7,7 +7,7 @@
 // crossing the Go/TS boundary is validated against the shared
 // schemas, so drift fails loudly here instead of surfacing as
 // undefined-flavored breakage in the renderer.
-import { Schema } from "effect";
+import { Context, Schema } from "effect";
 import {
   CarryOverReportSchema,
   CleanupErrorSchema,
@@ -28,6 +28,7 @@ import {
 } from "@shared/schemas";
 import { unknownProjectError, unknownWorktreeError } from "@shared/errors";
 import { shellQuote } from "@host/lib/scripts/process";
+import { hostService } from "@host/runtime";
 
 // One NDJSON document from the CLI's --json stream. `event` is set on
 // streamed progress documents (created/phase/carryOver/script/done);
@@ -44,11 +45,11 @@ export interface CliResult {
   stderrTail: string;
 }
 
-// The electron layer injects the CLI process runner at boot. Spawning
-// stays in main/electron (the runner resolves the binary through
-// Electron's packaging paths and registers children with quit-time
-// reaping), so this seam owns the document shapes and the delegate
-// stays free of Electron imports.
+// The electron layer provides the CLI process runner. Spawning stays
+// in main/electron (the runner resolves the binary through Electron's
+// packaging paths and registers children with quit-time reaping), so
+// this seam owns the document shapes and the delegate stays free of
+// Electron imports.
 type CliRunnerImpl = {
   runCli: (
     args: string[],
@@ -60,19 +61,15 @@ type CliRunnerImpl = {
   cliFailureMessage: (result: CliResult, fallback: string) => string;
 };
 
-let impl: CliRunnerImpl | null = null;
-
-export function setCliRunnerImpl(next: CliRunnerImpl): void {
-  impl = next;
-}
+export class CliRunner extends Context.Service<CliRunner, CliRunnerImpl>()(
+  "sm/host/CliRunner",
+) {}
 
 function runner(): CliRunnerImpl {
-  if (impl === null) {
-    throw new Error(
-      "cli delegate invoked before setCliRunnerImpl registered one",
-    );
-  }
-  return impl;
+  return hostService(
+    CliRunner,
+    "cli delegate invoked before the host runtime provided CliRunner",
+  );
 }
 
 // Renderer-bound emit callbacks supplied by the IPC handler, fed from

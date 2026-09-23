@@ -1,25 +1,26 @@
+import { Context } from "effect";
 import { menuContract } from "@shared/ipc/modules/menu";
 import type { Handlers } from "@shared/ipc/types";
 import type { LaunchToolMenuEntry } from "@shared/schemas";
+import { appService } from "../../services";
 
-// The electron layer injects the actual menu-rebuild function at boot.
-// Keeps the handler module free of Electron imports while still letting
-// the renderer drive native menu state.
+// The electron layer provides the actual menu-rebuild function. Keeps
+// the handler module free of Electron imports while still letting the
+// renderer drive native menu state.
 type SetLaunchToolsEnabledFn = (
   enabled: boolean,
   entries?: readonly LaunchToolMenuEntry[],
 ) => void;
 
-let impl: SetLaunchToolsEnabledFn = () => {
-  throw new Error("menu handler invoked before electron registered impl");
-};
-
-export function setMenuImpl(fn: SetLaunchToolsEnabledFn): void {
-  impl = fn;
-}
+export class Menu extends Context.Service<Menu, SetLaunchToolsEnabledFn>()(
+  "sm/main/Menu",
+) {}
 
 export const menuHandlers: Handlers<typeof menuContract> = {
   setLaunchToolsEnabled: ({ enabled, entries }) => {
-    impl(enabled, entries);
+    appService(Menu, "menu handler invoked before the runtime provided Menu")(
+      enabled,
+      entries,
+    );
   },
 };

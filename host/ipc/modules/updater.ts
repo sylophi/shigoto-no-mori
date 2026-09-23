@@ -1,12 +1,14 @@
+import { Context, Effect } from "effect";
 import { updaterContract } from "@shared/ipc/modules/updater";
 import { type HandlerContext, isRemoteCaller } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import type { UpdaterState } from "@shared/schemas";
+import { hostAttempt, hostHandler, requireService } from "@host/runtime";
 
 // The electron layer owns the updater wiring (the CLI-driven pipeline
-// in main/electron/updater.ts) and injects the concrete state machine
-// at boot. Keeping these as setters lets the handler module stay free
-// of Electron imports, like every other host module.
+// in main/electron/updater.ts) and provides the concrete state machine.
+// Keeping it behind a service lets the handler module stay free of
+// Electron imports, like every other host module.
 type UpdaterImpl = {
   getState: () => UpdaterState;
   check: () => void;
@@ -17,27 +19,28 @@ type UpdaterImpl = {
   install: (unattended: boolean) => void | Promise<void>;
 };
 
-let impl: UpdaterImpl = {
-  getState: () => ({ kind: "idle" }),
-  check: () => {
-    throw new Error("updater handler invoked before electron registered impl");
-  },
-  install: () => {
-    throw new Error("updater handler invoked before electron registered impl");
-  },
-};
+export class Updater extends Context.Service<Updater, UpdaterImpl>()(
+  "sm/host/Updater",
+) {}
 
-export function setUpdaterImpl(next: UpdaterImpl): void {
-  impl = next;
-}
+const updater = requireService(
+  Updater,
+  "updater handler invoked before the host runtime provided Updater",
+);
 
 export const updaterHandlers: Handlers<typeof updaterContract, HandlerContext> =
   {
-    get: () => impl.getState(),
-    check: () => {
-      impl.check();
-    },
-    install: async (_input, ctx) => {
-      await impl.install(isRemoteCaller(ctx));
-    },
+    get: hostHandler(() => Effect.map(updater, (impl) => impl.getState())),
+    check: hostHandler(() =>
+      Effect.flatMap(updater, (impl) =>
+        hostAttempt(() => impl.check()).pipe(Effect.as(undefined)),
+      ),
+    ),
+    install: hostHandler((_input: unknown, ctx: HandlerContext) =>
+      Effect.flatMap(updater, (impl) =>
+        hostAttempt(async () => {
+          await impl.install(isRemoteCaller(ctx));
+        }).pipe(Effect.as(undefined)),
+      ),
+    ),
   };

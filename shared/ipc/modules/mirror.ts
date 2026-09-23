@@ -338,7 +338,6 @@ export const MirrorStartToPayloadSchema = strictStruct({
   ignoreMode: MirrorIgnoreModeSchema,
   ignores: MirrorIgnoresSchema,
 });
-export type MirrorStartToPayload = typeof MirrorStartToPayloadSchema.Type;
 
 const MirrorSessionPayloadSchema = strictStruct({
   session: MirrorSessionIdSchema,

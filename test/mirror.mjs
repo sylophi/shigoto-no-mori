@@ -53,6 +53,7 @@ import { connect as netConnect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { Layer, ManagedRuntime } from "effect";
 import { buildClient } from "@shared/ipc/buildClient";
 import { forwardContract } from "@shared/ipc/modules/forward";
 import {
@@ -62,13 +63,13 @@ import {
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
-import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
-import { setFileSyncSpawnImpl, spawnStreamChild } from "@host/fileSync/spawn";
+import { CliRunner } from "@host/ipc/cliDelegate";
+import { FileSyncSpawn, spawnStreamChild } from "@host/fileSync/spawn";
 import { forwardHandlers } from "@host/ipc/modules/forward";
 import {
   listMirrorServing,
+  MirrorEngine,
   mirrorHandlers,
-  setMirrorImpl,
 } from "@host/ipc/modules/mirror";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
@@ -80,6 +81,7 @@ import {
 import { transferFilesOnce } from "@host/mirror/oneShot";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { initDataDirAt } from "@host/lib/util/paths";
+import { installHostRuntime, resetHostRuntime } from "@host/runtime";
 import { createMirrorDaemon } from "../main/core/mirror/daemon.ts";
 import { createMirrorGateway } from "../main/core/mirror/gateway.ts";
 import {
@@ -223,19 +225,34 @@ async function main() {
   const worktreeIdB = worktreeIdFromPath(rootB);
 
   initDataDirAt(dataDir);
-  setCliRunnerImpl({
-    runCli,
-    requireCliBinary: () => smBinary,
-    cliFailureMessage,
-  });
-  // A's serve children, exactly as the app spawns them, plus the
-  // observation seam.
-  setFileSyncSpawnImpl((args) =>
-    spawnStreamChild(fileSyncBinary, args, {
-      env: smEnv,
-      onSpawned: (child) => serveChildren.add(child),
+  // The host's services, as the app's runtime provides them
+  // (host/runtime.ts). A check that swaps one installs a fresh runtime
+  // with the rest unchanged.
+  const services = {
+    cliRunner: Layer.succeed(CliRunner, {
+      runCli,
+      requireCliBinary: () => smBinary,
+      cliFailureMessage,
     }),
-  );
+    // A's serve children, exactly as the app spawns them, plus the
+    // observation seam.
+    fileSync: Layer.succeed(FileSyncSpawn, (args) =>
+      spawnStreamChild(fileSyncBinary, args, {
+        env: smEnv,
+        onSpawned: (child) => serveChildren.add(child),
+      }),
+    ),
+  };
+  let installed = null;
+  const provide = async () => {
+    if (installed !== null) {
+      resetHostRuntime();
+      await installed.dispose();
+    }
+    installed = ManagedRuntime.make(Layer.mergeAll(...Object.values(services)));
+    installHostRuntime(installed);
+  };
+  await provide();
   const projectIdOf = async (path) => {
     const result = await sm("projects", "add", "--", path);
     const doc = result.docs.findLast((d) => typeof d.id === "string");
@@ -684,7 +701,7 @@ async function main() {
     // on A, one beside it crosses, and no session survives the call.
     // Only the daemon slot's create/sessions/terminate/status are in
     // play. The rest of the impl is inert here.
-    setMirrorImpl({
+    services.mirror = Layer.succeed(MirrorEngine, {
       ...daemon,
       recreate: () => Promise.reject(new Error("not in this check")),
       gitStatus: () => undefined,
@@ -692,6 +709,7 @@ async function main() {
       noteEvent: () => {},
       forgetHistory: () => {},
     });
+    await provide();
     mkdirSync(join(worktreeA, "skip"), { recursive: true });
     writeFileSync(join(worktreeA, "skip", "me.txt"), "stays\n");
     writeFileSync(join(worktreeA, "once.txt"), "once\n");
@@ -770,7 +788,7 @@ async function main() {
         ],
       ]);
       const noted = [];
-      setMirrorImpl({
+      services.mirror = Layer.succeed(MirrorEngine, {
         ...daemon,
         sessions: () => [...live.values()],
         terminate: async (id) => {
@@ -783,6 +801,7 @@ async function main() {
           noted.push([worktreeId, kind, detail]),
         forgetHistory: () => {},
       });
+      await provide();
       await endMirrorsWithPeers((deviceId) => deviceId !== "A", "A left");
       assert.deepEqual([...live.keys()], ["s-with-c", "t-with-a"]);
       assert.deepEqual(noted, [["wt-a", "stopped", "A left"]]);
@@ -816,6 +835,8 @@ async function main() {
       }
     }
     await teardown();
+    resetHostRuntime();
+    await installed?.dispose();
     rmSync(sandbox, { recursive: true, force: true });
   }
 }

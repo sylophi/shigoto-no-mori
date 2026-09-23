@@ -56,8 +56,10 @@ import { buildClient } from "@shared/ipc/buildClient";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
-import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
-import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
+import { Layer, ManagedRuntime } from "effect";
+import { CliRunner } from "@host/ipc/cliDelegate";
+import { PeerApis } from "@host/ipc/peerSync";
+import { installHostRuntime, resetHostRuntime } from "@host/runtime";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import {
@@ -253,11 +255,26 @@ async function main() {
   const worktreeId = worktreeIdFromPath(worktreePath);
 
   initDataDirAt(dataDir);
-  setCliRunnerImpl({
-    runCli,
-    requireCliBinary: () => smBinary,
-    cliFailureMessage,
-  });
+  // The host's services, as the app's runtime provides them
+  // (host/runtime.ts): the CLI runner now, the peer reach once the
+  // wire it rides is up.
+  const services = {
+    cliRunner: Layer.succeed(CliRunner, {
+      runCli,
+      requireCliBinary: () => smBinary,
+      cliFailureMessage,
+    }),
+  };
+  let installed = null;
+  const provide = async () => {
+    if (installed !== null) {
+      resetHostRuntime();
+      await installed.dispose();
+    }
+    installed = ManagedRuntime.make(Layer.mergeAll(...Object.values(services)));
+    installHostRuntime(installed);
+  };
+  await provide();
   const projectIdOf = async (path) => {
     const result = await sm("projects", "add", "--", path);
     const doc = result.docs.findLast((d) => typeof d.id === "string");
@@ -590,7 +607,7 @@ async function main() {
     // tests drove. Everything in between -- refTips negotiation,
     // captureDirty, the chunked bundle, `sm create`, the capture
     // re-key, `sm dirty apply` -- is production code against real git.
-    setPeerSyncApiImpl({
+    services.peerApis = Layer.succeed(PeerApis, {
       syncApiFor: (deviceId) => {
         assert.equal(deviceId, "A", "the pull dialed an unexpected device");
         return sync;
@@ -601,6 +618,7 @@ async function main() {
         return worktreesOverWire;
       },
     });
+    await provide();
     const pullCtx = {
       signal: new AbortController().signal,
       notifier: () => () => {},
@@ -1038,6 +1056,8 @@ async function main() {
     // sessions and listener first, then the hub connections, then
     // the stub.
     await teardown();
+    resetHostRuntime();
+    await installed?.dispose();
   }
 
   done();

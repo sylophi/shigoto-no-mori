@@ -186,7 +186,7 @@ type project struct {
 	Source string `json:"source,omitempty"`
 }
 
-// Per-project config (ShigomoriConfigSchema). Mirrors the zod schema's
+// Per-project config (ShigomoriConfigSchema). Mirrors the app schema's
 // strictness where it matters: defaultBranch is required there, so a
 // config missing it is treated as absent entirely, same as the app's
 // readShigomoriConfig(...).catch(() => null).

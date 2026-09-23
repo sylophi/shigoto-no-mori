@@ -283,7 +283,6 @@ const HubSendEnvelopeSchema = Schema.Struct({
 // kept as a union so later client envelopes are an addition, not a
 // reshape.
 export const DeviceEnvelopeSchema = Schema.Union([HubSendEnvelopeSchema]);
-export type DeviceEnvelope = typeof DeviceEnvelopeSchema.Type;
 // What a device writes: the wire side, where a deviceId is a plain
 // string (the brand is the decoded side's).
 export type DeviceEnvelopeWire = typeof DeviceEnvelopeSchema.Encoded;

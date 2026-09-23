@@ -37,23 +37,17 @@ import {
   announceProjectChanged,
   registerIpcHandlers,
   startMirrorEngine,
-  stopMirrorEngine,
 } from "./ipc/handlers";
 import { clerkPublishableKey, retryParkedSignOut } from "./ipc/modules/account";
-import { stopAllPortForwards } from "./ipc/modules/portForward";
-import { installHostImpls } from "./electron/hostImpls";
-import { buildAppMenu, installMenuImpl } from "./electron/menu";
+import { buildAppMenu } from "./electron/menu";
 import {
   broadcast,
   broadcastAll,
   refreshHubConnection,
   refreshSocketHost,
   startControlHost,
-  stopControlHost,
-  stopDirectHost,
   onHostMutationSettled,
   probeRemoteConnections,
-  stopHubConnection,
 } from "./ipc/register";
 import {
   getInflightDeleteIds,
@@ -68,6 +62,7 @@ import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktre
 import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
 import { killAllCli, cliChildCount } from "./electron/cliRunner";
+import { installHostRuntime } from "@host/runtime";
 import { runtime } from "./runtime";
 import { applyUserShellPath } from "./core/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
@@ -86,11 +81,7 @@ import {
   reconcileLaunchAtLogin,
 } from "./electron/liveness";
 import { errorMessageOf } from "@shared/errors";
-import {
-  installUpdaterImpl,
-  isInstallingUpdate,
-  startUpdater,
-} from "./electron/updater";
+import { isInstallingUpdate, startUpdater } from "./electron/updater";
 
 enableDevCdpPort();
 
@@ -179,16 +170,18 @@ createDesktopClerkBridge();
 
 initDataDir(app.isPackaged);
 
-// Electron-layer impls must be wired before registerIpcHandlers runs so
-// the first renderer call never lands on the throwing default.
-installMenuImpl();
-installUpdaterImpl();
-installHostImpls();
+// The app's runtime (main/runtime.ts, built from AppLive) is installed
+// before registerIpcHandlers runs: registration reads the wires off it,
+// and every Electron-layer impl a handler needs is one of its services,
+// so the first renderer call never lands on a runtime without them.
+// The first read builds it, which creates the runners and binds the
+// mirror gateway.
+installHostRuntime(runtime);
 registerIpcHandlers();
 // The mirror daemon resumes persisted sessions the moment it is up, so
 // it starts with the app rather than with the first mirror the user
-// asks for. A gateway that fails to bind is retried inside. Nothing
-// here is fatal, the app works without mirroring.
+// asks for. A gateway that fails to bind is retried inside its layer.
+// Nothing here is fatal, the app works without mirroring.
 void startMirrorEngine().catch((error: unknown) => {
   console.warn("[mirror] engine failed to start:", errorMessageOf(error));
 });
@@ -562,20 +555,18 @@ app.on("before-quit", (event) => {
   // Acceptable for an explicit, user-initiated update.
   if (isInstallingUpdate() || isRelaunching()) {
     markShuttingDown();
-    // Local listeners die with the process anyway. Stopping before the
-    // hub teardown gives the best-effort host-side conn closes a
-    // socket to ride out on.
-    stopAllPortForwards();
-    stopControlHost();
-    stopMirrorEngine();
-    // Fire and forget: the hub close frame either flushes in the
-    // handoff window or the DO notices the dead socket on its own. The
-    // direct listener goes down the same way so connected peers see a
-    // clean going-away.
-    void stopHubConnection();
-    void stopDirectHost();
     signalAllScriptsBestEffort("SIGTERM");
     killAllCli();
+    // The runtime's finalizers (main/runtime.ts), fired and forgotten:
+    // the hub close frame either flushes in the handoff window or the
+    // DO notices the dead socket on its own, and the direct listener
+    // goes down the same way so connected peers see a clean
+    // going-away. The port forwards stop first, since their layer is
+    // released before the direct plane and hub connection it depends
+    // on: local listeners die with the process anyway, but stopping
+    // before the hub teardown gives the best-effort host-side conn
+    // closes a socket to ride out on.
+    void runtime.dispose().catch(() => undefined);
     return;
   }
   // The install branch above has already gated its own restart via the
@@ -596,25 +587,29 @@ app.on("before-quit", (event) => {
   isQuitting = true;
   markShuttingDown();
   event.preventDefault();
-  // Same rationale as the install branch: forward teardown first, so
-  // its close frames ride the hub socket while it is still up. The
-  // mirror daemon gets its stdin closed here and is reaped with the
-  // CLI children below if it lingers.
-  stopAllPortForwards();
-  stopControlHost();
-  stopMirrorEngine();
-  // Close the hub socket alongside the script reaping so the DO sees
-  // a clean departure, and the direct listener with it so peers see a
-  // clean going-away. Fire and forget for the same reason as above.
-  void stopHubConnection();
-  void stopDirectHost();
-  // Backstop: if a kill chain wedges (unkillable child), don't leave
-  // the app running headless after the window is gone.
+  // Backstop: if a kill chain or a runner's stop wedges (unkillable
+  // child), don't leave the app running headless after the window is
+  // gone.
   setTimeout(() => app.exit(1), 15_000);
   // CLI children (CLI-engine lifecycle operations) get the same reap as
   // scripts; the CLI's own children share its terminal-style process
-  // group and follow it down.
+  // group and follow it down. The file-sync children (the mirror
+  // daemon and its serve processes) are registered with the same reap,
+  // so they are signalled here too, before their layer closes the
+  // daemon's stdin below.
   killAllCli();
+  // The runtime's finalizers (main/runtime.ts) run alongside the script
+  // reaping, in its layers' dependency order: the port forwards first,
+  // so their close frames ride the hub socket while it is still up;
+  // the control listener unpublishes, so a CLI run that starts now
+  // reads "not running"; the mirror engine stops; then the direct
+  // plane, the hub socket (the DO sees a clean departure), the tunnel,
+  // and the direct and LAN listeners (peers see a clean going-away).
+  // Awaited with the reap, so the exit below waits for both. A runner's
+  // stop that fails is logged in its finalizer; the catch keeps a
+  // dispose failure from surfacing as an unhandled rejection before
+  // the reap gets to it.
+  const disposed = runtime.dispose().catch(() => undefined);
   const inflight = getInflightDeleteIds();
   // allSettled: one rejected per-worktree kill must not skip the
   // killAllScripts pass for everything else.
@@ -622,10 +617,7 @@ app.on("before-quit", (event) => {
     Array.from(inflight).map((id) => killScriptsForWorktree(id)),
   )
     .then(() => killAllScripts({ graceMs: 1_500 }))
-    // The Effect runtime last: its finalizers close what the layers
-    // opened, after the children those layers may still be talking to
-    // are gone.
-    .finally(() => runtime.dispose())
+    .finally(() => disposed)
     .catch(() => undefined)
     .finally(() => {
       // `app.exit` skips before-quit/will-quit, avoiding a re-entry loop.

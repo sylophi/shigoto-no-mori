@@ -1,4 +1,6 @@
+import { Context, Effect } from "effect";
 import { launchersContract } from "@shared/ipc/modules/launchers";
+import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import {
   launcherIdFor,
@@ -29,28 +31,22 @@ import {
   findProjectOrThrow,
 } from "@host/lib/projects";
 import { countWithin, pruneAndPush } from "@host/lib/util/useLog";
+import { hostAttempt, hostHandler, requireService } from "@host/runtime";
 
-// The electron layer injects shell.openExternal at boot. Keeping it
-// behind a setter keeps this module and lib/launchers free of
-// Electron imports.
+// The electron layer provides shell.openExternal. Keeping it behind a
+// service keeps this module and lib/launchers free of Electron imports.
 type LaunchersImpl = {
   openExternal: (url: string) => Promise<void>;
 };
 
-let impl: LaunchersImpl | null = null;
+export class Launchers extends Context.Service<Launchers, LaunchersImpl>()(
+  "sm/host/Launchers",
+) {}
 
-export function setLaunchersImpl(next: LaunchersImpl): void {
-  impl = next;
-}
-
-function launchersImpl(): LaunchersImpl {
-  if (impl === null) {
-    throw new Error(
-      "launchers handler invoked before setLaunchersImpl registered one",
-    );
-  }
-  return impl;
-}
+const launchersImpl = requireService(
+  Launchers,
+  "launchers handler invoked before the host runtime provided Launchers",
+);
 
 // Rolling-window usage so the launcher row adapts when the user switches
 // tools. Each entry in the log is a launch timestamp; the score is the
@@ -153,64 +149,89 @@ function bumpUseCount(launcherId: string): void {
   });
 }
 
-export const launchersHandlers: Handlers<typeof launchersContract> = {
-  detect: async () =>
-    detectedEntries(await detectApps()).toSorted((a, b) =>
-      a.label.localeCompare(b.label),
-    ),
+async function launch(
+  impl: LaunchersImpl,
+  { projectId, worktreeId, launcherId }: LaunchInput,
+): Promise<void> {
+  const { project, worktree } = await findProjectAndWorktreeOrThrow(
+    projectId,
+    worktreeId,
+  );
 
-  forProject: async ({ projectId }) => getLaunchersForProject(projectId),
+  const parsed = parseLauncherId(launcherId);
+  if (parsed === null) {
+    throw new Error(`Unknown launcher id format: ${launcherId}`);
+  }
 
-  launch: async ({ projectId, worktreeId, launcherId }) => {
-    const { project, worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
-
-    const parsed = parseLauncherId(launcherId);
-    if (parsed === null) {
-      throw new Error(`Unknown launcher id format: ${launcherId}`);
+  if (parsed.kind === "app") {
+    const appId = parsed.id;
+    const apps = await detectApps();
+    const app = findDetected(appId, apps);
+    if (!app) throw new Error(`Launcher not detected: ${appId}`);
+    // Protocol-based apps (Codex, Claude) open via the OS URL handler.
+    // The provided openExternal lives here rather than in
+    // lib/launchers so that module stays free of launch plumbing.
+    const deepLink = deepLinkFor(appId, worktree.path);
+    if (deepLink) {
+      await impl.openExternal(deepLink);
+    } else {
+      await launchDetected(app, worktree.path);
     }
-
-    if (parsed.kind === "app") {
-      const appId = parsed.id;
-      const apps = await detectApps();
-      const app = findDetected(appId, apps);
-      if (!app) throw new Error(`Launcher not detected: ${appId}`);
-      // Protocol-based apps (Codex, Claude) open via the OS URL handler.
-      // The injected openExternal lives here rather than in
-      // lib/launchers so that module stays free of launch plumbing.
-      const deepLink = deepLinkFor(appId, worktree.path);
-      if (deepLink) {
-        await launchersImpl().openExternal(deepLink);
-      } else {
-        await launchDetected(app, worktree.path);
-      }
-      bumpUseCount(launcherId);
-      return;
-    }
-
-    if (parsed.kind === "web") {
-      if (launcherId !== WEB_GITHUB_ID) {
-        throw new Error(`Unknown web launcher: ${launcherId}`);
-      }
-      const info = await getGithubRepoInfo(project.path);
-      if (!info) throw new Error(`GitHub remote not found: ${project.name}`);
-      await launchersImpl().openExternal(githubRepoUrl(info));
-      bumpUseCount(launcherId);
-      return;
-    }
-
-    const customId = parsed.id;
-    const [projectConfig, globalConfig] = await Promise.all([
-      readShigomoriConfig(project.id),
-      readGlobalConfig(),
-    ]);
-    const custom = findCustomCommand(customId, globalConfig, projectConfig);
-    if (!custom) {
-      throw new Error(`Custom launcher not found: ${customId}`);
-    }
-    launchCustom(custom.command, worktree.path);
     bumpUseCount(launcherId);
-  },
+    return;
+  }
+
+  if (parsed.kind === "web") {
+    if (launcherId !== WEB_GITHUB_ID) {
+      throw new Error(`Unknown web launcher: ${launcherId}`);
+    }
+    const info = await getGithubRepoInfo(project.path);
+    if (!info) throw new Error(`GitHub remote not found: ${project.name}`);
+    await impl.openExternal(githubRepoUrl(info));
+    bumpUseCount(launcherId);
+    return;
+  }
+
+  const customId = parsed.id;
+  const [projectConfig, globalConfig] = await Promise.all([
+    readShigomoriConfig(project.id),
+    readGlobalConfig(),
+  ]);
+  const custom = findCustomCommand(customId, globalConfig, projectConfig);
+  if (!custom) {
+    throw new Error(`Custom launcher not found: ${customId}`);
+  }
+  launchCustom(custom.command, worktree.path);
+  bumpUseCount(launcherId);
+}
+
+type LaunchInput = {
+  projectId: string;
+  worktreeId: string;
+  launcherId: string;
+};
+
+export const launchersHandlers: Handlers<
+  typeof launchersContract,
+  HandlerContext
+> = {
+  detect: hostHandler(() =>
+    hostAttempt(async () =>
+      detectedEntries(await detectApps()).toSorted((a, b) =>
+        a.label.localeCompare(b.label),
+      ),
+    ),
+  ),
+
+  forProject: hostHandler(({ projectId }: { projectId: string }) =>
+    hostAttempt(() => getLaunchersForProject(projectId)),
+  ),
+
+  // One step from the lookups through the use-count bump, so a caller
+  // that leaves mid-launch stops waiting, not the launch.
+  launch: hostHandler((input: LaunchInput) =>
+    Effect.flatMap(launchersImpl, (impl) =>
+      hostAttempt(() => launch(impl, input)).pipe(Effect.as(undefined)),
+    ),
+  ),
 };

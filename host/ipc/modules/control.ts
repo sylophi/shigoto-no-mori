@@ -50,7 +50,7 @@ import {
   type Worktree,
   WorktreeSchema,
 } from "@shared/schemas";
-import { Schema } from "effect";
+import { Context, Schema } from "effect";
 import {
   parseLeaveOutPreset,
   sharedSettingKeys,
@@ -67,14 +67,15 @@ import {
   findProjectOrThrow,
 } from "@host/lib/projects";
 import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
+import { hostService } from "@host/runtime";
 import { mirrorHandlers } from "./mirror";
 import { syncHandlers } from "./sync";
 import { worktreesHandlers } from "./worktrees";
 
-// The Electron layer injects the account and the peer reach at boot
-// (main/ipc/handlers.ts), like the other peer seams (peerSync.ts): the
-// device registry rides the stored credential and the peer transport
-// is the shared cached direct session, both main's.
+// The Electron layer provides the account and the peer reach
+// (main/electron/hostImpls.ts), like the other peer seams
+// (peerSync.ts): the device registry rides the stored credential and
+// the peer transport is the shared cached direct session, both main's.
 type ControlImpl = {
   // The account's device registry. Empty when signed out.
   listDevices: () => Promise<readonly DeviceInfo[]>;
@@ -87,17 +88,15 @@ type ControlImpl = {
   peerTransportFor: (deviceId: string) => ClientTransport;
 };
 
-let impl: ControlImpl | null = null;
-
-export function setControlImpl(next: ControlImpl): void {
-  impl = next;
-}
+export class ControlReach extends Context.Service<ControlReach, ControlImpl>()(
+  "sm/host/ControlReach",
+) {}
 
 function requireImpl(): ControlImpl {
-  if (impl === null) {
-    throw new Error("control op requested before setControlImpl ran");
-  }
-  return impl;
+  return hostService(
+    ControlReach,
+    "control op requested before the host runtime provided ControlReach",
+  );
 }
 
 type Named = { deviceId: DeviceId; name: string };

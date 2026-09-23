@@ -4389,7 +4389,9 @@ async function main() {
       // a broadcast validate it without running the read a second time.
       const doc = decodeWith(Doc, { entries: { k: entry, bad: 5 } });
       assert.equal(Schema.is(Doc)(doc), true);
-      assert.equal(validateWith(Doc, doc), doc);
+      // validateWith answers a copy holding only the declared keys, so
+      // a producer's undeclared fields never ride a broadcast.
+      assert.deepStrictEqual(validateWith(Doc, doc), doc);
       // The contract's slots are the same document.
       for (const slot of [
         sharedSettingsContract.calls.read.output,
@@ -4706,10 +4708,13 @@ async function main() {
       [[], refuse()],
       ["x", refuse()],
       // zod skipped an own `__proto__` key (JSON.parse makes one) and
-      // accepted; the strict struct refuses it.
+      // accepted. The codec drops it before any decode (an own
+      // `__proto__` is never data), so through decodeWith the strict
+      // struct accepts the rest, as zod did; the struct itself, asked
+      // directly, refuses the key (the Schema.is check below).
       [
         JSON.parse('{"name":"n","__proto__":{"polluted":true}}'),
-        refuse('Unexpected key "__proto__"'),
+        ok({ name: "n" }),
       ],
       // zod's for-in also refused an inherited enumerable key; only own
       // keys arrive over a wire, and the decoded value is a fresh object
@@ -4925,6 +4930,61 @@ async function main() {
       assert.equal(decode(trimmed)("  abc  "), "abc");
       assert.equal(decodes(trimmed, "   "), false);
       assert.equal(decodes(trimmed, " abcd "), false);
+    },
+  );
+
+  await check(
+    "codec hardening: decodeWith drops an own __proto__ key at any depth before decoding, and validateWith strips undeclared keys at any depth",
+    () => {
+      // A loose document (a record rest) would otherwise carry the key
+      // as its own, and the first key-by-key copy would make its value
+      // the object's prototype.
+      const Loose = Schema.StructWithRest(Schema.Struct({ a: Schema.String }), [
+        Schema.Record(Schema.String, Schema.Unknown),
+      ]);
+      const Nested = Schema.Struct({
+        inner: Loose,
+        list: Schema.Array(Schema.Record(Schema.String, Schema.Unknown)),
+      });
+      const hostile = JSON.parse(
+        '{"inner":{"a":"x","__proto__":{"evil":1},"keep":true},"list":[{"__proto__":{"evil":2},"ok":1}]}',
+      );
+      const out = decodeWith(Nested, hostile);
+      assert.equal(Object.hasOwn(out.inner, "__proto__"), false);
+      assert.equal(Object.hasOwn(out.list[0], "__proto__"), false);
+      assert.equal(out.inner.keep, true);
+      assert.equal(out.list[0].ok, 1);
+      assert.equal(out.inner.evil, undefined);
+      // The input is left as it was: the strip copies, never mutates.
+      assert.equal(Object.hasOwn(hostile.inner, "__proto__"), true);
+      assert.deepStrictEqual(
+        Object.keys(
+          safeDecodeWith(Loose, JSON.parse('{"a":"y","__proto__":{}}')).data,
+        ),
+        ["a"],
+      );
+
+      // A producer that spreads an internal record into a broadcast
+      // payload must not leak the undeclared fields to a peer.
+      const Payload = Schema.Struct({
+        projectId: Schema.String,
+        detail: Schema.Struct({ n: Schema.Finite }),
+      });
+      const produced = {
+        projectId: "p",
+        secret: "internal",
+        detail: { n: 1, token: "internal" },
+      };
+      const validated = validateWith(Payload, produced);
+      assert.deepStrictEqual(validated, { projectId: "p", detail: { n: 1 } });
+      assert.notEqual(
+        validated,
+        produced,
+        "the producer's object was returned as is",
+      );
+      assert.throws(() =>
+        validateWith(Payload, { projectId: 1, detail: { n: 1 } }),
+      );
     },
   );
 

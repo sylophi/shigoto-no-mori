@@ -165,7 +165,7 @@ const GhPrDetailSchema = Schema.Struct({
   state: PullRequestStateSchema,
   isDraft: Schema.Boolean,
   // A merge state this build doesn't know, or none at all, reads as
-  // UNKNOWN rather than failing the whole lookup (zod's .catch).
+  // UNKNOWN rather than failing the whole lookup (the decoding catch).
   mergeStateStatus: PullRequestMergeStateSchema.pipe(
     Schema.catchDecoding(() => Effect.succeedSome("UNKNOWN" as const)),
     Schema.withDecodingDefault(Effect.succeed("UNKNOWN" as const)),

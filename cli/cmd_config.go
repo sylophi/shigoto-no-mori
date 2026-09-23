@@ -4,7 +4,7 @@ package main
 // the terminal, plus the shared key engine `sm projects config` reuses
 // for its per-project verbs (cmd_project.go). Keys are the JSON field
 // names (dotted for nesting: scripts.setup), values are validated
-// against the same shapes the app's zod schemas enforce, and writes
+// against the same shapes the app's schemas enforce, and writes
 // are read-modify-write under the file lock so nothing else in the
 // document is disturbed. Serialization follows the app's authority
 // (renderer/hooks/config/useSettingsSave.ts): a value equal to its
@@ -159,7 +159,7 @@ func normalizeAbsolutePath(raw string) (string, error) {
 	return abs, nil
 }
 
-// Element validators for `write` payloads, mirroring the zod element
+// Element validators for `write` payloads, mirroring the app schema element
 // schemas (LauncherCommandSchema, CarryOverEntrySchema).
 func validLauncherEntry(value any) error {
 	m, ok := value.(map[string]any)
@@ -468,7 +468,7 @@ func configDocLookup(doc map[string]any, name string) (any, bool, error) {
 // Shape check for `write --data` payloads: required keys must be
 // present, and every registry key that is present must carry its
 // schema'd type (elements included), so engine drift fails loudly here
-// instead of surfacing as a document zod later rejects wholesale.
+// instead of surfacing as a document the app later rejects wholesale.
 // Unknown keys pass through untouched (forward compatibility).
 func validateConfigDoc(keys []configKey, doc map[string]any) error {
 	for _, key := range keys {
@@ -758,7 +758,7 @@ func runConfigUnset(scope configDocScope, name string) (int, error) {
 // setting back to its default, since it serializes defaults by
 // omission). Everything else already in the file is kept, so a key
 // only a newer version models survives an older build's save. The
-// app's zod schemas strip what they don't model, so the payload can't
+// app's schemas strip what they don't model, so the payload can't
 // be relied on to carry such a key back on its own.
 // Objects merge field by field for the same reason, which keeps an
 // unknown field sitting beside scripts.setup. Arrays and scalars
@@ -817,7 +817,7 @@ func mergeJSONObjects(doc, payload map[string]any) {
 }
 
 // Whole-document write for the plumbing `write --data` verb. The
-// payload was already zod-parsed app-side. validateConfigDoc re-checks
+// payload was already decoded app-side. validateConfigDoc re-checks
 // the shape (including required keys) so engine drift fails loudly,
 // then mergeConfigDoc folds it into what is on disk under the lock.
 // Routing through scope.update rather than a raw locked write is also

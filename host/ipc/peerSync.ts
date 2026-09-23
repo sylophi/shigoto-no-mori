@@ -1,7 +1,7 @@
 // The pull orchestration's reach into a peer device's sync surface,
-// injected at boot following the setCliRunnerImpl precedent: the
+// provided by the binding like the CLI runner (cliDelegate.ts): the
 // remote plumbing lives in main/, so this seam owns the api shape and
-// the sync handlers stay free of Electron imports. The injected
+// the sync handlers stay free of Electron imports. The provided
 // factory must route through the bridge's SHARED direct-session cache
 // (makeHubHandlers), never a fresh dial: the host keeps exactly one
 // authed socket per deviceId, and a second dial silently supersedes
@@ -10,7 +10,8 @@ import type { mirrorContract } from "@shared/ipc/modules/mirror";
 import type { syncContract } from "@shared/ipc/modules/sync";
 import type { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type { Client } from "@shared/ipc/types";
-import { Schema } from "effect";
+import { Context, Schema } from "effect";
+import { hostService } from "@host/runtime";
 import { type Worktree, WorktreeSchema } from "@shared/schemas";
 
 // The remote verbs the orchestrations drive. Superset of the transfer
@@ -53,17 +54,15 @@ type PeerSyncImpl = {
   worktreesApiFor: (deviceId: string) => PeerWorktreesApi;
 };
 
-let impl: PeerSyncImpl | null = null;
-
-export function setPeerSyncApiImpl(next: PeerSyncImpl): void {
-  impl = next;
-}
+export class PeerApis extends Context.Service<PeerApis, PeerSyncImpl>()(
+  "sm/host/PeerApis",
+) {}
 
 function requireImpl(): PeerSyncImpl {
-  if (impl === null) {
-    throw new Error("peer api requested before setPeerSyncApiImpl ran");
-  }
-  return impl;
+  return hostService(
+    PeerApis,
+    "peer api requested before the host runtime provided PeerApis",
+  );
 }
 
 export function peerSyncApiFor(deviceId: string): PeerSyncApi {

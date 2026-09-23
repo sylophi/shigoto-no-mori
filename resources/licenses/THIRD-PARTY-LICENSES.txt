@@ -4,7 +4,7 @@ Third-Party Licenses
 This file is generated from production npm dependencies with license-checker,
 the Go modules linked into the bundled sm CLI and file-sync engine, and the
 other binaries the packaged app bundles.
-Packages: 586
+Packages: 597
 
 --------------------------------------------------------------------------------
 @adraffy/ens-normalize@1.11.1
@@ -856,6 +856,64 @@ Copyright: Copyright (c) 2021, Claudéric Demers
 MIT License
 
 Copyright (c) 2021, Claudéric Demers
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------------
+@effect/platform-node-shared@4.0.0-rc.115
+License: MIT
+Repository: https://github.com/Effect-TS/effect
+License file: node_modules/@effect/platform-node-shared/LICENSE
+Copyright: Copyright (c) 2023 Effectful Technologies Inc
+
+MIT License
+
+Copyright (c) 2023 Effectful Technologies Inc
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------------
+@effect/platform-node@4.0.0-rc.114
+License: MIT
+Repository: https://github.com/Effect-TS/effect
+License file: node_modules/@effect/platform-node/LICENSE
+Copyright: Copyright (c) 2023 Effectful Technologies Inc
+
+MIT License
+
+Copyright (c) 2023 Effectful Technologies Inc
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -3433,6 +3491,443 @@ License file: node_modules/@react-native/virtualized-lists/README.md
 > This is an internal dependency of React Native. **Please don't depend on it directly.**
 
 Virtualized list primitives (`VirtualizedList`, `VirtualizedSectionList`) backing React Native's `FlatList` and `SectionList` components.
+
+--------------------------------------------------------------------------------
+@redis/bloom@6.2.1
+License: MIT
+Repository: https://github.com/redis/node-redis
+License file: node_modules/@redis/bloom/README.md
+
+# @redis/bloom
+
+This package provides support for the [RedisBloom](https://redis.io/docs/data-types/probabilistic/) module, which adds additional probabilistic data structures to Redis.
+
+Should be used with [`redis`/`@redis/client`](https://github.com/redis/node-redis).
+
+:warning: To use these extra commands, your Redis server must have the RedisBloom module installed.
+
+RedisBloom provides the following probabilistic data structures:
+
+* Bloom Filter: for checking set membership with a high degree of certainty.
+* Cuckoo Filter: for checking set membership with a high degree of certainty.
+* T-Digest: for estimating the quantiles of a stream of data.
+* Top-K: Maintain a list of k most frequently seen items.
+* Count-Min Sketch: Determine the frequency of events in a stream.
+
+For some examples, see [`bloom-filter.js`](https://github.com/redis/node-redis/tree/master/examples/bloom-filter.js), [`cuckoo-filter.js`](https://github.com/redis/node-redis/tree/master/examples/cuckoo-filter.js), [`count-min-sketch.js`](https://github.com/redis/node-redis/tree/master/examples/count-min-sketch.js) and [`topk.js`](https://github.com/redis/node-redis/tree/master/examples/topk.js) in the [examples folder](https://github.com/redis/node-redis/tree/master/examples).
+
+--------------------------------------------------------------------------------
+@redis/client@6.2.1
+License: MIT
+Repository: https://github.com/redis/node-redis
+License file: node_modules/@redis/client/README.md
+
+# @redis/client
+
+The source code and documentation for this package are in the main [node-redis](https://github.com/redis/node-redis) repo.
+
+--------------------------------------------------------------------------------
+@redis/json@6.2.1
+License: MIT
+Repository: https://github.com/redis/node-redis
+License file: node_modules/@redis/json/README.md
+
+# @redis/json
+
+This package provides support for the [RedisJSON](https://redis.io/docs/latest/develop/data-types/json/) module, which adds JSON as a native data type to Redis.
+
+Should be used with [`redis`/`@redis/client`](https://github.com/redis/node-redis).
+
+:warning: To use these extra commands, your Redis server must have the RedisJSON module installed.
+
+## Usage
+
+For a complete example, see [`managing-json.js`](https://github.com/redis/node-redis/blob/master/examples/managing-json.js) in the [examples folder](https://github.com/redis/node-redis/tree/master/examples).
+
+### Storing JSON Documents in Redis
+
+The [`JSON.SET`](https://redis.io/commands/json.set/) command stores a JSON value at a given JSON Path in a Redis key.
+
+Here, we'll store a JSON document in the root of the Redis key "`mydoc`":
+
+```javascript
+await client.json.set('noderedis:jsondata', '$', {
+  name: 'Roberta McDonald',
+  pets: [{
+    name: 'Rex',
+    species: 'dog',
+    age: 3,
+    isMammal: true
+  }, {
+    name: 'Goldie',
+    species: 'fish',
+    age: 2,
+    isMammal: false
+  }]
+});
+```
+
+For more information about RedisJSON's path syntax, [check out the documentation](https://redis.io/docs/latest/develop/data-types/json/path).
+
+### Retrieving JSON Documents from Redis
+
+With RedisJSON, we can retrieve all or part(s) of a JSON document using the [`JSON.GET`](https://redis.io/commands/json.get/) command and one or more JSON Paths. Let's get the name and age of one of the pets:
+
+```javascript
+const results = await client.json.get('noderedis:jsondata', {
+  path: [
+    '.pets[1].name',
+    '.pets[1].age'
+  ]
+});
+```
+
+`results` will contain the following:
+
+```javascript
+ { '.pets[1].name': 'Goldie', '.pets[1].age': 2 }
+```
+
+### Performing Atomic Updates on JSON Documents Stored in Redis
+
+RedisJSON includes commands that can atomically update values in a JSON document, in place in Redis without having to first retrieve the entire document.
+
+Using the [`JSON.NUMINCRBY`](https://redis.io/commands/json.numincrby/) command, we can update the age of one of the pets like this:
+
+```javascript
+await client.json.numIncrBy('noderedis:jsondata', '.pets[1].age', 1);
+```
+
+And we can add a new object to the pets array with the [`JSON.ARRAPPEND`](https://redis.io/commands/json.arrappend/) command:
+
+```javascript
+await client.json.arrAppend('noderedis:jsondata', '.pets', {
+  name: 'Robin',
+  species: 'bird',
+  age: 1,
+  isMammal: false
+});
+```
+
+--------------------------------------------------------------------------------
+@redis/search@6.2.1
+License: MIT
+Repository: https://github.com/redis/node-redis
+License file: node_modules/@redis/search/README.md
+
+# @redis/search
+
+This package provides support for the [RediSearch](https://redis.io/docs/interact/search-and-query/) module, which adds indexing and querying support for data stored in Redis Hashes or as JSON documents with the [RedisJSON](https://redis.io/docs/data-types/json/) module.
+
+Should be used with [`redis`/`@redis/client`](https://github.com/redis/node-redis).
+
+:warning: To use these extra commands, your Redis server must have the RediSearch module installed. To index and query JSON documents, you'll also need to add the RedisJSON module.
+
+## Usage
+
+For complete examples, see [`search-hashes.js`](https://github.com/redis/node-redis/blob/master/examples/search-hashes.js) and [`search-json.js`](https://github.com/redis/node-redis/blob/master/examples/search-json.js) in the [examples folder](https://github.com/redis/node-redis/tree/master/examples).
+
+### Indexing and Querying Data in Redis Hashes
+
+#### Creating an Index
+
+Before we can perform any searches, we need to tell RediSearch how to index our data, and which Redis keys to find that data in.  The [FT.CREATE](https://redis.io/commands/ft.create) command creates a RediSearch index. Here's how to use it to create an index we'll call `idx:animals` where we want to index hashes containing `name`, `species` and `age` fields, and whose key names in Redis begin with the prefix `noderedis:animals`:
+
+```javascript
+await client.ft.create('idx:animals', {
+  name: {
+    type: SCHEMA_FIELD_TYPE.TEXT,
+    SORTABLE: true
+  },
+  species: SCHEMA_FIELD_TYPE.TAG,
+  age: SCHEMA_FIELD_TYPE.NUMERIC
+}, {
+  ON: 'HASH',
+  PREFIX: 'noderedis:animals'
+});
+```
+
+See the [`FT.CREATE` documentation](https://redis.io/commands/ft.create/#description) for information about the different field types and additional options.
+
+#### Indexing a Field Multiple Times
+
+You can index the same field multiple times with different types or aliases by using an array:
+
+```javascript
+await client.ft.create('idx:products', {
+  sku: [
+    { type: SCHEMA_FIELD_TYPE.TEXT, AS: 'sku_text' },
+    { type: SCHEMA_FIELD_TYPE.TAG, AS: 'sku_tag', SORTABLE: true }
+  ]
+}, {
+  ON: 'HASH',
+  PREFIX: 'product:'
+});
+```
+
+This allows querying the same field using different search strategies.
+
+#### Querying the Index
+
+Once we've created an index, and added some data to Redis hashes whose keys begin with the prefix `noderedis:animals`, we can start writing some search queries.  RediSearch supports a rich query syntax for full-text search, faceted search, aggregation and more.  Check out the [`FT.SEARCH` documentation](https://redis.io/commands/ft.search) and the [query syntax reference](https://redis.io/docs/interact/search-and-query/query) for more information.
+
+Let's write a query to find all the animals where the `species` field has the value `dog`:
+
+```javascript
+const results = await client.ft.search('idx:animals', '@species:{dog}');
+```
+
+`results` looks like this:
+
+```javascript
+{
+  total: 2,
+  documents: [
+    {
+      id: 'noderedis:animals:4',
+      value: {
+        name: 'Fido',
+        species: 'dog',
+        age: '7'
+      }
+    },
+    {
+      id: 'noderedis:animals:3',
+      value: {
+        name: 'Rover',
+        species: 'dog',
+        age: '9'
+      }
+    }
+  ]
+}
+```
+
+### Indexing and Querying Data with RedisJSON
+
+RediSearch can also index and query JSON documents stored in Redis using the RedisJSON module.  The approach is similar to that for indexing and searching data in hashes, but we can now use JSON Path like syntax and the data no longer has to be flat name/value pairs - it can contain nested objects and arrays.
+
+#### Creating an Index
+
+As before, we create an index with the `FT.CREATE` command, this time specifying we want to index JSON documents that look like this:
+
+```javascript
+{
+  name: 'Alice',
+  age: 32,
+  coins: 100
+}
+```
+
+Each document represents a user in some system, and users have name, age and coins properties.
+
+One way we might choose to index these documents is as follows:
+
+```javascript
+await client.ft.create('idx:users', {
+  '$.name': {
+    type: SCHEMA_FIELD_TYPE.TEXT,
+    SORTABLE: 'UNF'
+  },
+  '$.age': {
+    type: SCHEMA_FIELD_TYPE.NUMERIC,
+    AS: 'age'
+  },
+  '$.coins': {
+    type: SCHEMA_FIELD_TYPE.NUMERIC,
+    AS: 'coins'
+  }
+}, {
+  ON: 'JSON',
+  PREFIX: 'noderedis:users'
+});
+```
+
+Note that we're using JSON Path to specify where the fields to index are in our JSON documents, and the `AS` clause to define a name/alias for each field.  We'll use these when writing queries.
+
+#### Querying the Index
+
+Now we have an index and some data stored as JSON documents in Redis (see the [JSON package documentation](https://github.com/redis/node-redis/tree/master/packages/json) for examples of how to store JSON), we can write some queries...
+
+We'll use the [RediSearch query language](https://redis.io/docs/interact/search-and-query/query) and [`FT.SEARCH`](https://redis.io/commands/ft.search) command.  Here's a query to find users under the age of 30:
+
+```javascript
+await client.ft.search('idx:users', '@age:[0 30]');
+```
+
+--------------------------------------------------------------------------------
+@redis/time-series@6.2.1
+License: MIT
+Repository: https://github.com/redis/node-redis
+License file: node_modules/@redis/time-series/README.md
+
+# @redis/time-series
+
+This package provides support for the [RedisTimeSeries](https://redis.io/docs/data-types/timeseries/) module, which adds a time series data structure to Redis.
+
+Should be used with [`redis`/`@redis/client`](https://github.com/redis/node-redis).
+
+:warning: To use these extra commands, your Redis server must have the RedisTimeSeries module installed.
+
+## Usage
+
+For a complete example, see [`time-series.js`](https://github.com/redis/node-redis/blob/master/examples/time-series.js) in the Node Redis examples folder.
+
+### Creating Time Series data structure in Redis
+
+The [`TS.CREATE`](https://oss.redis.com/redistimeseries/commands/#tscreate) command creates a new time series.
+
+Here, we'll create a new time series "`temperature`":
+
+```javascript
+
+import { createClient } from 'redis';
+import { TimeSeriesDuplicatePolicies, TimeSeriesEncoding, TIME_SERIES_AGGREGATION_TYPE } from '@redis/time-series';
+
+...
+const created = await client.ts.create('temperature', {
+  RETENTION: 86400000, // 1 day in milliseconds
+  ENCODING: TimeSeriesEncoding.UNCOMPRESSED, // No compression - When not specified, the option is set to COMPRESSED
+  DUPLICATE_POLICY: TimeSeriesDuplicatePolicies.BLOCK, // No duplicates - When not specified: set to the global DUPLICATE_POLICY configuration of the database (which by default, is BLOCK).
+});
+
+if (created === 'OK') {
+  console.log('Created timeseries.');
+} else {
+  console.log('Error creating timeseries :(');
+  process.exit(1);
+}
+```
+
+### Adding new value to a Time Series data structure in Redis
+
+With RedisTimeSeries, we can add a single value to time series data structure using the [`TS.ADD`](https://redis.io/commands/ts.add/) command and if we would like to add multiple values we can use the [`TS.MADD`](https://redis.io/commands/ts.madd/) command.
+
+```javascript
+
+let value = Math.floor(Math.random() * 1000) + 1; // Random data point value
+let currentTimestamp = 1640995200000; // Jan 1 2022 00:00:00
+let num = 0;
+
+while (num < 10000) {
+  // Add a new value to the timeseries, providing our own timestamp:
+  // https://redis.io/commands/ts.add/
+  await client.ts.add('temperature', currentTimestamp, value);
+  console.log(`Added timestamp ${currentTimestamp}, value ${value}.`);
+
+  num += 1;
+  value = Math.floor(Math.random() * 1000) + 1; // Get another random value
+  currentTimestamp += 1000; // Move on one second.
+}
+
+// Add multiple values to the timeseries in round trip to the server:
+// https://redis.io/commands/ts.madd/
+const response = await client.ts.mAdd([{
+  key: 'temperature',
+  timestamp: currentTimestamp + 60000,
+  value: Math.floor(Math.random() * 1000) + 1
+}, {
+  key: 'temperature',
+  timestamp: currentTimestamp + 120000,
+  value: Math.floor(Math.random() * 1000) + 1
+}]);
+```
+
+### Retrieving Time Series data from Redis
+
+With RedisTimeSeries, we can retrieve the time series data using the [`TS.RANGE`](https://redis.io/commands/ts.range/) command by passing the criteria as follows:
+
+```javascript
+// Query the timeseries with TS.RANGE:
+// https://redis.io/commands/ts.range/
+const fromTimestamp = 1640995200000; // Jan 1 2022 00:00:00
+const toTimestamp = 1640995260000; // Jan 1 2022 00:01:00
+const rangeResponse = await client.ts.range('temperature', fromTimestamp, toTimestamp, {
+  // Group into 10 second averages.
+  AGGREGATION: {
+    type: TIME_SERIES_AGGREGATION_TYPE.AVG,
+    timeBucket: 10000
+  }
+});
+
+console.log('RANGE RESPONSE:');
+// rangeResponse looks like:
+// [
+//   { timestamp: 1640995200000, value: 356.8 },
+//   { timestamp: 1640995210000, value: 534.8 },
+//   { timestamp: 1640995220000, value: 481.3 },
+//   { timestamp: 1640995230000, value: 437 },
+//   { timestamp: 1640995240000, value: 507.3 },
+//   { timestamp: 1640995250000, value: 581.2 },
+//   { timestamp: 1640995260000, value: 600 }
+// ]
+```
+
+For multiple aggregations in one command, use the dedicated `*MultiAggr` methods:
+
+```javascript
+const multiRangeResponse = await client.ts.rangeMultiAggr('temperature', fromTimestamp, toTimestamp, {
+  AGGREGATION: {
+    types: [
+      TIME_SERIES_AGGREGATION_TYPE.MIN,
+      TIME_SERIES_AGGREGATION_TYPE.MAX,
+      TIME_SERIES_AGGREGATION_TYPE.AVG
+    ],
+    timeBucket: 10000
+  }
+});
+
+// multiRangeResponse looks like:
+// [
+//   { timestamp: 1640995200000, values: [120, 580, 356.8] },
+//   ...
+// ]
+```
+
+Equivalent multi-aggregation helpers are also available for reverse and multi-key variants:
+`revRangeMultiAggr`, `mRangeMultiAggr`, `mRevRangeMultiAggr`, `mRangeWithLabelsMultiAggr`,
+`mRevRangeWithLabelsMultiAggr`, `mRangeSelectedLabelsMultiAggr`, and `mRevRangeSelectedLabelsMultiAggr`.
+
+### Altering Time Series data Stored in Redis
+
+RedisTimeSeries includes commands that can update values in a time series data structure.
+
+Using the [`TS.ALTER`](https://redis.io/commands/ts.alter/) command, we can update time series retention like this:
+
+```javascript
+// https://redis.io/commands/ts.alter/
+const alterResponse = await client.ts.alter('temperature', {
+  RETENTION: 0 // Keep the entries forever
+});
+```
+
+### Retrieving Information about the timeseries Stored in Redis
+
+RedisTimeSeries also includes commands that can help to view the information on the state of a time series.
+
+Using the [`TS.INFO`](https://redis.io/commands/ts.info/) command, we can view timeseries information like this:
+
+```javascript
+// Get some information about the state of the timeseries.
+// https://redis.io/commands/ts.info/
+const tsInfo = await client.ts.info('temperature');
+
+// tsInfo looks like this:
+// {
+//   totalSamples: 1440,
+//   memoryUsage: 28904,
+//   firstTimestamp: 1641508920000,
+//   lastTimestamp: 1641595320000,
+//   retentionTime: 86400000,
+//   chunkCount: 7,
+//   chunkSize: 4096,
+//   chunkType: 'uncompressed',
+//   duplicatePolicy: 'block',
+//   labels: [],
+//   sourceKey: null,
+//   rules: []
+// }
+```
 
 --------------------------------------------------------------------------------
 @scure/base@1.2.6
@@ -12696,6 +13191,27 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 --------------------------------------------------------------------------------
+cluster-key-slot@1.1.2
+License: Apache-2.0
+Repository: https://github.com/Salakar/cluster-key-slot
+License file: node_modules/cluster-key-slot/LICENSE
+Copyright: Copyright (c) 2018 Mike Diarmid (Salakar) <mike.diarmid@gmail.com>
+
+Copyright (c) 2018 Mike Diarmid (Salakar) <mike.diarmid@gmail.com>
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this library except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+--------------------------------------------------------------------------------
 cmdk@1.1.1
 License: MIT
 Repository: https://github.com/pacocoursey/cmdk
@@ -13581,6 +14097,35 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+
+--------------------------------------------------------------------------------
+effect@4.0.0-rc.114
+License: MIT
+Repository: https://github.com/Effect-TS/effect
+License file: node_modules/effect/LICENSE
+Copyright: Copyright (c) 2023 Effectful Technologies Inc
+
+MIT License
+
+Copyright (c) 2023 Effectful Technologies Inc
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 --------------------------------------------------------------------------------
 electron-store@8.2.0
@@ -20909,6 +21454,354 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 --------------------------------------------------------------------------------
+redis@6.2.1
+License: MIT
+Repository: https://github.com/redis/node-redis
+License file: node_modules/redis/README.md
+
+# Node-Redis
+
+[![Tests](https://img.shields.io/github/actions/workflow/status/redis/node-redis/tests.yml?branch=master)](https://github.com/redis/node-redis/actions/workflows/tests.yml)
+[![Coverage](https://codecov.io/gh/redis/node-redis/branch/master/graph/badge.svg?token=xcfqHhJC37)](https://codecov.io/gh/redis/node-redis)
+[![License](https://img.shields.io/github/license/redis/node-redis.svg)](https://github.com/redis/node-redis/blob/master/LICENSE)
+
+[![Discord](https://img.shields.io/discord/697882427875393627.svg?style=social&logo=discord)](https://discord.gg/redis)
+[![Twitch](https://img.shields.io/twitch/status/redisinc?style=social)](https://www.twitch.tv/redisinc)
+[![YouTube](https://img.shields.io/youtube/channel/views/UCD78lHSwYqMlyetR0_P4Vig?style=social)](https://www.youtube.com/redisinc)
+[![Twitter](https://img.shields.io/twitter/follow/redisinc?style=social)](https://twitter.com/redisinc)
+
+node-redis is a modern, high performance [Redis](https://redis.io) client for Node.js.
+
+## How do I Redis?
+
+[Learn for free at Redis University](https://university.redis.com/)
+
+[Build faster with the Redis Launchpad](https://launchpad.redis.com/)
+
+[Try the Redis Cloud](https://redis.com/try-free/)
+
+[Dive in developer tutorials](https://developer.redis.com/)
+
+[Join the Redis community](https://redis.com/community/)
+
+[Work at Redis](https://redis.com/company/careers/jobs/)
+
+## Installation
+
+Start a redis via docker:
+
+```bash
+docker run -p 6379:6379 -d redis:8.0-rc1
+```
+
+To install node-redis, simply:
+
+```bash
+npm install redis
+```
+> "redis" is the "whole in one" package that includes all the other packages. If you only need a subset of the commands,
+> you can install the individual packages. See the list below.
+
+## Packages
+
+| Name                                           | Description                                                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| [`redis`](https://github.com/redis/node-redis/tree/master/packages/redis)                    | The client with all the ["redis-stack"](https://github.com/redis-stack/redis-stack) modules |
+| [`@redis/client`](https://github.com/redis/node-redis/tree/master/packages/client)           | The base clients (i.e `RedisClient`, `RedisCluster`, etc.)                                  |
+| [`@redis/bloom`](https://github.com/redis/node-redis/tree/master/packages/bloom)             | [Redis Bloom](https://redis.io/docs/data-types/probabilistic/) commands                     |
+| [`@redis/json`](https://github.com/redis/node-redis/tree/master/packages/json)               | [Redis JSON](https://redis.io/docs/data-types/json/) commands                               |
+| [`@redis/search`](https://github.com/redis/node-redis/tree/master/packages/search)           | [RediSearch](https://redis.io/docs/interact/search-and-query/) commands                     |
+| [`@redis/time-series`](https://github.com/redis/node-redis/tree/master/packages/time-series) | [Redis Time-Series](https://redis.io/docs/data-types/timeseries/) commands                  |
+| [`@redis/entraid`](https://github.com/redis/node-redis/tree/master/packages/entraid)         | Secure token-based authentication for Redis clients using Microsoft Entra ID                |
+
+> Looking for a high-level library to handle object mapping?
+> See [redis-om-node](https://github.com/redis/redis-om-node)!
+
+
+## Usage
+
+### Basic Example
+
+```typescript
+import { createClient } from "redis";
+
+const client = await createClient()
+  .on("error", (err) => console.log("Redis Client Error", err))
+  .connect();
+
+await client.set("key", "value");
+const value = await client.get("key");
+client.destroy();
+```
+
+The above code connects to localhost on port 6379. To connect to a different host or port, use a connection string in
+the format `redis[s]://[[username][:password]@][host][:port][/db-number]`:
+
+```typescript
+createClient({
+  url: "redis://alice:foobared@awesome.redis.server:6380",
+});
+```
+
+You can also use discrete parameters, UNIX sockets, and even TLS to connect. Details can be found in
+the [client configuration guide](https://github.com/redis/node-redis/blob/master/docs/client-configuration.md).
+
+To check if the the client is connected and ready to send commands, use `client.isReady` which returns a boolean.
+`client.isOpen` is also available. This returns `true` when the client's underlying socket is open, and `false` when it
+isn't (for example when the client is still connecting or reconnecting after a network error).
+
+### Redis Commands
+
+There is built-in support for all of the [out-of-the-box Redis commands](https://redis.io/commands). They are exposed
+using the raw Redis command names (`HSET`, `HGETALL`, etc.) and a friendlier camel-cased version (`hSet`, `hGetAll`,
+etc.):
+
+```typescript
+// raw Redis commands
+await client.HSET("key", "field", "value");
+await client.HGETALL("key");
+
+// friendly JavaScript commands
+await client.hSet("key", "field", "value");
+await client.hGetAll("key");
+```
+
+Modifiers to commands are specified using a JavaScript object:
+
+```typescript
+await client.set("key", "value", {
+  EX: 10,
+  NX: true,
+});
+```
+
+Replies will be transformed into useful data structures:
+
+```typescript
+await client.hGetAll("key"); // { field1: 'value1', field2: 'value2' }
+await client.hVals("key"); // ['value1', 'value2']
+```
+
+`Buffer`s are supported as well:
+
+```typescript
+const client = createClient().withTypeMapping({
+  [RESP_TYPES.BLOB_STRING]: Buffer
+});
+
+await client.hSet("key", "field", Buffer.from("value")); // 'OK'
+await client.hGet("key", "field"); // { field: <Buffer 76 61 6c 75 65> }
+
+```
+
+For commands that return serialized binary payloads, such as `DUMP`, map blob strings to `Buffer` before using the result with commands like `RESTORE`:
+
+```typescript
+const binaryClient = createClient().withTypeMapping({
+  [RESP_TYPES.BLOB_STRING]: Buffer
+});
+
+const dump = await binaryClient.dump("source");
+await binaryClient.restore("destination", 0, dump);
+```
+
+### Unsupported Redis Commands
+
+If you want to run commands and/or use arguments that Node Redis doesn't know about (yet!) use `.sendCommand()`:
+
+```typescript
+await client.sendCommand(["SET", "key", "value", "NX"]); // 'OK'
+
+await client.sendCommand(["HGETALL", "key"]); // ['key1', 'field1', 'key2', 'field2']
+```
+
+### Transactions (Multi/Exec)
+
+Start a [transaction](https://redis.io/topics/transactions) by calling `.multi()`, then chaining your commands. When
+you're done, call `.exec()` and you'll get an array back with your results:
+
+```typescript
+await client.set("another-key", "another-value");
+
+const [setKeyReply, otherKeyValue] = await client
+  .multi()
+  .set("key", "value")
+  .get("another-key")
+  .exec(); // ['OK', 'another-value']
+```
+
+You can also [watch](https://redis.io/topics/transactions#optimistic-locking-using-check-and-set) keys by calling
+`.watch()`. Your transaction will abort if any of the watched keys change.
+
+
+### Blocking Commands
+
+In v4, `RedisClient` had the ability to create a pool of connections using an "Isolation Pool" on top of the "main"
+connection. However, there was no way to use the pool without a "main" connection:
+
+```javascript
+const client = await createClient()
+  .on("error", (err) => console.error(err))
+  .connect();
+
+await client.ping(client.commandOptions({ isolated: true }));
+```
+
+In v5 we've extracted this pool logic into its own class—`RedisClientPool`:
+
+```javascript
+const pool = await createClientPool()
+  .on("error", (err) => console.error(err))
+  .connect();
+
+await pool.ping();
+```
+
+
+### Pub/Sub
+
+See the [Pub/Sub overview](https://github.com/redis/node-redis/blob/master/docs/pub-sub.md).
+
+### Scan Iterator
+
+[`SCAN`](https://redis.io/commands/scan) results can be looped over
+using [async iterators](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/asyncIterator):
+
+```typescript
+for await (const key of client.scanIterator()) {
+  // use the key!
+  await client.get(key);
+}
+```
+
+This works with `HSCAN`, `SSCAN`, and `ZSCAN` too:
+
+```typescript
+for await (const { field, value } of client.hScanIterator("hash")) {
+}
+for await (const member of client.sScanIterator("set")) {
+}
+for await (const { score, value } of client.zScanIterator("sorted-set")) {
+}
+```
+
+You can override the default options by providing a configuration object:
+
+```typescript
+client.scanIterator({
+  TYPE: "string", // `SCAN` only
+  MATCH: "patter*",
+  COUNT: 100,
+});
+```
+
+### Disconnecting
+
+The `QUIT` command has been deprecated in Redis 7.2 and should now also be considered deprecated in Node-Redis. Instead
+of sending a `QUIT` command to the server, the client can simply close the network connection.
+
+`client.QUIT/quit()` is replaced by `client.close()`. and, to avoid confusion, `client.disconnect()` has been renamed to
+`client.destroy()`.
+
+```typescript
+client.destroy();
+```
+### Client Side Caching
+
+Node Redis v5 adds support for [Client Side Caching](https://redis.io/docs/manual/client-side-caching/), which enables clients to cache query results locally. The Redis server will notify the client when cached results are no longer valid.
+
+```typescript
+// Enable client side caching with RESP3
+const client = createClient({
+  RESP: 3, 
+  clientSideCache: {
+    ttl: 0,             // Time-to-live (0 = no expiration)
+    maxEntries: 0,      // Maximum entries (0 = unlimited)
+    evictPolicy: "LRU"  // Eviction policy: "LRU" or "FIFO"
+  }
+});
+```
+
+See the [V5 documentation](https://github.com/redis/node-redis/blob/master/docs/v5.md#client-side-caching) for more details and advanced usage.
+
+### Auto-Pipelining
+
+Node Redis will automatically pipeline requests that are made during the same "tick".
+
+```typescript
+client.set("Tm9kZSBSZWRpcw==", "users:1");
+client.sAdd("users:1:tokens", "Tm9kZSBSZWRpcw==");
+```
+
+Of course, if you don't do something with your Promises you're certain to
+get [unhandled Promise exceptions](https://nodejs.org/api/process.html#process_event_unhandledrejection). To take
+advantage of auto-pipelining and handle your Promises, use `Promise.all()`.
+
+```typescript
+await Promise.all([
+  client.set("Tm9kZSBSZWRpcw==", "users:1"),
+  client.sAdd("users:1:tokens", "Tm9kZSBSZWRpcw=="),
+]);
+```
+
+### Programmability
+
+See the [Programmability overview](https://github.com/redis/node-redis/blob/master/docs/programmability.md).
+
+### Clustering
+
+Check out the [Clustering Guide](https://github.com/redis/node-redis/blob/master/docs/clustering.md) when using Node Redis to connect to a Redis Cluster.
+
+### Events
+
+The Node Redis client class is an Nodejs EventEmitter and it emits an event each time the network status changes:
+
+| Name                    | When                                                                               | Listener arguments                                        |
+| ----------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `connect`               | Initiating a connection to the server                                              | _No arguments_                                            |
+| `ready`                 | Client is ready to use                                                             | _No arguments_                                            |
+| `end`                   | Connection has been closed (via `.disconnect()`)                                   | _No arguments_                                            |
+| `error`                 | An error has occurred—usually a network issue such as "Socket closed unexpectedly" | `(error: Error)`                                          |
+| `reconnecting`          | Client is trying to reconnect to the server                                        | _No arguments_                                            |
+| `sharded-channel-moved` | See [here](https://github.com/redis/node-redis/blob/master/docs/pub-sub.md#sharded-channel-moved-event)                          | See [here](https://github.com/redis/node-redis/blob/master/docs/pub-sub.md#sharded-channel-moved-event) |
+
+> :warning: You **MUST** listen to `error` events. If a client doesn't have at least one `error` listener registered and
+> an `error` occurs, that error will be thrown and the Node.js process will exit. See the [ > `EventEmitter` docs](https://nodejs.org/api/events.html#events_error_events) for more details.
+
+> The client will not emit [any other events](https://github.com/redis/node-redis/blob/master/docs/v3-to-v4.md#all-the-removed-events) beyond those listed above.
+
+## Supported Redis versions
+
+Node Redis is supported with the following versions of Redis:
+
+| Version | Supported          |
+| ------- | ------------------ |
+| 8.0.z   | :heavy_check_mark: |
+| 7.4.z   | :heavy_check_mark: |
+| 7.2.z   | :heavy_check_mark: |
+| < 7.2   | :x:                |
+
+> Node Redis should work with older versions of Redis, but it is not fully tested and we cannot offer support.
+
+## Migration
+
+- [From V3 to V4](https://github.com/redis/node-redis/blob/master/docs/v3-to-v4.md)
+- [From V4 to V5](https://github.com/redis/node-redis/blob/master/docs/v4-to-v5.md)
+- [V5](https://github.com/redis/node-redis/blob/master/docs/v5.md)
+
+## Contributing
+
+If you'd like to contribute, check out the [contributing guide](https://github.com/redis/node-redis/blob/master/CONTRIBUTING.md).
+
+Thank you to all the people who already contributed to Node Redis!
+
+[![Contributors](https://contrib.rocks/image?repo=redis/node-redis)](https://github.com/redis/node-redis/graphs/contributors)
+
+## License
+
+This repository is licensed under the "MIT" license. See [LICENSE](https://github.com/redis/node-redis/blob/master/LICENSE).
+
+--------------------------------------------------------------------------------
 regenerator-runtime@0.13.11
 License: MIT
 Repository: https://github.com/facebook/regenerator/tree/main/packages/runtime
@@ -23568,6 +24461,35 @@ undici@7.28.0
 License: MIT
 Repository: https://github.com/nodejs/undici
 License file: node_modules/undici/LICENSE
+Copyright: Copyright (c) Matteo Collina and Undici contributors
+
+MIT License
+
+Copyright (c) Matteo Collina and Undici contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------------
+undici@8.10.2
+License: MIT
+Repository: https://github.com/nodejs/undici
+License file: node_modules/@effect/platform-node/node_modules/undici/LICENSE
 Copyright: Copyright (c) Matteo Collina and Undici contributors
 
 MIT License

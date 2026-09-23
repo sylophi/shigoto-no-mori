@@ -1,8 +1,8 @@
 // Host side of continuous worktree mirroring (shared/ipc/modules/
 // mirror.ts). The daemon that owns the sessions lives in main
 // (main/core/mirror/daemon.ts, spawned and supervised there), so it arrives
-// through an injected impl following the setPortForwardEngine
-// precedent. This module owns the rest: the start orchestration, the
+// as a service main provides (MirrorEngine, host/mirror/registry.ts),
+// beside the PortForwardEngine precedent. This module owns the rest: the start orchestration, the
 // stream open a peer drives to mirror FROM here (with the serving
 // registry and the served index watcher behind it), and the git half
 // a peer's follower reads and applies.
@@ -15,7 +15,7 @@
 // between that worktree and the peer's, with almost nothing left to
 // move. The peer's root path is read off its own worktree list over
 // the grant-gated wire, never taken from the caller.
-import { Schema } from "effect";
+import { Context, Schema } from "effect";
 import {
   MIRROR_LABEL_COPY_SIDE,
   MIRROR_COPY_STAYED,
@@ -68,10 +68,11 @@ import {
   requireRunningEngine,
 } from "@host/mirror/registry";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
+import { hostServiceOrNull } from "@host/runtime";
 import { runPullWorktree, sendWorktree } from "./sync";
 import { worktreesHandlers } from "./worktrees";
 
-// The daemon slot, the session labels and the raw session shapes live
+// The daemon service, the session labels and the raw session shapes live
 // in host/mirror/registry.ts, where the worktree delete can reach them
 // without importing this module (which reaches sync, which reaches
 // worktrees). Re-exported so the daemon and the follower keep one
@@ -79,7 +80,7 @@ import { worktreesHandlers } from "./worktrees";
 export {
   MIRROR_LABEL_LOCAL_PROJECT,
   MIRROR_LABEL_LOCAL_WORKTREE,
-  setMirrorImpl,
+  MirrorEngine,
   type MirrorCreateInput,
   type MirrorImpl,
   type MirrorSessionRaw,
@@ -95,24 +96,21 @@ export {
 // learn from the git-directory watcher.
 type Served = { entry: MirrorServing; stopIndexWatch: (() => void) | null };
 const serving = new Map<string, Served>();
-let onServingChange: (() => void) | null = null;
-let onServingGitChange:
-  | ((change: { projectId: string; worktreeId: string }) => void)
-  | null = null;
 
-// main installs the two broadcast hooks at boot. Before that (and in
-// checks that never mount them) changes are simply unannounced.
-export function setMirrorServingListener(listener: (() => void) | null): void {
-  onServingChange = listener;
-}
+// main provides the two broadcast hooks. On a runtime without them (a
+// check that never mounts them) changes are simply unannounced.
+export class MirrorServingListener extends Context.Service<
+  MirrorServingListener,
+  () => void
+>()("sm/host/MirrorServingListener") {}
 
-export function setMirrorGitChangedListener(
-  listener:
-    | ((change: { projectId: string; worktreeId: string }) => void)
-    | null,
-): void {
-  onServingGitChange = listener;
-}
+export class MirrorGitChangedListener extends Context.Service<
+  MirrorGitChangedListener,
+  (change: { projectId: string; worktreeId: string }) => void
+>()("sm/host/MirrorGitChangedListener") {}
+
+const onServingChange = () => hostServiceOrNull(MirrorServingListener);
+const onServingGitChange = () => hostServiceOrNull(MirrorGitChangedListener);
 
 export function listMirrorServing(): MirrorServing[] {
   return [...serving.values()].map((served) => served.entry);
@@ -127,7 +125,7 @@ function forgetServing(key: string): void {
   if (served === undefined) return;
   served.stopIndexWatch?.();
   serving.delete(key);
-  onServingChange?.();
+  onServingChange()?.();
 }
 
 // The daemon's document with the two label-borne ids lifted to fields,
@@ -498,7 +496,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     };
     serving.set(key, served);
     void watchIndexFile(identity.path, () =>
-      onServingGitChange?.({ projectId, worktreeId }),
+      onServingGitChange()?.({ projectId, worktreeId }),
     ).then(
       (stop) => {
         if (serving.get(key) === served) served.stopIndexWatch = stop;
@@ -506,7 +504,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
       },
       () => {},
     );
-    onServingChange?.();
+    onServingChange()?.();
   },
 
   // The git half served to the device mirroring from here (see

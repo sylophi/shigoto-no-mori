@@ -1,12 +1,12 @@
-// The mirror daemon's slot and the vocabulary around it: the labels the
-// start orchestration writes on a session, the raw shapes the daemon
-// reports, and the impl main wires in following the setPortForwardEngine
-// precedent. Separate from the mirror handler module so the worktree
+// The mirror daemon's service and the vocabulary around it: the labels
+// the start orchestration writes on a session, the raw shapes the
+// daemon reports, and the impl main provides (MirrorEngine, beside the
+// PortForwardEngine precedent). Separate from the mirror handler module so the worktree
 // tombstone protocol (host/lib/scripts/index.ts withDeleteInflight)
 // can stop a worktree's mirrors without importing that module (which
 // reaches sync, which reaches worktrees).
 import { randomUUID } from "node:crypto";
-import { Schema } from "effect";
+import { Context, Schema } from "effect";
 import {
   isTransferSession,
   MIRROR_LABEL_TRANSFER,
@@ -18,6 +18,7 @@ import {
   type MirrorSession,
 } from "@shared/ipc/modules/mirror";
 import { errorMessageOf } from "@shared/errors";
+import { hostService, hostServiceOrNull } from "@host/runtime";
 
 const isMirrorIgnoreMode = Schema.is(MirrorIgnoreModeSchema);
 
@@ -102,11 +103,9 @@ export function ignoreModeOf(labels: Record<string, string>): MirrorIgnoreMode {
   return isMirrorIgnoreMode(mode) ? mode : "everything";
 }
 
-let impl: MirrorImpl | null = null;
-
-export function setMirrorImpl(next: MirrorImpl): void {
-  impl = next;
-}
+export class MirrorEngine extends Context.Service<MirrorEngine, MirrorImpl>()(
+  "sm/host/MirrorEngine",
+) {}
 
 // The engine when it can take a session, or the reason it cannot:
 // the mirror start and the transplant's file transfer both begin here.
@@ -171,17 +170,17 @@ export function findSession(
   return daemon.sessions().find((raw) => raw.session === session);
 }
 
-// The daemon, or null before it is wired, for a caller that has a
-// sensible answer without one.
+// The daemon, or null when the runtime provides none, for a caller
+// that has a sensible answer without one.
 export function engineOrNull(): MirrorImpl | null {
-  return impl;
+  return hostServiceOrNull(MirrorEngine);
 }
 
 export function engine(): MirrorImpl {
-  if (impl === null) {
-    throw new Error("mirror handler invoked before the daemon was wired");
-  }
-  return impl;
+  return hostService(
+    MirrorEngine,
+    "mirror handler invoked before the host runtime provided MirrorEngine",
+  );
 }
 
 // Every session whose local side is the named worktree, stopped. The
@@ -189,7 +188,7 @@ export function engine(): MirrorImpl {
 // through (withDeleteInflight says why after and not before): left
 // alone, the session sits halted on a root that is gone or moved and
 // the peer keeps calling its worktree mirrored. It goes through the
-// injected impl, the one mirror:stop uses, so the git follower forgets
+// provided impl, the one mirror:stop uses, so the git follower forgets
 // the session too. A relocate changes the worktree id (it is path
 // derived), but the label still carries the old one, which is what
 // the caller passes.
@@ -199,7 +198,7 @@ export function engine(): MirrorImpl {
 export async function stopMirrorsForWorktree(
   localWorktreeId: string,
 ): Promise<void> {
-  const daemon = impl;
+  const daemon = engineOrNull();
   // Unwired (a check, a surface that never mounts the daemon) there is
   // nothing mirroring anything.
   if (daemon === null) return;
@@ -235,7 +234,7 @@ export async function endMirrorsWithPeers(
   detail: string,
   opts: { transfers?: boolean } = {},
 ): Promise<void> {
-  const daemon = impl;
+  const daemon = engineOrNull();
   if (daemon === null) return;
   const candidates = opts.transfers
     ? daemon.sessions()

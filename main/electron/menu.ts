@@ -16,7 +16,6 @@ import type {
   BroadcastProducerPayload,
 } from "@shared/ipc/types";
 import type { LaunchToolMenuEntry } from "@shared/schemas";
-import { setMenuImpl } from "../ipc/modules/menu";
 import { broadcast } from "../ipc/register";
 
 // ⌘1..⌘9 is the accelerator space; anything beyond is unreachable.
@@ -57,10 +56,6 @@ export function setLaunchToolsEnabled(
   currentLaunchToolsEnabled = enabled;
   currentLaunchToolEntries = nextEntries;
   buildAppMenu();
-}
-
-export function installMenuImpl(): void {
-  setMenuImpl(setLaunchToolsEnabled);
 }
 
 // Click handler that broadcasts to the focused window. Electron types

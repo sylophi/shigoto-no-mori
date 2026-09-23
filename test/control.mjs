@@ -67,7 +67,7 @@ import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { ManagedRuntime } from "effect";
+import { Layer, ManagedRuntime } from "effect";
 import { TestClock } from "effect/testing";
 import { buildClient } from "@shared/ipc/buildClient";
 import { controlContract } from "@shared/ipc/modules/control";
@@ -80,14 +80,15 @@ import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
-import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
-import { controlHandlers, setControlImpl } from "@host/ipc/modules/control";
-import { setMirrorImpl } from "@host/ipc/modules/mirror";
+import { CliRunner } from "@host/ipc/cliDelegate";
+import { ControlReach, controlHandlers } from "@host/ipc/modules/control";
+import { MirrorEngine } from "@host/ipc/modules/mirror";
 import { projectsHandlers } from "@host/ipc/modules/projects";
 import { remoteAccessHandlers } from "@host/ipc/modules/remoteAccess";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
-import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
+import { PeerApis } from "@host/ipc/peerSync";
+import { installHostRuntime, resetHostRuntime } from "@host/runtime";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { initDataDirAt } from "@host/lib/util/paths";
 import { unknownWorktreeError } from "@shared/errors";
@@ -505,11 +506,27 @@ async function main() {
   const inPath = await addWorktree(sourceRepo, "wt-in", "feat-in", "i.txt");
 
   initDataDirAt(dataDir);
-  setCliRunnerImpl({
-    runCli,
-    requireCliBinary: () => smBinary,
-    cliFailureMessage,
-  });
+  // The host's services, as the app's runtime provides them
+  // (host/runtime.ts). A check that swaps one installs a fresh runtime
+  // with the rest unchanged.
+  const services = {
+    cliRunner: Layer.succeed(CliRunner, {
+      runCli,
+      requireCliBinary: () => smBinary,
+      cliFailureMessage,
+    }),
+  };
+  let installed = null;
+  const provide = async (overrides = {}) => {
+    if (installed !== null) {
+      resetHostRuntime();
+      await installed.dispose();
+    }
+    const layers = Object.values({ ...services, ...overrides });
+    installed = ManagedRuntime.make(Layer.mergeAll(...layers));
+    installHostRuntime(installed);
+  };
+  await provide();
   const projectIdOf = async (path) => {
     const result = await sm("projects", "add", "--", path);
     return result.docs.findLast((doc) => typeof doc.id === "string").id;
@@ -550,7 +567,7 @@ async function main() {
         );
       },
     });
-    setPeerSyncApiImpl({
+    services.peerApis = Layer.succeed(PeerApis, {
       syncApiFor: () => buildClient(syncContract, peerA.transport),
       worktreesApiFor: () => buildClient(worktreesContract, peerA.transport),
     });
@@ -584,9 +601,10 @@ async function main() {
       connectedDeviceIds: async () => connected,
       peerTransportFor: () => peerTransport,
     };
-    setControlImpl(controlImpl);
+    services.control = Layer.succeed(ControlReach, controlImpl);
     const engine = fakeMirrorEngine();
-    setMirrorImpl(engine.impl);
+    services.mirror = Layer.succeed(MirrorEngine, engine.impl);
+    await provide();
 
     const control = createControlServer({
       appVersion: () => "9.9.9",
@@ -1035,7 +1053,12 @@ async function main() {
           { t: "req", id: 1, channel: "control:devices", input: {} },
         ])
       )[1];
-    setControlImpl({ ...controlImpl, thisDeviceId: () => "nobody-here" });
+    await provide({
+      control: Layer.succeed(ControlReach, {
+        ...controlImpl,
+        thisDeviceId: () => "nobody-here",
+      }),
+    });
     const signedOut = await devicesRes();
     assert.equal(signedOut.ok, false);
     assert.equal(signedOut.code, "signed-out", "the code left the top level");
@@ -1048,11 +1071,13 @@ async function main() {
       message: signedOut.message,
     });
     await refused(["devices"], "signed-out", /isn't signed in/);
-    setControlImpl({
-      ...controlImpl,
-      listDevices: async () => {
-        throw unknownWorktreeError("wt-gone");
-      },
+    await provide({
+      control: Layer.succeed(ControlReach, {
+        ...controlImpl,
+        listDevices: async () => {
+          throw unknownWorktreeError("wt-gone");
+        },
+      }),
     });
     const gone = await devicesRes();
     assert.equal(gone.ok, false);
@@ -1064,7 +1089,7 @@ async function main() {
       message: "Unknown worktree: wt-gone",
     });
     await refused(["devices"], undefined, /Unknown worktree: wt-gone/);
-    setControlImpl(controlImpl);
+    await provide();
     ok(
       "typed errors: a ControlError keeps its code on the top-level res, and a tagged error's additive error field reaches the real CLI, which still prints the message",
     );
@@ -1084,6 +1109,8 @@ async function main() {
     ok("stopping the server unpublishes it");
   } finally {
     await teardown();
+    resetHostRuntime();
+    await installed?.dispose();
   }
 
   done();

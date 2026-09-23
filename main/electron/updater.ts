@@ -29,7 +29,7 @@ import {
   UpdateStageEventSchema,
   UpdateStageResultSchema,
 } from "@shared/schemas";
-import { setUpdaterImpl } from "@host/ipc/modules/updater";
+import type { Updater } from "@host/ipc/modules/updater";
 import { broadcastAll } from "../ipc/register";
 import { readJsonOrNull } from "@host/lib/util/jsonFile";
 import { pathExists, dataDir } from "@host/lib/util/paths";
@@ -246,13 +246,13 @@ async function installUpdate(unattended: boolean): Promise<void> {
   app.quit();
 }
 
-export function installUpdaterImpl(): void {
-  setUpdaterImpl({
-    getState: getUpdaterState,
-    check: checkForUpdates,
-    install: installUpdate,
-  });
-}
+// The state machine the host's updater handlers drive, provided as
+// the Updater service (main/electron/hostImpls.ts).
+export const updaterImpl: Updater["Service"] = {
+  getState: getUpdaterState,
+  check: checkForUpdates,
+  install: installUpdate,
+};
 
 export function startUpdater(): void {
   if (started) return;
