@@ -41,20 +41,38 @@ export function makeTtlCache<K, A, E>(
   );
 }
 
-// Cache.get with an exit the cache will not serve again dropped from
-// the map at once. An entry whose time to live is zero is expired the
-// moment it lands, but Cache keeps expired entries until its capacity
-// sweep, so a failure per key (or every settled single flight) would
-// otherwise sit in memory for nothing. An interrupted get drops
-// nothing: the lookup may still be serving the callers that stayed.
-function dropped<K, A, E>(
+// Cache.get, twice over if need be. When the last caller waiting on a
+// lookup leaves, Cache interrupts the lookup but keeps its entry until
+// the lookup's fiber has exited; a get arriving in that window joins
+// the dying fiber and ends with an interruption that was never this
+// caller's. One more get then finds the entry gone and starts afresh.
+// A caller that was itself interrupted is interrupted again on that
+// retry, and ends there.
+function joined<K, A, E>(
   cache: Cache.Cache<K, A, E>,
   key: K,
-  exit: Exit.Exit<A, E>,
+): Effect.Effect<A, E> {
+  return Cache.get(cache, key).pipe(
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause)
+        ? Cache.get(cache, key)
+        : Effect.failCause(cause),
+    ),
+  );
+}
+
+// An entry the cache will not serve again leaves the map at once. An
+// entry whose time to live is zero (a failure, a settled single
+// flight) is expired the moment it lands, but Cache keeps expired
+// entries until its capacity sweep, so they would otherwise sit in
+// memory for nothing. Cache.has removes an expired entry it finds and
+// nothing else: a fresh lookup that a writer's invalidate started
+// meanwhile is not the one this caller waited on, and stays.
+function purgeExpired<K, A, E>(
+  cache: Cache.Cache<K, A, E>,
+  key: K,
 ): Effect.Effect<void> {
-  return Exit.isSuccess(exit) || !Cause.hasInterrupts(exit.cause)
-    ? Cache.invalidate(cache, key)
-    : Effect.void;
+  return Effect.asVoid(Cache.has(cache, key));
 }
 
 // A get on a TTL cache: a success is served for its TTL, a failure is
@@ -63,9 +81,9 @@ export function getCached<K, A, E>(
   cache: Cache.Cache<K, A, E>,
   key: K,
 ): Effect.Effect<A, E> {
-  return Cache.get(cache, key).pipe(
+  return joined(cache, key).pipe(
     Effect.onExit((exit) =>
-      Exit.isSuccess(exit) ? Effect.void : dropped(cache, key, exit),
+      Exit.isSuccess(exit) ? Effect.void : purgeExpired(cache, key),
     ),
   );
 }
@@ -78,9 +96,7 @@ export function singleFlight<K, A, E>(
 ): (key: K) => Effect.Effect<A, E> {
   const cache = makeTtlCache(lookup, Duration.zero);
   return (key) =>
-    Cache.get(cache, key).pipe(
-      Effect.onExit((exit) => dropped(cache, key, exit)),
-    );
+    joined(cache, key).pipe(Effect.onExit(() => purgeExpired(cache, key)));
 }
 
 function makeCache<K, V>(

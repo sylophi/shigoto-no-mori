@@ -56,11 +56,21 @@ const isJsonValue = Schema.is(Schema.Json);
 // one failure into an answer the caller never receives.
 export const MAX_WIRE_FIELD_CHARS = 4_096;
 
-function bounded(value: unknown): unknown {
-  if (typeof value === "string" && value.length > MAX_WIRE_FIELD_CHARS) {
-    return `${value.slice(0, MAX_WIRE_FIELD_CHARS)}…`;
+// A string field is cut to the bound; a nested value rides only when
+// its JSON is within it (no catalogued error nests anything, and a
+// peer's rebuilt error could nest a great deal), else it is left out.
+function bounded(value: unknown): { keep: boolean; value: unknown } {
+  if (typeof value === "string")
+    return { keep: true, value: boundedText(value) };
+  if (typeof value !== "object" || value === null) return { keep: true, value };
+  try {
+    return {
+      keep: JSON.stringify(value).length <= MAX_WIRE_FIELD_CHARS,
+      value,
+    };
+  } catch {
+    return { keep: false, value };
   }
-  return value;
 }
 
 // The wire form of a typed error, or undefined for a plain Error, in
@@ -68,19 +78,34 @@ function bounded(value: unknown): unknown {
 // enumerable JSON-safe fields ride: an Effect tagged error's fields
 // are exactly that, and a WireError rebuilt on a hop in between (main
 // forwarding a peer's failure to the renderer) carries its fields the
-// same way. Top-level string fields are bounded; nested values are
-// carried as they are, since no catalogued error nests a string. The
-// message is not bounded here: every wire carries the full message
-// beside this shape, and rebuilds from that one (see rebuildWireError).
+// same way, each bounded (see bounded). The shape's own `message` is
+// bounded like a field: every wire carries the full message beside
+// this shape and rebuilds from that one (see rebuildWireError), so a
+// whole copy here would only double what a long stderr costs against
+// the device hub's frame cap. Nothing here throws: the encode runs
+// inside the catch blocks that answer a failed call, and an error it
+// cannot encode (a field too deep for the JSON check to walk) rides
+// as its tag and message alone.
 export function encodeWireError(error: unknown): WireErrorShape | undefined {
   const tag = errorTagOf(error);
   if (tag === undefined) return undefined;
   const fields: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(error as object)) {
-    if (RESERVED.has(key) || !isJsonValue(value)) continue;
-    fields[key] = bounded(value);
+  try {
+    for (const [key, value] of Object.entries(error as object)) {
+      if (RESERVED.has(key) || !isJsonValue(value)) continue;
+      const field = bounded(value);
+      if (field.keep) fields[key] = field.value;
+    }
+  } catch {
+    return { _tag: tag, message: boundedText(errorMessageOf(error)) };
   }
-  return { ...fields, _tag: tag, message: errorMessageOf(error) };
+  return { ...fields, _tag: tag, message: boundedText(errorMessageOf(error)) };
+}
+
+function boundedText(text: string): string {
+  return text.length > MAX_WIRE_FIELD_CHARS
+    ? `${text.slice(0, MAX_WIRE_FIELD_CHARS)}…`
+    : text;
 }
 
 // The calling side's one rebuild path: the shape's tag and fields with

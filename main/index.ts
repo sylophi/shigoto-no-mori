@@ -39,6 +39,7 @@ import {
   startMirrorEngine,
   stopMirrorEngine,
 } from "./ipc/handlers";
+import { PortForwardEngine } from "./ipc/modules/portForward";
 import { clerkPublishableKey, retryParkedSignOut } from "./ipc/modules/account";
 import { buildAppMenu } from "./electron/menu";
 import {
@@ -66,7 +67,7 @@ import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktre
 import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
 import { killAllCli, cliChildCount } from "./electron/cliRunner";
-import { installHostRuntime } from "@host/runtime";
+import { hostServiceOrNull, installHostRuntime } from "@host/runtime";
 import { runtime } from "./runtime";
 import { applyUserShellPath } from "./core/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
@@ -575,6 +576,9 @@ app.on("before-quit", (event) => {
     // so a CLI run that starts now reads "not running".
     stopControlHost();
     stopMirrorEngine();
+    // The forwards close over the direct sessions they ride, so they
+    // go before those sessions do.
+    hostServiceOrNull(PortForwardEngine)?.stopAll();
     void stopHubConnection();
     void stopDirectHost();
     void runtime.dispose().catch(() => undefined);

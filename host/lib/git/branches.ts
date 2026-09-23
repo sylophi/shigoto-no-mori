@@ -134,7 +134,8 @@ export const createLocalBranchEffect = Effect.fn("branches.createLocalBranch")(
     if (track) args.push("--track");
     args.push("--", name);
     if (base) args.push(base);
-    yield* runEffect(projectPath, args);
+    // The ref and its upstream config are two writes: whole, or not.
+    yield* Effect.uninterruptible(runEffect(projectPath, args));
   },
 );
 
@@ -148,11 +149,15 @@ export function createLocalBranch(
 
 // Rename any local branch (not necessarily the current one). `git branch
 // -m <old> <new>` works even if `old` is checked out in a worktree. Git
-// updates that worktree's HEAD to the new name.
+// updates that worktree's HEAD to the new name. Not interruptible, for
+// renameBranch's reason: the ref, every worktree's HEAD on it and the
+// config section are separate writes.
 export const renameAnyLocalBranchEffect = Effect.fn(
   "branches.renameAnyLocalBranch",
 )(function* (projectPath: string, oldName: string, newName: string) {
-  yield* runEffect(projectPath, ["branch", "-m", "--", oldName, newName]);
+  yield* Effect.uninterruptible(
+    runEffect(projectPath, ["branch", "-m", "--", oldName, newName]),
+  );
 });
 
 // Delete a local branch. Without `force` this is git's safe delete
@@ -167,12 +172,9 @@ export const deleteAnyLocalBranchEffect: (
 ) => Effect.Effect<void, GitFailure | BranchNotMerged> = Effect.fn(
   "branches.deleteAnyLocalBranch",
 )(function* (projectPath: string, name: string, force: boolean) {
-  yield* runEffect(projectPath, [
-    "branch",
-    force ? "-D" : "-d",
-    "--",
-    name,
-  ]).pipe(
+  yield* Effect.uninterruptible(
+    runEffect(projectPath, ["branch", force ? "-D" : "-d", "--", name]),
+  ).pipe(
     // git's stderr wording is stable here because core.ts pins LC_ALL=C.
     Effect.catchIf(
       (error) =>

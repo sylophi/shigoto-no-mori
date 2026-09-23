@@ -369,20 +369,31 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
     },
   );
 
+  let stopping: Promise<void> | null = null;
+  const stopNow = async (): Promise<void> => {
+    if (fiber === null && status.phase === "stopped") return;
+    const running = fiber;
+    fiber = null;
+    if (running !== null) await runtime.runPromise(Fiber.interrupt(running));
+    // A start() that landed during the interrupt owns the status now.
+    if (fiber !== null) return;
+    reportConnection(null);
+    setStatus({ phase: "stopped" });
+  };
+
   return {
     start(): void {
       if (fiber !== null) return;
       fiber = runtime.runFork(supervise);
     },
-    async stop(): Promise<void> {
-      if (fiber === null && status.phase === "stopped") return;
-      const running = fiber;
-      fiber = null;
-      if (running !== null) await runtime.runPromise(Fiber.interrupt(running));
-      // A start() that landed during the interrupt owns the status now.
-      if (fiber !== null) return;
-      reportConnection(null);
-      setStatus({ phase: "stopped" });
+    stop(): Promise<void> {
+      // A stop while one is in flight waits on that one, so every
+      // caller's promise resolves once the loop's fiber is gone and
+      // "stopped" is reported once.
+      stopping ??= stopNow().finally(() => {
+        stopping = null;
+      });
+      return stopping;
     },
     status: () => status,
   };

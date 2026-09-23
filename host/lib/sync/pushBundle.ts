@@ -116,14 +116,21 @@ type PushBundlePeer = Pick<
   "pushStart" | "pushChunk" | "pushFinish"
 >;
 
-// The bundle is built into a temp dir this fiber owns (scopedFiles.ts),
-// gone the moment the push ends however it ended. The peer's half of
-// the push lives in its own registry, swept there if this side leaves
-// between the start and the finish.
-export const pushBundle = (
+// The push in two steps: the bundle is built into a temp dir this
+// fiber owns (scopedFiles.ts), gone the moment the staging ends
+// however it ended, and every chunk is sent; then the finish, which
+// the peer answers by unpacking the bundle under refs/shigomori/. The
+// finish is handed back rather than run here so a caller can run it
+// inside the same uninterruptible step as the landing that consumes
+// (and sweeps) what it unpacked: with the two apart, a caller leaving
+// between them would leave the unpacked ref on the peer, where a
+// later transfer of a branch nested under that name fails on the ref
+// name clash. The peer's half of a push left staged lives in its own
+// registry, swept there if this side never finishes it.
+export const stageBundle = (
   peer: PushBundlePeer,
   input: PushBundleInput,
-): Effect.Effect<Fetched, unknown> =>
+): Effect.Effect<Effect.Effect<Fetched, unknown>, unknown> =>
   Effect.scoped(
     Effect.gen(function* () {
       const dir = yield* scopedTempDir("sm-sync-push-");
@@ -146,7 +153,7 @@ export const pushBundle = (
           }),
         ),
       );
-      return yield* hostAttempt(() =>
+      return hostAttempt(() =>
         peer.pushFinish({
           transferId,
           refspecs: input.refs.map(landingRefspec),
@@ -154,6 +161,13 @@ export const pushBundle = (
       );
     }),
   );
+
+// The two steps as one, for a caller with no landing of its own.
+export const pushBundle = (
+  peer: PushBundlePeer,
+  input: PushBundleInput,
+): Effect.Effect<Fetched, unknown> =>
+  Effect.flatMap(stageBundle(peer, input), (finish) => finish);
 
 export function pushBundleToPeer(
   peer: PushBundlePeer,

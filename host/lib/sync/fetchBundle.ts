@@ -4,7 +4,7 @@
 // the sync orchestration (slice C); no UI here.
 import type { FileHandle } from "node:fs/promises";
 import { join } from "node:path";
-import { Cause, Effect, Exit, Option, Schema } from "effect";
+import { Cause, Duration, Effect, Exit, Option, Schema } from "effect";
 import {
   SyncBundleStartResultSchema,
   type syncContract,
@@ -16,6 +16,9 @@ import { findProject } from "@host/lib/projects";
 import { hostAttempt } from "@host/runtime";
 import { coalescedProgress, pumpChunks } from "./chunkWindow";
 import { scopedFile, scopedTempDir } from "./scopedFiles";
+
+// How long a failed fetch waits for the peer to acknowledge its abort.
+const ABORT_ANSWER_MS = Duration.seconds(10);
 
 export interface FetchBundleInput {
   // The project id on the PEER (ids differ per device registry;
@@ -201,9 +204,15 @@ export const fetchBundle = (
                 )
                 .catch(() => {});
             if (Exit.isSuccess(exit)) return Effect.void;
+            // A finalizer cannot be interrupted, so the wait for the
+            // peer's answer is bounded: a peer that hangs must not
+            // hold this fiber past the failure it is already reporting.
             return Cause.hasInterrupts(exit.cause)
               ? Effect.sync(() => void abort())
-              : Effect.promise(abort);
+              : Effect.promise(abort).pipe(
+                  Effect.timeoutOption(ABORT_ANSWER_MS),
+                  Effect.asVoid,
+                );
           },
         );
         const start = yield* hostAttempt(() => pendingStart);

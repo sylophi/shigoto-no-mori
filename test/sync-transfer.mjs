@@ -990,6 +990,83 @@ async function main() {
       "a caller that leaves during the landing gets the landing whole with its receipt, and a mirror start on it still opens its session",
     );
 
+    // A start whose session cannot open: the engine refuses, so the
+    // landing is rolled back (the worktree, its branch, its incoming
+    // ref) and the receipt that said it landed goes with it, so no
+    // teardown can act on a copy that is gone. The start fails with
+    // the engine's own words.
+    {
+      const rollPath = join(sandbox, "wt-roll");
+      await git(sourceRepo, [
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        "feature-roll",
+        rollPath,
+      ]);
+      writeFileSync(join(rollPath, "roll.txt"), "rolled back\n");
+      await git(rollPath, ["add", "-A"]);
+      await git(rollPath, ["commit", "-qm", "roll"]);
+      const refusing = {
+        status: () => "running",
+        sessions: () => [],
+        create: () => Promise.reject(new Error("the engine says no")),
+        recreate: () => Promise.reject(new Error("not in this check")),
+        terminate: async () => {},
+        pause: async () => {},
+        resume: async () => {},
+        gitStatus: () => undefined,
+        history: () => [],
+        noteEvent: () => {},
+        forgetHistory: () => {},
+      };
+      services.mirror = Layer.succeed(MirrorEngine, refusing);
+      await provide();
+      try {
+        const sourceWorktreeId = worktreeIdFromPath(rollPath);
+        await assert.rejects(
+          mirrorHandlers.start(
+            {
+              sourceDeviceId: "A",
+              sourceProjectId,
+              sourceWorktreeId,
+              sourceIdentity: identity,
+              branch: "feature-roll",
+              ignoreMode: "gitignored",
+              ignores: [],
+            },
+            pullCtx,
+          ),
+          /the engine says no/,
+        );
+        assert.equal(
+          await refExists(targetRepo, "refs/heads/feature-roll"),
+          false,
+          "the rolled-back start kept its branch",
+        );
+        assert.equal(
+          await refExists(targetRepo, "refs/shigomori/incoming/feature-roll"),
+          false,
+          "the rolled-back start kept its incoming ref",
+        );
+        await assert.rejects(
+          syncHandlers.teardownSource(
+            { sourceDeviceId: "A", sourceProjectId, sourceWorktreeId },
+            pullCtx,
+          ),
+          /No pull recorded/,
+        );
+        assert.equal(existsSync(rollPath), true, "the source was torn down");
+      } finally {
+        delete services.mirror;
+        await provide();
+      }
+    }
+    ok(
+      "a mirror start whose session cannot open rolls its landing back, receipt included, and fails with the engine's words",
+    );
+
     // ---- The transplant (step 9): the pull above plus tearing the
     // source worktree down on A through its wire-served
     // worktrees:delete, gated by the pull's receipt. Fresh worktrees
@@ -1281,6 +1358,110 @@ async function main() {
     assert.equal(existsSync(wt7Path), false);
     ok(
       "sendWorktree: a dirty worktree lands on the peer with its commit and its uncommitted work, a repeat is refused by the peer, and teardownSent removes the local source only while it still matches what was sent",
+    );
+
+    // The mirror turned around, left during the peer's landing: the
+    // push's finish and the landing are one step, so the copy lands,
+    // the receipt is kept, and the session opens for the caller that
+    // left (mirror:startTo builds on the send the way start builds on
+    // the pull).
+    {
+      const toPath = join(sandbox, "wt-to");
+      await git(sourceRepo, [
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        "feature-to",
+        toPath,
+      ]);
+      writeFileSync(join(toPath, "to.txt"), "sent, left mid-landing\n");
+      await git(toPath, ["add", "-A"]);
+      await git(toPath, ["commit", "-qm", "to"]);
+      const leaving = new AbortController();
+      const created = [];
+      const engine = {
+        status: () => "running",
+        sessions: () => [],
+        create: async (input) => {
+          created.push(input);
+          return "opened-after-leaving-to";
+        },
+        recreate: () => Promise.reject(new Error("not in this check")),
+        terminate: async () => {},
+        pause: async () => {},
+        resume: async () => {},
+        gitStatus: () => undefined,
+        history: () => [],
+        noteEvent: () => {},
+        forgetHistory: () => {},
+      };
+      services.mirror = Layer.succeed(MirrorEngine, engine);
+      await provide();
+      try {
+        const toWorktreeId = worktreeIdFromPath(toPath);
+        const left = await mirrorHandlers
+          .startTo(
+            {
+              targetDeviceId: "A",
+              projectId: sourceProjectId,
+              worktreeId: toWorktreeId,
+              ignoreMode: "gitignored",
+              ignores: [],
+            },
+            {
+              signal: leaving.signal,
+              notifier: () => (frame) => {
+                if (frame.step === "create") leaving.abort();
+              },
+            },
+          )
+          .then(
+            () => "resolved",
+            () => "rejected",
+          );
+        assert.equal(
+          left,
+          "rejected",
+          "a startTo left during its landing resolved",
+        );
+        assert.equal(
+          await refExists(targetRepo, "refs/heads/feature-to"),
+          true,
+          "the peer's landing did not finish for the caller that left",
+        );
+        assert.equal(
+          await refExists(targetRepo, "refs/shigomori/incoming/feature-to"),
+          false,
+          "the peer kept the incoming ref the landing consumes",
+        );
+        assert.equal(
+          created.length,
+          1,
+          "the session did not open for the caller that left",
+        );
+        assert.equal(created[0].localWorktreeId, toWorktreeId);
+        // The receipt was kept with the landing: teardownSent reads it.
+        await syncHandlers.teardownSent(
+          {
+            targetDeviceId: "A",
+            projectId: sourceProjectId,
+            worktreeId: toWorktreeId,
+          },
+          pullCtx,
+        );
+        assert.equal(
+          existsSync(toPath),
+          false,
+          "teardownSent did not remove the sent source",
+        );
+      } finally {
+        delete services.mirror;
+        await provide();
+      }
+    }
+    ok(
+      "a mirror started to a peer, left during the peer's landing, lands whole with its receipt and still opens its session",
     );
   } finally {
     // Reverse creation order via the shared tracker: the direct

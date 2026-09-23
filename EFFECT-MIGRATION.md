@@ -733,9 +733,10 @@ Deviations:
   still fork with `runFork` behind a runtime seam that the Layer
   supplies; a throw from an owner callback inside a fiber is contained
   and logged, since a defect in a forked fiber is reported nowhere.
-- `createLimiter` (`shared/util/limit.ts`) stays for the four
-  call-ordered lifecycles (cloudflared reconciles, the socket host's
-  accept path, the hub connection, the ws client transport). Effect's
+- `createLimiter` (`shared/util/limit.ts`) stays for the call-ordered
+  lifecycles (cloudflared reconciles, the socket host's start, stop
+  and refresh, the hub connection, the ws client transport) and the
+  global config's write lock. Effect's
   `Semaphore` wakes waiters in scheduler order, not arrival order, and
   the cloudflared proof caught the reconcile-order regression when it
   was swapped in.

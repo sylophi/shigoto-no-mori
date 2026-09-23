@@ -10,9 +10,11 @@
 // (main/runtime.ts).
 import { join } from "node:path";
 import {
+  Cause,
   Context,
   Deferred,
   Effect,
+  Exit,
   Fiber,
   Layer,
   Schedule,
@@ -212,7 +214,15 @@ export class MirrorGateway extends Context.Service<
             ),
           ),
         ),
-        Effect.ensuring(Deferred.succeed(tried, undefined)),
+        // Settled on an attempt's own outcome, bound or not. An
+        // interrupt (a stop during the first bind) settles nothing, so a
+        // start still waiting on it never starts the daemon after the
+        // stop that ended the gateway.
+        Effect.onExit((exit) =>
+          Exit.isFailure(exit) && Cause.hasInterrupts(exit.cause)
+            ? Effect.void
+            : Deferred.succeed(tried, undefined),
+        ),
         Effect.retry(Schedule.spaced(GATEWAY_RETRY_MS)),
         Effect.forkScoped,
       );

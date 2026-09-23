@@ -8,7 +8,14 @@
 //
 // Runs under test/lib/register-ts-alias.mjs. Run: pnpm test ttl-cache.
 import assert from "node:assert/strict";
-import { ttlMapCache, ttlValueCache } from "@host/lib/util/ttlCache";
+import { Effect, Fiber } from "effect";
+import {
+  getCached,
+  makeTtlCache,
+  singleFlight,
+  ttlMapCache,
+  ttlValueCache,
+} from "@host/lib/util/ttlCache";
 import { delay, makeProof } from "./lib/checkKit.mjs";
 
 const { check, done, fail } = makeProof("ttl-cache proof");
@@ -171,6 +178,59 @@ async function main() {
         await cache.get(),
         "post-write",
         "the old value was re-cached",
+      );
+    },
+  );
+
+  await check(
+    "single flight and getCached: one lookup per burst, nothing settled served again, and a get that lands on a lookup being torn down starts afresh",
+    async () => {
+      let lookups = 0;
+      let refusing = false;
+      // A lookup that takes a while to wind down once interrupted (the
+      // first stretch cannot be interrupted, as a directory read in
+      // flight cannot), then answers.
+      const lookup = (key) =>
+        Effect.gen(function* () {
+          lookups += 1;
+          yield* Effect.uninterruptible(Effect.sleep("40 millis"));
+          yield* Effect.sleep("20 millis");
+          if (refusing) return yield* Effect.fail(new Error(`no ${key}`));
+          return `${key}#${lookups}`;
+        });
+      const flight = singleFlight(lookup);
+      // A burst shares one lookup; the next caller after it looks up
+      // again, since a settled single flight is never served twice.
+      const [a, b] = await Promise.all([
+        Effect.runPromise(flight("k")),
+        Effect.runPromise(flight("k")),
+      ]);
+      assert.equal(a, "k#1");
+      assert.equal(b, "k#1");
+      assert.equal(lookups, 1, "a burst spawned two lookups");
+      assert.equal(await Effect.runPromise(flight("k")), "k#2");
+      // The lone caller leaves; the lookup it started is being torn
+      // down (40 ms of it cannot be interrupted). A caller arriving in
+      // that window is not handed the interruption: it looks up anew.
+      const abandoned = Effect.runFork(flight("k"));
+      await delay(5);
+      const interrupting = Effect.runPromise(Fiber.interrupt(abandoned));
+      await delay(5);
+      const late = await Effect.runPromise(flight("k"));
+      await interrupting;
+      assert.equal(late, "k#4", `the late caller got ${late}`);
+      assert.equal(lookups, 4);
+      // getCached on a TTL cache: a failure is handed out and dropped,
+      // so the next get looks up again rather than serving it.
+      const cache = makeTtlCache(lookup, "1 minute");
+      refusing = true;
+      await assert.rejects(Effect.runPromise(getCached(cache, "k")), /no k/);
+      refusing = false;
+      assert.equal(await Effect.runPromise(getCached(cache, "k")), "k#6");
+      assert.equal(
+        await Effect.runPromise(getCached(cache, "k")),
+        "k#6",
+        "a success inside its TTL was not served",
       );
     },
   );

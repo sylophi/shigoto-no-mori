@@ -94,7 +94,7 @@ import {
   findProjectOrThrow,
 } from "@host/lib/projects";
 import { fetchBundle } from "@host/lib/sync/fetchBundle";
-import { pushBundle } from "@host/lib/sync/pushBundle";
+import { stageBundle } from "@host/lib/sync/pushBundle";
 import { scopedFile, scopedTempDir } from "@host/lib/sync/scopedFiles";
 import { hostAttempt, hostHandler } from "@host/runtime";
 import { deleteWorktree, notifierFor } from "./worktrees";
@@ -1077,22 +1077,29 @@ export const pullWorktreeThen = <S>(
             progress,
           );
           const captureCommit = capture.captured ? capture.commit : undefined;
-          remember(
-            pullReceipts,
-            receiptKey({ sourceDeviceId, sourceProjectId, sourceWorktreeId }),
-            {
-              targetProjectId: project.id,
-              branch,
-              branchTip,
-              captured: capture.captured,
-              dirtyApplied: landed.dirtyApplied,
-              captureTree:
-                captureCommit === undefined
-                  ? undefined
-                  : yield* treeOfEffect(project.path, captureCommit),
-            },
+          const key = receiptKey({
+            sourceDeviceId,
+            sourceProjectId,
+            sourceWorktreeId,
+          });
+          remember(pullReceipts, key, {
+            targetProjectId: project.id,
+            branch,
+            branchTip,
+            captured: capture.captured,
+            dirtyApplied: landed.dirtyApplied,
+            captureTree:
+              captureCommit === undefined
+                ? undefined
+                : yield* treeOfEffect(project.path, captureCommit),
+          });
+          // A continuation that fails has rolled the landing back (see
+          // mirror.ts openSession), so the receipt that says it landed
+          // goes with it: a teardown must not act on a copy that is gone.
+          const continued = yield* withinLanding(landed.worktree).pipe(
+            Effect.tapError(() => Effect.sync(() => pullReceipts.delete(key))),
           );
-          return { ...landed, landing: yield* withinLanding(landed.worktree) };
+          return { ...landed, landing: continued };
         }),
       );
 
@@ -1277,8 +1284,12 @@ export const sendWorktreeThen = <S>(
       ...(tipIsThere ? [] : [branchRef]),
       ...(captured ? [dirtyRef] : []),
     ];
+    // The chunks cross interruptibly; the finish (the peer's unpack)
+    // waits for the landing's step below, which consumes what it
+    // unpacks.
+    let finishPush: Effect.Effect<unknown, unknown> = Effect.void;
     if (sendRefs.length > 0) {
-      yield* pushBundle(peer, {
+      finishPush = yield* stageBundle(peer, {
         localProject: project,
         peerProjectId,
         refs: sendRefs,
@@ -1290,16 +1301,20 @@ export const sendWorktreeThen = <S>(
       progress({ step: "transfer" });
     }
 
-    // 5. The landing, on the peer, and the receipt the teardown reads:
-    // one uninterruptible step, for the pull's reason. A caller that
-    // leaves while the peer creates the copy waits for the answer; the
-    // peer finishes the copy either way, and only with the answer can
-    // the send be finished (or a start on it rolled back) rather than
-    // the copy left behind unknown. The caller's own step (see
-    // sendWorktreeThen) closes it, once the apply is reported.
-    progress({ step: "create" });
+    // 5. The push's finish, then the landing on the peer, then the
+    // receipt the teardown reads: one uninterruptible step, for the
+    // pull's reason, and because the landing is what sweeps the ref
+    // the finish unpacks (a caller leaving between the two would leave
+    // that ref on the peer). A caller that leaves while the peer
+    // creates the copy waits for the answer; the peer finishes the copy
+    // either way, and only with the answer can the send be finished (or
+    // a start on it rolled back) rather than the copy left behind
+    // unknown. The caller's own step (see sendWorktreeThen) closes it,
+    // once the apply is reported.
     const { landed, landing } = yield* Effect.uninterruptible(
       Effect.gen(function* () {
+        yield* finishPush;
+        progress({ step: "create" });
         const answered = yield* fromPeer(
           hostAttempt(() =>
             peer.landWorktree({
@@ -1319,25 +1334,25 @@ export const sendWorktreeThen = <S>(
             Schema.decodeUnknownEffect(SyncLandWorktreeResultSchema),
           ),
         );
-        remember(
-          sendReceipts,
-          sentKey({ targetDeviceId, projectId, worktreeId }),
-          {
-            branch,
-            branchTip,
-            captured,
-            dirtyApplied: answered.dirtyApplied,
-            captureTree:
-              captureCommit === undefined
-                ? undefined
-                : yield* treeOfEffect(project.path, captureCommit),
-          },
-        );
+        const key = sentKey({ targetDeviceId, projectId, worktreeId });
+        remember(sendReceipts, key, {
+          branch,
+          branchTip,
+          captured,
+          dirtyApplied: answered.dirtyApplied,
+          captureTree:
+            captureCommit === undefined
+              ? undefined
+              : yield* treeOfEffect(project.path, captureCommit),
+        });
         progress({ step: "apply" });
-        return {
-          landed: answered,
-          landing: yield* withinLanding(answered.worktree, worktree),
-        };
+        const continued = yield* withinLanding(
+          answered.worktree,
+          worktree,
+        ).pipe(
+          Effect.tapError(() => Effect.sync(() => sendReceipts.delete(key))),
+        );
+        return { landed: answered, landing: continued };
       }),
     );
 

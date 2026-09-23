@@ -16,40 +16,71 @@ export type CodecIn<S> = S extends AnyCodec ? S["Encoded"] : never;
 // a spread that writes key by key) would then make its value the
 // object's prototype. Dropped before any decode, at every depth. The
 // input is copied only where such a key exists.
-function dropProtoKeys(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    let copy: unknown[] | null = null;
-    for (let i = 0; i < value.length; i += 1) {
-      const item = dropProtoKeys(value[i]);
-      if (item !== value[i] && copy === null) copy = value.slice();
-      if (copy !== null) copy[i] = item;
-    }
-    return copy ?? value;
-  }
-  if (typeof value !== "object" || value === null) return value;
-  if (Object.getPrototypeOf(value) !== Object.prototype) return value;
-  const record = value as Record<string, unknown>;
-  let copy: Record<string, unknown> | null = null;
-  for (const key of Object.keys(record)) {
-    if (key === "__proto__") {
-      copy ??= { ...record };
-      delete copy[key];
+function dropProtoKeys(root: unknown): unknown {
+  // Iterative, with an explicit stack: a hostile frame can nest deeper
+  // than the call stack allows, and a walk that overflowed would drop
+  // a frame whose call then waits forever.
+  const copies = new Map<object, object>();
+  const stack: unknown[] = [root];
+  const order: object[] = [];
+  while (stack.length > 0) {
+    const value = stack.pop();
+    if (typeof value !== "object" || value === null) continue;
+    if (copies.has(value)) continue;
+    if (Array.isArray(value)) {
+      copies.set(value, value);
+      order.push(value);
+      for (const item of value) stack.push(item);
       continue;
     }
-    const item = dropProtoKeys(record[key]);
-    if (item !== record[key]) {
-      copy ??= { ...record };
-      copy[key] = item;
-    }
+    if (Object.getPrototypeOf(value) !== Object.prototype) continue;
+    copies.set(value, value);
+    order.push(value);
+    for (const item of Object.values(value)) stack.push(item);
   }
-  return copy ?? value;
+  // Children before parents, so a parent sees its children's copies.
+  for (let i = order.length - 1; i >= 0; i -= 1) {
+    const value = order[i] as object;
+    if (Array.isArray(value)) {
+      let copy: unknown[] | null = null;
+      for (let j = 0; j < value.length; j += 1) {
+        const item = replacement(copies, value[j]);
+        if (item !== value[j] && copy === null) copy = value.slice();
+        if (copy !== null) copy[j] = item;
+      }
+      if (copy !== null) copies.set(value, copy);
+      continue;
+    }
+    const record = value as Record<string, unknown>;
+    let copy: Record<string, unknown> | null = null;
+    for (const key of Object.keys(record)) {
+      if (key === "__proto__") {
+        copy ??= { ...record };
+        delete copy[key];
+        continue;
+      }
+      const item = replacement(copies, record[key]);
+      if (item !== record[key]) {
+        copy ??= { ...record };
+        copy[key] = item;
+      }
+    }
+    if (copy !== null) copies.set(value, copy);
+  }
+  return replacement(copies, root);
+}
+
+function replacement(copies: Map<object, object>, value: unknown): unknown {
+  if (typeof value !== "object" || value === null) return value;
+  return copies.get(value) ?? value;
 }
 
 // The walk is a visit of every node, so it runs once per value: a
 // value it produced, or a parse of text that cannot spell the key, is
-// remembered here and passed through by later decodes (a frame decoded
-// on the wire and its input decoded again by the registrar, a hub
-// envelope and the frame inside it).
+// remembered here and passed through by later decodes of that same
+// object (a hub envelope's frame decoded twice). A nested value handed
+// on to another decode (a frame's input at the registrar) is walked
+// again, since only the value the walk was asked about is remembered.
 const protoFree = new WeakSet<object>();
 
 function withoutProtoKeys(value: unknown): unknown {
