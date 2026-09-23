@@ -342,15 +342,19 @@ function hostHandlersFor(
     "portPool:isActive": () => true,
     "globalConfig:read": () => labGlobalConfig,
     "globalConfig:writeDeviceSettings": () => undefined,
-    // Thinkpad has an update staged, so its Settings section's
-    // restart-to-update button has something to show. Everyone else is
-    // up to date.
+    // The devices ?updates poses (Thinkpad alone by default) have an
+    // update staged, so their Settings sections' restart-to-update
+    // buttons have something to show. Installing stands in for the
+    // restart into the new build: the device reports up to date.
     "updater:get": () =>
-      forest.deviceId === THINKPAD_ID
+      stagedUpdates.has(forest.deviceId)
         ? { kind: "ready", version: "2.1.0", releaseDate: null }
         : { kind: "idle" },
     "updater:check": () => undefined,
-    "updater:install": () => undefined,
+    "updater:install": () => {
+      stagedUpdates.delete(forest.deviceId);
+      emit("updater:state", { kind: "idle" });
+    },
     "launchers:detect": () => LAB_DETECTED,
     "launchers:forProject": () => ({
       entries: [
@@ -543,23 +547,23 @@ const LAB_TREE: Record<
 //
 // One lab-wide mirror world, since a session on Studio Mac and the
 // stream Thinkpad serves for it are two views of the same fact. Each
-// forest's wire is remembered so mirror:changed reaches the local page
-// through its own wire and a peer's page through the client wire's
-// peer push, exactly as the real bridge delivers it.
+// forest's emitter is remembered so mirror:changed reaches every page,
+// a peer's riding the client wire's peer push (installLabBridge).
 const labMirrors: {
   sessions: MirrorSession[];
   serving: (MirrorServing & { deviceId: string })[];
   history: Record<string, MirrorEvent[]>;
 } = { sessions: [], serving: [], history: {} };
 const mirrorWires = new Map<string, FixtureWire["emit"]>();
-let pushFromPeer: (deviceId: string, channel: string) => void = () => {};
+let pushFromPeer: (
+  deviceId: string,
+  channel: string,
+  payload: unknown,
+) => void = () => {};
 let labSessionSerial = 1;
 
 function mirrorChanged() {
-  for (const [deviceId, emit] of mirrorWires) {
-    if (deviceId === LOCAL_DEVICE_ID) emit("mirror:changed", undefined);
-    else pushFromPeer(deviceId, "mirror:changed");
-  }
+  for (const emit of mirrorWires.values()) emit("mirror:changed", undefined);
 }
 
 function noteMirrorEvent(
@@ -906,9 +910,12 @@ const PEER_KEYS: Record<string, string> = {
 };
 const roster = new Set<string>();
 const directSessions = new Set<string>();
+// ?updates=sm,tp,mini: the devices holding a staged update.
+const stagedUpdates = new Set<string>();
 
 function initPresence(): void {
-  const posed = new URLSearchParams(location.search).get("peers");
+  const pose = new URLSearchParams(location.search);
+  const posed = pose.get("peers");
   const entries = (
     posed ?? (WEB_SHELL ? "sm:connected,tp:connected" : "tp:connected")
   ).split(",");
@@ -918,6 +925,10 @@ function initPresence(): void {
     if (id === undefined) continue;
     if (state === "connected" || state === "online") roster.add(id);
     if (state === "connected") directSessions.add(id);
+  }
+  for (const key of (pose.get("updates") ?? "tp").split(",")) {
+    const id = PEER_KEYS[key.trim()];
+    if (id !== undefined) stagedUpdates.add(id);
   }
 }
 let socketPhase: HubStatus["socket"] = {
@@ -941,9 +952,11 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
   WEB_SHELL = opts.webShell === true;
   initPresence();
   // Remote hosts: one fixture wire per device, reached only through
-  // hub:invokePeer exactly like the real hub bridge. Under the web
-  // shell every machine forest (Studio Mac included) is a peer of the
-  // browser device, while on desktop Studio Mac is the local host.
+  // hub:invokePeer exactly like the real hub bridge, and broadcasting
+  // the way it delivers a peer's: as a peer push on the client wire.
+  // Under the web shell every machine forest (Studio Mac included) is
+  // a peer of the browser device, while on desktop Studio Mac is the
+  // local host.
   const selfDeviceId = WEB_SHELL ? WEB_DEVICE_ID : LOCAL_DEVICE_ID;
   const peerWires = new Map<string, FixtureWire>();
   for (const forest of Object.values(forests)) {
@@ -952,7 +965,10 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
       forest.deviceId,
       createFixtureWire(
         "host",
-        (emit) => hostHandlersFor(forest, emit),
+        () =>
+          hostHandlersFor(forest, (channel, payload) =>
+            pushFromPeer(forest.deviceId, channel, payload),
+          ),
         forest.deviceId,
       ),
     );
@@ -1112,8 +1128,8 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
   };
 
   const client = createFixtureWire("client", () => clientHandlers, "client");
-  pushFromPeer = (deviceId, channel) =>
-    client.emit("hub:peerPush", { deviceId, channel, payload: undefined });
+  pushFromPeer = (deviceId, channel, payload) =>
+    client.emit("hub:peerPush", { deviceId, channel, payload });
 
   const api = {
     deviceId: selfDeviceId,
