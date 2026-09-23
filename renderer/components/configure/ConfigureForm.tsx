@@ -175,7 +175,7 @@ export function ConfigureForm({
   return (
     <>
       <div className={PAGE_BODY}>
-        <div className="flex max-w-3xl flex-col gap-10">
+        <div className="flex flex-col gap-10">
           <section className="space-y-3">
             <SectionHeading className="mb-1">Location</SectionHeading>
             <div className="flex font-mono text-sm select-text">

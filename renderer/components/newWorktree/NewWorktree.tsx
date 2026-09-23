@@ -89,7 +89,7 @@ export function NewWorktree() {
     <ProjectDevicePage title="New worktree">
       {(scoped, tab) => (
         <div className={PAGE_BODY}>
-          <div className="flex max-w-xl flex-col gap-7">
+          <div className="flex flex-col gap-7">
             <NewWorktreeForm
               projectId={scoped.id}
               project={scoped}

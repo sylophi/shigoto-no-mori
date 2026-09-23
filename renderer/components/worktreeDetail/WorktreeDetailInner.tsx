@@ -227,7 +227,7 @@ export function WorktreeDetailInner({
         )}
         aria-disabled={locked}
       >
-        <div className="flex max-w-4xl flex-col gap-10 phone:gap-8">
+        <div className="flex flex-col gap-10 phone:gap-8">
           <LaunchSection worktree={worktree} />
 
           <PullRequestSection worktree={worktree} />
