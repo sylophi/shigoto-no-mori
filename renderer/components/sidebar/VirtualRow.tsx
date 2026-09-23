@@ -7,7 +7,7 @@ import { ROW_LAYOUT, type InboxShelf, type SidebarRow } from "./sidebarRow";
 // grouped so VirtualRow's own props stay about positioning and hover.
 export interface RowHandlers {
   onToggle: (groupId: string) => void;
-  onToggleShelved: (projectId: string) => void;
+  onToggleShelved: (groupId: string) => void;
   onToggleShelf: (shelf: InboxShelf) => void;
   arrangeMode: boolean;
 }
@@ -64,6 +64,8 @@ function projectIdForRow(row: SidebarRow): string | null {
   if (row.kind === "inbox-worktree" || row.kind === "inbox-shelf") return null;
   // Remote rows report the group they were merged into, so hovering a
   // peer's worktree keeps its project header's actions alive.
-  if (row.kind === "remote-worktree") return row.groupId;
+  if (row.kind === "remote-worktree" || row.kind === "shelved-toggle") {
+    return row.groupId;
+  }
   return row.projectId;
 }

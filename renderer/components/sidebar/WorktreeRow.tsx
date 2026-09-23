@@ -25,18 +25,22 @@ interface WorktreeRowProps {
 export const WORKTREE_ROW_BUTTON =
   "group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-accent/60";
 
-// The two-line branch-over-name block both row flavors lead with.
+// The two-line branch-over-name block both row flavors lead with, faded
+// back for a shelved worktree.
 export function WorktreeRowLabel({
   worktree,
-  className,
   emphasized = false,
 }: {
   worktree: Worktree;
-  className?: string;
   emphasized?: boolean;
 }) {
   return (
-    <div className={cn("flex min-w-0 flex-1 flex-col", className)}>
+    <div
+      className={cn(
+        "flex min-w-0 flex-1 flex-col",
+        worktree.shelved && "opacity-60",
+      )}
+    >
       <span
         className={cn("truncate font-mono", emphasized && "font-medium")}
         title={worktree.detached ? "Detached HEAD (commit hash)" : undefined}
@@ -66,11 +70,7 @@ export function WorktreeRow({ worktree, mirror }: WorktreeRowProps) {
         isDeleting && "opacity-50",
       )}
     >
-      <WorktreeRowLabel
-        worktree={worktree}
-        className={worktree.shelved ? "opacity-60" : undefined}
-        emphasized={isSelected}
-      />
+      <WorktreeRowLabel worktree={worktree} emphasized={isSelected} />
       <RowTrailing
         worktree={worktree}
         activity={activity}

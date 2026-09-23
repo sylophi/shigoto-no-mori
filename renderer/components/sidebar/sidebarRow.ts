@@ -90,7 +90,9 @@ export type SidebarRow =
   | {
       kind: "shelved-toggle";
       key: string;
-      projectId: string;
+      // The shelf is the group's: a local project's, or a peer-only
+      // group's (remoteGroupId).
+      groupId: string;
       count: number;
       expanded: boolean;
     }
