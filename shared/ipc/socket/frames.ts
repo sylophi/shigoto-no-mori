@@ -19,6 +19,8 @@
 // chunks (WIRE_CHUNK_BYTES below) for flow control, and so an uplink
 // req carrying a chunk stays under the inbound cap.
 import { z } from "zod";
+import { errorTagOf } from "../../errorOf";
+import { WireErrorShapeSchema } from "../wireError";
 import { HANDSHAKE_NONCE_PATTERN } from "./proof";
 
 // One well-known default keeps the app listener and a client's connect
@@ -248,20 +250,26 @@ export const COMMAND_REFUSED_MESSAGE =
 // client role) when a res error carries COMMAND_REFUSED_CODE. The
 // message is preserved verbatim so every message-text matcher keeps
 // behaving as before.
+export const COMMAND_REFUSED_TAG = "CommandRefused";
+
 export class CommandRefusedError extends Error {
+  // The tag the wire codec encodes (shared/ipc/wireError.ts), so the
+  // refusal crosses a hop (main forwarding a peer's answer to the
+  // renderer) as a WireError carrying this tag.
+  readonly _tag = COMMAND_REFUSED_TAG;
   constructor(message: string) {
     super(message);
     this.name = "CommandRefusedError";
   }
 }
 
-// Matcher that survives Electron's IPC error serialization (which
-// flattens an error to its message text): the renderer behind the hub
-// bridge sees a plain Error carrying the refusal message, not the
-// instance minted in main, and an OLD peer sends the message with no
-// code at all. Either form means "ask that machine to allow commands".
+// Matcher for every form a refusal arrives in: the instance a client
+// role minted, the WireError a hop rebuilt from the tag, and the bare
+// message an OLD peer sends with no code or tag at all. Each means
+// "ask that machine to allow commands".
 export function isCommandRefusedError(error: unknown): boolean {
   if (error instanceof CommandRefusedError) return true;
+  if (errorTagOf(error) === COMMAND_REFUSED_TAG) return true;
   const message = error instanceof Error ? error.message : String(error);
   return message.includes(COMMAND_REFUSED_MESSAGE);
 }
@@ -273,12 +281,16 @@ export function isCommandRefusedError(error: unknown): boolean {
 // classification, ADDITIVE per the version-skew policy: an old peer
 // sends no code, and a reader treats absence as an unclassified
 // failure, falling back to the message text.
+// `error` is the typed form (shared/ipc/wireError.ts): the handler's
+// tag and fields, ADDITIVE the same way, so a matcher on the far side
+// reads the tag and an old peer that sends none is read by message.
 const ResErrFrameSchema = z.object({
   t: z.literal("res"),
   id: z.number().int(),
   ok: z.literal(false),
   message: z.string(),
   code: z.string().optional(),
+  error: WireErrorShapeSchema.optional(),
 });
 
 const PushFrameSchema = z.object({

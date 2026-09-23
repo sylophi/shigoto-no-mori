@@ -61,6 +61,7 @@ import {
   provisionDeviceTunnel,
   hubConnectInputs,
 } from "./modules/account";
+import { settleEnvelope } from "@shared/ipc/wireError";
 
 // Gates OUTPUT validation only. Input parsing in the shared registrar
 // is unconditional in every build. In dev we re-run handler results
@@ -121,7 +122,11 @@ function contextFor(sender: WebContents): HandlerContext {
 
 const electronServer: ServerTransport = {
   handle(channel, fn) {
-    ipcMain.handle(channel, (event, raw) => fn(contextFor(event.sender), raw));
+    // Resolves an envelope rather than rejecting, so a typed error's
+    // tag and fields reach the renderer (shared/ipc/wireError.ts).
+    ipcMain.handle(channel, (event, raw) =>
+      settleEnvelope(() => fn(contextFor(event.sender), raw)),
+    );
   },
   // Payloads arrive already parsed from the shared fan-out path.
   broadcastAll(channel, payload) {

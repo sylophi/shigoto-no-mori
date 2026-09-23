@@ -1,67 +1,125 @@
-// "Entity gone" errors: a project/worktree was deleted out from under a
+// The app's typed errors, and the matchers the renderer keys on.
+//
+// Every error that crosses a wire (Electron IPC, the LAN and direct
+// sockets, the hub broker, the control wire) is an Effect tagged error.
+// A transport encodes its `_tag` and fields beside the message
+// (shared/ipc/wireError.ts), and the far side rebuilds a WireError
+// carrying the same tag, so a matcher reads the tag on every wire
+// alike. The message stays for display and is built from the fields,
+// so wording can change without a matcher following along.
+//
+// The message-text fallbacks below exist for one reason: a peer on an
+// older app version sends message only. The version-skew policy keeps
+// both directions working until every device has moved, and the
+// fallbacks go when no supported peer version sends message-only
+// errors.
+import { Schema } from "effect";
+import { errorMessageOf, errorTagOf } from "./errorOf";
+
+// The class-free readers live in shared/errorOf.ts (the hub Worker
+// compiles the frame schemas that need them and must not load
+// effect); re-exported here so callers have one module to import.
+export {
+  errorCodeOf,
+  errorFieldOf,
+  errorMessageOf,
+  errorTagOf,
+} from "./errorOf";
+
+// "Entity gone": a project or worktree was deleted out from under a
 // call (worktree delete, project removal, nuke racing a renderer poll).
-// Electron's IPC serialization only preserves the message string, so the
-// renderer can recognize these solely by message text. Keeping the
-// constructors and the matcher in one module means main can't reword a
-// message without the matcher following along.
+export class UnknownProject extends Schema.TaggedError<UnknownProject>()(
+  "UnknownProject",
+  { projectId: Schema.String },
+) {
+  override get message(): string {
+    return `Unknown project: ${this.projectId}`;
+  }
+}
+
+export class UnknownWorktree extends Schema.TaggedError<UnknownWorktree>()(
+  "UnknownWorktree",
+  { worktreeId: Schema.String },
+) {
+  override get message(): string {
+    return `Unknown worktree: ${this.worktreeId}`;
+  }
+}
+
+export function unknownProjectError(projectId: string): UnknownProject {
+  return new UnknownProject({ projectId });
+}
+
+export function unknownWorktreeError(worktreeId: string): UnknownWorktree {
+  return new UnknownWorktree({ worktreeId });
+}
+
+const ENTITY_GONE_TAGS: ReadonlySet<string> = new Set([
+  UnknownProject.prototype._tag,
+  UnknownWorktree.prototype._tag,
+]);
 const ENTITY_GONE_PREFIXES = ["Unknown project:", "Unknown worktree:"];
 
-export function errorMessageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-// The machine-readable code an error carries, when it has one (a
-// ControlError, a Node errno). What a wire sends beside the message so
-// the far side keys on the code and not on the prose.
-export function errorCodeOf(error: unknown): string | undefined {
-  if (typeof error !== "object" || error === null || !("code" in error)) {
-    return undefined;
-  }
-  return typeof error.code === "string" ? error.code : undefined;
-}
-
-export function unknownProjectError(projectId: string): Error {
-  return new Error(`Unknown project: ${projectId}`);
-}
-
-export function unknownWorktreeError(worktreeId: string): Error {
-  return new Error(`Unknown worktree: ${worktreeId}`);
-}
-
-// Message-text match, so it works on every wire alike: the preload
-// transport strips Electron's "Error invoking remote method" wrapper
-// before a rejection reaches the renderer, and the socket transports
-// deliver the handler's message as-is.
 export function isEntityGoneError(error: unknown): boolean {
+  const tag = errorTagOf(error);
+  if (tag !== undefined) return ENTITY_GONE_TAGS.has(tag);
   const message = errorMessageOf(error);
   return ENTITY_GONE_PREFIXES.some((prefix) => message.includes(prefix));
 }
 
 // The hub bridge's rejection for a call on a peer it has no direct
-// session with (shared/hub/bridgeHandlers.ts requirePeer). Same
-// message-text contract: the renderer keeps a peer's page mounted
-// through a session blip, and every query under it then fails this
-// way until the keeper lands the session again, which the device
-// registry already shows. So this one is not a toast.
+// session with (shared/hub/bridgeHandlers.ts requirePeer). The
+// renderer keeps a peer's page mounted through a session blip, and
+// every query under it then fails this way until the keeper lands the
+// session again, which the device registry already shows. So this one
+// is not a toast.
 export const NO_DIRECT_CONNECTION_PREFIX = "no direct connection to ";
 
+export class NoDirectConnection extends Schema.TaggedError<NoDirectConnection>()(
+  "NoDirectConnection",
+  {
+    deviceId: Schema.String,
+    // Why the keeper has no session right now, when it can say.
+    reason: Schema.NullOr(Schema.String),
+  },
+) {
+  override get message(): string {
+    return (
+      `${NO_DIRECT_CONNECTION_PREFIX}${this.deviceId}` +
+      (this.reason === null ? "" : ` (${this.reason})`)
+    );
+  }
+}
+
 export function isNoDirectConnectionError(error: unknown): boolean {
+  const tag = errorTagOf(error);
+  if (tag !== undefined) return tag === NoDirectConnection.prototype._tag;
   return errorMessageOf(error).startsWith(NO_DIRECT_CONNECTION_PREFIX);
 }
 
 // Safe branch delete (`git branch -d`) refused because the branch has
-// commits unreachable from other refs. Same message-text contract as
-// above: the renderer matches on the marker to swap its confirm dialog
-// into a force-delete prompt with friendlier copy than git's stderr.
-// The marker is deliberately NOT the phrase git prints ("is not fully
-// merged") so the two layers stay distinct: host/lib/git/branches.ts
-// detects git's stderr and rethrows this error.
+// commits unreachable from other refs. The renderer swaps its confirm
+// dialog into a force-delete prompt with friendlier copy than git's
+// stderr. The marker is deliberately NOT the phrase git prints ("is
+// not fully merged") so the two layers stay distinct:
+// host/lib/git/branches.ts detects git's stderr and raises this.
 const BRANCH_NOT_MERGED_MARKER = "has unmerged commits";
 
-export function branchNotMergedError(name: string): Error {
-  return new Error(`Branch '${name}' ${BRANCH_NOT_MERGED_MARKER}.`);
+export class BranchNotMerged extends Schema.TaggedError<BranchNotMerged>()(
+  "BranchNotMerged",
+  { branch: Schema.String },
+) {
+  override get message(): string {
+    return `Branch '${this.branch}' ${BRANCH_NOT_MERGED_MARKER}.`;
+  }
+}
+
+export function branchNotMergedError(name: string): BranchNotMerged {
+  return new BranchNotMerged({ branch: name });
 }
 
 export function isBranchNotMergedError(error: unknown): boolean {
+  const tag = errorTagOf(error);
+  if (tag !== undefined) return tag === BranchNotMerged.prototype._tag;
   return errorMessageOf(error).includes(BRANCH_NOT_MERGED_MARKER);
 }

@@ -34,7 +34,7 @@ import type { hubContract, HubStatus } from "@shared/ipc/modules/hub";
 import type { ChannelMux } from "@shared/ipc/socket/channels";
 import type { Handlers } from "@shared/ipc/types";
 import type { ConnectPeerOpts, PeerConnection } from "@shared/hub/directDial";
-import { NO_DIRECT_CONNECTION_PREFIX } from "@shared/errors";
+import { NoDirectConnection } from "@shared/errors";
 
 type HubHandlerDeps = {
   status(): HubStatus;
@@ -202,10 +202,7 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
     if (entry === undefined) {
       const reason = deps.peerUnavailableReason?.(deviceId);
       return Promise.reject(
-        new Error(
-          `${NO_DIRECT_CONNECTION_PREFIX}${deviceId}` +
-            (reason == null ? "" : ` (${reason})`),
-        ),
+        new NoDirectConnection({ deviceId, reason: reason ?? null }),
       );
     }
     return entry.promise;

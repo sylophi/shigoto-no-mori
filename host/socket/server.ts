@@ -74,6 +74,7 @@ import {
 } from "@shared/ipc/socket/channels";
 import type { RawData } from "ws";
 import { toBytes, toText } from "./rawData";
+import { encodeWireError } from "@shared/ipc/wireError";
 
 // Ticket-mode auth for the direct data plane: a
 // SECOND binding instance serves device-to-device data over direct
@@ -569,14 +570,16 @@ export function createWsServerBinding(
       const result = await fn(ctx, frame.input);
       send(socket, { t: "res", id: frame.id, ok: true, result });
     } catch (error) {
-      // Message text only, mirroring what survives Electron's IPC
-      // error serialization, so the shared/errors.ts matchers behave
-      // the same on both wires.
+      // The message plus, for a typed error, its tag and fields
+      // (shared/ipc/wireError.ts), so the shared/errors.ts matchers
+      // behave the same on both wires.
+      const encoded = encodeWireError(error);
       send(socket, {
         t: "res",
         id: frame.id,
         ok: false,
         message: errorMessageOf(error),
+        ...(encoded === undefined ? {} : { error: encoded }),
       });
     }
   }

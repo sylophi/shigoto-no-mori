@@ -21,6 +21,7 @@
       { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }
     ],
     "import/no-unassigned-import": ["error", { "allow": ["**/*.css"] }],
+    "no-underscore-dangle": ["error", { "allow": ["_tag"] }],
     "no-restricted-imports": [
       "error",
       {

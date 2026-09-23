@@ -38,6 +38,7 @@ import { atomicWriteJsonSync } from "@host/lib/util/jsonFile";
 import { lineSplitter } from "@host/lib/util/ndjson";
 import { secretsMatch } from "@host/lib/util/secretCompare";
 import { listenLoopback } from "../portForward/bridge";
+import { encodeWireError } from "@shared/ipc/wireError";
 
 // cli/control.go reads this exact name and shape.
 export const CONTROL_FILE_NAME = "control.json";
@@ -131,12 +132,14 @@ export function createControlServer(deps: {
       // Only the codes this wire owns: a Node errno riding an error
       // would otherwise become a CLI error kind.
       const code = errorCodeOf(error);
+      const encoded = encodeWireError(error);
       send(socket, {
         t: "res",
         id: parsed.id,
         ok: false,
         message: errorMessageOf(error),
         ...(isControlErrorCode(code) ? { code } : {}),
+        ...(encoded === undefined ? {} : { error: encoded }),
       });
     } finally {
       inFlight.count -= 1;

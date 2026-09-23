@@ -68,6 +68,7 @@ import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktre
 import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
 import { killAllCli, cliChildCount } from "./electron/cliRunner";
+import { runtime } from "./runtime";
 import { applyUserShellPath } from "./core/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
 import {
@@ -621,6 +622,11 @@ app.on("before-quit", (event) => {
     Array.from(inflight).map((id) => killScriptsForWorktree(id)),
   )
     .then(() => killAllScripts({ graceMs: 1_500 }))
+    // The Effect runtime last: its finalizers close what the layers
+    // opened, after the children those layers may still be talking to
+    // are gone.
+    .finally(() => runtime.dispose())
+    .catch(() => undefined)
     .finally(() => {
       // `app.exit` skips before-quit/will-quit, avoiding a re-entry loop.
       app.exit(0);

@@ -46,6 +46,7 @@ import {
   ServerEnvelopeSchema,
   utf8ByteLength,
 } from "./protocol";
+import { encodeWireError, WireError } from "@shared/ipc/wireError";
 
 // The device hub's own per-peer in-flight bound. Legitimate broker
 // concurrency is ~1 (one connectInfo exchange per dial), so this is a
@@ -488,14 +489,16 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
         const result = await fn(session.ctx, frame.input);
         answer = { t: "res", id: frame.id, ok: true, result };
       } catch (error) {
-        // Message text only, mirroring what survives Electron's IPC error
-        // serialization, so shared/errors.ts matchers behave the same on
-        // every wire.
+        // The message plus, for a typed error, its tag and fields
+        // (shared/ipc/wireError.ts), so shared/errors.ts matchers
+        // behave the same on every wire.
+        const encoded = encodeWireError(error);
         answer = {
           t: "res",
           id: frame.id,
           ok: false,
           message: errorMessageOf(error),
+          ...(encoded === undefined ? {} : { error: encoded }),
         };
       }
     }
@@ -691,6 +694,9 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       peer.pending.delete(frame.id);
       if (frame.ok) {
         entry.resolve(frame.result);
+      } else if (frame.error !== undefined) {
+        // The typed form, rebuilt with its tag and fields.
+        entry.reject(new WireError(frame.error));
       } else if (frame.message === noHandlerMessage(deps.broker.channel)) {
         // The one answer that is a STRUCTURAL fact about the peer
         // rather than a failure of this call, so it is re-typed here
