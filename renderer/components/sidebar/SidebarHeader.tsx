@@ -44,7 +44,7 @@ type ThemeHeaderProps = DevAffordance;
 const STICKER =
   "-rotate-6 rounded-full px-2 py-0.75 text-3xs leading-none font-black tracking-widest uppercase";
 
-// The "album-art" moment of doubutsu mode: a cream pill anchoring the
+// The "album-art" moment of the doubutsu theme: a cream pill anchoring the
 // sidebar, with 仕事の森 as the hero and a giant 森 watermark bleeding
 // off the corner. Cream-on-mint gives the pill a calm-card-on-shelf
 // feel against the leaf-patterned sidebar.

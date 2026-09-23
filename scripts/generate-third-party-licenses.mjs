@@ -208,6 +208,25 @@ const BUNDLED_BINARIES = [
   ]),
 ];
 
+// Data the CLI and the app embed: the doubutsu worktree names, taken
+// from Nookipedia's character lists (scripts/fetch-doubutsu-names.mts).
+const doubutsuSource = require("../cli/embed/doubutsu-names.json").source;
+const BUNDLED_DATA = [
+  normalizeEntry([
+    `doubutsu-names@${doubutsuSource.retrieved}`,
+    {
+      licenses: "CC-BY-SA-4.0",
+      url: doubutsuSource.url,
+      publisher: doubutsuSource.name,
+      licenseText:
+        "Character names from Nookipedia's Villagers and Special characters " +
+        "categories, licensed under Creative Commons Attribution-ShareAlike " +
+        "4.0 International. Full text: " +
+        "https://creativecommons.org/licenses/by-sa/4.0/legalcode",
+    },
+  ]),
+];
+
 function isMissingLicense(entry) {
   return (
     !entry.licenses ||
@@ -281,6 +300,7 @@ async function main() {
   const entries = [
     ...Object.entries(packages).map(normalizeEntry),
     ...BUNDLED_BINARIES,
+    ...BUNDLED_DATA,
     ...goByKey.values(),
   ].toSorted((a, b) =>
     `${a.name}@${a.version}`.localeCompare(`${b.name}@${b.version}`),

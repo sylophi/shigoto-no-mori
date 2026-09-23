@@ -192,6 +192,12 @@ export const GlobalConfigSchema = z.object({
   // When true, autoPullNew covers only the primary checkout of a newly
   // added project. Nothing on its own.
   autoPullPrimaryOnly: z.boolean().optional(),
+  // When true, auto-picked worktree names are Animal Crossing villager
+  // and character names (cli/embed/doubutsu-names.json, e.g. `raymond`)
+  // instead of adjective + animal pairs (`snug-otter`). Picked by the
+  // CLI at create time (cli/names.go) and by the host for the New
+  // Worktree form's pre-pick (host/lib/worktrees/names.ts).
+  doubutsuNames: z.boolean().optional(),
   // When true, projects with a valid port-pool.config.json run
   // `port-pool provision` after setup at create and
   // `port-pool release` before teardown at delete.
@@ -301,6 +307,7 @@ export const DeviceSettingsPatchSchema = z.strictObject(
     autoPopulateInstall: true,
     autoPullNew: true,
     autoPullPrimaryOnly: true,
+    doubutsuNames: true,
     portPool: true,
     terrier: true,
     githubCli: true,

@@ -35,7 +35,7 @@ func autoPullSandbox(t *testing.T) project {
 }
 
 // `sm worktrees create <name>` from the primary checkout, the layer the
-// autoPullNew seed lives at (createWorktree itself is policy-free).
+// autoPullNew seed lives at (createWorktree leaves auto-pull alone).
 func createViaCmd(t *testing.T, proj project, name string) worktreeIdentity {
 	t.Helper()
 	ctx := resolveContext(proj.Path, []project{proj})

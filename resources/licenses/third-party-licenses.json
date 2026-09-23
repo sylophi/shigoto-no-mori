@@ -3091,6 +3091,17 @@
     "copyright": "Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)"
   },
   {
+    "name": "doubutsu-names",
+    "version": "2026-09-23",
+    "licenses": "CC-BY-SA-4.0",
+    "repository": "",
+    "publisher": "Nookipedia",
+    "url": "https://nookipedia.com/",
+    "licenseFile": "",
+    "licenseText": "Character names from Nookipedia's Villagers and Special characters categories, licensed under Creative Commons Attribution-ShareAlike 4.0 International. Full text: https://creativecommons.org/licenses/by-sa/4.0/legalcode",
+    "copyright": ""
+  },
+  {
     "name": "ee-first",
     "version": "1.1.1",
     "licenses": "MIT",
