@@ -5,7 +5,7 @@
 // unless the flow is a transplant to a peer (DestinationScope), so
 // `localProject` and `thisDeviceLabel` name the landing side, whichever
 // machine that is.
-import { pullWorktreeName } from "@shared/git/branches";
+import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
 import {
   AlertTriangle,
   ArrowDown,
@@ -64,12 +64,15 @@ export type DestinationPick = {
 // row and the footer asking the same question cost one read between
 // them. The disk half of the folder rule (a stray folder that is no
 // worktree) is the host's alone. With no landing project yet (a flow
-// to a peer before its pick) nothing is read and nothing refuses.
+// to a peer before its pick) nothing is read and nothing refuses. The
+// branch asked about is the one the copy lands on (pullLandingBranch).
 function useLocalCollision(
   localProject: Project | undefined,
   worktree: Worktree,
   landing: Landing = LANDS_HERE,
 ): {
+  // The branch the copy lands on.
+  landingBranch: string;
   held: boolean;
   holder: Worktree | undefined;
   // The refusal the footer shows and Start waits on, or null.
@@ -77,9 +80,10 @@ function useLocalCollision(
 } {
   const { data: branches } = useBranches(localProject?.id ?? null);
   const { data: worktrees } = useWorktrees(localProject?.id ?? null);
-  const held = branches?.local.includes(worktree.branch) ?? false;
+  const landingBranch = pullLandingBranch(worktree);
+  const held = branches?.local.includes(landingBranch) ?? false;
   const holder = held
-    ? worktrees?.find((entry) => entry.branch === worktree.branch)
+    ? worktrees?.find((entry) => entry.branch === landingBranch)
     : undefined;
   const name = pullWorktreeName(worktree);
   const taken =
@@ -94,11 +98,11 @@ function useLocalCollision(
     localProject === undefined
       ? null
       : held
-        ? pullBranchCollision(worktree.branch, holder?.path, where)
+        ? pullBranchCollision(landingBranch, holder?.path, where)
         : taken
           ? pullFolderCollision(name, `${localProject.name}/${name}`, where)
           : null;
-  return { held, holder, refusal };
+  return { landingBranch, held, holder, refusal };
 }
 
 // One device of the column: the mark a pick fills, the device, two
@@ -187,7 +191,10 @@ function DestinationRow({
   thisDeviceLabel: string;
   tag: string;
 }) {
-  const { held, holder } = useLocalCollision(localProject, worktree);
+  const { landingBranch, held, holder } = useLocalCollision(
+    localProject,
+    worktree,
+  );
   return (
     <DeviceRow
       className={
@@ -218,9 +225,11 @@ function DestinationRow({
       note={
         held
           ? holder === undefined
-            ? `already has ${worktree.branch}`
-            : `already has ${worktree.branch} in ${holder.name}`
-          : `has ${localProject.name}`
+            ? `already has ${landingBranch}`
+            : `already has ${landingBranch} in ${holder.name}`
+          : landingBranch !== worktree.branch
+            ? `has ${localProject.name}, copy on ${landingBranch}`
+            : `has ${localProject.name}`
       }
       trailing={
         <StatusDot

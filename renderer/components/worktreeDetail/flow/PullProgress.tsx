@@ -18,7 +18,7 @@ import { DestinationScope } from "@/hooks/remote/useHostScope";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { formatBytes } from "@/lib/formatBytes";
 import { pluralize } from "@/lib/pluralize";
-import { pullWorktreeName } from "@shared/git/branches";
+import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
 import { cn } from "@/lib/utils";
 import { useCreatePlan } from "./createPlan";
 import { FlowBody, FlowFooter } from "./FlowChrome";
@@ -119,6 +119,7 @@ function ProgressView({
   const failed = error !== undefined;
   const dirty = worktree.changedCount > 0;
   const folder = pullWorktreeName(worktree);
+  const landingBranch = pullLandingBranch(worktree);
   const pullDone = frame?.step === "apply" && extraRows.length > 0;
   const ratio = pullDone ? 0.97 : overallProgress(frame);
   const caption = (step: "transfer" | "files") =>
@@ -169,7 +170,7 @@ function ProgressView({
       title: `Create the worktree on ${thisDeviceLabel}`,
       detail: (
         <>
-          <span className="font-mono">{worktree.branch}</span>
+          <span className="font-mono">{landingBranch}</span>
           {folder !== undefined && (
             <>
               {" in "}

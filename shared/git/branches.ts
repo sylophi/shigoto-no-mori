@@ -89,16 +89,56 @@ export function forkBranchCandidates(
   ];
 }
 
+// Where a mirror of a primary checkout lives on the other device. A
+// primary is on the repo's main line, which that device's own primary
+// almost always holds, and git allows a branch in one worktree at a
+// time. So the copy takes mirror/<branch> in a mirror-<name> folder,
+// and the git follower (host/mirror/gitFollow.ts) reads the two branch
+// names as one: commits cross between the primary's `main` and the
+// copy's `mirror/main`, and both primaries keep their branches. The
+// rule holds for every branch the primary moves to, so the copy never
+// collides with a branch its device holds.
+const MIRROR_BRANCH_PREFIX = "mirror/";
+
+export function mirrorBranchFor(branch: string): string {
+  return `${MIRROR_BRANCH_PREFIX}${branch}`;
+}
+
+// The inverse, for the follower reading the copy's branch as the
+// original's. Null for a branch without the prefix: the copy has left
+// the rule, and following it would move the original's primary onto
+// that branch and then bounce the copy onto its mirror.
+export function originalBranchOf(mirrorBranch: string): string | null {
+  return mirrorBranch.startsWith(MIRROR_BRANCH_PREFIX)
+    ? mirrorBranch.slice(MIRROR_BRANCH_PREFIX.length)
+    : null;
+}
+
+// The branch a pulled or sent worktree lands on: its own, or the
+// mirror branch for a primary checkout.
+export function pullLandingBranch(worktree: {
+  branch: string;
+  isPrimary: boolean;
+}): string {
+  return worktree.isPrimary
+    ? mirrorBranchFor(worktree.branch)
+    : worktree.branch;
+}
+
 // The folder a pulled or sent (transplanted or mirrored) worktree
 // lands under on the other device: the source's own folder name
 // (Worktree.name, the source host's basename of its path), so the two
-// sides read as one worktree in every sidebar. Undefined when that
-// name would not be a valid managed dirname (an external worktree in
-// an odd folder), in which case the create picks a fresh pool name as
-// it always did. Shared so the dialogs' review and the host's send
-// name the same folder.
+// sides read as one worktree in every sidebar, or mirror-<name> for a
+// primary (its name is the repo folder, which the other device's
+// primary is usually called too). Undefined when the name would not
+// be a valid managed dirname (an external worktree in an odd folder),
+// in which case the create picks a fresh pool name as it always did.
+// Shared so the dialogs' review and the host's send name the same
+// folder.
 export function pullWorktreeName(worktree: {
   name: string;
+  isPrimary: boolean;
 }): string | undefined {
-  return isValidWorktreeDirName(worktree.name) ? worktree.name : undefined;
+  const name = worktree.isPrimary ? `mirror-${worktree.name}` : worktree.name;
+  return isValidWorktreeDirName(name) ? name : undefined;
 }

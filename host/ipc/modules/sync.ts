@@ -32,7 +32,7 @@ import {
   pullBranchCollision,
   pullFolderCollision,
 } from "@shared/pullCollision";
-import { pullWorktreeName } from "@shared/git/branches";
+import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
 import {
   DeleteWorktreeResultSchema,
   isRealBranch,
@@ -386,9 +386,10 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
   // from the sending device). The identity is re-resolved from disk
   // here, the same wall the pull stands behind, so a send structurally
   // cannot land in a repo that is not the sender's.
-  landCheck: async ({ identity, branch, worktreeName }) => {
+  landCheck: async ({ identity, branch, worktreeName, landBranch }) => {
     const project = await findProjectByIdentityOrThrow(identity);
-    await refuseLandingCollision(project, branch, worktreeName);
+    const landing = landBranch ?? branch;
+    await refuseLandingCollision(project, landing, worktreeName);
     return { projectId: project.id };
   },
 
@@ -400,13 +401,22 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
   // sweep covers a refused create too, for the pull's reason: a stale
   // incoming ref blocks later ones beneath its name.
   landWorktree: async (
-    { identity, branch, worktreeName, branchTip, runSetup, capture },
+    {
+      identity,
+      branch,
+      worktreeName,
+      landBranch,
+      branchTip,
+      runSetup,
+      capture,
+    },
     ctx,
   ) => {
     const project = await findProjectByIdentityOrThrow(identity);
     const incomingRef = `refs/shigomori/incoming/${branch}`;
+    const landing = landBranch ?? branch;
     try {
-      await refuseLandingCollision(project, branch, worktreeName);
+      await refuseLandingCollision(project, landing, worktreeName);
       const expected = [branchTip, ...(capture ? [capture.commit] : [])];
       for (const commit of expected) {
         // oxlint-disable-next-line no-await-in-loop -- two cheap probes at most
@@ -417,7 +427,7 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
       await updateRef(project.path, incomingRef, branchTip);
       return await landIncoming(
         project,
-        { branch, incomingRef, worktreeName, runSetup, capture },
+        { branch: landing, incomingRef, worktreeName, runSetup, capture },
         ctx,
       );
     } finally {
@@ -643,6 +653,18 @@ async function refuseLandingCollision(
     const holder = existing.find((w) => w.branch === branch);
     throw new Error(pullBranchCollision(branch, holder?.path));
   }
+  // Git keeps refs in a directory tree, so a branch can sit neither
+  // under an existing one nor above it: mirror/main is refused by a
+  // branch named mirror, and a branch named mirror by mirror/main.
+  // Refused here, before the transfer, rather than by the create.
+  const inTheWay = local.find(
+    (name) => name.startsWith(`${branch}/`) || branch.startsWith(`${name}/`),
+  );
+  if (inTheWay !== undefined) {
+    throw new Error(
+      `${branch} cannot be created here: a branch named ${inTheWay} is in the way (git allows one of the two). Rename that branch first.`,
+    );
+  }
   // The copy keeps the source's folder name, and the CLI create
   // refuses a taken one (cli/worktree.go: a worktree of this project
   // by that name, case-insensitively, or anything at the path). That
@@ -663,7 +685,8 @@ async function refuseLandingCollision(
 
 // The landing proper, shared the same way: the worktree created on the
 // incoming ref, then the capture re-applied in it. The caller owns the
-// incoming ref and its sweep.
+// incoming ref and its sweep. `branch` is the one the copy is created
+// on, which the incoming ref need not be named after.
 async function landIncoming(
   project: Project,
   input: {
@@ -774,7 +797,12 @@ export async function runPullWorktree(
     ignores,
   }: z.infer<typeof SyncPullWorktreePayloadSchema>,
   ctx: HandlerContext,
+  // The branch the copy is created on when it is not the source's (the
+  // mirror start's, for a primary: shared/git/branches.ts). Not on the
+  // wire: what lands is decided by what the source is, on the host.
+  { landBranch }: { landBranch?: string } = {},
 ) {
+  const landing = landBranch ?? branch;
   // Running commentary back to the caller, keyed by the source id (the
   // only id it holds until the create lands). Frames are droppable
   // presence, never state: the result is the single source of truth.
@@ -787,7 +815,7 @@ export async function runPullWorktree(
 
   // 2. Refuse up front what the create would refuse after the bundle
   // crossed.
-  await refuseLandingCollision(project, branch, worktreeName);
+  await refuseLandingCollision(project, landing, worktreeName);
 
   const peer = peerSyncApiFor(sourceDeviceId);
   const branchRef = `refs/heads/${branch}`;
@@ -855,7 +883,7 @@ export async function runPullWorktree(
     const { worktree, dirtyApplied } = await landIncoming(
       project,
       {
-        branch,
+        branch: landing,
         incomingRef,
         worktreeName,
         runSetup,
@@ -964,23 +992,28 @@ export async function sendWorktree(
     ignores,
   }: z.infer<typeof SyncSendWorktreePayloadSchema>,
   ctx: HandlerContext,
+  // The mirror start's send: the one that may take a primary checkout
+  // (it lands on the peer as mirror/<branch>, and the session then
+  // keeps the pair in step). A plain send moves a worktree, and the
+  // primary is the project itself.
+  { mirror = false }: { mirror?: boolean } = {},
 ) {
   const notifyProgress = ctx.notifier(syncContract, "pullProgress");
   const progress = (frame: Omit<SyncPullProgress, "sourceWorktreeId">) =>
     notifyProgress({ sourceWorktreeId: worktreeId, ...frame });
 
-  // 1. The local source. A primary checkout is the project itself, and
-  // a detached head has no branch to land.
+  // 1. The local source. A detached head has no branch to land.
   const { project, worktree } = await findProjectAndWorktreeOrThrow(
     projectId,
     worktreeId,
   );
-  if (
-    worktree.isPrimary ||
-    worktree.detached ||
-    !isRealBranch(worktree.branch)
-  ) {
+  if (worktree.detached || !isRealBranch(worktree.branch)) {
     throw new Error("Only a worktree on a branch of its own can be sent.");
+  }
+  if (worktree.isPrimary && !mirror) {
+    throw new Error(
+      "The primary checkout can be mirrored but not sent: it is the project itself.",
+    );
   }
   const identity = await getRepoIdentity(project.path).catch(() => null);
   if (identity === null) {
@@ -990,12 +1023,19 @@ export async function sendWorktree(
   }
   const branch = worktree.branch;
   const worktreeName = pullWorktreeName(worktree);
+  const landing = pullLandingBranch(worktree);
+  const target = {
+    identity,
+    branch,
+    worktreeName,
+    ...(landing === branch ? {} : { landBranch: landing }),
+  };
 
   // 2. The peer's refusals, before a byte moves. Its answers are
   // re-parsed like the pull's: they flow into the push below.
   const peer = peerSyncApiFor(targetDeviceId);
   const { projectId: peerProjectId } = SyncLandCheckResultSchema.parse(
-    await fromPeer(peer.landCheck({ identity, branch, worktreeName })),
+    await fromPeer(peer.landCheck(target)),
   );
 
   // 3. The tip, then the capture, with the peer asked meanwhile which
@@ -1047,9 +1087,7 @@ export async function sendWorktree(
   const landed = SyncLandWorktreeResultSchema.parse(
     await fromPeer(
       peer.landWorktree({
-        identity,
-        branch,
-        worktreeName,
+        ...target,
         branchTip,
         runSetup,
         capture:

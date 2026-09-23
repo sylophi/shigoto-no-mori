@@ -379,6 +379,10 @@ const SyncLandTargetSchema = z.strictObject({
   identity: z.string().min(1),
   branch: SyncPullWorktreePayloadSchema.shape.branch,
   worktreeName: SyncPullWorktreePayloadSchema.shape.worktreeName,
+  // The branch the copy is created on when it is not the sender's own
+  // (a primary's mirror lands on mirror/<branch>, shared/git/
+  // branches.ts). The commits still arrive under `branch`.
+  landBranch: GitRefNameSchema.optional(),
 });
 export const SyncLandCheckResultSchema = z.strictObject({
   projectId: z.string().min(1),

@@ -26,6 +26,10 @@ sm worktrees mirror <name-or-branch> --from <device>
 It makes a new worktree here, so `cd` to the path it prints. Their original
 stays and follows your work.
 
+The primary checkout can be mirrored too. Its copy lands as a worktree on
+`mirror/<branch>` beside the other machine's own primary, and commits cross
+between the two branches. It cannot be sent or brought.
+
 `send` and `bring` take the same arguments and move the worktree once instead
 of mirroring it. Use them only when asked. `--source teardown` deletes the
 original along with any ignored files that did not cross (a `.env`), so pass
