@@ -323,7 +323,7 @@ export const MirrorStartPayloadSchema = strictStruct({
   ignoreMode: MirrorIgnoreModeSchema,
   ignores: MirrorIgnoresSchema,
 });
-export type MirrorStartPayload = typeof MirrorStartPayloadSchema.Type;
+export type MirrorStartPayload = typeof MirrorStartPayloadSchema.Encoded;
 
 const MirrorStartResultSchema = strictStruct({
   ...SyncPullWorktreeResultSchema.fields,

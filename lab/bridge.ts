@@ -22,6 +22,7 @@ import {
   EMPTY_SHARED_SETTINGS,
 } from "@shared/sharedSettings";
 import type { ContractScope } from "@shared/ipc/contract";
+import { HexId32Schema } from "@shared/ipc/hexId";
 import { WEB_PLATFORM } from "@shared/account/enroll";
 import type { HubStatus } from "@shared/ipc/modules/hub";
 import {
@@ -649,7 +650,7 @@ async function labMirrorStart(
   labMirrors.sessions.push(session);
   labMirrors.serving.push({
     deviceId: input.sourceDeviceId,
-    channelId: "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+    channelId: HexId32Schema.make("a1b2c3d4e5f60718293a4b5c6d7e8f90"),
     projectId: input.sourceProjectId,
     worktreeId: input.sourceWorktreeId,
     peerDeviceId: LOCAL_DEVICE_ID,

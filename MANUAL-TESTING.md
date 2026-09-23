@@ -322,8 +322,8 @@ returns a window with `evaluate`, `waitFor`, `screenshot` and `close`.
 - `hub.invokePeer` and the check scripts use the raw contract payload
   from `shared/ipc/modules/<module>.ts`.
 
-A rejection with a zod issue list means the payload shape matches the
-wrong convention.
+A rejection with a schema issue (`Expected ...` and the path it
+failed at) means the payload shape matches the wrong convention.
 
 ### From a terminal
 

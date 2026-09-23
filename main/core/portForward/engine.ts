@@ -38,6 +38,8 @@ import {
   type SupervisorRuntime,
 } from "@shared/remote/supervisor";
 import { mintHexId } from "@host/lib/idleRegistry";
+import type { DeviceId } from "@shared/hub/protocol";
+import type { HexId32 } from "@shared/ipc/hexId";
 import { bridgedConn, loopbackListener, type PeerChannels } from "./bridge";
 
 export type ForwardApi = Client<typeof forwardContract>;
@@ -70,16 +72,16 @@ export class PortForwardStopped extends Schema.TaggedError<PortForwardStopped>()
 }
 
 export type PortForwardSummary = {
-  forwardId: string;
-  deviceId: string;
+  forwardId: HexId32;
+  deviceId: DeviceId;
   remotePort: number;
   localPort: number;
   connCount: number;
 };
 
 type Forward = {
-  forwardId: string;
-  deviceId: string;
+  forwardId: HexId32;
+  deviceId: DeviceId;
   remotePort: number;
   localPort: number;
   // The forward's lifetime: its listener, and every accepted conn as a
@@ -254,7 +256,7 @@ export function createPortForwardEngine(deps: {
   );
 
   const start = Effect.fnUntraced(function* (input: {
-    deviceId: string;
+    deviceId: DeviceId;
     remotePort: number;
     localPort?: number;
   }) {
@@ -318,10 +320,10 @@ export function createPortForwardEngine(deps: {
   });
 
   function startForward(input: {
-    deviceId: string;
+    deviceId: DeviceId;
     remotePort: number;
     localPort?: number;
-  }): Promise<{ forwardId: string; localPort: number }> {
+  }): Promise<{ forwardId: HexId32; localPort: number }> {
     return runtime.runPromise(
       Effect.forkIn(start(input), scope).pipe(
         Effect.flatMap(Fiber.join),

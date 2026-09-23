@@ -35,6 +35,7 @@ import { portPoolContract } from "@shared/ipc/modules/portPool";
 import { portsContract } from "@shared/ipc/modules/ports";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { hubContract } from "@shared/ipc/modules/hub";
+import { DeviceIdSchema } from "@shared/hub/protocol";
 import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
@@ -137,9 +138,14 @@ import {
 // remote-forest query is riding, since the host keeps one authed
 // socket per device.
 const peerTransportFor = (deviceId: string) => ({
+  // The handler is called directly, past the registrar's input wall,
+  // so the id is held to the wire's shape here instead.
   invoke: (channel: string, input: unknown) =>
-    Promise.resolve(
-      hubHandlers.invokePeer({ deviceId, channel, input }, undefined),
+    Promise.resolve().then(() =>
+      hubHandlers.invokePeer(
+        { deviceId: DeviceIdSchema.make(deviceId), channel, input },
+        undefined,
+      ),
     ),
   subscribe: (): (() => void) => {
     throw new Error("the peer api is invoke-only");

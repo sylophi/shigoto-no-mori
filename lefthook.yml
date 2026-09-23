@@ -49,10 +49,11 @@ pre-commit:
     # The zod-to-Schema port, pure: every schema moved to Effect Schema
     # decodes and refuses what its zod version did through the wires'
     # codec (unknown keys stripped, absent versus undefined optional
-    # keys, bounds, the refine message, a void input), and the v4
-    # constructs the port's mapping relies on keep their semantics.
+    # keys, bounds, the refine message, a void input), the v4
+    # constructs the port's mapping relies on keep their semantics, and
+    # the web stub walker answers every contract read as it did.
     schema-port:
-      glob: "{shared/schemas/**,shared/ipc/modules/**,shared/ipc/codec.ts,test/schema-port.mjs,test/lib/checkKit.mjs}"
+      glob: "{shared/schemas/**,shared/ipc/modules/**,shared/ipc/codec.ts,web/ipc/stubDefaults.ts,test/schema-port.mjs,test/lib/checkKit.mjs}"
       run: pnpm test schema-port
     # The reconnect supervisor under Effect's TestClock, pure: the exact
     # backoff ladder and its cap, the stable-connection reset, blocked
@@ -88,10 +89,10 @@ pre-commit:
     # shared/hub/protocol.ts. hub/ is a standalone pnpm project with
     # its own lockfile, which the check installs first. One caveat: the
     # shared files it imports (shared/hub/protocol.ts and the frames.ts
-    # it re-exports) live outside hub/, so their `zod` import resolves
-    # from the repo-root node_modules, not hub/node_modules. The two
-    # installs pin the same zod, so a root install is a prerequisite for
-    # those shared files.
+    # it re-exports) live outside hub/, so their `effect` import
+    # resolves from the repo-root node_modules, not hub/node_modules.
+    # The two installs pin the same effect, so a root install is a
+    # prerequisite for those shared files.
     hub:
       glob: "{hub/**,shared/hub/protocol.ts,shared/ipc/socket/frames.ts}"
       run: pnpm -C hub install --frozen-lockfile --prefer-offline && pnpm -C hub run check

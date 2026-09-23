@@ -199,28 +199,29 @@ async function main() {
       // The walker itself: without fabrication a union or bounded
       // string yields the sentinel, with fabrication (allowlist only)
       // it still parses.
-      const { z } = await import("zod");
-      const union = z.discriminatedUnion("t", [
-        z.object({ t: z.literal("a"), n: z.number().int() }),
-        z.object({ t: z.literal("b") }),
+      const { Schema } = await import("effect");
+      const union = Schema.Union([
+        Schema.Struct({ t: Schema.Literal("a"), n: Schema.Int }),
+        Schema.Struct({ t: Schema.Literal("b") }),
       ]);
       assert.equal(
         stubValueFor(union, { fabricateArms: false }),
         NO_STRUCTURAL_STUB,
       );
       assert.equal(
-        stubValueFor(z.string().min(1), { fabricateArms: false }),
+        stubValueFor(Schema.NonEmptyString, { fabricateArms: false }),
         NO_STRUCTURAL_STUB,
       );
       assert.equal(
-        union.safeParse(stubValueFor(union, { fabricateArms: true })).success,
+        Schema.is(union)(stubValueFor(union, { fabricateArms: true })),
         true,
       );
       // A nested enum blocks the whole object structurally.
       assert.equal(
-        stubValueFor(z.object({ state: z.enum(["granted", "denied"]) }), {
-          fabricateArms: false,
-        }),
+        stubValueFor(
+          Schema.Struct({ state: Schema.Literals(["granted", "denied"]) }),
+          { fabricateArms: false },
+        ),
         NO_STRUCTURAL_STUB,
       );
     },

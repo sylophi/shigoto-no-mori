@@ -8,4 +8,5 @@ import { Schema } from "effect";
 // modules must stay free of node builtins.
 export const HexId32Schema = Schema.String.check(
   Schema.isPattern(/^[0-9a-f]{32}$/),
-);
+).pipe(Schema.brand("HexId32"));
+export type HexId32 = typeof HexId32Schema.Type;

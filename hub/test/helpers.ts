@@ -10,7 +10,7 @@ import {
 import { expect } from "vitest";
 import {
   CONNECT_TICKET_PARAM,
-  type DeviceEnvelope,
+  type DeviceEnvelopeWire,
   type EnrollResponse,
   EnrollResponseSchema,
   HUB_ROUTES,
@@ -181,7 +181,7 @@ export class TestSocket {
     openSockets.add(this);
   }
 
-  send(envelope: DeviceEnvelope): void {
+  send(envelope: DeviceEnvelopeWire): void {
     this.ws.send(encodeEnvelope(envelope));
   }
 

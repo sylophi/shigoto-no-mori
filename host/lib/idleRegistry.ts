@@ -9,20 +9,21 @@
 // consumers are grant-gated already (a trusted peer), so there are
 // deliberately no per-peer quotas here.
 import { randomBytes } from "node:crypto";
+import { type HexId32, HexId32Schema } from "@shared/ipc/hexId";
 
 // The host-minted opaque id whose wire shape HexId32Schema
 // (shared/ipc/hexId.ts) pins: 16 random bytes, hex. Lives here rather
 // than beside the schema because shared/ modules must stay free of
 // node builtins.
-export function mintHexId(): string {
-  return randomBytes(16).toString("hex");
+export function mintHexId(): HexId32 {
+  return HexId32Schema.make(randomBytes(16).toString("hex"));
 }
 
 const SWEEP_INTERVAL_MS = 60_000;
 
 export type IdleRegistry<T> = {
   // Mints a fresh id for `value` and arms the sweep.
-  mint: (value: T) => string;
+  mint: (value: T) => HexId32;
   get: (id: string) => T | undefined;
   // Stamps a live entry's last-touched time. Unknown ids are a no-op.
   touch: (id: string) => void;
@@ -67,7 +68,7 @@ export function createIdleRegistry<T>({
     sweepTimer.unref?.();
   }
 
-  function mint(value: T): string {
+  function mint(value: T): HexId32 {
     const id = mintHexId();
     entries.set(id, { value, touched: Date.now() });
     ensureSweep();

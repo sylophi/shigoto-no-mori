@@ -108,7 +108,8 @@ export const CLOSE_SUPERSEDED = 4103;
 // sites that route or grant against a device id.
 export const DeviceIdSchema = Schema.NonEmptyString.check(
   Schema.isMaxLength(200),
-);
+).pipe(Schema.brand("DeviceId"));
+export type DeviceId = typeof DeviceIdSchema.Type;
 export const isDeviceId = Schema.is(DeviceIdSchema);
 
 // ---- HTTP routes ----
@@ -283,6 +284,9 @@ const HubSendEnvelopeSchema = Schema.Struct({
 // reshape.
 export const DeviceEnvelopeSchema = Schema.Union([HubSendEnvelopeSchema]);
 export type DeviceEnvelope = typeof DeviceEnvelopeSchema.Type;
+// What a device writes: the wire side, where a deviceId is a plain
+// string (the brand is the decoded side's).
+export type DeviceEnvelopeWire = typeof DeviceEnvelopeSchema.Encoded;
 
 // DO to device: a frame forwarded from another device. The device hub
 // copies `frame` verbatim, it never parses or rewrites it.
@@ -333,7 +337,7 @@ export type ServerEnvelope = typeof ServerEnvelopeSchema.Type;
 // fields are omitted and come back as undefined, so an opaque frame
 // value survives the device hub hop unchanged.
 export function encodeEnvelope(
-  envelope: DeviceEnvelope | ServerEnvelope,
+  envelope: DeviceEnvelopeWire | typeof ServerEnvelopeSchema.Encoded,
 ): string {
   return JSON.stringify(envelope);
 }

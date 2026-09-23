@@ -9,8 +9,7 @@
 //
 // Asserts, through the wires' own decode (shared/ipc/codec.ts,
 // decodeWith and safeDecodeWith, which must agree):
-//   - each ported schema is a Schema, not zod, so the codec takes the
-//     Schema path;
+//   - each ported schema is a Schema;
 //   - valid inputs decode to the zod output: unknown keys stripped at
 //     every level, an optional key absent stays absent and an explicit
 //     undefined stays an own key, url input trimmed;
@@ -68,18 +67,14 @@
 //     decoding defaults, excess keys stripped by default and refused
 //     under onExcessProperty "error", withDecodingDefault's placement,
 //     catchDecoding as zod's .catch);
-//   - the web stub walker answers a Schema output from its structural
-//     candidates, as it did the zod one.
+//   - the web stub walker (now over SchemaAST) gives every contract read
+//     the answer the zod walker gave, structural and fabricated.
 //
 // Runs under test/lib/register-ts-alias.mjs. Run: pnpm test schema-port.
 import assert from "node:assert/strict";
 import { Effect, Schema, Struct } from "effect";
-import {
-  decodeWith,
-  isZodCodec,
-  safeDecodeWith,
-  validateWith,
-} from "@shared/ipc/codec";
+import { decodeWith, safeDecodeWith, validateWith } from "@shared/ipc/codec";
+import { allContractModules } from "@shared/ipc/client";
 import {
   AccountStatusSchema,
   accountContract,
@@ -144,7 +139,7 @@ function describe(value) {
 
 // One schema against its recorded zod results, through both codec calls.
 function assertCases(codec, cases) {
-  assert.equal(isZodCodec(codec), false, "the schema is still zod");
+  assert.ok(Schema.isSchema(codec), "the schema is not a Schema");
   for (const [input, recorded] of cases) {
     const want = recorded.same ? ok(input) : recorded;
     const label = describe(input);
@@ -4474,66 +4469,206 @@ async function main() {
   });
 
   await check(
-    "the web stub walker answers a Schema output structurally",
+    "the web stub walker answers every channel as the zod walker did",
     () => {
-      const structural = { fabricateArms: false };
-      assert.deepStrictEqual(
-        stubValueFor(projectsContract.calls.list.output, structural),
-        [],
-      );
-      assert.equal(
-        stubValueFor(projectsContract.calls.icon.output, structural),
-        null,
-      );
-      assert.equal(
-        stubValueFor(branchesContract.calls.create.output, structural),
-        undefined,
-      );
-      // Wave 2's reads that a candidate still meets.
-      assert.deepStrictEqual(
-        stubValueFor(
-          projectsContract.calls.carryOverListing.output,
-          structural,
-        ),
-        [],
-      );
-      assert.deepStrictEqual(
-        stubValueFor(projectsContract.calls.carryOverStats.output, structural),
-        {},
-      );
-      assert.deepStrictEqual(
-        stubValueFor(globalConfigContract.calls.read.output, structural),
-        {},
-      );
-      assert.equal(
-        stubValueFor(shigomoriContract.calls.read.output, structural),
-        null,
-      );
-      // A struct with required members is the zod walker's recursive
-      // build, which does not read Schema yet (wave 4): no stub rather
-      // than an invented one.
-      assert.equal(
-        stubValueFor(schemas.GithubCliReadinessSchema, structural),
-        NO_STRUCTURAL_STUB,
-      );
-      for (const output of [
-        projectsContract.calls.worktreeIncludeStatus.output,
-        sharedSettingsContract.calls.read.output,
-        cliContract.calls.shellStatus.output,
-        accountContract.calls.status.output,
-        // Wave 3's reads the zod walker built ({ events: [] } and
-        // { available: false }): no stub until the walker reads
-        // SchemaAST. The web's grant preflight has a real handler
-        // instead (web/ipc/register.ts), so it never needs one.
-        mirrorModule.mirrorContract.calls.history.output,
-        directModule.directContract.calls.connectInfo.output,
-        remoteAccessContract.calls.commandAccess.output,
-      ]) {
-        assert.equal(stubValueFor(output, structural), NO_STRUCTURAL_STUB);
+      // Recorded against the zod walker (every contract read, the
+      // unclassified client channels, and a few mutations for the
+      // fabricated arms the lab relies on): [channel, the structural
+      // answer, the answer with fabricateArms when it differs].
+      const recorded = [
+        [
+          "account:status",
+          {
+            configured: false,
+            signedIn: false,
+            accountId: "",
+            deviceName: "",
+            sharedSignIn: false,
+          },
+        ],
+        [
+          "account:enroll",
+          {
+            configured: false,
+            signedIn: false,
+            accountId: "",
+            deviceName: "",
+            sharedSignIn: false,
+          },
+        ],
+        ["account:signOut", undefined],
+        ["account:revokeDevice", undefined],
+        ["account:listDevices", []],
+        [
+          "account:setDeviceName",
+          {
+            configured: false,
+            signedIn: false,
+            accountId: "",
+            deviceName: "",
+            sharedSignIn: false,
+          },
+        ],
+        ["account:acceptsCommands", false],
+        ["account:setAcceptsCommands", undefined],
+        ["clientConfig:read", {}],
+        ["clientConfig:write", undefined],
+        ["dialog:pickFolder", ""],
+        ["direct:connectInfo", { available: false }],
+        ["git:sweep", { leaseMs: 0 }],
+        ["githubCli:readiness", { installed: false, authed: false }],
+        ["githubCli:projectPullRequests", {}],
+        ["githubCli:worktreePullRequest", null],
+        [
+          "githubCli:pullRequestCandidates",
+          NO_STRUCTURAL_STUB,
+          { status: "ok", pullRequests: [] },
+        ],
+        ["githubCli:repoMergeConfig", null],
+        ["githubCli:pullRequestDiff", ""],
+        ["globalConfig:read", {}],
+        ["globalConfig:readLocal", {}],
+        ["hygiene:list", []],
+        [
+          "hygiene:diskUsage",
+          { worktreeId: "", bytes: 0, lastActivityAt: 0, partial: false },
+        ],
+        ["launchers:detect", []],
+        ["launchers:forProject", { entries: [], hiddenCount: 0 }],
+        ["launchers:launch", undefined],
+        ["menu:setLaunchToolsEnabled", undefined],
+        [
+          "mirror:list",
+          NO_STRUCTURAL_STUB,
+          { daemon: "stopped", sessions: [], serving: [] },
+        ],
+        ["mirror:history", { events: [] }],
+        [
+          "mirror:gitState",
+          NO_STRUCTURAL_STUB,
+          {
+            head: { kind: "branch", branch: "unavailable" },
+            tip: "unavailable",
+            indexTree: "unavailable",
+            indexCommit: null,
+          },
+        ],
+        ["packageScripts:list", null],
+        ["packageScripts:getSort", NO_STRUCTURAL_STUB, "manifest"],
+        [
+          "portForward:start",
+          NO_STRUCTURAL_STUB,
+          { forwardId: "unavailable", localPort: 0 },
+        ],
+        ["portForward:stop", undefined],
+        ["portForward:list", { forwards: [] }],
+        ["portPool:isActive", false],
+        ["portPool:isInstalled", false],
+        ["ports:list", { ports: [] }],
+        ["projects:list", []],
+        ["projects:add", { id: "", name: "", path: "" }],
+        ["projects:getSort", NO_STRUCTURAL_STUB, "alphabetical"],
+        ["projects:getCollapsed", []],
+        ["projects:defaultBranch", ""],
+        ["projects:cloneUrl", ""],
+        ["projects:listBranches", { local: [], remote: [] }],
+        ["projects:pickWorktreeName", ""],
+        [
+          "projects:worktreeIncludeStatus",
+          { fileExists: false, matchedPaths: [] },
+        ],
+        ["projects:carryOverListing", []],
+        ["projects:carryOverStats", {}],
+        ["projects:icon", null],
+        [
+          "hub:status",
+          NO_STRUCTURAL_STUB,
+          {
+            socket: { phase: "idle" },
+            onlineDeviceIds: [],
+            peerAppVersions: {},
+          },
+        ],
+        ["hub:invokePeer", undefined],
+        ["remoteAccess:commandAccess", { granted: false }],
+        [
+          "runtime:info",
+          NO_STRUCTURAL_STUB,
+          {
+            dataDir: "unavailable",
+            dataDirSource: "env",
+            atDefaultDataDir: false,
+            canonicalDataDirName: "unavailable",
+            homedir: "unavailable",
+          },
+        ],
+        ["runtime:nuke", undefined],
+        ["scripts:cancel", { cancelled: false }],
+        ["scripts:orphanReport", { stopped: 0 }],
+        ["sharedSettings:read", { entries: {} }],
+        [
+          "cli:status",
+          NO_STRUCTURAL_STUB,
+          {
+            name: "",
+            aliasName: "",
+            binDir: "",
+            linkPath: "",
+            state: "installed",
+            foreignPaths: [],
+            onPath: false,
+          },
+        ],
+        ["cli:shellStatus", { loginShell: "", shells: [] }],
+        ["shell:openExternal", undefined],
+        ["shell:showItemInFolder", undefined],
+        ["terrier:readiness", { installed: false, compatible: false }],
+        ["shigomori:read", null],
+        ["worktreeData:read", null],
+        ["sync:pushStart", NO_STRUCTURAL_STUB, { transferId: "unavailable" }],
+        ["sync:landCheck", NO_STRUCTURAL_STUB, { projectId: "unavailable" }],
+        ["updater:get", NO_STRUCTURAL_STUB, { kind: "unsupported" }],
+        ["window:previewTheme", undefined],
+        ["window:relaunch", undefined],
+        ["worktrees:list", []],
+        ["worktrees:delete", NO_STRUCTURAL_STUB, { ok: true }],
+        ["worktrees:fileDiff", ""],
+        ["worktrees:changeStatus", []],
+        ["worktrees:commitMessage", { summary: "", description: "" }],
+        ["worktrees:commitDiff", ""],
+        ["worktrees:listCommits", []],
+      ];
+      const defs = new Map();
+      for (const module of allContractModules) {
+        for (const def of Object.values(module.calls)) {
+          if (def.kind === "invoke") defs.set(def.channel, def);
+        }
       }
+      for (const [channel, structural, fabricated = structural] of recorded) {
+        const def = defs.get(channel);
+        assert.ok(def, `${channel} is not a contract invoke`);
+        assert.deepStrictEqual(
+          stubValueFor(def.output, { fabricateArms: false }),
+          structural,
+          `${channel}'s structural stub`,
+        );
+        assert.deepStrictEqual(
+          stubValueFor(def.output, { fabricateArms: true }),
+          fabricated,
+          `${channel}'s fabricated stub`,
+        );
+      }
+      // Every other channel answers without throwing, a stub or the
+      // sentinel.
+      for (const def of defs.values()) {
+        stubValueFor(def.output, { fabricateArms: false });
+        stubValueFor(def.output, { fabricateArms: true });
+      }
+      // A candidate list with no arm fabricated stays refused: its
+      // status union has no plain empty.
       assert.equal(
         stubValueFor(schemas.PullRequestCandidateListSchema, {
-          fabricateArms: true,
+          fabricateArms: false,
         }),
         NO_STRUCTURAL_STUB,
       );

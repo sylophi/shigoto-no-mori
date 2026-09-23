@@ -264,9 +264,6 @@ importers:
       ws:
         specifier: ^8.21.3
         version: 8.21.3(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
     devDependencies:
       '@babel/core':
         specifier: ^7.29.7
@@ -11477,7 +11474,8 @@ snapshots:
 
   yoctocolors@2.1.2: {}
 
-  zod@4.4.3: {}
+  zod@4.4.3:
+    optional: true
 
   zustand@5.0.3(@types/react@19.2.17)(react@19.2.7)(use-sync-external-store@1.6.0(react@19.2.7)):
     optionalDependencies:

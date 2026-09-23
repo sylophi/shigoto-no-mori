@@ -58,7 +58,7 @@ export async function startDirectListener(track, opts = {}) {
 
 // Boots the hub pair: B wires the REAL direct broker pair into its
 // binding's one slot (the ONLY thing the hub wire serves, with the
-// same channel and zod parse wiring main uses), A is the dialing
+// same channel and schema decode wiring main uses), A is the dialing
 // client. The two devices are independent, so they boot concurrently.
 export async function bootBrokeredPair(stub, track, listener, opts = {}) {
   const [host, client] = await Promise.all([

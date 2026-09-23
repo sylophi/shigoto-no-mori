@@ -29,7 +29,12 @@ import { hostsProjects } from "@shared/account/enroll";
 import { isHubRefusal } from "@shared/account/service";
 import { errorMessageOf } from "@shared/errors";
 import { pullWorktreeName } from "@shared/git/branches";
-import type { DeviceInfo } from "@shared/hub/protocol";
+import {
+  type DeviceId,
+  DeviceIdSchema,
+  type DeviceInfo,
+  isDeviceId,
+} from "@shared/hub/protocol";
 import {
   type IgnoreSelection,
   type MirrorIgnoreChoice,
@@ -95,7 +100,14 @@ function requireImpl(): ControlImpl {
   return impl;
 }
 
-type Named = { deviceId: string; name: string };
+type Named = { deviceId: DeviceId; name: string };
+
+// A registry entry whose id is a well-formed device id: the only kind a
+// peer call can reach (invokePeer and the hub relay refuse any other),
+// and the only kind the hub enrolls.
+type Peer = DeviceInfo & { readonly deviceId: DeviceId };
+const isPeer = (device: DeviceInfo): device is Peer =>
+  isDeviceId(device.deviceId);
 
 // An ask that only informs an answer gets a probe's patience: a peer
 // whose session is up but whose app is wedged would otherwise hold a
@@ -121,12 +133,12 @@ const nameOf = (device: DeviceInfo): string =>
 
 async function roster(): Promise<{
   here: Named;
-  peers: readonly DeviceInfo[];
+  peers: readonly Peer[];
 }> {
   const { listDevices, thisDeviceId } = requireImpl();
-  let devices: readonly DeviceInfo[];
+  let devices: readonly Peer[];
   try {
-    devices = await listDevices();
+    devices = (await listDevices()).filter(isPeer);
   } catch (error) {
     // A credential the hub no longer honors (the device was removed
     // from the account while the app held it) is the signed-out case
@@ -148,7 +160,7 @@ async function roster(): Promise<{
     });
   }
   return {
-    here: { deviceId: hereId, name: nameOf(here) },
+    here: { deviceId: here.deviceId, name: nameOf(here) },
     // A browser on the account is a device too, but hosts no forest.
     peers: devices.filter(
       (device) => device.deviceId !== hereId && hostsProjects(device.platform),
@@ -163,7 +175,7 @@ const GRANTED = { granted: true };
 // read fresh off the peers themselves. A read skips the grant ask,
 // since reads are ungated.
 async function standingsOf(
-  devices: readonly DeviceInfo[],
+  devices: readonly Peer[],
   identity: string | null,
   { grant }: { grant: boolean },
 ): Promise<ControlDevice[]> {
@@ -174,7 +186,7 @@ async function standingsOf(
 }
 
 async function standingOf(
-  device: DeviceInfo,
+  device: Peer,
   identity: string | null,
   connected: ReadonlySet<string>,
   grant: boolean,
@@ -226,10 +238,7 @@ const BLOCK_REASON: Record<NonNullable<ControlDevice["block"]>, string> = {
   "no-grant": "doesn't accept commands (turn it on from its Devices page)",
 };
 
-function matchDevices(
-  peers: readonly DeviceInfo[],
-  query: string,
-): DeviceInfo[] {
+function matchDevices(peers: readonly Peer[], query: string): Peer[] {
   const wanted = query.trim().toLowerCase();
   const byId = peers.filter((device) => device.deviceId === query);
   if (byId.length > 0) return byId;
@@ -393,9 +402,9 @@ async function peerNames(): Promise<Named[]> {
   }));
 }
 
-async function registryOrEmpty(): Promise<readonly DeviceInfo[]> {
+async function registryOrEmpty(): Promise<readonly Peer[]> {
   try {
-    return await within(requireImpl().listDevices(), () => []);
+    return (await within(requireImpl().listDevices(), () => [])).filter(isPeer);
   } catch {
     return [];
   }
@@ -712,7 +721,12 @@ async function alreadyMirrored(
     worktree: copy,
     captured: false,
     dirtyApplied: false,
-    device: view.device,
+    // The session's peer is one this device dialed, so its id is well
+    // formed; the view carries it as the session stored it.
+    device: {
+      deviceId: DeviceIdSchema.make(view.device.deviceId),
+      name: view.device.name,
+    },
     copySide: view.copySide,
     session: session.session,
     alreadyMirrored: true,

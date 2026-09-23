@@ -40,7 +40,7 @@ export const MIRROR_GATEWAY_TOKEN_ENV = "SM_MIRROR_GATEWAY_TOKEN";
 export type MirrorPeerApi = Pick<Client<typeof mirrorContract>, "openStream">;
 
 // The preface's shape (file-sync/engine.go mirrorPreface), reduced to
-// the fields the gateway acts on. Validated by hand rather than zod:
+// the fields the gateway acts on. Validated by hand rather than a Schema:
 // this is a loopback line from our own child.
 type Preface = {
   token: string;
