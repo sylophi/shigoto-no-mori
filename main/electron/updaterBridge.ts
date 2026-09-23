@@ -62,8 +62,11 @@ export function publishUpdaterState(state: UpdaterState): Promise<void> {
 async function consumeOnce(
   handle: (action: UpdateRequest["action"]) => void,
 ): Promise<void> {
-  const consumingPath = updateRequestPath() + ".consuming";
+  // Everything inside the try, the path included: a throw out of here
+  // (the data dir not set up yet) would end the drain fiber below with
+  // nothing logging it, and every later request would go unread.
   try {
+    const consumingPath = updateRequestPath() + ".consuming";
     // Claim atomically before reading: a fresh request landing
     // mid-consume keeps its own file (and its own watch event, queued
     // for the next pass) instead of being deleted unread by this pass's

@@ -544,9 +544,12 @@ async function revalidateAndRead(
 // is kept once it settles (a time to live of zero, success and failure
 // alike): every lookup after that revalidates against the source file,
 // and a failure never answers a later lookup. When every caller of a
-// resolution has gone (a handler's caller that left), the resolution
-// is interrupted. Project paths are few; the capacity only bounds the
-// settled entries the cache sweeps lazily.
+// resolution has gone (a handler's caller that left), the cache drops
+// the entry; the read itself has no abort signal and runs its course
+// untracked, so a caller arriving right then starts a second read of
+// the same path, which computes the same value. Project paths are
+// few; the capacity only bounds the settled entries the cache sweeps
+// lazily.
 const lookups = Effect.runSync(
   Cache.makeWith<string, ProjectIcon | null, unknown, never>(
     (projectPath) =>

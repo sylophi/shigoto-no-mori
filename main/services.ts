@@ -124,7 +124,7 @@ export const runner = <A>(
         orElse: () =>
           Effect.sync(() =>
             console.warn(
-              `[quit] ${what} did not stop within ${RUNNER_STOP_TIMEOUT_MS} ms, moving on`,
+              `[quit] ${what} did not stop within ${RUNNER_STOP_TIMEOUT_MS} ms, moving on (it keeps stopping in the background)`,
             ),
           ),
       }),
