@@ -1051,19 +1051,26 @@ async function main() {
     const targetMainBefore = await gitOut(targetRepo, "rev-parse", "HEAD");
     // The landing branch is the mirror start's to decide (off the
     // peer's list), not the wire's: the orchestration takes it as an
-    // option.
-    const primaryPulled = await runPullWorktree(
-      {
-        sourceDeviceId: "A",
-        sourceProjectId,
-        sourceWorktreeId: worktreeIdFromPath(sourceRepo),
-        sourceIdentity: identity,
-        branch: "main",
-        worktreeName: "pulled-primary",
-      },
-      pullCtx,
-      { landBranch: "mirror/main" },
+    // option. A branch named mirror stands in mirror/main's way at
+    // git's ref boundary, refused before anything crosses.
+    const primaryPull = {
+      sourceDeviceId: "A",
+      sourceProjectId,
+      sourceWorktreeId: worktreeIdFromPath(sourceRepo),
+      sourceIdentity: identity,
+      branch: "main",
+      worktreeName: "pulled-primary",
+    };
+    await git(targetRepo, ["branch", "mirror", baseSha]);
+    await assert.rejects(
+      () =>
+        runPullWorktree(primaryPull, pullCtx, { landBranch: "mirror/main" }),
+      /a branch named mirror is in the way/,
     );
+    await git(targetRepo, ["branch", "-D", "mirror"]);
+    const primaryPulled = await runPullWorktree(primaryPull, pullCtx, {
+      landBranch: "mirror/main",
+    });
     assert.equal(primaryPulled.worktree.isPrimary, false);
     assert.equal(primaryPulled.worktree.branch, "mirror/main");
     assert.equal(primaryPulled.dirtyApplied, true);
@@ -1092,7 +1099,7 @@ async function main() {
       false,
     );
     ok(
-      "pullWorktree of a primary: lands as a worktree on mirror/main with main's tip and uncommitted work, leaving the target's primary alone",
+      "pullWorktree of a primary: refuses a branch named mirror in the way, then lands as a worktree on mirror/main with main's tip and uncommitted work, leaving the target's primary alone",
     );
 
     // The same from the other side: the send reads the mirror branch

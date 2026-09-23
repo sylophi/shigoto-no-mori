@@ -61,6 +61,7 @@ import { buildClient } from "@shared/ipc/buildClient";
 import { controlContract } from "@shared/ipc/modules/control";
 import {
   MIRROR_LABEL_COPY_SIDE,
+  MIRROR_LABEL_MIRROR_BRANCH,
   MIRROR_LABEL_TRANSFER,
 } from "@shared/ipc/modules/mirror";
 import { projectsContract } from "@shared/ipc/modules/projects";
@@ -114,6 +115,7 @@ const smEnv = { ...baseEnv, SHIGOMORI_DATA_DIR: dataDir };
 async function git(cwd, args) {
   return execFileP("git", args, { cwd, env: baseEnv });
 }
+const gitOut = async (cwd, ...args) => (await git(cwd, args)).stdout.trim();
 
 const { runCli, sm } = createCliRunner(smBinary, smEnv);
 const { ok, done, fail } = makeProof("control proof");
@@ -804,9 +806,55 @@ async function main() {
       "stopping removes the copy here",
     );
     assert.equal(existsSync(inPath), true, "and never the peer's original");
-    peerOwns = targetProjectId;
     ok(
       "mirror --from: the peer's worktree is copied here under a session whose copy is local, a repeat from either end answers with that copy, --to with --from and a blank --from are refused as usage, and unmirror removes the local copy only",
+    );
+
+    // ---- (7c) mirror --from of the peer's primary checkout: the copy
+    // lands as a worktree on mirror/main in a mirror- folder, the
+    // session is labelled for the follower, and the peer's primary
+    // stays. Named by its folder, as list --remote shows it.
+    const primaryMainBefore = await gitOut(sourceRepo, "rev-parse", "HEAD");
+    const fromPrimary = finalDoc(
+      await sm(
+        "worktrees",
+        "mirror",
+        "source",
+        "-p",
+        "target",
+        "--from",
+        "Studio Mac",
+      ),
+    );
+    assert.equal(fromPrimary.worktree.projectId, targetProjectId);
+    assert.equal(fromPrimary.worktree.branch, "mirror/main");
+    assert.equal(fromPrimary.worktree.name, "mirror-source");
+    assert.equal(fromPrimary.worktree.isPrimary, false);
+    assert.equal(fromPrimary.copySide, "local");
+    const fromPrimaryInput = mirrorsCreated().at(-1);
+    assert.equal(fromPrimaryInput.remoteRoot, sourceRepo);
+    assert.equal(fromPrimaryInput.labels[MIRROR_LABEL_MIRROR_BRANCH], "1");
+    assert.equal(
+      await gitOut(fromPrimary.worktree.path, "rev-parse", "HEAD"),
+      primaryMainBefore,
+    );
+    const fromPrimaryStop = finalDoc(
+      await sm("worktrees", "unmirror", fromPrimary.worktree.path),
+    );
+    assert.equal(fromPrimaryStop.mirror.copySide, "local");
+    assert.equal(existsSync(fromPrimary.worktree.path), false);
+    assert.equal(
+      await gitOut(sourceRepo, "rev-parse", "HEAD"),
+      primaryMainBefore,
+    );
+    assert.equal(
+      await gitOut(sourceRepo, "symbolic-ref", "HEAD"),
+      "refs/heads/main",
+      "the peer's primary must stay on its branch",
+    );
+    peerOwns = targetProjectId;
+    ok(
+      "mirror --from of the peer's primary: lands as a worktree on mirror/main in mirror-<name>, labelled for the follower, and unmirror removes the copy with the peer's primary untouched",
     );
 
     // ---- (8) The peer going away mid-life reads as offline, not as a hang.

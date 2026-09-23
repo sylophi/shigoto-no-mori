@@ -749,13 +749,26 @@ async function main() {
       mainBefore,
       "B's own primary must not move",
     );
+    // The copy leaving the mirror/ rule is reported, not followed: A's
+    // primary stays on main until the copy is back on a mirror/ branch.
+    await git(rootB2, ["checkout", "-q", "-b", "stray"]);
+    follower.onLocalProjectChanged(projectIdB);
+    await waitGit2("blocked", "the follower to report the stray branch");
+    assert.match(follower.statusOf(session2).detail, /without the mirror\//);
+    assert.equal(
+      await gitOut(repoA, "symbolic-ref", "HEAD"),
+      "refs/heads/main",
+    );
+    await git(rootB2, ["checkout", "-q", "mirror/main"]);
+    follower.onLocalProjectChanged(projectIdB);
+    await waitGit2("synced", "synced once the copy is back on mirror/main");
     await daemon.terminate(session2);
     await waitFor(
       () => daemon.sessions().every((s) => s.session !== session2),
       "the primary's session to leave the state stream",
     );
     ok(
-      "git: a primary mirrored to a mirror/main worktree carries commits both ways, with B's own main untouched",
+      "git: a primary mirrored to a mirror/main worktree carries commits both ways with B's own main untouched, and a stray branch on the copy is reported rather than followed",
     );
     follower.stop();
 
