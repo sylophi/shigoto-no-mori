@@ -21,6 +21,7 @@ import { createServer, type Server, type Socket } from "node:net";
 import { errorMessageOf } from "@shared/errors";
 import type { mirrorContract } from "@shared/ipc/modules/mirror";
 import type { Client } from "@shared/ipc/types";
+import { Schema } from "effect";
 import { WorktreeIdSchema } from "@shared/schemas";
 import { mintHexId } from "@host/lib/idleRegistry";
 import { secretsMatch } from "@host/lib/util/secretCompare";
@@ -57,6 +58,9 @@ const PREFACE_LIMIT_BYTES = 8 * 1024;
 // The daemon's own connect timeout is 30s (file-sync/engine.go), so a
 // preface that has not arrived well before that is a dead dial.
 const PREFACE_TIMEOUT_MS = 10_000;
+
+const isWorktreeId = Schema.is(WorktreeIdSchema);
+
 // Sanity bound, not a quota: one stream per mirror session, and a
 // runaway loop should not exhaust the per-connection channel budget
 // it shares with the port forwards to the same device, so it takes
@@ -82,14 +86,14 @@ function parsePreface(line: string): Preface {
     deviceId: field("deviceId"),
     projectId: field("projectId"),
     worktreeId: field("worktreeId"),
-    localWorktreeId: WorktreeIdSchema.safeParse(localWorktreeId).success
+    localWorktreeId: isWorktreeId(localWorktreeId)
       ? localWorktreeId
       : undefined,
   };
   if (
     preface.deviceId === "" ||
     preface.projectId === "" ||
-    !WorktreeIdSchema.safeParse(preface.worktreeId).success
+    !isWorktreeId(preface.worktreeId)
   ) {
     throw new Error("bad preface");
   }

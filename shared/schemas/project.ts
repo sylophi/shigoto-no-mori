@@ -83,10 +83,6 @@ export const SidebarViewSchema = Schema.Literals(SIDEBAR_VIEWS);
 export type SidebarView = typeof SidebarViewSchema.Type;
 export const isSidebarView = Schema.is(SidebarViewSchema);
 
-// The zod form of SidebarViewSchema, for config.ts's client config
-// that still embeds it. Phase 4 wave 2 removes this.
-export const SidebarViewZod = z.enum(SIDEBAR_VIEWS);
-
 // Sidebar collapse state: toggles one project id in the persisted
 // collapsed set. A toggle (rather than a whole-list write) keeps the
 // read-modify-write in the main process, so a stale renderer cache

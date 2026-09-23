@@ -7,6 +7,7 @@
 // associative and idempotent, so copies may exchange entries in any
 // order, any number of times, over any path, and still agree: there is
 // no sync session to complete and nothing to resume.
+import { Schema } from "effect";
 import { z } from "zod";
 import { isSafeRelPath } from "@shared/git/gitPaths";
 import {
@@ -98,11 +99,13 @@ export function leaveOutPresetValue(preset: LeaveOutPreset): string | null {
       ),
     });
   return (
-    [encode(["leftOut", "brought"]), encode([inForce])].find(
-      (value) => SharedSettingValueSchema.safeParse(value).success,
+    [encode(["leftOut", "brought"]), encode([inForce])].find((value) =>
+      isSharedSettingValue(value),
     ) ?? null
   );
 }
+
+const isSharedSettingValue = Schema.is(SharedSettingValueSchema);
 
 // Whether write `a` outranks write `b`: the later stamp, then the
 // device id, an arbitrary order that is the same on every copy.

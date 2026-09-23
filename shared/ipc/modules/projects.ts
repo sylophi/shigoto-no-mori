@@ -1,5 +1,4 @@
 import { Schema } from "effect";
-import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   BranchListSchema,
@@ -122,18 +121,16 @@ export const projectsContract = defineContract("host", {
   // Named for its first caller. The leave-out preset's picker reads it
   // too, on every device holding the repo, so the name stays for the
   // peers that know it.
-  // The two carry-over outputs embed config.ts's zod schemas, so they
-  // stay zod until it ports (Phase 4 wave 2).
   carryOverListing: invoke(
     "projects:carryOverListing",
     CarryOverListingPayloadSchema,
-    z.array(CarryOverCandidateSchema),
+    Schema.Array(CarryOverCandidateSchema),
     { remote: true, mutating: false },
   ),
   carryOverStats: invoke(
     "projects:carryOverStats",
     CarryOverStatsPayloadSchema,
-    z.record(z.string(), CarryOverStatSchema),
+    Schema.Record(Schema.String, CarryOverStatSchema),
     { remote: true, mutating: false },
   ),
   icon: invoke(

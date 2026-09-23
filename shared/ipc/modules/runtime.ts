@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   MoveDataDirPayloadSchema,
@@ -20,16 +20,18 @@ import {
 // data dir, which a peer this host has not granted control to has no
 // use for). It moves no state, so it never pings viewers.
 export const runtimeContract = defineContract("host", {
-  info: invoke("runtime:info", z.void(), RuntimeInfoSchema, {
+  info: invoke("runtime:info", Schema.Undefined, RuntimeInfoSchema, {
     remote: true,
     mutating: true,
     movesHostState: false,
   }),
-  nuke: invoke("runtime:nuke", z.void(), z.void(), { remote: false }),
+  nuke: invoke("runtime:nuke", Schema.Undefined, Schema.Undefined, {
+    remote: false,
+  }),
   moveDataDir: invoke(
     "runtime:moveDataDir",
     MoveDataDirPayloadSchema,
-    z.void(),
+    Schema.Undefined,
     // The host restarts right after, and the session that comes back
     // refetches everything, so the viewer ping would only race the
     // quit.

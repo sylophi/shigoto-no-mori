@@ -28,7 +28,7 @@ export interface PathPickerModalProps<E extends PickerEntry> {
   rootPath: string;
   // The listing for one root-relative folder ("" at the root).
   useListing: (relative: string) => {
-    data: E[] | undefined;
+    data: readonly E[] | undefined;
     isPending: boolean;
     error: unknown;
   };

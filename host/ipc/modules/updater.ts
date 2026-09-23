@@ -34,6 +34,10 @@ export function setUpdaterImpl(next: UpdaterImpl): void {
 export const updaterHandlers: Handlers<typeof updaterContract, HandlerContext> =
   {
     get: () => impl.getState(),
-    check: () => impl.check(),
-    install: (_input, ctx) => impl.install(isRemoteCaller(ctx)),
+    check: () => {
+      impl.check();
+    },
+    install: async (_input, ctx) => {
+      await impl.install(isRemoteCaller(ctx));
+    },
   };

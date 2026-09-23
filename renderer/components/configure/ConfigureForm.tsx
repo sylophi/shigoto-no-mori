@@ -48,8 +48,8 @@ function fromConfig(
     defaultBranch: config?.defaultBranch ?? resolvedDefaultBranch,
     setup: config?.scripts?.setup ?? "",
     teardown: config?.scripts?.teardown ?? "",
-    launchers: config?.launchers ?? [],
-    carryOver: config?.carryOver ?? [],
+    launchers: [...(config?.launchers ?? [])],
+    carryOver: [...(config?.carryOver ?? [])],
     useWorktreeInclude: config?.useWorktreeInclude !== false,
     showPrimaryInInbox: config?.showPrimaryInInbox ?? false,
   };

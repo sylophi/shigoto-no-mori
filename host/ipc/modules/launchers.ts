@@ -60,7 +60,7 @@ const USE_LOG_KEY = "launcherUseLog";
 type UseLogMap = Record<string, number[]>;
 
 function customEntriesFrom(
-  launchers: LauncherCommand[] | undefined,
+  launchers: readonly LauncherCommand[] | undefined,
 ): CustomLauncher[] {
   if (!launchers) return [];
   return launchers.map(

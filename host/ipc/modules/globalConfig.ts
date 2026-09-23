@@ -25,10 +25,10 @@ export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
   readLocal: async () => readGlobalConfig(),
   // Same engine rule as the worktree/project mutations: the CLI
   // performs the write.
-  write: async ({ config }) =>
+  write: async ({ config }) => {
     // Under the shared config write lock so a local whole-document write
     // and a remote writeDeviceSettings patch mutually exclude on the host.
-    withGlobalConfigWriteLock(async () => {
+    await withGlobalConfigWriteLock(async () => {
       await globalConfigWriteViaCli(config);
       // The watcher treats the delegated spawn as a self-write, so the
       // TTL cache must be dropped here rather than by the fs event. This
@@ -40,8 +40,9 @@ export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
       // The terrier merge gates on the toggle just written. Without this
       // the sidebar would keep the pre-save project list for a TTL.
       invalidateTerrierCaches();
-    }),
-  // The remote-writable device-settings subset. The zod boundary already
+    });
+  },
+  // The remote-writable device-settings subset. The schema boundary already
   // rejected any key outside the managed set (the patch schema is
   // strict), so by the time this runs the patch can only carry settings
   // the Settings form manages, never socketHost or remoteDevices.
@@ -51,11 +52,11 @@ export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
   // cache-invalidation so listener reconciliation still runs. An
   // explicitly-undefined key is skipped rather than spread, or the
   // whole-document write would delete the base's value for it.
-  writeDeviceSettings: async ({ patch }) =>
+  writeDeviceSettings: async ({ patch }) => {
     // Under the shared config write lock so this whole read-modify-write
     // cannot interleave with a concurrent local `write` and lose an
     // update. Both host write handlers acquire the same lock.
-    withGlobalConfigWriteLock(async () => {
+    await withGlobalConfigWriteLock(async () => {
       // Cache-bypassing base: a base up to the 5s TTL stale would let this
       // whole-document write resurrect a just-rotated socketHost.token or
       // re-enable a just-disabled host, because the CLI clears every
@@ -70,5 +71,6 @@ export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
       // Device-settings patches can carry the terrier toggle too, so the
       // merged project list must not serve a pre-save TTL entry either.
       invalidateTerrierCaches();
-    }),
+    });
+  },
 };

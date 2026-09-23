@@ -16,6 +16,8 @@ import type {
   ShellHookState,
   ShellIntegrationStatus,
 } from "@shared/ipc/modules/cli";
+import { Schema } from "effect";
+import { safeDecodeWith } from "@shared/ipc/codec";
 import { ShellHookStateSchema } from "@shared/ipc/modules/cli";
 import { cliFailureMessage, runCli } from "./cliRunner";
 
@@ -81,16 +83,21 @@ function loginShellBase(): string | null {
 
 // The `shells` array of the CLI's status document, which install and
 // uninstall also emit. Empty when the run produced none.
-function shellsFromDocs(docs: { [key: string]: unknown }[]): ShellHookState[] {
+function shellsFromDocs(
+  docs: { [key: string]: unknown }[],
+): readonly ShellHookState[] {
   const doc = docs.find((d) => d["ok"] === true && d["shells"] !== undefined);
   if (doc === undefined) return [];
-  const parsed = ShellHookStateSchema.array().safeParse(doc["shells"]);
+  const parsed = safeDecodeWith(
+    Schema.Array(ShellHookStateSchema),
+    doc["shells"],
+  );
   return parsed.success ? parsed.data : [];
 }
 
 // `shells` enumerates exactly the kinds the CLI supports, so the login
 // shell is "supported" iff it appears there.
-function statusFrom(shells: ShellHookState[]): ShellIntegrationStatus {
+function statusFrom(shells: readonly ShellHookState[]): ShellIntegrationStatus {
   const base = loginShellBase();
   const loginShell =
     base !== null && shells.some((s) => s.shell === base) ? base : null;

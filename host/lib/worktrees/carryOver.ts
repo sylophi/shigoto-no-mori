@@ -10,6 +10,7 @@
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { makeIgnoreMatcher, normalizeRelPath } from "@shared/git/gitPaths";
+import type { Types } from "effect";
 import type { CarryOverCandidate, CarryOverStat } from "@shared/schemas";
 import type { SyncWorktreeFolderEntry } from "@shared/ipc/modules/sync";
 import { listIgnoredPaths } from "../git/branches";
@@ -117,7 +118,7 @@ export async function listCarryOverCandidates(
   if (listed.every((r) => r === null)) {
     throw new Error(`Couldn't read ${relative || "the project root"}`);
   }
-  const byName = new Map<string, CarryOverCandidate>();
+  const byName = new Map<string, Types.DeepMutable<CarryOverCandidate>>();
   for (const result of listed) {
     if (!result) continue;
     for (const entry of result.entries) {
@@ -210,7 +211,7 @@ export async function listWorktreeFolder(
 export async function statCarryOverPaths(
   projectId: string,
   projectPath: string,
-  paths: string[],
+  paths: readonly string[],
 ): Promise<Record<string, CarryOverStat>> {
   const checkouts = await listCarryOverCheckouts(projectId, projectPath);
   const stats: Record<string, CarryOverStat> = {};

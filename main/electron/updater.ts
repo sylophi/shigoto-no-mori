@@ -21,6 +21,7 @@
 // CLI child inherits both from our environment.
 import { join } from "node:path";
 import { app } from "electron";
+import { safeDecodeWith } from "@shared/ipc/codec";
 import { updaterContract } from "@shared/ipc/modules/updater";
 import type { StagedManifest, UpdaterState } from "@shared/schemas";
 import {
@@ -131,7 +132,7 @@ async function runCheck(): Promise<void> {
         // "verifying" arrives too, and the renderer's machine collapses
         // everything between "found one" and "staged" into downloading.
         if (
-          UpdateStageEventSchema.safeParse(doc).success &&
+          safeDecodeWith(UpdateStageEventSchema, doc).success &&
           state.kind !== "downloading"
         ) {
           setState({ kind: "downloading" });
@@ -142,7 +143,9 @@ async function runCheck(): Promise<void> {
     );
     const final = result.docs.findLast((doc) => typeof doc["ok"] === "boolean");
     const parsed =
-      final?.["ok"] === true ? UpdateStageResultSchema.safeParse(final) : null;
+      final?.["ok"] === true
+        ? safeDecodeWith(UpdateStageResultSchema, final)
+        : null;
     if (parsed?.success === true && parsed.data.status === "staged") {
       setState(readyStateFrom(parsed.data));
     } else if (

@@ -26,8 +26,26 @@
 //     dash on a git ref, a path leaving the worktree, a commit hash, a
 //     clone URL or folder name), each bound, each default and each
 //     discriminated union's pick;
-//   - the zod copies left for waves 2 and 3 (the `...Zod` exports) give
-//     the same verdicts and outputs as the Schema they mirror;
+//   - wave 2 (config, runtime, sharedSettings and every contract slot
+//     that embeds them or held zod: globalConfig, runtime,
+//     sharedSettings, updater, clientConfig, projectLauncher, cli, nav,
+//     window, shigomori, account, hub, and projects' carry-over
+//     outputs): every row of RECORDED_WAVE2 decodes, or is refused,
+//     exactly as zod did, including the carry-over path refine's
+//     message, every bound, the loose stored documents keeping unknown
+//     keys at their own level only, and each void slot taking undefined
+//     alone;
+//   - the remote device-settings patch refuses `socketHost` (and every
+//     other key the Settings form does not manage) by name, at every
+//     level it rides, and through Schema.is, while its picked keys are
+//     the full config's own field schemas;
+//   - the shared settings document reads entry by entry as the zod
+//     transform did: a bad key or entry is left out without costing the
+//     rest, the first 512 readable entries in the document's own order
+//     are kept, and a `__proto__` key is dropped with the prototype
+//     untouched, since every device must run the same rule;
+//   - the zod copies left for wave 3 (the `...Zod` exports) give the
+//     same verdicts and outputs as the Schema they mirror;
 //   - strictStruct (shared/schemas/strict.ts) is z.strictObject: an
 //     undeclared key at its level is refused with the key named, a
 //     nested plain struct still strips, optional keys and the decoded
@@ -45,8 +63,28 @@
 // Runs under test/lib/register-ts-alias.mjs. Run: pnpm test schema-port.
 import assert from "node:assert/strict";
 import { Effect, Schema, Struct } from "effect";
-import { decodeWith, isZodCodec, safeDecodeWith } from "@shared/ipc/codec";
+import {
+  decodeWith,
+  isZodCodec,
+  safeDecodeWith,
+  validateWith,
+} from "@shared/ipc/codec";
+import {
+  AccountStatusSchema,
+  accountContract,
+} from "@shared/ipc/modules/account";
 import { branchesContract } from "@shared/ipc/modules/branches";
+import { ShellHookStateSchema, cliContract } from "@shared/ipc/modules/cli";
+import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
+import { globalConfigContract } from "@shared/ipc/modules/globalConfig";
+import { HubStatusSchema, hubContract } from "@shared/ipc/modules/hub";
+import { navContract } from "@shared/ipc/modules/nav";
+import { projectLauncherContract } from "@shared/ipc/modules/projectLauncher";
+import { runtimeContract } from "@shared/ipc/modules/runtime";
+import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
+import { shigomoriContract } from "@shared/ipc/modules/shigomori";
+import { updaterContract } from "@shared/ipc/modules/updater";
+import { windowContract } from "@shared/ipc/modules/window";
 import { gitContract } from "@shared/ipc/modules/git";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
 import { launchersContract } from "@shared/ipc/modules/launchers";
@@ -1183,17 +1221,1032 @@ const RECORDED = {
   ],
 };
 
+// Wave 2's fixtures and recorded table, in the same form. A row's
+// label is an export's name, or "module.call.slot" for a contract slot
+// built inline.
+const launcher = { id: "l", label: "L", command: "c" };
+const carry = { path: "node_modules", mode: "symlink" };
+const carryCandidate = {
+  name: "n",
+  isDirectory: true,
+  ignored: true,
+  inPrimary: false,
+  worktrees: ["w"],
+};
+const carryStat = { isDirectory: false, inPrimary: true, worktrees: [] };
+const fullProjectConfig = {
+  scripts: { setup: "pnpm i", teardown: "x" },
+  launchers: [launcher],
+  portBase: 3000,
+  defaultBranch: "main",
+  carryOver: [carry, { path: ".env", mode: "copy" }],
+  useWorktreeInclude: false,
+  worktreeLayout: "in-project",
+  customWorktreePath: "/w",
+  lastMergeMethod: "squash",
+  showPrimaryInInbox: true,
+};
+const socketHost = { enabled: true, port: 8080, lan: false, token: "t" };
+const fullGlobal = {
+  launchers: [launcher],
+  hiddenLaunchers: ["app:cursor"],
+  launchScripts: false,
+  deleteBranchOnRemove: true,
+  autoPopulateInstall: true,
+  autoPullNew: false,
+  autoPullPrimaryOnly: true,
+  portPool: true,
+  terrier: false,
+  githubCli: true,
+  directConnections: false,
+  cloudflaredPath: "/bin/cloudflared",
+  socketHost,
+};
+// Every key the Settings form manages, so every key the remote patch
+// takes.
+const patchKeys = {
+  launchers: [launcher],
+  hiddenLaunchers: ["web:github"],
+  launchScripts: true,
+  deleteBranchOnRemove: false,
+  autoPopulateInstall: false,
+  autoPullNew: true,
+  autoPullPrimaryOnly: false,
+  portPool: false,
+  terrier: true,
+  githubCli: false,
+};
+const fullClient = {
+  theme: "dark",
+  doubutsu: false,
+  pauseAnimationsOnBattery: true,
+  keepReachable: false,
+  forwardLocalPorts: { "d:3000": 3001 },
+  quickCreateDevices: { "github.com/a/b": "d" },
+  sidebarView: "inbox",
+  collapsedRemoteProjects: ["g"],
+};
+const runtimeInfo = {
+  dataDir: "/d",
+  dataDirSource: "default",
+  atDefaultDataDir: true,
+  canonicalDataDirName: ".sm",
+  homedir: "/h",
+};
+const entry = { value: "v", at: 3, by: "k" };
+const cliStatus = {
+  name: "sm",
+  aliasName: "shigomori",
+  binDir: "/b",
+  linkPath: "/b/sm",
+  state: "installed",
+  foreignPaths: [],
+  onPath: true,
+};
+const hook = { shell: "zsh", path: "/h/.zshrc", state: "installed" };
+const hubBase = { onlineDeviceIds: [], peerAppVersions: {} };
+const accountStatus = {
+  configured: true,
+  signedIn: true,
+  accountId: "a",
+  deviceName: "Mac",
+  sharedSignIn: false,
+};
+const ports = (count) =>
+  Array.from({ length: count }, (_, at) => ({ port: 3000 + at }));
+
+const RECORDED_WAVE2 = {
+  LauncherCommandSchema: [
+    [launcher, same],
+    [{ ...launcher, extra: 1 }, ok(launcher)],
+    [{ id: "", label: "L", command: "c" }, refuse()],
+    [{ id: "l", label: "L", command: "" }, refuse()],
+    [{ id: "l", label: "L" }, refuse()],
+    [{ id: "l", label: "L", command: 1 }, refuse()],
+    [null, refuse()],
+  ],
+  CarryOverEntrySchema: [
+    [carry, same],
+    [
+      { path: ".env", mode: "copy", extra: 1 },
+      ok({ path: ".env", mode: "copy" }),
+    ],
+    [
+      { path: "../x", mode: "copy" },
+      refuse("Path must stay within the project root"),
+    ],
+    [
+      { path: "a/../../b", mode: "copy" },
+      refuse("Path must stay within the project root"),
+    ],
+    [
+      { path: "/abs", mode: "copy" },
+      refuse("Path must stay within the project root"),
+    ],
+    [
+      { path: "a\u0000b", mode: "copy" },
+      refuse("Path must stay within the project root"),
+    ],
+    [{ path: "", mode: "copy" }, refuse()],
+    [{ path: "a", mode: "hardlink" }, refuse()],
+    [{ path: "a" }, refuse()],
+  ],
+  ShigomoriConfigSchema: [
+    [{ defaultBranch: "main" }, same],
+    [fullProjectConfig, same],
+    [
+      { ...fullProjectConfig, extra: 1, schemaVersion: 1 },
+      ok(fullProjectConfig),
+    ],
+    [
+      { defaultBranch: "main", scripts: { setup: "x", junk: 1 } },
+      ok({ scripts: { setup: "x" }, defaultBranch: "main" }),
+    ],
+    [{ defaultBranch: "main", scripts: {} }, same],
+    [{ defaultBranch: "main", scripts: { setup: undefined } }, same],
+    [{ defaultBranch: "main", scripts: null }, refuse()],
+    [
+      { defaultBranch: "main", launchers: undefined, portBase: undefined },
+      same,
+    ],
+    [{ defaultBranch: "" }, refuse()],
+    [{}, refuse()],
+    [{ defaultBranch: "main", portBase: 0 }, refuse()],
+    [{ defaultBranch: "main", portBase: 1.5 }, refuse()],
+    [{ defaultBranch: "main", portBase: -1 }, refuse()],
+    [{ defaultBranch: "main", portBase: Infinity }, refuse()],
+    [{ defaultBranch: "main", worktreeLayout: "nested" }, refuse()],
+    [{ defaultBranch: "main", lastMergeMethod: "fast-forward" }, refuse()],
+    [{ defaultBranch: "main", lastMergeMethod: "rebase" }, same],
+    [
+      { defaultBranch: "main", carryOver: [{ path: "../x", mode: "copy" }] },
+      refuse("Path must stay within the project root"),
+    ],
+    [{ defaultBranch: "main", launchers: [{ id: "l" }] }, refuse()],
+    [{ defaultBranch: "main", useWorktreeInclude: "yes" }, refuse()],
+    [{ defaultBranch: "main", customWorktreePath: 1 }, refuse()],
+    [null, refuse()],
+  ],
+  StoredShigomoriConfigSchema: [
+    [{ defaultBranch: "main" }, same],
+    [{ ...fullProjectConfig, extra: 1, schemaVersion: 1 }, same],
+    [{ defaultBranch: "main", future: { deep: [1] } }, same],
+    [
+      { defaultBranch: "main", scripts: { setup: "x", junk: 1 } },
+      ok({ scripts: { setup: "x" }, defaultBranch: "main" }),
+    ],
+    [{ defaultBranch: "main", portBase: 0 }, refuse()],
+    [{ defaultBranch: "main", future: 1, worktreeLayout: "nested" }, refuse()],
+    [{}, refuse()],
+    [[], refuse()],
+  ],
+  WorktreeIncludeStatusSchema: [
+    [{ fileExists: true, matchedPaths: ["a/", "b"] }, same],
+    [
+      { fileExists: false, matchedPaths: [], extra: 1 },
+      ok({ fileExists: false, matchedPaths: [] }),
+    ],
+    [{ fileExists: false }, refuse()],
+    [{ fileExists: false, matchedPaths: [1] }, refuse()],
+  ],
+  CarryOverListingPayloadSchema: [
+    [{ ...P, relative: "" }, same],
+    [{ ...P, relative: "src/a" }, same],
+    [
+      { ...P, relative: "src", ruleIgnored: true, extra: 1 },
+      ok({ ...P, relative: "src", ruleIgnored: true }),
+    ],
+    [
+      { ...P, relative: "../x" },
+      refuse("Path must stay within the project root"),
+    ],
+    [
+      { ...P, relative: "/abs" },
+      refuse("Path must stay within the project root"),
+    ],
+    [{ ...P, relative: "", ruleIgnored: "yes" }, refuse()],
+    [{ projectId: "", relative: "" }, refuse()],
+    [{ ...P }, refuse()],
+  ],
+  CarryOverCandidateSchema: [
+    [carryCandidate, same],
+    [{ ...carryCandidate, extra: 1 }, ok(carryCandidate)],
+    [
+      {
+        name: "n",
+        isDirectory: true,
+        ignored: true,
+        inPrimary: false,
+        worktrees: undefined,
+      },
+      refuse(),
+    ],
+    [
+      {
+        name: 1,
+        isDirectory: true,
+        ignored: true,
+        inPrimary: false,
+        worktrees: ["w"],
+      },
+      refuse(),
+    ],
+  ],
+  CarryOverStatsPayloadSchema: [
+    [{ ...P, paths: [] }, same],
+    [
+      { ...P, paths: ["a", "b/c"], extra: 1 },
+      ok({ ...P, paths: ["a", "b/c"] }),
+    ],
+    [
+      { ...P, paths: ["../x"] },
+      refuse("Path must stay within the project root"),
+    ],
+    [{ ...P, paths: [""] }, refuse()],
+    [{ ...P, paths: "a" }, refuse()],
+    [{ paths: [] }, refuse()],
+  ],
+  CarryOverStatSchema: [
+    [carryStat, same],
+    [{ ...carryStat, extra: 1 }, ok(carryStat)],
+    [{ isDirectory: true }, refuse()],
+  ],
+  ShigomoriWorktreeDataSchema: [
+    [{}, same],
+    [{ notes: "n" }, same],
+    [{ notes: undefined, ports: undefined }, same],
+    [
+      { ports: [{ port: 3000, label: " web " }] },
+      ok({ ports: [{ port: 3000, label: "web" }] }),
+    ],
+    [
+      { ports: [{ port: 3000, extra: 1 }], extra: 1, schemaVersion: 1 },
+      ok({ ports: [{ port: 3000 }] }),
+    ],
+    [{ ports: ports(16) }, same],
+    [{ ports: ports(17) }, refuse()],
+    [{ ports: [{ port: 0 }] }, refuse()],
+    [{ ports: [{ port: 3000, label: "   " }] }, refuse()],
+    [{ ports: [{ port: 3000, label: "x".repeat(33) }] }, refuse()],
+    [{ ports: [{ port: 3000, label: "x".repeat(32) }] }, same],
+    [{ notes: 1 }, refuse()],
+    [null, refuse()],
+  ],
+  GlobalConfigSchema: [
+    [{}, same],
+    [fullGlobal, same],
+    [
+      { theme: "dark", doubutsu: true, remoteDevices: [{ token: "x" }] },
+      ok({}),
+    ],
+    [
+      { socketHost: { ...socketHost, junk: 1 } },
+      ok({ socketHost: socketHost }),
+    ],
+    [{ socketHost: {} }, same],
+    [{ socketHost: { port: 0 } }, refuse()],
+    [{ socketHost: { port: 65536 } }, refuse()],
+    [{ socketHost: { port: 1.5 } }, refuse()],
+    [{ socketHost: { port: 65535, token: "" } }, same],
+    [{ socketHost: null }, refuse()],
+    [{ launchers: [{ id: "", label: "L", command: "c" }] }, refuse()],
+    [{ hiddenLaunchers: [1] }, refuse()],
+    [{ launchScripts: "no" }, refuse()],
+    [{ cloudflaredPath: 1 }, refuse()],
+    [{ directConnections: undefined, launchers: undefined }, same],
+    [null, refuse()],
+    [[], refuse()],
+  ],
+  StoredGlobalConfigSchema: [
+    [{}, same],
+    [fullGlobal, same],
+    [
+      { theme: "dark", remoteDevices: [{ token: "x" }], schemaVersion: 1 },
+      same,
+    ],
+    [
+      { socketHost: { ...socketHost, junk: 1 }, extra: 1 },
+      ok({ socketHost: socketHost, extra: 1 }),
+    ],
+    [{ socketHost: { port: 0 }, extra: 1 }, refuse()],
+    [{ extra: undefined }, same],
+    [null, refuse()],
+  ],
+  ReadGlobalConfigSchema: [
+    [{}, same],
+    [
+      {
+        launchers: [launcher],
+        hiddenLaunchers: ["app:cursor"],
+        launchScripts: false,
+        deleteBranchOnRemove: true,
+        autoPopulateInstall: true,
+        autoPullNew: false,
+        autoPullPrimaryOnly: true,
+        portPool: true,
+        terrier: false,
+        githubCli: true,
+        directConnections: false,
+        cloudflaredPath: "/bin/cloudflared",
+        socketHost: { enabled: true, port: 1, tokenSet: true },
+      },
+      same,
+    ],
+    [
+      { socketHost: { ...socketHost, tokenSet: true } },
+      ok({
+        socketHost: { enabled: true, port: 8080, lan: false, tokenSet: true },
+      }),
+    ],
+    [{ socketHost: { tokenSet: "yes" } }, refuse()],
+    [{ theme: "dark", extra: 1 }, same],
+    [{ socketHost: { port: 0 } }, refuse()],
+  ],
+  WriteGlobalConfigPayloadSchema: [
+    [{ config: {} }, same],
+    [{ config: fullGlobal }, same],
+    [
+      { config: { theme: "x", launchScripts: true, remoteDevices: [] } },
+      ok({ config: { launchScripts: true } }),
+    ],
+    [{ config: {}, extra: 1 }, ok({ config: {} })],
+    [{}, refuse()],
+    [{ config: null }, refuse()],
+    [{ config: { socketHost: { port: 0 } } }, refuse()],
+  ],
+  DeviceSettingsPatchSchema: [
+    [{}, same],
+    [patchKeys, same],
+    [{ launchScripts: true }, same],
+    [{ launchers: undefined }, same],
+    [{ socketHost: {} }, refuse()],
+    [{ socketHost: { token: "t" }, launchScripts: true }, refuse()],
+    [{ remoteDevices: [] }, refuse()],
+    [{ theme: "dark" }, refuse()],
+    [{ directConnections: true }, refuse()],
+    [{ cloudflaredPath: "/x" }, refuse()],
+    [{ extra: undefined }, refuse()],
+    [{ launchers: [{ id: "" }] }, refuse()],
+    [{ hiddenLaunchers: "x" }, refuse()],
+    [null, refuse()],
+    [[], refuse()],
+  ],
+  WriteDeviceSettingsPayloadSchema: [
+    [{ patch: {} }, same],
+    [
+      { patch: { portPool: true }, extra: 1 },
+      ok({ patch: { portPool: true } }),
+    ],
+    [{ patch: { socketHost: { token: "t" } } }, refuse()],
+    [{ patch: null }, refuse()],
+    [{}, refuse()],
+  ],
+  ClientConfigSchema: [
+    [{}, same],
+    [fullClient, same],
+    [{ ...fullClient, extra: 1, schemaVersion: 1 }, ok(fullClient)],
+    [{ theme: "sepia" }, refuse()],
+    [{ forwardLocalPorts: { "d:3000": 0 } }, refuse()],
+    [{ forwardLocalPorts: { "d:3000": "3001" } }, refuse()],
+    [{ forwardLocalPorts: { "d:3000": 1.5 } }, refuse()],
+    [{ forwardLocalPorts: [] }, refuse()],
+    [{ quickCreateDevices: { a: 1 } }, refuse()],
+    [{ sidebarView: "tree" }, refuse()],
+    [{ collapsedRemoteProjects: "g" }, refuse()],
+    [{ keepReachable: undefined, theme: undefined }, same],
+    [null, refuse()],
+  ],
+  StoredClientConfigSchema: [
+    [{}, same],
+    [{ ...fullClient, extra: 1, schemaVersion: 1 }, same],
+    [{ theme: "sepia", extra: 1 }, refuse()],
+    [{ future: null }, same],
+  ],
+  WriteClientConfigPayloadSchema: [
+    [{ config: {} }, same],
+    [{ config: { ...fullClient, extra: 1 } }, ok({ config: fullClient })],
+    [{ config: { theme: "x" } }, refuse()],
+    [{}, refuse()],
+  ],
+  WriteShigomoriPayloadSchema: [
+    [{ ...P, config: { defaultBranch: "main" } }, same],
+    [
+      { ...P, config: { defaultBranch: "main", extra: 1 }, extra: 1 },
+      ok({ ...P, config: { defaultBranch: "main" } }),
+    ],
+    [{ ...P, config: {} }, refuse()],
+    [{ projectId: "", config: { defaultBranch: "main" } }, refuse()],
+    [{ ...P }, refuse()],
+  ],
+  WorktreeIdSchema: [
+    ["0123456789ab", same],
+    ["0123456789AB", refuse()],
+    ["0123456789a", refuse()],
+    ["0123456789abc", refuse()],
+    ["01234567890g", refuse()],
+    ["", refuse()],
+    [12, refuse()],
+  ],
+  ReadWorktreeDataPayloadSchema: [
+    [{ ...P, worktreeId: "0123456789ab" }, same],
+    [
+      { ...P, worktreeId: "0123456789ab", extra: 1 },
+      ok({ ...P, worktreeId: "0123456789ab" }),
+    ],
+    [{ ...P, worktreeId: "../x" }, refuse()],
+    [{ worktreeId: "0123456789ab" }, refuse()],
+  ],
+  WriteWorktreeDataPayloadSchema: [
+    [{ ...P, worktreeId: "0123456789ab", data: {} }, same],
+    [
+      { ...P, worktreeId: "0123456789ab", data: { notes: "n", junk: 1 } },
+      ok({ ...P, worktreeId: "0123456789ab", data: { notes: "n" } }),
+    ],
+    [
+      { ...P, worktreeId: "0123456789ab", data: { ports: [{ port: 0 }] } },
+      refuse(),
+    ],
+    [{ ...P, worktreeId: "0123456789ab" }, refuse()],
+  ],
+  PreviewThemePayloadSchema: [
+    [{ theme: "dark" }, same],
+    [{ theme: "light", extra: 1 }, ok({ theme: "light" })],
+    [{ theme: "system" }, same],
+    [{ theme: "x" }, refuse()],
+    [{}, refuse()],
+  ],
+  RuntimeInfoSchema: [
+    [runtimeInfo, same],
+    [
+      {
+        dataDir: "/d",
+        dataDirSource: "legacy",
+        atDefaultDataDir: true,
+        canonicalDataDirName: ".sm",
+        homedir: "/h",
+        extra: 1,
+      },
+      ok({
+        dataDir: "/d",
+        dataDirSource: "legacy",
+        atDefaultDataDir: true,
+        canonicalDataDirName: ".sm",
+        homedir: "/h",
+      }),
+    ],
+    [
+      {
+        dataDir: "/d",
+        dataDirSource: "bad",
+        atDefaultDataDir: true,
+        canonicalDataDirName: ".sm",
+        homedir: "/h",
+      },
+      refuse(),
+    ],
+    [
+      {
+        dataDir: "",
+        dataDirSource: "default",
+        atDefaultDataDir: true,
+        canonicalDataDirName: ".sm",
+        homedir: "/h",
+      },
+      refuse(),
+    ],
+    [
+      {
+        dataDir: "/d",
+        dataDirSource: "default",
+        atDefaultDataDir: true,
+        canonicalDataDirName: ".sm",
+        homedir: undefined,
+      },
+      refuse(),
+    ],
+  ],
+  MoveDataDirPayloadSchema: [
+    [{}, same],
+    [{ parentDir: "/x" }, same],
+    [{ parentDir: undefined }, same],
+    [{ parentDir: "" }, refuse()],
+    [{ parentDir: "/x", extra: 1 }, ok({ parentDir: "/x" })],
+    [undefined, refuse()],
+    [null, refuse()],
+  ],
+  NukeProgressSchema: [
+    [{ phase: "scripts" }, same],
+    [{ phase: "worktrees", done: 1, total: 2 }, same],
+    [{ phase: "wipe", extra: 1 }, ok({ phase: "wipe" })],
+    [{ phase: "scripts", done: 1 }, ok({ phase: "scripts" })],
+    [{ phase: "worktrees", done: -1, total: 2 }, refuse()],
+    [{ phase: "worktrees", done: 1.5, total: 2 }, refuse()],
+    [{ phase: "worktrees" }, refuse()],
+    [{ phase: "other" }, refuse()],
+    [{}, refuse()],
+  ],
+  UpdaterStateSchema: [
+    [{ kind: "unsupported" }, same],
+    [{ kind: "idle" }, same],
+    [{ kind: "checking" }, same],
+    [{ kind: "downloading", extra: 1 }, ok({ kind: "downloading" })],
+    [{ kind: "ready", version: "1.2.3", releaseDate: null }, same],
+    [
+      { kind: "ready", version: "1.2.3", notes: "n", releaseDate: "2026" },
+      same,
+    ],
+    [
+      { kind: "ready", version: "1.2.3", notes: undefined, releaseDate: null },
+      same,
+    ],
+    [{ kind: "ready", version: "1.2.3" }, refuse()],
+    [{ kind: "ready", version: 1, releaseDate: null }, refuse()],
+    [{ kind: "error", message: "m" }, same],
+    [{ kind: "error" }, refuse()],
+    [{ kind: "bogus" }, refuse()],
+    [null, refuse()],
+  ],
+  UpdateRequestSchema: [
+    [{ action: "install", requestedAt: 1 }, same],
+    [
+      { action: "install", requestedAt: 1.5, extra: 1 },
+      ok({ action: "install", requestedAt: 1.5 }),
+    ],
+    [{ action: "check", requestedAt: 1 }, refuse()],
+    [{ action: "install", requestedAt: Number.NaN }, refuse()],
+    [{ action: "install", requestedAt: Infinity }, refuse()],
+    [{ action: "install" }, refuse()],
+  ],
+  StagedManifestSchema: [
+    [{ version: "1", bundleName: "b.app" }, same],
+    [{ version: "1", bundleName: "b.app", notes: "n", releaseDate: "d" }, same],
+    [
+      { version: "1", bundleName: "b.app", extra: 1 },
+      ok({ version: "1", bundleName: "b.app" }),
+    ],
+    [{ version: "", bundleName: "b.app" }, refuse()],
+    [{ version: "1", bundleName: "" }, refuse()],
+    [{ version: "1", bundleName: "b.app", notes: null }, refuse()],
+  ],
+  UpdateStageEventSchema: [
+    [{ event: "downloading" }, same],
+    [{ event: "verifying", ok: true }, ok({ event: "verifying" })],
+    [{ event: "staged" }, refuse()],
+    [{}, refuse()],
+  ],
+  UpdateStageResultSchema: [
+    [{ status: "up-to-date", version: "1" }, same],
+    [
+      { status: "up-to-date", version: "1", ok: true },
+      ok({ status: "up-to-date", version: "1" }),
+    ],
+    [{ status: "staged", version: "2", installed: "1" }, same],
+    [
+      {
+        status: "staged",
+        version: "2",
+        installed: "1",
+        notes: "n",
+        releaseDate: "d",
+        ok: true,
+      },
+      ok({
+        status: "staged",
+        version: "2",
+        installed: "1",
+        notes: "n",
+        releaseDate: "d",
+      }),
+    ],
+    [{ status: "staged", version: "", installed: "1" }, refuse()],
+    [{ status: "staged", version: "2" }, refuse()],
+    [{ status: "failed", version: "2" }, refuse()],
+  ],
+  SharedSettingValueSchema: [
+    ["x", same],
+    ["", same],
+    ["x".repeat(256), same],
+    ["x".repeat(257), refuse()],
+    [1.5, same],
+    [-3, same],
+    [Number.NaN, refuse()],
+    [Infinity, refuse()],
+    [true, same],
+    [null, same],
+    [undefined, refuse()],
+    [{}, refuse()],
+    [[], refuse()],
+  ],
+  SharedSettingEntrySchema: [
+    [entry, same],
+    [{ ...entry, extra: 1 }, ok(entry)],
+    [{ value: null, at: 3, by: "k" }, same],
+    [{ value: "v", at: 0, by: "k" }, same],
+    [{ value: "v", at: 8640000000000000, by: "k" }, same],
+    [{ value: "v", at: 8640000000000001, by: "k" }, refuse()],
+    [{ value: "v", at: -1, by: "k" }, refuse()],
+    [{ value: "v", at: 1.5, by: "k" }, refuse()],
+    [{ value: "v", at: 3, by: "" }, refuse()],
+    [{ value: "v", at: 3, by: "b".repeat(128) }, same],
+    [{ value: "v", at: 3, by: "b".repeat(129) }, refuse()],
+    [{ at: 3, by: "k" }, refuse()],
+    [{ value: undefined, at: 3, by: "k" }, refuse()],
+  ],
+  SharedSettingsDocSchema: [
+    [{ entries: {} }, same],
+    [{ entries: { k: entry }, extra: 1 }, ok({ entries: { k: entry } })],
+    [
+      {
+        entries: {
+          good: entry,
+          tooLong: { value: "x".repeat(300), at: 4, by: "k" },
+          badStamp: { value: true, at: 9007199254740991, by: "k" },
+          notAnEntry: 5,
+          withExtra: { ...entry, junk: 1 },
+          "": entry,
+          kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk:
+            entry,
+          kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk:
+            entry,
+        },
+      },
+      ok({
+        entries: {
+          good: entry,
+          withExtra: entry,
+          kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk:
+            entry,
+        },
+      }),
+    ],
+    [{ entries: { 1: entry, 2: entry, b: entry, a: entry } }, same],
+    [
+      {
+        entries: {
+          ["__proto__"]: { value: 1, at: 1, by: "k" },
+          k: { value: 1, at: 1, by: "k" },
+        },
+      },
+      ok({ entries: { k: { value: 1, at: 1, by: "k" } } }),
+    ],
+    [{ entries: [] }, refuse()],
+    [{ entries: [entry] }, refuse()],
+    [{ entries: null }, refuse()],
+    [{ entries: "x" }, refuse()],
+    [{}, refuse()],
+    [null, refuse()],
+  ],
+  SetSharedSettingPayloadSchema: [
+    [{ key: "k", value: null }, same],
+    [{ key: "k", value: "v", extra: 1 }, ok({ key: "k", value: "v" })],
+    [{ key: "", value: 1 }, refuse()],
+    [{ key: "k".repeat(512), value: 1 }, same],
+    [{ key: "k".repeat(513), value: 1 }, refuse()],
+    [{ key: "k" }, refuse()],
+    [{ key: "k", value: {} }, refuse()],
+  ],
+  MergeSharedSettingsPayloadSchema: [
+    [
+      { doc: { entries: { k: entry, bad: 5 } } },
+      ok({ doc: { entries: { k: entry } } }),
+    ],
+    [{ doc: { entries: {} }, extra: 1 }, ok({ doc: { entries: {} } })],
+    [{ doc: {} }, refuse()],
+    [{}, refuse()],
+  ],
+  "cli.status.output": [
+    [cliStatus, same],
+    [
+      {
+        name: "sm",
+        aliasName: "shigomori",
+        binDir: "/b",
+        linkPath: "/b/sm",
+        state: "foreign",
+        foreignPaths: ["/b/x"],
+        onPath: true,
+        extra: 1,
+      },
+      ok({
+        name: "sm",
+        aliasName: "shigomori",
+        binDir: "/b",
+        linkPath: "/b/sm",
+        state: "foreign",
+        foreignPaths: ["/b/x"],
+        onPath: true,
+      }),
+    ],
+    [
+      {
+        name: "sm",
+        aliasName: "shigomori",
+        binDir: "/b",
+        linkPath: "/b/sm",
+        state: "gone",
+        foreignPaths: [],
+        onPath: true,
+      },
+      refuse(),
+    ],
+    [
+      {
+        name: "sm",
+        aliasName: "shigomori",
+        binDir: "/b",
+        linkPath: "/b/sm",
+        state: "installed",
+        foreignPaths: undefined,
+        onPath: true,
+      },
+      refuse(),
+    ],
+  ],
+  "cli.install.input": [
+    [{ force: true }, same],
+    [{ force: false, extra: 1 }, ok({ force: false })],
+    [{}, refuse()],
+    [{ force: "yes" }, refuse()],
+    [undefined, refuse()],
+  ],
+  "cli.shellStatus.output": [
+    [{ loginShell: null, shells: [] }, same],
+    [
+      { loginShell: "zsh", shells: [hook, { ...hook, extra: 1 }], extra: 1 },
+      ok({ loginShell: "zsh", shells: [hook, hook] }),
+    ],
+    [{ shells: [] }, refuse()],
+    [
+      {
+        loginShell: null,
+        shells: [{ shell: "zsh", path: "/h/.zshrc", state: "foreign" }],
+      },
+      refuse(),
+    ],
+  ],
+  ShellHookStateSchema: [
+    [hook, same],
+    [
+      { shell: "zsh", path: "/h/.zshrc", state: "modified", extra: 1 },
+      ok({ shell: "zsh", path: "/h/.zshrc", state: "modified" }),
+    ],
+    [{ shell: "zsh", path: "/h/.zshrc", state: "missing" }, same],
+    [{ shell: "zsh", path: "/h/.zshrc", state: "stale" }, refuse()],
+    [{ shell: "zsh" }, refuse()],
+  ],
+  HubStatusSchema: [
+    [{ ...hubBase, socket: { phase: "idle" } }, same],
+    [
+      {
+        socket: { phase: "connecting", extra: 1 },
+        onlineDeviceIds: ["a"],
+        peerAppVersions: { a: "1.0" },
+        tunnel: "up",
+        extra: 1,
+      },
+      ok({
+        socket: { phase: "connecting" },
+        onlineDeviceIds: ["a"],
+        peerAppVersions: { a: "1.0" },
+        tunnel: "up",
+      }),
+    ],
+    [
+      {
+        ...hubBase,
+        socket: {
+          phase: "connected",
+          remoteDeviceId: "",
+          remoteAppVersion: "",
+        },
+      },
+      same,
+    ],
+    [{ ...hubBase, socket: { phase: "connected" } }, refuse()],
+    [
+      { ...hubBase, socket: { phase: "backoff", attempt: 2, delayMs: 1.5 } },
+      same,
+    ],
+    [
+      { ...hubBase, socket: { phase: "backoff", attempt: 1.5, delayMs: 1 } },
+      refuse(),
+    ],
+    [
+      {
+        ...hubBase,
+        socket: { phase: "backoff", attempt: 1, delayMs: Number.NaN },
+      },
+      refuse(),
+    ],
+    [
+      {
+        ...hubBase,
+        socket: { phase: "blocked", reason: "revoked", message: "m" },
+      },
+      same,
+    ],
+    [
+      {
+        ...hubBase,
+        socket: { phase: "blocked", reason: "banned", message: "m" },
+      },
+      refuse(),
+    ],
+    [{ ...hubBase, socket: { phase: "stopped" }, tunnel: "no-binary" }, same],
+    [{ ...hubBase, socket: { phase: "stopped" }, tunnel: "down" }, refuse()],
+    [{ ...hubBase, socket: { phase: "stopped" }, tunnel: undefined }, same],
+    [
+      {
+        socket: { phase: "stopped" },
+        onlineDeviceIds: [],
+        peerAppVersions: { a: 1 },
+      },
+      refuse(),
+    ],
+    [{ ...hubBase, socket: { phase: "gone" } }, refuse()],
+    [hubBase, refuse()],
+  ],
+  "hub.peerPush.payload": [
+    [{ deviceId: "d", channel: "c" }, same],
+    [
+      { deviceId: "d", channel: "c", payload: { x: [1] }, extra: 1 },
+      ok({ deviceId: "d", channel: "c", payload: { x: [1] } }),
+    ],
+    [{ deviceId: "d", channel: "c", payload: undefined }, same],
+    [{ deviceId: "d", channel: "c", payload: null }, same],
+    [{ deviceId: "d" }, refuse()],
+    [{ deviceId: 1, channel: "c" }, refuse()],
+  ],
+  "account.status.output": [
+    [accountStatus, same],
+    [{ ...accountStatus, credential: "secret" }, ok(accountStatus)],
+    [
+      {
+        configured: true,
+        signedIn: true,
+        accountId: "a",
+        deviceName: "Mac",
+        sharedSignIn: undefined,
+      },
+      refuse(),
+    ],
+  ],
+  "account.enroll.input": [
+    ["t", same],
+    ["", refuse()],
+    [1, refuse()],
+    [undefined, refuse()],
+  ],
+  "account.setDeviceName.input": [
+    ["n", same],
+    ["", refuse()],
+    ["n".repeat(256), same],
+    ["n".repeat(257), refuse()],
+    [1, refuse()],
+  ],
+  "account.acceptsCommands.output": [
+    [true, same],
+    [false, same],
+    ["true", refuse()],
+    [undefined, refuse()],
+  ],
+  "account.setAcceptsCommands.input": [
+    [false, same],
+    [true, same],
+    [undefined, refuse()],
+    [0, refuse()],
+  ],
+  "account.changed.payload": [
+    [{ accountId: null }, same],
+    [{ accountId: "a", extra: 1 }, ok({ accountId: "a" })],
+    [{}, refuse()],
+    [{ accountId: 1 }, refuse()],
+    [{ accountId: undefined }, refuse()],
+  ],
+  "nav.launchById.payload": [
+    ["x", same],
+    ["", same],
+    [1, refuse()],
+    [undefined, refuse()],
+  ],
+  "shigomori.read.output": [
+    [null, same],
+    [{ defaultBranch: "main", extra: 1 }, same],
+    [{ defaultBranch: "" }, refuse()],
+    [undefined, refuse()],
+  ],
+  "shigomori.worktreeDataRead.output": [
+    [null, same],
+    [{ notes: "n", junk: 1 }, ok({ notes: "n" })],
+    [{ notes: 1 }, refuse()],
+    [undefined, refuse()],
+  ],
+  "projects.carryOverListing.output": [
+    [[], same],
+    [[{ ...carryCandidate, extra: 1 }], ok([carryCandidate])],
+    [[{ name: "n" }], refuse()],
+    [{}, refuse()],
+  ],
+  "projects.carryOverStats.output": [
+    [{}, same],
+    [
+      { a: carryStat, "b/c": { ...carryStat, extra: 1 } },
+      ok({ a: carryStat, "b/c": carryStat }),
+    ],
+    [{ a: {} }, refuse()],
+    [[], refuse()],
+    [null, refuse()],
+  ],
+};
+
+const VOID_SLOTS = [
+  "globalConfig.read.input",
+  "globalConfig.readLocal.input",
+  "globalConfig.write.output",
+  "globalConfig.writeDeviceSettings.output",
+  "runtime.info.input",
+  "runtime.nuke.input",
+  "runtime.nuke.output",
+  "runtime.moveDataDir.output",
+  "sharedSettings.read.input",
+  "updater.get.input",
+  "updater.check.input",
+  "updater.check.output",
+  "updater.install.input",
+  "updater.install.output",
+  "clientConfig.read.input",
+  "clientConfig.write.output",
+  "projectLauncher.toggle.payload",
+  "projectLauncher.addProject.payload",
+  "cli.status.input",
+  "cli.uninstall.input",
+  "cli.shellStatus.input",
+  "cli.shellInstall.input",
+  "cli.shellUninstall.input",
+  "nav.openSettings.payload",
+  "window.focused.payload",
+  "window.blurred.payload",
+  "window.previewTheme.output",
+  "window.relaunch.input",
+  "window.relaunch.output",
+  "shigomori.write.output",
+  "shigomori.worktreeDataWrite.output",
+  "account.status.input",
+  "account.signOut.input",
+  "account.signOut.output",
+  "account.revokeDevice.output",
+  "account.listDevices.input",
+  "account.setAcceptsCommands.output",
+  "account.acceptsCommands.input",
+  "account.commandAccessChanged.payload",
+  "hub.status.input",
+];
+
+// Each void slot answered undefined, and refused everything else.
+const VOID_ROWS = [
+  [undefined, ok(undefined)],
+  [null, refuse()],
+  [{}, refuse()],
+  [0, refuse()],
+  ["", refuse()],
+];
+
+const WAVE2_CONTRACTS = {
+  account: accountContract,
+  cli: cliContract,
+  clientConfig: clientConfigContract,
+  globalConfig: globalConfigContract,
+  hub: hubContract,
+  nav: navContract,
+  projectLauncher: projectLauncherContract,
+  projects: projectsContract,
+  runtime: runtimeContract,
+  sharedSettings: sharedSettingsContract,
+  shigomori: shigomoriContract,
+  updater: updaterContract,
+  window: windowContract,
+};
+const MODULE_SCHEMAS = {
+  AccountStatusSchema,
+  HubStatusSchema,
+  ShellHookStateSchema,
+};
+
+function wave2Codec(label) {
+  if (label in schemas) return schemas[label];
+  if (label in MODULE_SCHEMAS) return MODULE_SCHEMAS[label];
+  const [module, call, slot] = label.split(".");
+  return WAVE2_CONTRACTS[module].calls[call][slot];
+}
+
 // The zod copies the unported embedders still hold, beside the Schema
-// each mirrors (Phase 4 waves 2 and 3 delete them).
+// each mirrors (Phase 4 wave 3 deletes them).
 const ZOD_COPIES = [
-  ["ProjectScopedPayloadZod", "ProjectScopedPayloadSchema"],
   ["GitRefNameZod", "GitRefNameSchema"],
-  ["SidebarViewZod", "SidebarViewSchema"],
   ["CommitHashZod", "CommitHashSchema"],
   ["CreatePhaseZod", "CreatePhaseSchema"],
   ["WorktreeZod", "WorktreeSchema"],
-  ["MergeMethodZod", "MergeMethodSchema"],
-  ["CustomPortZod", "CustomPortSchema"],
+  ["WorktreeIdZod", "WorktreeIdSchema"],
 ];
 
 // Whether a Schema decodes the input, for the construct checks.
@@ -1393,7 +2446,7 @@ async function main() {
         want,
         `PortNumberSchema on ${raw}`,
       );
-      // The zod copy still embedded by config.ts and the forward
+      // The zod copy still embedded by the forward and portForward
       // contracts must agree with the Schema form while both exist.
       const viaZod = PortNumberZod.safeParse(Number(raw));
       assert.equal(
@@ -1411,11 +2464,158 @@ async function main() {
     });
   }
 
+  for (const [label, rows] of Object.entries(RECORDED_WAVE2)) {
+    // oxlint-disable-next-line no-await-in-loop -- one named check per schema, in table order
+    await check(`${label} matches zod`, () => {
+      assertCases(wave2Codec(label), rows);
+    });
+  }
+
+  await check("wave 2's void slots take undefined alone", () => {
+    for (const label of VOID_SLOTS) {
+      const codec = wave2Codec(label);
+      assert.equal(codec, Schema.Undefined, `${label} is Schema.Undefined`);
+      assertCases(codec, VOID_ROWS);
+    }
+  });
+
+  await check(
+    "the remote device-settings patch refuses socketHost by name",
+    () => {
+      const SOCKET_HOST = 'Unexpected key "socketHost"';
+      const patch = schemas.DeviceSettingsPatchSchema;
+      const payload = schemas.WriteDeviceSettingsPayloadSchema;
+      const wireInput = globalConfigContract.calls.writeDeviceSettings.input;
+      assert.equal(wireInput, payload, "the contract takes the payload");
+      const carrying = { socketHost: { enabled: true, lan: true, token: "x" } };
+      assert.equal(
+        safeDecodeWith(patch, carrying).error?.message,
+        `${SOCKET_HOST}\n  at ["socketHost"]`,
+      );
+      assert.equal(
+        safeDecodeWith(patch, { ...carrying, launchScripts: true }).error
+          ?.message,
+        `${SOCKET_HOST}\n  at ["socketHost"]`,
+      );
+      assert.equal(
+        safeDecodeWith(wireInput, { patch: carrying }).error?.message,
+        `${SOCKET_HOST}\n  at ["patch"]["socketHost"]`,
+      );
+      assert.throws(
+        () => decodeWith(wireInput, { patch: { socketHost: {} } }),
+        (error) => error.message.includes(SOCKET_HOST),
+      );
+      // A guard cannot pass it either.
+      assert.equal(Schema.is(patch)(carrying), false);
+      assert.equal(Schema.is(payload)({ patch: carrying }), false);
+      // Every other key outside the managed set, by name too.
+      for (const key of [
+        "remoteDevices",
+        "directConnections",
+        "cloudflaredPath",
+        "theme",
+      ]) {
+        assert.match(
+          String(safeDecodeWith(patch, { [key]: true }).error?.message),
+          new RegExp(`Unexpected key "${key}"`),
+        );
+      }
+      // The managed keys are picked, not respelled: each is the full
+      // config's own field schema, so a managed key's shape cannot drift
+      // between the local write and the remote patch.
+      assert.deepStrictEqual(
+        Object.keys(patch.fields).toSorted(),
+        Object.keys(patchKeys).toSorted(),
+      );
+      for (const key of Object.keys(patchKeys)) {
+        assert.equal(
+          patch.fields[key],
+          schemas.GlobalConfigSchema.fields[key],
+          `${key} is GlobalConfigSchema's field`,
+        );
+      }
+      assert.deepStrictEqual(decodeWith(wireInput, { patch: patchKeys }), {
+        patch: patchKeys,
+      });
+      // The whole-document local write still strips instead.
+      assert.deepStrictEqual(
+        decodeWith(schemas.WriteGlobalConfigPayloadSchema, {
+          config: { launchScripts: true, remoteDevices: [] },
+        }),
+        { config: { launchScripts: true } },
+      );
+    },
+  );
+
+  await check(
+    "the shared settings document keeps zod's lenient per-entry read",
+    () => {
+      const Doc = schemas.SharedSettingsDocSchema;
+      // Past the entry cap, with an unreadable entry every hundred: the
+      // first 512 readable ones in the document's own order are kept,
+      // and no unreadable one costs a readable one its place. Recorded
+      // against zod: 512 kept, k0 to k511, no bad key.
+      const big = {};
+      for (let at = 0; at < 600; at += 1) {
+        big[`k${at}`] = { value: at, at: 1, by: "d" };
+        if (at % 100 === 0) big[`bad${at}`] = { value: {}, at: 1, by: "d" };
+      }
+      const kept = Object.keys(decodeWith(Doc, { entries: big }).entries);
+      assert.equal(kept.length, schemas.MAX_SHARED_SETTING_ENTRIES);
+      assert.deepStrictEqual(
+        kept,
+        Array.from({ length: 512 }, (_, at) => `k${at}`),
+      );
+      // One unreadable entry never fails the document, whatever it is.
+      for (const bad of [
+        5,
+        null,
+        "x",
+        [],
+        { value: {}, at: 1, by: "d" },
+        { value: "v", at: -1, by: "d" },
+        { value: "v", at: 1, by: "" },
+      ]) {
+        assert.deepStrictEqual(
+          decodeWith(Doc, { entries: { bad, k: entry } }),
+          { entries: { k: entry } },
+          `${describe(bad)} is left out`,
+        );
+      }
+      // A `__proto__` key (JSON.parse makes it own) is left out as zod
+      // left it out, and never becomes the entries' prototype.
+      const proto = decodeWith(
+        Doc,
+        JSON.parse(
+          '{"entries":{"__proto__":{"value":1,"at":1,"by":"k"},"k":{"value":1,"at":1,"by":"k"}}}',
+        ),
+      );
+      assert.deepStrictEqual(Object.keys(proto.entries), ["k"]);
+      assert.equal(Object.getPrototypeOf(proto.entries), Object.prototype);
+      assert.equal({}.value, undefined, "Object.prototype untouched");
+      // Decoded, the document is its own type: the dev output check and
+      // a broadcast validate it without running the read a second time.
+      const doc = decodeWith(Doc, { entries: { k: entry, bad: 5 } });
+      assert.equal(Schema.is(Doc)(doc), true);
+      assert.equal(validateWith(Doc, doc), doc);
+      // The contract's slots are the same document.
+      for (const slot of [
+        sharedSettingsContract.calls.read.output,
+        sharedSettingsContract.calls.set.output,
+        sharedSettingsContract.calls.merge.output,
+        sharedSettingsContract.calls.changed.payload,
+      ]) {
+        assert.equal(slot, Doc);
+      }
+    },
+  );
+
   await check("the zod copies agree with the Schema they mirror", () => {
     for (const [copyName, schemaName] of ZOD_COPIES) {
       const copy = schemas[copyName];
       assert.equal(isZodCodec(copy), true, `${copyName} is zod`);
-      for (const [input] of RECORDED[schemaName]) {
+      const rows = RECORDED[schemaName] ?? RECORDED_WAVE2[schemaName];
+      for (const [input] of rows) {
         const viaCopy = copy.safeParse(input);
         const viaSchema = safeDecodeWith(schemas[schemaName], input);
         const label = `${copyName} on ${describe(input)}`;
@@ -1509,6 +2709,26 @@ async function main() {
         stubValueFor(branchesContract.calls.create.output, structural),
         undefined,
       );
+      // Wave 2's reads that a candidate still meets.
+      assert.deepStrictEqual(
+        stubValueFor(
+          projectsContract.calls.carryOverListing.output,
+          structural,
+        ),
+        [],
+      );
+      assert.deepStrictEqual(
+        stubValueFor(projectsContract.calls.carryOverStats.output, structural),
+        {},
+      );
+      assert.deepStrictEqual(
+        stubValueFor(globalConfigContract.calls.read.output, structural),
+        {},
+      );
+      assert.equal(
+        stubValueFor(shigomoriContract.calls.read.output, structural),
+        null,
+      );
       // A struct with required members is the zod walker's recursive
       // build, which does not read Schema yet (wave 4): no stub rather
       // than an invented one.
@@ -1516,6 +2736,14 @@ async function main() {
         stubValueFor(schemas.GithubCliReadinessSchema, structural),
         NO_STRUCTURAL_STUB,
       );
+      for (const output of [
+        projectsContract.calls.worktreeIncludeStatus.output,
+        sharedSettingsContract.calls.read.output,
+        cliContract.calls.shellStatus.output,
+        accountContract.calls.status.output,
+      ]) {
+        assert.equal(stubValueFor(output, structural), NO_STRUCTURAL_STUB);
+      }
       assert.equal(
         stubValueFor(schemas.PullRequestCandidateListSchema, {
           fabricateArms: true,

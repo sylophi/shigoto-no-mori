@@ -4,10 +4,11 @@
 // (use logs, sort and collapse preferences) and the per-project configs
 // at <dataDir>/projects/<projectId>.json. Appearance is client
 // config and lives in main/electron/clientConfig.ts instead.
-import { z } from "zod";
+import type { Types } from "effect";
 import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { errorMessageOf } from "@shared/errors";
+import { safeDecodeWith } from "@shared/ipc/codec";
 import { DEFAULT_SOCKET_PORT } from "@shared/ipc/socket/frames";
 import {
   type ClientConfig,
@@ -16,6 +17,10 @@ import {
   type ReadGlobalConfig,
   StoredGlobalConfigSchema,
 } from "@shared/schemas";
+
+// config.json as read, unknown keys included, for the locked
+// read-mutate-write below: a fresh decode the mutation owns.
+type StoredConfigDoc = Types.Mutable<typeof StoredGlobalConfigSchema.Type>;
 import {
   atomicWriteJsonSync,
   readJsonOrNull,
@@ -193,11 +198,14 @@ export async function ensureSocketHostToken(): Promise<boolean> {
 // other. Sync because two callers sit on the boot path before the
 // first window. Returns false when config.json is missing.
 function updateConfigDocSync(
-  mutate: (doc: z.infer<typeof StoredGlobalConfigSchema>) => boolean,
+  mutate: (doc: StoredConfigDoc) => boolean,
 ): boolean {
   const path = configPath();
   return withFileLock(`${path}.lock`, () => {
-    const doc = readJsonOrNullSync(path, StoredGlobalConfigSchema);
+    const doc: StoredConfigDoc | null = readJsonOrNullSync(
+      path,
+      StoredGlobalConfigSchema,
+    );
     if (doc === null || !mutate(doc)) return false;
     // 0o600 like the credential and grant stores: this document carries
     // socketHost.token, the LAN wire's bearer secret.
@@ -219,8 +227,8 @@ export function redactGlobalConfigForRead(
   config: GlobalConfig,
 ): ReadGlobalConfig {
   const { socketHost, ...rest } = config;
-  const redacted: ReadGlobalConfig = { ...rest };
-  delete (redacted as Record<string, unknown>).remoteDevices;
+  const redacted: Types.Mutable<ReadGlobalConfig> = { ...rest };
+  delete redacted["remoteDevices"];
   if (socketHost !== undefined) {
     const { token, ...withoutToken } = socketHost;
     redacted.socketHost = {
@@ -254,14 +262,17 @@ export function dropLegacyRemoteDevices(): void {
 // the migration for that boot.
 export function readLegacyAppearance(): ClientConfig {
   const doc = readJsonOrNullSync(configPath(), StoredGlobalConfigSchema);
-  const found: ClientConfig = {};
+  const found: Types.Mutable<ClientConfig> = {};
   if (doc === null) return found;
   // Field by field so one bad value can't void the other. An invalid
   // value is still drained by dropLegacyAppearance: the store's
   // defaults are the right replacement for a value no build could read.
-  const theme = ClientConfigSchema.shape.theme.safeParse(doc["theme"]);
+  const theme = safeDecodeWith(ClientConfigSchema.fields.theme, doc["theme"]);
   if (theme.success && theme.data !== undefined) found.theme = theme.data;
-  const doubutsu = ClientConfigSchema.shape.doubutsu.safeParse(doc["doubutsu"]);
+  const doubutsu = safeDecodeWith(
+    ClientConfigSchema.fields.doubutsu,
+    doc["doubutsu"],
+  );
   if (doubutsu.success && doubutsu.data !== undefined) {
     found.doubutsu = doubutsu.data;
   }

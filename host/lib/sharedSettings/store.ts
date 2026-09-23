@@ -11,6 +11,7 @@
 // window's pick, a peer's push) can never overwrite each other's
 // entries.
 import { errorMessageOf } from "@shared/errors";
+import { safeDecodeWith } from "@shared/ipc/codec";
 import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
@@ -26,7 +27,7 @@ import { registryStore, SHARED_SETTINGS_KEY } from "../config/store";
 // than trusted. A mangled one reads as empty, and the next merge from
 // any peer fills it back in.
 function parse(stored: unknown): SharedSettingsDoc {
-  const parsed = SharedSettingsDocSchema.safeParse(stored);
+  const parsed = safeDecodeWith(SharedSettingsDocSchema, stored);
   return parsed.success ? parsed.data : EMPTY_SHARED_SETTINGS;
 }
 

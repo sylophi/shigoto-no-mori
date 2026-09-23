@@ -473,7 +473,10 @@ export function makeAccountHandlers(
     },
 
     signOut: async () => {
-      if (signOutInFlight) return signOutInFlight;
+      if (signOutInFlight) {
+        await signOutInFlight;
+        return;
+      }
       signOutInFlight = (async (): Promise<void> => {
         // The command-access switch is off from the first moment of
         // the sign-out, ahead of the revoke's round trip: the grant is
@@ -504,7 +507,7 @@ export function makeAccountHandlers(
         await accountChanged();
       })();
       try {
-        return await signOutInFlight;
+        await signOutInFlight;
       } finally {
         signOutInFlight = null;
       }

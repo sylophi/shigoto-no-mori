@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { UpdaterStateSchema } from "@shared/schemas";
 
@@ -11,16 +11,16 @@ import { UpdaterStateSchema } from "@shared/schemas";
 // state a viewer caches (the state rides its own broadcast), so they
 // opt out of the resolved-mutation cache ping.
 export const updaterContract = defineContract("host", {
-  get: invoke("updater:get", z.void(), UpdaterStateSchema, {
+  get: invoke("updater:get", Schema.Undefined, UpdaterStateSchema, {
     remote: true,
     mutating: false,
   }),
-  check: invoke("updater:check", z.void(), z.void(), {
+  check: invoke("updater:check", Schema.Undefined, Schema.Undefined, {
     remote: true,
     mutating: true,
     movesHostState: false,
   }),
-  install: invoke("updater:install", z.void(), z.void(), {
+  install: invoke("updater:install", Schema.Undefined, Schema.Undefined, {
     remote: true,
     mutating: true,
     movesHostState: false,

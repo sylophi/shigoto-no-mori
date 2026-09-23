@@ -45,7 +45,7 @@ export function fromConfig(
     theme: clientConfig.theme ?? "system",
     doubutsu: clientConfig.doubutsu ?? true,
     pauseAnimationsOnBattery: clientConfig.pauseAnimationsOnBattery ?? true,
-    launchers: config.launchers ?? [],
+    launchers: [...(config.launchers ?? [])],
     // Sorted here and on every toggle so the id list has one canonical
     // order. useDirtyForm compares FormState by JSON.stringify, and
     // hiding is set-semantic -- without this, re-hiding a tool in a

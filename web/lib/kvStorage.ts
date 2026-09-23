@@ -7,6 +7,12 @@
 // than touching a browser global at module scope, which is what lets
 // the check import these modules under node.
 
+import {
+  type AnyCodec,
+  type CodecOut,
+  safeDecodeWith,
+} from "@shared/ipc/codec";
+
 export type KeyValueStorage = {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -27,18 +33,16 @@ export function readKey(storage: KeyValueStorage, key: string): string | null {
 // A stored JSON document read against its schema. Absent, unparseable
 // and wrong-shaped all read as `fallback`: corrupt storage reads as
 // defaults, and the next write heals it.
-export function readJsonKey<T>(
+export function readJsonKey<C extends AnyCodec>(
   storage: KeyValueStorage,
   key: string,
-  schema: {
-    safeParse(value: unknown): { success: true; data: T } | { success: false };
-  },
-  fallback: T,
-): T {
+  schema: C,
+  fallback: CodecOut<C>,
+): CodecOut<C> {
   const raw = readKey(storage, key);
   if (raw === null) return fallback;
   try {
-    const parsed = schema.safeParse(JSON.parse(raw));
+    const parsed = safeDecodeWith(schema, JSON.parse(raw));
     return parsed.success ? parsed.data : fallback;
   } catch {
     return fallback;

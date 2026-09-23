@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { DeviceIdSchema, DeviceInfoSchema } from "@shared/hub/protocol";
@@ -16,17 +17,17 @@ import { DeviceIdSchema, DeviceInfoSchema } from "@shared/hub/protocol";
 // "this device" marker reads that instead. configured is false until the
 // owner sets the service env vars, and the UI shows a "not configured"
 // state instead of a dead Sign in button.
-export const AccountStatusSchema = z.object({
-  configured: z.boolean(),
-  signedIn: z.boolean(),
-  accountId: z.string(),
-  deviceName: z.string(),
+export const AccountStatusSchema = Schema.Struct({
+  configured: Schema.Boolean,
+  signedIn: Schema.Boolean,
+  accountId: Schema.String,
+  deviceName: Schema.String,
   // The sign-in behind this device is a copy another window holds too
   // (a dev profile launched with --clone-login), so ending the Clerk
   // session here ends it there as well. Always false outside dev.
-  sharedSignIn: z.boolean(),
+  sharedSignIn: Schema.Boolean,
 });
-export type AccountStatus = z.infer<typeof AccountStatusSchema>;
+export type AccountStatus = typeof AccountStatusSchema.Type;
 
 export const accountContract = defineContract("client", {
   // Reads local state only: the resolved service config is cached, but
@@ -34,16 +35,16 @@ export const accountContract = defineContract("client", {
   // decrypt on EVERY call, so invoke this on account events, not on a
   // poll. The device list is a separate call so a status read never
   // hits the device hub.
-  status: invoke("account:status", z.void(), AccountStatusSchema),
+  status: invoke("account:status", Schema.Undefined, AccountStatusSchema),
   // Enrolls this device on the device hub under a fresh Clerk session
   // token (the renderer owns the Clerk sign-in UI and mints the token)
   // and stores the returned device credential. Resolves to the
   // post-enrollment status.
-  enroll: invoke("account:enroll", z.string().min(1), AccountStatusSchema),
+  enroll: invoke("account:enroll", Schema.NonEmptyString, AccountStatusSchema),
   // Best-effort revokes THIS device on the device hub, then clears the
   // stored credential locally. The revoke is best-effort so local
   // sign-out always succeeds even offline.
-  signOut: invoke("account:signOut", z.void(), z.void()),
+  signOut: invoke("account:signOut", Schema.Undefined, Schema.Undefined),
   // Removes a device from the ACCOUNT on the device hub, under this
   // device's credential: the target's credential stops working the
   // moment it next calls, and it disappears from every other device's
@@ -57,13 +58,20 @@ export const accountContract = defineContract("client", {
   // instead, which ends the Clerk session first -- with the session
   // still live ClerkAccountSync would see "signed in, not enrolled" and
   // silently re-enroll, undoing the revoke).
-  revokeDevice: invoke("account:revokeDevice", DeviceIdSchema, z.void()),
+  revokeDevice: invoke(
+    "account:revokeDevice",
+    DeviceIdSchema,
+    Schema.Undefined,
+  ),
   // The account's device registry from the device hub, under the stored
   // credential. Element shape is the shared hub DeviceInfo so the app
   // and the Worker cannot drift. Empty when signed out or unconfigured.
+  // Stays zod with DeviceInfoSchema, like revokeDevice's DeviceIdSchema
+  // input: shared/hub/protocol.ts is what the hub Worker compiles, and
+  // it ports with the wire contracts (Phase 4 wave 3).
   listDevices: invoke(
     "account:listDevices",
-    z.void(),
+    Schema.Undefined,
     z.array(DeviceInfoSchema),
   ),
   // Renames this device: the stored metadata, then (best-effort) the
@@ -73,7 +81,7 @@ export const accountContract = defineContract("client", {
     "account:setDeviceName",
     // Bounded to match EnrollRequestSchema.name so a stored name can
     // never later fail enroll's schema or blank the device identity.
-    z.string().min(1).max(256),
+    Schema.NonEmptyString.check(Schema.isMaxLength(256)),
     AccountStatusSchema,
   ),
   // Whether THIS host accepts commands from the account's other
@@ -82,13 +90,17 @@ export const accountContract = defineContract("client", {
   // served). One switch for the whole account, made on the machine
   // being driven, and enforced host-local, so it never rides the hub
   // wire (client-scoped). False when signed out.
-  acceptsCommands: invoke("account:acceptsCommands", z.void(), z.boolean()),
+  acceptsCommands: invoke(
+    "account:acceptsCommands",
+    Schema.Undefined,
+    Schema.Boolean,
+  ),
   // Flips the switch above. Idempotent. Throws if signed out, since
   // there is no account to scope the answer to.
   setAcceptsCommands: invoke(
     "account:setAcceptsCommands",
-    z.boolean(),
-    z.void(),
+    Schema.Boolean,
+    Schema.Undefined,
   ),
   // Fan-out after any sign-in, sign-out or rename so every window
   // re-reads status and the device list. Client-scoped, so it stays on
@@ -97,11 +109,14 @@ export const accountContract = defineContract("client", {
   // or an account switch without a status read of its own.
   changed: broadcast(
     "account:changed",
-    z.object({ accountId: z.string().nullable() }),
+    Schema.Struct({ accountId: Schema.NullOr(Schema.String) }),
   ),
   // Fan-out after the command-access switch flips, kept separate from
   // `changed` so the toggle does not thrash the account status and
   // device queries. The Devices page invalidates only the switch's
   // query on this.
-  commandAccessChanged: broadcast("account:commandAccessChanged", z.void()),
+  commandAccessChanged: broadcast(
+    "account:commandAccessChanged",
+    Schema.Undefined,
+  ),
 });

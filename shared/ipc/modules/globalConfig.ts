@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   ReadGlobalConfigSchema,
@@ -11,7 +11,7 @@ export const globalConfigContract = defineContract("host", {
   // Output is the REDACTED read schema: socketHost.token is structurally
   // absent from the read contract (a derived tokenSet boolean stands in
   // for it), so the secret can never ride out on a read, remote or local.
-  read: invoke("globalConfig:read", z.void(), ReadGlobalConfigSchema, {
+  read: invoke("globalConfig:read", Schema.Undefined, ReadGlobalConfigSchema, {
     remote: true,
     mutating: false,
   }),
@@ -27,7 +27,7 @@ export const globalConfigContract = defineContract("host", {
   // redacted read omits.
   readLocal: invoke(
     "globalConfig:readLocal",
-    z.void(),
+    Schema.Undefined,
     StoredGlobalConfigSchema,
     {
       remote: false,
@@ -41,7 +41,7 @@ export const globalConfigContract = defineContract("host", {
   write: invoke(
     "globalConfig:write",
     WriteGlobalConfigPayloadSchema,
-    z.void(),
+    Schema.Undefined,
     {
       remote: false,
       // Never rides a wire (remote:false channels are not registered on
@@ -65,7 +65,7 @@ export const globalConfigContract = defineContract("host", {
   writeDeviceSettings: invoke(
     "globalConfig:writeDeviceSettings",
     WriteDeviceSettingsPayloadSchema,
-    z.void(),
+    Schema.Undefined,
     { remote: true, mutating: true },
   ),
 });

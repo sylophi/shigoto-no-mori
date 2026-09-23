@@ -110,7 +110,7 @@ export function startRemoteHostWatch(queryClient: QueryClient): void {
     // Settings dot, the Settings device rows) follow a peer whose
     // section was never opened.
     if (channel === UPDATER_STATE.channel) {
-      const parsed = UPDATER_STATE.payload.safeParse(payload);
+      const parsed = safeDecodeWith(UPDATER_STATE.payload, payload);
       if (!parsed.success) return;
       writeUpdaterState(queryClient, deviceId, parsed.data);
       return;
@@ -119,7 +119,7 @@ export function startRemoteHostWatch(queryClient: QueryClient): void {
     // whole. It is not cached as the peer's: it is folded into this
     // device's own copy, which is the only one the UI reads.
     if (channel === SHARED_SETTINGS_CHANGED.channel) {
-      const parsed = SHARED_SETTINGS_CHANGED.payload.safeParse(payload);
+      const parsed = safeDecodeWith(SHARED_SETTINGS_CHANGED.payload, payload);
       if (!parsed.success) return;
       mergePeerSharedSettings(parsed.data);
       return;

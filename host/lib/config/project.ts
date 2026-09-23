@@ -5,6 +5,7 @@
 // files exist for managed worktrees and the primary checkout (the main repo
 // root); other external worktrees deliberately have no persisted state.
 import { join } from "node:path";
+import { decodeWith } from "@shared/ipc/codec";
 import {
   type ShigomoriConfig,
   StoredShigomoriConfigSchema,
@@ -78,12 +79,12 @@ export async function writeWorktreeData(
   worktreeId: string,
   data: ShigomoriWorktreeData,
 ): Promise<void> {
-  // The zod parse strips anything it doesn't model, the marker
+  // The decode strips anything it doesn't model, the marker
   // included, so it is stamped back on at the write rather than
   // carried through the schema.
   await atomicWriteJson(
     worktreeDataPath(projectId, worktreeId),
-    withSchemaVersion(ShigomoriWorktreeDataSchema.parse(data)),
+    withSchemaVersion(decodeWith(ShigomoriWorktreeDataSchema, data)),
   );
   worktreeCache.invalidate(worktreeKey(projectId, worktreeId));
 }

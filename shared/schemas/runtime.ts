@@ -1,43 +1,45 @@
-import { z } from "zod";
+import { Schema } from "effect";
 
-export const RuntimeInfoSchema = z.object({
+const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
+export const RuntimeInfoSchema = Schema.Struct({
   // The data dir: where worktrees, configs and state live.
-  dataDir: z.string().min(1),
+  dataDir: Schema.NonEmptyString,
   // How boot resolved it (host/lib/util/paths.ts DataDirSource).
   // "legacy" is a pre-2.0 folder adopted in place.
-  dataDirSource: z.enum(["env", "pointer", "legacy", "default"]),
+  dataDirSource: Schema.Literals(["env", "pointer", "legacy", "default"]),
   // Whether the data dir sits at the flavor's default location. Settings
   // offers a reset to the default when it doesn't.
-  atDefaultDataDir: z.boolean(),
+  atDefaultDataDir: Schema.Boolean,
   // The flavor's own folder name (".sm" / ".smd"): what a move renames
   // the folder to.
-  canonicalDataDirName: z.string().min(1),
-  homedir: z.string().min(1),
+  canonicalDataDirName: Schema.NonEmptyString,
+  homedir: Schema.NonEmptyString,
 });
-export type RuntimeInfo = z.infer<typeof RuntimeInfoSchema>;
+export type RuntimeInfo = typeof RuntimeInfoSchema.Type;
 
 // Move the data dir: the picked directory becomes the new parent of
 // the data folder (which takes its canonical name). With no parent the
 // folder goes back to its default location. The app relaunches right
 // after a successful move (the data dir is a boot-time constant), so the
 // invoke returns nothing the renderer could outlive.
-export const MoveDataDirPayloadSchema = z.object({
-  parentDir: z.string().min(1).optional(),
+export const MoveDataDirPayloadSchema = Schema.Struct({
+  parentDir: Schema.optional(Schema.NonEmptyString),
 });
 
 // Progress broadcast while `runtime:nuke` runs, driving the renderer's
 // blocking overlay: reap scripts → remove worktrees (with a counter) →
 // wipe the data dir.
-export const NukeProgressSchema = z.discriminatedUnion("phase", [
-  z.object({ phase: z.literal("scripts") }),
-  z.object({
-    phase: z.literal("worktrees"),
-    done: z.number().int().nonnegative(),
-    total: z.number().int().nonnegative(),
+export const NukeProgressSchema = Schema.Union([
+  Schema.Struct({ phase: Schema.Literal("scripts") }),
+  Schema.Struct({
+    phase: Schema.Literal("worktrees"),
+    done: NonNegativeInt,
+    total: NonNegativeInt,
   }),
-  z.object({ phase: z.literal("wipe") }),
+  Schema.Struct({ phase: Schema.Literal("wipe") }),
 ]);
-export type NukeProgress = z.infer<typeof NukeProgressSchema>;
+export type NukeProgress = typeof NukeProgressSchema.Type;
 
 // In-app updater state. The CLI owns the update pipeline
 // (cli/updater.go), and the app mirrors its progress into this machine.
@@ -46,21 +48,21 @@ export type NukeProgress = z.infer<typeof NukeProgressSchema>;
 // `ready` carries the version we'll restart into. `unsupported` means
 // this build has no update channel at all (dev builds): the renderer
 // hides the check button rather than offering a dead one.
-export const UpdaterStateSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("unsupported") }),
-  z.object({ kind: z.literal("idle") }),
-  z.object({ kind: z.literal("checking") }),
-  z.object({ kind: z.literal("downloading") }),
-  z.object({
-    kind: z.literal("ready"),
-    version: z.string(),
-    notes: z.string().optional(),
+export const UpdaterStateSchema = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("unsupported") }),
+  Schema.Struct({ kind: Schema.Literal("idle") }),
+  Schema.Struct({ kind: Schema.Literal("checking") }),
+  Schema.Struct({ kind: Schema.Literal("downloading") }),
+  Schema.Struct({
+    kind: Schema.Literal("ready"),
+    version: Schema.String,
+    notes: Schema.optional(Schema.String),
     // ISO 8601; null when the OS gave us an unparseable date.
-    releaseDate: z.string().nullable(),
+    releaseDate: Schema.NullOr(Schema.String),
   }),
-  z.object({ kind: z.literal("error"), message: z.string() }),
+  Schema.Struct({ kind: Schema.Literal("error"), message: Schema.String }),
 ]);
-export type UpdaterState = z.infer<typeof UpdaterStateSchema>;
+export type UpdaterState = typeof UpdaterStateSchema.Type;
 
 // The app<->CLI bridge over the data dir (the CLI has no IPC channel
 // into the app): the app publishes updater.json (UpdaterStatus, written
@@ -71,52 +73,55 @@ export type UpdaterState = z.infer<typeof UpdaterStateSchema>;
 // reader of updater.json is the Go CLI, so UpdaterStatusSchema exists
 // to pin the published shape. cli/cmd_update.go mirrors the subset it
 // needs (pid, appVersion, and the state's error kind).
-const UpdaterStatusSchema = z.object({
-  pid: z.number().int().positive(),
-  appVersion: z.string(),
+const UpdaterStatusSchema = Schema.Struct({
+  pid: Schema.Int.check(Schema.isGreaterThan(0)),
+  appVersion: Schema.String,
   state: UpdaterStateSchema,
 });
-export type UpdaterStatus = z.infer<typeof UpdaterStatusSchema>;
+export type UpdaterStatus = typeof UpdaterStatusSchema.Type;
 
-export const UpdateRequestSchema = z.object({
+export const UpdateRequestSchema = Schema.Struct({
   // The one thing the CLI ever asks of a running app: quit (confirming
   // with the user if scripts are running) and restart into the update
   // the CLI already staged. Checking needs no request, since the CLI
   // talks to the release feed itself.
-  action: z.literal("install"),
+  action: Schema.Literal("install"),
   // Unix ms. Requests older than a couple of minutes are dropped as
   // leftovers of an interrupted CLI run: acting on one later would
   // restart the app under the user out of nowhere.
-  requestedAt: z.number(),
+  requestedAt: Schema.Finite,
 });
-export type UpdateRequest = z.infer<typeof UpdateRequestSchema>;
+export type UpdateRequest = typeof UpdateRequestSchema.Type;
 
 // Manifest the CLI writes beside a verified staged update
 // (<dataDir>/updates/staged/manifest.json). Mirrors cli/updater.go
 // stagedManifest. The app reads it to seed "ready" at boot and to know
 // whether "restart to update" has anything to restart into.
-export const StagedManifestSchema = z.object({
-  version: z.string().min(1),
-  bundleName: z.string().min(1),
-  notes: z.string().optional(),
-  releaseDate: z.string().optional(),
+export const StagedManifestSchema = Schema.Struct({
+  version: Schema.NonEmptyString,
+  bundleName: Schema.NonEmptyString,
+  notes: Schema.optional(Schema.String),
+  releaseDate: Schema.optional(Schema.String),
 });
-export type StagedManifest = z.infer<typeof StagedManifestSchema>;
+export type StagedManifest = typeof StagedManifestSchema.Type;
 
 // What `sm update --stage --json` streams: phase events while the
 // pipeline runs, then one result document (cli/cmd_update.go emits
 // both). The app's check validates against these so drift between the
 // Go and TS sides fails loudly instead of degrading to a blank state.
-export const UpdateStageEventSchema = z.object({
-  event: z.enum(["downloading", "verifying"]),
+export const UpdateStageEventSchema = Schema.Struct({
+  event: Schema.Literals(["downloading", "verifying"]),
 });
-export const UpdateStageResultSchema = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("up-to-date"), version: z.string() }),
-  z.object({
-    status: z.literal("staged"),
-    version: z.string().min(1),
-    installed: z.string(),
-    notes: z.string().optional(),
-    releaseDate: z.string().optional(),
+export const UpdateStageResultSchema = Schema.Union([
+  Schema.Struct({
+    status: Schema.Literal("up-to-date"),
+    version: Schema.String,
+  }),
+  Schema.Struct({
+    status: Schema.Literal("staged"),
+    version: Schema.NonEmptyString,
+    installed: Schema.String,
+    notes: Schema.optional(Schema.String),
+    releaseDate: Schema.optional(Schema.String),
   }),
 ]);

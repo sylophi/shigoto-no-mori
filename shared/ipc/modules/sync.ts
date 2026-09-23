@@ -10,7 +10,7 @@ import {
   CommitHashZod,
   CreatePhaseZod,
   GitRefNameZod,
-  WorktreeIdSchema,
+  WorktreeIdZod,
   WorktreeZod,
 } from "@shared/schemas";
 
@@ -117,7 +117,7 @@ const SyncRefTipSchema = z.strictObject({
 
 const SyncCaptureDirtyPayloadSchema = z.strictObject({
   projectId: z.string().min(1),
-  worktreeId: WorktreeIdSchema,
+  worktreeId: WorktreeIdZod,
 });
 
 // Tip negotiation for the pull orchestration. Load bearing for
@@ -171,7 +171,7 @@ export const SyncCaptureDirtyResultSchema = z.strictObject({
 // trailing-slash entry.
 const SyncIgnoredPathsPayloadSchema = z.strictObject({
   projectId: z.string().min(1),
-  worktreeId: WorktreeIdSchema,
+  worktreeId: WorktreeIdZod,
 });
 
 // Capped on the wire: a worktree with scattered per-file ignores can
@@ -275,7 +275,7 @@ export function pullBringsIgnoredFiles(
 export const SyncPullWorktreePayloadSchema = z.strictObject({
   sourceDeviceId: DeviceIdSchema,
   sourceProjectId: z.string().min(1),
-  sourceWorktreeId: WorktreeIdSchema,
+  sourceWorktreeId: WorktreeIdZod,
   sourceIdentity: z.string().min(1),
   branch: GitRefNameZod.refine(
     (name) => SyncBundleRefSchema.safeParse(`refs/heads/${name}`).success,
@@ -325,7 +325,7 @@ export const SyncPullStepSchema = z.enum([
 export type SyncPullStep = z.infer<typeof SyncPullStepSchema>;
 
 const SyncPullProgressSchema = z.strictObject({
-  sourceWorktreeId: WorktreeIdSchema,
+  sourceWorktreeId: WorktreeIdZod,
   step: SyncPullStepSchema,
   bytes: z.number().int().nonnegative().optional(),
   totalBytes: z.number().int().nonnegative().optional(),
@@ -364,7 +364,7 @@ export type SyncPullWorktreeResult = z.infer<
 export const SyncSendWorktreePayloadSchema = z.strictObject({
   targetDeviceId: DeviceIdSchema,
   projectId: z.string().min(1),
-  worktreeId: WorktreeIdSchema,
+  worktreeId: WorktreeIdZod,
   runSetup: SyncPullWorktreePayloadSchema.shape.runSetup,
   ignoreMode: SyncPullWorktreePayloadSchema.shape.ignoreMode,
   ignores: SyncPullWorktreePayloadSchema.shape.ignores,
@@ -394,7 +394,7 @@ export const SyncLandWorktreePayloadSchema = SyncLandTargetSchema.extend({
   runSetup: SyncPullWorktreePayloadSchema.shape.runSetup,
   capture: z
     .strictObject({
-      sourceWorktreeId: WorktreeIdSchema,
+      sourceWorktreeId: WorktreeIdZod,
       commit: CommitHashZod,
     })
     .optional(),
@@ -472,7 +472,7 @@ export const SyncHasCommitsResultSchema = z.strictObject({
 export const SyncTeardownSourcePayloadSchema = z.strictObject({
   sourceDeviceId: DeviceIdSchema,
   sourceProjectId: z.string().min(1),
-  sourceWorktreeId: WorktreeIdSchema,
+  sourceWorktreeId: WorktreeIdZod,
 });
 
 // The sent worktree's teardown: which peer it went to and which local
@@ -481,7 +481,7 @@ export const SyncTeardownSourcePayloadSchema = z.strictObject({
 export const SyncTeardownSentPayloadSchema = z.strictObject({
   targetDeviceId: DeviceIdSchema,
   projectId: z.string().min(1),
-  worktreeId: WorktreeIdSchema,
+  worktreeId: WorktreeIdZod,
 });
 
 export const syncContract = defineContract("host", {

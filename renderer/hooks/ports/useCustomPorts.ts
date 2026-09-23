@@ -11,10 +11,12 @@ export function useCustomPortsWrite(worktree: {
   id: string;
 }) {
   const write = useWorktreeDataWrite();
-  const variables = (change: (current: CustomPort[]) => CustomPort[]) => ({
+  const variables = (
+    change: (current: readonly CustomPort[]) => CustomPort[],
+  ) => ({
     projectId: worktree.projectId,
     worktreeId: worktree.id,
-    patch: (current: { ports?: CustomPort[] }) => {
+    patch: (current: { ports?: readonly CustomPort[] }) => {
       const ports = change(current.ports ?? []);
       return { ports: ports.length > 0 ? ports : undefined };
     },

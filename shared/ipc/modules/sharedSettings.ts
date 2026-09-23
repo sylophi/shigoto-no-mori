@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
   MergeSharedSettingsPayloadSchema,
@@ -15,10 +15,15 @@ export const sharedSettingsContract = defineContract("host", {
   // Served to any account peer: a copy is only useful if the others
   // can read it, and it holds nothing a project list does not already
   // say.
-  read: invoke("sharedSettings:read", z.void(), SharedSettingsDocSchema, {
-    remote: true,
-    mutating: false,
-  }),
+  read: invoke(
+    "sharedSettings:read",
+    Schema.Undefined,
+    SharedSettingsDocSchema,
+    {
+      remote: true,
+      mutating: false,
+    },
+  ),
   // A write made at this device: the handler stamps it, so the stamp
   // and the device id are never the caller's to claim. Local only. A
   // peer's write arrives as an already-stamped entry through merge.

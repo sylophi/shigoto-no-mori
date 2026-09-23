@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { defineContract, invoke } from "@shared/ipc/contract";
 
 // State of the CLI symlink in the user's bin dir:
@@ -7,19 +7,19 @@ import { defineContract, invoke } from "@shared/ipc/contract";
 // - missing: nothing at the link path
 // - foreign: something we didn't create; only replaced when an install
 //   passes force (the Settings "Replace and install" consent)
-const CliStatusSchema = z.object({
-  name: z.string(),
-  aliasName: z.string(),
-  binDir: z.string(),
-  linkPath: z.string(),
-  state: z.enum(["installed", "stale", "missing", "foreign"]),
+const CliStatusSchema = Schema.Struct({
+  name: Schema.String,
+  aliasName: Schema.String,
+  binDir: Schema.String,
+  linkPath: Schema.String,
+  state: Schema.Literals(["installed", "stale", "missing", "foreign"]),
   // Every link path whose occupant is foreign, so the replace consent
   // can name each file a force install would overwrite (linkPath only
   // carries the single worst one).
-  foreignPaths: z.array(z.string()),
-  onPath: z.boolean(),
+  foreignPaths: Schema.Array(Schema.String),
+  onPath: Schema.Boolean,
 });
-export type CliStatus = z.infer<typeof CliStatusSchema>;
+export type CliStatus = typeof CliStatusSchema.Type;
 
 // One shell's integration hook (the guarded eval line the CLI's
 // `shell install` writes into that shell's config):
@@ -27,23 +27,21 @@ export type CliStatus = z.infer<typeof CliStatusSchema>;
 // - missing: not installed (or no config file at all)
 // - modified: our markers with content we didn't write. The CLI never
 //   touches those, mirroring the foreign-link policy above
-export const ShellHookStateSchema = z.object({
-  shell: z.string(),
-  path: z.string(),
-  state: z.enum(["installed", "missing", "modified"]),
+export const ShellHookStateSchema = Schema.Struct({
+  shell: Schema.String,
+  path: Schema.String,
+  state: Schema.Literals(["installed", "missing", "modified"]),
 });
-export type ShellHookState = z.infer<typeof ShellHookStateSchema>;
+export type ShellHookState = typeof ShellHookStateSchema.Type;
 
-const ShellIntegrationStatusSchema = z.object({
+const ShellIntegrationStatusSchema = Schema.Struct({
   // The user's login shell when integration supports it, else null
   // (installs target this shell, resolved app-side since a
   // Finder-launched app may not have $SHELL).
-  loginShell: z.string().nullable(),
-  shells: z.array(ShellHookStateSchema),
+  loginShell: Schema.NullOr(Schema.String),
+  shells: Schema.Array(ShellHookStateSchema),
 });
-export type ShellIntegrationStatus = z.infer<
-  typeof ShellIntegrationStatusSchema
->;
+export type ShellIntegrationStatus = typeof ShellIntegrationStatusSchema.Type;
 
 // Served to a peer as well as the local window: Settings shows every
 // device of the account, and a peer holding the command grant may
@@ -57,29 +55,29 @@ export type ShellIntegrationStatus = z.infer<
 const gated = { remote: true, mutating: true, movesHostState: false };
 
 export const cliContract = defineContract("host", {
-  status: invoke("cli:status", z.void(), CliStatusSchema, gated),
+  status: invoke("cli:status", Schema.Undefined, CliStatusSchema, gated),
   install: invoke(
     "cli:install",
-    z.object({ force: z.boolean() }),
+    Schema.Struct({ force: Schema.Boolean }),
     CliStatusSchema,
     gated,
   ),
-  uninstall: invoke("cli:uninstall", z.void(), CliStatusSchema, gated),
+  uninstall: invoke("cli:uninstall", Schema.Undefined, CliStatusSchema, gated),
   shellStatus: invoke(
     "cli:shellStatus",
-    z.void(),
+    Schema.Undefined,
     ShellIntegrationStatusSchema,
     gated,
   ),
   shellInstall: invoke(
     "cli:shellInstall",
-    z.void(),
+    Schema.Undefined,
     ShellIntegrationStatusSchema,
     gated,
   ),
   shellUninstall: invoke(
     "cli:shellUninstall",
-    z.void(),
+    Schema.Undefined,
     ShellIntegrationStatusSchema,
     gated,
   ),

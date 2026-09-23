@@ -10,9 +10,9 @@ export const PortNumberSchema = Schema.Int.check(
   Schema.isBetween({ minimum: PORT_MIN, maximum: PORT_MAX }),
 );
 
-// The zod form, for the zod schemas that still embed a port (config.ts's
-// local-port preference, the forward and portForward contracts): a zod
-// object cannot hold a Schema field. Phase 4 waves 2 and 3 remove this.
+// The zod form, for the zod schemas that still embed a port (the
+// forward and portForward contracts): a zod object cannot hold a Schema
+// field. Phase 4 wave 3 removes this.
 export const PortNumberZod = z.number().int().min(PORT_MIN).max(PORT_MAX);
 
 export const PORT_LABEL_MAX = 32;
@@ -32,13 +32,6 @@ export const CustomPortSchema = Schema.Struct({
   ),
 });
 export type CustomPort = typeof CustomPortSchema.Type;
-
-// The zod form of CustomPortSchema, for config.ts's worktree data
-// schema that still embeds it. Phase 4 wave 2 removes this.
-export const CustomPortZod = z.object({
-  port: PortNumberZod,
-  label: z.string().trim().min(1).max(PORT_LABEL_MAX).optional(),
-});
 
 // Where a listed port came from: port-pool's allocation for the
 // worktree directory (named after the entry in the project's

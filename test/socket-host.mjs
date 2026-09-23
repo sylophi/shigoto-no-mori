@@ -64,6 +64,7 @@ import {
   isEntityGoneError,
   unknownWorktreeError,
 } from "@shared/errors";
+import { safeDecodeWith } from "@shared/ipc/codec";
 import { WireError } from "@shared/ipc/wireError";
 import { DEFLATED_FRAME_KIND } from "@shared/ipc/socket/deflatedFrame";
 import { connectDevice } from "@shared/ipc/socket/wsClientTransport";
@@ -1318,14 +1319,14 @@ async function main() {
       assert.equal(writeDeviceSettings.remote, true);
       assert.equal(writeDeviceSettings.mutating, true);
       assert.equal(
-        writeDeviceSettings.input.safeParse({
+        safeDecodeWith(writeDeviceSettings.input, {
           patch: { socketHost: { enabled: true, lan: true, token: "x" } },
         }).success,
         false,
         "writeDeviceSettings accepted a socketHost key",
       );
       assert.equal(
-        writeDeviceSettings.input.safeParse({
+        safeDecodeWith(writeDeviceSettings.input, {
           patch: {
             remoteDevices: [{ url: "ws://evil", token: "t" }],
           },
@@ -1336,12 +1337,12 @@ async function main() {
         "writeDeviceSettings accepted a remoteDevices key",
       );
       assert.equal(
-        writeDeviceSettings.input.safeParse({ patch: {} }).success,
+        safeDecodeWith(writeDeviceSettings.input, { patch: {} }).success,
         true,
         "an empty patch must parse",
       );
       assert.equal(
-        writeDeviceSettings.input.safeParse({
+        safeDecodeWith(writeDeviceSettings.input, {
           patch: { githubCli: false, portPool: true },
         }).success,
         true,

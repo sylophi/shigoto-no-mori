@@ -53,6 +53,7 @@ import { createAccountStore } from "../main/core/account/credentialStore.ts";
 import { createAccountStore as createCoreAccountStore } from "../shared/account/credentialStore.ts";
 import { createGrantStore } from "../main/core/account/grantStore.ts";
 import { shortHostname } from "../main/core/account/defaultDeviceName.ts";
+import { decodeWith, safeDecodeWith } from "@shared/ipc/codec";
 import {
   AccountStatusSchema,
   accountContract,
@@ -867,10 +868,10 @@ async function main() {
       // never carry the credential, so a compromised renderer cannot read
       // it back out of a status poll.
       assert.ok(
-        !("credential" in AccountStatusSchema.shape),
+        !("credential" in AccountStatusSchema.fields),
         "AccountStatusSchema exposes a credential field",
       );
-      const status = AccountStatusSchema.parse({
+      const status = decodeWith(AccountStatusSchema, {
         configured: true,
         signedIn: true,
         accountId: "acct-1",
@@ -897,14 +898,14 @@ async function main() {
     "contract: setDeviceName rejects an empty and an over-256-char name",
     () => {
       const input = accountContract.calls.setDeviceName.input;
-      assert.equal(input.safeParse("A valid name").success, true);
+      assert.equal(safeDecodeWith(input, "A valid name").success, true);
       assert.equal(
-        input.safeParse("").success,
+        safeDecodeWith(input, "").success,
         false,
         "an empty device name should be rejected",
       );
       assert.equal(
-        input.safeParse("x".repeat(300)).success,
+        safeDecodeWith(input, "x".repeat(300)).success,
         false,
         "a 300-char device name should be rejected",
       );
@@ -913,9 +914,9 @@ async function main() {
 
   await check("contract: enroll rejects an empty session token", () => {
     const input = accountContract.calls.enroll.input;
-    assert.equal(input.safeParse(fakeSessionJwt("user_x")).success, true);
+    assert.equal(safeDecodeWith(input, fakeSessionJwt("user_x")).success, true);
     assert.equal(
-      input.safeParse("").success,
+      safeDecodeWith(input, "").success,
       false,
       "an empty enroll token should be rejected",
     );

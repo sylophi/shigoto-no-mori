@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Schema } from "effect";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import {
   ProjectScopedPayloadSchema,
@@ -13,24 +13,29 @@ export const shigomoriContract = defineContract("host", {
   read: invoke(
     "shigomori:read",
     ProjectScopedPayloadSchema,
-    StoredShigomoriConfigSchema.nullable(),
+    Schema.NullOr(StoredShigomoriConfigSchema),
     { remote: true, mutating: false },
   ),
-  write: invoke("shigomori:write", WriteShigomoriPayloadSchema, z.void(), {
-    tracksProjectUsage: true,
-    remote: true,
-    mutating: true,
-  }),
+  write: invoke(
+    "shigomori:write",
+    WriteShigomoriPayloadSchema,
+    Schema.Undefined,
+    {
+      tracksProjectUsage: true,
+      remote: true,
+      mutating: true,
+    },
+  ),
   worktreeDataRead: invoke(
     "worktreeData:read",
     ReadWorktreeDataPayloadSchema,
-    ShigomoriWorktreeDataSchema.nullable(),
+    Schema.NullOr(ShigomoriWorktreeDataSchema),
     { remote: true, mutating: false },
   ),
   worktreeDataWrite: invoke(
     "worktreeData:write",
     WriteWorktreeDataPayloadSchema,
-    z.void(),
+    Schema.Undefined,
     { tracksProjectUsage: true, remote: true, mutating: true },
   ),
 });

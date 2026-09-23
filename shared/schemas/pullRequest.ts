@@ -1,5 +1,4 @@
 import { Schema } from "effect";
-import { z } from "zod";
 import { ProjectScopedPayloadSchema } from "./payloads";
 
 const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0));
@@ -121,10 +120,6 @@ export type PullRequestDetail = typeof PullRequestDetailSchema.Type;
 const MERGE_METHODS = ["merge", "squash", "rebase"] as const;
 export const MergeMethodSchema = Schema.Literals(MERGE_METHODS);
 export type MergeMethod = typeof MergeMethodSchema.Type;
-
-// The zod form of MergeMethodSchema, for config.ts's global config
-// that still embeds it. Phase 4 wave 2 removes this.
-export const MergeMethodZod = z.enum(MERGE_METHODS);
 
 // Per-repo merge button settings from `gh repo view`. All three may be
 // allowed, or only a subset (some teams squash-only). UI hides disabled

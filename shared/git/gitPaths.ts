@@ -7,7 +7,7 @@
 // ignored directory (entry with trailing slash). Mirrors how `git
 // check-ignore` resolves nested paths against `--directory` output.
 export function makeIgnoreMatcher(
-  paths: string[],
+  paths: readonly string[],
 ): (relative: string) => boolean {
   const set = new Set(paths);
   return (relative) => {

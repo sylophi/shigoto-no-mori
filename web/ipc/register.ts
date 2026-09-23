@@ -295,19 +295,24 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     // The shared best-effort revoke-then-clear (the desktop handler
     // adds a warn-once and its grant clear on top of the same core).
     signOut: async () => {
-      if (signOutInFlight) return signOutInFlight;
+      if (signOutInFlight) {
+        await signOutInFlight;
+        return;
+      }
       signOutInFlight = (async (): Promise<void> => {
         await signOutDevice({ config, service, store, deviceId });
         accountChanged();
       })();
       try {
-        return await signOutInFlight;
+        await signOutInFlight;
       } finally {
         signOutInFlight = null;
       }
     },
 
-    revokeDevice: (targetDeviceId) => revokeDeviceOnAccount(targetDeviceId),
+    revokeDevice: async (targetDeviceId) => {
+      await revokeDeviceOnAccount(targetDeviceId);
+    },
 
     listDevices: async () => {
       const record = store.read();

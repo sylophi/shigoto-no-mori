@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { z } from "zod";
+import { type AnyCodec, type CodecOut, decodeWith } from "@shared/ipc/codec";
 import { isENOENT } from "./paths";
 import { noteSelfWrite } from "./selfWrite";
 
@@ -79,25 +79,25 @@ export function noteNewerSchema(filePath: string, parsed: unknown): void {
 // as null, and anything else is wrapped with the path attached. `read`
 // returns the raw text or throws the reader's own IO failure into the
 // same handling.
-function finishJsonRead<T>(
+function finishJsonRead<C extends AnyCodec>(
   filePath: string,
-  schema: z.ZodType<T>,
+  schema: C,
   read: () => string,
-): T | null {
+): CodecOut<C> | null {
   try {
     const parsed: unknown = JSON.parse(read());
     noteNewerSchema(filePath, parsed);
-    return schema.parse(parsed);
+    return decodeWith(schema, parsed);
   } catch (error) {
     if (isENOENT(error)) return null;
     throw new Error(`Failed to read ${filePath}`, { cause: error });
   }
 }
 
-export async function readJsonOrNull<T>(
+export async function readJsonOrNull<C extends AnyCodec>(
   filePath: string,
-  schema: z.ZodType<T>,
-): Promise<T | null> {
+  schema: C,
+): Promise<CodecOut<C> | null> {
   // The await happens out here because the shared tail is sync. A read
   // failure is rethrown from inside it so ENOENT-vs-wrap stays in one
   // place.
@@ -118,10 +118,10 @@ export async function readJsonOrNull<T>(
 // exists). Same semantics: an absent file reads as null, a newer-schema
 // file is noted and read anyway, and anything else throws with the path
 // attached.
-export function readJsonOrNullSync<T>(
+export function readJsonOrNullSync<C extends AnyCodec>(
   filePath: string,
-  schema: z.ZodType<T>,
-): T | null {
+  schema: C,
+): CodecOut<C> | null {
   return finishJsonRead(filePath, schema, () => readFileSync(filePath, "utf8"));
 }
 

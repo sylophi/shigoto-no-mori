@@ -12,7 +12,7 @@
 // different builds: a copy must carry and forward an entry its build
 // has never heard of, or an older device in the middle would strip a
 // newer one's settings on the way through.
-import { z } from "zod";
+import { Option, Schema, SchemaGetter } from "effect";
 
 // Bounds that keep a whole document under the direct wire's frame cap
 // (MAX_INBOUND_FRAME_BYTES in shared/ipc/socket/frames.ts, 1 MiB),
@@ -27,58 +27,81 @@ const MAX_SHARED_SETTING_STAMP = 8.64e15;
 
 // Null is a cleared setting. The entry stays as a tombstone: dropping
 // it would let a copy that still holds the old value hand it back.
-export const SharedSettingValueSchema = z.union([
-  z.string().max(MAX_SHARED_SETTING_STRING_LENGTH),
-  z.number().finite(),
-  z.boolean(),
-  z.null(),
+export const SharedSettingValueSchema = Schema.Union([
+  Schema.String.check(Schema.isMaxLength(MAX_SHARED_SETTING_STRING_LENGTH)),
+  Schema.Finite,
+  Schema.Boolean,
+  Schema.Null,
 ]);
-export type SharedSettingValue = z.infer<typeof SharedSettingValueSchema>;
+export type SharedSettingValue = typeof SharedSettingValueSchema.Type;
 
-export const SharedSettingEntrySchema = z.object({
+export const SharedSettingEntrySchema = Schema.Struct({
   value: SharedSettingValueSchema,
   // The write's stamp: milliseconds, never below the writing copy's
   // highest stamp plus one (withSharedSetting), so a device with a slow
   // clock still outranks what it has already seen.
-  at: z.number().int().nonnegative().max(MAX_SHARED_SETTING_STAMP),
+  at: Schema.Int.check(
+    Schema.isGreaterThanOrEqualTo(0),
+    Schema.isLessThanOrEqualTo(MAX_SHARED_SETTING_STAMP),
+  ),
   // The writing device, which breaks a tie between equal stamps the
   // same way on every copy.
-  by: z.string().min(1).max(128),
+  by: Schema.NonEmptyString.check(Schema.isMaxLength(128)),
 });
-export type SharedSettingEntry = z.infer<typeof SharedSettingEntrySchema>;
+export type SharedSettingEntry = typeof SharedSettingEntrySchema.Type;
 
-const SharedSettingKeySchema = z
-  .string()
-  .min(1)
-  .max(MAX_SHARED_SETTING_KEY_LENGTH);
+const SharedSettingKeySchema = Schema.NonEmptyString.check(
+  Schema.isMaxLength(MAX_SHARED_SETTING_KEY_LENGTH),
+);
+const isSharedSettingKey = Schema.is(SharedSettingKeySchema);
+const decodeSharedSettingEntry = Schema.decodeUnknownOption(
+  SharedSettingEntrySchema,
+);
 
 // Read entry by entry: one this build cannot hold (a newer build's
 // longer value, a hand-mangled stamp) is left out and the rest still
 // merge. Failing the whole document over it would cut this device off
 // from every setting a newer peer holds, not just the one it cannot
 // read.
-export const SharedSettingsDocSchema = z.object({
-  entries: z.record(z.string(), z.unknown()).transform((raw) => {
-    const entries: Record<string, SharedSettingEntry> = {};
-    let count = 0;
-    for (const [key, value] of Object.entries(raw)) {
-      if (count >= MAX_SHARED_SETTING_ENTRIES) break;
-      if (!SharedSettingKeySchema.safeParse(key).success) continue;
-      const entry = SharedSettingEntrySchema.safeParse(value);
-      if (!entry.success) continue;
-      entries[key] = entry.data;
-      count += 1;
-    }
-    return entries;
-  }),
-});
-export type SharedSettingsDoc = z.infer<typeof SharedSettingsDocSchema>;
+//
+// Every device runs this exact rule on every copy it takes in, so it
+// has to stay the same rule on every build: entries in the document's
+// own key order, the first MAX_SHARED_SETTING_ENTRIES readable ones
+// kept. A `__proto__` key (JSON.parse makes it an own key) is left out
+// like an unreadable entry, as the zod version this replaced left it
+// out, and so it can never become the prototype of the entries object.
+function readableEntries(raw: {
+  readonly [key: string]: unknown;
+}): Record<string, SharedSettingEntry> {
+  const entries: Record<string, SharedSettingEntry> = {};
+  let count = 0;
+  for (const [key, value] of Object.entries(raw)) {
+    if (count >= MAX_SHARED_SETTING_ENTRIES) break;
+    if (key === "__proto__" || !isSharedSettingKey(key)) continue;
+    const entry = decodeSharedSettingEntry(value);
+    if (Option.isNone(entry)) continue;
+    entries[key] = entry.value;
+    count += 1;
+  }
+  return entries;
+}
 
-export const SetSharedSettingPayloadSchema = z.object({
+export const SharedSettingsDocSchema = Schema.Struct({
+  entries: Schema.Record(Schema.String, Schema.Unknown).pipe(
+    Schema.decodeTo(Schema.Record(Schema.String, SharedSettingEntrySchema), {
+      decode: SchemaGetter.transform(readableEntries),
+      // The kept entries are already a record of unknowns.
+      encode: SchemaGetter.transform((entries) => entries),
+    }),
+  ),
+});
+export type SharedSettingsDoc = typeof SharedSettingsDocSchema.Type;
+
+export const SetSharedSettingPayloadSchema = Schema.Struct({
   key: SharedSettingKeySchema,
   value: SharedSettingValueSchema,
 });
 
-export const MergeSharedSettingsPayloadSchema = z.object({
+export const MergeSharedSettingsPayloadSchema = Schema.Struct({
   doc: SharedSettingsDocSchema,
 });

@@ -18,6 +18,7 @@
 //
 // Pure aside from the injected deps (no electron, no node builtins),
 // like the pieces it composes.
+import type { Types } from "effect";
 import type { DirectCandidateKind } from "@shared/ipc/modules/direct";
 import type { HubPeerPush, HubStatus } from "@shared/ipc/modules/hub";
 import type { HubBrokerSession } from "@shared/hub/link";
@@ -143,7 +144,7 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
   }
 
   function buildStatus(current: HubConnectionStatus): HubStatus {
-    const snapshot: HubStatus = {
+    const snapshot: Types.Mutable<HubStatus> = {
       socket: current.socket,
       onlineDeviceIds: current.onlineDeviceIds,
       // Folded into the snapshot so the renderer stops polling
