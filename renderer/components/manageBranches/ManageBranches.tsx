@@ -36,7 +36,7 @@ function BranchesBody({ project }: { project: Project }) {
 
   return (
     <div className={PAGE_BODY}>
-      <div className="flex max-w-3xl flex-col gap-10">
+      <div className="flex flex-col gap-10">
         <section className="space-y-3">
           <div className="flex items-center justify-between">
             <SectionHeading>Local branches</SectionHeading>

@@ -15,7 +15,8 @@ const GAP_PX = 8;
 
 // Upper bound on what we're willing to lay out off-screen. A repo with 60
 // scripts would otherwise render 60 hidden pills to measure the ~8 that can
-// fit. Deliberately above any plausible fit at max-w-4xl.
+// fit. The row runs the full pane width, so this is the shortcut budget
+// rather than a fit bound. Off-row scripts stay in the Scripts section.
 const MAX_CANDIDATES = 16;
 
 interface ScriptLaunchRowProps {

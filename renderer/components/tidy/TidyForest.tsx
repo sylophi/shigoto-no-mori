@@ -228,7 +228,7 @@ function TidyBody() {
   return (
     <>
       <div className={PAGE_BODY}>
-        <div className="flex max-w-3xl flex-col gap-6">
+        <div className="flex flex-col gap-6">
           {/* A narrower gutter on a phone: three columns leave a card just
               short of its longest word at the full one. */}
           <div className="grid grid-cols-3 gap-3 phone:gap-2">
