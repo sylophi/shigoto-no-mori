@@ -46,7 +46,11 @@ import {
 } from "lucide-react";
 import type { ComponentType } from "react";
 import type { DeviceKind } from "@shared/account/deviceKind";
-import { TONE_PILL, type StatusTone } from "@/components/ui/status-dot";
+import {
+  StatusDot,
+  TONE_PILL,
+  type StatusTone,
+} from "@/components/ui/status-dot";
 import { cn } from "@/lib/utils";
 
 // A small box (a Mac mini, a NUC): lucide has no such glyph, so this is
@@ -120,6 +124,31 @@ export function DeviceIcon({
 }: { kind: DeviceKind } & LucideProps) {
   const Glyph = GLYPH[kind];
   return <Glyph aria-hidden className={cn("shrink-0", className)} {...props} />;
+}
+
+// The lead every name-bearing device row shares (the chips, the tabs,
+// the filter pills, the settings list): the device's connection dot,
+// then its glyph, then the name the caller sets beside it. Dot first,
+// so the row scans as state, identity, name, the order a list of rows
+// is read down. No tone (this device, which has no connection to
+// show) is the bare glyph.
+export function DeviceGlyph({
+  kind,
+  tone,
+  className,
+}: {
+  kind: DeviceKind;
+  tone?: StatusTone | null;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn("inline-flex shrink-0 items-center gap-1.5", className)}
+    >
+      {tone && <StatusDot tone={tone} />}
+      <DeviceIcon kind={kind} className="size-3.5" />
+    </span>
+  );
 }
 
 // The glyph on a tile washed in the device's connection tone, drawn

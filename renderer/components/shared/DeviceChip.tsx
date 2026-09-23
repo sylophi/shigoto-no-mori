@@ -1,9 +1,8 @@
 // The quiet "which machine is this" marker for device-scoped pages: the
-// device's glyph, a status dot and its name, rendered only under a
-// remote host scope. The local pages stay chipless, since this machine is the default,
+// device's connection dot, its glyph and its name, rendered only under
+// a remote host scope. The local pages stay chipless, since this machine is the default,
 // not a state worth announcing.
-import { DeviceIcon } from "@/components/shared/DeviceIcon";
-import { StatusDot } from "@/components/ui/status-dot";
+import { DeviceGlyph } from "@/components/shared/DeviceIcon";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
 import { deviceStatusView, deviceTitle } from "@/lib/remote/deviceStatus";
@@ -28,8 +27,7 @@ export function DeviceChip() {
       title={deviceTitle(device.label, status)}
       className={DEVICE_PILL_CLASS}
     >
-      <DeviceIcon kind={device.kind} className="size-3.5" />
-      <StatusDot tone={status.tone} />
+      <DeviceGlyph kind={device.kind} tone={status.tone} />
       <span className="max-w-32 truncate">{device.label}</span>
     </span>
   );

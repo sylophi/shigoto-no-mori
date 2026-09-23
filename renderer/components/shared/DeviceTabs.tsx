@@ -15,10 +15,9 @@ import { useState, type ReactNode } from "react";
 import { MonitorSmartphone } from "lucide-react";
 import type { DeviceKind } from "@shared/account/deviceKind";
 import { DEVICE_PILL_CLASS } from "@/components/shared/DeviceChip";
-import { DeviceIcon } from "@/components/shared/DeviceIcon";
+import { DeviceGlyph } from "@/components/shared/DeviceIcon";
 import { hostsProjects } from "@/lib/remote/deviceTraits";
 import { EmptyPanel } from "@/components/ui/empty-panel";
-import { StatusDot } from "@/components/ui/status-dot";
 import {
   useLocalDeviceKind,
   useLocalDeviceName,
@@ -182,14 +181,9 @@ export function DeviceTabBar({
     ...tabs.map((tab) => ({
       id: tab.deviceId,
       title: deviceTitle(tab.label, tab.status),
-      // The device's glyph, then its connection dot: this device has
+      // The device's connection dot, then its glyph: this device has
       // no connection to show and wears the glyph alone.
-      lead: (
-        <>
-          <DeviceIcon kind={tab.kind} className="size-3.5" />
-          {tab.status && <StatusDot tone={tab.status.tone} />}
-        </>
-      ),
+      lead: <DeviceGlyph kind={tab.kind} tone={tab.status?.tone} />,
       label: tab.label,
     })),
   ];

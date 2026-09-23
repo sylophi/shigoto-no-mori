@@ -11,10 +11,9 @@
 // forest always says which machine it is showing. A radio group: one
 // pick at a time, arrows move it, the way the device tabs do.
 import type { DeviceKind } from "@shared/account/deviceKind";
-import { DeviceIcon } from "@/components/shared/DeviceIcon";
+import { DeviceGlyph } from "@/components/shared/DeviceIcon";
 import type { DeviceRosterEntry } from "@/components/shared/DeviceTabs";
 import { Button } from "@/components/ui/button";
-import { StatusDot } from "@/components/ui/status-dot";
 import { useRovingPick } from "@/hooks/ui/useRovingPick";
 import { deviceTitle } from "@/lib/remote/deviceStatus";
 import { cn } from "@/lib/utils";
@@ -83,8 +82,7 @@ export function DeviceFilterBar({ choices, selected }: DeviceFilter) {
                 "border-transparent bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground",
             )}
           >
-            {pill.kind && <DeviceIcon kind={pill.kind} className="size-3.5" />}
-            {pill.tone && <StatusDot tone={pill.tone} />}
+            {pill.kind && <DeviceGlyph kind={pill.kind} tone={pill.tone} />}
             {pill.label !== null && (
               <span className="max-w-32 truncate">{pill.label}</span>
             )}
