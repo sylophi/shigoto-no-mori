@@ -45,6 +45,10 @@ import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest
 import { tildify } from "@/lib/projectPaths";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { cn } from "@/lib/utils";
+import {
+  type CloneDestination,
+  CloneDestinationSection,
+} from "./cloneDestination";
 import type { PullChoiceState } from "./ignoreChoice";
 import { SetupToggle } from "./SetupToggle";
 import { FlowFooter } from "./FlowChrome";
@@ -298,6 +302,7 @@ export function ReviewDevicesColumn({
   toPeer,
   worktree,
   localProject,
+  clone,
   sourceDeviceLabel,
   thisDeviceLabel,
   pull,
@@ -307,22 +312,35 @@ export function ReviewDevicesColumn({
   sourceKeeps?: boolean;
   toPeer?: DestinationPick;
   worktree: Worktree;
-  // Absent while a flow to a peer has no destination picked.
+  // Absent while a flow to a peer has no destination picked, and on a
+  // flow here with no checkout of the repo on this machine, where the
+  // clone stands in for it.
   localProject: Project | undefined;
+  clone?: CloneDestination;
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
   pull: PullChoiceState;
 }) {
   // The source is the device the dialog sits under.
   const sourceKind = useDeviceKind(useHostScope().deviceId);
-  const destination = localProject !== undefined && (
-    <DestinationRow
-      worktree={worktree}
-      localProject={localProject}
-      thisDeviceLabel={thisDeviceLabel}
-      tag={toPeer ? "destination" : "this device"}
-    />
-  );
+  const cloning = localProject === undefined && clone !== undefined;
+  const destination =
+    localProject !== undefined ? (
+      <DestinationRow
+        worktree={worktree}
+        localProject={localProject}
+        thisDeviceLabel={thisDeviceLabel}
+        tag={toPeer ? "destination" : "this device"}
+      />
+    ) : (
+      cloning && (
+        <CloneRow
+          clone={clone}
+          worktree={worktree}
+          thisDeviceLabel={thisDeviceLabel}
+        />
+      )
+    );
   return (
     <DestinationScope>
       <div className="flex min-w-0 flex-col gap-5">
@@ -393,8 +411,57 @@ export function ReviewDevicesColumn({
             />
           </>
         )}
+        {cloning && (
+          <CloneDestinationSection
+            clone={clone}
+            thisDeviceLabel={thisDeviceLabel}
+          />
+        )}
       </div>
     </DestinationScope>
+  );
+}
+
+// This machine as the destination when it has no checkout of the
+// repo: filled like the destination row, since the clone makes it
+// one, and saying so.
+function CloneRow({
+  clone,
+  worktree,
+  thisDeviceLabel,
+}: {
+  clone: CloneDestination;
+  worktree: Worktree;
+  thisDeviceLabel: string;
+}) {
+  const destinationKind = useDeviceKind(useDestinationScope().deviceId);
+  const landingBranch = pullLandingBranch(worktree);
+  return (
+    <DeviceRow
+      className="bg-accent text-accent-foreground"
+      mark={
+        <span
+          aria-hidden
+          className="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground"
+        >
+          <Check className="size-2.5" />
+        </span>
+      }
+      kind={destinationKind}
+      soft
+      title={thisDeviceLabel}
+      note={
+        landingBranch !== worktree.branch
+          ? `gets ${clone.projectName}, copy on ${landingBranch}`
+          : `gets ${clone.projectName}`
+      }
+      trailing={
+        <StatusDot
+          tone="emerald"
+          label={<span className="text-xs">this device</span>}
+        />
+      }
+    />
   );
 }
 
@@ -406,6 +473,7 @@ export function ReviewDevicesColumn({
 export function PullReviewFooter({
   worktree,
   localProject,
+  cloning = false,
   landing,
   waiting,
   blocked,
@@ -416,6 +484,9 @@ export function PullReviewFooter({
 }: {
   worktree: Worktree;
   localProject: Project | undefined;
+  // A landing here with no checkout, which the pull clones first: no
+  // project to check for collisions, and nothing to pick.
+  cloning?: boolean;
   landing?: Landing;
   // The gitignored rule resolves over the ignored list: no start
   // before it lands, or the files step would bring everything.
@@ -428,7 +499,7 @@ export function PullReviewFooter({
   onStart: () => void;
 }) {
   const { refusal } = useLocalCollision(localProject, worktree, landing);
-  const unpicked = localProject === undefined;
+  const unpicked = localProject === undefined && !cloning;
   return (
     <FlowFooter
       note={

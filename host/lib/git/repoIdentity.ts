@@ -22,3 +22,11 @@ const cache = ttlMapCache<string, string | null>(60_000, (projectPath) =>
 export function getRepoIdentity(projectPath: string): Promise<string | null> {
   return cache.get(projectPath);
 }
+
+// For the one writer that changes a repo's identity: the clone from a
+// peer (host/lib/sync/cloneFromPeer.ts), which turns an empty
+// repository into a populated one, and must not be read as the former
+// for the rest of the TTL.
+export function forgetRepoIdentity(projectPath: string): void {
+  cache.invalidate(projectPath);
+}

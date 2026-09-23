@@ -7,6 +7,7 @@
 // authed socket per deviceId, and a second dial silently supersedes
 // the session every remote-forest query is riding on.
 import type { mirrorContract } from "@shared/ipc/modules/mirror";
+import type { projectsContract } from "@shared/ipc/modules/projects";
 import type { syncContract } from "@shared/ipc/modules/sync";
 import type { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type { Client } from "@shared/ipc/types";
@@ -47,9 +48,19 @@ export type PeerWorktreesApi = Pick<
   "delete" | "list" | "setShelved"
 >;
 
+// The clone's one question of the peer's projects surface: which
+// branch its checkout of the repo is on by default, the branch the
+// clone here is made of (host/lib/sync/cloneFromPeer.ts). A read, so
+// it needs no grant, unlike the bundle that follows it.
+export type PeerProjectsApi = Pick<
+  Client<typeof projectsContract>,
+  "defaultBranch"
+>;
+
 type PeerSyncImpl = {
   syncApiFor: (deviceId: string) => PeerSyncApi;
   worktreesApiFor: (deviceId: string) => PeerWorktreesApi;
+  projectsApiFor: (deviceId: string) => PeerProjectsApi;
 };
 
 let impl: PeerSyncImpl | null = null;
@@ -71,6 +82,10 @@ export function peerSyncApiFor(deviceId: string): PeerSyncApi {
 
 export function peerWorktreesApiFor(deviceId: string): PeerWorktreesApi {
   return requireImpl().worktreesApiFor(deviceId);
+}
+
+export function peerProjectsApiFor(deviceId: string): PeerProjectsApi {
+  return requireImpl().projectsApiFor(deviceId);
 }
 
 // One of a peer's worktrees, read off its own list and re-parsed

@@ -3,7 +3,9 @@
 // setup command, and whether ports get provisioned. The review's
 // cards and the running view's steps read the same answers, so the
 // steps only name what the review already showed. Every hook here
-// reads this machine, so callers sit under LocalHostScope.
+// reads this machine, so callers sit under LocalHostScope. Under a
+// project not there yet (the pull clones it first) every answer is
+// empty: nobody has configured the checkout its create goes into.
 import type { Project } from "@shared/schemas";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { usePortPoolActive } from "@/hooks/ports/usePortPoolActive";
@@ -13,8 +15,8 @@ import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 
 // The local project's setup command, "" when none is configured (or
 // the config has not loaded yet).
-function useSetupScript(localProject: Project): string {
-  const { data: config } = useShigomoriConfig(localProject.id);
+function useSetupScript(localProject: Project | undefined): string {
+  const { data: config } = useShigomoriConfig(localProject?.id ?? null);
   return config?.scripts?.setup?.trim() ?? "";
 }
 
@@ -23,12 +25,14 @@ function useSetupScript(localProject: Project): string {
 // uses. The include status is read unconditionally (like Configure
 // does) so the two requests run side by side instead of the second
 // waiting on the config.
-export function useCarryOverRows(localProject: Project): {
+export function useCarryOverRows(localProject: Project | undefined): {
   rows: { path: string; tag: string }[];
   isPending: boolean;
 } {
-  const { data: config, isPending } = useShigomoriConfig(localProject.id);
-  const { data: include } = useWorktreeIncludeStatus(localProject.id);
+  const { data: config, isPending } = useShigomoriConfig(
+    localProject?.id ?? null,
+  );
+  const { data: include } = useWorktreeIncludeStatus(localProject?.id ?? null);
   const manual = config?.carryOver ?? [];
   const included = worktreeIncludeExtras(
     manual,
@@ -48,10 +52,13 @@ export function useCarryOverRows(localProject: Project): {
 // yet, so the primary checkout answers for it: port-pool is on for a
 // managed worktree when the toggle is on and the repo carries its
 // config, which the primary shares with every worktree cut from it.
-function useProvisionsPorts(localProject: Project): boolean {
-  const { data: worktrees } = useWorktrees(localProject.id);
+function useProvisionsPorts(localProject: Project | undefined): boolean {
+  const { data: worktrees } = useWorktrees(localProject?.id ?? null);
   const primary = worktrees?.find((entry) => entry.isPrimary);
-  const { data: active } = usePortPoolActive(localProject.id, primary?.id);
+  const { data: active } = usePortPoolActive(
+    localProject?.id ?? "",
+    primary?.id,
+  );
   return active === true;
 }
 
@@ -62,7 +69,10 @@ type CreatePlan = {
   provisionsPorts: boolean;
 };
 
-export function useCreatePlan(localProject: Project): CreatePlan {
+// Every answer empty for a project that is not there yet: the pull
+// that clones the repo first creates into a checkout nobody has
+// configured, so its create does nothing the plan could name.
+export function useCreatePlan(localProject: Project | undefined): CreatePlan {
   return {
     carryOverCount: useCarryOverRows(localProject).rows.length,
     setupCommand: useSetupScript(localProject),

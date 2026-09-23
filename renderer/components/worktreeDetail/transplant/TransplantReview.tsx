@@ -15,6 +15,7 @@ import { changeEntries } from "@/lib/patchFiles";
 import { DestinationScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
 import { cn } from "@/lib/utils";
+import type { CloneDestination } from "../flow/cloneDestination";
 import type { PullChoiceState } from "../flow/ignoreChoice";
 import type { Landing } from "../flow/pullSteps";
 import { PullLeaveOut } from "../flow/PullLeaveOut";
@@ -37,6 +38,7 @@ export function TransplantReview({
   worktree,
   project,
   localProject,
+  clone,
   sourceDeviceLabel,
   thisDeviceLabel,
   landing,
@@ -49,8 +51,10 @@ export function TransplantReview({
   project: Project;
   // The landing project and device: this machine's, or the picked
   // peer's when the transplant goes to one (`toPeer`), absent until
-  // one is picked.
+  // one is picked. Absent too when this machine has no checkout, and
+  // `clone` says where the pull makes one.
   localProject: Project | undefined;
+  clone?: CloneDestination;
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
   landing?: Landing;
@@ -116,6 +120,7 @@ export function TransplantReview({
             toPeer={toPeer}
             worktree={worktree}
             localProject={localProject}
+            clone={clone}
             sourceDeviceLabel={sourceDeviceLabel}
             thisDeviceLabel={thisDeviceLabel}
             pull={pull}
@@ -127,6 +132,7 @@ export function TransplantReview({
         <PullReviewFooter
           worktree={worktree}
           localProject={localProject}
+          cloning={localProject === undefined && clone !== undefined}
           landing={landing}
           waiting={pull.waiting}
           blocked={pull.blocked}

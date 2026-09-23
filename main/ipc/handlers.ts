@@ -494,6 +494,8 @@ export function registerIpcHandlers(): void {
       buildClient(syncContract, peerTransportFor(deviceId)),
     worktreesApiFor: (deviceId) =>
       buildClient(worktreesContract, peerTransportFor(deviceId)),
+    projectsApiFor: (deviceId) =>
+      buildClient(projectsContract, peerTransportFor(deviceId)),
   });
   // The port-forward engine's peer reach, riding the same
   // peerTransportFor as the sync wiring above and for the same reason:

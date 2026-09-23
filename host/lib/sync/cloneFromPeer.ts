@@ -1,0 +1,95 @@
+// A checkout of a peer's repo made on this device over the device
+// link: the pull's landing project when this device has none
+// (sync:pullWorktree's `cloneInto`). The peer's default branch crosses
+// as a bundle, the way the pulled branch does, so a repo with no
+// remote gets here too and the peer's grant is the one gate. The
+// bundle unpacks into a fresh repository at the folder asked for, the
+// branch is checked out, and the checkout is registered the way the
+// add-project dialog's clone is (`sm projects add`, config seed
+// included, which is why the register waits for the checkout). Up to
+// the register everything is undone on failure: the folder is this
+// call's own, made here.
+import { mkdir, rm, stat } from "node:fs/promises";
+import { join } from "node:path";
+import { errorMessageOf } from "@shared/errors";
+import {
+  type SyncCloneInto,
+  SyncBundleRefSchema,
+} from "@shared/ipc/modules/sync";
+import { GitRefNameSchema, type Project } from "@shared/schemas";
+import { projectsAddViaCli } from "@host/ipc/cliDelegate";
+import type { PeerProjectsApi, PeerSyncApi } from "@host/ipc/peerSync";
+import { run } from "@host/lib/git/core";
+import { deleteRef, updateRef } from "@host/lib/git/refs";
+import { forgetRepoIdentity } from "@host/lib/git/repoIdentity";
+import { expandHome, isENOENT, pathExists } from "@host/lib/util/paths";
+import { fetchBundleFromPeer, landingRefspec } from "./fetchBundle";
+
+export async function cloneProjectFromPeer(
+  peer: { sync: PeerSyncApi; projects: PeerProjectsApi },
+  sourceProjectId: string,
+  { parentDir: rawParentDir, name }: SyncCloneInto,
+  onProgress?: (bytes: number, totalBytes: number) => void,
+): Promise<Project> {
+  // The same two checks the URL clone makes (host/lib/git/clone.ts),
+  // for the same reason: git would refuse either, in words about its
+  // own argv.
+  const parentDir = expandHome(rawParentDir);
+  const parent = await stat(parentDir).catch((error: unknown) => {
+    if (isENOENT(error)) return null;
+    throw error;
+  });
+  if (!parent?.isDirectory()) {
+    throw new Error(`${parentDir} is not a folder`);
+  }
+  const dest = join(parentDir, name);
+  if (await pathExists(dest)) {
+    throw new Error(`${dest} already exists`);
+  }
+
+  // The peer's default branch is what the checkout is made of, so the
+  // clone reads as the repo (its identity is the root of that branch,
+  // shared/git/repoIdentity.mts) and not as one worktree of it.
+  // Re-parsed: it flows into refs and argv here.
+  const branch = GitRefNameSchema.parse(
+    await peer.projects.defaultBranch({ projectId: sourceProjectId }),
+  );
+  const branchRef = SyncBundleRefSchema.parse(`refs/heads/${branch}`);
+  const incomingRef = landingRefspec(branchRef).split(":")[1] ?? "";
+
+  await mkdir(dest);
+  try {
+    await run(dest, ["init", "--quiet"]);
+    // HEAD names the branch before it exists, so the checkout below is
+    // one reset, and a clone of a repo whose default branch is not
+    // git's own default lands on the right one.
+    await run(dest, ["symbolic-ref", "HEAD", branchRef]);
+    const { fetched } = await fetchBundleFromPeer(peer.sync, {
+      sourceProjectId,
+      repoPath: dest,
+      refs: [branchRef],
+      haves: [],
+      onProgress,
+    });
+    const tip = fetched.find((entry) => entry.ref === incomingRef)?.commit;
+    if (tip === undefined) {
+      throw new Error(`${branch} did not arrive whole from the other device.`);
+    }
+    await updateRef(dest, branchRef, tip);
+    await deleteRef(dest, incomingRef);
+    await run(dest, ["reset", "--quiet", "--hard"]);
+  } catch (error) {
+    await rm(dest, { recursive: true, force: true }).catch(() => {});
+    throw error;
+  }
+  // Read while empty, the folder would have cached as "no identity"
+  // for the rest of the TTL, and the pull that follows matches by it.
+  forgetRepoIdentity(dest);
+  // The checkout stays if registering fails, so the error says where
+  // it is: a retry would only find the folder taken.
+  return projectsAddViaCli(dest).catch((error: unknown) => {
+    throw new Error(
+      `Cloned into ${dest}, but couldn't add it as a project: ${errorMessageOf(error)}`,
+    );
+  });
+}

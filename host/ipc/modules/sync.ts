@@ -9,6 +9,7 @@ import { join } from "node:path";
 import type { z } from "zod";
 import {
   SyncCaptureDirtyResultSchema,
+  type SyncCloneInto,
   SyncHasCommitsResultSchema,
   SyncLandCheckResultSchema,
   SyncLandWorktreeResultSchema,
@@ -51,6 +52,7 @@ import {
   dirtyCaptureViaCli,
 } from "@host/ipc/cliDelegate";
 import {
+  peerProjectsApiFor,
   peerSyncApiFor,
   peerWorktreeOrUndefined,
   peerWorktreesApiFor,
@@ -81,9 +83,12 @@ import {
 } from "@host/lib/git/refs";
 import {
   findProjectAndWorktreeOrThrow,
+  findProjectByIdentity,
   findProjectByIdentityOrThrow,
   findProjectOrThrow,
+  NO_PROJECT_OF_IDENTITY,
 } from "@host/lib/projects";
+import { cloneProjectFromPeer } from "@host/lib/sync/cloneFromPeer";
 import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
 import { pushBundleToPeer } from "@host/lib/sync/pushBundle";
 import { notifierFor, worktreesHandlers } from "./worktrees";
@@ -683,6 +688,22 @@ async function refuseLandingCollision(
   }
 }
 
+// The pull's landing project: the checkout this device has of the
+// repo, or the one the pull makes when it has none and was told where
+// (cloneFromPeer.ts). A checkout it has wins over a place named for a
+// new one: the dialog that named it was reading a stale list, and a
+// second clone of a repo already here is not what anyone asked for.
+async function landingProject(
+  identity: string,
+  cloneInto: SyncCloneInto | undefined,
+  clone: (into: SyncCloneInto) => Promise<Project>,
+): Promise<{ project: Project; cloned: boolean }> {
+  const held = await findProjectByIdentity(identity);
+  if (held !== undefined) return { project: held, cloned: false };
+  if (cloneInto === undefined) throw new Error(NO_PROJECT_OF_IDENTITY);
+  return { project: await clone(cloneInto), cloned: true };
+}
+
 // The landing proper, shared the same way: the worktree created on the
 // incoming ref, then the capture re-applied in it. The caller owns the
 // incoming ref and its sweep. `branch` is the one the copy is created
@@ -795,6 +816,7 @@ export async function runPullWorktree(
     runSetup,
     ignoreMode,
     ignores,
+    cloneInto,
   }: z.infer<typeof SyncPullWorktreePayloadSchema>,
   ctx: HandlerContext,
   // The branch the copy is created on when it is not the source's (the
@@ -810,14 +832,28 @@ export async function runPullWorktree(
   const progress = (frame: Omit<SyncPullProgress, "sourceWorktreeId">) =>
     notifyProgress({ sourceWorktreeId, ...frame });
 
-  // 1. The local target repo, re-resolved by identity from disk.
-  const project = await findProjectByIdentityOrThrow(sourceIdentity);
+  // 1. The local target repo, re-resolved by identity from disk, or
+  // made now: with none, and a place named for one, the repo is
+  // cloned from the peer first and the copy lands in that.
+  const peer = peerSyncApiFor(sourceDeviceId);
+  const { project, cloned } = await landingProject(
+    sourceIdentity,
+    cloneInto,
+    (into) => {
+      progress({ step: "clone" });
+      return cloneProjectFromPeer(
+        { sync: peer, projects: peerProjectsApiFor(sourceDeviceId) },
+        sourceProjectId,
+        into,
+        (bytes, totalBytes) => progress({ step: "clone", bytes, totalBytes }),
+      );
+    },
+  );
 
   // 2. Refuse up front what the create would refuse after the bundle
   // crossed.
   await refuseLandingCollision(project, landing, worktreeName);
 
-  const peer = peerSyncApiFor(sourceDeviceId);
   const branchRef = `refs/heads/${branch}`;
 
   // 3. Tip negotiation, then capture. The tip decides whether the
@@ -948,7 +984,13 @@ export async function runPullWorktree(
             : undefined,
       },
     );
-    return { worktree, captured: capture.captured, dirtyApplied, files };
+    return {
+      worktree,
+      captured: capture.captured,
+      dirtyApplied,
+      files,
+      ...(cloned ? { cloned: project } : {}),
+    };
   } finally {
     // Sweep the landing ref success or fail. A survivor is not
     // harmless: a stale incoming/foo blocks any later incoming/foo/bar

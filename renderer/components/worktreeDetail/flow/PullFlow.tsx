@@ -37,16 +37,16 @@ const STAGE_LOOK: Record<
 
 type Landed = { worktree: { projectId: string; id: string } };
 
-export function usePullFlow<Data extends Landed>({
+export function usePullFlow<Data extends Landed, Choice extends PullChoice>({
   mutation,
   sourceWorktreeId,
   choice,
   destinationDeviceId = localDeviceId,
   onClose,
 }: {
-  mutation: UseMutationResult<Data, Error, PullChoice>;
+  mutation: UseMutationResult<Data, Error, Choice>;
   sourceWorktreeId: string;
-  choice: PullChoice;
+  choice: Choice;
   // Where the worktree lands: this machine, unless the flow is a
   // transplant to a peer.
   destinationDeviceId?: string;

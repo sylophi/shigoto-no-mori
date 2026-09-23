@@ -15,7 +15,10 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import type { MirrorStartPayload } from "@shared/ipc/modules/mirror";
-import type { SyncPullWorktreeResult } from "@shared/ipc/modules/sync";
+import type {
+  SyncCloneInto,
+  SyncPullWorktreeResult,
+} from "@shared/ipc/modules/sync";
 import type { MirrorIgnoreChoice } from "@shared/leaveOutRule";
 import type { Worktree } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
@@ -34,27 +37,28 @@ export function keptSourceReason(
 }
 
 // What every pull-shaped landing does once the worktree is here: the
-// local forest's registry keys refresh. The outcome is the caller's
-// to report (the dialogs' last step is the report). Shared with the
-// mirror start, which lands the same way.
-function invalidateLanded(
-  queryClient: QueryClient,
-  localProjectId: string,
-): void {
+// local forest's registry keys refresh, read off the landed worktree
+// (the project it went into may be one the pull made). The outcome is
+// the caller's to report (the dialogs' last step is the report).
+// Shared with the mirror start, which lands the same way.
+function invalidateLanded(queryClient: QueryClient, landed: Landed): void {
+  if (landed.cloned !== undefined) {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
+  }
   void queryClient.invalidateQueries({
-    queryKey: queryKeys.worktrees(localProjectId),
+    queryKey: queryKeys.worktrees(landed.worktree.projectId),
   });
   void queryClient.invalidateQueries({
-    queryKey: queryKeys.branches(localProjectId),
+    queryKey: queryKeys.branches(landed.worktree.projectId),
   });
 }
 
-// Where a pull-shaped landing comes from and where it lands.
+// Where a pull-shaped landing comes from. Where it lands is this
+// machine's checkout of the same repo, which the host resolves.
 export type PullSource = {
   worktree: Worktree;
   sourceProjectId: string;
   sourceIdentity: string;
-  localProjectId: string;
 };
 
 // What a mirror leaves out, as the dialog and the section hand it to
@@ -65,20 +69,28 @@ export type { MirrorIgnoreChoice };
 // switch, the same for a transplant and a mirror start.
 export type PullChoice = MirrorIgnoreChoice & { runSetup: boolean };
 
+// The pulls that land here take one more: where to clone the repo
+// first when this machine has no checkout of it (the review's clone
+// section). A landing on a peer has no such option, the peer must
+// hold the repo.
+export type LandingChoice = PullChoice & { cloneInto?: SyncCloneInto };
+
+type Landed = Pick<SyncPullWorktreeResult, "worktree" | "cloned">;
+
 // The mutation the pull and the mirror start share: the same payload
 // built from the scope and the source (the mirror start's, which is the
 // pull's with the leave-out rule a PullChoice always carries), handed
 // to whichever verb lands it. The leave-out rule rides along (the host brings the ignored files
 // it admits over once the worktree is here). Success only invalidates:
 // the caller shows the outcome, so the conclusion is told once.
-export function useLandingMutation<Result>(
-  { worktree, sourceProjectId, sourceIdentity, localProjectId }: PullSource,
+export function useLandingMutation<Result extends Landed>(
+  { worktree, sourceProjectId, sourceIdentity }: PullSource,
   land: (payload: MirrorStartPayload) => Promise<Result>,
 ) {
   const { deviceId } = useHostScope();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (choice: PullChoice) =>
+    mutationFn: (choice: LandingChoice) =>
       land({
         sourceDeviceId: deviceId,
         sourceProjectId,
@@ -88,7 +100,7 @@ export function useLandingMutation<Result>(
         worktreeName: pullWorktreeName(worktree),
         ...choice,
       }),
-    onSuccess: () => invalidateLanded(queryClient, localProjectId),
+    onSuccess: (landed) => invalidateLanded(queryClient, landed),
     meta: { silentError: true },
   });
 }
@@ -156,7 +168,7 @@ export function useTeardownSent(
         worktreeId: worktree.id,
       });
     },
-    onSuccess: () => invalidateLanded(queryClient, worktree.projectId),
+    onSuccess: () => invalidateLanded(queryClient, { worktree }),
     meta: { errorTitle: "Couldn't tear down the source worktree" },
   });
 }

@@ -30,9 +30,14 @@ export const AFTER_PULL_POSITION = TIMELINE.length;
 
 // Before the first frame the orchestrator is negotiating tips, which
 // is the capture step's preamble, so the first step reads as running
-// from the start.
-export function framePosition(frame: SyncPullProgress | null): number {
-  return stepPosition(frame?.createPhase ?? frame?.step ?? "capture");
+// from the start. A run that clones the repo first opens on that.
+export function framePosition(
+  frame: SyncPullProgress | null,
+  cloning = false,
+): number {
+  return stepPosition(
+    frame?.createPhase ?? frame?.step ?? (cloning ? "clone" : "capture"),
+  );
 }
 
 // Each row's state against the frame, for rows in run order. The
@@ -79,6 +84,11 @@ const CREATE_PHASE_SHARE: Record<CreatePhase, number> = {
 export function overallProgress(frame: SyncPullProgress | null): number {
   if (frame === null) return 0.04;
   switch (frame.step) {
+    case "clone": {
+      const total = frame.totalBytes ?? 0;
+      const ratio = total > 0 ? Math.min(1, (frame.bytes ?? 0) / total) : 0;
+      return 0.02 + ratio * 0.05;
+    }
     case "capture":
       return 0.08;
     case "transfer": {
@@ -154,6 +164,8 @@ export function stepHeadline(
 ): string {
   const here = landing.on;
   switch (frame?.step ?? "capture") {
+    case "clone":
+      return `cloning the repository from ${sourceDeviceLabel}`;
     case "capture":
       return `capturing the uncommitted work on ${sourceDeviceLabel}`;
     case "transfer":

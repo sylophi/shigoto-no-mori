@@ -147,6 +147,16 @@ function prepareFixture(): Fixture {
   git(seed, "remote", "add", "origin", origin);
   git(seed, "push", "-q", "origin", "main");
 
+  // A repo only b has, with no remote to clone it from: the mirror
+  // onto a device with no checkout has to bring it over the device
+  // link itself.
+  const lone = join(b.repos, "lone");
+  mkdirSync(lone, { recursive: true });
+  git(lone, "init", "-q", "-b", "main");
+  writeFileSync(join(lone, "README.md"), "only on b\n");
+  git(lone, "add", ".");
+  git(lone, "commit", "-q", "-m", "Initial");
+
   for (const profile of [a, b]) {
     mkdirSync(profile.repos, { recursive: true });
     mkdirSync(profile.dataDir, { recursive: true });
@@ -840,6 +850,123 @@ async function main(): Promise<string[]> {
       assert.ok(existsSync(bPrimary.path), "b's primary vanished on stop");
       assert.equal(gitOut(aRepo, "rev-parse", "HEAD"), aMainBefore);
       assert.equal(gitOut(bPrimary.path, "rev-parse", "HEAD"), tipA);
+    });
+
+    // b's `lone` repo has no remote and a has no checkout of it. The
+    // start refuses as it always did until told where to clone, then
+    // clones the repo over the device link, registers it on a, and
+    // lands the primary's copy beside it. The stop removes the copy
+    // alone: the clone stays as an ordinary project.
+    await scenario("mirror: onto a device with no checkout", async () => {
+      const projects = (await onPeer(a, idB, "projects:list")) as Project[];
+      const lone = need(
+        projects.find((p) => p.name === "lone"),
+        "b's lone project",
+      );
+      const identity = need(lone.identity ?? undefined, "lone's identity");
+      const onB = (await onPeer(a, idB, "worktrees:list", {
+        projectId: lone.id,
+      })) as Worktree[];
+      const bPrimary = need(
+        onB.find((w) => w.isPrimary),
+        "lone's primary on b",
+      );
+      const payload = {
+        sourceDeviceId: idB,
+        sourceProjectId: lone.id,
+        sourceWorktreeId: bPrimary.id,
+        sourceIdentity: identity,
+        branch: bPrimary.branch,
+        worktreeName: `mirror-${bPrimary.name}`,
+        runSetup: false,
+        ignoreMode: "everything",
+        ignores: [],
+      };
+      await assert.rejects(
+        () => a.evaluate(`window.api.mirror.start(${JSON.stringify(payload)})`),
+        /No local project matches/,
+      );
+      const started = await a.evaluate<{
+        worktree: Worktree;
+        session: string;
+        cloned?: Project;
+      }>(
+        `window.api.mirror.start(${JSON.stringify({
+          ...payload,
+          cloneInto: { parentDir: fixture.a.repos, name: "lone" },
+        })})`,
+      );
+      const cloned = need(started.cloned, "the start's clone");
+      assert.equal(
+        realpathSync(cloned.path),
+        realpathSync(join(fixture.a.repos, "lone")),
+      );
+      const onA = await a.evaluate<Project[]>("window.api.projects.list()");
+      assert.equal(
+        onA.find((p) => p.id === cloned.id)?.identity,
+        identity,
+        "a's clone does not read as the same repo",
+      );
+      assert.equal(
+        gitOut(cloned.path, "symbolic-ref", "HEAD"),
+        "refs/heads/main",
+      );
+      assert.equal(
+        gitOut(cloned.path, "rev-parse", "HEAD"),
+        gitOut(bPrimary.path, "rev-parse", "HEAD"),
+      );
+      assert.equal(
+        readFileSync(join(cloned.path, "README.md"), "utf8"),
+        "only on b\n",
+      );
+      const local = started.worktree;
+      assert.equal(local.projectId, cloned.id);
+      assert.equal(local.branch, "mirror/main");
+      const session = JSON.stringify(started.session);
+      await a.waitFor(
+        "the clone's mirror to be watching with git in sync",
+        `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${session} && s.status === "watching" && s.git?.status === "synced"))`,
+        90_000,
+      );
+      // A commit on b's primary lands on the copy, through the clone.
+      writeFileSync(join(bPrimary.path, "after-clone.txt"), "b again\n");
+      await waitFor(
+        () => fileEquals(join(local.path, "after-clone.txt"), "b again\n"),
+        "b's file to reach the copy",
+        30_000,
+      );
+      git(bPrimary.path, "add", "after-clone.txt");
+      git(bPrimary.path, "commit", "-q", "-m", "after the clone");
+      const tipB = gitOut(bPrimary.path, "rev-parse", "HEAD");
+      await waitFor(
+        () => gitOut(local.path, "rev-parse", "HEAD") === tipB,
+        "the copy to follow b's primary",
+        60_000,
+      );
+      // The stop, unforced once synced, takes the copy. The clone is
+      // a's project now.
+      await a.waitFor(
+        "synced after b's commit",
+        `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${session} && s.git?.status === "synced"))`,
+        90_000,
+      );
+      await a.evaluate(`window.api.mirror.stop(${session})`);
+      await waitFor(
+        () => !existsSync(local.path),
+        "the copy to leave the disk",
+        30_000,
+      );
+      assert.ok(existsSync(cloned.path), "the clone went with the stop");
+      const after = await a.evaluate<Project[]>("window.api.projects.list()");
+      assert.ok(
+        after.some((p) => p.id === cloned.id),
+        "the clone was unregistered by the stop",
+      );
+      // Back to no checkout on a, for the dialog's turn below.
+      await a.evaluate(
+        `window.api.projects.remove(${JSON.stringify(cloned.id)})`,
+      );
+      rmSync(cloned.path, { recursive: true, force: true });
     });
 
     await scenario("transplant", async () => {
@@ -1931,6 +2058,101 @@ async function main(): Promise<string[]> {
         30_000,
       );
     });
+
+    // The mirror dialog on a peer's worktree of a repo this device has
+    // no checkout of: the review offers to clone it here first, with
+    // the folder to change. The default follows b's own layout with
+    // the home swapped, which on one machine is b's folder itself, so
+    // the folder is changed through the picker.
+    await scenario(
+      "dialog: mirror onto a device with no checkout",
+      async () => {
+        const projects = (await onPeer(a, idB, "projects:list")) as Project[];
+        const lone = need(
+          projects.find((p) => p.name === "lone"),
+          "b's lone project",
+        );
+        const before = await a.evaluate<Project[]>(
+          "window.api.projects.list()",
+        );
+        assert.ok(
+          !before.some((p) => p.name === "lone"),
+          "a already holds lone",
+        );
+        // b's lone is the one row of that name in a's sidebar.
+        await click("the sidebar row of b's lone primary", byText("lone"));
+        await click("the Mirror here button", byText("Mirror here"));
+        await a.waitFor(
+          "the review to offer the clone",
+          `Boolean(${byText("Change folder")})`,
+          30_000,
+        );
+        await shoot("clone-review-default");
+        await clickText("Change folder");
+        const PICKER_INPUT = `document.querySelector('input[placeholder^="Enter a path"]')`;
+        await a.waitFor(
+          "the folder picker",
+          `${PICKER_INPUT} !== null`,
+          30_000,
+        );
+        await a.evaluate(
+          `(() => {
+          const input = ${PICKER_INPUT};
+          const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+          setter.call(input, ${JSON.stringify(`${fixture.a.repos}/`)});
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        })()`,
+        );
+        await click(
+          "the picker's confirm",
+          `document.querySelector('button[aria-label^="Use this folder"]')`,
+        );
+        await a.waitFor(
+          "the review to name the picked folder",
+          `!${PICKER_INPUT} && document.body.textContent.includes("e2e-a/repos/lone")`,
+          30_000,
+        );
+        await shoot("clone-review");
+        await clickText("Start mirroring");
+        await a.waitFor(
+          "the mirror dialog to reach its live step",
+          `Boolean(${byText("Open here")})`,
+          180_000,
+        );
+        await shoot("clone-live");
+        const onA = await a.evaluate<Project[]>("window.api.projects.list()");
+        const cloned = need(
+          onA.find((p) => p.name === "lone"),
+          "a's clone of lone",
+        );
+        assert.equal(
+          realpathSync(cloned.path),
+          realpathSync(join(fixture.a.repos, "lone")),
+        );
+        assert.equal(cloned.identity, lone.identity);
+        const list = await a.evaluate<Worktree[]>(
+          `window.api.worktrees.list(${JSON.stringify(cloned.id)})`,
+        );
+        const local = need(
+          list.find((w) => w.branch === "mirror/main"),
+          "the copy beside a's clone",
+        );
+        await clickText("Open here");
+        const session = need(
+          (await mirrorsOn(a)).sessions.find(
+            (s) => s.localWorktreeId === local.id,
+          ),
+          "the session the dialog started",
+        );
+        await mirrorOp("stop", session.session);
+        await waitFor(
+          () => !existsSync(local.path),
+          "the copy to go with the stop",
+          30_000,
+        );
+        assert.ok(existsSync(cloned.path), "the clone went with the stop");
+      },
+    );
 
     // The transplant dialog with the switch pinned against the rule:
     // Gitignored turns it on, the user turns it off, and it stays off

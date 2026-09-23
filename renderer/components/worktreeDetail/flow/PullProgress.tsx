@@ -26,6 +26,7 @@ import { formatBytes } from "@/lib/formatBytes";
 import { pluralize } from "@/lib/pluralize";
 import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
 import { cn } from "@/lib/utils";
+import type { CloneDestination } from "./cloneDestination";
 import { useCreatePlan } from "./createPlan";
 import { FlowBody, FlowFooter } from "./FlowChrome";
 import {
@@ -59,8 +60,10 @@ type Props = {
   // The source worktree being brought here.
   worktree: Worktree;
   // The project it lands in, whose carry-over, setup script and ports
-  // the create's rows name.
-  localProject: Project;
+  // the create's rows name. Absent when the run makes it (`cloning`).
+  localProject: Project | undefined;
+  // The clone the run opens with, when this machine had no checkout.
+  cloning?: CloneDestination;
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
   // The review's setup switch.
@@ -106,6 +109,7 @@ function ProgressView({
   phasesSeen,
   worktree,
   localProject,
+  cloning,
   sourceDeviceLabel,
   thisDeviceLabel,
   runSetup,
@@ -127,20 +131,24 @@ function ProgressView({
   const sourceKind = useDeviceKind(useHostScope().deviceId);
   const destinationKind = useDeviceKind(useDestinationScope().deviceId);
   const plan = useCreatePlan(localProject);
+  const projectName = localProject?.name ?? cloning?.projectName ?? "";
   const failed = error !== undefined;
   const dirty = worktree.changedCount > 0;
   const folder = pullWorktreeName(worktree);
   const landingBranch = pullLandingBranch(worktree);
   const pullDone = frame?.step === "apply" && extraRows.length > 0;
   const ratio = pullDone ? 0.97 : overallProgress(frame);
-  const caption = (step: "transfer" | "files") =>
+  const caption = (step: "clone" | "transfer" | "files") =>
     frame?.step === step && frame.totalBytes
       ? `${formatBytes(frame.bytes ?? 0)} of ${formatBytes(frame.totalBytes)}`
       : null;
+  const cloneCaption = caption("clone");
   const transferCaption = caption("transfer");
   const filesCaption = caption("files");
 
-  const at = pullDone ? AFTER_PULL_POSITION : framePosition(frame);
+  const at = pullDone
+    ? AFTER_PULL_POSITION
+    : framePosition(frame, cloning !== undefined);
   // The create's phases are listed from the plan, which is a reading
   // of the project made before the create ran, and settled by what the
   // run reports: a phase it reports gets its row even unplanned, and a
@@ -163,6 +171,13 @@ function ProgressView({
   // ports are listed when the project has them, setup whenever it has
   // a script (skipped with the switch off), the re-apply always.
   const rows: Row[] = [
+    ...rowIf(cloning !== undefined, {
+      title: `Clone ${projectName} to ${thisDeviceLabel}`,
+      detail: cloneCaption ?? (
+        <span className="font-mono">{cloning?.dest}</span>
+      ),
+      position: stepPosition("clone"),
+    }),
     {
       title: `Capture on ${sourceDeviceLabel}`,
       detail: dirty
@@ -196,8 +211,8 @@ function ProgressView({
       title: "Carry files over",
       detail:
         plan.carryOverCount > 0
-          ? `${pluralize(plan.carryOverCount, "path")} from ${localProject.name}`
-          : `from ${localProject.name}`,
+          ? `${pluralize(plan.carryOverCount, "path")} from ${projectName}`
+          : `from ${projectName}`,
     }),
     ...phaseRow("setup", plan.setupCommand !== "", {
       title: "Run the setup script",
@@ -240,7 +255,9 @@ function ProgressView({
             />
             <div className="min-w-0 flex-1 space-y-1.5">
               <p className="h-4 truncate text-center text-xs text-sky-700 dark:text-sky-300">
-                {failed ? "stopped" : (transferCaption ?? filesCaption ?? " ")}
+                {failed
+                  ? "stopped"
+                  : (cloneCaption ?? transferCaption ?? filesCaption ?? " ")}
               </p>
               <div
                 role="progressbar"
