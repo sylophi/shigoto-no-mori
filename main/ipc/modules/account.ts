@@ -266,7 +266,7 @@ function statusOf(
     deviceName:
       record?.deviceName ?? store().rememberedDeviceName() ?? defaultName,
     // The kind by the same rule (a pick outlives a sign-out too).
-    deviceKind: effectiveDeviceKind(store(), detectedKind),
+    deviceKind: effectiveDeviceKind(record, store(), detectedKind),
     detectedDeviceKind: detectedKind,
     // --clone-login leaves this beside the token store it copied
     // (scripts/lib/devProfile.mts cloneDevLogin).

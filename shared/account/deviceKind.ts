@@ -55,13 +55,13 @@ export const DEVICE_MARKS = [
   "gamepad",
 ] as const;
 
-export const DEVICE_KINDS = [...DEVICE_SHAPES, ...DEVICE_MARKS] as const;
+const DEVICE_KINDS = [...DEVICE_SHAPES, ...DEVICE_MARKS] as const;
 
 export type DeviceShape = (typeof DEVICE_SHAPES)[number];
-export type DeviceMark = (typeof DEVICE_MARKS)[number];
-export type DeviceKind = DeviceShape | DeviceMark;
+export type DeviceKind = DeviceShape | (typeof DEVICE_MARKS)[number];
 
 export const DeviceKindSchema = z.enum(DEVICE_KINDS);
+const KIND_SET: ReadonlySet<string> = new Set(DEVICE_KINDS);
 
 // The kind as the picker names it.
 export const DEVICE_KIND_LABELS: Record<DeviceKind, string> = {
@@ -103,24 +103,28 @@ export const DEVICE_KIND_LABELS: Record<DeviceKind, string> = {
 };
 
 export function isDeviceKind(value: unknown): value is DeviceKind {
-  return DeviceKindSchema.safeParse(value).success;
+  return typeof value === "string" && KIND_SET.has(value);
 }
+
+// The shape a machine is drawn as when nothing better is known: the one
+// that claims the least. The one literal, so every fallback (a row
+// from before kinds, an id the registry no longer knows, a placeholder
+// before the status lands) lands on the same glyph.
+export const MACHINE_FALLBACK_KIND: DeviceShape = "desktop";
 
 // The kind a device of this platform reads as when it never said: a
 // device enrolled before kinds existed, or one whose hub row predates
-// the column. A browser is a browser; a machine is drawn as a desktop,
-// the shape that claims the least.
+// the column. A browser is a browser; a machine is the fallback shape.
 export function fallbackDeviceKind(platform: string): DeviceShape {
-  return platform === WEB_PLATFORM ? "browser" : "desktop";
+  return platform === WEB_PLATFORM ? "browser" : MACHINE_FALLBACK_KIND;
 }
 
-// The kind a registry row draws as: what the row says, when it says
-// something this build knows, else the platform fallback. A kind from
-// a newer build passes through the wire as a string, so an unknown one
-// falls back rather than crashing an older client.
+// The kind a registry row draws as: what the row says, else the
+// platform fallback. The wire schema already reads an unknown kind (a
+// newer build's) as null, so no second check here.
 export function resolveDeviceKind(
-  kind: string | null | undefined,
+  kind: DeviceKind | null,
   platform: string,
 ): DeviceKind {
-  return isDeviceKind(kind) ? kind : fallbackDeviceKind(platform);
+  return kind ?? fallbackDeviceKind(platform);
 }

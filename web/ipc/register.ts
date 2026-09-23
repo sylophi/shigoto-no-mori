@@ -41,8 +41,8 @@ import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
 } from "@shared/sharedSettings";
+import { WEB_PLATFORM } from "@shared/account/platform";
 import {
-  WEB_PLATFORM,
   effectiveDeviceKind,
   enrollDevice,
   setDeviceKind,
@@ -204,7 +204,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       signedIn: record !== null,
       accountId: record?.accountId ?? "",
       deviceName: record?.deviceName ?? defaultDeviceName(),
-      deviceKind: effectiveDeviceKind(store, detectedKind),
+      deviceKind: effectiveDeviceKind(record, store, detectedKind),
       detectedDeviceKind: detectedKind,
       sharedSignIn: false,
     };

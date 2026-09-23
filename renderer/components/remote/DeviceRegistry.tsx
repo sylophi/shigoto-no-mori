@@ -18,7 +18,6 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { resolveDeviceKind } from "@shared/account/deviceKind";
 import {
   useAccountDevices,
-  useAccountStatus,
   useLocalDevice,
   useRevokeDevice,
   useWatchCommandAccessChanges,
@@ -49,11 +48,6 @@ import { deviceRowStatus } from "./deviceRegistryStatus";
 export function DeviceRegistry({ accountId }: { accountId: string }) {
   useWatchCommandAccessChanges();
   const local = useLocalDevice();
-  // What this device detected about itself, for its picker. The
-  // platform's fallback until the status lands, when the picker is
-  // moments from re-rendering with the real answer anyway.
-  const detectedKind =
-    useAccountStatus().data?.detectedDeviceKind ?? local.kind;
   const devicesQuery = useAccountDevices();
   const revokeDevice = useRevokeDevice();
   const hubDevices = useRemoteDevices();
@@ -184,7 +178,6 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
                 isThisDevice={isThisDevice}
                 name={name}
                 kind={kind}
-                detectedKind={detectedKind}
                 showId={(nameCount.get(name) ?? 0) > 1}
                 status={status}
                 appVersion={appVersion}

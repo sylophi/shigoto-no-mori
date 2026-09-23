@@ -47,7 +47,6 @@ export function DeviceRegistryRow({
   isThisDevice,
   name,
   kind,
-  detectedKind,
   showId,
   status,
   appVersion,
@@ -67,10 +66,6 @@ export function DeviceRegistryRow({
   // What the row's mark draws: this device's own answer, a peer's
   // registry one, resolved by the registry like the name.
   kind: DeviceKind;
-  // What this device detected about itself, for its picker's "detected"
-  // entry. Unused on a peer's row, which offers no picker: a machine's
-  // icon is picked on that machine, like its name.
-  detectedKind: DeviceKind;
   // Another row wears the same name, so the id has to tell them apart.
   showId: boolean;
   // Derived once by the registry so the marks cannot disagree with
@@ -147,7 +142,6 @@ export function DeviceRegistryRow({
         {isThisDevice ? (
           <DeviceKindPicker
             kind={kind}
-            detectedKind={detectedKind}
             tone={status.tone}
             label={traits.selfLabel}
           />

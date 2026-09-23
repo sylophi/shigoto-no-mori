@@ -15,6 +15,7 @@ import type { DeviceKind } from "@shared/account/deviceKind";
 import { DeviceGlyph } from "@/components/shared/DeviceIcon";
 import type { DeviceRosterEntry } from "@/components/shared/DeviceTabs";
 import { Button } from "@/components/ui/button";
+import type { StatusTone } from "@/components/ui/status-dot";
 import { useRovingPick } from "@/hooks/ui/useRovingPick";
 import { deviceAbbrev } from "@/lib/deviceAbbrev";
 import { deviceTitle } from "@/lib/remote/deviceStatus";
@@ -23,10 +24,19 @@ import { setDeviceFilter, type DeviceFilter } from "./deviceFilter";
 
 const ALL = "all";
 
-function pillFor(choice: DeviceRosterEntry, checked: boolean) {
+// One pill: a device, or the All pill, which has no glyph and no tone.
+type Pill = {
+  id: string;
+  kind: DeviceKind | null;
+  label: string;
+  title: string;
+  tone: StatusTone | null;
+};
+
+function pillFor(choice: DeviceRosterEntry, checked: boolean): Pill {
   return {
     id: choice.deviceId,
-    kind: choice.kind as DeviceKind | null,
+    kind: choice.kind,
     label: checked ? choice.label : deviceAbbrev(choice.label),
     title: deviceTitle(choice.label, choice.status),
     tone: choice.status?.tone ?? null,
@@ -35,7 +45,7 @@ function pillFor(choice: DeviceRosterEntry, checked: boolean) {
 
 export function DeviceFilterBar({ choices, selected }: DeviceFilter) {
   const selectedId = selected?.deviceId ?? ALL;
-  const pills = [
+  const pills: Pill[] = [
     { id: ALL, kind: null, label: "All", title: "Every device", tone: null },
     ...choices.map((choice) => pillFor(choice, choice.deviceId === selectedId)),
   ];

@@ -195,29 +195,20 @@ export async function isRevokedCredentialHash(
 }
 // Changes the device row's name and/or kind, scoped to the account the
 // worker authorized like deleteDevice. A field left undefined keeps its
-// value. Returns true when a row was actually updated.
+// value (COALESCE against the column). Returns true when a row was
+// actually updated.
 export async function updateDevice(
   db: D1Database,
   deviceId: string,
   accountId: string,
   patch: { name?: string; kind?: string },
 ): Promise<boolean> {
-  const sets: string[] = [];
-  const binds: string[] = [];
-  if (patch.name !== undefined) {
-    sets.push("name = ?");
-    binds.push(patch.name);
-  }
-  if (patch.kind !== undefined) {
-    sets.push("kind = ?");
-    binds.push(patch.kind);
-  }
-  if (sets.length === 0) return false;
   const result = await db
     .prepare(
-      `UPDATE devices SET ${sets.join(", ")} WHERE device_id = ? AND account_id = ?`,
+      `UPDATE devices SET name = COALESCE(?, name), kind = COALESCE(?, kind)
+       WHERE device_id = ? AND account_id = ?`,
     )
-    .bind(...binds, deviceId, accountId)
+    .bind(patch.name ?? null, patch.kind ?? null, deviceId, accountId)
     .run();
   return result.meta.changes > 0;
 }

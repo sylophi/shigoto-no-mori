@@ -12,7 +12,10 @@ import {
 } from "@tanstack/react-query";
 import type { AccountStatus } from "@shared/ipc/modules/account";
 import type { DeviceInfo } from "@shared/hub/protocol";
-import type { DeviceKind } from "@shared/account/deviceKind";
+import {
+  MACHINE_FALLBACK_KIND,
+  type DeviceKind,
+} from "@shared/account/deviceKind";
 import { hasLocalHost } from "@/lib/localHost";
 import { queryKeys } from "@/lib/queryKeys";
 
@@ -52,7 +55,9 @@ export function useLocalDevice(): { name: string; kind: DeviceKind } {
 // never waits on the read.
 export function useLocalDeviceKind(): DeviceKind {
   const { data: account } = useAccountStatus();
-  return account?.deviceKind ?? (hasLocalHost ? "desktop" : "browser");
+  return (
+    account?.deviceKind ?? (hasLocalHost ? MACHINE_FALLBACK_KIND : "browser")
+  );
 }
 
 // The account's device registry from the device hub, as shared options

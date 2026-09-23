@@ -1,8 +1,7 @@
 // The platform label a device enrolls under, and the one trait read off
-// it. Its own module (rather than enroll.ts, which re-exports it) so
-// the device kind catalog can read the browser label without pulling
-// the enrollment orchestration, and its service and protocol imports,
-// into a cycle.
+// it. Its own module so the device kind catalog can read the browser
+// label without pulling the enrollment orchestration, and its service
+// and protocol imports, into a cycle.
 
 // The platform label a browser enrolls under, beside the desktop's
 // os.platform() values. Producers (the web bridge, the lab) and the

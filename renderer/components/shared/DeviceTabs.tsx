@@ -18,10 +18,7 @@ import { DEVICE_PILL_CLASS } from "@/components/shared/DeviceChip";
 import { DeviceGlyph } from "@/components/shared/DeviceIcon";
 import { hostsProjects } from "@/lib/remote/deviceTraits";
 import { EmptyPanel } from "@/components/ui/empty-panel";
-import {
-  useLocalDeviceKind,
-  useLocalDeviceName,
-} from "@/hooks/account/useAccount";
+import { useLocalDevice } from "@/hooks/account/useAccount";
 import {
   commandAccessOf,
   usePeerCommandAccess,
@@ -76,14 +73,13 @@ export interface DeviceTab extends DeviceRosterEntry {
 // the sidebar's device filter reads it as is.
 export function useDeviceRoster(): DeviceRosterEntry[] {
   const devices = useRemoteDevices();
-  const localName = useLocalDeviceName();
-  const localKind = useLocalDeviceKind();
+  const local = useLocalDevice();
   const here: DeviceRosterEntry[] = hasLocalHost
     ? [
         {
           deviceId: localDeviceId,
-          label: localName,
-          kind: localKind,
+          label: local.name,
+          kind: local.kind,
           isThisDevice: true,
           hostsProjects: true,
           status: null,

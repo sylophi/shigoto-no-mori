@@ -467,7 +467,7 @@ export function SourceCard({
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2 text-sm">
         <DeviceIcon
-          kind={device?.kind ?? "desktop"}
+          kind={useDeviceKind(deviceId)}
           className="size-4 text-muted-foreground"
         />
         <span className="font-medium">{sourceDeviceLabel}</span>

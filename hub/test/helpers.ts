@@ -124,7 +124,7 @@ export async function enroll(
       deviceId,
       name,
       platform,
-      ...(kind === undefined ? {} : { kind }),
+      kind,
     }),
   );
   expect(response.status).toBe(200);

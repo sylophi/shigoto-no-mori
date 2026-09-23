@@ -26,22 +26,24 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { StatusTone } from "@/components/ui/status-dot";
-import { useSetDeviceKind } from "@/hooks/account/useAccount";
+import { useAccountStatus, useSetDeviceKind } from "@/hooks/account/useAccount";
 import { cn } from "@/lib/utils";
 
 export function DeviceKindPicker({
   kind,
-  detectedKind,
   tone,
   // "This device" / "This browser", for the control's accessible name.
   label,
 }: {
   kind: DeviceKind;
-  detectedKind: DeviceKind;
   tone: StatusTone;
   label: string;
 }) {
   const setDeviceKind = useSetDeviceKind();
+  // What this device detected about itself, for the tile that means
+  // "back to the default". The kind worn now until the status lands,
+  // moments before the picker re-renders with the real answer.
+  const detectedKind = useAccountStatus().data?.detectedDeviceKind ?? kind;
   const pick = (next: DeviceKind) =>
     setDeviceKind.mutate(next === detectedKind ? null : next);
   return (

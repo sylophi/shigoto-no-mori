@@ -522,10 +522,15 @@ async function main() {
       assert.equal(setDeviceKind(deps, "mini"), false, "picked signed out");
       assert.equal(calls.length, 0);
       store.write({ credential: "c", accountId: "a", deviceName: "d" });
-      assert.equal(effectiveDeviceKind(store, "laptop"), "laptop");
+      assert.equal(
+        effectiveDeviceKind(store.read(), store, "laptop"),
+        "laptop",
+      );
       assert.equal(setDeviceKind(deps, "mini"), true);
       assert.equal(store.read().deviceKind, "mini");
-      assert.equal(effectiveDeviceKind(store, "laptop"), "mini");
+      assert.equal(effectiveDeviceKind(store.read(), store, "laptop"), "mini");
+      // The current tile clicked again changes nothing, so nothing moves.
+      assert.equal(setDeviceKind(deps, "mini"), false);
       // Dropping the pick removes the key outright, so the next
       // enrollment sends whatever the machine detects by then.
       assert.equal(setDeviceKind(deps, null), true);
@@ -547,7 +552,10 @@ async function main() {
       store.write({ ...store.read(), deviceKind: "server" });
       store.clear();
       assert.equal(store.rememberedDeviceKind(), "server");
-      assert.equal(effectiveDeviceKind(store, "laptop"), "server");
+      assert.equal(
+        effectiveDeviceKind(store.read(), store, "laptop"),
+        "server",
+      );
       // A stored kind this build does not know reads as no pick.
       const odd = createCoreAccountStore({
         storage: {

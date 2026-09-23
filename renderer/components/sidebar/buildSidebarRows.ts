@@ -1,3 +1,4 @@
+import { MACHINE_FALLBACK_KIND } from "@shared/account/deviceKind";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
@@ -70,7 +71,7 @@ export function mirrorBadgeLookup(
       deviceBadges.get(peer) ?? {
         deviceId: peer,
         label: "another device",
-        kind: "desktop",
+        kind: MACHINE_FALLBACK_KIND,
         tone: "slate",
         reachable: false,
       }

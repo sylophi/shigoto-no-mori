@@ -99,6 +99,20 @@ function kindOf(doc: StoredShape | SignedOutShape): DeviceKind | undefined {
   return isDeviceKind(doc.deviceKind) ? doc.deviceKind : undefined;
 }
 
+// The opened credential plus the identity the document keeps beside
+// it: the name always, the kind only when one was picked.
+function withIdentity(
+  doc: StoredShape | SignedOutShape,
+  opened: { credential: string; accountId: string },
+): StoredAccount {
+  const kind = kindOf(doc);
+  return {
+    ...opened,
+    deviceName: doc.deviceName,
+    ...(kind === undefined ? {} : { deviceKind: kind }),
+  };
+}
+
 export function createAccountStore(opts: {
   storage: AccountStorage;
   cipher: StoreCipher;
@@ -180,13 +194,7 @@ export function createAccountStore(opts: {
         return null;
       }
       const opened = decrypt(doc);
-      if (opened === null) return null;
-      const kind = kindOf(doc);
-      return {
-        ...opened,
-        deviceName: doc.deviceName,
-        ...(kind === undefined ? {} : { deviceKind: kind }),
-      };
+      return opened === null ? null : withIdentity(doc, opened);
     },
 
     write(account) {
@@ -251,13 +259,7 @@ export function createAccountStore(opts: {
       const doc = signedOutDoc();
       if (doc === null || doc.parked === undefined) return null;
       const opened = decrypt(doc.parked);
-      if (opened === null) return null;
-      const kind = kindOf(doc);
-      return {
-        ...opened,
-        deviceName: doc.deviceName,
-        ...(kind === undefined ? {} : { deviceKind: kind }),
-      };
+      return opened === null ? null : withIdentity(doc, opened);
     },
 
     clearParked() {

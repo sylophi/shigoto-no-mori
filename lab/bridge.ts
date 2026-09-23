@@ -23,7 +23,7 @@ import {
   EMPTY_SHARED_SETTINGS,
 } from "@shared/sharedSettings";
 import type { ContractScope } from "@shared/ipc/contract";
-import { WEB_PLATFORM } from "@shared/account/enroll";
+import { WEB_PLATFORM } from "@shared/account/platform";
 import type { HubStatus } from "@shared/ipc/modules/hub";
 import {
   MIRROR_HISTORY_LIMIT,
@@ -868,8 +868,10 @@ let acceptsCommands = true;
 // so the revoke handler records the id here and the list filters it.
 const revoked = new Set<string>();
 let deviceName = "Studio Mac";
-// The icon pick on this device's row: null is "what it detected".
+// The icon pick on this device's row: null is "what it detected",
+// which depends on the shell posed (set at install, so read late).
 let deviceKind: DeviceKind | null = null;
+const detectedKind = (): DeviceKind => (WEB_SHELL ? "browser" : "mini");
 
 // The web-shell pose (lab/web-main.tsx): this page is an enrolled
 // BROWSER device, every machine forest (Studio Mac included) is a
@@ -979,8 +981,8 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
     signedIn: true,
     accountId: LAB_ACCOUNT_ID,
     deviceName: WEB_SHELL ? "Chrome on MacBook" : deviceName,
-    deviceKind: deviceKind ?? (WEB_SHELL ? "browser" : "mini"),
-    detectedDeviceKind: WEB_SHELL ? "browser" : "mini",
+    deviceKind: deviceKind ?? detectedKind(),
+    detectedDeviceKind: detectedKind(),
   });
 
   // The engine's forward table, mutated by start/stop so the switches

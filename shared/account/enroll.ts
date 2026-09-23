@@ -9,15 +9,10 @@
 import { errorMessageOf } from "../errors";
 import type { EnrollResponse } from "../hub/protocol";
 import { HubRequestError, isHubRefusal, type AccountService } from "./service";
-import type { AccountStore } from "./credentialStore";
+import type { AccountStore, StoredAccount } from "./credentialStore";
 import { isConfigured, type AccountServiceConfig } from "./serviceConfig";
 import { deriveAccountId } from "./token";
 import type { DeviceKind } from "./deviceKind";
-
-// Re-exported from platform.ts, where they moved so the kind catalog
-// can read them without importing this module; every consumer still
-// imports them from here.
-export { WEB_PLATFORM, hostsProjects } from "./platform";
 
 type EnrollDeviceDeps = {
   config: AccountServiceConfig;
@@ -36,15 +31,16 @@ type EnrollDeviceDeps = {
 
 // The kind this device reports to the hub: the owner's pick where one
 // is stored (or remembered across a sign-out), else what the device
-// detected. One rule for the enroll and the pick's push, so the
-// registry never sees one answer at enroll and another after.
+// detected. One rule for the enroll, the pick's push and every status
+// read, so the registry never sees one answer at enroll and another
+// after. Takes the record the caller already read: a read is a file
+// parse plus a keychain decrypt, not something to repeat per field.
 export function effectiveDeviceKind(
-  store: Pick<AccountStore, "read" | "rememberedDeviceKind">,
+  record: StoredAccount | null,
+  store: Pick<AccountStore, "rememberedDeviceKind">,
   detectedKind: DeviceKind,
 ): DeviceKind {
-  return (
-    store.read()?.deviceKind ?? store.rememberedDeviceKind() ?? detectedKind
-  );
+  return record?.deviceKind ?? store.rememberedDeviceKind() ?? detectedKind;
 }
 
 // Exchanges a fresh Clerk session token (minted by the renderer's
@@ -62,12 +58,13 @@ export async function enrollDevice(
     stored?.deviceName ??
     deps.store.rememberedDeviceName() ??
     deps.fallbackDeviceName;
+  // The pick alone, for the store: the wire gets the effective kind.
   const deviceKind = stored?.deviceKind ?? deps.store.rememberedDeviceKind();
   const fields = {
     deviceId: deps.deviceId,
     name: deviceName,
     platform: deps.platform,
-    kind: deviceKind ?? deps.detectedKind,
+    kind: effectiveDeviceKind(stored, deps.store, deps.detectedKind),
   };
   let enrollment: EnrollResponse;
   try {
@@ -186,7 +183,8 @@ export function renameDevice(
 // the pick, so the device goes back to what it detected), then the
 // best-effort hub push of the kind the device now reports. Resolves
 // true when a pick was written; signed out there is nothing to pick
-// against, like the rename.
+// against, like the rename, and a pick that changes nothing (the
+// current tile clicked again) writes and pushes nothing.
 export function setDeviceKind(
   deps: Pick<
     EnrollDeviceDeps,
@@ -195,7 +193,7 @@ export function setDeviceKind(
   kind: DeviceKind | null,
 ): boolean {
   const record = deps.store.read();
-  if (record === null) return false;
+  if (record === null || (record.deviceKind ?? null) === kind) return false;
   const { deviceKind: _dropped, ...rest } = record;
   deps.store.write(kind === null ? rest : { ...rest, deviceKind: kind });
   pushDeviceUpdate(deps, record.credential, {

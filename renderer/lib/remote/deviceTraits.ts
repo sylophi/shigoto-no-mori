@@ -6,7 +6,7 @@
 // project strip nor the switches that expose a machine to the others.
 // One place, so a row never branches on the platform string, or on
 // the shell it happens to render in, by itself.
-import { hostsProjects } from "@shared/account/enroll";
+import { hostsProjects } from "@shared/account/platform";
 import { platformLabel } from "@/lib/platformLabel";
 
 export type DeviceTraits = {
