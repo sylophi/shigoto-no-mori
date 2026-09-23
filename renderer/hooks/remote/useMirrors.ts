@@ -5,7 +5,7 @@
 // machine and for a peer being viewed. The mutations are local: start
 // is a pull plus a mirror, and stop/pause/resume speak to this
 // machine's daemon.
-import { useEffect } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   mirrorCopyIsRemote,
@@ -22,7 +22,11 @@ import {
   useLandingMutation,
   useLandingOnPeer,
 } from "@/hooks/remote/usePullWorktree";
-import { invalidateHostDevice } from "@/lib/queryKeys";
+import { invalidateHostDevice, localDeviceId } from "@/lib/queryKeys";
+import {
+  subscribeWorktreeLifecycle,
+  worktreeRemoving,
+} from "@/store/worktreeLifecycle";
 import { useForgetDeletedWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { notifyError } from "@/lib/toast";
 
@@ -104,6 +108,91 @@ export function mirrorLinksOf(mirrors: MirrorListResult): MirrorLink[] {
 }
 
 const NO_LINKS: MirrorLink[] = [];
+
+const linkKey = (link: MirrorLink) =>
+  `${link.peerDeviceId}:${link.peerWorktreeId}:${link.localWorktreeId}`;
+
+// How long a pair whose session just ended is held before its rows
+// split, when neither side has (yet) announced a removal. The device
+// that stops keeps the session listed until the copy is gone
+// (mirror.ts `stopping`), so this is for the device at the other
+// end, which only sees its stream close: the announcement of the
+// copy's delete trails that by a round trip.
+const HELD_LINK_GRACE_MS = 3_000;
+
+type HeldLink = { link: MirrorLink; endedAt: number };
+const NO_HELD: ReadonlyMap<string, HeldLink> = new Map();
+
+// The live pairs, plus the pairs whose session just ended while the
+// copy it made is still being removed. Without the hold, the sidebar
+// would split such a pair for the seconds the delete takes: the copy
+// as an ordinary row of its own, the original with its badge gone. A
+// held pair is dropped when either of its rows is no longer listed
+// (`present`, by device and worktree id) or, if no side announced a
+// removal, when the grace runs out. The announced removal itself drops
+// the row the moment the copy is gone (boot's worktrees:removal
+// follower), so the hold ends with the copy.
+export function useHeldMirrorLinks(
+  live: MirrorLink[],
+  present: (deviceId: string, worktreeId: string) => boolean,
+): MirrorLink[] {
+  const [held, setHeld] = useState(NO_HELD);
+  const [tick, bump] = useReducer((n: number) => n + 1, 0);
+  const previous = useRef(live);
+  useEffect(() => {
+    const before = previous.current;
+    previous.current = live;
+    const liveKeys = new Set(live.map(linkKey));
+    const now = Date.now();
+    const next = new Map<string, HeldLink>();
+    const consider = (link: MirrorLink, endedAt: number) => {
+      const key = linkKey(link);
+      if (liveKeys.has(key) || next.has(key)) return;
+      if (
+        !present(localDeviceId, link.localWorktreeId) ||
+        !present(link.peerDeviceId, link.peerWorktreeId)
+      ) {
+        return;
+      }
+      const announced =
+        worktreeRemoving(localDeviceId, link.localWorktreeId) ||
+        worktreeRemoving(link.peerDeviceId, link.peerWorktreeId);
+      if (!announced && now - endedAt > HELD_LINK_GRACE_MS) return;
+      next.set(key, { link, endedAt });
+    };
+    for (const entry of held.values()) consider(entry.link, entry.endedAt);
+    for (const link of before) consider(link, now);
+    const same =
+      next.size === held.size && [...next.keys()].every((key) => held.has(key));
+    if (!same) setHeld(next);
+  }, [live, held, present, tick]);
+  // What moves a held pair on: a removal announced (or done) on
+  // either side, and the grace running out.
+  useEffect(() => {
+    if (held.size === 0) return;
+    const unsubscribes: Array<() => void> = [];
+    let soonest = Number.POSITIVE_INFINITY;
+    for (const { link, endedAt } of held.values()) {
+      unsubscribes.push(
+        subscribeWorktreeLifecycle(localDeviceId, link.localWorktreeId, bump),
+        subscribeWorktreeLifecycle(
+          link.peerDeviceId,
+          link.peerWorktreeId,
+          bump,
+        ),
+      );
+      soonest = Math.min(soonest, endedAt + HELD_LINK_GRACE_MS);
+    }
+    const timer = setTimeout(bump, Math.max(0, soonest - Date.now()) + 1);
+    return () => {
+      clearTimeout(timer);
+      for (const unsubscribe of unsubscribes) unsubscribe();
+    };
+  }, [held]);
+
+  if (held.size === 0) return live;
+  return [...live, ...[...held.values()].map((entry) => entry.link)];
+}
 
 // The pairs alone, for the always-mounted sidebar: the list moves on
 // every cycle of a busy mirror (counts, status), and the projection

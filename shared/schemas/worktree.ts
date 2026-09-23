@@ -284,6 +284,19 @@ export type WorktreeLifecyclePhase = z.infer<
   typeof WorktreeLifecyclePhaseSchema
 >;
 
+// A worktree's removal as the host announces it, to every window and
+// peer rather than to the caller alone: "removing" when the delete
+// starts (cleanup scripts, then the git remove), then "removed" once
+// it is gone or "kept" when the delete failed and the worktree stays.
+// A worktree on its way out would otherwise read as an ordinary one
+// to anyone who did not press the button (a mirror stop, a
+// transplant's source teardown, the CLI's unmirror, another window),
+// since the list only drops the row once the delete has resolved.
+export const WorktreeRemovalSchema = WorktreeScopedPayloadSchema.extend({
+  state: z.enum(["removing", "removed", "kept"]),
+});
+export type WorktreeRemoval = z.infer<typeof WorktreeRemovalSchema>;
+
 export const WorktreeCarryOverCompleteSchema =
   WorktreeScopedPayloadSchema.extend({
     report: CarryOverReportSchema,

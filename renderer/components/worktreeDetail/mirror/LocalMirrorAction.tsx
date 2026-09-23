@@ -15,7 +15,10 @@ import { MirrorManageDialog } from "./MirrorManageDialog";
 
 export function LocalMirrorAction({ worktree }: { worktree: Worktree }) {
   const { session } = useWorktreeMirror(worktree);
-  const [open, setOpen] = useState(false);
+  // Open for one session: a stop ends with the session leaving the
+  // list and the dialog with it, and a later mirror on the same
+  // worktree starts closed.
+  const [openFor, setOpenFor] = useState<string | null>(null);
   const peer = useRemoteDeviceLabel(session?.deviceId ?? "");
   if (session === undefined) return null;
   return (
@@ -23,13 +26,13 @@ export function LocalMirrorAction({ worktree }: { worktree: Worktree }) {
       <FooterActionButton
         icon={<RefreshCw />}
         label={`Mirror with ${peer}`}
-        onClick={() => setOpen(true)}
+        onClick={() => setOpenFor(session.session)}
       />
-      {open && (
+      {openFor === session.session && (
         <MirrorManageDialog
           session={session}
           worktree={worktree}
-          onClose={() => setOpen(false)}
+          onClose={() => setOpenFor(null)}
         />
       )}
     </>

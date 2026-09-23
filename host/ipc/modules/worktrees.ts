@@ -1,7 +1,7 @@
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
-import type { Project, Worktree } from "@shared/schemas";
+import type { Project, Worktree, WorktreeRemoval } from "@shared/schemas";
 import { readShigomoriConfig } from "@host/lib/config/project";
 import { checkoutBranch, renameBranch } from "@host/lib/git/branches";
 import {
@@ -36,6 +36,7 @@ import {
   findProjectOrThrow,
 } from "@host/lib/projects";
 import {
+  getInflightDeleteIds,
   getRunningScriptWorktrees,
   withDeleteInflight,
 } from "@host/lib/scripts";
@@ -61,6 +62,18 @@ export function notifierFor(ctx: HandlerContext) {
     ),
     notifyScript: scriptEventNotifier(ctx),
   };
+}
+
+// A removal goes to everyone, not just the caller: main installs a
+// broadcaster at boot that fans it out to every window and remote
+// wire. Before that (and in checks that never mount one) the delete
+// is unannounced.
+let broadcastRemoval: ((payload: WorktreeRemoval) => void) | null = null;
+
+export function setWorktreeRemovalBroadcaster(
+  broadcaster: ((payload: WorktreeRemoval) => void) | null,
+): void {
+  broadcastRemoval = broadcaster;
 }
 
 export const worktreesHandlers: Handlers<
@@ -117,16 +130,36 @@ export const worktreesHandlers: Handlers<
     // The CLI can't see the app's script registry, so the delete runs
     // under the shared tombstone protocol (see withDeleteInflight).
     // The CLI drops the shelf and auto-pull marks with the worktree.
-    return withDeleteInflight(
-      worktreeId,
-      "This worktree is already being removed.",
-      () =>
-        deleteViaCli(
-          project,
-          { worktreeId, force, skipCleanup },
-          notifierFor(ctx),
-        ),
-    );
+    // The announcement brackets this call's run only. A second caller
+    // is refused up front (withDeleteInflight would refuse it the
+    // same way), so its "kept" cannot close the first one's removal
+    // under every viewer. The close carries the outcome, so a viewer
+    // drops the row exactly when the delete did.
+    if (getInflightDeleteIds().has(worktreeId)) {
+      throw new Error("This worktree is already being removed.");
+    }
+    broadcastRemoval?.({ projectId, worktreeId, state: "removing" });
+    let removed = false;
+    try {
+      const result = await withDeleteInflight(
+        worktreeId,
+        "This worktree is already being removed.",
+        () =>
+          deleteViaCli(
+            project,
+            { worktreeId, force, skipCleanup },
+            notifierFor(ctx),
+          ),
+      );
+      removed = result.ok;
+      return result;
+    } finally {
+      broadcastRemoval?.({
+        projectId,
+        worktreeId,
+        state: removed ? "removed" : "kept",
+      });
+    }
   },
 
   setShelved: ({ projectId, worktreeId, shelved }) =>

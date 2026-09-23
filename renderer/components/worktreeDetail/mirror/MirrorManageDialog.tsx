@@ -51,7 +51,6 @@ import {
   CONFIRM_DESTRUCTIVE_MS,
   useConfirmTwice,
 } from "@/hooks/ui/useConfirmTwice";
-import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { cn } from "@/lib/utils";
 import { CARD, FlowHeader, FlowBody, FlowFooter } from "../flow/FlowChrome";
 import {
@@ -81,7 +80,6 @@ export function MirrorManageDialog({
   const peer = useRemoteDeviceLabel(session.deviceId);
   const view = describeMirror(session);
   const controls = useMirrorControls();
-  const nav = useWorktreeNav();
   const { armed, trigger } = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
   // This snapshot drives the WARNING only. The host re-reads the live
   // status and decides, so a refusal it sends escalates to the discard
@@ -92,7 +90,10 @@ export function MirrorManageDialog({
   // mirror started to it, where this page's worktree stays.
   const copyThere = mirrorCopyIsRemote(session);
   const copyWhere = copyThere ? `on ${peer}` : "here";
+  // A session the host lists as stopping is past its controls: the
+  // engine has ended it and the copy is on its way out.
   const busy =
+    session.stopping === true ||
     controls.pause.isPending ||
     controls.resume.isPending ||
     controls.stop.isPending;
@@ -188,14 +189,16 @@ export function MirrorManageDialog({
                     // warning has named what goes.
                     { session, force: discarding },
                     {
-                      // A stop that removed the copy this page is on
-                      // leaves it the way a delete does. The original
-                      // of a copy on the peer stays where it is.
-                      onSuccess: () => {
-                        onClose();
-                        if (!copyThere) nav.toFallback(true);
-                      },
-                      // The host knew something this page did not.
+                      // No success callback: the host lists the
+                      // session as stopping until the copy is gone,
+                      // and its removal reaches this window before
+                      // the stop replies. A copy here takes its page
+                      // (and this dialog) with it. A copy on the peer
+                      // leaves the original's page standing, and the
+                      // session's exit from the list closes the
+                      // dialog. A refusal arrives with the session
+                      // still running, so this one does fire: the
+                      // host knew something this page did not.
                       onError: (error) => {
                         if (isMirrorStopUnconfirmed(error)) setRefused(true);
                       },

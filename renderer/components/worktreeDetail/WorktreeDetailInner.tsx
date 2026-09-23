@@ -15,6 +15,7 @@ import {
   useScriptRunState,
 } from "@/hooks/scripts/useScriptRuns";
 import { useDeleteAndNavigate } from "@/hooks/worktrees/useDeleteAndNavigate";
+import { useIsDeletingWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import {
   scriptKey,
@@ -106,7 +107,11 @@ export function WorktreeDetailInner({
     teardownState.status === "starting" ||
     releaseState.status === "running" ||
     releaseState.status === "starting";
-  const busy = deleteMutation.isPending;
+  // This page's own delete, or a removal the host announced (a mirror
+  // stop takes the copy with it, a peer's transplant tears its source
+  // down here): the page goes into limbo either way, instead of
+  // standing as an ordinary worktree until the row vanishes.
+  const busy = useIsDeletingWorktree(worktree.id);
   const inLimbo = cleanupRunning || busy;
 
   // Banner-only for setup / port-pool provision: those are user scripts

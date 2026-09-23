@@ -93,7 +93,10 @@ import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { updaterHandlers } from "@host/ipc/modules/updater";
 import { windowHandlers } from "./modules/window";
-import { worktreesHandlers } from "@host/ipc/modules/worktrees";
+import {
+  setWorktreeRemovalBroadcaster,
+  worktreesHandlers,
+} from "@host/ipc/modules/worktrees";
 import { buildClient } from "@shared/ipc/buildClient";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import { createPortForwardEngine } from "../core/portForward/engine";
@@ -562,6 +565,13 @@ export function registerIpcHandlers(): void {
     forgetHistory: (localWorktreeId) => mirrorHistory.forget(localWorktreeId),
   });
   setMirrorServingListener(broadcastMirrorChanged);
+  // A delete's removal, to every window and peer (remote:true by
+  // contract): the row a mirror stop or a peer's teardown is taking
+  // away dims for whoever is looking, not only for the caller, and
+  // goes for everyone the moment it is gone.
+  setWorktreeRemovalBroadcaster((payload) =>
+    broadcastAll(worktreesContract, "removal", payload),
+  );
   // A served worktree's index moved: tell the device mirroring it
   // (remote:true, so it rides the peer push path to the follower there).
   setMirrorGitChangedListener((change) =>

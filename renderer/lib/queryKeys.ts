@@ -355,6 +355,19 @@ export function invalidateHostDevice(
   });
 }
 
+// The queries a worktree owns on a device, for cancelling or dropping
+// them together when it goes: every host key of that device that
+// names the worktree id anywhere. Scoped by device, since worktree ids
+// are path hashes that can collide across the owner's machines.
+export function worktreeQueriesOn(
+  deviceId: string,
+  worktreeId: string,
+): (query: { queryKey: readonly unknown[] }) => boolean {
+  return (query) =>
+    hostKeyDeviceId(query.queryKey) === deviceId &&
+    query.queryKey.includes(worktreeId);
+}
+
 // The PROJECT-SCOPED sweep, for git:projectChanged: one project's git
 // state moved on that device (a commit, a checkout, a ref written by
 // any tool), so only the host keys carrying that project id refetch,

@@ -1,10 +1,23 @@
-// Tracks the in-flight create-lifecycle phase per worktree so the
-// detail page can show a banner (carrying over / setting up /
-// provisioning ports) and the carry-over failure toast can fire after
-// the IPC has already returned. Main is the source of truth; this
-// store only reflects events it broadcasts.
+// Tracks per-worktree lifecycle state the host broadcasts: the
+// in-flight create phase (so the detail page can show a banner:
+// carrying over / setting up / provisioning ports, and the carry-over
+// failure toast can fire after the IPC has already returned), and a
+// removal under way, so a worktree on its way out reads as deleting
+// to every window and not only to the one that pressed the button (a
+// mirror stop, a transplant's source teardown, the CLI's unmirror all
+// remove through the same host delete). One store per device, like
+// the script run stores: the create phases stream to the caller, so
+// only this machine's store sees them, while a peer's store carries
+// the peer's removals. Main is the source of truth. A store only
+// reflects the events its device broadcasts.
 import { useSyncExternalStore } from "react";
-import type { CreatePhase } from "@shared/schemas";
+import type { CreatePhase, WorktreeRemoval } from "@shared/schemas";
+import { localDeviceId } from "@/lib/queryKeys";
+import {
+  apiFor,
+  onAccountLeft,
+  onSessionLanded,
+} from "@/lib/remote/remoteDeviceSync";
 import { toast } from "@/lib/toast";
 import type { RendererApi } from "@/window";
 import { KeyedSubscribers } from "./keyedSubscribers";
@@ -22,7 +35,7 @@ export const CREATE_PHASE_LABEL = {
 
 type WorktreesApi = Pick<
   RendererApi["worktrees"],
-  "onLifecyclePhase" | "onCarryOverComplete"
+  "onLifecyclePhase" | "onCarryOverComplete" | "onRemoval"
 >;
 
 type NotifyFn = (title: string, options?: { description?: string }) => unknown;
@@ -40,96 +53,156 @@ function clippedLines(lines: string[], max: number): string {
   return shown.join("\n") + (more > 0 ? `\n...and ${more} more` : "");
 }
 
+// Followers of a removal on any device, with the announcing device:
+// the boot gives an announced removal the treatment this window's own
+// delete gives its worktree (cancel its fetches, then drop its row and
+// queries once it is gone). Boot-scoped, so there is no unsubscribe.
+type RemovalListener = (deviceId: string, removal: WorktreeRemoval) => void;
+const removalListeners = new Set<RemovalListener>();
+
+export function onWorktreeRemoval(listener: RemovalListener): void {
+  removalListeners.add(listener);
+}
+
 class WorktreeLifecycleStore {
   private phases = new Map<string, CreatePhase>();
+  private removing = new Set<string>();
   private subs = new KeyedSubscribers<string>();
-  private unsubscribePhase: (() => void) | null = null;
+  private unsubscribes: Array<() => void> = [];
+  private deviceId: string;
   private api: WorktreesApi;
   private warn: NotifyFn;
   private info: NotifyFn;
   private onCarryOverReconciled: ((projectId: string) => void) | null = null;
 
-  constructor(api: WorktreesApi, warn: NotifyFn, info: NotifyFn) {
+  constructor(
+    deviceId: string,
+    api: WorktreesApi,
+    warn: NotifyFn,
+    info: NotifyFn,
+  ) {
+    this.deviceId = deviceId;
     this.api = api;
     this.warn = warn;
     this.info = info;
   }
 
-  // The store is a renderer-lifetime singleton, so these subscriptions
-  // are never torn down; unsubscribePhase exists only as the
-  // already-started guard.
+  // The local store is a renderer-lifetime singleton whose
+  // subscriptions are never torn down (their presence doubles as the
+  // already-started guard). A peer's store goes with the account. A
+  // peer's store follows removals only: the create stream reaches its
+  // caller alone, so nothing else would ever arrive.
   start(deps?: StartDeps): void {
-    if (this.unsubscribePhase) return;
+    if (this.unsubscribes.length > 0) return;
+    this.unsubscribes.push(
+      this.api.onRemoval((removal) => {
+        if (removal.state === "removing") {
+          if (this.removing.has(removal.worktreeId)) return;
+          this.removing.add(removal.worktreeId);
+        } else {
+          if (!this.removing.delete(removal.worktreeId)) return;
+        }
+        this.subs.notify(removal.worktreeId);
+        for (const listener of removalListeners) {
+          listener(this.deviceId, removal);
+        }
+      }),
+    );
+    if (this.deviceId !== localDeviceId) return;
     this.onCarryOverReconciled = deps?.onCarryOverReconciled ?? null;
-    this.unsubscribePhase = this.api.onLifecyclePhase((evt) => {
-      this.setPhase(evt.worktreeId, evt.phase === "idle" ? null : evt.phase);
-    });
-    this.api.onCarryOverComplete((evt) => {
-      const removed = evt.removedCarryOverPaths ?? [];
-      if (removed.length > 0) {
-        this.onCarryOverReconciled?.(evt.projectId);
-        this.info(
-          `.worktreeinclude replaced ${removed.length} carry-over ${
-            removed.length === 1 ? "entry" : "entries"
-          }`,
+    this.unsubscribes.push(
+      this.api.onLifecyclePhase((evt) => {
+        this.setPhase(evt.worktreeId, evt.phase === "idle" ? null : evt.phase);
+      }),
+      this.api.onCarryOverComplete((evt) => {
+        const removed = evt.removedCarryOverPaths ?? [];
+        if (removed.length > 0) {
+          this.onCarryOverReconciled?.(evt.projectId);
+          this.info(
+            `.worktreeinclude replaced ${removed.length} carry-over ${
+              removed.length === 1 ? "entry" : "entries"
+            }`,
+            {
+              description:
+                "The repo's .worktreeinclude file now covers these paths, so " +
+                "their manual carry-over entries were removed:\n" +
+                clippedLines(removed, 4),
+            },
+          );
+        }
+        const { applied, failures } = evt.report;
+        const includeFailures = evt.report.includeFailures ?? [];
+        if (includeFailures.length > 0) {
+          this.warn("Couldn't resolve .worktreeinclude", {
+            description: clippedLines(
+              includeFailures.map((f) =>
+                f.source ? `${f.source}: ${f.reason}` : f.reason,
+              ),
+              4,
+            ),
+          });
+        }
+        const sourced = evt.report.sourced ?? [];
+        if (sourced.length > 0) {
+          this.info("Carried over from other worktrees", {
+            description: clippedLines(
+              sourced.map(
+                (s) =>
+                  `${s.path} from ${s.source}${
+                    s.copiedInstead
+                      ? " (copied: symlinks only target the main checkout)"
+                      : ""
+                  }`,
+              ),
+              4,
+            ),
+          });
+        }
+        if (failures.length === 0) return;
+        this.warn(
+          `Carried over ${applied} of ${applied + failures.length} entries`,
           {
-            description:
-              "The repo's .worktreeinclude file now covers these paths, so " +
-              "their manual carry-over entries were removed:\n" +
-              clippedLines(removed, 4),
+            description: clippedLines(
+              failures.map(
+                (f) =>
+                  `${f.path}${f.source ? ` in ${f.source}` : ""}: ${f.reason}`,
+              ),
+              4,
+            ),
           },
         );
-      }
-      const { applied, failures } = evt.report;
-      const includeFailures = evt.report.includeFailures ?? [];
-      if (includeFailures.length > 0) {
-        this.warn("Couldn't resolve .worktreeinclude", {
-          description: clippedLines(
-            includeFailures.map((f) =>
-              f.source ? `${f.source}: ${f.reason}` : f.reason,
-            ),
-            4,
-          ),
-        });
-      }
-      const sourced = evt.report.sourced ?? [];
-      if (sourced.length > 0) {
-        this.info("Carried over from other worktrees", {
-          description: clippedLines(
-            sourced.map(
-              (s) =>
-                `${s.path} from ${s.source}${
-                  s.copiedInstead
-                    ? " (copied: symlinks only target the main checkout)"
-                    : ""
-                }`,
-            ),
-            4,
-          ),
-        });
-      }
-      if (failures.length === 0) return;
-      this.warn(
-        `Carried over ${applied} of ${applied + failures.length} entries`,
-        {
-          description: clippedLines(
-            failures.map(
-              (f) =>
-                `${f.path}${f.source ? ` in ${f.source}` : ""}: ${f.reason}`,
-            ),
-            4,
-          ),
-        },
-      );
-    });
+      }),
+    );
+  }
+
+  stop(): void {
+    for (const unsubscribe of this.unsubscribes) unsubscribe();
+    this.unsubscribes = [];
+    this.phases.clear();
+    this.clearRemoving();
+  }
+
+  // The wire may drop between a removal's start and its close, and
+  // the close is not replayed. A session landing again refetches the
+  // device's listing (the session-landed sweep), which then says
+  // whether the worktree is still there. The flag is not to outlive
+  // that.
+  clearRemoving(): void {
+    const ids = [...this.removing];
+    this.removing.clear();
+    for (const id of ids) this.subs.notify(id);
   }
 
   subscribe(worktreeId: string, cb: () => void): () => void {
     return this.subs.subscribe(worktreeId, cb);
   }
 
-  snapshot(worktreeId: string): CreatePhase | null {
+  phase(worktreeId: string): CreatePhase | null {
     return this.phases.get(worktreeId) ?? null;
+  }
+
+  isRemoving(worktreeId: string): boolean {
+    return this.removing.has(worktreeId);
   }
 
   private setPhase(worktreeId: string, phase: CreatePhase | null): void {
@@ -139,10 +212,6 @@ class WorktreeLifecycleStore {
       if (this.phases.get(worktreeId) === phase) return;
       this.phases.set(worktreeId, phase);
     }
-    this.notify(worktreeId);
-  }
-
-  private notify(worktreeId: string): void {
     this.subs.notify(worktreeId);
   }
 }
@@ -151,13 +220,47 @@ class WorktreeLifecycleStore {
 // lifecycle has a single owner. Importing this module just constructs
 // the singleton; it does not attach IPC listeners as a side effect.
 export const worktreeLifecycle = new WorktreeLifecycleStore(
+  localDeviceId,
   window.api.worktrees,
   (title, options) => toast.warning(title, options),
   (title, options) => toast.info(title, options),
 );
 
+// A peer's stores, dropped with the account like the script run
+// stores. One listens from the moment the peer's session lands, not
+// from the first row that asks: the row a mirror folds away is never
+// rendered, so nothing would open the store before the peer announces
+// the copy's removal, and a broadcast is not replayed.
+const peerStores = new Map<string, WorktreeLifecycleStore>();
+const silent: NotifyFn = () => {};
+
+onAccountLeft(() => {
+  for (const store of peerStores.values()) store.stop();
+  peerStores.clear();
+});
+
+onSessionLanded((deviceId) => {
+  worktreeLifecycleFor(deviceId).clearRemoving();
+});
+
+function worktreeLifecycleFor(deviceId: string): WorktreeLifecycleStore {
+  if (deviceId === localDeviceId) return worktreeLifecycle;
+  let store = peerStores.get(deviceId);
+  if (store === undefined) {
+    store = new WorktreeLifecycleStore(
+      deviceId,
+      apiFor(deviceId).worktrees,
+      silent,
+      silent,
+    );
+    store.start();
+    peerStores.set(deviceId, store);
+  }
+  return store;
+}
+
 // Null asks for nothing: a page whose worktree lives on a peer has no
-// local lifecycle to follow.
+// local create lifecycle to follow.
 export function useWorktreeCreatePhase(
   worktreeId: string | null,
 ): CreatePhase | null {
@@ -166,7 +269,39 @@ export function useWorktreeCreatePhase(
       worktreeId === null
         ? () => {}
         : worktreeLifecycle.subscribe(worktreeId, cb),
-    () => (worktreeId === null ? null : worktreeLifecycle.snapshot(worktreeId)),
+    () => (worktreeId === null ? null : worktreeLifecycle.phase(worktreeId)),
     () => null,
   );
+}
+
+// Whether the device is in the middle of removing the worktree, as
+// its host announced it. `deviceId` names the peer a remote row or
+// page belongs to, or this machine.
+export function useWorktreeRemoving(
+  worktreeId: string,
+  deviceId: string,
+): boolean {
+  const store = worktreeLifecycleFor(deviceId);
+  return useSyncExternalStore(
+    (cb) => store.subscribe(worktreeId, cb),
+    () => store.isRemoving(worktreeId),
+    () => false,
+  );
+}
+
+// The same question outside React (the sidebar's held mirror pairs),
+// and a subscription to its changes.
+export function worktreeRemoving(
+  deviceId: string,
+  worktreeId: string,
+): boolean {
+  return worktreeLifecycleFor(deviceId).isRemoving(worktreeId);
+}
+
+export function subscribeWorktreeLifecycle(
+  deviceId: string,
+  worktreeId: string,
+  cb: () => void,
+): () => void {
+  return worktreeLifecycleFor(deviceId).subscribe(worktreeId, cb);
 }
