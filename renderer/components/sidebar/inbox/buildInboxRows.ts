@@ -35,7 +35,7 @@ interface BuildInboxRowsArgs {
   // Every peer's badge off the device registry (see buildSidebarRows).
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
   // Which shelves are open. Absence means shut, so both shelves start
-  // folded on every launch, the same reasoning as the per-project
+  // folded on every launch, the same reasoning as the per-group
   // "Show shelved" reveal in the classic view.
   openShelves: Set<InboxShelf>;
 }

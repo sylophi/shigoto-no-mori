@@ -11,7 +11,7 @@ import type { InboxShelf, SidebarRow } from "./sidebarRow";
 interface RowContentProps {
   row: SidebarRow;
   onToggle: (groupId: string) => void;
-  onToggleShelved: (projectId: string) => void;
+  onToggleShelved: (groupId: string) => void;
   onToggleShelf: (shelf: InboxShelf) => void;
   arrangeMode: boolean;
   isHovered: boolean;
@@ -76,7 +76,7 @@ export function RowContent({
         <ShelvedToggleRow
           count={row.count}
           expanded={row.expanded}
-          onToggle={() => onToggleShelved(row.projectId)}
+          onToggle={() => onToggleShelved(row.groupId)}
         />
       );
     case "inbox-shelf":

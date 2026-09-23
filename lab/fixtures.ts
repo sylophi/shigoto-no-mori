@@ -261,6 +261,19 @@ const localWorktrees: Record<string, Worktree[]> = {
         ),
       ],
     }),
+    worktree({
+      id: "wt_sm_owl",
+      projectId: "p_sm",
+      name: "odd-owl",
+      branch: "exp/tray-menu",
+      path: "/Users/rin/.sm/worktrees/shigoto-no-mori/odd-owl",
+      shelved: true,
+      ahead: 1,
+      lastChangeAt: now - 9 * DAY,
+      recentCommits: [
+        commit("2e8b7c4", "Sketch a tray menu for the forest", 9 * DAY, 48, 0),
+      ],
+    }),
   ],
   p_pp: [
     worktree({
@@ -360,6 +373,19 @@ const thinkpadWorktrees: Record<string, Worktree[]> = {
           74,
           20,
         ),
+      ],
+    }),
+    worktree({
+      id: "c0ffee123456",
+      projectId: "tp_sm",
+      name: "patient-panda",
+      branch: "exp/wayland-tray",
+      path: "/home/rin/.sm/worktrees/shigoto-no-mori/patient-panda",
+      shelved: true,
+      changedCount: 2,
+      lastChangeAt: now - 6 * DAY,
+      recentCommits: [
+        commit("9d41a07", "Probe the Wayland tray protocol", 6 * DAY, 31, 4),
       ],
     }),
   ],

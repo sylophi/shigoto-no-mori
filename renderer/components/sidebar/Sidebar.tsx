@@ -177,12 +177,18 @@ function Forest({
   for (const key of collapsedRemoteKeys) {
     if (!localIdByIdentity.has(key)) collapsed.add(remoteGroupId(key));
   }
-  // Per-project "Show shelved" reveal. Transient on purpose, since the
+  // Per-group "Show shelved" reveal. Transient on purpose, since the
   // whole point of shelving is to keep the noise down on a fresh window.
-  const [shelvedExpanded, setShelvedExpanded] = useState<Set<string>>(
+  // One per repo like the fold: a repo this machine holds keeps its
+  // reveal under the local id while narrowed to a peer.
+  const [shelvedOpenIds, setShelvedOpenIds] = useState<Set<string>>(
     () => new Set(),
   );
-  // Inbox shelves, same transient-by-design reasoning as the per-project
+  const shelvedExpanded = new Set(shelvedOpenIds);
+  for (const [identity, id] of localIdByIdentity) {
+    if (shelvedOpenIds.has(id)) shelvedExpanded.add(remoteGroupId(identity));
+  }
+  // Inbox shelves, same transient-by-design reasoning as the per-group
   // reveal above: both start folded on every launch.
   const [openShelves, setOpenShelves] = useState<Set<InboxShelf>>(
     () => new Set(),
@@ -202,8 +208,11 @@ function Forest({
     else if (remoteKey !== undefined) toggleCollapsedRemote.mutate(remoteKey);
   };
 
-  const toggleShelved = (projectId: string) => {
-    setShelvedExpanded(withToggled(projectId));
+  const toggleShelved = (groupId: string) => {
+    const remoteKey = remoteGroupKeyOf(groupId);
+    const localId =
+      remoteKey === undefined ? undefined : localIdByIdentity.get(remoteKey);
+    setShelvedOpenIds(withToggled(localId ?? groupId));
   };
 
   const toggleShelf = (shelf: InboxShelf) => {
