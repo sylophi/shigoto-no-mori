@@ -1,8 +1,9 @@
 import { createExternalStore, useExternalStore } from "@/store/externalStore";
 import { Palette, Rocket, type LucideIcon } from "lucide-react";
+import type { DeviceKind } from "@shared/account/deviceKind";
 import type { StatusTone } from "@/components/ui/status-dot";
 import type { RemoteDevice } from "@/lib/remote/devices";
-import { deviceStatusView } from "@/lib/remote/deviceStatus";
+import { deviceStatusView, THIS_DEVICE_VIEW } from "@/lib/remote/deviceStatus";
 import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
 
@@ -101,14 +102,15 @@ export function landOnStagedUpdate(
 }
 
 // One section of the page as a list draws it: its tab id, its label,
-// and either an icon (the visual sections) or a presence tone (the
-// device sections, absent for a lone device, which has no roster to
-// be present in). A device section holding a staged update this window
+// and either an icon (the visual sections) or the device's glyph and
+// a presence tone (the device sections, where the tone is absent for a
+// lone device, which has no roster to be present in). A device section holding a staged update this window
 // could install carries its version, which the list flags.
 export interface SettingsSection {
   id: string;
   label: string;
   icon?: LucideIcon;
+  kind?: DeviceKind;
   tone?: StatusTone;
   title?: string;
   update?: string;
@@ -123,7 +125,7 @@ export interface SettingsSection {
 // visual group is Appearance alone and its devices are all peers.
 export function settingsSections(
   devices: readonly RemoteDevice[],
-  localName: string,
+  local: { name: string; kind: DeviceKind },
   // useStagedUpdates' answer: deviceId to the version staged there.
   updates: Readonly<Record<string, string>>,
 ): { visual: SettingsSection[]; devices: SettingsSection[] } {
@@ -139,8 +141,9 @@ export function settingsSections(
     const update = updates[localDeviceId];
     deviceRows.push({
       id: LOCAL_DEVICE_TAB,
-      label: localName,
-      tone: solo ? undefined : "emerald",
+      label: local.name,
+      kind: local.kind,
+      tone: solo ? undefined : THIS_DEVICE_VIEW.tone,
       title: "This device: the machine this window runs on",
       update,
     });
@@ -151,6 +154,7 @@ export function settingsSections(
     deviceRows.push({
       id: deviceTab(device.deviceId),
       label: device.label,
+      kind: device.kind,
       tone,
       title: `${device.label}: ${label}`,
       update,

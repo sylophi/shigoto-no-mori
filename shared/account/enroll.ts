@@ -9,22 +9,10 @@
 import { errorMessageOf } from "../errors";
 import type { EnrollResponse } from "../hub/protocol";
 import { HubRequestError, isHubRefusal, type AccountService } from "./service";
-import type { AccountStore } from "./credentialStore";
+import type { AccountStore, StoredAccount } from "./credentialStore";
 import { isConfigured, type AccountServiceConfig } from "./serviceConfig";
 import { deriveAccountId } from "./token";
-
-// The platform label a browser enrolls under, beside the desktop's
-// os.platform() values. Producers (the web bridge, the lab) and the
-// one consumer that branches on it (the registry row's traits) share
-// this so a typo cannot silently turn a browser into a desktop row.
-export const WEB_PLATFORM = "web";
-
-// Whether a device of this platform registers projects. The one trait
-// a list filters on, here so the host's device roster (the CLI's
-// cross-device verbs) and the renderer's lists cannot disagree.
-export function hostsProjects(platform: string): boolean {
-  return platform !== WEB_PLATFORM;
-}
+import type { DeviceKind } from "./deviceKind";
 
 type EnrollDeviceDeps = {
   config: AccountServiceConfig;
@@ -36,7 +24,24 @@ type EnrollDeviceDeps = {
   // Opaque platform label the device hub stores beside the device
   // (os.platform() on desktop, WEB_PLATFORM in a browser).
   platform: string;
+  // What this device detected itself to be, the kind it enrolls under
+  // unless its owner picked one (the store's deviceKind).
+  detectedKind: DeviceKind;
 };
+
+// The kind this device reports to the hub: the owner's pick where one
+// is stored (or remembered across a sign-out), else what the device
+// detected. One rule for the enroll, the pick's push and every status
+// read, so the registry never sees one answer at enroll and another
+// after. Takes the record the caller already read: a read is a file
+// parse plus a keychain decrypt, not something to repeat per field.
+export function effectiveDeviceKind(
+  record: StoredAccount | null,
+  store: Pick<AccountStore, "rememberedDeviceKind">,
+  detectedKind: DeviceKind,
+): DeviceKind {
+  return record?.deviceKind ?? store.rememberedDeviceKind() ?? detectedKind;
+}
 
 // Exchanges a fresh Clerk session token (minted by the renderer's
 // ClerkAccountSync off the live session) for the hub device
@@ -48,14 +53,18 @@ export async function enrollDevice(
   if (!isConfigured(deps.config)) {
     throw new Error("the device hub is not configured on this build");
   }
+  const stored = deps.store.read();
   const deviceName =
-    deps.store.read()?.deviceName ??
+    stored?.deviceName ??
     deps.store.rememberedDeviceName() ??
     deps.fallbackDeviceName;
+  // The pick alone, for the store: the wire gets the effective kind.
+  const deviceKind = stored?.deviceKind ?? deps.store.rememberedDeviceKind();
   const fields = {
     deviceId: deps.deviceId,
     name: deviceName,
     platform: deps.platform,
+    kind: effectiveDeviceKind(stored, deps.store, deps.detectedKind),
   };
   let enrollment: EnrollResponse;
   try {
@@ -79,6 +88,7 @@ export async function enrollDevice(
     credential: enrollment.credential,
     accountId: deriveAccountId(token),
     deviceName,
+    ...(deviceKind === null ? {} : { deviceKind }),
   });
 }
 
@@ -165,13 +175,44 @@ export function renameDevice(
   const record = deps.store.read();
   if (record === null) return false;
   deps.store.write({ ...record, deviceName: name });
-  if (!isConfigured(deps.config)) return true;
+  pushDeviceUpdate(deps, record.credential, { name });
+  return true;
+}
+
+// The icon pick, the rename's twin: the local store write (null drops
+// the pick, so the device goes back to what it detected), then the
+// best-effort hub push of the kind the device now reports. Resolves
+// true when a pick was written. Signed out there is nothing to pick
+// against, like the rename, and a pick that changes nothing (the
+// current tile clicked again) writes and pushes nothing.
+export function setDeviceKind(
+  deps: Pick<
+    EnrollDeviceDeps,
+    "config" | "service" | "store" | "deviceId" | "detectedKind"
+  >,
+  kind: DeviceKind | null,
+): boolean {
+  const record = deps.store.read();
+  if (record === null || (record.deviceKind ?? null) === kind) return false;
+  const { deviceKind: _dropped, ...rest } = record;
+  deps.store.write(kind === null ? rest : { ...rest, deviceKind: kind });
+  pushDeviceUpdate(deps, record.credential, {
+    kind: kind ?? deps.detectedKind,
+  });
+  return true;
+}
+
+function pushDeviceUpdate(
+  deps: Pick<EnrollDeviceDeps, "config" | "service" | "deviceId">,
+  credential: string,
+  patch: Parameters<AccountService["update"]>[2],
+): void {
+  if (!isConfigured(deps.config)) return;
   void deps.service
-    .rename(record.credential, deps.deviceId, name)
+    .update(credential, deps.deviceId, patch)
     .catch((error: unknown) => {
       console.warn(
-        `[account] could not push the rename to the device hub: ${errorMessageOf(error)}`,
+        `[account] could not push the device update to the device hub: ${errorMessageOf(error)}`,
       );
     });
-  return true;
 }

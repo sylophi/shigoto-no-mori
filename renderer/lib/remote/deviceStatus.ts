@@ -51,6 +51,27 @@ function presentationOf(status: RemoteDeviceStatus): {
   }
 }
 
+// The machine this window runs on, in the same vocabulary: it has no
+// connection to describe, so it is always here, and every surface
+// that tags it (the settings header, its nav row) reads this one
+// entry rather than spelling "This device" and emerald on its own.
+export const THIS_DEVICE_VIEW: DeviceStatusView = {
+  tone: "emerald",
+  label: "This device",
+  reachable: true,
+};
+
+// The tooltip every compact mark for a device carries: its name and
+// its state, in one spelling ("Thinkpad, Connected", "Studio Mac, This
+// device"), so a pill, a tab and a badge naming the same machine say
+// the same thing on hover.
+export function deviceTitle(
+  label: string,
+  status: DeviceStatusView | null,
+): string {
+  return `${label}, ${(status ?? THIS_DEVICE_VIEW).label}`;
+}
+
 export function deviceStatusView(status: RemoteDeviceStatus): DeviceStatusView {
   return {
     ...presentationOf(status),

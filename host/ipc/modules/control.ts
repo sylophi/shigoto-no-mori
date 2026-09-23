@@ -25,7 +25,7 @@ import { projectsContract } from "@shared/ipc/modules/projects";
 import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
-import { hostsProjects } from "@shared/account/enroll";
+import { hostsProjects } from "@shared/account/platform";
 import { isHubRefusal } from "@shared/account/service";
 import { errorMessageOf } from "@shared/errors";
 import { pullWorktreeName } from "@shared/git/branches";

@@ -7,6 +7,7 @@
 // route, exactly like clicking a local row. An unreachable device's
 // rows fade back: last known state, not an error.
 import type { PullRequest, Worktree } from "@shared/schemas";
+import type { DeviceKind } from "@shared/account/deviceKind";
 import type { StatusTone } from "@/components/ui/status-dot";
 import { cn } from "@/lib/utils";
 import { DeviceBadge } from "./DeviceBadge";
@@ -21,6 +22,7 @@ interface RemoteWorktreeRowProps {
   worktree: Worktree;
   deviceId: string;
   deviceLabel: string;
+  deviceKind: DeviceKind;
   reachable: boolean;
   tone: StatusTone;
   pr: PullRequest | undefined;
@@ -30,6 +32,7 @@ export function RemoteWorktreeRow({
   worktree,
   deviceId,
   deviceLabel,
+  deviceKind,
   reachable,
   tone,
   pr,
@@ -60,7 +63,15 @@ export function RemoteWorktreeRow({
       />
       {/* Rightmost, where the local row keeps its own trailing cluster:
           the owning device, name in the tooltip. */}
-      <DeviceBadge badge={{ deviceId, label: deviceLabel, tone, reachable }} />
+      <DeviceBadge
+        badge={{
+          deviceId,
+          label: deviceLabel,
+          kind: deviceKind,
+          tone,
+          reachable,
+        }}
+      />
     </button>
   );
 }

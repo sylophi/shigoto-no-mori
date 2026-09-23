@@ -7,13 +7,16 @@ export interface DeviceRow {
   account_id: string;
   name: string;
   platform: string;
+  // hub/migrations/0003_device_kind.sql. NULL for a device that never
+  // reported one.
+  kind: string | null;
   credential_hash: string;
   created_at: number;
   last_seen_at: number | null;
 }
 
 const DEVICE_COLUMNS =
-  "device_id, account_id, name, platform, credential_hash, created_at, last_seen_at";
+  "device_id, account_id, name, platform, kind, credential_hash, created_at, last_seen_at";
 
 export async function getDeviceById(
   db: D1Database,
@@ -76,8 +79,8 @@ export async function listAccountDeviceIds(
 }
 
 // Enrollment upsert. Re-enrolling an existing device rotates the
-// credential and refreshes name and platform but keeps created_at and
-// last_seen_at. The ON CONFLICT update is guarded by
+// credential and refreshes name, platform and kind but keeps created_at
+// and last_seen_at. The ON CONFLICT update is guarded by
 // account_id = excluded.account_id so it fails closed regardless of
 // what a concurrent read saw. Two enrolls of the same deviceId from
 // different accounts cannot cross-bind. The losing account's UPDATE
@@ -92,17 +95,19 @@ export async function upsertDevice(
     accountId: string;
     name: string;
     platform: string;
+    kind: string | null;
     credentialHash: string;
     createdAt: number;
   },
 ): Promise<boolean> {
   const result = await db
     .prepare(
-      `INSERT INTO devices (device_id, account_id, name, platform, credential_hash, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO devices (device_id, account_id, name, platform, kind, credential_hash, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (device_id) DO UPDATE
        SET name = excluded.name,
            platform = excluded.platform,
+           kind = excluded.kind,
            credential_hash = excluded.credential_hash
        WHERE device_id = excluded.device_id
          AND account_id = excluded.account_id`,
@@ -112,6 +117,7 @@ export async function upsertDevice(
       row.accountId,
       row.name,
       row.platform,
+      row.kind,
       row.credentialHash,
       row.createdAt,
     )
@@ -187,19 +193,22 @@ export async function isRevokedCredentialHash(
     return false;
   }
 }
-// Renames the device row, scoped to the account the worker authorized
-// like deleteDevice. Returns true when a row was actually renamed.
-export async function renameDevice(
+// Changes the device row's name and/or kind, scoped to the account the
+// worker authorized like deleteDevice. A field left undefined keeps its
+// value (COALESCE against the column). Returns true when a row was
+// actually updated.
+export async function updateDevice(
   db: D1Database,
   deviceId: string,
   accountId: string,
-  name: string,
+  patch: { name?: string; kind?: string },
 ): Promise<boolean> {
   const result = await db
     .prepare(
-      "UPDATE devices SET name = ? WHERE device_id = ? AND account_id = ?",
+      `UPDATE devices SET name = COALESCE(?, name), kind = COALESCE(?, kind)
+       WHERE device_id = ? AND account_id = ?`,
     )
-    .bind(name, deviceId, accountId)
+    .bind(patch.name ?? null, patch.kind ?? null, deviceId, accountId)
     .run();
   return result.meta.changes > 0;
 }
