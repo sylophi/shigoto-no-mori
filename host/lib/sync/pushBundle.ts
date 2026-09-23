@@ -4,16 +4,18 @@
 // peer unpack it under its refs/shigomori/ namespace. The mirror of
 // fetchBundleFromPeer, for the git follower shipping local commits to
 // the device it mirrors with.
-import { type FileHandle, mkdtemp, open, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import type { FileHandle } from "node:fs/promises";
 import { join } from "node:path";
+import { Effect, Option } from "effect";
 import type { syncContract } from "@shared/ipc/modules/sync";
 import type { Client } from "@shared/ipc/types";
 import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
 import type { Project } from "@shared/schemas";
 import { bundleCreateViaCli } from "@host/ipc/cliDelegate";
-import { coalescedProgress, createChunkWindow } from "./chunkWindow";
+import { hostAttempt } from "@host/runtime";
+import { coalescedProgress, pumpChunks } from "./chunkWindow";
 import { landingRefspec } from "./fetchBundle";
+import { scopedFile, scopedTempDir } from "./scopedFiles";
 
 export interface PushBundleInput {
   localProject: Project;
@@ -36,9 +38,8 @@ export interface PushBundleInput {
 // that said it takes them pipelined, several ride the wire at once
 // (chunkWindow.ts), sent in order and answered in any. Against an
 // older host each chunk waits for the last one's answer, which is the
-// only order that host accepts. Exported for the wire benchmark
-// (test/bench/wire.mjs).
-export async function sendBundleChunks(
+// only order that host accepts. Interruptible at every chunk.
+export const sendChunks = (
   peer: Pick<Client<typeof syncContract>, "pushChunk">,
   transferId: string,
   handle: Pick<FileHandle, "read">,
@@ -51,82 +52,119 @@ export async function sendBundleChunks(
     // The running total of bytes the peer has answered for.
     onSent?: (bytes: number, final: boolean) => void;
   },
-): Promise<void> {
-  const window = createChunkWindow(WIRE_CHUNK_BYTES, {
-    maxInFlight: pipelined ? undefined : 1,
-  });
-  let sent = 0;
-  try {
-    for (let offset = 0; offset < bytes;) {
+): Effect.Effect<void, unknown> =>
+  Effect.suspend(() => {
+    let sent = 0;
+    let offset = 0;
+    // The next chunk, read only once the window has room for it.
+    const nextChunk = Effect.gen(function* () {
+      if (offset >= bytes) return Option.none();
       // A buffer per chunk: the last one is still being encoded and
       // sent when the next is read. Unzeroed, since only the bytes the
       // read filled are ever used.
       const buffer = Buffer.allocUnsafe(
         Math.min(WIRE_CHUNK_BYTES, bytes - offset),
       );
-      // oxlint-disable-next-line no-await-in-loop -- chunks are read in order
-      const { bytesRead } = await handle.read(buffer, 0, buffer.length, offset);
-      if (bytesRead === 0) throw new Error("bundle shrank while sending");
       const at = offset;
-      // oxlint-disable-next-line no-await-in-loop -- the window's backpressure
-      await window.add(async () => {
-        await peer.pushChunk({
-          transferId,
-          offset: at,
-          dataB64: buffer.subarray(0, bytesRead).toString("base64"),
-        });
-        sent += bytesRead;
-        onSent?.(sent, sent >= bytes);
-        return bytesRead;
-      });
+      const { bytesRead } = yield* hostAttempt(() =>
+        handle.read(buffer, 0, buffer.length, at),
+      );
+      if (bytesRead === 0) {
+        return yield* Effect.fail(new Error("bundle shrank while sending"));
+      }
       offset += bytesRead;
-    }
-    await window.drain();
-  } finally {
-    await window.settled();
-  }
+      return Option.some(
+        hostAttempt(() =>
+          peer.pushChunk({
+            transferId,
+            offset: at,
+            dataB64: buffer.subarray(0, bytesRead).toString("base64"),
+          }),
+        ).pipe(
+          Effect.map(() => {
+            sent += bytesRead;
+            onSent?.(sent, sent >= bytes);
+            return bytesRead;
+          }),
+        ),
+      );
+    });
+    return pumpChunks(WIRE_CHUNK_BYTES, nextChunk, {
+      maxInFlight: pipelined ? undefined : 1,
+    });
+  });
+
+// The same loop for a Promise-side caller. Exported for the wire
+// benchmark (test/bench/wire.mjs).
+export function sendBundleChunks(
+  peer: Pick<Client<typeof syncContract>, "pushChunk">,
+  transferId: string,
+  handle: Pick<FileHandle, "read">,
+  bytes: number,
+  options: {
+    pipelined: boolean;
+    onSent?: (bytes: number, final: boolean) => void;
+  },
+): Promise<void> {
+  return Effect.runPromise(
+    sendChunks(peer, transferId, handle, bytes, options),
+  );
 }
 
-export async function pushBundleToPeer(
-  peer: Pick<
-    Client<typeof syncContract>,
-    "pushStart" | "pushChunk" | "pushFinish"
-  >,
-  input: PushBundleInput,
-): Promise<{
+type PushBundlePeer = Pick<
+  Client<typeof syncContract>,
+  "pushStart" | "pushChunk" | "pushFinish"
+>;
+
+type Fetched = {
   readonly fetched: readonly {
     readonly ref: string;
     readonly commit: string;
   }[];
-}> {
-  const dir = await mkdtemp(join(tmpdir(), "sm-sync-push-"));
-  try {
-    const path = join(dir, "push.bundle");
-    const created = await bundleCreateViaCli(
-      input.localProject,
-      path,
-      input.refs,
-      input.haves,
-    );
-    const { transferId, pipelined } = await peer.pushStart({
-      projectId: input.peerProjectId,
-      bytes: created.bytes,
-    });
-    input.onProgress?.(0, created.bytes);
-    const handle = await open(path, "r");
-    try {
-      await sendBundleChunks(peer, transferId, handle, created.bytes, {
-        pipelined: pipelined === true,
-        onSent: coalescedProgress(created.bytes, input.onProgress),
-      });
-    } finally {
-      await handle.close();
-    }
-    return await peer.pushFinish({
-      transferId,
-      refspecs: input.refs.map(landingRefspec),
-    });
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+};
+
+// The bundle is built into a temp dir this fiber owns (scopedFiles.ts),
+// gone the moment the push ends however it ended. The peer's half of
+// the push lives in its own registry, swept there if this side leaves
+// between the start and the finish.
+export const pushBundle = (
+  peer: PushBundlePeer,
+  input: PushBundleInput,
+): Effect.Effect<Fetched, unknown> =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const dir = yield* scopedTempDir("sm-sync-push-");
+      const path = join(dir.value, "push.bundle");
+      const created = yield* hostAttempt(() =>
+        bundleCreateViaCli(input.localProject, path, input.refs, input.haves),
+      );
+      const { transferId, pipelined } = yield* hostAttempt(() =>
+        peer.pushStart({
+          projectId: input.peerProjectId,
+          bytes: created.bytes,
+        }),
+      );
+      input.onProgress?.(0, created.bytes);
+      yield* Effect.scoped(
+        Effect.flatMap(scopedFile(path, "r"), (handle) =>
+          sendChunks(peer, transferId, handle.value, created.bytes, {
+            pipelined: pipelined === true,
+            onSent: coalescedProgress(created.bytes, input.onProgress),
+          }),
+        ),
+      );
+      return yield* hostAttempt(() =>
+        peer.pushFinish({
+          transferId,
+          refspecs: input.refs.map(landingRefspec),
+        }),
+      );
+    }),
+  );
+
+export function pushBundleToPeer(
+  peer: PushBundlePeer,
+  input: PushBundleInput,
+): Promise<Fetched> {
+  return Effect.runPromise(pushBundle(peer, input));
 }

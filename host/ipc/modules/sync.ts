@@ -3,10 +3,22 @@
 // invoke responses. The transfer registry rides the shared idle
 // registry (host/lib/idleRegistry.ts) -- transfers are ephemeral by
 // design, so nothing survives a restart and nothing is persisted.
-import { type FileHandle, mkdtemp, open, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+//
+// Every handler is an Effect run under its caller's signal
+// (hostHandler), so a caller that leaves (a closed window, a dropped
+// peer socket, a killed CLI) interrupts the work at its next step. The
+// steps that must not be left half done are marked uninterruptible
+// where they sit: a bundle landing in refs/shigomori/, a worktree
+// being created on an incoming ref. A temp file a single call makes is
+// a resource of that call's fiber (host/lib/sync/scopedFiles.ts),
+// removed the moment the call ends however it ended. A transfer that
+// outlives the call that started it (a bundle served chunk by chunk,
+// a push written chunk by chunk) is handed to its registry, whose idle
+// sweep is the backstop.
+import type { FileHandle } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import {
   SyncCaptureDirtyResultSchema,
   SyncHasCommitsResultSchema,
@@ -39,10 +51,7 @@ import {
   type Project,
   type Worktree,
 } from "@shared/schemas";
-import {
-  type TransferFilesResult,
-  transferFilesOnce,
-} from "@host/mirror/oneShot";
+import { type TransferFilesResult, transferFiles } from "@host/mirror/oneShot";
 import {
   bundleCreateViaCli,
   bundleUnpackViaCli,
@@ -50,11 +59,7 @@ import {
   dirtyApplyViaCli,
   dirtyCaptureViaCli,
 } from "@host/ipc/cliDelegate";
-import {
-  peerSyncApiFor,
-  peerWorktreeOrUndefined,
-  peerWorktreesApiFor,
-} from "@host/ipc/peerSync";
+import { peerApis, peerWorktree } from "@host/ipc/peerSync";
 import {
   isCommandRefusedError,
   WIRE_CHUNK_BYTES,
@@ -84,8 +89,10 @@ import {
   findProjectByIdentityOrThrow,
   findProjectOrThrow,
 } from "@host/lib/projects";
-import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
-import { pushBundleToPeer } from "@host/lib/sync/pushBundle";
+import { fetchBundle } from "@host/lib/sync/fetchBundle";
+import { pushBundle } from "@host/lib/sync/pushBundle";
+import { scopedFile, scopedTempDir } from "@host/lib/sync/scopedFiles";
+import { hostAttempt, hostHandler } from "@host/runtime";
 import { notifierFor, worktreesHandlers } from "./worktrees";
 
 // The ref the CLI's dirty capture lands a worktree's uncommitted state
@@ -142,9 +149,12 @@ const sentKey = (sent: SentRef) =>
 // 0700, so the data is no more readable than the repo it came from).
 type Transfer = { dir: string; path: string; bytes: number };
 
-// The idle sweep is the entire lifecycle bookkeeping (see the
-// idleRegistry header): a receiver that vanished mid-transfer (crash,
-// network) leaks at most one temp file for the idle window.
+// A transfer outlives the call that started it (the chunks are later
+// calls), so it is not a resource of any one fiber: the eof, the
+// receiver's abort (sent the moment its own caller leaves, see
+// fetchBundle) and the idle sweep (see the idleRegistry header) are its
+// lifecycle. A receiver that vanished mid-transfer (crash, network)
+// leaks at most one temp file for the idle window.
 //
 // Two accepted caveats, both by design, neither worth machinery here:
 //   - A hard crash of THIS process skips the sweep entirely, so its
@@ -192,118 +202,66 @@ const pushes = createIdleRegistry<IncomingPush>({
   },
 });
 
-export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
-  pushStart: async ({ projectId, bytes }) => {
-    findProjectOrThrow(projectId);
-    const dir = await mkdtemp(join(tmpdir(), "sm-sync-recv-"));
-    const path = join(dir, "push.bundle");
-    const handle = await open(path, "w");
-    const transferId = pushes.mint({
-      projectId,
-      dir,
-      path,
-      handle,
-      bytes,
-      received: 0,
-      writes: new Set(),
-      failed: false,
-    });
-    return { transferId, pipelined: true };
-  },
+// A chunk of an incoming push. Chunks arrive in offset order (one
+// socket, dispatched as they land), so an offset that is not the next
+// byte is a broken sender, not a retry to honor. The sender may have
+// several in flight, so the bytes are claimed BEFORE the write is
+// awaited: the next chunk's check runs while this one is still
+// writing. A write that fails fails its chunk, and the sender gives
+// the transfer up.
+async function writePushChunk({
+  transferId,
+  offset,
+  dataB64,
+}: {
+  transferId: string;
+  offset: number;
+  dataB64: string;
+}): Promise<void> {
+  const push = pushes.get(transferId);
+  if (push === undefined) throw new Error("unknown-transfer");
+  pushes.touch(transferId);
+  const data = Buffer.from(dataB64, "base64");
+  if (offset !== push.received) throw new Error("push chunk out of order");
+  if (push.received + data.length > push.bytes) {
+    throw new Error("push overran the announced size");
+  }
+  push.received += data.length;
+  const write = push.handle.write(data, 0, data.length, offset);
+  push.writes.add(write);
+  try {
+    await write;
+  } catch (error) {
+    // The bytes were claimed and are not on disk, so the count no
+    // longer proves the file whole: the finish must refuse.
+    push.failed = true;
+    throw error;
+  } finally {
+    push.writes.delete(write);
+  }
+}
 
-  // Chunks arrive in offset order (one socket, dispatched as they
-  // land), so an offset that is not the next byte is a broken sender,
-  // not a retry to honor. The sender may have several in flight, so
-  // the bytes are claimed BEFORE the write is awaited: the next chunk's
-  // check runs while this one is still writing. A write that fails
-  // fails its chunk, and the sender gives the transfer up.
-  pushChunk: async ({ transferId, offset, dataB64 }) => {
-    const push = pushes.get(transferId);
-    if (push === undefined) throw new Error("unknown-transfer");
-    pushes.touch(transferId);
-    const data = Buffer.from(dataB64, "base64");
-    if (offset !== push.received) throw new Error("push chunk out of order");
-    if (push.received + data.length > push.bytes) {
-      throw new Error("push overran the announced size");
-    }
-    push.received += data.length;
-    const write = push.handle.write(data, 0, data.length, offset);
-    push.writes.add(write);
-    try {
-      await write;
-    } catch (error) {
-      // The bytes were claimed and are not on disk, so the count no
-      // longer proves the file whole: the finish must refuse.
-      push.failed = true;
-      throw error;
-    } finally {
-      push.writes.delete(write);
-    }
-  },
+const dropTransfer = (transferId: string) =>
+  Effect.promise(() => transfers.drop(transferId));
 
-  pushFinish: async ({ transferId, refspecs }) => {
-    const push = pushes.get(transferId);
-    if (push === undefined) throw new Error("unknown-transfer");
-    try {
-      // A well-behaved sender finishes only once every chunk was
-      // answered. One that does not must still not unpack under a
-      // write.
-      await Promise.allSettled(push.writes);
-      if (push.failed) throw new Error("push failed: a chunk was not written");
-      if (push.received !== push.bytes) {
-        throw new Error(
-          `push incomplete: got ${push.received} of ${push.bytes} bytes`,
-        );
-      }
-      await push.handle.close();
-      const project = findProjectOrThrow(push.projectId);
-      // The CLI re-validates every dst under refs/shigomori/ before any
-      // git spawn (cli/cmd_bundle.go), the same wall the pull's unpack
-      // stands behind.
-      return await bundleUnpackViaCli(project, push.path, refspecs);
-    } finally {
-      await pushes.drop(transferId);
-    }
-  },
+// Sweeps a landing ref, success or fail. A survivor is not harmless: a
+// stale incoming/foo blocks any later incoming/foo/bar at git's
+// directory/file ref boundary.
+const sweepRef = (repo: string, ref: string) =>
+  Effect.promise(() => deleteRef(repo, ref).catch(() => {}));
 
-  hasCommits: async ({ projectId, commits }) => {
-    const project = findProjectOrThrow(projectId);
-    const present: string[] = [];
-    for (const commit of commits) {
-      // oxlint-disable-next-line no-await-in-loop -- a handful of cheap probes
-      if (await hasCommit(project.path, commit)) present.push(commit);
-    }
-    return { present };
-  },
-
-  refTips: async ({ projectId, refs }) => {
-    const project = findProjectOrThrow(projectId);
-    const tips: { ref: string; commit: string }[] = [];
-    for (const ref of refs) {
-      // oxlint-disable-next-line no-await-in-loop -- a handful of cheap probes
-      const commit = await refTip(project.path, ref);
-      if (commit !== null) tips.push({ ref, commit });
-    }
-    return { tips };
-  },
-
-  captureDirty: async ({ projectId, worktreeId }) => {
-    const project = findProjectOrThrow(projectId);
-    return dirtyCaptureViaCli(project, worktreeId);
-  },
-
-  worktreeFolder: async ({ projectId, worktreeId, relative }) => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
-    return listWorktreeFolder(worktree.path, relative);
-  },
-
-  // The ignored files a capture leaves behind (see the contract note):
-  // listed against the worktree, not the project, so a peer's
-  // transplant dialog can name what a teardown would take with it.
-  ignoredPaths: async ({ projectId, worktreeId }) => {
+// The ignored files a capture leaves behind (see the contract note):
+// listed against the worktree, not the project, so a peer's
+// transplant dialog can name what a teardown would take with it. The
+// control ops ask it too.
+export const ignoredPathsOf = ({
+  projectId,
+  worktreeId,
+}: {
+  projectId: string;
+  worktreeId: string;
+}) =>
+  hostAttempt(async () => {
     const { worktree } = await findProjectAndWorktreeOrThrow(
       projectId,
       worktreeId,
@@ -317,80 +275,225 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
       total: paths.length,
       patterns,
     };
-  },
+  });
 
-  bundleStart: async ({ projectId, refs, haves }) => {
-    const project = findProjectOrThrow(projectId);
-    // refs/haves passed the contract's fail-closed allowlist schemas
-    // already; the CLI re-validates with its own complementary shape
-    // (see the gate note in shared/ipc/modules/sync.ts) before argv.
-    const dir = await mkdtemp(join(tmpdir(), "sm-sync-"));
-    try {
-      const path = join(dir, "transfer.bundle");
-      const created = await bundleCreateViaCli(project, path, refs, haves);
-      // Only the transfer handle and the byte count travel back. The
-      // CLI also reports the refs it resolved, but that list is
-      // computed against the repo AFTER `git bundle create` silently
-      // dropped any have-covered ref, so it can name refs the bundle
-      // lacks -- and no consumer reads it.
-      const transferId = transfers.mint({ dir, path, bytes: created.bytes });
-      return { transferId, bytes: created.bytes };
-    } catch (error) {
-      await rm(dir, { recursive: true, force: true });
-      throw error;
-    }
-  },
+export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
+  // The push's file and handle belong to this call until the registry
+  // holds them, so a sender that leaves before the mint leaves nothing
+  // behind. From the mint on they are the registry's: the chunks and
+  // the finish are later calls.
+  pushStart: hostHandler(({ projectId, bytes }) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* hostAttempt(() => findProjectOrThrow(projectId));
+        const dir = yield* scopedTempDir("sm-sync-recv-");
+        const path = join(dir.value, "push.bundle");
+        const handle = yield* scopedFile(path, "w");
+        const transferId = pushes.mint({
+          projectId,
+          dir: dir.value,
+          path,
+          handle: handle.value,
+          bytes,
+          received: 0,
+          writes: new Set(),
+          failed: false,
+        });
+        dir.handOff();
+        handle.handOff();
+        return { transferId, pipelined: true };
+      }),
+    ),
+  ),
 
-  bundleChunk: async ({ transferId, offset }) => {
-    const transfer = transfers.get(transferId);
-    // Stable marker, not prose, matching the wire's hyphenated marker
-    // family (unknown-conn, conn-closed): the id resolves to no live
-    // transfer, which after a valid start means it was dropped
-    // (eof-finished or idle-swept), NOT a malformed request. Asserted
-    // by the sync check; no client branches on it yet.
-    if (transfer === undefined) throw new Error("unknown-transfer");
-    transfers.touch(transferId);
-    // Clamp: the schema pinned offset to a nonnegative int, so the only
-    // remaining bad shape is past-the-end, which reads zero bytes.
-    const remaining = Math.max(
-      0,
-      transfer.bytes - Math.min(offset, transfer.bytes),
-    );
-    const length = Math.min(WIRE_CHUNK_BYTES, remaining);
-    let data = Buffer.alloc(0);
-    if (length > 0) {
-      const handle = await open(transfer.path, "r");
-      try {
-        const buffer = Buffer.alloc(length);
-        const { bytesRead } = await handle.read(buffer, 0, length, offset);
-        data = buffer.subarray(0, bytesRead);
-      } finally {
-        await handle.close();
+  // One step: a sender that leaves stops waiting for the write, never
+  // the write itself, which stays tracked on the push for the finish.
+  pushChunk: hostHandler((input) =>
+    hostAttempt(() => writePushChunk(input)).pipe(Effect.as(undefined)),
+  ),
+
+  pushFinish: hostHandler(({ transferId, refspecs }) =>
+    Effect.gen(function* () {
+      const push = pushes.get(transferId);
+      if (push === undefined) {
+        return yield* Effect.fail(new Error("unknown-transfer"));
       }
-    }
-    const eof = offset + data.length >= transfer.bytes;
-    if (eof) await transfers.drop(transferId);
-    return { dataB64: data.toString("base64"), eof };
-  },
+      return yield* Effect.gen(function* () {
+        // A well-behaved sender finishes only once every chunk was
+        // answered. One that does not must still not unpack under a
+        // write.
+        yield* hostAttempt(() => Promise.allSettled(push.writes));
+        if (push.failed) {
+          return yield* Effect.fail(
+            new Error("push failed: a chunk was not written"),
+          );
+        }
+        if (push.received !== push.bytes) {
+          return yield* Effect.fail(
+            new Error(
+              `push incomplete: got ${push.received} of ${push.bytes} bytes`,
+            ),
+          );
+        }
+        // Uninterruptible: the unpack is one non-atomic git fetch into
+        // refs/shigomori/ that runs to its end whatever this fiber
+        // does, so the drop below (which removes the bundle) waits for
+        // it rather than pulling the file out from under it. The CLI
+        // re-validates every dst under refs/shigomori/ before any git
+        // spawn (cli/cmd_bundle.go), the same wall the pull's unpack
+        // stands behind.
+        return yield* Effect.uninterruptible(
+          hostAttempt(async () => {
+            await push.handle.close();
+            const project = findProjectOrThrow(push.projectId);
+            return bundleUnpackViaCli(project, push.path, refspecs);
+          }),
+        );
+      }).pipe(Effect.ensuring(Effect.promise(() => pushes.drop(transferId))));
+    }),
+  ),
+
+  hasCommits: hostHandler(({ projectId, commits }) =>
+    Effect.gen(function* () {
+      const project = yield* hostAttempt(() => findProjectOrThrow(projectId));
+      const present: string[] = [];
+      for (const commit of commits) {
+        if (yield* hostAttempt(() => hasCommit(project.path, commit))) {
+          present.push(commit);
+        }
+      }
+      return { present };
+    }),
+  ),
+
+  refTips: hostHandler(({ projectId, refs }) =>
+    Effect.gen(function* () {
+      const project = yield* hostAttempt(() => findProjectOrThrow(projectId));
+      const tips: { ref: string; commit: string }[] = [];
+      for (const ref of refs) {
+        const commit = yield* hostAttempt(() => refTip(project.path, ref));
+        if (commit !== null) tips.push({ ref, commit });
+      }
+      return { tips };
+    }),
+  ),
+
+  captureDirty: hostHandler(({ projectId, worktreeId }) =>
+    hostAttempt(() =>
+      dirtyCaptureViaCli(findProjectOrThrow(projectId), worktreeId),
+    ),
+  ),
+
+  worktreeFolder: hostHandler(({ projectId, worktreeId, relative }) =>
+    hostAttempt(async () => {
+      const { worktree } = await findProjectAndWorktreeOrThrow(
+        projectId,
+        worktreeId,
+      );
+      return listWorktreeFolder(worktree.path, relative);
+    }),
+  ),
+
+  ignoredPaths: hostHandler(ignoredPathsOf),
+
+  // The bundle is built into a dir this call owns until the registry
+  // holds it: a receiver that leaves mid-build (a large repo takes a
+  // while) takes the dir with it at once, and the CLI's create then
+  // fails on the removed dir, its answer unread.
+  bundleStart: hostHandler(({ projectId, refs, haves }) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const project = yield* hostAttempt(() => findProjectOrThrow(projectId));
+        // refs/haves passed the contract's fail-closed allowlist schemas
+        // already; the CLI re-validates with its own complementary shape
+        // (see the gate note in shared/ipc/modules/sync.ts) before argv.
+        const dir = yield* scopedTempDir("sm-sync-");
+        const path = join(dir.value, "transfer.bundle");
+        const created = yield* hostAttempt(() =>
+          bundleCreateViaCli(project, path, refs, haves),
+        );
+        // Only the transfer handle and the byte count travel back. The
+        // CLI also reports the refs it resolved, but that list is
+        // computed against the repo AFTER `git bundle create` silently
+        // dropped any have-covered ref, so it can name refs the bundle
+        // lacks -- and no consumer reads it.
+        const transferId = transfers.mint({
+          dir: dir.value,
+          path,
+          bytes: created.bytes,
+        });
+        dir.handOff();
+        return { transferId, bytes: created.bytes };
+      }),
+    ),
+  ),
+
+  bundleChunk: hostHandler(({ transferId, offset }) =>
+    Effect.gen(function* () {
+      const transfer = transfers.get(transferId);
+      // Stable marker, not prose, matching the wire's hyphenated marker
+      // family (unknown-conn, conn-closed): the id resolves to no live
+      // transfer, which after a valid start means it was dropped
+      // (eof-finished or idle-swept), NOT a malformed request. Asserted
+      // by the sync check; no client branches on it yet.
+      if (transfer === undefined) {
+        return yield* Effect.fail(new Error("unknown-transfer"));
+      }
+      transfers.touch(transferId);
+      // Clamp: the schema pinned offset to a nonnegative int, so the
+      // only remaining bad shape is past-the-end, which reads zero bytes.
+      const remaining = Math.max(
+        0,
+        transfer.bytes - Math.min(offset, transfer.bytes),
+      );
+      const length = Math.min(WIRE_CHUNK_BYTES, remaining);
+      const data =
+        length > 0
+          ? yield* Effect.scoped(
+              Effect.flatMap(scopedFile(transfer.path, "r"), (handle) =>
+                hostAttempt(async () => {
+                  const buffer = Buffer.alloc(length);
+                  const { bytesRead } = await handle.value.read(
+                    buffer,
+                    0,
+                    length,
+                    offset,
+                  );
+                  return buffer.subarray(0, bytesRead);
+                }),
+              ),
+            )
+          : Buffer.alloc(0);
+      const eof = offset + data.length >= transfer.bytes;
+      if (eof) yield* dropTransfer(transferId);
+      return { dataB64: data.toString("base64"), eof };
+    }),
+  ),
 
   // Idempotent and non-throwing: aborting an unknown or already-finished
   // transfer is a no-op, and the drop callback swallows rm failures, so
   // a receiver's best-effort cleanup resolves regardless of the outcome.
-  bundleAbort: async ({ transferId }) => {
-    await transfers.drop(transferId);
-  },
+  bundleAbort: hostHandler(({ transferId }) =>
+    dropTransfer(transferId).pipe(Effect.as(undefined)),
+  ),
 
-  pullWorktree: runPullWorktree,
+  pullWorktree: hostHandler((input, ctx: HandlerContext) =>
+    runPullWorktree(input, ctx),
+  ),
 
-  // The receiving half of a send (runSendWorktree below drives both
+  // The receiving half of a send (sendWorktree below drives both
   // from the sending device). The identity is re-resolved from disk
   // here, the same wall the pull stands behind, so a send structurally
   // cannot land in a repo that is not the sender's.
-  landCheck: async ({ identity, branch, worktreeName }) => {
-    const project = await findProjectByIdentityOrThrow(identity);
-    await refuseLandingCollision(project, branch, worktreeName);
-    return { projectId: project.id };
-  },
+  landCheck: hostHandler(({ identity, branch, worktreeName }) =>
+    Effect.gen(function* () {
+      const project = yield* hostAttempt(() =>
+        findProjectByIdentityOrThrow(identity),
+      );
+      yield* refuseLandingCollision(project, branch, worktreeName);
+      return { projectId: project.id };
+    }),
+  ),
 
   // The push left the branch under the incoming ref, unless this
   // device already held its tip, in which case nothing crossed and the
@@ -399,94 +502,119 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
   // that fell short never leaves a worktree without its changes. The
   // sweep covers a refused create too, for the pull's reason: a stale
   // incoming ref blocks later ones beneath its name.
-  landWorktree: async (
-    { identity, branch, worktreeName, branchTip, runSetup, capture },
-    ctx,
-  ) => {
-    const project = await findProjectByIdentityOrThrow(identity);
-    const incomingRef = `refs/shigomori/incoming/${branch}`;
-    try {
-      await refuseLandingCollision(project, branch, worktreeName);
-      const expected = [branchTip, ...(capture ? [capture.commit] : [])];
-      for (const commit of expected) {
-        // oxlint-disable-next-line no-await-in-loop -- two cheap probes at most
-        if (!(await hasCommit(project.path, commit))) {
-          throw new Error(`${branch} did not arrive whole on this device.`);
-        }
-      }
-      await updateRef(project.path, incomingRef, branchTip);
-      return await landIncoming(
-        project,
-        { branch, incomingRef, worktreeName, runSetup, capture },
-        ctx,
-      );
-    } finally {
-      await deleteRef(project.path, incomingRef).catch(() => {});
-    }
-  },
+  landWorktree: hostHandler(
+    (
+      { identity, branch, worktreeName, branchTip, runSetup, capture },
+      ctx: HandlerContext,
+    ) =>
+      Effect.gen(function* () {
+        const project = yield* hostAttempt(() =>
+          findProjectByIdentityOrThrow(identity),
+        );
+        const incomingRef = `refs/shigomori/incoming/${branch}`;
+        return yield* Effect.gen(function* () {
+          yield* refuseLandingCollision(project, branch, worktreeName);
+          const expected = [branchTip, ...(capture ? [capture.commit] : [])];
+          for (const commit of expected) {
+            if (!(yield* hostAttempt(() => hasCommit(project.path, commit)))) {
+              return yield* Effect.fail(
+                new Error(`${branch} did not arrive whole on this device.`),
+              );
+            }
+          }
+          yield* hostAttempt(() =>
+            updateRef(project.path, incomingRef, branchTip),
+          );
+          return yield* landIncoming(
+            project,
+            { branch, incomingRef, worktreeName, runSetup, capture },
+            ctx,
+          );
+        }).pipe(Effect.ensuring(sweepRef(project.path, incomingRef)));
+      }),
+  ),
 
-  sendWorktree: async (input, ctx) => (await sendWorktree(input, ctx)).result,
+  sendWorktree: hostHandler((input, ctx: HandlerContext) =>
+    Effect.map(sendWorktree(input, ctx), (sent) => sent.result),
+  ),
 
-  // The sent worktree's teardown, the mirror image of teardownSource
-  // below: the send's own receipt decides whether it may run, the
-  // local source must still be exactly what was sent, and a refusal is
-  // an answer, not a throw.
-  teardownSent: async (sent, ctx) => {
+  teardownSent: hostHandler((sent, ctx: HandlerContext) =>
+    teardownSent(sent, ctx),
+  ),
+
+  teardownSource: hostHandler((source) => teardownSource(source)),
+};
+
+// The sent worktree's teardown, the mirror image of teardownSource
+// below: the send's own receipt decides whether it may run, the
+// local source must still be exactly what was sent, and a refusal is
+// an answer, not a throw.
+export const teardownSent = (sent: SentRef, ctx: HandlerContext) =>
+  Effect.gen(function* () {
     const key = sentKey(sent);
     const receipt = sendReceipts.get(key);
     if (receipt === undefined) {
-      throw new Error(
-        "No send recorded for that worktree on this device. Send it first.",
+      return yield* Effect.fail(
+        new Error(
+          "No send recorded for that worktree on this device. Send it first.",
+        ),
       );
     }
-    const changed = await sentSourceChangedSince(sent, receipt);
+    const changed = yield* sentSourceChangedSince(sent, receipt);
     if (changed !== undefined) {
       return { sourceRemoved: false, sourceError: changed };
     }
-    const result = await tearDown(receipt, "on the other device", (force) =>
-      worktreesHandlers.delete(
-        {
-          projectId: sent.projectId,
-          worktreeId: sent.worktreeId,
-          force,
-          refuseRunningScripts: true,
-        },
-        ctx,
+    const result = yield* tearDown(receipt, "on the other device", (force) =>
+      hostAttempt(() =>
+        worktreesHandlers.delete(
+          {
+            projectId: sent.projectId,
+            worktreeId: sent.worktreeId,
+            force,
+            refuseRunningScripts: true,
+          },
+          ctx,
+        ),
       ),
     );
     if (result.sourceRemoved) sendReceipts.delete(key);
     return result;
-  },
+  });
 
-  // The source teardown, after a pull landed here. The
-  // pull's own receipt decides whether it may run at all. Without one
-  // (no pull, or a restart in between) the call refuses outright
-  // rather than guess. The receipt is kept until a teardown actually
-  // removes the source, so a refused or failed one can be retried.
-  teardownSource: async (source) => {
+// The source teardown, after a pull landed here. The
+// pull's own receipt decides whether it may run at all. Without one
+// (no pull, or a restart in between) the call refuses outright
+// rather than guess. The receipt is kept until a teardown actually
+// removes the source, so a refused or failed one can be retried.
+export const teardownSource = (source: SourceRef) =>
+  Effect.gen(function* () {
     const key = receiptKey(source);
     const receipt = pullReceipts.get(key);
     if (receipt === undefined) {
-      throw new Error(
-        "No pull recorded for that worktree on this device. Bring it here first.",
+      return yield* Effect.fail(
+        new Error(
+          "No pull recorded for that worktree on this device. Bring it here first.",
+        ),
       );
     }
-    const changed = await sourceChangedSince(source, receipt);
+    const changed = yield* sourceChangedSince(source, receipt);
     if (changed !== undefined) {
       return { sourceRemoved: false, sourceError: changed };
     }
-    const result = await tearDown(receipt, "here", (force) =>
-      peerWorktreesApiFor(source.sourceDeviceId).delete({
-        projectId: source.sourceProjectId,
-        worktreeId: source.sourceWorktreeId,
-        force,
-        refuseRunningScripts: true,
-      }),
+    const apis = yield* peerApis;
+    const result = yield* tearDown(receipt, "here", (force) =>
+      hostAttempt(() =>
+        apis.worktreesApiFor(source.sourceDeviceId).delete({
+          projectId: source.sourceProjectId,
+          worktreeId: source.sourceWorktreeId,
+          force,
+          refuseRunningScripts: true,
+        }),
+      ),
     );
     if (result.sourceRemoved) pullReceipts.delete(key);
     return result;
-  },
-};
+  });
 
 // The teardown may run any time after the pull, so the source is
 // re-checked against the receipt first: the branch tip must not have
@@ -495,75 +623,86 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
 // tip and compared by tree hash, since capture commits are not
 // deterministic). Anything else is work that never crossed, and the
 // reason comes back as the kept-source explanation.
-async function sourceChangedSince(
-  source: SourceRef,
-  receipt: PullReceipt,
-): Promise<string | undefined> {
-  const peer = peerSyncApiFor(source.sourceDeviceId);
-  const branchRef = `refs/heads/${receipt.branch}`;
-  const { tips } = Schema.decodeUnknownSync(SyncRefTipsResultSchema)(
-    await peer.refTips({
-      projectId: source.sourceProjectId,
-      refs: [branchRef],
-    }),
-  );
-  if (tips.find((tip) => tip.ref === branchRef)?.commit !== receipt.branchTip) {
-    return "the branch on the source device moved after it was brought here.";
-  }
-  const fresh = Schema.decodeUnknownSync(SyncCaptureDirtyResultSchema)(
-    await peer.captureDirty({
-      projectId: source.sourceProjectId,
-      worktreeId: source.sourceWorktreeId,
-    }),
-  );
-  const changedSince =
-    "the source worktree changed after its uncommitted work was captured.";
-  if (!fresh.captured) return receipt.captured ? changedSince : undefined;
-  if (!receipt.captured || receipt.captureTree === undefined) {
-    return "the source worktree has uncommitted changes that were never brought here.";
-  }
-  const project = findProjectOrThrow(receipt.targetProjectId);
-  const dirtyRef = dirtyRefFor(source.sourceWorktreeId);
-  try {
-    await fetchBundleFromPeer(peer, {
-      sourceProjectId: source.sourceProjectId,
-      targetProjectId: project.id,
-      refs: [dirtyRef],
-      haves: [receipt.branchTip],
-    });
-    const tree = await treeOf(project.path, fresh.commit ?? "");
-    return tree === receipt.captureTree ? undefined : changedSince;
-  } finally {
-    await deleteRef(project.path, dirtyRef).catch(() => {});
-  }
-}
+const sourceChangedSince = (source: SourceRef, receipt: PullReceipt) =>
+  Effect.gen(function* () {
+    const peer = (yield* peerApis).syncApiFor(source.sourceDeviceId);
+    const branchRef = `refs/heads/${receipt.branch}`;
+    const { tips } = yield* hostAttempt(async () =>
+      Schema.decodeUnknownSync(SyncRefTipsResultSchema)(
+        await peer.refTips({
+          projectId: source.sourceProjectId,
+          refs: [branchRef],
+        }),
+      ),
+    );
+    if (
+      tips.find((tip) => tip.ref === branchRef)?.commit !== receipt.branchTip
+    ) {
+      return "the branch on the source device moved after it was brought here.";
+    }
+    const fresh = yield* hostAttempt(async () =>
+      Schema.decodeUnknownSync(SyncCaptureDirtyResultSchema)(
+        await peer.captureDirty({
+          projectId: source.sourceProjectId,
+          worktreeId: source.sourceWorktreeId,
+        }),
+      ),
+    );
+    const changedSince =
+      "the source worktree changed after its uncommitted work was captured.";
+    if (!fresh.captured) return receipt.captured ? changedSince : undefined;
+    if (!receipt.captured || receipt.captureTree === undefined) {
+      return "the source worktree has uncommitted changes that were never brought here.";
+    }
+    const project = yield* hostAttempt(() =>
+      findProjectOrThrow(receipt.targetProjectId),
+    );
+    const dirtyRef = dirtyRefFor(source.sourceWorktreeId);
+    return yield* Effect.gen(function* () {
+      yield* fetchBundle(peer, {
+        sourceProjectId: source.sourceProjectId,
+        targetProjectId: project.id,
+        refs: [dirtyRef],
+        haves: [receipt.branchTip],
+      });
+      const tree = yield* hostAttempt(() =>
+        treeOf(project.path, fresh.commit ?? ""),
+      );
+      return tree === receipt.captureTree ? undefined : changedSince;
+    }).pipe(Effect.ensuring(sweepRef(project.path, dirtyRef)));
+  });
 
 // The same proof for a sent worktree, all of it local: the branch has
 // not moved since the send, and a fresh capture holds the tree the
 // send captured.
-async function sentSourceChangedSince(
-  sent: SentRef,
-  receipt: SendReceipt,
-): Promise<string | undefined> {
-  const project = findProjectOrThrow(sent.projectId);
-  const tip = await refTip(project.path, `refs/heads/${receipt.branch}`);
-  if (tip !== receipt.branchTip) {
-    return "the branch moved after it was sent.";
-  }
-  const fresh = await dirtyCaptureViaCli(project, sent.worktreeId);
-  const changedSince =
-    "the worktree changed after its uncommitted work was captured.";
-  if (!fresh.captured) return receipt.captured ? changedSince : undefined;
-  if (
-    !receipt.captured ||
-    receipt.captureTree === undefined ||
-    fresh.commit === undefined
-  ) {
-    return "the worktree has uncommitted changes that were never sent.";
-  }
-  const tree = await treeOf(project.path, fresh.commit);
-  return tree === receipt.captureTree ? undefined : changedSince;
-}
+const sentSourceChangedSince = (sent: SentRef, receipt: SendReceipt) =>
+  Effect.gen(function* () {
+    const project = yield* hostAttempt(() =>
+      findProjectOrThrow(sent.projectId),
+    );
+    const tip = yield* hostAttempt(() =>
+      refTip(project.path, `refs/heads/${receipt.branch}`),
+    );
+    if (tip !== receipt.branchTip) {
+      return "the branch moved after it was sent.";
+    }
+    const fresh = yield* hostAttempt(() =>
+      dirtyCaptureViaCli(project, sent.worktreeId),
+    );
+    const changedSince =
+      "the worktree changed after its uncommitted work was captured.";
+    if (!fresh.captured) return receipt.captured ? changedSince : undefined;
+    const commit = fresh.commit;
+    if (
+      !receipt.captured ||
+      receipt.captureTree === undefined ||
+      commit === undefined
+    ) {
+      return "the worktree has uncommitted changes that were never sent.";
+    }
+    const tree = yield* hostAttempt(() => treeOf(project.path, commit));
+    return tree === receipt.captureTree ? undefined : changedSince;
+  });
 
 // The source teardown. It runs ONLY when nothing the capture describes
 // can be lost: an unapplied capture means the uncommitted work still
@@ -582,89 +721,117 @@ async function sentSourceChangedSince(
 // Both directions run it: a pull tears down the peer's worktree over
 // the wire, a send this device's own through the same handler, and
 // `landed` is where the copy went, for the refusal's wording.
-async function tearDown(
+const tearDown = (
   pulled: { captured: boolean; dirtyApplied: boolean },
   landed: "here" | "on the other device",
-  remove: (force: boolean) => unknown,
-): Promise<SyncTeardownSourceResult> {
+  remove: (force: boolean) => Effect.Effect<unknown, unknown>,
+): Effect.Effect<SyncTeardownSourceResult> => {
   if (pulled.captured && !pulled.dirtyApplied) {
-    return {
+    return Effect.succeed({
       sourceRemoved: false,
       sourceError: `the uncommitted changes could not be applied ${landed} and only exist on the source worktree`,
-    };
+    });
   }
-  try {
-    // Force only when the dirty state was actually captured and
-    // applied here. The CLI's --force does more than skip its own
-    // clean-tree guard (cmd_rm.go requireClean): it also switches to
-    // `git worktree remove --force` and enables the ENOTEMPTY
-    // force-wipe fallback, which would silently destroy work a
-    // capture cannot carry (submodule-only dirt captures as clean,
-    // see the cli/cmd_dirty.go header) or edits made after the
-    // capture. So on a capture that said clean, git's own pre-removal
-    // check must independently agree before the source dies, and a
-    // disagreement surfaces as sourceRemoved:false with the git
-    // message instead of silent loss. Accepted cost: worktrees with
-    // populated submodules report sourceRemoved:false on clean
-    // transplants because git refuses non-forced removal of them.
-    // refuseRunningScripts is the app-side guard the local
-    // kill-then-delete path deliberately lacks.
-    const removed = Schema.decodeUnknownSync(DeleteWorktreeResultSchema)(
-      await remove(pulled.captured),
-    );
-    if (removed.ok) return { sourceRemoved: true };
-    // ok:false means the worktree was NOT removed: cleanup scripts
-    // run before `git worktree remove` and a failure aborts the
-    // pipeline with the worktree left in place (cli/cmd_rm.go).
-    return {
-      sourceRemoved: false,
-      sourceError: `cleanup failed on the source device (${removed.cleanupError.phase})`,
-    };
-  } catch (error) {
-    return { sourceRemoved: false, sourceError: errorMessageOf(error) };
-  }
-}
+  // Force only when the dirty state was actually captured and
+  // applied here. The CLI's --force does more than skip its own
+  // clean-tree guard (cmd_rm.go requireClean): it also switches to
+  // `git worktree remove --force` and enables the ENOTEMPTY
+  // force-wipe fallback, which would silently destroy work a
+  // capture cannot carry (submodule-only dirt captures as clean,
+  // see the cli/cmd_dirty.go header) or edits made after the
+  // capture. So on a capture that said clean, git's own pre-removal
+  // check must independently agree before the source dies, and a
+  // disagreement surfaces as sourceRemoved:false with the git
+  // message instead of silent loss. Accepted cost: worktrees with
+  // populated submodules report sourceRemoved:false on clean
+  // transplants because git refuses non-forced removal of them.
+  // refuseRunningScripts is the app-side guard the local
+  // kill-then-delete path deliberately lacks.
+  return remove(pulled.captured).pipe(
+    Effect.flatMap((answer) =>
+      hostAttempt(() =>
+        Schema.decodeUnknownSync(DeleteWorktreeResultSchema)(answer),
+      ),
+    ),
+    Effect.map(
+      (removed): SyncTeardownSourceResult =>
+        removed.ok
+          ? { sourceRemoved: true }
+          : // ok:false means the worktree was NOT removed: cleanup
+            // scripts run before `git worktree remove` and a failure
+            // aborts the pipeline with the worktree left in place
+            // (cli/cmd_rm.go).
+            {
+              sourceRemoved: false,
+              sourceError: `cleanup failed on the source device (${removed.cleanupError.phase})`,
+            },
+    ),
+    Effect.catch((error) =>
+      Effect.succeed({
+        sourceRemoved: false,
+        sourceError: errorMessageOf(error),
+      }),
+    ),
+  );
+};
 
 // Where a landing would refuse, shared by the pull and by the
 // receiving half of a send. Updating an existing branch is out of
 // scope, so a held one refuses with the state the user can act on.
-async function refuseLandingCollision(
+const refuseLandingCollision = (
   project: Project,
   branch: string,
   worktreeName: string | undefined,
-): Promise<void> {
-  const [{ local }, existing] = await Promise.all([
-    listBranches(project.path),
-    listWorktreeIdentities(project.id, project.path),
-  ]);
-  if (local.includes(branch)) {
-    // Name the worktree holding it when one does: that is the thing
-    // the user has to stop or delete.
-    const holder = existing.find((w) => w.branch === branch);
-    throw new Error(pullBranchCollision(branch, holder?.path));
-  }
-  // The copy keeps the source's folder name, and the CLI create
-  // refuses a taken one (cli/worktree.go: a worktree of this project
-  // by that name, case-insensitively, or anything at the path). That
-  // refusal lands at the create, after the bundle crossed. The same
-  // two checks here refuse before a byte moves.
-  if (worktreeName !== undefined) {
-    const wanted = worktreeName.toLowerCase();
-    const config = await readShigomoriConfig(project.id).catch(() => null);
-    const target = worktreePathForProject(project.path, config, worktreeName);
-    if (
-      existing.some((w) => w.name.toLowerCase() === wanted) ||
-      (await pathExists(target))
-    ) {
-      throw new Error(pullFolderCollision(worktreeName, target));
+) =>
+  Effect.gen(function* () {
+    const [{ local }, existing] = yield* Effect.all(
+      [
+        hostAttempt(() => listBranches(project.path)),
+        hostAttempt(() => listWorktreeIdentities(project.id, project.path)),
+      ],
+      { concurrency: "unbounded" },
+    );
+    if (local.includes(branch)) {
+      // Name the worktree holding it when one does: that is the thing
+      // the user has to stop or delete.
+      const holder = existing.find((w) => w.branch === branch);
+      return yield* Effect.fail(
+        new Error(pullBranchCollision(branch, holder?.path)),
+      );
     }
-  }
-}
+    // The copy keeps the source's folder name, and the CLI create
+    // refuses a taken one (cli/worktree.go: a worktree of this project
+    // by that name, case-insensitively, or anything at the path). That
+    // refusal lands at the create, after the bundle crossed. The same
+    // two checks here refuse before a byte moves.
+    if (worktreeName !== undefined) {
+      const wanted = worktreeName.toLowerCase();
+      const config = yield* hostAttempt(() =>
+        readShigomoriConfig(project.id),
+      ).pipe(Effect.orElseSucceed(() => null));
+      const target = worktreePathForProject(project.path, config, worktreeName);
+      if (
+        existing.some((w) => w.name.toLowerCase() === wanted) ||
+        (yield* hostAttempt(() => pathExists(target)))
+      ) {
+        return yield* Effect.fail(
+          new Error(pullFolderCollision(worktreeName, target)),
+        );
+      }
+    }
+  });
 
 // The landing proper, shared the same way: the worktree created on the
 // incoming ref, then the capture re-applied in it. The caller owns the
 // incoming ref and its sweep.
-async function landIncoming(
+//
+// Uninterruptible as a whole: once the create starts, a worktree is
+// being added on the incoming ref, and the caller's sweep of that ref
+// must wait for it, as must the capture that belongs in it. A caller
+// that leaves here gets a finished landing (the worktree with its
+// changes applied, or parked for sm dirty apply), never a worktree
+// without its changes or a create whose base ref vanished under it.
+const landIncoming = (
   project: Project,
   input: {
     branch: string;
@@ -678,70 +845,82 @@ async function landIncoming(
   progress: (
     frame: Pick<SyncPullProgress, "step" | "createPhase">,
   ) => void = () => {},
-): Promise<{ worktree: Worktree; dirtyApplied: boolean }> {
-  // The ordinary create, on a new branch at the incoming ref.
-  // checkout stays UNSET: checkout:true would leave the worktree ON
-  // the incoming ref instead of the new branch. resolveOn "exit"
-  // holds the mutation until carry-over and setup finished, so the
-  // dirty apply below never races the setup scripts. The new
-  // worktree's own lifecycle phases still reach its detail page as
-  // usual. They are mirrored into the pull's progress because the
-  // caller cannot subscribe by an id that does not exist yet.
-  progress({ step: "create" });
-  const notify = notifierFor(ctx);
-  const { worktree } = await createViaCli(
-    project,
-    {
-      branchName: input.branch,
-      base: input.incomingRef,
-      worktreeName: input.worktreeName,
-      skipSetup: input.runSetup === false,
-    },
-    {
-      ...notify,
-      notifyPhase: (payload) => {
-        notify.notifyPhase(payload);
-        if (payload.phase !== "idle") {
-          progress({ step: "create", createPhase: payload.phase });
-        }
-      },
-    },
-    { resolveOn: "exit" },
-  );
+): Effect.Effect<{ worktree: Worktree; dirtyApplied: boolean }, unknown> =>
+  Effect.uninterruptible(
+    Effect.gen(function* () {
+      // The ordinary create, on a new branch at the incoming ref.
+      // checkout stays UNSET: checkout:true would leave the worktree ON
+      // the incoming ref instead of the new branch. resolveOn "exit"
+      // holds the mutation until carry-over and setup finished, so the
+      // dirty apply below never races the setup scripts. The new
+      // worktree's own lifecycle phases still reach its detail page as
+      // usual. They are mirrored into the pull's progress because the
+      // caller cannot subscribe by an id that does not exist yet.
+      progress({ step: "create" });
+      const notify = notifierFor(ctx);
+      const { worktree } = yield* hostAttempt(() =>
+        createViaCli(
+          project,
+          {
+            branchName: input.branch,
+            base: input.incomingRef,
+            worktreeName: input.worktreeName,
+            skipSetup: input.runSetup === false,
+          },
+          {
+            ...notify,
+            notifyPhase: (payload) => {
+              notify.notifyPhase(payload);
+              if (payload.phase !== "idle") {
+                progress({ step: "create", createPhase: payload.phase });
+              }
+            },
+          },
+          { resolveOn: "exit" },
+        ),
+      );
 
-  // Capture refs are keyed by worktree id, and ids are derived
-  // from paths (sha256(path)[:12]), so the source's id names the
-  // worktree just created only when both devices minted the SAME
-  // managed path (root/worktrees/<project>/<name> with the name from
-  // a shared pool) -- rare, but real across same-username machines.
-  // Re-key the ref to the local id, then apply and let the CLI
-  // consume it. On that collision the re-key is a no-op and the
-  // delete below is skipped, or it would discard the capture it just
-  // parked. An apply refusal (a setup script left an untracked file,
-  // say) does NOT throw away the successful create: the worktree is
-  // real, the capture stays parked under the local id for sm dirty
-  // apply, and the caller learns via dirtyApplied:false.
-  // The frame is emitted either way, so the last step reads as
-  // reached on a clean source too (and a mirror's session open,
-  // which follows, is not mistaken for a stuck create).
-  progress({ step: "apply" });
-  let dirtyApplied = false;
-  if (input.capture !== undefined) {
-    const sourceDirtyRef = dirtyRefFor(input.capture.sourceWorktreeId);
-    const localDirtyRef = dirtyRefFor(worktree.id);
-    await updateRef(project.path, localDirtyRef, input.capture.commit);
-    if (localDirtyRef !== sourceDirtyRef) {
-      await deleteRef(project.path, sourceDirtyRef);
-    }
-    try {
-      await dirtyApplyViaCli(project, worktree.id);
-      dirtyApplied = true;
-    } catch (error) {
-      console.warn("[sync] dirty apply failed after create:", error);
-    }
-  }
-  return { worktree, dirtyApplied };
-}
+      // Capture refs are keyed by worktree id, and ids are derived
+      // from paths (sha256(path)[:12]), so the source's id names the
+      // worktree just created only when both devices minted the SAME
+      // managed path (root/worktrees/<project>/<name> with the name
+      // from a shared pool) -- rare, but real across same-username
+      // machines. Re-key the ref to the local id, then apply and let
+      // the CLI consume it. On that collision the re-key is a no-op and
+      // the delete below is skipped, or it would discard the capture it
+      // just parked. An apply refusal (a setup script left an untracked
+      // file, say) does NOT throw away the successful create: the
+      // worktree is real, the capture stays parked under the local id
+      // for sm dirty apply, and the caller learns via
+      // dirtyApplied:false. The frame is emitted either way, so the
+      // last step reads as reached on a clean source too (and a
+      // mirror's session open, which follows, is not mistaken for a
+      // stuck create).
+      progress({ step: "apply" });
+      const capture = input.capture;
+      if (capture === undefined) return { worktree, dirtyApplied: false };
+      const sourceDirtyRef = dirtyRefFor(capture.sourceWorktreeId);
+      const localDirtyRef = dirtyRefFor(worktree.id);
+      yield* hostAttempt(() =>
+        updateRef(project.path, localDirtyRef, capture.commit),
+      );
+      if (localDirtyRef !== sourceDirtyRef) {
+        yield* hostAttempt(() => deleteRef(project.path, sourceDirtyRef));
+      }
+      const dirtyApplied = yield* hostAttempt(() =>
+        dirtyApplyViaCli(project, worktree.id),
+      ).pipe(
+        Effect.as(true),
+        Effect.catch((error) =>
+          Effect.sync(() => {
+            console.warn("[sync] dirty apply failed after create:", error);
+            return false;
+          }),
+        ),
+      );
+      return { worktree, dirtyApplied };
+    }),
+  );
 
 // The pull orchestration, shared with the
 // transplant orchestrator above: bring a peer device's worktree here.
@@ -761,7 +940,13 @@ async function landIncoming(
 // After the create, an apply failure resolves with dirtyApplied:false
 // rather than throwing: the worktree and branch are real and useful,
 // and the dirty state is still safe on the source device.
-export async function runPullWorktree(
+//
+// Interruptible everywhere but the landing (see landIncoming) and the
+// unpack inside the fetch (see fetchBundle): a caller that leaves
+// mid-transfer stops it at the next chunk, its temp bundle goes at
+// once and the peer is told, and the incoming ref is swept on the way
+// out. The files step ends its engine session the same way.
+export const runPullWorktree = (
   {
     sourceDeviceId,
     sourceProjectId,
@@ -774,170 +959,187 @@ export async function runPullWorktree(
     ignores,
   }: typeof SyncPullWorktreePayloadSchema.Type,
   ctx: HandlerContext,
-) {
-  // Running commentary back to the caller, keyed by the source id (the
-  // only id it holds until the create lands). Frames are droppable
-  // presence, never state: the result is the single source of truth.
-  const notifyProgress = ctx.notifier(syncContract, "pullProgress");
-  const progress = (frame: Omit<SyncPullProgress, "sourceWorktreeId">) =>
-    notifyProgress({ sourceWorktreeId, ...frame });
+) =>
+  Effect.gen(function* () {
+    // Running commentary back to the caller, keyed by the source id
+    // (the only id it holds until the create lands). Frames are
+    // droppable presence, never state: the result is the single source
+    // of truth.
+    const notifyProgress = ctx.notifier(syncContract, "pullProgress");
+    const progress = (frame: Omit<SyncPullProgress, "sourceWorktreeId">) =>
+      notifyProgress({ sourceWorktreeId, ...frame });
 
-  // 1. The local target repo, re-resolved by identity from disk.
-  const project = await findProjectByIdentityOrThrow(sourceIdentity);
+    // 1. The local target repo, re-resolved by identity from disk.
+    const project = yield* hostAttempt(() =>
+      findProjectByIdentityOrThrow(sourceIdentity),
+    );
 
-  // 2. Refuse up front what the create would refuse after the bundle
-  // crossed.
-  await refuseLandingCollision(project, branch, worktreeName);
+    // 2. Refuse up front what the create would refuse after the bundle
+    // crossed.
+    yield* refuseLandingCollision(project, branch, worktreeName);
 
-  const peer = peerSyncApiFor(sourceDeviceId);
-  const branchRef = `refs/heads/${branch}`;
+    const peer = (yield* peerApis).syncApiFor(sourceDeviceId);
+    const branchRef = `refs/heads/${branch}`;
 
-  // 3. Tip negotiation, then capture. The tip decides whether the
-  // branch needs transferring at all: `git bundle create` silently
-  // drops a ref covered by a have, so requesting a branch whose tip
-  // we already hold would corrupt the transfer, not thin it.
-  // Both answers are re-parsed here because their hashes flow into
-  // LOCAL git argv: the peer's own dev-build output validation is not
-  // this device's wall.
-  const { tips } = Schema.decodeUnknownSync(SyncRefTipsResultSchema)(
-    await peer.refTips({
-      projectId: sourceProjectId,
-      refs: [branchRef],
-    }),
-  );
-  const branchTip = tips.find((tip) => tip.ref === branchRef)?.commit;
-  if (branchTip === undefined) {
-    throw new Error(`${branch} no longer exists on the source device.`);
-  }
-  progress({ step: "capture" });
-  const capture = Schema.decodeUnknownSync(SyncCaptureDirtyResultSchema)(
-    await peer.captureDirty({
-      projectId: sourceProjectId,
-      worktreeId: sourceWorktreeId,
-    }),
-  );
+    // 3. Tip negotiation, then capture. The tip decides whether the
+    // branch needs transferring at all: `git bundle create` silently
+    // drops a ref covered by a have, so requesting a branch whose tip
+    // we already hold would corrupt the transfer, not thin it.
+    // Both answers are re-parsed here because their hashes flow into
+    // LOCAL git argv: the peer's own dev-build output validation is not
+    // this device's wall.
+    const { tips } = yield* hostAttempt(async () =>
+      Schema.decodeUnknownSync(SyncRefTipsResultSchema)(
+        await peer.refTips({
+          projectId: sourceProjectId,
+          refs: [branchRef],
+        }),
+      ),
+    );
+    const branchTip = tips.find((tip) => tip.ref === branchRef)?.commit;
+    if (branchTip === undefined) {
+      return yield* Effect.fail(
+        new Error(`${branch} no longer exists on the source device.`),
+      );
+    }
+    progress({ step: "capture" });
+    const capture = yield* hostAttempt(async () =>
+      Schema.decodeUnknownSync(SyncCaptureDirtyResultSchema)(
+        await peer.captureDirty({
+          projectId: sourceProjectId,
+          worktreeId: sourceWorktreeId,
+        }),
+      ),
+    );
 
-  // 4. Fetch what's missing. Tip already here + clean worktree means
-  // nothing crosses at all.
-  const tipIsLocal = await hasCommit(project.path, branchTip);
-  const sourceDirtyRef = dirtyRefFor(sourceWorktreeId);
-  const wantRefs = [
-    ...(tipIsLocal ? [] : [branchRef]),
-    ...(capture.captured ? [sourceDirtyRef] : []),
-  ];
-  const incomingRef = `refs/shigomori/incoming/${branch}`;
-  try {
-    if (wantRefs.length > 0) {
-      // The fetch opens the transfer step itself with its (0, total)
-      // frame, so only the nothing-to-fetch case needs a bare tick.
-      await fetchBundleFromPeer(peer, {
-        sourceProjectId,
-        targetProjectId: project.id,
-        refs: wantRefs,
-        onProgress: (bytes, totalBytes) =>
-          progress({ step: "transfer", bytes, totalBytes }),
+    // 4. Fetch what's missing. Tip already here + clean worktree means
+    // nothing crosses at all.
+    const tipIsLocal = yield* hostAttempt(() =>
+      hasCommit(project.path, branchTip),
+    );
+    const sourceDirtyRef = dirtyRefFor(sourceWorktreeId);
+    const wantRefs = [
+      ...(tipIsLocal ? [] : [branchRef]),
+      ...(capture.captured ? [sourceDirtyRef] : []),
+    ];
+    const incomingRef = `refs/shigomori/incoming/${branch}`;
+    // The incoming ref is swept however this ends, the sweep opening
+    // BEFORE the fetch (see the header above).
+    return yield* Effect.gen(function* () {
+      if (wantRefs.length > 0) {
+        // The fetch opens the transfer step itself with its (0, total)
+        // frame, so only the nothing-to-fetch case needs a bare tick.
         // With the tip local the only novel commit is the capture, so
         // the tip itself is the perfect (and safe) have. Otherwise every
         // local branch tip thins the bundle, and none can cover the
         // branch tip: covering it would mean we already hold it. The
         // exception is a shallow clone, where a have can cover a tip
-        // hasCommit said we lack, and that surfaces as a loud bundle error
-        // before anything is mutated, never as silent corruption.
-        haves: tipIsLocal ? [branchTip] : await localBranchTips(project.path),
-      });
-    } else {
-      progress({ step: "transfer" });
-    }
-    if (tipIsLocal) await updateRef(project.path, incomingRef, branchTip);
+        // hasCommit said we lack, and that surfaces as a loud bundle
+        // error before anything is mutated, never as silent corruption.
+        const haves = tipIsLocal
+          ? [branchTip]
+          : yield* hostAttempt(() => localBranchTips(project.path));
+        yield* fetchBundle(peer, {
+          sourceProjectId,
+          targetProjectId: project.id,
+          refs: wantRefs,
+          onProgress: (bytes, totalBytes) =>
+            progress({ step: "transfer", bytes, totalBytes }),
+          haves,
+        });
+      } else {
+        progress({ step: "transfer" });
+      }
+      if (tipIsLocal) {
+        yield* hostAttempt(() =>
+          updateRef(project.path, incomingRef, branchTip),
+        );
+      }
 
-    // 5 and 6. The create on the incoming ref, then the capture
-    // re-applied in it.
-    const { worktree, dirtyApplied } = await landIncoming(
-      project,
-      {
-        branch,
-        incomingRef,
-        worktreeName,
-        runSetup,
-        capture:
-          capture.captured && capture.commit !== undefined
-            ? { sourceWorktreeId, commit: capture.commit }
-            : undefined,
-      },
-      ctx,
-      progress,
-    );
-
-    // 7. The ignored files, once the tree has settled: the leave-out
-    // rule admits them and git never carried them, so the mirror
-    // engine runs once between the two worktrees (host/mirror/
-    // oneShot.ts). Gitignored leaves nothing to carry, and the mirror
-    // start passes no rule (its own session, opened next, carries the
-    // files and keeps carrying them). Never fatal: the worktree is
-    // real, and the outcome rides the result.
-    let files: TransferFilesResult | undefined;
-    if (pullBringsIgnoredFiles(ignoreMode)) {
-      progress({ step: "files" });
-      const source = await peerWorktreeOrUndefined(
-        sourceDeviceId,
-        sourceProjectId,
-        sourceWorktreeId,
+      // 5 and 6. The create on the incoming ref, then the capture
+      // re-applied in it.
+      const { worktree, dirtyApplied } = yield* landIncoming(
+        project,
+        {
+          branch,
+          incomingRef,
+          worktreeName,
+          runSetup,
+          capture:
+            capture.captured && capture.commit !== undefined
+              ? { sourceWorktreeId, commit: capture.commit }
+              : undefined,
+        },
+        ctx,
+        progress,
       );
-      files =
-        source === undefined
-          ? {
-              crossed: false,
-              conflicts: 0,
-              error: "the source worktree is no longer listed there",
-            }
-          : await transferFilesOnce(
-              {
-                localRoot: worktree.path,
-                localWorktreeId: worktree.id,
-                sourceDeviceId,
-                sourceProjectId,
-                sourceWorktreeId,
-                remoteRoot: source.path,
-                name: branch,
-                ignores: ignores ?? [],
-              },
-              (bytes, totalBytes) =>
-                progress({ step: "files", bytes, totalBytes }),
-            );
-    }
-    remember(
-      pullReceipts,
-      receiptKey({ sourceDeviceId, sourceProjectId, sourceWorktreeId }),
-      {
-        targetProjectId: project.id,
-        branch,
-        branchTip,
-        captured: capture.captured,
-        dirtyApplied,
-        captureTree:
-          capture.captured && capture.commit !== undefined
-            ? await treeOf(project.path, capture.commit)
-            : undefined,
-      },
-    );
-    return { worktree, captured: capture.captured, dirtyApplied, files };
-  } finally {
-    // Sweep the landing ref success or fail. A survivor is not
-    // harmless: a stale incoming/foo blocks any later incoming/foo/bar
-    // at git's directory/file ref boundary.
-    await deleteRef(project.path, incomingRef).catch(() => {});
-  }
-}
+
+      // 7. The ignored files, once the tree has settled: the leave-out
+      // rule admits them and git never carried them, so the mirror
+      // engine runs once between the two worktrees (host/mirror/
+      // oneShot.ts). Gitignored leaves nothing to carry, and the mirror
+      // start passes no rule (its own session, opened next, carries the
+      // files and keeps carrying them). Never fatal: the worktree is
+      // real, and the outcome rides the result.
+      let files: TransferFilesResult | undefined;
+      if (pullBringsIgnoredFiles(ignoreMode)) {
+        progress({ step: "files" });
+        const source = yield* peerWorktree(
+          sourceDeviceId,
+          sourceProjectId,
+          sourceWorktreeId,
+        );
+        files =
+          source === undefined
+            ? {
+                crossed: false,
+                conflicts: 0,
+                error: "the source worktree is no longer listed there",
+              }
+            : yield* transferFiles(
+                {
+                  localRoot: worktree.path,
+                  localWorktreeId: worktree.id,
+                  sourceDeviceId,
+                  sourceProjectId,
+                  sourceWorktreeId,
+                  remoteRoot: source.path,
+                  name: branch,
+                  ignores: ignores ?? [],
+                },
+                (bytes, totalBytes) =>
+                  progress({ step: "files", bytes, totalBytes }),
+              );
+      }
+      const captureCommit = capture.captured ? capture.commit : undefined;
+      remember(
+        pullReceipts,
+        receiptKey({ sourceDeviceId, sourceProjectId, sourceWorktreeId }),
+        {
+          targetProjectId: project.id,
+          branch,
+          branchTip,
+          captured: capture.captured,
+          dirtyApplied,
+          captureTree:
+            captureCommit === undefined
+              ? undefined
+              : yield* hostAttempt(() => treeOf(project.path, captureCommit)),
+        },
+      );
+      return { worktree, captured: capture.captured, dirtyApplied, files };
+    }).pipe(Effect.ensuring(sweepRef(project.path, incomingRef)));
+  });
 
 // A landing refusal is worded on the peer, where "this device" means
 // the peer, so it is attributed before it reaches this device's user.
 // The command refusal passes as it is: surfaces match on its text.
-function fromPeer<T>(answer: Promise<T>): Promise<T> {
-  return answer.catch((error: unknown) => {
-    if (isCommandRefusedError(error)) throw error;
-    throw new Error(`The other device answered: ${errorMessageOf(error)}`);
-  });
-}
+const fromPeer = <A>(answer: Effect.Effect<A, unknown>) =>
+  Effect.mapError(answer, (error) =>
+    isCommandRefusedError(error)
+      ? error
+      : new Error(`The other device answered: ${errorMessageOf(error)}`),
+  );
 
 // The send orchestration, the pull turned around: one of this device's
 // worktrees goes to a peer. Local-only by contract (remote:false), and
@@ -954,7 +1156,10 @@ function fromPeer<T>(answer: Promise<T>): Promise<T> {
 // folder name and the identity are read off it here. The source it
 // resolved rides back beside the result, for the mirror start built on
 // this (mirror:startTo), which opens its session on that worktree.
-export async function sendWorktree(
+// Interruptible at every step: nothing here lands locally, the push's
+// temp bundle is this fiber's, and a landing already asked of the peer
+// runs to its end there.
+export const sendWorktree = (
   {
     targetDeviceId,
     projectId,
@@ -964,142 +1169,168 @@ export async function sendWorktree(
     ignores,
   }: typeof SyncSendWorktreePayloadSchema.Type,
   ctx: HandlerContext,
-) {
-  const notifyProgress = ctx.notifier(syncContract, "pullProgress");
-  const progress = (frame: Omit<SyncPullProgress, "sourceWorktreeId">) =>
-    notifyProgress({ sourceWorktreeId: worktreeId, ...frame });
+) =>
+  Effect.gen(function* () {
+    const notifyProgress = ctx.notifier(syncContract, "pullProgress");
+    const progress = (frame: Omit<SyncPullProgress, "sourceWorktreeId">) =>
+      notifyProgress({ sourceWorktreeId: worktreeId, ...frame });
 
-  // 1. The local source. A primary checkout is the project itself, and
-  // a detached head has no branch to land.
-  const { project, worktree } = await findProjectAndWorktreeOrThrow(
-    projectId,
-    worktreeId,
-  );
-  if (
-    worktree.isPrimary ||
-    worktree.detached ||
-    !isRealBranch(worktree.branch)
-  ) {
-    throw new Error("Only a worktree on a branch of its own can be sent.");
-  }
-  const identity = await getRepoIdentity(project.path).catch(() => null);
-  if (identity === null) {
-    throw new Error(
-      "This repository has no shared identity, so no other device can be matched to it.",
+    // 1. The local source. A primary checkout is the project itself,
+    // and a detached head has no branch to land.
+    const { project, worktree } = yield* hostAttempt(() =>
+      findProjectAndWorktreeOrThrow(projectId, worktreeId),
     );
-  }
-  const branch = worktree.branch;
-  const worktreeName = pullWorktreeName(worktree);
+    if (
+      worktree.isPrimary ||
+      worktree.detached ||
+      !isRealBranch(worktree.branch)
+    ) {
+      return yield* Effect.fail(
+        new Error("Only a worktree on a branch of its own can be sent."),
+      );
+    }
+    const identity = yield* hostAttempt(() =>
+      getRepoIdentity(project.path),
+    ).pipe(Effect.orElseSucceed(() => null));
+    if (identity === null) {
+      return yield* Effect.fail(
+        new Error(
+          "This repository has no shared identity, so no other device can be matched to it.",
+        ),
+      );
+    }
+    const branch = worktree.branch;
+    const worktreeName = pullWorktreeName(worktree);
 
-  // 2. The peer's refusals, before a byte moves. Its answers are
-  // re-parsed like the pull's: they flow into the push below.
-  const peer = peerSyncApiFor(targetDeviceId);
-  const { projectId: peerProjectId } = Schema.decodeUnknownSync(
-    SyncLandCheckResultSchema,
-  )(await fromPeer(peer.landCheck({ identity, branch, worktreeName })));
-
-  // 3. The tip, then the capture, with the peer asked meanwhile which
-  // of this repo's tips it holds: the branch's own, and the other
-  // local branches' for thinning. One round trip answers both.
-  const branchRef = `refs/heads/${branch}`;
-  const branchTip = await refTip(project.path, branchRef);
-  if (branchTip === null) throw new Error(`${branch} no longer exists.`);
-  const otherTips = (await localBranchTips(project.path))
-    .filter((tip) => tip !== branchTip)
-    .slice(0, SYNC_HAS_COMMITS_LIMIT - 1);
-  progress({ step: "capture" });
-  const [capture, held] = await Promise.all([
-    dirtyCaptureViaCli(project, worktreeId),
-    peer.hasCommits({
-      projectId: peerProjectId,
-      commits: [branchTip, ...otherTips],
-    }),
-  ]);
-  const captured = capture.captured && capture.commit !== undefined;
-  const { present } = Schema.decodeUnknownSync(SyncHasCommitsResultSchema)(
-    held,
-  );
-
-  // 4. Push what the peer lacks. The pull's tip rule from the other
-  // side: a branch whose tip the peer holds must not be named, or
-  // `git bundle create` drops it under the have. Otherwise the local
-  // branch tips the peer also holds thin the bundle (none of them is
-  // the branch's own, which the peer was just found to lack).
-  const tipIsThere = present.includes(branchTip);
-  const dirtyRef = dirtyRefFor(worktreeId);
-  const sendRefs = [
-    ...(tipIsThere ? [] : [branchRef]),
-    ...(captured ? [dirtyRef] : []),
-  ];
-  if (sendRefs.length > 0) {
-    await pushBundleToPeer(peer, {
-      localProject: project,
-      peerProjectId,
-      refs: sendRefs,
-      haves: tipIsThere ? [branchTip] : present,
-      onProgress: (bytes, totalBytes) =>
-        progress({ step: "transfer", bytes, totalBytes }),
-    });
-  } else {
-    progress({ step: "transfer" });
-  }
-
-  // 5. The landing, on the peer.
-  progress({ step: "create" });
-  const landed = Schema.decodeUnknownSync(SyncLandWorktreeResultSchema)(
-    await fromPeer(
-      peer.landWorktree({
-        identity,
-        branch,
-        worktreeName,
-        branchTip,
-        runSetup,
-        capture:
-          captured && capture.commit !== undefined
-            ? { sourceWorktreeId: worktreeId, commit: capture.commit }
-            : undefined,
-      }),
-    ),
-  );
-  progress({ step: "apply" });
-
-  // 6. The ignored files, pushed into the root the peer's landing
-  // answered with (re-parsed above, like everything it sends).
-  let files: TransferFilesResult | undefined;
-  if (pullBringsIgnoredFiles(ignoreMode)) {
-    progress({ step: "files" });
-    files = await transferFilesOnce(
-      {
-        localRoot: worktree.path,
-        localWorktreeId: worktree.id,
-        sourceDeviceId: targetDeviceId,
-        sourceProjectId: peerProjectId,
-        sourceWorktreeId: landed.worktree.id,
-        remoteRoot: landed.worktree.path,
-        name: branch,
-        ignores: ignores ?? [],
-        direction: "push",
-      },
-      (bytes, totalBytes) => progress({ step: "files", bytes, totalBytes }),
+    // 2. The peer's refusals, before a byte moves. Its answers are
+    // re-parsed like the pull's: they flow into the push below.
+    const peer = (yield* peerApis).syncApiFor(targetDeviceId);
+    const { projectId: peerProjectId } = yield* fromPeer(
+      hostAttempt(() => peer.landCheck({ identity, branch, worktreeName })),
+    ).pipe(
+      Effect.flatMap((answer) =>
+        hostAttempt(() =>
+          Schema.decodeUnknownSync(SyncLandCheckResultSchema)(answer),
+        ),
+      ),
     );
-  }
-  remember(sendReceipts, sentKey({ targetDeviceId, projectId, worktreeId }), {
-    branch,
-    branchTip,
-    captured,
-    dirtyApplied: landed.dirtyApplied,
-    captureTree:
-      captured && capture.commit !== undefined
-        ? await treeOf(project.path, capture.commit)
-        : undefined,
-  });
-  return {
-    source: worktree,
-    result: {
-      worktree: landed.worktree,
+
+    // 3. The tip, then the capture, with the peer asked meanwhile which
+    // of this repo's tips it holds: the branch's own, and the other
+    // local branches' for thinning. One round trip answers both.
+    const branchRef = `refs/heads/${branch}`;
+    const branchTip = yield* hostAttempt(() => refTip(project.path, branchRef));
+    if (branchTip === null) {
+      return yield* Effect.fail(new Error(`${branch} no longer exists.`));
+    }
+    const otherTips = (yield* hostAttempt(() => localBranchTips(project.path)))
+      .filter((tip) => tip !== branchTip)
+      .slice(0, SYNC_HAS_COMMITS_LIMIT - 1);
+    progress({ step: "capture" });
+    const [capture, held] = yield* Effect.all(
+      [
+        hostAttempt(() => dirtyCaptureViaCli(project, worktreeId)),
+        hostAttempt(() =>
+          peer.hasCommits({
+            projectId: peerProjectId,
+            commits: [branchTip, ...otherTips],
+          }),
+        ),
+      ],
+      { concurrency: "unbounded" },
+    );
+    const captureCommit = capture.captured ? capture.commit : undefined;
+    const captured = captureCommit !== undefined;
+    const { present } = yield* hostAttempt(() =>
+      Schema.decodeUnknownSync(SyncHasCommitsResultSchema)(held),
+    );
+
+    // 4. Push what the peer lacks. The pull's tip rule from the other
+    // side: a branch whose tip the peer holds must not be named, or
+    // `git bundle create` drops it under the have. Otherwise the local
+    // branch tips the peer also holds thin the bundle (none of them is
+    // the branch's own, which the peer was just found to lack).
+    const tipIsThere = present.includes(branchTip);
+    const dirtyRef = dirtyRefFor(worktreeId);
+    const sendRefs = [
+      ...(tipIsThere ? [] : [branchRef]),
+      ...(captured ? [dirtyRef] : []),
+    ];
+    if (sendRefs.length > 0) {
+      yield* pushBundle(peer, {
+        localProject: project,
+        peerProjectId,
+        refs: sendRefs,
+        haves: tipIsThere ? [branchTip] : present,
+        onProgress: (bytes, totalBytes) =>
+          progress({ step: "transfer", bytes, totalBytes }),
+      });
+    } else {
+      progress({ step: "transfer" });
+    }
+
+    // 5. The landing, on the peer.
+    progress({ step: "create" });
+    const landed = yield* fromPeer(
+      hostAttempt(() =>
+        peer.landWorktree({
+          identity,
+          branch,
+          worktreeName,
+          branchTip,
+          runSetup,
+          capture:
+            captureCommit === undefined
+              ? undefined
+              : { sourceWorktreeId: worktreeId, commit: captureCommit },
+        }),
+      ),
+    ).pipe(
+      Effect.flatMap((answer) =>
+        hostAttempt(() =>
+          Schema.decodeUnknownSync(SyncLandWorktreeResultSchema)(answer),
+        ),
+      ),
+    );
+    progress({ step: "apply" });
+
+    // 6. The ignored files, pushed into the root the peer's landing
+    // answered with (re-parsed above, like everything it sends).
+    let files: TransferFilesResult | undefined;
+    if (pullBringsIgnoredFiles(ignoreMode)) {
+      progress({ step: "files" });
+      files = yield* transferFiles(
+        {
+          localRoot: worktree.path,
+          localWorktreeId: worktree.id,
+          sourceDeviceId: targetDeviceId,
+          sourceProjectId: peerProjectId,
+          sourceWorktreeId: landed.worktree.id,
+          remoteRoot: landed.worktree.path,
+          name: branch,
+          ignores: ignores ?? [],
+          direction: "push",
+        },
+        (bytes, totalBytes) => progress({ step: "files", bytes, totalBytes }),
+      );
+    }
+    remember(sendReceipts, sentKey({ targetDeviceId, projectId, worktreeId }), {
+      branch,
+      branchTip,
       captured,
       dirtyApplied: landed.dirtyApplied,
-      files,
-    },
-  };
-}
+      captureTree:
+        captureCommit === undefined
+          ? undefined
+          : yield* hostAttempt(() => treeOf(project.path, captureCommit)),
+    });
+    return {
+      source: worktree,
+      result: {
+        worktree: landed.worktree,
+        captured,
+        dirtyApplied: landed.dirtyApplied,
+        files,
+      },
+    };
+  });

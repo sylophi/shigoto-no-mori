@@ -8,12 +8,13 @@
 // the far end lives exactly as long as the channel: a peer reset, a
 // clean end from both sides, or the socket dying tears it down. No
 // registry, no idle sweep, nothing to leak past the connection.
-import type { Socket } from "node:net";
+import { Effect } from "effect";
 import { errorMessageOf, ForwardConnectFailed } from "@shared/errors";
 import { forwardContract } from "@shared/ipc/modules/forward";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { dialLoopback } from "@host/lib/net";
+import { hostAttempt, hostHandler } from "@host/runtime";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
 
 // How long a dial may sit unanswered before the open refuses.
@@ -25,27 +26,44 @@ const DIAL_TIMEOUT_MS = 5_000;
 
 export const forwardHandlers: Handlers<typeof forwardContract, HandlerContext> =
   {
-    open: async ({ port, channelId }, ctx) => {
-      // The schema already pinned the range. Re-check so this handler
-      // stays fail-closed even if it is ever reached off-contract.
-      if (!Number.isInteger(port) || port < 1 || port > 65535) {
-        throw new ForwardConnectFailed({ detail: "port out of range" });
-      }
-      requireChannels(ctx, channelId);
-      // Loopback only, always: the feature is reaching the host's OWN
-      // dev server, never using the host as a hop to its network. The
-      // shared dial (host/lib/net.ts) tries 127.0.0.1 then ::1 and
-      // carries its own deadline, so a hung dial cannot burn one of
-      // the peer's in-flight slots forever.
-      let socket: Socket;
-      try {
-        socket = await dialLoopback(port, DIAL_TIMEOUT_MS);
-      } catch (error) {
-        throw new ForwardConnectFailed({ detail: errorMessageOf(error) });
-      }
-      // Nagle batches small writes against the wire's round trips, so
-      // keystrokes and small frames must not wait on it.
-      socket.setNoDelay(true);
-      attachFarEnd(ctx, channelId, socket);
-    },
+    open: hostHandler(({ port, channelId }, ctx: HandlerContext) =>
+      Effect.gen(function* () {
+        // The schema already pinned the range. Re-check so this handler
+        // stays fail-closed even if it is ever reached off-contract.
+        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+          return yield* new ForwardConnectFailed({
+            detail: "port out of range",
+          });
+        }
+        yield* hostAttempt(() => requireChannels(ctx, channelId));
+        // Loopback only, always: the feature is reaching the host's OWN
+        // dev server, never using the host as a hop to its network. The
+        // shared dial (host/lib/net.ts) tries 127.0.0.1 then ::1 and
+        // carries its own deadline, so a hung dial cannot burn one of
+        // the peer's in-flight slots forever.
+        //
+        // Uninterruptible from the dial to the attach: a dial the caller
+        // walked away from would otherwise connect later to a socket
+        // nobody holds. Bounded by the dial's own deadline, and a socket
+        // that lands after the caller left is destroyed by the attach's
+        // re-check of the connection, not leaked.
+        yield* Effect.uninterruptible(
+          Effect.gen(function* () {
+            const socket = yield* hostAttempt(() =>
+              dialLoopback(port, DIAL_TIMEOUT_MS),
+            ).pipe(
+              Effect.mapError(
+                (error) =>
+                  new ForwardConnectFailed({ detail: errorMessageOf(error) }),
+              ),
+            );
+            // Nagle batches small writes against the wire's round trips,
+            // so keystrokes and small frames must not wait on it.
+            socket.setNoDelay(true);
+            yield* hostAttempt(() => attachFarEnd(ctx, channelId, socket));
+          }),
+        );
+        return undefined;
+      }),
+    ),
   };

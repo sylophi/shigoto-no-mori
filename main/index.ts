@@ -37,6 +37,7 @@ import {
   announceProjectChanged,
   registerIpcHandlers,
   startMirrorEngine,
+  stopMirrorEngine,
 } from "./ipc/handlers";
 import { clerkPublishableKey, retryParkedSignOut } from "./ipc/modules/account";
 import { buildAppMenu } from "./electron/menu";
@@ -46,6 +47,9 @@ import {
   refreshHubConnection,
   refreshSocketHost,
   startControlHost,
+  stopControlHost,
+  stopDirectHost,
+  stopHubConnection,
   onHostMutationSettled,
   probeRemoteConnections,
 } from "./ipc/register";
@@ -62,7 +66,7 @@ import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktre
 import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
 import { killAllCli, cliChildCount } from "./electron/cliRunner";
-import { installHostRuntime } from "@host/runtime";
+import { installAppRuntime } from "./services";
 import { runtime } from "./runtime";
 import { applyUserShellPath } from "./core/shellPath";
 import { startStateWatcher } from "./electron/stateWatcher";
@@ -174,9 +178,11 @@ initDataDir(app.isPackaged);
 // before registerIpcHandlers runs: registration reads the wires off it,
 // and every Electron-layer impl a handler needs is one of its services,
 // so the first renderer call never lands on a runtime without them.
-// The first read builds it, which creates the runners and binds the
-// mirror gateway.
-installHostRuntime(runtime);
+// The install builds it (synchronously: every layer's acquire is
+// synchronous, and a future one that is not would fail right here
+// with an async-boundary defect), which creates the runners and
+// starts the mirror gateway's bind.
+installAppRuntime(runtime);
 registerIpcHandlers();
 // The mirror daemon resumes persisted sessions the moment it is up, so
 // it starts with the app rather than with the first mirror the user
@@ -557,15 +563,20 @@ app.on("before-quit", (event) => {
     markShuttingDown();
     signalAllScriptsBestEffort("SIGTERM");
     killAllCli();
-    // The runtime's finalizers (main/runtime.ts), fired and forgotten:
-    // the hub close frame either flushes in the handoff window or the
-    // DO notices the dead socket on its own, and the direct listener
-    // goes down the same way so connected peers see a clean
-    // going-away. The port forwards stop first, since their layer is
-    // released before the direct plane and hub connection it depends
-    // on: local listeners die with the process anyway, but stopping
-    // before the hub teardown gives the best-effort host-side conn
-    // closes a socket to ride out on.
+    // The remote plane's stops are fired directly, in the same tick:
+    // the runtime's finalizers below run tier by tier, each waiting on
+    // the one before, and this quit is not awaited (Electron's natural
+    // quit carries on), so the hub close frame and the listeners'
+    // going-away would otherwise wait behind the forwards and the
+    // mirror engine and could miss the handoff window, leaving a
+    // cloudflared child orphaned until the next launch's reap. Every
+    // stop is idempotent, so the finalizers finding them stopped is
+    // fine. The control listener unpublishes synchronously here too,
+    // so a CLI run that starts now reads "not running".
+    stopControlHost();
+    stopMirrorEngine();
+    void stopHubConnection();
+    void stopDirectHost();
     void runtime.dispose().catch(() => undefined);
     return;
   }

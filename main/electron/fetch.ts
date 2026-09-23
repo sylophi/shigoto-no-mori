@@ -9,6 +9,7 @@
 // and projectPullRequestsRefreshed when a pass changed something so
 // the renderer, local or peer, can invalidate.
 import { BrowserWindow } from "electron";
+import { Effect, Exit, Layer, Schedule, Scope } from "effect";
 import { errorMessageOf } from "@shared/errors";
 import { gitContract } from "@shared/ipc/modules/git";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
@@ -24,6 +25,7 @@ import { runningScriptWorktreeIds } from "@host/lib/scripts";
 import { sweepAutoPull } from "@host/lib/worktrees/autoPullSweep";
 import { announceProjectChanged } from "../ipc/handlers";
 import { broadcastAll } from "../ipc/register";
+import { runner } from "../services";
 
 // Skip if a fetch finished within this window. Short enough that rapid
 // focus events don't feel stale, long enough that the focus, sweep and
@@ -52,7 +54,8 @@ const failingProjects = new Set<string>();
 // worktree that stops failing (pulled, skipped, unmarked, removed)
 // drops out, and its next failure warns again.
 const failingAutoPulls = new Map<string, ReadonlySet<string>>();
-let sweepHandle: NodeJS.Timeout | null = null;
+// The scope the sweep's fiber is forked into, while it runs.
+let sweeping: Scope.Closeable | null = null;
 let attendedUntil = 0;
 
 // Resolves to whether a fetch ran (false inside the freshness window).
@@ -213,8 +216,50 @@ function sweepIfAttended(): void {
   if (attended) sweepProjects();
 }
 
+// One tick per interval, the first an interval after the start (the
+// start sweeps at once itself). A tick only starts the pass, so the
+// spacing is the interval. Contained: a throw would end the fiber, and
+// with it the sweeps, with a defect nothing reports.
+const sweepLoop = Effect.sleep(SWEEP_INTERVAL_MS).pipe(
+  Effect.andThen(
+    Effect.repeat(
+      Effect.sync(() => {
+        try {
+          sweepIfAttended();
+        } catch (error) {
+          console.warn(`[fetch] sweep failed: ${errorMessageOf(error)}`);
+        }
+      }),
+      Schedule.spaced(SWEEP_INTERVAL_MS),
+    ),
+  ),
+);
+
 export function startBackgroundFetch(): void {
-  if (sweepHandle) return;
+  if (sweeping) return;
+  const scope = Scope.makeUnsafe();
+  sweeping = scope;
   sweepProjects();
-  sweepHandle = setInterval(sweepIfAttended, SWEEP_INTERVAL_MS);
+  Effect.runSync(Effect.forkIn(sweepLoop, scope));
 }
+
+// Stops the timer (a pass already started runs out on its own). The
+// app's runtime calls it on quit, through BackgroundFetchLive.
+export function stopBackgroundFetch(): Promise<void> {
+  const scope = sweeping;
+  sweeping = null;
+  if (scope === null) return Promise.resolve();
+  return Effect.runPromise(Scope.close(scope, Exit.void));
+}
+
+// The sweep's lifetime on the app runtime (main/runtime.ts, Engines
+// tier): nothing starts when the layer is built, since the first pass
+// waits for boot to read the terrier listings (main/index.ts calls
+// startBackgroundFetch), and disposing the runtime stops it.
+export const BackgroundFetchLive = Layer.effectDiscard(
+  runner(
+    "the background fetch",
+    () => undefined,
+    () => stopBackgroundFetch(),
+  ),
+);

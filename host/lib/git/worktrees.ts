@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { Effect, Semaphore } from "effect";
 import { unknownWorktreeError } from "@shared/errors";
 import {
   type CommitSummary,
@@ -13,10 +14,15 @@ import { readShelvedSet } from "../worktrees/shelved";
 import { readShigomoriConfig } from "../config/project";
 import { pickWorktreeName } from "../worktrees/names";
 import { isManagedPath, managedBasesFor } from "../worktrees/paths";
-import { createLimiter } from "@shared/util/limit";
-import { listChangedFiles } from "./changes";
-import { GitError, run } from "./core";
-import { listRemotes, resolveDefaultBranch } from "./remotes";
+import { listChangedFilesEffect } from "./changes";
+import { runEffect, runGit } from "./core";
+import { listRemotesEffect, resolveDefaultBranchEffect } from "./remotes";
+
+// The project's config, or null when it can't be read: every reader
+// here falls back to the defaults.
+function projectConfig(projectId: string) {
+  return Effect.promise(() => readShigomoriConfig(projectId).catch(() => null));
+}
 
 interface RawWorktreeEntry {
   path: string;
@@ -67,35 +73,39 @@ interface WorkingTreeChanges {
   lastChangeAt?: number;
 }
 
-async function getWorkingTreeChanges(
-  worktreePath: string,
-): Promise<WorkingTreeChanges> {
-  try {
+const getWorkingTreeChanges = Effect.fnUntraced(
+  function* (worktreePath: string) {
     // Deliberately NOT pinned to an --untracked-files mode, unlike the
     // dirty guard in overwriteFromUpstream: this runs per worktree on
     // every window focus, and `-uno` users chose that setting to make
     // exactly this scan cheap. See the comment there.
-    const paths = (await listChangedFiles(worktreePath)).map((f) => f.path);
-    if (paths.length === 0) return { count: 0 };
+    const paths = (yield* listChangedFilesEffect(worktreePath)).map(
+      (f) => f.path,
+    );
+    const clean: WorkingTreeChanges = { count: 0 };
+    if (paths.length === 0) return clean;
     // A deleted path stats as a failure, an untracked directory stats as
     // the directory. Both are fine, we only want the newest hit.
-    const times = await Promise.all(
-      paths.slice(0, CHANGE_MTIME_STAT_LIMIT).map((rel) =>
-        stat(join(worktreePath, rel)).then(
-          (info) => info.mtimeMs,
-          () => 0,
+    const times = yield* Effect.forEach(
+      paths.slice(0, CHANGE_MTIME_STAT_LIMIT),
+      (rel) =>
+        Effect.promise(() =>
+          stat(join(worktreePath, rel)).then(
+            (info) => info.mtimeMs,
+            () => 0,
+          ),
         ),
-      ),
+      { concurrency: "unbounded" },
     );
     const newest = Math.max(0, ...times);
-    return {
+    const changes: WorkingTreeChanges = {
       count: paths.length,
       lastChangeAt: newest > 0 ? Math.round(newest) : undefined,
     };
-  } catch {
-    return { count: 0 };
-  }
-}
+    return changes;
+  },
+  Effect.orElseSucceed((): WorkingTreeChanges => ({ count: 0 })),
+);
 
 interface RemoteSync {
   ahead: number;
@@ -115,46 +125,68 @@ interface RemoteSync {
 // there is no upstream to measure against: the branch was never
 // pushed, its remote branch is gone, or HEAD is detached. Shared with
 // the auto-pull sweep, which decides on the same two numbers.
-export async function getUpstreamCounts(
-  worktreePath: string,
-): Promise<{ ahead: number; behind: number } | null> {
-  try {
-    const stdout = await run(worktreePath, [
+export const getUpstreamCountsEffect = Effect.fnUntraced(
+  function* (worktreePath: string) {
+    const stdout = yield* runEffect(worktreePath, [
       "rev-list",
       "--left-right",
       "--count",
       "HEAD...@{u}",
     ]);
     const [a, b] = stdout.trim().split(/\s+/);
-    return { ahead: Number(a) || 0, behind: Number(b) || 0 };
-  } catch {
-    return null;
-  }
+    const counts: { ahead: number; behind: number } | null = {
+      ahead: Number(a) || 0,
+      behind: Number(b) || 0,
+    };
+    return counts;
+  },
+  Effect.orElseSucceed(() => null),
+);
+
+export function getUpstreamCounts(
+  worktreePath: string,
+): Promise<{ ahead: number; behind: number } | null> {
+  return runGit(getUpstreamCountsEffect(worktreePath));
 }
 
-async function getRemoteSync(worktreePath: string): Promise<RemoteSync> {
-  const counts = await getUpstreamCounts(worktreePath);
+const getRemoteSync = Effect.fnUntraced(function* (worktreePath: string) {
+  const counts = yield* getUpstreamCountsEffect(worktreePath);
   if (counts === null) {
-    return { ahead: 0, behind: 0, hasUpstream: false, divergedClean: false };
+    const none: RemoteSync = {
+      ahead: 0,
+      behind: 0,
+      hasUpstream: false,
+      divergedClean: false,
+    };
+    return none;
   }
   const { ahead, behind } = counts;
   const hasUpstream = true;
   if (ahead === 0 || behind === 0) {
-    return { ahead, behind, hasUpstream, divergedClean: false };
+    const sync: RemoteSync = {
+      ahead,
+      behind,
+      hasUpstream,
+      divergedClean: false,
+    };
+    return sync;
   }
   // Diverged: ask git whether a merge would land without conflicts.
   // `merge-tree --write-tree` exits 0 on a clean merge and non-zero
   // when conflicts would arise (or on git < 2.38, where we treat the
   // unknown as "not clean", the safer default).
-  let divergedClean = false;
-  try {
-    await run(worktreePath, ["merge-tree", "--write-tree", "HEAD", "@{u}"]);
-    divergedClean = true;
-  } catch {
-    divergedClean = false;
-  }
-  return { ahead, behind, hasUpstream, divergedClean };
-}
+  const divergedClean = yield* runEffect(worktreePath, [
+    "merge-tree",
+    "--write-tree",
+    "HEAD",
+    "@{u}",
+  ]).pipe(
+    Effect.as(true),
+    Effect.orElseSucceed(() => false),
+  );
+  const sync: RemoteSync = { ahead, behind, hasUpstream, divergedClean };
+  return sync;
+});
 
 // How many of HEAD's newest commits no remote has: what amend and undo
 // may touch. Measured against every remote-tracking ref, not just the
@@ -164,9 +196,9 @@ async function getRemoteSync(worktreePath: string): Promise<RemoteSync> {
 // exact number stops mattering and the walk stops paying for it.
 const UNPUSHED_SCAN_LIMIT = 1000;
 
-async function getUnpushedCount(worktreePath: string): Promise<number> {
-  try {
-    const stdout = await run(worktreePath, [
+const getUnpushedCount = Effect.fnUntraced(
+  function* (worktreePath: string) {
+    const stdout = yield* runEffect(worktreePath, [
       "rev-list",
       "--count",
       `--max-count=${UNPUSHED_SCAN_LIMIT}`,
@@ -175,11 +207,10 @@ async function getUnpushedCount(worktreePath: string): Promise<number> {
       "--remotes",
     ]);
     return Number(stdout.trim()) || 0;
-  } catch {
-    // An unborn branch has no HEAD to count from.
-    return 0;
-  }
-}
+  },
+  // An unborn branch has no HEAD to count from.
+  Effect.orElseSucceed(() => 0),
+);
 
 // `--shortstat` appends " N files changed, X insertions(+), Y deletions(-)"
 // on its own line after each commit's formatted output. A SOH (\x01)
@@ -230,18 +261,20 @@ function parseLog(stdout: string): CommitSummary[] {
 // in the detail page passes skip=0 with a small count. Returns [] on
 // any git failure (empty repo, detached state mid-rebase) so callers
 // don't have to fork on error.
-export async function listCommits(
+export const listCommitsEffect = Effect.fnUntraced(
+  function* (worktreePath: string, opts: { skip: number; count: number }) {
+    const args = ["log", `--skip=${opts.skip}`, `-${opts.count}`];
+    args.push(`--pretty=format:${LOG_FORMAT}`, "--shortstat");
+    return parseLog(yield* runEffect(worktreePath, args));
+  },
+  Effect.orElseSucceed((): CommitSummary[] => []),
+);
+
+export function listCommits(
   worktreePath: string,
   opts: { skip: number; count: number },
 ): Promise<CommitSummary[]> {
-  try {
-    const args = ["log", `--skip=${opts.skip}`, `-${opts.count}`];
-    args.push(`--pretty=format:${LOG_FORMAT}`, "--shortstat");
-    const stdout = await run(worktreePath, args);
-    return parseLog(stdout);
-  } catch {
-    return [];
-  }
+  return runGit(listCommitsEffect(worktreePath, opts));
 }
 
 // Worktree identity: the subset of fields the main process needs to
@@ -267,14 +300,16 @@ export function worktreeIdFromPath(path: string): string {
   return createHash("sha256").update(path).digest("hex").slice(0, 12);
 }
 
-export async function listWorktreeIdentities(
-  projectId: string,
-  projectPath: string,
-): Promise<WorktreeIdentity[]> {
-  const [stdout, config] = await Promise.all([
-    run(projectPath, ["worktree", "list", "--porcelain"]),
-    readShigomoriConfig(projectId).catch(() => null),
-  ]);
+export const listWorktreeIdentitiesEffect = Effect.fn(
+  "worktrees.listWorktreeIdentities",
+)(function* (projectId: string, projectPath: string) {
+  const [stdout, config] = yield* Effect.all(
+    [
+      runEffect(projectPath, ["worktree", "list", "--porcelain"]),
+      projectConfig(projectId),
+    ],
+    { concurrency: 2 },
+  );
   // A worktree counts as managed if it sits under any layout we know
   // about (managed root, in-project, or the configured custom path).
   // This keeps mixed states (some worktrees still in the old layout
@@ -324,6 +359,13 @@ export async function listWorktreeIdentities(
     });
   }
   return identities;
+});
+
+export function listWorktreeIdentities(
+  projectId: string,
+  projectPath: string,
+): Promise<WorktreeIdentity[]> {
+  return runGit(listWorktreeIdentitiesEffect(projectId, projectPath));
 }
 
 // How many recent commits to surface on the worktree detail page. The
@@ -357,79 +399,72 @@ const FIRST_PARENT_SCAN_LIMIT = 2000;
 // from "never started" here: the resulting history is identical, so it
 // reads as not landed. That errs toward leaving a row visible, and
 // GitHub-hosted repos get the answer from the PR state anyway.
-async function landedOnPrimary(
+function landedOnPrimary(
   worktreePath: string,
   behindPrimary: number,
   readChain: PrimaryChainReader,
-): Promise<boolean> {
-  if (behindPrimary > FIRST_PARENT_SCAN_LIMIT) return false;
-  try {
-    const [head, chain] = await Promise.all([
-      run(worktreePath, ["rev-parse", "HEAD"]),
-      readChain(),
-    ]);
-    const tip = head.trim();
-    return chain !== null && tip.length > 0 && !chain.has(tip);
-  } catch {
-    return false;
-  }
+): Effect.Effect<boolean> {
+  if (behindPrimary > FIRST_PARENT_SCAN_LIMIT) return Effect.succeed(false);
+  return Effect.all(
+    [runEffect(worktreePath, ["rev-parse", "HEAD"]), readChain],
+    { concurrency: 2 },
+  ).pipe(
+    Effect.map(([head, chain]) => {
+      const tip = head.trim();
+      return chain !== null && tip.length > 0 && !chain.has(tip);
+    }),
+    Effect.orElseSucceed(() => false),
+  );
 }
 
 // The primary's first-parent chain is the same answer for every worktree
 // in the project (one object store, one ref), so it's read once and
-// shared. Lazily, because a project whose worktrees are all ahead of the
-// primary never asks the question and shouldn't pay for it.
+// shared (Effect.cached). Lazily, because a project whose worktrees are
+// all ahead of the primary never asks the question and shouldn't pay
+// for it.
 //
 // Null means "couldn't read it", which callers must treat as "not
 // landed": an empty set would say every HEAD is off the chain, i.e.
 // everything merged.
-type PrimaryChainReader = () => Promise<ReadonlySet<string> | null>;
+type PrimaryChainReader = Effect.Effect<ReadonlySet<string> | null>;
 
-function primaryChainReader(
+function readPrimaryChain(
   projectPath: string,
   primaryRef: string | null,
 ): PrimaryChainReader {
-  let pending: Promise<ReadonlySet<string> | null> | null = null;
-  return () => (pending ??= readPrimaryChain(projectPath, primaryRef));
-}
-
-async function readPrimaryChain(
-  projectPath: string,
-  primaryRef: string | null,
-): Promise<ReadonlySet<string> | null> {
-  if (!primaryRef) return null;
-  try {
-    // FIRST_PARENT_SCAN_LIMIT bounds how far behind a worktree can be
-    // and still be asked about, so a chain that long covers every HEAD
-    // that could be on it.
-    const stdout = await run(projectPath, [
-      "rev-list",
-      "--first-parent",
-      `-n${FIRST_PARENT_SCAN_LIMIT + 1}`,
-      primaryRef,
-    ]);
-    return new Set(stdout.trim().split("\n").filter(Boolean));
-  } catch {
-    return null;
-  }
+  if (!primaryRef) return Effect.succeed(null);
+  // FIRST_PARENT_SCAN_LIMIT bounds how far behind a worktree can be
+  // and still be asked about, so a chain that long covers every HEAD
+  // that could be on it.
+  return runEffect(projectPath, [
+    "rev-list",
+    "--first-parent",
+    `-n${FIRST_PARENT_SCAN_LIMIT + 1}`,
+    primaryRef,
+  ]).pipe(
+    Effect.map(
+      (stdout): ReadonlySet<string> | null =>
+        new Set(stdout.trim().split("\n").filter(Boolean)),
+    ),
+    Effect.orElseSucceed(() => null),
+  );
 }
 
 // How the worktree sits against the project's primary branch. Both
 // answers are "no relation" where the question doesn't apply (no
 // primary, the primary worktree itself, detached HEAD).
-async function getPrimaryRelation(
-  identity: WorktreeIdentity,
-  ctx: BuildContext,
-): Promise<PrimaryRelation> {
-  const none: PrimaryRelation = {
-    behindPrimary: 0,
-    mergedIntoPrimary: false,
-  };
-  if (!ctx.primaryRef || identity.isPrimary || identity.detached) return none;
-  try {
+const getPrimaryRelation = Effect.fnUntraced(
+  function* (identity: WorktreeIdentity, ctx: BuildContext) {
+    const none: PrimaryRelation = {
+      behindPrimary: 0,
+      mergedIntoPrimary: false,
+    };
+    if (!ctx.primaryRef || identity.isPrimary || identity.detached) {
+      return none;
+    }
     // `--left-right` on the symmetric difference prints "<left>\t<right>":
     // commits only on HEAD, then commits only on the primary.
-    const stdout = await run(identity.path, [
+    const stdout = yield* runEffect(identity.path, [
       "rev-list",
       "--count",
       "--left-right",
@@ -441,20 +476,26 @@ async function getPrimaryRelation(
     // Anything HEAD still holds on its own hasn't landed yet, and a
     // branch level with the primary has nothing to have landed.
     if (aheadOfPrimary > 0 || behindPrimary === 0) {
-      return { behindPrimary, mergedIntoPrimary: false };
+      const relation: PrimaryRelation = {
+        behindPrimary,
+        mergedIntoPrimary: false,
+      };
+      return relation;
     }
-    return {
+    const relation: PrimaryRelation = {
       behindPrimary,
-      mergedIntoPrimary: await landedOnPrimary(
+      mergedIntoPrimary: yield* landedOnPrimary(
         identity.path,
         behindPrimary,
         ctx.primaryChain,
       ),
     };
-  } catch {
-    return none;
-  }
-}
+    return relation;
+  },
+  Effect.orElseSucceed(
+    (): PrimaryRelation => ({ behindPrimary: 0, mergedIntoPrimary: false }),
+  ),
+);
 
 // Project-level inputs every row in a list/describe/create call needs.
 // Resolved once, passed by reference, so per-row work stays O(git probes
@@ -467,40 +508,49 @@ interface BuildContext {
   primaryChain: PrimaryChainReader;
 }
 
-async function loadBuildContext(
+const loadBuildContext = Effect.fnUntraced(function* (
   projectId: string,
   projectPath: string,
-): Promise<BuildContext> {
-  const [remotes, config] = await Promise.all([
-    listRemotes(projectPath),
-    readShigomoriConfig(projectId).catch(() => null),
-  ]);
-  const primaryRef = await resolveDefaultBranch(
+) {
+  const [remotes, config] = yield* Effect.all(
+    [listRemotesEffect(projectPath), projectConfig(projectId)],
+    { concurrency: 2 },
+  );
+  const primaryRef = yield* resolveDefaultBranchEffect(
     projectPath,
     config?.defaultBranch,
-  ).catch(() => null);
-  return {
+  ).pipe(Effect.orElseSucceed(() => null));
+  const ctx: BuildContext = {
     hasRemote: remotes.length > 0,
     primaryRef,
     shelvedSet: readShelvedSet(),
     autoPullSet: readAutoPullSet(),
-    primaryChain: primaryChainReader(projectPath, primaryRef),
+    primaryChain: yield* Effect.cached(
+      readPrimaryChain(projectPath, primaryRef),
+    ),
   };
-}
+  return ctx;
+});
 
-async function buildWorktree(
+const buildWorktree = Effect.fnUntraced(function* (
   identity: WorktreeIdentity,
   ctx: BuildContext,
-): Promise<Worktree> {
+) {
   const [changes, recentCommits, remoteSync, primary, unpushedCount] =
-    await Promise.all([
-      getWorkingTreeChanges(identity.path),
-      listCommits(identity.path, { skip: 0, count: RECENT_COMMITS_COUNT }),
-      getRemoteSync(identity.path),
-      getPrimaryRelation(identity, ctx),
-      getUnpushedCount(identity.path),
-    ]);
-  return {
+    yield* Effect.all(
+      [
+        getWorkingTreeChanges(identity.path),
+        listCommitsEffect(identity.path, {
+          skip: 0,
+          count: RECENT_COMMITS_COUNT,
+        }),
+        getRemoteSync(identity.path),
+        getPrimaryRelation(identity, ctx),
+        getUnpushedCount(identity.path),
+      ],
+      { concurrency: "unbounded" },
+    );
+  const worktree: Worktree = {
     id: identity.id,
     projectId: identity.projectId,
     name: identity.name,
@@ -527,99 +577,146 @@ async function buildWorktree(
       ctx.shelvedSet.has(identity.id),
     autoPull: ctx.autoPullSet.has(identity.id),
   };
-}
+  return worktree;
+});
 
 // Each buildWorktree starts four to six git processes and the sidebar
 // asks for every project at once on focus. Unbounded, that is hundreds
-// of simultaneous forks. Same window as tidy's gitProbes.
-const rowProbes = createLimiter(6);
+// of simultaneous forks. Six rows at a time per call, and six across
+// every call in the process (the permits), since the burst is many
+// projects' lists at once. Same window as tidy's probes.
+const ROW_WINDOW = 6;
+const rowProbes = Semaphore.makeUnsafe(ROW_WINDOW);
 
-export async function listWorktrees(
+export const listWorktreesEffect = Effect.fn("worktrees.listWorktrees")(
+  function* (projectId: string, projectPath: string) {
+    const [identities, ctx] = yield* Effect.all(
+      [
+        listWorktreeIdentitiesEffect(projectId, projectPath),
+        loadBuildContext(projectId, projectPath),
+      ],
+      { concurrency: 2 },
+    );
+    // Primary first so it anchors the sidebar list as the canonical checkout.
+    const ordered = identities.toSorted((a, b) =>
+      a.isPrimary === b.isPrimary ? 0 : a.isPrimary ? -1 : 1,
+    );
+    return yield* Effect.forEach(
+      ordered,
+      (identity) => rowProbes.withPermits(1)(buildWorktree(identity, ctx)),
+      { concurrency: ROW_WINDOW },
+    );
+  },
+);
+
+export function listWorktrees(
   projectId: string,
   projectPath: string,
 ): Promise<Worktree[]> {
-  const [identities, ctx] = await Promise.all([
-    listWorktreeIdentities(projectId, projectPath),
-    loadBuildContext(projectId, projectPath),
-  ]);
-  // Primary first so it anchors the sidebar list as the canonical checkout.
-  const ordered = identities.toSorted((a, b) =>
-    a.isPrimary === b.isPrimary ? 0 : a.isPrimary ? -1 : 1,
-  );
-  return Promise.all(
-    ordered.map((id) => rowProbes(() => buildWorktree(id, ctx))),
-  );
+  return runGit(listWorktreesEffect(projectId, projectPath));
 }
 
-export async function describeWorktree(
+export const describeWorktreeEffect = Effect.fn("worktrees.describeWorktree")(
+  function* (identity: WorktreeIdentity, projectPath: string) {
+    const ctx = yield* loadBuildContext(identity.projectId, projectPath);
+    return yield* buildWorktree(identity, ctx);
+  },
+);
+
+export function describeWorktree(
   identity: WorktreeIdentity,
   projectPath: string,
 ): Promise<Worktree> {
-  const ctx = await loadBuildContext(identity.projectId, projectPath);
-  return buildWorktree(identity, ctx);
+  return runGit(describeWorktreeEffect(identity, projectPath));
 }
 
-export async function findWorktreeIdentityOrThrow(
+// Fails with UnknownWorktree when the project has no worktree by that id.
+export const findWorktreeIdentityEffect = Effect.fn(
+  "worktrees.findWorktreeIdentity",
+)(function* (projectId: string, projectPath: string, worktreeId: string) {
+  const identities = yield* listWorktreeIdentitiesEffect(
+    projectId,
+    projectPath,
+  );
+  const identity = identities.find((w) => w.id === worktreeId);
+  if (!identity) return yield* Effect.fail(unknownWorktreeError(worktreeId));
+  return identity;
+});
+
+export function findWorktreeIdentityOrThrow(
   projectId: string,
   projectPath: string,
   worktreeId: string,
 ): Promise<WorktreeIdentity> {
-  const identities = await listWorktreeIdentities(projectId, projectPath);
-  const identity = identities.find((w) => w.id === worktreeId);
-  if (!identity) throw unknownWorktreeError(worktreeId);
-  return identity;
+  return runGit(findWorktreeIdentityEffect(projectId, projectPath, worktreeId));
 }
 
-export async function pickAvailableWorktreeName(
+export const pickAvailableWorktreeNameEffect = Effect.fn(
+  "worktrees.pickAvailableWorktreeName",
+)(function* (projectId: string, projectPath: string) {
+  const existing = yield* listWorktreeIdentitiesEffect(projectId, projectPath);
+  const used = new Set(existing.map((w) => w.name.toLowerCase()));
+  return pickWorktreeName(used);
+});
+
+export function pickAvailableWorktreeName(
   projectId: string,
   projectPath: string,
 ): Promise<string> {
-  const existing = await listWorktreeIdentities(projectId, projectPath);
-  const used = new Set(existing.map((w) => w.name.toLowerCase()));
-  return pickWorktreeName(used);
-}
-
-async function removeWorktree(
-  projectPath: string,
-  worktreePath: string,
-  force: boolean,
-): Promise<void> {
-  const args = ["worktree", "remove", worktreePath];
-  if (force) args.push("--force");
-  await run(projectPath, args);
+  return runGit(pickAvailableWorktreeNameEffect(projectId, projectPath));
 }
 
 // Force-removes a worktree, falling back to a manual wipe when git's
 // recursive rmdir fails with ENOTEMPTY (untracked content git couldn't
 // sweep: caches, files held open). We don't retry `git worktree
 // remove` after fs.rm because once the dir is gone, remove errors out
-// on "not on disk". Other failures (corrupt repo, EACCES) rethrow so
-// real bugs stay visible.
-export async function removeWorktreeForce(
+// on "not on disk". Other failures (corrupt repo, EACCES) fail as they
+// are so real bugs stay visible.
+export const removeWorktreeForceEffect = Effect.fn(
+  "worktrees.removeWorktreeForce",
+)(function* (projectPath: string, worktreePath: string) {
+  yield* runEffect(projectPath, [
+    "worktree",
+    "remove",
+    worktreePath,
+    "--force",
+  ]).pipe(
+    Effect.catchIf(
+      (error) =>
+        error._tag === "GitError" &&
+        /Directory not empty|ENOTEMPTY/i.test(error.stderr),
+      (error) =>
+        Effect.gen(function* () {
+          console.warn(`[worktrees] force-wipe fallback: ${error.message}`);
+          yield* Effect.tryPromise({
+            try: () => rm(worktreePath, { recursive: true, force: true }),
+            catch: (cause) =>
+              cause instanceof Error ? cause : new Error(String(cause)),
+          });
+          yield* pruneStaleWorktreesEffect(projectPath);
+        }),
+    ),
+  );
+});
+
+export function removeWorktreeForce(
   projectPath: string,
   worktreePath: string,
 ): Promise<void> {
-  try {
-    await removeWorktree(projectPath, worktreePath, true);
-    return;
-  } catch (err) {
-    if (
-      !(err instanceof GitError) ||
-      !/Directory not empty|ENOTEMPTY/i.test(err.stderr)
-    ) {
-      throw err;
-    }
-    console.warn(`[worktrees] force-wipe fallback: ${err.message}`);
-  }
-  await rm(worktreePath, { recursive: true, force: true });
-  await pruneStaleWorktrees(projectPath);
+  return runGit(removeWorktreeForceEffect(projectPath, worktreePath));
 }
 
 // Drops admin entries under $GIT_DIR/worktrees whose checkout dir is
 // gone. Used after a fallback fs.rm and after the nuke-everything root
 // wipe to keep `git worktree list` honest.
-export async function pruneStaleWorktrees(projectPath: string): Promise<void> {
-  await run(projectPath, ["worktree", "prune"]);
+export const pruneStaleWorktreesEffect = Effect.fn(
+  "worktrees.pruneStaleWorktrees",
+)(function* (projectPath: string) {
+  yield* runEffect(projectPath, ["worktree", "prune"]);
+});
+
+export function pruneStaleWorktrees(projectPath: string): Promise<void> {
+  return runGit(pruneStaleWorktreesEffect(projectPath));
 }
 
 // Moves a worktree's checkout to a new directory. `git worktree move`
@@ -627,11 +724,21 @@ export async function pruneStaleWorktrees(projectPath: string): Promise<void> {
 // carry-over symlinks stay valid because their targets don't change. Git
 // refuses if the worktree is locked, dirty in a way that conflicts with
 // the move, or the destination already exists.
-export async function relocateWorktree(
+export const relocateWorktreeEffect = Effect.fn("worktrees.relocateWorktree")(
+  function* (projectPath: string, oldPath: string, newPath: string) {
+    yield* Effect.tryPromise({
+      try: () => mkdir(dirname(newPath), { recursive: true }),
+      catch: (cause) =>
+        cause instanceof Error ? cause : new Error(String(cause)),
+    });
+    yield* runEffect(projectPath, ["worktree", "move", oldPath, newPath]);
+  },
+);
+
+export function relocateWorktree(
   projectPath: string,
   oldPath: string,
   newPath: string,
 ): Promise<void> {
-  await mkdir(dirname(newPath), { recursive: true });
-  await run(projectPath, ["worktree", "move", oldPath, newPath]);
+  return runGit(relocateWorktreeEffect(projectPath, oldPath, newPath));
 }

@@ -1,46 +1,49 @@
+import { Effect } from "effect";
+import { UnknownProject } from "@shared/errors";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
-import type { Project, Worktree } from "@shared/schemas";
+import type { Project } from "@shared/schemas";
 import { readShigomoriConfig } from "@host/lib/config/project";
-import { checkoutBranch, renameBranch } from "@host/lib/git/branches";
 import {
-  commitStaged,
-  discardChanges,
-  listChangesForPage,
-  readCommitMessage,
-  resetSoft,
-  restoreDiscard,
-  setStaged,
+  checkoutBranchEffect,
+  renameBranchEffect,
+} from "@host/lib/git/branches";
+import {
+  commitStagedEffect,
+  discardChangesEffect,
+  listChangesForPageEffect,
+  readCommitMessageEffect,
+  resetSoftEffect,
+  restoreDiscardEffect,
+  setStagedEffect,
 } from "@host/lib/git/changes";
-import { getCommitDiff, getFileDiff } from "@host/lib/git/diff";
-import { resolveDefaultBranch } from "@host/lib/git/remotes";
+import { getCommitDiffEffect, getFileDiffEffect } from "@host/lib/git/diff";
+import { resolveDefaultBranchEffect } from "@host/lib/git/remotes";
 import {
-  overwriteFromUpstream,
-  publishCurrentBranch,
-  pullFastForward,
-  pullRebaseOrMergeAndPush,
-  pushFastForward,
-  pushForceWithLease,
-  syncWithPrimary,
+  overwriteFromUpstreamEffect,
+  publishCurrentBranchEffect,
+  pullFastForwardEffect,
+  pullRebaseOrMergeAndPushEffect,
+  pushFastForwardEffect,
+  pushForceWithLeaseEffect,
+  syncWithPrimaryEffect,
 } from "@host/lib/git/sync";
 import {
-  describeWorktree,
-  findWorktreeIdentityOrThrow,
-  listCommits,
-  listWorktrees,
+  describeWorktreeEffect,
+  findWorktreeIdentityEffect,
+  listCommitsEffect,
+  listWorktreesEffect,
   type WorktreeIdentity,
 } from "@host/lib/git/worktrees";
-import {
-  findProjectAndWorktreeOrThrow,
-  findProjectOrThrow,
-} from "@host/lib/projects";
+import { findProjectOrThrow } from "@host/lib/projects";
 import {
   getRunningScriptWorktrees,
   withDeleteInflight,
 } from "@host/lib/scripts";
 import { setAutoPull } from "@host/lib/worktrees/autoPull";
 import { relocateWorktreeToManagedPath } from "@host/lib/worktrees/relocate";
+import { type HostServices, hostAttempt, hostHandler } from "@host/runtime";
 import { scriptEventNotifier } from "../scriptRun";
 import {
   adoptViaCli,
@@ -63,236 +66,319 @@ export function notifierFor(ctx: HandlerContext) {
   };
 }
 
+// The project a handler names, failing typed (UnknownProject) when the
+// registry has no such id. Anything else the lookup throws (an
+// unreadable registry) is a defect, which rejects the call as the throw
+// did. Shared with the branches and hygiene handlers.
+export function projectEffect(
+  projectId: string,
+): Effect.Effect<Project, UnknownProject> {
+  return Effect.suspend(() => {
+    try {
+      return Effect.succeed(findProjectOrThrow(projectId));
+    } catch (error) {
+      return error instanceof UnknownProject
+        ? Effect.fail(error)
+        : Effect.die(error);
+    }
+  });
+}
+
+// The preamble every worktree-scoped handler opens with (the Effect
+// form of findProjectAndWorktreeOrThrow): UnknownProject, then
+// UnknownWorktree.
+const projectAndWorktree = Effect.fnUntraced(function* (
+  projectId: string,
+  worktreeId: string,
+) {
+  const project = yield* projectEffect(projectId);
+  const worktree = yield* findWorktreeIdentityEffect(
+    project.id,
+    project.path,
+    worktreeId,
+  );
+  return { project, worktree };
+});
+
+// The worktree a read-only handler asks about.
+const worktreeOf = (projectId: string, worktreeId: string) =>
+  Effect.map(projectAndWorktree(projectId, worktreeId), (r) => r.worktree);
+
 export const worktreesHandlers: Handlers<
   typeof worktreesContract,
   HandlerContext
 > = {
-  list: async ({ projectId }) => {
-    const project = findProjectOrThrow(projectId);
-    return listWorktrees(project.id, project.path);
-  },
+  list: hostHandler(({ projectId }) =>
+    Effect.flatMap(projectEffect(projectId), (project) =>
+      listWorktreesEffect(project.id, project.path),
+    ),
+  ),
 
   // Lifecycle mutations route through the bundled CLI so the app and a
-  // terminal run the same engine.
-  create: async (
-    { projectId, worktreeName, branchName, base, checkout },
-    ctx,
-  ) => {
-    const project = findProjectOrThrow(projectId);
-    const input = { worktreeName, branchName, base, checkout };
-    return createViaCli(project, input, notifierFor(ctx));
-  },
-
-  convertExternal: async ({ projectId, worktreeId }, ctx) => {
-    const project = findProjectOrThrow(projectId);
-    return adoptViaCli(project, worktreeId, notifierFor(ctx));
-  },
-
-  relocate: async ({ projectId, worktreeId, destinationPath }) => {
-    const project = findProjectOrThrow(projectId);
-    return relocateWorktreeToManagedPath(project, worktreeId, destinationPath);
-  },
-
-  delete: async (
-    { projectId, worktreeId, force, skipCleanup, refuseRunningScripts },
-    ctx,
-  ) => {
-    const project = findProjectOrThrow(projectId);
-    // Local delete kills scripts by design (withDeleteInflight reaps
-    // them). The transplant orchestrator refuses instead, since its
-    // teardown must never take down work still running on the source
-    // device. The lookup is app-registry-only, so the CLI stays
-    // ignorant of the flag. "scripts-running" is a stable marker the
-    // orchestrator and the UI match on, not prose.
-    if (refuseRunningScripts) {
-      const running = getRunningScriptWorktrees().find(
-        (entry) => entry.worktreeId === worktreeId,
-      );
-      if (running !== undefined) {
-        throw new Error(
-          `scripts-running: ${running.scriptCount} script(s) are running in this worktree`,
-        );
-      }
-    }
-    // The CLI can't see the app's script registry, so the delete runs
-    // under the shared tombstone protocol (see withDeleteInflight).
-    // The CLI drops the shelf and auto-pull marks with the worktree.
-    return withDeleteInflight(
-      worktreeId,
-      "This worktree is already being removed.",
-      () =>
-        deleteViaCli(
-          project,
-          { worktreeId, force, skipCleanup },
-          notifierFor(ctx),
+  // terminal run the same engine. Each is one step: a caller that
+  // leaves stops waiting, never the lifecycle halfway.
+  create: hostHandler(
+    ({ projectId, worktreeName, branchName, base, checkout }, ctx) =>
+      Effect.flatMap(projectEffect(projectId), (project) =>
+        hostAttempt(() =>
+          createViaCli(
+            project,
+            { worktreeName, branchName, base, checkout },
+            notifierFor(ctx),
+          ),
         ),
-    );
-  },
+      ),
+  ),
 
-  setShelved: ({ projectId, worktreeId, shelved }) =>
-    mutateAndDescribe({ projectId, worktreeId }, (_target, project) =>
-      setShelvedViaCli(project, worktreeId, shelved),
+  convertExternal: hostHandler(({ projectId, worktreeId }, ctx) =>
+    Effect.flatMap(projectEffect(projectId), (project) =>
+      hostAttempt(() => adoptViaCli(project, worktreeId, notifierFor(ctx))),
     ),
+  ),
+
+  relocate: hostHandler(({ projectId, worktreeId, destinationPath }) =>
+    Effect.flatMap(projectEffect(projectId), (project) =>
+      hostAttempt(() =>
+        relocateWorktreeToManagedPath(project, worktreeId, destinationPath),
+      ),
+    ),
+  ),
+
+  delete: hostHandler(
+    (
+      { projectId, worktreeId, force, skipCleanup, refuseRunningScripts },
+      ctx,
+    ) =>
+      Effect.flatMap(projectEffect(projectId), (project) =>
+        hostAttempt(() => {
+          // Local delete kills scripts by design (withDeleteInflight
+          // reaps them). The transplant orchestrator refuses instead,
+          // since its teardown must never take down work still running
+          // on the source device. The lookup is app-registry-only, so
+          // the CLI stays ignorant of the flag. "scripts-running" is a
+          // stable marker the orchestrator and the UI match on, not
+          // prose.
+          if (refuseRunningScripts) {
+            const running = getRunningScriptWorktrees().find(
+              (entry) => entry.worktreeId === worktreeId,
+            );
+            if (running !== undefined) {
+              throw new Error(
+                `scripts-running: ${running.scriptCount} script(s) are running in this worktree`,
+              );
+            }
+          }
+          // The CLI can't see the app's script registry, so the delete
+          // runs under the shared tombstone protocol (see
+          // withDeleteInflight). The CLI drops the shelf and auto-pull
+          // marks with the worktree.
+          return withDeleteInflight(
+            worktreeId,
+            "This worktree is already being removed.",
+            () =>
+              deleteViaCli(
+                project,
+                { worktreeId, force, skipCleanup },
+                notifierFor(ctx),
+              ),
+          );
+        }),
+      ),
+  ),
+
+  setShelved: hostHandler(({ projectId, worktreeId, shelved }) =>
+    mutateAndDescribe({ projectId, worktreeId }, (_target, project) =>
+      hostAttempt(() => setShelvedViaCli(project, worktreeId, shelved)),
+    ),
+  ),
 
   // A flag flip only, like setShelved. The pull itself has one entry
   // point, the fetch scheduler's sweep (main/electron/fetch.ts): the
   // renderer follows a mark with git:refreshProject so the first pull
   // happens right away, through the same path as every later one.
-  setAutoPull: ({ projectId, worktreeId, autoPull }) =>
-    mutateAndDescribe({ projectId, worktreeId }, async () => {
-      setAutoPull(worktreeId, autoPull);
-    }),
-
-  renameBranch: (input) =>
-    mutateAndDescribe(input, (wt) => renameBranch(wt.path, input.newBranch)),
-
-  checkoutBranch: (input) =>
-    mutateAndDescribe(input, (wt) => checkoutBranch(wt.path, input.branch)),
-
-  fileDiff: async ({ projectId, worktreeId, paths, untracked }) => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
-    return getFileDiff(worktree.path, paths, untracked);
-  },
-
-  changeStatus: async ({ projectId, worktreeId }) => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
-    return listChangesForPage(worktree.path);
-  },
-
-  setStaged: async ({ projectId, worktreeId, paths, staged }) => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
-    return setStaged(worktree.path, paths, staged);
-  },
-
-  commit: async (input) => {
-    const { result: hash, worktree } = await mutateAndDescribeWith(
-      input,
-      (wt) => commitStaged(wt.path, input),
-    );
-    return { hash, worktree };
-  },
-
-  discardChanges: async (input) => {
-    const { result: snapshot, worktree } = await mutateAndDescribeWith(
-      input,
-      (wt) => discardChanges(wt.path, input.paths),
-    );
-    return { snapshot, worktree };
-  },
-
-  restoreDiscard: (input) =>
-    mutateAndDescribe(input, (wt) => restoreDiscard(wt.path, input.snapshot)),
-
-  commitMessage: async ({ projectId, worktreeId, hash }) => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
-    return readCommitMessage(worktree.path, hash);
-  },
-
-  resetSoft: async (input) => {
-    const { result: previousHead, worktree } = await mutateAndDescribeWith(
-      input,
-      (wt) => resetSoft(wt.path, input.target, input.expectHead),
-    );
-    return { previousHead, worktree };
-  },
-
-  commitDiff: async ({ projectId, worktreeId, hash }) => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
-    return getCommitDiff(worktree.path, hash);
-  },
-
-  listCommits: async ({ projectId, worktreeId, skip, count }) => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
-    return listCommits(worktree.path, { skip, count });
-  },
-
-  push: (input) => mutateAndDescribe(input, (wt) => pushFastForward(wt.path)),
-  pull: (input) => mutateAndDescribe(input, (wt) => pullFastForward(wt.path)),
-  pushForce: (input) =>
-    mutateAndDescribe(input, (wt) => pushForceWithLease(wt.path)),
-  overwrite: (input) =>
-    mutateAndDescribe(input, (wt) => overwriteFromUpstream(wt.path)),
-  publish: (input) =>
-    mutateAndDescribe(input, (wt, project) =>
-      publishCurrentBranch(wt.path, project.path),
+  setAutoPull: hostHandler(({ projectId, worktreeId, autoPull }) =>
+    mutateAndDescribe({ projectId, worktreeId }, () =>
+      hostAttempt(() => setAutoPull(worktreeId, autoPull)),
     ),
-  pullAndPush: (input) =>
-    mutateAndDescribe(input, (wt) => pullRebaseOrMergeAndPush(wt.path)),
-  syncWithPrimary: (input) =>
-    mutateAndDescribe(input, async (target, project) => {
-      if (target.isPrimary) {
-        throw new Error("The primary checkout can't be synced from itself");
-      }
-      if (target.detached) {
-        throw new Error(
-          "Detached worktrees can't be synced with the primary branch",
+  ),
+
+  renameBranch: hostHandler((input) =>
+    mutateAndDescribe(input, (wt) =>
+      renameBranchEffect(wt.path, input.newBranch),
+    ),
+  ),
+
+  checkoutBranch: hostHandler((input) =>
+    mutateAndDescribe(input, (wt) =>
+      checkoutBranchEffect(wt.path, input.branch),
+    ),
+  ),
+
+  fileDiff: hostHandler(({ projectId, worktreeId, paths, untracked }) =>
+    Effect.flatMap(worktreeOf(projectId, worktreeId), (worktree) =>
+      getFileDiffEffect(worktree.path, paths, untracked),
+    ),
+  ),
+
+  changeStatus: hostHandler(({ projectId, worktreeId }) =>
+    Effect.flatMap(worktreeOf(projectId, worktreeId), (worktree) =>
+      listChangesForPageEffect(worktree.path),
+    ),
+  ),
+
+  setStaged: hostHandler(({ projectId, worktreeId, paths, staged }) =>
+    Effect.flatMap(worktreeOf(projectId, worktreeId), (worktree) =>
+      setStagedEffect(worktree.path, paths, staged),
+    ),
+  ),
+
+  commit: hostHandler((input) =>
+    Effect.map(
+      mutateAndDescribeWith(input, (wt) => commitStagedEffect(wt.path, input)),
+      ({ result: hash, worktree }) => ({ hash, worktree }),
+    ),
+  ),
+
+  discardChanges: hostHandler((input) =>
+    Effect.map(
+      mutateAndDescribeWith(input, (wt) =>
+        discardChangesEffect(wt.path, input.paths),
+      ),
+      ({ result: snapshot, worktree }) => ({ snapshot, worktree }),
+    ),
+  ),
+
+  restoreDiscard: hostHandler((input) =>
+    mutateAndDescribe(input, (wt) =>
+      restoreDiscardEffect(wt.path, input.snapshot),
+    ),
+  ),
+
+  commitMessage: hostHandler(({ projectId, worktreeId, hash }) =>
+    Effect.flatMap(worktreeOf(projectId, worktreeId), (worktree) =>
+      readCommitMessageEffect(worktree.path, hash),
+    ),
+  ),
+
+  resetSoft: hostHandler((input) =>
+    Effect.map(
+      mutateAndDescribeWith(input, (wt) =>
+        resetSoftEffect(wt.path, input.target, input.expectHead),
+      ),
+      ({ result: previousHead, worktree }) => ({ previousHead, worktree }),
+    ),
+  ),
+
+  commitDiff: hostHandler(({ projectId, worktreeId, hash }) =>
+    Effect.flatMap(worktreeOf(projectId, worktreeId), (worktree) =>
+      getCommitDiffEffect(worktree.path, hash),
+    ),
+  ),
+
+  listCommits: hostHandler(({ projectId, worktreeId, skip, count }) =>
+    Effect.flatMap(worktreeOf(projectId, worktreeId), (worktree) =>
+      listCommitsEffect(worktree.path, { skip, count }),
+    ),
+  ),
+
+  push: hostHandler((input) =>
+    mutateAndDescribe(input, (wt) => pushFastForwardEffect(wt.path)),
+  ),
+  pull: hostHandler((input) =>
+    mutateAndDescribe(input, (wt) => pullFastForwardEffect(wt.path)),
+  ),
+  pushForce: hostHandler((input) =>
+    mutateAndDescribe(input, (wt) => pushForceWithLeaseEffect(wt.path)),
+  ),
+  overwrite: hostHandler((input) =>
+    mutateAndDescribe(input, (wt) => overwriteFromUpstreamEffect(wt.path)),
+  ),
+  publish: hostHandler((input) =>
+    mutateAndDescribe(input, (wt, project) =>
+      publishCurrentBranchEffect(wt.path, project.path),
+    ),
+  ),
+  pullAndPush: hostHandler((input) =>
+    mutateAndDescribe(input, (wt) => pullRebaseOrMergeAndPushEffect(wt.path)),
+  ),
+  syncWithPrimary: hostHandler((input) =>
+    mutateAndDescribe(input, (target, project) =>
+      Effect.gen(function* () {
+        if (target.isPrimary) {
+          return yield* Effect.fail(
+            new Error("The primary checkout can't be synced from itself"),
+          );
+        }
+        if (target.detached) {
+          return yield* Effect.fail(
+            new Error(
+              "Detached worktrees can't be synced with the primary branch",
+            ),
+          );
+        }
+        const primaryRef = yield* resolvePrimaryRef(
+          target.projectId,
+          project.path,
         );
-      }
-      const primaryRef = await resolvePrimaryRef(
-        target.projectId,
-        project.path,
-      );
-      await syncWithPrimary(target.path, project.path, primaryRef);
-    }),
-  switchToPrimaryAndDeleteBranch: async (input) => {
-    const project = findProjectOrThrow(input.projectId);
-    return doneViaCli(project, input.worktreeId);
-  },
+        yield* syncWithPrimaryEffect(target.path, project.path, primaryRef);
+      }),
+    ),
+  ),
+  switchToPrimaryAndDeleteBranch: hostHandler((input) =>
+    Effect.flatMap(projectEffect(input.projectId), (project) =>
+      hostAttempt(() => doneViaCli(project, input.worktreeId)),
+    ),
+  ),
 };
 
 // Resolve the project's primary ref, honoring the configured override.
-async function resolvePrimaryRef(
+const resolvePrimaryRef = Effect.fnUntraced(function* (
   projectId: string,
   projectPath: string,
-): Promise<string> {
-  const config = await readShigomoriConfig(projectId).catch(() => null);
-  return resolveDefaultBranch(projectPath, config?.defaultBranch);
-}
+) {
+  const config = yield* Effect.promise(() =>
+    readShigomoriConfig(projectId).catch(() => null),
+  );
+  return yield* resolveDefaultBranchEffect(projectPath, config?.defaultBranch);
+});
 
 // Worktree mutations (remote syncs, local branch ops, commits) all share
 // the same shape: resolve the worktree, run a git action, return the
 // freshly-described worktree so the renderer can replace its cached row
 // in one round trip. The `With` form also hands back what the action
 // produced (a commit hash, a snapshot ref) for the calls that have one.
-async function mutateAndDescribeWith<T>(
+// Mutation, then refetch: sequential by design.
+function mutateAndDescribeWith<A, E>(
   { projectId, worktreeId }: { projectId: string; worktreeId: string },
-  action: (target: WorktreeIdentity, project: Project) => Promise<T>,
-): Promise<{ result: T; worktree: Worktree }> {
-  // react-doctor-disable-next-line react-doctor/async-parallel -- mutation → refetch is sequential by design
-  const { project, worktree } = await findProjectAndWorktreeOrThrow(
-    projectId,
-    worktreeId,
-  );
-  const result = await action(worktree, project);
-  const refreshed = await findWorktreeIdentityOrThrow(
-    project.id,
-    project.path,
-    worktreeId,
-  );
-  return { result, worktree: await describeWorktree(refreshed, project.path) };
+  action: (
+    target: WorktreeIdentity,
+    project: Project,
+  ) => Effect.Effect<A, E, HostServices>,
+) {
+  return Effect.gen(function* () {
+    const { project, worktree } = yield* projectAndWorktree(
+      projectId,
+      worktreeId,
+    );
+    const result = yield* action(worktree, project);
+    const refreshed = yield* findWorktreeIdentityEffect(
+      project.id,
+      project.path,
+      worktreeId,
+    );
+    return {
+      result,
+      worktree: yield* describeWorktreeEffect(refreshed, project.path),
+    };
+  });
 }
 
-async function mutateAndDescribe(
+function mutateAndDescribe<A, E>(
   scope: { projectId: string; worktreeId: string },
-  action: (target: WorktreeIdentity, project: Project) => Promise<void>,
-): Promise<Worktree> {
-  return (await mutateAndDescribeWith(scope, action)).worktree;
+  action: (
+    target: WorktreeIdentity,
+    project: Project,
+  ) => Effect.Effect<A, E, HostServices>,
+) {
+  return Effect.map(mutateAndDescribeWith(scope, action), (r) => r.worktree);
 }

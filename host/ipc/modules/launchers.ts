@@ -91,11 +91,12 @@ function detectedEntries(apps: DetectedApp[]): DetectedLauncher[] {
   );
 }
 
-async function webEntriesFor(projectPath: string): Promise<WebLauncher[]> {
-  const info = await getGithubRepoInfo(projectPath);
-  if (!info) return [];
-  return [{ kind: "web", id: WEB_GITHUB_ID, label: "GitHub" }];
-}
+const webEntriesFor = (projectPath: string) =>
+  hostAttempt(() => getGithubRepoInfo(projectPath)).pipe(
+    Effect.map((info): WebLauncher[] =>
+      info ? [{ kind: "web", id: WEB_GITHUB_ID, label: "GitHub" }] : [],
+    ),
+  );
 
 // Authoritative ordering used by both the LauncherRow buttons and the File
 // menu ⌘1..⌘9 entries. Sort by rolling-window use count (descending),
@@ -104,16 +105,17 @@ async function webEntriesFor(projectPath: string): Promise<WebLauncher[]> {
 // query has a staleTime and useLaunch doesn't invalidate it, so the visible
 // order stays put while the user interacts. It only re-sorts when they
 // navigate away and back (or the cache goes stale).
-async function getLaunchersForProject(
-  projectId: string,
-): Promise<{ entries: LauncherEntry[]; hiddenCount: number }> {
-  const project = findProjectOrThrow(projectId);
-  const [detected, projectConfig, globalConfig, web] = await Promise.all([
-    detectApps(),
-    readShigomoriConfig(project.id),
-    readGlobalConfig(),
-    webEntriesFor(project.path),
-  ]);
+const getLaunchersForProject = Effect.fnUntraced(function* (projectId: string) {
+  const project = yield* hostAttempt(() => findProjectOrThrow(projectId));
+  const [detected, projectConfig, globalConfig, web] = yield* Effect.all(
+    [
+      hostAttempt(() => detectApps()),
+      hostAttempt(() => readShigomoriConfig(project.id)),
+      hostAttempt(() => readGlobalConfig()),
+      webEntriesFor(project.path),
+    ],
+    { concurrency: "unbounded" },
+  );
 
   const resolvable: LauncherEntry[] = [
     ...detectedEntries(detected).filter((e) => e.available),
@@ -122,8 +124,8 @@ async function getLaunchersForProject(
     ...customEntriesFrom(projectConfig?.launchers),
   ];
 
-  // Hiding is presentational only: `launch` still resolves a hidden id, so
-  // an in-flight deep link or a stale menu accelerator keeps working.
+  // Hiding is presentational only: `launch` still resolves a hidden id,
+  // so an in-flight deep link or a stale menu accelerator keeps working.
   const hidden = new Set(globalConfig.hiddenLaunchers ?? []);
   const entries = resolvable.filter((e) => !hidden.has(e.id));
 
@@ -137,7 +139,7 @@ async function getLaunchersForProject(
     }),
     hiddenCount: resolvable.length - entries.length,
   };
-}
+});
 
 function bumpUseCount(launcherId: string): void {
   // updateKey, not readKey + writeKey: the CLI (`sm open`) bumps the
@@ -223,9 +225,7 @@ export const launchersHandlers: Handlers<
     ),
   ),
 
-  forProject: hostHandler(({ projectId }: { projectId: string }) =>
-    hostAttempt(() => getLaunchersForProject(projectId)),
-  ),
+  forProject: hostHandler(({ projectId }) => getLaunchersForProject(projectId)),
 
   // One step from the lookups through the use-count bump, so a caller
   // that leaves mid-launch stops waiting, not the launch.

@@ -66,11 +66,28 @@ let installed: HostRuntime | null = null;
 // Called once at boot by the binding, before any handler runs. A
 // second install is a composition bug and throws, like a second
 // ipcMain.handle on a channel.
-export function installHostRuntime(runtime: HostRuntime): void {
+//
+// What is kept is not the ManagedRuntime but the services it built,
+// captured here (which builds its layers, synchronously, the moment
+// the binding installs it): a ManagedRuntime refuses every run once
+// its dispose() has begun, and the quit is long (a script reap, the
+// runners' stops in order) while handlers, timers and the closing
+// wires still call into the host. Running on the captured services
+// keeps every read and every handler working through the quit, the
+// way the setter slots kept their impls until the process exited,
+// while the runtime's scope still owns the finalizers.
+export function installHostRuntime(
+  runtime: Pick<ManagedRuntime.ManagedRuntime<HostServices, never>, "runSync">,
+): void {
   if (installed !== null) {
     throw new Error("host runtime installed twice");
   }
-  installed = runtime;
+  const services = runtime.runSync(Effect.context<HostServices>());
+  installed = {
+    runPromise: Effect.runPromiseWith(services),
+    runFork: Effect.runForkWith(services),
+    runSync: Effect.runSyncWith(services),
+  };
 }
 
 export function hostRuntime(): HostRuntime {

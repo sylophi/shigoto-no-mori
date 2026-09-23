@@ -21,6 +21,7 @@
 // CLI child inherits both from our environment.
 import { join } from "node:path";
 import { app } from "electron";
+import { Effect, Exit, Layer, Schedule, Scope } from "effect";
 import { safeDecodeWith } from "@shared/ipc/codec";
 import { updaterContract } from "@shared/ipc/modules/updater";
 import type { StagedManifest, UpdaterState } from "@shared/schemas";
@@ -36,8 +37,13 @@ import { pathExists, dataDir } from "@host/lib/util/paths";
 import { busyActionRemoteRefusal, confirmBusyAction } from "./busyPrompt";
 import { cliFailureMessage, runCli, spawnCliDetached } from "./cliRunner";
 import { UNATTENDED_QUIT_DELAY_MS } from "./relaunch";
-import { publishUpdaterState, startUpdaterBridge } from "./updaterBridge";
+import {
+  publishUpdaterState,
+  startUpdaterBridge,
+  stopUpdaterBridge,
+} from "./updaterBridge";
 import { errorMessageOf } from "@shared/errors";
+import { runner } from "../services";
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
 // The first check waits out the boot rush: staging can download
@@ -46,6 +52,10 @@ const FIRST_CHECK_DELAY_MS = 60 * 1000;
 // Failed checks back off linearly (2, 3, ... ticks between attempts,
 // capped at an hour): a repeatable failure re-runs the whole download
 // pipeline, which shouldn't burn bandwidth every 10 minutes forever.
+// The backoff gates the tick (nextAutoCheckAt) rather than reshaping
+// the timer's schedule, because a check the user starts from Settings
+// moves it too: its failure pushes the next automatic one out, its
+// success brings it back to the next tick.
 const MAX_BACKOFF_TICKS = 6;
 // Hard cap on one staging run (the Go side allows up to 20 min for the
 // download but puts no deadline on its codesign/ditto subprocesses). A
@@ -55,6 +65,9 @@ const STAGE_TIMEOUT_MS = 30 * 60 * 1000;
 
 let state: UpdaterState = { kind: "idle" };
 let started = false;
+// The scope the check timers are forked into, from startUpdater until
+// stopUpdater.
+let timers: Scope.Closeable | null = null;
 let installing = false;
 let checkInFlight = false;
 let failedChecks = 0;
@@ -254,6 +267,30 @@ export const updaterImpl: Updater["Service"] = {
   install: installUpdate,
 };
 
+// A timer body, contained: a throw would end the fiber, and with it
+// every later check, with a defect nothing reports.
+const contained = (what: string, body: () => void) =>
+  Effect.sync(() => {
+    try {
+      body();
+    } catch (error) {
+      console.warn(`[updater] ${what} failed: ${errorMessageOf(error)}`);
+    }
+  });
+
+// Every CHECK_INTERVAL_MS, the first one interval after the start, a
+// check unless the backoff says not yet.
+const checkLoop = Effect.sleep(CHECK_INTERVAL_MS).pipe(
+  Effect.andThen(
+    Effect.repeat(
+      contained("scheduled check", () => {
+        if (Date.now() >= nextAutoCheckAt) checkForUpdates();
+      }),
+      Schedule.spaced(CHECK_INTERVAL_MS),
+    ),
+  ),
+);
+
 export function startUpdater(): void {
   if (started) return;
   if (!app.isPackaged) {
@@ -263,6 +300,8 @@ export function startUpdater(): void {
     return;
   }
   started = true;
+  const scope = Scope.makeUnsafe();
+  timers = scope;
   // The only bridge request is "install" (UpdateRequestSchema). The
   // CLI runs at this machine's own terminal, so it is attended.
   startUpdaterBridge(() => void installUpdate(false));
@@ -278,11 +317,38 @@ export function startUpdater(): void {
       setState(readyStateFrom(staged));
       return;
     }
-    setTimeout(checkForUpdates, FIRST_CHECK_DELAY_MS);
+    // Stopped while the manifest was read: nothing to schedule into.
+    if (timers !== scope) return;
+    Effect.runSync(
+      Effect.sleep(FIRST_CHECK_DELAY_MS).pipe(
+        Effect.andThen(contained("first check", checkForUpdates)),
+        Effect.forkIn(scope),
+      ),
+    );
   })();
-  // Runs for the app's lifetime. Quit tears the interval down with the
-  // process, so there's no stop path.
-  setInterval(() => {
-    if (Date.now() >= nextAutoCheckAt) checkForUpdates();
-  }, CHECK_INTERVAL_MS);
+  Effect.runSync(Effect.forkIn(checkLoop, scope));
 }
+
+// Stops the check timers and the CLI bridge (a check already running
+// finishes on its own; checks stay off until the next launch). The
+// app's runtime calls it on quit, through UpdaterLive.
+export function stopUpdater(): Promise<void> {
+  const scope = timers;
+  timers = null;
+  if (scope === null) return Promise.resolve();
+  started = false;
+  stopUpdaterBridge();
+  return Effect.runPromise(Scope.close(scope, Exit.void));
+}
+
+// The updater's lifetime on the app runtime (main/runtime.ts, Engines
+// tier): nothing starts when the layer is built (main/index.ts calls
+// startUpdater once boot is through), and disposing the runtime stops
+// it.
+export const UpdaterLive = Layer.effectDiscard(
+  runner(
+    "the updater",
+    () => undefined,
+    () => stopUpdater(),
+  ),
+);

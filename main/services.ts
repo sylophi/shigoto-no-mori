@@ -7,11 +7,12 @@
 // any module that declares or reads one can import this without an
 // import cycle, and main/runtime.ts stays the one module that pulls
 // every layer together.
-import { type Context, Effect } from "effect";
+import { type Context, Effect, type ManagedRuntime } from "effect";
 import { errorMessageOf } from "@shared/errors";
 import {
   hostRuntime,
   type HostServices,
+  installHostRuntime,
   type RuntimeOf,
   serviceFrom,
 } from "@host/runtime";
@@ -57,9 +58,18 @@ export type MainServices =
 
 export type AppServices = HostServices | MainServices;
 
-// The installed runtime, typed with main's services. main/index.ts
-// installs the runtime AppLive built (main/runtime.ts), so the host's
-// slot holds one that provides them all.
+// The one install, typed: the runtime AppLive built (main/runtime.ts)
+// provides the host's services and main's, so the host's slot holds
+// one that provides them all, and a runtime missing a main service
+// fails here at the type level rather than at the first read.
+export function installAppRuntime(
+  runtime: ManagedRuntime.ManagedRuntime<AppServices, never>,
+): void {
+  installHostRuntime(runtime);
+}
+
+// The installed runtime, typed with main's services (installAppRuntime
+// is the only install main makes, so the widening holds).
 export function appRuntime(): RuntimeOf<AppServices> {
   return hostRuntime() as unknown as RuntimeOf<AppServices>;
 }
@@ -78,17 +88,25 @@ export function appService<I extends AppServices, S>(
 }
 
 // For a caller with a sensible answer when the runtime has none (a
-// quit before the engine was ever wired has nothing to stop).
+// proof that installed a runtime without this service).
 export function appServiceOrNull<I extends AppServices, S>(
   tag: Context.Key<I, S>,
 ): S | null {
   return serviceFrom(appRuntime(), tag) ?? null;
 }
 
+// How long one runner's stop may take before the quit moves on
+// without it: the stops run in tier order, so one that wedges (a
+// child that ignores its kill, a socket close the peer never answers)
+// would otherwise hold every later tier until the 15 s backstop
+// exits the process with none of them run.
+export const RUNNER_STOP_TIMEOUT_MS = 5_000;
+
 // A runner acquired by its factory and released by its stop, for a
 // layer: the runtime's dispose runs the stops in reverse acquisition
-// order. A stop that throws or rejects is logged and swallowed, so the
-// next finalizer runs either way and one runner cannot fail the quit.
+// order. A stop that throws, rejects or overruns its bound is logged
+// and let go, so the next finalizer runs either way and one runner
+// cannot fail the quit.
 export const runner = <A>(
   what: string,
   create: () => A,
@@ -101,6 +119,15 @@ export const runner = <A>(
       },
       catch: (error) => error,
     }).pipe(
+      Effect.timeoutOrElse({
+        duration: RUNNER_STOP_TIMEOUT_MS,
+        orElse: () =>
+          Effect.sync(() =>
+            console.warn(
+              `[quit] ${what} did not stop within ${RUNNER_STOP_TIMEOUT_MS} ms, moving on`,
+            ),
+          ),
+      }),
       Effect.catch((error) =>
         Effect.sync(() =>
           console.warn(

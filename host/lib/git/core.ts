@@ -1,6 +1,6 @@
 // Single chokepoint for every git invocation. Other modules in this
-// folder call `run` / `runLenient`; nothing else in the codebase should
-// shell out to git directly.
+// folder build on `runEffect` / `runLenientEffect`; nothing else in the
+// codebase should shell out to git directly.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { Effect, Schema } from "effect";
@@ -266,38 +266,81 @@ export function runEffect(
   });
 }
 
+// The Promise face of a git Effect, for the callers that are not
+// Effects yet: every `export async function` in this folder is one of
+// these over its `...Effect` form. Git needs no service, so it runs on
+// Effect's default services rather than the installed host runtime:
+// that runtime's dispose makes its runPromise die at once, and a
+// quit-time finalizer that reaches git through a Promise form must
+// still get its git.
+export function runGit<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
+  return Effect.runPromise(effect);
+}
+
+// A git Effect as a Promise bound to a fiber's signal, for Promise
+// code that runs inside an Effect (Effect.tryPromise hands it the
+// signal): interrupting the fiber kills the git, and a signal already
+// gone starts nothing.
+export function runUnder<A, E>(
+  effect: Effect.Effect<A, E>,
+  signal: AbortSignal,
+): Promise<A> {
+  return signal.aborted
+    ? Promise.reject(new Error("git run interrupted"))
+    : Effect.runPromise(effect, { signal });
+}
+
+// The Promise runner shared/git's pure policies take (defaultBranch,
+// repoIdentity), bound to a fiber's signal: interrupting the fiber
+// that awaits the policy kills the git it is waiting on, and a policy
+// that swallows that rejection and asks again starts nothing.
+export function promiseRunner(
+  signal: AbortSignal,
+): (cwd: string, args: string[]) => Promise<string> {
+  return (cwd, args) => runUnder(runEffect(cwd, args), signal);
+}
+
 export function run(
   cwd: string,
   args: string[],
   options?: RunOptions,
 ): Promise<string> {
-  return Effect.runPromise(runEffect(cwd, args, options));
+  return runGit(runEffect(cwd, args, options));
 }
 
-// Like `run`, but tolerates non-zero exit (e.g. `git diff --no-index`,
-// which exits 1 whenever there's a diff to print). Returns whatever
-// stdout was produced before exit, falling back to empty.
+// Like `runEffect`, but tolerates non-zero exit (e.g. `git diff
+// --no-index`, which exits 1 whenever there's a diff to print).
+// Answers with whatever stdout was produced before exit; git that
+// could not start answers empty.
 //
 // Truncation is the one failure it won't swallow. A run killed at
 // maxBuffer looks exactly like a diff that exited 1, and answering with
 // the prefix would hand the caller a patch that parses cleanly and is
-// missing every file past the cut.
-export async function runLenient(
+// missing every file past the cut. A run killed by the timeout
+// (exitCode null) is the same silent prefix, so it is not swallowed
+// either.
+export function runLenientEffect(
+  cwd: string,
+  args: string[],
+  options?: RunOptions,
+): Effect.Effect<string, GitError | GitOutputTruncated> {
+  return runEffect(cwd, args, options).pipe(
+    Effect.catchTags({
+      GitError: (error) =>
+        error.exitCode !== null
+          ? Effect.succeed(error.stdout)
+          : Effect.fail(error),
+      GitSpawnError: () => Effect.succeed(""),
+    }),
+  );
+}
+
+export function runLenient(
   cwd: string,
   args: string[],
   options?: RunOptions,
 ): Promise<string> {
-  try {
-    return await run(cwd, args, options);
-  } catch (err) {
-    // A run killed by the timeout is the same silent prefix as a
-    // truncation, so it is not swallowed either.
-    if (err instanceof GitError && err.exitCode !== null) return err.stdout;
-    if (err instanceof GitError || err instanceof GitOutputTruncated) {
-      throw err;
-    }
-    return "";
-  }
+  return runGit(runLenientEffect(cwd, args, options));
 }
 
 // Pathspecs travel as argv, and a big refactor can carry enough paths
@@ -319,11 +362,13 @@ export function splitZ(stdout: string): string[] {
   return stdout.split("\0").filter((entry) => entry.length > 0);
 }
 
-export function isGitRepo(path: string): Promise<boolean> {
-  return Effect.runPromise(
-    runEffect(path, ["rev-parse", "--git-dir"]).pipe(
-      Effect.as(true),
-      Effect.catch(() => Effect.succeed(false)),
-    ),
+export function isGitRepoEffect(path: string): Effect.Effect<boolean> {
+  return runEffect(path, ["rev-parse", "--git-dir"]).pipe(
+    Effect.as(true),
+    Effect.orElseSucceed(() => false),
   );
+}
+
+export function isGitRepo(path: string): Promise<boolean> {
+  return runGit(isGitRepoEffect(path));
 }

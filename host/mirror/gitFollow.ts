@@ -36,8 +36,12 @@
 // index watcher per session, the peer's git:projectChanged and
 // mirror:gitChanged pushes, every daemon snapshot whose session set
 // changed, and a slow periodic sweep as the backstop. Reconciles are
-// coalesced per session: one in flight, one queued.
-import { Schema } from "effect";
+// coalesced per session: one in flight, one queued. Each session has a
+// fiber of its own draining a sliding queue of capacity one (a signal
+// while one is queued changes nothing), and the sweep is a fiber on a
+// spaced schedule. All of them live in the follower's scope, which
+// stop() closes.
+import { Effect, Exit, Fiber, Queue, Schedule, Schema, Scope } from "effect";
 import type { Project } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
 import {
@@ -91,8 +95,12 @@ type FollowRecord = {
   session: FollowableSession;
   status: MirrorGitStatus;
   agreed: GitStateCore | null;
-  running: boolean;
-  pending: boolean;
+  // The session's reconcile queue, set by its drain fiber as it
+  // starts, and whether a signal came before then (the fiber queues it
+  // once it has the queue).
+  queue: Queue.Queue<void> | null;
+  early: boolean;
+  drain: Fiber.Fiber<void> | null;
   stopIndexWatch: (() => void) | null;
 };
 
@@ -119,6 +127,13 @@ function core(state: GitState): GitStateCore {
 
 type Outcome = { applied: true } | { applied: false; reason: string };
 
+// Asks for a reconcile. One in flight, one queued: the queue slides,
+// so a signal while one is already waiting is absorbed by it.
+function trigger(record: FollowRecord): void {
+  if (record.queue === null) record.early = true;
+  else Queue.offerUnsafe(record.queue, undefined);
+}
+
 export function createGitFollower(deps: {
   sessions: () => FollowableSession[];
   peerSyncApiFor: (deviceId: string) => PeerSyncApi;
@@ -133,7 +148,11 @@ export function createGitFollower(deps: {
 }) {
   const records = new Map<string, FollowRecord>();
   const log = deps.log ?? ((message: string) => console.warn(message));
-  let sweepTimer: ReturnType<typeof setInterval> | null = null;
+  // Where the drain fibers and the sweep run. Opened on first use and
+  // closed by stop(), which interrupts every one of them.
+  let scope: Scope.Closeable | null = null;
+  let sweeper: Fiber.Fiber<void> | null = null;
+  const followScope = (): Scope.Closeable => (scope ??= Scope.makeUnsafe());
   // The agreed states by session id, loaded on the first start (the
   // follower is built at module load, before the data dir exists)
   // and written back only when an entry actually changes.
@@ -180,26 +199,40 @@ export function createGitFollower(deps: {
     persist();
   }
 
-  function trigger(record: FollowRecord): void {
-    if (record.running) {
-      record.pending = true;
-      return;
-    }
-    record.running = true;
-    void (async () => {
-      try {
-        do {
-          record.pending = false;
-          // oxlint-disable-next-line no-await-in-loop -- reconciles are serial per session by design
-          await reconcile(record);
-        } while (
-          record.pending &&
-          records.get(record.session.session) === record
-        );
-      } finally {
-        record.running = false;
-      }
-    })();
+  // The session's drain: one reconcile per queued signal, serial by
+  // construction. A reconcile never fails (it reports
+  // through the status), and a throw out of it (an owner callback) is
+  // contained and logged, since a defect in a forked fiber is reported
+  // nowhere and would end the session's follow. Interrupting the fiber
+  // (the session went, or the follower stopped) stops waiting on a
+  // reconcile in flight, which finishes on its own.
+  function startDrain(record: FollowRecord): void {
+    const reconcileOnce = Effect.tryPromise({
+      try: () => reconcile(record),
+      catch: (error) => error,
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.sync(() =>
+          log(
+            `[mirror] git follow ${record.session.session}: ${errorMessageOf(error)}`,
+          ),
+        ),
+      ),
+    );
+    record.drain = Fiber.runIn(
+      Effect.runFork(
+        Effect.gen(function* () {
+          const queue = yield* Queue.sliding<void>(1);
+          record.queue = queue;
+          if (record.early) yield* Queue.offer(queue, undefined);
+          while (true) {
+            yield* Queue.take(queue);
+            yield* reconcileOnce;
+          }
+        }),
+      ),
+      followScope(),
+    );
   }
 
   function triggerWhere(
@@ -280,7 +313,7 @@ export function createGitFollower(deps: {
       if (outcome.reason === "changed-locally") {
         // The side being written moved between our read and the
         // apply. Look again right away.
-        record.pending = true;
+        trigger(record);
         return;
       }
       setStatus(record, { status: "blocked", detail: outcome.reason });
@@ -467,6 +500,9 @@ export function createGitFollower(deps: {
     for (const [id, record] of records) {
       if (!current.has(id)) {
         record.stopIndexWatch?.();
+        if (record.drain !== null) {
+          Effect.runFork(Fiber.interrupt(record.drain));
+        }
         records.delete(id);
         changed = true;
       }
@@ -483,11 +519,13 @@ export function createGitFollower(deps: {
         session,
         status: { status: "off", detail: "" },
         agreed: stored[id] ?? null,
-        running: false,
-        pending: false,
+        queue: null,
+        early: false,
+        drain: null,
         stopIndexWatch: null,
       };
       records.set(id, record);
+      startDrain(record);
       void watchIndexFile(session.localRoot, () => trigger(record)).then(
         (stop) => {
           if (records.get(id) === record) record.stopIndexWatch = stop;
@@ -508,21 +546,39 @@ export function createGitFollower(deps: {
   return {
     start(): void {
       reconcileAll();
-      if (sweepTimer === null) {
-        sweepTimer = setInterval(
-          reconcileAll,
-          deps.sweepMs ?? DEFAULT_SWEEP_MS,
+      if (sweeper === null) {
+        const every = deps.sweepMs ?? DEFAULT_SWEEP_MS;
+        // The backstop: a look at every session each `every`, the
+        // first one `every` from now (the start just looked).
+        sweeper = Fiber.runIn(
+          Effect.runFork(
+            Effect.sync(() => {
+              // Contained, for the drain's reason.
+              try {
+                reconcileAll();
+              } catch (error) {
+                log(`[mirror] git follow sweep: ${errorMessageOf(error)}`);
+              }
+            }).pipe(
+              Effect.delay(every),
+              Effect.repeat(Schedule.spaced(every)),
+              Effect.asVoid,
+            ),
+          ),
+          followScope(),
         );
-        sweepTimer.unref?.();
       }
     },
+    // Closes the follower's scope: the sweep and every session's drain
+    // are interrupted. A later start (or a snapshot) opens a fresh one.
     stop(): void {
-      if (sweepTimer !== null) {
-        clearInterval(sweepTimer);
-        sweepTimer = null;
-      }
       for (const record of records.values()) record.stopIndexWatch?.();
       records.clear();
+      sweeper = null;
+      if (scope !== null) {
+        Effect.runFork(Scope.close(scope, Exit.void));
+        scope = null;
+      }
     },
     // The daemon reported a snapshot: only a session coming, going or
     // flipping its pause is worth a re-look.

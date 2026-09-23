@@ -15,7 +15,13 @@
 // between that worktree and the peer's, with almost nothing left to
 // move. The peer's root path is read off its own worktree list over
 // the grant-gated wire, never taken from the caller.
-import { Context, Schema } from "effect";
+//
+// Every handler is an Effect run under its caller's signal
+// (hostHandler). The steps that must finish once begun are marked
+// uninterruptible where they sit: a start's session open (or its
+// rollback) once the pull landed, a stop's terminate and the copy's
+// removal, a git state apply.
+import { Context, Effect, Schema } from "effect";
 import {
   MIRROR_LABEL_COPY_SIDE,
   MIRROR_COPY_STAYED,
@@ -37,10 +43,7 @@ import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { errorMessageOf, unknownWorktreeError } from "@shared/errors";
 import { spawnFileSync } from "@host/fileSync/spawn";
-import {
-  peerWorktreeOrUndefined,
-  peerWorktreesApiFor,
-} from "@host/ipc/peerSync";
+import { peerApis, peerWorktree } from "@host/ipc/peerSync";
 import { deleteAnyLocalBranch } from "@host/lib/git/branches";
 import {
   findWorktreeIdentityOrThrow,
@@ -55,7 +58,6 @@ import {
   watchIndexFile,
 } from "@host/mirror/gitState";
 import {
-  engine,
   engineOrNull,
   findSession,
   ignoreModeOf,
@@ -63,12 +65,14 @@ import {
   MIRROR_LABEL_IGNORE_MODE,
   MIRROR_LABEL_LOCAL_PROJECT,
   MIRROR_LABEL_LOCAL_WORKTREE,
+  type MirrorImpl,
   type MirrorSessionRaw,
+  mirrorEngine,
   mirrorSessions,
-  requireRunningEngine,
+  runningEngine,
 } from "@host/mirror/registry";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
-import { hostServiceOrNull } from "@host/runtime";
+import { hostAttempt, hostHandler, hostServiceOrNull } from "@host/runtime";
 import { runPullWorktree, sendWorktree } from "./sync";
 import { worktreesHandlers } from "./worktrees";
 
@@ -159,7 +163,7 @@ async function rollBackPull(worktree: {
 
 // A device's mirror picture: what mirror:list answers and what
 // mirror:changed carries. The same for every caller.
-function mirrorListOf(daemon: ReturnType<typeof engine>): MirrorListResult {
+function mirrorListOf(daemon: MirrorImpl): MirrorListResult {
   return {
     daemon: daemon.status(),
     sessions: mirrorSessions(daemon).map((raw) =>
@@ -186,136 +190,189 @@ export function currentMirrorList(): MirrorListResult | undefined {
   }
 }
 
-export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
-  list: () => mirrorListOf(engine()),
+// The same context with a signal that never aborts, for a handler of
+// another module called from inside an uninterruptible step: that
+// handler runs under its own caller's signal, and a step that must
+// finish must not have it refuse to start because the caller left.
+const detached = (ctx: HandlerContext): HandlerContext => ({
+  ...ctx,
+  signal: new AbortController().signal,
+});
 
-  start: async (input: typeof MirrorStartPayloadSchema.Type, ctx) => {
-    // Every precondition before the pull, so a refusal creates
-    // nothing: the engine must be up, and the peer's worktree must
-    // exist (its root path is read off the peer's own list, because
-    // it flows into a session this device persists). The branch
-    // collision is the pull's own guard.
-    const daemon = requireRunningEngine();
-    const source = await peerWorktreeOrUndefined(
+// mirror:list, for the control ops too.
+export const mirrorList = Effect.flatMap(mirrorEngine, (daemon) =>
+  hostAttempt(() => mirrorListOf(daemon)),
+);
+
+// The rollback of a start whose session did not open, and the note of
+// one that did. No session, so no copy either: the pull (or the send)
+// is undone, or a retry would refuse on the branch the failed attempt
+// left behind. Best effort. A rollback failure is logged, not thrown
+// over the real error.
+const openSession = <A>(
+  create: Effect.Effect<string, unknown>,
+  rollBack: () => Promise<unknown>,
+  what: string,
+  started: (session: string) => A,
+) =>
+  create.pipe(
+    Effect.tapError(() =>
+      Effect.promise(() =>
+        rollBack().catch((rollbackError: unknown) => {
+          console.warn(
+            `[mirror] could not remove ${what} of a failed start: ${errorMessageOf(rollbackError)}`,
+          );
+        }),
+      ),
+    ),
+    Effect.map(started),
+  );
+
+// mirror:start. Every precondition before the pull, so a refusal
+// creates nothing: the engine must be up, and the peer's worktree must
+// exist (its root path is read off the peer's own list, because it
+// flows into a session this device persists). The branch collision is
+// the pull's own guard. The pull is interruptible (see
+// runPullWorktree). Once it returns, what follows is not: the session
+// opens, or the pull is rolled back, so a caller that leaves right
+// after the landing gets a mirror or nothing, never a worktree the
+// start left behind without its session.
+export const startMirror = (
+  input: typeof MirrorStartPayloadSchema.Type,
+  ctx: HandlerContext,
+) =>
+  Effect.gen(function* () {
+    const daemon = yield* runningEngine;
+    const source = yield* peerWorktree(
       input.sourceDeviceId,
       input.sourceProjectId,
       input.sourceWorktreeId,
     );
-    if (source === undefined)
-      throw unknownWorktreeError(input.sourceWorktreeId);
-
+    if (source === undefined) {
+      return yield* Effect.fail(unknownWorktreeError(input.sourceWorktreeId));
+    }
     const { ignoreMode, ignores, ...pullInput } = input;
-    const pulled = await runPullWorktree(pullInput, ctx);
-    let session: string;
-    try {
-      session = await daemon.create({
-        localRoot: pulled.worktree.path,
-        deviceId: input.sourceDeviceId,
-        projectId: input.sourceProjectId,
-        worktreeId: input.sourceWorktreeId,
-        remoteRoot: source.path,
-        name: input.branch,
-        localWorktreeId: pulled.worktree.id,
-        labels: {
-          [MIRROR_LABEL_LOCAL_PROJECT]: pulled.worktree.projectId,
-          [MIRROR_LABEL_LOCAL_WORKTREE]: pulled.worktree.id,
-          [MIRROR_LABEL_IGNORE_MODE]: ignoreMode,
-        },
-        ignores,
-      });
-    } catch (error) {
-      // No session, so no worktree either: the pull is undone (the
-      // branch and its uncommitted changes are still on the peer), or
-      // a retry would refuse on the branch the failed attempt left
-      // behind. Best effort. A rollback failure is logged, not thrown
-      // over the real error.
-      await rollBackPull(pulled.worktree).catch((rollbackError: unknown) => {
-        console.warn(
-          `[mirror] could not remove the worktree of a failed start: ${errorMessageOf(rollbackError)}`,
+    return yield* Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        const pulled = yield* restore(runPullWorktree(pullInput, ctx));
+        return yield* openSession(
+          hostAttempt(() =>
+            daemon.create({
+              localRoot: pulled.worktree.path,
+              deviceId: input.sourceDeviceId,
+              projectId: input.sourceProjectId,
+              worktreeId: input.sourceWorktreeId,
+              remoteRoot: source.path,
+              name: input.branch,
+              localWorktreeId: pulled.worktree.id,
+              labels: {
+                [MIRROR_LABEL_LOCAL_PROJECT]: pulled.worktree.projectId,
+                [MIRROR_LABEL_LOCAL_WORKTREE]: pulled.worktree.id,
+                [MIRROR_LABEL_IGNORE_MODE]: ignoreMode,
+              },
+              ignores,
+            }),
+          ),
+          () => rollBackPull(pulled.worktree),
+          "the worktree",
+          (session) => {
+            daemon.noteEvent(
+              pulled.worktree.id,
+              "started",
+              summarizeIgnores(ignoreMode, ignores),
+            );
+            return { ...pulled, session };
+          },
         );
-      });
-      throw error;
-    }
-    daemon.noteEvent(
-      pulled.worktree.id,
-      "started",
-      summarizeIgnores(ignoreMode, ignores),
+      }),
     );
-    return { ...pulled, session };
-  },
+  });
 
-  // The mirror turned around: one of this device's worktrees, sent to
-  // a peer and kept in step with the copy made there. The session runs
-  // here all the same (this device holds the original, the peer the
-  // copy, and the label says so for the stop), so like the send it
-  // rides the peer's grant alone. No leave-out rule goes to the send:
-  // the session opened next carries the ignored files and keeps
-  // carrying them, as in start.
-  startTo: async (input: typeof MirrorStartToPayloadSchema.Type, ctx) => {
-    const daemon = requireRunningEngine();
+// mirror:startTo. The mirror turned around: one of this device's
+// worktrees, sent to a peer and kept in step with the copy made there.
+// The session runs here all the same (this device holds the original,
+// the peer the copy, and the label says so for the stop), so like the
+// send it rides the peer's grant alone. No leave-out rule goes to the
+// send: the session opened next carries the ignored files and keeps
+// carrying them, as in start. Interruptible up to the send's end, then
+// not, for start's reason.
+export const startMirrorTo = (
+  input: typeof MirrorStartToPayloadSchema.Type,
+  ctx: HandlerContext,
+) =>
+  Effect.gen(function* () {
+    const daemon = yield* runningEngine;
+    const apis = yield* peerApis;
     const { ignoreMode, ignores, ...sendInput } = input;
-    const { source: worktree, result: sent } = await sendWorktree(
-      sendInput,
-      ctx,
+    return yield* Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        const { source: worktree, result: sent } = yield* restore(
+          sendWorktree(sendInput, ctx),
+        );
+        const copy = {
+          projectId: sent.worktree.projectId,
+          worktreeId: sent.worktree.id,
+        };
+        return yield* openSession(
+          hostAttempt(() =>
+            daemon.create({
+              localRoot: worktree.path,
+              deviceId: input.targetDeviceId,
+              ...copy,
+              // The copy's root as the peer's landing answered it,
+              // re-parsed by the send.
+              remoteRoot: sent.worktree.path,
+              name: worktree.branch,
+              localWorktreeId: worktree.id,
+              labels: {
+                [MIRROR_LABEL_LOCAL_PROJECT]: input.projectId,
+                [MIRROR_LABEL_LOCAL_WORKTREE]: worktree.id,
+                [MIRROR_LABEL_IGNORE_MODE]: ignoreMode,
+                [MIRROR_LABEL_COPY_SIDE]: "remote",
+              },
+              ignores,
+            }),
+          ),
+          () =>
+            apis
+              .worktreesApiFor(input.targetDeviceId)
+              .delete({ ...copy, force: true }),
+          "the peer's copy",
+          (session) => {
+            daemon.noteEvent(
+              worktree.id,
+              "started",
+              summarizeIgnores(ignoreMode, ignores),
+            );
+            return { ...sent, session };
+          },
+        );
+      }),
     );
-    const copy = {
-      projectId: sent.worktree.projectId,
-      worktreeId: sent.worktree.id,
-    };
-    let session: string;
-    try {
-      session = await daemon.create({
-        localRoot: worktree.path,
-        deviceId: input.targetDeviceId,
-        ...copy,
-        // The copy's root as the peer's landing answered it, re-parsed
-        // by the send.
-        remoteRoot: sent.worktree.path,
-        name: worktree.branch,
-        localWorktreeId: worktree.id,
-        labels: {
-          [MIRROR_LABEL_LOCAL_PROJECT]: input.projectId,
-          [MIRROR_LABEL_LOCAL_WORKTREE]: worktree.id,
-          [MIRROR_LABEL_IGNORE_MODE]: ignoreMode,
-          [MIRROR_LABEL_COPY_SIDE]: "remote",
-        },
-        ignores,
-      });
-    } catch (error) {
-      // No session, so no copy either, for start's reason: a retry
-      // would refuse on the branch the failed attempt left on the
-      // peer. Best effort, and logged, not thrown over the real error.
-      await peerWorktreesApiFor(input.targetDeviceId)
-        .delete({ ...copy, force: true })
-        .catch((rollbackError: unknown) => {
-          console.warn(
-            `[mirror] could not remove the peer's copy of a failed start: ${errorMessageOf(rollbackError)}`,
-          );
-        });
-      throw error;
-    }
-    daemon.noteEvent(
-      worktree.id,
-      "started",
-      summarizeIgnores(ignoreMode, ignores),
-    );
-    return { ...sent, session };
-  },
+  });
 
-  // Stop ends the session and removes the copy the mirror made: the
-  // mirror was the copy's reason to exist, and the source keeps the
-  // branch. The copy is this device's worktree, or the peer's for a
-  // mirror started to it (startTo), where the original here stays. The delete follows the terminate (the other way round the
-  // tombstone protocol would stop the session itself, mid-delete) and
-  // is forced, since the copy carries the source's uncommitted state
-  // by design. A copy the delete cannot remove is reported with the
-  // session already gone: the worktree page then offers the ordinary
-  // delete.
-  stop: async ({ session, force }, ctx) => {
-    const daemon = engine();
+// mirror:stop ends the session and removes the copy the mirror made:
+// the mirror was the copy's reason to exist, and the source keeps the
+// branch. The copy is this device's worktree, or the peer's for a
+// mirror started to it (startTo), where the original here stays. The
+// delete follows the terminate (the other way round the tombstone
+// protocol would stop the session itself, mid-delete) and is forced,
+// since the copy carries the source's uncommitted state by design. A
+// copy the delete cannot remove is reported with the session already
+// gone: the worktree page then offers the ordinary delete. The guard
+// is the only part a caller that leaves can stop: from the terminate
+// on, the stop runs to its end (the session gone, the copy gone or
+// reported on its thread), since a stop left halfway is a copy with no
+// session and no line saying why.
+export const stopMirror = (
+  { session, force }: { session: string; force?: boolean | undefined },
+  ctx: HandlerContext,
+) =>
+  Effect.gen(function* () {
+    const daemon = yield* mirrorEngine;
     const raw = findSession(daemon, session);
     if (raw === undefined) {
-      throw new Error("That mirror is no longer running.");
+      return yield* Effect.fail(new Error("That mirror is no longer running."));
     }
     // The copy goes with the stop. Refusing on "diverged" alone read
     // as safe exactly when it cannot know: a paused session reports
@@ -323,116 +380,159 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     // computed against a live peer. So anything but "synced" refuses.
     const git = daemon.gitStatus(session)?.status;
     if (force !== true && !mirrorStopIsSafe(git)) {
-      throw new Error(
-        `${MIRROR_STOP_UNCONFIRMED} (${git ?? "starting"}), so it may hold commits that exist nowhere else. Resume or reconnect the mirror to let it catch up, or stop it anyway to discard them.`,
+      return yield* Effect.fail(
+        new Error(
+          `${MIRROR_STOP_UNCONFIRMED} (${git ?? "starting"}), so it may hold commits that exist nowhere else. Resume or reconnect the mirror to let it catch up, or stop it anyway to discard them.`,
+        ),
       );
     }
-    await daemon.terminate(session);
-    // How the copy goes depends on where it is. What follows does not:
-    // a copy that stayed is reported, with the session already gone.
-    const localWorktreeId = localWorktreeIdOf(raw);
-    const projectId = raw.labels[MIRROR_LABEL_LOCAL_PROJECT];
-    const onPeer = mirrorCopyIsRemote(raw);
-    let stayed: string | null;
-    if (onPeer) {
-      stayed = await peerWorktreesApiFor(raw.deviceId)
-        .delete({
-          projectId: raw.projectId,
-          worktreeId: raw.worktreeId,
-          force: true,
-        })
-        .then((result) => {
-          const removed = Schema.decodeUnknownSync(DeleteWorktreeResultSchema)(
-            result,
+    const apis = yield* peerApis;
+    return yield* Effect.uninterruptible(
+      hostAttempt(async () => {
+        await daemon.terminate(session);
+        // How the copy goes depends on where it is. What follows does
+        // not: a copy that stayed is reported, with the session already
+        // gone.
+        const localWorktreeId = localWorktreeIdOf(raw);
+        const projectId = raw.labels[MIRROR_LABEL_LOCAL_PROJECT];
+        const onPeer = mirrorCopyIsRemote(raw);
+        let stayed: string | null;
+        if (onPeer) {
+          stayed = await apis
+            .worktreesApiFor(raw.deviceId)
+            .delete({
+              projectId: raw.projectId,
+              worktreeId: raw.worktreeId,
+              force: true,
+            })
+            .then((result) => {
+              const removed = Schema.decodeUnknownSync(
+                DeleteWorktreeResultSchema,
+              )(result);
+              return removed.ok
+                ? null
+                : `its ${removed.cleanupError.phase} step failed`;
+            }, errorMessageOf);
+        } else if (localWorktreeId === "" || projectId === undefined) {
+          stayed = "the session did not name its worktree";
+        } else {
+          // The ordinary delete, which takes the worktree's history
+          // thread with it: there is no page left to show a "stopped"
+          // line on.
+          const removed = await worktreesHandlers.delete(
+            { projectId, worktreeId: localWorktreeId, force: true },
+            detached(ctx),
           );
-          return removed.ok
+          stayed = removed.ok
             ? null
             : `its ${removed.cleanupError.phase} step failed`;
-        }, errorMessageOf);
-    } else if (localWorktreeId === "" || projectId === undefined) {
-      stayed = "the session did not name its worktree";
-    } else {
-      // The ordinary delete, which takes the worktree's history thread
-      // with it: there is no page left to show a "stopped" line on.
-      const removed = await worktreesHandlers.delete(
-        { projectId, worktreeId: localWorktreeId, force: true },
-        ctx,
-      );
-      stayed = removed.ok
-        ? null
-        : `its ${removed.cleanupError.phase} step failed`;
-    }
-    // A copy on the peer leaves the page this was stopped from
-    // standing, so its thread gets the line either way.
-    if (stayed !== null || onPeer) {
+        }
+        // A copy on the peer leaves the page this was stopped from
+        // standing, so its thread gets the line either way.
+        if (stayed !== null || onPeer) {
+          daemon.noteEvent(
+            localWorktreeId,
+            "stopped",
+            stayed === null
+              ? ""
+              : `Copy on ${onPeer ? "the other" : "this"} device kept`,
+          );
+        }
+        if (stayed !== null) {
+          throw new Error(
+            `${MIRROR_COPY_STAYED} ${onPeer ? "on the other device" : "here"} stayed: ${stayed}. Delete it from its page.`,
+          );
+        }
+      }),
+    );
+  });
+
+export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
+  list: hostHandler(() => mirrorList),
+
+  start: hostHandler((input, ctx: HandlerContext) => startMirror(input, ctx)),
+
+  startTo: hostHandler((input, ctx: HandlerContext) =>
+    startMirrorTo(input, ctx),
+  ),
+
+  stop: hostHandler((input, ctx: HandlerContext) =>
+    stopMirror(input, ctx).pipe(Effect.as(undefined)),
+  ),
+
+  pause: hostHandler(({ session }) =>
+    Effect.gen(function* () {
+      const daemon = yield* mirrorEngine;
+      yield* hostAttempt(() => daemon.pause(session));
       daemon.noteEvent(
-        localWorktreeId,
-        "stopped",
-        stayed === null
-          ? ""
-          : `Copy on ${onPeer ? "the other" : "this"} device kept`,
+        localWorktreeIdOf(findSession(daemon, session)),
+        "paused",
+        "",
       );
-    }
-    if (stayed !== null) {
-      throw new Error(
-        `${MIRROR_COPY_STAYED} ${onPeer ? "on the other device" : "here"} stayed: ${stayed}. Delete it from its page.`,
+      return undefined;
+    }),
+  ),
+
+  resume: hostHandler(({ session }) =>
+    Effect.gen(function* () {
+      const daemon = yield* mirrorEngine;
+      yield* hostAttempt(() => daemon.resume(session));
+      daemon.noteEvent(
+        localWorktreeIdOf(findSession(daemon, session)),
+        "resumed",
+        "",
       );
-    }
-  },
-  pause: async ({ session }) => {
-    const daemon = engine();
-    await daemon.pause(session);
-    daemon.noteEvent(
-      localWorktreeIdOf(findSession(daemon, session)),
-      "paused",
-      "",
-    );
-  },
-  resume: async ({ session }) => {
-    const daemon = engine();
-    await daemon.resume(session);
-    daemon.noteEvent(
-      localWorktreeIdOf(findSession(daemon, session)),
-      "resumed",
-      "",
-    );
-  },
+      return undefined;
+    }),
+  ),
 
   // The engine cannot re-configure a live session, so a change of
   // ignores re-opens it on the same pair (MirrorImpl.recreate, which
   // keeps the old one until the new one is up and carries the git
   // follower's agreement across), the labels carried over. The pair's
   // files are already in agreement, so the new session's first cycle
-  // has little to do.
-  setIgnores: async ({ session, ignoreMode, ignores }) => {
-    const daemon = engine();
-    const raw = findSession(daemon, session);
-    if (raw === undefined) {
-      throw new Error("That mirror is no longer running.");
-    }
-    const localWorktreeId = localWorktreeIdOf(raw);
-    const next = await daemon.recreate(session, {
-      localRoot: raw.localRoot,
-      deviceId: raw.deviceId,
-      projectId: raw.projectId,
-      worktreeId: raw.worktreeId,
-      remoteRoot: raw.remoteRoot,
-      name: raw.name,
-      localWorktreeId,
-      labels: { ...raw.labels, [MIRROR_LABEL_IGNORE_MODE]: ignoreMode },
-      ignores,
-    });
-    daemon.noteEvent(
-      localWorktreeId,
-      "ignores-changed",
-      summarizeIgnores(ignoreMode, ignores),
-    );
-    return { session: next };
-  },
+  // has little to do. Uninterruptible once asked: the recreate swaps
+  // the session under the same pair, and its answer is the only place
+  // the new id and the thread's line come from.
+  setIgnores: hostHandler(({ session, ignoreMode, ignores }) =>
+    Effect.gen(function* () {
+      const daemon = yield* mirrorEngine;
+      const raw = findSession(daemon, session);
+      if (raw === undefined) {
+        return yield* Effect.fail(
+          new Error("That mirror is no longer running."),
+        );
+      }
+      const localWorktreeId = localWorktreeIdOf(raw);
+      const next = yield* Effect.uninterruptible(
+        hostAttempt(() =>
+          daemon.recreate(session, {
+            localRoot: raw.localRoot,
+            deviceId: raw.deviceId,
+            projectId: raw.projectId,
+            worktreeId: raw.worktreeId,
+            remoteRoot: raw.remoteRoot,
+            name: raw.name,
+            localWorktreeId,
+            labels: { ...raw.labels, [MIRROR_LABEL_IGNORE_MODE]: ignoreMode },
+            ignores,
+          }),
+        ),
+      );
+      daemon.noteEvent(
+        localWorktreeId,
+        "ignores-changed",
+        summarizeIgnores(ignoreMode, ignores),
+      );
+      return { session: next };
+    }),
+  ),
 
-  history: ({ localWorktreeId }) => ({
-    events: engine().history(localWorktreeId),
-  }),
+  history: hostHandler(({ localWorktreeId }) =>
+    Effect.map(mirrorEngine, (daemon) => ({
+      events: daemon.history(localWorktreeId),
+    })),
+  ),
 
   // A mirror stream: the far end is a fresh `file-sync serve` for the
   // named worktree, spoken to over its stdio. The worktree must exist
@@ -442,98 +542,150 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
   // exits on its own ends the channel the ordinary way. The root path
   // the peer's Mutagen side names travels inside the protocol, which
   // this handler does not read: the grant is the wall, as everywhere
-  // on the byte-stream surface.
-  openStream: async (
-    { projectId, worktreeId, channelId, peerWorktreeId },
-    ctx,
-  ) => {
-    requireChannels(ctx, channelId);
-    const project = findProjectOrThrow(projectId);
-    const identity = await findWorktreeIdentityOrThrow(
-      projectId,
-      project.path,
-      worktreeId,
-    );
-    const child = spawnFileSync(["serve"]);
-    if (child === null) {
-      throw new Error(
-        "mirroring is unavailable on this device (no file-sync engine)",
-      );
-    }
-    child.stderr?.on("data", (chunk: Buffer) => {
-      const text = chunk.toString("utf8").trim();
-      if (text !== "") console.warn(`[mirror] serve ${worktreeId}: ${text}`);
-    });
-    const key = servingKey(ctx, channelId);
-    const stopChild = () => {
-      child.kill();
-      child.stream.destroy();
-    };
-    try {
-      attachFarEnd(ctx, channelId, child.stream, {
-        onClosed: () => {
-          stopChild();
-          forgetServing(key);
-        },
-      });
-    } catch (error) {
-      // The connection died or the id was claimed during the lookup
-      // above: the child is detached, so the destroyed stdio alone
-      // would not end it.
-      stopChild();
-      throw error;
-    }
-    const served: Served = {
-      entry: {
-        channelId,
-        projectId,
-        worktreeId,
-        peerDeviceId: ctx.callerDeviceId ?? "",
-        ...(peerWorktreeId === undefined ? {} : { peerWorktreeId }),
-        since: Date.now(),
-      },
-      stopIndexWatch: null,
-    };
-    serving.set(key, served);
-    void watchIndexFile(identity.path, () =>
-      onServingGitChange()?.({ projectId, worktreeId }),
-    ).then(
-      (stop) => {
-        if (serving.get(key) === served) served.stopIndexWatch = stop;
-        else stop();
-      },
-      () => {},
-    );
-    onServingChange()?.();
-  },
+  // on the byte-stream surface. Interruptible only up to the lookup:
+  // from the spawn to the attach nothing yields, so a child is never
+  // left without the channel that ends it.
+  openStream: hostHandler(
+    (
+      { projectId, worktreeId, channelId, peerWorktreeId },
+      ctx: HandlerContext,
+    ) =>
+      Effect.gen(function* () {
+        const identity = yield* hostAttempt(async () => {
+          requireChannels(ctx, channelId);
+          const project = findProjectOrThrow(projectId);
+          return findWorktreeIdentityOrThrow(
+            projectId,
+            project.path,
+            worktreeId,
+          );
+        });
+        yield* hostAttempt(() =>
+          serveStream(ctx, identity.path, {
+            projectId,
+            worktreeId,
+            channelId,
+            peerWorktreeId,
+          }),
+        );
+        return undefined;
+      }),
+  ),
 
   // The git half served to the device mirroring from here (see
   // host/mirror/gitState.ts): the worktree must be one this host
   // lists, and the state is read or applied in place.
-  gitState: async ({ projectId, worktreeId }) => {
-    const project = findProjectOrThrow(projectId);
-    const identity = await findWorktreeIdentityOrThrow(
-      projectId,
-      project.path,
-      worktreeId,
-    );
-    return readGitState(project.path, identity.path, worktreeId);
-  },
+  gitState: hostHandler(({ projectId, worktreeId }) =>
+    hostAttempt(async () => {
+      const project = findProjectOrThrow(projectId);
+      const identity = await findWorktreeIdentityOrThrow(
+        projectId,
+        project.path,
+        worktreeId,
+      );
+      return readGitState(project.path, identity.path, worktreeId);
+    }),
+  ),
 
-  applyGitState: async ({ projectId, worktreeId, expect, state, sweep }) => {
-    const project = findProjectOrThrow(projectId);
-    const identity = await findWorktreeIdentityOrThrow(
-      projectId,
-      project.path,
-      worktreeId,
-    );
-    const result = await applyGitState(
-      project,
-      { id: worktreeId, path: identity.path },
-      { expect, state, sweep },
-    );
-    return result.applied
-      ? { applied: true }
-      : { applied: false, reason: result.reason };
-  },
+  // Uninterruptible once the worktree is found: the apply moves the
+  // branch, HEAD and the index in turn, and a caller that leaves must
+  // not see it stop between them (the compare-and-set that guards it
+  // is only checked at its start).
+  applyGitState: hostHandler(
+    ({ projectId, worktreeId, expect, state, sweep }) =>
+      Effect.gen(function* () {
+        const { project, identity } = yield* hostAttempt(async () => {
+          const found = findProjectOrThrow(projectId);
+          return {
+            project: found,
+            identity: await findWorktreeIdentityOrThrow(
+              projectId,
+              found.path,
+              worktreeId,
+            ),
+          };
+        });
+        const result = yield* Effect.uninterruptible(
+          hostAttempt(() =>
+            applyGitState(
+              project,
+              { id: worktreeId, path: identity.path },
+              { expect, state, sweep },
+            ),
+          ),
+        );
+        return result.applied
+          ? { applied: true }
+          : { applied: false, reason: result.reason };
+      }),
+  ),
 };
+
+// The serve child for a stream, attached to the caller's channel. All
+// synchronous from the spawn to the attach, so nothing can interrupt
+// between them.
+function serveStream(
+  ctx: HandlerContext,
+  worktreePath: string,
+  {
+    projectId,
+    worktreeId,
+    channelId,
+    peerWorktreeId,
+  }: Pick<
+    MirrorServing,
+    "projectId" | "worktreeId" | "channelId" | "peerWorktreeId"
+  >,
+): void {
+  const child = spawnFileSync(["serve"]);
+  if (child === null) {
+    throw new Error(
+      "mirroring is unavailable on this device (no file-sync engine)",
+    );
+  }
+  child.stderr?.on("data", (chunk: Buffer) => {
+    const text = chunk.toString("utf8").trim();
+    if (text !== "") console.warn(`[mirror] serve ${worktreeId}: ${text}`);
+  });
+  const key = servingKey(ctx, channelId);
+  const stopChild = () => {
+    child.kill();
+    child.stream.destroy();
+  };
+  try {
+    attachFarEnd(ctx, channelId, child.stream, {
+      onClosed: () => {
+        stopChild();
+        forgetServing(key);
+      },
+    });
+  } catch (error) {
+    // The connection died or the id was claimed during the lookup
+    // above: the child is detached, so the destroyed stdio alone
+    // would not end it.
+    stopChild();
+    throw error;
+  }
+  const served: Served = {
+    entry: {
+      channelId,
+      projectId,
+      worktreeId,
+      peerDeviceId: ctx.callerDeviceId ?? "",
+      ...(peerWorktreeId === undefined ? {} : { peerWorktreeId }),
+      since: Date.now(),
+    },
+    stopIndexWatch: null,
+  };
+  serving.set(key, served);
+  void watchIndexFile(worktreePath, () =>
+    onServingGitChange()?.({ projectId, worktreeId }),
+  ).then(
+    (stop) => {
+      if (serving.get(key) === served) served.stopIndexWatch = stop;
+      else stop();
+    },
+    () => {},
+  );
+  onServingChange()?.();
+}

@@ -1,13 +1,20 @@
-// Bounded concurrency for work that fans out as wide as the caller
-// happens to ask for. Pure (no node builtins, no electron), so it lives
-// in shared/ and both the host probes and the web hub connection's
-// single-slot lifecycle serializer use the one implementation.
+// A FIFO limiter: at most `limit` tasks run at once, and waiters start
+// strictly in the order they called. Pure (no node builtins, no
+// electron), so it lives in shared/ and the host and the web client
+// use the one implementation.
 //
-// The tidy surface is the reason it started here: it asks about every
-// worktree in every project at once, so both its git probes and its
-// directory walks would otherwise start as one burst of hundreds of
-// processes and syscalls. Queueing them behind a small window makes the
-// first results land sooner and leaves the rest of the app some IO.
+// Kept on purpose. The fan-out users it once served (the tidy
+// surface's git probes and directory walks, the worktree row probes)
+// moved to Effect (`Effect.forEach` with `concurrency`, a Semaphore
+// for the directory reads). What is left are single-slot lifecycle
+// serializers whose correctness is call order: a `stop` queued behind
+// a `start` must run after it, never before. An Effect Semaphore
+// cannot stand in for them, because it wakes its waiters in scheduler
+// order, not in the order they queued. The users, and the only ones it
+// should have: the cloudflared runner (host/direct/cloudflared.ts), the
+// socket host (host/socket/server.ts), the ws client transport's
+// in-order sends (shared/ipc/socket/wsClientTransport.ts) and the hub
+// connection core (shared/hub/connection.ts).
 type Limiter = <T>(task: () => Promise<T>) => Promise<T>;
 
 export function createLimiter(limit: number): Limiter {

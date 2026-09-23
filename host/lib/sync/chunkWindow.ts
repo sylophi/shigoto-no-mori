@@ -8,80 +8,88 @@
 // rate, plus one. A slow uplink keeps two in flight (the link stays
 // busy, a call waits behind little more than it did), a fast one grows
 // toward the cap.
+import { Cause, Clock, Effect, Exit, Option, Queue } from "effect";
+
 const WINDOW_SECONDS = 0.35;
 const MIN_CHUNKS_IN_FLIGHT = 2;
 const MAX_CHUNKS_IN_FLIGHT = 8;
 
-export type ChunkWindow = {
-  // Starts one chunk (the task resolves to the bytes it moved) and
-  // resolves once there is room to start the next. Rejects with the
-  // first failure of any chunk, as soon as one is known, so a caller
-  // stops feeding a transfer that is already lost.
-  add(chunk: () => Promise<number>): Promise<void>;
-  // Resolves once every chunk started so far has landed, or rejects
-  // with the first failure.
-  drain(): Promise<void>;
-  // For a finally: resolves once no chunk is in flight, failed or not,
-  // so whatever they write to may be closed.
-  settled(): Promise<void>;
-};
-
-// A window for a transfer that starts now, moving `strideBytes` per
-// chunk. `maxInFlight: 1` is the sequential transfer an older peer
-// needs.
-export function createChunkWindow(
+// Moves every chunk `nextChunk` hands out, `strideBytes` each, with as
+// many in flight as the window allows at the moment each one starts.
+// A queue-fed pump: every chunk runs on a fiber of its own and reports
+// on `landed` when it is done, and the pump takes from `landed`
+// whenever the window is full. The window is re-read on every take, so
+// it grows with the measured rate while the transfer runs, which is
+// what a fixed `Effect.forEach` concurrency could not do.
+//
+// The first chunk to fail is the transfer's failure, as soon as it is
+// known: no further chunk is started, and the pump fails with that
+// chunk's own cause. However the pump ends (done, failed, or its
+// caller interrupted), the chunks still in flight are interrupted and
+// waited for before it returns, so whatever they write to may be
+// closed right after. `maxInFlight: 1` is the sequential transfer an
+// older peer needs.
+//
+// `nextChunk` is asked for the next chunk only once there is room for
+// it, so a producer that reads the chunk's bytes (the push) reads no
+// further ahead than the window. Each chunk starts at once when forked,
+// so chunks begin in the order they were handed out.
+export const pumpChunks = <E, R>(
   strideBytes: number,
+  nextChunk: Effect.Effect<Option.Option<Effect.Effect<number, E, R>>, E, R>,
   { maxInFlight = MAX_CHUNKS_IN_FLIGHT }: { maxInFlight?: number } = {},
-): ChunkWindow {
-  const startedAt = Date.now();
-  let doneBytes = 0;
-  // Never rejecting: a failure is recorded, and surfaced by the next
-  // add or the drain.
-  const inFlight = new Set<Promise<void>>();
-  let failure: { error: unknown } | null = null;
-  const limit = (): number => {
-    const seconds = Math.max(0.05, (Date.now() - startedAt) / 1000);
-    const chunks = ((doneBytes / seconds) * WINDOW_SECONDS) / strideBytes;
-    return Math.min(
-      maxInFlight,
-      Math.max(MIN_CHUNKS_IN_FLIGHT, Math.round(chunks) + 1),
-    );
-  };
-  const throwFailure = (): void => {
-    if (failure !== null) throw failure.error;
-  };
-  return {
-    async add(chunk) {
-      throwFailure();
-      const landed = chunk()
-        .then(
-          (bytes) => {
-            doneBytes += bytes;
-          },
-          (error: unknown) => {
-            failure ??= { error };
-          },
-        )
-        .then(() => {
-          inFlight.delete(landed);
+): Effect.Effect<void, E, R> =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const scope = yield* Effect.scope;
+      const startedAt = yield* Clock.currentTimeMillis;
+      let doneBytes = 0;
+      let inFlight = 0;
+      // The first chunk failure, recorded by the chunk itself and
+      // surfaced by the pump at its next look.
+      let failure: Cause.Cause<E> | null = null;
+      // One signal per chunk that ended, however it ended.
+      const landed = yield* Queue.unbounded<void>();
+      const limit = Effect.map(Clock.currentTimeMillis, (now) => {
+        const seconds = Math.max(0.05, (now - startedAt) / 1000);
+        const chunks = ((doneBytes / seconds) * WINDOW_SECONDS) / strideBytes;
+        return Math.min(
+          maxInFlight,
+          Math.max(MIN_CHUNKS_IN_FLIGHT, Math.round(chunks) + 1),
+        );
+      });
+      const throwFailure = Effect.suspend(() =>
+        failure === null ? Effect.void : Effect.failCause(failure),
+      );
+      const settle = (exit: Exit.Exit<number, E>) =>
+        Effect.suspend(() => {
+          inFlight -= 1;
+          if (Exit.isSuccess(exit)) doneBytes += exit.value;
+          else failure ??= exit.cause;
+          return Queue.offer(landed, undefined);
         });
-      inFlight.add(landed);
-      while (inFlight.size >= limit()) {
-        // oxlint-disable-next-line no-await-in-loop -- the window's backpressure
-        await Promise.race(inFlight);
-        throwFailure();
+      while (true) {
+        yield* throwFailure;
+        const next = yield* nextChunk;
+        if (Option.isNone(next)) break;
+        inFlight += 1;
+        yield* next.value.pipe(
+          Effect.exit,
+          Effect.flatMap(settle),
+          Effect.forkIn(scope, { startImmediately: true }),
+        );
+        // The window's backpressure: wait for a chunk to land while the
+        // window, as the rate now stands, is full.
+        while (inFlight >= (yield* limit)) {
+          yield* Queue.take(landed);
+          yield* throwFailure;
+        }
       }
-      throwFailure();
-    },
-    async drain() {
-      await Promise.all(inFlight);
-      throwFailure();
-    },
-    async settled() {
-      await Promise.all(inFlight);
-    },
-  };
-}
+      // oxlint-disable-next-line no-unmodified-loop-condition -- the chunk fibers count it down
+      while (inFlight > 0) yield* Queue.take(landed);
+      yield* throwFailure;
+    }),
+  );
 
 // Byte progress for a caller that reports it, coalesced to about half
 // a percent or 100ms between reports (every frame is an IPC round trip

@@ -13,11 +13,16 @@
 // the upstream now tracks, refuse on. A worktree with a script the
 // app started in it is left alone too: the tree moving under a running
 // dev server is the one way a pull the user never clicked could bite.
+import { Effect } from "effect";
 import { errorMessageOf } from "@shared/errors";
-import { fastForwardToUpstream, hasUncommittedOrUntracked } from "../git/sync";
+import { runGit } from "../git/core";
 import {
-  getUpstreamCounts,
-  listWorktreeIdentities,
+  fastForwardToUpstreamEffect,
+  hasUncommittedOrUntrackedEffect,
+} from "../git/sync";
+import {
+  getUpstreamCountsEffect,
+  listWorktreeIdentitiesEffect,
   type WorktreeIdentity,
 } from "../git/worktrees";
 import { readAutoPullSet } from "./autoPull";
@@ -44,23 +49,43 @@ const skipped = (reason: AutoPullSkipReason): AutoPullOutcome => ({
 // nothing local stands in the way. `busy` is the caller's knowledge of
 // processes the app started in this worktree. Git cannot see those,
 // and it is required so no caller forgets to ask.
-export async function autoPullWorktree(
+export const autoPullWorktreeEffect = Effect.fn("autoPull.autoPullWorktree")(
+  function* (
+    worktree: Pick<WorktreeIdentity, "path" | "detached">,
+    options: { busy: boolean },
+  ) {
+    if (worktree.detached) return skipped("detached");
+    const counts = yield* getUpstreamCountsEffect(worktree.path);
+    if (counts === null) return skipped("no-upstream");
+    if (counts.behind === 0) return skipped("synced");
+    if (counts.ahead > 0) return skipped("ahead");
+    if (options.busy) return skipped("busy");
+    return yield* Effect.gen(function* () {
+      if (yield* hasUncommittedOrUntrackedEffect(worktree.path)) {
+        return skipped("dirty");
+      }
+      yield* fastForwardToUpstreamEffect(worktree.path);
+      const pulled: AutoPullOutcome = {
+        kind: "pulled",
+        commits: counts.behind,
+      };
+      return pulled;
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.succeed<AutoPullOutcome>({
+          kind: "failed",
+          message: errorMessageOf(error),
+        }),
+      ),
+    );
+  },
+);
+
+export function autoPullWorktree(
   worktree: Pick<WorktreeIdentity, "path" | "detached">,
   options: { busy: boolean },
 ): Promise<AutoPullOutcome> {
-  if (worktree.detached) return skipped("detached");
-  const counts = await getUpstreamCounts(worktree.path);
-  if (counts === null) return skipped("no-upstream");
-  if (counts.behind === 0) return skipped("synced");
-  if (counts.ahead > 0) return skipped("ahead");
-  if (options.busy) return skipped("busy");
-  try {
-    if (await hasUncommittedOrUntracked(worktree.path)) return skipped("dirty");
-    await fastForwardToUpstream(worktree.path);
-  } catch (error) {
-    return { kind: "failed", message: errorMessageOf(error) };
-  }
-  return { kind: "pulled", commits: counts.behind };
+  return runGit(autoPullWorktreeEffect(worktree, options));
 }
 
 export interface AutoPullSweepResult {
@@ -75,26 +100,39 @@ export interface AutoPullSweepResult {
 // app-started process in them. Marks for worktrees that no longer
 // exist simply match nothing, so an `sm rm` in a terminal leaves no
 // pull behind.
-export async function sweepAutoPull(
+export const sweepAutoPullEffect = Effect.fn("autoPull.sweepAutoPull")(
+  function* (
+    projectId: string,
+    projectPath: string,
+    busyWorktreeIds: ReadonlySet<string>,
+  ) {
+    const result: AutoPullSweepResult = { pulled: [], failed: [] };
+    const marked = readAutoPullSet();
+    if (marked.size === 0) return result;
+    const identities = yield* listWorktreeIdentitiesEffect(
+      projectId,
+      projectPath,
+    );
+    // One git at a time, by design (see above).
+    for (const worktree of identities) {
+      if (!marked.has(worktree.id)) continue;
+      const outcome = yield* autoPullWorktreeEffect(worktree, {
+        busy: busyWorktreeIds.has(worktree.id),
+      });
+      if (outcome.kind === "pulled") {
+        result.pulled.push({ worktree, commits: outcome.commits });
+      } else if (outcome.kind === "failed") {
+        result.failed.push({ worktree, message: outcome.message });
+      }
+    }
+    return result;
+  },
+);
+
+export function sweepAutoPull(
   projectId: string,
   projectPath: string,
   busyWorktreeIds: ReadonlySet<string>,
 ): Promise<AutoPullSweepResult> {
-  const result: AutoPullSweepResult = { pulled: [], failed: [] };
-  const marked = readAutoPullSet();
-  if (marked.size === 0) return result;
-  const identities = await listWorktreeIdentities(projectId, projectPath);
-  for (const worktree of identities) {
-    if (!marked.has(worktree.id)) continue;
-    // oxlint-disable-next-line no-await-in-loop -- one git at a time, by design (see above)
-    const outcome = await autoPullWorktree(worktree, {
-      busy: busyWorktreeIds.has(worktree.id),
-    });
-    if (outcome.kind === "pulled") {
-      result.pulled.push({ worktree, commits: outcome.commits });
-    } else if (outcome.kind === "failed") {
-      result.failed.push({ worktree, message: outcome.message });
-    }
-  }
-  return result;
+  return runGit(sweepAutoPullEffect(projectId, projectPath, busyWorktreeIds));
 }

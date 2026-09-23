@@ -1,25 +1,42 @@
+import { Effect } from "effect";
 import { branchesContract } from "@shared/ipc/modules/branches";
+import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import {
-  createLocalBranch,
-  deleteAnyLocalBranch,
-  renameAnyLocalBranch,
+  createLocalBranchEffect,
+  deleteAnyLocalBranchEffect,
+  renameAnyLocalBranchEffect,
 } from "@host/lib/git/branches";
-import { findProjectOrThrow } from "@host/lib/projects";
+import { hostHandler } from "@host/runtime";
+import { projectEffect } from "./worktrees";
 
-export const branchesHandlers: Handlers<typeof branchesContract> = {
-  create: async ({ projectId, name, base }) => {
-    const project = findProjectOrThrow(projectId);
-    await createLocalBranch(project.path, name, base);
-  },
+export const branchesHandlers: Handlers<
+  typeof branchesContract,
+  HandlerContext
+> = {
+  create: hostHandler(({ projectId, name, base }) =>
+    Effect.gen(function* () {
+      const project = yield* projectEffect(projectId);
+      yield* createLocalBranchEffect(project.path, name, base);
+      return undefined;
+    }),
+  ),
 
-  rename: async ({ projectId, oldName, newName }) => {
-    const project = findProjectOrThrow(projectId);
-    await renameAnyLocalBranch(project.path, oldName, newName);
-  },
+  rename: hostHandler(({ projectId, oldName, newName }) =>
+    Effect.gen(function* () {
+      const project = yield* projectEffect(projectId);
+      yield* renameAnyLocalBranchEffect(project.path, oldName, newName);
+      return undefined;
+    }),
+  ),
 
-  delete: async ({ projectId, name, force }) => {
-    const project = findProjectOrThrow(projectId);
-    await deleteAnyLocalBranch(project.path, name, force ?? false);
-  },
+  // An unmerged branch without `force` fails as BranchNotMerged, whose
+  // tag the renderer matches to offer the force retry.
+  delete: hostHandler(({ projectId, name, force }) =>
+    Effect.gen(function* () {
+      const project = yield* projectEffect(projectId);
+      yield* deleteAnyLocalBranchEffect(project.path, name, force ?? false);
+      return undefined;
+    }),
+  ),
 };

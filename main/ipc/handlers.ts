@@ -132,7 +132,7 @@ import {
   hubHandlers,
   onPeerPush,
 } from "./register";
-import { appService, runner } from "../services";
+import { appRuntime, appService, runner } from "../services";
 
 // The pull/transplant orchestrations' and the port-forward engine's
 // peer reach, routed through the SAME invokePeer path (and so the same
@@ -430,14 +430,17 @@ export const MirrorEngineLive = Layer.effectContext(
 
 // The mirror sweep of a device leaving its account, bounded so a stuck
 // daemon request cannot hold the sign-out: the hub refresh that
-// follows closes the sessions the sweep's terminates ride.
+// follows closes the sessions the sweep's terminates ride. Past the
+// bound the sign-out stops waiting (the timer is the fiber's, gone with
+// it); the terminates already sent are the daemon's to answer.
 function endAllMirrorsBounded(): Promise<unknown> {
-  return Promise.race([
-    endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL, {
-      transfers: true,
-    }),
-    new Promise((resolve) => setTimeout(resolve, 5_000).unref?.()),
-  ]);
+  return appRuntime().runPromise(
+    Effect.promise(() =>
+      endMirrorsWithPeers(() => false, LEFT_ACCOUNT_DETAIL, {
+        transfers: true,
+      }),
+    ).pipe(Effect.timeoutOption("5 seconds")),
+  );
 }
 
 // A step of the account fan-out that must not take the rest with it.

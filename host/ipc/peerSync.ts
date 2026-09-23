@@ -10,8 +10,8 @@ import type { mirrorContract } from "@shared/ipc/modules/mirror";
 import type { syncContract } from "@shared/ipc/modules/sync";
 import type { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type { Client } from "@shared/ipc/types";
-import { Context, Schema } from "effect";
-import { hostService } from "@host/runtime";
+import { Context, Effect, Schema } from "effect";
+import { hostAttempt, hostService, requireService } from "@host/runtime";
 import { type Worktree, WorktreeSchema } from "@shared/schemas";
 
 // The remote verbs the orchestrations drive. Superset of the transfer
@@ -58,12 +58,15 @@ export class PeerApis extends Context.Service<PeerApis, PeerSyncImpl>()(
   "sm/host/PeerApis",
 ) {}
 
+const MISSING = "peer api requested before the host runtime provided PeerApis";
+
 function requireImpl(): PeerSyncImpl {
-  return hostService(
-    PeerApis,
-    "peer api requested before the host runtime provided PeerApis",
-  );
+  return hostService(PeerApis, MISSING);
 }
+
+// The same reach for a handler written as an Effect.
+export const peerApis: Effect.Effect<PeerSyncImpl, never, PeerApis> =
+  requireService(PeerApis, MISSING);
 
 export function peerSyncApiFor(deviceId: string): PeerSyncApi {
   return requireImpl().syncApiFor(deviceId);
@@ -77,13 +80,29 @@ export function peerWorktreesApiFor(deviceId: string): PeerWorktreesApi {
 // here: its root path flows into a session this device persists, so
 // the caller's say-so is never the source of it. undefined when the
 // peer no longer lists it.
+const decodeWorktrees = Schema.decodeUnknownSync(Schema.Array(WorktreeSchema));
+
 export async function peerWorktreeOrUndefined(
   deviceId: string,
   projectId: string,
   worktreeId: string,
 ): Promise<Worktree | undefined> {
-  const worktrees = Schema.decodeUnknownSync(Schema.Array(WorktreeSchema))(
+  const worktrees = decodeWorktrees(
     await peerWorktreesApiFor(deviceId).list({ projectId }),
   );
   return worktrees.find((worktree) => worktree.id === worktreeId);
 }
+
+// The same lookup as an Effect, interruptible while the peer answers.
+export const peerWorktree = (
+  deviceId: string,
+  projectId: string,
+  worktreeId: string,
+): Effect.Effect<Worktree | undefined, unknown, PeerApis> =>
+  Effect.flatMap(peerApis, (apis) =>
+    hostAttempt(async () =>
+      decodeWorktrees(
+        await apis.worktreesApiFor(deviceId).list({ projectId }),
+      ).find((worktree) => worktree.id === worktreeId),
+    ),
+  );

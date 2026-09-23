@@ -27,6 +27,10 @@
 //     it here and shelves the source over the wire,
 //     and a source fate the peer refuses leaves the bring standing
 //     with exit 3 and the reason.
+//   - a bring whose control socket closes mid-transfer stops there:
+//     within a second no temp bundle is left on either side (not at
+//     the 10 minute idle sweep), nothing lands, and the incoming ref
+//     is swept.
 //   - `mirror` sends the worktree and opens a session labelled with
 //     the copy on the peer, a second `mirror` answers with the running
 //     one, and `unmirror` is refused until the follower reports synced
@@ -56,7 +60,9 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -882,6 +888,94 @@ async function main() {
     );
     ok(
       "list --remote names the peer's worktrees, and bring: points there when given none, refuses an unknown one by code, lands one by branch with its uncommitted work, exits 3 naming the source fate that didn't hold, and shelves a source the peer will shelve",
+    );
+
+    // ---- (6b) A bring whose CLI goes away mid-transfer. The chunk
+    // requests are held at this device's side of the wire, so the
+    // transfer has started on both ends when the control socket
+    // closes. The temp dirs are made under a sandboxed TMPDIR for the
+    // check, so what is left behind is exactly what the listing shows.
+    await addWorktree(sourceRepo, "wt-depart", "feat-depart", "d.txt");
+    const departTmp = join(sandbox, "depart-tmp");
+    mkdirSync(departTmp);
+    const tmpBefore = process.env.TMPDIR;
+    process.env.TMPDIR = departTmp;
+    const transferDirs = () =>
+      readdirSync(departTmp).filter((name) => name.startsWith("sm-sync-"));
+    const heldChunks = [];
+    const syncOverWire = buildClient(syncContract, peerA.transport);
+    await provide({
+      peerApis: Layer.succeed(PeerApis, {
+        syncApiFor: () => ({
+          ...syncOverWire,
+          bundleChunk: (input) =>
+            new Promise((resolve, reject) => {
+              heldChunks.push(() =>
+                syncOverWire.bundleChunk(input).then(resolve, reject),
+              );
+            }),
+        }),
+        worktreesApiFor: () => buildClient(worktreesContract, peerA.transport),
+      }),
+    });
+    try {
+      const cli = await rawClient(published.port);
+      cli.send({ t: "hello", token: published.token });
+      await waitFor(() => cli.frames.length > 0, "a welcome");
+      cli.send({
+        t: "req",
+        id: 1,
+        channel: "control:bring",
+        input: { projectId: targetProjectId, worktree: "feat-depart" },
+      });
+      await waitFor(
+        () => heldChunks.length > 0,
+        "the bring's first chunk request",
+        30_000,
+      );
+      const started = transferDirs();
+      assert.ok(
+        started.some((name) => name.startsWith("sm-sync-recv-")) &&
+          started.some((name) => !name.startsWith("sm-sync-recv-")),
+        `the bring had not made both temp bundles: ${started.join(", ")}`,
+      );
+      cli.socket.destroy();
+      await waitFor(
+        () => transferDirs().length === 0,
+        "the temp bundles to go with the departed CLI",
+        1_000,
+      );
+      assert.equal(
+        resOf(cli).length,
+        0,
+        "the departed bring answered a closed socket",
+      );
+      await git(targetRepo, [
+        "rev-parse",
+        "--verify",
+        "-q",
+        "refs/heads/feat-depart",
+      ]).then(
+        () => assert.fail("the departed bring landed its branch"),
+        () => {},
+      );
+      await git(targetRepo, [
+        "rev-parse",
+        "--verify",
+        "-q",
+        "refs/shigomori/incoming/feat-depart",
+      ]).then(
+        () => assert.fail("the departed bring left its incoming ref"),
+        () => {},
+      );
+    } finally {
+      for (const release of heldChunks.splice(0)) release();
+      process.env.TMPDIR = tmpBefore;
+      if (tmpBefore === undefined) delete process.env.TMPDIR;
+      await provide();
+    }
+    ok(
+      "bring: a CLI that goes away mid-transfer leaves no temp bundle on either side within a second, lands nothing, and sweeps its incoming ref",
     );
 
     peerOwns = targetProjectId;

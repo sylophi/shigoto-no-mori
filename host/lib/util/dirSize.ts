@@ -14,7 +14,7 @@
 // fall back to the apparent size.
 import { lstat, opendir } from "node:fs/promises";
 import { join } from "node:path";
-import { createLimiter } from "@shared/util/limit";
+import { Effect, Semaphore } from "effect";
 
 // Names whose contents are real disk usage but not evidence that anyone
 // touched the worktree. A fresh `pnpm install` rewrites every mtime
@@ -48,8 +48,13 @@ const ACTIVITY_EXCLUDED_NAMES = new Set([
 // How many directories are read concurrently, across every walk in
 // flight. Enough to keep the disk busy without risking EMFILE on a deep
 // tree. The walk is IO-bound, so going wider stops helping well before
-// this.
-const readDirs = createLimiter(8);
+// this. A semaphore rather than a `concurrency` option on the fan-out:
+// that option bounds one Effect.forEach call, and the walk makes one
+// per directory, so it would bound each directory's children (8 per
+// level, compounding with depth) and nothing across the concurrent
+// walks the tidy surface starts.
+const READ_SLOTS = 8;
+const readSlots = Semaphore.makeUnsafe(READ_SLOTS);
 
 export interface DirSizeResult {
   // Bytes occupied on disk across the whole tree.
@@ -78,10 +83,24 @@ interface PendingDir {
 // in-project layout puts a project's worktrees *inside* its primary
 // checkout, so without this the primary's walk counts every sibling's
 // bytes as its own and the page's headline total doubles.
-export async function measureDirectory(
+export function measureDirectoryEffect(
+  root: string,
+  exclude: ReadonlySet<string> = new Set(),
+): Effect.Effect<DirSizeResult> {
+  return Effect.suspend(() => walk(root, exclude));
+}
+
+export function measureDirectory(
   root: string,
   exclude: ReadonlySet<string> = new Set(),
 ): Promise<DirSizeResult> {
+  return Effect.runPromise(measureDirectoryEffect(root, exclude));
+}
+
+function walk(
+  root: string,
+  exclude: ReadonlySet<string>,
+): Effect.Effect<DirSizeResult> {
   let bytes = 0;
   let lastActivityAt: number | null = null;
   let partial = false;
@@ -146,19 +165,25 @@ export async function measureDirectory(
   };
 
   // Descend breadth-first, with only the directory reads themselves
-  // going through the limiter. Recursing inside a slot would deadlock the
-  // moment a tree is deeper than the limit, and a fixed pool of workers
-  // draining a shared queue has the opposite failure: every worker but
-  // the first finds the queue empty on the tick it starts, returns, and
-  // the walk runs single-file for the rest of its life.
-  const descend = async (entry: PendingDir): Promise<void> => {
-    const children = await readDirs(() => readDir(entry));
-    await Promise.all(children.map((child) => descend(child)));
-  };
-  await descend({ path: root, countsAsActivity: true });
+  // holding a slot. Recursing inside a slot would deadlock the moment a
+  // tree is deeper than the limit, and a fixed pool of workers draining
+  // a shared queue has the opposite failure: every worker but the first
+  // finds the queue empty on the tick it starts, returns, and the walk
+  // runs single-file for the rest of its life. readDir never rejects.
+  const descend = (entry: PendingDir): Effect.Effect<void> =>
+    readSlots.withPermit(Effect.promise(() => readDir(entry))).pipe(
+      Effect.flatMap((children) =>
+        Effect.forEach(children, descend, {
+          concurrency: "unbounded",
+          discard: true,
+        }),
+      ),
+    );
 
   // Floored for the same reason as the mtime above: the IPC schema takes
   // whole integers, and a platform reporting fractional blocks would
   // otherwise fail the boundary parse rather than the walk.
-  return { bytes: Math.floor(bytes), lastActivityAt, partial };
+  return descend({ path: root, countsAsActivity: true }).pipe(
+    Effect.map(() => ({ bytes: Math.floor(bytes), lastActivityAt, partial })),
+  );
 }

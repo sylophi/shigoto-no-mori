@@ -2,7 +2,9 @@
 // allocation for the directory when the integration is on, then the
 // user-added entries from the worktree data file, each probed on this
 // machine's loopback.
+import { Effect } from "effect";
 import { portsContract } from "@shared/ipc/modules/ports";
+import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import { readWorktreeData } from "@host/lib/config/project";
@@ -11,6 +13,7 @@ import { isLoopbackPortListening } from "@host/lib/net";
 import { isPortPoolActive, poolPortsFor } from "@host/lib/portPool";
 import { findProjectOrThrow } from "@host/lib/projects";
 import { ttlMapCache } from "@host/lib/util/ttlCache";
+import { hostAttempt, hostHandler } from "@host/runtime";
 
 // A loopback dial answers in microseconds when something listens and
 // is refused just as fast when nothing does. The deadline only matters
@@ -37,31 +40,35 @@ const pathCache = ttlMapCache<string, string>(
   },
 );
 
-export const portsHandlers: Handlers<typeof portsContract> = {
-  list: async ({ projectId, worktreeId }) => {
-    // Validated first so a bogus project id never builds a path.
-    findProjectOrThrow(projectId);
-    // The pool chain hangs off the path alone, so it runs beside the
-    // data-file read rather than behind it.
-    const [pool, data] = await Promise.all([
-      pathCache
-        .get(`${projectId}:${worktreeId}`)
-        .then(async (path) =>
-          (await isPortPoolActive(path)) ? poolPortsFor(path) : [],
-        ),
-      readWorktreeData(projectId, worktreeId),
-    ]);
-    const ports = await Promise.all(
-      // The merge mints fresh objects, so each is completed in place.
-      mergeWorktreePorts(pool, data?.ports ?? []).map(async (entry) =>
-        Object.assign(entry, {
-          listening: await isLoopbackPortListening(
-            entry.port,
-            PROBE_TIMEOUT_MS,
+export const portsHandlers: Handlers<typeof portsContract, HandlerContext> = {
+  list: hostHandler(({ projectId, worktreeId }) =>
+    Effect.gen(function* () {
+      // Validated first so a bogus project id never builds a path.
+      yield* hostAttempt(() => findProjectOrThrow(projectId));
+      // The pool chain hangs off the path alone, so it runs beside the
+      // data-file read rather than behind it.
+      const [pool, data] = yield* Effect.all(
+        [
+          hostAttempt(async () => {
+            const path = await pathCache.get(`${projectId}:${worktreeId}`);
+            return (await isPortPoolActive(path)) ? poolPortsFor(path) : [];
+          }),
+          hostAttempt(() => readWorktreeData(projectId, worktreeId)),
+        ],
+        { concurrency: "unbounded" },
+      );
+      const ports = yield* Effect.forEach(
+        // The merge mints fresh objects, so each is completed in place.
+        mergeWorktreePorts(pool, data?.ports ?? []),
+        (entry) =>
+          Effect.promise(() =>
+            isLoopbackPortListening(entry.port, PROBE_TIMEOUT_MS),
+          ).pipe(
+            Effect.map((listening) => Object.assign(entry, { listening })),
           ),
-        }),
-      ),
-    );
-    return { ports };
-  },
+        { concurrency: "unbounded" },
+      );
+      return { ports };
+    }),
+  ),
 };

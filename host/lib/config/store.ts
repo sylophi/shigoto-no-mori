@@ -13,6 +13,15 @@
 // every click never touch it.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { Schema } from "effect";
+import { errorMessageOf } from "@shared/errors";
+import { type AnyCodec, safeDecodeWith } from "@shared/ipc/codec";
+import {
+  PackageScriptSortModeSchema,
+  ProjectSchema,
+  ProjectSortModeSchema,
+  SharedSettingsDocSchema,
+} from "@shared/schemas";
 import {
   atomicWriteJsonSync,
   noteNewerSchema,
@@ -39,10 +48,112 @@ export const SHARED_SETTINGS_KEY = "sharedSettings";
 // and the CLI alike (cli/state.go autoPullKey).
 export const AUTO_PULL_KEY = "autoPullWorktrees";
 
+// state.json's keys, named here beside their shapes below. The feature
+// modules that own them (projects/usage.ts, projects/collapsed.ts,
+// scripts/packageScriptStats.ts, ipc/modules/launchers.ts) spell the
+// same strings, and cli/state.go the ones it writes too.
+export const PROJECT_USE_LOG_KEY = "projectUseLog";
+export const LAUNCHER_USE_LOG_KEY = "launcherUseLog";
+export const PACKAGE_SCRIPT_USE_LOG_KEY = "packageScriptUseLog";
+export const PROJECTS_SORT_KEY = "projectsSort";
+export const PACKAGE_SCRIPT_SORT_KEY = "packageScriptSort";
+export const PROJECTS_COLLAPSED_KEY = "projectsCollapsed";
+
 // Drives only the state.json→registry.json split below. deviceId is
 // deliberately absent because it postdates the split, so no old-format
 // data dir holds one.
 const REGISTRY_KEYS = [PROJECTS_KEY, SHELVED_KEY];
+
+// --- what each key holds ---
+//
+// Both files are hand-editable and shared with the CLI, so a value is
+// decoded against its shape on the way out of readAll rather than cast.
+// The decode is per key, never per document: a mangled sort preference
+// must not make the project list unreadable, and a key this build does
+// not model (a newer build's, the CLI's) is never looked at, so it rides
+// through every read-modify-write untouched. A project row is loose for
+// the same reason: a field this build does not model survives a
+// reorder, which rewrites the whole list.
+//
+// What a malformed value does depends on who owns the repair:
+//
+// - "refuse": the strict read (readKey, and updateKey's read under the
+//   lock) throws, naming the file and the key, and readHint answers its
+//   fallback. A write must never rebuild the value out of a fallback,
+//   because the fallback is "nothing": the CLI's decodeKey refuses the
+//   same way (cli/state.go).
+// - "absent": the value reads as missing, on every path. For keys whose
+//   owner already self-heals a bad value on its next write (the device
+//   id is re-minted under the lock, the shared settings refill from the
+//   next peer merge, the collapse set degrades to nothing folded), where
+//   refusing would turn a repairable value into a stuck error.
+
+// A project row as stored: the declared fields decode, every other key
+// rides through (config.ts's loose()).
+const StoredProjectSchema = Schema.StructWithRest(ProjectSchema, [
+  Schema.Record(Schema.String, Schema.Unknown),
+]);
+// A worktree id set (the shelf, the auto-pull marks). Written as
+// id -> true; cli/state.go reads it as map[string]bool.
+const IdMarksSchema = Schema.Record(Schema.String, Schema.Boolean);
+// id -> action timestamps, the rolling window util/useLog.ts keeps.
+const UseLogSchema = Schema.Record(Schema.String, Schema.Array(Schema.Number));
+// The GUID shape, any version: the id is minted by randomUUID, and an
+// older mint must keep reading as valid.
+export const DeviceIdSchema = Schema.String.check(Schema.isGUID());
+
+type KeyRule = { schema: AnyCodec; malformed: "refuse" | "absent" };
+const refuse = (schema: AnyCodec): KeyRule => ({ schema, malformed: "refuse" });
+const absent = (schema: AnyCodec): KeyRule => ({ schema, malformed: "absent" });
+
+const REGISTRY_RULES: Readonly<Record<string, KeyRule>> = {
+  [PROJECTS_KEY]: refuse(Schema.Array(StoredProjectSchema)),
+  [SHELVED_KEY]: refuse(IdMarksSchema),
+  [AUTO_PULL_KEY]: refuse(IdMarksSchema),
+  [DEVICE_ID_KEY]: absent(DeviceIdSchema),
+  [SHARED_SETTINGS_KEY]: absent(SharedSettingsDocSchema),
+};
+
+const STATE_RULES: Readonly<Record<string, KeyRule>> = {
+  [PROJECT_USE_LOG_KEY]: refuse(UseLogSchema),
+  [LAUNCHER_USE_LOG_KEY]: refuse(UseLogSchema),
+  [PACKAGE_SCRIPT_USE_LOG_KEY]: refuse(
+    Schema.Record(Schema.String, UseLogSchema),
+  ),
+  [PROJECTS_SORT_KEY]: refuse(ProjectSortModeSchema),
+  [PACKAGE_SCRIPT_SORT_KEY]: refuse(
+    Schema.Record(Schema.String, PackageScriptSortModeSchema),
+  ),
+  [PROJECTS_COLLAPSED_KEY]: absent(Schema.Array(Schema.String)),
+};
+
+const RULES: Readonly<Record<string, Readonly<Record<string, KeyRule>>>> = {
+  [REGISTRY_FILE]: REGISTRY_RULES,
+  [STATE_FILE]: STATE_RULES,
+};
+
+// A key's value as read, decoded against its rule. `found` is false
+// when the key is missing, or holds a malformed "absent" value; a
+// malformed "refuse" value throws. A key with no rule is handed over as
+// stored.
+function decodeKey(
+  file: string,
+  all: Record<string, unknown>,
+  key: string,
+): { found: false } | { found: true; value: unknown } {
+  if (!(key in all)) return { found: false };
+  const rule = RULES[file]?.[key];
+  if (rule === undefined) return { found: true, value: all[key] };
+  const decoded = safeDecodeWith(rule.schema, all[key]);
+  if (decoded.success) return { found: true, value: decoded.data };
+  if (rule.malformed === "absent") return { found: false };
+  throw new Error(
+    `${filePath(file)} holds a malformed "${key}" value ` +
+      `(${errorMessageOf(decoded.error)}). Nothing was written. ` +
+      "Fix the file or move it aside, then try again.",
+    { cause: decoded.error },
+  );
+}
 
 function filePath(file: string): string {
   return join(dataDir(), file);
@@ -101,10 +212,12 @@ function withStoreLock<T>(file: string, fn: () => T): T {
   return withFileLock(`${filePath(file)}.lock`, fn);
 }
 
+// The casts below are the store's generic surface: the value was
+// decoded against the key's rule, and the caller names the type that
+// rule's schema produces.
 function readKeyIn<T>(file: string, key: string, fallback: T): T {
-  const all = readAll(file);
-  if (key in all) return all[key] as T;
-  return fallback;
+  const read = decodeKey(file, readAll(file), key);
+  return read.found ? (read.value as T) : fallback;
 }
 
 function writeKeyIn<T>(file: string, key: string, value: T): void {
@@ -123,7 +236,8 @@ function updateKeyIn<T>(
 ): void {
   withStoreLock(file, () => {
     const all = readAll(file);
-    const current = key in all ? (all[key] as T) : fallback;
+    const read = decodeKey(file, all, key);
+    const current = read.found ? (read.value as T) : fallback;
     const next = update(current);
     if (next === undefined) return;
     all[key] = next;
@@ -140,7 +254,9 @@ const hintFailureLogged = new Set<string>();
 function noteHintFailure(file: string, error: unknown): void {
   if (hintFailureLogged.has(file)) return;
   hintFailureLogged.add(file);
-  console.warn(`[store] ${file} unreadable, falling back:`, error);
+  console.warn(
+    `[store] ${file} unreadable, falling back: ${errorMessageOf(error)}`,
+  );
 }
 
 interface JsonStore {

@@ -7,15 +7,22 @@
 // reads the same pointer file the app does, so it lands on the app's
 // root without being told.
 import { type ChildProcess, spawn } from "node:child_process";
+import type { Readable } from "node:stream";
+import { NodeStream } from "@effect/platform-node";
+import { Deferred, Effect, Fiber, Option, Stream } from "effect";
 import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
+import { decodeWith } from "@shared/ipc/codec";
 import { app } from "electron";
 import { registerInflightContributor } from "@host/lib/scripts";
 import { noteSelfWrite } from "@host/lib/util/selfWrite";
 import { signalTreeBestEffort } from "@host/lib/scripts/process";
 // The injection seam in the CLI delegate owns the document shapes;
 // this runner is the Electron-side implementation wired in at boot.
-import type { CliDoc, CliResult } from "@host/ipc/cliDelegate";
-import { lineSplitter } from "@host/lib/util/ndjson";
+import {
+  type CliDoc,
+  CliDocSchema,
+  type CliResult,
+} from "@host/ipc/cliDelegate";
 import { bundledBinaryResolver } from "./bundledBinary";
 
 export const cliBinaryPath = bundledBinaryResolver(
@@ -118,17 +125,58 @@ export async function spawnCliDetached(args: string[]): Promise<void> {
   });
 }
 
+// Signals the child's process group (its pid is the group leader, see
+// killAllCli), or the child alone when it never got a pid.
+function signalChild(child: ChildProcess, signal: NodeJS.Signals): void {
+  try {
+    if (child.pid !== undefined) signalTreeBestEffort(child.pid, signal);
+    else child.kill(signal);
+  } catch {
+    // Already gone.
+  }
+}
+
+// The documents on a child's stdout, as they arrive: NDJSON decoded
+// with the text and line splitting done by the stream, each non-empty
+// line parsed and decoded against CliDocSchema. A line that is not a
+// document is logged and skipped, never fatal: the run's outcome is in
+// the documents that did decode and in the exit code. A stdout that
+// errors ends the stream there, like its end would.
+function cliDocs(stdout: Readable): Stream.Stream<CliDoc> {
+  return NodeStream.fromReadable<Uint8Array, unknown>({
+    evaluate: () => stdout,
+    onError: (error) => error,
+  }).pipe(
+    Stream.decodeText(),
+    Stream.splitLines,
+    Stream.map((line) => line.trim()),
+    Stream.filter((line) => line !== ""),
+    Stream.mapEffect((line) =>
+      Effect.try((): CliDoc => decodeWith(CliDocSchema, JSON.parse(line))).pipe(
+        Effect.catch(() =>
+          Effect.sync(() => {
+            console.warn("[cli] unparseable output line:", line.slice(0, 200));
+            return null;
+          }),
+        ),
+      ),
+    ),
+    Stream.filter((doc): doc is CliDoc => doc !== null),
+    Stream.catch(() => Stream.empty),
+  );
+}
+
 // Runs `sm --json <args>`, parsing each stdout line as a document and
 // forwarding it to onDoc as it arrives. Resolves with every document
-// once the process exits, and rejects only on spawn failure. Non-zero
-// exits resolve normally since the error payload is in the documents.
-// extraEnv overlays the app's environment (used by cliShell.ts to pass
-// the user's real shell-config env vars, which launchd strips).
-// opts.background exempts the child from the busy aggregate (see
-// backgroundChildren). opts.timeoutMs SIGKILLs the child's process
-// group when it runs that long, so a wedged child (a stuck subprocess
-// on the Go side) can't hold the returned promise open forever. The
-// kill surfaces as a normal non-zero close.
+// once the process exits and its stdout is drained, and rejects only on
+// spawn failure. Non-zero exits resolve normally since the error
+// payload is in the documents. extraEnv overlays the app's environment
+// (used by cliShell.ts to pass the user's real shell-config env vars,
+// which launchd strips). opts.background exempts the child from the
+// busy aggregate (see backgroundChildren). opts.timeoutMs SIGKILLs the
+// child's process group when it runs that long, so a wedged child (a
+// stuck subprocess on the Go side) can't hold the returned promise open
+// forever. The kill surfaces as a normal non-zero close.
 export async function runCli(
   args: string[],
   onDoc?: (doc: CliDoc) => void,
@@ -136,66 +184,89 @@ export async function runCli(
   opts?: { background?: boolean; timeoutMs?: number },
 ): Promise<CliResult> {
   const binary = requireCliBinary();
-  return new Promise((resolve, reject) => {
-    const child = spawn(binary, ["--json", ...args], {
-      env: { ...process.env, ...extraEnv },
-      // Own process group so killAllCli can signal the CLI and any
-      // lifecycle script it spawned as one unit (see killAllCli).
-      detached: true,
-    });
-    children.add(child);
-    if (opts?.background) backgroundChildren++;
-    const killTimer =
-      opts?.timeoutMs !== undefined
-        ? setTimeout(() => {
-            try {
-              if (child.pid !== undefined)
-                signalTreeBestEffort(child.pid, "SIGKILL");
-              else child.kill("SIGKILL");
-            } catch {
-              // Already gone.
-            }
-          }, opts.timeoutMs)
-        : null;
-    // error and close can both fire for one child, so release runs once.
-    const release = () => {
-      if (killTimer !== null) clearTimeout(killTimer);
-      if (children.delete(child) && opts?.background) backgroundChildren--;
-    };
-
-    const docs: CliDoc[] = [];
-    child.stdout.on(
-      "data",
-      lineSplitter((line) => {
-        try {
-          const doc = JSON.parse(line) as CliDoc;
-          docs.push(doc);
-          onDoc?.(doc);
-        } catch {
-          console.warn("[cli] unparseable output line:", line.slice(0, 200));
-        }
-      }),
-    );
-
-    // Human diagnostics land on stderr; keep a tail for error surfaces.
-    let stderrTail = "";
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderrTail = (stderrTail + chunk.toString("utf8")).slice(-4000);
-    });
-
-    child.on("error", (error) => {
-      release();
-      reject(error);
-    });
-    child.on("close", (code) => {
-      release();
-      // The CLI's writes into the data dir are the app's own doing; mark
-      // them so the state watcher doesn't refetch-storm on the echo.
-      // (While the child runs, the watcher checks cliChildCount().)
-      noteSelfWrite();
-      resolve({ code: code ?? -1, docs, stderrTail });
-    });
+  const child = spawn(binary, ["--json", ...args], {
+    env: { ...process.env, ...extraEnv },
+    // Own process group so killAllCli can signal the CLI and any
+    // lifecycle script it spawned as one unit (see killAllCli).
+    detached: true,
   });
+  children.add(child);
+  if (opts?.background) backgroundChildren++;
+  // error and close can both fire for one child, so release runs once
+  // and the first of them settles the run.
+  const release = () => {
+    if (children.delete(child) && opts?.background) backgroundChildren--;
+  };
+
+  // Listened for here, synchronously: a spawn failure is emitted on a
+  // later tick, and an 'error' nobody listens for is an uncaught
+  // exception in the main process.
+  const closed = Deferred.makeUnsafe<number | null, Error>();
+  child.on("error", (error) => {
+    release();
+    Deferred.doneUnsafe(closed, Effect.fail(error));
+  });
+  child.on("close", (code) => {
+    release();
+    // The CLI's writes into the data dir are the app's own doing; mark
+    // them so the state watcher doesn't refetch-storm on the echo.
+    // (While the child runs, the watcher checks cliChildCount().)
+    noteSelfWrite();
+    Deferred.doneUnsafe(closed, Effect.succeed(code));
+  });
+
+  // Human diagnostics land on stderr; keep a tail for error surfaces.
+  let stderrTail = "";
+  child.stderr.on("data", (chunk: Buffer) => {
+    stderrTail = (stderrTail + chunk.toString("utf8")).slice(-4000);
+  });
+
+  const docs: CliDoc[] = [];
+  // Contained: a throw from the caller's callback would end the reader
+  // with a defect and lose every later document.
+  const deliver = (doc: CliDoc) =>
+    Effect.sync(() => {
+      docs.push(doc);
+      try {
+        onDoc?.(doc);
+      } catch (error) {
+        console.warn("[cli] document handler threw:", error);
+      }
+    });
+
+  // The close, bounded by timeoutMs: past it the group is SIGKILLed and
+  // the close that kill causes is awaited as usual.
+  const exited =
+    opts?.timeoutMs === undefined
+      ? Deferred.await(closed)
+      : Deferred.await(closed).pipe(
+          Effect.timeoutOption(opts.timeoutMs),
+          Effect.flatMap(
+            Option.match({
+              onSome: Effect.succeed,
+              onNone: () =>
+                Effect.sync(() => signalChild(child, "SIGKILL")).pipe(
+                  Effect.andThen(Deferred.await(closed)),
+                ),
+            }),
+          ),
+        );
+
+  // On Effect's default runtime: this needs no service, and a run can
+  // start while the app's runtime is being disposed on quit (a layer's
+  // stop that shells out), when a run on it would die at once.
+  return Effect.runPromise(
+    Effect.gen(function* () {
+      const reader = yield* Effect.forkChild(
+        Stream.runForEach(cliDocs(child.stdout), deliver),
+      );
+      const code = yield* exited;
+      // stdout ends before close, so this is the tail of the last
+      // chunk, already read or about to be.
+      yield* Fiber.join(reader);
+      return { code: code ?? -1, docs, stderrTail };
+    }),
+  );
 }
 
 // The failure message for a run whose documents carried no result: the

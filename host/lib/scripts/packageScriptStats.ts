@@ -7,11 +7,12 @@ import type {
   PackageScriptSortMode,
   PackageScriptUsage,
 } from "@shared/schemas";
-import { stateStore } from "../config/store";
+import {
+  PACKAGE_SCRIPT_SORT_KEY as SORT_KEY,
+  PACKAGE_SCRIPT_USE_LOG_KEY as USE_LOG_KEY,
+  stateStore,
+} from "../config/store";
 import { countWithin, maxTimestamp, pruneAndPush } from "../util/useLog";
-
-const USE_LOG_KEY = "packageScriptUseLog";
-const SORT_KEY = "packageScriptSort";
 
 type UseLog = Record<string, Record<string, number[]>>;
 type SortMap = Record<string, PackageScriptSortMode>;

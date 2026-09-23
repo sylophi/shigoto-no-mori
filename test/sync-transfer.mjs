@@ -22,6 +22,11 @@
 //   - the host drops a finished transfer (a stale chunk request is
 //     refused) and bundleAbort cleans up an abandoned one;
 //   - unpacking a corrupted bundle fails with the coded "bad-bundle".
+//   - a pull whose caller leaves mid-transfer (its ctx signal aborts)
+//     leaves no temp bundle behind within a second, on either side:
+//     the receiver's is its fiber's and goes with it, and the host's
+//     goes with the abort the receiver sends on its way out, not at the
+//     10 minute idle sweep. Nothing lands and the incoming ref is swept.
 //
 // The pull orchestration (slice C) and the transplant orchestration on
 // top of it (step 9: pull plus source teardown over the peer's
@@ -40,6 +45,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -757,6 +763,109 @@ async function main() {
     );
     ok(
       "pull refusals: an already-existing branch and an unmatched repo identity both refuse up front",
+    );
+
+    // (8b) A caller that leaves mid-transfer. The chunk requests are
+    // held at the receiver's side of the wire, so the transfer is
+    // started on both ends (the host's bundle built, the receiver's
+    // temp file open) when the caller's signal aborts. Every temp dir
+    // of the transfer is made under a sandboxed TMPDIR for the check,
+    // so what is left behind is exactly what the listing shows.
+    const departTmp = join(sandbox, "depart-tmp");
+    mkdirSync(departTmp);
+    const tmpBefore = process.env.TMPDIR;
+    process.env.TMPDIR = departTmp;
+    const transferDirs = () =>
+      readdirSync(departTmp).filter((name) => name.startsWith("sm-sync-"));
+    const departPath = join(sandbox, "wt-depart");
+    await git(sourceRepo, [
+      "worktree",
+      "add",
+      "-q",
+      "-b",
+      "feature-depart",
+      departPath,
+    ]);
+    writeFileSync(join(departPath, "departing.txt"), "left mid-transfer\n");
+    await git(departPath, ["add", "-A"]);
+    await git(departPath, ["commit", "-qm", "departing"]);
+    const held = [];
+    const heldChunks = {
+      ...sync,
+      bundleChunk: (input) =>
+        new Promise((resolve, reject) => {
+          held.push(() => sync.bundleChunk(input).then(resolve, reject));
+        }),
+    };
+    services.peerApis = Layer.succeed(PeerApis, {
+      syncApiFor: () => heldChunks,
+      worktreesApiFor: () => worktreesOverWire,
+    });
+    await provide();
+    try {
+      const departing = new AbortController();
+      const left = syncHandlers
+        .pullWorktree(
+          {
+            sourceDeviceId: "A",
+            sourceProjectId,
+            sourceWorktreeId: worktreeIdFromPath(departPath),
+            sourceIdentity: identity,
+            branch: "feature-depart",
+          },
+          { signal: departing.signal, notifier: () => () => {} },
+        )
+        .then(
+          () => "resolved",
+          () => "rejected",
+        );
+      const deadline = Date.now() + 30_000;
+      while (held.length === 0) {
+        if (Date.now() > deadline) throw new Error("no chunk was ever asked");
+        // oxlint-disable-next-line no-await-in-loop -- polling for the transfer to start
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      const started = transferDirs();
+      assert.ok(
+        started.some((name) => name.startsWith("sm-sync-recv-")) &&
+          started.some((name) => !name.startsWith("sm-sync-recv-")),
+        `the transfer had not made both temp bundles: ${started.join(", ")}`,
+      );
+      const leftAt = Date.now();
+      departing.abort();
+      assert.equal(await left, "rejected", "an interrupted pull resolved");
+      while (transferDirs().length > 0 && Date.now() - leftAt < 1_000) {
+        // oxlint-disable-next-line no-await-in-loop -- polling for the cleanup
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      assert.deepEqual(
+        transferDirs(),
+        [],
+        "a temp bundle outlived its departed caller by a second",
+      );
+      assert.equal(
+        await refExists(targetRepo, "refs/shigomori/incoming/feature-depart"),
+        false,
+        "the departed pull left its incoming ref",
+      );
+      assert.equal(
+        await refExists(targetRepo, "refs/heads/feature-depart"),
+        false,
+        "the departed pull landed a branch",
+      );
+    } finally {
+      // The held requests go through now, to a transfer already gone.
+      for (const release of held.splice(0)) release();
+      process.env.TMPDIR = tmpBefore;
+      if (tmpBefore === undefined) delete process.env.TMPDIR;
+      services.peerApis = Layer.succeed(PeerApis, {
+        syncApiFor: () => sync,
+        worktreesApiFor: () => worktreesOverWire,
+      });
+      await provide();
+    }
+    ok(
+      "a pull whose caller leaves mid-transfer leaves no temp bundle on either side within a second, lands nothing, and sweeps its incoming ref",
     );
 
     // ---- The transplant (step 9): the pull above plus tearing the

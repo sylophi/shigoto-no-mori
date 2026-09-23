@@ -39,6 +39,14 @@ export interface CliDoc {
   [key: string]: unknown;
 }
 
+// The shape every line of that stream decodes against before it is a
+// CliDoc: a JSON object whose `event`, when present, is a string. The
+// rest of its keys ride through for the per-command schemas below.
+export const CliDocSchema = Schema.StructWithRest(
+  Schema.Struct({ event: Schema.optional(Schema.String) }),
+  [Schema.Record(Schema.String, Schema.Unknown)],
+);
+
 export interface CliResult {
   code: number;
   docs: CliDoc[];

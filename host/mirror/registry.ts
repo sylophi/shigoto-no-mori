@@ -6,7 +6,7 @@
 // can stop a worktree's mirrors without importing that module (which
 // reaches sync, which reaches worktrees).
 import { randomUUID } from "node:crypto";
-import { Context, Schema } from "effect";
+import { Context, Effect, Option, Schema } from "effect";
 import {
   isTransferSession,
   MIRROR_LABEL_TRANSFER,
@@ -18,7 +18,7 @@ import {
   type MirrorSession,
 } from "@shared/ipc/modules/mirror";
 import { errorMessageOf } from "@shared/errors";
-import { hostService, hostServiceOrNull } from "@host/runtime";
+import { hostService, hostServiceOrNull, requireService } from "@host/runtime";
 
 const isMirrorIgnoreMode = Schema.is(MirrorIgnoreModeSchema);
 
@@ -107,20 +107,44 @@ export class MirrorEngine extends Context.Service<MirrorEngine, MirrorImpl>()(
   "sm/host/MirrorEngine",
 ) {}
 
+const MISSING_ENGINE =
+  "mirror handler invoked before the host runtime provided MirrorEngine";
+
+// Why a daemon cannot take a session, or null when it can.
+function notRunning(daemon: MirrorImpl): Error | null {
+  const status = daemon.status();
+  if (status === "running") return null;
+  return new Error(
+    status === "unavailable"
+      ? "Mirroring is unavailable on this device: the file-sync engine is missing."
+      : "The mirror engine is still starting. Try again in a moment.",
+  );
+}
+
 // The engine when it can take a session, or the reason it cannot:
 // the mirror start and the transplant's file transfer both begin here.
 export function requireRunningEngine(): MirrorImpl {
   const daemon = engine();
-  const status = daemon.status();
-  if (status !== "running") {
-    throw new Error(
-      status === "unavailable"
-        ? "Mirroring is unavailable on this device: the file-sync engine is missing."
-        : "The mirror engine is still starting. Try again in a moment.",
-    );
-  }
+  const refusal = notRunning(daemon);
+  if (refusal !== null) throw refusal;
   return daemon;
 }
+
+// The daemon for a handler written as an Effect.
+export const mirrorEngine: Effect.Effect<MirrorImpl, never, MirrorEngine> =
+  requireService(MirrorEngine, MISSING_ENGINE);
+
+// requireRunningEngine as an Effect. A runtime with no engine at all
+// fails with the same "invoked before" message rather than dying, so
+// the transplant's file step reports it as its outcome.
+export const runningEngine: Effect.Effect<MirrorImpl, Error, MirrorEngine> =
+  Effect.flatMap(Effect.serviceOption(MirrorEngine), (found) => {
+    if (Option.isNone(found)) return Effect.fail(new Error(MISSING_ENGINE));
+    const refusal = notRunning(found.value);
+    return refusal === null
+      ? Effect.succeed(found.value)
+      : Effect.fail(refusal);
+  });
 
 // The daemon's sessions that ARE mirrors: a transplant's one-shot
 // transfer (host/mirror/oneShot.ts) rides the same daemon under a
@@ -177,10 +201,7 @@ export function engineOrNull(): MirrorImpl | null {
 }
 
 export function engine(): MirrorImpl {
-  return hostService(
-    MirrorEngine,
-    "mirror handler invoked before the host runtime provided MirrorEngine",
-  );
+  return hostService(MirrorEngine, MISSING_ENGINE);
 }
 
 // Every session whose local side is the named worktree, stopped. The

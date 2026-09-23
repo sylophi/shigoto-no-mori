@@ -2,10 +2,9 @@
 // sync:bundleStart / sync:bundleChunk surface into a local temp file,
 // then unpacks it into this device's repo via the CLI. Exported for
 // the sync orchestration (slice C); no UI here.
-import { Schema } from "effect";
-import { type FileHandle, mkdtemp, open, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import type { FileHandle } from "node:fs/promises";
 import { join } from "node:path";
+import { Cause, Effect, Exit, Option, Schema } from "effect";
 import {
   SyncBundleStartResultSchema,
   type syncContract,
@@ -14,11 +13,9 @@ import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
 import type { Client } from "@shared/ipc/types";
 import { bundleUnpackViaCli } from "@host/ipc/cliDelegate";
 import { findProjectOrThrow } from "@host/lib/projects";
-import {
-  type ChunkWindow,
-  coalescedProgress,
-  createChunkWindow,
-} from "./chunkWindow";
+import { hostAttempt } from "@host/runtime";
+import { coalescedProgress, pumpChunks } from "./chunkWindow";
+import { scopedFile, scopedTempDir } from "./scopedFiles";
 
 export interface FetchBundleInput {
   // The project id on the PEER (ids differ per device registry;
@@ -49,7 +46,7 @@ export function landingRefspec(ref: string): string {
 }
 
 // Windowed chunk loop: writes the announced bytes of a started
-// transfer into `handle` and resolves once all of them landed. The
+// transfer into `handle` and succeeds once all of them landed. The
 // first chunk goes alone. When it is the wire's chunk size, every later
 // offset is a multiple of it and the chunks between the first and the
 // last ride a window (chunkWindow.ts). A short read on the peer leaves
@@ -59,130 +56,179 @@ export function landingRefspec(ref: string): string {
 // read still in flight. A first chunk of any other size is a peer that
 // cuts its chunks differently, and that transfer goes on one chunk at
 // a time, each offset following from the last answer, as every
-// transfer once did. Exported for the wire benchmark
-// (test/bench/wire.mjs), which drives it over a shaped link.
-export async function receiveBundleChunks(
+// transfer once did. Interruptible at every chunk: a caller that
+// leaves stops the loop, and the window waits for no answer.
+export const receiveChunks = (
+  peer: Pick<Client<typeof syncContract>, "bundleChunk">,
+  transfer: { transferId: string; bytes: number },
+  handle: Pick<FileHandle, "write">,
+  report: (bytes: number, final: boolean) => void,
+): Effect.Effect<void, unknown> =>
+  Effect.gen(function* () {
+    let received = 0;
+    // One chunk: request, check it against the announced size, write it
+    // at its own offset.
+    const take = (offset: number) =>
+      Effect.gen(function* () {
+        const chunk = yield* hostAttempt(() =>
+          peer.bundleChunk({ transferId: transfer.transferId, offset }),
+        );
+        const data = Buffer.from(chunk.dataB64, "base64");
+        // A peer that stops making progress or overshoots its own
+        // announced size is broken; bail instead of looping/growing.
+        if (!chunk.eof && data.length === 0) {
+          return yield* Effect.fail(
+            new Error("bundle transfer stalled (empty non-final chunk)"),
+          );
+        }
+        if (offset + data.length > transfer.bytes) {
+          return yield* Effect.fail(
+            new Error("bundle transfer overran the announced size"),
+          );
+        }
+        yield* hostAttempt(() => handle.write(data, 0, data.length, offset));
+        received += data.length;
+        report(received, chunk.eof);
+        return { bytes: data.length, eof: chunk.eof };
+      });
+    // The bytes from `offset` up to `end`, however many answers they
+    // take: a short one is followed by a request for the rest.
+    const takeThrough = (offset: number, end: number) =>
+      Effect.gen(function* () {
+        for (let at = offset; at < end;) {
+          const { bytes, eof } = yield* take(at);
+          at += bytes;
+          if (at > end || (eof && at < end)) {
+            return yield* Effect.fail(
+              new Error("bundle transfer chunk did not match its offset"),
+            );
+          }
+        }
+        return end - offset;
+      });
+
+    const first = yield* take(0);
+    if (!first.eof && first.bytes === WIRE_CHUNK_BYTES) {
+      const stride = WIRE_CHUNK_BYTES;
+      const lastOffset = Math.floor((transfer.bytes - 1) / stride) * stride;
+      let offset = stride;
+      yield* pumpChunks(
+        stride,
+        Effect.sync(() => {
+          if (offset >= lastOffset) return Option.none();
+          const at = offset;
+          offset += stride;
+          return Option.some(takeThrough(at, at + stride));
+        }),
+      );
+      yield* takeThrough(lastOffset, transfer.bytes);
+    } else if (!first.eof) {
+      yield* takeThrough(first.bytes, transfer.bytes);
+    }
+    if (received !== transfer.bytes) {
+      return yield* Effect.fail(
+        new Error(
+          `bundle transfer incomplete: got ${received} of ${transfer.bytes} bytes`,
+        ),
+      );
+    }
+  });
+
+// The same loop for a Promise-side caller. Exported for the wire
+// benchmark (test/bench/wire.mjs), which drives it over a shaped link.
+export function receiveBundleChunks(
   peer: Pick<Client<typeof syncContract>, "bundleChunk">,
   transfer: { transferId: string; bytes: number },
   handle: Pick<FileHandle, "write">,
   report: (bytes: number, final: boolean) => void,
 ): Promise<void> {
-  let received = 0;
-  let window: ChunkWindow | null = null;
-  try {
-    // One chunk: request, check it against the announced size, write it
-    // at its own offset.
-    const take = async (
-      offset: number,
-    ): Promise<{ bytes: number; eof: boolean }> => {
-      const chunk = await peer.bundleChunk({
-        transferId: transfer.transferId,
-        offset,
-      });
-      const data = Buffer.from(chunk.dataB64, "base64");
-      // A peer that stops making progress or overshoots its own
-      // announced size is broken; bail instead of looping/growing.
-      if (!chunk.eof && data.length === 0) {
-        throw new Error("bundle transfer stalled (empty non-final chunk)");
-      }
-      if (offset + data.length > transfer.bytes) {
-        throw new Error("bundle transfer overran the announced size");
-      }
-      await handle.write(data, 0, data.length, offset);
-      received += data.length;
-      report(received, chunk.eof);
-      return { bytes: data.length, eof: chunk.eof };
-    };
-    // The bytes from `offset` up to `end`, however many answers they
-    // take: a short one is followed by a request for the rest.
-    const takeThrough = async (
-      offset: number,
-      end: number,
-    ): Promise<number> => {
-      for (let at = offset; at < end;) {
-        // oxlint-disable-next-line no-await-in-loop -- each offset follows the last answer
-        const { bytes, eof } = await take(at);
-        at += bytes;
-        if (at > end || (eof && at < end)) {
-          throw new Error("bundle transfer chunk did not match its offset");
-        }
-      }
-      return end - offset;
-    };
-
-    const first = await take(0);
-    if (!first.eof && first.bytes === WIRE_CHUNK_BYTES) {
-      const stride = WIRE_CHUNK_BYTES;
-      const lastOffset = Math.floor((transfer.bytes - 1) / stride) * stride;
-      window = createChunkWindow(stride);
-      for (let offset = stride; offset < lastOffset; offset += stride) {
-        const at = offset;
-        // oxlint-disable-next-line no-await-in-loop -- the window's backpressure
-        await window.add(() => takeThrough(at, at + stride));
-      }
-      await window.drain();
-      await takeThrough(lastOffset, transfer.bytes);
-    } else if (!first.eof) {
-      await takeThrough(first.bytes, transfer.bytes);
-    }
-  } finally {
-    await window?.settled();
-  }
-  if (received !== transfer.bytes) {
-    throw new Error(
-      `bundle transfer incomplete: got ${received} of ${transfer.bytes} bytes`,
-    );
-  }
+  return Effect.runPromise(receiveChunks(peer, transfer, handle, report));
 }
 
-// Abort on any error (best effort -- the host's idle sweep is the
-// backstop), temp file always removed. The peer parameter is the
-// transfer slice of a peer's sync client (a subset of
-// host/ipc/peerSync.ts's PeerSyncApi) -- window.api-shaped device apis
-// and a bare contract client both satisfy it.
-export async function fetchBundleFromPeer(
-  peer: Pick<
-    Client<typeof syncContract>,
-    "bundleStart" | "bundleChunk" | "bundleAbort"
-  >,
-  input: FetchBundleInput,
-): Promise<{
+type FetchBundlePeer = Pick<
+  Client<typeof syncContract>,
+  "bundleStart" | "bundleChunk" | "bundleAbort"
+>;
+
+type Fetched = {
   readonly fetched: readonly {
     readonly ref: string;
     readonly commit: string;
   }[];
-}> {
-  const project = findProjectOrThrow(input.targetProjectId);
-  // Re-parsed here because the byte count flows into the progress
-  // frames' strict schema and bounds the loop below: the peer's own
-  // output validation is not this device's wall.
-  const start = Schema.decodeUnknownSync(SyncBundleStartResultSchema)(
-    await peer.bundleStart({
-      projectId: input.sourceProjectId,
-      refs: input.refs,
-      haves: input.haves,
-    }),
-  );
-  input.onProgress?.(0, start.bytes);
-  const report = coalescedProgress(start.bytes, input.onProgress);
-  const dir = await mkdtemp(join(tmpdir(), "sm-sync-recv-"));
-  try {
-    const path = join(dir, "incoming.bundle");
-    const handle = await open(path, "w");
-    try {
-      await receiveBundleChunks(peer, start, handle, report);
-    } finally {
-      await handle.close();
-    }
-    const refspecs = input.refs.map(landingRefspec);
-    return await bundleUnpackViaCli(project, path, refspecs);
-  } catch (error) {
-    // On the success path the host already dropped the transfer at
-    // eof; this only tells it a giving-up receiver is done. Best
-    // effort: abort is idempotent and the idle sweep backstops it.
-    await peer.bundleAbort({ transferId: start.transferId }).catch(() => {});
-    throw error;
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+};
+
+// Abort on any error (best effort -- the host's idle sweep is the
+// backstop), temp file always removed, at once when the caller leaves:
+// the dir is a resource of this fiber (scopedFiles.ts). The peer
+// parameter is the transfer slice of a peer's sync client (a subset of
+// host/ipc/peerSync.ts's PeerSyncApi) -- window.api-shaped device apis
+// and a bare contract client both satisfy it.
+export const fetchBundle = (
+  peer: FetchBundlePeer,
+  input: FetchBundleInput,
+): Effect.Effect<Fetched, unknown> =>
+  Effect.gen(function* () {
+    const project = yield* hostAttempt(() =>
+      findProjectOrThrow(input.targetProjectId),
+    );
+    return yield* Effect.scoped(
+      Effect.gen(function* () {
+        // Re-parsed here because the byte count flows into the progress
+        // frames' strict schema and bounds the loop below: the peer's
+        // own output validation is not this device's wall. Held as a
+        // resource: once the peer has minted the transfer, however this
+        // fiber ends short of the eof tells it a giving-up receiver is
+        // done. On the success path the host already dropped the
+        // transfer at eof. Best effort: abort is idempotent and the
+        // idle sweep backstops it. A failure waits for the answer; a
+        // caller that left does not wait on the peer, it only sends it.
+        const start = yield* Effect.acquireRelease(
+          hostAttempt(async () =>
+            Schema.decodeUnknownSync(SyncBundleStartResultSchema)(
+              await peer.bundleStart({
+                projectId: input.sourceProjectId,
+                refs: input.refs,
+                haves: input.haves,
+              }),
+            ),
+          ),
+          (started, exit) => {
+            const abort = () =>
+              peer
+                .bundleAbort({ transferId: started.transferId })
+                .catch(() => {});
+            if (Exit.isSuccess(exit)) return Effect.void;
+            return Cause.hasInterrupts(exit.cause)
+              ? Effect.sync(() => void abort())
+              : Effect.promise(abort);
+          },
+        );
+        input.onProgress?.(0, start.bytes);
+        const report = coalescedProgress(start.bytes, input.onProgress);
+        const dir = yield* scopedTempDir("sm-sync-recv-");
+        const path = join(dir.value, "incoming.bundle");
+        yield* Effect.scoped(
+          Effect.flatMap(scopedFile(path, "w"), (handle) =>
+            receiveChunks(peer, start, handle.value, report),
+          ),
+        );
+        const refspecs = input.refs.map(landingRefspec);
+        // Uninterruptible: the unpack is one non-atomic git fetch over
+        // several refspecs into refs/shigomori/, and the CLI runs it to
+        // its end whatever this fiber does. Left interruptible, a
+        // caller leaving would remove the bundle under the fetch still
+        // reading it, and the caller's own sweep of the landing refs
+        // would race refs still being written.
+        return yield* Effect.uninterruptible(
+          hostAttempt(() => bundleUnpackViaCli(project, path, refspecs)),
+        );
+      }),
+    );
+  });
+
+export function fetchBundleFromPeer(
+  peer: FetchBundlePeer,
+  input: FetchBundleInput,
+): Promise<Fetched> {
+  return Effect.runPromise(fetchBundle(peer, input));
 }

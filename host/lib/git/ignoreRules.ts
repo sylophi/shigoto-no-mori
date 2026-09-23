@@ -11,7 +11,8 @@
 // bare name matches at any depth beneath it, as git reads them.
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { run } from "./core";
+import { Effect } from "effect";
+import { runEffect, runGit } from "./core";
 
 export const IGNORE_RULES_LIMIT = 512;
 
@@ -44,49 +45,54 @@ export function anchorRule(rule: string, folder: string): string {
 
 // Every .gitignore git can see: tracked ones and untracked ones it
 // does not itself ignore. The pathspec's * spans folders.
-async function listIgnoreFiles(worktreePath: string): Promise<string[]> {
-  try {
-    const out = await run(worktreePath, [
-      "ls-files",
-      "-z",
-      "--cached",
-      "--others",
-      "--exclude-standard",
-      "--",
-      ".gitignore",
-      "*/.gitignore",
-    ]);
-    return out.split("\0").filter((path) => path !== "");
-  } catch {
-    return [".gitignore"];
-  }
+function listIgnoreFiles(worktreePath: string): Effect.Effect<string[]> {
+  return runEffect(worktreePath, [
+    "ls-files",
+    "-z",
+    "--cached",
+    "--others",
+    "--exclude-standard",
+    "--",
+    ".gitignore",
+    "*/.gitignore",
+  ]).pipe(
+    Effect.map((out) => out.split("\0").filter((path) => path !== "")),
+    Effect.orElseSucceed(() => [".gitignore"]),
+  );
 }
 
-export async function listIgnoreRules(worktreePath: string): Promise<string[]> {
-  const files = await listIgnoreFiles(worktreePath);
-  const rules: string[] = [];
-  for (const file of files.toSorted()) {
-    const folder = dirname(file) === "." ? "" : dirname(file);
-    // oxlint-disable-next-line no-await-in-loop -- one small file each
-    for (const rule of await readRules(join(worktreePath, file))) {
-      rules.push(anchorRule(rule, folder));
+export const listIgnoreRulesEffect = Effect.fn("ignoreRules.listIgnoreRules")(
+  function* (worktreePath: string) {
+    const files = yield* listIgnoreFiles(worktreePath);
+    const rules: string[] = [];
+    for (const file of files.toSorted()) {
+      const folder = dirname(file) === "." ? "" : dirname(file);
+      // One small file each.
+      for (const rule of yield* Effect.promise(() =>
+        readRules(join(worktreePath, file)),
+      )) {
+        rules.push(anchorRule(rule, folder));
+      }
     }
-  }
-  // The exclude file lives in the repository's git dir, which a
-  // linked worktree only points at. Its rules read like the root's.
-  let excludePath = "";
-  try {
-    excludePath = (
-      await run(worktreePath, [
-        "rev-parse",
-        "--path-format=absolute",
-        "--git-path",
-        "info/exclude",
-      ])
-    ).trim();
-  } catch {
+    // The exclude file lives in the repository's git dir, which a
+    // linked worktree only points at. Its rules read like the root's.
     // No git dir to ask: the .gitignore files alone.
-  }
-  if (excludePath !== "") rules.push(...(await readRules(excludePath)));
-  return [...new Set(rules)].slice(0, IGNORE_RULES_LIMIT);
+    const excludePath = yield* runEffect(worktreePath, [
+      "rev-parse",
+      "--path-format=absolute",
+      "--git-path",
+      "info/exclude",
+    ]).pipe(
+      Effect.map((out) => out.trim()),
+      Effect.orElseSucceed(() => ""),
+    );
+    if (excludePath !== "") {
+      rules.push(...(yield* Effect.promise(() => readRules(excludePath))));
+    }
+    return [...new Set(rules)].slice(0, IGNORE_RULES_LIMIT);
+  },
+);
+
+export function listIgnoreRules(worktreePath: string): Promise<string[]> {
+  return runGit(listIgnoreRulesEffect(worktreePath));
 }

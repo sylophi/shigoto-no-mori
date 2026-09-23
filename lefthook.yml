@@ -75,6 +75,22 @@ pre-commit:
     git-runner:
       glob: "{host/lib/git/core.ts,shared/ipc/effectHandler.ts,test/git-runner.mjs,test/lib/checkKit.mjs}"
       run: pnpm test git-runner
+    # The git library as Effects against real sandbox repositories:
+    # BranchNotMerged through the branches handler and onto the wire, a
+    # departed worktrees:list caller killing every row probe's git under
+    # the row window, one shared in-flight fetch per project, and the
+    # per-worktree index lock.
+    git-lib:
+      glob: "{host/lib/git/**,host/lib/worktrees/hygiene.ts,host/ipc/modules/{branches,worktrees}.ts,test/git-lib.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test git-lib
+    # The host libraries on Effect, against real files and a stub gh on
+    # PATH: concurrent icon lookups share one resolution and a failure
+    # is never cached (and every persist lands), a directory walk never
+    # has more than 8 reads in flight, and gh's timeout and a cancelled
+    # run both kill the child and fail typed.
+    host-libs:
+      glob: "{host/lib/projects/icon.ts,host/lib/githubCli/exec.ts,host/lib/util/dirSize.ts,test/host-libs.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test host-libs
     # The hub connection core's dial and lifecycle under TestClock, pure
     # (a fake socket adapter, a scripted ticket mint): the mint and
     # accept deadlines, close-code verdicts, redial with a fresh ticket,
@@ -251,6 +267,22 @@ pre-commit:
     auto-pull:
       glob: "{host/lib/worktrees/autoPull.ts,host/lib/worktrees/autoPullSweep.ts,host/lib/git/sync.ts,host/lib/git/core.ts,host/lib/config/store.ts,test/auto-pull.mjs,test/lib/checkKit.mjs}"
       run: pnpm test auto-pull
+    # The data-dir stores against a sandbox data dir: the global-config
+    # write lock keeps both of two concurrent updates, the change
+    # listeners fire and unsubscribe, registry.json keys decode against
+    # their schemas (an unknown key round-trips, a malformed value fails
+    # the strict read and reads the fallback on the lenient one), and
+    # the fresh read bypasses the TTL.
+    config-store:
+      glob: "{host/lib/config/**,host/lib/util/jsonFile.ts,test/config-store.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test config-store
+    # The script runner: the 16 ms / 64 KiB output batching under
+    # TestClock and against a real pty, the SIGTERM-then-SIGKILL kill
+    # escalation, and withDeleteInflight refusing a script start while
+    # it holds the worktree's mark.
+    scripts:
+      glob: "{host/lib/scripts/**,test/scripts.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test scripts
     # Drives the electron-free account layer (main/core/account/*,
     # shared/account/*) end to end with stubs: the hub client's
     # route/method/auth-tier discipline against the shared schemas

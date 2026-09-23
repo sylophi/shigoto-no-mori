@@ -1,4 +1,5 @@
-import { PATCH_MAX_BUFFER, runLenient } from "./core";
+import { Effect } from "effect";
+import { PATCH_MAX_BUFFER, runGit, runLenientEffect } from "./core";
 
 // The diff of one file in the working tree, read as the changes page
 // picks files. Nothing here can go stale against a list built somewhere
@@ -15,11 +16,11 @@ import { PATCH_MAX_BUFFER, runLenient } from "./core";
 // `paths` is the file, preceded by its old name when git records a
 // rename. Handing over both is what makes the pair one entry rather
 // than an unexplained addition.
-export async function getFileDiff(
+export const getFileDiffEffect = Effect.fn("diff.getFileDiff")(function* (
   worktreePath: string,
   paths: readonly string[],
   untracked: boolean,
-): Promise<string> {
+) {
   const file = paths[paths.length - 1];
   if (file === undefined) return "";
   // A path is a filename and never a pattern. Without this a file called
@@ -32,7 +33,7 @@ export async function getFileDiff(
   // the file is an untracked change. A symlink is safe to let through:
   // `--no-index` prints where it points, never what is there.
   if (untracked) {
-    const listed = await runLenient(worktreePath, [
+    const listed = yield* runLenientEffect(worktreePath, [
       ...pathspecOpts,
       "ls-files",
       "--others",
@@ -43,31 +44,46 @@ export async function getFileDiff(
     if (listed === "") return "";
   }
   // `--` keeps a filename like `-weird.txt` from being parsed as flags,
-  // and `runLenient` swallows the non-zero exit `--no-index` makes
+  // and the lenient run swallows the non-zero exit `--no-index` makes
   // whenever it has a diff to print.
   const args = untracked
     ? ["diff", "--no-index", "--no-color", "--", "/dev/null", file]
     : ["diff", "HEAD", "--no-color", "--", ...paths];
-  return runLenient(worktreePath, [...pathspecOpts, ...args], {
+  return yield* runLenientEffect(worktreePath, [...pathspecOpts, ...args], {
     maxBuffer: PATCH_MAX_BUFFER,
   });
+});
+
+export function getFileDiff(
+  worktreePath: string,
+  paths: readonly string[],
+  untracked: boolean,
+): Promise<string> {
+  return runGit(getFileDiffEffect(worktreePath, paths, untracked));
 }
 
 // Unified patch of a single commit, with the commit metadata stripped
 // (`--format=`) so the output feeds straight into @pierre/diffs'
 // `parsePatchFiles`. Returns empty for commits without diffs (e.g. an
 // unconfigured merge commit).
-export async function getCommitDiff(
+export const getCommitDiffEffect = Effect.fn("diff.getCommitDiff")(function* (
   worktreePath: string,
   hash: string,
-): Promise<string> {
+) {
   // `--end-of-options` is what actually pins `hash` to the revision slot.
   // A trailing `--` only bounds the pathspec list, so on its own it would
   // still let a hash like `--output=FILE` be parsed as a flag and hand a
   // malicious repo an arbitrary file write.
-  return runLenient(
+  return yield* runLenientEffect(
     worktreePath,
     ["show", "--format=", "--no-color", "--end-of-options", hash, "--"],
     { maxBuffer: PATCH_MAX_BUFFER },
   );
+});
+
+export function getCommitDiff(
+  worktreePath: string,
+  hash: string,
+): Promise<string> {
+  return runGit(getCommitDiffEffect(worktreePath, hash));
 }

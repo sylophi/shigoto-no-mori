@@ -1,21 +1,29 @@
-import { branchNotMergedError } from "@shared/errors";
+import { Effect } from "effect";
+import { BranchNotMerged, branchNotMergedError } from "@shared/errors";
 import { type BranchList, isRealBranch } from "@shared/schemas";
-import { GitError, run, splitZ } from "./core";
+import { type GitFailure, runEffect, runGit, splitZ } from "./core";
 import {
-  listRemotes,
-  localBranchExists,
-  remoteRefExists,
+  listRemotesEffect,
+  localBranchExistsEffect,
+  remoteRefExistsEffect,
   splitRemoteRefSync,
 } from "./remotes";
 import type { WorktreeIdentity } from "./worktrees";
 
 // Rename the branch currently checked out in a worktree.
 // `git branch -m <new>` renames the current HEAD branch.
-export async function renameBranch(
+export const renameBranchEffect = Effect.fn("branches.renameBranch")(function* (
+  worktreePath: string,
+  newBranch: string,
+) {
+  yield* runEffect(worktreePath, ["branch", "-m", "--", newBranch]);
+});
+
+export function renameBranch(
   worktreePath: string,
   newBranch: string,
 ): Promise<void> {
-  await run(worktreePath, ["branch", "-m", "--", newBranch]);
+  return runGit(renameBranchEffect(worktreePath, newBranch));
 }
 
 // Switch a worktree to a different branch. Callers may hand us a
@@ -30,41 +38,59 @@ export async function renameBranch(
 // `--end-of-options` pins the name to the revision slot and the trailing
 // `--` keeps it out of the pathspec slot, so no caller-supplied name can
 // be read as a flag or as a file.
-export async function checkoutBranch(
+export const checkoutBranchEffect = Effect.fn("branches.checkoutBranch")(
+  function* (
+    worktreePath: string,
+    branch: string,
+    remotes?: readonly string[],
+  ) {
+    // An exact local branch (including the rare literal "remote/thing") wins.
+    if (yield* localBranchExistsEffect(worktreePath, branch)) {
+      yield* runEffect(worktreePath, [
+        "checkout",
+        "--end-of-options",
+        branch,
+        "--",
+      ]);
+      return;
+    }
+    const split = splitRemoteRefSync(
+      branch,
+      remotes ?? (yield* listRemotesEffect(worktreePath)),
+    );
+    // A qualified remote ref whose local branch doesn't exist yet: create the
+    // tracking branch from the explicit ref so a name shared across remotes
+    // stays unambiguous.
+    if (
+      split &&
+      !(yield* localBranchExistsEffect(worktreePath, split.branch))
+    ) {
+      yield* runEffect(worktreePath, [
+        "checkout",
+        "--track",
+        "--end-of-options",
+        branch,
+        "--",
+      ]);
+      return;
+    }
+    // Either a plain name git can DWIM, or the stripped local branch already
+    // exists, so switch to it.
+    yield* runEffect(worktreePath, [
+      "checkout",
+      "--end-of-options",
+      split ? split.branch : branch,
+      "--",
+    ]);
+  },
+);
+
+export function checkoutBranch(
   worktreePath: string,
   branch: string,
   remotes?: readonly string[],
 ): Promise<void> {
-  // An exact local branch (including the rare literal "remote/thing") wins.
-  if (await localBranchExists(worktreePath, branch)) {
-    await run(worktreePath, ["checkout", "--end-of-options", branch, "--"]);
-    return;
-  }
-  const split = splitRemoteRefSync(
-    branch,
-    remotes ?? (await listRemotes(worktreePath)),
-  );
-  // A qualified remote ref whose local branch doesn't exist yet: create the
-  // tracking branch from the explicit ref so a name shared across remotes
-  // stays unambiguous.
-  if (split && !(await localBranchExists(worktreePath, split.branch))) {
-    await run(worktreePath, [
-      "checkout",
-      "--track",
-      "--end-of-options",
-      branch,
-      "--",
-    ]);
-    return;
-  }
-  // Either a plain name git can DWIM, or the stripped local branch already
-  // exists, so switch to it.
-  await run(worktreePath, [
-    "checkout",
-    "--end-of-options",
-    split ? split.branch : branch,
-    "--",
-  ]);
+  return runGit(checkoutBranchEffect(worktreePath, branch, remotes));
 }
 
 // The "delete the local branch after the worktree is gone" policy for
@@ -73,19 +99,29 @@ export async function checkoutBranch(
 // branch), skip placeholder branches, and swallow failures since the
 // branch may be shared with another worktree or be the primary's HEAD.
 // Leaving it behind is always the safe fallback.
-export async function deleteBranchAfterWorktreeRemoval(
+export const deleteBranchAfterWorktreeRemovalEffect = Effect.fn(
+  "branches.deleteBranchAfterWorktreeRemoval",
+)(function* (
+  projectPath: string,
+  identity: WorktreeIdentity,
+  enabled: boolean,
+) {
+  if (!enabled) return;
+  if (identity.isExternal) return;
+  if (!isRealBranch(identity.branch)) return;
+  yield* Effect.ignore(
+    deleteAnyLocalBranchEffect(projectPath, identity.branch, true),
+  );
+});
+
+export function deleteBranchAfterWorktreeRemoval(
   projectPath: string,
   identity: WorktreeIdentity,
   enabled: boolean,
 ): Promise<void> {
-  if (!enabled) return;
-  if (identity.isExternal) return;
-  if (!isRealBranch(identity.branch)) return;
-  try {
-    await deleteAnyLocalBranch(projectPath, identity.branch, true);
-  } catch {
-    // see comment above
-  }
+  return runGit(
+    deleteBranchAfterWorktreeRemovalEffect(projectPath, identity, enabled),
+  );
 }
 
 // Create a local branch pointing at `base` (or HEAD if omitted). When
@@ -95,56 +131,80 @@ export async function deleteBranchAfterWorktreeRemoval(
 // since that would pin the new branch's upstream to a local ref. An
 // exact local branch wins over the remote interpretation, matching
 // checkoutBranch's precedence.
-export async function createLocalBranch(
+export const createLocalBranchEffect = Effect.fn("branches.createLocalBranch")(
+  function* (projectPath: string, name: string, base: string | undefined) {
+    const track = base
+      ? !(yield* localBranchExistsEffect(projectPath, base)) &&
+        (yield* remoteRefExistsEffect(projectPath, base))
+      : false;
+    const args = ["branch"];
+    if (track) args.push("--track");
+    args.push("--", name);
+    if (base) args.push(base);
+    yield* runEffect(projectPath, args);
+  },
+);
+
+export function createLocalBranch(
   projectPath: string,
   name: string,
   base: string | undefined,
 ): Promise<void> {
-  const track = base
-    ? !(await localBranchExists(projectPath, base)) &&
-      (await remoteRefExists(projectPath, base))
-    : false;
-  const args = ["branch"];
-  if (track) args.push("--track");
-  args.push("--", name);
-  if (base) args.push(base);
-  await run(projectPath, args);
+  return runGit(createLocalBranchEffect(projectPath, name, base));
 }
 
 // Rename any local branch (not necessarily the current one). `git branch
 // -m <old> <new>` works even if `old` is checked out in a worktree. Git
 // updates that worktree's HEAD to the new name.
-export async function renameAnyLocalBranch(
+export const renameAnyLocalBranchEffect = Effect.fn(
+  "branches.renameAnyLocalBranch",
+)(function* (projectPath: string, oldName: string, newName: string) {
+  yield* runEffect(projectPath, ["branch", "-m", "--", oldName, newName]);
+});
+
+export function renameAnyLocalBranch(
   projectPath: string,
   oldName: string,
   newName: string,
 ): Promise<void> {
-  await run(projectPath, ["branch", "-m", "--", oldName, newName]);
+  return runGit(renameAnyLocalBranchEffect(projectPath, oldName, newName));
 }
 
 // Delete a local branch. Without `force` this is git's safe delete
-// (`-d`), whose "not fully merged" refusal is rethrown as the shared
-// branchNotMergedError so the renderer can offer a force retry. With
-// `force` (`-D`), git still refuses if the branch is checked out in any
-// worktree, which is the safety we care about.
-export async function deleteAnyLocalBranch(
+// (`-d`), whose "not fully merged" refusal fails as BranchNotMerged so
+// the renderer can offer a force retry. With `force` (`-D`), git still
+// refuses if the branch is checked out in any worktree, which is the
+// safety we care about.
+export const deleteAnyLocalBranchEffect: (
+  projectPath: string,
+  name: string,
+  force: boolean,
+) => Effect.Effect<void, GitFailure | BranchNotMerged> = Effect.fn(
+  "branches.deleteAnyLocalBranch",
+)(function* (projectPath: string, name: string, force: boolean) {
+  yield* runEffect(projectPath, [
+    "branch",
+    force ? "-D" : "-d",
+    "--",
+    name,
+  ]).pipe(
+    // git's stderr wording is stable here because core.ts pins LC_ALL=C.
+    Effect.catchIf(
+      (error) =>
+        !force &&
+        error._tag === "GitError" &&
+        /not fully merged/.test(error.stderr),
+      () => Effect.fail(branchNotMergedError(name)),
+    ),
+  );
+});
+
+export function deleteAnyLocalBranch(
   projectPath: string,
   name: string,
   force: boolean,
 ): Promise<void> {
-  try {
-    await run(projectPath, ["branch", force ? "-D" : "-d", "--", name]);
-  } catch (err) {
-    // git's stderr wording is stable here because core.ts pins LC_ALL=C.
-    if (
-      !force &&
-      err instanceof GitError &&
-      /not fully merged/.test(err.stderr)
-    ) {
-      throw branchNotMergedError(name);
-    }
-    throw err;
-  }
+  return runGit(deleteAnyLocalBranchEffect(projectPath, name, force));
 }
 
 // `--directory` collapses fully-ignored directories into a single
@@ -152,44 +212,62 @@ export async function deleteAnyLocalBranch(
 // listed individually. `-z` keeps non-ASCII names raw instead of
 // core.quotePath-escaped so they compare equal against
 // filesystem-derived paths.
-async function listOthersIgnored(
+function listOthersIgnoredEffect(
   projectPath: string,
   excludeArg: string,
-): Promise<string[]> {
-  const stdout = await run(projectPath, [
+): Effect.Effect<string[], GitFailure> {
+  return runEffect(projectPath, [
     "ls-files",
     "-z",
     "--others",
     "--ignored",
     excludeArg,
     "--directory",
-  ]);
-  return splitZ(stdout);
+  ]).pipe(Effect.map(splitZ));
 }
 
 // Untracked paths ignored by the standard excludes (.gitignore et al).
 // The renderer derives membership from this list to decide whether a
 // filesystem entry can be carried over.
-export async function listIgnoredPaths(projectPath: string): Promise<string[]> {
-  return listOthersIgnored(projectPath, "--exclude-standard");
+export const listIgnoredPathsEffect = Effect.fn("branches.listIgnoredPaths")(
+  function* (projectPath: string) {
+    return yield* listOthersIgnoredEffect(projectPath, "--exclude-standard");
+  },
+);
+
+export function listIgnoredPaths(projectPath: string): Promise<string[]> {
+  return runGit(listIgnoredPathsEffect(projectPath));
 }
 
 // Untracked paths matched by the gitignore-syntax patterns in
 // `excludeFile` (absolute path). `--exclude-from` replaces the standard
 // excludes as the pattern source, so this evaluates ONLY the given file's
 // patterns, with full gitignore semantics including negation.
-export async function listUntrackedMatchingExcludeFile(
+export const listUntrackedMatchingExcludeFileEffect = Effect.fn(
+  "branches.listUntrackedMatchingExcludeFile",
+)(function* (projectPath: string, excludeFile: string) {
+  return yield* listOthersIgnoredEffect(
+    projectPath,
+    `--exclude-from=${excludeFile}`,
+  );
+});
+
+export function listUntrackedMatchingExcludeFile(
   projectPath: string,
   excludeFile: string,
 ): Promise<string[]> {
-  return listOthersIgnored(projectPath, `--exclude-from=${excludeFile}`);
+  return runGit(
+    listUntrackedMatchingExcludeFileEffect(projectPath, excludeFile),
+  );
 }
 
 // Lists branches usable as a base ref: local heads and remote-tracking refs.
 // Symbolic refs like `origin/HEAD` are dropped because they alias another
 // remote branch and would show up twice.
-export async function listBranches(projectPath: string): Promise<BranchList> {
-  const stdout = await run(projectPath, [
+export const listBranchesEffect = Effect.fn("branches.listBranches")(function* (
+  projectPath: string,
+) {
+  const stdout = yield* runEffect(projectPath, [
     "for-each-ref",
     "--format=%(refname)\t%(refname:short)\t%(symref)",
     "refs/heads/",
@@ -204,5 +282,10 @@ export async function listBranches(projectPath: string): Promise<BranchList> {
     if (full.startsWith("refs/heads/")) local.push(short);
     else if (full.startsWith("refs/remotes/")) remote.push(short);
   }
-  return { local, remote };
+  const list: BranchList = { local, remote };
+  return list;
+});
+
+export function listBranches(projectPath: string): Promise<BranchList> {
+  return runGit(listBranchesEffect(projectPath));
 }

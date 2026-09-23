@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import type { Stats } from "node:fs";
 import { isAbsolute, join, posix, relative, resolve } from "node:path";
+import { Cache, Duration, Effect, type Fiber, Queue } from "effect";
 import type { ProjectIcon } from "@shared/schemas";
 import { listProjectFiles } from "../git/files";
 import { atomicWriteJsonSync } from "../util/jsonFile";
@@ -424,40 +425,40 @@ function persistDirtySync(map: Map<string, IconCacheEntry>): void {
   }
 }
 
-// Coalesce parallel persists: a single in-flight write covers any
-// number of additional callers because they all mutate the shared
-// memoryCache (and dirty sets) before we serialize. Without this, the
-// fan-out of N parallel IPCs from the sidebar's first render would
-// contend on the file lock once per entry.
-//
-// Errors are logged and swallowed inside the loop because every
-// coalesced caller awaits the same promise: an inner-loop rejection
-// would otherwise propagate to callers whose own mutation already
-// landed on disk in an earlier iteration. The next persist gets a
-// fresh shot anyway.
-let persistInFlight: Promise<void> | null = null;
-let persistPending = false;
+// Persisting is write-behind: a mutation offers the map to a sliding
+// queue of one and returns, and one fiber drains it, one merge per
+// wake. Offers that land while a merge runs (or before the drainer
+// wakes) collapse into the single queued wake, and the merge after it
+// covers every key dirtied meanwhile, since they all mutate the shared
+// memoryCache and dirty sets. The fan-out of N parallel IPCs from the
+// sidebar's first render therefore contends on the file lock a handful
+// of times, not once per entry. A queue rather than a shared promise:
+// no caller needs the write to have landed (the icon it answers comes
+// from the source file), and the promise-based coalescer this replaced
+// never cleared itself (the merge is synchronous, so its `finally` ran
+// before the promise was stored), which left every persist after the
+// first a no-op. A failed merge is logged and its keys stay dirty
+// (persistDirtySync puts them back) for the next wake.
+const persistWake = Effect.runSync(
+  Queue.sliding<Map<string, IconCacheEntry>>(1),
+);
+let persistDrainer: Fiber.Fiber<never> | null = null;
 
-function persistCache(map: Map<string, IconCacheEntry>): Promise<void> {
-  if (persistInFlight) {
-    persistPending = true;
-    return persistInFlight;
-  }
-  persistInFlight = (async () => {
-    try {
-      do {
-        persistPending = false;
-        try {
-          persistDirtySync(map);
-        } catch (error) {
-          console.warn("[icon-cache] failed to persist index:", error);
-        }
-      } while (persistPending);
-    } finally {
-      persistInFlight = null;
-    }
-  })();
-  return persistInFlight;
+function persistCache(map: Map<string, IconCacheEntry>): void {
+  persistDrainer ??= Effect.runFork(
+    Effect.forever(
+      Effect.flatMap(Queue.take(persistWake), (latest) =>
+        Effect.sync(() => {
+          try {
+            persistDirtySync(latest);
+          } catch (error) {
+            console.warn("[icon-cache] failed to persist index:", error);
+          }
+        }),
+      ),
+    ),
+  );
+  Queue.offerUnsafe(persistWake, map);
 }
 
 async function buildEntry(
@@ -539,19 +540,34 @@ async function revalidateAndRead(
 }
 
 // One in-flight resolution per project path so the parallel IPC
-// fan-out from the sidebar's first render doesn't race itself.
-const inflight = new Map<string, Promise<ProjectIcon | null>>();
+// fan-out from the sidebar's first render doesn't race itself. Nothing
+// is kept once it settles (a time to live of zero, success and failure
+// alike): every lookup after that revalidates against the source file,
+// and a failure never answers a later lookup. When every caller of a
+// resolution has gone (a handler's caller that left), the resolution
+// is interrupted. Project paths are few; the capacity only bounds the
+// settled entries the cache sweeps lazily.
+const lookups = Effect.runSync(
+  Cache.makeWith<string, ProjectIcon | null, unknown, never>(
+    (projectPath) =>
+      Effect.tryPromise({
+        try: () => readProjectIconInner(projectPath),
+        catch: (error) => error,
+      }),
+    { capacity: 1_000, timeToLive: () => Duration.zero },
+  ),
+);
 
-export async function readProjectIcon(
+export function readProjectIconEffect(
+  projectPath: string,
+): Effect.Effect<ProjectIcon | null, unknown> {
+  return Cache.get(lookups, projectPath);
+}
+
+export function readProjectIcon(
   projectPath: string,
 ): Promise<ProjectIcon | null> {
-  const pending = inflight.get(projectPath);
-  if (pending) return pending;
-  const promise = readProjectIconInner(projectPath).finally(() => {
-    inflight.delete(projectPath);
-  });
-  inflight.set(projectPath, promise);
-  return promise;
+  return Effect.runPromise(readProjectIconEffect(projectPath));
 }
 
 async function readProjectIconInner(
@@ -569,7 +585,7 @@ async function readProjectIconInner(
     if (revalidated) {
       if (revalidated.dirty) {
         setEntry(cache, projectPath, revalidated.entry);
-        await persistCache(cache);
+        persistCache(cache);
       }
       return {
         mime: revalidated.entry.mime,
@@ -579,7 +595,7 @@ async function readProjectIconInner(
     // Source vanished, so drop the stale entry and fall through to
     // re-resolve in case the project now has a different icon.
     deleteEntry(cache, projectPath);
-    await persistCache(cache);
+    persistCache(cache);
   }
 
   const resolved = await resolveIconPath(projectPath);
@@ -588,7 +604,7 @@ async function readProjectIconInner(
   const built = await buildEntry(resolved);
   if (!built) return null;
   setEntry(cache, projectPath, built.entry);
-  await persistCache(cache);
+  persistCache(cache);
   return { mime: built.entry.mime, base64: built.bytes.toString("base64") };
 }
 
@@ -596,5 +612,5 @@ export async function forgetProjectIcon(projectPath: string): Promise<void> {
   const cache = await loadCache();
   if (!cache.has(projectPath)) return;
   deleteEntry(cache, projectPath);
-  await persistCache(cache);
+  persistCache(cache);
 }

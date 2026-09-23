@@ -1,5 +1,4 @@
-import { isENOENT } from "../util/paths";
-import { execGh, trimGhError } from "./exec";
+import { execGh, GhError, GhSpawnError } from "./exec";
 import { evictProjectPullRequests } from "./pullRequests";
 import { ghReady } from "./readiness";
 
@@ -23,19 +22,14 @@ async function runGh(
   } catch (err) {
     // gh vanished between the readiness probe (cached 30s) and this
     // spawn; "spawn gh ENOENT" would read as a bug rather than a state.
-    if (isENOENT(err)) {
+    if (err instanceof GhSpawnError && err.code === "ENOENT") {
       throw new Error("GitHub CLI isn't installed", { cause: err });
     }
-    // A timeout kill rejects with "Command failed: gh ..." and empty
-    // stderr; name the actual cause instead.
-    if (err instanceof Error && "killed" in err && err.killed === true) {
-      throw new Error("GitHub CLI timed out", { cause: err });
-    }
+    // gh's own last line, or "GitHub CLI timed out" for a timeout kill
+    // (whose stderr is usually empty).
     const message =
-      err instanceof Error && err.message
-        ? trimGhError(err.message)
-        : opts.fallback;
-    throw new Error(message, { cause: err });
+      err instanceof GhError || err instanceof GhSpawnError ? err.message : "";
+    throw new Error(message || opts.fallback, { cause: err });
   }
 }
 

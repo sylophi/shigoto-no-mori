@@ -12,6 +12,16 @@
 // before letting Electron exit, so a Cmd-Q never orphans `npm run dev`.
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
+import {
+  type Cause,
+  Deferred,
+  Effect,
+  Fiber,
+  Option,
+  Queue,
+  type Scope,
+  Stream,
+} from "effect";
 import { errorMessageOf } from "@shared/errors";
 import { stopMirrorsForWorktree } from "@host/mirror/registry";
 import type { Project, ScriptEvent } from "@shared/schemas";
@@ -45,8 +55,94 @@ const DEFAULT_ROWS = 40;
 // parse and a render, so reads that land within a frame go out as one
 // chunk. The byte ceiling keeps a firehose from pooling for the whole
 // frame.
-const OUTPUT_FLUSH_MS = 16;
-const OUTPUT_FLUSH_BYTES = 64 * 1024;
+export const OUTPUT_FLUSH_MS = 16;
+export const OUTPUT_FLUSH_BYTES = 64 * 1024;
+
+// What a run's output stream carries, in the order it happened. The PTY
+// is one ordered byte stream (stdout and stderr share the terminal), so
+// `data` reads concatenate without changing anything xterm renders. The
+// other kinds are emitted by us, and each one closes the batch in front
+// of it so it lands after the output that preceded it: a kill's notice,
+// a PTY read error, the exit.
+export type ScriptOutput =
+  | { kind: "data"; data: string }
+  | { kind: "notice"; data: string }
+  | { kind: "error"; data: string }
+  | { kind: "exit"; code: number | null };
+
+// A batch's window closing: the timer a batch starts offers this into
+// the same queue, so the window closes in order with the output around
+// it. Only the batch that started it honors it (`batch` is its number);
+// a tick that outlived its batch (closed early by the byte cap or an
+// event) is dropped.
+type OutputTick = { kind: "tick"; batch: number };
+
+export type ScriptOutputQueue = Queue.Queue<
+  ScriptOutput | OutputTick,
+  Cause.Done
+>;
+
+// One frame's output, then the event that closed it early, if any.
+export interface OutputBatch {
+  data: string;
+  closedBy: ScriptOutput | null;
+}
+
+export const makeScriptOutputQueue = (): ScriptOutputQueue =>
+  Effect.runSync(Queue.unbounded<ScriptOutput | OutputTick, Cause.Done>());
+
+// The batching rule as a Stream over a run's output queue: a read opens
+// a batch, which goes out 16 ms after that read, or the moment it holds
+// 64 KiB, or the moment one of our own events arrives, whichever is
+// first; an idle run holds no timer. Stream.groupedWithin would count
+// elements rather than bytes and flush on a fixed tick that runs while
+// the script is idle, so the window is this pull instead: the timer is a
+// child fiber that offers a tick into the queue, which means no take is
+// ever interrupted (an interrupted take could lose the read it had just
+// taken) and the window closes in order with the reads around it. The
+// stream ends when the queue does, after the exit. Exported for the
+// scripts check, which drives it under TestClock.
+export function batchScriptOutput(
+  events: ScriptOutputQueue,
+): Stream.Stream<OutputBatch> {
+  let opened = 0;
+  const nextBatch = Effect.gen(function* () {
+    let first = yield* Queue.take(events);
+    while (first.kind === "tick") first = yield* Queue.take(events);
+    if (first.kind !== "data") {
+      return [{ data: "", closedBy: first }] as const;
+    }
+    const batch: OutputBatch = { data: first.data, closedBy: null };
+    if (batch.data.length >= OUTPUT_FLUSH_BYTES) return [batch] as const;
+    opened += 1;
+    const id = opened;
+    const timer = yield* Effect.sleep(OUTPUT_FLUSH_MS).pipe(
+      Effect.andThen(Queue.offer(events, { kind: "tick", batch: id })),
+      Effect.forkChild,
+    );
+    while (batch.data.length < OUTPUT_FLUSH_BYTES) {
+      // Done here is the queue ending without an exit in front of it
+      // (the check's teardown): the batch goes out, and the next pull
+      // ends the stream.
+      const next = yield* Queue.take(events).pipe(
+        Effect.catch(() => Effect.succeed(null)),
+      );
+      if (next === null) break;
+      if (next.kind === "tick") {
+        if (next.batch === id) break;
+        continue;
+      }
+      if (next.kind !== "data") {
+        batch.closedBy = next;
+        break;
+      }
+      batch.data += next.data;
+    }
+    yield* Fiber.interrupt(timer);
+    return [batch] as const;
+  });
+  return Stream.fromPull(Effect.succeed(nextBatch));
+}
 
 interface ScriptWorktree {
   id: string;
@@ -83,12 +179,11 @@ interface RunRecord {
   startedAt: number;
   exited: boolean;
   cancelling: boolean;
-  done: Promise<void>;
-  notify: NotifyScriptEvent;
-  // Sends whatever PTY output is pooled for the next frame (see
-  // OUTPUT_FLUSH_MS). Anything else that emits into the run's stream
-  // must call it first so it lands after the output that preceded it.
-  flushOutput: () => void;
+  // Completed once the exit event has gone out.
+  done: Deferred.Deferred<void>;
+  // The run's output stream (batchScriptOutput). Everything the run
+  // emits goes through it, so it all reaches the renderer in order.
+  output: ScriptOutputQueue;
 }
 
 const runningScripts = new Map<string, RunRecord>();
@@ -119,6 +214,9 @@ const inflightDeleteCounts = new Map<string, number>();
 const inflightProjectDeleteIds = new Set<string>();
 let shuttingDown = false;
 
+// The sync pair, for the flows that mark a whole list up front and clear
+// it in their own finally (nuke, the data-folder move). Every mark must
+// be paired with exactly one clear.
 export function markDeleteInflight(worktreeId: string): void {
   inflightDeleteCounts.set(
     worktreeId,
@@ -137,6 +235,30 @@ export function getInflightDeleteIds(): ReadonlySet<string> {
   return new Set(inflightDeleteCounts.keys());
 }
 
+// The mark as a scoped resource: held from the acquire to the close of
+// the scope it is acquired in, however that scope ends (success, a
+// failure, an interruption). The acquire refuses a worktree another
+// mutation holds, in the same step as it marks, so no second mutation
+// can slip in between the check and the mark.
+function deleteMark(
+  worktreeId: string,
+  busyMessage: string,
+): Effect.Effect<void, Error, Scope.Scope> {
+  return Effect.acquireRelease(
+    Effect.suspend(() =>
+      inflightDeleteCounts.has(worktreeId)
+        ? Effect.fail(new Error(busyMessage))
+        : Effect.sync(() => markDeleteInflight(worktreeId)),
+    ),
+    () => Effect.sync(() => clearDeleteInflight(worktreeId)),
+  );
+}
+
+// A Promise step inside an Effect body. Its rejection stays the very
+// object thrown, so a caller of the Promise surface sees what it saw.
+const attempt = <A>(run: () => PromiseLike<A> | A) =>
+  Effect.tryPromise({ try: async () => run(), catch: (error) => error });
+
 // The one place the tombstone protocol is spelled out: refuse a
 // concurrent mutation of the same worktree, mark the id so a still-
 // running create lifecycle can't spawn steps into a directory that is
@@ -152,23 +274,23 @@ export function getInflightDeleteIds(): ReadonlySet<string> {
 // between the root vanishing and the stop propagates nothing. Callers
 // supply the busy message because the operations differ (removed vs
 // moved).
-export async function withDeleteInflight<T>(
+export function withDeleteInflight<T>(
   worktreeId: string,
   busyMessage: string,
   run: () => Promise<T>,
 ): Promise<T> {
-  if (getInflightDeleteIds().has(worktreeId)) {
-    throw new Error(busyMessage);
-  }
-  markDeleteInflight(worktreeId);
-  try {
-    await killScriptsForWorktree(worktreeId);
-    const result = await run();
-    await stopMirrorsForWorktree(worktreeId);
-    return result;
-  } finally {
-    clearDeleteInflight(worktreeId);
-  }
+  // The default runtime, like runKill below says.
+  return Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* deleteMark(worktreeId, busyMessage);
+        yield* attempt(() => killScriptsForWorktree(worktreeId));
+        const result = yield* attempt(run);
+        yield* attempt(() => stopMirrorsForWorktree(worktreeId));
+        return result;
+      }),
+    ),
+  );
 }
 
 // Project-level counterpart for projects.remove, which doesn't know its
@@ -191,11 +313,18 @@ export interface BusyOperations {
 // Extra sources of in-flight lifecycle work that live outside this
 // module (the CLI runner registers its child count). Aggregating here
 // means every getBusyOperations caller sees the full picture instead
-// of each consumer patching the count locally.
-const inflightContributors: Array<() => number> = [];
+// of each consumer patching the count locally. Returns the unregister,
+// for a contributor that goes away before the app does.
+const inflightContributors = new Set<() => number>();
 
-export function registerInflightContributor(count: () => number): void {
-  inflightContributors.push(count);
+export function registerInflightContributor(count: () => number): () => void {
+  // A wrapper per registration, so registering one function twice
+  // counts it twice and each unregister drops only its own.
+  const entry = () => count();
+  inflightContributors.add(entry);
+  return () => {
+    inflightContributors.delete(entry);
+  };
 }
 
 // One entry per worktree that currently has live scripts, with what it
@@ -250,18 +379,13 @@ export function markShuttingDown(): void {
   shuttingDown = true;
 }
 
-async function waitWithTimeout(
-  promise: Promise<void>,
-  ms: number,
-): Promise<boolean> {
-  let timer: NodeJS.Timeout | null = null;
-  const timeout = new Promise<boolean>((resolve) => {
-    timer = setTimeout(() => resolve(false), ms);
-  });
-  const finished = promise.then(() => true);
-  const result = await Promise.race([finished, timeout]);
-  if (timer) clearTimeout(timer);
-  return result;
+// Whether the run's exit went out within `ms`. The wait is interrupted
+// at the deadline, so nothing is left pending behind a timed-out one.
+function exitedWithin(record: RunRecord, ms: number): Effect.Effect<boolean> {
+  return Deferred.await(record.done).pipe(
+    Effect.timeoutOption(ms),
+    Effect.map(Option.isSome),
+  );
 }
 
 interface KillOptions {
@@ -269,33 +393,32 @@ interface KillOptions {
   reason?: string;
 }
 
-async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {
+const killRecord = Effect.fnUntraced(function* (
+  record: RunRecord,
+  opts: KillOptions,
+) {
   if (record.exited) return;
   if (record.cancelling) {
     // Another caller is already escalating. Wait for it, but bounded
     // so an unkillable child doesn't wedge this caller's chain too.
-    await waitWithTimeout(record.done, DEFAULT_GRACE_MS + UNKILLABLE_WAIT_MS);
+    yield* exitedWithin(record, DEFAULT_GRACE_MS + UNKILLABLE_WAIT_MS);
     return;
   }
   record.cancelling = true;
 
   if (opts.reason) {
-    record.flushOutput();
-    record.notify({
-      runId: record.runId,
-      kind: "data",
+    Queue.offerUnsafe(record.output, {
+      kind: "notice",
       data: `\r\n\x1b[2m[${opts.reason}]\x1b[0m\r\n`,
     });
   }
 
-  await signalTree(record.pid, "SIGTERM");
+  yield* attempt(() => signalTree(record.pid, "SIGTERM"));
   const graceMs = opts.graceMs ?? DEFAULT_GRACE_MS;
-  const exited = await waitWithTimeout(record.done, graceMs);
-  if (exited) return;
+  if (yield* exitedWithin(record, graceMs)) return;
 
-  await signalTree(record.pid, "SIGKILL");
-  const died = await waitWithTimeout(record.done, UNKILLABLE_WAIT_MS);
-  if (!died) {
+  yield* attempt(() => signalTree(record.pid, "SIGKILL"));
+  if (!(yield* exitedWithin(record, UNKILLABLE_WAIT_MS))) {
     // Give up rather than hanging the caller forever. The record stays
     // live on purpose: the process really is still running, so the busy
     // counts stay honest and a later delete attempt can retry.
@@ -303,6 +426,13 @@ async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {
       `[scripts] "${record.scriptName}" (pid ${record.pid}) survived SIGKILL; giving up on this kill attempt`,
     );
   }
+});
+
+// On Effect's default runtime, not the app's: these Effects need no
+// service, and the quit path runs its kills (killAllScripts) while the
+// app's runtime is being disposed, when a run on it would die at once.
+function runKill(record: RunRecord, opts: KillOptions): Promise<void> {
+  return Effect.runPromise(killRecord(record, opts));
 }
 
 export function startScript(args: RunArgs): string {
@@ -366,27 +496,10 @@ export function startScript(args: RunArgs): string {
     rows: DEFAULT_ROWS,
   });
 
-  // The PTY is one ordered byte stream (stdout and stderr share the
-  // terminal), so the renderer's xterm sees exactly what a real
-  // terminal would, and concatenating reads before sending changes
-  // nothing it renders.
-  let pendingOutput = "";
-  let flushTimer: NodeJS.Timeout | null = null;
-  const flushOutput = () => {
-    if (flushTimer) {
-      clearTimeout(flushTimer);
-      flushTimer = null;
-    }
-    if (!pendingOutput) return;
-    const data = pendingOutput;
-    pendingOutput = "";
-    args.notify({ runId, kind: "data", data });
-  };
-
-  let resolveDone: () => void;
-  const done = new Promise<void>((resolve) => {
-    resolveDone = resolve;
-  });
+  // The run's output stream. The queue exists, and the PTY's listeners
+  // feed it, before this function returns, so no read can land ahead of
+  // them; the pump below drains it on its own fiber.
+  const output = makeScriptOutputQueue();
 
   const record: RunRecord = {
     runId,
@@ -401,17 +514,14 @@ export function startScript(args: RunArgs): string {
     startedAt: Date.now(),
     exited: false,
     cancelling: false,
-    done,
-    notify: args.notify,
-    flushOutput,
+    done: Deferred.makeUnsafe<void>(),
+    output,
   };
   runningScripts.set(runId, record);
   persistSnapshot();
 
-  pty.onData((data) => {
-    pendingOutput += data;
-    if (pendingOutput.length >= OUTPUT_FLUSH_BYTES) flushOutput();
-    else if (!flushTimer) flushTimer = setTimeout(flushOutput, OUTPUT_FLUSH_MS);
+  const dataListener = pty.onData((data) => {
+    Queue.offerUnsafe(output, { kind: "data", data });
   });
 
   // A read error on the PTY master is rethrown by node-pty unless
@@ -420,15 +530,13 @@ export function startScript(args: RunArgs): string {
   // node-pty's own, so it sees the EAGAIN/EIO noise that one filters
   // as part of a normal PTY lifecycle and must skip it too. node-pty
   // closes the PTY first, so the exit event follows a real error.
-  (pty as unknown as NodeJS.EventEmitter).on(
-    "error",
-    (error: NodeJS.ErrnoException) => {
-      const code = error.code ?? "";
-      if (code.includes("EAGAIN") || code.includes("EIO")) return;
-      flushOutput();
-      args.notify({ runId, kind: "error", data: errorMessageOf(error) });
-    },
-  );
+  const ptyEvents = pty as unknown as NodeJS.EventEmitter;
+  const onError = (error: NodeJS.ErrnoException) => {
+    const code = error.code ?? "";
+    if (code.includes("EAGAIN") || code.includes("EIO")) return;
+    Queue.offerUnsafe(output, { kind: "error", data: errorMessageOf(error) });
+  };
+  ptyEvents.on("error", onError);
 
   // node-pty reports exit only after the terminal stream has drained
   // (or a short grace period when a backgrounded grandchild still holds
@@ -437,20 +545,75 @@ export function startScript(args: RunArgs): string {
   // only window in which a kill could target an already-reaped pid.
   // It is a couple hundred milliseconds, and the target would have to
   // be recycled as a group leader to be hit at all.
-  pty.onExit(({ exitCode, signal }) => {
+  const exitListener = pty.onExit(({ exitCode, signal }) => {
     // SIGTERM via our kill path commonly surfaces as exit 143 (128+15)
     // because the shell wrapping the user's command translated the
     // signal into an exit code. If we initiated the cancel, report
-    // null code so the UI shows "stopped" not "failed".
+    // null code so the UI shows "stopped" not "failed". Read now, at
+    // the exit, not when the event reaches the front of the stream.
     const wasSignal = signal !== undefined && signal !== 0;
-    const reported = record.cancelling || wasSignal ? null : exitCode;
-    flushOutput();
-    args.notify({ runId, kind: "exit", code: reported });
-    record.exited = true;
-    resolveDone();
-    runningScripts.delete(runId);
-    persistSnapshot();
+    const code = record.cancelling || wasSignal ? null : exitCode;
+    Queue.offerUnsafe(output, { kind: "exit", code });
+    Queue.endUnsafe(output);
   });
+
+  // Contained: the pump is the run's only way out to the renderer, and
+  // a throw from a notify would end it with a defect nothing reports,
+  // leaving the exit unsent and every kill waiting out its deadline.
+  const notify = (payload: ScriptEvent) => {
+    try {
+      args.notify(payload);
+    } catch (error) {
+      console.warn(
+        `[scripts] "${record.scriptName}" event not delivered: ${errorMessageOf(error)}`,
+      );
+    }
+  };
+  const settle = (event: ScriptOutput) => {
+    switch (event.kind) {
+      case "data":
+      case "notice":
+        notify({ runId, kind: "data", data: event.data });
+        return;
+      case "error":
+        notify({ runId, kind: "error", data: event.data });
+        return;
+      case "exit":
+        notify({ runId, kind: "exit", code: event.code });
+        record.exited = true;
+        Deferred.doneUnsafe(record.done, Effect.void);
+        runningScripts.delete(runId);
+        persistSnapshot();
+        return;
+    }
+  };
+
+  // The pump: the batched output stream, run on a fiber that owns the
+  // scope the PTY listeners live in. It ends after the exit went out,
+  // and its scope then drops the listeners.
+  Effect.runFork(
+    Effect.scoped(
+      Effect.gen(function* () {
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            dataListener.dispose();
+            exitListener.dispose();
+            ptyEvents.off("error", onError);
+          }),
+        );
+        yield* batchScriptOutput(output).pipe(
+          Stream.runForEach((batch) =>
+            Effect.sync(() => {
+              if (batch.data !== "") {
+                notify({ runId, kind: "data", data: batch.data });
+              }
+              if (batch.closedBy !== null) settle(batch.closedBy);
+            }),
+          ),
+        );
+      }),
+    ),
+  );
 
   return runId;
 }
@@ -478,7 +641,7 @@ export function resizeScript(runId: string, cols: number, rows: number): void {
 export async function cancelScript(runId: string): Promise<boolean> {
   const record = runningScripts.get(runId);
   if (!record) return false;
-  await killRecord(record, { reason: "Cancelled by user" });
+  await runKill(record, { reason: "Cancelled by user" });
   return true;
 }
 
@@ -491,7 +654,7 @@ async function killMatching(
     (r) => !r.exited && predicate(r),
   );
   if (targets.length === 0) return;
-  await Promise.all(targets.map((r) => killRecord(r, { reason, ...opts })));
+  await Promise.all(targets.map((r) => runKill(r, { reason, ...opts })));
 }
 
 export async function killScriptsForWorktree(

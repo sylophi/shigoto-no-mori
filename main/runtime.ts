@@ -8,7 +8,9 @@
 // to sequence by hand: a layer is released before anything it depends
 // on, and siblings in one tier are released together.
 import { Layer, ManagedRuntime } from "effect";
+import { BackgroundFetchLive } from "./electron/fetch";
 import { HostImplsLive } from "./electron/hostImpls";
+import { UpdaterLive } from "./electron/updater";
 import {
   AccountHandlers,
   MirrorEngineLive,
@@ -34,7 +36,7 @@ export const appMemoMap = Layer.makeMemoMapUnsafe();
 //
 //   HostImplsLive          the host's services, over the runners below
 //   PortForwardEngine, the mirror daemon/follower/history,
-//   ControlServer, AccountHandlers
+//   ControlServer, AccountHandlers, the fetch and updater loops
 //   MirrorGateway          binds (and retries) inside its scope
 //   RemotePlane            tunnel, hub connection, direct plane, broker
 //   SocketHost, DirectListener, PeerPushes, MutationsSettled
@@ -50,11 +52,16 @@ const WiresLive = Layer.mergeAll(
   MutationsSettled.layer,
 );
 
+// The two background loops (the minute fetch sweep, the updater's
+// check tick) add no service: their layers only own the loops' scope,
+// so a quit stops them with the engines.
 const EnginesLive = Layer.mergeAll(
   PortForwardEngineLive,
   MirrorEngineLive,
   ControlServer.layer,
   AccountHandlers.layer,
+  BackgroundFetchLive,
+  UpdaterLive,
 );
 
 export const AppLive: Layer.Layer<AppServices> = HostImplsLive.pipe(

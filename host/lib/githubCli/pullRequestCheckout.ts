@@ -16,7 +16,7 @@ import { errorMessageOf } from "@shared/errors";
 import { createLocalBranch } from "../git/branches";
 import { run } from "../git/core";
 import { localBranchExists } from "../git/remotes";
-import { execGh, trimGhError } from "./exec";
+import { execGh, GhError, trimGhError } from "./exec";
 import { getGithubRepoInfo, remoteNameForUrl } from "./remote";
 import { ghUnavailableReason } from "./readiness";
 
@@ -149,9 +149,9 @@ async function readPullRequestHead(
       { cwd },
     ));
   } catch (err) {
-    const stderr = (err as { stderr?: string }).stderr ?? "";
+    // gh's own last line (or its timeout), never the argv.
     throw new Error(
-      `Couldn't read pull request #${number}: ${trimGhError(stderr) || "gh failed"}`,
+      `Couldn't read pull request #${number}: ${err instanceof GhError ? err.message : "gh failed"}`,
       { cause: err },
     );
   }

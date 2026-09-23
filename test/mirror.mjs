@@ -33,6 +33,10 @@
 //     nothing, and resolving on B brings the session back to synced,
 //   - a checkout on A to a branch another worktree on B holds is
 //     refused with the path, and checking back restores sync.
+// And the transplant's one-shot file transfer (host/mirror/oneShot.ts):
+//   - it settles, keeps to its rule, and ends its own session,
+//   - a caller that leaves while it waits stops its polling at once
+//     and ends the session, rather than polling on to a ceiling.
 //
 // Both "devices" share one node process and one sandboxed
 // SHIGOMORI_DATA_DIR. What separates them is the direct wire between them,
@@ -53,7 +57,7 @@ import { connect as netConnect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { Layer, ManagedRuntime } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { buildClient } from "@shared/ipc/buildClient";
 import { forwardContract } from "@shared/ipc/modules/forward";
 import {
@@ -76,9 +80,10 @@ import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { createGitFollower } from "@host/mirror/gitFollow";
 import {
   endMirrorsWithPeers,
+  isOrphanedTransfer,
   MIRROR_LABEL_LOCAL_WORKTREE,
 } from "@host/mirror/registry";
-import { transferFilesOnce } from "@host/mirror/oneShot";
+import { transferFiles, transferFilesOnce } from "@host/mirror/oneShot";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { initDataDirAt } from "@host/lib/util/paths";
 import { installHostRuntime, resetHostRuntime } from "@host/runtime";
@@ -751,6 +756,104 @@ async function main() {
     );
     ok(
       "one-shot transfer: the admitted file crosses, the rule holds, nothing flows back, the session ends itself",
+    );
+
+    // (6b') The same transfer with a caller that leaves while it waits.
+    // A stand-in engine whose session never settles counts every poll
+    // (each one reads the daemon's sessions): once the caller's signal
+    // aborts, the polls stop at once and the session is ended, instead
+    // of the wait polling on to its connect or settle ceiling.
+    {
+      const endpoint = {
+        connected: true,
+        scanned: false,
+        directories: 0,
+        files: 0,
+        symbolicLinks: 0,
+        totalFileSize: 0,
+        problems: [],
+        excludedProblems: 0,
+      };
+      let polls = 0;
+      let stuck = null;
+      const ended = [];
+      const stuckEngine = {
+        status: () => "running",
+        sessions: () => {
+          polls += 1;
+          return stuck === null ? [] : [stuck];
+        },
+        create: async (input) => {
+          stuck = {
+            session: "stuck",
+            name: input.name,
+            labels: input.labels,
+            localRoot: input.localRoot,
+            deviceId: input.deviceId,
+            projectId: input.projectId,
+            worktreeId: input.worktreeId,
+            remoteRoot: input.remoteRoot,
+            paused: false,
+            ignores: input.ignores,
+            createdAt: 1,
+            status: "scanning",
+            statusText: "Scanning",
+            successfulCycles: 0,
+            conflicts: [],
+            excludedConflicts: 0,
+            local: endpoint,
+            remote: endpoint,
+          };
+          return "stuck";
+        },
+        recreate: () => Promise.reject(new Error("not in this check")),
+        terminate: async (id) => {
+          ended.push(id);
+        },
+        pause: async () => {},
+        resume: async () => {},
+        gitStatus: () => undefined,
+        history: () => [],
+        noteEvent: () => {},
+        forgetHistory: () => {},
+      };
+      const leaving = new AbortController();
+      const waited = Effect.runPromise(
+        transferFiles(
+          {
+            localRoot: rootB,
+            localWorktreeId: worktreeIdB,
+            sourceDeviceId: "A",
+            sourceProjectId: projectIdA,
+            sourceWorktreeId: worktreeIdA,
+            remoteRoot: worktreeA,
+            name: "feature",
+            ignores: [],
+          },
+          () => {},
+        ).pipe(Effect.provideService(MirrorEngine, stuckEngine)),
+        { signal: leaving.signal },
+      ).then(
+        () => "settled",
+        () => "left",
+      );
+      await waitFor(() => polls >= 3, "the transfer to be polling", 5_000);
+      const stuckSession = stuck;
+      leaving.abort();
+      assert.equal(await waited, "left", "the wait outlived its caller");
+      const pollsAtLeave = polls;
+      assert.deepEqual(ended, ["stuck"], "the session was not ended");
+      assert.equal(
+        isOrphanedTransfer(stuckSession),
+        true,
+        "the transfer's token outlived its caller",
+      );
+      // Four poll intervals: a wait still running would have polled.
+      await delay(1_000);
+      assert.equal(polls, pollsAtLeave, "the wait kept polling");
+    }
+    ok(
+      "one-shot transfer: a caller that leaves while it waits stops the polling at once and ends the session",
     );
 
     // (6c) A device leaving the account ends the mirrors it had with

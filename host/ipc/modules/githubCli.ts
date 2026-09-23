@@ -1,4 +1,6 @@
+import { Effect } from "effect";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
+import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import {
   getPullRequestDiff,
@@ -17,53 +19,94 @@ import { mergeViaCli } from "../cliDelegate";
 import { getGithubCliReadiness } from "@host/lib/githubCli/readiness";
 import { getRepoMergeConfig } from "@host/lib/githubCli/repoConfig";
 import { findProjectOrThrow } from "@host/lib/projects";
+import { hostAttempt, hostHandler } from "@host/runtime";
 
-export const githubCliHandlers: Handlers<typeof githubCliContract> = {
-  readiness: () => getGithubCliReadiness(),
+// The project a handler is about, as its first step: an unknown id
+// fails with the very UnknownProject findProjectOrThrow throws.
+const projectOf = (projectId: string) =>
+  hostAttempt(() => findProjectOrThrow(projectId));
 
-  projectPullRequests: async ({ projectId }) => {
-    const project = findProjectOrThrow(projectId);
-    const map = await listProjectPullRequests(project.path);
-    // Maps don't survive structured clone across IPC, so ship a record.
-    return Object.fromEntries(map);
-  },
+export const githubCliHandlers: Handlers<
+  typeof githubCliContract,
+  HandlerContext
+> = {
+  readiness: hostHandler(() => hostAttempt(() => getGithubCliReadiness())),
 
-  worktreePullRequest: async ({ projectId, branch }) => {
-    const project = findProjectOrThrow(projectId);
-    return getWorktreePullRequest(project.path, branch);
-  },
+  projectPullRequests: hostHandler(({ projectId }) =>
+    Effect.gen(function* () {
+      const project = yield* projectOf(projectId);
+      const map = yield* hostAttempt(() =>
+        listProjectPullRequests(project.path),
+      );
+      // Maps don't survive structured clone across IPC, so ship a record.
+      return Object.fromEntries(map);
+    }),
+  ),
 
-  pullRequestCandidates: async ({ projectId }) => {
-    const project = findProjectOrThrow(projectId);
-    return listPullRequestCandidates(project.path);
-  },
+  worktreePullRequest: hostHandler(({ projectId, branch }) =>
+    Effect.gen(function* () {
+      const project = yield* projectOf(projectId);
+      return yield* hostAttempt(() =>
+        getWorktreePullRequest(project.path, branch),
+      );
+    }),
+  ),
 
-  resolvePullRequestCheckout: async ({ projectId, number }) => {
-    const project = findProjectOrThrow(projectId);
-    return resolvePullRequestCheckout(project.path, number);
-  },
+  pullRequestCandidates: hostHandler(({ projectId }) =>
+    Effect.gen(function* () {
+      const project = yield* projectOf(projectId);
+      return yield* hostAttempt(() => listPullRequestCandidates(project.path));
+    }),
+  ),
 
-  repoMergeConfig: async ({ projectId }) => {
-    const project = findProjectOrThrow(projectId);
-    return getRepoMergeConfig(project.path);
-  },
+  resolvePullRequestCheckout: hostHandler(({ projectId, number }) =>
+    Effect.gen(function* () {
+      const project = yield* projectOf(projectId);
+      return yield* hostAttempt(() =>
+        resolvePullRequestCheckout(project.path, number),
+      );
+    }),
+  ),
 
-  mergePullRequest: async ({ projectId, number, method }) => {
-    const project = findProjectOrThrow(projectId);
-    // The CLI runs the gh merge and persists lastMergeMethod itself.
-    await mergeViaCli(project, number, method);
-    // The merge changes upstream refs (and the sidebar PR cache). Evict
-    // so the next read sees the merged state.
-    evictProjectPullRequests(project.path);
-  },
+  repoMergeConfig: hostHandler(({ projectId }) =>
+    Effect.gen(function* () {
+      const project = yield* projectOf(projectId);
+      return yield* hostAttempt(() => getRepoMergeConfig(project.path));
+    }),
+  ),
 
-  pullRequestDiff: async ({ projectId, number }) => {
-    const project = findProjectOrThrow(projectId);
-    return getPullRequestDiff({ cwd: project.path, number });
-  },
+  mergePullRequest: hostHandler(({ projectId, number, method }) =>
+    Effect.gen(function* () {
+      const project = yield* projectOf(projectId);
+      // One step, so a caller that leaves mid-merge stops waiting, not
+      // the eviction that must follow a merge.
+      yield* hostAttempt(async () => {
+        // The CLI runs the gh merge and persists lastMergeMethod itself.
+        await mergeViaCli(project, number, method);
+        // The merge changes upstream refs (and the sidebar PR cache).
+        // Evict so the next read sees the merged state.
+        evictProjectPullRequests(project.path);
+      });
+      return undefined;
+    }),
+  ),
 
-  setPullRequestDraft: async ({ projectId, number, draft }) => {
-    const project = findProjectOrThrow(projectId);
-    await setPullRequestDraft({ cwd: project.path, number, draft });
-  },
+  pullRequestDiff: hostHandler(({ projectId, number }) =>
+    Effect.gen(function* () {
+      const project = yield* projectOf(projectId);
+      return yield* hostAttempt(() =>
+        getPullRequestDiff({ cwd: project.path, number }),
+      );
+    }),
+  ),
+
+  setPullRequestDraft: hostHandler(({ projectId, number, draft }) =>
+    Effect.gen(function* () {
+      const project = yield* projectOf(projectId);
+      yield* hostAttempt(() =>
+        setPullRequestDraft({ cwd: project.path, number, draft }),
+      );
+      return undefined;
+    }),
+  ),
 };

@@ -6,6 +6,7 @@
 // all-git and fast enough to block the list render; `measureWorktreeDisk`
 // walks the whole directory (node_modules and all) and is fetched
 // per-row so a slow disk never holds up the page.
+import { Cache, Duration, Effect, Exit, Semaphore } from "effect";
 import { unknownWorktreeError } from "@shared/errors";
 import { isSameOrInside } from "@shared/git/worktreeLayout";
 import {
@@ -14,20 +15,18 @@ import {
   type WorktreeHygiene,
 } from "@shared/schemas";
 import { readShigomoriConfig } from "../config/project";
-import { run, runLenient } from "../git/core";
+import { runEffect, runGit, runLenientEffect } from "../git/core";
 import {
-  listRemotes,
-  localBranchExists,
-  resolveDefaultBranch,
+  listRemotesEffect,
+  localBranchExistsEffect,
+  resolveDefaultBranchEffect,
   splitRemoteRefSync,
 } from "../git/remotes";
 import {
-  listWorktreeIdentities,
+  listWorktreeIdentitiesEffect,
   type WorktreeIdentity,
 } from "../git/worktrees";
-import { measureDirectory } from "../util/dirSize";
-import { createLimiter } from "@shared/util/limit";
-import { ttlMapCache } from "../util/ttlCache";
+import { measureDirectoryEffect } from "../util/dirSize";
 
 interface HeadCommit {
   // Epoch ms of the worktree's HEAD commit.
@@ -38,21 +37,25 @@ interface HeadCommit {
 }
 
 // The commit HEAD points at. Both fields null for an empty repo.
-async function getHeadCommit(worktreePath: string): Promise<HeadCommit> {
-  try {
-    const stdout = await run(worktreePath, ["log", "-1", "--format=%ct%n%h"]);
+const getHeadCommit = Effect.fnUntraced(
+  function* (worktreePath: string) {
+    const stdout = yield* runEffect(worktreePath, [
+      "log",
+      "-1",
+      "--format=%ct%n%h",
+    ]);
     const [seconds, hash] = stdout.trim().split("\n");
     const at = Number(seconds);
-    return {
+    const head: HeadCommit = {
       // Floored to a whole millisecond: the IPC schema takes safe ints,
       // so a malformed %ct must not reach the boundary as a float.
       at: Number.isFinite(at) ? Math.floor(at * 1000) : null,
       hash: hash?.trim() || null,
     };
-  } catch {
-    return { at: null, hash: null };
-  }
-}
+    return head;
+  },
+  Effect.orElseSucceed((): HeadCommit => ({ at: null, hash: null })),
+);
 
 // Commits on HEAD that `primaryRef` doesn't have, or null when the
 // count couldn't be taken.
@@ -63,22 +66,18 @@ async function getHeadCommit(worktreePath: string): Promise<HeadCommit> {
 // those into 0 would preselect them as "every commit is already in
 // main", which is the one mistake this surface must not make. Unparsable
 // output is treated the same way, failing safe like `contentAlreadyIn`.
-async function countUniqueCommits(
-  worktreePath: string,
-  primaryRef: string,
-): Promise<number | null> {
-  try {
-    const stdout = await run(worktreePath, [
+const countUniqueCommits = Effect.fnUntraced(
+  function* (worktreePath: string, primaryRef: string) {
+    const stdout = yield* runEffect(worktreePath, [
       "rev-list",
       "--count",
       `${primaryRef}..HEAD`,
     ]);
     const count = Number(stdout.trim());
     return Number.isInteger(count) && count >= 0 ? count : null;
-  } catch {
-    return null;
-  }
-}
+  },
+  Effect.orElseSucceed(() => null),
+);
 
 // Does this worktree hold untracked files?
 //
@@ -87,21 +86,20 @@ async function countUniqueCommits(
 // the question that setting suppresses, and is only asked for the rows
 // that would otherwise be ticked. `--exclude-standard` keeps it off
 // ignored paths, so node_modules costs nothing.
-async function hasUntrackedFiles(worktreePath: string): Promise<boolean> {
-  try {
-    const stdout = await run(worktreePath, [
+const hasUntrackedFiles = Effect.fnUntraced(
+  function* (worktreePath: string) {
+    const stdout = yield* runEffect(worktreePath, [
       "ls-files",
       "--others",
       "--exclude-standard",
       "-z",
     ]);
     return stdout.length > 0;
-  } catch {
-    // Unreadable cuts the same way as dirty: assume there is something
-    // to lose.
-    return true;
-  }
-}
+  },
+  // Unreadable cuts the same way as dirty: assume there is something
+  // to lose.
+  Effect.orElseSucceed(() => true),
+);
 
 // Would merging this worktree into `primaryRef` change anything?
 //
@@ -117,14 +115,10 @@ async function hasUntrackedFiles(worktreePath: string): Promise<boolean> {
 //
 // The primary's own tree OID is a per-project constant, so it is
 // resolved once by `primaryRefCandidates` rather than per worktree.
-async function contentAlreadyIn(
-  projectPath: string,
-  candidate: PrimaryCandidate,
-  head: string,
-): Promise<boolean> {
-  if (!candidate.tree) return false;
-  try {
-    const merged = await runLenient(projectPath, [
+const contentAlreadyIn = Effect.fnUntraced(
+  function* (projectPath: string, candidate: PrimaryCandidate, head: string) {
+    if (!candidate.tree) return false;
+    const merged = yield* runLenientEffect(projectPath, [
       "merge-tree",
       "--write-tree",
       candidate.ref,
@@ -132,10 +126,9 @@ async function contentAlreadyIn(
     ]);
     const mergedTree = merged.split("\n", 1)[0]?.trim();
     return Boolean(mergedTree) && mergedTree === candidate.tree;
-  } catch {
-    return false;
-  }
-}
+  },
+  Effect.orElseSucceed(() => false),
+);
 
 // Every ref that counts as "the primary branch" for containment.
 //
@@ -156,54 +149,62 @@ interface PrimaryCandidate {
   tree: string | null;
 }
 
-async function primaryRefCandidates(
+const primaryRefCandidates = Effect.fnUntraced(function* (
   projectPath: string,
   primaryRef: string | null,
   remotes: string[],
-): Promise<PrimaryCandidate[]> {
-  if (!primaryRef) return [];
+) {
+  const none: PrimaryCandidate[] = [];
+  if (!primaryRef) return none;
   const split = splitRemoteRefSync(primaryRef, remotes);
   const refs = [primaryRef];
   if (split && split.branch !== primaryRef) {
-    if (await localBranchExists(projectPath, split.branch)) {
+    if (yield* localBranchExistsEffect(projectPath, split.branch)) {
       refs.push(split.branch);
     }
   }
-  return Promise.all(
-    refs.map(async (ref) => ({ ref, tree: await treeOf(projectPath, ref) })),
+  return yield* Effect.forEach(
+    refs,
+    (ref) =>
+      Effect.map(
+        treeOf(projectPath, ref),
+        (tree): PrimaryCandidate => ({ ref, tree }),
+      ),
+    { concurrency: "unbounded" },
   );
-}
+});
 
-async function treeOf(
+function treeOf(
   projectPath: string,
   ref: string,
-): Promise<string | null> {
-  try {
-    const stdout = await run(projectPath, ["rev-parse", `${ref}^{tree}`]);
-    return stdout.trim() || null;
-  } catch {
-    return null;
-  }
+): Effect.Effect<string | null> {
+  return runEffect(projectPath, ["rev-parse", `${ref}^{tree}`]).pipe(
+    Effect.map((stdout) => stdout.trim() || null),
+    Effect.orElseSucceed(() => null),
+  );
 }
 
 // The untracked scan is worth a git call only where the answer changes
 // something, and that is exactly here: a worktree reported as contained
 // is one the page ticks on its own, so this is the last chance to notice
 // files that exist nowhere else.
-async function contained(
+function contained(
   worktreePath: string,
   facts: WorktreeHygiene,
-): Promise<WorktreeHygiene> {
-  return { ...facts, untracked: await hasUntrackedFiles(worktreePath) };
+): Effect.Effect<WorktreeHygiene> {
+  return Effect.map(
+    hasUntrackedFiles(worktreePath),
+    (untracked): WorktreeHygiene => ({ ...facts, untracked }),
+  );
 }
 
-async function hygieneFor(
+const hygieneFor = Effect.fnUntraced(function* (
   identity: WorktreeIdentity,
   projectPath: string,
   candidates: PrimaryCandidate[],
   primaryBranch: string | null,
-): Promise<WorktreeHygiene> {
-  const head = await getHeadCommit(identity.path);
+) {
+  const head = yield* getHeadCommit(identity.path);
   const base: WorktreeHygiene = {
     worktreeId: identity.id,
     lastCommitAt: head.at,
@@ -237,11 +238,11 @@ async function hygieneFor(
   // First candidate that already contains this work wins, and the facts
   // are then reported against *that* ref so the reason the user reads
   // names the branch the work actually landed in. If none contains it,
-  // fall back to the canonical ref's numbers.
+  // fall back to the canonical ref's numbers. Candidates are asked in
+  // priority order, one after another.
   let fallback: WorktreeHygiene | null = null;
   for (const candidate of candidates) {
-    // oxlint-disable-next-line no-await-in-loop -- candidate priority order matters
-    const uniqueCommits = await countUniqueCommits(
+    const uniqueCommits = yield* countUniqueCommits(
       identity.path,
       candidate.ref,
     );
@@ -251,21 +252,20 @@ async function hygieneFor(
     if (uniqueCommits === 0) {
       // Fully contained already. The merge-tree probe would only
       // confirm what the commit count just proved.
-      return contained(identity.path, {
+      return yield* contained(identity.path, {
         ...base,
         primaryRef: candidate.ref,
         uniqueCommits: 0,
         contentAlreadyInPrimary: true,
       });
     }
-    // oxlint-disable-next-line no-await-in-loop -- candidate priority order matters
-    const alreadyIn = await contentAlreadyIn(
+    const alreadyIn = yield* contentAlreadyIn(
       projectPath,
       candidate,
       identity.branch,
     );
     if (alreadyIn) {
-      return contained(identity.path, {
+      return yield* contained(identity.path, {
         ...base,
         primaryRef: candidate.ref,
         uniqueCommits,
@@ -276,30 +276,34 @@ async function hygieneFor(
   }
 
   return fallback ?? base;
-}
+});
 
 // Probes run through a shared window because this is asked for every
 // project at once: a machine with five projects would otherwise start
 // forty independent git chains, `merge-tree` included, in one burst.
-const gitProbes = createLimiter(6);
+// Six rows at a time per call, and six across every call (the permits).
+const PROBE_WINDOW = 6;
+const gitProbes = Semaphore.makeUnsafe(PROBE_WINDOW);
 
-export async function collectProjectHygiene(
-  projectId: string,
-  projectPath: string,
-): Promise<WorktreeHygiene[]> {
-  const [identities, config, remotes] = await Promise.all([
-    projectIdentities(projectId, projectPath),
-    readShigomoriConfig(projectId).catch(() => null),
-    listRemotes(projectPath),
-  ]);
+export const collectProjectHygieneEffect = Effect.fn(
+  "hygiene.collectProjectHygiene",
+)(function* (projectId: string, projectPath: string) {
+  const [identities, config, remotes] = yield* Effect.all(
+    [
+      projectIdentities(projectId, projectPath),
+      Effect.promise(() => readShigomoriConfig(projectId).catch(() => null)),
+      listRemotesEffect(projectPath),
+    ],
+    { concurrency: "unbounded" },
+  );
   // A repo with no resolvable default branch has nothing to compare
   // against. Reported as no candidates rather than as a failed call, so
   // the rows read "can't tell" instead of loading forever.
-  const primaryRef = await resolveDefaultBranch(
+  const primaryRef = yield* resolveDefaultBranchEffect(
     projectPath,
     config?.defaultBranch,
-  ).catch(() => null);
-  const candidates = await primaryRefCandidates(
+  ).pipe(Effect.orElseSucceed(() => null));
+  const candidates = yield* primaryRefCandidates(
     projectPath,
     primaryRef,
     remotes,
@@ -310,62 +314,81 @@ export async function collectProjectHygiene(
   const primaryBranch = primaryRef
     ? (splitRemoteRefSync(primaryRef, remotes)?.branch ?? primaryRef)
     : null;
-  return Promise.all(
-    identities.map((identity) =>
-      gitProbes(() =>
+  return yield* Effect.forEach(
+    identities,
+    (identity) =>
+      gitProbes.withPermits(1)(
         hygieneFor(identity, projectPath, candidates, primaryBranch),
       ),
-    ),
+    { concurrency: PROBE_WINDOW },
   );
+});
+
+export function collectProjectHygiene(
+  projectId: string,
+  projectPath: string,
+): Promise<WorktreeHygiene[]> {
+  return runGit(collectProjectHygieneEffect(projectId, projectPath));
 }
+
+// Keys are few (projects, worktrees), never a hostile stream, so the
+// capacity is a safety bound rather than a budget. A failed load is
+// never kept (its time to live is zero), so the next ask retries.
+const CACHE_CAPACITY = 10_000;
+const keepSuccessFor =
+  (ttl: Duration.Duration) =>
+  <A, E>(exit: Exit.Exit<A, E>): Duration.Duration =>
+    Exit.isSuccess(exit) ? ttl : Duration.zero;
 
 // The worktree list, cached for long enough to serve one page load.
 //
 // The renderer asks for disk usage one worktree at a time, and each of
 // those calls needs the same id-to-path lookup. Without this, opening
 // the page re-runs `git worktree list` once per row on top of the once
-// per project the facts already paid for.
-const identityCache = ttlMapCache(10_000, (key: string) => {
-  const [projectId, projectPath] = key.split("\u0000");
-  return listWorktreeIdentities(projectId, projectPath);
-});
+// per project the facts already paid for. The whole burst arrives
+// before the first lookup has resolved, so the cache's join of an
+// in-flight load is what makes it one `git worktree list` per project
+// rather than one per row.
+const identityCache = Effect.runSync(
+  Cache.makeWith(
+    (key: string) => {
+      const [projectId = "", projectPath = ""] = key.split("\u0000");
+      return listWorktreeIdentitiesEffect(projectId, projectPath);
+    },
+    {
+      capacity: CACHE_CAPACITY,
+      timeToLive: keepSuccessFor(Duration.seconds(10)),
+    },
+  ),
+);
 
-// The renderer asks for every worktree's disk usage at once, so the
-// whole burst arrives before the first lookup has resolved and a
-// value-only cache would miss on all of them. Holding the in-flight
-// promise is what makes it one `git worktree list` per project rather
-// than one per row.
-const identityInFlight = new Map<string, Promise<WorktreeIdentity[]>>();
-
-function projectIdentities(
-  projectId: string,
-  projectPath: string,
-): Promise<WorktreeIdentity[]> {
-  const key = `${projectId}\u0000${projectPath}`;
-  const pending = identityInFlight.get(key);
-  if (pending) return pending;
-  const load = identityCache.get(key).finally(() => {
-    identityInFlight.delete(key);
-  });
-  identityInFlight.set(key, load);
-  return load;
+function projectIdentities(projectId: string, projectPath: string) {
+  return Cache.get(identityCache, `${projectId}\u0000${projectPath}`);
 }
 
-export async function findWorktreeForDisk(
+// Fails with UnknownWorktree when the project has no worktree by that id.
+export const findWorktreeForDiskEffect = Effect.fn(
+  "hygiene.findWorktreeForDisk",
+)(function* (projectId: string, projectPath: string, worktreeId: string) {
+  const identities = yield* projectIdentities(projectId, projectPath);
+  const found = identities.find((identity) => identity.id === worktreeId);
+  if (!found) return yield* Effect.fail(unknownWorktreeError(worktreeId));
+  return found;
+});
+
+export function findWorktreeForDisk(
   projectId: string,
   projectPath: string,
   worktreeId: string,
 ): Promise<WorktreeIdentity> {
-  const identities = await projectIdentities(projectId, projectPath);
-  const found = identities.find((identity) => identity.id === worktreeId);
-  if (!found) throw unknownWorktreeError(worktreeId);
-  return found;
+  return runGit(findWorktreeForDiskEffect(projectId, projectPath, worktreeId));
 }
 
-// Three walks at a time. Each one already runs its own pool of
+// Three walks at a time, across every call: the renderer asks for each
+// row's size in its own call. Each walk already runs its own pool of
 // directory readers, so a wider window mostly makes the first size land
 // later. Any narrower and a fleet of forty crawls.
-const diskWalks = createLimiter(3);
+const diskWalks = Semaphore.makeUnsafe(3);
 
 // Disk measurements are cached because a full walk of a big checkout
 // costs real IO, and the tidy page refetches on mount and on window
@@ -379,29 +402,53 @@ const diskWalks = createLimiter(3);
 // went away. Cache lookups sit inside the slot so a queued worktree
 // whose walk landed in the meantime returns from cache instead of
 // re-walking.
-const diskCache = ttlMapCache(60_000, (key: string) => {
-  const [root, ...excluded] = key.split("\u0000");
-  return measureDirectory(root, new Set(excluded));
-});
+const diskCache = Effect.runSync(
+  Cache.makeWith(
+    (key: string) => {
+      const [root = "", ...excluded] = key.split("\u0000");
+      return measureDirectoryEffect(root, new Set(excluded));
+    },
+    {
+      capacity: CACHE_CAPACITY,
+      timeToLive: keepSuccessFor(Duration.seconds(60)),
+    },
+  ),
+);
 
-export async function measureWorktreeDisk(
+export const measureWorktreeDiskEffect = Effect.fn(
+  "hygiene.measureWorktreeDisk",
+)(function* (
   projectId: string,
   projectPath: string,
   worktree: WorktreeIdentity,
-): Promise<WorktreeDiskUsage> {
+) {
   const worktreePath = worktree.path;
   // Under the in-project layout a project's worktrees live inside its
   // primary checkout. Each one is measured as its own row, so the
   // enclosing walk steps over them rather than counting them twice.
-  const identities = await projectIdentities(projectId, projectPath);
+  const identities = yield* projectIdentities(projectId, projectPath);
   const nested = identities
     .map((identity) => identity.path)
     .filter(
       (path) => path !== worktreePath && isSameOrInside(path, worktreePath),
     )
     .toSorted();
-  const { bytes, lastActivityAt, partial } = await diskWalks(() =>
-    diskCache.get([worktreePath, ...nested].join("\u0000")),
+  const { bytes, lastActivityAt, partial } = yield* diskWalks.withPermits(1)(
+    Cache.get(diskCache, [worktreePath, ...nested].join("\u0000")),
   );
-  return { worktreeId: worktree.id, bytes, lastActivityAt, partial };
+  const usage: WorktreeDiskUsage = {
+    worktreeId: worktree.id,
+    bytes,
+    lastActivityAt,
+    partial,
+  };
+  return usage;
+});
+
+export function measureWorktreeDisk(
+  projectId: string,
+  projectPath: string,
+  worktree: WorktreeIdentity,
+): Promise<WorktreeDiskUsage> {
+  return runGit(measureWorktreeDiskEffect(projectId, projectPath, worktree));
 }

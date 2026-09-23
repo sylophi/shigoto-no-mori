@@ -1,42 +1,67 @@
-import {
-  listRemotes as listRemotesWith,
-  localBranchExists as localBranchExistsWith,
-  remoteRefExists as remoteRefExistsWith,
-  resolveDefaultBranch as resolveDefaultBranchWith,
-  resolveDefaultRef as resolveDefaultRefWith,
-} from "@shared/git/defaultBranch.mts";
-import { run } from "./core";
+import { Cache, Duration, Effect } from "effect";
+import * as policy from "@shared/git/defaultBranch.mts";
+import { type GitFailure, promiseRunner, runEffect, runGit } from "./core";
 
 // Default-branch policy lives in shared/git/defaultBranch.mts so the
-// identity parity harness resolves through the same code. These
-// wrappers bind the app's git runner.
+// identity parity harness resolves through the same code. These bind
+// it to the app's git runner, under the calling fiber's signal, so an
+// interrupted caller stops the probe it was waiting on.
+function withPolicy<A>(
+  use: (run: policy.GitRunner) => Promise<A>,
+): Effect.Effect<A> {
+  return Effect.promise((signal) => use(promiseRunner(signal)));
+}
+
+export const localBranchExistsEffect = Effect.fnUntraced(function* (
+  projectPath: string,
+  branch: string,
+) {
+  return yield* withPolicy((run) =>
+    policy.localBranchExists(run, projectPath, branch),
+  );
+});
+
 export function localBranchExists(
   projectPath: string,
   branch: string,
 ): Promise<boolean> {
-  return localBranchExistsWith(run, projectPath, branch);
+  return runGit(localBranchExistsEffect(projectPath, branch));
 }
+
+export const remoteRefExistsEffect = Effect.fnUntraced(function* (
+  projectPath: string,
+  ref: string,
+) {
+  return yield* withPolicy((run) =>
+    policy.remoteRefExists(run, projectPath, ref),
+  );
+});
 
 export function remoteRefExists(
   projectPath: string,
   ref: string,
 ): Promise<boolean> {
-  return remoteRefExistsWith(run, projectPath, ref);
+  return runGit(remoteRefExistsEffect(projectPath, ref));
 }
 
+export const listRemotesEffect = Effect.fnUntraced(function* (
+  projectPath: string,
+) {
+  return yield* withPolicy((run) => policy.listRemotes(run, projectPath));
+});
+
 export function listRemotes(projectPath: string): Promise<string[]> {
-  return listRemotesWith(run, projectPath);
+  return runGit(listRemotesEffect(projectPath));
 }
 
 // Every row of `git remote -v` as a name + URL pair. git emits two rows
 // per remote, fetch and push. Both are kept because a remote can push
 // somewhere other than it fetches, and callers classifying hosts want to
-// see either side. Identical rows are de-duped.
-export async function listRemoteEntries(
-  projectPath: string,
-): Promise<{ name: string; url: string }[]> {
-  try {
-    const stdout = await run(projectPath, ["remote", "-v"]);
+// see either side. Identical rows are de-duped. A failed listing is no
+// remotes.
+export const listRemoteEntriesEffect = Effect.fn("remotes.listRemoteEntries")(
+  function* (projectPath: string) {
+    const stdout = yield* runEffect(projectPath, ["remote", "-v"]);
     const entries: { name: string; url: string }[] = [];
     const seen = new Set<string>();
     for (const line of stdout.split("\n")) {
@@ -48,42 +73,80 @@ export async function listRemoteEntries(
       entries.push({ name, url });
     }
     return entries;
-  } catch {
-    return [];
-  }
+  },
+  Effect.orElseSucceed(() => []),
+);
+
+export function listRemoteEntries(
+  projectPath: string,
+): Promise<{ name: string; url: string }[]> {
+  return runGit(listRemoteEntriesEffect(projectPath));
 }
+
+// Fails with the policy's own Error when the repo has no local branch
+// at all to fall back on.
+export const resolveDefaultBranchEffect = Effect.fn(
+  "remotes.resolveDefaultBranch",
+)(function* (projectPath: string, override?: string) {
+  return yield* Effect.tryPromise({
+    try: (signal) =>
+      policy.resolveDefaultBranch(promiseRunner(signal), projectPath, override),
+    catch: (error) =>
+      error instanceof Error ? error : new Error(String(error)),
+  });
+});
 
 export function resolveDefaultBranch(
   projectPath: string,
   override?: string,
 ): Promise<string> {
-  return resolveDefaultBranchWith(run, projectPath, override);
+  return runGit(resolveDefaultBranchEffect(projectPath, override));
 }
 
 // Qualified, fallback-free variant for repo identity. See
 // shared/git/defaultBranch.mts for the contract split.
+export const resolveDefaultRefEffect = Effect.fn("remotes.resolveDefaultRef")(
+  function* (projectPath: string, override?: string) {
+    return yield* withPolicy((run) =>
+      policy.resolveDefaultRef(run, projectPath, override),
+    );
+  },
+);
+
 export function resolveDefaultRef(
   projectPath: string,
   override?: string,
 ): Promise<string | null> {
-  return resolveDefaultRefWith(run, projectPath, override);
+  return runGit(resolveDefaultRefEffect(projectPath, override));
 }
 
-// Coalesces overlapping callers onto a single in-flight fetch so the
+// Overlapping callers join a single in-flight fetch per project, so the
 // focus-driven sweep and the periodic refresh can't dogpile a slow
-// remote.
-const fetchInflight = new Map<string, Promise<void>>();
+// remote. Nothing outlives the run: a settled fetch, success or
+// failure, is never served to a later caller (time to live zero), and
+// once every caller waiting on a fetch has gone the fetch is
+// interrupted, which kills its git.
+const fetches = Effect.runSync(
+  Cache.make<string, void, GitFailure>({
+    // Projects are few; a safety bound, not a budget.
+    capacity: 10_000,
+    lookup: (projectPath) =>
+      runEffect(projectPath, ["fetch", "--all", "--quiet", "--prune"]).pipe(
+        Effect.asVoid,
+        Effect.withSpan("remotes.fetchAllRemotes"),
+      ),
+    timeToLive: Duration.zero,
+  }),
+);
 
-export async function fetchAllRemotes(projectPath: string): Promise<void> {
-  const existing = fetchInflight.get(projectPath);
-  if (existing) return existing;
-  const p = run(projectPath, ["fetch", "--all", "--quiet", "--prune"])
-    .then(() => undefined)
-    .finally(() => {
-      fetchInflight.delete(projectPath);
-    });
-  fetchInflight.set(projectPath, p);
-  return p;
+export function fetchAllRemotesEffect(
+  projectPath: string,
+): Effect.Effect<void, GitFailure> {
+  return Cache.get(fetches, projectPath);
+}
+
+export function fetchAllRemotes(projectPath: string): Promise<void> {
+  return runGit(fetchAllRemotesEffect(projectPath));
 }
 
 // Splits a remote-tracking ref like "origin/main" or "fork/feat/x" into
@@ -107,10 +170,16 @@ export function splitRemoteRefSync(
 
 // Single-string snapshot of every remote-tracking ref + its SHA. Compared
 // before/after a fetch to skip the broadcast when nothing actually moved.
-export async function snapshotRemoteRefs(projectPath: string): Promise<string> {
-  return run(projectPath, [
+export function snapshotRemoteRefsEffect(
+  projectPath: string,
+): Effect.Effect<string, GitFailure> {
+  return runEffect(projectPath, [
     "for-each-ref",
     "--format=%(objectname) %(refname)",
     "refs/remotes/",
   ]);
+}
+
+export function snapshotRemoteRefs(projectPath: string): Promise<string> {
+  return runGit(snapshotRemoteRefsEffect(projectPath));
 }
