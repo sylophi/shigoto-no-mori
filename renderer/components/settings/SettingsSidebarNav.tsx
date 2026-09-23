@@ -17,6 +17,7 @@ import {
   useActiveSettingsTab,
   type SettingsSection,
 } from "./settingsNav";
+import { UpdateAllButton } from "./UpdateAllButton";
 
 // The Settings page's navigation, rendered by the app sidebar in place
 // of the project tree while /settings is open. Two labelled groups:
@@ -57,7 +58,10 @@ export function SettingsSidebarNav() {
         ))}
       </NavGroup>
 
-      <NavGroup label={solo ? "Device" : "Devices"}>
+      <NavGroup
+        label={solo ? "Device" : "Devices"}
+        action={<UpdateAllButton updates={updates} />}
+      >
         {!hasLocalHost && devices.length === 0 && (
           <p className="px-2 py-1.5 text-xs text-muted-foreground/70">
             No devices on this account yet.
@@ -99,19 +103,25 @@ export function SectionLabel({ section }: { section: SettingsSection }) {
 
 // A labelled group of rows: the eyebrow is the scope, the page's own
 // section heading at the sidebar's size so it reads as structure
-// rather than as another row.
+// rather than as another row. An action for the whole group (the
+// devices' Update all) trails the label.
 function NavGroup({
   label,
+  action,
   children,
 }: {
   label: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <SectionHeading className="px-2 pt-3 pb-1 text-3xs text-muted-foreground/80">
-        {label}
-      </SectionHeading>
+      <div className="flex items-center justify-between gap-2 px-2 pt-3 pb-1">
+        <SectionHeading className="text-3xs text-muted-foreground/80">
+          {label}
+        </SectionHeading>
+        {action}
+      </div>
       {children}
     </div>
   );

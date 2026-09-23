@@ -228,6 +228,9 @@ async function installUpdate(unattended: boolean): Promise<void> {
       kind: "error",
       message: errorMessageOf(err),
     });
+    // A remote caller reads success as "restarting", and Update all
+    // restarts the asking machine on it, so the failure rides back.
+    if (unattended) throw err;
     return;
   }
   // A peer's invoke is answered when this handler resolves, and quit
