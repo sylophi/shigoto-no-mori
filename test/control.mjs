@@ -33,6 +33,12 @@
 //     (stop-unconfirmed), then removes the peer's copy.
 //   - `mirror --from` copies the peer's worktree here under a session
 //     whose copy is local, which `unmirror` removes, original kept.
+//   - the listener's bounds, on a TestClock: a connection with no hello
+//     is dropped at the hello deadline and a welcomed one is not, the
+//     connection past the cap is refused as busy until one closes, the
+//     call past the in-flight cap is refused, an unbroken line past a
+//     frame is dropped, a closed socket aborts its calls' signal, and
+//     stop() tears live connections down before it returns.
 //   - typed errors on the control wire: a ControlError keeps its code
 //     on the top-level res frame, and a handler's tagged error rides the
 //     additive `error` field (tag and fields) beside the message without
@@ -61,6 +67,8 @@ import { createConnection } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { ManagedRuntime } from "effect";
+import { TestClock } from "effect/testing";
 import { buildClient } from "@shared/ipc/buildClient";
 import { controlContract } from "@shared/ipc/modules/control";
 import {
@@ -84,8 +92,14 @@ import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { initDataDirAt } from "@host/lib/util/paths";
 import { unknownWorktreeError } from "@shared/errors";
 import {
+  HELLO_TIMEOUT_MS,
+  MAX_IN_FLIGHT_PER_PEER,
+  MAX_INBOUND_FRAME_BYTES,
+} from "@shared/ipc/socket/frames";
+import {
   CONTROL_FILE_NAME,
   createControlServer,
+  MAX_CONNECTIONS,
 } from "../main/core/control/server.ts";
 import {
   cliFailureMessage,
@@ -163,6 +177,192 @@ function rawExchange(port, lines, waitMs = 300) {
       ),
     );
   });
+}
+
+// One raw connection held open, for the bounds: the frames it has
+// heard so far, whether the server hung up, and a writer.
+function rawClient(port) {
+  return new Promise((resolve, reject) => {
+    const socket = createConnection({ host: "127.0.0.1", port });
+    const client = {
+      socket,
+      frames: [],
+      closed: false,
+      send: (frame) => socket.write(`${JSON.stringify(frame)}\n`),
+    };
+    let buffer = "";
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk) => {
+      buffer += chunk;
+      for (let i = buffer.indexOf("\n"); i >= 0; i = buffer.indexOf("\n")) {
+        client.frames.push(JSON.parse(buffer.slice(0, i)));
+        buffer = buffer.slice(i + 1);
+      }
+    });
+    socket.on("close", () => {
+      client.closed = true;
+    });
+    socket.once("error", reject);
+    socket.once("connect", () => {
+      socket.off("error", reject);
+      socket.on("error", () => {});
+      resolve(client);
+    });
+  });
+}
+
+// The answers a raw client has heard.
+const resOf = (client) => client.frames.filter((frame) => frame.t === "res");
+
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Polls until the condition holds, failing with `what` after a while.
+async function waitFor(condition, what, ms = 3_000) {
+  const deadline = Date.now() + ms;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting: ${what}`);
+    // oxlint-disable-next-line no-await-in-loop -- polling is sequential
+    await pause(10);
+  }
+}
+
+// The listener's bounds, on a server of their own whose fibers run on
+// a TestClock, so the hello deadline moves only when told to.
+async function proveBounds(track) {
+  const rt = ManagedRuntime.make(TestClock.layer());
+  track(() => rt.dispose());
+  const adjust = async (ms) => {
+    // Let the server take the connection (and start its deadline)
+    // before the clock moves past it.
+    await pause(50);
+    await rt.runPromise(TestClock.adjust(ms));
+    await pause(50);
+  };
+  const boundsFile = join(sandbox, "bounds-control.json");
+  const server = createControlServer({
+    appVersion: () => "9.9.9",
+    filePath: () => boundsFile,
+    log: () => {
+      throw new Error("a throwing logger must not take the server down");
+    },
+    runtime: { runFork: rt.runFork, runPromise: rt.runPromise },
+  });
+  // A call that holds until released, keeping its context to read.
+  const held = [];
+  server.transport.handle("test:hold", (ctx, input) => {
+    const { promise, resolve } = Promise.withResolvers();
+    held.push({ ctx, release: () => resolve(input) });
+    return promise;
+  });
+  await server.start();
+  track(() => server.stop());
+  const { port, token } = JSON.parse(readFileSync(boundsFile, "utf8"));
+  const welcomed = async () => {
+    const client = await rawClient(port);
+    client.send({ t: "hello", token });
+    await waitFor(() => client.frames.length > 0, "a welcome");
+    assert.equal(client.frames[0].t, "welcome");
+    return client;
+  };
+
+  // The hello deadline: a silent connection goes at the deadline and
+  // not before, while a welcomed one outlives it.
+  const silent = await rawClient(port);
+  const greeted = await welcomed();
+  await adjust(HELLO_TIMEOUT_MS - 1);
+  assert.equal(silent.closed, false, "dropped before the hello deadline");
+  await adjust(1);
+  await waitFor(() => silent.closed, "the hello deadline to drop it");
+  assert.equal(greeted.closed, false, "the deadline dropped a welcomed one");
+  // A malformed line after the hello is dropped, not fatal (and the
+  // throwing logger it reaches is contained).
+  greeted.socket.write("not json\n");
+
+  // The connection cap: the one past it is refused as busy, and a slot
+  // frees when a connection closes.
+  const open = [greeted];
+  while (open.length < MAX_CONNECTIONS) {
+    // oxlint-disable-next-line no-await-in-loop -- one at a time
+    open.push(await welcomed());
+  }
+  const extra = await rawClient(port);
+  await waitFor(() => extra.closed, "the busy refusal to end the socket");
+  assert.deepEqual(
+    extra.frames.map((frame) => [frame.t, frame.code]),
+    [["refused", "busy"]],
+  );
+  // The server hears the close a moment later, so retry briefly.
+  open.pop().socket.destroy();
+  let freed = null;
+  for (let attempt = 0; attempt < 50 && freed === null; attempt += 1) {
+    // oxlint-disable-next-line no-await-in-loop -- retried until the close lands
+    const client = await rawClient(port);
+    client.send({ t: "hello", token });
+    // oxlint-disable-next-line no-await-in-loop -- retried until the close lands
+    await waitFor(
+      () => client.frames.length > 0 || client.closed,
+      "an answer to the hello",
+    );
+    if (client.frames[0]?.t === "welcome") freed = client;
+    // oxlint-disable-next-line no-await-in-loop -- retried until the close lands
+    else await pause(20);
+  }
+  assert.ok(freed, "a closed connection never freed its slot");
+  open.push(freed);
+
+  // The in-flight cap, on one connection: the call past it is refused
+  // at once, and the held ones all answer when released.
+  const busy = open[0];
+  for (let id = 1; id <= MAX_IN_FLIGHT_PER_PEER + 1; id += 1) {
+    busy.send({ t: "req", id, channel: "test:hold", input: id });
+  }
+  await waitFor(() => resOf(busy).length === 1, "the call past the cap");
+  assert.deepEqual(resOf(busy)[0], {
+    t: "res",
+    id: MAX_IN_FLIGHT_PER_PEER + 1,
+    ok: false,
+    message: "too many in-flight requests",
+  });
+  assert.equal(held.length, MAX_IN_FLIGHT_PER_PEER);
+  for (const call of held.splice(0)) call.release();
+  await waitFor(
+    () => resOf(busy).length === MAX_IN_FLIGHT_PER_PEER + 1,
+    "the held calls' answers",
+  );
+  assert.ok(
+    resOf(busy)
+      .slice(1)
+      .every((frame) => frame.ok === true),
+  );
+
+  // A closed socket aborts the signal of the calls it was carrying.
+  const leaving = open[1];
+  leaving.send({ t: "req", id: 1, channel: "test:hold", input: 1 });
+  await waitFor(() => held.length === 1, "the held call");
+  const leftCall = held.pop();
+  assert.equal(leftCall.ctx.signal.aborted, false);
+  leaving.socket.destroy();
+  await waitFor(() => leftCall.ctx.signal.aborted, "the signal to abort");
+
+  // An unbroken line past a frame's bound ends the connection.
+  const flood = open[2];
+  flood.socket.write("x".repeat(MAX_INBOUND_FRAME_BYTES + 1));
+  await waitFor(() => flood.closed, "the oversized line to end it");
+
+  // stop() is synchronous: the file is gone and the live connections'
+  // calls are aborted by the time it returns.
+  const last = open[3];
+  last.send({ t: "req", id: 1, channel: "test:hold", input: 1 });
+  await waitFor(() => held.length === 1, "the held call");
+  const lastCall = held.pop();
+  server.stop();
+  assert.equal(existsSync(boundsFile), false, "stop left the file");
+  assert.equal(
+    lastCall.ctx.signal.aborted,
+    true,
+    "stop returned with a connection still live",
+  );
+  await waitFor(() => open.every((client) => client.closed), "every close");
 }
 
 // One row of the account's device registry, as the hub lists it.
@@ -440,6 +640,12 @@ async function main() {
     writeFileSync(controlFile, JSON.stringify(published));
     ok(
       "control.json is owner-only, a bad or missing hello is refused, only the control contract is served, and a stale token reads as app-not-running",
+    );
+
+    // ---- (2b) The listener's bounds, on a server of their own.
+    await proveBounds(track);
+    ok(
+      "bounds: the hello deadline drops a silent connection only, the connection past the cap is refused as busy until one closes, the call past the in-flight cap is refused, an oversized line ends the connection, a close aborts its calls' signal, and stop() tears connections down before it returns",
     );
 
     // ---- (3) devices: standing per device for the repo.

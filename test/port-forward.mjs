@@ -18,7 +18,8 @@
 //     but the one-time broker frames ever rides the device hub),
 //   - a server-side close ends the channel's direction after its tail
 //     bytes, and ending this side too completes the channel,
-//   - dialing a dead port fails with the coded "connect-failed", a
+//   - dialing a dead port fails with the coded "connect-failed" (the
+//     ForwardConnectFailed tag), a
 //     reused channel id with "channel-taken", and the per-connection
 //     channel cap with "too-many-conns",
 //   - the surface still serves a fresh channel after full teardown.
@@ -40,7 +41,11 @@
 //   - the first concurrent local socket OVER the client-side
 //     per-device cap (MAX_CONNS_PER_DEVICE, derived from the engine's
 //     exported constant) is destroyed while the capped set stands,
-//     with no wire traffic spent on the doomed dial.
+//     with no wire traffic spent on the doomed dial,
+//   - a move onto a taken local port rejects with the typed PortInUse
+//     and leaves the forward as it was,
+//   - stopAll closes every listener, is idempotent, and is terminal (a
+//     later start rejects with PortForwardStopped).
 //
 // Both "devices" share one node process. What separates them is the
 // direct wire between them, which is exactly the surface this proof
@@ -50,6 +55,8 @@ import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { connect, createServer } from "node:net";
 import { CommandRefusedError } from "@shared/ipc/socket/frames";
+import { errorTagOf } from "@shared/errorOf";
+import { FORWARD_CONNECT_FAILED_TAG, PORT_IN_USE_TAG } from "@shared/errors";
 import { CHANNEL_MAX_FRAME_BYTES } from "@shared/ipc/socket/channels";
 import { buildClient } from "@shared/ipc/buildClient";
 import { forwardContract } from "@shared/ipc/modules/forward";
@@ -59,6 +66,7 @@ import { mintHexId } from "@host/lib/idleRegistry";
 import {
   createPortForwardEngine,
   MAX_CONNS_PER_DEVICE,
+  PortForwardStopped,
 } from "../main/core/portForward/engine.ts";
 import { freeLoopbackPort, makeProof, makeTracker } from "./lib/checkKit.mjs";
 import { bootDirectWire } from "./lib/directBoot.mjs";
@@ -366,14 +374,17 @@ async function main() {
     ok("a large response followed by a server close arrives complete");
 
     // (6) A dead port: nothing listens once the fixture closed, so the
-    // dial refuses with the coded "connect-failed". A channel id that
+    // dial refuses with the coded "connect-failed", carried as the
+    // ForwardConnectFailed tag beside the message. A channel id that
     // is already attached on the connection refuses "channel-taken".
     const dead = await startFixtureServer(() => {});
     const deadPort = dead.port;
     await dead.close();
     await assert.rejects(
       () => openChannel(peerA, forward, deadPort),
-      /connect-failed/,
+      (error) =>
+        errorTagOf(error) === FORWARD_CONNECT_FAILED_TAG &&
+        /connect-failed/.test(error.message),
     );
     const taken = await openChannel(peerA, forward, echo.port);
     await assert.rejects(
@@ -469,6 +480,35 @@ async function main() {
     assert.equal(started.localPort, before);
     assert.equal(engine.listForwards().length, 1);
     ok("engine: a start naming another local port moves the listener");
+
+    // (9c) A move onto a local port something else holds rejects with
+    // the typed PortInUse, and the working forward stays exactly as it
+    // was: same id, same port, still round-tripping.
+    const squatter = await startFixtureServer(() => {});
+    await assert.rejects(
+      () =>
+        engine.startForward({
+          deviceId: "A",
+          remotePort: echo.port,
+          localPort: squatter.port,
+        }),
+      (error) =>
+        errorTagOf(error) === PORT_IN_USE_TAG && error.port === squatter.port,
+    );
+    await squatter.close();
+    assert.deepEqual(
+      engine.listForwards().map((f) => [f.forwardId, f.localPort]),
+      [[started.forwardId, started.localPort]],
+    );
+    const stayedPing = await dialAndCollect(
+      started.localPort,
+      Buffer.from("stayed"),
+      6,
+    );
+    assert.equal(stayedPing.toString("utf8"), "stayed");
+    ok(
+      "engine: a move onto a taken local port rejects PortInUse and leaves the forward as it was",
+    );
 
     // (10) A ~1.5 MB transfer through the local listener, chunked by
     // the engine's uplink pump and reassembled off its poll loop.
@@ -653,11 +693,35 @@ async function main() {
       "the cap tore down an established conn instead of the over-cap dial",
     );
     for (const socket of capSockets) socket.destroy();
-    engine.stopAll();
-    assert.equal(engine.listForwards().length, 0);
     ok(
       `engine: local socket ${MAX_CONNS_PER_DEVICE + 1} is destroyed at the cap of ${MAX_CONNS_PER_DEVICE}`,
     );
+
+    // (14) stopAll is the quit teardown: every listener closes at once,
+    // it is idempotent, and it is terminal, so a later start is refused
+    // typed instead of binding a listener nothing will ever stop.
+    engine.stopAll();
+    assert.equal(engine.listForwards().length, 0);
+    engine.stopAll();
+    await assert.rejects(
+      () =>
+        new Promise((resolve, reject) => {
+          const probe = connect({ host: "127.0.0.1", port: fresh.localPort });
+          probe.once("connect", () => {
+            probe.destroy();
+            resolve();
+          });
+          probe.once("error", reject);
+        }),
+      undefined,
+      "a listener still accepts after stopAll",
+    );
+    await assert.rejects(
+      () => engine.startForward({ deviceId: "A", remotePort: echo.port }),
+      (error) => error instanceof PortForwardStopped,
+    );
+    assert.equal(engine.listForwards().length, 0);
+    ok("engine: stopAll closes every listener, is idempotent, and is terminal");
   } finally {
     engine?.stopAll();
     // Reverse creation order via the shared tracker: the direct

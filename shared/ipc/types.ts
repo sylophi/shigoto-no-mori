@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import type { CodecIn, CodecOut } from "./codec";
 import type {
   BroadcastDef,
   Contract,
@@ -17,23 +17,23 @@ type BroadcastKeysOf<C extends Contract> = {
   [K in keyof C]: C[K] extends BroadcastDef ? K : never;
 }[keyof C];
 
-// Inputs flow through `schema.parse(...)`. Producers (renderer client,
-// broadcast caller) provide the wire shape (`z.input`); consumers
-// (handler, broadcast subscriber) see the parsed shape (`z.output`).
-// For plain object schemas the two collapse, but they diverge for
-// z.coerce / preprocess / .default / .transform.
-type ClientIn<D> = D extends InvokeDef ? z.input<D["input"]> : never;
-type HandlerIn<D> = D extends InvokeDef ? z.output<D["input"]> : never;
-type Out<D> = D extends InvokeDef ? z.output<D["output"]> : never;
+// Inputs flow through the codec's decode. Producers (renderer client,
+// broadcast caller) provide the wire shape (zod's input, a Schema's
+// Encoded); consumers (handler, broadcast subscriber) see the decoded
+// shape (zod's output, a Schema's Type). For plain object schemas the
+// two collapse, but they diverge for defaults and transforms.
+type ClientIn<D> = D extends InvokeDef ? CodecIn<D["input"]> : never;
+type HandlerIn<D> = D extends InvokeDef ? CodecOut<D["input"]> : never;
+type Out<D> = D extends InvokeDef ? CodecOut<D["output"]> : never;
 
 type BroadcastSubscriberPayload<D> = D extends BroadcastDef
-  ? z.output<D["payload"]>
+  ? CodecOut<D["payload"]>
   : never;
 
 type BroadcastProducerPayloadOf<
   C extends Contract,
   K extends keyof C,
-> = C[K] extends BroadcastDef ? z.input<C[K]["payload"]> : never;
+> = C[K] extends BroadcastDef ? CodecIn<C[K]["payload"]> : never;
 
 // `z.void()` infers as `void`. Map void inputs to a zero-arg call so
 // no-input clients don't force callers to pass `undefined`.

@@ -15,10 +15,30 @@
 // accounts on this machine can reach loopback, so the file carries a
 // token minted at bind and is written owner-only.
 //
+// One bind is one run: an Effect scope holding the listener, the
+// published file and every connection, each connection in a child
+// scope of its own whose close aborts the context's signal and
+// destroys the socket. stop() unpublishes and closes the run's scope,
+// which tears the rest down in reverse order, in the same call on the
+// default runtime. The hello deadline is a timeout on the connection's
+// fiber, and a connection's calls are fibers of its scope, so neither
+// a timer nor a socket set nor an in-flight counter is kept by hand.
+//
 // Electron-free on purpose: test/control.mjs drives this exact server.
-import { createServer, type Server, type Socket } from "node:net";
+import { createServer, type Socket } from "node:net";
 import { existsSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
+import {
+  Cause,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  FiberSet,
+  Iterable,
+  Option,
+  Scope,
+} from "effect";
 import { z } from "zod";
 import { errorCodeOf, errorMessageOf } from "@shared/errors";
 import { noHandlerMessage } from "@shared/hub/link";
@@ -33,6 +53,10 @@ import {
   ReqFrameSchema,
 } from "@shared/ipc/socket/frames";
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
+import {
+  defaultSupervisorRuntime,
+  type SupervisorRuntime,
+} from "@shared/remote/supervisor";
 import { mintHexId } from "@host/lib/idleRegistry";
 import { atomicWriteJsonSync } from "@host/lib/util/jsonFile";
 import { lineSplitter } from "@host/lib/util/ndjson";
@@ -52,7 +76,7 @@ export type ControlFile = {
 
 // A terminal or an agent runs a handful of commands at once, never
 // dozens.
-const MAX_CONNECTIONS = 16;
+export const MAX_CONNECTIONS = 16;
 
 const HelloSchema = z.object({ t: z.literal("hello"), token: z.string() });
 
@@ -76,144 +100,208 @@ function refuse(socket: Socket, code: string, message: string): void {
   socket.end(`${JSON.stringify({ t: "refused", code, message })}\n`);
 }
 
+// The answer to a call that threw. Only the codes this wire owns: a
+// Node errno riding an error would otherwise become a CLI error kind.
+function failedRes(id: unknown, error: unknown): Record<string, unknown> {
+  const code = errorCodeOf(error);
+  const encoded = encodeWireError(error);
+  return {
+    t: "res",
+    id,
+    ok: false,
+    message: errorMessageOf(error),
+    ...(isControlErrorCode(code) ? { code } : {}),
+    ...(encoded === undefined ? {} : { error: encoded }),
+  };
+}
+
 export function createControlServer(deps: {
   appVersion: () => string;
   // Where control.json goes: the data dir's, resolved late because the
   // data dir is a boot-time fact.
   filePath: () => string;
   log?: (message: string) => void;
+  // Where the run's fibers live. Real callers take Effect's default
+  // services; a test passes a ManagedRuntime built on TestClock.layer()
+  // and moves the hello deadline with TestClock.adjust.
+  runtime?: SupervisorRuntime;
 }) {
-  const log = deps.log ?? ((message: string) => console.warn(message));
+  const runtime = deps.runtime ?? defaultSupervisorRuntime;
   const handlers = new Map<string, Handler>();
-  const sockets = new Set<Socket>();
-  let server: Server | null = null;
-  let token: string | null = null;
+  // The current bind: the scope stop() closes, and the start() every
+  // caller until then shares.
+  let run: { scope: Scope.Closeable; started: Promise<void> } | null = null;
+  // What is on disk for the current bind, for republish().
   let file: ControlFile | null = null;
   let published: string | null = null;
 
-  async function dispatch(
-    socket: Socket,
-    ctx: HandlerContext,
-    // The connection's running calls, capped like a peer's.
-    inFlight: { count: number },
-    line: string,
-  ): Promise<void> {
-    const parsed = decodeFrame(line, ReqFrameSchema);
-    if (parsed === null) {
-      // One malformed line must not kill a connection carrying another
-      // call, and with no id there is nothing to answer.
-      log("[control] dropping an unparseable line");
-      return;
-    }
-    const fn = handlers.get(parsed.channel);
-    if (fn === undefined) {
-      send(socket, {
-        t: "res",
-        id: parsed.id,
-        ok: false,
-        message: noHandlerMessage(parsed.channel),
-      });
-      return;
-    }
-    if (inFlight.count >= MAX_IN_FLIGHT_PER_PEER) {
-      send(socket, {
-        t: "res",
-        id: parsed.id,
-        ok: false,
-        message: "too many in-flight requests",
-      });
-      return;
-    }
-    inFlight.count += 1;
+  // The owner's logger runs from socket callbacks and fibers alike, so
+  // a throw from it is contained here rather than crashing a callback
+  // or ending a fiber with a defect nothing reports.
+  function log(message: string): void {
     try {
-      const result = await fn(ctx, parsed.input);
-      send(socket, { t: "res", id: parsed.id, ok: true, result });
+      (deps.log ?? console.warn)(message);
     } catch (error) {
-      // Only the codes this wire owns: a Node errno riding an error
-      // would otherwise become a CLI error kind.
-      const code = errorCodeOf(error);
-      const encoded = encodeWireError(error);
-      send(socket, {
-        t: "res",
-        id: parsed.id,
-        ok: false,
-        message: errorMessageOf(error),
-        ...(isControlErrorCode(code) ? { code } : {}),
-        ...(encoded === undefined ? {} : { error: encoded }),
-      });
-    } finally {
-      inFlight.count -= 1;
+      console.warn(`[control] log threw: ${String(error)}`);
     }
   }
 
-  function handleConnection(socket: Socket): void {
-    // 'close' always follows 'error'. The listener must exist or the
-    // error is an uncaught throw.
-    socket.on("error", () => {});
-    if (sockets.size >= MAX_CONNECTIONS) {
-      refuse(socket, "busy", "too many control connections");
-      return;
-    }
-    sockets.add(socket);
-    const controller = new AbortController();
-    const notifier: HandlerContext["notifier"] = (module, key) => (payload) => {
-      const { channel, parsed } = resolveBroadcast(module, key, payload);
-      send(socket, { t: "push", channel, payload: parsed });
-    };
-    const ctx: HandlerContext = {
-      signal: controller.signal,
-      // A local process of this user commands its own machine, like a
-      // local window.
-      isCallerCommandGranted: () => true,
-      notifier,
-    };
-    const inFlight = { count: 0 };
-    let authed = false;
-    const helloTimer = setTimeout(() => socket.destroy(), HELLO_TIMEOUT_MS);
-    helloTimer.unref?.();
+  // One call, as a fiber of its connection's scope: the Promise handler
+  // runs to its answer unless the connection closes first, in which
+  // case there is no one to answer.
+  const answer = (
+    socket: Socket,
+    ctx: HandlerContext,
+    id: unknown,
+    fn: Handler,
+    input: unknown,
+  ): Effect.Effect<void> =>
+    Effect.tryPromise({
+      try: () => fn(ctx, input),
+      catch: (error) => error,
+    }).pipe(
+      Effect.match({
+        onSuccess: (result) => send(socket, { t: "res", id, ok: true, result }),
+        onFailure: (error) => send(socket, failedRes(id, error)),
+      }),
+      // A result that will not serialize is a bug, not a reason to end
+      // the fiber with a defect nothing reports.
+      Effect.catchCause((cause) =>
+        Cause.hasInterruptsOnly(cause)
+          ? Effect.failCause(cause)
+          : Effect.sync(() =>
+              log(`[control] a call failed: ${Cause.pretty(cause)}`),
+            ),
+      ),
+    );
 
-    const onLine = (line: string) => {
-      if (authed) {
-        void dispatch(socket, ctx, inFlight, line);
-        return;
-      }
-      const hello = decodeFrame(line, HelloSchema);
-      if (hello === null || !secretsMatch(hello.token, token ?? "")) {
-        // Nothing legitimate reaches here, so log it.
-        log("[control] refused a connection with a bad hello");
-        refuse(socket, "bad-token", "bad token");
-        return;
-      }
-      authed = true;
-      clearTimeout(helloTimer);
-      send(socket, { t: "welcome", appVersion: deps.appVersion() });
-    };
+  // One connection, from accept to close, inside its own scope. The
+  // scope closes when the socket does, when the hello deadline passes
+  // without a hello, or when stop() closes the run; closing it
+  // interrupts the calls still running, aborts the context's signal
+  // and destroys the socket.
+  const serveConnection = (
+    socket: Socket,
+    token: string,
+  ): Effect.Effect<void, never, Scope.Scope> =>
+    Effect.gen(function* () {
+      const controller = new AbortController();
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          controller.abort();
+          socket.destroy();
+        }),
+      );
+      const closed = Deferred.makeUnsafe<void>();
+      socket.on("close", () => {
+        Deferred.doneUnsafe(closed, Effect.void);
+      });
+      // The connection's running calls, capped like a peer's.
+      const calls = yield* FiberSet.make<void>();
+      const runCall = yield* FiberSet.runtime(calls)();
+      const ctx: HandlerContext = {
+        signal: controller.signal,
+        // A local process of this user commands its own machine, like a
+        // local window.
+        isCallerCommandGranted: () => true,
+        notifier: (module, key) => (payload) => {
+          const { channel, parsed } = resolveBroadcast(module, key, payload);
+          send(socket, { t: "push", channel, payload: parsed });
+        },
+      };
 
-    // A request names a channel and carries a small payload. A line
-    // that outgrows a frame is not our CLI.
-    let unbroken = 0;
-    const split = lineSplitter(onLine);
-    socket.setEncoding("utf8");
-    socket.on("data", (chunk: string) => {
-      const lastNewline = chunk.lastIndexOf("\n");
-      unbroken =
-        lastNewline < 0
-          ? unbroken + chunk.length
-          : chunk.length - lastNewline - 1;
-      if (unbroken > MAX_INBOUND_FRAME_BYTES) {
-        socket.destroy();
-        return;
-      }
-      split(chunk);
+      const dispatch = (line: string): void => {
+        const parsed = decodeFrame(line, ReqFrameSchema);
+        if (parsed === null) {
+          // One malformed line must not kill a connection carrying
+          // another call, and with no id there is nothing to answer.
+          log("[control] dropping an unparseable line");
+          return;
+        }
+        const fn = handlers.get(parsed.channel);
+        if (fn === undefined) {
+          send(socket, {
+            t: "res",
+            id: parsed.id,
+            ok: false,
+            message: noHandlerMessage(parsed.channel),
+          });
+          return;
+        }
+        if (Iterable.size(calls) >= MAX_IN_FLIGHT_PER_PEER) {
+          send(socket, {
+            t: "res",
+            id: parsed.id,
+            ok: false,
+            message: "too many in-flight requests",
+          });
+          return;
+        }
+        runCall(answer(socket, ctx, parsed.id, fn, parsed.input));
+      };
+
+      // Completed by a good hello, which lifts the deadline.
+      const hello = Deferred.makeUnsafe<void>();
+      // The first line is the hello; what the later ones mean depends
+      // on how it went.
+      let onLine = (line: string): void => {
+        const frame = decodeFrame(line, HelloSchema);
+        if (frame === null || !secretsMatch(frame.token, token)) {
+          // Nothing legitimate reaches here, so log it. The refusal is
+          // the last word: later lines are not read, and the socket
+          // goes when the client hangs up or at the deadline.
+          log("[control] refused a connection with a bad hello");
+          refuse(socket, "bad-token", "bad token");
+          onLine = () => {};
+          return;
+        }
+        onLine = dispatch;
+        send(socket, { t: "welcome", appVersion: deps.appVersion() });
+        Deferred.doneUnsafe(hello, Effect.void);
+      };
+
+      // A request names a channel and carries a small payload. A line
+      // that outgrows a frame is not our CLI.
+      let unbroken = 0;
+      const split = lineSplitter((line) => onLine(line));
+      socket.setEncoding("utf8");
+      socket.on("data", (chunk: string) => {
+        const lastNewline = chunk.lastIndexOf("\n");
+        unbroken =
+          lastNewline < 0
+            ? unbroken + chunk.length
+            : chunk.length - lastNewline - 1;
+        if (unbroken > MAX_INBOUND_FRAME_BYTES) {
+          socket.destroy();
+          return;
+        }
+        split(chunk);
+      });
+
+      // Held until the socket closes, or until the deadline passes with
+      // no hello, which ends the scope and so destroys the socket.
+      yield* Effect.raceFirst(
+        Deferred.await(closed),
+        Deferred.await(hello).pipe(
+          Effect.timeoutOption(HELLO_TIMEOUT_MS),
+          Effect.flatMap((welcomed) =>
+            Option.isSome(welcomed) ? Effect.never : Effect.void,
+          ),
+        ),
+      );
     });
-    socket.on("close", () => {
-      clearTimeout(helloTimer);
-      sockets.delete(socket);
-      controller.abort();
-    });
+
+  function publish(next: ControlFile): void {
+    const path = deps.filePath();
+    // selfWrite: false because this is control-plane plumbing the
+    // state watcher ignores, not user state.
+    atomicWriteJsonSync(path, next, { selfWrite: false, mode: 0o600 });
+    file = next;
+    published = path;
   }
 
   function unpublish(): void {
+    file = null;
     if (published === null) return;
     try {
       rmSync(published, { force: true });
@@ -224,27 +312,85 @@ export function createControlServer(deps: {
     published = null;
   }
 
-  // Binds the loopback listener on an ephemeral port and publishes it.
-  async function start(): Promise<void> {
-    if (server !== null) return;
-    const listener = createServer();
-    listener.on("connection", handleConnection);
-    listener.on("error", () => {});
-    const port = await listenLoopback(listener, 0);
-    server = listener;
-    // Minted per bind, so a token cannot outlive the listener it opened.
-    token = mintHexId();
-    file = { pid: process.pid, port, token, appVersion: deps.appVersion() };
-    publish();
-  }
+  // One bind, its resources acquired into the run's scope: the
+  // connections' set, the listener, then the file, released in the
+  // reverse order.
+  const serve: Effect.Effect<void, unknown, Scope.Scope> = Effect.gen(
+    function* () {
+      // Minted per bind, so a token cannot outlive the listener it
+      // opened.
+      const token = mintHexId();
+      const connections = yield* FiberSet.make<void>();
+      const runConnection = yield* FiberSet.runtime(connections)();
+      const port = yield* Effect.acquireRelease(
+        Effect.suspend(() => {
+          const listener = createServer((socket) => {
+            // 'close' always follows 'error'. The listener must exist
+            // or the error is an uncaught throw.
+            socket.on("error", () => {});
+            if (Iterable.size(connections) >= MAX_CONNECTIONS) {
+              refuse(socket, "busy", "too many control connections");
+              return;
+            }
+            runConnection(Effect.scoped(serveConnection(socket, token)));
+          });
+          listener.on("error", () => {});
+          return Effect.tryPromise({
+            try: () =>
+              listenLoopback(listener, 0).then((bound) => ({
+                listener,
+                port: bound,
+              })),
+            catch: (error) => error,
+          });
+        }),
+        ({ listener }) => Effect.sync(() => listener.close()),
+      ).pipe(Effect.map(({ port: bound }) => bound));
+      yield* Effect.acquireRelease(
+        Effect.try({
+          try: () =>
+            publish({
+              pid: process.pid,
+              port,
+              token,
+              appVersion: deps.appVersion(),
+            }),
+          catch: (error) => error,
+        }),
+        () => Effect.sync(unpublish),
+      );
+    },
+  );
 
-  function publish(): void {
-    if (file === null) return;
-    const path = deps.filePath();
-    // selfWrite: false because this is control-plane plumbing the
-    // state watcher ignores, not user state.
-    atomicWriteJsonSync(path, file, { selfWrite: false, mode: 0o600 });
-    published = path;
+  // Binds the loopback listener on an ephemeral port and publishes it.
+  // A stop() while the bind is in flight wins: the listener is closed
+  // as soon as it is bound, nothing is published, and this resolves.
+  function start(): Promise<void> {
+    if (run !== null) return run.started;
+    const scope = Scope.makeUnsafe();
+    const current = {
+      scope,
+      started: runtime
+        .runPromise(
+          Effect.forkIn(Scope.provide(serve, scope), scope).pipe(
+            Effect.flatMap(Fiber.join),
+            Effect.onError(() => Scope.close(scope, Exit.void)),
+            Effect.catchCause((cause) =>
+              Cause.hasInterruptsOnly(cause)
+                ? Effect.void
+                : Effect.failCause(cause),
+            ),
+          ),
+        )
+        .catch((error: unknown) => {
+          // A failed bind leaves nothing behind, so a later start()
+          // tries again.
+          if (run === current) run = null;
+          throw error;
+        }),
+    };
+    run = current;
+    return current.started;
   }
 
   // Puts the file back after a data wipe (host/lib/nuke.ts) removed the
@@ -254,21 +400,23 @@ export function createControlServer(deps: {
   // bring back one the wipe retired on purpose (the pre-2.0 name).
   function republish(): void {
     try {
-      if (existsSync(dirname(deps.filePath()))) publish();
+      if (file !== null && existsSync(dirname(deps.filePath()))) {
+        publish(file);
+      }
     } catch (error) {
       log(`[control] could not republish: ${errorMessageOf(error)}`);
     }
   }
 
-  // Synchronous so every quit path can call it on its way out.
+  // Synchronous so every quit path can call it on its way out. The file
+  // goes first, so a CLI run that starts now reads "not running"; then
+  // the run's scope closes, which on the default runtime closes the
+  // listener and every connection before this returns.
   function stop(): void {
     unpublish();
-    file = null;
-    server?.close();
-    server = null;
-    token = null;
-    for (const socket of sockets) socket.destroy();
-    sockets.clear();
+    const ending = run;
+    run = null;
+    if (ending !== null) runtime.runFork(Scope.close(ending.scope, Exit.void));
   }
 
   const transport: ServerTransport = {

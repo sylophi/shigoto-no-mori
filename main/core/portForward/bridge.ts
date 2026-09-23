@@ -14,7 +14,13 @@
 // (host/socket/channelStreams.ts) carries bytes, ends and resets both
 // ways with credit-based backpressure, so a slow local consumer pauses
 // the peer's source and the reverse.
-import type { Server, Socket } from "node:net";
+//
+// The byte pumps stay callback-based (the adapter is the callback
+// API). What the port-forward engine holds as Effect resources are the
+// listener (loopbackListener) and each bridged conn (bridgedConn):
+// acquired into a scope, released when that scope closes.
+import { createServer, type Server, type Socket } from "node:net";
+import { Effect, type Scope } from "effect";
 import type { ChannelHandle, ChannelMux } from "@shared/ipc/socket/channels";
 import { mintHexId } from "@host/lib/idleRegistry";
 import { bridgeDuplexToChannel } from "@host/socket/channelStreams";
@@ -52,6 +58,37 @@ export function listenLoopback(server: Server, port: number): Promise<number> {
       resolve(address.port);
     });
   });
+}
+
+// A loopback listener as a scoped resource: bound on acquire, closed
+// when the owning scope closes. `onConnection` is attached before the
+// bind, so no socket is ever accepted without a handler. allowHalfOpen:
+// a client FIN must not tear a bridged conn down (the adapter in
+// host/socket/channelStreams.ts ends one direction and keeps the other
+// flowing), but node's default would auto-end the writable side and
+// drop the remote's response. A failed bind is released by
+// listenLoopback itself, so only a bound listener reaches the scope.
+export function loopbackListener(
+  port: number,
+  onConnection: (socket: Socket) => void,
+): Effect.Effect<{ server: Server; port: number }, unknown, Scope.Scope> {
+  return Effect.acquireRelease(
+    Effect.tryPromise({
+      try: async () => {
+        const server = createServer({ allowHalfOpen: true }, onConnection);
+        const bound = await listenLoopback(server, port);
+        // A bound listener errors only in exotic cases, but an
+        // unlistened 'error' would take the whole process down.
+        server.on("error", () => {});
+        return { server, port: bound };
+      },
+      catch: (error) => error,
+    }),
+    ({ server }) =>
+      Effect.sync(() => {
+        server.close();
+      }),
+  );
 }
 
 export type BridgedConn = {
@@ -160,4 +197,21 @@ export function bridgeSocket(
   })();
 
   return { channelId, destroy };
+}
+
+// bridgeSocket as a scoped resource: the conn is torn down (channel
+// reset, socket destroyed) when the owning scope closes. A conn that
+// ends on its own first makes the release a no-op, since destroy is
+// idempotent.
+export function bridgedConn(
+  socket: Socket,
+  opts: Parameters<typeof bridgeSocket>[1],
+): Effect.Effect<BridgedConn, never, Scope.Scope> {
+  return Effect.acquireRelease(
+    Effect.sync(() => bridgeSocket(socket, opts)),
+    (conn) =>
+      Effect.sync(() => {
+        conn.destroy();
+      }),
+  );
 }

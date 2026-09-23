@@ -6,9 +6,10 @@
 // rejection, the Origin gate (the app's own renderer origins pass and
 // reach welcome, a foreign web origin is refused), empty-token start
 // refusal, the no-handler answer a non-remote channel gets, the
-// per-socket in-flight cap, the stopped-listener generation guard, and
-// the contract invariant that every host invoke is explicitly tagged
-// remote true or false.
+// per-socket in-flight cap, the stopped-listener guard, the hello
+// deadline and the failed-auth lockout on the runtime's clock (a
+// TestClock moves both), and the contract invariant that every host
+// invoke is explicitly tagged remote true or false.
 //
 // The LAN read-only gate: the LAN wire serves
 // ONLY channels explicitly registered mutating:false, refusing a
@@ -43,8 +44,11 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocket, WebSocketServer } from "ws";
+import { ManagedRuntime } from "effect";
+import { TestClock } from "effect/testing";
 import {
   CLOSE_AUTH_FAILED,
+  CLOSE_AUTH_LOCKED_OUT,
   CLOSE_GOING_AWAY,
   CLOSE_HELLO_FAILED,
   COMMAND_REFUSED_CODE,
@@ -545,6 +549,66 @@ async function main() {
       );
       client.close();
       await stopping;
+    },
+  );
+
+  await check(
+    "runtime clock: the hello deadline and the failed-auth lockout window run on the binding's runtime, so a TestClock moves them",
+    async (track) => {
+      const rt = ManagedRuntime.make(TestClock.layer());
+      track(() => rt.dispose());
+      const adjust = async (ms) => {
+        await rt.runPromise(TestClock.adjust(ms));
+        await delay(50);
+      };
+      const binding = createWsServerBinding(undefined, {
+        runtime: { runFork: rt.runFork, runPromise: rt.runPromise },
+      });
+      registerTestHandlers(binding);
+      const port = await binding.start({
+        port: 0,
+        bindAddress: "127.0.0.1",
+        token: TOKEN,
+        deviceId: "host-device",
+        appVersion: "9.9.9",
+        helloTimeoutMs: 60_000,
+      });
+      track(() => binding.stop());
+      const url = `ws://127.0.0.1:${port}`;
+
+      // A silent client outlives any real-time wait: its deadline is a
+      // minute of the TestClock, and only moving the clock ends it.
+      const silent = connect(url);
+      await silent.opened;
+      await delay(100);
+      assert.equal(silent.ws.readyState, WebSocket.OPEN);
+      await adjust(60_000);
+      const expired = await silent.waitClose();
+      assert.equal(expired.code, CLOSE_HELLO_FAILED);
+      assert.equal(expired.reason, "hello timeout");
+
+      // Five wrong tokens bench the client identity, the sixth
+      // connection is refused before its hello with the lockout code,
+      // and the window lifts only when the clock passes it.
+      const helloWith = async (token) => {
+        const client = connect(url);
+        await client.opened;
+        client.send({ t: "hello", token, deviceId: "client", appVersion: "1" });
+        return client;
+      };
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        // oxlint-disable-next-line no-await-in-loop -- each failure must land before the next attempt
+        const bad = await helloWith("wrong-token");
+        // oxlint-disable-next-line no-await-in-loop -- same
+        assert.equal((await bad.waitClose()).code, CLOSE_AUTH_FAILED);
+      }
+      const benched = connect(url);
+      const refused = await benched.waitClose();
+      assert.equal(refused.code, CLOSE_AUTH_LOCKED_OUT);
+      await adjust(30_000);
+      const good = await helloWith(TOKEN);
+      assert.equal((await good.nextFrame()).t, "welcome");
+      good.close();
     },
   );
 

@@ -1,8 +1,10 @@
-import { z } from "zod";
+import type { AnyCodec } from "./codec";
 
+// Every schema slot takes a zod schema or an Effect Schema while the
+// port runs (shared/ipc/codec.ts); the wires decode through codec.ts.
 export type InvokeDef<
-  I extends z.ZodTypeAny = z.ZodTypeAny,
-  O extends z.ZodTypeAny = z.ZodTypeAny,
+  I extends AnyCodec = AnyCodec,
+  O extends AnyCodec = AnyCodec,
 > = {
   kind: "invoke";
   channel: string;
@@ -42,7 +44,7 @@ export type InvokeDef<
   movesHostState?: boolean;
 };
 
-export type BroadcastDef<P extends z.ZodTypeAny = z.ZodTypeAny> = {
+export type BroadcastDef<P extends AnyCodec = AnyCodec> = {
   kind: "broadcast";
   channel: string;
   payload: P;
@@ -68,7 +70,7 @@ export type ContractModule<C extends Contract = Contract> = {
   calls: C;
 };
 
-export const invoke = <I extends z.ZodTypeAny, O extends z.ZodTypeAny>(
+export const invoke = <I extends AnyCodec, O extends AnyCodec>(
   channel: string,
   input: I,
   output: O,
@@ -99,7 +101,7 @@ export const invoke = <I extends z.ZodTypeAny, O extends z.ZodTypeAny>(
   movesHostState: opts?.movesHostState,
 });
 
-export const broadcast = <P extends z.ZodTypeAny>(
+export const broadcast = <P extends AnyCodec>(
   channel: string,
   payload: P,
   opts?: { remote?: boolean },

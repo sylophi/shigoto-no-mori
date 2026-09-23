@@ -46,6 +46,14 @@ pre-commit:
     wire-error:
       glob: "{shared/errors.ts,shared/errorOf.ts,shared/ipc/wireError.ts,shared/ipc/socket/frames.ts,test/wire-error.mjs,test/lib/checkKit.mjs}"
       run: pnpm test wire-error
+    # The zod-to-Schema port, pure: every schema moved to Effect Schema
+    # decodes and refuses what its zod version did through the wires'
+    # codec (unknown keys stripped, absent versus undefined optional
+    # keys, bounds, the refine message, a void input), and the v4
+    # constructs the port's mapping relies on keep their semantics.
+    schema-port:
+      glob: "{shared/schemas/**,shared/ipc/modules/**,shared/ipc/codec.ts,test/schema-port.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test schema-port
     # The reconnect supervisor under Effect's TestClock, pure: the exact
     # backoff ladder and its cap, the stable-connection reset, blocked
     # verdicts that never redial, and stop() cancelling a dial, a held
@@ -53,6 +61,12 @@ pre-commit:
     supervisor:
       glob: "{shared/remote/supervisor.ts,shared/ipc/socket/wsClientTransport.ts,test/supervisor.mjs,test/lib/checkKit.mjs}"
       run: pnpm test supervisor
+    # The TTL caches over Effect's Cache (host/lib/util/ttlCache.ts):
+    # coalesced loads, uncached rejections, an invalidate during a load
+    # discarding that load, and the value cache's peek/expire rules.
+    ttl-cache:
+      glob: "{host/lib/util/ttlCache.ts,test/ttl-cache.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test ttl-cache
     # Drives the git runner's Effect form against real git: the timeout
     # kills a run that never finishes, a caller's cancellation kills it
     # at once, git that cannot start fails as GitSpawnError, and the
