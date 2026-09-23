@@ -170,6 +170,7 @@ const registered = (deviceId, name, platform = "darwin") => ({
   deviceId,
   name,
   platform,
+  kind: "laptop",
   createdAt: 1,
   lastSeenAt: null,
   online: true,

@@ -17,13 +17,12 @@
 // the Durable Objects, Clerk). It cannot stop the Worker invocation
 // itself from being billed, only a WAF rule at the zone can, see
 // README.md (Abuse limits).
-import { isDeviceKind } from "../../shared/account/deviceKind";
 import {
   CONNECT_TICKET_PARAM,
   DEVICE_REVOKED_CODE,
-  type DeviceInfo,
-  type DeviceListResponse,
-  type EnrollResponse,
+  type DeviceInfoWire,
+  type DeviceListResponseWire,
+  type EnrollResponseWire,
   EnrollRequestSchema,
   DevicePatchRequestSchema,
   type ErrorBody,
@@ -213,15 +212,20 @@ async function accountPresenceSafe(
   return accountPresence(env, accountId).catch(() => new Set<string>());
 }
 
-function toDeviceInfo(row: DeviceRow, online: Set<string>): DeviceInfo {
+// One row as the API reports it, for the list and the enroll response
+// alike, so the two cannot disagree about a device.
+function toDeviceInfo(
+  row: Omit<DeviceRow, "account_id" | "credential_hash">,
+  online: Set<string>,
+): DeviceInfoWire {
   return {
     deviceId: row.device_id,
     name: row.name,
     platform: row.platform,
     // The column holds whatever the device sent (a newer device's kind
-    // lands as is). The wire shape is the catalog this Worker knows, so
-    // an unknown one reads as none.
-    kind: isDeviceKind(row.kind) ? row.kind : null,
+    // lands as is) and goes out as is: each reader maps it to the
+    // catalog it knows (DeviceInfoSchema).
+    kind: row.kind,
     createdAt: row.created_at,
     lastSeenAt: row.last_seen_at,
     online: online.has(row.device_id),
@@ -388,7 +392,7 @@ export function createWorker(deps: HubDeps): HubWorker {
     const body = EnrollRequestSchema.safeParse(await readJson(request));
     if (!body.success)
       return jsonError(400, { error: "invalid enroll request" });
-    const { deviceId, name, platform, kind = null } = body.data;
+    const { deviceId, name, platform, kind } = body.data;
     const existing = await getDeviceById(env.DB, deviceId);
     if (existing !== null && existing.account_id !== login.accountId) {
       return jsonError(409, {
@@ -471,17 +475,18 @@ export function createWorker(deps: HubDeps): HubWorker {
     const online = await presence;
     const response = {
       credential,
-      device: {
-        deviceId,
-        name,
-        platform,
-        // Read back through the same catalog check the list applies.
-        kind: isDeviceKind(kind) ? kind : null,
-        createdAt,
-        lastSeenAt: existing?.last_seen_at ?? null,
-        online: online.has(deviceId),
-      },
-    } satisfies EnrollResponse;
+      device: toDeviceInfo(
+        {
+          device_id: deviceId,
+          name,
+          platform,
+          kind,
+          created_at: createdAt,
+          last_seen_at: existing?.last_seen_at ?? null,
+        },
+        online,
+      ),
+    } satisfies EnrollResponseWire;
     return Response.json(response);
   }
 
@@ -500,7 +505,7 @@ export function createWorker(deps: HubDeps): HubWorker {
     const online = await accountPresenceSafe(env, rows[0].account_id);
     const response = {
       devices: rows.map((row) => toDeviceInfo(row, online)),
-    } satisfies DeviceListResponse;
+    } satisfies DeviceListResponseWire;
     return Response.json(response);
   }
 

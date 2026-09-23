@@ -107,24 +107,15 @@ export function isDeviceKind(value: unknown): value is DeviceKind {
 }
 
 // The shape a machine is drawn as when nothing better is known: the one
-// that claims the least. The one literal, so every fallback (a row
-// from before kinds, an id the registry no longer knows, a placeholder
-// before the status lands) lands on the same glyph.
+// that claims the least. The one literal, so every fallback (an id the
+// registry no longer knows, a placeholder before the status lands, a
+// kind this build does not know) lands on the same glyph.
 export const MACHINE_FALLBACK_KIND: DeviceShape = "desktop";
 
-// The kind a device of this platform reads as when it never said: a
-// device enrolled before kinds existed, or one whose hub row predates
-// the column. A browser is a browser, and a machine is the fallback shape.
+// The shape a device of this platform is drawn as when its kind cannot
+// be: the detector found nothing better, or the registry carries a
+// kind this build does not know (a newer build's pick). A browser is
+// a browser, and a machine is the fallback shape.
 export function fallbackDeviceKind(platform: string): DeviceShape {
   return platform === WEB_PLATFORM ? "browser" : MACHINE_FALLBACK_KIND;
-}
-
-// The kind a registry row draws as: what the row says, else the
-// platform fallback. The wire schema already reads an unknown kind (a
-// newer build's) as null, so no second check here.
-export function resolveDeviceKind(
-  kind: DeviceKind | null,
-  platform: string,
-): DeviceKind {
-  return kind ?? fallbackDeviceKind(platform);
 }

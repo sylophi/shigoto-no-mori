@@ -15,7 +15,6 @@ import { errorMessageOf } from "@shared/errors";
 import { isHubRefusal } from "@shared/account/service";
 import { ClerkSignOutButton } from "@/components/account/ClerkSignOutButton";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { resolveDeviceKind } from "@shared/account/deviceKind";
 import {
   useAccountDevices,
   useLocalDevice,
@@ -100,9 +99,7 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
       // under. The local ones are the truth the user just picked, so
       // the row shows them.
       name: isThisDevice ? local.name : device.name,
-      kind: isThisDevice
-        ? local.kind
-        : resolveDeviceKind(device.kind, device.platform),
+      kind: isThisDevice ? local.kind : device.kind,
       status: deviceRowStatus(device, isThisDevice, hubDevice, socket, now),
       access: commandAccessOf(peerAccess, device.deviceId),
       api: hubDevice?.api,
