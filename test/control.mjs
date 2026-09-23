@@ -353,6 +353,7 @@ async function main() {
     setPeerSyncApiImpl({
       syncApiFor: () => buildClient(syncContract, peerA.transport),
       worktreesApiFor: () => buildClient(worktreesContract, peerA.transport),
+      projectsApiFor: () => buildClient(projectsContract, peerA.transport),
     });
     // The account as the hub would list it: this device, the peer, a
     // machine that is signed in but away, and a browser.

@@ -19,12 +19,16 @@ import {
   createChunkWindow,
 } from "./chunkWindow";
 
-export interface FetchBundleInput {
+// Where the bundle unpacks: a project in THIS device's registry, or a
+// repository at a path not registered yet (the clone from a peer,
+// cloneFromPeer.ts, which registers it once it is a checkout). The CLI
+// takes either.
+type UnpackTarget = { targetProjectId: string } | { repoPath: string };
+
+export type FetchBundleInput = UnpackTarget & {
   // The project id on the PEER (ids differ per device registry;
   // identity matching across devices is the orchestration's job).
   sourceProjectId: string;
-  // The project id in THIS device's registry to unpack into.
-  targetProjectId: string;
   // Allowlisted full refs to request (refs/heads/<branch> or
   // refs/shigomori/dirty/<worktreeId>); validated peer-side by the
   // contract schema and again by the CLI.
@@ -34,6 +38,12 @@ export interface FetchBundleInput {
   // Byte progress for a caller that reports it: once with 0 when the
   // peer announces the size, then coalesced (chunkWindow.ts).
   onProgress?: (bytes: number, totalBytes: number) => void;
+};
+
+// Where a fetched branch lands locally, and where the orchestrations
+// look for it: never the branch itself.
+export function incomingRefFor(branch: string): string {
+  return `refs/shigomori/incoming/${branch}`;
 }
 
 // Where a fetched ref lands locally: capture refs keep their name,
@@ -43,7 +53,7 @@ export interface FetchBundleInput {
 export function landingRefspec(ref: string): string {
   const dst = ref.startsWith("refs/shigomori/")
     ? ref
-    : `refs/shigomori/incoming/${ref.slice("refs/heads/".length)}`;
+    : incomingRefFor(ref.slice("refs/heads/".length));
   return `${ref}:${dst}`;
 }
 
@@ -146,7 +156,10 @@ export async function fetchBundleFromPeer(
   >,
   input: FetchBundleInput,
 ): Promise<{ fetched: { ref: string; commit: string }[] }> {
-  const project = findProjectOrThrow(input.targetProjectId);
+  const target =
+    "targetProjectId" in input
+      ? findProjectOrThrow(input.targetProjectId)
+      : { path: input.repoPath };
   // Re-parsed here because the byte count flows into the progress
   // frames' strict schema and bounds the loop below: the peer's own
   // output validation is not this device's wall.
@@ -169,7 +182,7 @@ export async function fetchBundleFromPeer(
       await handle.close();
     }
     const refspecs = input.refs.map(landingRefspec);
-    return await bundleUnpackViaCli(project, path, refspecs);
+    return await bundleUnpackViaCli(target, path, refspecs);
   } catch (error) {
     // On the success path the host already dropped the transfer at
     // eof; this only tells it a giving-up receiver is done. Best

@@ -97,18 +97,27 @@ export async function listProjectsWithStatus(): Promise<Project[]> {
 // local clones of the same repo are both legitimate targets, so the
 // ambiguity is benign. Recomputed here from disk rather than trusted
 // from the caller, so a pull can never be aimed at a non-matching repo.
-export async function findProjectByIdentityOrThrow(
+export async function findProjectByIdentity(
   identity: string,
-): Promise<Project> {
+): Promise<Project | undefined> {
   for (const project of loadProjects()) {
     if (!existsSync(project.path)) continue;
     // oxlint-disable-next-line no-await-in-loop -- first match wins, and the TTL cache absorbs repeats
     const candidate = await getRepoIdentity(project.path).catch(() => null);
     if (candidate !== null && candidate === identity) return project;
   }
-  throw new Error(
-    "No local project matches this repository. Add a clone of it to this device first.",
-  );
+  return undefined;
+}
+
+const NO_PROJECT_OF_IDENTITY =
+  "No local project matches this repository. Add a clone of it to this device first.";
+
+export async function findProjectByIdentityOrThrow(
+  identity: string,
+): Promise<Project> {
+  const project = await findProjectByIdentity(identity);
+  if (project === undefined) throw new Error(NO_PROJECT_OF_IDENTITY);
+  return project;
 }
 
 // A project repo registered from inside the data dir (nothing stops

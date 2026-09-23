@@ -7,9 +7,11 @@ import { HexId32Schema } from "@shared/ipc/hexId";
 import { ChunkB64Schema } from "@shared/ipc/socket/frames";
 import { DeviceIdSchema } from "@shared/hub/protocol";
 import {
+  CloneProjectPayloadSchema,
   CommitHashSchema,
   CreatePhaseSchema,
   GitRefNameSchema,
+  ProjectSchema,
   WorktreeIdSchema,
   WorktreeSchema,
 } from "@shared/schemas";
@@ -70,7 +72,7 @@ import {
 const BUNDLE_REF_RE =
   /^refs\/(heads\/[A-Za-z0-9][A-Za-z0-9._/-]*|shigomori\/(dirty|index)\/[0-9a-f]{12})$/;
 
-const SyncBundleRefSchema = z
+export const SyncBundleRefSchema = z
   .string()
   .regex(BUNDLE_REF_RE, { message: "Ref outside the sync allowlist" })
   .refine((ref) => !ref.includes("..") && !ref.includes("//"), {
@@ -272,6 +274,15 @@ export function pullBringsIgnoredFiles(
   return mode !== undefined && mode !== "gitignored";
 }
 
+// A new checkout's place on this device: the folder it goes in and
+// its name, one segment (the add-project dialog's clone takes the
+// same pair, CloneProjectPayloadSchema). `~` is expanded by the host.
+export const SyncCloneIntoSchema = z.strictObject({
+  parentDir: z.string().min(1),
+  name: CloneProjectPayloadSchema.shape.name.unwrap(),
+});
+export type SyncCloneInto = z.infer<typeof SyncCloneIntoSchema>;
+
 export const SyncPullWorktreePayloadSchema = z.strictObject({
   sourceDeviceId: DeviceIdSchema,
   sourceProjectId: z.string().min(1),
@@ -305,14 +316,26 @@ export const SyncPullWorktreePayloadSchema = z.strictObject({
   // them). Gitignored leaves nothing to carry, so it skips the step.
   ignoreMode: MirrorIgnoreModeSchema.optional(),
   ignores: MirrorIgnoresSchema.optional(),
+  // Where to clone the repo when this device has no checkout of it
+  // yet: the pull's landing project is made first (the peer's default
+  // branch, fetched over the device link like the branch itself, so a
+  // repo with no remote crosses too), registered, and the copy lands
+  // in it as usual. Ignored when a local project already matches: the
+  // dialog that offered it was reading a stale list, and the pull
+  // takes the checkout it has. Without it, a device with no checkout
+  // refuses as before.
+  cloneInto: SyncCloneIntoSchema.optional(),
 });
 
 // The pull's progress, one frame per step change and per transferred
 // chunk, keyed by the SOURCE worktree id (the only id the caller holds
 // before the local worktree exists). `create` frames carry the new
 // worktree's ordinary lifecycle phase as it streams (carry-over, setup,
-// port provision). `transfer` frames carry the byte count.
+// port provision). `transfer` frames carry the byte count, and so do
+// `clone` frames, for the repo's own bundle.
 export const SyncPullStepSchema = z.enum([
+  // The repo cloned here first, a pull with `cloneInto` alone.
+  "clone",
   "capture",
   "transfer",
   "create",
@@ -352,6 +375,10 @@ export const SyncPullWorktreeResultSchema = z.strictObject({
       error: z.string().optional(),
     })
     .optional(),
+  // The project the pull made for the copy to land in (`cloneInto`),
+  // as registered. Absent when the copy landed in a checkout this
+  // device already had.
+  cloned: ProjectSchema.optional(),
 });
 export type SyncPullWorktreeResult = z.infer<
   typeof SyncPullWorktreeResultSchema

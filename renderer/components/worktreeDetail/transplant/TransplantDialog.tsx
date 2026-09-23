@@ -18,13 +18,14 @@ import {
 import type { Project, Worktree } from "@shared/schemas";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
 import {
-  type PullChoice,
+  type LandingChoice,
   usePullWorktree,
   useSendWorktree,
   useTeardownSent,
   useTeardownSource,
 } from "@/hooks/remote/usePullWorktree";
 import { DestinationProvider } from "@/hooks/remote/useHostScope";
+import { useLandingTarget } from "../flow/cloneDestination";
 import { modeOf, selectionSummary, usePullChoice } from "../flow/ignoreChoice";
 import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
 import type { DestinationPick } from "../flow/PullReview";
@@ -60,7 +61,9 @@ export function TransplantDialog({
   project: Project;
   sourceIdentity: string;
   // The identity-matched project on this machine the worktree lands in.
-  localProject: Project;
+  // Absent when this machine has none: the pull clones the repo here
+  // first, where the review says (flow/cloneDestination.tsx).
+  localProject: Project | undefined;
   sourceDeviceLabel: string;
   onClose: () => void;
 }) {
@@ -68,7 +71,6 @@ export function TransplantDialog({
     worktree,
     sourceProjectId: project.id,
     sourceIdentity,
-    localProjectId: localProject.id,
   });
   const teardown = useTeardownSource({ worktree, sourceProjectId: project.id });
   const thisDeviceLabel = useLocalDeviceName();
@@ -141,8 +143,9 @@ function TransplantFlow({
   sourceIdentity: string;
   // The landing side, named as the flow's pieces name it
   // (flow/PullReview.tsx says why): this machine, or the picked peer.
-  // Absent only on the review of a flow to a peer with none picked
-  // yet, which Start waits on.
+  // Absent on the review of a flow to a peer with none picked yet,
+  // which Start waits on, and on a flow here with no checkout of the
+  // repo, which the pull clones first (flow/cloneDestination.tsx).
   localProject: Project | undefined;
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
@@ -150,7 +153,7 @@ function TransplantFlow({
   // which peer (flow/peerTargets.ts makes both).
   landing?: Landing;
   toPeer?: DestinationPick;
-  pull: UseMutationResult<SyncPullWorktreeResult, Error, PullChoice>;
+  pull: UseMutationResult<SyncPullWorktreeResult, Error, LandingChoice>;
   teardown: UseMutationResult<SyncTeardownSourceResult, Error, void>;
   onClose: () => void;
 }) {
@@ -160,10 +163,20 @@ function TransplantFlow({
   const choice = usePullChoice(project.id, worktree.id, sourceIdentity);
   const mode = modeOf(choice.selection);
   const bringsFiles = pullBringsIgnoredFiles(mode);
+  const target = useLandingTarget({
+    localProject,
+    sourceProject: project,
+    toPeer: toPeer !== undefined,
+    submitted: pull.variables,
+  });
   const { stage, elapsed, progress, start, open } = usePullFlow({
     mutation: pull,
     sourceWorktreeId: worktree.id,
-    choice: choice.choice,
+    // The key only when there is a clone: the flows to a peer take the
+    // plain choice, and their payloads are strict.
+    choice: target?.clone
+      ? { ...choice.choice, cloneInto: target.clone.cloneInto }
+      : choice.choice,
     destinationDeviceId: toPeer?.pickedId ?? undefined,
     onClose,
   });
@@ -203,7 +216,7 @@ function TransplantFlow({
         <TransplantReview
           worktree={worktree}
           project={project}
-          localProject={localProject}
+          target={target}
           sourceDeviceLabel={sourceDeviceLabel}
           thisDeviceLabel={thisDeviceLabel}
           landing={landing}
@@ -213,14 +226,14 @@ function TransplantFlow({
           onStart={start}
         />
       )}
-      {(stage === "running" || stage === "failed") && localProject && (
+      {(stage === "running" || stage === "failed") && target && (
         <PullProgress
           frame={progress.frame}
           phasesSeen={progress.phasesSeen}
           sourceDeviceLabel={sourceDeviceLabel}
           thisDeviceLabel={thisDeviceLabel}
           worktree={worktree}
-          localProject={localProject}
+          target={target}
           runSetup={choice.runSetup}
           landing={landing}
           phasesReported={!landing.onPeer}

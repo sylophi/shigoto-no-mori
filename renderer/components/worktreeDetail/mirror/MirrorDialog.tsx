@@ -30,8 +30,9 @@ import {
   useStartMirror,
   useStartMirrorTo,
 } from "@/hooks/remote/useMirrors";
-import type { PullChoice } from "@/hooks/remote/usePullWorktree";
+import type { LandingChoice } from "@/hooks/remote/usePullWorktree";
 import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
+import { type LandingTarget, useLandingTarget } from "../flow/cloneDestination";
 import { FlowBody, FlowFooter, LandedPath } from "../flow/FlowChrome";
 import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
 import { PullProgress } from "../flow/PullProgress";
@@ -73,7 +74,9 @@ export function MirrorDialog({
   project: Project;
   sourceIdentity: string;
   // The identity-matched project on this machine the copy lands in.
-  localProject: Project;
+  // Absent when this machine has none: the start clones the repo
+  // here first, where the review says (flow/cloneDestination.tsx).
+  localProject: Project | undefined;
   sourceDeviceLabel: string;
   onClose: () => void;
 }) {
@@ -82,7 +85,6 @@ export function MirrorDialog({
     worktree,
     sourceProjectId: project.id,
     sourceIdentity,
-    localProjectId: localProject.id,
   });
   return (
     <MirrorFlow
@@ -148,8 +150,9 @@ function MirrorFlow({
   sourceIdentity: string;
   // The landing side, named as the flow's pieces name it
   // (flow/PullReview.tsx says why): this machine, or the picked peer.
-  // Absent only on the review of a flow to a peer with none picked
-  // yet, which Start waits on.
+  // Absent on the review of a flow to a peer with none picked yet,
+  // which Start waits on, and on a flow here with no checkout of the
+  // repo, which the start clones first (flow/cloneDestination.tsx).
   localProject: Project | undefined;
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
@@ -165,17 +168,27 @@ function MirrorFlow({
       session: string;
     },
     Error,
-    PullChoice
+    LandingChoice
   >;
   onClose: () => void;
 }) {
   // Under the source scope: its ignored list walks the checkout over
   // the device link.
   const pull = usePullChoice(project.id, worktree.id, sourceIdentity);
+  const target = useLandingTarget({
+    localProject,
+    sourceProject: project,
+    toPeer: toPeer !== undefined,
+    submitted: mirror.variables,
+  });
   const { stage, elapsed, progress, start, open } = usePullFlow({
     mutation: mirror,
     sourceWorktreeId: worktree.id,
-    choice: pull.choice,
+    // The key only when there is a clone: the flows to a peer take the
+    // plain choice, and their payloads are strict.
+    choice: target?.clone
+      ? { ...pull.choice, cloneInto: target.clone.cloneInto }
+      : pull.choice,
     destinationDeviceId: toPeer?.pickedId ?? undefined,
     onClose,
   });
@@ -240,7 +253,7 @@ function MirrorFlow({
         <MirrorReview
           worktree={worktree}
           project={project}
-          localProject={localProject}
+          target={target}
           sourceDeviceLabel={sourceDeviceLabel}
           thisDeviceLabel={thisDeviceLabel}
           landing={landing}
@@ -250,14 +263,14 @@ function MirrorFlow({
           onStart={start}
         />
       )}
-      {(stage === "running" || stage === "failed") && localProject && (
+      {(stage === "running" || stage === "failed") && target && (
         <PullProgress
           frame={progress.frame}
           phasesSeen={progress.phasesSeen}
           sourceDeviceLabel={sourceDeviceLabel}
           thisDeviceLabel={thisDeviceLabel}
           worktree={worktree}
-          localProject={localProject}
+          target={target}
           runSetup={pull.runSetup}
           landing={landing}
           phasesReported={!landing.onPeer}
@@ -302,7 +315,7 @@ function MirrorFlow({
 function MirrorReview({
   worktree,
   project,
-  localProject,
+  target,
   sourceDeviceLabel,
   thisDeviceLabel,
   landing = LANDS_HERE,
@@ -313,7 +326,7 @@ function MirrorReview({
 }: {
   worktree: Worktree;
   project: Project;
-  localProject: Project | undefined;
+  target: LandingTarget | null;
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
   landing?: Landing;
@@ -352,7 +365,7 @@ function MirrorReview({
             sourceKeeps
             toPeer={toPeer}
             worktree={worktree}
-            localProject={localProject}
+            target={target}
             sourceDeviceLabel={sourceDeviceLabel}
             thisDeviceLabel={thisDeviceLabel}
             pull={pull}
@@ -363,7 +376,7 @@ function MirrorReview({
       <DestinationScope>
         <PullReviewFooter
           worktree={worktree}
-          localProject={localProject}
+          target={target}
           landing={landing}
           waiting={pull.waiting}
           blocked={pull.blocked}

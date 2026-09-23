@@ -9,11 +9,12 @@
 // part of one (mirror/MirrorAction.tsx), in place of "Mirror here": a
 // worktree holds one mirror, the rule the local footer's "Mirror to…"
 // follows. The two transfers need command access, a real branch, and
-// a local project sharing the repo identity (the handler re-verifies
-// that last one). A repo with no identity at all gets a line of
-// explanation instead of an empty footer. The peer's primary checkout
-// can only be mirrored: a transplant would have to tear the project
-// itself down.
+// a repo identity to match a local project by (the handler re-verifies
+// the match). No local project sharing it is not a stop: the dialogs
+// clone the repo here first. A repo with no identity at all gets a
+// line of explanation instead of an empty footer. The peer's primary
+// checkout can only be mirrored: a transplant would have to tear the
+// project itself down.
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { useState } from "react";
 import { RefreshCw, Shovel } from "lucide-react";
@@ -64,10 +65,9 @@ function TransferActions({
   // without a word reads as a bug, and the cause (the repo, not the
   // app) is fixable by the person looking at it.
   if (project.identity == null) return <NoIdentityNote />;
-  // Identified, but nothing on this machine is the same repo. The
-  // buttons stay hidden: this one resolves by adding the project here,
-  // and the empty projects list already says that.
-  if (localProject === undefined) return null;
+  // Identified, and either held here or not: with no checkout on this
+  // machine the dialogs clone the repo first (over the device link, so
+  // a repo with no remote comes too), and say where.
   return (
     <>
       <MirrorButton
@@ -119,7 +119,7 @@ function TransplantButton({
   worktree: Worktree;
   project: Project;
   sourceIdentity: string;
-  localProject: Project;
+  localProject: Project | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const { deviceId } = useHostScope();
@@ -162,7 +162,7 @@ function MirrorButton({
   worktree: Worktree;
   project: Project;
   sourceIdentity: string;
-  localProject: Project;
+  localProject: Project | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const { deviceId } = useHostScope();

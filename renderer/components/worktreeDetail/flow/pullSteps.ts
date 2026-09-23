@@ -30,9 +30,14 @@ export const AFTER_PULL_POSITION = TIMELINE.length;
 
 // Before the first frame the orchestrator is negotiating tips, which
 // is the capture step's preamble, so the first step reads as running
-// from the start.
-export function framePosition(frame: SyncPullProgress | null): number {
-  return stepPosition(frame?.createPhase ?? frame?.step ?? "capture");
+// from the start. A run that clones the repo first opens on that.
+export function framePosition(
+  frame: SyncPullProgress | null,
+  cloning = false,
+): number {
+  return stepPosition(
+    frame?.createPhase ?? frame?.step ?? (cloning ? "clone" : "capture"),
+  );
 }
 
 // Each row's state against the frame, for rows in run order. The
@@ -79,13 +84,12 @@ const CREATE_PHASE_SHARE: Record<CreatePhase, number> = {
 export function overallProgress(frame: SyncPullProgress | null): number {
   if (frame === null) return 0.04;
   switch (frame.step) {
+    case "clone":
+      return 0.02 + byteRatio(frame) * 0.05;
     case "capture":
       return 0.08;
-    case "transfer": {
-      const total = frame.totalBytes ?? 0;
-      const ratio = total > 0 ? Math.min(1, (frame.bytes ?? 0) / total) : 0;
-      return 0.12 + ratio * 0.48;
-    }
+    case "transfer":
+      return 0.12 + byteRatio(frame) * 0.48;
     case "create":
       return (
         0.62 +
@@ -93,12 +97,15 @@ export function overallProgress(frame: SyncPullProgress | null): number {
       );
     case "apply":
       return 0.93;
-    case "files": {
-      const total = frame.totalBytes ?? 0;
-      const ratio = total > 0 ? Math.min(1, (frame.bytes ?? 0) / total) : 0;
-      return 0.94 + ratio * 0.05;
-    }
+    case "files":
+      return 0.94 + byteRatio(frame) * 0.05;
   }
+}
+
+// How far a byte-counted step has come, 0 until the total is known.
+function byteRatio(frame: SyncPullProgress): number {
+  const total = frame.totalBytes ?? 0;
+  return total > 0 ? Math.min(1, (frame.bytes ?? 0) / total) : 0;
 }
 
 // A once-a-second tick while a pull runs, for the elapsed figure.
@@ -154,6 +161,8 @@ export function stepHeadline(
 ): string {
   const here = landing.on;
   switch (frame?.step ?? "capture") {
+    case "clone":
+      return `cloning the repository from ${sourceDeviceLabel}`;
     case "capture":
       return `capturing the uncommitted work on ${sourceDeviceLabel}`;
     case "transfer":

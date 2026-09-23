@@ -53,11 +53,13 @@ import {
   WIRE_CHUNK_BYTES,
 } from "@shared/ipc/socket/frames";
 import { buildClient } from "@shared/ipc/buildClient";
+import { projectsContract } from "@shared/ipc/modules/projects";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
 import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
+import { projectsHandlers } from "@host/ipc/modules/projects";
 import {
   runPullWorktree,
   sendWorktree,
@@ -69,9 +71,10 @@ import {
   killScriptsForWorktree,
   startScript,
 } from "@host/lib/scripts";
+import { cloneProjectFromPeer } from "@host/lib/sync/cloneFromPeer";
 import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
 import { pushBundleToPeer } from "@host/lib/sync/pushBundle";
-import { findProjectOrThrow } from "@host/lib/projects";
+import { findProjectOrThrow, loadProjects } from "@host/lib/projects";
 import { getRepoIdentity } from "@host/lib/git/repoIdentity";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { initDataDirAt } from "@host/lib/util/paths";
@@ -294,11 +297,18 @@ async function main() {
         validateOutputs: true,
         onUsageTracked: () => {},
       });
+      // The clone's one read of the peer (its default branch), beside
+      // the grant-gated bundle it then asks for.
+      registerContract(projectsContract, projectsHandlers, binding, {
+        validateOutputs: true,
+        onUsageTracked: () => {},
+      });
     },
   });
   try {
     const sync = buildClient(syncContract, peerA.transport);
     const worktreesOverWire = buildClient(worktreesContract, peerA.transport);
+    const projectsOverWire = buildClient(projectsContract, peerA.transport);
     const dirtyRef = `refs/shigomori/dirty/${worktreeId}`;
 
     // (1) Ungranted: the whole surface is refused typed, before any
@@ -603,6 +613,11 @@ async function main() {
       worktreesApiFor: (deviceId) => {
         assert.equal(deviceId, "A", "the teardown dialed an unexpected device");
         return worktreesOverWire;
+      },
+      // The clone's reach: the peer's default branch, over the same wire.
+      projectsApiFor: (deviceId) => {
+        assert.equal(deviceId, "A", "the clone dialed an unexpected device");
+        return projectsOverWire;
       },
     });
     const pullCtx = {
@@ -1140,6 +1155,140 @@ async function main() {
     );
     ok(
       "sendWorktree from a primary: lands on the peer as a worktree on mirror/<branch> with the uncommitted work, its primary untouched",
+    );
+
+    // ---- A device with no checkout of the repo: the clone from a peer
+    // (host/lib/sync/cloneFromPeer.ts) makes one over the same wire,
+    // the pull's landing project when it is told where (cloneInto).
+    // Both devices share one registry here, so a pull's identity scan
+    // always finds a checkout (the source itself) and never reaches
+    // the clone: the clone is driven directly, and what the pull
+    // proves is that a checkout it has wins over a place named for a
+    // new one. The clone end to end is the remote smoke's.
+    // The source has a remote, which the clone must carry: it is what a
+    // clone of that remote would be, and a repo whose default branch is
+    // only its remote's HEAD to go by reads as the same repo through it.
+    const originUrl = "https://github.com/example/lone.git";
+    await git(sourceRepo, ["remote", "add", "origin", originUrl]);
+    // A parent this machine does not have yet is made (the dialog's
+    // default is the peer's own layout).
+    const clonesDir = join(sandbox, "clones", "deep");
+    const peer = { sync, projects: projectsOverWire };
+    const cloneFrames = [];
+    const cloned = await cloneProjectFromPeer(
+      peer,
+      sourceProjectId,
+      { parentDir: clonesDir, name: "lone" },
+      "feat/landing",
+      (bytes, totalBytes) => cloneFrames.push([bytes, totalBytes]),
+    );
+    assert.equal(cloned.path, join(clonesDir, "lone"));
+    assert.equal(
+      await gitOut(cloned.path, "remote", "get-url", "origin"),
+      originUrl,
+    );
+    assert.equal(
+      await gitOut(cloned.path, "symbolic-ref", "refs/remotes/origin/HEAD"),
+      "refs/remotes/origin/main",
+    );
+    assert.equal(
+      await gitOut(cloned.path, "rev-parse", "--abbrev-ref", "main@{upstream}"),
+      "origin/main",
+    );
+    assert.equal(findProjectOrThrow(cloned.id).path, cloned.path);
+    // The source's default branch (main, not the primary-branch its
+    // primary sits on), checked out at the source's tip, the tree
+    // populated, and the incoming ref swept.
+    assert.equal(
+      await gitOut(cloned.path, "symbolic-ref", "HEAD"),
+      "refs/heads/main",
+    );
+    assert.equal(await gitOut(cloned.path, "rev-parse", "HEAD"), mainTip);
+    assert.equal(
+      readFileSync(join(cloned.path, "ff.txt"), "utf8"),
+      "from main\n",
+    );
+    assert.equal(await gitOut(cloned.path, "status", "--porcelain"), "");
+    assert.equal(
+      await gitOut(cloned.path, "for-each-ref", "refs/shigomori/"),
+      "",
+    );
+    assert.equal(
+      await getRepoIdentity(cloned.path),
+      identity,
+      "the clone must read as the same repo",
+    );
+    assert.ok(cloneFrames.length >= 2, "the clone reported no progress");
+    assert.deepEqual(cloneFrames[0], [0, cloneFrames[0][1]]);
+    assert.deepEqual(cloneFrames.at(-1), [
+      cloneFrames[0][1],
+      cloneFrames[0][1],
+    ]);
+    // A taken folder, a parent that is a file, and a landing branch the
+    // clone itself checks out are refused before anything is made, and
+    // none leaves a folder or a registration behind.
+    const before = loadProjects().length;
+    await assert.rejects(
+      () =>
+        cloneProjectFromPeer(
+          peer,
+          sourceProjectId,
+          { parentDir: clonesDir, name: "lone" },
+          "feat/landing",
+        ),
+      /already exists/,
+    );
+    writeFileSync(join(sandbox, "notafolder"), "");
+    await assert.rejects(
+      () =>
+        cloneProjectFromPeer(
+          peer,
+          sourceProjectId,
+          { parentDir: join(sandbox, "notafolder"), name: "x" },
+          "feat/landing",
+        ),
+      /is not a folder/,
+    );
+    await assert.rejects(
+      () =>
+        cloneProjectFromPeer(
+          peer,
+          sourceProjectId,
+          { parentDir: clonesDir, name: "y" },
+          "main",
+        ),
+      /would land on main/,
+    );
+    assert.equal(existsSync(join(clonesDir, "y")), false);
+    assert.equal(loadProjects().length, before);
+    // A pull told where to clone beside a checkout it already has
+    // takes the checkout: nothing is cloned and the result says so.
+    const wtBesidePath = join(sandbox, "wt-beside");
+    await git(sourceRepo, [
+      "worktree",
+      "add",
+      "-q",
+      "-b",
+      "beside",
+      wtBesidePath,
+    ]);
+    const beside = await syncHandlers.pullWorktree(
+      {
+        sourceDeviceId: "A",
+        sourceProjectId,
+        sourceWorktreeId: worktreeIdFromPath(wtBesidePath),
+        sourceIdentity: identity,
+        branch: "beside",
+        worktreeName: "beside",
+        cloneInto: { parentDir: clonesDir, name: "again" },
+      },
+      pullCtx,
+    );
+    assert.equal(beside.cloned, undefined);
+    assert.equal(beside.worktree.projectId, targetProjectId);
+    assert.equal(existsSync(join(clonesDir, "again")), false);
+    ok(
+      "cloneProjectFromPeer: the peer's default branch lands as a registered checkout of the same identity with its remote and progress reported, a taken folder, a parent that is a file and a landing on the default branch are refused clean, and a pull with cloneInto beside a checkout it has clones nothing",
     );
   } finally {
     // Reverse creation order via the shared tracker: the direct

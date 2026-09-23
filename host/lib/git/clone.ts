@@ -3,12 +3,11 @@ import { join } from "node:path";
 import { isENOENT, pathExists } from "@host/lib/util/paths";
 import { run } from "./core";
 
-// Clones `url` into `parentDir/name` and returns the new checkout's
-// path. The payload schema has already held the URL to a real remote
-// and the name to one segment. Both checks below are for the message:
-// git would refuse either, in words about its own argv.
-export async function cloneRepo(
-  url: string,
+// Where a clone lands: `parentDir/name`, with the parent a folder and
+// the destination not yet there. Both checks are for the message: git
+// would refuse either, in words about its own argv. The clone from a
+// peer (host/lib/sync/cloneFromPeer.ts) lands the same way.
+export async function checkCloneDestination(
   parentDir: string,
   name: string,
 ): Promise<string> {
@@ -23,6 +22,18 @@ export async function cloneRepo(
   if (await pathExists(dest)) {
     throw new Error(`${dest} already exists`);
   }
+  return dest;
+}
+
+// Clones `url` into `parentDir/name` and returns the new checkout's
+// path. The payload schema has already held the URL to a real remote
+// and the name to one segment.
+export async function cloneRepo(
+  url: string,
+  parentDir: string,
+  name: string,
+): Promise<string> {
+  const dest = await checkCloneDestination(parentDir, name);
   // Nobody is at this process's terminal to answer a credential prompt,
   // least of all when the clone was asked for from another device, so
   // git's own is turned off and a remote it can't authenticate to fails

@@ -51,6 +51,7 @@ import {
   dirtyCaptureViaCli,
 } from "@host/ipc/cliDelegate";
 import {
+  peerProjectsApiFor,
   peerSyncApiFor,
   peerWorktreeOrUndefined,
   peerWorktreesApiFor,
@@ -81,10 +82,15 @@ import {
 } from "@host/lib/git/refs";
 import {
   findProjectAndWorktreeOrThrow,
+  findProjectByIdentity,
   findProjectByIdentityOrThrow,
   findProjectOrThrow,
 } from "@host/lib/projects";
-import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
+import { cloneProjectFromPeer } from "@host/lib/sync/cloneFromPeer";
+import {
+  fetchBundleFromPeer,
+  incomingRefFor,
+} from "@host/lib/sync/fetchBundle";
 import { pushBundleToPeer } from "@host/lib/sync/pushBundle";
 import { notifierFor, worktreesHandlers } from "./worktrees";
 
@@ -413,7 +419,7 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
     ctx,
   ) => {
     const project = await findProjectByIdentityOrThrow(identity);
-    const incomingRef = `refs/shigomori/incoming/${branch}`;
+    const incomingRef = incomingRefFor(branch);
     const landing = landBranch ?? branch;
     try {
       await refuseLandingCollision(project, landing, worktreeName);
@@ -795,6 +801,7 @@ export async function runPullWorktree(
     runSetup,
     ignoreMode,
     ignores,
+    cloneInto,
   }: z.infer<typeof SyncPullWorktreePayloadSchema>,
   ctx: HandlerContext,
   // The branch the copy is created on when it is not the source's (the
@@ -810,14 +817,35 @@ export async function runPullWorktree(
   const progress = (frame: Omit<SyncPullProgress, "sourceWorktreeId">) =>
     notifyProgress({ sourceWorktreeId, ...frame });
 
-  // 1. The local target repo, re-resolved by identity from disk.
-  const project = await findProjectByIdentityOrThrow(sourceIdentity);
+  // 1. The local target repo, re-resolved by identity from disk, or
+  // made now: with none, and a place named for one, the repo is
+  // cloned from the peer first (cloneFromPeer.ts) and the copy lands
+  // in that. A checkout this device has wins over the place named: the
+  // dialog that named it was reading a stale list, and a second clone
+  // of a repo already here is not what anyone asked for.
+  const peer = peerSyncApiFor(sourceDeviceId);
+  let cloned: Project | undefined;
+  let project: Project;
+  if (cloneInto === undefined) {
+    project = await findProjectByIdentityOrThrow(sourceIdentity);
+  } else {
+    const held = await findProjectByIdentity(sourceIdentity);
+    if (held === undefined) progress({ step: "clone" });
+    project =
+      held ??
+      (cloned = await cloneProjectFromPeer(
+        { sync: peer, projects: peerProjectsApiFor(sourceDeviceId) },
+        sourceProjectId,
+        cloneInto,
+        landing,
+        (bytes, totalBytes) => progress({ step: "clone", bytes, totalBytes }),
+      ));
+  }
 
   // 2. Refuse up front what the create would refuse after the bundle
   // crossed.
   await refuseLandingCollision(project, landing, worktreeName);
 
-  const peer = peerSyncApiFor(sourceDeviceId);
   const branchRef = `refs/heads/${branch}`;
 
   // 3. Tip negotiation, then capture. The tip decides whether the
@@ -853,7 +881,7 @@ export async function runPullWorktree(
     ...(tipIsLocal ? [] : [branchRef]),
     ...(capture.captured ? [sourceDirtyRef] : []),
   ];
-  const incomingRef = `refs/shigomori/incoming/${branch}`;
+  const incomingRef = incomingRefFor(branch);
   try {
     if (wantRefs.length > 0) {
       // The fetch opens the transfer step itself with its (0, total)
@@ -948,7 +976,13 @@ export async function runPullWorktree(
             : undefined,
       },
     );
-    return { worktree, captured: capture.captured, dirtyApplied, files };
+    return {
+      worktree,
+      captured: capture.captured,
+      dirtyApplied,
+      files,
+      cloned,
+    };
   } finally {
     // Sweep the landing ref success or fail. A survivor is not
     // harmless: a stale incoming/foo blocks any later incoming/foo/bar

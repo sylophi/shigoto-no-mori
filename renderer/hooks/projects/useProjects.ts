@@ -23,14 +23,18 @@ import {
 // Single source of truth for the projects-list query. The key registry
 // is derived from the scope's device id, so the key and the queryFn can
 // never name different devices. The scope rule is resolveForestScope's.
-export function projectsQueryOptions(scope: HostForestScope = {}) {
+export function projectsQueryOptions(
+  scope: HostForestScope = {},
+  enabled = true,
+) {
   const { deviceId, api } = resolveForestScope(scope);
   return queryOptions<Project[]>({
     queryKey: queryKeysFor(deviceId).projects(),
     queryFn: () => (api ? api.projects.list() : []),
     // Local: api and id are always present, so this stays always-enabled.
-    // Remote: an unconnected device never fetches.
-    enabled: api !== undefined && deviceId !== "",
+    // Remote: an unconnected device never fetches. A caller with no use
+    // for the list yet holds it off.
+    enabled: enabled && api !== undefined && deviceId !== "",
     meta: { errorTitle: "Couldn't load projects" },
   });
 }

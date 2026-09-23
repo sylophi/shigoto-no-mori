@@ -45,6 +45,10 @@ import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest
 import { tildify } from "@/lib/projectPaths";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { cn } from "@/lib/utils";
+import {
+  CloneDestinationSection,
+  type LandingTarget,
+} from "./cloneDestination";
 import type { PullChoiceState } from "./ignoreChoice";
 import { SetupToggle } from "./SetupToggle";
 import { FlowFooter } from "./FlowChrome";
@@ -184,14 +188,16 @@ const EMPTY_MARK = (
   />
 );
 
+// The landing device, filled: it has the repo, or gets it (the clone
+// the flow makes first, which has no branches to collide with yet).
 function DestinationRow({
   worktree,
-  localProject,
+  target,
   thisDeviceLabel,
   tag,
 }: {
   worktree: Worktree;
-  localProject: Project;
+  target: LandingTarget;
   thisDeviceLabel: string;
   tag: string;
 }) {
@@ -199,9 +205,12 @@ function DestinationRow({
   // the peer a flow to a peer picked (DestinationProvider).
   const destinationKind = useDeviceKind(useDestinationScope().deviceId);
   const { landingBranch, held, holder } = useLocalCollision(
-    localProject,
+    target.project,
     worktree,
   );
+  const holds = target.project
+    ? `has ${target.project.name}`
+    : `gets ${target.clone.projectName}`;
   return (
     <DeviceRow
       className={
@@ -235,8 +244,8 @@ function DestinationRow({
             ? `already has ${landingBranch}`
             : `already has ${landingBranch} in ${holder.name}`
           : landingBranch !== worktree.branch
-            ? `has ${localProject.name}, copy on ${landingBranch}`
-            : `has ${localProject.name}`
+            ? `${holds}, copy on ${landingBranch}`
+            : holds
       }
       trailing={
         <StatusDot
@@ -297,7 +306,7 @@ export function ReviewDevicesColumn({
   sourceKeeps = false,
   toPeer,
   worktree,
-  localProject,
+  target,
   sourceDeviceLabel,
   thisDeviceLabel,
   pull,
@@ -307,18 +316,19 @@ export function ReviewDevicesColumn({
   sourceKeeps?: boolean;
   toPeer?: DestinationPick;
   worktree: Worktree;
-  // Absent while a flow to a peer has no destination picked.
-  localProject: Project | undefined;
+  // Where the flow lands (flow/cloneDestination.tsx). Null while a
+  // flow to a peer has no destination picked.
+  target: LandingTarget | null;
   sourceDeviceLabel: string;
   thisDeviceLabel: string;
   pull: PullChoiceState;
 }) {
   // The source is the device the dialog sits under.
   const sourceKind = useDeviceKind(useHostScope().deviceId);
-  const destination = localProject !== undefined && (
+  const destination = target !== null && (
     <DestinationRow
       worktree={worktree}
-      localProject={localProject}
+      target={target}
       thisDeviceLabel={thisDeviceLabel}
       tag={toPeer ? "destination" : "this device"}
     />
@@ -335,13 +345,13 @@ export function ReviewDevicesColumn({
           >
             {toPeer === undefined
               ? destination
-              : toPeer.targets.map((target) =>
-                  target.deviceId === toPeer.pickedId ? (
-                    <Fragment key={target.deviceId}>{destination}</Fragment>
+              : toPeer.targets.map((candidate) =>
+                  candidate.deviceId === toPeer.pickedId ? (
+                    <Fragment key={candidate.deviceId}>{destination}</Fragment>
                   ) : (
                     <PeerTargetRow
-                      key={target.deviceId}
-                      target={target}
+                      key={candidate.deviceId}
+                      target={candidate}
                       onPick={toPeer.onPick}
                     />
                   ),
@@ -376,22 +386,28 @@ export function ReviewDevicesColumn({
           </ul>
         </section>
 
-        {localProject !== undefined && (
+        {target?.project && (
           <>
             <DestinationFolder
-              localProject={localProject}
+              localProject={target.project}
               thisDeviceLabel={thisDeviceLabel}
               name={pullWorktreeName(worktree)}
             />
 
             <SetupToggle
-              localProject={localProject}
+              localProject={target.project}
               thisDeviceLabel={thisDeviceLabel}
               checked={pull.runSetup}
               onChange={pull.setRunSetup}
               pinned={pull.setupPinned}
             />
           </>
+        )}
+        {target?.clone && (
+          <CloneDestinationSection
+            clone={target.clone}
+            thisDeviceLabel={thisDeviceLabel}
+          />
         )}
       </div>
     </DestinationScope>
@@ -405,7 +421,7 @@ export function ReviewDevicesColumn({
 // has nothing to check, and the band asks for the pick.
 export function PullReviewFooter({
   worktree,
-  localProject,
+  target,
   landing,
   waiting,
   blocked,
@@ -415,7 +431,9 @@ export function PullReviewFooter({
   onStart,
 }: {
   worktree: Worktree;
-  localProject: Project | undefined;
+  // Where the flow lands, null while unpicked. A clone has no project
+  // to check for collisions in yet.
+  target: LandingTarget | null;
   landing?: Landing;
   // The gitignored rule resolves over the ignored list: no start
   // before it lands, or the files step would bring everything.
@@ -427,8 +445,8 @@ export function PullReviewFooter({
   onCancel: () => void;
   onStart: () => void;
 }) {
-  const { refusal } = useLocalCollision(localProject, worktree, landing);
-  const unpicked = localProject === undefined;
+  const { refusal } = useLocalCollision(target?.project, worktree, landing);
+  const unpicked = target === null;
   return (
     <FlowFooter
       note={
