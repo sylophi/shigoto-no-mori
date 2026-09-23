@@ -5,11 +5,11 @@
 //
 // Each pill is the outline button the New worktree button above it is,
 // so the row reads as one set of controls with it rather than a second
-// kind of chip. Pills carry the device's glyph, the same one its rows
-// carry (DeviceBadge), so the bar stays one row however many machines
-// there are, and the picked pill spells its name out, so the narrowed
-// forest always says which machine it is showing. A radio group: one
-// pick at a time, arrows move it, the way the device tabs do.
+// kind of chip. Each pill is the device's dot, glyph and name, the
+// lead every device row shares, and the row scrolls sideways past the
+// edge rather than shrinking a pill to its glyph, so every machine
+// stays named. A radio group: one pick at a time, arrows move it, the
+// way the device tabs do.
 import type { DeviceKind } from "@shared/account/deviceKind";
 import { DeviceGlyph } from "@/components/shared/DeviceIcon";
 import type { DeviceRosterEntry } from "@/components/shared/DeviceTabs";
@@ -21,11 +21,11 @@ import { setDeviceFilter, type DeviceFilter } from "./deviceFilter";
 
 const ALL = "all";
 
-function pillFor(choice: DeviceRosterEntry, checked: boolean) {
+function pillFor(choice: DeviceRosterEntry) {
   return {
     id: choice.deviceId,
     kind: choice.kind as DeviceKind | null,
-    label: checked ? choice.label : null,
+    label: choice.label,
     title: deviceTitle(choice.label, choice.status),
     tone: choice.status?.tone ?? null,
   };
@@ -35,7 +35,7 @@ export function DeviceFilterBar({ choices, selected }: DeviceFilter) {
   const selectedId = selected?.deviceId ?? ALL;
   const pills = [
     { id: ALL, kind: null, label: "All", title: "Every device", tone: null },
-    ...choices.map((choice) => pillFor(choice, choice.deviceId === selectedId)),
+    ...choices.map(pillFor),
   ];
   const pick = (id: string) => setDeviceFilter(id === ALL ? null : id);
   const { listRef, onKeyDown } = useRovingPick({
@@ -83,9 +83,7 @@ export function DeviceFilterBar({ choices, selected }: DeviceFilter) {
             )}
           >
             {pill.kind && <DeviceGlyph kind={pill.kind} tone={pill.tone} />}
-            {pill.label !== null && (
-              <span className="max-w-32 truncate">{pill.label}</span>
-            )}
+            <span className="max-w-32 truncate">{pill.label}</span>
           </Button>
         );
       })}
