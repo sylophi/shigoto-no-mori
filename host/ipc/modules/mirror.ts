@@ -21,7 +21,7 @@
 // uninterruptible where they sit: a start's session open (or its
 // rollback) once the pull landed, a stop's terminate and the copy's
 // removal, a git state apply.
-import { Context, Effect, Schema } from "effect";
+import { Cause, Context, Effect, Schema } from "effect";
 import {
   MIRROR_LABEL_COPY_SIDE,
   MIRROR_COPY_STAYED,
@@ -38,7 +38,7 @@ import {
   mirrorStopIsSafe,
   summarizeIgnores,
 } from "@shared/ipc/modules/mirror";
-import { DeleteWorktreeResultSchema } from "@shared/schemas";
+import { DeleteWorktreeResultSchema, type Worktree } from "@shared/schemas";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { errorMessageOf, unknownWorktreeError } from "@shared/errors";
@@ -49,6 +49,7 @@ import {
   findWorktreeIdentityOrThrow,
   removeWorktreeForce,
   worktreeIdFromPath,
+  type WorktreeIdentity,
 } from "@host/lib/git/worktrees";
 import { findProjectOrThrow } from "@host/lib/projects";
 import { dropWorktreeMarks } from "@host/lib/worktrees/marks";
@@ -228,15 +229,38 @@ const openSession = <A>(
     Effect.map(started),
   );
 
+// A start whose caller left during the landing: the worktree (or the
+// peer's copy) exists, so the start is carried to its end for them,
+// the way the Promise this replaced ran to its end. Nothing can hear
+// the answer, so a failure is logged; openSession has already rolled
+// the copy back by then.
+const finishAfterLeaving = (
+  open: Effect.Effect<unknown, unknown>,
+  what: string,
+) =>
+  open.pipe(
+    Effect.catchCause((cause) =>
+      Effect.sync(() => {
+        console.warn(
+          `[mirror] a start whose caller left could not open its session on ${what}: ${errorMessageOf(Cause.squash(cause))}`,
+        );
+      }),
+    ),
+  );
+
 // mirror:start. Every precondition before the pull, so a refusal
 // creates nothing: the engine must be up, and the peer's worktree must
 // exist (its root path is read off the peer's own list, because it
 // flows into a session this device persists). The branch collision is
-// the pull's own guard. The pull is interruptible (see
-// runPullWorktree). Once it returns, what follows is not: the session
-// opens, or the pull is rolled back, so a caller that leaves right
-// after the landing gets a mirror or nothing, never a worktree the
-// start left behind without its session.
+// the pull's own guard. The pull is interruptible up to its landing
+// (see runPullWorktree). From the landing on, nothing is: the session
+// opens, or the pull is rolled back. A caller that leaves during the
+// landing is the one case the mask alone does not cover (the pull's
+// landing step finishes, then the pull ends as interrupted, and the
+// session would never open), so the pull's `onLanded` hook keeps the
+// landed worktree and the interrupt path opens the session for the
+// caller that left. Either way: a mirror, or nothing, never a
+// worktree the start left behind without its session.
 export const startMirror = (
   input: typeof MirrorStartPayloadSchema.Type,
   ctx: HandlerContext,
@@ -252,38 +276,54 @@ export const startMirror = (
       return yield* Effect.fail(unknownWorktreeError(input.sourceWorktreeId));
     }
     const { ignoreMode, ignores, ...pullInput } = input;
+    const open = (pulled: Worktree) =>
+      openSession(
+        hostAttempt(() =>
+          daemon.create({
+            localRoot: pulled.path,
+            deviceId: input.sourceDeviceId,
+            projectId: input.sourceProjectId,
+            worktreeId: input.sourceWorktreeId,
+            remoteRoot: source.path,
+            name: input.branch,
+            localWorktreeId: pulled.id,
+            labels: {
+              [MIRROR_LABEL_LOCAL_PROJECT]: pulled.projectId,
+              [MIRROR_LABEL_LOCAL_WORKTREE]: pulled.id,
+              [MIRROR_LABEL_IGNORE_MODE]: ignoreMode,
+            },
+            ignores,
+          }),
+        ),
+        () => rollBackPull(pulled),
+        "the worktree",
+        (session) => {
+          daemon.noteEvent(
+            pulled.id,
+            "started",
+            summarizeIgnores(ignoreMode, ignores),
+          );
+          return session;
+        },
+      );
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
-        const pulled = yield* restore(runPullWorktree(pullInput, ctx));
-        return yield* openSession(
-          hostAttempt(() =>
-            daemon.create({
-              localRoot: pulled.worktree.path,
-              deviceId: input.sourceDeviceId,
-              projectId: input.sourceProjectId,
-              worktreeId: input.sourceWorktreeId,
-              remoteRoot: source.path,
-              name: input.branch,
-              localWorktreeId: pulled.worktree.id,
-              labels: {
-                [MIRROR_LABEL_LOCAL_PROJECT]: pulled.worktree.projectId,
-                [MIRROR_LABEL_LOCAL_WORKTREE]: pulled.worktree.id,
-                [MIRROR_LABEL_IGNORE_MODE]: ignoreMode,
-              },
-              ignores,
-            }),
+        let landed: Worktree | undefined;
+        const pulled = yield* restore(
+          runPullWorktree(pullInput, ctx, {
+            onLanded: (worktree) => {
+              landed = worktree;
+            },
+          }),
+        ).pipe(
+          Effect.onInterrupt(() =>
+            landed === undefined
+              ? Effect.void
+              : finishAfterLeaving(open(landed), "the worktree"),
           ),
-          () => rollBackPull(pulled.worktree),
-          "the worktree",
-          (session) => {
-            daemon.noteEvent(
-              pulled.worktree.id,
-              "started",
-              summarizeIgnores(ignoreMode, ignores),
-            );
-            return { ...pulled, session };
-          },
         );
+        const session = yield* open(pulled.worktree);
+        return { ...pulled, session };
       }),
     );
   });
@@ -294,8 +334,9 @@ export const startMirror = (
 // the peer the copy, and the label says so for the stop), so like the
 // send it rides the peer's grant alone. No leave-out rule goes to the
 // send: the session opened next carries the ignored files and keeps
-// carrying them, as in start. Interruptible up to the send's end, then
-// not, for start's reason.
+// carrying them, as in start. Interruptible up to the peer's landing,
+// then not, for start's reason, with the same hook for a caller that
+// leaves while the peer makes the copy.
 export const startMirrorTo = (
   input: typeof MirrorStartToPayloadSchema.Type,
   ctx: HandlerContext,
@@ -304,49 +345,65 @@ export const startMirrorTo = (
     const daemon = yield* runningEngine;
     const apis = yield* peerApis;
     const { ignoreMode, ignores, ...sendInput } = input;
+    const open = (copy: Worktree, source: WorktreeIdentity) =>
+      openSession(
+        hostAttempt(() =>
+          daemon.create({
+            localRoot: source.path,
+            deviceId: input.targetDeviceId,
+            projectId: copy.projectId,
+            worktreeId: copy.id,
+            // The copy's root as the peer's landing answered it,
+            // re-parsed by the send.
+            remoteRoot: copy.path,
+            name: source.branch,
+            localWorktreeId: source.id,
+            labels: {
+              [MIRROR_LABEL_LOCAL_PROJECT]: input.projectId,
+              [MIRROR_LABEL_LOCAL_WORKTREE]: source.id,
+              [MIRROR_LABEL_IGNORE_MODE]: ignoreMode,
+              [MIRROR_LABEL_COPY_SIDE]: "remote",
+            },
+            ignores,
+          }),
+        ),
+        () =>
+          apis.worktreesApiFor(input.targetDeviceId).delete({
+            projectId: copy.projectId,
+            worktreeId: copy.id,
+            force: true,
+          }),
+        "the peer's copy",
+        (session) => {
+          daemon.noteEvent(
+            source.id,
+            "started",
+            summarizeIgnores(ignoreMode, ignores),
+          );
+          return session;
+        },
+      );
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
-        const { source: worktree, result: sent } = yield* restore(
-          sendWorktree(sendInput, ctx),
-        );
-        const copy = {
-          projectId: sent.worktree.projectId,
-          worktreeId: sent.worktree.id,
-        };
-        return yield* openSession(
-          hostAttempt(() =>
-            daemon.create({
-              localRoot: worktree.path,
-              deviceId: input.targetDeviceId,
-              ...copy,
-              // The copy's root as the peer's landing answered it,
-              // re-parsed by the send.
-              remoteRoot: sent.worktree.path,
-              name: worktree.branch,
-              localWorktreeId: worktree.id,
-              labels: {
-                [MIRROR_LABEL_LOCAL_PROJECT]: input.projectId,
-                [MIRROR_LABEL_LOCAL_WORKTREE]: worktree.id,
-                [MIRROR_LABEL_IGNORE_MODE]: ignoreMode,
-                [MIRROR_LABEL_COPY_SIDE]: "remote",
-              },
-              ignores,
-            }),
+        let landed: { copy: Worktree; source: WorktreeIdentity } | undefined;
+        const { source, result: sent } = yield* restore(
+          sendWorktree(sendInput, ctx, {
+            onLanded: (copy, from) => {
+              landed = { copy, source: from };
+            },
+          }),
+        ).pipe(
+          Effect.onInterrupt(() =>
+            landed === undefined
+              ? Effect.void
+              : finishAfterLeaving(
+                  open(landed.copy, landed.source),
+                  "the peer's copy",
+                ),
           ),
-          () =>
-            apis
-              .worktreesApiFor(input.targetDeviceId)
-              .delete({ ...copy, force: true }),
-          "the peer's copy",
-          (session) => {
-            daemon.noteEvent(
-              worktree.id,
-              "started",
-              summarizeIgnores(ignoreMode, ignores),
-            );
-            return { ...sent, session };
-          },
         );
+        const session = yield* open(sent.worktree, source);
+        return { ...sent, session };
       }),
     );
   });
@@ -460,14 +517,21 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     stopMirror(input, ctx).pipe(Effect.as(undefined)),
   ),
 
+  // The engine's change and the thread's line about it are one step:
+  // a caller leaving between the two would leave a paused session
+  // whose thread never says so.
   pause: hostHandler(({ session }) =>
     Effect.gen(function* () {
       const daemon = yield* mirrorEngine;
-      yield* hostAttempt(() => daemon.pause(session));
-      daemon.noteEvent(
-        localWorktreeIdOf(findSession(daemon, session)),
-        "paused",
-        "",
+      yield* Effect.uninterruptible(
+        hostAttempt(async () => {
+          await daemon.pause(session);
+          daemon.noteEvent(
+            localWorktreeIdOf(findSession(daemon, session)),
+            "paused",
+            "",
+          );
+        }),
       );
       return undefined;
     }),
@@ -476,11 +540,15 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
   resume: hostHandler(({ session }) =>
     Effect.gen(function* () {
       const daemon = yield* mirrorEngine;
-      yield* hostAttempt(() => daemon.resume(session));
-      daemon.noteEvent(
-        localWorktreeIdOf(findSession(daemon, session)),
-        "resumed",
-        "",
+      yield* Effect.uninterruptible(
+        hostAttempt(async () => {
+          await daemon.resume(session);
+          daemon.noteEvent(
+            localWorktreeIdOf(findSession(daemon, session)),
+            "resumed",
+            "",
+          );
+        }),
       );
       return undefined;
     }),
@@ -505,8 +573,8 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
       }
       const localWorktreeId = localWorktreeIdOf(raw);
       const next = yield* Effect.uninterruptible(
-        hostAttempt(() =>
-          daemon.recreate(session, {
+        hostAttempt(async () => {
+          const recreated = await daemon.recreate(session, {
             localRoot: raw.localRoot,
             deviceId: raw.deviceId,
             projectId: raw.projectId,
@@ -516,13 +584,14 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
             localWorktreeId,
             labels: { ...raw.labels, [MIRROR_LABEL_IGNORE_MODE]: ignoreMode },
             ignores,
-          }),
-        ),
-      );
-      daemon.noteEvent(
-        localWorktreeId,
-        "ignores-changed",
-        summarizeIgnores(ignoreMode, ignores),
+          });
+          daemon.noteEvent(
+            localWorktreeId,
+            "ignores-changed",
+            summarizeIgnores(ignoreMode, ignores),
+          );
+          return recreated;
+        }),
       );
       return { session: next };
     }),

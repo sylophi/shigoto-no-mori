@@ -175,27 +175,36 @@ export const fetchBundle = (
       Effect.gen(function* () {
         // Re-parsed here because the byte count flows into the progress
         // frames' strict schema and bounds the loop below: the peer's
-        // own output validation is not this device's wall. Held as a
-        // resource: once the peer has minted the transfer, however this
-        // fiber ends short of the eof tells it a giving-up receiver is
-        // done. On the success path the host already dropped the
-        // transfer at eof. Best effort: abort is idempotent and the
-        // idle sweep backstops it. A failure waits for the answer; a
-        // caller that left does not wait on the peer, it only sends it.
-        const start = yield* Effect.acquireRelease(
-          hostAttempt(async () =>
-            Schema.decodeUnknownSync(SyncBundleStartResultSchema)(
-              await peer.bundleStart({
+        // own output validation is not this device's wall. The request
+        // is the resource, not its answer: the peer builds the whole
+        // bundle before it answers, and an acquire that awaited it
+        // would hold a departed caller for as long as that takes
+        // (acquireRelease's acquire is uninterruptible). So the promise
+        // is made under the scope and awaited interruptibly after, and
+        // however this fiber ends short of the eof, the release tells
+        // the peer a giving-up receiver is done, once (and if) the
+        // transfer was minted. On the success path the host already
+        // dropped the transfer at eof. Best effort: abort is idempotent
+        // and the idle sweep backstops it. A failure waits for the
+        // answer; a caller that left does not wait on the peer.
+        const pendingStart = yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            peer
+              .bundleStart({
                 projectId: input.sourceProjectId,
                 refs: input.refs,
                 haves: input.haves,
-              }),
-            ),
+              })
+              .then((answer) =>
+                Schema.decodeUnknownSync(SyncBundleStartResultSchema)(answer),
+              ),
           ),
-          (started, exit) => {
+          (pending, exit) => {
             const abort = () =>
-              peer
-                .bundleAbort({ transferId: started.transferId })
+              pending
+                .then((started) =>
+                  peer.bundleAbort({ transferId: started.transferId }),
+                )
                 .catch(() => {});
             if (Exit.isSuccess(exit)) return Effect.void;
             return Cause.hasInterrupts(exit.cause)
@@ -203,6 +212,7 @@ export const fetchBundle = (
               : Effect.promise(abort);
           },
         );
+        const start = yield* hostAttempt(() => pendingStart);
         input.onProgress?.(0, start.bytes);
         const report = coalescedProgress(start.bytes, input.onProgress);
         const dir = yield* scopedTempDir("sm-sync-recv-");

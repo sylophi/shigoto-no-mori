@@ -75,7 +75,10 @@ import {
   listWorktreeFolder,
 } from "@host/lib/worktrees/carryOver";
 import { getRepoIdentity } from "@host/lib/git/repoIdentity";
-import { listWorktreeIdentities } from "@host/lib/git/worktrees";
+import {
+  listWorktreeIdentities,
+  type WorktreeIdentity,
+} from "@host/lib/git/worktrees";
 import {
   deleteRef,
   hasCommit,
@@ -922,6 +925,17 @@ const landIncoming = (
     }),
   );
 
+// What a caller may hear from inside the landing step, for the one
+// that must act on a landing its caller did not wait for.
+export type PullHooks = {
+  onLanded?: (worktree: Worktree) => void;
+};
+export type SendHooks = {
+  // The copy as the peer answered it, and the local source it was
+  // made from.
+  onLanded?: (copy: Worktree, source: WorktreeIdentity) => void;
+};
+
 // The pull orchestration, shared with the
 // transplant orchestrator above: bring a peer device's worktree here.
 // Local-only by contract (remote:false). The peer's half is the
@@ -959,6 +973,7 @@ export const runPullWorktree = (
     ignores,
   }: typeof SyncPullWorktreePayloadSchema.Type,
   ctx: HandlerContext,
+  hooks: PullHooks = {},
 ) =>
   Effect.gen(function* () {
     // Running commentary back to the caller, keyed by the source id
@@ -1057,21 +1072,51 @@ export const runPullWorktree = (
       }
 
       // 5 and 6. The create on the incoming ref, then the capture
-      // re-applied in it.
-      const { worktree, dirtyApplied } = yield* landIncoming(
-        project,
-        {
-          branch,
-          incomingRef,
-          worktreeName,
-          runSetup,
-          capture:
-            capture.captured && capture.commit !== undefined
-              ? { sourceWorktreeId, commit: capture.commit }
-              : undefined,
-        },
-        ctx,
-        progress,
+      // re-applied in it, then the receipt the teardown reads: one
+      // uninterruptible step. With the receipt outside it, a caller
+      // leaving during the create would get its worktree with no
+      // record of where it came from, and the teardown would refuse.
+      // `onLanded` fires inside the step, so a start built on this
+      // pull can carry a landing its caller did not wait for to its
+      // own end (mirror.ts startMirror).
+      const { worktree, dirtyApplied } = yield* Effect.uninterruptible(
+        Effect.gen(function* () {
+          const landed = yield* landIncoming(
+            project,
+            {
+              branch,
+              incomingRef,
+              worktreeName,
+              runSetup,
+              capture:
+                capture.captured && capture.commit !== undefined
+                  ? { sourceWorktreeId, commit: capture.commit }
+                  : undefined,
+            },
+            ctx,
+            progress,
+          );
+          const captureCommit = capture.captured ? capture.commit : undefined;
+          remember(
+            pullReceipts,
+            receiptKey({ sourceDeviceId, sourceProjectId, sourceWorktreeId }),
+            {
+              targetProjectId: project.id,
+              branch,
+              branchTip,
+              captured: capture.captured,
+              dirtyApplied: landed.dirtyApplied,
+              captureTree:
+                captureCommit === undefined
+                  ? undefined
+                  : yield* hostAttempt(() =>
+                      treeOf(project.path, captureCommit),
+                    ),
+            },
+          );
+          hooks.onLanded?.(landed.worktree);
+          return landed;
+        }),
       );
 
       // 7. The ignored files, once the tree has settled: the leave-out
@@ -1111,22 +1156,6 @@ export const runPullWorktree = (
                   progress({ step: "files", bytes, totalBytes }),
               );
       }
-      const captureCommit = capture.captured ? capture.commit : undefined;
-      remember(
-        pullReceipts,
-        receiptKey({ sourceDeviceId, sourceProjectId, sourceWorktreeId }),
-        {
-          targetProjectId: project.id,
-          branch,
-          branchTip,
-          captured: capture.captured,
-          dirtyApplied,
-          captureTree:
-            captureCommit === undefined
-              ? undefined
-              : yield* hostAttempt(() => treeOf(project.path, captureCommit)),
-        },
-      );
       return { worktree, captured: capture.captured, dirtyApplied, files };
     }).pipe(Effect.ensuring(sweepRef(project.path, incomingRef)));
   });
@@ -1169,6 +1198,7 @@ export const sendWorktree = (
     ignores,
   }: typeof SyncSendWorktreePayloadSchema.Type,
   ctx: HandlerContext,
+  hooks: SendHooks = {},
 ) =>
   Effect.gen(function* () {
     const notifyProgress = ctx.notifier(syncContract, "pullProgress");
@@ -1269,28 +1299,54 @@ export const sendWorktree = (
       progress({ step: "transfer" });
     }
 
-    // 5. The landing, on the peer.
+    // 5. The landing, on the peer, and the receipt the teardown reads:
+    // one uninterruptible step, for the pull's reason. A caller that
+    // leaves while the peer creates the copy waits for the answer; the
+    // peer finishes the copy either way, and only with the answer can
+    // the send be finished (or a start on it rolled back) rather than
+    // the copy left behind unknown. `onLanded` fires inside the step
+    // (mirror.ts startMirrorTo).
     progress({ step: "create" });
-    const landed = yield* fromPeer(
-      hostAttempt(() =>
-        peer.landWorktree({
-          identity,
-          branch,
-          worktreeName,
-          branchTip,
-          runSetup,
-          capture:
-            captureCommit === undefined
-              ? undefined
-              : { sourceWorktreeId: worktreeId, commit: captureCommit },
-        }),
-      ),
-    ).pipe(
-      Effect.flatMap((answer) =>
-        hostAttempt(() =>
-          Schema.decodeUnknownSync(SyncLandWorktreeResultSchema)(answer),
-        ),
-      ),
+    const landed = yield* Effect.uninterruptible(
+      Effect.gen(function* () {
+        const answered = yield* fromPeer(
+          hostAttempt(() =>
+            peer.landWorktree({
+              identity,
+              branch,
+              worktreeName,
+              branchTip,
+              runSetup,
+              capture:
+                captureCommit === undefined
+                  ? undefined
+                  : { sourceWorktreeId: worktreeId, commit: captureCommit },
+            }),
+          ),
+        ).pipe(
+          Effect.flatMap((answer) =>
+            hostAttempt(() =>
+              Schema.decodeUnknownSync(SyncLandWorktreeResultSchema)(answer),
+            ),
+          ),
+        );
+        remember(
+          sendReceipts,
+          sentKey({ targetDeviceId, projectId, worktreeId }),
+          {
+            branch,
+            branchTip,
+            captured,
+            dirtyApplied: answered.dirtyApplied,
+            captureTree:
+              captureCommit === undefined
+                ? undefined
+                : yield* hostAttempt(() => treeOf(project.path, captureCommit)),
+          },
+        );
+        hooks.onLanded?.(answered.worktree, worktree);
+        return answered;
+      }),
     );
     progress({ step: "apply" });
 
@@ -1314,16 +1370,6 @@ export const sendWorktree = (
         (bytes, totalBytes) => progress({ step: "files", bytes, totalBytes }),
       );
     }
-    remember(sendReceipts, sentKey({ targetDeviceId, projectId, worktreeId }), {
-      branch,
-      branchTip,
-      captured,
-      dirtyApplied: landed.dirtyApplied,
-      captureTree:
-        captureCommit === undefined
-          ? undefined
-          : yield* hostAttempt(() => treeOf(project.path, captureCommit)),
-    });
     return {
       source: worktree,
       result: {

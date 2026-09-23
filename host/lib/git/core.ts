@@ -269,10 +269,8 @@ export function runEffect(
 // The Promise face of a git Effect, for the callers that are not
 // Effects yet: every `export async function` in this folder is one of
 // these over its `...Effect` form. Git needs no service, so it runs on
-// Effect's default services rather than the installed host runtime:
-// that runtime's dispose makes its runPromise die at once, and a
-// quit-time finalizer that reaches git through a Promise form must
-// still get its git.
+// Effect's default services rather than the installed host runtime,
+// and the library's proofs run it with no runtime installed.
 export function runGit<A, E>(effect: Effect.Effect<A, E>): Promise<A> {
   return Effect.runPromise(effect);
 }

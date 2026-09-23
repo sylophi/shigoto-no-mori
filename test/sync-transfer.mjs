@@ -66,6 +66,8 @@ import { Layer, ManagedRuntime } from "effect";
 import { CliRunner } from "@host/ipc/cliDelegate";
 import { PeerApis } from "@host/ipc/peerSync";
 import { installHostRuntime, resetHostRuntime } from "@host/runtime";
+import { mirrorHandlers } from "@host/ipc/modules/mirror";
+import { MirrorEngine } from "@host/mirror/registry";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import {
@@ -866,6 +868,109 @@ async function main() {
     }
     ok(
       "a pull whose caller leaves mid-transfer leaves no temp bundle on either side within a second, lands nothing, and sweeps its incoming ref",
+    );
+
+    // A caller that leaves DURING the landing. The create has begun, so
+    // the pull finishes the landing and its receipt as one step and
+    // only then ends as interrupted: the branch is there, and the
+    // teardown, which reads the receipt, still works. mirror:start
+    // built on that pull carries the landing to its session: the
+    // engine (a stand-in here) sees the create although nobody waited
+    // for the answer, instead of a worktree left behind with no
+    // session, which its next start would refuse on the branch.
+    {
+      const landPath = join(sandbox, "wt-land");
+      await git(sourceRepo, [
+        "worktree",
+        "add",
+        "-q",
+        "-b",
+        "feature-land",
+        landPath,
+      ]);
+      writeFileSync(join(landPath, "landing.txt"), "left mid-landing\n");
+      await git(landPath, ["add", "-A"]);
+      await git(landPath, ["commit", "-qm", "landing"]);
+      const leaving = new AbortController();
+      const leaveAtCreate = {
+        signal: leaving.signal,
+        notifier: () => (frame) => {
+          if (frame.step === "create") leaving.abort();
+        },
+      };
+      const created = [];
+      const engine = {
+        status: () => "running",
+        sessions: () => [],
+        create: async (input) => {
+          created.push(input);
+          return "opened-after-leaving";
+        },
+        recreate: () => Promise.reject(new Error("not in this check")),
+        terminate: async () => {},
+        pause: async () => {},
+        resume: async () => {},
+        gitStatus: () => undefined,
+        history: () => [],
+        noteEvent: () => {},
+        forgetHistory: () => {},
+      };
+      services.mirror = Layer.succeed(MirrorEngine, engine);
+      await provide();
+      try {
+        const sourceWorktreeId = worktreeIdFromPath(landPath);
+        const left = await mirrorHandlers
+          .start(
+            {
+              sourceDeviceId: "A",
+              sourceProjectId,
+              sourceWorktreeId,
+              sourceIdentity: identity,
+              branch: "feature-land",
+              ignoreMode: "gitignored",
+              ignores: [],
+            },
+            leaveAtCreate,
+          )
+          .then(
+            () => "resolved",
+            () => "rejected",
+          );
+        assert.equal(
+          left,
+          "rejected",
+          "a start left during its landing resolved",
+        );
+        assert.equal(
+          await refExists(targetRepo, "refs/heads/feature-land"),
+          true,
+          "the landing did not finish for the caller that left",
+        );
+        assert.equal(
+          created.length,
+          1,
+          "the session did not open for the caller that left",
+        );
+        assert.equal(created[0].name, "feature-land");
+        assert.equal(created[0].worktreeId, sourceWorktreeId);
+        // The receipt was recorded with the landing: the teardown that
+        // reads it goes through instead of refusing "No pull recorded".
+        await syncHandlers.teardownSource(
+          { sourceDeviceId: "A", sourceProjectId, sourceWorktreeId },
+          pullCtx,
+        );
+        assert.equal(
+          existsSync(landPath),
+          false,
+          "the teardown did not remove the source it had a receipt for",
+        );
+      } finally {
+        delete services.mirror;
+        await provide();
+      }
+    }
+    ok(
+      "a caller that leaves during the landing gets the landing whole with its receipt, and a mirror start on it still opens its session",
     );
 
     // ---- The transplant (step 9): the pull above plus tearing the

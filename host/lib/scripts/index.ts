@@ -429,8 +429,7 @@ const killRecord = Effect.fnUntraced(function* (
 });
 
 // On Effect's default runtime, not the app's: these Effects need no
-// service, and the quit path runs its kills (killAllScripts) while the
-// app's runtime is being disposed, when a run on it would die at once.
+// service, and the proofs run them with no runtime installed.
 function runKill(record: RunRecord, opts: KillOptions): Promise<void> {
   return Effect.runPromise(killRecord(record, opts));
 }

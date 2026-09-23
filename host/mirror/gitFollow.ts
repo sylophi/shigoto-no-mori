@@ -41,7 +41,7 @@
 // while one is queued changes nothing), and the sweep is a fiber on a
 // spaced schedule. All of them live in the follower's scope, which
 // stop() closes.
-import { Effect, Exit, Fiber, Queue, Schedule, Schema, Scope } from "effect";
+import { Effect, Exit, Fiber, Queue, Schema, Scope } from "effect";
 import type { Project } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
 import {
@@ -550,19 +550,22 @@ export function createGitFollower(deps: {
         const every = deps.sweepMs ?? DEFAULT_SWEEP_MS;
         // The backstop: a look at every session each `every`, the
         // first one `every` from now (the start just looked).
+        // (A sleep then the look, forever: a `repeat` over a delayed
+        // effect would wait the delay and the schedule's gap both.)
         sweeper = Fiber.runIn(
           Effect.runFork(
-            Effect.sync(() => {
-              // Contained, for the drain's reason.
-              try {
-                reconcileAll();
-              } catch (error) {
-                log(`[mirror] git follow sweep: ${errorMessageOf(error)}`);
-              }
-            }).pipe(
-              Effect.delay(every),
-              Effect.repeat(Schedule.spaced(every)),
-              Effect.asVoid,
+            Effect.sleep(every).pipe(
+              Effect.andThen(
+                Effect.sync(() => {
+                  // Contained, for the drain's reason.
+                  try {
+                    reconcileAll();
+                  } catch (error) {
+                    log(`[mirror] git follow sweep: ${errorMessageOf(error)}`);
+                  }
+                }),
+              ),
+              Effect.forever,
             ),
           ),
           followScope(),

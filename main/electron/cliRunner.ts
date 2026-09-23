@@ -252,9 +252,7 @@ export async function runCli(
           ),
         );
 
-  // On Effect's default runtime: this needs no service, and a run can
-  // start while the app's runtime is being disposed on quit (a layer's
-  // stop that shells out), when a run on it would die at once.
+  // On Effect's default runtime: this needs no service.
   return Effect.runPromise(
     Effect.gen(function* () {
       const reader = yield* Effect.forkChild(

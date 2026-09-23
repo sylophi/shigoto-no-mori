@@ -514,6 +514,43 @@ async function main() {
       "the state stream reports watching, both endpoints connected, cycles counted",
     );
 
+    // ---- The git follower's backstop cadence: one look per period,
+    // the first a period after the start's own look. (A `repeat` over
+    // a delayed effect waits the delay and the schedule's gap both,
+    // which halved the rate.) A stand-in with no sessions, counting
+    // the looks.
+    {
+      let looks = 0;
+      const counting = createGitFollower({
+        sessions: () => {
+          looks += 1;
+          return [];
+        },
+        peerSyncApiFor: () => {
+          throw new Error("no session to follow");
+        },
+        peerMirrorApiFor: () => {
+          throw new Error("no session to follow");
+        },
+        sweepMs: 100,
+        log: () => {},
+      });
+      counting.start();
+      const atStart = looks;
+      await delay(1_250);
+      counting.stop();
+      const sweeps = looks - atStart;
+      assert.ok(
+        sweeps >= 9 && sweeps <= 13,
+        `about 12 sweeps expected in 1.25 s at a 100 ms period, saw ${sweeps}`,
+      );
+      await delay(250);
+      assert.equal(looks - atStart, sweeps, "the sweep outlived its stop");
+    }
+    ok(
+      "git: the backstop sweep looks once per period and stops with the follower",
+    );
+
     // ---- The git follower, against the same wire ----
     const follower = createGitFollower({
       sessions: () => daemon.sessions(),
