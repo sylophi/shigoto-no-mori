@@ -184,7 +184,11 @@ function MirrorFlow({
   const { stage, elapsed, progress, start, open } = usePullFlow({
     mutation: mirror,
     sourceWorktreeId: worktree.id,
-    choice: { ...pull.choice, cloneInto: target?.clone?.cloneInto },
+    // The key only when there is a clone: the flows to a peer take the
+    // plain choice, and their payloads are strict.
+    choice: target?.clone
+      ? { ...pull.choice, cloneInto: target.clone.cloneInto }
+      : pull.choice,
     destinationDeviceId: toPeer?.pickedId ?? undefined,
     onClose,
   });

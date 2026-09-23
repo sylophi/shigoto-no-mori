@@ -233,6 +233,9 @@ func cmdBundle(ctx cliContext, args []string) (int, error) {
 		if verb != "unpack" || strings.HasPrefix(repo, "-") {
 			return 2, usageErrf("--repo <path> is for unpack.")
 		}
+		if parsed.strings["project"] != "" || parsed.strings["project-id"] != "" {
+			return 2, usageErrf("--repo names the repository itself; leave --project and --project-id off.")
+		}
 		projectPath = toAbsolute(repo)
 	} else {
 		proj, err := resolveProjectArgs(ctx, parsed)

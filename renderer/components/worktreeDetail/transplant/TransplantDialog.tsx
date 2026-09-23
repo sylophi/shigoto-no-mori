@@ -172,7 +172,11 @@ function TransplantFlow({
   const { stage, elapsed, progress, start, open } = usePullFlow({
     mutation: pull,
     sourceWorktreeId: worktree.id,
-    choice: { ...choice.choice, cloneInto: target?.clone?.cloneInto },
+    // The key only when there is a clone: the flows to a peer take the
+    // plain choice, and their payloads are strict.
+    choice: target?.clone
+      ? { ...choice.choice, cloneInto: target.clone.cloneInto }
+      : choice.choice,
     destinationDeviceId: toPeer?.pickedId ?? undefined,
     onClose,
   });

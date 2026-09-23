@@ -109,7 +109,7 @@ export async function findProjectByIdentity(
   return undefined;
 }
 
-export const NO_PROJECT_OF_IDENTITY =
+const NO_PROJECT_OF_IDENTITY =
   "No local project matches this repository. Add a clone of it to this device first.";
 
 export async function findProjectByIdentityOrThrow(

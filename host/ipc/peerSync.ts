@@ -48,13 +48,14 @@ export type PeerWorktreesApi = Pick<
   "delete" | "list" | "setShelved"
 >;
 
-// The clone's one question of the peer's projects surface: which
-// branch its checkout of the repo is on by default, the branch the
-// clone here is made of (host/lib/sync/cloneFromPeer.ts). A read, so
-// it needs no grant, unlike the bundle that follows it.
+// The clone's two questions of the peer's projects surface: which
+// branch its checkout of the repo is on by default (the branch the
+// clone here is made of) and where it was cloned from (the remote the
+// clone here gets), host/lib/sync/cloneFromPeer.ts. Reads, so they
+// need no grant, unlike the bundle that follows them.
 export type PeerProjectsApi = Pick<
   Client<typeof projectsContract>,
-  "defaultBranch"
+  "defaultBranch" | "cloneUrl"
 >;
 
 type PeerSyncImpl = {

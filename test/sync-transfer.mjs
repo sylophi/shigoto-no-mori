@@ -1165,17 +1165,36 @@ async function main() {
     // the clone: the clone is driven directly, and what the pull
     // proves is that a checkout it has wins over a place named for a
     // new one. The clone end to end is the remote smoke's.
-    const clonesDir = join(sandbox, "clones");
-    mkdirSync(clonesDir);
+    // The source has a remote, which the clone must carry: it is what a
+    // clone of that remote would be, and a repo whose default branch is
+    // only its remote's HEAD to go by reads as the same repo through it.
+    const originUrl = "https://github.com/example/lone.git";
+    await git(sourceRepo, ["remote", "add", "origin", originUrl]);
+    // A parent this machine does not have yet is made (the dialog's
+    // default is the peer's own layout).
+    const clonesDir = join(sandbox, "clones", "deep");
     const peer = { sync, projects: projectsOverWire };
     const cloneFrames = [];
     const cloned = await cloneProjectFromPeer(
       peer,
       sourceProjectId,
       { parentDir: clonesDir, name: "lone" },
+      "feat/landing",
       (bytes, totalBytes) => cloneFrames.push([bytes, totalBytes]),
     );
     assert.equal(cloned.path, join(clonesDir, "lone"));
+    assert.equal(
+      await gitOut(cloned.path, "remote", "get-url", "origin"),
+      originUrl,
+    );
+    assert.equal(
+      await gitOut(cloned.path, "symbolic-ref", "refs/remotes/origin/HEAD"),
+      "refs/remotes/origin/main",
+    );
+    assert.equal(
+      await gitOut(cloned.path, "rev-parse", "--abbrev-ref", "main@{upstream}"),
+      "origin/main",
+    );
     assert.equal(findProjectOrThrow(cloned.id).path, cloned.path);
     // The source's default branch (main, not the primary-branch its
     // primary sits on), checked out at the source's tip, the tree
@@ -1205,27 +1224,43 @@ async function main() {
       cloneFrames[0][1],
       cloneFrames[0][1],
     ]);
-    // A taken folder and a missing parent are refused before anything
-    // is made, and neither leaves a folder or a registration behind.
+    // A taken folder, a parent that is a file, and a landing branch the
+    // clone itself checks out are refused before anything is made, and
+    // none leaves a folder or a registration behind.
     const before = loadProjects().length;
     await assert.rejects(
       () =>
-        cloneProjectFromPeer(peer, sourceProjectId, {
-          parentDir: clonesDir,
-          name: "lone",
-        }),
+        cloneProjectFromPeer(
+          peer,
+          sourceProjectId,
+          { parentDir: clonesDir, name: "lone" },
+          "feat/landing",
+        ),
       /already exists/,
+    );
+    writeFileSync(join(sandbox, "notafolder"), "");
+    await assert.rejects(
+      () =>
+        cloneProjectFromPeer(
+          peer,
+          sourceProjectId,
+          { parentDir: join(sandbox, "notafolder"), name: "x" },
+          "feat/landing",
+        ),
+      /is not a folder/,
     );
     await assert.rejects(
       () =>
-        cloneProjectFromPeer(peer, sourceProjectId, {
-          parentDir: join(sandbox, "nowhere"),
-          name: "x",
-        }),
-      /is not a folder/,
+        cloneProjectFromPeer(
+          peer,
+          sourceProjectId,
+          { parentDir: clonesDir, name: "y" },
+          "main",
+        ),
+      /would land on main/,
     );
+    assert.equal(existsSync(join(clonesDir, "y")), false);
     assert.equal(loadProjects().length, before);
-    assert.equal(existsSync(join(sandbox, "nowhere")), false);
     // A pull told where to clone beside a checkout it already has
     // takes the checkout: nothing is cloned and the result says so.
     const wtBesidePath = join(sandbox, "wt-beside");
@@ -1253,7 +1288,7 @@ async function main() {
     assert.equal(beside.worktree.projectId, targetProjectId);
     assert.equal(existsSync(join(clonesDir, "again")), false);
     ok(
-      "cloneProjectFromPeer: the peer's default branch lands as a registered checkout of the same identity with progress reported, a taken folder or a missing parent is refused clean, and a pull with cloneInto beside a checkout it has clones nothing",
+      "cloneProjectFromPeer: the peer's default branch lands as a registered checkout of the same identity with its remote and progress reported, a taken folder, a parent that is a file and a landing on the default branch are refused clean, and a pull with cloneInto beside a checkout it has clones nothing",
     );
   } finally {
     // Reverse creation order via the shared tracker: the direct

@@ -85,7 +85,6 @@ import {
   findProjectByIdentity,
   findProjectByIdentityOrThrow,
   findProjectOrThrow,
-  NO_PROJECT_OF_IDENTITY,
 } from "@host/lib/projects";
 import { cloneProjectFromPeer } from "@host/lib/sync/cloneFromPeer";
 import {
@@ -826,17 +825,21 @@ export async function runPullWorktree(
   // of a repo already here is not what anyone asked for.
   const peer = peerSyncApiFor(sourceDeviceId);
   let cloned: Project | undefined;
-  let project = await findProjectByIdentity(sourceIdentity);
-  if (project === undefined) {
-    if (cloneInto === undefined) throw new Error(NO_PROJECT_OF_IDENTITY);
-    progress({ step: "clone" });
-    cloned = await cloneProjectFromPeer(
-      { sync: peer, projects: peerProjectsApiFor(sourceDeviceId) },
-      sourceProjectId,
-      cloneInto,
-      (bytes, totalBytes) => progress({ step: "clone", bytes, totalBytes }),
-    );
-    project = cloned;
+  let project: Project;
+  if (cloneInto === undefined) {
+    project = await findProjectByIdentityOrThrow(sourceIdentity);
+  } else {
+    const held = await findProjectByIdentity(sourceIdentity);
+    if (held === undefined) progress({ step: "clone" });
+    project =
+      held ??
+      (cloned = await cloneProjectFromPeer(
+        { sync: peer, projects: peerProjectsApiFor(sourceDeviceId) },
+        sourceProjectId,
+        cloneInto,
+        landing,
+        (bytes, totalBytes) => progress({ step: "clone", bytes, totalBytes }),
+      ));
   }
 
   // 2. Refuse up front what the create would refuse after the bundle

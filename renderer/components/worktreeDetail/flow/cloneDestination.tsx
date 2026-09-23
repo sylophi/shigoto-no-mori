@@ -3,7 +3,7 @@
 // into a folder the review names and the user can change. The default
 // mirrors the source's own layout, the peer's path with its home
 // swapped for this one's, so the two machines end up alike without a
-// pick; a path outside the peer's home falls back to where this
+// pick. A path outside the peer's home falls back to where this
 // device keeps its repos (addProject/cloneDestination.ts). The
 // mutation gets the pair as the pull's `cloneInto`.
 //
@@ -58,18 +58,13 @@ function useCloneDestination(
 ): CloneDestination {
   // The dialog sits under the source's scope, so its runtime info is
   // the peer's home. This machine's comes from the local scope.
-  const { data: peerRuntime } = useQuery({
-    ...runtimeInfoQueryOptions(useHostScope()),
-    enabled,
-  });
-  const { data: localRuntime } = useQuery({
-    ...runtimeInfoQueryOptions({}),
-    enabled,
-  });
-  const { data: localProjects = [] } = useQuery({
-    ...projectsQueryOptions({}),
-    enabled,
-  });
+  const { data: peerRuntime } = useQuery(
+    runtimeInfoQueryOptions(useHostScope(), enabled),
+  );
+  const { data: localRuntime } = useQuery(runtimeInfoQueryOptions({}, enabled));
+  const { data: localProjects = [] } = useQuery(
+    projectsQueryOptions({}, enabled),
+  );
   const [picked, setPicked] = useState<string | null>(null);
 
   const localHome = localRuntime?.homedir ?? null;

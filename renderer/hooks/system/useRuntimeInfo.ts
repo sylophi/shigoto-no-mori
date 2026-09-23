@@ -12,7 +12,10 @@ import { localDeviceId, queryKeysFor } from "@/lib/queryKeys";
 // machine's from under a peer's scope (the pull dialogs' clone section)
 // shares the cache entry with the scoped hook below. The scope rule is
 // resolveForestScope's: this machine unless one is named.
-export function runtimeInfoQueryOptions(scope: HostForestScope = {}) {
+export function runtimeInfoQueryOptions(
+  scope: HostForestScope = {},
+  enabled = true,
+) {
   const { deviceId, api } = resolveForestScope(scope);
   return queryOptions<RuntimeInfo>({
     queryKey: queryKeysFor(deviceId).runtimeInfo(),
@@ -21,7 +24,7 @@ export function runtimeInfoQueryOptions(scope: HostForestScope = {}) {
       return api.runtime.info();
     },
     staleTime: Number.POSITIVE_INFINITY,
-    enabled: api !== undefined,
+    enabled: enabled && api !== undefined,
     // A peer's pages treat a refused read as "no path to spell".
     meta: gatedHostReadMeta(
       deviceId !== localDeviceId,
