@@ -194,10 +194,13 @@ export const appMemoMap = Layer.makeMemoMapUnsafe()
 export const runtime = ManagedRuntime.make(AppLive, { memoMap: appMemoMap })
 ```
 
-- `AppLive` is composed in `main/ipc/register.ts` from the host and
-  Electron layers. It replaces the import-time singleton graph and the
-  `set*Impl` slots. A forward reference such as `directPlane` needing
-  `hubServer` becomes an ordinary `Layer.provide`.
+- `AppLive` is composed in `main/runtime.ts` from the runner services
+  `main/ipc/register.ts` and `main/ipc/handlers.ts` declare and the
+  Electron bindings in `main/electron/hostImpls.ts`, as five tiers
+  joined with `Layer.provideMerge` (wires, remote plane, mirror
+  gateway, engines, host impls). It replaces the import-time singleton
+  graph and the `set*Impl` slots. A forward reference such as
+  `directPlane` needing `hubServer` becomes an ordinary `Layer.provide`.
 - Electron's `app.on("before-quit")` becomes `await runtime.dispose()`
   with the existing 15 s `app.exit(1)` backstop kept. Finalizers run in
   reverse acquisition order, which is the order the quit sequence
@@ -205,9 +208,13 @@ export const runtime = ManagedRuntime.make(AppLive, { memoMap: appMemoMap })
   keep that property because a finalizer failure never skips the next
   one.
 - Non-Effect edges (`ipcMain.handle`, `ws` callbacks, `fs.watch`
-  callbacks, Electron events) call `runtime.runPromise(effect, { signal })`
-  or `runtime.runFork`. That is the documented bridge pattern, and it
-  is what `wrapContractCall` does in phase 3.
+  callbacks, Electron events) go through `host/runtime.ts`: at install
+  the slot captures the runtime's service context once and runs with
+  `Effect.runPromiseWith(services)` / `runForkWith` / `runSyncWith`, so
+  a handler or a stop that runs while the `ManagedRuntime` is being
+  disposed still has its services (a `ManagedRuntime` refuses runs
+  after `dispose()` begins). `hostHandler` is the phase 3 wrapper over
+  that slot, under the caller's signal.
 - The `host-boundary` test keeps its rules. Effect core is
   platform-neutral, so `shared/` may import `effect` but not
   `@effect/platform-node`; only `host/` and `main/` may.
@@ -650,6 +657,18 @@ hand:
   found to be the thing in the way, which nothing in the survey
   suggests.
 
+**Decision (taken with phases 1 to 4 landed): neither.** The phase 3
+wrapper did not re-implement middleware: `hostHandler` is a
+`runPromise` under the caller's signal, and the grant gate, usage
+tracking and host-state moves stayed where the contract axes already
+put them (`wrapContractCall`, the broker, the socket host). Nothing
+was written that `RpcMiddleware` would replace, so `effect/rpc` would
+be a rewrite of five working wires and their golden proof for no
+behavior. TanStack Query was never in the way in the renderer, and the
+renderer stays Effect-free by design (section 4.8), so `@effect/atom-react`
+is out. Both stay open as separate, later decisions if the wires or
+the renderer's data layer are reworked for some other reason.
+
 ## Status (updated as phases land)
 
 What is on the branch, in commit order, and what each step changed
@@ -683,49 +702,112 @@ The in-process client errors (`RemoteConnectError`, the hub link
 errors, `HubRequestError`) were left as plain classes: they never cross
 a wire, and their modules are converted in Phase 2.
 
-**Phase 2** landed for steps 1, 2, 3, 4 and 6: the reconnect
-supervisor, the hub dial, the direct keeper, the cloudflared runner,
-the mirror daemon, the git watcher and the state watcher run as Effect
-fibers; interruption is the cancel path; the clock seams are gone and
-their proofs run under `TestClock`. Deviations:
+**Phase 2** landed in full. Steps 1 to 6: the reconnect supervisor,
+the hub dial, the direct keeper, the cloudflared runner, the mirror
+daemon, the git watcher, the state watcher, the control server, the
+socket host and the port-forward engine (with its bridge) run as
+Effect fibers under scopes; interruption is the cancel path; the clock
+seams are gone and their proofs run under `TestClock`. Step 7: `AppLive`
+lives in `main/runtime.ts` (section 4.1), every `set*Impl` slot is
+gone, the runners are Layers (`SocketHost`, `DirectListener`,
+`ControlServer`, `PeerPushes`, `MutationsSettled`, `HubConnection`,
+`DirectPlane`, `TunnelRunner`, `DirectBroker`, `MirrorGateway`,
+`MirrorDaemon`, `MirrorHistory`, `GitFollower`, `AccountHandlers`,
+`PortForwardEngineLive`, `BackgroundFetchLive`, `UpdaterLive`,
+`HostImplsLive`), and the normal quit awaits `runtime.dispose()` beside
+the script reap inside the existing 15 s backstop; the install/relaunch
+branch stops the control host, the mirror engine, the hub connection
+and the direct host and disposes the runtime without waiting.
+Deviations:
 
 - The ladder is driven by an explicit loop with `Effect.sleep` and the
   shared `backoffDelayMs`, not by `Schedule.retry`: the `attempt` and
   `delayMs` the status reports, and the "stable resets the ladder, then
   waits one rung" rule, are exact contracts the proofs pin, and a
   `Schedule` reproduces them less directly than the loop does.
-- The runners still fork with `Effect.runFork` behind a `runtime` seam
-  rather than living in a Layer, because their owners start and stop
-  them synchronously from Promise-side code. Step 7 (AppLive) moves
-  them. Until then a throw from an owner callback inside a fiber is
-  contained and logged, since a defect in a forked fiber is reported
-  nowhere.
-- Steps 5 (the control server, the socket host, the port-forward
-  engine) and 7 (AppLive, the `set*Impl` slots, the quit sequence) are
-  not started.
+- Runners whose owners start and stop them synchronously from
+  Promise-side code (the supervisor, the hub connection, the daemon)
+  still fork with `runFork` behind a runtime seam that the Layer
+  supplies; a throw from an owner callback inside a fiber is contained
+  and logged, since a defect in a forked fiber is reported nowhere.
+- `createLimiter` (`shared/util/limit.ts`) stays for the four
+  call-ordered lifecycles (cloudflared reconciles, the socket host's
+  accept path, the hub connection, the ws client transport). Effect's
+  `Semaphore` wakes waiters in scheduler order, not arrival order, and
+  the cloudflared proof caught the reconcile-order regression when it
+  was swapped in.
+- The status refs stayed as each runner's own `SubscriptionRef`-like
+  pair where the runner has one subscriber; no shared status type was
+  introduced beyond `SupervisorStatus`.
 
-**Phase 3** has its seam: `shared/ipc/effectHandler.ts` adapts an
-Effect handler to the registrar under the caller's signal, and
-`host/lib/git/core.ts` exposes `runEffect` (the Promise `run` is a
-thin `runPromise` over it), which gives every git run a timeout and
-makes it interruptible. No handler module is converted yet.
+**Phase 3** landed. `host/lib/git/core.ts` exposes `runEffect` (every
+git run has a timeout, 30 min by default, and is interruptible; a
+write that must not stop halfway is marked `uninterruptible` at the
+call site, in `sync.ts`, `changes.ts` and the sync, mirror and forward
+handlers) and the git library exposes an `*Effect` form beside each
+Promise form. Twenty of the twenty-five handler modules are
+`hostHandler` Effects under the caller's signal, with `hostAttempt`
+keeping each rejection the same error object the wire matched before
+and `requireService` dying with the old "not installed" message; the
+five that stayed plain (`direct`, `sharedSettings`, `globalConfig`,
+`packageScripts`, `scripts`) delegate to services that are already
+Effects or do only synchronous reads. The hand-rolled concurrency is
+gone: per-worktree index locks are an `RcMap` of semaphores, the
+fetch, identity and icon single-flights are `Cache`s, the sync chunk
+pump is a `Queue`, temp files are scoped, the PTY output batcher and
+the CLI's NDJSON are `Stream`s, the fetch and updater loops are
+`Schedule.spaced` fibers in their Layers, and the global config write
+lock is a `Semaphore` with `PubSub` listeners. Deviations:
 
-**Phases 4 and 5** are not started.
+- `runGit` is `Effect.runPromise`, not the host runtime: the git
+  effects need no service, and the proofs run them without a runtime.
+- The `waitSettled` and the kill-escalation timings were kept to the
+  millisecond (missing 10 s, connect 60 s, settle 30 min; SIGTERM grace
+  then SIGKILL then a 5 s give-up), pinned by the new proofs.
+- A mangled `registry.json` value (a `projects` entry that is not a
+  list, say) now fails decoding with a named error where the old reader
+  passed the garbage through. The ready handler's existing try/catch
+  turns it into the boot error dialog, the same path a file that is not
+  JSON already took; only a genuinely absent file reads as empty.
 
-New proofs: `wire-error`, `supervisor`, `hub-dial`, `git-runner`; the
-`direct-plane` keeper and cloudflared checks run under `TestClock`.
+**Phase 4** landed. `zod` is gone from the app, the web shell, the lab
+and the hub worker; `shared/ipc/codec.ts` is the one decode seam
+(`decodeWith`, `safeDecodeWith`, `validateWith`, and `withoutProtoKeys`
+stripping own `__proto__` keys before any decode), `shared/schemas/strict.ts`
+gives the strict-object recipe (`strictStruct`, and the pick recipe
+for subsets), and `test/schema-port.mjs` replays 249 recorded zod
+accept/reject rows against the ported schemas. Deviations: the
+`SocketStatusMatchesSupervisor` type trick in `hub.ts` stays, because
+deriving the status from the supervisor's schema would pull the ws
+client into the preload bundle; `Schema.TaggedError` puts `_tag` on the
+instance (not the prototype), so every matcher reads a tag constant
+and the lint config allows `_tag`.
+
+**Phase 5** is decided: neither `effect/rpc` nor `@effect/atom-react`
+(the reasoning is under Phase 5 above).
+
+New proofs: `wire-error`, `supervisor`, `hub-dial`, `git-runner`,
+`git-lib`, `ttl-cache`, `schema-port`, `config-store`, `scripts`,
+`host-libs`, and `test/types/strict-struct.mts`; the `direct-plane`
+keeper and cloudflared checks, the control server, the socket host and
+the script runner's kill escalation run under `TestClock`. Each phase was reviewed
+by a separate read-only reviewer against the previous behavior, and
+the app was booted, driven over CDP and quit for real after phase 1,
+after step 7 and after phase 3.
 
 Measures at this point (the section 9 table's "now" column was taken
 before the work began):
 
 | Measure | Before | Now |
 |---|---|---|
-| `throw new Error(` in `main/` + `host/` | 142 | 137 |
+| `throw new Error(` in `main/` + `host/` | 142 | 89 |
 | message-text error matchers with no tag path | 8 | 0 |
 | child-process calls with no timeout | git: all | git: none |
 | hand-rolled ladder and clock code | 5 files | 1 (the shared `backoffDelayMs`) |
-| `set*Impl` slots | 14 | 11 |
+| `set*Impl` slots | 14 | 0 |
 | `fakeClock` proof harnesses | 12 sites | 0 |
+| `zod` imports | every schema | 0 |
+| proof scripts | 22 | 32 |
 
 ## 7. Conventions for the code that gets written
 
