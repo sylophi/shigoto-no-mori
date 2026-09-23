@@ -1,6 +1,6 @@
-import { branchNotMergedError, errorMessageOf } from "@shared/errors";
+import { branchNotMergedError } from "@shared/errors";
 import { type BranchList, isRealBranch } from "@shared/schemas";
-import { run, splitZ } from "./core";
+import { GitError, run, splitZ } from "./core";
 import {
   listRemotes,
   localBranchExists,
@@ -136,7 +136,11 @@ export async function deleteAnyLocalBranch(
     await run(projectPath, ["branch", force ? "-D" : "-d", "--", name]);
   } catch (err) {
     // git's stderr wording is stable here because core.ts pins LC_ALL=C.
-    if (!force && /not fully merged/.test(errorMessageOf(err))) {
+    if (
+      !force &&
+      err instanceof GitError &&
+      /not fully merged/.test(err.stderr)
+    ) {
       throw branchNotMergedError(name);
     }
     throw err;

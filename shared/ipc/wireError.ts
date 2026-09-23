@@ -20,7 +20,10 @@ export const WireErrorShapeSchema = z.looseObject({
 });
 export type WireErrorShape = z.infer<typeof WireErrorShapeSchema>;
 
-// Keys an Error owns for itself, never copied as fields.
+// Keys an Error owns for itself, never copied as fields, plus the
+// method names a field must not shadow (a `toString` field would make
+// String(error) throw) and the ones a thenable or JSON hook would
+// hijack.
 const RESERVED = new Set([
   "_tag",
   "message",
@@ -30,6 +33,10 @@ const RESERVED = new Set([
   "__proto__",
   "constructor",
   "prototype",
+  "toString",
+  "valueOf",
+  "toJSON",
+  "then",
 ]);
 
 function isJsonValue(value: unknown, depth = 0): boolean {
@@ -56,21 +63,48 @@ function isJsonValue(value: unknown, depth = 0): boolean {
   );
 }
 
+// The most of one string field that rides the wire. A field is for a
+// matcher or a short note (a port, a reason, git's stderr), never a
+// payload: a git failure's stdout can run to megabytes, and the device
+// hub caps a whole frame at 64 KiB, so an unbounded field would turn
+// one failure into an answer the caller never receives.
+export const MAX_WIRE_FIELD_CHARS = 4_096;
+
+function bounded(value: unknown): unknown {
+  if (typeof value === "string" && value.length > MAX_WIRE_FIELD_CHARS) {
+    return `${value.slice(0, MAX_WIRE_FIELD_CHARS)}…`;
+  }
+  return value;
+}
+
 // The wire form of a typed error, or undefined for a plain Error, in
 // which case the wire carries the message alone as before. Only own
 // enumerable JSON-safe fields ride: an Effect tagged error's fields
 // are exactly that, and a WireError rebuilt on a hop in between (main
 // forwarding a peer's failure to the renderer) carries its fields the
-// same way.
+// same way. Top-level string fields are bounded; nested values are
+// carried as they are, since no catalogued error nests a string. The
+// message is not bounded here: every wire carries the full message
+// beside this shape, and rebuilds from that one (see rebuildWireError).
 export function encodeWireError(error: unknown): WireErrorShape | undefined {
   const tag = errorTagOf(error);
   if (tag === undefined) return undefined;
   const fields: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(error as object)) {
     if (RESERVED.has(key) || !isJsonValue(value)) continue;
-    fields[key] = value;
+    fields[key] = bounded(value);
   }
   return { ...fields, _tag: tag, message: errorMessageOf(error) };
+}
+
+// The calling side's one rebuild path: the shape's tag and fields with
+// the message the frame carried beside it, which is the full text an
+// older reader would have shown.
+export function rebuildWireError(
+  shape: WireErrorShape,
+  message: string,
+): WireError {
+  return new WireError({ ...shape, message });
 }
 
 // The calling side's rebuild: an Error whose `_tag` and fields are the
@@ -122,5 +156,5 @@ export function unwrapEnvelope(envelope: InvokeEnvelope): unknown {
   if (envelope.ok) return envelope.value;
   throw envelope.error === undefined
     ? new Error(envelope.message)
-    : new WireError(envelope.error);
+    : rebuildWireError(envelope.error, envelope.message);
 }

@@ -20,11 +20,15 @@ that hold across all of them:
   `host/` and `main/` may (the host-boundary check enforces the rest).
 - Service ids are `"sm/<area>/<Name>"`. A service's primary layer is
   `static readonly layer`; variants are `layerTest`, `layerNoDeps`.
-- Errors that cross a wire are `Schema.TaggedError` classes declared in
-  `shared/errors.ts`. Transports carry the tag and fields beside the
-  message (`shared/ipc/wireError.ts`); matchers read the tag, never the
-  prose. Every wire change stays additive (optional field, message
-  fallback) because a user's devices run mixed app versions.
+- Errors are `Schema.TaggedError` classes. One the renderer matches on
+  is declared in `shared/errors.ts` beside its matcher and tag
+  constant; one only its own module raises lives beside that module
+  (`GitError` in `host/lib/git/core.ts`). Transports carry the tag and
+  fields beside the message (`shared/ipc/wireError.ts`); matchers read
+  the tag, never the prose, and `_tag` is an own property of the
+  instance, not of the prototype. Every wire change stays additive
+  (optional field, message fallback) because a user's devices run mixed
+  app versions.
 - Imports from `effect/unstable/*` are confined to adapter files, since
   the stable release drops the `unstable` segment.
 - Bridge into Effect with `runtime.runPromise(effect, { signal })` at

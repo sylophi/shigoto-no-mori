@@ -20,6 +20,7 @@
 // error) resets whatever is left. A peer end ends the duplex. A peer
 // reset destroys it.
 import type { Duplex } from "node:stream";
+import { ChannelOpenRefused } from "@shared/errors";
 import {
   CHANNEL_OPEN_NO_CHANNELS,
   CHANNEL_OPEN_TAKEN,
@@ -105,7 +106,7 @@ export function bridgeDuplexToChannel(
 // (a dial, a worktree lookup), re-checking everything that can have
 // changed meanwhile: the connection may have died, the id may have
 // been claimed, the cap may have filled. On any refusal the duplex is
-// destroyed and the coded marker thrown, so a handler that spawned a
+// destroyed and a ChannelOpenRefused thrown, so a handler that spawned a
 // process for the far end need only kill it on a throw. A channel the
 // peer already reset comes back closed (see ChannelMux.attach), and
 // the adapter tears the far end down through its ordinary close path.
@@ -114,12 +115,14 @@ export function requireChannels(
   channelId: string,
 ): NonNullable<HandlerContext["channels"]> {
   const channels = ctx.channels;
-  if (channels === undefined) throw new Error(CHANNEL_OPEN_NO_CHANNELS);
+  if (channels === undefined) {
+    throw new ChannelOpenRefused({ reason: CHANNEL_OPEN_NO_CHANNELS });
+  }
   if (channels.has(channelId) || ctx.signal.aborted) {
-    throw new Error(CHANNEL_OPEN_TAKEN);
+    throw new ChannelOpenRefused({ reason: CHANNEL_OPEN_TAKEN });
   }
   if (channels.size() >= MAX_CHANNELS_PER_CONNECTION) {
-    throw new Error(CHANNEL_OPEN_TOO_MANY);
+    throw new ChannelOpenRefused({ reason: CHANNEL_OPEN_TOO_MANY });
   }
   return channels;
 }

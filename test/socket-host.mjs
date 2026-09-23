@@ -20,6 +20,15 @@
 // writes, globalConfig.writeDeviceSettings with its strict patch schema
 // that structurally rejects socketHost and any unmanaged key).
 //
+// Typed errors: a handler's Effect tagged error answers with its
+// message AND the additive `error` field (tag plus fields,
+// shared/ipc/wireError.ts), which the client transport rebuilds as a
+// WireError the shared/errors.ts matchers read by tag; a plain Error
+// answers with the message alone, as it always has. A stand-in host
+// replays an old peer's message-only answer (still matched by its
+// text) and a new peer's answer carrying both the refusal code and the
+// typed error (the typed form wins).
+//
 // The golden read surface: every channel servable ungated (remote:true,
 // mutating:false) is pinned in read-surface.golden.json, so flipping a
 // mutating tag shows up as a reviewed diff instead of silently opening
@@ -39,10 +48,19 @@ import {
   CLOSE_GOING_AWAY,
   CLOSE_HELLO_FAILED,
   COMMAND_REFUSED_CODE,
+  COMMAND_REFUSED_MESSAGE,
+  COMMAND_REFUSED_TAG,
   CommandRefusedError,
   encodeFrame,
+  isCommandRefusedError,
   MAX_IN_FLIGHT_PER_PEER,
 } from "@shared/ipc/socket/frames";
+import {
+  errorTagOf,
+  isEntityGoneError,
+  unknownWorktreeError,
+} from "@shared/errors";
+import { WireError } from "@shared/ipc/wireError";
 import { DEFLATED_FRAME_KIND } from "@shared/ipc/socket/deflatedFrame";
 import { connectDevice } from "@shared/ipc/socket/wsClientTransport";
 import { rendererSchemeOrigins } from "@shared/packaging/rendererScheme.mts";
@@ -108,6 +126,15 @@ function registerTestHandlers(binding) {
     "test:fail",
     async () => {
       throw new Error("boom");
+    },
+    { mutating: false },
+  );
+  // A read-classified handler that throws a TAGGED error, so the
+  // typed-error tests can prove its tag and fields cross the wire.
+  binding.handle(
+    "test:gone",
+    async () => {
+      throw unknownWorktreeError("w1");
     },
     { mutating: false },
   );
@@ -595,6 +622,131 @@ async function main() {
       } finally {
         await binding.stop();
       }
+    },
+  );
+
+  await check(
+    "typed errors on the wire: a tagged handler error answers with message and an error field carrying its tag and fields, a plain Error with message only",
+    async () => {
+      const { binding, url } = await startBinding();
+      try {
+        const { client } = await authenticate(url);
+        client.send({ t: "req", id: 1, channel: "test:gone" });
+        const gone = await client.nextFrame();
+        assert.equal(gone.ok, false);
+        assert.equal(gone.message, "Unknown worktree: w1");
+        assert.deepEqual(gone.error, {
+          _tag: "UnknownWorktree",
+          worktreeId: "w1",
+          message: "Unknown worktree: w1",
+        });
+        assert.equal("code" in gone, false, "a handler error grew a code");
+        client.send({ t: "req", id: 2, channel: "test:fail" });
+        const plain = await client.nextFrame();
+        assert.equal(plain.ok, false);
+        assert.equal(plain.message, "boom");
+        // Absent, not present-and-undefined: an old reader sees exactly
+        // the frame it always did.
+        assert.equal("error" in plain, false, "a plain Error grew an error");
+        assert.deepEqual(Object.keys(plain).toSorted(), [
+          "id",
+          "message",
+          "ok",
+          "t",
+        ]);
+        client.close();
+      } finally {
+        await binding.stop();
+      }
+    },
+  );
+
+  await check(
+    "typed errors client-side: the socket client transport rejects with a WireError the matchers read by tag, and a plain failure stays a plain Error",
+    async () => {
+      const { binding, url } = await startBinding();
+      try {
+        const connection = await connectDevice({
+          url,
+          token: TOKEN,
+          appVersion: "1",
+          localDeviceId: "client",
+          onClose: () => {},
+        });
+        await assert.rejects(
+          () => connection.transport.invoke("test:gone", undefined),
+          (error) =>
+            error instanceof WireError &&
+            error._tag === "UnknownWorktree" &&
+            error.worktreeId === "w1" &&
+            error.message === "Unknown worktree: w1" &&
+            isEntityGoneError(error),
+        );
+        await assert.rejects(
+          () => connection.transport.invoke("test:fail", undefined),
+          (error) =>
+            error instanceof Error &&
+            !(error instanceof WireError) &&
+            errorTagOf(error) === undefined &&
+            error.message === "boom" &&
+            !isEntityGoneError(error),
+        );
+        connection.close();
+      } finally {
+        await binding.stop();
+      }
+    },
+  );
+
+  await check(
+    "typed errors across versions: an old host's message-only answer still matches by its text, and a new host's refusal carrying code and error rebuilds from the error",
+    async (track) => {
+      // A stand-in host answering each req with a hand-built res: the
+      // real binding can no longer produce the old shape.
+      const answers = {
+        "old:gone": { ok: false, message: "Unknown worktree: w1" },
+        "new:refused": {
+          ok: false,
+          code: COMMAND_REFUSED_CODE,
+          message: COMMAND_REFUSED_MESSAGE,
+          error: {
+            _tag: COMMAND_REFUSED_TAG,
+            message: COMMAND_REFUSED_MESSAGE,
+          },
+        },
+      };
+      const url = await fakeHost(track, (ws) => {
+        ws.on("message", (data) => {
+          const frame = JSON.parse(data.toString("utf8"));
+          if (frame.t !== "req") return;
+          ws.send(
+            encodeFrame({ t: "res", id: frame.id, ...answers[frame.channel] }),
+          );
+        });
+      });
+      const connection = await connectDevice({
+        url,
+        token: TOKEN,
+        appVersion: "1",
+        localDeviceId: "client",
+        onClose: () => {},
+        openSocket: (target) => new WebSocket(target),
+      });
+      track(() => connection.close());
+      await assert.rejects(
+        () => connection.transport.invoke("old:gone", undefined),
+        (error) =>
+          !(error instanceof WireError) &&
+          errorTagOf(error) === undefined &&
+          isEntityGoneError(error),
+      );
+      await assert.rejects(
+        () => connection.transport.invoke("new:refused", undefined),
+        (error) =>
+          error instanceof WireError &&
+          error._tag === COMMAND_REFUSED_TAG &&
+          isCommandRefusedError(error),
+      );
     },
   );
 

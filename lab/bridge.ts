@@ -1098,8 +1098,9 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
     isElectron: !WEB_SHELL,
     ...buildApi({ host: localHost.transport, client: client.transport }),
   };
-  // The renderer's window.d.ts types window.api off the preload, and
-  // the lab bridge satisfies the same runtime surface.
+  // The renderer's window.d.ts types window.api as RendererApi
+  // (shared/ipc/rendererApi.ts), and the lab bridge satisfies the same
+  // runtime surface.
   (window as any).api = api;
 
   const pushHub = () => client.emit("hub:statusChanged", hubSnapshot());

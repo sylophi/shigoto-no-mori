@@ -14,13 +14,12 @@
 // fallbacks go when no supported peer version sends message-only
 // errors.
 import { Schema } from "effect";
-import { errorMessageOf, errorTagOf } from "./errorOf.ts";
+import { errorFieldOf, errorMessageOf, errorTagOf } from "./errorOf.ts";
 
-// The class-free readers live in shared/errorOf.ts (the hub Worker
-// compiles the frame schemas that need them and must not load
-// effect); re-exported here so callers have one module to import.
-// Extension spelled out: scripts/ imports this module under plain
-// node, which resolves no extensionless specifier.
+// The class-free readers live in shared/errorOf.ts, effect-free so a
+// frame reader need not load effect; re-exported here so callers have
+// one module to import. Extension spelled out: scripts/ imports this
+// module under plain node, which resolves no extensionless specifier.
 export {
   errorCodeOf,
   errorFieldOf,
@@ -37,6 +36,10 @@ export const UNKNOWN_PROJECT_TAG = "UnknownProject";
 export const UNKNOWN_WORKTREE_TAG = "UnknownWorktree";
 export const NO_DIRECT_CONNECTION_TAG = "NoDirectConnection";
 export const BRANCH_NOT_MERGED_TAG = "BranchNotMerged";
+export const FORWARD_CONNECT_FAILED_TAG = "ForwardConnectFailed";
+export const CHANNEL_OPEN_REFUSED_TAG = "ChannelOpenRefused";
+export const PORT_IN_USE_TAG = "PortInUse";
+export const PORT_DENIED_TAG = "PortDenied";
 
 export class UnknownProject extends Schema.TaggedError<UnknownProject>()(
   UNKNOWN_PROJECT_TAG,
@@ -132,4 +135,102 @@ export function isBranchNotMergedError(error: unknown): boolean {
   const tag = errorTagOf(error);
   if (tag !== undefined) return tag === BRANCH_NOT_MERGED_TAG;
   return errorMessageOf(error).includes(BRANCH_NOT_MERGED_MARKER);
+}
+
+// A forward:open whose loopback dial on the host failed: nothing
+// answered on the port, or it was out of range
+// (host/ipc/modules/forward.ts). The one refusal that says something
+// about the port rather than the peer or the grant, so the engine's
+// start probe (main/core/portForward/engine.ts) lets it through. The
+// message keeps the "connect-failed" prefix an older peer sends and
+// matches on.
+const FORWARD_CONNECT_FAILED_PREFIX = "connect-failed";
+
+export class ForwardConnectFailed extends Schema.TaggedError<ForwardConnectFailed>()(
+  FORWARD_CONNECT_FAILED_TAG,
+  { detail: Schema.String },
+) {
+  override get message(): string {
+    return `${FORWARD_CONNECT_FAILED_PREFIX}: ${this.detail}`;
+  }
+}
+
+export function isForwardConnectFailedError(error: unknown): boolean {
+  const tag = errorTagOf(error);
+  if (tag !== undefined) return tag === FORWARD_CONNECT_FAILED_TAG;
+  return errorMessageOf(error).startsWith(FORWARD_CONNECT_FAILED_PREFIX);
+}
+
+// A byte-stream open (forward:open, mirror:openStream) the host's
+// channel layer refused (host/socket/channelStreams.ts): the
+// connection carries no byte channels, the caller's channel id is
+// already attached, or the per-connection cap is full. The message is
+// the bare reason, which is what an older peer sends as the whole
+// message; the reason names live beside the channel layer as
+// CHANNEL_OPEN_* in shared/ipc/socket/channels.ts.
+export const CHANNEL_OPEN_REFUSED_REASONS = [
+  "no-byte-channels",
+  "channel-taken",
+  "too-many-conns",
+] as const;
+export type ChannelOpenRefusedReason =
+  (typeof CHANNEL_OPEN_REFUSED_REASONS)[number];
+
+export class ChannelOpenRefused extends Schema.TaggedError<ChannelOpenRefused>()(
+  CHANNEL_OPEN_REFUSED_TAG,
+  { reason: Schema.Literals(CHANNEL_OPEN_REFUSED_REASONS) },
+) {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
+export function isChannelOpenRefused(
+  error: unknown,
+  reason: ChannelOpenRefusedReason,
+): boolean {
+  const tag = errorTagOf(error);
+  if (tag !== undefined) {
+    return (
+      tag === CHANNEL_OPEN_REFUSED_TAG &&
+      errorFieldOf(error, "reason") === reason
+    );
+  }
+  return errorMessageOf(error).startsWith(reason);
+}
+
+// A forward's local listener could not bind (main/core/portForward/
+// engine.ts): the port is taken, or it is privileged. Only these two
+// errnos are typed, since a person can act on them; any other bind
+// failure passes through as node said it. The messages keep node's
+// errno, which is what the fallback below matches in a message from a
+// build that passed node's error through untyped.
+export class PortInUse extends Schema.TaggedError<PortInUse>()(
+  PORT_IN_USE_TAG,
+  { port: Schema.Int },
+) {
+  override get message(): string {
+    return `localhost:${this.port} is already in use (EADDRINUSE)`;
+  }
+}
+
+export class PortDenied extends Schema.TaggedError<PortDenied>()(
+  PORT_DENIED_TAG,
+  { port: Schema.Int },
+) {
+  override get message(): string {
+    return `localhost:${this.port} needs elevated privileges (EACCES)`;
+  }
+}
+
+export function isPortInUseError(error: unknown): boolean {
+  const tag = errorTagOf(error);
+  if (tag !== undefined) return tag === PORT_IN_USE_TAG;
+  return errorMessageOf(error).includes("EADDRINUSE");
+}
+
+export function isPortDeniedError(error: unknown): boolean {
+  const tag = errorTagOf(error);
+  if (tag !== undefined) return tag === PORT_DENIED_TAG;
+  return errorMessageOf(error).includes("EACCES");
 }

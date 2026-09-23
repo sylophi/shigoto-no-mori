@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { DeviceIdSchema } from "@shared/hub/protocol";
@@ -214,11 +215,13 @@ export function isControlErrorCode(code: unknown): code is ControlErrorCode {
   return (CONTROL_ERROR_CODES as readonly unknown[]).includes(code);
 }
 
-export class ControlError extends Error {
-  readonly code: ControlErrorCode;
-  constructor(code: ControlErrorCode, message: string) {
-    super(message);
-    this.name = "ControlError";
-    this.code = code;
-  }
-}
+// A control op's refusal. `code` is an own field, so the control wire
+// (main/core/control/server.ts) reads it with errorCodeOf and sends it
+// as the res frame's top-level `code`, which is what the Go CLI keys
+// on, beside the encoded error.
+export const CONTROL_ERROR_TAG = "ControlError";
+
+export class ControlError extends Schema.TaggedError<ControlError>()(
+  CONTROL_ERROR_TAG,
+  { code: Schema.Literals(CONTROL_ERROR_CODES), message: Schema.String },
+) {}

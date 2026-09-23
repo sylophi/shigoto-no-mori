@@ -3,7 +3,7 @@
 // schema-pinned hex hash / worktree id or an app-built refs/... path;
 // --end-of-options pins them to the revision slot anyway, matching the
 // house argv discipline (see captureDirtyState in cli/cmd_dirty.go).
-import { run } from "./core";
+import { GitError, run } from "./core";
 
 // The ref must not exist, in update-ref's compare-and-set vocabulary.
 export const ZERO_SHA = "0".repeat(40);
@@ -83,7 +83,7 @@ export async function isAncestor(
     ]);
     return true;
   } catch (error) {
-    if ((error as { code?: unknown }).code === 1) return false;
+    if (error instanceof GitError && error.exitCode === 1) return false;
     throw error;
   }
 }

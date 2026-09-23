@@ -17,7 +17,10 @@
 // globalConfig.writeDeviceSettings) keep rejecting as mutating-rejects,
 // the preflight grant read answers the structural granted:false rather
 // than a fabricated grant, shell.openExternal reaches
-// the injected opener, an unconfigured build keeps the socket stopped,
+// the injected opener, a peer call with no direct session rejects with
+// the typed NoDirectConnection instance itself (the in-page wire copies
+// nothing, so the class and its fields reach the renderer as thrown),
+// an unconfigured build keeps the socket stopped,
 // and a device hub refusal blocks the supervisor (terminal, no retry
 // loop) the way it does on the desktop.
 //
@@ -26,6 +29,7 @@
 import assert from "node:assert/strict";
 import { buildApi } from "@shared/ipc/client";
 import { DeviceIdSchema } from "@shared/hub/protocol";
+import { NoDirectConnection, isNoDirectConnectionError } from "@shared/errors";
 import { createWebBridge } from "../web/ipc/register.ts";
 import { defaultWebDeviceName } from "../web/account/deviceName.ts";
 import { NO_STRUCTURAL_STUB, stubValueFor } from "../web/ipc/stubDefaults.ts";
@@ -317,6 +321,27 @@ async function main() {
       assert.equal(
         await bridge.api.shell.showItemInFolder("/somewhere"),
         undefined,
+      );
+    },
+  );
+
+  await check(
+    "typed errors: a peer invoke with no direct session rejects with the NoDirectConnection instance itself, tag and fields intact",
+    async (track) => {
+      const bridge = createWebBridge(makeDeps());
+      track(() => bridge.stop());
+      await assert.rejects(
+        bridge.api.hub.invokePeer({
+          deviceId: "peer-without-session",
+          channel: "worktrees:list",
+        }),
+        (error) =>
+          error instanceof NoDirectConnection &&
+          error._tag === "NoDirectConnection" &&
+          error.deviceId === "peer-without-session" &&
+          error.reason === null &&
+          error.message === "no direct connection to peer-without-session" &&
+          isNoDirectConnectionError(error),
       );
     },
   );

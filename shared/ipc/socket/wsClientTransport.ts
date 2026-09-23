@@ -39,7 +39,7 @@ import {
 } from "@shared/ipc/socket/channels";
 import type { ClientTransport } from "@shared/ipc/transport";
 import { createLimiter } from "@shared/util/limit";
-import { WireError } from "../wireError.ts";
+import { rebuildWireError } from "../wireError.ts";
 
 // A connect attempt failed before the welcome landed. `code` is the
 // close code when the failure came from a socket close (null on a
@@ -639,7 +639,7 @@ export function openDevice(
         // The typed form: the handler's tag and fields, rebuilt so
         // the shared/errors.ts matchers read the tag on this wire as
         // they do in-process.
-        entry.reject(new WireError(frame.error));
+        entry.reject(rebuildWireError(frame.error, frame.message));
       } else if (frame.code === COMMAND_REFUSED_CODE) {
         // The host's gate refused the command (the LAN wire is
         // read-only). Typed, message preserved, so a caller can

@@ -1,8 +1,10 @@
 // Reading an error without knowing its class: the message, the tag,
 // a field, a code. Effect-free on purpose, so the wire codec
-// (shared/ipc/wireError.ts) and the frame schemas can use these from
-// the hub Worker's compile, which must not load the effect package.
-// shared/errors.ts re-exports them beside the typed error classes.
+// (shared/ipc/wireError.ts) and the frame schemas can use these
+// without pulling the effect package into a bundle that only needs to
+// read frames (the web client's transports, a future Worker-side
+// reader). shared/errors.ts re-exports them beside the typed error
+// classes.
 
 export function errorMessageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -10,12 +12,15 @@ export function errorMessageOf(error: unknown): string {
 
 // The tag of a typed error, whichever side of a wire it is on: an
 // Effect tagged error minted in-process, or the WireError a transport
-// rebuilt from a res frame. undefined for a plain Error.
+// rebuilt from a res frame. undefined for a plain Error, and for an
+// empty tag, which no class mints and the wire shape refuses.
 export function errorTagOf(error: unknown): string | undefined {
   if (typeof error !== "object" || error === null || !("_tag" in error)) {
     return undefined;
   }
-  return typeof error._tag === "string" ? error._tag : undefined;
+  return typeof error._tag === "string" && error._tag !== ""
+    ? error._tag
+    : undefined;
 }
 
 // A field of a typed error by name, for a reader that only knows the

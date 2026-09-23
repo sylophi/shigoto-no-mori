@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { errorMessageOf, unknownWorktreeError } from "@shared/errors";
+import { unknownWorktreeError } from "@shared/errors";
 import {
   type CommitSummary,
   isCommitHash,
@@ -15,7 +15,7 @@ import { pickWorktreeName } from "../worktrees/names";
 import { isManagedPath, managedBasesFor } from "../worktrees/paths";
 import { createLimiter } from "@shared/util/limit";
 import { listChangedFiles } from "./changes";
-import { run } from "./core";
+import { GitError, run } from "./core";
 import { listRemotes, resolveDefaultBranch } from "./remotes";
 
 interface RawWorktreeEntry {
@@ -603,11 +603,13 @@ export async function removeWorktreeForce(
     await removeWorktree(projectPath, worktreePath, true);
     return;
   } catch (err) {
-    const msg = errorMessageOf(err);
-    if (!/Directory not empty|ENOTEMPTY/i.test(msg)) {
+    if (
+      !(err instanceof GitError) ||
+      !/Directory not empty|ENOTEMPTY/i.test(err.stderr)
+    ) {
       throw err;
     }
-    console.warn(`[worktrees] force-wipe fallback: ${msg}`);
+    console.warn(`[worktrees] force-wipe fallback: ${err.message}`);
   }
   await rm(worktreePath, { recursive: true, force: true });
   await pruneStaleWorktrees(projectPath);

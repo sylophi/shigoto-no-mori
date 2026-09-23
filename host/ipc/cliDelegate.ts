@@ -7,6 +7,7 @@
 // crossing the Go/TS boundary is validated against the shared zod
 // schemas, so drift fails loudly here instead of surfacing as
 // undefined-flavored breakage in the renderer.
+import { Schema } from "effect";
 import { z } from "zod";
 import {
   CarryOverReportSchema,
@@ -85,6 +86,21 @@ interface WorktreeOperationNotifiers {
 
 const PhaseSchema = z.union([CreatePhaseSchema, z.literal("idle")]);
 
+// A CLI run that produced no ok result. The message is the CLI's own
+// text (its error document's `error`, else the fallback and the exit
+// code), so it is a field rather than built from the others. `code` is
+// the error document's stable code when it carries one; `exitCode` is
+// null when the process was killed rather than exiting.
+export class CliFailed extends Schema.TaggedError<CliFailed>()("CliFailed", {
+  code: Schema.NullOr(Schema.String),
+  exitCode: Schema.NullOr(Schema.Number),
+  message: Schema.String,
+}) {}
+
+function idAfter(text: string, prefix: string): string {
+  return text.startsWith(prefix) ? text.slice(prefix.length).trim() : "";
+}
+
 // The failure for a run that produced no ok result. The CLI's --json
 // error document carries a stable `code` for entity-gone failures;
 // mapping it onto the shared constructors here means the renderer's
@@ -94,14 +110,29 @@ function cliFailure(
   fallback: string,
   ids: { projectId?: string; worktreeId?: string } = {},
 ): Error {
-  const code = result.docs.find((doc) => doc["ok"] === false)?.["code"];
-  if (code === "unknown-project" && ids.projectId !== undefined) {
-    return unknownProjectError(ids.projectId);
+  const errorDoc = result.docs.find((doc) => doc["ok"] === false);
+  const code = errorDoc?.["code"];
+  const text = typeof errorDoc?.["error"] === "string" ? errorDoc["error"] : "";
+  // The code decides the class whatever ids the caller had at hand: a
+  // shelve that only knows its worktree still meets an unknown-project
+  // verdict, and it must stay entity-gone. The id comes from the caller
+  // when it has one, else from the CLI's own "Unknown project: <id>".
+  if (code === "unknown-project") {
+    return unknownProjectError(
+      ids.projectId ?? idAfter(text, "Unknown project: "),
+    );
   }
-  if (code === "unknown-worktree" && ids.worktreeId !== undefined) {
-    return unknownWorktreeError(ids.worktreeId);
+  if (code === "unknown-worktree") {
+    return unknownWorktreeError(
+      ids.worktreeId ?? idAfter(text, "Unknown worktree: "),
+    );
   }
-  return new Error(runner().cliFailureMessage(result, fallback));
+  return new CliFailed({
+    code: typeof code === "string" ? code : null,
+    // runCli reports a signal kill as -1.
+    exitCode: result.code < 0 ? null : result.code,
+    message: runner().cliFailureMessage(result, fallback),
+  });
 }
 
 // The final {ok: boolean} document of a run; throws the mapped failure

@@ -9,11 +9,8 @@
 // clean end from both sides, or the socket dying tears it down. No
 // registry, no idle sweep, nothing to leak past the connection.
 import type { Socket } from "node:net";
-import { errorMessageOf } from "@shared/errors";
-import {
-  FORWARD_CONNECT_FAILED,
-  forwardContract,
-} from "@shared/ipc/modules/forward";
+import { errorMessageOf, ForwardConnectFailed } from "@shared/errors";
+import { forwardContract } from "@shared/ipc/modules/forward";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { dialLoopback } from "@host/lib/net";
@@ -22,10 +19,9 @@ import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
 // How long a dial may sit unanswered before the open refuses.
 const DIAL_TIMEOUT_MS = 5_000;
 
-// Error messages here are stable markers, not prose (the FORWARD_*
-// constants beside the contract): Electron IPC and the device wires
-// both preserve only the message string, so the client side and the
-// UI match these exact texts.
+// Refusals are typed (shared/errors.ts): the client side and the UI
+// match the tag, and an older client the message, which keeps the
+// "connect-failed" prefix it matches on.
 
 export const forwardHandlers: Handlers<typeof forwardContract, HandlerContext> =
   {
@@ -33,7 +29,7 @@ export const forwardHandlers: Handlers<typeof forwardContract, HandlerContext> =
       // The schema already pinned the range. Re-check so this handler
       // stays fail-closed even if it is ever reached off-contract.
       if (!Number.isInteger(port) || port < 1 || port > 65535) {
-        throw new Error(`${FORWARD_CONNECT_FAILED}: port out of range`);
+        throw new ForwardConnectFailed({ detail: "port out of range" });
       }
       requireChannels(ctx, channelId);
       // Loopback only, always: the feature is reaching the host's OWN
@@ -45,9 +41,7 @@ export const forwardHandlers: Handlers<typeof forwardContract, HandlerContext> =
       try {
         socket = await dialLoopback(port, DIAL_TIMEOUT_MS);
       } catch (error) {
-        throw new Error(`${FORWARD_CONNECT_FAILED}: ${errorMessageOf(error)}`, {
-          cause: error,
-        });
+        throw new ForwardConnectFailed({ detail: errorMessageOf(error) });
       }
       // Nagle batches small writes against the wire's round trips, so
       // keystrokes and small frames must not wait on it.

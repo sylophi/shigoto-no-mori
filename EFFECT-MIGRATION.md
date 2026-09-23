@@ -302,7 +302,7 @@ rule (new fields are optional, readers fall back to message text).
 
 | Wire | Today | Change |
 |---|---|---|
-| Electron IPC (`main/preloadTransport.ts`) | rejection keeps message only | Handlers resolve an envelope `{ ok: true, value } \| { ok: false, error: EncodedTaggedError, message }`; the preload rehydrates with `Schema.decodeUnknownSync(WireError)` and rejects. Same process, both sides ship together, so no skew concern. |
+| Electron IPC (`main/preloadTransport.ts`) | rejection keeps message only | Handlers resolve an envelope `{ ok: true, value } \| { ok: false, error: EncodedTaggedError, message }`. The preload passes it through unchanged (contextBridge copies a thrown Error as message and stack only, so the preload cannot rebuild it) and the renderer builds `window.api` from the raw bridge and rebuilds the error on its side (`renderer/electronApi.ts`). Same process, both sides ship together, so no skew concern. |
 | LAN and direct websocket (`shared/ipc/socket/frames.ts`) | `res { ok:false, message, code? }` | Add optional `error` (the encoded tagged error). Readers prefer `error`, fall back to `code`, then to `message`. |
 | Hub broker (`shared/hub/link.ts`) | message only | Same `error` field on the broker's `res`. |
 | Control wire (`main/core/control/server.ts`) | `code` for `ControlError` only | `ControlError` becomes a tagged error with `code` as a field; the `error` field is added; the Go CLI keeps reading `code`. |

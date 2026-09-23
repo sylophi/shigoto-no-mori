@@ -269,7 +269,10 @@ export class CommandRefusedError extends Error {
 // "ask that machine to allow commands".
 export function isCommandRefusedError(error: unknown): boolean {
   if (error instanceof CommandRefusedError) return true;
-  if (errorTagOf(error) === COMMAND_REFUSED_TAG) return true;
+  // The tag wins: a typed error of another kind is not a refusal
+  // however its message reads. Only an untagged error is read by text.
+  const tag = errorTagOf(error);
+  if (tag !== undefined) return tag === COMMAND_REFUSED_TAG;
   const message = error instanceof Error ? error.message : String(error);
   return message.includes(COMMAND_REFUSED_MESSAGE);
 }
@@ -284,13 +287,17 @@ export function isCommandRefusedError(error: unknown): boolean {
 // `error` is the typed form (shared/ipc/wireError.ts): the handler's
 // tag and fields, ADDITIVE the same way, so a matcher on the far side
 // reads the tag and an old peer that sends none is read by message.
+// A malformed `error` (a NEWER peer's shape this build cannot read)
+// degrades to absent rather than failing the frame: a dropped res
+// would leave the caller's invoke pending forever, since no wire has a
+// per-call timeout, where a message-only answer rejects it at once.
 const ResErrFrameSchema = z.object({
   t: z.literal("res"),
   id: z.number().int(),
   ok: z.literal(false),
   message: z.string(),
   code: z.string().optional(),
-  error: WireErrorShapeSchema.optional(),
+  error: WireErrorShapeSchema.optional().catch(undefined),
 });
 
 const PushFrameSchema = z.object({

@@ -1,7 +1,8 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
+import { errorTagOf } from "@shared/errors";
 import { isENOENT, pathExists } from "@host/lib/util/paths";
-import { run } from "./core";
+import { GitError, run } from "./core";
 
 // Clones `url` into `parentDir/name` and returns the new checkout's
 // path. The payload schema has already held the URL to a real remote
@@ -37,11 +38,26 @@ export async function cloneRepo(
   }).catch((error: unknown) => {
     // Refusing to prompt, git names the URL it wanted a password for,
     // userinfo and all, and a pasted token sits there. The message goes
-    // to a toast, so that part is dropped.
-    if (error instanceof Error) {
-      error.message = error.message.replace(/(https?:\/\/)[^/\s'"]*@/gi, "$1");
+    // to a toast and a GitError's output rides the wire as fields, so
+    // that part is dropped from both.
+    if (error instanceof GitError) {
+      throw new GitError({
+        stderr: withoutUserinfo(error.stderr),
+        stdout: withoutUserinfo(error.stdout),
+        exitCode: error.exitCode,
+      });
+    }
+    // A typed error's message is a getter over its fields (a
+    // GitOutputTruncated names no URL), so only a plain Error is
+    // rewritten.
+    if (error instanceof Error && errorTagOf(error) === undefined) {
+      error.message = withoutUserinfo(error.message);
     }
     throw error;
   });
   return dest;
+}
+
+function withoutUserinfo(text: string): string {
+  return text.replace(/(https?:\/\/)[^/\s'"]*@/gi, "$1");
 }

@@ -46,7 +46,7 @@ import {
   ServerEnvelopeSchema,
   utf8ByteLength,
 } from "./protocol";
-import { encodeWireError, WireError } from "@shared/ipc/wireError";
+import { encodeWireError, rebuildWireError } from "@shared/ipc/wireError";
 
 // The device hub's own per-peer in-flight bound. Legitimate broker
 // concurrency is ~1 (one connectInfo exchange per dial), so this is a
@@ -696,7 +696,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
         entry.resolve(frame.result);
       } else if (frame.error !== undefined) {
         // The typed form, rebuilt with its tag and fields.
-        entry.reject(new WireError(frame.error));
+        entry.reject(rebuildWireError(frame.error, frame.message));
       } else if (frame.message === noHandlerMessage(deps.broker.channel)) {
         // The one answer that is a STRUCTURAL fact about the peer
         // rather than a failure of this call, so it is re-typed here

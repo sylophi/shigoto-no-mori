@@ -20,6 +20,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeProof, sandboxGit, scrubbedGitEnv } from "./lib/checkKit.mjs";
+import { encodeWireError } from "@shared/ipc/wireError";
 
 // cloneRepo runs git under this process's environment. The pre-commit
 // hook's GIT_* variables would point that git at the commit in
@@ -192,6 +193,13 @@ async function main() {
       assert.ok(
         !failure.message.includes("s3cret-t0ken"),
         `the token is in the message: ${failure.message}`,
+      );
+      // A GitError's stderr and stdout ride the wire as fields, so the
+      // scrub must reach them too, not only the message.
+      const wire = JSON.stringify(encodeWireError(failure) ?? {});
+      assert.ok(
+        !wire.includes("s3cret-t0ken"),
+        `the token is in the wire form: ${wire}`,
       );
       assert.ok(!existsSync(join(sandbox, "repo")));
     },

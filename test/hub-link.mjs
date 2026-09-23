@@ -15,7 +15,9 @@
 // wire. The dispatch scenarios all ride the broker channel, multiplexed
 // by an input mode. Also asserted: the sm-level hello/welcome over the
 // device hub, req/res id correlation, the void-field framing invariant,
-// error serialization (message only), the local outbound size guard at
+// error serialization (a plain Error as message only, a tagged one with
+// the additive typed `error` field the client rebuilds as a WireError
+// its matchers read by tag), the local outbound size guard at
 // the shrunken control-frame budget, offline nacks, presence-driven
 // peer teardown, supervisor redial with a fresh ticket per attempt, the
 // blocked verdicts for the revoked and superseded close codes, the
@@ -48,6 +50,12 @@ import {
   HubMessageTooLargeError,
   HubPeerOfflineError,
 } from "@shared/hub/link";
+import {
+  errorTagOf,
+  isEntityGoneError,
+  unknownWorktreeError,
+} from "@shared/errors";
+import { WireError } from "@shared/ipc/wireError";
 import { makeProof } from "./lib/checkKit.mjs";
 import { bootDevice as bootHubDevice } from "./lib/hubBoot.mjs";
 import { delay, waitFor } from "./lib/checkKit.mjs";
@@ -83,6 +91,7 @@ let hangResolvers = [];
 async function brokerTestHandler(_ctx, raw) {
   const mode = raw !== undefined && raw !== null ? raw.mode : undefined;
   if (mode === "fail") throw new Error("boom");
+  if (mode === "gone") throw unknownWorktreeError("w1");
   if (mode === "hang") {
     return new Promise((resolve) => hangResolvers.push(resolve));
   }
@@ -272,7 +281,7 @@ async function main() {
   );
 
   await check(
-    "error path: a throwing handler answers ok:false with the message only",
+    "error path: a handler throwing a plain Error answers ok:false with the message only, and the client gets a plain Error",
     async (track) => {
       const stub = await startStubHub();
       track(() => stub.close());
@@ -282,7 +291,11 @@ async function main() {
       const peer = await a.connection.connectBroker("B");
       await assert.rejects(
         () => peer.brokerInvoke({ mode: "fail" }),
-        (error) => error instanceof Error && error.message === "boom",
+        (error) =>
+          error instanceof Error &&
+          !(error instanceof WireError) &&
+          errorTagOf(error) === undefined &&
+          error.message === "boom",
       );
       const res = stub.received.find(
         (entry) =>
@@ -292,8 +305,51 @@ async function main() {
           smOf(entry).message === "boom",
       );
       assert.ok(res, "the err res never reached the stub");
-      // The inner sm frame carries only the message form, no result.
+      // A plain Error rides as the message alone: no result, and no
+      // typed error key (absent, not undefined), so an old peer reads
+      // exactly the frame it always did.
       assert.deepEqual(Object.keys(res.frame.sm).toSorted(), [
+        "id",
+        "message",
+        "ok",
+        "t",
+      ]);
+    },
+  );
+
+  await check(
+    "typed error path: a handler throwing a tagged error answers with the message AND an error field carrying its tag and fields, which the client rebuilds as a WireError",
+    async (track) => {
+      const stub = await startStubHub();
+      track(() => stub.close());
+      const a = await bootDevice(stub, "A", {}, track);
+      const b = await bootDevice(stub, "B", { registerHandlers: true }, track);
+      void b;
+      const peer = await a.connection.connectBroker("B");
+      await assert.rejects(
+        () => peer.brokerInvoke({ mode: "gone" }),
+        (error) =>
+          error instanceof WireError &&
+          error._tag === "UnknownWorktree" &&
+          error.worktreeId === "w1" &&
+          error.message === "Unknown worktree: w1" &&
+          isEntityGoneError(error),
+      );
+      const res = stub.received.find(
+        (entry) =>
+          entry.from === "B" &&
+          smOf(entry)?.t === "res" &&
+          smOf(entry).ok === false &&
+          smOf(entry).message === "Unknown worktree: w1",
+      );
+      assert.ok(res, "the typed err res never reached the stub");
+      assert.deepEqual(res.frame.sm.error, {
+        _tag: "UnknownWorktree",
+        worktreeId: "w1",
+        message: "Unknown worktree: w1",
+      });
+      assert.deepEqual(Object.keys(res.frame.sm).toSorted(), [
+        "error",
         "id",
         "message",
         "ok",

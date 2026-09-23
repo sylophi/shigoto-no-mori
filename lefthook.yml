@@ -36,8 +36,16 @@ pre-commit:
     # the invariant through allContractModules), so adding an untagged
     # host invoke also trips it.
     socket-host:
-      glob: "{host/socket/**,host/ipc/modules/globalConfig.ts,host/ipc/modules/remoteAccess.ts,shared/ipc/**,shared/schemas/**,shared/hub/protocol.ts,main/ipc/register.ts,test/socket-host.mjs,test/lib/checkKit.mjs}"
+      glob: "{host/socket/**,host/ipc/modules/globalConfig.ts,host/ipc/modules/remoteAccess.ts,shared/ipc/**,shared/errors.ts,shared/errorOf.ts,shared/schemas/**,shared/hub/protocol.ts,main/ipc/register.ts,test/socket-host.mjs,test/lib/checkKit.mjs}"
       run: pnpm test socket-host
+    # The typed-error wire codec, pure: encodeWireError's tag, message
+    # and JSON-only fields, the WireError rebuild (hostile keys cannot
+    # pollute it, a hop re-encodes the same shape), the shape schema and
+    # the res frame's additive error field, tag-first matchers with the
+    # message fallback an older peer needs, and the Electron envelope.
+    wire-error:
+      glob: "{shared/errors.ts,shared/errorOf.ts,shared/ipc/wireError.ts,shared/ipc/socket/frames.ts,test/wire-error.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test wire-error
     # Typechecks the hub Worker package and runs its vitest suite
     # inside workerd (real D1, Durable Object and websocket bindings)
     # against the shared app-to-worker protocol, so enrollment, ticket,
@@ -56,13 +64,14 @@ pre-commit:
     # envelope protocol) and drives two REAL hub connections through the
     # real link, asserting the sm hello/welcome over the device hub, id
     # correlation, the void-field framing invariant, broadcast gating,
-    # message-only error serialization, the local outbound size guard,
+    # error serialization (message only, plus the typed error field for
+    # a tagged error), the local outbound size guard,
     # offline nacks, presence-driven peer teardown, fresh-ticket
     # redials, the revoked/superseded blocked verdicts, the ignored
     # hello token and the per-peer in-flight cap. Gated to the hub
     # transport surface plus the sm frame layer it multiplexes.
     hub-link:
-      glob: "{shared/hub/**,shared/remote/**,host/hub/**,shared/ipc/socket/**,shared/ipc/registerContract.ts,shared/ipc/modules/remoteAccess.ts,host/ipc/modules/remoteAccess.ts,shared/util/limit.ts,test/hub-link.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs}"
+      glob: "{shared/hub/**,shared/remote/**,host/hub/**,shared/ipc/socket/**,shared/ipc/wireError.ts,shared/errors.ts,shared/errorOf.ts,shared/ipc/registerContract.ts,shared/ipc/modules/remoteAccess.ts,host/ipc/modules/remoteAccess.ts,shared/util/limit.ts,test/hub-link.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs}"
       run: pnpm test hub-link
     # Durable proof for the direct data plane (supervised by the keeper): boots the stub Durable Object plus a REAL ticket-mode
     # listener on an ephemeral loopback port, brokers connect tickets
@@ -98,10 +107,11 @@ pre-commit:
     # real direct wire against real git. Asserts the hello gate and the
     # owner-only token file, every app-not-running dead end, device and
     # worktree resolution by code, streamed progress, the source fates,
-    # exit 3 on a caveat, and the mirror stop guard. Gated to the
+    # exit 3 on a caveat, the mirror stop guard, and the typed error
+    # field beside a ControlError's top-level code. Gated to the
     # control surface plus the sync surface and CLI it rides.
     control:
-      glob: "{cli/**,shared/ipc/modules/control.ts,shared/ipc/modules/sync.ts,shared/ipc/modules/mirror.ts,shared/ipc/modules/worktrees.ts,shared/ipc/modules/projects.ts,shared/ipc/modules/remoteAccess.ts,shared/leaveOutRule.ts,shared/sharedSettings.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,host/ipc/modules/control.ts,host/ipc/modules/sync.ts,host/ipc/modules/mirror.ts,host/ipc/modules/worktrees.ts,host/ipc/peerSync.ts,host/ipc/cliDelegate.ts,host/mirror/**,host/lib/sync/**,host/lib/git/**,host/lib/util/paths.ts,main/core/control/**,main/core/portForward/bridge.ts,test/control.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs,test/lib/directBoot.mjs}"
+      glob: "{cli/**,shared/ipc/modules/control.ts,shared/ipc/wireError.ts,shared/errors.ts,shared/errorOf.ts,shared/ipc/modules/sync.ts,shared/ipc/modules/mirror.ts,shared/ipc/modules/worktrees.ts,shared/ipc/modules/projects.ts,shared/ipc/modules/remoteAccess.ts,shared/leaveOutRule.ts,shared/sharedSettings.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,host/ipc/modules/control.ts,host/ipc/modules/sync.ts,host/ipc/modules/mirror.ts,host/ipc/modules/worktrees.ts,host/ipc/peerSync.ts,host/ipc/cliDelegate.ts,host/mirror/**,host/lib/sync/**,host/lib/git/**,host/lib/util/paths.ts,main/core/control/**,main/core/portForward/bridge.ts,test/control.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs,test/lib/directBoot.mjs}"
       run: pnpm test control
     # End-to-end proof for the port-forward wire: drives the host-side
     # forward verbs between two REAL hub connections against real
@@ -152,11 +162,12 @@ pre-commit:
     # the localStorage-backed clientConfig and credential stores, the
     # stable per-browser deviceId, the Clerk session-token enroll
     # (platform "web") and the sign-out revoke, the schema-derived
-    # stubs for OS-bound channels, and the typed
+    # stubs for OS-bound channels, the typed NoDirectConnection a
+    # sessionless peer call rejects with, and the typed
     # unconfigured/origin-blocked access states that keep a
     # misconfigured deployment from looping the hub supervisor.
     web-bridge:
-      glob: "{web/**,shared/account/**,shared/ipc/**,shared/hub/protocol.ts,test/web-bridge.mjs,test/lib/checkKit.mjs}"
+      glob: "{web/**,shared/account/**,shared/ipc/**,shared/hub/protocol.ts,shared/hub/bridgeHandlers.ts,shared/errors.ts,shared/errorOf.ts,test/web-bridge.mjs,test/lib/checkKit.mjs}"
       run: pnpm test web-bridge
     # Drives the shared settings merge and both places a copy lives
     # (the host's registry.json key, the browser's localStorage) through

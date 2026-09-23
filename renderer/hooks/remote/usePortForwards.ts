@@ -13,8 +13,12 @@
 // an api the caller does not need.
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { errorMessageOf } from "@shared/errors";
-import { FORWARD_TOO_MANY_CONNS } from "@shared/ipc/modules/forward";
+import {
+  errorMessageOf,
+  isChannelOpenRefused,
+  isPortDeniedError,
+  isPortInUseError,
+} from "@shared/errors";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { queryKeys } from "@/lib/queryKeys";
 import { notifyError } from "@/lib/toast";
@@ -60,9 +64,9 @@ function usePortForwardList() {
   });
 }
 
-// The host's coded refusals (the FORWARD_* markers beside the contract)
-// and node's bind errors (stable OS codes), in words a row can show
-// inline. Anything else passes through as the engine said it.
+// The host's typed refusals and the engine's typed bind errors
+// (shared/errors.ts), in words a row can show inline. Anything else
+// passes through as the engine said it.
 export function describeForwardError(
   error: unknown,
   ports: { remotePort: number; localPort?: number },
@@ -70,17 +74,16 @@ export function describeForwardError(
   if (isCommandRefusedError(error)) {
     return peerReadOnlyNote();
   }
-  const message = errorMessageOf(error);
-  if (message.includes("EADDRINUSE")) {
+  if (isPortInUseError(error)) {
     return `localhost:${ports.localPort ?? ports.remotePort} is already taken on this machine. Pick another local port.`;
   }
-  if (message.includes("EACCES")) {
+  if (isPortDeniedError(error)) {
     return `localhost:${ports.localPort ?? ports.remotePort} needs elevated privileges here. Pick a port above 1024.`;
   }
-  if (message.startsWith(FORWARD_TOO_MANY_CONNS)) {
+  if (isChannelOpenRefused(error, "too-many-conns")) {
     return "That device already has as many forwarded connections open as it allows.";
   }
-  return message;
+  return errorMessageOf(error);
 }
 
 export function usePortForwards(deviceId: string) {

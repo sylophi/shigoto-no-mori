@@ -3,6 +3,7 @@
 // shell out to git directly.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { Schema } from "effect";
 import { beginGitSelfWrite } from "../util/selfWrite";
 
 const execFileP = promisify(execFile);
@@ -108,18 +109,76 @@ const DEFAULT_MAX_BUFFER = 10 * 1024 * 1024;
 // A patch is the one output whose size the user decides rather than the
 // app: one regenerated lockfile or checked-in bundle runs to tens of
 // megabytes on its own. Sized to swallow that, because the alternative
-// isn't a smaller patch but a wrong one (see isTruncated).
+// isn't a smaller patch but a wrong one (see GitOutputTruncated).
 export const PATCH_MAX_BUFFER = 64 * 1024 * 1024;
+
+// git ran and failed: a non-zero exit, or a kill by signal (exitCode
+// null). Callers that need to tell failures apart read `stderr` or
+// `exitCode`, never the message. A failure to start git at all (no
+// binary, a missing cwd) is not one of these: it stays Node's own
+// errno error, whose "spawn git ENOENT" is the useful part.
+export class GitError extends Schema.TaggedError<GitError>()("GitError", {
+  stderr: Schema.String,
+  // What git printed before it failed. runLenient answers with it.
+  stdout: Schema.String,
+  exitCode: Schema.NullOr(Schema.Number),
+}) {
+  // Git's own words. execFile's message is "Command failed: git
+  // <argv>\n<stderr>", and the argv repeats whatever was passed (a
+  // commit message, a path list, a clone URL) and says nothing a user
+  // can act on, so it is never part of this.
+  override get message(): string {
+    const stderr = this.stderr.trim();
+    if (stderr) return stderr;
+    return this.exitCode === null
+      ? "git was stopped before it finished."
+      : `git exited with code ${this.exitCode}.`;
+  }
+}
 
 // Node kills the child once its output passes maxBuffer and reports the
 // truncated stdout alongside the error. That is not a git failure and
 // must never be treated as one: the output is a prefix of the real
 // thing, which for a patch means whole files silently missing from the
 // end of it.
-function isTruncated(err: unknown): boolean {
-  return (
-    (err as { code?: string }).code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
-  );
+export class GitOutputTruncated extends Schema.TaggedError<GitOutputTruncated>()(
+  "GitOutputTruncated",
+  {},
+) {
+  override get message(): string {
+    return "git produced more output than the app can hold.";
+  }
+}
+
+// execFile's rejection, as the promisified form hands it over.
+interface ExecFileFailure {
+  code?: unknown;
+  signal?: unknown;
+  stdout?: unknown;
+  stderr?: unknown;
+}
+
+function asText(value: unknown): string {
+  if (typeof value === "string") return value;
+  return Buffer.isBuffer(value) ? value.toString("utf8") : "";
+}
+
+// The typed form of an execFile rejection, or the rejection itself when
+// git never ran. A numeric `code` is git's exit status; a string one is
+// an errno from the spawn or Node's maxBuffer kill; neither with a
+// signal set is a kill.
+function gitFailure(err: unknown): unknown {
+  if (typeof err !== "object" || err === null) return err;
+  const { code, signal, stdout, stderr } = err as ExecFileFailure;
+  if (code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
+    return new GitOutputTruncated();
+  }
+  if (typeof code !== "number" && typeof signal !== "string") return err;
+  return new GitError({
+    stderr: asText(stderr),
+    stdout: asText(stdout),
+    exitCode: typeof code === "number" ? code : null,
+  });
 }
 
 async function exec(
@@ -142,18 +201,7 @@ async function exec(
     });
     return { stdout: result.stdout };
   } catch (err) {
-    // execFile's message is "Command failed: git <argv>\n<stderr>". The
-    // argv repeats whatever was passed (a commit message, a path list)
-    // and says nothing a user can act on. Git's own words do. Keep the
-    // stdout the lenient callers read, and the rest of the error.
-    const failure = err as Error & { stdout?: string; stderr?: string };
-    if (isTruncated(err)) {
-      failure.message = "git produced more output than the app can hold.";
-      throw failure;
-    }
-    const stderr = failure.stderr?.trim();
-    if (stderr) failure.message = stderr;
-    throw failure;
+    throw gitFailure(err);
   } finally {
     endSelfWrite?.();
   }
@@ -188,8 +236,9 @@ export async function runLenient(
   try {
     return await run(cwd, args, options);
   } catch (err) {
-    if (isTruncated(err)) throw err;
-    return (err as { stdout?: string }).stdout ?? "";
+    if (err instanceof GitError) return err.stdout;
+    if (err instanceof GitOutputTruncated) throw err;
+    return "";
   }
 }
 

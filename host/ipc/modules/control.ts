@@ -128,18 +128,20 @@ async function roster(): Promise<{ here: Named; peers: DeviceInfo[] }> {
     // from the account while the app held it) is the signed-out case
     // with a reason, not a raw hub error for the CLI to print.
     if (!isHubRefusal(error)) throw error;
-    throw new ControlError(
-      "signed-out",
-      "This device's access to the account was removed. Sign in again from the app.",
-    );
+    throw new ControlError({
+      code: "signed-out",
+      message:
+        "This device's access to the account was removed. Sign in again from the app.",
+    });
   }
   const hereId = thisDeviceId();
   const here = devices.find((device) => device.deviceId === hereId);
   if (here === undefined) {
-    throw new ControlError(
-      "signed-out",
-      "This device isn't signed in to an account, so it has no other devices to reach. Sign in from the app first.",
-    );
+    throw new ControlError({
+      code: "signed-out",
+      message:
+        "This device isn't signed in to an account, so it has no other devices to reach. Sign in from the app first.",
+    });
   }
   return {
     here: { deviceId: hereId, name: nameOf(here) },
@@ -251,25 +253,26 @@ async function candidates(
 ): Promise<{ identity: string | null; standings: ControlDevice[] }> {
   const { peers } = await roster();
   if (peers.length === 0) {
-    throw new ControlError(
-      "no-device",
-      "This account has no other device. Sign in to the app on another machine first.",
-    );
+    throw new ControlError({
+      code: "no-device",
+      message:
+        "This account has no other device. Sign in to the app on another machine first.",
+    });
   }
   let asked = peers;
   if (query !== undefined) {
     asked = matchDevices(peers, query);
     if (asked.length === 0) {
-      throw new ControlError(
-        "no-device",
-        `No device is named "${query}". The account's other devices: ${listed(peers.map((device) => ({ name: nameOf(device) })))}.`,
-      );
+      throw new ControlError({
+        code: "no-device",
+        message: `No device is named "${query}". The account's other devices: ${listed(peers.map((device) => ({ name: nameOf(device) })))}.`,
+      });
     }
     if (asked.length > 1) {
-      throw new ControlError(
-        "ambiguous-device",
-        `"${query}" matches several devices: ${listed(asked.map((device) => ({ name: nameOf(device) })))}. Name one in full, or pass its id.`,
-      );
+      throw new ControlError({
+        code: "ambiguous-device",
+        message: `"${query}" matches several devices: ${listed(asked.map((device) => ({ name: nameOf(device) })))}. Name one in full, or pass its id.`,
+      });
     }
   }
   const identity = await repoIdentityOf(project);
@@ -287,22 +290,23 @@ async function pickDevice(
   const ready = standings.filter((device) => device.block === undefined);
   if (ready.length === 1) return { identity, target: ready[0] };
   if (ready.length > 1) {
-    throw new ControlError(
-      "ambiguous-device",
-      `Several devices could take part: ${listed(ready)}. Name one.`,
-    );
+    throw new ControlError({
+      code: "ambiguous-device",
+      message: `Several devices could take part: ${listed(ready)}. Name one.`,
+    });
   }
   const why = standings
     .map(
       (device) => `"${device.name}" ${BLOCK_REASON[device.block ?? "offline"]}`,
     )
     .join(", ");
-  throw new ControlError(
-    "device-blocked",
-    query === undefined
-      ? `No other device can take part: ${why}.`
-      : `${why.charAt(0).toUpperCase()}${why.slice(1)}.`,
-  );
+  throw new ControlError({
+    code: "device-blocked",
+    message:
+      query === undefined
+        ? `No other device can take part: ${why}.`
+        : `${why.charAt(0).toUpperCase()}${why.slice(1)}.`,
+  });
 }
 
 function presetSelection(identity: string | null): IgnoreSelection {
@@ -470,10 +474,10 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
       // A device asked for by name and not there is a refusal, not an
       // empty list.
       if (device !== undefined && unreachable.length > 0) {
-        throw new ControlError(
-          "device-blocked",
-          `"${unreachable[0].name}" ${BLOCK_REASON.offline}.`,
-        );
+        throw new ControlError({
+          code: "device-blocked",
+          message: `"${unreachable[0].name}" ${BLOCK_REASON.offline}.`,
+        });
       }
       const { worktrees, unanswered } = await worktreesOn(standings);
       return {
@@ -548,19 +552,20 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
         (device) => device.deviceId === found.device.deviceId,
       );
       if (standing?.block !== undefined) {
-        throw new ControlError(
-          "device-blocked",
-          `"${found.device.name}" ${BLOCK_REASON[standing.block]}.`,
-        );
+        throw new ControlError({
+          code: "device-blocked",
+          message: `"${found.device.name}" ${BLOCK_REASON[standing.block]}.`,
+        });
       }
       if (identity === null) {
         // Unreachable past pickWorktree (a null identity matches no
         // peer, so none listed a worktree), kept so the payload below
         // is typed honestly.
-        throw new ControlError(
-          "device-blocked",
-          "This repo has no shared identity, so it can't be matched with another device's.",
-        );
+        throw new ControlError({
+          code: "device-blocked",
+          message:
+            "This repo has no shared identity, so it can't be matched with another device's.",
+        });
       }
       const choice = await choiceFor(identity, input, () =>
         peerSyncApiFor(found.device.deviceId).ignoredPaths({
@@ -623,7 +628,10 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
     mirrorStop: async ({ force, ...target }, ctx) => {
       const session = await mirrorOf(ctx, target);
       if (session === undefined) {
-        throw new ControlError("no-mirror", "That worktree isn't mirrored.");
+        throw new ControlError({
+          code: "no-mirror",
+          message: "That worktree isn't mirrored.",
+        });
       }
       // The names are only for the answer, so they are read beside the
       // stop and not after it.
@@ -633,7 +641,10 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
         await mirrorHandlers.stop({ session: session.session, force }, ctx);
       } catch (error) {
         if (isMirrorStopUnconfirmed(error)) {
-          throw new ControlError("stop-unconfirmed", errorMessageOf(error));
+          throw new ControlError({
+            code: "stop-unconfirmed",
+            message: errorMessageOf(error),
+          });
         }
         // Thrown with the session already gone, so the stop is the
         // answer and the copy that stayed is a caveat on it.
@@ -668,10 +679,10 @@ async function alreadyMirrored(
     // The same reading of a name a fresh start would make.
     const named = matchDevices(registry, device);
     if (named.length !== 1 || named[0].deviceId !== session.deviceId) {
-      throw new ControlError(
-        "device-blocked",
-        `This worktree is already mirrored with "${view.device.name}", and a worktree holds one mirror. Stop that one first (sm worktrees unmirror).`,
-      );
+      throw new ControlError({
+        code: "device-blocked",
+        message: `This worktree is already mirrored with "${view.device.name}", and a worktree holds one mirror. Stop that one first (sm worktrees unmirror).`,
+      });
     }
   }
   const copy = mirrorCopyIsRemote(session)
@@ -685,10 +696,10 @@ async function alreadyMirrored(
       ).find((worktree) => worktree.id === session.localWorktreeId);
   if (copy === undefined) {
     // Not a reason to start a second session beside the first.
-    throw new ControlError(
-      "no-worktree",
-      `This worktree is mirrored with "${view.device.name}", but its copy is gone. Stop the mirror (sm worktrees unmirror -f) before starting another.`,
-    );
+    throw new ControlError({
+      code: "no-worktree",
+      message: `This worktree is mirrored with "${view.device.name}", but its copy is gone. Stop the mirror (sm worktrees unmirror -f) before starting another.`,
+    });
   }
   return {
     worktree: copy,
@@ -755,22 +766,22 @@ function pickWorktree(
   const found = all.filter((entry) => matchesWorktree(entry.worktree, query));
   if (found.length === 1) return found[0];
   if (found.length > 1) {
-    throw new ControlError(
-      "ambiguous-worktree",
-      `"${query}" is on several devices: ${listed(found.map((entry) => entry.device))}. Name one with --from.`,
-    );
+    throw new ControlError({
+      code: "ambiguous-worktree",
+      message: `"${query}" is on several devices: ${listed(found.map((entry) => entry.device))}. Name one with --from.`,
+    });
   }
   const known = all
     .map((entry) => `${entry.worktree.name} (${entry.device.name})`)
     .join(", ");
-  throw new ControlError(
-    "no-worktree",
-    [
+  throw new ControlError({
+    code: "no-worktree",
+    message: [
       `No worktree "${query}" on another device.`,
       known === "" ? "" : ` There: ${known}.`,
       unreachable.length === 0
         ? ""
         : ` Not reached, so not looked at: ${listed(unreachable)}.`,
     ].join(""),
-  );
+  });
 }

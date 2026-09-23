@@ -1,6 +1,4 @@
-import { CHANNEL_OPEN_TOO_MANY } from "@shared/ipc/socket/channels";
 import { z } from "zod";
-import { errorMessageOf } from "@shared/errors";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { HexId32Schema } from "@shared/ipc/hexId";
 import { PortNumberSchema } from "@shared/schemas";
@@ -31,22 +29,10 @@ import { PortNumberSchema } from "@shared/schemas";
 // already attached on that connection.
 const ChannelIdSchema = HexId32Schema;
 
-// The host's coded refusals, as the exact message texts the client
-// side matches on (the engine's start probe, the UI's inline wording).
-// Electron IPC and the device wires preserve only the message string,
-// so the marker IS the message: mint and match through these, never a
-// literal.
-// connect-failed is a prefix, the rest are the whole message.
-export const FORWARD_CONNECT_FAILED = "connect-failed";
-
-// The host dialed the port and nothing answered: the one refusal that
-// says something about the port rather than the peer or the grant.
-export function isForwardConnectFailedError(error: unknown): boolean {
-  return errorMessageOf(error).startsWith(FORWARD_CONNECT_FAILED);
-}
-// The channel layer's own refusals, under the names the forward UI
-// matches (renderer/hooks/remote/usePortForwards.ts).
-export const FORWARD_TOO_MANY_CONNS = CHANNEL_OPEN_TOO_MANY;
+// The host's refusals are typed errors in shared/errors.ts:
+// ForwardConnectFailed when the dial finds nothing on the port (the
+// engine's start probe lets that one through), ChannelOpenRefused from
+// the channel layer (the forward UI words too-many-conns inline).
 
 const ForwardOpenPayloadSchema = z.strictObject({
   port: PortNumberSchema,

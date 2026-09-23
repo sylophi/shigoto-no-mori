@@ -16,9 +16,12 @@
 import { coalesce } from "@host/lib/util/coalesce";
 import { createServer, type Server, type Socket } from "node:net";
 import {
-  type forwardContract,
+  errorCodeOf,
   isForwardConnectFailedError,
-} from "@shared/ipc/modules/forward";
+  PortDenied,
+  PortInUse,
+} from "@shared/errors";
+import type { forwardContract } from "@shared/ipc/modules/forward";
 import type { Client } from "@shared/ipc/types";
 import { mintHexId } from "@host/lib/idleRegistry";
 import {
@@ -70,6 +73,21 @@ type Forward = {
 };
 
 export type PortForwardEngine = ReturnType<typeof createPortForwardEngine>;
+
+// The bind errnos a person can act on (another local port, one above
+// 1024), typed for the forward UI (renderer/hooks/remote/
+// usePortForwards.ts). Any other bind failure passes through as node
+// raised it.
+function typedBindError(error: unknown, port: number): unknown {
+  switch (errorCodeOf(error)) {
+    case "EADDRINUSE":
+      return new PortInUse({ port });
+    case "EACCES":
+      return new PortDenied({ port });
+    default:
+      return error;
+  }
+}
 
 export function createPortForwardEngine(deps: {
   forwardApiFor: (deviceId: string) => ForwardApi;
@@ -171,7 +189,11 @@ export function createPortForwardEngine(deps: {
     // keeps the other flowing), but node's default would auto-end the
     // writable side and drop the remote's response.
     const server = createServer({ allowHalfOpen: true });
-    const localPort = await listenLoopback(server, input.localPort ?? 0);
+    const localPort = await listenLoopback(server, input.localPort ?? 0).catch(
+      (error: unknown) => {
+        throw typedBindError(error, input.localPort ?? 0);
+      },
+    );
     // The dedupe scan above ran before two awaits, so a concurrent
     // start for the same pair may have bound in the meantime: yield to
     // the twin and release the just-bound listener. The forward being

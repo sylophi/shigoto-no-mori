@@ -123,9 +123,16 @@ function contextFor(sender: WebContents): HandlerContext {
 const electronServer: ServerTransport = {
   handle(channel, fn) {
     // Resolves an envelope rather than rejecting, so a typed error's
-    // tag and fields reach the renderer (shared/ipc/wireError.ts).
+    // tag and fields reach the renderer (shared/ipc/wireError.ts). The
+    // warn keeps the line Electron used to print for a rejected
+    // handler, so a failure still shows in the main process log.
     ipcMain.handle(channel, (event, raw) =>
-      settleEnvelope(() => fn(contextFor(event.sender), raw)),
+      settleEnvelope(() =>
+        fn(contextFor(event.sender), raw).catch((error: unknown) => {
+          console.warn(`[ipc] ${channel} failed: ${errorMessageOf(error)}`);
+          throw error;
+        }),
+      ),
     );
   },
   // Payloads arrive already parsed from the shared fan-out path.

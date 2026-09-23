@@ -33,6 +33,10 @@
 //     (stop-unconfirmed), then removes the peer's copy.
 //   - `mirror --from` copies the peer's worktree here under a session
 //     whose copy is local, which `unmirror` removes, original kept.
+//   - typed errors on the control wire: a ControlError keeps its code
+//     on the top-level res frame, and a handler's tagged error rides the
+//     additive `error` field (tag and fields) beside the message without
+//     tripping the CLI, which still prints the message.
 //
 // Every worktree is named with -p: a landed copy keeps its source's
 // folder name, and with both projects in one registry the bare name
@@ -78,6 +82,7 @@ import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { initDataDirAt } from "@host/lib/util/paths";
+import { unknownWorktreeError } from "@shared/errors";
 import {
   CONTROL_FILE_NAME,
   createControlServer,
@@ -373,12 +378,13 @@ async function main() {
           : result;
       },
     };
-    setControlImpl({
+    const controlImpl = {
       listDevices: async () => registry,
       thisDeviceId: () => "B",
       connectedDeviceIds: async () => connected,
       peerTransportFor: () => peerTransport,
-    });
+    };
+    setControlImpl(controlImpl);
     const engine = fakeMirrorEngine();
     setMirrorImpl(engine.impl);
 
@@ -811,6 +817,51 @@ async function main() {
       /not connected/,
     );
     ok("a peer with no session is reported offline");
+
+    // ---- (8b) Typed errors on the control wire. The CLI keys on the
+    // top-level code, so a ControlError must keep it there whatever else
+    // rides; and the typed `error` field beside the message is additive,
+    // so the Go reader must ignore it and still print the message.
+    const devicesRes = async () =>
+      (
+        await rawExchange(published.port, [
+          { t: "hello", token: published.token },
+          { t: "req", id: 1, channel: "control:devices", input: {} },
+        ])
+      )[1];
+    setControlImpl({ ...controlImpl, thisDeviceId: () => "nobody-here" });
+    const signedOut = await devicesRes();
+    assert.equal(signedOut.ok, false);
+    assert.equal(signedOut.code, "signed-out", "the code left the top level");
+    assert.match(signedOut.message, /isn't signed in/);
+    // A ControlError is a tagged error, so it also rides the typed form,
+    // its code a field of it.
+    assert.deepEqual(signedOut.error, {
+      _tag: "ControlError",
+      code: "signed-out",
+      message: signedOut.message,
+    });
+    await refused(["devices"], "signed-out", /isn't signed in/);
+    setControlImpl({
+      ...controlImpl,
+      listDevices: async () => {
+        throw unknownWorktreeError("wt-gone");
+      },
+    });
+    const gone = await devicesRes();
+    assert.equal(gone.ok, false);
+    assert.equal(gone.message, "Unknown worktree: wt-gone");
+    assert.equal("code" in gone, false, "an uncoded error grew a code");
+    assert.deepEqual(gone.error, {
+      _tag: "UnknownWorktree",
+      worktreeId: "wt-gone",
+      message: "Unknown worktree: wt-gone",
+    });
+    await refused(["devices"], undefined, /Unknown worktree: wt-gone/);
+    setControlImpl(controlImpl);
+    ok(
+      "typed errors: a ControlError keeps its code on the top-level res, and a tagged error's additive error field reaches the real CLI, which still prints the message",
+    );
 
     // ---- (9) A data wipe takes control.json with the rest of the data
     // dir while the app lives on. The wipe's last step puts it back.
