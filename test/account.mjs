@@ -502,7 +502,7 @@ async function main() {
   );
 
   await check(
-    "icon pick: setDeviceKind stores the pick and pushes it, null drops the pick and pushes the detection, and signed out there is nothing to pick",
+    "icon pick: setDeviceKind stores the pick and pushes it, null (or the detected kind) drops the pick and pushes the detection, and signed out there is nothing to pick",
     async () => {
       const { fetchImpl, calls } = recordingFetch(
         () => new Response(null, { status: 204 }),
@@ -539,11 +539,20 @@ async function main() {
         accountId: "a",
         deviceName: "d",
       });
+      // Picking the detected kind is the same as dropping the pick (a
+      // peer's picker sends the kind itself): it clears a stored pick,
+      // and with none stored there is nothing to write.
+      assert.equal(setDeviceKind(deps, "mini"), true);
+      assert.equal(setDeviceKind(deps, "laptop"), true);
+      assert.equal(store.read().deviceKind, undefined);
+      assert.equal(setDeviceKind(deps, "laptop"), false);
       // The push is fire-and-forget: give it a tick to land.
       await new Promise((resolve) => setTimeout(resolve, 0));
       assert.deepEqual(
         calls.map((c) => [c.init.method, JSON.parse(c.init.body)]),
         [
+          ["PATCH", { kind: "mini" }],
+          ["PATCH", { kind: "laptop" }],
           ["PATCH", { kind: "mini" }],
           ["PATCH", { kind: "laptop" }],
         ],

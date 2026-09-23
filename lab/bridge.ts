@@ -8,7 +8,7 @@
 //
 // window.smLab carries the posing controls: flip a peer's presence,
 // change the socket phase, navigate the memory router.
-import type { DeviceKind } from "@shared/account/deviceKind";
+import { resolveDeviceKind, type DeviceKind } from "@shared/account/deviceKind";
 import { buildApi } from "@shared/ipc/client";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import type {
@@ -205,6 +205,16 @@ function hostHandlersFor(
     Object.entries(labCustomPorts).map(([id, ports]) => [id, { ports }]),
   );
   const allWorktrees = () => Object.values(forest.worktrees).flat();
+  // The icon a peer's picker reads and picks. What the fixture
+  // registry lists stands in for the device's detection, and a pick
+  // lands on that same entry, as the peer's own hub push would.
+  const registryEntry = accountDevices.find(
+    (device) => device.deviceId === forest.deviceId,
+  );
+  const detectedHere = resolveDeviceKind(
+    registryEntry?.kind ?? null,
+    registryEntry?.platform ?? "darwin",
+  );
   const findWorktree = (worktreeId: string) =>
     allWorktrees().find((worktree) => worktree.id === worktreeId);
   const branchesOf = () => [
@@ -327,6 +337,11 @@ function hostHandlersFor(
       ),
     }),
     "remoteAccess:commandAccess": () => ({ granted: forest.grantsCaller }),
+    "device:detectedKind": () => detectedHere,
+    "device:setKind": (kind: DeviceKind) => {
+      if (registryEntry !== undefined) registryEntry.kind = kind;
+      return kind;
+    },
     // The stub's shape with a full create lifecycle on it (carry-over,
     // a setup script, and ports below), so the pull dialogs' setup
     // switch and their running steps have every phase to name.
@@ -1034,7 +1049,8 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
       return accountStatus();
     },
     "account:setDeviceKind": (kind: DeviceKind | null) => {
-      deviceKind = kind;
+      // The store's rule: the detected kind is no pick.
+      deviceKind = kind === detectedKind() ? null : kind;
       client.emit("account:changed", { accountId: accountStatus().accountId });
       return accountStatus();
     },

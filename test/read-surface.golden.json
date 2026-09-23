@@ -1,4 +1,5 @@
 [
+  "device:detectedKind",
   "direct:connectInfo",
   "git:sweep",
   "githubCli:projectPullRequests",

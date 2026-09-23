@@ -196,6 +196,10 @@ function buildQueryKeys(deviceId: string) {
     // never reaches this key.
     commandAccess: () => host("commandAccess"),
 
+    // Host-scoped: what a peer detected itself to be, read by its icon
+    // picker on this device's Devices page.
+    detectedDeviceKind: () => host("detectedDeviceKind"),
+
     // Client-scoped: the store lives in this app instance's userData, so
     // no host sentinel and no device id.
     clientConfig: () => ["clientConfig"] as const,
@@ -305,6 +309,8 @@ const externalChangeExempt = new Set([
   // A permission verdict, not state: it moves only on a grant or
   // revoke on the host, never because that host's git state did.
   "commandAccess",
+  // Fixed for the host's process, and no forest state.
+  "detectedDeviceKind",
   "fs",
   "githubCli",
   // Driven by its own changed broadcast, like portForwards and updater.

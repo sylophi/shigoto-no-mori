@@ -181,17 +181,20 @@ export function renameDevice(
 
 // The icon pick, the rename's twin: the local store write (null drops
 // the pick, so the device goes back to what it detected), then the
-// best-effort hub push of the kind the device now reports. Resolves
-// true when a pick was written. Signed out there is nothing to pick
-// against, like the rename, and a pick that changes nothing (the
-// current tile clicked again) writes and pushes nothing.
+// best-effort hub push of the kind the device now reports. Picking
+// the detected kind drops the pick too, so a device put back to its
+// default carries no override a later, better detection could not
+// move. Resolves true when a pick was written. Signed out there is
+// nothing to pick against, like the rename, and a pick that changes
+// nothing (the current tile clicked again) writes and pushes nothing.
 export function setDeviceKind(
   deps: Pick<
     EnrollDeviceDeps,
     "config" | "service" | "store" | "deviceId" | "detectedKind"
   >,
-  kind: DeviceKind | null,
+  picked: DeviceKind | null,
 ): boolean {
+  const kind = picked === deps.detectedKind ? null : picked;
   const record = deps.store.read();
   if (record === null || (record.deviceKind ?? null) === kind) return false;
   const { deviceKind: _dropped, ...rest } = record;

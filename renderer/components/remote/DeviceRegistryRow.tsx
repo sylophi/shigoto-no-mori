@@ -6,7 +6,9 @@
 // it and whether it stays reachable to them. A peer's row makes no decision about the
 // peer: what a machine allows is decided on that machine, so a peer
 // row only reports the answer (read-only from here, or not) and holds
-// the forwards this machine has open against it.
+// the forwards this machine has open against it. A peer that allows
+// control from here lends its mark the icon picker too, since the pick
+// is then the peer's own, made through its api.
 //
 // Everything about a device is inside its own row, so nothing about a
 // machine ever floats in a section of its own where it has to re-name
@@ -24,6 +26,8 @@ import { Button } from "@/components/ui/button";
 import { RowTag } from "@/components/ui/row-tag";
 import { StatusDot, TONE_TEXT } from "@/components/ui/status-dot";
 import type { CommandAccess } from "@/hooks/remote/useCommandAccess";
+import type { HostApi } from "@/hooks/remote/useHostScope";
+import { usePeerDetectedKind } from "@/hooks/remote/usePeerDeviceKind";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import {
   CONFIRM_DESTRUCTIVE_MS,
@@ -34,7 +38,7 @@ import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { cn } from "@/lib/utils";
 import { AcceptCommandsToggle } from "./AcceptCommandsToggle";
 import { DeviceHosts } from "./DeviceHosts";
-import { DeviceKindPicker } from "./DeviceKindPicker";
+import { DeviceKindPicker, PeerDeviceKindPicker } from "./DeviceKindPicker";
 import { DeviceNameField, DeviceRenameButton } from "./DeviceNameField";
 import { KeepReachableToggle } from "./KeepReachableToggle";
 import { PortForwardSection } from "./PortForwardSection";
@@ -56,6 +60,7 @@ export function DeviceRegistryRow({
   revokePending,
   tunnel,
   access,
+  api,
 }: {
   device: DeviceInfo;
   isThisDevice: boolean;
@@ -88,6 +93,9 @@ export function DeviceRegistryRow({
   // switch, as it answers us. Resolved once for every row by the
   // registry rather than per row. Ignored on the this-device row.
   access: CommandAccess;
+  // The peer's api while it has a session, for the icon pick made on
+  // its behalf. Ignored on the this-device row.
+  api: HostApi | undefined;
 }) {
   // The shared two-step confirm carries the armed flag, so an untouched
   // banner disarms itself.
@@ -113,13 +121,18 @@ export function DeviceRegistryRow({
   // itself failed (that is transport, not the peer's switch), when the
   // peer is unreachable (it cannot run anything anyway), or for a
   // browser, which has no switch to point at.
+  const peerUp = !isThisDevice && traits.exposable && status.reachable;
   const readOnlyHere =
-    !isThisDevice &&
-    traits.exposable &&
-    status.reachable &&
-    !access.isLoading &&
-    !access.isError &&
-    !access.granted;
+    peerUp && !access.isLoading && !access.isError && !access.granted;
+  // The peer has ANSWERED yes (not merely not answered yet, and not on
+  // a stale answer whose refresh failed): a picker that turned back
+  // into a plain mark on a refusal would be worse than one that
+  // appears a moment late. Its detected kind landing is the proof its
+  // build can take a pick.
+  const grantedHere = peerUp && access.granted && !access.isError;
+  const peerDetected = usePeerDetectedKind(device.deviceId, api, grantedHere);
+  const canPickForPeer =
+    grantedHere && api !== undefined && peerDetected !== undefined;
   const note = isThisDevice
     ? tunnelNote(tunnel)
     : readOnlyHere
@@ -144,6 +157,15 @@ export function DeviceRegistryRow({
             kind={kind}
             tone={status.tone}
             label={traits.selfLabel}
+          />
+        ) : canPickForPeer ? (
+          <PeerDeviceKindPicker
+            deviceId={device.deviceId}
+            api={api}
+            kind={kind}
+            detected={peerDetected}
+            tone={status.tone}
+            name={namedDevice}
           />
         ) : (
           <DeviceMark kind={kind} tone={status.tone} size="lg" />
