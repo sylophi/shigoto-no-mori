@@ -314,6 +314,10 @@ export const MirrorSessionSchema = z.strictObject({
   // Attached by the host from the git follower. Absent when the host
   // has no follower for it yet.
   git: MirrorGitStatusSchema.optional(),
+  // Set while a stop is under way: the engine has ended the session
+  // and the copy is being removed. The list keeps the session until
+  // the copy is gone, so the pair reads as one worktree throughout.
+  stopping: z.boolean().optional(),
 });
 export type MirrorSession = z.infer<typeof MirrorSessionSchema>;
 

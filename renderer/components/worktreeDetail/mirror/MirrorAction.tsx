@@ -58,7 +58,10 @@ function MirrorLinkAction({
 }) {
   const { deviceId: pageDeviceId } = useHostScope();
   const nav = useWorktreeNav();
-  const [open, setOpen] = useState(false);
+  // Open for one session: a stop ends with the session leaving the
+  // list and the dialog with it, and a later mirror on the same
+  // worktree starts closed.
+  const [openFor, setOpenFor] = useState<string | null>(null);
   const other = useDeviceName(link.otherDeviceId);
   // A stop that removed the copy this page is on leaves it the way a
   // delete does. A page on the other worktree stays.
@@ -70,14 +73,14 @@ function MirrorLinkAction({
       <FooterActionButton
         icon={<RefreshCw />}
         label={`Mirror with ${other}`}
-        onClick={() => setOpen(true)}
+        onClick={() => setOpenFor(session.session)}
       />
-      {open && (
+      {openFor === session.session && (
         <RunnerScope deviceId={link.runnerDeviceId} api={runnerApi}>
           <MirrorManageDialog
             session={session}
             otherDeviceId={link.otherDeviceId}
-            onClose={() => setOpen(false)}
+            onClose={() => setOpenFor(null)}
             onStopped={() => {
               if (pageIsCopy) nav.toFallback(true);
             }}

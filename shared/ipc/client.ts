@@ -441,6 +441,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       delete: worktreesClient.delete,
       onLifecyclePhase: worktreesClient.lifecyclePhase,
       onCarryOverComplete: worktreesClient.carryOverComplete,
+      onRemoval: worktreesClient.removal,
       renameBranch: worktreesClient.renameBranch,
       setShelved: worktreesClient.setShelved,
       setAutoPull: worktreesClient.setAutoPull,

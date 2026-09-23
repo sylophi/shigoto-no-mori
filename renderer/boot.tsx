@@ -41,11 +41,19 @@ import {
   invalidateHostProject,
   localDeviceId,
   queryKeys,
+  worktreeQueriesOn,
 } from "./lib/queryKeys";
 import { toast } from "./lib/toast";
 import { createAppRouter, type AppRouter } from "./router";
 import { scriptRuns } from "./store/scriptRuns";
-import { worktreeLifecycle } from "./store/worktreeLifecycle";
+import {
+  onWorktreeRemoval,
+  worktreeLifecycle,
+} from "./store/worktreeLifecycle";
+import {
+  forgetDeletedWorktree,
+  isOwnDeletePending,
+} from "./hooks/worktrees/useWorktreeMutations";
 import "./index.css";
 
 // Not render blocking, unlike index.css (see fonts.css). A failed fetch
@@ -63,6 +71,30 @@ export function bootApp({
   // opt-outs) lives in lib/queryClientOptions.ts.
   const queryClient = createAppQueryClient();
   const router = createAppRouter(history);
+
+  // A removal announced by any device (this machine or a peer) gets
+  // the treatment this window's own delete gives its worktree: its
+  // in-flight fetches cancelled as the delete starts (settled, they
+  // would answer "Unknown worktree" and toast), and its row and
+  // queries dropped the moment it is gone, for every viewer at once.
+  // This window's own delete is left to its mutation, which forgets
+  // the row and routes off it together once the invoke replies. Both
+  // shells: the web shell views peers' removals too.
+  onWorktreeRemoval((deviceId, removal) => {
+    if (isOwnDeletePending(queryClient, deviceId, removal.worktreeId)) return;
+    if (removal.state === "removing") {
+      void queryClient.cancelQueries({
+        predicate: worktreeQueriesOn(deviceId, removal.worktreeId),
+      });
+    } else if (removal.state === "removed") {
+      forgetDeletedWorktree(
+        queryClient,
+        deviceId,
+        removal.projectId,
+        removal.worktreeId,
+      );
+    }
+  });
 
   if (hasLocalHost) startLocalHost(queryClient);
 

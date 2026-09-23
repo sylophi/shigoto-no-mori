@@ -27,6 +27,7 @@ import {
   SetStagedPayloadSchema,
   WorktreeCarryOverCompleteSchema,
   WorktreeLifecyclePhaseSchema,
+  WorktreeRemovalSchema,
   WorktreeSchema,
   WorktreeScopedPayloadSchema,
 } from "@shared/schemas";
@@ -185,4 +186,7 @@ export const worktreesContract = defineContract("host", {
     WorktreeCarryOverCompleteSchema,
     { remote: true },
   ),
+  removal: broadcast("worktrees:removal", WorktreeRemovalSchema, {
+    remote: true,
+  }),
 });

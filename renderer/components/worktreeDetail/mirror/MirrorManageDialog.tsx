@@ -116,7 +116,10 @@ export function MirrorManageDialog({
   const copyName = useDeviceName(copy.deviceId);
   const keeper = useDeviceName(keeperDeviceId);
   const copyWhere = copy.deviceId === localDeviceId ? "here" : `on ${copyName}`;
+  // A session the runner lists as stopping is past its controls: the
+  // engine has ended it and the copy is on its way out.
   const busy =
+    session.stopping === true ||
     controls.pause.isPending ||
     controls.resume.isPending ||
     controls.stop.isPending;

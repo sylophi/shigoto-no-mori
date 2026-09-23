@@ -75,7 +75,10 @@ import { setMirrorImpl } from "@host/ipc/modules/mirror";
 import { projectsHandlers } from "@host/ipc/modules/projects";
 import { remoteAccessHandlers } from "@host/ipc/modules/remoteAccess";
 import { syncHandlers } from "@host/ipc/modules/sync";
-import { worktreesHandlers } from "@host/ipc/modules/worktrees";
+import {
+  setWorktreeRemovalBroadcaster,
+  worktreesHandlers,
+} from "@host/ipc/modules/worktrees";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { initDataDirAt } from "@host/lib/util/paths";
@@ -383,6 +386,16 @@ async function main() {
     });
     const engine = fakeMirrorEngine();
     setMirrorImpl(engine.impl);
+    // The delete's removal, as main fans it out to every window and
+    // peer. Each record notes which sessions had ended by then: the
+    // copy a stop removes is announced only once its session is gone,
+    // since the delete follows the terminate.
+    const removals = [];
+    setWorktreeRemovalBroadcaster((payload) =>
+      removals.push({ ...payload, endedThen: [...engine.state.terminated] }),
+    );
+    const removalsOf = (worktreeId) =>
+      removals.filter((entry) => entry.worktreeId === worktreeId);
 
     const control = createControlServer({
       appVersion: () => "9.9.9",
@@ -724,6 +737,11 @@ async function main() {
       "stopping removes the copy on the peer",
     );
     assert.equal(existsSync(mirrorPath), true, "and never the original");
+    assert.deepEqual(
+      removalsOf(mirrored.worktree.id).map((entry) => entry.state),
+      ["removing", "removed"],
+      "the peer announces the copy's removal, and that it is gone",
+    );
     await refused(
       ["worktrees", "unmirror", "wt-mirror", "-p", "source"],
       "no-mirror",
@@ -806,6 +824,17 @@ async function main() {
       "stopping removes the copy here",
     );
     assert.equal(existsSync(inPath), true, "and never the peer's original");
+    const inboundRemovals = removalsOf(inbound.worktree.id);
+    assert.deepEqual(
+      inboundRemovals.map((entry) => entry.state),
+      ["removing", "removed"],
+      "the local copy's removal is announced, and that it is gone",
+    );
+    assert.equal(inboundRemovals[0].projectId, targetProjectId);
+    assert.ok(
+      inboundRemovals[0].endedThen.includes(inbound.session),
+      "announced after the session ended: the delete follows the terminate",
+    );
     ok(
       "mirror --from: the peer's worktree is copied here under a session whose copy is local, a repeat from either end answers with that copy, --to with --from and a blank --from are refused as usage, and unmirror removes the local copy only",
     );

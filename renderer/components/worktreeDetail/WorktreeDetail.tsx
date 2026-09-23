@@ -1,5 +1,8 @@
-import { useScopedWorktreeParams } from "@/hooks/worktrees/useWorktreeNav";
-import { useEffect } from "react";
+import {
+  useScopedWorktreeParams,
+  useWorktreeNav,
+} from "@/hooks/worktrees/useWorktreeNav";
+import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { useProjects } from "@/hooks/projects/useProjects";
@@ -20,6 +23,26 @@ export function WorktreeDetail() {
   } = useWorktrees(projectId);
   const project = projects.find((p) => p.id === projectId);
   const worktree = worktrees.find((w) => w.id === worktreeId);
+  const nav = useWorktreeNav();
+
+  // A worktree that vanishes from under its open page (a mirror stop
+  // removed the copy, a peer tore its transplant source down here, a
+  // terminal ran sm rm) leaves the page the way this page's own delete
+  // does, instead of stranding it on "not found". Keyed on the route's
+  // pair so a page that opened on a missing worktree is not sent away,
+  // and a delete that already moved to a sibling is left alone.
+  const key = `${projectId}/${worktreeId}`;
+  const seen = useRef<string | null>(null);
+  useEffect(() => {
+    if (worktree) {
+      seen.current = key;
+      return;
+    }
+    if (seen.current === key && !worktreesPending && !worktreesError) {
+      seen.current = null;
+      nav.toFallback(true);
+    }
+  }, [worktree, worktreesPending, worktreesError, key, nav]);
 
   useEffect(() => {
     // Local-only page-open work: refreshProject is a mutating invoke

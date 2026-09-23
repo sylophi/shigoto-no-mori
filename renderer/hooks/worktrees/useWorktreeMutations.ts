@@ -8,10 +8,12 @@ import type {
   DeleteWorktreeResult,
   Worktree,
 } from "@shared/schemas";
-import { hostKeyDeviceId, queryKeysFor } from "@/lib/queryKeys";
+import { queryKeysFor, worktreeQueriesOn } from "@/lib/queryKeys";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { scriptRunsFor } from "@/store/scriptRuns";
+import { useWorktreeRemoving } from "@/store/worktreeLifecycle";
+import type { QueryClient } from "@tanstack/react-query";
 
 interface CreateWorktreeInput {
   projectId: string;
@@ -148,12 +150,57 @@ interface DeleteWorktreeInput {
 const deleteWorktreeMutationKey = (deviceId: string) =>
   ["delete-worktree", deviceId] as const;
 
-// What the renderer does once a worktree is gone from disk: drop it
-// from the cached list synchronously (consumers routing off the back
-// of the mutation must not read the stale list during the refetch),
-// clear its script runs, and remove its no-longer-observed queries so
-// nothing can refetch or replay them. Shared by the delete and by a
-// mirror stop, which removes the copy the same way.
+const deleteFilters = (deviceId: string, worktreeId: string) => ({
+  mutationKey: deleteWorktreeMutationKey(deviceId),
+  predicate: (m: { state: { variables: unknown } }) =>
+    (m.state.variables as DeleteWorktreeInput | undefined)?.worktreeId ===
+    worktreeId,
+});
+
+// Whether this window's own delete of the worktree is in flight. The
+// host announces that delete's removal too, and the announcement lands
+// before the invoke replies. The mutation's own success path forgets
+// the row and routes off it in one go, so the follower leaves the
+// row to it.
+export function isOwnDeletePending(
+  queryClient: QueryClient,
+  deviceId: string,
+  worktreeId: string,
+): boolean {
+  return queryClient.isMutating(deleteFilters(deviceId, worktreeId)) > 0;
+}
+
+// What the renderer does once a worktree is gone from a device: drop
+// it from the cached list synchronously (consumers routing off the
+// back of the mutation must not read the stale list during the
+// refetch), clear its script runs, and remove its no-longer-observed
+// queries so nothing can refetch or replay them. Run by this window's
+// own delete on success, by a mirror stop, and for every removal a
+// host announces (boot's worktrees:removal follower), whoever asked
+// for it.
+export function forgetDeletedWorktree(
+  queryClient: QueryClient,
+  deviceId: string,
+  projectId: string,
+  worktreeId: string,
+): void {
+  const keys = queryKeysFor(deviceId);
+  queryClient.setQueryData<Worktree[]>(keys.worktrees(projectId), (current) =>
+    current ? current.filter((w) => w.id !== worktreeId) : current,
+  );
+  void queryClient.invalidateQueries({
+    queryKey: keys.worktrees(projectId),
+  });
+  scriptRunsFor(deviceId).clearForWorktree(worktreeId);
+  // Same treatment as project removal. Active queries (the detail
+  // route unmounts only after the post-delete navigation) are left
+  // to go inactive and gc naturally.
+  queryClient.removeQueries({
+    type: "inactive",
+    predicate: worktreeQueriesOn(deviceId, worktreeId),
+  });
+}
+
 export function useForgetDeletedWorktree() {
   const { deviceId } = useHostScope();
   const forgetOn = useForgetDeletedWorktreeOn();
@@ -166,26 +213,8 @@ export function useForgetDeletedWorktree() {
 // through the peer running it, whose copy is here).
 export function useForgetDeletedWorktreeOn() {
   const queryClient = useQueryClient();
-  return (deviceId: string, projectId: string, worktreeId: string) => {
-    const keys = queryKeysFor(deviceId);
-    const scriptRuns = scriptRunsFor(deviceId);
-    queryClient.setQueryData<Worktree[]>(keys.worktrees(projectId), (current) =>
-      current ? current.filter((w) => w.id !== worktreeId) : current,
-    );
-    void queryClient.invalidateQueries({
-      queryKey: keys.worktrees(projectId),
-    });
-    scriptRuns.clearForWorktree(worktreeId);
-    // Same treatment as project removal. Active queries (the detail
-    // route unmounts only after the post-delete navigation) are left
-    // to go inactive and gc naturally.
-    queryClient.removeQueries({
-      type: "inactive",
-      predicate: (query) =>
-        hostKeyDeviceId(query.queryKey) === deviceId &&
-        query.queryKey.includes(worktreeId),
-    });
-  };
+  return (deviceId: string, projectId: string, worktreeId: string) =>
+    forgetDeletedWorktree(queryClient, deviceId, projectId, worktreeId);
 }
 
 export function useDeleteWorktree() {
@@ -203,9 +232,7 @@ export function useDeleteWorktree() {
       // so another device's queries never match on a coincidentally
       // equal worktree id.
       await queryClient.cancelQueries({
-        predicate: (query) =>
-          hostKeyDeviceId(query.queryKey) === deviceId &&
-          query.queryKey.includes(vars.worktreeId),
+        predicate: worktreeQueriesOn(deviceId, vars.worktreeId),
       });
     },
     onSuccess: (data, vars) => {
@@ -219,21 +246,24 @@ export function useDeleteWorktree() {
   });
 }
 
-// `deviceId` names the peer a remote sidebar row belongs to. Absent,
-// it is the surrounding scope's device (this machine with no provider).
+// Whether the worktree is on its way out: this window's own delete of
+// it is in flight, or its device announced it is removing it (every
+// delete broadcasts its removal, whoever asked for it: a mirror stop,
+// a transplant's teardown, a CLI unmirror, another window). The list
+// drops the row only once the delete resolves, so without the
+// announcement a worktree being removed by anything but this window's
+// delete button reads as an ordinary one for the seconds its cleanup
+// takes. `deviceId` names the peer a remote sidebar row belongs to;
+// absent, it is the surrounding scope's device (this machine with no
+// provider).
 export function useIsDeletingWorktree(
   worktreeId: string,
   deviceId?: string,
 ): boolean {
   const scope = useHostScope();
-  return (
-    useIsMutating({
-      mutationKey: deleteWorktreeMutationKey(deviceId ?? scope.deviceId),
-      predicate: (m) =>
-        (m.state.variables as DeleteWorktreeInput | undefined)?.worktreeId ===
-        worktreeId,
-    }) > 0
-  );
+  const onDevice = deviceId ?? scope.deviceId;
+  const removing = useWorktreeRemoving(worktreeId, onDevice);
+  return useIsMutating(deleteFilters(onDevice, worktreeId)) > 0 || removing;
 }
 
 // The two per-worktree flags (shelf, auto-pull) share one mutation
