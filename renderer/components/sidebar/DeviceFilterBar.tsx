@@ -5,28 +5,29 @@
 //
 // Each pill is the outline button the New worktree button above it is,
 // so the row reads as one set of controls with it rather than a second
-// kind of chip. Each pill is the device's dot, glyph and name, the
-// lead every device row shares, at the bar's own small size. The bar
-// wraps onto more rows rather than scrolling a machine out of sight
-// or shrinking a pill to its glyph, so every machine stays named and
-// in view. A radio group: one pick at a time, arrows move it, the way
-// the device tabs do.
+// kind of chip. Each pill leads with the device's dot and glyph like
+// every device row, then its two-letter mark (deviceAbbrev), so the
+// bar stays one row however many machines there are, and the picked
+// pill spells its name out, so the narrowed forest always says which
+// machine it is showing. A radio group: one pick at a time, arrows
+// move it, the way the device tabs do.
 import type { DeviceKind } from "@shared/account/deviceKind";
 import { DeviceGlyph } from "@/components/shared/DeviceIcon";
 import type { DeviceRosterEntry } from "@/components/shared/DeviceTabs";
 import { Button } from "@/components/ui/button";
 import { useRovingPick } from "@/hooks/ui/useRovingPick";
+import { deviceAbbrev } from "@/lib/deviceAbbrev";
 import { deviceTitle } from "@/lib/remote/deviceStatus";
 import { cn } from "@/lib/utils";
 import { setDeviceFilter, type DeviceFilter } from "./deviceFilter";
 
 const ALL = "all";
 
-function pillFor(choice: DeviceRosterEntry) {
+function pillFor(choice: DeviceRosterEntry, checked: boolean) {
   return {
     id: choice.deviceId,
     kind: choice.kind as DeviceKind | null,
-    label: choice.label,
+    label: checked ? choice.label : deviceAbbrev(choice.label),
     title: deviceTitle(choice.label, choice.status),
     tone: choice.status?.tone ?? null,
   };
@@ -36,7 +37,7 @@ export function DeviceFilterBar({ choices, selected }: DeviceFilter) {
   const selectedId = selected?.deviceId ?? ALL;
   const pills = [
     { id: ALL, kind: null, label: "All", title: "Every device", tone: null },
-    ...choices.map(pillFor),
+    ...choices.map((choice) => pillFor(choice, choice.deviceId === selectedId)),
   ];
   const pick = (id: string) => setDeviceFilter(id === ALL ? null : id);
   const { listRef, onKeyDown } = useRovingPick({
@@ -54,7 +55,9 @@ export function DeviceFilterBar({ choices, selected }: DeviceFilter) {
       role="radiogroup"
       aria-label="Show worktrees on"
       data-slot="sidebar-device-filter"
-      className="flex shrink-0 flex-wrap gap-1 px-2 pb-1.5"
+      // Scrolls sideways past the edge rather than wrapping, so the
+      // list below keeps its place however many machines there are.
+      className="flex shrink-0 [scrollbar-width:none] gap-1 overflow-x-auto px-2 pb-1.5"
     >
       {pills.map((pill) => {
         const checked = pill.id === selectedId;
@@ -84,7 +87,7 @@ export function DeviceFilterBar({ choices, selected }: DeviceFilter) {
             {pill.kind && (
               <DeviceGlyph kind={pill.kind} tone={pill.tone} size="xs" />
             )}
-            <span className="max-w-24 truncate">{pill.label}</span>
+            <span className="max-w-32 truncate">{pill.label}</span>
           </Button>
         );
       })}
