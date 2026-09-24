@@ -40,7 +40,6 @@ import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
 import { cliContract } from "@shared/ipc/modules/cli";
-import { deviceContract } from "@shared/ipc/modules/device";
 import { controlContract } from "@shared/ipc/modules/control";
 import { shellContract } from "@shared/ipc/modules/shell";
 import { terrierContract } from "@shared/ipc/modules/terrier";
@@ -87,7 +86,6 @@ import { scriptsHandlers } from "@host/ipc/modules/scripts";
 import { sharedSettingsHandlers } from "@host/ipc/modules/sharedSettings";
 import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
 import { cliHandlers } from "@host/ipc/modules/cli";
-import { deviceHandlers, setDeviceImpl } from "@host/ipc/modules/device";
 import { controlHandlers, setControlImpl } from "@host/ipc/modules/control";
 import { shellHandlers } from "./modules/shell";
 import { terrierHandlers } from "@host/ipc/modules/terrier";
@@ -115,11 +113,7 @@ import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
 import { spawnFileSync } from "@host/fileSync/spawn";
 import { dataDir } from "@host/lib/util/paths";
 import { getDeviceId } from "@host/lib/config/deviceId";
-import {
-  accountSignedIn,
-  detectedDeviceIcon,
-  makeAccountHandlers,
-} from "./modules/account";
+import { accountSignedIn, makeAccountHandlers } from "./modules/account";
 import { hubConnectInputs } from "./modules/account";
 import { reconcileLaunchAtLogin } from "../electron/liveness";
 import { withoutPeerState } from "@shared/schemas/config";
@@ -652,14 +646,4 @@ export function registerIpcHandlers(): void {
   // Host-scoped: a peer's Settings page reads this device's update
   // state and, when granted, checks or restarts into an update here.
   registerContract(updaterContract, updaterHandlers);
-  // Host-scoped: a peer's Devices page changes this device's icon when
-  // granted. The pick goes through this device's own account handler,
-  // so it is stored, fanned out to the windows here and pushed to the
-  // hub exactly as a pick made here would be.
-  setDeviceImpl({
-    detectedIcon: detectedDeviceIcon,
-    setIcon: async (icon) =>
-      (await accountHandlers.setDeviceIcon(icon, undefined)).deviceIcon,
-  });
-  registerContract(deviceContract, deviceHandlers);
 }

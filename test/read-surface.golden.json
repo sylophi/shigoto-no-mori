@@ -1,5 +1,4 @@
 [
-  "device:detectedIcon",
   "direct:connectInfo",
   "git:sweep",
   "githubCli:projectPullRequests",

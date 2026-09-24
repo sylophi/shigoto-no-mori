@@ -205,13 +205,6 @@ function hostHandlersFor(
     Object.entries(labCustomPorts).map(([id, ports]) => [id, { ports }]),
   );
   const allWorktrees = () => Object.values(forest.worktrees).flat();
-  // The icon a peer's picker reads and picks. What the fixture
-  // registry lists stands in for the device's detection, and a pick
-  // lands on that same entry, as the peer's own hub push would.
-  const registryEntry = accountDevices.find(
-    (device) => device.deviceId === forest.deviceId,
-  )!;
-  const detectedHere = registryEntry.icon;
   const findWorktree = (worktreeId: string) =>
     allWorktrees().find((worktree) => worktree.id === worktreeId);
   const branchesOf = () => [
@@ -334,11 +327,6 @@ function hostHandlersFor(
       ),
     }),
     "remoteAccess:commandAccess": () => ({ granted: forest.grantsCaller }),
-    "device:detectedIcon": () => detectedHere,
-    "device:setIcon": (icon: DeviceIcon) => {
-      registryEntry.icon = icon;
-      return icon;
-    },
     // The stub's shape with a full create lifecycle on it (carry-over,
     // a setup script, and ports below), so the pull dialogs' setup
     // switch and their running steps have every phase to name.

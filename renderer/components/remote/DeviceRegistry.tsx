@@ -102,7 +102,6 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
       icon: isThisDevice ? local.icon : device.icon,
       status: deviceRowStatus(device, isThisDevice, hubDevice, socket, now),
       access: commandAccessOf(peerAccess, device.deviceId),
-      api: hubDevice?.api,
       // This machine knows its own version synchronously. A peer
       // confirms one only once its direct session's welcome lands.
       appVersion: isThisDevice
@@ -168,7 +167,6 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
               icon,
               status,
               access,
-              api,
               appVersion,
             }) => (
               <DeviceRegistryRow
@@ -197,7 +195,6 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
                 }
                 tunnel={isThisDevice ? tunnel : undefined}
                 access={access}
-                api={api}
               />
             ),
           )}
