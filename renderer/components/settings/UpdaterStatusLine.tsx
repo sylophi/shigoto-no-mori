@@ -1,4 +1,5 @@
 import { assertNever } from "@/lib/utils";
+import { InlineError } from "@/components/ui/inline-error";
 import type { UpdaterState } from "@shared/schemas";
 
 // The button already speaks for itself when an update is ready, so we
@@ -29,8 +30,9 @@ export function UpdaterStatusLine({ state }: { state: UpdaterState | null }) {
       );
     case "error":
       return (
-        <span className="text-xs text-destructive" title={state.message}>
-          Update check failed.
+        <span className="flex min-w-0 gap-1 text-xs text-destructive">
+          <span className="shrink-0">Update check failed:</span>
+          <InlineError message={state.message} title="Update check failed" />
         </span>
       );
     case "checking":

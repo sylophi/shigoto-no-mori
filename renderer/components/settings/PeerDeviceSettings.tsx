@@ -217,7 +217,12 @@ function PeerSettingsForm({
         </>
       )}
 
-      {save.error && <ErrorBanner>{save.error.message}</ErrorBanner>}
+      {save.error && (
+        <ErrorBanner
+          message={save.error.message}
+          title="Couldn't save the device's settings"
+        />
+      )}
     </>
   );
 }

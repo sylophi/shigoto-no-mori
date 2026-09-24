@@ -347,7 +347,12 @@ export function ConfigureForm({
             </Button>
           </section>
 
-          {write.error && <ErrorBanner>{write.error.message}</ErrorBanner>}
+          {write.error && (
+            <ErrorBanner
+              message={write.error.message}
+              title="Couldn't save project config"
+            />
+          )}
         </div>
       </div>
       <EditorFooter

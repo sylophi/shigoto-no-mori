@@ -48,7 +48,11 @@ export function ProjectHeader({
   arrangeMode,
   reorderable = true,
 }: ProjectHeaderProps) {
-  const [nameRef, isTruncated] = useIsTruncated<HTMLSpanElement>();
+  // Keyed on what swaps or refills the name span, which a ResizeObserver
+  // on the old span would miss.
+  const [nameRef, isTruncated] = useIsTruncated<HTMLSpanElement>(
+    `${arrangeMode}:${missing}:${project.name}`,
+  );
   const icon = (
     <ProjectIcon
       projectId={iconFrom?.projectId ?? project.id}

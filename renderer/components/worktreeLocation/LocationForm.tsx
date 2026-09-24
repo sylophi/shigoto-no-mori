@@ -244,7 +244,12 @@ export function LocationForm({
         </div>
       )}
 
-      {write.error && <ErrorBanner>{write.error.message}</ErrorBanner>}
+      {write.error && (
+        <ErrorBanner
+          message={write.error.message}
+          title="Couldn't save the worktree location"
+        />
+      )}
 
       <div className="flex items-center justify-end gap-2">
         <Button

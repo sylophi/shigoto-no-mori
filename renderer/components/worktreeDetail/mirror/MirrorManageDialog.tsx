@@ -41,6 +41,7 @@ import {
   TONE_PILL,
   TONE_TEXT,
 } from "@/components/ui/status-dot";
+import { InlineError } from "@/components/ui/inline-error";
 import { MirrorConflictsChip } from "@/components/worktreeDetail/MirrorConflicts";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
@@ -496,9 +497,11 @@ function EventRow({ event }: { event: MirrorEvent }) {
           </span>
         </div>
         {event.detail !== "" && (
-          <p className="truncate text-muted-foreground" title={event.detail}>
-            {event.detail}
-          </p>
+          <InlineError
+            message={event.detail}
+            title={look.label}
+            className="text-muted-foreground"
+          />
         )}
       </div>
     </li>

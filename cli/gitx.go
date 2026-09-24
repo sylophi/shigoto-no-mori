@@ -7,6 +7,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -64,9 +65,34 @@ func runGitStdin(cwd string, extraEnv []string, stdin string, args ...string) (s
 		if msg == "" {
 			msg = err.Error()
 		}
-		return stdout.String(), fmt.Errorf("git %s: %s", strings.Join(args, " "), msg)
+		return stdout.String(), &gitError{args: args, msg: msg}
 	}
 	return stdout.String(), nil
+}
+
+// gitError is a failed git run. Error() leads with the command, which
+// a terminal reader needs to tell which step of a multi-step verb
+// failed. The app shows the message where only its front fits, and
+// there the argv (paths, mostly) pushes git's reason out of view, so
+// the JSON error document carries git's own words (jsonErrorMessage).
+type gitError struct {
+	args []string
+	msg  string
+}
+
+func (e *gitError) Error() string {
+	return fmt.Sprintf("git %s: %s", strings.Join(e.args, " "), e.msg)
+}
+
+// jsonErrorMessage is err's message for the JSON error document: a git
+// failure in it, wrapped or not, loses its command prefix.
+func jsonErrorMessage(err error) string {
+	msg := err.Error()
+	var ge *gitError
+	if errors.As(err, &ge) {
+		msg = strings.Replace(msg, ge.Error(), ge.msg, 1)
+	}
+	return msg
 }
 
 // --- worktree identities ---

@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip-button";
 import { RowTag } from "@/components/ui/row-tag";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { InlineError } from "@/components/ui/inline-error";
 import { keptSourceReason } from "@/hooks/remote/usePullWorktree";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 import {
@@ -308,16 +309,26 @@ export function TransplantFinish({
           </section>
 
           {error !== null ? (
-            <p className="text-xs text-destructive select-text">
-              {isCommandRefusedError(error)
-                ? peerReadOnlyNote(sourceDeviceLabel)
-                : errorMessageOf(error)}
-            </p>
+            isCommandRefusedError(error) ? (
+              <p className="text-xs text-destructive select-text">
+                {peerReadOnlyNote(sourceDeviceLabel)}
+              </p>
+            ) : (
+              <InlineError
+                message={errorMessageOf(error)}
+                title={`Couldn't finish on ${sourceDeviceLabel}`}
+                multiline
+                className="text-xs text-destructive"
+              />
+            )
           ) : (
             kept !== null && (
-              <p className="text-xs text-destructive select-text">
-                The copy on {sourceDeviceLabel} stayed: {kept}
-              </p>
+              <InlineError
+                message={`The copy on ${sourceDeviceLabel} stayed: ${kept}`}
+                title={`Couldn't tear down the copy on ${sourceDeviceLabel}`}
+                multiline
+                className="text-xs text-destructive"
+              />
             )
           )}
         </div>

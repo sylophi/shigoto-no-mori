@@ -1,5 +1,6 @@
 import { BranchLabel } from "@/components/ui/branch-label";
 import { type RowStatus, RowStatusBadge } from "@/components/ui/row-status";
+import { InlineError } from "@/components/ui/inline-error";
 
 interface WorktreeMoveDetailsProps {
   branch: string;
@@ -61,9 +62,11 @@ export function WorktreeMoveDetails({
           </dd>
         </dl>
         {status.kind === "error" && (
-          <p className="text-xs text-destructive select-text">
-            {status.message}
-          </p>
+          <InlineError
+            message={status.message}
+            title="Couldn't move the worktree"
+            className="text-xs text-destructive"
+          />
         )}
       </div>
       <RowStatusBadge status={status} labels={labels} />

@@ -10,7 +10,6 @@ import { type BranchEntry } from "@/components/shared/BranchCombobox";
 import { rankByScore } from "@/lib/fuzzyMatch";
 import { localBranchOf } from "@shared/git/branches";
 import { isRealBranch, type Worktree } from "@shared/schemas";
-import { ErrorBanner } from "@/components/ui/error-banner";
 
 export function BranchSwitcher({
   worktree,
@@ -68,7 +67,6 @@ export function BranchSwitcher({
       onOpenChange={(open) => {
         if (open) {
           setQuery("");
-          checkout.reset();
           void queryClient.invalidateQueries({
             queryKey: keys.branches(worktree.projectId),
           });
@@ -138,11 +136,6 @@ export function BranchSwitcher({
                 </Combobox.Item>
               ))}
             </Combobox.List>
-            {checkout.error && (
-              <ErrorBanner className="rounded-none border-x-0 border-t border-b-0">
-                {checkout.error.message}
-              </ErrorBanner>
-            )}
           </Combobox.Popup>
         </Combobox.Positioner>
       </Combobox.Portal>

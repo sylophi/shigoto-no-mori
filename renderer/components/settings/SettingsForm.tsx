@@ -242,7 +242,10 @@ export function SettingsForm({
           report inside their own section. */}
       {save.error && (
         <div className="px-6 pb-3">
-          <ErrorBanner>{save.error.message}</ErrorBanner>
+          <ErrorBanner
+            message={save.error.message}
+            title="Couldn't save settings"
+          />
         </div>
       )}
 

@@ -119,3 +119,24 @@ func TestResolveDefaultBranchFallsBackToRemoteHead(t *testing.T) {
 		t.Errorf("dangling origin/HEAD = %q, want no default ref", ref)
 	}
 }
+
+// The terminal keeps the command in front of a git failure. The JSON
+// error document the app reads drops it, wrapped or not.
+func TestJSONErrorMessageDropsGitCommand(t *testing.T) {
+	dir := t.TempDir()
+	_, err := runGit(dir, "worktree", "remove", filepath.Join(dir, "nope"))
+	if err == nil {
+		t.Fatal("git worktree remove outside a repo succeeded")
+	}
+	if !strings.HasPrefix(err.Error(), "git worktree remove ") {
+		t.Fatalf("terminal message lost the command: %q", err.Error())
+	}
+	got := jsonErrorMessage(err)
+	if !strings.HasPrefix(got, "fatal: ") {
+		t.Fatalf("JSON message = %q, want git's own words", got)
+	}
+	wrapped := jsonErrorMessage(fmt.Errorf("removing the worktree: %w", err))
+	if want := "removing the worktree: " + got; wrapped != want {
+		t.Fatalf("wrapped JSON message = %q, want %q", wrapped, want)
+	}
+}

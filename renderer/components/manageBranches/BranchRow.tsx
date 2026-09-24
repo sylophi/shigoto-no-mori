@@ -162,17 +162,21 @@ export function BranchRow({
                 : "You'll be asked again if it has commits that aren't " +
                   "merged elsewhere."}
             </p>
-            {del.isError && (
-              <ErrorBanner className="mt-3 whitespace-pre-line">
-                {isBranchNotMergedError(del.error)
-                  ? "This branch has commits that aren't on any other " +
-                    "branch. You can force delete it, but those commits " +
-                    "are discarded permanently. If the branch was " +
-                    "squash-merged, its changes already landed and nothing " +
-                    "is lost."
-                  : del.error.message}
-              </ErrorBanner>
-            )}
+            {del.isError &&
+              (isBranchNotMergedError(del.error) ? (
+                <ErrorBanner className="mt-3">
+                  This branch has commits that aren&apos;t on any other branch.
+                  You can force delete it, but those commits are discarded
+                  permanently. If the branch was squash-merged, its changes
+                  already landed and nothing is lost.
+                </ErrorBanner>
+              ) : (
+                <ErrorBanner
+                  className="mt-3"
+                  message={del.error.message}
+                  title="Couldn't delete the branch"
+                />
+              ))}
             <div className="mt-5 flex justify-end gap-2">
               <Button
                 variant="outline"

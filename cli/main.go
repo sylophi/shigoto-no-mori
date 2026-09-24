@@ -724,7 +724,7 @@ func run() int {
 
 func reportError(err error) {
 	if jsonMode {
-		doc := map[string]any{"ok": false, "error": err.Error()}
+		doc := map[string]any{"ok": false, "error": jsonErrorMessage(err)}
 		// Stable machine-readable code so the app maps failures (entity
 		// gone, ...) without matching prose.
 		if kind := errorKindOf(err); kind != "" {

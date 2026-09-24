@@ -165,8 +165,18 @@ export function MergeBox({
           </div>
         </div>
       </div>
-      {merge.error && <ErrorBanner>{merge.error.message}</ErrorBanner>}
-      {setDraft.error && <ErrorBanner>{setDraft.error.message}</ErrorBanner>}
+      {merge.error && (
+        <ErrorBanner
+          message={merge.error.message}
+          title="Couldn't merge the pull request"
+        />
+      )}
+      {setDraft.error && (
+        <ErrorBanner
+          message={setDraft.error.message}
+          title="Couldn't change the draft state"
+        />
+      )}
     </div>
   );
 }
