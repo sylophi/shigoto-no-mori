@@ -132,6 +132,9 @@ export function placeByStack<T>(
     if (placed.has(index)) return;
     const stack = pullRequestStackFor(prs, branchOf(item), trunk);
     if (!stack) {
+      // Placed too: a fork point has no stack of its own, and a member
+      // above it would otherwise gather it into its group again.
+      placed.add(index);
       out.push({ item, position: null });
       return;
     }

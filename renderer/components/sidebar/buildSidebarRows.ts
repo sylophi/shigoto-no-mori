@@ -301,18 +301,23 @@ export function buildSidebarRows({
     const trunk =
       trunkOf(query?.data as Worktree[] | undefined) ??
       trunkOf(group.remote[0]?.worktrees);
-    for (const { item, position, child } of placeByStack(
-      [...localRows(localVisible), ...remoteVisible],
-      (row) => row.worktree.branch,
-      group.pullRequests,
-      trunk,
-    )) {
-      rows.push({ ...item, stack: position, stackChild: child });
-    }
+    const placed = (local: Worktree[], peers: RemoteRow[]): SidebarRow[] =>
+      placeByStack(
+        [...localRows(local), ...peers],
+        (row) => row.worktree.branch,
+        group.pullRequests,
+        trunk,
+      ).map(({ item, position, child }) => {
+        // The rows were built for this call, so they are ours to fill in.
+        item.stack = position;
+        item.stackChild = child;
+        return item;
+      });
+    rows.push(...placed(localVisible, remoteVisible));
     const shelvedCount = localShelved.length + remoteShelved.length;
     if (shelvedCount > 0) {
       const shelfOpen = shelvedExpanded.has(groupId);
-      if (shelfOpen) rows.push(...localRows(localShelved), ...remoteShelved);
+      if (shelfOpen) rows.push(...placed(localShelved, remoteShelved));
       // Always anchored at the bottom of the project's section:
       // "N shelved" reveals, "Hide shelved" collapses.
       rows.push({

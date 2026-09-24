@@ -211,11 +211,11 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 		if err != nil {
 			return exitCodeOf(err), err
 		}
-		allowed := allowedMergeMethods(proj.Path)
 		if stack {
-			return cmdMergeStack(proj, number, methodFlag, allowed)
+			// nil: the stack lookups fetch the allowed methods alongside.
+			return cmdMergeStack(proj, number, methodFlag, nil)
 		}
-		method, err := execMerge(proj, number, methodFlag, allowed)
+		method, err := execMerge(proj, number, methodFlag, allowedMergeMethods(proj.Path))
 		if err != nil {
 			return exitCodeOf(err), err
 		}
@@ -289,15 +289,21 @@ func execMerge(proj project, number int, methodFlag string, allowed []string) (s
 // asynchronous merge API lands those, and it lands every open PR
 // under the asked one too. So the plain merge of a stacked PR is
 // honoured only for the lowest open PR of its stack, where it is that
-// PR alone. Anything else is a stack merge, which `--stack` says
-// explicitly. Any other failure is reported as it came.
+// PR alone. Anything else is a stack merge, which `merge --stack` and
+// the app's stack merge say explicitly. Any other failure is reported
+// as it came: the refusal's wording is the cheap gate, the stacks API
+// the answer, so a merge that failed for any other reason pays no
+// extra round trip.
 func mergeStackedAlone(projectPath string, number int, method string, mergeErr error) error {
+	if !strings.Contains(mergeErr.Error(), "part of a stack") {
+		return mergeErr
+	}
 	ghStack, err := githubStackFor(projectPath, number)
 	if err != nil || ghStack == nil {
 		return mergeErr
 	}
 	if lowest, ok := ghStack.lowestOpen(); !ok || lowest != number {
-		return errf("PR #%d sits above open pull requests in its GitHub stack; merge it with --stack", number)
+		return errf("PR #%d sits above open pull requests in its GitHub stack; merge the stack instead (`%s merge --stack`)", number, binaryName)
 	}
 	return mergeStackAsync(projectPath, number, method)
 }
@@ -335,9 +341,15 @@ func persistMergeMethod(proj project, method string) {
 
 // The --stack arm of both paths: every open PR from the bottom of the
 // stack up to and including `number`, one JSON event per landed PR in
-// --json mode so a caller can follow along.
+// --json mode so a caller can follow along. `allowed` is the repo's
+// merge methods when the caller already fetched them, else nil and
+// the stack lookups fetch them alongside their own round trips.
 func cmdMergeStack(proj project, number int, methodFlag string, allowed []string) (int, error) {
-	method, err := resolveMergeMethod(proj, methodFlag, allowed)
+	lk, err := lookupStack(proj, number, allowed)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	method, err := resolveMergeMethod(proj, methodFlag, lk.allowed)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -348,7 +360,7 @@ func cmdMergeStack(proj project, number int, methodFlag string, allowed []string
 			out(greenOut(fmt.Sprintf("merged PR #%d (%s): %s", pr.Number, method, pr.Title)))
 		}
 	}
-	if err := execMergeStack(proj, number, method, onMerged); err != nil {
+	if err := execMergeStack(proj, number, method, lk, onMerged); err != nil {
 		return exitCodeOf(err), err
 	}
 	persistMergeMethod(proj, method)

@@ -163,7 +163,9 @@ export function useMergeBox({
     others,
     blocked: plan.blocked,
     label: activeMethod ? mergeLabel(activeMethod, reach, plan.count) : "",
-    pendingLabel: stack && plan.count > 1 ? "Merging stack…" : "Merging…",
+    // More than this PR lands: the label says so, and the icon marks it.
+    landsStack: plan.count > 1,
+    pendingLabel: plan.count > 1 ? "Merging stack…" : "Merging…",
     reach,
     showReach,
     runMerge,

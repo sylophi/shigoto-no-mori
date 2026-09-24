@@ -172,6 +172,18 @@ try {
         placeByStack(rows, (r) => r, undefined, "main").map((p) => p.item),
         rows,
       );
+      // A fork point has no stack of its own, and must not be picked
+      // up again by the group of a layer above it.
+      const forked = { ...prs, "layer-b2": pr("layer-a") };
+      assert.deepEqual(
+        placeByStack(
+          ["layer-a", "layer-b", "layer-b2"],
+          (r) => r,
+          forked,
+          "main",
+        ).map((p) => p.item),
+        ["layer-a", "layer-b", "layer-b2"],
+      );
       // One row showing of a stack nests nothing.
       assert.deepEqual(
         placeByStack(["layer-b", "other"], (r) => r, prs, "main").map(

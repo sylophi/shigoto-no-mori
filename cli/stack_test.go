@@ -106,3 +106,36 @@ func TestGithubStackDecodes(t *testing.T) {
 		t.Errorf("asyncMerge decoded %+v (%v)", m, err)
 	}
 }
+
+// A merged bottom older than the listing's page is still the bottom:
+// the walk continues by lookup until the trunk, so the sequential
+// merge retargets at main rather than at the landed branch.
+func TestExtendBelowReachesTheTrunk(t *testing.T) {
+	chain := stackBelow(stackFixture(), 4, "main")[1:] // as if #2 fell off the page
+	if chain[0].BaseRefName != "layer-a" {
+		t.Fatalf("fixture: chain bottom base = %q", chain[0].BaseRefName)
+	}
+	looked := []string{}
+	extended, err := extendBelow(chain, "main", func(branch string) (*prSummary, error) {
+		looked = append(looked, branch)
+		if branch == "layer-a" {
+			return &prSummary{Number: 2, State: "MERGED", HeadRefName: "layer-a", BaseRefName: "main"}, nil
+		}
+		return nil, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := numbersOf(extended), []int{2, 3, 4}; !slices.Equal(got, want) {
+		t.Errorf("extended chain = %v, want %v", got, want)
+	}
+	if !slices.Equal(looked, []string{"layer-a"}) {
+		t.Errorf("looked up %v, want just the missing layer", looked)
+	}
+	// A bottom whose base has no PR is the bottom: one lookup, no change.
+	orphan := []prSummary{{Number: 9, State: "OPEN", HeadRefName: "x", BaseRefName: "release"}}
+	extended, err = extendBelow(orphan, "main", func(string) (*prSummary, error) { return nil, nil })
+	if err != nil || len(extended) != 1 {
+		t.Errorf("orphan chain = %v (%v), want unchanged", numbersOf(extended), err)
+	}
+}

@@ -253,37 +253,61 @@ func awaitMergeability(projectPath string, number int) {
 	}
 }
 
+// What a stack merge needs to know before it lands anything. Four
+// independent round trips (git for the trunk, gh for the repo's merge
+// methods, the PR list and the stack object), so they overlap.
+type stackLookups struct {
+	trunk   string
+	allowed []string
+	prs     []prSummary
+	ghStack *githubStack
+}
+
+func lookupStack(proj project, number int, allowed []string) (stackLookups, error) {
+	var (
+		lk    stackLookups
+		wg    sync.WaitGroup
+		ptErr error
+		lsErr error
+		stErr error
+	)
+	lk.allowed = allowed
+	wg.Add(3)
+	go func() {
+		defer wg.Done()
+		var pt primaryTarget
+		pt, ptErr = resolvePrimaryTarget(proj)
+		lk.trunk = pt.localPrimary
+	}()
+	go func() { defer wg.Done(); lk.prs, lsErr = listPullRequests(proj.Path) }()
+	go func() { defer wg.Done(); lk.ghStack, stErr = githubStackFor(proj.Path, number) }()
+	if allowed == nil {
+		wg.Add(1)
+		go func() { defer wg.Done(); lk.allowed = allowedMergeMethods(proj.Path) }()
+	}
+	wg.Wait()
+	return lk, errors.Join(ptErr, lsErr, stErr)
+}
+
 // The whole `--stack` merge: resolve the set, pick GitHub's own merge
 // when it knows the stack, land one PR at a time otherwise. Reports
-// each landed PR through onMerged either way. The three lookups are
-// independent round trips, so they overlap.
-func execMergeStack(proj project, number int, method string, onMerged func(prSummary)) error {
-	var (
-		wg       sync.WaitGroup
-		pt       primaryTarget
-		prs      []prSummary
-		ghStack  *githubStack
-		ptErr    error
-		listErr  error
-		stackErr error
-	)
-	wg.Add(3)
-	go func() { defer wg.Done(); pt, ptErr = resolvePrimaryTarget(proj) }()
-	go func() { defer wg.Done(); prs, listErr = listPullRequests(proj.Path) }()
-	go func() { defer wg.Done(); ghStack, stackErr = githubStackFor(proj.Path, number) }()
-	wg.Wait()
-	if err := errors.Join(ptErr, listErr, stackErr); err != nil {
-		return err
-	}
-	chain := stackBelow(prs, number, pt.localPrimary)
+// each landed PR through onMerged either way.
+func execMergeStack(proj project, number int, method string, lk stackLookups, onMerged func(prSummary)) error {
+	chain := stackBelow(lk.prs, number, lk.trunk)
 	if chain == nil {
 		return errf("No pull request #%d", number)
+	}
+	chain, err := extendBelow(chain, lk.trunk, func(branch string) (*prSummary, error) {
+		return findPullRequest(proj.Path, branch)
+	})
+	if err != nil {
+		return err
 	}
 	set, err := stackMergeSet(chain)
 	if err != nil {
 		return err
 	}
-	if ghStack != nil {
+	if lk.ghStack != nil {
 		if err := mergeStackAsync(proj.Path, number, method); err != nil {
 			return err
 		}
@@ -293,4 +317,28 @@ func execMergeStack(proj project, number int, method string, onMerged func(prSum
 		return nil
 	}
 	return mergeStackSequentially(proj.Path, set, chain[0].BaseRefName, method, onMerged)
+}
+
+// The listing is one page of the newest PRs, so an old, merged bottom
+// can be missing from it, and a chain read off the page alone would
+// then land on that bottom's branch instead of the trunk. Walk the
+// remaining way down with one lookup per missing layer (gh's
+// server-side --head filter, any state), until the base is the trunk
+// or has no PR at all.
+func extendBelow(chain []prSummary, trunk string, lookup func(branch string) (*prSummary, error)) ([]prSummary, error) {
+	for len(chain) < maxStackDepth {
+		base := chain[0].BaseRefName
+		if base == trunk {
+			return chain, nil
+		}
+		below, err := lookup(base)
+		if err != nil {
+			return nil, err
+		}
+		if below == nil {
+			return chain, nil
+		}
+		chain = append([]prSummary{*below}, chain...)
+	}
+	return chain, nil
 }

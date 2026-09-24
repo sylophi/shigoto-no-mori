@@ -47,6 +47,7 @@ export function MergeBox({
     others,
     blocked,
     label,
+    landsStack,
     pendingLabel,
     reach,
     showReach,
@@ -83,7 +84,7 @@ export function MergeBox({
         "Click again to confirm"
       ) : (
         <>
-          {stack && <Layers2 aria-hidden className="size-3.5" />}
+          {landsStack && <Layers2 aria-hidden className="size-3.5" />}
           {label}
         </>
       )}
