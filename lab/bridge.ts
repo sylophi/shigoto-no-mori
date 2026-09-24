@@ -871,11 +871,23 @@ const LAB_PRS = {
 
 const LAB_PR_SLIM = LAB_PRS["v2-exp/remote-ui-flows"];
 
+// The stacked PRs carry no checks, so the stack poses with and without
+// the checks row (#148 keeps its two).
 function labPullRequestDetail(branch: string) {
   const slim = (LAB_PRS as Record<string, typeof LAB_PR_SLIM>)[branch];
   if (!slim) return null;
-  return { ...LAB_PR_DETAIL, ...slim };
+  if (slim === LAB_PR_SLIM) return LAB_PR_DETAIL;
+  return { ...LAB_PR_DETAIL, ...slim, checks: LAB_NO_CHECKS, checkList: [] };
 }
+
+const LAB_NO_CHECKS = {
+  total: 0,
+  passed: 0,
+  failing: 0,
+  pending: 0,
+  neutral: 0,
+  skipped: 0,
+};
 
 const LAB_PR_DETAIL = {
   ...LAB_PR_SLIM,
