@@ -462,7 +462,7 @@ function NewWorktreeForm({
               optionClassName="px-2 py-0.5 text-2xs"
             />
           ) : (
-            <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none">
+            <label className="flex cursor-pointer items-center gap-2 rounded-md text-xs text-muted-foreground select-none">
               <Checkbox
                 checked={useBranchAsFolder}
                 onCheckedChange={(next) => {
