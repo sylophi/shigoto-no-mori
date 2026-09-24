@@ -89,6 +89,8 @@ var globalConfigKeys = []configKey{
 		desc: "autoPullNew applies to added projects' primaries only"},
 	{name: "doubutsuNames", kind: boolKind, def: false,
 		desc: "Name new worktrees after Animal Crossing characters"},
+	{name: "codexWorktreeNames", kind: boolKind, def: false,
+		desc: "Name Codex-style <name>/<repo> worktrees by their parent folder"},
 	{name: "portPool", kind: boolKind, def: false,
 		desc: "Provision/release port-pool ports with worktrees"},
 	{name: "terrier", kind: boolKind, def: false,

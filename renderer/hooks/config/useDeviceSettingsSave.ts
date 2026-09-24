@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { GlobalConfig } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   invalidateDeviceSettingsQueries,
@@ -26,7 +27,15 @@ export function useDeviceSettingsSave() {
   return useMutation({
     mutationFn: (state: SettingsFormState) =>
       api.globalConfig.writeDeviceSettings(toDeviceSettingsPatch(state)),
-    onSuccess: () => invalidateDeviceSettingsQueries(queryClient, keys),
+    // Read before the write lands, while the cached config is still
+    // the one the form was seeded from.
+    onMutate: (state) => ({
+      worktreeNamesChanged:
+        (queryClient.getQueryData<GlobalConfig>(keys.globalConfig())
+          ?.codexWorktreeNames ?? false) !== state.codexWorktreeNames,
+    }),
+    onSuccess: (_, __, { worktreeNamesChanged }) =>
+      invalidateDeviceSettingsQueries(queryClient, keys, worktreeNamesChanged),
     meta: { errorTitle: "Couldn't save settings" },
   });
 }

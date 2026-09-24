@@ -6,6 +6,7 @@ import {
   errorMessageOf,
   unknownWorktreeError,
 } from "@shared/errors";
+import { isValidWorktreeDirName } from "@shared/git/branches";
 import {
   type CommitSummary,
   isCommitHash,
@@ -281,9 +282,10 @@ export async function listWorktreeIdentities(
   projectId: string,
   projectPath: string,
 ): Promise<WorktreeIdentity[]> {
-  const [stdout, config] = await Promise.all([
+  const [stdout, config, globalConfig] = await Promise.all([
     run(projectPath, ["worktree", "list", "--porcelain"]),
     readShigomoriConfig(projectId).catch(() => null),
+    readGlobalConfig().catch(() => null),
   ]);
   // A worktree counts as managed if it sits under any layout we know
   // about (managed root, in-project, or the configured custom path).
@@ -320,8 +322,13 @@ export async function listWorktreeIdentities(
     const isPrimary = entry.path === primaryPath;
     // Primary checkout sits at the project root, so its "name" is just
     // the project's directory basename. Managed worktrees use the picked
-    // animal dirname; external ones use whatever the user named them.
-    const name = basename(entry.path);
+    // animal dirname. External ones use whatever the user named them, or
+    // with codexWorktreeNames on, possibly the folder above it.
+    const isExternal = !isManagedPath(entry.path, managedBases);
+    const name =
+      globalConfig?.codexWorktreeNames && isExternal && !isPrimary
+        ? externalWorktreeName(entry.path, projectPath)
+        : basename(entry.path);
     identities.push({
       id: worktreeIdFromPath(entry.path),
       projectId,
@@ -329,11 +336,25 @@ export async function listWorktreeIdentities(
       branch,
       path: entry.path,
       isPrimary,
-      isExternal: !isManagedPath(entry.path, managedBases),
+      isExternal,
       detached: entry.detached ?? false,
     });
   }
   return identities;
+}
+
+// A leaf that just repeats the repo's folder name (the Codex layout,
+// see codexWorktreeNames) takes its parent's name instead, when that
+// passes as a folder name of our own. Mirrored in cli/gitx.go.
+function externalWorktreeName(
+  worktreePath: string,
+  projectPath: string,
+): string {
+  const leaf = basename(worktreePath);
+  const repo = basename(projectPath).replace(/\.git$/, "");
+  if (leaf.toLowerCase() !== repo.toLowerCase()) return leaf;
+  const parent = basename(dirname(worktreePath));
+  return isValidWorktreeDirName(parent) ? parent : leaf;
 }
 
 // How many recent commits to surface on the worktree detail page. The
