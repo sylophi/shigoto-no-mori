@@ -80,8 +80,10 @@ export function Sidebar({
 }) {
   const [arrangeMode, setArrangeMode] = useState(false);
   // While Settings is open the sidebar is its section list: the tree
-  // steps aside (header and footer stay) and comes back on the next
-  // route. The tree's queries never unmount, so the swap costs nothing.
+  // steps aside and comes back on the next route. The footer goes with
+  // it, since Settings is its own UI and none of the footer's actions
+  // belong there. The tree's queries never unmount, so the swap costs
+  // nothing.
   const onSettings = useLocation({
     select: (location) => location.pathname === "/settings",
   });
@@ -104,12 +106,9 @@ export function Sidebar({
         onArrange={() => setArrangeMode(true)}
         pinnedView={view}
       />
-      {footer && (
+      {footer && !onSettings && (
         <SidebarFooter
-          // Arranging is a tree mode. While Settings holds the sidebar the
-          // footer shows its normal actions, and the mode resumes with the
-          // tree.
-          arrangeMode={arrangeMode && !onSettings}
+          arrangeMode={arrangeMode}
           onToggleArrange={() => setArrangeMode((v) => !v)}
         />
       )}
