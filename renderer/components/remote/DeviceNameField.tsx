@@ -1,8 +1,10 @@
-// This device's name, edited in place. The saved name is the metadata
-// the credential store keeps, so a rename survives a relaunch. Shared
-// by the desktop devices registry ("This device") and the web devices
-// page ("This browser"), which differ only in how they address the
-// machine -- the rename semantics must not drift between the clients.
+// A device's name, edited in place on its registry row, this device's
+// or a peer's. The name lives on the device hub (shared/account/
+// enroll.ts updateDevice), so a rename reaches a peer that is offline
+// too, and it takes the new name on its next registry read. Shared by
+// the desktop app ("This device") and the web client ("This browser"),
+// which differ only in how they address this machine -- the rename
+// semantics must not drift between the clients.
 //
 // The name is TEXT until asked for: it is the thing every other device
 // shows in its sidebar, so it reads as an identity, not as a form field
@@ -16,11 +18,10 @@ import { Input } from "@/components/ui/input";
 import { useSetDeviceName } from "@/hooks/account/useAccount";
 import { cn } from "@/lib/utils";
 
-// The trigger is a separate export because its two call sites put it in
-// different places: the web page inline after the name, the registry row
-// with the row's other actions on the right. The editor itself always
-// opens where the NAME is, so the open/closed flag is the caller's to
-// hold rather than something the field can own for both layouts.
+// The trigger is a separate export because it sits apart from the
+// field: the registry row keeps it with the row's other actions on the
+// right, while the editor always opens where the NAME is, so the
+// open/closed flag is the caller's to hold.
 export function DeviceRenameButton({
   label,
   onClick,
@@ -33,7 +34,7 @@ export function DeviceRenameButton({
       variant="ghost"
       size="xs"
       className="text-muted-foreground"
-      aria-label={`Rename ${label.toLowerCase()}`}
+      aria-label={`Rename ${label}`}
       onClick={onClick}
     >
       <Pencil />
@@ -43,15 +44,17 @@ export function DeviceRenameButton({
 }
 
 export function DeviceNameField({
+  deviceId,
   deviceName,
   label,
   editing,
   onEditingChange,
   className,
 }: {
+  deviceId: string;
   deviceName: string;
-  // "This device" / "This browser". The control's accessible name
-  // derives from it, so the two can't drift apart.
+  // "This device" / "This browser", or the peer's name. The control's
+  // accessible name derives from it, so the two can't drift apart.
   label: string;
   // Open/closed, held by the caller alongside its DeviceRenameButton.
   editing: boolean;
@@ -86,7 +89,10 @@ export function DeviceNameField({
       cancel();
       return;
     }
-    setDeviceName.mutate(trimmed, { onSuccess: () => onEditingChange(false) });
+    setDeviceName.mutate(
+      { deviceId, name: trimmed },
+      { onSuccess: () => onEditingChange(false) },
+    );
   }
 
   if (!editing) {

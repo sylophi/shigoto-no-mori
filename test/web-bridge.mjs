@@ -377,6 +377,8 @@ async function main() {
         credential: "cred-1",
         accountId: "acct_1",
         deviceName: defaultWebDeviceName(CHROME_MAC_UA),
+        hubName: defaultWebDeviceName(CHROME_MAC_UA),
+        hubIcon: "browser",
       });
       // Auth state survives a "reload": a fresh bridge over the same
       // storage reads the same signed-in status.

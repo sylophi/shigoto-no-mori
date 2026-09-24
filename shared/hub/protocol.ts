@@ -128,9 +128,9 @@ export const HUB_ROUTES = {
     path: (deviceId: string) => `/devices/${encodeURIComponent(deviceId)}`,
   },
   // Changes a device of the caller's account: its name, its icon, or
-  // both (the app updates itself through it after the local write), so
-  // the registry every other device lists carries the change at once
-  // rather than at the device's next enrollment.
+  // both. The hub holds both, so any device of the account changes any
+  // other through it, and the changed device takes the new value from
+  // its next registry read (shared/account/enroll.ts).
   updateDevice: {
     method: "PATCH",
     path: (deviceId: string) => `/devices/${encodeURIComponent(deviceId)}`,

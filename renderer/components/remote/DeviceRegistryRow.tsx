@@ -1,9 +1,10 @@
 // One machine on the account, as a row of the registry: its mark and
-// name (both changeable on THIS device's row: the mark opens the icon
-// picker, Rename the name), one line saying what state it is in and
-// what it runs, the projects it hosts, and -- on THIS device's row --
-// the two things it exposes to the others: whether they may control
-// it and whether it stays reachable to them. A peer's row makes no decision about the
+// name (changeable on every row, a peer's included, since both live on
+// the device hub: the mark opens the icon picker, Rename the name),
+// one line saying what state it is in and what it runs, the projects
+// it hosts, and -- on THIS device's row -- the two things it
+// exposes to the others: whether they may control it and whether it
+// stays reachable to them. A peer's row makes no decision about the
 // peer: what a machine allows is decided on that machine, so a peer
 // row only reports the answer (read-only from here, or not) and holds
 // the forwards this machine has open against it.
@@ -19,7 +20,6 @@ import { AlertTriangle, Trash2 } from "lucide-react";
 import type { TunnelState } from "@shared/ipc/modules/hub";
 import type { DeviceInfo } from "@shared/hub/protocol";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
-import { DeviceMark } from "@/components/shared/DeviceGlyph";
 import { Button } from "@/components/ui/button";
 import { RowTag } from "@/components/ui/row-tag";
 import { StatusDot, TONE_TEXT } from "@/components/ui/status-dot";
@@ -108,6 +108,9 @@ export function DeviceRegistryRow({
   const namedDevice = showId
     ? `${name} ${abbreviateId(device.deviceId)}`
     : name;
+  // What the row's controls call the machine: this one by its role, a
+  // peer by name.
+  const controlLabel = isThisDevice ? traits.selfLabel : namedDevice;
   // A peer that is up and has ANSWERED "no" is read-only from here.
   // Nothing is said while the verdict is in flight, when the preflight
   // itself failed (that is transport, not the peer's switch), when the
@@ -139,30 +142,25 @@ export function DeviceRegistryRow({
     // the sake of a column it does not belong to.
     <li className="flex flex-col gap-3 py-5 first:pt-1 last:pb-1">
       <div className="flex gap-3.5">
-        {isThisDevice ? (
-          <DeviceIconPicker
-            icon={icon}
-            tone={status.tone}
-            label={traits.selfLabel}
-          />
-        ) : (
-          <DeviceMark icon={icon} tone={status.tone} size="lg" />
-        )}
+        <DeviceIconPicker
+          deviceId={device.deviceId}
+          isThisDevice={isThisDevice}
+          icon={icon}
+          tone={status.tone}
+          label={controlLabel}
+        />
 
         <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-3 gap-y-2">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-              {isThisDevice ? (
-                <DeviceNameField
-                  deviceName={name}
-                  label={traits.selfLabel}
-                  editing={renaming}
-                  onEditingChange={setRenaming}
-                  className="text-base"
-                />
-              ) : (
-                <span className="truncate text-base font-medium">{name}</span>
-              )}
+              <DeviceNameField
+                deviceId={device.deviceId}
+                deviceName={name}
+                label={controlLabel}
+                editing={renaming}
+                onEditingChange={setRenaming}
+                className="text-base"
+              />
               {isThisDevice && !renaming && <RowTag>{traits.selfLabel}</RowTag>}
               {showId && (
                 <span
@@ -194,16 +192,13 @@ export function DeviceRegistryRow({
             </p>
           </div>
 
-          {!confirming && (
-            <div className="flex shrink-0 items-center">
-              {isThisDevice ? (
-                !renaming && (
-                  <DeviceRenameButton
-                    label={traits.selfLabel}
-                    onClick={() => setRenaming(true)}
-                  />
-                )
-              ) : (
+          {!confirming && !renaming && (
+            <div className="flex shrink-0 items-center gap-1">
+              <DeviceRenameButton
+                label={isThisDevice ? controlLabel.toLowerCase() : controlLabel}
+                onClick={() => setRenaming(true)}
+              />
+              {!isThisDevice && (
                 <Button
                   // Muted until hovered: a rose "Remove" on every peer
                   // row would make the page's rarest act its loudest.

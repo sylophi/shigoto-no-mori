@@ -45,10 +45,11 @@ import { WEB_PLATFORM } from "@shared/account/platform";
 import {
   effectiveDeviceIcon,
   enrollDevice,
-  setDeviceIcon,
-  renameDevice,
   retryParkedRevoke,
   signOutDevice,
+  syncHubDevice,
+  updateDevice,
+  type DeviceFields,
 } from "@shared/account/enroll";
 import { createHubConnection } from "../hub/connection";
 import { webServiceConfig } from "../account/config";
@@ -189,6 +190,26 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
   // ---- account module ----
 
+  // A device's name or icon change, made on the hub (updateDevice),
+  // then the fan-out so every tab re-reads the registry.
+  async function updateAccountDevice(
+    target: string,
+    patch: DeviceFields,
+  ): Promise<AccountStatus> {
+    const record = store.read();
+    if (record === null || !isConfigured(config)) {
+      throw new Error("cannot change a device while signed out");
+    }
+    await updateDevice(
+      { service, store, deviceId, detectedIcon },
+      record,
+      target,
+      patch,
+    );
+    accountChanged();
+    return readStatus();
+  }
+
   function defaultDeviceName(): string {
     return defaultWebDeviceName(deps.userAgent, deps.browserHints);
   }
@@ -322,24 +343,24 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     listDevices: async () => {
       const record = store.read();
       if (record === null || !isConfigured(config)) return [];
-      return service.listDevices(record.credential);
-    },
-
-    setDeviceName: (name) => {
-      if (renameDevice({ config, service, store, deviceId }, name)) {
-        accountChanged();
-      }
-      return readStatus();
-    },
-
-    setDeviceIcon: (icon) => {
+      const devices = await service.listDevices(record.credential);
       if (
-        setDeviceIcon({ config, service, store, deviceId, detectedIcon }, icon)
+        syncHubDevice(
+          { service, store, deviceId, detectedIcon },
+          record,
+          devices,
+        )
       ) {
         accountChanged();
       }
-      return readStatus();
+      return devices;
     },
+
+    setDeviceName: ({ deviceId: target, name }) =>
+      updateAccountDevice(target, { name }),
+
+    setDeviceIcon: ({ deviceId: target, icon }) =>
+      updateAccountDevice(target, { icon }),
 
     // A web client is a refuse-all host (web/hub/connection.ts): it
     // serves no peer calls, so switching command access on would

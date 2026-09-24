@@ -37,10 +37,12 @@ import {
 import {
   effectiveDeviceIcon,
   enrollDevice,
-  renameDevice,
+  renameLocally,
   retryParkedRevoke,
-  setDeviceIcon,
   signOutDevice,
+  syncHubDevice,
+  updateDevice,
+  type DeviceFields,
 } from "@shared/account/enroll";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import {
@@ -408,8 +410,9 @@ export function makeAccountHandlers(
   // forward, once per process, the first time status is read while
   // signed in with a SETTLED default (a provisional one would bake the
   // hostname stand-in in for good) -- through the same fan-out a rename
-  // takes, so every window sees the new name, and through the same
-  // hub push, so the other devices list it too. A name the user
+  // takes, so every window sees the new name. The next registry read
+  // finds the hub's copy stale and pushes it (syncHubDevice), so the
+  // other devices list it too. A name the user
   // typed cannot match the raw hostname unless they typed exactly that,
   // in which case the default is what they asked for. Returns the
   // record status should report. A write that fails leaves the old
@@ -430,18 +433,9 @@ export function makeAccountHandlers(
     ) {
       return record;
     }
-    const renamed = { ...record, deviceName: defaultName.name };
+    let renamed: StoredAccount;
     try {
-      const config = serviceConfig();
-      renameDevice(
-        {
-          config,
-          service: createAccountService({ baseUrl: config.hubUrl }),
-          store: store(),
-          deviceId: getDeviceId(),
-        },
-        defaultName.name,
-      );
+      renamed = renameLocally(store(), record, defaultName.name);
     } catch (error) {
       console.warn(
         "[account] could not rename the device to its default",
@@ -451,6 +445,30 @@ export function makeAccountHandlers(
     }
     accountChanged();
     return renamed;
+  };
+  // A device's name or icon change, made on the hub (updateDevice).
+  // Every window re-reads the registry after, a peer's change with it.
+  const update = async (
+    deviceId: string,
+    patch: DeviceFields,
+  ): Promise<AccountStatus> => {
+    const signedIn = signedInService();
+    if (signedIn === null) {
+      throw new Error("cannot change a device while signed out");
+    }
+    await updateDevice(
+      {
+        service: signedIn.service,
+        store: store(),
+        deviceId: getDeviceId(),
+        detectedIcon: await detectedDeviceIcon(),
+      },
+      signedIn.record,
+      deviceId,
+      patch,
+    );
+    accountChanged();
+    return readStatus();
   };
   return {
     status: async () => {
@@ -569,40 +587,24 @@ export function makeAccountHandlers(
       const devices = await signedIn.service.listDevices(
         signedIn.record.credential,
       );
-      onDeviceList(devices);
-      return devices;
-    },
-
-    setDeviceName: (name) => {
-      const config = serviceConfig();
-      const renamed = renameDevice(
+      const adopted = syncHubDevice(
         {
-          config,
-          service: createAccountService({ baseUrl: config.hubUrl }),
-          store: store(),
-          deviceId: getDeviceId(),
-        },
-        name,
-      );
-      if (renamed) accountChanged();
-      return readStatus();
-    },
-
-    setDeviceIcon: async (icon) => {
-      const config = serviceConfig();
-      const picked = setDeviceIcon(
-        {
-          config,
-          service: createAccountService({ baseUrl: config.hubUrl }),
+          service: signedIn.service,
           store: store(),
           deviceId: getDeviceId(),
           detectedIcon: await detectedDeviceIcon(),
         },
-        icon,
+        signedIn.record,
+        devices,
       );
-      if (picked) accountChanged();
-      return readStatus();
+      if (adopted) accountChanged();
+      onDeviceList(devices);
+      return devices;
     },
+
+    setDeviceName: ({ deviceId, name }) => update(deviceId, { name }),
+
+    setDeviceIcon: ({ deviceId, icon }) => update(deviceId, { icon }),
 
     acceptsCommands: acceptsPeerCommands,
 

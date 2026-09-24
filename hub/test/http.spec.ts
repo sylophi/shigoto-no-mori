@@ -388,6 +388,24 @@ describe("PATCH /devices/:deviceId", () => {
     ).toBe(400);
   });
 
+  it("changes another device's icon from a device of the same account", async () => {
+    const self = await enroll("acct-icon-3", "dev-icon-3-self");
+    const other = await enroll("acct-icon-3", "dev-icon-3-other");
+    expect(
+      (
+        await call(
+          updateRequest(self.credential, "dev-icon-3-other", { icon: "cat" }),
+        )
+      ).status,
+    ).toBe(204);
+    const listed = (await (
+      await call(listRequest(other.credential))
+    ).json()) as { devices: { deviceId: string; icon: string }[] };
+    expect(
+      listed.devices.find((d) => d.deviceId === "dev-icon-3-other")?.icon,
+    ).toBe("cat");
+  });
+
   it("rejects a blank name and hides other accounts' devices behind 404", async () => {
     const self = await enroll("acct-ren-2", "dev-ren-2");
     const outsider = await enroll("acct-ren-outsider", "dev-ren-outsider");

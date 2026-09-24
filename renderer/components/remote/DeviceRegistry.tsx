@@ -94,10 +94,9 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
     return {
       device,
       isThisDevice,
-      // setDeviceName and setDeviceIcon write this device's name and
-      // icon locally while the hub registry keeps what it enrolled
-      // under. The local ones are the truth the user just picked, so
-      // the row shows them.
+      // This device's name and icon are the copies it keeps of the
+      // hub's, current the moment a change here lands. The row shows
+      // the ones every other surface of this device draws.
       name: isThisDevice ? local.name : device.name,
       icon: isThisDevice ? local.icon : device.icon,
       status: deviceRowStatus(device, isThisDevice, hubDevice, socket, now),
