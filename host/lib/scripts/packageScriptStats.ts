@@ -55,22 +55,44 @@ export function readScriptOrder(projectId: string): string[] {
   return map[projectId] ?? [];
 }
 
-// `arranged` is one worktree's scripts in their new order. Names the
-// stored order holds that this worktree's package.json lacks stay, after
-// the arranged ones, so arranging on one branch doesn't forget another
-// branch's scripts. Merged here, against the stored order read under the
-// lock, rather than by the client against its cached copy, which another
-// window may have written past.
+// `arranged` is one worktree's scripts in their new order. Merged here,
+// against the stored order read under the lock, rather than by the
+// client against its cached copy, which another window may have written
+// past.
 export function writeScriptOrder(projectId: string, arranged: string[]): void {
   stateStore.updateKey<OrderMap>(ORDER_KEY, {}, (map) => {
     const current = map[projectId] ?? [];
-    const shown = new Set(arranged);
-    const next = [...arranged, ...current.filter((name) => !shown.has(name))];
+    const next = mergeArrangedOrder(current, arranged);
     const unchanged =
       current.length === next.length &&
       current.every((name, i) => name === next[i]);
     return unchanged ? undefined : { ...map, [projectId]: next };
   });
+}
+
+// The stored order after one worktree arranges its scripts. Scripts it
+// lacks (another branch's) stay stored, each right behind the nearest
+// script it followed that this worktree does have, so "deploy comes
+// after dev" survives a branch without deploy moving dev. One with no
+// such script before it keeps to the front.
+export function mergeArrangedOrder(
+  stored: readonly string[],
+  arranged: readonly string[],
+): string[] {
+  const shown = new Set(arranged);
+  const followers = new Map<string | null, string[]>();
+  let anchor: string | null = null;
+  for (const name of stored) {
+    if (shown.has(name)) {
+      anchor = name;
+    } else {
+      followers.set(anchor, [...(followers.get(anchor) ?? []), name]);
+    }
+  }
+  return [
+    ...(followers.get(null) ?? []),
+    ...arranged.flatMap((name) => [name, ...(followers.get(name) ?? [])]),
+  ];
 }
 
 export function usageFor(
