@@ -89,25 +89,26 @@ Rules that keep that working:
 
 ## Devices: one identity, drawn one way
 
-A device is its name and its kind. The kind is one of the closed
-catalog in `shared/account/deviceKind.ts`: seven device shapes (laptop,
+A device is its name and its icon. The icon is one of the closed
+catalog in `shared/account/deviceIcon.ts`: seven device shapes (laptop,
 desktop, mini, server, phone, tablet, browser) and a set of marks that
 are only ever picked (a leaf, a cat, a rocket), for telling two laptops
 apart. The device detects its own shape at
-enrollment (`main/core/account/defaultDeviceKind.ts` on a machine,
-`web/account/deviceKind.ts` in a browser), its owner can pick another
+enrollment (`main/core/account/defaultDeviceIcon.ts` on a machine,
+`web/account/deviceIcon.ts` in a browser), its owner can pick another
 on its Devices page row, and the hub stores the result beside the
 name so every device draws every other one the same way.
 
 Rules that keep a machine looking like itself everywhere:
 
-- **Every mark for a device goes through `shared/DeviceIcon.tsx`.**
-  `DeviceIcon` is the glyph, `DeviceMark` the glyph on a tile in the
+- **Every mark for a device goes through `shared/DeviceGlyph.tsx`.**
+  `DeviceGlyph` is the bare glyph, `DeviceLead` the connection dot and
+  glyph that leads a name, `DeviceMark` the glyph on a tile in the
   device's connection tone. Never a lucide laptop or monitor picked at
   a call site, and never a mark derived from the name.
-- **The kind comes off the device record**, never guessed: a
-  `RemoteDevice` and a `DeviceRosterEntry` carry `kind`, this device's
-  comes from `useLocalDeviceKind`, and `useDeviceKind(deviceId)`
+- **The icon comes off the device record**, never guessed: a
+  `RemoteDevice` and a `DeviceRosterEntry` carry `icon`, this device's
+  comes from `useLocalDeviceIcon`, and `useDeviceIcon(deviceId)`
   answers for either.
 - **State stays on the dot and the tone.** A device's connection is
   the `StatusDot` beside its glyph (or the tint of its mark), through

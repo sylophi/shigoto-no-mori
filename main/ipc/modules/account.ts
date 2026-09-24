@@ -29,20 +29,20 @@ import {
   isLegacyDefaultName,
   type DefaultDeviceName,
 } from "../../core/account/defaultDeviceName";
-import { detectDesktopDeviceKind } from "../../core/account/defaultDeviceKind";
+import { detectDesktopDeviceShape } from "../../core/account/defaultDeviceIcon";
 import {
   createGrantStore,
   type GrantStore,
 } from "../../core/account/grantStore";
 import {
-  effectiveDeviceKind,
+  effectiveDeviceIcon,
   enrollDevice,
   renameDevice,
   retryParkedRevoke,
-  setDeviceKind,
+  setDeviceIcon,
   signOutDevice,
 } from "@shared/account/enroll";
-import type { DeviceKind } from "@shared/account/deviceKind";
+import type { DeviceIcon } from "@shared/account/deviceIcon";
 import {
   createAccountService,
   type AccountService,
@@ -210,21 +210,21 @@ async function defaultDeviceName(): Promise<DefaultDeviceName> {
   return { name, provisional: resolved.provisional };
 }
 
-// What this machine looks like (defaultDeviceKind.ts), the kind it
+// What this machine looks like (defaultDeviceIcon.ts), the icon it
 // enrolls under until its owner picks one. Detected once per process:
 // the probes shell out, and the answer cannot change while the app
 // runs. It cannot reject (the detector falls back to the platform).
-let detectedKindInFlight: Promise<DeviceKind> | null = null;
-export function detectedDeviceKind(): Promise<DeviceKind> {
-  detectedKindInFlight ??= detectDesktopDeviceKind();
-  return detectedKindInFlight;
+let detectedIconInFlight: Promise<DeviceIcon> | null = null;
+export function detectedDeviceIcon(): Promise<DeviceIcon> {
+  detectedIconInFlight ??= detectDesktopDeviceShape();
+  return detectedIconInFlight;
 }
 
 // Starts both resolves at boot so they overlap window creation instead
 // of gating the first status read. Neither can reject, so nothing
 // awaits them.
 void defaultDeviceName();
-void detectedDeviceKind();
+void detectedDeviceIcon();
 
 // Whether this build has an account service at all, for callers outside
 // the account module (liveness gates keepReachable on it: with no
@@ -255,7 +255,7 @@ export function clerkPublishableKey(): string {
 function statusOf(
   record: StoredAccount | null,
   defaultName: string,
-  detectedKind: DeviceKind,
+  detectedIcon: DeviceIcon,
 ): AccountStatus {
   return {
     configured: isConfigured(serviceConfig()),
@@ -265,9 +265,9 @@ function statusOf(
     // what the next enrollment uses (enroll.ts).
     deviceName:
       record?.deviceName ?? store().rememberedDeviceName() ?? defaultName,
-    // The kind by the same rule (a pick outlives a sign-out too).
-    deviceKind: effectiveDeviceKind(record, store(), detectedKind),
-    detectedDeviceKind: detectedKind,
+    // The icon by the same rule (a pick outlives a sign-out too).
+    deviceIcon: effectiveDeviceIcon(record, store(), detectedIcon),
+    detectedDeviceIcon: detectedIcon,
     // --clone-login leaves this beside the token store it copied
     // (scripts/lib/devProfile.mts cloneDevLogin).
     sharedSignIn: existsSync(
@@ -280,7 +280,7 @@ async function readStatus(): Promise<AccountStatus> {
   return statusOf(
     store().read(),
     (await defaultDeviceName()).name,
-    await detectedDeviceKind(),
+    await detectedDeviceIcon(),
   );
 }
 
@@ -458,7 +458,7 @@ export function makeAccountHandlers(
       return statusOf(
         migrateDefaultName(store().read(), defaultName),
         defaultName.name,
-        await detectedDeviceKind(),
+        await detectedDeviceIcon(),
       );
     },
 
@@ -483,7 +483,7 @@ export function makeAccountHandlers(
             fallbackDeviceName: (await defaultDeviceName()).name,
             // The device hub stores it as an opaque label.
             platform: platform(),
-            detectedKind: await detectedDeviceKind(),
+            detectedIcon: await detectedDeviceIcon(),
           },
           token,
         );
@@ -588,17 +588,17 @@ export function makeAccountHandlers(
       return readStatus();
     },
 
-    setDeviceKind: async (kind) => {
+    setDeviceIcon: async (icon) => {
       const config = serviceConfig();
-      const picked = setDeviceKind(
+      const picked = setDeviceIcon(
         {
           config,
           service: createAccountService({ baseUrl: config.hubUrl }),
           store: store(),
           deviceId: getDeviceId(),
-          detectedKind: await detectedDeviceKind(),
+          detectedIcon: await detectedDeviceIcon(),
         },
-        kind,
+        icon,
       );
       if (picked) accountChanged();
       return readStatus();

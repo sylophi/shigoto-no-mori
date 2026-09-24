@@ -119,6 +119,17 @@ app talking through a new Worker) degrades softly instead: its
 oversize sends get nacked and the calls time out, which is acceptable
 during the owner's own rollout.
 
+Deploy order for the device icon rename (`0005_device_icon.sql`, which
+renames the `devices.kind` column and the wire field to `icon`): apply
+the migration and deploy the Worker back to back, then ship the app
+builds. There is no compatibility path. Between the two steps the old
+Worker's queries name a column that no longer exists, so every
+credentialed route fails until the new Worker is live, and rolling the
+Worker back needs the column renamed back too. Apps built before the
+rename cannot enroll or read the device list against the new Worker
+(and the reverse), and two devices on either side of it cannot change
+each other's icon.
+
 Devices heartbeat their hub socket with a bare `ping` text that the
 Durable Object answers `pong` through the hibernation runtime's
 auto-response (`shared/hub/protocol.ts`), so a socket a NAT or a sleep

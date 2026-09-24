@@ -38,10 +38,10 @@ import {
   resolveServiceConfig,
 } from "../shared/account/serviceConfig.ts";
 import {
-  effectiveDeviceKind,
+  effectiveDeviceIcon,
   enrollDevice,
   retryParkedRevoke,
-  setDeviceKind,
+  setDeviceIcon,
   signOutDevice,
 } from "../shared/account/enroll.ts";
 import {
@@ -57,9 +57,9 @@ import { createGrantStore } from "../main/core/account/grantStore.ts";
 import { shortHostname } from "../main/core/account/defaultDeviceName.ts";
 import {
   appleProductNameOf,
-  deviceKindFromAppleModel,
-  deviceKindFromDmi,
-} from "../main/core/account/defaultDeviceKind.ts";
+  deviceShapeFromAppleModel,
+  deviceShapeFromDmi,
+} from "../main/core/account/defaultDeviceIcon.ts";
 import {
   AccountStatusSchema,
   accountContract,
@@ -106,14 +106,14 @@ const DEVICE = {
   deviceId: "device-uuid",
   name: "Test Mac",
   platform: "darwin",
-  kind: "laptop",
+  icon: "laptop",
   createdAt: 1_700_000_000_000,
   lastSeenAt: null,
   online: true,
 };
 
 const dmi = (chassisType, vendor = null, product = null) =>
-  deviceKindFromDmi({ chassisType, vendor, product });
+  deviceShapeFromDmi({ chassisType, vendor, product });
 
 const { check, done, fail } = makeProof("account layer proof");
 
@@ -150,7 +150,7 @@ async function main() {
         deviceId: "device-uuid",
         name: "Test Mac",
         platform: "darwin",
-        kind: "laptop",
+        icon: "laptop",
       });
       assert.equal(result.credential, "device-credential");
       assert.deepEqual(result.device, DEVICE);
@@ -162,7 +162,7 @@ async function main() {
         deviceId: "device-uuid",
         name: "Test Mac",
         platform: "darwin",
-        kind: "laptop",
+        icon: "laptop",
       });
     },
   );
@@ -192,7 +192,7 @@ async function main() {
   );
 
   await check(
-    "service: update PATCHes the per-device route with the name and/or kind and tolerates a 204",
+    "service: update PATCHes the per-device route with the name and/or icon and tolerates a 204",
     async () => {
       const { fetchImpl, calls } = recordingFetch(
         () => new Response(null, { status: 204 }),
@@ -214,8 +214,8 @@ async function main() {
         calls[0].init.headers.authorization,
         "Bearer device-credential",
       );
-      await service.update("device-credential", "id", { kind: "mini" });
-      assert.deepEqual(JSON.parse(calls[1].init.body), { kind: "mini" });
+      await service.update("device-credential", "id", { icon: "mini" });
+      assert.deepEqual(JSON.parse(calls[1].init.body), { icon: "mini" });
       await assert.rejects(
         () => service.update("device-credential", "id", { name: "" }),
         "a blank name was sent to the hub",
@@ -225,8 +225,8 @@ async function main() {
         "an empty patch was sent to the hub",
       );
       await assert.rejects(
-        () => service.update("device-credential", "id", { kind: "" }),
-        "a blank kind was sent to the hub",
+        () => service.update("device-credential", "id", { icon: "" }),
+        "a blank icon was sent to the hub",
       );
     },
   );
@@ -301,7 +301,7 @@ async function main() {
         deviceId: "device-uuid",
         name: "Test Mac",
         platform: "darwin",
-        kind: "laptop",
+        icon: "laptop",
       });
       await service.listDevices("device-credential");
       const enrollAuth = calls[0].init.headers.authorization;
@@ -360,9 +360,10 @@ async function main() {
 
   // An in-memory store over the shared core, the seam both shells'
   // enroll/sign-out orchestration is driven through.
-  const memoryStore = () => {
-    let stored = null;
-    return createCoreAccountStore({
+  // `initial` seeds the stored document, and raw() reads it back.
+  const memoryStore = (initial = null) => {
+    let stored = initial;
+    const store = createCoreAccountStore({
       storage: {
         readRaw: () => stored,
         writeRaw: (text) => {
@@ -374,6 +375,7 @@ async function main() {
       },
       cipher: PLAINTEXT_CIPHER,
     });
+    return Object.assign(store, { raw: () => JSON.parse(stored) });
   };
 
   await check(
@@ -395,7 +397,7 @@ async function main() {
           deviceId: "device-uuid",
           fallbackDeviceName: "Fallback Mac",
           platform: "darwin",
-          detectedKind: "laptop",
+          detectedIcon: "laptop",
         },
         fakeSessionJwt("user_abc"),
       );
@@ -405,13 +407,13 @@ async function main() {
         deviceName: "Fallback Mac",
       });
       // With no pick stored, the device enrolls under what it detected.
-      assert.equal(JSON.parse(calls[0].init.body).kind, "laptop");
+      assert.equal(JSON.parse(calls[0].init.body).icon, "laptop");
       // A stored name survives re-enrollment. The fallback is only for
       // a first sign-in. So does a stored icon pick, over the detection.
       store.write({
         ...store.read(),
         deviceName: "Renamed",
-        deviceKind: "server",
+        deviceIcon: "server",
       });
       await enrollDevice(
         {
@@ -421,13 +423,13 @@ async function main() {
           deviceId: "device-uuid",
           fallbackDeviceName: "Fallback Mac",
           platform: "darwin",
-          detectedKind: "laptop",
+          detectedIcon: "laptop",
         },
         fakeSessionJwt("user_abc"),
       );
       assert.equal(store.read().deviceName, "Renamed");
-      assert.equal(store.read().deviceKind, "server");
-      assert.equal(JSON.parse(calls[1].init.body).kind, "server");
+      assert.equal(store.read().deviceIcon, "server");
+      assert.equal(JSON.parse(calls[1].init.body).icon, "server");
       // The name outlives a sign-out into the next enrollment, and a
       // parked revoke from that sign-out is delivered only when the hub
       // refuses the enroll for it (a 409: the device is still on the
@@ -436,7 +438,7 @@ async function main() {
         credential: "cred-1",
         accountId: "user_abc",
         deviceName: "Renamed",
-        deviceKind: "server",
+        deviceIcon: "server",
       });
       assert.equal(store.read(), null);
       let refusals = 0;
@@ -461,7 +463,7 @@ async function main() {
           deviceId: "device-uuid",
           fallbackDeviceName: "Fallback Mac",
           platform: "darwin",
-          detectedKind: "laptop",
+          detectedIcon: "laptop",
         },
         fakeSessionJwt("user_other"),
       );
@@ -478,7 +480,7 @@ async function main() {
         credential: "cred-2",
         accountId: "user_other",
         deviceName: "Renamed",
-        deviceKind: "server",
+        deviceIcon: "server",
       });
       assert.equal(store.readParked(), null);
 
@@ -493,7 +495,7 @@ async function main() {
               deviceId: "device-uuid",
               fallbackDeviceName: "Fallback Mac",
               platform: "darwin",
-              detectedKind: "laptop",
+              detectedIcon: "laptop",
             },
             fakeSessionJwt("user_abc"),
           ),
@@ -504,7 +506,7 @@ async function main() {
   );
 
   await check(
-    "icon pick: setDeviceKind stores the pick and pushes it, null (or the detected kind) drops the pick and pushes the detection, and signed out there is nothing to pick",
+    "icon pick: setDeviceIcon stores the pick and pushes it, null (or the detected icon) drops the pick and pushes the detection, and signed out there is nothing to pick",
     async () => {
       const { fetchImpl, calls } = recordingFetch(
         () => new Response(null, { status: 204 }),
@@ -519,55 +521,55 @@ async function main() {
         service,
         store,
         deviceId: "device-uuid",
-        detectedKind: "laptop",
+        detectedIcon: "laptop",
       };
-      assert.equal(setDeviceKind(deps, "mini"), false, "picked signed out");
+      assert.equal(setDeviceIcon(deps, "mini"), false, "picked signed out");
       assert.equal(calls.length, 0);
       store.write({ credential: "c", accountId: "a", deviceName: "d" });
       assert.equal(
-        effectiveDeviceKind(store.read(), store, "laptop"),
+        effectiveDeviceIcon(store.read(), store, "laptop"),
         "laptop",
       );
-      assert.equal(setDeviceKind(deps, "mini"), true);
-      assert.equal(store.read().deviceKind, "mini");
-      assert.equal(effectiveDeviceKind(store.read(), store, "laptop"), "mini");
+      assert.equal(setDeviceIcon(deps, "mini"), true);
+      assert.equal(store.read().deviceIcon, "mini");
+      assert.equal(effectiveDeviceIcon(store.read(), store, "laptop"), "mini");
       // The current tile clicked again changes nothing, so nothing moves.
-      assert.equal(setDeviceKind(deps, "mini"), false);
+      assert.equal(setDeviceIcon(deps, "mini"), false);
       // Dropping the pick removes the key outright, so the next
       // enrollment sends whatever the machine detects by then.
-      assert.equal(setDeviceKind(deps, null), true);
+      assert.equal(setDeviceIcon(deps, null), true);
       assert.deepEqual(store.read(), {
         credential: "c",
         accountId: "a",
         deviceName: "d",
       });
-      // Picking the detected kind is the same as dropping the pick (a
-      // peer's picker sends the kind itself): it clears a stored pick,
+      // Picking the detected icon is the same as dropping the pick (a
+      // peer's picker sends the icon itself): it clears a stored pick,
       // and with none stored there is nothing to write.
-      assert.equal(setDeviceKind(deps, "mini"), true);
-      assert.equal(setDeviceKind(deps, "laptop"), true);
-      assert.equal(store.read().deviceKind, undefined);
-      assert.equal(setDeviceKind(deps, "laptop"), false);
+      assert.equal(setDeviceIcon(deps, "mini"), true);
+      assert.equal(setDeviceIcon(deps, "laptop"), true);
+      assert.equal(store.read().deviceIcon, undefined);
+      assert.equal(setDeviceIcon(deps, "laptop"), false);
       // The push is fire-and-forget: give it a tick to land.
       await new Promise((resolve) => setTimeout(resolve, 0));
       assert.deepEqual(
         calls.map((c) => [c.init.method, JSON.parse(c.init.body)]),
         [
-          ["PATCH", { kind: "mini" }],
-          ["PATCH", { kind: "laptop" }],
-          ["PATCH", { kind: "mini" }],
-          ["PATCH", { kind: "laptop" }],
+          ["PATCH", { icon: "mini" }],
+          ["PATCH", { icon: "laptop" }],
+          ["PATCH", { icon: "mini" }],
+          ["PATCH", { icon: "laptop" }],
         ],
       );
       // The pick outlives a sign-out, like the name.
-      store.write({ ...store.read(), deviceKind: "server" });
+      store.write({ ...store.read(), deviceIcon: "server" });
       store.clear();
-      assert.equal(store.rememberedDeviceKind(), "server");
+      assert.equal(store.rememberedDeviceIcon(), "server");
       assert.equal(
-        effectiveDeviceKind(store.read(), store, "laptop"),
+        effectiveDeviceIcon(store.read(), store, "laptop"),
         "server",
       );
-      // A stored kind this build does not know reads as no pick.
+      // A stored icon this build does not know reads as no pick.
       const odd = createCoreAccountStore({
         storage: {
           readRaw: () =>
@@ -577,30 +579,48 @@ async function main() {
               credential: "c",
               accountId: "a",
               deviceName: "d",
-              deviceKind: "hologram",
+              deviceIcon: "hologram",
             }),
           writeRaw: () => {},
           removeRaw: () => {},
         },
         cipher: PLAINTEXT_CIPHER,
       });
-      assert.equal(odd.read().deviceKind, undefined);
-      assert.equal(odd.rememberedDeviceKind(), null);
+      assert.equal(odd.read().deviceIcon, undefined);
+      assert.equal(odd.rememberedDeviceIcon(), null);
+      // A pick stored before the rename, under deviceKind, still reads,
+      // and the next write stores it as deviceIcon.
+      const legacy = memoryStore(
+        JSON.stringify({
+          v: 1,
+          enc: false,
+          credential: "c",
+          accountId: "a",
+          deviceName: "d",
+          deviceKind: "cat",
+        }),
+      );
+      assert.equal(legacy.read().deviceIcon, "cat");
+      legacy.write(legacy.read());
+      assert.deepEqual(
+        [legacy.raw().deviceIcon, legacy.raw().deviceKind],
+        ["cat", undefined],
+      );
     },
   );
 
   await check(
-    "device kind detection: Apple product names and model identifiers, DMI chassis codes, virtual machines",
+    "device icon detection: Apple product names and model identifiers, DMI chassis codes, virtual machines",
     () => {
-      assert.equal(deviceKindFromAppleModel("MacBook Pro"), "laptop");
-      assert.equal(deviceKindFromAppleModel("MacBookAir10,1"), "laptop");
-      assert.equal(deviceKindFromAppleModel("Mac mini (2024)"), "mini");
-      assert.equal(deviceKindFromAppleModel("Macmini9,1"), "mini");
-      assert.equal(deviceKindFromAppleModel("Mac Studio"), "mini");
-      assert.equal(deviceKindFromAppleModel("iMac21,1"), "desktop");
-      assert.equal(deviceKindFromAppleModel("Mac Pro"), "desktop");
+      assert.equal(deviceShapeFromAppleModel("MacBook Pro"), "laptop");
+      assert.equal(deviceShapeFromAppleModel("MacBookAir10,1"), "laptop");
+      assert.equal(deviceShapeFromAppleModel("Mac mini (2024)"), "mini");
+      assert.equal(deviceShapeFromAppleModel("Macmini9,1"), "mini");
+      assert.equal(deviceShapeFromAppleModel("Mac Studio"), "mini");
+      assert.equal(deviceShapeFromAppleModel("iMac21,1"), "desktop");
+      assert.equal(deviceShapeFromAppleModel("Mac Pro"), "desktop");
       // The bare Apple silicon identifier says nothing about the shape.
-      assert.equal(deviceKindFromAppleModel("Mac16,10"), null);
+      assert.equal(deviceShapeFromAppleModel("Mac16,10"), null);
       assert.equal(
         appleProductNameOf(
           '  |   "product-name" = <"Mac mini (2024)">\n  |   "target-type" = <"J773g">',
@@ -1030,8 +1050,8 @@ async function main() {
         signedIn: true,
         accountId: "acct-1",
         deviceName: "Mac",
-        deviceKind: "laptop",
-        detectedDeviceKind: "laptop",
+        deviceIcon: "laptop",
+        detectedDeviceIcon: "laptop",
         sharedSignIn: false,
       });
       assert.ok(

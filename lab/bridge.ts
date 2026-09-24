@@ -8,7 +8,7 @@
 //
 // window.smLab carries the posing controls: flip a peer's presence,
 // change the socket phase, navigate the memory router.
-import type { DeviceKind } from "@shared/account/deviceKind";
+import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { buildApi } from "@shared/ipc/client";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import type {
@@ -211,7 +211,7 @@ function hostHandlersFor(
   const registryEntry = accountDevices.find(
     (device) => device.deviceId === forest.deviceId,
   )!;
-  const detectedHere = registryEntry.kind;
+  const detectedHere = registryEntry.icon;
   const findWorktree = (worktreeId: string) =>
     allWorktrees().find((worktree) => worktree.id === worktreeId);
   const branchesOf = () => [
@@ -334,10 +334,10 @@ function hostHandlersFor(
       ),
     }),
     "remoteAccess:commandAccess": () => ({ granted: forest.grantsCaller }),
-    "device:detectedKind": () => detectedHere,
-    "device:setKind": (kind: DeviceKind) => {
-      registryEntry.kind = kind;
-      return kind;
+    "device:detectedIcon": () => detectedHere,
+    "device:setIcon": (icon: DeviceIcon) => {
+      registryEntry.icon = icon;
+      return icon;
     },
     // The stub's shape with a full create lifecycle on it (carry-over,
     // a setup script, and ports below), so the pull dialogs' setup
@@ -898,8 +898,8 @@ const revoked = new Set<string>();
 let deviceName = "Studio Mac";
 // The icon pick on this device's row: null is "what it detected",
 // which depends on the shell posed (set at install, so read late).
-let deviceKind: DeviceKind | null = null;
-const detectedKind = (): DeviceKind => (WEB_SHELL ? "browser" : "mini");
+let deviceIcon: DeviceIcon | null = null;
+const detectedIcon = (): DeviceIcon => (WEB_SHELL ? "browser" : "mini");
 
 // The web-shell pose (lab/web-main.tsx): this page is an enrolled
 // BROWSER device, every machine forest (Studio Mac included) is a
@@ -1007,7 +1007,7 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
             deviceId: WEB_DEVICE_ID,
             name: "Chrome on MacBook",
             platform: WEB_PLATFORM,
-            kind: "browser",
+            icon: "browser",
             createdAt: Date.now() - 2 * 24 * 3_600_000,
             lastSeenAt: Date.now(),
             online: true,
@@ -1021,8 +1021,8 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
     signedIn: true,
     accountId: LAB_ACCOUNT_ID,
     deviceName: WEB_SHELL ? "Chrome on MacBook" : deviceName,
-    deviceKind: deviceKind ?? detectedKind(),
-    detectedDeviceKind: detectedKind(),
+    deviceIcon: deviceIcon ?? detectedIcon(),
+    detectedDeviceIcon: detectedIcon(),
   });
 
   // The engine's forward table, mutated by start/stop so the switches
@@ -1061,9 +1061,9 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
       client.emit("account:changed", { accountId: accountStatus().accountId });
       return accountStatus();
     },
-    "account:setDeviceKind": (kind: DeviceKind | null) => {
-      // The store's rule: the detected kind is no pick.
-      deviceKind = kind === detectedKind() ? null : kind;
+    "account:setDeviceIcon": (icon: DeviceIcon | null) => {
+      // The store's rule: the detected icon is no pick.
+      deviceIcon = icon === detectedIcon() ? null : icon;
       client.emit("account:changed", { accountId: accountStatus().accountId });
       return accountStatus();
     },

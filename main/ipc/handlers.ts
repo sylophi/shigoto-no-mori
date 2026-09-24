@@ -117,7 +117,7 @@ import { dataDir } from "@host/lib/util/paths";
 import { getDeviceId } from "@host/lib/config/deviceId";
 import {
   accountSignedIn,
-  detectedDeviceKind,
+  detectedDeviceIcon,
   makeAccountHandlers,
 } from "./modules/account";
 import { hubConnectInputs } from "./modules/account";
@@ -657,9 +657,9 @@ export function registerIpcHandlers(): void {
   // so it is stored, fanned out to the windows here and pushed to the
   // hub exactly as a pick made here would be.
   setDeviceImpl({
-    detectedKind: detectedDeviceKind,
-    setKind: async (kind) =>
-      (await accountHandlers.setDeviceKind(kind, undefined)).deviceKind,
+    detectedIcon: detectedDeviceIcon,
+    setIcon: async (icon) =>
+      (await accountHandlers.setDeviceIcon(icon, undefined)).deviceIcon,
   });
   registerContract(deviceContract, deviceHandlers);
 }

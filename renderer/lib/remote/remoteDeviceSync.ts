@@ -330,7 +330,7 @@ function buildEntry(
     deviceId: info.deviceId,
     label: info.name,
     platform: info.platform,
-    kind: info.kind,
+    icon: info.icon,
     status,
     appVersion: version ?? "",
     api,

@@ -13,9 +13,9 @@
 // the row with one tab for it, ahead of the machines it spans.
 import { useState, type ReactNode } from "react";
 import { MonitorSmartphone } from "lucide-react";
-import type { DeviceKind } from "@shared/account/deviceKind";
+import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { DEVICE_PILL_CLASS } from "@/components/shared/DeviceChip";
-import { DeviceGlyph } from "@/components/shared/DeviceIcon";
+import { DeviceLead } from "@/components/shared/DeviceGlyph";
 import { hostsProjects } from "@/lib/remote/deviceTraits";
 import { EmptyPanel } from "@/components/ui/empty-panel";
 import { useLocalDevice } from "@/hooks/account/useAccount";
@@ -47,8 +47,8 @@ import { cn } from "@/lib/utils";
 export interface DeviceRosterEntry {
   deviceId: string;
   label: string;
-  // What it looks like (DeviceIcon), so every pick draws it.
-  kind: DeviceKind;
+  // What it looks like (DeviceGlyph), so every pick draws it.
+  icon: DeviceIcon;
   isThisDevice: boolean;
   // Registers projects (deviceTraits): a browser on the account is a
   // device too, but hosts no forest.
@@ -79,7 +79,7 @@ export function useDeviceRoster(): DeviceRosterEntry[] {
         {
           deviceId: localDeviceId,
           label: local.name,
-          kind: local.kind,
+          icon: local.icon,
           isThisDevice: true,
           hostsProjects: true,
           status: null,
@@ -91,7 +91,7 @@ export function useDeviceRoster(): DeviceRosterEntry[] {
     (device): DeviceRosterEntry => ({
       deviceId: device.deviceId,
       label: device.label,
-      kind: device.kind,
+      icon: device.icon,
       isThisDevice: false,
       hostsProjects: hostsProjects(device.platform),
       status: deviceStatusView(device.status),
@@ -179,7 +179,7 @@ export function DeviceTabBar({
       title: deviceTitle(tab.label, tab.status),
       // The device's connection dot, then its glyph: this device has
       // no connection to show and wears the glyph alone.
-      lead: <DeviceGlyph kind={tab.kind} tone={tab.status?.tone} />,
+      lead: <DeviceLead icon={tab.icon} tone={tab.status?.tone} />,
       label: tab.label,
     })),
   ];

@@ -10,9 +10,9 @@ import {
   useSettingsSave,
 } from "@/hooks/config/useSettingsSave";
 import { useLocalDevice } from "@/hooks/account/useAccount";
-import { DeviceIcon } from "@/components/shared/DeviceIcon";
+import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import { THIS_DEVICE_VIEW } from "@/lib/remote/deviceStatus";
-import type { DeviceKind } from "@shared/account/deviceKind";
+import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
 import { useStagedUpdates } from "@/hooks/system/useUpdater";
 import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
@@ -289,7 +289,7 @@ function ClientVersionSection() {
 function headingFor(
   activeTab: string,
   peer: RemoteDevice | undefined,
-  local: { name: string; kind: DeviceKind },
+  local: { name: string; icon: DeviceIcon },
   // One machine on the account: no roster to place it in, so its
   // title carries neither the device eyebrow nor a presence pill.
   solo: boolean,
@@ -305,8 +305,8 @@ function headingFor(
     eyebrow: "Device settings",
     title: (
       <span className="inline-flex max-w-full items-center gap-2">
-        <DeviceIcon
-          kind={peer?.kind ?? local.kind}
+        <DeviceGlyph
+          icon={peer?.icon ?? local.icon}
           className="size-5 text-muted-foreground"
         />
         <span className="truncate">{peer?.label ?? local.name}</span>

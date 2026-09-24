@@ -13,9 +13,9 @@ import {
 import type { AccountStatus } from "@shared/ipc/modules/account";
 import type { DeviceInfo } from "@shared/hub/protocol";
 import {
-  MACHINE_FALLBACK_KIND,
-  type DeviceKind,
-} from "@shared/account/deviceKind";
+  MACHINE_FALLBACK_ICON,
+  type DeviceIcon,
+} from "@shared/account/deviceIcon";
 import { hasLocalHost } from "@/lib/localHost";
 import { queryKeys } from "@/lib/queryKeys";
 
@@ -45,18 +45,18 @@ export function useLocalDeviceName(): string {
 
 // Both at once, for the surfaces that draw this device's name beside
 // its glyph.
-export function useLocalDevice(): { name: string; kind: DeviceKind } {
-  return { name: useLocalDeviceName(), kind: useLocalDeviceKind() };
+export function useLocalDevice(): { name: string; icon: DeviceIcon } {
+  return { name: useLocalDeviceName(), icon: useLocalDeviceIcon() };
 }
 
 // What this device looks like, for its own marks: the account's
 // answer, or the platform's fallback until the status lands (a
 // desktop app is a machine, a hostless client a browser), so a mark
 // never waits on the read.
-export function useLocalDeviceKind(): DeviceKind {
+export function useLocalDeviceIcon(): DeviceIcon {
   const { data: account } = useAccountStatus();
   return (
-    account?.deviceKind ?? (hasLocalHost ? MACHINE_FALLBACK_KIND : "browser")
+    account?.deviceIcon ?? (hasLocalHost ? MACHINE_FALLBACK_ICON : "browser")
   );
 }
 
@@ -160,9 +160,9 @@ export function useSetDeviceName() {
 
 // The icon pick, on the rename's pattern. Null drops the pick, so the
 // device goes back to what it detected.
-export function useSetDeviceKind() {
-  return useMutation<AccountStatus, Error, DeviceKind | null>({
-    mutationFn: (kind) => window.api.account.setDeviceKind(kind),
+export function useSetDeviceIcon() {
+  return useMutation<AccountStatus, Error, DeviceIcon | null>({
+    mutationFn: (icon) => window.api.account.setDeviceIcon(icon),
     meta: { errorTitle: "Couldn't change this device's icon" },
   });
 }

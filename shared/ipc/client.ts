@@ -147,7 +147,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       revokeDevice: accountClient.revokeDevice,
       listDevices: accountClient.listDevices,
       setDeviceName: accountClient.setDeviceName,
-      setDeviceKind: accountClient.setDeviceKind,
+      setDeviceIcon: accountClient.setDeviceIcon,
       acceptsCommands: accountClient.acceptsCommands,
       setAcceptsCommands: accountClient.setAcceptsCommands,
       onChanged: accountClient.changed,
@@ -175,8 +175,8 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
     },
 
     device: {
-      detectedKind: deviceClient.detectedKind,
-      setKind: deviceClient.setKind,
+      detectedIcon: deviceClient.detectedIcon,
+      setIcon: deviceClient.setIcon,
     },
 
     dialog: {

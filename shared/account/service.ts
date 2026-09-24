@@ -28,7 +28,7 @@ import {
   type TicketResponse,
   type TunnelProvisionResponse,
 } from "@shared/hub/protocol";
-import type { DeviceKind } from "./deviceKind";
+import type { DeviceIcon } from "./deviceIcon";
 
 // A hub call answered non-2xx. Carries the HTTP status so callers that
 // classify outcomes (the tunnel provision path) can read it off the
@@ -106,7 +106,7 @@ type EnrollFields = {
   deviceId: string;
   name: string;
   platform: string;
-  kind: DeviceKind;
+  icon: DeviceIcon;
 };
 
 export type AccountService = {
@@ -117,7 +117,7 @@ export type AccountService = {
     deviceId: string,
     signal?: AbortSignal,
   ): Promise<void>;
-  // Changes a device of the account on the hub (its name, its kind, or
+  // Changes a device of the account on the hub (its name, its icon, or
   // both), so the registry the other devices list carries the change
   // at once.
   update(

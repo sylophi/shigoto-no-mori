@@ -7,7 +7,7 @@
 // whichever device it is made from. A project held on one device alone
 // has nothing to pick, so the section stays out.
 import { Check } from "lucide-react";
-import { DeviceIcon } from "@/components/shared/DeviceIcon";
+import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import { RowTag } from "@/components/ui/row-tag";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { THIS_DEVICE_VIEW } from "@/lib/remote/deviceStatus";
@@ -78,8 +78,8 @@ export function CreateOnSection({ project }: { project: Project }) {
                 <Check
                   className={cn("size-3.5 shrink-0", !selected && "opacity-0")}
                 />
-                <DeviceIcon
-                  kind={holder.kind}
+                <DeviceGlyph
+                  icon={holder.icon}
                   className="size-3.5 text-muted-foreground"
                 />
                 <span className="truncate">{holder.label}</span>

@@ -20,8 +20,8 @@ import {
   pullFolderCollision,
 } from "@shared/pullCollision";
 import { worktreeBaseFor } from "@shared/git/worktreeLayout";
-import type { DeviceKind } from "@shared/account/deviceKind";
-import { DeviceIcon } from "@/components/shared/DeviceIcon";
+import type { DeviceIcon } from "@shared/account/deviceIcon";
+import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip-button";
 import { PathSpan } from "@/components/ui/path-span";
@@ -36,7 +36,7 @@ import {
   useHostScope,
 } from "@/hooks/remote/useHostScope";
 import {
-  useDeviceKind,
+  useDeviceIcon,
   useRemoteDevice,
 } from "@/hooks/remote/useRemoteDevices";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
@@ -121,7 +121,7 @@ function useLocalCollision(
 function DeviceRow({
   className,
   mark,
-  kind,
+  icon,
   title,
   note,
   trailing,
@@ -135,8 +135,8 @@ function DeviceRow({
   soft?: boolean;
   // Absent on a row that is no pick at all (the source among targets).
   mark?: ReactNode;
-  // What the device looks like (DeviceIcon), never a shape picked here.
-  kind: DeviceKind;
+  // What the device looks like (DeviceGlyph), never a shape picked here.
+  icon: DeviceIcon;
   title: string;
   note: string;
   trailing?: ReactNode;
@@ -147,7 +147,7 @@ function DeviceRow({
   const body = (
     <>
       {mark}
-      <DeviceIcon kind={kind} className={cn("size-4", soft && "opacity-70")} />
+      <DeviceGlyph icon={icon} className={cn("size-4", soft && "opacity-70")} />
       <span className="min-w-0 flex-1 leading-tight">
         <span className="block truncate font-medium">{title}</span>
         <span className={cn("block truncate text-2xs", soft && "opacity-70")}>
@@ -203,7 +203,7 @@ function DestinationRow({
 }) {
   // The destination as the devices column names it: this machine, or
   // the peer a flow to a peer picked (DestinationProvider).
-  const destinationKind = useDeviceKind(useDestinationScope().deviceId);
+  const destinationIcon = useDeviceIcon(useDestinationScope().deviceId);
   const { landingBranch, held, holder } = useLocalCollision(
     target.project,
     worktree,
@@ -235,7 +235,7 @@ function DestinationRow({
           )}
         </span>
       }
-      kind={destinationKind}
+      icon={destinationIcon}
       soft
       title={thisDeviceLabel}
       note={
@@ -276,7 +276,7 @@ function PeerTargetRow({
         ready ? "hover:bg-muted hover:text-foreground" : "opacity-60",
       )}
       mark={EMPTY_MARK}
-      kind={target.kind}
+      icon={target.icon}
       title={target.label}
       note={`has ${target.project.name}`}
       trailing={
@@ -324,7 +324,7 @@ export function ReviewDevicesColumn({
   pull: PullChoiceState;
 }) {
   // The source is the device the dialog sits under.
-  const sourceKind = useDeviceKind(useHostScope().deviceId);
+  const sourceIcon = useDeviceIcon(useHostScope().deviceId);
   const destination = target !== null && (
     <DestinationRow
       worktree={worktree}
@@ -374,7 +374,7 @@ export function ReviewDevicesColumn({
                   </span>
                 )
               }
-              kind={sourceKind}
+              icon={sourceIcon}
               title={sourceDeviceLabel}
               note={sourceNote}
               trailing={
@@ -493,8 +493,8 @@ export function SourceCard({
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
       <div className="flex items-center gap-2 border-b border-border bg-muted/40 px-3 py-2 text-sm">
-        <DeviceIcon
-          kind={useDeviceKind(deviceId)}
+        <DeviceGlyph
+          icon={useDeviceIcon(deviceId)}
           className="size-4 text-muted-foreground"
         />
         <span className="font-medium">{sourceDeviceLabel}</span>

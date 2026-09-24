@@ -9,18 +9,19 @@
 import { AlertCircle, Check, Minus } from "lucide-react";
 import type { ReactNode } from "react";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
+import type { DeviceIcon } from "@shared/account/deviceIcon";
 import type { SyncPullProgress } from "@shared/ipc/modules/sync";
 import type { CreatePhase, Worktree } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { DeviceIcon } from "@/components/shared/DeviceIcon";
+import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import {
   DestinationScope,
   useDestinationScope,
   useHostScope,
 } from "@/hooks/remote/useHostScope";
-import { useDeviceKind } from "@/hooks/remote/useRemoteDevices";
+import { useDeviceIcon } from "@/hooks/remote/useRemoteDevices";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { formatBytes } from "@/lib/formatBytes";
 import { pluralize } from "@/lib/pluralize";
@@ -125,8 +126,8 @@ function ProgressView({
   // The two ends as the devices they are: the dialog sits under the
   // source's scope and the destination provider names where it lands
   // (this machine unless a peer was picked).
-  const sourceKind = useDeviceKind(useHostScope().deviceId);
-  const destinationKind = useDeviceKind(useDestinationScope().deviceId);
+  const sourceIcon = useDeviceIcon(useHostScope().deviceId);
+  const destinationIcon = useDeviceIcon(useDestinationScope().deviceId);
   const plan = useCreatePlan(target.project);
   const projectName = target.project
     ? target.project.name
@@ -248,7 +249,7 @@ function ProgressView({
         <div className="flex flex-col gap-4">
           <div className="flex items-center gap-4">
             <DeviceEnd
-              icon={<DeviceIcon kind={sourceKind} className="size-4" />}
+              icon={sourceIcon}
               name={sourceDeviceLabel}
               part={sourcePart}
             />
@@ -276,7 +277,7 @@ function ProgressView({
               </div>
             </div>
             <DeviceEnd
-              icon={<DeviceIcon kind={destinationKind} className="size-4" />}
+              icon={destinationIcon}
               name={thisDeviceLabel}
               part="destination"
               align="end"
@@ -329,7 +330,7 @@ function DeviceEnd({
   part,
   align = "start",
 }: {
-  icon: React.ReactNode;
+  icon: DeviceIcon;
   name: string;
   part: string;
   align?: "start" | "end";
@@ -341,7 +342,7 @@ function DeviceEnd({
         align === "end" && "flex-row-reverse text-right",
       )}
     >
-      <span className="text-muted-foreground">{icon}</span>
+      <DeviceGlyph icon={icon} className="size-4 text-muted-foreground" />
       <div className="leading-tight">
         <p className="text-sm font-medium">{name}</p>
         <p className="text-2xs text-muted-foreground">{part}</p>

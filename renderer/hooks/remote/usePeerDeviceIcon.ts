@@ -3,7 +3,7 @@
 // device hub), so it rides the peer's command grant like any other
 // mutation. See shared/ipc/modules/device.ts.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { DeviceKind } from "@shared/account/deviceKind";
+import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
 import type { HostApi } from "@/hooks/remote/useHostScope";
 import { queryKeysFor } from "@/lib/queryKeys";
@@ -14,16 +14,16 @@ import { queryKeysFor } from "@/lib/queryKeys";
 // the plain mark rather than offer a picker whose every pick fails.
 // Asked once per session (the peer detects once per process) and never
 // retried, since an unknown call stays unknown.
-export function usePeerDetectedKind(
+export function usePeerDetectedIcon(
   deviceId: string,
   api: HostApi | undefined,
   enabled: boolean,
-): DeviceKind | undefined {
-  return useQuery<DeviceKind>({
-    queryKey: queryKeysFor(deviceId).detectedDeviceKind(),
+): DeviceIcon | undefined {
+  return useQuery<DeviceIcon>({
+    queryKey: queryKeysFor(deviceId).detectedDeviceIcon(),
     queryFn: () => {
       if (api === undefined) throw new Error("no session to the device");
-      return api.device.detectedKind();
+      return api.device.detectedIcon();
     },
     enabled: enabled && api !== undefined,
     staleTime: Infinity,
@@ -37,18 +37,18 @@ export function usePeerDetectedKind(
 // written into the shared device list, the one copy every surface here
 // draws peers from, rather than refetched: the peer's hub push is
 // best-effort and may not have landed yet.
-export function useSetPeerDeviceKind(
+export function useSetPeerDeviceIcon(
   deviceId: string,
   api: HostApi,
   name: string,
 ) {
   const queryClient = useQueryClient();
-  return useMutation<DeviceKind, Error, DeviceKind>({
-    mutationFn: (kind) => api.device.setKind(kind),
-    onSuccess: (kind) => {
+  return useMutation<DeviceIcon, Error, DeviceIcon>({
+    mutationFn: (icon) => api.device.setIcon(icon),
+    onSuccess: (icon) => {
       queryClient.setQueryData(accountDevicesQueryOptions.queryKey, (devices) =>
         devices?.map((device) =>
-          device.deviceId === deviceId ? { ...device, kind } : device,
+          device.deviceId === deviceId ? { ...device, icon } : device,
         ),
       );
     },

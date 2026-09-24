@@ -1,4 +1,4 @@
-import { MACHINE_FALLBACK_KIND } from "@shared/account/deviceKind";
+import { MACHINE_FALLBACK_ICON } from "@shared/account/deviceIcon";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
@@ -71,7 +71,7 @@ export function mirrorBadgeLookup(
       deviceBadges.get(peer) ?? {
         deviceId: peer,
         label: "another device",
-        kind: MACHINE_FALLBACK_KIND,
+        icon: MACHINE_FALLBACK_ICON,
         tone: "slate",
         reachable: false,
       }
@@ -370,7 +370,7 @@ export function deviceBadgeOf(item: RemoteForestItem): SidebarDeviceBadge {
   return {
     deviceId: item.deviceId,
     label: item.deviceLabel,
-    kind: item.deviceKind,
+    icon: item.deviceIcon,
     tone: item.tone,
     reachable: item.reachable,
   };
@@ -394,7 +394,7 @@ function remoteWorktreeRows(
       worktree,
       deviceId: item.deviceId,
       deviceLabel: item.deviceLabel,
-      deviceKind: item.deviceKind,
+      deviceIcon: item.deviceIcon,
       reachable: item.reachable,
       tone: item.tone,
       pr: item.pullRequests[worktree.branch],
@@ -414,7 +414,7 @@ function membersOf(items: readonly RemoteForestItem[]): RemoteProjectMember[] {
       members.set(item.deviceId, {
         deviceId: item.deviceId,
         deviceLabel: item.deviceLabel,
-        deviceKind: item.deviceKind,
+        deviceIcon: item.deviceIcon,
         project: item.project,
       });
     }

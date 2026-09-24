@@ -1,6 +1,6 @@
 // A device's icon, picked in place: the mark on its Devices page row
-// is the trigger, and the menu lays out every kind the catalog has
-// (shared/account/deviceKind.ts) as one grid of tiles: the device
+// is the trigger, and the menu lays out every icon the catalog has
+// (shared/account/deviceIcon.ts) as one grid of tiles: the device
 // shapes as the first row, with what the device detected about itself
 // named as such, then under a hairline the marks that are only ever
 // picked (a leaf, a cat, a rocket), which tell two laptops apart the
@@ -16,12 +16,12 @@
 // own, made through its host api (shared/ipc/modules/device.ts).
 import { ChevronDown } from "lucide-react";
 import {
-  DEVICE_KIND_LABELS,
+  DEVICE_ICON_LABELS,
   DEVICE_MARKS,
   DEVICE_SHAPES,
-  type DeviceKind,
-} from "@shared/account/deviceKind";
-import { DeviceIcon, DeviceMark } from "@/components/shared/DeviceIcon";
+  type DeviceIcon,
+} from "@shared/account/deviceIcon";
+import { DeviceGlyph, DeviceMark } from "@/components/shared/DeviceGlyph";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,42 +30,42 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { StatusTone } from "@/components/ui/status-dot";
-import { useAccountStatus, useSetDeviceKind } from "@/hooks/account/useAccount";
+import { useAccountStatus, useSetDeviceIcon } from "@/hooks/account/useAccount";
 import type { HostApi } from "@/hooks/remote/useHostScope";
-import { useSetPeerDeviceKind } from "@/hooks/remote/usePeerDeviceKind";
+import { useSetPeerDeviceIcon } from "@/hooks/remote/usePeerDeviceIcon";
 import { cn } from "@/lib/utils";
 
-export function DeviceKindPicker({
-  kind,
+export function DeviceIconPicker({
+  icon,
   tone,
   // "This device" / "This browser", for the control's accessible name.
   label,
 }: {
-  kind: DeviceKind;
+  icon: DeviceIcon;
   tone: StatusTone;
   label: string;
 }) {
-  const setDeviceKind = useSetDeviceKind();
+  const setDeviceIcon = useSetDeviceIcon();
   // What this device detected about itself, for the tile that means
-  // "back to the default". The kind worn now until the status lands,
+  // "back to the default". The icon worn now until the status lands,
   // moments before the picker re-renders with the real answer.
-  const detectedKind = useAccountStatus().data?.detectedDeviceKind ?? kind;
+  const detectedIcon = useAccountStatus().data?.detectedDeviceIcon ?? icon;
   return (
-    <KindPickerMenu
-      kind={kind}
+    <IconPickerMenu
+      icon={icon}
       tone={tone}
       label={label}
-      detected={detectedKind}
-      pending={setDeviceKind.isPending}
-      onPick={(next) => setDeviceKind.mutate(next)}
+      detected={detectedIcon}
+      pending={setDeviceIcon.isPending}
+      onPick={(next) => setDeviceIcon.mutate(next)}
     />
   );
 }
 
-export function PeerDeviceKindPicker({
+export function PeerDeviceIconPicker({
   deviceId,
   api,
-  kind,
+  icon,
   detected,
   tone,
   // The peer's name, for the control's accessible name and the error.
@@ -73,50 +73,50 @@ export function PeerDeviceKindPicker({
 }: {
   deviceId: string;
   api: HostApi;
-  kind: DeviceKind;
-  // What the peer detected about itself (usePeerDetectedKind), read by
+  icon: DeviceIcon;
+  // What the peer detected about itself (usePeerDetectedIcon), read by
   // the row, which offers this picker only once the peer answered.
-  detected: DeviceKind;
+  detected: DeviceIcon;
   tone: StatusTone;
   name: string;
 }) {
-  const setPeerKind = useSetPeerDeviceKind(deviceId, api, name);
+  const setPeerIcon = useSetPeerDeviceIcon(deviceId, api, name);
   return (
-    <KindPickerMenu
-      kind={kind}
+    <IconPickerMenu
+      icon={icon}
       tone={tone}
       label={name}
       detected={detected}
-      pending={setPeerKind.isPending}
-      onPick={(next) => setPeerKind.mutate(next)}
+      pending={setPeerIcon.isPending}
+      onPick={(next) => setPeerIcon.mutate(next)}
     />
   );
 }
 
-function KindPickerMenu({
-  kind,
+function IconPickerMenu({
+  icon,
   tone,
   label,
   detected,
   pending,
   onPick,
 }: {
-  kind: DeviceKind;
+  icon: DeviceIcon;
   tone: StatusTone;
   label: string;
-  detected: DeviceKind | undefined;
+  detected: DeviceIcon | undefined;
   pending: boolean;
-  onPick: (kind: DeviceKind) => void;
+  onPick: (icon: DeviceIcon) => void;
 }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        aria-label={`${label} icon: ${DEVICE_KIND_LABELS[kind]}. Change`}
+        aria-label={`${label} icon: ${DEVICE_ICON_LABELS[icon]}. Change`}
         title="Change icon"
         disabled={pending}
         className="group relative shrink-0 rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60"
       >
-        <DeviceMark kind={kind} tone={tone} size="lg" />
+        <DeviceMark icon={icon} tone={tone} size="lg" />
         {/* A small cue that the mark opens something, kept off the
             marks that open nothing. */}
         <span className="absolute -right-1 -bottom-1 flex size-3.5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground group-hover:text-foreground">
@@ -124,16 +124,16 @@ function KindPickerMenu({
         </span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
-        <KindTiles
-          kinds={DEVICE_SHAPES}
-          picked={kind}
+        <IconTiles
+          icons={DEVICE_SHAPES}
+          picked={icon}
           detected={detected}
           onPick={onPick}
         />
         <DropdownMenuSeparator />
-        <KindTiles
-          kinds={DEVICE_MARKS}
-          picked={kind}
+        <IconTiles
+          icons={DEVICE_MARKS}
+          picked={icon}
           detected={detected}
           onPick={onPick}
         />
@@ -147,24 +147,24 @@ function KindPickerMenu({
 // the tooltip and to assistive tech. The picked tile wears the accent
 // fill every selection in the app wears, and the detected one says so
 // in its name, since it is the entry that means "back to the default".
-function KindTiles({
-  kinds,
+function IconTiles({
+  icons,
   picked,
   detected,
   onPick,
 }: {
-  kinds: readonly DeviceKind[];
-  picked: DeviceKind;
-  detected: DeviceKind | undefined;
-  onPick: (kind: DeviceKind) => void;
+  icons: readonly DeviceIcon[];
+  picked: DeviceIcon;
+  detected: DeviceIcon | undefined;
+  onPick: (icon: DeviceIcon) => void;
 }) {
   return (
     <div className="grid grid-cols-7 gap-0.5 p-1">
-      {kinds.map((option) => {
-        // The tile's whole name: the kind, and whether it is the
+      {icons.map((option) => {
+        // The tile's whole name: the icon, and whether it is the
         // one worn now or the one the device detected.
         const name = [
-          DEVICE_KIND_LABELS[option],
+          DEVICE_ICON_LABELS[option],
           option === picked ? "(current)" : null,
           option === detected ? "(detected)" : null,
         ]
@@ -181,7 +181,7 @@ function KindTiles({
               option === picked && "bg-accent text-accent-foreground",
             )}
           >
-            <DeviceIcon kind={option} className="size-4" />
+            <DeviceGlyph icon={option} className="size-4" />
           </DropdownMenuItem>
         );
       })}

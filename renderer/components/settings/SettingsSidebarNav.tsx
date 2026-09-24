@@ -3,7 +3,7 @@ import { WORKTREE_ROW_BUTTON } from "@/components/sidebar/WorktreeRow";
 import { BackButton } from "@/components/ui/back-button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusDot } from "@/components/ui/status-dot";
-import { DeviceGlyph } from "@/components/shared/DeviceIcon";
+import { DeviceLead } from "@/components/shared/DeviceGlyph";
 import { useLocalDevice } from "@/hooks/account/useAccount";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
 import { useStagedUpdates } from "@/hooks/system/useUpdater";
@@ -89,7 +89,9 @@ export function SectionLabel({ section }: { section: SettingsSection }) {
   return (
     <>
       {Icon && <Icon aria-hidden className="size-3.5 shrink-0" />}
-      {section.kind && <DeviceGlyph kind={section.kind} tone={section.tone} />}
+      {section.deviceIcon && (
+        <DeviceLead icon={section.deviceIcon} tone={section.tone} />
+      )}
       <span className="truncate">{section.label}</span>
       {section.update !== undefined && (
         <>

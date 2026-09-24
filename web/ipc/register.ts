@@ -43,9 +43,9 @@ import {
 } from "@shared/sharedSettings";
 import { WEB_PLATFORM } from "@shared/account/platform";
 import {
-  effectiveDeviceKind,
+  effectiveDeviceIcon,
   enrollDevice,
-  setDeviceKind,
+  setDeviceIcon,
   renameDevice,
   retryParkedRevoke,
   signOutDevice,
@@ -54,7 +54,7 @@ import { createHubConnection } from "../hub/connection";
 import { webServiceConfig } from "../account/config";
 import { getWebDeviceId } from "../account/deviceId";
 import { defaultWebDeviceName, type BrowserHints } from "../account/deviceName";
-import { defaultWebDeviceKind } from "../account/deviceKind";
+import { defaultWebDeviceShape } from "../account/deviceIcon";
 import { createWebAccountStore } from "../account/store";
 import { readJsonKey, writeKey, type KeyValueStorage } from "../lib/kvStorage";
 import { createLoopbackWire } from "./loopback";
@@ -195,7 +195,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
 
   // Read off the same user agent as the name, once: it cannot change
   // while the page lives.
-  const detectedKind = defaultWebDeviceKind(deps.userAgent);
+  const detectedIcon = defaultWebDeviceShape(deps.userAgent);
 
   function readStatus(): AccountStatus {
     const record = store.read();
@@ -204,8 +204,8 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       signedIn: record !== null,
       accountId: record?.accountId ?? "",
       deviceName: record?.deviceName ?? defaultDeviceName(),
-      deviceKind: effectiveDeviceKind(record, store, detectedKind),
-      detectedDeviceKind: detectedKind,
+      deviceIcon: effectiveDeviceIcon(record, store, detectedIcon),
+      detectedDeviceIcon: detectedIcon,
       sharedSignIn: false,
     };
   }
@@ -288,7 +288,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
             deviceId,
             fallbackDeviceName: defaultDeviceName(),
             platform: WEB_PLATFORM,
-            detectedKind,
+            detectedIcon,
           },
           token,
         );
@@ -332,9 +332,9 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       return readStatus();
     },
 
-    setDeviceKind: (kind) => {
+    setDeviceIcon: (icon) => {
       if (
-        setDeviceKind({ config, service, store, deviceId, detectedKind }, kind)
+        setDeviceIcon({ config, service, store, deviceId, detectedIcon }, icon)
       ) {
         accountChanged();
       }

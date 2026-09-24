@@ -117,14 +117,14 @@ export async function enroll(
   deviceId: string,
   name = "Test Device",
   platform = "darwin",
-  kind = "laptop",
+  icon = "laptop",
 ): Promise<EnrollResponse> {
   const response = await call(
     enrollRequest(`${TEST_TOKEN_PREFIX}${accountId}`, {
       deviceId,
       name,
       platform,
-      kind,
+      icon,
     }),
   );
   expect(response.status).toBe(200);

@@ -39,7 +39,7 @@ function overCapRequest(): Request {
     deviceId: "dev-cap-extra",
     name: "One too many",
     platform: "darwin",
-    kind: "laptop",
+    icon: "laptop",
   });
 }
 
@@ -62,7 +62,7 @@ describe("POST /devices/enroll", () => {
       deviceId: "dev-enroll",
       name: "MacBook",
       platform: "darwin",
-      kind: "laptop",
+      icon: "laptop",
       lastSeenAt: null,
       online: false,
     });
@@ -71,43 +71,43 @@ describe("POST /devices/enroll", () => {
     expect(list.status).toBe(200);
   });
 
-  it("stores the kind a device reports, lists it, and passes one outside the catalog through as sent", async () => {
+  it("stores the icon a device reports, lists it, and passes one outside the catalog through as sent", async () => {
     const { credential, device } = await enroll(
-      "acct-kind",
-      "dev-kind",
+      "acct-icon",
+      "dev-icon",
       "MacBook",
       "darwin",
       "laptop",
     );
-    expect(device.kind).toBe("laptop");
+    expect(device.icon).toBe("laptop");
     const listed = (await (await call(listRequest(credential))).json()) as {
-      devices: { deviceId: string; kind: string }[];
+      devices: { deviceId: string; icon: string }[];
     };
-    expect(listed.devices.find((d) => d.deviceId === "dev-kind")?.kind).toBe(
+    expect(listed.devices.find((d) => d.deviceId === "dev-icon")?.icon).toBe(
       "laptop",
     );
-    // A kind this Worker's catalog lacks (a newer client's) must not
+    // An icon this Worker's catalog lacks (a newer client's) must not
     // block the enroll: it is stored and listed as sent, and each
     // reader maps it to the catalog it knows (DeviceInfoSchema).
     const newer = await call(
-      enrollRequest(`${TEST_TOKEN_PREFIX}acct-kind`, {
-        deviceId: "dev-kind-newer",
+      enrollRequest(`${TEST_TOKEN_PREFIX}acct-icon`, {
+        deviceId: "dev-icon-newer",
         name: "Toaster",
         platform: "linux",
-        kind: "toaster",
+        icon: "toaster",
       }),
     );
     expect(newer.status).toBe(200);
     const again = (await (await call(listRequest(credential))).json()) as {
-      devices: { deviceId: string; kind: string }[];
+      devices: { deviceId: string; icon: string }[];
     };
     expect(
-      again.devices.find((d) => d.deviceId === "dev-kind-newer")?.kind,
+      again.devices.find((d) => d.deviceId === "dev-icon-newer")?.icon,
     ).toBe("toaster");
     expect(
       DeviceListResponseSchema.parse(again).devices.find(
-        (d) => d.deviceId === "dev-kind-newer",
-      )?.kind,
+        (d) => d.deviceId === "dev-icon-newer",
+      )?.icon,
     ).toBe("desktop");
   });
 
@@ -130,11 +130,11 @@ describe("POST /devices/enroll", () => {
     expect(response.status).toBe(400);
   });
 
-  it("rejects an enroll that names no kind with 400", async () => {
+  it("rejects an enroll that names no icon with 400", async () => {
     const response = await call(
-      enrollRequest(`${TEST_TOKEN_PREFIX}acct-nokind`, {
-        deviceId: "dev-nokind",
-        name: "Kindless",
+      enrollRequest(`${TEST_TOKEN_PREFIX}acct-noicon`, {
+        deviceId: "dev-noicon",
+        name: "Iconless",
         platform: "darwin",
       }),
     );
@@ -186,7 +186,7 @@ describe("POST /devices/enroll", () => {
         deviceId: "dev-conflict",
         name: "Thief",
         platform: "win32",
-        kind: "desktop",
+        icon: "desktop",
       }),
     );
     expect(response.status).toBe(409);
@@ -205,7 +205,7 @@ describe("POST /devices/enroll", () => {
           deviceId,
           name: "A",
           platform: "darwin",
-          kind: "laptop",
+          icon: "laptop",
         }),
       ),
       call(
@@ -213,7 +213,7 @@ describe("POST /devices/enroll", () => {
           deviceId,
           name: "B",
           platform: "linux",
-          kind: "laptop",
+          icon: "laptop",
         }),
       ),
     ]);
@@ -236,7 +236,7 @@ describe("POST /devices/enroll", () => {
         deviceId: "d".repeat(300),
         name: "X",
         platform: "linux",
-        kind: "laptop",
+        icon: "laptop",
       }),
     );
     expect(response.status).toBe(400);
@@ -362,28 +362,28 @@ describe("PATCH /devices/:deviceId", () => {
     ).toBe("Studio Mac");
   });
 
-  it("changes a device's kind alone, leaving its name, and refuses an empty patch", async () => {
-    const self = await enroll("acct-kind-2", "dev-kind-2", "Mini", "darwin");
+  it("changes a device's icon alone, leaving its name, and refuses an empty patch", async () => {
+    const self = await enroll("acct-icon-2", "dev-icon-2", "Mini", "darwin");
     expect(
       (
         await call(
-          updateRequest(self.credential, "dev-kind-2", { kind: "mini" }),
+          updateRequest(self.credential, "dev-icon-2", { icon: "mini" }),
         )
       ).status,
     ).toBe(204);
     const listed = (await (
       await call(listRequest(self.credential))
     ).json()) as {
-      devices: { deviceId: string; name: string; kind: string }[];
+      devices: { deviceId: string; name: string; icon: string }[];
     };
     expect(
-      listed.devices.find((d) => d.deviceId === "dev-kind-2"),
-    ).toMatchObject({ name: "Mini", kind: "mini" });
+      listed.devices.find((d) => d.deviceId === "dev-icon-2"),
+    ).toMatchObject({ name: "Mini", icon: "mini" });
     expect(
-      (await call(updateRequest(self.credential, "dev-kind-2", {}))).status,
+      (await call(updateRequest(self.credential, "dev-icon-2", {}))).status,
     ).toBe(400);
     expect(
-      (await call(updateRequest(self.credential, "dev-kind-2", { kind: "" })))
+      (await call(updateRequest(self.credential, "dev-icon-2", { icon: "" })))
         .status,
     ).toBe(400);
   });
