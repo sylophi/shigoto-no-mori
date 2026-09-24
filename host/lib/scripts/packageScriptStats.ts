@@ -12,9 +12,11 @@ import { countWithin, maxTimestamp, pruneAndPush } from "../util/useLog";
 
 const USE_LOG_KEY = "packageScriptUseLog";
 const SORT_KEY = "packageScriptSort";
+const ORDER_KEY = "packageScriptOrder";
 
 type UseLog = Record<string, Record<string, number[]>>;
 type SortMap = Record<string, PackageScriptSortMode>;
+type OrderMap = Record<string, string[]>;
 
 // "frequent" is the implicit default: new repos open with the most-used
 // scripts on top, and switching back to it deletes the persisted entry
@@ -46,6 +48,29 @@ export function writeScriptSort(
     map[projectId] = mode;
   }
   stateStore.writeKey<SortMap>(SORT_KEY, map);
+}
+
+export function readScriptOrder(projectId: string): string[] {
+  const map = stateStore.readHint<OrderMap>(ORDER_KEY, {});
+  return map[projectId] ?? [];
+}
+
+// `arranged` is one worktree's scripts in their new order. Names the
+// stored order holds that this worktree's package.json lacks stay, after
+// the arranged ones, so arranging on one branch doesn't forget another
+// branch's scripts. Merged here, against the stored order read under the
+// lock, rather than by the client against its cached copy, which another
+// window may have written past.
+export function writeScriptOrder(projectId: string, arranged: string[]): void {
+  stateStore.updateKey<OrderMap>(ORDER_KEY, {}, (map) => {
+    const current = map[projectId] ?? [];
+    const shown = new Set(arranged);
+    const next = [...arranged, ...current.filter((name) => !shown.has(name))];
+    const unchanged =
+      current.length === next.length &&
+      current.every((name, i) => name === next[i]);
+    return unchanged ? undefined : { ...map, [projectId]: next };
+  });
 }
 
 export function usageFor(

@@ -2,8 +2,10 @@ import { ArrowDownUp } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { PackageScriptSortMode } from "@shared/schemas";
@@ -16,14 +18,17 @@ const SORT_OPTIONS: ReadonlyArray<{
   { value: "recent", label: "Most recently used" },
   { value: "alphabetical", label: "Alphabetical" },
   { value: "manifest", label: "package.json" },
+  { value: "manual", label: "Manual order" },
 ];
 
 export function SortMenu({
   value,
   onChange,
+  onArrange,
 }: {
   value: PackageScriptSortMode;
   onChange: (mode: PackageScriptSortMode) => void;
+  onArrange: () => void;
 }) {
   return (
     <DropdownMenu>
@@ -46,6 +51,11 @@ export function SortMenu({
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        {/* Sized like the radio items above, which are text-sm. */}
+        <DropdownMenuItem onClick={onArrange} className="pl-1.5 text-sm">
+          Set manual order
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

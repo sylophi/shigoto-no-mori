@@ -7,8 +7,10 @@ import {
 import { startScript } from "@host/lib/scripts";
 import {
   bumpScriptUseCount,
+  readScriptOrder,
   readScriptSort,
   usageFor,
+  writeScriptOrder,
   writeScriptSort,
 } from "@host/lib/scripts/packageScriptStats";
 import {
@@ -36,14 +38,25 @@ export const packageScriptsHandlers: Handlers<
     };
   },
 
-  getSort: async ({ projectId }) => {
+  getSort: async ({ projectId, knowsManual }) => {
     const project = findProjectOrThrow(projectId);
-    return readScriptSort(project.id);
+    const mode = readScriptSort(project.id);
+    return mode === "manual" && !knowsManual ? "manifest" : mode;
   },
 
   setSort: async ({ projectId, mode }) => {
     const project = findProjectOrThrow(projectId);
     writeScriptSort(project.id, mode);
+  },
+
+  getOrder: async ({ projectId }) => {
+    const project = findProjectOrThrow(projectId);
+    return readScriptOrder(project.id);
+  },
+
+  setOrder: async ({ projectId, arranged }) => {
+    const project = findProjectOrThrow(projectId);
+    writeScriptOrder(project.id, arranged);
   },
 
   run: async ({ projectId, worktreeId, scriptName }, handlerCtx) => {

@@ -130,6 +130,8 @@ function buildQueryKeys(deviceId: string) {
       host("packageScripts", projectId, worktreeId),
     packageScriptSort: (projectId: string | null) =>
       host("packageScriptSort", projectId),
+    packageScriptOrder: (projectId: string | null) =>
+      host("packageScriptOrder", projectId),
 
     portPoolInstalled: () => host("portPoolInstalled"),
     // The merged pool + custom port list with its liveness probe. Polled
