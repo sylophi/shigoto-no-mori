@@ -42,7 +42,6 @@ import {
   EMPTY_SHARED_SETTINGS,
 } from "@shared/sharedSettings";
 import { WEB_PLATFORM } from "@shared/account/platform";
-import type { DeviceIcon } from "@shared/account/deviceIcon";
 import {
   effectiveDeviceIcon,
   enrollDevice,
@@ -50,6 +49,7 @@ import {
   signOutDevice,
   syncHubDevice,
   updateDevice,
+  type DeviceFields,
 } from "@shared/account/enroll";
 import { createHubConnection } from "../hub/connection";
 import { webServiceConfig } from "../account/config";
@@ -194,7 +194,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // then the fan-out so every tab re-reads the registry.
   async function updateAccountDevice(
     target: string,
-    patch: { name?: string; icon?: DeviceIcon },
+    patch: DeviceFields,
   ): Promise<AccountStatus> {
     const record = store.read();
     if (record === null || !isConfigured(config)) {

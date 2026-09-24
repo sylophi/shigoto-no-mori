@@ -37,10 +37,12 @@ import {
 import {
   effectiveDeviceIcon,
   enrollDevice,
+  renameLocally,
   retryParkedRevoke,
   signOutDevice,
   syncHubDevice,
   updateDevice,
+  type DeviceFields,
 } from "@shared/account/enroll";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import {
@@ -416,11 +418,39 @@ export function makeAccountHandlers(
   // record status should report. A write that fails leaves the old
   // name, since a cosmetic rename must never turn a status read into
   // an error.
+  let defaultNameMigrated = false;
+  const migrateDefaultName = (
+    record: StoredAccount | null,
+    defaultName: DefaultDeviceName,
+  ): StoredAccount | null => {
+    if (defaultNameMigrated || record === null || defaultName.provisional) {
+      return record;
+    }
+    defaultNameMigrated = true;
+    if (
+      !isLegacyDefaultName(record.deviceName) ||
+      record.deviceName === defaultName.name
+    ) {
+      return record;
+    }
+    let renamed: StoredAccount;
+    try {
+      renamed = renameLocally(store(), record, defaultName.name);
+    } catch (error) {
+      console.warn(
+        "[account] could not rename the device to its default",
+        error,
+      );
+      return record;
+    }
+    accountChanged();
+    return renamed;
+  };
   // A device's name or icon change, made on the hub (updateDevice).
   // Every window re-reads the registry after, a peer's change with it.
   const update = async (
     deviceId: string,
-    patch: { name?: string; icon?: DeviceIcon },
+    patch: DeviceFields,
   ): Promise<AccountStatus> => {
     const signedIn = signedInService();
     if (signedIn === null) {
@@ -439,40 +469,6 @@ export function makeAccountHandlers(
     );
     accountChanged();
     return readStatus();
-  };
-  let defaultNameMigrated = false;
-  const migrateDefaultName = (
-    record: StoredAccount | null,
-    defaultName: DefaultDeviceName,
-  ): StoredAccount | null => {
-    if (defaultNameMigrated || record === null || defaultName.provisional) {
-      return record;
-    }
-    defaultNameMigrated = true;
-    if (
-      !isLegacyDefaultName(record.deviceName) ||
-      record.deviceName === defaultName.name
-    ) {
-      return record;
-    }
-    // The hub still holds the name left behind (unless it moved since),
-    // so the next registry read pushes the new one over it.
-    const renamed = {
-      ...record,
-      deviceName: defaultName.name,
-      hubName: record.hubName ?? record.deviceName,
-    };
-    try {
-      store().write(renamed);
-    } catch (error) {
-      console.warn(
-        "[account] could not rename the device to its default",
-        error,
-      );
-      return record;
-    }
-    accountChanged();
-    return renamed;
   };
   return {
     status: async () => {

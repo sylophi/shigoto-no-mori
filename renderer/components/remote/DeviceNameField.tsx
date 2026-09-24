@@ -18,11 +18,10 @@ import { Input } from "@/components/ui/input";
 import { useSetDeviceName } from "@/hooks/account/useAccount";
 import { cn } from "@/lib/utils";
 
-// The trigger is a separate export because its two call sites put it in
-// different places: the web page inline after the name, the registry row
-// with the row's other actions on the right. The editor itself always
-// opens where the NAME is, so the open/closed flag is the caller's to
-// hold rather than something the field can own for both layouts.
+// The trigger is a separate export because it sits apart from the
+// field: the registry row keeps it with the row's other actions on the
+// right, while the editor always opens where the NAME is, so the
+// open/closed flag is the caller's to hold.
 export function DeviceRenameButton({
   label,
   onClick,

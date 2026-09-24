@@ -108,6 +108,9 @@ export function DeviceRegistryRow({
   const namedDevice = showId
     ? `${name} ${abbreviateId(device.deviceId)}`
     : name;
+  // What the row's controls call the machine: this one by its role, a
+  // peer by name.
+  const controlLabel = isThisDevice ? traits.selfLabel : namedDevice;
   // A peer that is up and has ANSWERED "no" is read-only from here.
   // Nothing is said while the verdict is in flight, when the preflight
   // itself failed (that is transport, not the peer's switch), when the
@@ -144,7 +147,7 @@ export function DeviceRegistryRow({
           isThisDevice={isThisDevice}
           icon={icon}
           tone={status.tone}
-          label={isThisDevice ? traits.selfLabel : namedDevice}
+          label={controlLabel}
         />
 
         <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-3 gap-y-2">
@@ -153,7 +156,7 @@ export function DeviceRegistryRow({
               <DeviceNameField
                 deviceId={device.deviceId}
                 deviceName={name}
-                label={isThisDevice ? traits.selfLabel : namedDevice}
+                label={controlLabel}
                 editing={renaming}
                 onEditingChange={setRenaming}
                 className="text-base"
@@ -192,9 +195,7 @@ export function DeviceRegistryRow({
           {!confirming && !renaming && (
             <div className="flex shrink-0 items-center gap-1">
               <DeviceRenameButton
-                label={
-                  isThisDevice ? traits.selfLabel.toLowerCase() : namedDevice
-                }
+                label={isThisDevice ? controlLabel.toLowerCase() : controlLabel}
                 onClick={() => setRenaming(true)}
               />
               {!isThisDevice && (

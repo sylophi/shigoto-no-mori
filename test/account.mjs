@@ -595,6 +595,8 @@ async function main() {
         ),
         false,
       );
+      // A read landing while the push is out does not repeat it.
+      syncHubDevice(deps, store.read(), ownRowListing("laptop", "mini.local"));
       // The push is fire-and-forget: give it a tick to land.
       await new Promise((resolve) => setTimeout(resolve, 0));
       assert.deepEqual(
@@ -633,6 +635,50 @@ async function main() {
       );
       assert.equal(store.read().deviceName, "Office");
       assert.equal(calls.length, 1);
+    },
+  );
+
+  await check(
+    "device sync: a change made here while a stale push is out waits for it to land, so the push cannot land over the change",
+    async () => {
+      let release;
+      const held = new Promise((resolve) => (release = resolve));
+      const { fetchImpl, calls } = recordingFetch(async () => {
+        if (calls.length === 1) await held;
+        return new Response(null, { status: 204 });
+      });
+      const store = memoryStore();
+      const deps = {
+        service: createAccountService({ baseUrl: CONFIG.hubUrl, fetchImpl }),
+        store,
+        deviceId: "device-uuid",
+        detectedIcon: "laptop",
+      };
+      store.write({
+        credential: "c",
+        accountId: "a",
+        deviceName: "Mac",
+        hubName: "Mac.local",
+        hubIcon: "laptop",
+      });
+      syncHubDevice(deps, store.read(), ownRowListing("laptop", "Mac.local"));
+      const renamed = updateDevice(deps, store.read(), "device-uuid", {
+        name: "Work",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.equal(
+        calls.length,
+        1,
+        "the rename went out before the push landed",
+      );
+      release();
+      await renamed;
+      assert.deepEqual(
+        calls.map((c) => JSON.parse(c.init.body)),
+        [{ name: "Mac" }, { name: "Work" }],
+      );
+      assert.equal(store.read().deviceName, "Work");
+      assert.equal(store.read().hubName, "Work");
     },
   );
 
