@@ -53,15 +53,20 @@ export function ScriptRow({ worktree, slot, label, command }: ScriptRowProps) {
         <span className="min-w-0 flex-1 truncate font-mono">{label}</span>
       </button>
 
+      {/* Capped at half the row so a long status (a failed run's exit
+          code and age) in a narrow grid column truncates instead of
+          squeezing the script's name out. */}
       {hasHistory && (
         <button
           type="button"
           onClick={openConsole}
           aria-label={`View ${label} output`}
           title="View output"
-          className="flex shrink-0 items-center gap-2 border-l border-border px-2.5 py-1.5 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
+          className="flex max-w-1/2 min-w-0 items-center gap-2 border-l border-border px-2.5 py-1.5 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
         >
-          <ScriptStatusBadge state={state} />
+          <span className="min-w-0 truncate">
+            <ScriptStatusBadge state={state} />
+          </span>
           <ChevronRight aria-hidden className="size-3 shrink-0" />
         </button>
       )}
