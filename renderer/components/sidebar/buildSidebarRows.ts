@@ -1,3 +1,4 @@
+import { pullRequestStackPosition, trunkOf } from "@shared/pullRequestStack";
 import { MACHINE_FALLBACK_ICON } from "@shared/account/deviceIcon";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
@@ -398,6 +399,11 @@ function remoteWorktreeRows(
       reachable: item.reachable,
       tone: item.tone,
       pr: item.pullRequests[worktree.branch],
+      stack: pullRequestStackPosition(
+        item.pullRequests,
+        worktree.branch,
+        trunkOf(item.worktrees),
+      ),
       groupId,
     });
   }

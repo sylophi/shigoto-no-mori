@@ -166,6 +166,12 @@ pre-commit:
     shared-settings:
       glob: "{shared/sharedSettings.ts,shared/schemas/sharedSettings.ts,shared/ipc/modules/sharedSettings.ts,host/lib/sharedSettings/**,web/ipc/register.ts,test/shared-settings.mjs,test/lib/checkKit.mjs}"
       run: pnpm test shared-settings
+    # Drives stack detection (shared/pullRequestStack.ts), the pure
+    # read behind the sidebar's stack pill, the worktree page's stack
+    # list and the stack merge button.
+    pull-request-stack:
+      glob: "{shared/pullRequestStack.ts,shared/schemas/pullRequest.ts,shared/schemas/worktree.ts,test/pull-request-stack.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test pull-request-stack
     # Drives the pure liveness rate limiters (renderer crash-loop guard
     # and fatal-relaunch guard) that decide recreate-vs-give-up and
     # relaunch-vs-stand. Gated to the pure module plus the check itself,

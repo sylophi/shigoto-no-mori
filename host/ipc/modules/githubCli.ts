@@ -57,6 +57,12 @@ export const githubCliHandlers: Handlers<typeof githubCliContract> = {
     evictProjectPullRequests(project.path);
   },
 
+  mergePullRequestStack: async ({ projectId, number, method }) => {
+    const project = findProjectOrThrow(projectId);
+    await mergeViaCli(project, number, method, { stack: true });
+    evictProjectPullRequests(project.path);
+  },
+
   pullRequestDiff: async ({ projectId, number }) => {
     const project = findProjectOrThrow(projectId);
     return getPullRequestDiff({ cwd: project.path, number });

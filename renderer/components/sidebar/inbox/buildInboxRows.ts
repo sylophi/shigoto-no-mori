@@ -1,3 +1,4 @@
+import { pullRequestStackPosition, trunkOf } from "@shared/pullRequestStack";
 import type { ProjectShigomoriConfigQueries } from "@/hooks/config/useShigomoriConfig";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { ProjectPullRequestQueries } from "@/hooks/projects/useProjectPullRequests";
@@ -16,7 +17,12 @@ import {
   remoteWorktreeKey,
 } from "../buildSidebarRows";
 import type { SidebarDeviceBadge } from "../DeviceBadge";
-import type { InboxShelf, SidebarRow, SidebarViewModel } from "../sidebarRow";
+import type {
+  InboxShelf,
+  SidebarRow,
+  SidebarViewModel,
+  StackPosition,
+} from "../sidebarRow";
 
 interface BuildInboxRowsArgs {
   projects: Project[];
@@ -44,6 +50,7 @@ interface Entry {
   worktree: Worktree;
   project: Project;
   pr: PullRequest | undefined;
+  stack: StackPosition | null;
   // Undefined for this machine's own worktree.
   device: SidebarDeviceBadge | undefined;
   mirror: SidebarDeviceBadge | undefined;
@@ -86,6 +93,7 @@ function worktreeRow(entry: Entry): SidebarRow {
     worktree: entry.worktree,
     project: entry.project,
     pr: entry.pr,
+    stack: entry.stack,
     device: entry.device,
     mirror: entry.mirror,
   };
@@ -132,12 +140,14 @@ export function buildInboxRows({
     showPrimary: boolean,
     device: SidebarDeviceBadge | undefined,
   ) => {
+    const trunk = trunkOf(trees);
     for (const worktree of trees) {
       if (worktree.isPrimary && !showPrimary) continue;
       const entry: Entry = {
         worktree,
         project,
         pr: prs?.[worktree.branch],
+        stack: pullRequestStackPosition(prs, worktree.branch, trunk),
         device,
         mirror: device === undefined ? mirrorBadgeFor(worktree) : undefined,
         activityAt: worktreeLastActivityAt(worktree),

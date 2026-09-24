@@ -9,6 +9,11 @@ export const PullRequestSchema = z.object({
   title: z.string(),
   state: PullRequestStateSchema,
   isDraft: z.boolean(),
+  // The branch the PR merges into ("main", or another PR's head when
+  // the PR sits in a stack). On the slim shape because the stack is
+  // read off the project-wide map: a PR whose base is another PR's
+  // head is stacked on it (shared/pullRequestStack.ts).
+  baseRefName: z.string(),
 });
 export type PullRequest = z.infer<typeof PullRequestSchema>;
 
@@ -22,6 +27,7 @@ export function toSlimPullRequest(pr: PullRequest): PullRequest {
     title: pr.title,
     state: pr.state,
     isDraft: pr.isDraft,
+    baseRefName: pr.baseRefName,
   };
 }
 
@@ -34,7 +40,8 @@ export function pullRequestsEqual(a: PullRequest, b: PullRequest): boolean {
     a.state === b.state &&
     a.isDraft === b.isDraft &&
     a.title === b.title &&
-    a.url === b.url
+    a.url === b.url &&
+    a.baseRefName === b.baseRefName
   );
 }
 
@@ -88,9 +95,6 @@ export type PullRequestChecksSummary = z.infer<
 // extra fields make `gh pr list` materially slower.
 export const PullRequestDetailSchema = PullRequestSchema.extend({
   mergeState: PullRequestMergeStateSchema,
-  // The PR's target branch (e.g. "main"). Shown in the section so the
-  // user can see what they're merging into without leaving the app.
-  baseRefName: z.string(),
   // GitHub login of whoever opened the PR. Worktrees may be checked
   // out by teammates' branches, so the author isn't always the local user.
   authorLogin: z.string(),
@@ -215,6 +219,12 @@ export const MergePullRequestPayloadSchema = ProjectScopedPayloadSchema.extend({
   number: z.number().int().positive(),
   method: MergeMethodSchema,
 });
+
+// Merges the PR together with every open PR under it in its stack,
+// bottom first, so the whole stack lands on the stack's base branch in
+// one action. The number names the top of the set (the whole stack
+// when it is the stack's top).
+export const MergePullRequestStackPayloadSchema = MergePullRequestPayloadSchema;
 
 export const SetPullRequestDraftPayloadSchema =
   ProjectScopedPayloadSchema.extend({

@@ -19,6 +19,7 @@ const GhPrListItemSchema = z.object({
   state: PullRequestStateSchema,
   isDraft: z.boolean(),
   headRefName: z.string(),
+  baseRefName: z.string(),
 });
 type GhPrListItem = z.infer<typeof GhPrListItemSchema>;
 
@@ -44,7 +45,7 @@ async function runGhPrList(
         "all",
         ...extraArgs,
         "--json",
-        "number,url,title,state,isDraft,headRefName",
+        "number,url,title,state,isDraft,headRefName,baseRefName",
       ],
       { cwd },
     );
@@ -63,6 +64,7 @@ function toPullRequest(item: GhPrListItem): PullRequest {
     title: item.title,
     state: item.state,
     isDraft: item.isDraft,
+    baseRefName: item.baseRefName,
   };
 }
 

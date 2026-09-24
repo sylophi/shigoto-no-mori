@@ -11,6 +11,7 @@ import type { DeviceIcon } from "@shared/account/deviceIcon";
 import type { StatusTone } from "@/components/ui/status-dot";
 import { cn } from "@/lib/utils";
 import { DeviceBadge } from "./DeviceBadge";
+import type { StackPosition } from "./sidebarRow";
 import { useWorktreeRowState } from "./useWorktreeRowState";
 import {
   RowTrailing,
@@ -26,6 +27,7 @@ interface RemoteWorktreeRowProps {
   reachable: boolean;
   tone: StatusTone;
   pr: PullRequest | undefined;
+  stack: StackPosition | null;
 }
 
 export function RemoteWorktreeRow({
@@ -36,6 +38,7 @@ export function RemoteWorktreeRow({
   reachable,
   tone,
   pr,
+  stack,
 }: RemoteWorktreeRowProps) {
   // The local row's own rule, scoped to the device: the open remote
   // worktree reads as selected like a local one.
@@ -60,6 +63,7 @@ export function RemoteWorktreeRow({
         activity={activity}
         isDeleting={isDeleting}
         pr={pr}
+        stack={stack}
       />
       {/* Rightmost, where the local row keeps its own trailing cluster:
           the owning device, name in the tooltip. */}

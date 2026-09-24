@@ -15,6 +15,10 @@ export interface RemoteProjectMember {
   project: Project;
 }
 
+// Where a PR sits in its stack (shared/pullRequestStack.ts), for the
+// PR pill.
+export type StackPosition = { index: number; size: number };
+
 export type SidebarRow =
   // A project header, for one repo wherever it is checked out: on this
   // machine with any peers' checkouts merged in, or on peers alone.
@@ -58,6 +62,8 @@ export type SidebarRow =
       worktree: Worktree;
       project: Project;
       pr: PullRequest | undefined;
+      // The PR's place in its stack, off the same map as `pr`.
+      stack: StackPosition | null;
       device: SidebarDeviceBadge | undefined;
       // The peer a local row is mirrored with, when it is (the tree's
       // worktree row wears the same).
@@ -85,6 +91,7 @@ export type SidebarRow =
       // Its PR on that device, off the peer's own map like a local
       // row's off this machine's.
       pr: PullRequest | undefined;
+      stack: StackPosition | null;
       groupId: string;
     }
   | {

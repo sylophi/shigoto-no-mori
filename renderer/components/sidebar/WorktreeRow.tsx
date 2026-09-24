@@ -5,6 +5,8 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { DeviceBadge, type SidebarDeviceBadge } from "./DeviceBadge";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { useProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
+import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { pullRequestStackPosition, trunkOf } from "@shared/pullRequestStack";
 import type { ScriptActivityKind } from "@/store/scriptRuns";
 import type { PullRequest, Worktree } from "@shared/schemas";
 import { ActivityIcon } from "./ActivityIcon";
@@ -58,6 +60,9 @@ export function WorktreeRow({ worktree, mirror }: WorktreeRowProps) {
   const { isSelected, open, activity, isDeleting, title } =
     useWorktreeRowState(worktree);
   const { data: prs } = useProjectPullRequests(worktree.projectId);
+  // The row's own project listing, already cached: the trunk the stack
+  // walk stops at is its primary checkout's branch.
+  const { data: siblings } = useWorktrees(worktree.projectId);
 
   return (
     <button
@@ -76,6 +81,11 @@ export function WorktreeRow({ worktree, mirror }: WorktreeRowProps) {
         activity={activity}
         isDeleting={isDeleting}
         pr={prs?.[worktree.branch]}
+        stack={pullRequestStackPosition(
+          prs,
+          worktree.branch,
+          trunkOf(siblings),
+        )}
       />
       {mirror && <MirrorBadge mirror={mirror} />}
     </button>
@@ -105,6 +115,8 @@ interface RowTrailingProps {
   // Resolved by the row: the local one off its project's map, a peer's
   // off the map that came with its forest.
   pr: PullRequest | undefined;
+  // The PR's place in its stack, off the same map.
+  stack?: { index: number; size: number } | null;
 }
 
 // The right-edge cluster, shared with RemoteWorktreeRow so a peer's row
@@ -117,6 +129,7 @@ export function RowTrailing({
   activity,
   isDeleting,
   pr,
+  stack,
 }: RowTrailingProps) {
   // Deletion spans cleanup scripts + the final git remove; the script
   // activity covers only cleanup, so keep the trash pulsing for the
@@ -128,7 +141,7 @@ export function RowTrailing({
     <>
       {activity && <ActivityIcon kind={activity} />}
       <StatusIndicator worktree={worktree} />
-      <PullRequestPill pr={pr} />
+      <PullRequestPill pr={pr} stack={stack} />
       <WorktreeKindIcon worktree={worktree} showTooltip={false} />
     </>
   );

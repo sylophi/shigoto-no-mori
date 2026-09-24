@@ -299,12 +299,15 @@ export async function doneViaCli(
   return WorktreeSchema.parse(final["worktree"]);
 }
 
+// `stack`: the PR and every open PR under it in its stack, which the
+// CLI resolves and merges bottom first (cli/stack.go).
 export async function mergeViaCli(
   project: Project,
   number: number,
   method: string,
+  options: { stack?: boolean } = {},
 ): Promise<void> {
-  const result = await runner().runCli([
+  const args = [
     "merge",
     "--project-id",
     project.id,
@@ -312,7 +315,9 @@ export async function mergeViaCli(
     String(number),
     "--method",
     method,
-  ]);
+  ];
+  if (options.stack) args.push("--stack");
+  const result = await runner().runCli(args);
   finalOkDoc(result, "sm merge failed", { projectId: project.id });
 }
 

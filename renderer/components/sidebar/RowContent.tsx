@@ -52,6 +52,7 @@ export function RowContent({
           reachable={row.reachable}
           tone={row.tone}
           pr={row.pr}
+          stack={row.stack}
         />
       );
     case "inbox-worktree":
@@ -60,6 +61,7 @@ export function RowContent({
           worktree={row.worktree}
           project={row.project}
           pr={row.pr}
+          stack={row.stack}
           device={row.device}
           mirror={row.mirror}
         />
