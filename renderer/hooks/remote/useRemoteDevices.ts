@@ -6,10 +6,10 @@
 // scoped surfaces resolve their device from.
 import { useSyncExternalStore } from "react";
 import {
-  MACHINE_FALLBACK_KIND,
-  type DeviceKind,
-} from "@shared/account/deviceKind";
-import { useLocalDeviceKind } from "@/hooks/account/useAccount";
+  MACHINE_FALLBACK_ICON,
+  type DeviceIcon,
+} from "@shared/account/deviceIcon";
+import { useLocalDeviceIcon } from "@/hooks/account/useAccount";
 import { localDeviceId } from "@/lib/queryKeys";
 import { hostsProjects } from "@/lib/remote/deviceTraits";
 import {
@@ -69,17 +69,17 @@ export function useRemoteDeviceApi(
 // shape for an id the registry no longer knows (a revoked peer whose
 // flow is still on screen), so a glyph always draws. A selector like
 // useRemoteDeviceApi, so a peer's status churn leaves the string alone.
-export function useDeviceKind(deviceId: string): DeviceKind {
-  const localKind = useLocalDeviceKind();
+export function useDeviceIcon(deviceId: string): DeviceIcon {
+  const localIcon = useLocalDeviceIcon();
   const select = () =>
     remoteDeviceStore.getSnapshot().find((entry) => entry.deviceId === deviceId)
-      ?.kind ?? MACHINE_FALLBACK_KIND;
-  const remoteKind = useSyncExternalStore(
+      ?.icon ?? MACHINE_FALLBACK_ICON;
+  const remoteIcon = useSyncExternalStore(
     remoteDeviceStore.subscribe,
     select,
     select,
   );
-  return deviceId === localDeviceId ? localKind : remoteKind;
+  return deviceId === localDeviceId ? localIcon : remoteIcon;
 }
 
 // The device's name for prose ("on Thinkpad", "Thinkpad:3000"). Falls

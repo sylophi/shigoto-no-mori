@@ -12,7 +12,7 @@ import { HubRequestError, isHubRefusal, type AccountService } from "./service";
 import type { AccountStore, StoredAccount } from "./credentialStore";
 import { isConfigured, type AccountServiceConfig } from "./serviceConfig";
 import { deriveAccountId } from "./token";
-import type { DeviceKind } from "./deviceKind";
+import type { DeviceIcon } from "./deviceIcon";
 
 type EnrollDeviceDeps = {
   config: AccountServiceConfig;
@@ -24,23 +24,23 @@ type EnrollDeviceDeps = {
   // Opaque platform label the device hub stores beside the device
   // (os.platform() on desktop, WEB_PLATFORM in a browser).
   platform: string;
-  // What this device detected itself to be, the kind it enrolls under
-  // unless its owner picked one (the store's deviceKind).
-  detectedKind: DeviceKind;
+  // What this device detected itself to be, the icon it enrolls under
+  // unless its owner picked one (the store's deviceIcon).
+  detectedIcon: DeviceIcon;
 };
 
-// The kind this device reports to the hub: the owner's pick where one
+// The icon this device reports to the hub: the owner's pick where one
 // is stored (or remembered across a sign-out), else what the device
 // detected. One rule for the enroll, the pick's push and every status
 // read, so the registry never sees one answer at enroll and another
 // after. Takes the record the caller already read: a read is a file
 // parse plus a keychain decrypt, not something to repeat per field.
-export function effectiveDeviceKind(
+export function effectiveDeviceIcon(
   record: StoredAccount | null,
-  store: Pick<AccountStore, "rememberedDeviceKind">,
-  detectedKind: DeviceKind,
-): DeviceKind {
-  return record?.deviceKind ?? store.rememberedDeviceKind() ?? detectedKind;
+  store: Pick<AccountStore, "rememberedDeviceIcon">,
+  detectedIcon: DeviceIcon,
+): DeviceIcon {
+  return record?.deviceIcon ?? store.rememberedDeviceIcon() ?? detectedIcon;
 }
 
 // Exchanges a fresh Clerk session token (minted by the renderer's
@@ -58,13 +58,13 @@ export async function enrollDevice(
     stored?.deviceName ??
     deps.store.rememberedDeviceName() ??
     deps.fallbackDeviceName;
-  // The pick alone, for the store: the wire gets the effective kind.
-  const deviceKind = stored?.deviceKind ?? deps.store.rememberedDeviceKind();
+  // The pick alone, for the store: the wire gets the effective icon.
+  const deviceIcon = stored?.deviceIcon ?? deps.store.rememberedDeviceIcon();
   const fields = {
     deviceId: deps.deviceId,
     name: deviceName,
     platform: deps.platform,
-    kind: effectiveDeviceKind(stored, deps.store, deps.detectedKind),
+    icon: effectiveDeviceIcon(stored, deps.store, deps.detectedIcon),
   };
   let enrollment: EnrollResponse;
   try {
@@ -88,7 +88,7 @@ export async function enrollDevice(
     credential: enrollment.credential,
     accountId: deriveAccountId(token),
     deviceName,
-    ...(deviceKind === null ? {} : { deviceKind }),
+    ...(deviceIcon === null ? {} : { deviceIcon }),
   });
 }
 
@@ -181,26 +181,26 @@ export function renameDevice(
 
 // The icon pick, the rename's twin: the local store write (null drops
 // the pick, so the device goes back to what it detected), then the
-// best-effort hub push of the kind the device now reports. Picking
-// the detected kind drops the pick too, so a device put back to its
+// best-effort hub push of the icon the device now reports. Picking
+// the detected icon drops the pick too, so a device put back to its
 // default carries no override a later, better detection could not
 // move. Resolves true when a pick was written. Signed out there is
 // nothing to pick against, like the rename, and a pick that changes
 // nothing (the current tile clicked again) writes and pushes nothing.
-export function setDeviceKind(
+export function setDeviceIcon(
   deps: Pick<
     EnrollDeviceDeps,
-    "config" | "service" | "store" | "deviceId" | "detectedKind"
+    "config" | "service" | "store" | "deviceId" | "detectedIcon"
   >,
-  picked: DeviceKind | null,
+  picked: DeviceIcon | null,
 ): boolean {
-  const kind = picked === deps.detectedKind ? null : picked;
+  const icon = picked === deps.detectedIcon ? null : picked;
   const record = deps.store.read();
-  if (record === null || (record.deviceKind ?? null) === kind) return false;
-  const { deviceKind: _dropped, ...rest } = record;
-  deps.store.write(kind === null ? rest : { ...rest, deviceKind: kind });
+  if (record === null || (record.deviceIcon ?? null) === icon) return false;
+  const { deviceIcon: _dropped, ...rest } = record;
+  deps.store.write(icon === null ? rest : { ...rest, deviceIcon: icon });
   pushDeviceUpdate(deps, record.credential, {
-    kind: kind ?? deps.detectedKind,
+    icon: icon ?? deps.detectedIcon,
   });
   return true;
 }

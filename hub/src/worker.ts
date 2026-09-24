@@ -222,10 +222,10 @@ function toDeviceInfo(
     deviceId: row.device_id,
     name: row.name,
     platform: row.platform,
-    // The column holds whatever the device sent (a newer device's kind
+    // The column holds whatever the device sent (a newer device's icon
     // lands as is) and goes out as is: each reader maps it to the
     // catalog it knows (DeviceInfoSchema).
-    kind: row.kind,
+    icon: row.icon,
     createdAt: row.created_at,
     lastSeenAt: row.last_seen_at,
     online: online.has(row.device_id),
@@ -392,7 +392,7 @@ export function createWorker(deps: HubDeps): HubWorker {
     const body = EnrollRequestSchema.safeParse(await readJson(request));
     if (!body.success)
       return jsonError(400, { error: "invalid enroll request" });
-    const { deviceId, name, platform, kind } = body.data;
+    const { deviceId, name, platform, icon } = body.data;
     const existing = await getDeviceById(env.DB, deviceId);
     if (existing !== null && existing.account_id !== login.accountId) {
       return jsonError(409, {
@@ -455,7 +455,7 @@ export function createWorker(deps: HubDeps): HubWorker {
       accountId: login.accountId,
       name,
       platform,
-      kind,
+      icon,
       credentialHash: await sha256Hex(credential),
       createdAt,
     });
@@ -480,7 +480,7 @@ export function createWorker(deps: HubDeps): HubWorker {
           device_id: deviceId,
           name,
           platform,
-          kind,
+          icon,
           created_at: createdAt,
           last_seen_at: existing?.last_seen_at ?? null,
         },
@@ -560,7 +560,7 @@ export function createWorker(deps: HubDeps): HubWorker {
     return new Response(null, { status: 204 });
   }
 
-  // Changes a device of the caller's account (name, kind, or both).
+  // Changes a device of the caller's account (name, icon, or both).
   // Scoped like revoke: the D1 update carries the account guard, so a
   // device outside the account (or gone meanwhile) matches no row and
   // reads as unknown.

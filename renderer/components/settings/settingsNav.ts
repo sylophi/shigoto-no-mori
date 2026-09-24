@@ -1,6 +1,6 @@
 import { createExternalStore, useExternalStore } from "@/store/externalStore";
 import { Palette, Rocket, type LucideIcon } from "lucide-react";
-import type { DeviceKind } from "@shared/account/deviceKind";
+import type { DeviceIcon } from "@shared/account/deviceIcon";
 import type { StatusTone } from "@/components/ui/status-dot";
 import type { RemoteDevice } from "@/lib/remote/devices";
 import { deviceStatusView, THIS_DEVICE_VIEW } from "@/lib/remote/deviceStatus";
@@ -110,7 +110,7 @@ export interface SettingsSection {
   id: string;
   label: string;
   icon?: LucideIcon;
-  kind?: DeviceKind;
+  deviceIcon?: DeviceIcon;
   tone?: StatusTone;
   title?: string;
   update?: string;
@@ -125,7 +125,7 @@ export interface SettingsSection {
 // visual group is Appearance alone and its devices are all peers.
 export function settingsSections(
   devices: readonly RemoteDevice[],
-  local: { name: string; kind: DeviceKind },
+  local: { name: string; icon: DeviceIcon },
   // useStagedUpdates' answer: deviceId to the version staged there.
   updates: Readonly<Record<string, string>>,
 ): { visual: SettingsSection[]; devices: SettingsSection[] } {
@@ -142,7 +142,7 @@ export function settingsSections(
     deviceRows.push({
       id: LOCAL_DEVICE_TAB,
       label: local.name,
-      kind: local.kind,
+      deviceIcon: local.icon,
       tone: solo ? undefined : THIS_DEVICE_VIEW.tone,
       title: "This device: the machine this window runs on",
       update,
@@ -154,7 +154,7 @@ export function settingsSections(
     deviceRows.push({
       id: deviceTab(device.deviceId),
       label: device.label,
-      kind: device.kind,
+      deviceIcon: device.icon,
       tone,
       title: `${device.label}: ${label}`,
       update,

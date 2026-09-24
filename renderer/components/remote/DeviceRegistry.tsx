@@ -94,12 +94,12 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
     return {
       device,
       isThisDevice,
-      // setDeviceName and setDeviceKind write this device's name and
-      // kind locally while the hub registry keeps what it enrolled
+      // setDeviceName and setDeviceIcon write this device's name and
+      // icon locally while the hub registry keeps what it enrolled
       // under. The local ones are the truth the user just picked, so
       // the row shows them.
       name: isThisDevice ? local.name : device.name,
-      kind: isThisDevice ? local.kind : device.kind,
+      icon: isThisDevice ? local.icon : device.icon,
       status: deviceRowStatus(device, isThisDevice, hubDevice, socket, now),
       access: commandAccessOf(peerAccess, device.deviceId),
       api: hubDevice?.api,
@@ -165,7 +165,7 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
               device,
               isThisDevice,
               name,
-              kind,
+              icon,
               status,
               access,
               api,
@@ -176,7 +176,7 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
                 device={device}
                 isThisDevice={isThisDevice}
                 name={name}
-                kind={kind}
+                icon={icon}
                 showId={(nameCount.get(name) ?? 0) > 1}
                 status={status}
                 appVersion={appVersion}

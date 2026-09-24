@@ -28,9 +28,9 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { DeviceKind } from "@shared/account/deviceKind";
+import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { useLocalDevice } from "@/hooks/account/useAccount";
-import { DeviceIcon } from "@/components/shared/DeviceIcon";
+import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import {
   commandAccessOf,
   usePeerCommandAccess,
@@ -59,7 +59,7 @@ import type { RemoteProjectMember } from "./sidebarRow";
 export interface GroupMember {
   deviceId: string;
   deviceLabel: string;
-  deviceKind: DeviceKind;
+  deviceIcon: DeviceIcon;
   project: Project;
   // Undefined while the device has no session (a peer that is asleep),
   // or while it has not granted this device control: either way its
@@ -94,7 +94,7 @@ export function useGroupMembers(
           {
             deviceId: localDeviceId,
             deviceLabel: local.name,
-            deviceKind: local.kind,
+            deviceIcon: local.icon,
             project: localProject,
             api: window.api,
             isThisDevice: true,
@@ -245,7 +245,7 @@ function RemoveSubmenu({
               variant="destructive"
               disabled
             >
-              <DeviceIcon kind={member.deviceKind} className="size-3.5" />
+              <DeviceGlyph icon={member.deviceIcon} className="size-3.5" />
               {member.deviceLabel}
             </DropdownMenuItem>
           ) : (
@@ -261,7 +261,7 @@ function RemoveSubmenu({
                 device={{
                   id: member.deviceId,
                   label: member.deviceLabel,
-                  kind: member.deviceKind,
+                  icon: member.deviceIcon,
                 }}
               />
             </MaybeHostScope>

@@ -1,11 +1,12 @@
-// The one way a device is drawn: its kind as a glyph (DeviceIcon), and
+// The one way a device is drawn: its icon as a glyph (DeviceGlyph),
+// that glyph after its connection dot to lead a name (DeviceLead), and
 // that glyph on a tinted tile in the device's connection tone
 // (DeviceMark). Every surface that stands for a machine (the sidebar's
 // badges, the filter pills, the device tabs and chips, the settings
 // list, the Devices page, the pull flow's two ends) draws through
-// these two, so a machine looks the same everywhere and a picked icon
-// lands everywhere at once. The kind comes from the device's own
-// answer (shared/account/deviceKind.ts), never from guessing at the
+// these, so a machine looks the same everywhere and a picked icon
+// lands everywhere at once. The icon comes from the device's own
+// answer (shared/account/deviceIcon.ts), never from guessing at the
 // name or the platform here.
 import {
   Apple,
@@ -45,7 +46,7 @@ import {
   type LucideProps,
 } from "lucide-react";
 import type { ComponentType } from "react";
-import type { DeviceKind } from "@shared/account/deviceKind";
+import type { DeviceIcon } from "@shared/account/deviceIcon";
 import {
   StatusDot,
   TONE_PILL,
@@ -76,7 +77,7 @@ function Mini({ className, ...props }: LucideProps) {
   );
 }
 
-const GLYPH: Record<DeviceKind, ComponentType<LucideProps>> = {
+const GLYPH: Record<DeviceIcon, ComponentType<LucideProps>> = {
   laptop: Laptop,
   desktop: Monitor,
   mini: Mini,
@@ -117,12 +118,12 @@ const GLYPH: Record<DeviceKind, ComponentType<LucideProps>> = {
 // The bare glyph, sized by the caller like any lucide icon. Decorative
 // by default: the name beside it carries the meaning, and a mark that
 // stands alone labels itself.
-export function DeviceIcon({
-  kind,
+export function DeviceGlyph({
+  icon,
   className,
   ...props
-}: { kind: DeviceKind } & LucideProps) {
-  const Glyph = GLYPH[kind];
+}: { icon: DeviceIcon } & LucideProps) {
+  const Glyph = GLYPH[icon];
   return <Glyph aria-hidden className={cn("shrink-0", className)} {...props} />;
 }
 
@@ -132,12 +133,12 @@ export function DeviceIcon({
 // so the row scans as state, identity, name, the order a list of rows
 // is read down. No tone (this device, which has no connection to
 // show) is the bare glyph.
-export function DeviceGlyph({
-  kind,
+export function DeviceLead({
+  icon,
   tone,
   size = "sm",
 }: {
-  kind: DeviceKind;
+  icon: DeviceIcon;
   tone?: StatusTone | null;
   // "xs" for a lead inside an xs control (the sidebar's filter pills),
   // where the row's own glyphs are a step smaller.
@@ -151,8 +152,8 @@ export function DeviceGlyph({
       )}
     >
       {tone && <StatusDot tone={tone} />}
-      <DeviceIcon
-        kind={kind}
+      <DeviceGlyph
+        icon={icon}
         className={size === "xs" ? "size-3" : "size-3.5"}
       />
     </span>
@@ -164,11 +165,11 @@ export function DeviceGlyph({
 // disagree about a machine. Two sizes: the row badge the sidebar wears
 // and the avatar that anchors a row on the Devices page.
 export function DeviceMark({
-  kind,
+  icon,
   tone,
   size = "sm",
 }: {
-  kind: DeviceKind;
+  icon: DeviceIcon;
   tone: StatusTone;
   size?: "sm" | "lg";
 }) {
@@ -180,7 +181,10 @@ export function DeviceMark({
         TONE_PILL[tone],
       )}
     >
-      <DeviceIcon kind={kind} className={size === "sm" ? "size-3" : "size-5"} />
+      <DeviceGlyph
+        icon={icon}
+        className={size === "sm" ? "size-3" : "size-5"}
+      />
     </span>
   );
 }

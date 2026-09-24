@@ -1,11 +1,11 @@
 // Compact device attribution for the merged tree: one mark per
 // contributing device on project headers, and the single-mark form on
 // remote worktree rows. The mark is the device's glyph on a tile in
-// its connection tone (shared/DeviceIcon.tsx DeviceMark), the same
+// its connection tone (shared/DeviceGlyph.tsx DeviceMark), the same
 // tile its row wears on the devices page, so a badge and a dot can
 // never disagree about a machine, and the name rides the tooltip.
-import type { DeviceKind } from "@shared/account/deviceKind";
-import { DeviceMark } from "@/components/shared/DeviceIcon";
+import type { DeviceIcon } from "@shared/account/deviceIcon";
+import { DeviceMark } from "@/components/shared/DeviceGlyph";
 import type { StatusTone } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
@@ -14,7 +14,7 @@ import { deviceStatusView } from "@/lib/remote/deviceStatus";
 export interface SidebarDeviceBadge {
   deviceId: string;
   label: string;
-  kind: DeviceKind;
+  icon: DeviceIcon;
   tone: StatusTone;
   // Only for the tooltip's wording: an unreachable device's rows are
   // its last known state, which the tone alone doesn't say.
@@ -33,7 +33,7 @@ export function useDeviceBadges(): ReadonlyMap<string, SidebarDeviceBadge> {
     badges.set(device.deviceId, {
       deviceId: device.deviceId,
       label: device.label,
-      kind: device.kind,
+      icon: device.icon,
       tone,
       reachable,
     });
@@ -47,7 +47,7 @@ export function DeviceBadge({ badge }: { badge: SidebarDeviceBadge }) {
       tip={`${badge.label}${badge.reachable ? "" : " (not reachable right now, last known state)"}`}
     >
       <span className="inline-flex shrink-0" aria-label={`On ${badge.label}`}>
-        <DeviceMark kind={badge.kind} tone={badge.tone} />
+        <DeviceMark icon={badge.icon} tone={badge.tone} />
       </span>
     </SimpleTooltip>
   );

@@ -1,5 +1,5 @@
-import type { DeviceKind } from "@shared/account/deviceKind";
-import { DeviceIcon } from "@/components/shared/DeviceIcon";
+import type { DeviceIcon } from "@shared/account/deviceIcon";
+import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import {
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -131,14 +131,14 @@ export function ProjectRemoveMenuItem({
   removeArm,
   device,
 }: ProjectMenuItemsProps & {
-  device?: { id: string; label: string; kind: DeviceKind };
+  device?: { id: string; label: string; icon: DeviceIcon };
 }) {
   const armKey = device?.id ?? "";
   // The row is the device, so it leads with the device's glyph, like
   // every other list that names one.
   const deviceRow = device && (
     <>
-      <DeviceIcon kind={device.kind} className="size-3.5" />
+      <DeviceGlyph icon={device.icon} className="size-3.5" />
       {device.label}
     </>
   );

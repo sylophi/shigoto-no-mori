@@ -1,7 +1,7 @@
 // What a device on the account looks like: the one closed catalog of
-// device kinds, and the icon every surface draws a device with. A kind
-// is the device's own answer (detected at enroll, or picked by its
-// owner on the Devices page) and the hub stores it beside the name, so
+// device icons every surface draws a device with. An icon is the
+// device's own answer (detected at enroll, or picked by its owner on
+// the Devices page) and the hub stores it beside the name, so
 // every device draws every other one the same way. Shared by the hub
 // protocol, both enroll paths (desktop and web), the lab and every
 // renderer surface, so the set cannot drift between them. Pure, like
@@ -55,16 +55,16 @@ export const DEVICE_MARKS = [
   "gamepad",
 ] as const;
 
-const DEVICE_KINDS = [...DEVICE_SHAPES, ...DEVICE_MARKS] as const;
+const DEVICE_ICONS = [...DEVICE_SHAPES, ...DEVICE_MARKS] as const;
 
 export type DeviceShape = (typeof DEVICE_SHAPES)[number];
-export type DeviceKind = DeviceShape | (typeof DEVICE_MARKS)[number];
+export type DeviceIcon = DeviceShape | (typeof DEVICE_MARKS)[number];
 
-export const DeviceKindSchema = z.enum(DEVICE_KINDS);
-const KIND_SET: ReadonlySet<string> = new Set(DEVICE_KINDS);
+export const DeviceIconSchema = z.enum(DEVICE_ICONS);
+const ICON_SET: ReadonlySet<string> = new Set(DEVICE_ICONS);
 
-// The kind as the picker names it.
-export const DEVICE_KIND_LABELS: Record<DeviceKind, string> = {
+// The icon as the picker names it.
+export const DEVICE_ICON_LABELS: Record<DeviceIcon, string> = {
   laptop: "Laptop",
   desktop: "Desktop",
   mini: "Mini",
@@ -102,20 +102,20 @@ export const DEVICE_KIND_LABELS: Record<DeviceKind, string> = {
   gamepad: "Gamepad",
 };
 
-export function isDeviceKind(value: unknown): value is DeviceKind {
-  return typeof value === "string" && KIND_SET.has(value);
+export function isDeviceIcon(value: unknown): value is DeviceIcon {
+  return typeof value === "string" && ICON_SET.has(value);
 }
 
 // The shape a machine is drawn as when nothing better is known: the one
 // that claims the least. The one literal, so every fallback (an id the
-// registry no longer knows, a placeholder before the status lands, a
-// kind this build does not know) lands on the same glyph.
-export const MACHINE_FALLBACK_KIND: DeviceShape = "desktop";
+// registry no longer knows, a placeholder before the status lands, an
+// icon this build does not know) lands on the same glyph.
+export const MACHINE_FALLBACK_ICON: DeviceShape = "desktop";
 
-// The shape a device of this platform is drawn as when its kind cannot
-// be: the detector found nothing better, or the registry carries a
-// kind this build does not know (a newer build's pick). A browser is
+// The shape a device of this platform is drawn as when its icon cannot
+// be: the detector found nothing better, or the registry carries an
+// icon this build does not know (a newer build's pick). A browser is
 // a browser, and a machine is the fallback shape.
-export function fallbackDeviceKind(platform: string): DeviceShape {
-  return platform === WEB_PLATFORM ? "browser" : MACHINE_FALLBACK_KIND;
+export function fallbackDeviceIcon(platform: string): DeviceShape {
+  return platform === WEB_PLATFORM ? "browser" : MACHINE_FALLBACK_ICON;
 }

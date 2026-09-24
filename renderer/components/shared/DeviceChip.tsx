@@ -2,7 +2,7 @@
 // device's connection dot, its glyph and its name, rendered only under
 // a remote host scope. The local pages stay chipless, since this machine is the default,
 // not a state worth announcing.
-import { DeviceGlyph } from "@/components/shared/DeviceIcon";
+import { DeviceLead } from "@/components/shared/DeviceGlyph";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
 import { deviceStatusView, deviceTitle } from "@/lib/remote/deviceStatus";
@@ -27,7 +27,7 @@ export function DeviceChip() {
       title={deviceTitle(device.label, status)}
       className={DEVICE_PILL_CLASS}
     >
-      <DeviceGlyph kind={device.kind} tone={status.tone} />
+      <DeviceLead icon={device.icon} tone={status.tone} />
       <span className="max-w-32 truncate">{device.label}</span>
     </span>
   );

@@ -31,7 +31,7 @@
 // To the app both are opaque strings: the credential rides in the
 // Authorization header and the ticket in the connect URL, unchanged.
 import { z } from "zod";
-import { fallbackDeviceKind, isDeviceKind } from "../account/deviceKind";
+import { fallbackDeviceIcon, isDeviceIcon } from "../account/deviceIcon";
 
 // Largest hub envelope the DO will forward, in bytes of the serialized
 // JSON. The device hub carries orchestration only:
@@ -127,7 +127,7 @@ export const HUB_ROUTES = {
     method: "DELETE",
     path: (deviceId: string) => `/devices/${encodeURIComponent(deviceId)}`,
   },
-  // Changes a device of the caller's account: its name, its kind, or
+  // Changes a device of the caller's account: its name, its icon, or
   // both (the app updates itself through it after the local write), so
   // the registry every other device lists carries the change at once
   // rather than at the device's next enrollment.
@@ -185,22 +185,22 @@ export type ErrorBody = z.infer<typeof ErrorBodySchema>;
 // throws past it, so it stays well under that. name and platform are
 // bounded so an enroll cannot store unbounded strings under a Clerk
 // token.
-// The kind as it rides the wire: any short string. The catalog check
+// The icon as it rides the wire: any short string. The catalog check
 // happens on read (DeviceInfoSchema below).
-const DeviceKindWireSchema = z.string().min(1).max(64);
+const DeviceIconWireSchema = z.string().min(1).max(64);
 
 export const EnrollRequestSchema = z.object({
   deviceId: z.string().min(1).max(200),
   name: z.string().min(1).max(256),
   platform: z.string().min(1).max(64),
-  // What the device looks like (shared/account/deviceKind.ts), sent
+  // What the device looks like (shared/account/deviceIcon.ts), sent
   // with every enrollment and stored as given: the device resolved its
   // own detection and its owner's pick before sending, so the hub
   // never has to know which is which. Bounded, not checked against the
   // catalog: a client whose catalog grew ahead of the Worker must still
   // sign in, so the Worker stores what it is sent and each reader
   // sanitizes to the catalog it knows.
-  kind: DeviceKindWireSchema,
+  icon: DeviceIconWireSchema,
 });
 
 // PATCH /devices/:id: the fields a device may change after enrolling,
@@ -209,35 +209,35 @@ export const EnrollRequestSchema = z.object({
 export const DevicePatchRequestSchema = z
   .object({
     name: EnrollRequestSchema.shape.name.optional(),
-    kind: DeviceKindWireSchema.optional(),
+    icon: DeviceIconWireSchema.optional(),
   })
-  .refine((patch) => patch.name !== undefined || patch.kind !== undefined, {
+  .refine((patch) => patch.name !== undefined || patch.icon !== undefined, {
     message: "nothing to change",
   });
 export type DevicePatch = z.infer<typeof DevicePatchRequestSchema>;
 
 // One device as the HTTP API reports it. Timestamps are epoch
 // milliseconds. lastSeenAt is null until the device first connects.
-// Every device has a kind (its enrollment sent one), but the string
+// Every device has an icon (its enrollment sent one), but the string
 // on the wire may be one this build's catalog lacks (a newer device's
 // pick, read through an older app), which reads as the shape its
-// platform is drawn as, so nothing past the parse ever holds a kind it
+// platform is drawn as, so nothing past the parse ever holds an icon it
 // cannot draw.
 const DeviceInfoWireSchema = z.object({
   deviceId: z.string(),
   name: z.string(),
   platform: z.string(),
-  kind: z.string(),
+  icon: z.string(),
   createdAt: z.number().int(),
   lastSeenAt: z.number().int().nullable(),
   online: z.boolean(),
 });
 export const DeviceInfoSchema = DeviceInfoWireSchema.transform((info) => ({
   ...info,
-  kind: isDeviceKind(info.kind) ? info.kind : fallbackDeviceKind(info.platform),
+  icon: isDeviceIcon(info.icon) ? info.icon : fallbackDeviceIcon(info.platform),
 }));
 export type DeviceInfo = z.output<typeof DeviceInfoSchema>;
-// The same device as the Worker writes it: the kind still the string
+// The same device as the Worker writes it: the icon still the string
 // it stored, before the reader's catalog check above.
 export type DeviceInfoWire = z.input<typeof DeviceInfoSchema>;
 

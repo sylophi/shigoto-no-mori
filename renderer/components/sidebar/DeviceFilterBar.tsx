@@ -11,8 +11,8 @@
 // pill spells its name out, so the narrowed forest always says which
 // machine it is showing. A radio group: one pick at a time, arrows
 // move it, the way the device tabs do.
-import type { DeviceKind } from "@shared/account/deviceKind";
-import { DeviceGlyph } from "@/components/shared/DeviceIcon";
+import type { DeviceIcon } from "@shared/account/deviceIcon";
+import { DeviceLead } from "@/components/shared/DeviceGlyph";
 import type { DeviceRosterEntry } from "@/components/shared/DeviceTabs";
 import { Button } from "@/components/ui/button";
 import type { StatusTone } from "@/components/ui/status-dot";
@@ -27,7 +27,7 @@ const ALL = "all";
 // One pill: a device, or the All pill, which has no glyph and no tone.
 type Pill = {
   id: string;
-  kind: DeviceKind | null;
+  icon: DeviceIcon | null;
   label: string;
   title: string;
   tone: StatusTone | null;
@@ -36,7 +36,7 @@ type Pill = {
 function pillFor(choice: DeviceRosterEntry, checked: boolean): Pill {
   return {
     id: choice.deviceId,
-    kind: choice.kind,
+    icon: choice.icon,
     label: checked ? choice.label : deviceAbbrev(choice.label),
     title: deviceTitle(choice.label, choice.status),
     tone: choice.status?.tone ?? null,
@@ -46,7 +46,7 @@ function pillFor(choice: DeviceRosterEntry, checked: boolean): Pill {
 export function DeviceFilterBar({ choices, selected }: DeviceFilter) {
   const selectedId = selected?.deviceId ?? ALL;
   const pills: Pill[] = [
-    { id: ALL, kind: null, label: "All", title: "Every device", tone: null },
+    { id: ALL, icon: null, label: "All", title: "Every device", tone: null },
     ...choices.map((choice) => pillFor(choice, choice.deviceId === selectedId)),
   ];
   const pick = (id: string) => setDeviceFilter(id === ALL ? null : id);
@@ -94,8 +94,8 @@ export function DeviceFilterBar({ choices, selected }: DeviceFilter) {
                 "border-transparent bg-accent text-accent-foreground hover:bg-accent hover:text-accent-foreground",
             )}
           >
-            {pill.kind && (
-              <DeviceGlyph kind={pill.kind} tone={pill.tone} size="xs" />
+            {pill.icon && (
+              <DeviceLead icon={pill.icon} tone={pill.tone} size="xs" />
             )}
             <span className="max-w-32 truncate">{pill.label}</span>
           </Button>

@@ -12,7 +12,7 @@
 // offers one (enc:true), and stored as plaintext with enc:false when it
 // does not, so sign-in still works on a machine without a keychain.
 
-import { isDeviceKind, type DeviceKind } from "./deviceKind";
+import { isDeviceIcon, type DeviceIcon } from "./deviceIcon";
 
 // The injected encryption seam. `available` records whether the backing
 // could actually encrypt: when false the store writes plaintext and
@@ -27,14 +27,14 @@ export type StoreCipher = {
 
 // What the caller reads and writes. accountId may be empty (a token
 // that does not parse yields "", see token.ts), deviceName is always
-// set. deviceKind is the owner's pick of what this device looks like
-// (shared/account/deviceKind.ts), present only once they picked one:
+// set. deviceIcon is the owner's pick of what this device looks like
+// (shared/account/deviceIcon.ts), present only once they picked one:
 // absent, the device reports what it detected about itself.
 export type StoredAccount = {
   credential: string;
   accountId: string;
   deviceName: string;
-  deviceKind?: DeviceKind;
+  deviceIcon?: DeviceIcon;
 };
 
 // The stored shape. `v` guards a future format change, `enc` records
@@ -45,11 +45,11 @@ type StoredShape = {
   credential: string;
   accountId: string;
   deviceName: string;
-  deviceKind?: DeviceKind;
+  deviceIcon?: DeviceIcon;
 };
 
 // What a sign-out leaves behind, in the same slot: the device's name
-// and picked kind (so the next enrollment keeps them instead of
+// and picked icon (so the next enrollment keeps them instead of
 // reverting to the machine defaults) and, when the sign-out's revoke
 // never reached the hub, the credential it should have revoked with,
 // parked for a later retry (enroll.ts retryParkedRevoke). A parked
@@ -59,7 +59,7 @@ type SignedOutShape = {
   v: 1;
   signedOut: true;
   deviceName: string;
-  deviceKind?: DeviceKind;
+  deviceIcon?: DeviceIcon;
   parked?: { enc: boolean; credential: string; accountId: string };
 };
 
@@ -73,8 +73,8 @@ export type AccountStore = {
   clear(): void;
   // The name the device last enrolled under, kept across a sign-out.
   rememberedDeviceName(): string | null;
-  // The kind its owner last picked, kept across a sign-out the same way.
-  rememberedDeviceKind(): DeviceKind | null;
+  // The icon its owner last picked, kept across a sign-out the same way.
+  rememberedDeviceIcon(): DeviceIcon | null;
   // Parks a credential whose revoke did not land, signing out.
   park(account: StoredAccount): void;
   readParked(): StoredAccount | null;
@@ -92,24 +92,30 @@ type AccountStorage = {
   removeRaw(): void;
 };
 
-// The picked kind on a document of either shape, or undefined when
+// The picked icon on a document of either shape, or undefined when
 // none was picked (or the field holds something this build does not
-// know, which reads as unpicked rather than crashing the store).
-function kindOf(doc: StoredShape | SignedOutShape): DeviceKind | undefined {
-  return isDeviceKind(doc.deviceKind) ? doc.deviceKind : undefined;
+// know, which reads as unpicked rather than crashing the store). A
+// document written before the field was renamed holds the pick under
+// deviceKind, read here so an upgrade keeps it. Every write rebuilds
+// the document, so the next one stores it as deviceIcon.
+function iconOf(
+  doc: (StoredShape | SignedOutShape) & { deviceKind?: unknown },
+): DeviceIcon | undefined {
+  const picked = doc.deviceIcon ?? doc.deviceKind;
+  return isDeviceIcon(picked) ? picked : undefined;
 }
 
 // The opened credential plus the identity the document keeps beside
-// it: the name always, the kind only when one was picked.
+// it: the name always, the icon only when one was picked.
 function withIdentity(
   doc: StoredShape | SignedOutShape,
   opened: { credential: string; accountId: string },
 ): StoredAccount {
-  const kind = kindOf(doc);
+  const icon = iconOf(doc);
   return {
     ...opened,
     deviceName: doc.deviceName,
-    ...(kind === undefined ? {} : { deviceKind: kind }),
+    ...(icon === undefined ? {} : { deviceIcon: icon }),
   };
 }
 
@@ -174,11 +180,11 @@ export function createAccountStore(opts: {
   // The one writer of the signed-out remainder.
   function setSignedOut(
     deviceName: string,
-    deviceKind: DeviceKind | undefined,
+    deviceIcon: DeviceIcon | undefined,
     parked?: SignedOutShape["parked"],
   ): void {
     const doc: SignedOutShape = { v: 1, signedOut: true, deviceName };
-    if (deviceKind !== undefined) doc.deviceKind = deviceKind;
+    if (deviceIcon !== undefined) doc.deviceIcon = deviceIcon;
     if (parked !== undefined) doc.parked = parked;
     storage.writeRaw(JSON.stringify(doc));
   }
@@ -204,7 +210,7 @@ export function createAccountStore(opts: {
         accountId: account.accountId,
         deviceName: account.deviceName,
       };
-      if (account.deviceKind !== undefined) doc.deviceKind = account.deviceKind;
+      if (account.deviceIcon !== undefined) doc.deviceIcon = account.deviceIcon;
       storage.writeRaw(JSON.stringify(doc));
     },
 
@@ -221,7 +227,7 @@ export function createAccountStore(opts: {
         if (doc !== null) {
           setSignedOut(
             typeof doc.deviceName === "string" ? doc.deviceName : "",
-            kindOf(doc),
+            iconOf(doc),
             "signedOut" in doc ? doc.parked : undefined,
           );
           return;
@@ -238,15 +244,15 @@ export function createAccountStore(opts: {
       return doc.deviceName === "" ? null : doc.deviceName;
     },
 
-    rememberedDeviceKind() {
+    rememberedDeviceIcon() {
       const doc = readDoc();
-      return doc === null ? null : (kindOf(doc) ?? null);
+      return doc === null ? null : (iconOf(doc) ?? null);
     },
 
     park(account) {
       // Like clear: a parking that cannot be written still signs out.
       try {
-        setSignedOut(account.deviceName, account.deviceKind, {
+        setSignedOut(account.deviceName, account.deviceIcon, {
           ...encrypt(account.credential),
           accountId: account.accountId,
         });
@@ -264,7 +270,7 @@ export function createAccountStore(opts: {
 
     clearParked() {
       const doc = signedOutDoc();
-      if (doc?.parked !== undefined) setSignedOut(doc.deviceName, kindOf(doc));
+      if (doc?.parked !== undefined) setSignedOut(doc.deviceName, iconOf(doc));
     },
   };
 }

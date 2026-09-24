@@ -20,14 +20,14 @@ import { useState } from "react";
 import { AlertTriangle, Trash2 } from "lucide-react";
 import type { TunnelState } from "@shared/ipc/modules/hub";
 import type { DeviceInfo } from "@shared/hub/protocol";
-import type { DeviceKind } from "@shared/account/deviceKind";
-import { DeviceMark } from "@/components/shared/DeviceIcon";
+import type { DeviceIcon } from "@shared/account/deviceIcon";
+import { DeviceMark } from "@/components/shared/DeviceGlyph";
 import { Button } from "@/components/ui/button";
 import { RowTag } from "@/components/ui/row-tag";
 import { StatusDot, TONE_TEXT } from "@/components/ui/status-dot";
 import type { CommandAccess } from "@/hooks/remote/useCommandAccess";
 import type { HostApi } from "@/hooks/remote/useHostScope";
-import { usePeerDetectedKind } from "@/hooks/remote/usePeerDeviceKind";
+import { usePeerDetectedIcon } from "@/hooks/remote/usePeerDeviceIcon";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import {
   CONFIRM_DESTRUCTIVE_MS,
@@ -38,7 +38,7 @@ import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { cn } from "@/lib/utils";
 import { AcceptCommandsToggle } from "./AcceptCommandsToggle";
 import { DeviceHosts } from "./DeviceHosts";
-import { DeviceKindPicker, PeerDeviceKindPicker } from "./DeviceKindPicker";
+import { DeviceIconPicker, PeerDeviceIconPicker } from "./DeviceIconPicker";
 import { DeviceNameField, DeviceRenameButton } from "./DeviceNameField";
 import { KeepReachableToggle } from "./KeepReachableToggle";
 import { PortForwardSection } from "./PortForwardSection";
@@ -50,7 +50,7 @@ export function DeviceRegistryRow({
   device,
   isThisDevice,
   name,
-  kind,
+  icon,
   showId,
   status,
   appVersion,
@@ -70,7 +70,7 @@ export function DeviceRegistryRow({
   name: string;
   // What the row's mark draws: this device's own answer, a peer's
   // registry one, resolved by the registry like the name.
-  kind: DeviceKind;
+  icon: DeviceIcon;
   // Another row wears the same name, so the id has to tell them apart.
   showId: boolean;
   // Derived once by the registry so the marks cannot disagree with
@@ -127,10 +127,10 @@ export function DeviceRegistryRow({
   // The peer has ANSWERED yes (not merely not answered yet, and not on
   // a stale answer whose refresh failed): a picker that turned back
   // into a plain mark on a refusal would be worse than one that
-  // appears a moment late. Its detected kind landing is the proof its
+  // appears a moment late. Its detected icon landing is the proof its
   // build can take a pick.
   const grantedHere = peerUp && access.granted && !access.isError;
-  const peerDetected = usePeerDetectedKind(device.deviceId, api, grantedHere);
+  const peerDetected = usePeerDetectedIcon(device.deviceId, api, grantedHere);
   const canPickForPeer =
     grantedHere && api !== undefined && peerDetected !== undefined;
   const note = isThisDevice
@@ -153,22 +153,22 @@ export function DeviceRegistryRow({
     <li className="flex flex-col gap-3 py-5 first:pt-1 last:pb-1">
       <div className="flex gap-3.5">
         {isThisDevice ? (
-          <DeviceKindPicker
-            kind={kind}
+          <DeviceIconPicker
+            icon={icon}
             tone={status.tone}
             label={traits.selfLabel}
           />
         ) : canPickForPeer ? (
-          <PeerDeviceKindPicker
+          <PeerDeviceIconPicker
             deviceId={device.deviceId}
             api={api}
-            kind={kind}
+            icon={icon}
             detected={peerDetected}
             tone={status.tone}
             name={namedDevice}
           />
         ) : (
-          <DeviceMark kind={kind} tone={status.tone} size="lg" />
+          <DeviceMark icon={icon} tone={status.tone} size="lg" />
         )}
 
         <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-3 gap-y-2">

@@ -1,13 +1,13 @@
 import { deviceContract } from "@shared/ipc/modules/device";
-import type { DeviceKind } from "@shared/account/deviceKind";
+import type { DeviceIcon } from "@shared/account/deviceIcon";
 import type { Handlers } from "@shared/ipc/types";
 
 // The account layer (main/ipc/modules/account.ts) owns the detection,
 // the stored pick and the hub push, and main injects them at boot,
 // following the setUpdaterImpl precedent.
 type DeviceImpl = {
-  detectedKind: () => Promise<DeviceKind>;
-  setKind: (kind: DeviceKind) => Promise<DeviceKind>;
+  detectedIcon: () => Promise<DeviceIcon>;
+  setIcon: (icon: DeviceIcon) => Promise<DeviceIcon>;
 };
 
 let impl: DeviceImpl | null = null;
@@ -26,6 +26,6 @@ function deviceImpl(): DeviceImpl {
 }
 
 export const deviceHandlers: Handlers<typeof deviceContract> = {
-  detectedKind: () => deviceImpl().detectedKind(),
-  setKind: (kind) => deviceImpl().setKind(kind),
+  detectedIcon: () => deviceImpl().detectedIcon(),
+  setIcon: (icon) => deviceImpl().setIcon(icon),
 };

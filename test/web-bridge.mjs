@@ -332,7 +332,7 @@ async function main() {
         if (url === `${HUB_URL}/devices/enroll`) {
           const body = JSON.parse(init.body);
           assert.equal(body.platform, "web");
-          assert.equal(body.kind, "browser");
+          assert.equal(body.icon, "browser");
           assert.equal(body.deviceId, deviceId);
           assert.equal(body.name, defaultWebDeviceName(CHROME_MAC_UA));
           // The enroll bearer is the session token itself, never a
@@ -347,7 +347,7 @@ async function main() {
               deviceId: body.deviceId,
               name: body.name,
               platform: body.platform,
-              kind: body.kind,
+              icon: body.icon,
               createdAt: Date.now(),
               lastSeenAt: null,
               online: false,

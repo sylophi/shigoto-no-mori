@@ -3,16 +3,16 @@
 // and a child process, a few sysfs reads), electron-free like the rest
 // of main/core/account/ so the account check script drives the
 // mapping half. Every probe may fail, and a failure reads as the
-// platform fallback rather than an error: the kind is cosmetic, and a
+// platform fallback rather than an error: the icon is cosmetic, and a
 // status read must never break on it.
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { platform } from "node:os";
 import { promisify } from "node:util";
 import {
-  fallbackDeviceKind,
+  fallbackDeviceIcon,
   type DeviceShape,
-} from "@shared/account/deviceKind";
+} from "@shared/account/deviceIcon";
 
 const execFileP = promisify(execFile);
 
@@ -23,7 +23,7 @@ const execFileP = promisify(execFile);
 // identifier, which says nothing about the shape, so the product name
 // is asked for first and the identifier is the fallback for the
 // machines that still spell a family into it.
-export function deviceKindFromAppleModel(model: string): DeviceShape | null {
+export function deviceShapeFromAppleModel(model: string): DeviceShape | null {
   const normalized = model.replace(/[\s-]/g, "").toLowerCase();
   if (normalized.startsWith("macbook")) return "laptop";
   if (normalized.startsWith("macmini")) return "mini";
@@ -38,7 +38,7 @@ export function deviceKindFromAppleModel(model: string): DeviceShape | null {
 // /sys/class/dmi/id/chassis_type reports them. Only the codes that say
 // a shape are listed. The rest ("Other", "Unknown", docking stations)
 // fall through.
-const DMI_CHASSIS_KIND: Record<string, DeviceShape> = {
+const DMI_CHASSIS_SHAPE: Record<string, DeviceShape> = {
   "3": "desktop", // Desktop
   "4": "desktop", // Low profile desktop
   "5": "desktop", // Pizza box
@@ -85,7 +85,7 @@ const VIRTUAL_MARKERS = [
   "virtual machine",
 ];
 
-export function deviceKindFromDmi(dmi: {
+export function deviceShapeFromDmi(dmi: {
   chassisType: string | null;
   vendor: string | null;
   product: string | null;
@@ -97,10 +97,10 @@ export function deviceKindFromDmi(dmi: {
   }
   // A Mac running Linux (Asahi) still reports its Apple product name.
   const apple =
-    dmi.product === null ? null : deviceKindFromAppleModel(dmi.product);
+    dmi.product === null ? null : deviceShapeFromAppleModel(dmi.product);
   if (apple !== null) return apple;
   const code = dmi.chassisType?.trim() ?? "";
-  return DMI_CHASSIS_KIND[code] ?? null;
+  return DMI_CHASSIS_SHAPE[code] ?? null;
 }
 
 async function readTrimmed(path: string): Promise<string | null> {
@@ -128,18 +128,18 @@ async function run(file: string, args: readonly string[]): Promise<string> {
   return stdout;
 }
 
-async function macKind(): Promise<DeviceShape | null> {
+async function macShape(): Promise<DeviceShape | null> {
   try {
     const name = appleProductNameOf(
       await run("/usr/sbin/ioreg", ["-rd1", "-n", "product"]),
     );
-    const kind = name === null ? null : deviceKindFromAppleModel(name);
-    if (kind !== null) return kind;
+    const shape = name === null ? null : deviceShapeFromAppleModel(name);
+    if (shape !== null) return shape;
   } catch {
     // Fall through to the identifier.
   }
   try {
-    return deviceKindFromAppleModel(
+    return deviceShapeFromAppleModel(
       (await run("/usr/sbin/sysctl", ["-n", "hw.model"])).trim(),
     );
   } catch {
@@ -147,7 +147,7 @@ async function macKind(): Promise<DeviceShape | null> {
   }
 }
 
-async function linuxKind(): Promise<DeviceShape | null> {
+async function linuxShape(): Promise<DeviceShape | null> {
   // WSL has no chassis, and a Windows machine's shape is unknown from
   // inside it: leave it to the fallback.
   const release = await readTrimmed("/proc/sys/kernel/osrelease");
@@ -157,19 +157,19 @@ async function linuxKind(): Promise<DeviceShape | null> {
     readTrimmed("/sys/class/dmi/id/sys_vendor"),
     readTrimmed("/sys/class/dmi/id/product_name"),
   ]);
-  return deviceKindFromDmi({ chassisType, vendor, product });
+  return deviceShapeFromDmi({ chassisType, vendor, product });
 }
 
-// The kind this desktop device detects itself to be. Never rejects:
+// The icon this desktop device detects for itself. Never rejects:
 // an unreadable probe lands on the platform fallback.
-export async function detectDesktopDeviceKind(): Promise<DeviceShape> {
-  const fallback = fallbackDeviceKind(platform());
+export async function detectDesktopDeviceShape(): Promise<DeviceShape> {
+  const fallback = fallbackDeviceIcon(platform());
   try {
     switch (platform()) {
       case "darwin":
-        return (await macKind()) ?? fallback;
+        return (await macShape()) ?? fallback;
       case "linux":
-        return (await linuxKind()) ?? fallback;
+        return (await linuxShape()) ?? fallback;
       default:
         return fallback;
     }

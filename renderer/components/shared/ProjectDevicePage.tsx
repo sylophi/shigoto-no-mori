@@ -76,7 +76,7 @@ export function ProjectDevicePage({
     : {
         deviceId: scope.deviceId,
         label: "",
-        kind: "desktop",
+        icon: "desktop",
         isThisDevice: !scope.remote,
         hostsProjects: true,
         status: null,
