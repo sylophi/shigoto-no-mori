@@ -1,17 +1,10 @@
 // The stack the worktree's PR sits in, top of the stack first down to
 // the branch it all lands on, the way the branches sit on each other.
-// Each row is the PR (its state, title, number) and the branch, with a
-// chip for every worktree holding that branch, on this machine or a
-// peer, so the next layer is one click away wherever it is checked
-// out. Merged rows stay: a stack whose bottom landed is still that
-// stack until the rest follows.
+// Each row is the PR: its state, title and number. Which worktree
+// holds each layer, and where, is the sidebar's job, which draws the
+// stack as a tree. Merged rows stay: a stack whose bottom landed is
+// still that stack until the rest follows.
 import { GitBranch } from "lucide-react";
-import { DeviceMark } from "@/components/shared/DeviceGlyph";
-import { ChipButton } from "@/components/ui/chip-button";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { useWorktreesByBranch } from "@/hooks/pullRequests/useWorktreesByBranch";
-import { useHostScope } from "@/hooks/remote/useHostScope";
-import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { describePullRequest } from "@/lib/pullRequest";
 import { cn } from "@/lib/utils";
 import type { PullRequestStack } from "@shared/pullRequestStack";
@@ -25,9 +18,6 @@ export function StackList({
   worktree: Worktree;
   stack: PullRequestStack;
 }) {
-  const nav = useWorktreeNav();
-  const { deviceId } = useHostScope();
-  const holders = useWorktreesByBranch(worktree.projectId);
   const size = stack.entries.length;
   return (
     <ol className="divide-y divide-border/60 rounded-md border border-border/60">
@@ -61,43 +51,6 @@ export function StackList({
             </button>
             <span className="shrink-0 text-muted-foreground/60">
               #{entry.pr.number}
-            </span>
-            <span className="ml-auto flex min-w-0 shrink items-center gap-1.5">
-              <span className="truncate font-mono text-xs text-muted-foreground">
-                {entry.branch}
-              </span>
-              {holders.get(entry.branch)?.map((holder) =>
-                holder.worktree.id === worktree.id &&
-                holder.deviceId === deviceId ? null : (
-                  <SimpleTooltip
-                    key={`${holder.deviceId}:${holder.worktree.id}`}
-                    tip={
-                      holder.badge
-                        ? `Open ${holder.worktree.name} on ${holder.badge.label}`
-                        : `Open ${holder.worktree.name}`
-                    }
-                  >
-                    <ChipButton
-                      onClick={() =>
-                        nav.toDeviceWorktree(
-                          holder.deviceId,
-                          holder.projectId,
-                          holder.worktree.id,
-                        )
-                      }
-                      className="py-0.5"
-                    >
-                      {holder.badge && (
-                        <DeviceMark
-                          icon={holder.badge.icon}
-                          tone={holder.badge.tone}
-                        />
-                      )}
-                      {holder.worktree.name}
-                    </ChipButton>
-                  </SimpleTooltip>
-                ),
-              )}
             </span>
           </li>
         );
