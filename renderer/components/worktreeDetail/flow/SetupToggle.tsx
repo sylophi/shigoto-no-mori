@@ -15,15 +15,11 @@ export function SetupToggle({
   thisDeviceLabel,
   checked,
   onChange,
-  pinned,
 }: {
   localProject: Project;
   thisDeviceLabel: string;
   checked: boolean;
   onChange: (next: boolean) => void;
-  // Whether the user set the switch. Until then it follows the
-  // leave-out rule, and the row says so.
-  pinned: boolean;
 }) {
   // The whole plan, not just the script: the running view lists its
   // steps from the same reads, and having them settled here means the
@@ -43,11 +39,6 @@ export function SetupToggle({
               "No setup script is configured for this project."
             )}
           </p>
-          {!pinned && configured && (
-            <p className="mt-0.5 text-2xs text-muted-foreground">
-              Follows the leave-out rule: on when something stays behind.
-            </p>
-          )}
         </div>
         <Switch
           checked={checked && configured}
