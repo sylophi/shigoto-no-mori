@@ -1,4 +1,5 @@
 import { describePullRequest } from "@/lib/pullRequest";
+import type { StackPosition } from "@shared/pullRequestStack";
 import type { PullRequest } from "@shared/schemas";
 import { StatusPill } from "./StatusPill";
 
@@ -14,7 +15,7 @@ interface PullRequestPillProps {
   // Where the PR sits in its stack, when it is in one
   // (shared/pullRequestStack.ts): the pill then reads "2/3", bottom
   // counted first, the order the stack merges in.
-  stack?: { index: number; size: number } | null;
+  stack?: StackPosition | null;
 }
 
 export function PullRequestPill({

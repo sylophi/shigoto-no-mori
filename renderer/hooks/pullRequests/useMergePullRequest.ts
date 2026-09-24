@@ -13,6 +13,8 @@ interface MergeVariables {
   branch: string;
   number: number;
   method: MergeMethod;
+  // The PR and every open PR under it in its stack, as one action.
+  stack?: boolean;
 }
 
 type Context = {
@@ -24,8 +26,8 @@ export function useMergePullRequest() {
   const qc = useQueryClient();
   const { api, keys } = useHostScope();
   return useMutation<void, Error, MergeVariables, Context>({
-    mutationFn: ({ projectId, number, method }) =>
-      api.githubCli.mergePullRequest({ projectId, number, method }),
+    mutationFn: ({ projectId, number, method, stack }) =>
+      api.githubCli.mergePullRequest({ projectId, number, method, stack }),
     onMutate: async ({ projectId, branch }) => {
       const key = keys.worktreePullRequest(projectId, branch);
       // Cancel in-flight refetches so they don't clobber the

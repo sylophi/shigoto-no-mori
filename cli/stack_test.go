@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 )
 
@@ -25,30 +26,18 @@ func numbersOf(prs []prSummary) []int {
 	return out
 }
 
-func equalInts(a, b []int) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // The chain runs from the bottom up to the asked PR, through a merged
 // bottom, and never into the trunk: the "main -> production" PR #7
 // would otherwise sit under every stack.
 func TestStackBelowWalksToTheTrunk(t *testing.T) {
 	chain := stackBelow(stackFixture(), 4, "main")
-	if got, want := numbersOf(chain), []int{2, 3, 4}; !equalInts(got, want) {
+	if got, want := numbersOf(chain), []int{2, 3, 4}; !slices.Equal(got, want) {
 		t.Errorf("stackBelow(4) = %v, want %v", got, want)
 	}
 	if chain[0].BaseRefName != "main" {
 		t.Errorf("bottom base = %q, want main", chain[0].BaseRefName)
 	}
-	if got := numbersOf(stackBelow(stackFixture(), 6, "main")); !equalInts(got, []int{6}) {
+	if got := numbersOf(stackBelow(stackFixture(), 6, "main")); !slices.Equal(got, []int{6}) {
 		t.Errorf("stackBelow(6) = %v, want just #6", got)
 	}
 	if stackBelow(stackFixture(), 99, "main") != nil {
@@ -63,10 +52,10 @@ func TestStackBelowIsBounded(t *testing.T) {
 		{Number: 1, State: "OPEN", HeadRefName: "a", BaseRefName: "b"},
 		{Number: 2, State: "OPEN", HeadRefName: "b", BaseRefName: "a"},
 	}
-	if got := numbersOf(stackBelow(prs, 1, "main")); !equalInts(got, []int{2, 1}) {
+	if got := numbersOf(stackBelow(prs, 1, "main")); !slices.Equal(got, []int{2, 1}) {
 		t.Errorf("stackBelow on a cycle = %v, want [2 1]", got)
 	}
-	if got := numbersOf(stackBelow(stackFixture(), 6, "")); !equalInts(got, []int{7, 6}) {
+	if got := numbersOf(stackBelow(stackFixture(), 6, "")); !slices.Equal(got, []int{7, 6}) {
 		t.Errorf("stackBelow without a trunk = %v, want the promotion PR under #6", got)
 	}
 }
@@ -83,7 +72,7 @@ func TestStackMergeSet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stackMergeSet: %v", err)
 	}
-	if got, want := numbersOf(set), []int{3, 4}; !equalInts(got, want) {
+	if got, want := numbersOf(set), []int{3, 4}; !slices.Equal(got, want) {
 		t.Errorf("merge set = %v, want %v", got, want)
 	}
 	chain[1].State = "CLOSED"
@@ -105,8 +94,11 @@ func TestGithubStackDecodes(t *testing.T) {
 	if err := json.Unmarshal([]byte(body), &stacks); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
-	if len(stacks) != 1 || stacks[0].Number != 7 || !stacks[0].contains(6) || stacks[0].contains(5) {
+	if len(stacks) != 1 || !stacks[0].contains(6) || stacks[0].contains(5) {
 		t.Errorf("decoded %+v", stacks)
+	}
+	if lowest, ok := stacks[0].lowestOpen(); !ok || lowest != 6 {
+		t.Errorf("lowestOpen = %d, %v, want 6 (the merged #4 is closed)", lowest, ok)
 	}
 	const ticket = `{"status":"pending","details":{"message":"Merge request enqueued.","uuid":"ffcc","merge_method":"squash"}}`
 	var m asyncMerge

@@ -10,7 +10,7 @@
 import assert from "node:assert/strict";
 import {
   pullRequestStackFor,
-  groupByStack,
+  placeByStack,
   pullRequestStackPosition,
   stackMergeSet,
   trunkOf,
@@ -124,30 +124,18 @@ try {
     },
   );
   await proof.check(
-    "the trunk comes off the listing's primary ref, whatever the primary checkout has out",
+    "the trunk is the host's primary branch, else the primary checkout's",
     () => {
       assert.equal(trunkOf(undefined), undefined);
-      assert.equal(trunkOf([wt("main", { isPrimary: true })]), "main");
       assert.equal(
-        trunkOf([
-          wt("main", { isPrimary: true }),
-          wt("x", { primaryRef: "origin/main" }),
-        ]),
+        trunkOf([wt("layer-l", { isPrimary: true, primaryBranch: "main" })]),
         "main",
+        "the host's answer wins over whatever the primary checkout has out",
       );
       assert.equal(
-        trunkOf([
-          wt("layer-l", { isPrimary: true, primaryRef: "origin/main" }),
-        ]),
+        trunkOf([wt("main", { isPrimary: true }), wt("x")]),
         "main",
-        "a primary checkout on a feature branch is not the trunk",
-      );
-      assert.equal(
-        trunkOf([
-          wt("release/2.0", { isPrimary: true }),
-          wt("x", { primaryRef: "release/2.0" }),
-        ]),
-        "release/2.0",
+        "an older host's listing falls back to the primary checkout's branch",
       );
     },
   );
@@ -164,13 +152,32 @@ try {
         "layer-b",
         "layer-b",
       ];
+      const placed = placeByStack(rows, (r) => r, prs, "main");
       assert.deepEqual(
-        groupByStack(rows, (r) => r, prs, "main"),
+        placed.map((p) => p.item),
         ["main", "hotfix", "layer-a", "layer-b", "layer-b", "layer-c", "other"],
       );
       assert.deepEqual(
-        groupByStack(rows, (r) => r, undefined, "main"),
+        placed.map(
+          (p) => p.position && `${p.position.index + 1}/${p.position.size}`,
+        ),
+        [null, null, "1/3", "2/3", "2/3", "3/3", null],
+      );
+      assert.deepEqual(
+        placed.map((p) => p.child ?? null),
+        [null, null, null, "middle", "middle", "last", null],
+        "every member above the group's first row is its child, the last closing",
+      );
+      assert.deepEqual(
+        placeByStack(rows, (r) => r, undefined, "main").map((p) => p.item),
         rows,
+      );
+      // One row showing of a stack nests nothing.
+      assert.deepEqual(
+        placeByStack(["layer-b", "other"], (r) => r, prs, "main").map(
+          (p) => p.child ?? null,
+        ),
+        [null, null],
       );
     },
   );

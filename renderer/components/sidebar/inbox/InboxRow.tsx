@@ -24,7 +24,7 @@ import { MirrorBadge } from "../WorktreeRow";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { ProjectMenuItems, useProjectMenuRemoveArm } from "../ProjectMenuItems";
 import { PullRequestPill } from "../PullRequestPill";
-import type { StackPosition } from "../sidebarRow";
+import type { StackPosition } from "@shared/pullRequestStack";
 import { ChangedFilesPill, RemoteSyncPill } from "../StatusIndicator";
 import { useWorktreeRowState } from "../useWorktreeRowState";
 

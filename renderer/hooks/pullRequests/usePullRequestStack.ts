@@ -8,7 +8,6 @@ import {
   trunkOf,
   type PullRequestStack,
 } from "@shared/pullRequestStack";
-import type { PullRequest } from "@shared/schemas";
 import { useProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 
@@ -18,13 +17,5 @@ export function usePullRequestStack(
 ): PullRequestStack | null {
   const { data: prs } = useProjectPullRequests(projectId);
   const { data: worktrees } = useWorktrees(projectId);
-  return stackOf(prs, branch, trunkOf(worktrees));
-}
-
-export function stackOf(
-  prs: Record<string, PullRequest> | undefined,
-  branch: string,
-  trunk: string | undefined,
-): PullRequestStack | null {
-  return prs ? pullRequestStackFor(prs, branch, trunk) : null;
+  return prs ? pullRequestStackFor(prs, branch, trunkOf(worktrees)) : null;
 }

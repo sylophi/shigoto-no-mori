@@ -94,35 +94,66 @@ export function stackMergeSet(
   return range.filter((entry) => entry.pr.state === "OPEN");
 }
 
+// Where a branch's PR sits in its stack: `index` from the bottom, of
+// `size` layers.
+export type StackPosition = { index: number; size: number };
+
+// A row's place under its stack's lowest row when the two sit
+// together: one of the layers built on it, drawn as a child in a tree,
+// the last one closing the branch.
+export type StackChild = "middle" | "last";
+
+export interface StackPlacement<T> {
+  item: T;
+  position: StackPosition | null;
+  child?: StackChild;
+}
+
 // One repo's rows with every stack's members brought together, bottom
 // first (the sidebar draws a stack as a tree, each layer nested under
-// the one it is built on), at the place the first member held. Rows
-// outside a stack keep their order. Two rows on one branch (a peer's
-// copy beside the local one) stay adjacent in their own order.
-export function groupByStack<T>(
+// the one it is built on), at the place the first member held, each
+// carrying its position and, for the members above a group's lowest
+// row, its place as a child of it. Rows outside a stack keep their
+// order. Two rows on one branch (a peer's copy beside the local one)
+// stay adjacent in their own order. A stack with one row showing (its
+// other layers shelved, or on a device the filter hides) nests
+// nothing: a child with no parent row would hang in space.
+export function placeByStack<T>(
   items: readonly T[],
   branchOf: (item: T) => string,
   prs: Record<string, PullRequest> | undefined,
   trunk?: string,
-): T[] {
-  if (!prs) return [...items];
+): StackPlacement<T>[] {
+  if (!prs) return items.map((item) => ({ item, position: null }));
   // By position, not identity: two rows may be equal values.
   const placed = new Set<number>();
-  const out: T[] = [];
+  const out: StackPlacement<T>[] = [];
   items.forEach((item, index) => {
     if (placed.has(index)) return;
     const stack = pullRequestStackFor(prs, branchOf(item), trunk);
     if (!stack) {
-      out.push(item);
+      out.push({ item, position: null });
       return;
     }
-    for (const entry of stack.entries) {
-      items.forEach((member, at) => {
-        if (placed.has(at) || branchOf(member) !== entry.branch) return;
-        placed.add(at);
-        out.push(member);
+    const group: StackPlacement<T>[] = [];
+    stack.entries.forEach((entry, at) => {
+      items.forEach((member, memberIndex) => {
+        if (placed.has(memberIndex) || branchOf(member) !== entry.branch)
+          return;
+        placed.add(memberIndex);
+        group.push({
+          item: member,
+          position: { index: at, size: stack.entries.length },
+        });
+      });
+    });
+    if (group.length > 1) {
+      group.forEach((placement, at) => {
+        if (at === 0) return;
+        placement.child = at === group.length - 1 ? "last" : "middle";
       });
     }
+    out.push(...group);
   });
   return out;
 }
@@ -133,35 +164,23 @@ export function pullRequestStackPosition(
   prs: Record<string, PullRequest> | undefined,
   branch: string,
   trunk?: string,
-): { index: number; size: number } | null {
+): StackPosition | null {
   if (!prs) return null;
   const stack = pullRequestStackFor(prs, branch, trunk);
   return stack ? { index: stack.index, size: stack.entries.length } : null;
 }
 
 // The project's primary branch, off the listing it already carries:
-// every non-primary worktree names the ref it syncs from (primaryRef,
-// "main" or "origin/main"), and the primary checkout's own branch
-// says which spelling that is. The checkout alone won't do: it can
-// have a feature branch out, and that branch's PR would then read as
-// the trunk instead of as a stack member.
+// the host resolves it once per listing (Worktree.primaryBranch). A
+// listing from an older host without it falls back to the primary
+// checkout's branch, which is right whenever that checkout is on the
+// primary branch.
 export function trunkOf(
   worktrees: readonly Worktree[] | undefined,
 ): string | undefined {
   if (!worktrees) return undefined;
-  const primary = worktrees.find((worktree) => worktree.isPrimary);
-  const ref = worktrees.find((worktree) => worktree.primaryRef)?.primaryRef;
-  if (!ref) return primary?.branch;
-  if (
-    primary &&
-    (ref === primary.branch || ref.endsWith(`/${primary.branch}`))
-  ) {
-    return primary.branch;
-  }
-  // A remote-tracking ref with no local checkout to confirm the split:
-  // drop the remote segment. Only a slash-named default branch with no
-  // remote at all reads wrong here, and then only while the primary
-  // checkout is on another branch.
-  const slash = ref.indexOf("/");
-  return slash === -1 ? ref : ref.slice(slash + 1);
+  return (
+    worktrees.find((worktree) => worktree.primaryBranch)?.primaryBranch ??
+    worktrees.find((worktree) => worktree.isPrimary)?.branch
+  );
 }

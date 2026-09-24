@@ -225,7 +225,6 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       repoMergeConfig: (projectId: string) =>
         githubCliClient.repoMergeConfig({ projectId }),
       mergePullRequest: githubCliClient.mergePullRequest,
-      mergePullRequestStack: githubCliClient.mergePullRequestStack,
       pullRequestDiff: githubCliClient.pullRequestDiff,
       setPullRequestDraft: githubCliClient.setPullRequestDraft,
       onProjectPullRequestsRefreshed:

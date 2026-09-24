@@ -218,13 +218,12 @@ export const GithubCliPullRequestDiffPayloadSchema =
 export const MergePullRequestPayloadSchema = ProjectScopedPayloadSchema.extend({
   number: z.number().int().positive(),
   method: MergeMethodSchema,
+  // Land the PR together with every open PR under it in its stack,
+  // bottom first (shared/pullRequestStack.ts), so the whole stack up
+  // to this PR lands in one action. One PR at a time would leave each
+  // next PR pointing at a branch that already landed.
+  stack: z.boolean().optional(),
 });
-
-// Merges the PR together with every open PR under it in its stack,
-// bottom first, so the whole stack lands on the stack's base branch in
-// one action. The number names the top of the set (the whole stack
-// when it is the stack's top).
-export const MergePullRequestStackPayloadSchema = MergePullRequestPayloadSchema;
 
 export const SetPullRequestDraftPayloadSchema =
   ProjectScopedPayloadSchema.extend({

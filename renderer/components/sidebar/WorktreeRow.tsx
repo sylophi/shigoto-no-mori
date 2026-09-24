@@ -6,14 +6,12 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { DeviceBadge, type SidebarDeviceBadge } from "./DeviceBadge";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { useProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
-import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { pullRequestStackPosition, trunkOf } from "@shared/pullRequestStack";
 import type { ScriptActivityKind } from "@/store/scriptRuns";
 import type { PullRequest, Worktree } from "@shared/schemas";
 import { ActivityIcon } from "./ActivityIcon";
 import { PullRequestPill } from "./PullRequestPill";
 import { StatusIndicator } from "./StatusIndicator";
-import type { StackChild } from "./sidebarRow";
+import type { StackChild, StackPosition } from "@shared/pullRequestStack";
 import { useWorktreeRowState } from "./useWorktreeRowState";
 
 interface WorktreeRowProps {
@@ -21,6 +19,9 @@ interface WorktreeRowProps {
   // The peer this worktree is mirrored with, when it is: the row then
   // stands for both copies and wears the peer's badge.
   mirror?: SidebarDeviceBadge;
+  // Both off the tree builder, which places the project's rows by
+  // stack once (buildSidebarRows).
+  stack: StackPosition | null;
   stackChild?: StackChild;
 }
 
@@ -95,14 +96,12 @@ export function StackConnector({ child }: { child: StackChild | undefined }) {
 export function WorktreeRow({
   worktree,
   mirror,
+  stack,
   stackChild,
 }: WorktreeRowProps) {
   const { isSelected, open, activity, isDeleting, title } =
     useWorktreeRowState(worktree);
   const { data: prs } = useProjectPullRequests(worktree.projectId);
-  // The row's own project listing, already cached: the trunk the stack
-  // walk stops at is its primary checkout's branch.
-  const { data: siblings } = useWorktrees(worktree.projectId);
 
   return (
     <button
@@ -123,11 +122,7 @@ export function WorktreeRow({
         activity={activity}
         isDeleting={isDeleting}
         pr={prs?.[worktree.branch]}
-        stack={pullRequestStackPosition(
-          prs,
-          worktree.branch,
-          trunkOf(siblings),
-        )}
+        stack={stack}
       />
       {mirror && <MirrorBadge mirror={mirror} />}
     </button>
@@ -158,7 +153,7 @@ interface RowTrailingProps {
   // off the map that came with its forest.
   pr: PullRequest | undefined;
   // The PR's place in its stack, off the same map.
-  stack?: { index: number; size: number } | null;
+  stack?: StackPosition | null;
 }
 
 // The right-edge cluster, shared with RemoteWorktreeRow so a peer's row

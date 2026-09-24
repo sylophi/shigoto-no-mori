@@ -16,28 +16,26 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 )
 
-const stackListLimit = "200"
-
 // Every PR of the repo, newest first, the sidebar sweep's projection
-// plus the two refs a stack is read from.
+// plus the two refs a stack is read from. Same page size as the sweep
+// (PR_LIST_LIMIT in host/lib/githubCli/pullRequests.ts).
 func listPullRequests(projectPath string) ([]prSummary, error) {
-	stdout, err := runGh(projectPath, "pr", "list", "--state", "all",
-		"--limit", stackListLimit, "--json", prSummaryFields)
-	if err != nil {
-		return nil, err
-	}
-	var prs []prSummary
-	if err := json.Unmarshal([]byte(stdout), &prs); err != nil {
-		return nil, errf("unexpected gh pr list output: %s", err)
-	}
-	return prs, nil
+	return ghPrList(projectPath, "pr", "list", "--state", "all",
+		"--limit", "200", "--json", prSummaryFields)
 }
+
+// Bounds the walk down a chain, like MAX_DEPTH in
+// shared/pullRequestStack.ts: the rows are a snapshot, so a loop in
+// stale ones must end.
+const maxStackDepth = 64
 
 // The chain from the bottom of the stack up to and including `number`,
 // or just that PR when nothing sits under it. Newest PR wins a reused
@@ -63,7 +61,7 @@ func stackBelow(prs []prSummary, number int, trunk string) []prSummary {
 	chain := []prSummary{*own}
 	visited := map[string]bool{own.HeadRefName: true}
 	cursor := *own
-	for len(chain) < 64 {
+	for len(chain) < maxStackDepth {
 		parent, ok := byHead[cursor.BaseRefName]
 		if !ok || cursor.BaseRefName == trunk || visited[parent.HeadRefName] {
 			break
@@ -108,7 +106,7 @@ func githubStackFor(projectPath string, number int) (*githubStack, error) {
 	if err != nil {
 		// A host without the stacks API (GHES, or the feature off)
 		// answers 404: not an error, just not a GitHub stack.
-		if strings.Contains(err.Error(), "404") {
+		if strings.Contains(err.Error(), "HTTP 404") {
 			return nil, nil
 		}
 		return nil, err
@@ -125,20 +123,29 @@ func githubStackFor(projectPath string, number int) (*githubStack, error) {
 	return nil, nil
 }
 
+// The stack as GitHub lists it, bottom first.
 type githubStack struct {
-	Number       int                `json:"number"`
 	PullRequests []githubStackEntry `json:"pull_requests"`
 }
 
 type githubStackEntry struct {
-	Number   int     `json:"number"`
-	State    string  `json:"state"`
-	Draft    bool    `json:"draft"`
-	MergedAt *string `json:"merged_at"`
+	Number int `json:"number"`
+	// "open" or "closed"; a merged PR is closed.
+	State string `json:"state"`
 }
 
 func (s *githubStack) contains(number int) bool {
 	return slices.ContainsFunc(s.PullRequests, func(e githubStackEntry) bool { return e.Number == number })
+}
+
+// The stack's lowest PR still open, the one a merge lands alone.
+func (s *githubStack) lowestOpen() (int, bool) {
+	for _, entry := range s.PullRequests {
+		if entry.State == "open" {
+			return entry.Number, true
+		}
+	}
+	return 0, false
 }
 
 // The asynchronous merge's ticket and outcome, as GitHub reports them.
@@ -248,36 +255,42 @@ func awaitMergeability(projectPath string, number int) {
 
 // The whole `--stack` merge: resolve the set, pick GitHub's own merge
 // when it knows the stack, land one PR at a time otherwise. Reports
-// each landed PR through onMerged either way.
-func execMergeStack(proj project, number int, method string, onMerged func(prSummary)) ([]prSummary, error) {
-	pt, err := resolvePrimaryTarget(proj)
-	if err != nil {
-		return nil, err
-	}
-	prs, err := listPullRequests(proj.Path)
-	if err != nil {
-		return nil, err
+// each landed PR through onMerged either way. The three lookups are
+// independent round trips, so they overlap.
+func execMergeStack(proj project, number int, method string, onMerged func(prSummary)) error {
+	var (
+		wg       sync.WaitGroup
+		pt       primaryTarget
+		prs      []prSummary
+		ghStack  *githubStack
+		ptErr    error
+		listErr  error
+		stackErr error
+	)
+	wg.Add(3)
+	go func() { defer wg.Done(); pt, ptErr = resolvePrimaryTarget(proj) }()
+	go func() { defer wg.Done(); prs, listErr = listPullRequests(proj.Path) }()
+	go func() { defer wg.Done(); ghStack, stackErr = githubStackFor(proj.Path, number) }()
+	wg.Wait()
+	if err := errors.Join(ptErr, listErr, stackErr); err != nil {
+		return err
 	}
 	chain := stackBelow(prs, number, pt.localPrimary)
 	if chain == nil {
-		return nil, errf("No pull request #%d", number)
+		return errf("No pull request #%d", number)
 	}
 	set, err := stackMergeSet(chain)
 	if err != nil {
-		return nil, err
-	}
-	ghStack, err := githubStackFor(proj.Path, number)
-	if err != nil {
-		return nil, err
+		return err
 	}
 	if ghStack != nil {
 		if err := mergeStackAsync(proj.Path, number, method); err != nil {
-			return nil, err
+			return err
 		}
 		for _, pr := range set {
 			onMerged(pr)
 		}
-		return set, nil
+		return nil
 	}
-	return set, mergeStackSequentially(proj.Path, set, chain[0].BaseRefName, method, onMerged)
+	return mergeStackSequentially(proj.Path, set, chain[0].BaseRefName, method, onMerged)
 }

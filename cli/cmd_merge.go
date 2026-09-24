@@ -95,8 +95,10 @@ func prLookupArgs(branch string, extraFields ...string) []string {
 	return []string{"pr", "list", "--state", "all", "--head", branch, "--limit", "1", "--json", fields}
 }
 
-func findPullRequest(projectPath, branch string) (*prSummary, error) {
-	stdout, err := runGh(projectPath, prLookupArgs(branch)...)
+// One `gh pr list` call decoded into prSummary rows, for every
+// projection built on prSummaryFields.
+func ghPrList(projectPath string, args ...string) ([]prSummary, error) {
+	stdout, err := runGh(projectPath, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -104,8 +106,13 @@ func findPullRequest(projectPath, branch string) (*prSummary, error) {
 	if err := json.Unmarshal([]byte(stdout), &prs); err != nil {
 		return nil, errf("unexpected gh pr list output: %s", err)
 	}
-	if len(prs) == 0 {
-		return nil, nil
+	return prs, nil
+}
+
+func findPullRequest(projectPath, branch string) (*prSummary, error) {
+	prs, err := ghPrList(projectPath, prLookupArgs(branch)...)
+	if err != nil || len(prs) == 0 {
+		return nil, err
 	}
 	return &prs[0], nil
 }
@@ -204,10 +211,11 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 		if err != nil {
 			return exitCodeOf(err), err
 		}
+		allowed := allowedMergeMethods(proj.Path)
 		if stack {
-			return cmdMergeStack(proj, number, methodFlag)
+			return cmdMergeStack(proj, number, methodFlag, allowed)
 		}
-		method, err := execMerge(proj, number, methodFlag, allowedMergeMethods(proj.Path))
+		method, err := execMerge(proj, number, methodFlag, allowed)
 		if err != nil {
 			return exitCodeOf(err), err
 		}
@@ -239,7 +247,7 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 		return 1, errf("PR #%d for %s is %s, not open", pr.Number, id.Branch, strings.ToLower(pr.State))
 	}
 	if stack {
-		return cmdMergeStack(proj, pr.Number, methodFlag)
+		return cmdMergeStack(proj, pr.Number, methodFlag, allowed)
 	}
 
 	method, err := execMerge(proj, pr.Number, methodFlag, allowed)
@@ -269,15 +277,7 @@ func execMerge(proj project, number int, methodFlag string, allowed []string) (s
 		return "", err
 	}
 	if _, err := runGh(proj.Path, "pr", "merge", fmt.Sprint(number), "--"+method); err != nil {
-		// A PR in a stack GitHub knows refuses the plain merge and
-		// names the asynchronous merge API. That API merges the PR
-		// together with whatever is still open under it, which is what
-		// GitHub means by merging a stacked PR; for the bottom PR, the
-		// common case here, it is just that PR.
-		if !isStackedMergeRefusal(err) {
-			return "", err
-		}
-		if err := mergeStackAsync(proj.Path, number, method); err != nil {
+		if err := mergeStackedAlone(proj.Path, number, method, err); err != nil {
 			return "", err
 		}
 	}
@@ -285,8 +285,21 @@ func execMerge(proj project, number int, methodFlag string, allowed []string) (s
 	return method, nil
 }
 
-func isStackedMergeRefusal(err error) bool {
-	return strings.Contains(err.Error(), "part of a stack")
+// A PR in a stack GitHub knows refuses the plain merge: only its
+// asynchronous merge API lands those, and it lands every open PR
+// under the asked one too. So the plain merge of a stacked PR is
+// honoured only for the lowest open PR of its stack, where it is that
+// PR alone. Anything else is a stack merge, which `--stack` says
+// explicitly. Any other failure is reported as it came.
+func mergeStackedAlone(projectPath string, number int, method string, mergeErr error) error {
+	ghStack, err := githubStackFor(projectPath, number)
+	if err != nil || ghStack == nil {
+		return mergeErr
+	}
+	if lowest, ok := ghStack.lowestOpen(); !ok || lowest != number {
+		return errf("PR #%d sits above open pull requests in its GitHub stack; merge it with --stack", number)
+	}
+	return mergeStackAsync(projectPath, number, method)
 }
 
 func resolveMergeMethod(proj project, methodFlag string, allowed []string) (string, error) {
@@ -323,8 +336,8 @@ func persistMergeMethod(proj project, method string) {
 // The --stack arm of both paths: every open PR from the bottom of the
 // stack up to and including `number`, one JSON event per landed PR in
 // --json mode so a caller can follow along.
-func cmdMergeStack(proj project, number int, methodFlag string) (int, error) {
-	method, err := resolveMergeMethod(proj, methodFlag, allowedMergeMethods(proj.Path))
+func cmdMergeStack(proj project, number int, methodFlag string, allowed []string) (int, error) {
+	method, err := resolveMergeMethod(proj, methodFlag, allowed)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -335,17 +348,12 @@ func cmdMergeStack(proj project, number int, methodFlag string) (int, error) {
 			out(greenOut(fmt.Sprintf("merged PR #%d (%s): %s", pr.Number, method, pr.Title)))
 		}
 	}
-	set, err := execMergeStack(proj, number, method, onMerged)
-	if err != nil {
+	if err := execMergeStack(proj, number, method, onMerged); err != nil {
 		return exitCodeOf(err), err
 	}
 	persistMergeMethod(proj, method)
 	if jsonMode {
-		numbers := make([]int, len(set))
-		for i, pr := range set {
-			numbers[i] = pr.Number
-		}
-		emit(map[string]any{"ok": true, "numbers": numbers, "method": method})
+		emit(map[string]any{"ok": true, "method": method})
 	}
 	return 0, nil
 }

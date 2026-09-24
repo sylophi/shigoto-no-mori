@@ -17,12 +17,8 @@ import {
   remoteWorktreeKey,
 } from "../buildSidebarRows";
 import type { SidebarDeviceBadge } from "../DeviceBadge";
-import type {
-  InboxShelf,
-  SidebarRow,
-  SidebarViewModel,
-  StackPosition,
-} from "../sidebarRow";
+import type { StackPosition } from "@shared/pullRequestStack";
+import type { InboxShelf, SidebarRow, SidebarViewModel } from "../sidebarRow";
 
 interface BuildInboxRowsArgs {
   projects: Project[];

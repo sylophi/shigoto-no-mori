@@ -1,3 +1,4 @@
+import type { StackChild, StackPosition } from "@shared/pullRequestStack";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import type { Project, PullRequest, Worktree } from "@shared/schemas";
 import type { StatusTone } from "@/components/ui/status-dot";
@@ -14,16 +15,6 @@ export interface RemoteProjectMember {
   deviceIcon: DeviceIcon;
   project: Project;
 }
-
-// Where a PR sits in its stack (shared/pullRequestStack.ts), for the
-// PR pill.
-export type StackPosition = { index: number; size: number };
-
-// A row's place under its stack's lowest row when the two sit in a
-// run of the stack's rows: one of the layers built on it, drawn as a
-// child in a tree, the last one closing the branch. Absent on the
-// lowest row and outside such a run.
-export type StackChild = "middle" | "last";
 
 export type SidebarRow =
   // A project header, for one repo wherever it is checked out: on this
@@ -54,6 +45,10 @@ export type SidebarRow =
       key: string;
       worktree: Worktree;
       mirror?: SidebarDeviceBadge;
+      // The PR's place in its stack, off the project's map, and its
+      // place under the stack's lowest row when the two sit together
+      // (shared/pullRequestStack.ts).
+      stack: StackPosition | null;
       stackChild?: StackChild;
     }
   // The inbox's own row: taller, cross-project, and built to be triaged

@@ -11,7 +11,7 @@ import type { DeviceIcon } from "@shared/account/deviceIcon";
 import type { StatusTone } from "@/components/ui/status-dot";
 import { cn } from "@/lib/utils";
 import { DeviceBadge } from "./DeviceBadge";
-import type { StackChild, StackPosition } from "./sidebarRow";
+import type { StackChild, StackPosition } from "@shared/pullRequestStack";
 import { useWorktreeRowState } from "./useWorktreeRowState";
 import {
   RowTrailing,

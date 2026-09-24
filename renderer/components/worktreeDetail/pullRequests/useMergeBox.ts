@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useMergePullRequest } from "@/hooks/pullRequests/useMergePullRequest";
-import { useMergePullRequestStack } from "@/hooks/pullRequests/useMergePullRequestStack";
 import { useSetPullRequestDraft } from "@/hooks/pullRequests/useSetPullRequestDraft";
 import {
   describeMergeState,
@@ -94,8 +93,7 @@ export function useMergeBox({
   lastMergeMethod,
   stack,
 }: UseMergeBoxArgs) {
-  const mergeOne = useMergePullRequest();
-  const mergeStack = useMergePullRequestStack();
+  const merge = useMergePullRequest();
   const setDraft = useSetPullRequestDraft();
   const { armed, trigger, reset } = useConfirmTwice(CONFIRM_QUICK_MS);
   const { primary, allowed } = resolveMergeMethod(repoConfig, lastMergeMethod);
@@ -105,18 +103,16 @@ export function useMergeBox({
   // method on one worktree doesn't bleed into another.
   const [pickedMethod, setPickedMethod] = useState<MergeMethod | null>(null);
   // Up to here by default: landing more than the page you are on says
-  // is the surprise to avoid. On the stack's top both reaches agree
-  // and the toggle stays hidden.
-  const [reach, setReach] = useState<StackReach>("upTo");
+  // is the surprise to avoid. On the stack's top both reaches agree,
+  // so the toggle stays hidden and the reach reads as the whole stack.
+  const [pickedReach, setReach] = useState<StackReach>("upTo");
 
   const atTop = stack !== null && stack.index === stack.entries.length - 1;
   const showReach = stack !== null && !atTop;
+  const reach: StackReach = atTop ? "stack" : pickedReach;
   const plan = planFor(stack, pr, reach);
   const activeMethod =
     pickedMethod && allowed.includes(pickedMethod) ? pickedMethod : primary;
-  // One mutation is ever in flight: the single merge outside a stack,
-  // the stack merge inside one.
-  const merge = stack ? mergeStack : mergeOne;
   const disabled =
     !mergeState.canMerge || plan.blocked !== null || merge.isPending;
   const others = allowed.filter((m) => m !== activeMethod);
@@ -128,6 +124,7 @@ export function useMergeBox({
         branch: worktree.branch,
         number: plan.number,
         method,
+        stack: stack !== null,
       },
       { onSuccess: () => reset() },
     );
@@ -165,9 +162,7 @@ export function useMergeBox({
     disabled,
     others,
     blocked: plan.blocked,
-    label: activeMethod
-      ? mergeLabel(activeMethod, stack, reach, plan.count)
-      : "",
+    label: activeMethod ? mergeLabel(activeMethod, reach, plan.count) : "",
     pendingLabel: stack && plan.count > 1 ? "Merging stack…" : "Merging…",
     reach,
     showReach,
@@ -179,19 +174,16 @@ export function useMergeBox({
 }
 
 // "Squash and merge", then what it reaches when that is more than
-// this PR: "stack (3)" on the top or with the whole stack picked,
-// "up to here (2)" below it. A count of one is this PR alone, which
-// the method label already says.
+// this PR: "stack (3)" or "up to here (2)". A count of one is this PR
+// alone, which the method label already says.
 function mergeLabel(
   method: MergeMethod,
-  stack: PullRequestStack | null,
   reach: StackReach,
   count: number,
 ): string {
   const base = MERGE_METHOD_SHORT_LABEL[method];
-  if (!stack || count < 2) return base;
-  const atTop = stack.index === stack.entries.length - 1;
-  return atTop || reach === "stack"
+  if (count < 2) return base;
+  return reach === "stack"
     ? `${base} stack (${count})`
     : `${base} up to here (${count})`;
 }

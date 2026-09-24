@@ -5,7 +5,6 @@ import {
   GithubCliReadinessSchema,
   GithubCliWorktreePullRequestPayloadSchema,
   MergePullRequestPayloadSchema,
-  MergePullRequestStackPayloadSchema,
   ProjectScopedPayloadSchema,
   PullRequestCandidateListSchema,
   PullRequestCheckoutRefSchema,
@@ -60,16 +59,6 @@ export const githubCliContract = defineContract("host", {
   mergePullRequest: invoke(
     "githubCli:mergePullRequest",
     MergePullRequestPayloadSchema,
-    z.void(),
-    { tracksProjectUsage: true, remote: true, mutating: true },
-  ),
-  // The PR and every open PR under it in its stack, bottom first
-  // (shared/pullRequestStack.ts). One action: a stack merged one PR at
-  // a time leaves each next PR pointing at a branch that already
-  // landed.
-  mergePullRequestStack: invoke(
-    "githubCli:mergePullRequestStack",
-    MergePullRequestStackPayloadSchema,
     z.void(),
     { tracksProjectUsage: true, remote: true, mutating: true },
   ),

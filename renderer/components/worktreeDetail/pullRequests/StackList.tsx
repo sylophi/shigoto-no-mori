@@ -9,7 +9,8 @@ import { describePullRequest } from "@/lib/pullRequest";
 import { cn } from "@/lib/utils";
 import type { PullRequestStack } from "@shared/pullRequestStack";
 import type { Worktree } from "@shared/schemas";
-import { openPullRequest, TONE_TEXT } from "./pullRequestShared";
+import { PullRequestTitleLink } from "./PullRequestIdentity";
+import { TONE_TEXT } from "./pullRequestShared";
 
 export function StackList({
   worktree,
@@ -41,14 +42,7 @@ export function StackList({
               aria-label={label}
               className={cn("size-3.5 shrink-0", TONE_TEXT[tone])}
             />
-            <button
-              type="button"
-              onClick={() => openPullRequest(entry.pr.url)}
-              title={`Open #${entry.pr.number} on GitHub`}
-              className="min-w-0 truncate rounded text-left transition-colors hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"
-            >
-              {entry.pr.title}
-            </button>
+            <PullRequestTitleLink pr={entry.pr} className="min-w-0 truncate" />
             <span className="shrink-0 text-muted-foreground/60">
               #{entry.pr.number}
             </span>

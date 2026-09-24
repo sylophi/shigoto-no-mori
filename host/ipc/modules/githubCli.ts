@@ -48,18 +48,12 @@ export const githubCliHandlers: Handlers<typeof githubCliContract> = {
     return getRepoMergeConfig(project.path);
   },
 
-  mergePullRequest: async ({ projectId, number, method }) => {
+  mergePullRequest: async ({ projectId, number, method, stack }) => {
     const project = findProjectOrThrow(projectId);
     // The CLI runs the gh merge and persists lastMergeMethod itself.
-    await mergeViaCli(project, number, method);
+    await mergeViaCli(project, number, method, { stack });
     // The merge changes upstream refs (and the sidebar PR cache). Evict
     // so the next read sees the merged state.
-    evictProjectPullRequests(project.path);
-  },
-
-  mergePullRequestStack: async ({ projectId, number, method }) => {
-    const project = findProjectOrThrow(projectId);
-    await mergeViaCli(project, number, method, { stack: true });
     evictProjectPullRequests(project.path);
   },
 

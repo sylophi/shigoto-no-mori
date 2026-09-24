@@ -1,9 +1,4 @@
-import {
-  groupByStack,
-  pullRequestStackFor,
-  pullRequestStackPosition,
-  trunkOf,
-} from "@shared/pullRequestStack";
+import { placeByStack, trunkOf } from "@shared/pullRequestStack";
 import { MACHINE_FALLBACK_ICON } from "@shared/account/deviceIcon";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
@@ -155,6 +150,7 @@ export function buildSidebarRows({
       key: `w:${worktree.id}`,
       worktree,
       mirror: mirrorBadgeFor(worktree),
+      stack: null,
     }));
 
   if (arrangeMode) {
@@ -303,21 +299,16 @@ export function buildSidebarRows({
     // beside the local ones it stacks with. The trunk comes off
     // whichever listing the group has.
     const trunk =
-      trunkOf(
-        localVisible.length > 0 ? (query?.data as Worktree[]) : undefined,
-      ) ?? trunkOf(group.remote[0]?.worktrees);
-    rows.push(
-      ...nestStacks(
-        groupByStack(
-          [...localRows(localVisible), ...remoteVisible],
-          (row) => row.worktree.branch,
-          group.pullRequests,
-          trunk,
-        ),
-        group.pullRequests,
-        trunk,
-      ),
-    );
+      trunkOf(query?.data as Worktree[] | undefined) ??
+      trunkOf(group.remote[0]?.worktrees);
+    for (const { item, position, child } of placeByStack(
+      [...localRows(localVisible), ...remoteVisible],
+      (row) => row.worktree.branch,
+      group.pullRequests,
+      trunk,
+    )) {
+      rows.push({ ...item, stack: position, stackChild: child });
+    }
     const shelvedCount = localShelved.length + remoteShelved.length;
     if (shelvedCount > 0) {
       const shelfOpen = shelvedExpanded.has(groupId);
@@ -418,38 +409,6 @@ export function deviceBadgeOf(item: RemoteForestItem): SidebarDeviceBadge {
 type LocalRow = Extract<SidebarRow, { kind: "worktree" }>;
 type RemoteRow = Extract<SidebarRow, { kind: "remote-worktree" }>;
 
-// A stack's rows as a tree: in each run of two or more consecutive
-// rows of one stack (keyed by its bottom PR), the lowest row is the
-// parent and every row above it a child under it, the last closing
-// the branch. A stack with a single row showing (its other layers
-// shelved, or on a device the filter hides) nests nothing.
-function nestStacks(
-  rows: (LocalRow | RemoteRow)[],
-  prs: Record<string, PullRequest> | undefined,
-  trunk: string | undefined,
-): (LocalRow | RemoteRow)[] {
-  if (!prs) return rows;
-  const stacks = rows.map((row) =>
-    pullRequestStackFor(prs, row.worktree.branch, trunk),
-  );
-  const keyAt = (i: number) => stacks[i]?.entries[0]?.pr.number ?? null;
-  let start = 0;
-  while (start < rows.length) {
-    const key = keyAt(start);
-    let end = start;
-    if (key !== null) {
-      while (end + 1 < rows.length && keyAt(end + 1) === key) end += 1;
-    }
-    if (key !== null && end > start) {
-      for (let i = start + 1; i <= end; i++) {
-        rows[i] = { ...rows[i]!, stackChild: i === end ? "last" : "middle" };
-      }
-    }
-    start = end + 1;
-  }
-  return rows;
-}
-
 function remoteWorktreeRows(
   item: RemoteForestItem,
   groupId: string,
@@ -470,11 +429,7 @@ function remoteWorktreeRows(
       reachable: item.reachable,
       tone: item.tone,
       pr: item.pullRequests[worktree.branch],
-      stack: pullRequestStackPosition(
-        item.pullRequests,
-        worktree.branch,
-        trunkOf(item.worktrees),
-      ),
+      stack: null,
       groupId,
     });
   }

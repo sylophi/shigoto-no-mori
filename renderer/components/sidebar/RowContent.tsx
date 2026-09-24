@@ -45,6 +45,7 @@ export function RowContent({
         <WorktreeRow
           worktree={row.worktree}
           mirror={row.mirror}
+          stack={row.stack}
           stackChild={row.stackChild}
         />
       );
