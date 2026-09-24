@@ -71,6 +71,7 @@ function buildQueryKeys(deviceId: string) {
     shigomoriConfig: (projectId: string | null) => host("shigomori", projectId),
 
     worktrees: (projectId: string | null) => host("worktrees", projectId),
+    worktreesAll: () => host("worktrees"),
     worktreeData: (projectId: string | null, worktreeId: string | null) =>
       host("worktreeData", projectId, worktreeId),
     // Every file diff of one worktree sits under this prefix, so the

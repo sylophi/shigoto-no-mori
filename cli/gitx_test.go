@@ -119,3 +119,82 @@ func TestResolveDefaultBranchFallsBackToRemoteHead(t *testing.T) {
 		t.Errorf("dangling origin/HEAD = %q, want no default ref", ref)
 	}
 }
+
+func TestExternalWorktreeName(t *testing.T) {
+	cases := []struct {
+		name, path, project, want string
+	}{
+		{"plain leaf", "/tmp/wt/feature-x", "/src/app", "feature-x"},
+		{"under its own name", "/tmp/wt/feature-x/app", "/src/app", "feature-x"},
+		{"bare project", "/tmp/wt/feature-x/app", "/src/app.git", "feature-x"},
+		{"case-insensitive", "/tmp/wt/feature-x/App", "/src/app", "feature-x"},
+		{"spaced parent", "/tmp/wt/my feature/app", "/src/app", "my feature"},
+		{"dotted parent keeps leaf", "/tmp/.wt/app", "/src/app", "app"},
+		{"reserved parent keeps leaf", "/tmp/root/app", "/src/app", "app"},
+		{"filesystem root keeps leaf", "/app", "/src/app", "app"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := externalWorktreeName(tc.path, tc.project); got != tc.want {
+				t.Errorf("externalWorktreeName(%q, %q) = %q, want %q", tc.path, tc.project, got, tc.want)
+			}
+		})
+	}
+}
+
+// End to end: only with the setting on does the non-primary Codex-style
+// external take its parent's name.
+func TestListWorktreeIdentitiesCodexStyleName(t *testing.T) {
+	root := sandboxDataDir(t)
+	repo := seedRepo(t, filepath.Join(root, "src"), "app")
+	codexStyle := filepath.Join(root, "tools", "feature-x", "app")
+	plain := filepath.Join(root, "tools", "plain-wt")
+	runGitT(t, repo, "worktree", "add", "-q", "-b", "feat", codexStyle)
+	runGitT(t, repo, "worktree", "add", "-q", "-b", "plain", plain)
+
+	names := func() map[string]string {
+		t.Helper()
+		identities, err := listWorktreeIdentitiesUncached(project{ID: "CODEX", Name: "app", Path: repo})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := map[string]string{}
+		for _, id := range identities {
+			got[id.Path] = id.Name
+		}
+		return got
+	}
+	if got, want := names(), map[string]string{repo: "app", codexStyle: "app", plain: "plain-wt"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("off: names = %v, want %v", got, want)
+	}
+	setGlobalBool(t, "codexWorktreeNames", true)
+	if got, want := names(), map[string]string{repo: "app", codexStyle: "feature-x", plain: "plain-wt"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("on: names = %v, want %v", got, want)
+	}
+}
+
+// A bare repo has no primary, so its first worktree is renamed like the
+// rest, matching the app.
+func TestListWorktreeIdentitiesCodexStyleBare(t *testing.T) {
+	root := sandboxDataDir(t)
+	src := seedRepo(t, root, "src")
+	bare := filepath.Join(root, "app.git")
+	runGitT(t, root, "clone", "-q", "--bare", src, bare)
+	first := filepath.Join(root, "wt", "abcd", "app")
+	second := filepath.Join(root, "wt", "ef01", "app")
+	runGitT(t, bare, "worktree", "add", "-q", "-b", "one", first)
+	runGitT(t, bare, "worktree", "add", "-q", "-b", "two", second)
+	setGlobalBool(t, "codexWorktreeNames", true)
+
+	identities, err := listWorktreeIdentitiesUncached(project{ID: "BARE", Name: "app", Path: bare})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, id := range identities {
+		got[id.Path] = id.Name
+	}
+	if want := map[string]string{first: "abcd", second: "ef01"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("names = %v, want %v", got, want)
+	}
+}

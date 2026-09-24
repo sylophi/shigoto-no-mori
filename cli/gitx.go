@@ -182,6 +182,10 @@ func listWorktreeIdentitiesUncached(proj project) ([]worktreeIdentity, error) {
 	}
 	config := readProjectConfig(proj.ID)
 	bases := managedBasesFor(proj.Path, config)
+	// Read once, and only if some entry needs it.
+	codexNames := sync.OnceValue(func() bool {
+		return codexWorktreeNamesEnabled(readGlobalConfigHints())
+	})
 	var identities []worktreeIdentity
 	index := 0
 	for _, entry := range parsePorcelain(stdout) {
@@ -189,19 +193,46 @@ func listWorktreeIdentitiesUncached(proj project) ([]worktreeIdentity, error) {
 			continue
 		}
 		isPrimary := entry.path == proj.Path || index == 0
+		isExternal := !isManagedPath(entry.path, bases)
+		name := filepath.Base(entry.path)
+		// Against the project path rather than isPrimary, whose index-0
+		// fallback would crown a bare repo's first worktree, which the
+		// app (primaryPath null for bare repos) renames like the rest.
+		if isExternal && entry.path != proj.Path && codexNames() {
+			name = externalWorktreeName(entry.path, proj.Path)
+		}
 		identities = append(identities, worktreeIdentity{
 			ID:         worktreeIDFromPath(entry.path),
 			ProjectID:  proj.ID,
-			Name:       filepath.Base(entry.path),
+			Name:       name,
 			Branch:     deriveBranch(entry),
 			Path:       entry.path,
 			IsPrimary:  isPrimary,
-			IsExternal: !isManagedPath(entry.path, bases),
+			IsExternal: isExternal,
 			Detached:   entry.detached,
 		})
 		index++
 	}
 	return identities, nil
+}
+
+func codexWorktreeNamesEnabled(global globalConfig) bool {
+	return global.CodexWorktreeNames != nil && *global.CodexWorktreeNames
+}
+
+// A leaf that just repeats the repo's folder name (the Codex layout,
+// see codexWorktreeNames) takes its parent's name instead, when that
+// passes as a folder name of our own. Mirrors externalWorktreeName in
+// host/lib/git/worktrees.ts.
+func externalWorktreeName(worktreePath, projectPath string) string {
+	leaf := filepath.Base(worktreePath)
+	if !strings.EqualFold(leaf, strings.TrimSuffix(filepath.Base(projectPath), ".git")) {
+		return leaf
+	}
+	if parent := filepath.Base(filepath.Dir(worktreePath)); isValidWorktreeDirName(parent) {
+		return parent
+	}
+	return leaf
 }
 
 // --- status probes (buildWorktree parity) ---

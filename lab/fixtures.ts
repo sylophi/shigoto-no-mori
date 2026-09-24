@@ -549,6 +549,7 @@ export const labGlobalConfig = {
   autoPullNew: false,
   autoPullPrimaryOnly: false,
   doubutsuNames: false,
+  codexWorktreeNames: false,
   portPool: true,
   terrier: false,
   githubCli: true,
