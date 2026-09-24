@@ -814,11 +814,16 @@
    a background-image so it layers on top of whatever fill the element
    already has, no markup changes required.
 
-   Coverage comes in two kinds. Pointer things (:hover): buttons, links,
-   radio/checkbox option cards, the file-picker rows. Composite widgets
-   (Base UI menus/comboboxes, cmdk lists) move a highlight themselves
-   instead of relying on :hover. There the stripes ride the highlighted
-   item, which also animates keyboard navigation. */
+   Coverage comes in two kinds. Pointer things: buttons, links,
+   radio/checkbox option cards, the file-picker rows. They stripe under
+   a hovering pointer and while held. Composite widgets (Base UI
+   menus/comboboxes, cmdk lists) move a highlight themselves instead of
+   relying on :hover. There the stripes ride the highlighted item,
+   which also animates keyboard navigation.
+
+   :hover is gated on (hover: hover), as index.css gates the `hover:`
+   variant: a tap on a touch screen leaves :hover stuck on whatever it
+   landed on, so there only the press stripes, under the finger. */
 @keyframes ac-stripe-slide {
   from {
     background-position: 0 0;
@@ -828,54 +833,70 @@
   }
 }
 
-.doubutsu button:not(:disabled):hover,
-.doubutsu [role="button"]:not([aria-disabled="true"]):hover,
-.doubutsu a[href]:hover,
-.doubutsu label:has(input[type="radio"]:not(:disabled)):hover,
-.doubutsu label:has(input[type="checkbox"]:not(:disabled)):hover,
-.doubutsu li[data-row-idx].cursor-pointer:hover,
-.doubutsu [data-slot="diff-index-row"]:hover,
+.doubutsu {
+  --doubutsu-stripe-animation: ac-stripe-slide 0.6s linear infinite;
+}
+
+/* The pointer list sits in :where() so the rule stays at one class and
+   one pseudo-class whatever the list holds. A dead control gets no
+   stripes, by the same three marks index.css's hover variant checks.
+   An option card's dead mark is on the input inside it. */
+.doubutsu
+  :where(
+    :is(
+      button,
+      [role="button"],
+      a[href],
+      li[data-row-idx].cursor-pointer,
+      [data-slot="diff-index-row"]
+    ):not(:disabled, [aria-disabled="true"], [data-disabled]),
+    label:has(input[type="radio"]:not(:disabled)),
+    label:has(input[type="checkbox"]:not(:disabled))
+  ) {
+  &:active {
+    background-image: var(--doubutsu-stripe-image);
+    background-size: 20px 20px;
+    animation: var(--doubutsu-stripe-animation);
+  }
+  @media (hover: hover) {
+    &:hover {
+      background-image: var(--doubutsu-stripe-image);
+      background-size: 20px 20px;
+      animation: var(--doubutsu-stripe-animation);
+    }
+  }
+}
+
 .doubutsu [data-highlighted]:not([data-disabled]),
 .doubutsu [cmdk-item][aria-selected="true"],
 .doubutsu [data-slot="launcher-tile"][aria-selected="true"] {
   background-image: var(--doubutsu-stripe-image);
   background-size: 20px 20px;
-  animation: ac-stripe-slide 0.6s linear infinite;
+  animation: var(--doubutsu-stripe-animation);
 }
 
 /* A diff rail row is hovered as one pill but built from three controls,
    and the middle one (the jump button) is a <button>, so the rule
    above would stripe a band across the row's middle instead of the row.
-   The row is on the list above. The jump button sits this one out. It
-   needs the type selector to match the button rule's specificity, and
+   The row is on the list above. The jump button sits this one out, and
    the two ride together (both are hooks in the CONTRACT). The tick and
    the discard keep their own stripes: those are controls you aim at,
    not the row's own click target. */
-.doubutsu button[data-slot="diff-index-jump"]:hover {
+.doubutsu [data-slot="diff-index-jump"]:is(:hover, :active) {
   background-image: none;
   animation: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .doubutsu [data-doubutsu-zone="main"]::before,
-  .doubutsu [data-slot="launcher"]::before,
-  .doubutsu button:not(:disabled):hover,
-  .doubutsu [role="button"]:not([aria-disabled="true"]):hover,
-  .doubutsu a[href]:hover,
-  .doubutsu label:has(input[type="radio"]:not(:disabled)):hover,
-  .doubutsu label:has(input[type="checkbox"]:not(:disabled)):hover,
-  .doubutsu li[data-row-idx].cursor-pointer:hover,
-  .doubutsu [data-slot="diff-index-row"]:hover,
-  .doubutsu [data-highlighted]:not([data-disabled]),
-  .doubutsu [cmdk-item][aria-selected="true"],
-  .doubutsu [data-slot="launcher-tile"][aria-selected="true"] {
-    animation: none;
+  .doubutsu {
+    --doubutsu-stripe-animation: none;
   }
 
   /* Nothing is drifting any more, so stop paying for the promoted
      layer the wallpaper asks for. */
   .doubutsu [data-doubutsu-zone="main"]::before,
   .doubutsu [data-slot="launcher"]::before {
+    animation: none;
     will-change: auto;
   }
 }
@@ -885,8 +906,9 @@
    `.battery-pause`): pause the drift rather than remove it, so it
    resumes where it was instead of snapping to frame one. The layer
    stays promoted, since dropping it would repaint the whole surface on
-   every flip. The hover stripes only run under a pointer, so they are
-   left alone. (The spinners' unfocused pause is in index.css, and
+   every flip. The stripes are left alone: the pointer ones only run
+   under a pointer or a finger, and a highlight's are one control's
+   worth. (The spinners' unfocused pause is in index.css, and
    stays off battery: a frozen spinner in view reads as a hang.) */
 .doubutsu:is(.unfocused, .battery-pause) [data-doubutsu-zone="main"]::before,
 .doubutsu:is(.unfocused, .battery-pause) [data-slot="launcher"]::before {
