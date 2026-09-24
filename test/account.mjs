@@ -41,9 +41,9 @@ import {
   effectiveDeviceIcon,
   enrollDevice,
   retryParkedRevoke,
-  setDeviceIcon,
   signOutDevice,
-  syncHubDeviceIcon,
+  syncHubDevice,
+  updateDevice,
 } from "../shared/account/enroll.ts";
 import {
   HubRequestError,
@@ -113,10 +113,11 @@ const DEVICE = {
   online: true,
 };
 
-// A registry listing holding a peer and this device, wearing `icon`.
-const ownRowListing = (icon) => [
+// A registry listing holding a peer and this device, wearing `icon`
+// and `name`.
+const ownRowListing = (icon, name = "d") => [
   { ...DEVICE, deviceId: "peer-uuid", platform: "linux", icon: "server" },
-  { ...DEVICE, icon },
+  { ...DEVICE, icon, name },
 ];
 
 const dmi = (chassisType, vendor = null, product = null) =>
@@ -413,6 +414,7 @@ async function main() {
         accountId: "user_abc",
         deviceName: "Fallback Mac",
         // What it enrolled under is where the hub starts.
+        hubName: "Fallback Mac",
         hubIcon: "laptop",
       });
       // With no pick stored, the device enrolls under what it detected.
@@ -490,6 +492,7 @@ async function main() {
         accountId: "user_other",
         deviceName: "Renamed",
         deviceIcon: "server",
+        hubName: "Renamed",
         hubIcon: "server",
       });
       assert.equal(store.readParked(), null);
@@ -516,7 +519,7 @@ async function main() {
   );
 
   await check(
-    "icon sync: syncHubDeviceIcon adopts a pick made on another device, the detected icon as no pick, and never over a pick or sign-out that landed during the read",
+    "device sync: syncHubDevice adopts a name or icon changed on another device, the detected icon as no pick, and never over a change or sign-out that landed during the read",
     async () => {
       const { fetchImpl, calls } = recordingFetch(
         () => new Response(null, { status: 204 }),
@@ -529,24 +532,30 @@ async function main() {
         detectedIcon: "laptop",
       };
       const sync = (listing, listedUnder = store.read()) =>
-        syncHubDeviceIcon(deps, listedUnder, listing);
+        syncHubDevice(deps, listedUnder, listing);
       store.write({ credential: "c", accountId: "a", deviceName: "d" });
-      // A record from before hubIcon takes the listing as its baseline.
+      // A record from before the hub fields takes the listing as its
+      // baseline.
       assert.equal(sync(ownRowListing("laptop")), false);
+      assert.equal(store.read().hubName, "d");
       assert.equal(store.read().hubIcon, "laptop");
       assert.equal(sync(ownRowListing("cat")), true);
       assert.equal(store.read().deviceIcon, "cat");
       assert.equal(store.read().hubIcon, "cat");
+      assert.equal(sync(ownRowListing("cat", "Studio")), true);
+      assert.equal(store.read().deviceName, "Studio");
+      assert.equal(store.read().hubName, "Studio");
       // The detected icon drops the pick outright.
-      assert.equal(sync(ownRowListing("laptop")), true);
+      assert.equal(sync(ownRowListing("laptop", "Studio")), true);
       assert.equal(store.read().deviceIcon, undefined);
       // A listing without this device changes nothing.
       assert.equal(sync(ownRowListing("cat").slice(0, 1)), false);
-      // A pick here while the listing was in flight wins over it.
+      // A change here while the listing was in flight wins over it.
       const listedUnder = store.read();
       store.write({ ...listedUnder, deviceIcon: "rocket", hubIcon: "rocket" });
-      assert.equal(sync(ownRowListing("cat"), listedUnder), false);
+      assert.equal(sync(ownRowListing("cat", "Other"), listedUnder), false);
       assert.equal(store.read().deviceIcon, "rocket");
+      assert.equal(store.read().deviceName, "Studio");
       // So does a sign-out: the record is not written back.
       const beforeSignOut = store.read();
       store.clear();
@@ -557,7 +566,7 @@ async function main() {
   );
 
   await check(
-    "icon sync: a hub copy that did not move but went stale (a detection that improved with an upgrade) gets this device's icon, not pinned as a pick",
+    "device sync: a hub copy that did not move but went stale (a default name migrated forward, a detection that improved with an upgrade) gets this device's name and icon, not pinned over them",
     async () => {
       const { fetchImpl, calls } = recordingFetch(
         () => new Response(null, { status: 204 }),
@@ -569,10 +578,21 @@ async function main() {
         deviceId: "device-uuid",
         detectedIcon: "mini",
       };
-      // Enrolled by a build that took this Mac mini for a laptop.
-      store.write({ credential: "c", accountId: "a", deviceName: "d" });
+      // Enrolled by a build that took this Mac mini for a laptop and
+      // named it by its raw hostname, since migrated forward here (which
+      // records the name it left as the hub's).
+      store.write({
+        credential: "c",
+        accountId: "a",
+        deviceName: "Mini",
+        hubName: "mini.local",
+      });
       assert.equal(
-        syncHubDeviceIcon(deps, store.read(), ownRowListing("laptop")),
+        syncHubDevice(
+          deps,
+          store.read(),
+          ownRowListing("laptop", "mini.local"),
+        ),
         false,
       );
       // The push is fire-and-forget: give it a tick to land.
@@ -582,23 +602,42 @@ async function main() {
         [
           [
             CONFIG.hubUrl + HUB_ROUTES.updateDevice.path("device-uuid"),
-            { icon: "mini" },
+            { name: "Mini", icon: "mini" },
           ],
         ],
       );
+      assert.equal(store.read().deviceName, "Mini");
       assert.equal(store.read().deviceIcon, undefined);
+      // Recorded as the hub's once it landed, so the next listing moves
+      // nothing, and a peer changing either back reads as the hub moving.
+      assert.equal(store.read().hubName, "Mini");
       assert.equal(store.read().hubIcon, "mini");
-      // The hub caught up, so the next listing moves nothing.
       assert.equal(
-        syncHubDeviceIcon(deps, store.read(), ownRowListing("mini")),
+        syncHubDevice(deps, store.read(), ownRowListing("mini", "Mini")),
         false,
       );
+      assert.equal(
+        syncHubDevice(deps, store.read(), ownRowListing("laptop", "Mini")),
+        true,
+      );
+      assert.equal(store.read().deviceIcon, "laptop");
+      assert.equal(calls.length, 1);
+      // A record from before hubName holds no answer for the name, and a
+      // hub name that differs is a peer's rename (a name only ever
+      // changed on this device before), so it is adopted, not pushed
+      // over.
+      store.write({ credential: "c", accountId: "a", deviceName: "Mini" });
+      assert.equal(
+        syncHubDevice(deps, store.read(), ownRowListing("mini", "Office")),
+        true,
+      );
+      assert.equal(store.read().deviceName, "Office");
       assert.equal(calls.length, 1);
     },
   );
 
   await check(
-    "icon pick: setDeviceIcon writes the hub first and keeps a pick for this device only, the detected icon drops the pick, and a pick the hub refused keeps nothing",
+    "device update: updateDevice writes the hub first and keeps the change for this device only, the detected icon drops the pick, and a change the hub refused keeps nothing",
     async () => {
       let status = 204;
       const { fetchImpl, calls } = recordingFetch(
@@ -616,7 +655,7 @@ async function main() {
         detectedIcon: "laptop",
       };
       const pick = (deviceId, icon) =>
-        setDeviceIcon(deps, store.read(), { deviceId, icon });
+        updateDevice(deps, store.read(), deviceId, { icon });
       store.write({ credential: "c", accountId: "a", deviceName: "d" });
       assert.equal(
         effectiveDeviceIcon(store.read(), store, "laptop"),
@@ -634,24 +673,26 @@ async function main() {
         deviceName: "d",
         hubIcon: "laptop",
       });
-      // A peer's pick is the hub's alone.
+      await updateDevice(deps, store.read(), "device-uuid", {
+        name: "Studio",
+      });
+      assert.equal(store.read().deviceName, "Studio");
+      assert.equal(store.read().hubName, "Studio");
+      // A peer's change is the hub's alone.
       await pick("peer-uuid", "cat");
+      await updateDevice(deps, store.read(), "peer-uuid", { name: "Work" });
       assert.equal(store.read().deviceIcon, undefined);
+      assert.equal(store.read().deviceName, "Studio");
+      const self = CONFIG.hubUrl + HUB_ROUTES.updateDevice.path("device-uuid");
+      const peer = CONFIG.hubUrl + HUB_ROUTES.updateDevice.path("peer-uuid");
       assert.deepEqual(
         calls.map((c) => [c.url, JSON.parse(c.init.body)]),
         [
-          [
-            CONFIG.hubUrl + HUB_ROUTES.updateDevice.path("device-uuid"),
-            { icon: "mini" },
-          ],
-          [
-            CONFIG.hubUrl + HUB_ROUTES.updateDevice.path("device-uuid"),
-            { icon: "laptop" },
-          ],
-          [
-            CONFIG.hubUrl + HUB_ROUTES.updateDevice.path("peer-uuid"),
-            { icon: "cat" },
-          ],
+          [self, { icon: "mini" }],
+          [self, { icon: "laptop" }],
+          [self, { name: "Studio" }],
+          [peer, { icon: "cat" }],
+          [peer, { name: "Work" }],
         ],
       );
       status = 500;
@@ -1166,14 +1207,16 @@ async function main() {
     "contract: setDeviceName rejects an empty and an over-256-char name",
     () => {
       const input = accountContract.calls.setDeviceName.input;
-      assert.equal(input.safeParse("A valid name").success, true);
+      const rename = (name) =>
+        input.safeParse({ deviceId: "device-uuid", name }).success;
+      assert.equal(rename("A valid name"), true);
       assert.equal(
-        input.safeParse("").success,
+        rename(""),
         false,
         "an empty device name should be rejected",
       );
       assert.equal(
-        input.safeParse("x".repeat(300)).success,
+        rename("x".repeat(300)),
         false,
         "a 300-char device name should be rejected",
       );

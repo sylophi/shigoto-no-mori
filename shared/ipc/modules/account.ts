@@ -73,21 +73,23 @@ export const accountContract = defineContract("client", {
     z.void(),
     z.array(DeviceInfoSchema),
   ),
-  // Renames this device: the stored metadata, then (best-effort) the
-  // device hub's registry, so the other devices list the new name at
-  // once. Resolves to the updated status.
+  // Renames any device of the account, this one or a peer, online or
+  // not: the device hub's registry holds the name (shared/account/
+  // enroll.ts updateDevice). Throws when the hub did not take it.
+  // Resolves to the updated status.
   setDeviceName: invoke(
     "account:setDeviceName",
-    // Bounded to match EnrollRequestSchema.name so a stored name can
-    // never later fail enroll's schema or blank the device identity.
-    z.string().min(1).max(256),
+    z.object({
+      deviceId: DeviceIdSchema,
+      // Bounded to match EnrollRequestSchema.name so a stored name can
+      // never later fail enroll's schema or blank the device identity.
+      name: z.string().min(1).max(256),
+    }),
     AccountStatusSchema,
   ),
   // Picks the icon of any device of the account (drawn for it
-  // everywhere), this one or a peer, online or not: the device hub's
-  // registry holds it (shared/account/enroll.ts setDeviceIcon). Picking
-  // a device's detected icon puts it back to its default. Throws when
-  // the hub did not take the pick. Resolves to the updated status.
+  // everywhere), the rename's twin. Picking a device's detected icon
+  // puts it back to its default. Resolves to the updated status.
   setDeviceIcon: invoke(
     "account:setDeviceIcon",
     z.object({ deviceId: DeviceIdSchema, icon: DeviceIconSchema }),

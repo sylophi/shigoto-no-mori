@@ -151,10 +151,11 @@ export function useRevokeDevice() {
   });
 }
 
+// A rename of any device of the account, this one or a peer.
 export function useSetDeviceName() {
-  return useMutation<AccountStatus, Error, string>({
-    mutationFn: (name) => window.api.account.setDeviceName(name),
-    meta: { errorTitle: "Couldn't rename this device" },
+  return useMutation<AccountStatus, Error, { deviceId: string; name: string }>({
+    mutationFn: (target) => window.api.account.setDeviceName(target),
+    meta: { errorTitle: "Couldn't rename the device" },
   });
 }
 

@@ -89,6 +89,7 @@ export async function enrollDevice(
     accountId: deriveAccountId(token),
     deviceName,
     ...(deviceIcon === null ? {} : { deviceIcon }),
+    hubName: deviceName,
     hubIcon: fields.icon,
   });
 }
@@ -161,61 +162,53 @@ export async function retryParkedRevoke(deps: {
   return true;
 }
 
-// A rename, both halves: the local store write (the name every status
-// read reports), then the hub push, best-effort like the sign-out
-// revoke, so the registry every other device lists carries the new
-// name at once. Signed out there is nothing to rename: the name is
-// the default until the next sign-in. The push is fire-and-forget on
-// purpose: an unreachable hub must not hold the caller, and a peer
-// that misses it sees the stored name at this device's next
-// enrollment anyway. Resolves true when a name was written.
-export function renameDevice(
-  deps: Pick<EnrollDeviceDeps, "config" | "service" | "store" | "deviceId">,
-  name: string,
-): boolean {
-  const record = deps.store.read();
-  if (record === null) return false;
-  deps.store.write({ ...record, deviceName: name });
-  pushDeviceUpdate(deps, record.credential, { name });
-  return true;
-}
-
-// A device's icon lives on the hub, so any device of the account can
-// pick it, this one or a peer, online or not. The pick is the hub
-// write, awaited: one the hub never took did not happen, so it throws
-// rather than leave a mark only this device draws. A pick for THIS
-// device is kept locally too, so the status it resolves to already
-// wears it. A peer takes its new icon from the hub on its next
-// registry read (syncHubDeviceIcon).
-export async function setDeviceIcon(
+// A device's name and icon live on the hub, so any device of the
+// account can change them, this one or a peer, online or not. The
+// change is the hub write, awaited: one the hub never took did not
+// happen, so it throws rather than leave a name or mark only this
+// device shows. A change to THIS device is kept locally too, so the
+// status it resolves to already wears it. A peer takes its change from
+// the hub on its next registry read (syncHubDevice).
+export async function updateDevice(
   deps: Pick<
     EnrollDeviceDeps,
     "service" | "store" | "deviceId" | "detectedIcon"
   >,
   record: StoredAccount,
-  target: { deviceId: string; icon: DeviceIcon },
+  deviceId: string,
+  patch: { name?: string; icon?: DeviceIcon },
 ): Promise<void> {
-  await deps.service.update(record.credential, target.deviceId, {
-    icon: target.icon,
+  await deps.service.update(record.credential, deviceId, patch);
+  if (deviceId !== deps.deviceId) return;
+  keepFields(deps, record, {
+    ...(patch.name === undefined
+      ? {}
+      : { deviceName: patch.name, hubName: patch.name }),
+    ...(patch.icon === undefined
+      ? {}
+      : { deviceIcon: pickOf(deps, patch.icon), hubIcon: patch.icon }),
   });
-  if (target.deviceId === deps.deviceId) {
-    keepIcon(deps, record, pickOf(deps, target.icon), target.icon);
-  }
 }
 
-// Squares this device's icon with the registry the hub just listed.
-// hubIcon, the icon the hub last held as far as this device knows,
-// tells the two ways they can differ apart:
-// - The hub moved: another device picked for this one, adopted here.
-// - The hub did not move but this device did: its detection improved
-//   with an upgrade (it has no pick, so it wears what it detects now).
-//   The hub copy is stale and gets this device's icon, best-effort.
-// A record from before hubIcon existed takes the listed icon as where
-// the hub was, so an upgrade corrects a stale detection rather than
-// pinning it as a pick. `listedUnder` is the record the listing was
-// fetched under: a pick here that raced the read wins over it
-// (keepIcon). Resolves true when the icon this device wears changed.
-export function syncHubDeviceIcon(
+// Squares this device's name and icon with the registry the hub just
+// listed. hubName and hubIcon, what the hub last held as far as this
+// device knows, tell the two ways a field can differ apart:
+// - The hub moved: another device changed this one, adopted here.
+// - The hub did not move but this device did: a default name it
+//   migrated forward (which records the name it left as the hub's), a
+//   detection that improved with an upgrade (it has no pick, so it
+//   wears what it detects now). The hub copy is stale and gets this
+//   device's value, best-effort, recorded as the hub's once it lands.
+// A record from before these fields existed has no answer, so each
+// field takes the likelier one. A name only ever changed on this
+// device before, so a hub name that differs is a peer's rename and is
+// adopted. An icon differs most likely by a detection that improved
+// since the enrollment, so the listing is taken as where the hub was
+// and this device's icon corrects it rather than being pinned.
+// `listedUnder` is the record the listing was fetched under: a change
+// here that raced the read wins over it (keepFields). Resolves true
+// when the name or icon this device wears changed.
+export function syncHubDevice(
   deps: Pick<
     EnrollDeviceDeps,
     "service" | "store" | "deviceId" | "detectedIcon"
@@ -223,27 +216,64 @@ export function syncHubDeviceIcon(
   listedUnder: StoredAccount,
   devices: readonly DeviceInfo[],
 ): boolean {
-  const listed = devices.find(
-    (device) => device.deviceId === deps.deviceId,
-  )?.icon;
+  const listed = devices.find((device) => device.deviceId === deps.deviceId);
   if (listed === undefined) return false;
-  if (listed !== (listedUnder.hubIcon ?? listed)) {
-    return keepIcon(deps, listedUnder, pickOf(deps, listed), listed);
+  const changes: HubFieldChanges = {};
+  const stale: { name?: string; icon?: DeviceIcon } = {};
+  if (listedUnder.hubName !== listed.name) {
+    // Moved, or no answer yet (see above): the hub's name either way.
+    changes.deviceName = listed.name;
+    changes.hubName = listed.name;
+  } else if (listedUnder.deviceName !== listed.name) {
+    stale.name = listedUnder.deviceName;
   }
-  const worn = listedUnder.deviceIcon ?? deps.detectedIcon;
-  if (worn === listed) {
-    keepIcon(deps, listedUnder, listedUnder.deviceIcon, listed);
-    return false;
+  const wornIcon = listedUnder.deviceIcon ?? deps.detectedIcon;
+  if (listed.icon !== (listedUnder.hubIcon ?? listed.icon)) {
+    changes.deviceIcon = pickOf(deps, listed.icon);
+    changes.hubIcon = listed.icon;
+  } else if (wornIcon !== listed.icon) {
+    stale.icon = wornIcon;
+  } else {
+    changes.hubIcon = listed.icon;
   }
-  void deps.service
-    .update(listedUnder.credential, deps.deviceId, { icon: worn })
-    .then(() => keepIcon(deps, listedUnder, listedUnder.deviceIcon, worn))
-    .catch((error: unknown) => {
-      console.warn(
-        `[account] could not push this device's icon to the device hub: ${errorMessageOf(error)}`,
-      );
-    });
-  return false;
+  const worn = keepFields(deps, listedUnder, changes);
+  if (stale.name !== undefined || stale.icon !== undefined) {
+    void pushStale(deps, listedUnder.credential, stale);
+  }
+  return worn;
+}
+
+// The best-effort push of this device's own values over a stale hub
+// copy, recorded as the hub's once it lands, so a peer that later
+// changes a field back to the old value reads as the hub moving. A
+// value this device stopped wearing meanwhile is not recorded.
+async function pushStale(
+  deps: Pick<
+    EnrollDeviceDeps,
+    "service" | "store" | "deviceId" | "detectedIcon"
+  >,
+  credential: string,
+  stale: { name?: string; icon?: DeviceIcon },
+): Promise<void> {
+  try {
+    await deps.service.update(credential, deps.deviceId, stale);
+  } catch (error) {
+    console.warn(
+      `[account] could not push this device's name or icon to the device hub: ${errorMessageOf(error)}`,
+    );
+    return;
+  }
+  const current = deps.store.read();
+  if (current === null || current.credential !== credential) return;
+  keepFields(deps, current, {
+    ...(stale.name !== undefined && current.deviceName === stale.name
+      ? { hubName: stale.name }
+      : {}),
+    ...(stale.icon !== undefined &&
+    (current.deviceIcon ?? deps.detectedIcon) === stale.icon
+      ? { hubIcon: stale.icon }
+      : {}),
+  });
 }
 
 // The detected icon is no pick, so a device put back to its default
@@ -255,49 +285,39 @@ function pickOf(
   return icon === deps.detectedIcon ? undefined : icon;
 }
 
-// Stores this device's pick and the hub's icon against the record the
-// caller started from. Re-reads before writing, since the caller may
-// have awaited the hub in between: a sign-out or re-enrollment
-// meanwhile, or a pick or sync that already moved either field, wins
-// over this write. Resolves true when the stored pick changed.
-function keepIcon(
+// The fields keepFields may move. A present deviceIcon key set to
+// undefined drops the pick.
+type HubFieldChanges = Partial<
+  Pick<StoredAccount, "deviceName" | "deviceIcon" | "hubName" | "hubIcon">
+>;
+
+// Writes `changes` over the record the caller started from. Re-reads
+// before writing, since the caller may have awaited the hub in between:
+// a sign-out or re-enrollment meanwhile, or a change or sync that
+// already moved one of these fields, wins over this write. Resolves
+// true when the name or icon this device wears changed.
+function keepFields(
   deps: Pick<EnrollDeviceDeps, "store">,
   startedFrom: StoredAccount,
-  pick: DeviceIcon | undefined,
-  hubIcon: DeviceIcon,
+  changes: HubFieldChanges,
 ): boolean {
-  if (startedFrom.deviceIcon === pick && startedFrom.hubIcon === hubIcon) {
-    return false;
-  }
+  const moves = (key: keyof HubFieldChanges) =>
+    key in changes && changes[key] !== startedFrom[key];
+  const worn = moves("deviceName") || moves("deviceIcon");
+  if (!worn && !moves("hubName") && !moves("hubIcon")) return false;
   const current = deps.store.read();
   if (
     current === null ||
     current.credential !== startedFrom.credential ||
+    current.deviceName !== startedFrom.deviceName ||
     current.deviceIcon !== startedFrom.deviceIcon ||
+    current.hubName !== startedFrom.hubName ||
     current.hubIcon !== startedFrom.hubIcon
   ) {
     return false;
   }
-  const { deviceIcon: _dropped, ...rest } = current;
-  deps.store.write({
-    ...rest,
-    hubIcon,
-    ...(pick === undefined ? {} : { deviceIcon: pick }),
-  });
-  return startedFrom.deviceIcon !== pick;
-}
-
-function pushDeviceUpdate(
-  deps: Pick<EnrollDeviceDeps, "config" | "service" | "deviceId">,
-  credential: string,
-  patch: Parameters<AccountService["update"]>[2],
-): void {
-  if (!isConfigured(deps.config)) return;
-  void deps.service
-    .update(credential, deps.deviceId, patch)
-    .catch((error: unknown) => {
-      console.warn(
-        `[account] could not push the device update to the device hub: ${errorMessageOf(error)}`,
-      );
-    });
+  const next: StoredAccount = { ...current, ...changes };
+  if (next.deviceIcon === undefined) delete next.deviceIcon;
+  deps.store.write(next);
+  return worn;
 }

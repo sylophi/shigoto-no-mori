@@ -1103,8 +1103,23 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
       revoked.add(deviceId);
       client.emit("account:changed", { accountId: accountStatus().accountId });
     },
-    "account:setDeviceName": (name: string) => {
-      deviceName = name;
+    "account:setDeviceName": ({
+      deviceId,
+      name,
+    }: {
+      deviceId: string;
+      name: string;
+    }) => {
+      if (deviceId === selfDeviceId) {
+        deviceName = name;
+      } else {
+        // A peer's rename lands on its registry entry, as the hub write
+        // would.
+        const entry = accountDevices.find(
+          (device) => device.deviceId === deviceId,
+        );
+        if (entry !== undefined) entry.name = name;
+      }
       client.emit("account:changed", { accountId: accountStatus().accountId });
       return accountStatus();
     },

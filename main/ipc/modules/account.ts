@@ -37,11 +37,10 @@ import {
 import {
   effectiveDeviceIcon,
   enrollDevice,
-  renameDevice,
   retryParkedRevoke,
-  setDeviceIcon,
   signOutDevice,
-  syncHubDeviceIcon,
+  syncHubDevice,
+  updateDevice,
 } from "@shared/account/enroll";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import {
@@ -409,13 +408,38 @@ export function makeAccountHandlers(
   // forward, once per process, the first time status is read while
   // signed in with a SETTLED default (a provisional one would bake the
   // hostname stand-in in for good) -- through the same fan-out a rename
-  // takes, so every window sees the new name, and through the same
-  // hub push, so the other devices list it too. A name the user
+  // takes, so every window sees the new name. The next registry read
+  // finds the hub's copy stale and pushes it (syncHubDevice), so the
+  // other devices list it too. A name the user
   // typed cannot match the raw hostname unless they typed exactly that,
   // in which case the default is what they asked for. Returns the
   // record status should report. A write that fails leaves the old
   // name, since a cosmetic rename must never turn a status read into
   // an error.
+  // A device's name or icon change, made on the hub (updateDevice).
+  // Every window re-reads the registry after, a peer's change with it.
+  const update = async (
+    deviceId: string,
+    patch: { name?: string; icon?: DeviceIcon },
+  ): Promise<AccountStatus> => {
+    const signedIn = signedInService();
+    if (signedIn === null) {
+      throw new Error("cannot change a device while signed out");
+    }
+    await updateDevice(
+      {
+        service: signedIn.service,
+        store: store(),
+        deviceId: getDeviceId(),
+        detectedIcon: await detectedDeviceIcon(),
+      },
+      signedIn.record,
+      deviceId,
+      patch,
+    );
+    accountChanged();
+    return readStatus();
+  };
   let defaultNameMigrated = false;
   const migrateDefaultName = (
     record: StoredAccount | null,
@@ -431,18 +455,15 @@ export function makeAccountHandlers(
     ) {
       return record;
     }
-    const renamed = { ...record, deviceName: defaultName.name };
+    // The hub still holds the name left behind (unless it moved since),
+    // so the next registry read pushes the new one over it.
+    const renamed = {
+      ...record,
+      deviceName: defaultName.name,
+      hubName: record.hubName ?? record.deviceName,
+    };
     try {
-      const config = serviceConfig();
-      renameDevice(
-        {
-          config,
-          service: createAccountService({ baseUrl: config.hubUrl }),
-          store: store(),
-          deviceId: getDeviceId(),
-        },
-        defaultName.name,
-      );
+      store().write(renamed);
     } catch (error) {
       console.warn(
         "[account] could not rename the device to its default",
@@ -570,7 +591,7 @@ export function makeAccountHandlers(
       const devices = await signedIn.service.listDevices(
         signedIn.record.credential,
       );
-      const adopted = syncHubDeviceIcon(
+      const adopted = syncHubDevice(
         {
           service: signedIn.service,
           store: store(),
@@ -585,40 +606,9 @@ export function makeAccountHandlers(
       return devices;
     },
 
-    setDeviceName: (name) => {
-      const config = serviceConfig();
-      const renamed = renameDevice(
-        {
-          config,
-          service: createAccountService({ baseUrl: config.hubUrl }),
-          store: store(),
-          deviceId: getDeviceId(),
-        },
-        name,
-      );
-      if (renamed) accountChanged();
-      return readStatus();
-    },
+    setDeviceName: ({ deviceId, name }) => update(deviceId, { name }),
 
-    setDeviceIcon: async (target) => {
-      const signedIn = signedInService();
-      if (signedIn === null) {
-        throw new Error("cannot change a device's icon while signed out");
-      }
-      await setDeviceIcon(
-        {
-          service: signedIn.service,
-          store: store(),
-          deviceId: getDeviceId(),
-          detectedIcon: await detectedDeviceIcon(),
-        },
-        signedIn.record,
-        target,
-      );
-      // Every window re-reads the registry, the peer's new icon with it.
-      accountChanged();
-      return readStatus();
-    },
+    setDeviceIcon: ({ deviceId, icon }) => update(deviceId, { icon }),
 
     acceptsCommands: acceptsPeerCommands,
 

@@ -1,8 +1,8 @@
 // One machine on the account, as a row of the registry: its mark and
-// name (the mark opens the icon picker on every row, since the icon
-// lives on the device hub, while Rename is on THIS device's row
-// only), one line saying what state it is in and what it runs, the
-// projects it hosts, and -- on THIS device's row -- the two things it
+// name (changeable on every row, a peer's included, since both live on
+// the device hub: the mark opens the icon picker, Rename the name),
+// one line saying what state it is in and what it runs, the projects
+// it hosts, and -- on THIS device's row -- the two things it
 // exposes to the others: whether they may control it and whether it
 // stays reachable to them. A peer's row makes no decision about the
 // peer: what a machine allows is decided on that machine, so a peer
@@ -150,17 +150,14 @@ export function DeviceRegistryRow({
         <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-3 gap-y-2">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-              {isThisDevice ? (
-                <DeviceNameField
-                  deviceName={name}
-                  label={traits.selfLabel}
-                  editing={renaming}
-                  onEditingChange={setRenaming}
-                  className="text-base"
-                />
-              ) : (
-                <span className="truncate text-base font-medium">{name}</span>
-              )}
+              <DeviceNameField
+                deviceId={device.deviceId}
+                deviceName={name}
+                label={isThisDevice ? traits.selfLabel : namedDevice}
+                editing={renaming}
+                onEditingChange={setRenaming}
+                className="text-base"
+              />
               {isThisDevice && !renaming && <RowTag>{traits.selfLabel}</RowTag>}
               {showId && (
                 <span
@@ -192,16 +189,15 @@ export function DeviceRegistryRow({
             </p>
           </div>
 
-          {!confirming && (
-            <div className="flex shrink-0 items-center">
-              {isThisDevice ? (
-                !renaming && (
-                  <DeviceRenameButton
-                    label={traits.selfLabel}
-                    onClick={() => setRenaming(true)}
-                  />
-                )
-              ) : (
+          {!confirming && !renaming && (
+            <div className="flex shrink-0 items-center gap-1">
+              <DeviceRenameButton
+                label={
+                  isThisDevice ? traits.selfLabel.toLowerCase() : namedDevice
+                }
+                onClick={() => setRenaming(true)}
+              />
+              {!isThisDevice && (
                 <Button
                   // Muted until hovered: a rose "Remove" on every peer
                   // row would make the page's rarest act its loudest.

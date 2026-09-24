@@ -94,9 +94,8 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
     return {
       device,
       isThisDevice,
-      // This device's name is its own (setDeviceName writes it locally
-      // and pushes it best-effort), and its icon the copy it keeps of
-      // the hub's, current the moment a pick here lands. The row shows
+      // This device's name and icon are the copies it keeps of the
+      // hub's, current the moment a change here lands. The row shows
       // the ones every other surface of this device draws.
       name: isThisDevice ? local.name : device.name,
       icon: isThisDevice ? local.icon : device.icon,
