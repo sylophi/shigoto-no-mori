@@ -1,4 +1,4 @@
-import { ChevronDown, CircleSlash, Loader2 } from "lucide-react";
+import { ChevronDown, CircleSlash, Layers2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -82,7 +82,10 @@ export function MergeBox({
       ) : armed ? (
         "Click again to confirm"
       ) : (
-        label
+        <>
+          {stack && <Layers2 aria-hidden className="size-3.5" />}
+          {label}
+        </>
       )}
     </Button>
   );
