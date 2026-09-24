@@ -36,9 +36,8 @@ func runGit(cwd string, args ...string) (string, error) {
 // runGit with per-call extra environment entries appended to the
 // inherited one (the dirty-state capture points GIT_INDEX_FILE at a
 // temporary index). LC_ALL=C pins git's messages to English on every
-// spawn: removeWorktreeForce matches "Directory not empty" on stderr,
-// which gettext would otherwise translate. The TS twin pins it in
-// host/lib/git/core.ts for the same reason.
+// spawn, so the errors sm relays read the same on every machine. The
+// TS twin pins it in host/lib/git/core.ts for the same reason.
 func runGitEnv(cwd string, extraEnv []string, args ...string) (string, error) {
 	return runGitStdin(cwd, extraEnv, "", args...)
 }
@@ -789,10 +788,6 @@ func gitWorktreeRemove(projectPath, worktreePath string, force bool) error {
 	}
 	_, err := runGit(projectPath, args...)
 	return err
-}
-
-func pruneStaleWorktrees(projectPath string) {
-	_, _ = runGit(projectPath, "worktree", "prune")
 }
 
 // Force-delete policy honoring the app's toggle: never externals, skip

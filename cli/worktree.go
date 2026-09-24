@@ -6,10 +6,14 @@ package main
 
 import (
 	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 )
 
 type worktreeJSON struct {
@@ -261,20 +265,90 @@ func createWorktree(proj project, requestedName, branchName, base string, checko
 	return worktreeJSON{}, errors.New("worktree disappeared after creation")
 }
 
-// Force-remove with the ENOTEMPTY wipe fallback (removeWorktreeForce).
-func removeWorktreeForce(projectPath, worktreePath string) error {
-	err := gitWorktreeRemove(projectPath, worktreePath, true)
+// Test seam: the sweep failure below is a race, so tests stub git's
+// end state instead of trying to hit the window.
+var gitWorktreeRemoveFn = gitWorktreeRemove
+
+// Removes the checkout through `git worktree remove`, finishing the
+// sweep when git couldn't. Git checks the tree first (clean unless
+// forced, unlocked, no submodules), then sweeps the directory, and it
+// drops the admin entry under $GIT_DIR/worktrees whether or not the
+// sweep finished. A sweep that stops short (a file landing between
+// git's readdir and rmdir, typically from a watcher or a script winding
+// down) therefore leaves a directory git no longer lists and no later
+// `git worktree remove` can reach. The wipe takes only what git had
+// already agreed to delete: it runs when the admin entry was there
+// before and is gone after, which is exactly a sweep that started. A
+// refusal keeps the entry and comes back unchanged. A wipe that fails
+// comes back as an orphanedWorktreeError, since git's side is done and
+// the caller's bookkeeping should follow.
+func removeWorktreeDir(projectPath, worktreePath string, force bool) error {
+	adminDir := worktreeAdminDir(worktreePath)
+	err := gitWorktreeRemoveFn(projectPath, worktreePath, force)
 	if err == nil {
 		return nil
 	}
-	msg := err.Error()
-	if !strings.Contains(msg, "Directory not empty") && !strings.Contains(msg, "ENOTEMPTY") {
+	if adminDir == "" || !dirGone(adminDir) {
 		return err
 	}
-	vlog("[worktrees] force-wipe fallback: %s", msg)
-	if err := os.RemoveAll(worktreePath); err != nil {
-		return err
+	vlog("[worktrees] wipe fallback: %s", err)
+	if wipeErr := wipeDir(worktreePath); wipeErr != nil {
+		return &orphanedWorktreeError{path: worktreePath, git: err, wipe: wipeErr}
 	}
-	pruneStaleWorktrees(projectPath)
 	return nil
+}
+
+// A removal git finished on its side (the admin entry is gone) whose
+// checkout is still on disk because the wipe failed.
+type orphanedWorktreeError struct {
+	path      string
+	git, wipe error
+}
+
+func (e *orphanedWorktreeError) Error() string {
+	return fmt.Sprintf("git no longer tracks %s as a worktree but couldn't finish deleting it (git: %v. wipe: %v). Delete the directory by hand.",
+		e.path, e.git, e.wipe)
+}
+
+// The admin directory git keeps for a linked checkout, read from the
+// checkout's own .git file ("gitdir: <dir>", relative to the checkout
+// under worktree.useRelativePaths). Empty when the path isn't a linked
+// worktree, which keeps the wipe away from any directory git never
+// registered. Read from disk rather than `git worktree list` so the
+// check costs no spawn and no path comparison against git's resolved
+// spellings.
+func worktreeAdminDir(worktreePath string) string {
+	data, err := os.ReadFile(filepath.Join(worktreePath, ".git"))
+	if err != nil {
+		return ""
+	}
+	dir, ok := strings.CutPrefix(strings.TrimSpace(string(data)), "gitdir: ")
+	if !ok {
+		return ""
+	}
+	if !filepath.IsAbs(dir) {
+		dir = filepath.Join(worktreePath, dir)
+	}
+	return dir
+}
+
+// Only a definite "not there" counts: an unreadable admin dir must not
+// pass for a finished sweep.
+func dirGone(path string) bool {
+	_, err := os.Stat(path)
+	return errors.Is(err, fs.ErrNotExist)
+}
+
+// os.RemoveAll, retried for a few seconds while a directory keeps
+// refilling: the writer that defeated git's sweep may still be landing
+// files. No other error clears by waiting.
+func wipeDir(path string) error {
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		err := os.RemoveAll(path)
+		if err == nil || !errors.Is(err, syscall.ENOTEMPTY) || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 }
