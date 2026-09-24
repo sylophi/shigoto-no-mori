@@ -41,7 +41,11 @@
     "bundleNames": ["Antigravity.app"],
     "cli": "agy"
   },
-  { "id": "codex", "label": "Codex", "bundleNames": ["Codex.app"] },
+  {
+    "id": "codex",
+    "label": "ChatGPT",
+    "bundleNames": ["ChatGPT.app", "Codex.app"]
+  },
   { "id": "claude", "label": "Claude", "bundleNames": ["Claude.app"] },
   {
     "id": "t3code",

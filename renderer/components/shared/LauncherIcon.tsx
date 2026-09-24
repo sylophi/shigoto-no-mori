@@ -12,9 +12,9 @@ import { Rider } from "@/components/ui/svgs/rider";
 import { Rubymine } from "@/components/ui/svgs/rubymine";
 import { Webstorm } from "@/components/ui/svgs/webstorm";
 import antigravityIconUrl from "@/app-icons/antigravity.png";
+import chatgptIconUrl from "@/app-icons/chatgpt.png";
 import claudeIconUrl from "@/app-icons/claude.png";
 import cmuxIconUrl from "@/app-icons/cmux.png";
-import codexIconUrl from "@/app-icons/codex.png";
 import cursorIconUrl from "@/app-icons/cursor.png";
 import ghosttyIconUrl from "@/app-icons/ghostty.png";
 import githubDesktopIconUrl from "@/app-icons/github-desktop.png";
@@ -83,7 +83,7 @@ export function LauncherIcon({
     case "antigravity":
       return <AppIcon src={antigravityIconUrl} className={className} />;
     case "codex":
-      return <AppIcon src={codexIconUrl} className={className} />;
+      return <AppIcon src={chatgptIconUrl} className={className} />;
     case "claude":
       return <AppIcon src={claudeIconUrl} className={className} />;
     case "t3code":

@@ -173,6 +173,8 @@ export function deepLinkFor(
   appId: string,
   worktreePath: string,
 ): string | null {
+  // "codex" is the ChatGPT app (formerly Codex), which kept the
+  // codex:// scheme. The id stays so saved launcher settings still match.
   if (appId === "codex") {
     const url = new URL("codex://threads/new");
     url.searchParams.set("path", worktreePath);
