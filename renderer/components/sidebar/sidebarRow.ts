@@ -19,6 +19,10 @@ export interface RemoteProjectMember {
 // PR pill.
 export type StackPosition = { index: number; size: number };
 
+// Which stretch of the rail a row draws when it sits in a run of its
+// stack's rows: the run's first row, one in the middle, or its last.
+export type StackRail = "top" | "middle" | "bottom";
+
 export type SidebarRow =
   // A project header, for one repo wherever it is checked out: on this
   // machine with any peers' checkouts merged in, or on peers alone.
@@ -48,6 +52,7 @@ export type SidebarRow =
       key: string;
       worktree: Worktree;
       mirror?: SidebarDeviceBadge;
+      stackRail?: StackRail;
     }
   // The inbox's own row: taller, cross-project, and built to be triaged
   // rather than picked out of a short list. See InboxRow. The project
@@ -92,6 +97,7 @@ export type SidebarRow =
       // row's off this machine's.
       pr: PullRequest | undefined;
       stack: StackPosition | null;
+      stackRail?: StackRail;
       groupId: string;
     }
   | {

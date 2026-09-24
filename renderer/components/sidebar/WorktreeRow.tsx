@@ -12,6 +12,7 @@ import type { PullRequest, Worktree } from "@shared/schemas";
 import { ActivityIcon } from "./ActivityIcon";
 import { PullRequestPill } from "./PullRequestPill";
 import { StatusIndicator } from "./StatusIndicator";
+import type { StackRail } from "./sidebarRow";
 import { useWorktreeRowState } from "./useWorktreeRowState";
 
 interface WorktreeRowProps {
@@ -19,13 +20,33 @@ interface WorktreeRowProps {
   // The peer this worktree is mirrored with, when it is: the row then
   // stands for both copies and wears the peer's badge.
   mirror?: SidebarDeviceBadge;
+  stackRail?: StackRail;
 }
 
 // The row button's shared shell, also worn by RemoteWorktreeRow so a
 // peer's worktree reads as a sibling of a local one -- and stays one
 // through the next restyle.
 export const WORKTREE_ROW_BUTTON =
-  "group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-accent/60";
+  "group relative flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-accent/60";
+
+// The thin line down the gutter beside a stack's rows, running from
+// the run's first row to its last with rounded ends, so the rows read
+// as one group without a box around them. Sits in the tree's indent,
+// left of the row's own box.
+export function StackRailMark({ rail }: { rail: StackRail | undefined }) {
+  if (!rail) return null;
+  return (
+    <span
+      aria-hidden
+      data-slot="stack-rail"
+      className={cn(
+        "absolute -left-2.5 w-0.5 bg-border",
+        rail === "top" ? "top-1.5 rounded-t-full" : "top-0",
+        rail === "bottom" ? "bottom-1.5 rounded-b-full" : "bottom-0",
+      )}
+    />
+  );
+}
 
 // The two-line branch-over-name block both row flavors lead with, faded
 // back for a shelved worktree.
@@ -56,7 +77,7 @@ export function WorktreeRowLabel({
   );
 }
 
-export function WorktreeRow({ worktree, mirror }: WorktreeRowProps) {
+export function WorktreeRow({ worktree, mirror, stackRail }: WorktreeRowProps) {
   const { isSelected, open, activity, isDeleting, title } =
     useWorktreeRowState(worktree);
   const { data: prs } = useProjectPullRequests(worktree.projectId);
@@ -75,6 +96,7 @@ export function WorktreeRow({ worktree, mirror }: WorktreeRowProps) {
         isDeleting && "opacity-50",
       )}
     >
+      <StackRailMark rail={stackRail} />
       <WorktreeRowLabel worktree={worktree} emphasized={isSelected} />
       <RowTrailing
         worktree={worktree}

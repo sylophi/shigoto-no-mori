@@ -1,5 +1,6 @@
 import {
   groupByStack,
+  pullRequestStackFor,
   pullRequestStackPosition,
   trunkOf,
 } from "@shared/pullRequestStack";
@@ -306,9 +307,13 @@ export function buildSidebarRows({
         localVisible.length > 0 ? (query?.data as Worktree[]) : undefined,
       ) ?? trunkOf(group.remote[0]?.worktrees);
     rows.push(
-      ...groupByStack(
-        [...localRows(localVisible), ...remoteVisible],
-        (row) => row.worktree.branch,
+      ...railStacks(
+        groupByStack(
+          [...localRows(localVisible), ...remoteVisible],
+          (row) => row.worktree.branch,
+          group.pullRequests,
+          trunk,
+        ),
         group.pullRequests,
         trunk,
       ),
@@ -412,6 +417,42 @@ export function deviceBadgeOf(item: RemoteForestItem): SidebarDeviceBadge {
 
 type LocalRow = Extract<SidebarRow, { kind: "worktree" }>;
 type RemoteRow = Extract<SidebarRow, { kind: "remote-worktree" }>;
+
+// The rail down a stack's rows: each run of two or more consecutive
+// rows of one stack (keyed by its bottom PR) gets its ends and middle
+// marked, so the rows read as one group. A stack with a single row
+// showing (its other layers shelved, or on a device the filter hides)
+// draws nothing: a rail beside one row would say nothing.
+function railStacks(
+  rows: (LocalRow | RemoteRow)[],
+  prs: Record<string, PullRequest> | undefined,
+  trunk: string | undefined,
+): (LocalRow | RemoteRow)[] {
+  if (!prs) return rows;
+  const keys = rows.map(
+    (row) =>
+      pullRequestStackFor(prs, row.worktree.branch, trunk)?.entries[0]?.pr
+        .number ?? null,
+  );
+  let start = 0;
+  while (start < rows.length) {
+    const key = keys[start];
+    let end = start;
+    if (key !== null) {
+      while (end + 1 < rows.length && keys[end + 1] === key) end += 1;
+    }
+    if (key !== null && end > start) {
+      for (let i = start; i <= end; i++) {
+        rows[i] = {
+          ...rows[i]!,
+          stackRail: i === start ? "top" : i === end ? "bottom" : "middle",
+        };
+      }
+    }
+    start = end + 1;
+  }
+  return rows;
+}
 
 function remoteWorktreeRows(
   item: RemoteForestItem,

@@ -41,7 +41,13 @@ export function RowContent({
         />
       );
     case "worktree":
-      return <WorktreeRow worktree={row.worktree} mirror={row.mirror} />;
+      return (
+        <WorktreeRow
+          worktree={row.worktree}
+          mirror={row.mirror}
+          stackRail={row.stackRail}
+        />
+      );
     case "remote-worktree":
       return (
         <RemoteWorktreeRow
@@ -53,6 +59,7 @@ export function RowContent({
           tone={row.tone}
           pr={row.pr}
           stack={row.stack}
+          stackRail={row.stackRail}
         />
       );
     case "inbox-worktree":
