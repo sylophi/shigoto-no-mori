@@ -96,6 +96,15 @@ async function readStagedManifest(): Promise<StagedManifest | null> {
   return manifest;
 }
 
+// The staged update, if it's one this build can restart into. A
+// manifest matching our own version is debris from an install that
+// crashed between swap and cleanup. Offering it would restart-loop
+// into the same version. The CLI clears it on its next stage run.
+async function readInstallableStaged(): Promise<StagedManifest | null> {
+  const staged = await readStagedManifest();
+  return staged !== null && staged.version !== app.getVersion() ? staged : null;
+}
+
 function readyStateFrom(manifest: {
   version: string;
   notes?: string;
@@ -113,58 +122,83 @@ export function checkForUpdates(): void {
   void runCheck();
 }
 
-// One check at a time. Once an update is staged ("ready") the only
-// useful action left is install, so further checks no-op until the
-// restart. The CLI holds its own cross-process staging lock, so a
-// terminal `sm update` racing this check is also safe. The loser
-// reports "update-in-progress" and is treated as a skip, not an error.
+// One check at a time. The CLI holds its own cross-process staging
+// lock, so a terminal `sm update` racing this check is also safe. The
+// loser reports "update-in-progress" and is treated as a skip, not an
+// error.
+//
+// Checks keep running after an update is staged, or a release that
+// ships later would wait for a restart into the older one first.
+// These re-checks run behind the "ready" state they found and leave
+// its restart button up throughout: the CLI keeps the staged bundle
+// until a newer one is verified, so a restart mid-download still has
+// it to install (and quitting reaps the download). Only a newly staged
+// release or a confirmed up-to-date answer (the release was pulled,
+// and the CLI cleared it) replaces it. A failure keeps it while its
+// bundle is still on disk, and still backs off.
 async function runCheck(): Promise<void> {
   if (!started || checkInFlight) return;
-  if (state.kind === "downloading" || state.kind === "ready") return;
+  if (state.kind === "downloading") return;
   checkInFlight = true;
-  setState({ kind: "checking" });
+  const shown = state.kind === "ready" ? state : null;
+  if (shown === null) setState({ kind: "checking" });
   let failed = false;
   try {
-    const result = await runCli(
-      ["update", "--stage"],
-      (doc) => {
-        // "verifying" arrives too, and the renderer's machine collapses
-        // everything between "found one" and "staged" into downloading.
-        if (
-          UpdateStageEventSchema.safeParse(doc).success &&
-          state.kind !== "downloading"
-        ) {
-          setState({ kind: "downloading" });
-        }
-      },
-      undefined,
-      { background: true, timeoutMs: STAGE_TIMEOUT_MS },
-    );
-    const final = result.docs.findLast((doc) => typeof doc["ok"] === "boolean");
-    const parsed =
-      final?.["ok"] === true ? UpdateStageResultSchema.safeParse(final) : null;
-    if (parsed?.success === true && parsed.data.status === "staged") {
-      setState(readyStateFrom(parsed.data));
-    } else if (
-      (parsed?.success === true && parsed.data.status === "up-to-date") ||
-      // A terminal `sm update` holding the staging lock is its turn,
-      // not an error.
-      final?.["code"] === "update-in-progress"
-    ) {
-      setState({ kind: "idle" });
-    } else {
-      failed = true;
-      setState({
-        kind: "error",
-        message: cliFailureMessage(result, "Update check failed"),
-      });
+    let next: UpdaterState;
+    try {
+      const result = await runCli(
+        ["update", "--stage"],
+        (doc) => {
+          // "verifying" arrives too, and the renderer's machine
+          // collapses everything between "found one" and "staged" into
+          // downloading.
+          if (
+            shown === null &&
+            UpdateStageEventSchema.safeParse(doc).success &&
+            state.kind !== "downloading"
+          ) {
+            setState({ kind: "downloading" });
+          }
+        },
+        undefined,
+        { background: true, timeoutMs: STAGE_TIMEOUT_MS },
+      );
+      const final = result.docs.findLast(
+        (doc) => typeof doc["ok"] === "boolean",
+      );
+      const parsed =
+        final?.["ok"] === true
+          ? UpdateStageResultSchema.safeParse(final)
+          : null;
+      if (parsed?.success === true && parsed.data.status === "staged") {
+        next = readyStateFrom(parsed.data);
+      } else if (
+        parsed?.success === true &&
+        parsed.data.status === "up-to-date"
+      ) {
+        next = { kind: "idle" };
+      } else if (final?.["code"] === "update-in-progress") {
+        // A terminal `sm update` holding the staging lock is its turn,
+        // not an error.
+        next = shown ?? { kind: "idle" };
+      } else {
+        next = {
+          kind: "error",
+          message: cliFailureMessage(result, "Update check failed"),
+        };
+      }
+    } catch (err) {
+      next = { kind: "error", message: errorMessageOf(err) };
     }
-  } catch (err) {
-    failed = true;
-    setState({
-      kind: "error",
-      message: errorMessageOf(err),
-    });
+    failed = next.kind === "error";
+    if (
+      failed &&
+      shown !== null &&
+      (await readInstallableStaged())?.version === shown.version
+    ) {
+      next = shown;
+    }
+    setState(next);
   } finally {
     checkInFlight = false;
     failedChecks = failed ? failedChecks + 1 : 0;
@@ -179,12 +213,11 @@ async function runCheck(): Promise<void> {
 // present, bundle on disk, and a different version than this build (a
 // same-version manifest is debris from an install that crashed between
 // swap and cleanup, and restarting into it would deliver nothing).
-// When it's gone while the UI still says ready, resets to idle:
-// runCheck refuses to run while ready, so nothing else would ever
-// revive the dead "Restart to update" button.
+// When it's gone while the UI still says ready, resets to idle rather
+// than leave a dead "Restart to update" button up until the next
+// check.
 async function hasInstallableStaged(): Promise<boolean> {
-  const staged = await readStagedManifest();
-  if (staged !== null && staged.version !== app.getVersion()) return true;
+  if ((await readInstallableStaged()) !== null) return true;
   if (state.kind === "ready") setState({ kind: "idle" });
   return false;
 }
@@ -269,15 +302,10 @@ export function startUpdater(): void {
   void (async () => {
     // Seed from disk before any network work: an update staged earlier
     // (a previous run, or `sm update --stage` in a terminal) is ready
-    // immediately, no CLI spawn needed. A manifest matching our own
-    // version is debris from an install that crashed between swap and
-    // cleanup. Offering it would restart-loop into the same version.
-    // The CLI clears it on its next stage run.
-    const staged = await readStagedManifest();
-    if (staged !== null && staged.version !== app.getVersion()) {
-      setState(readyStateFrom(staged));
-      return;
-    }
+    // immediately, no CLI spawn needed. The first check still runs, in
+    // case a newer release has shipped since.
+    const staged = await readInstallableStaged();
+    if (staged !== null) setState(readyStateFrom(staged));
     setTimeout(checkForUpdates, FIRST_CHECK_DELAY_MS);
   })();
   // Runs for the app's lifetime. Quit tears the interval down with the

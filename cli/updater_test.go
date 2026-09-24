@@ -430,3 +430,42 @@ func TestStageUpdateKeepsAStagedBundleOnAnUnconfirmedAnswer(t *testing.T) {
 		t.Fatal("a confirmed up-to-date answer left the staged dir behind")
 	}
 }
+
+func TestStageUpdateKeepsTheStagedBundleWhenANewerDownloadFails(t *testing.T) {
+	broken := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(broken.Close)
+	newer := labRelease("v2.0.0-beta.4", feedArch())
+	for i := range newer.Assets {
+		newer.Assets[i].URL = broken.URL + "/" + newer.Assets[i].Name
+	}
+	stubReleaseList(t, "2.0.0-beta.2", serveReleases(newer))
+	seedStaged(t, "2.0.0-beta.3")
+
+	if _, err := stageUpdate(t.TempDir(), func(string, string) {}); err == nil {
+		t.Fatal("a failed download reported success")
+	}
+	if man := readStagedManifest(); man == nil || man.Version != "2.0.0-beta.3" {
+		t.Fatalf("staged manifest = %+v, want beta.3 kept after the failed download", man)
+	}
+}
+
+// The app's own check can still hold the staging lock when the
+// installer starts. It waits the holder out, then reads the manifest.
+func TestInstallStagedWaitsForTheStagingLock(t *testing.T) {
+	sandboxDataDir(t)
+	if err := os.MkdirAll(updatesDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stagingLockPath(), []byte(strconv.Itoa(os.Getpid())), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		time.Sleep(3 * pollInterval)
+		_ = os.Remove(stagingLockPath())
+	}()
+
+	_, err := installStaged(t.TempDir())
+	if err == nil || errorKindOf(err) == "update-in-progress" || !strings.Contains(err.Error(), "No staged update") {
+		t.Fatalf("installStaged = %v, want it to wait for the lock and then find nothing staged", err)
+	}
+}
