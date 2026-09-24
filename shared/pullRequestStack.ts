@@ -94,11 +94,11 @@ export function stackMergeSet(
   return range.filter((entry) => entry.pr.state === "OPEN");
 }
 
-// One repo's rows with every stack's members brought together, in
-// stack order with the top first (the way the worktree page lists a
-// stack), at the place the first member held. Rows outside a stack
-// keep their order. Two rows on one branch (a peer's copy beside the
-// local one) stay adjacent in their own order.
+// One repo's rows with every stack's members brought together, bottom
+// first (the sidebar draws a stack as a tree, each layer nested under
+// the one it is built on), at the place the first member held. Rows
+// outside a stack keep their order. Two rows on one branch (a peer's
+// copy beside the local one) stay adjacent in their own order.
 export function groupByStack<T>(
   items: readonly T[],
   branchOf: (item: T) => string,
@@ -116,7 +116,7 @@ export function groupByStack<T>(
       out.push(item);
       return;
     }
-    for (const entry of stack.entries.toReversed()) {
+    for (const entry of stack.entries) {
       items.forEach((member, at) => {
         if (placed.has(at) || branchOf(member) !== entry.branch) return;
         placed.add(at);

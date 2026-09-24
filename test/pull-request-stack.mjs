@@ -153,7 +153,7 @@ try {
   );
 
   await proof.check(
-    "rows of a stack gather where its first row was, top first, peers' copies beside",
+    "rows of a stack gather where its first row was, bottom first, peers' copies beside",
     () => {
       const rows = [
         "main",
@@ -166,7 +166,7 @@ try {
       ];
       assert.deepEqual(
         groupByStack(rows, (r) => r, prs, "main"),
-        ["main", "hotfix", "layer-c", "layer-b", "layer-b", "layer-a", "other"],
+        ["main", "hotfix", "layer-a", "layer-b", "layer-b", "layer-c", "other"],
       );
       assert.deepEqual(
         groupByStack(rows, (r) => r, undefined, "main"),

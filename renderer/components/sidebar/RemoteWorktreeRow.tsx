@@ -11,11 +11,12 @@ import type { DeviceIcon } from "@shared/account/deviceIcon";
 import type { StatusTone } from "@/components/ui/status-dot";
 import { cn } from "@/lib/utils";
 import { DeviceBadge } from "./DeviceBadge";
-import type { StackPosition, StackRail } from "./sidebarRow";
+import type { StackDepth, StackPosition } from "./sidebarRow";
 import { useWorktreeRowState } from "./useWorktreeRowState";
 import {
   RowTrailing,
-  StackRailMark,
+  StackConnector,
+  stackIndentStyle,
   WORKTREE_ROW_BUTTON,
   WorktreeRowLabel,
 } from "./WorktreeRow";
@@ -29,7 +30,7 @@ interface RemoteWorktreeRowProps {
   tone: StatusTone;
   pr: PullRequest | undefined;
   stack: StackPosition | null;
-  stackRail?: StackRail;
+  stackDepth?: StackDepth;
 }
 
 export function RemoteWorktreeRow({
@@ -41,7 +42,7 @@ export function RemoteWorktreeRow({
   tone,
   pr,
   stack,
-  stackRail,
+  stackDepth,
 }: RemoteWorktreeRowProps) {
   // The local row's own rule, scoped to the device: the open remote
   // worktree reads as selected like a local one.
@@ -59,8 +60,9 @@ export function RemoteWorktreeRow({
         isSelected && "bg-accent text-accent-foreground",
         (isDeleting || !reachable) && "opacity-60",
       )}
+      style={stackIndentStyle(stackDepth)}
     >
-      <StackRailMark rail={stackRail} />
+      <StackConnector depth={stackDepth} />
       <WorktreeRowLabel worktree={worktree} emphasized={isSelected} />
       <RowTrailing
         worktree={worktree}

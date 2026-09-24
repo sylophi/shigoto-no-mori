@@ -43,7 +43,6 @@
  *      dropdown-menu-sub-trigger (+ data-variant)   ui/dropdown-menu.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
  *      sidebar-device-filter     sidebar/DeviceFilterBar.tsx
- *      stack-rail                sidebar/WorktreeRow.tsx
  *      device-chip               shared/DeviceChip.tsx, shared/DeviceTabs.tsx
  *      phone-tab-bar/-tab/-tab-pill   PhoneTabBar.tsx
  *
@@ -349,12 +348,6 @@
    bump to --muted as a soft 1px-tall band. Same fix for the diff hunk
    separator which lives in pierre's shadow DOM but inherits the var. */
 .doubutsu [data-slot="dropdown-menu-separator"] {
-  background-color: var(--muted);
-}
-
-/* The rail down a stack's rows in the sidebar tree is a bg-border
-   hairline too. Same tinted band. */
-.doubutsu [data-slot="stack-rail"] {
   background-color: var(--muted);
 }
 

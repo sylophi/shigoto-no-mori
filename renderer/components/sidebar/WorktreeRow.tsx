@@ -1,4 +1,5 @@
 import { RefreshCw } from "lucide-react";
+import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -12,7 +13,7 @@ import type { PullRequest, Worktree } from "@shared/schemas";
 import { ActivityIcon } from "./ActivityIcon";
 import { PullRequestPill } from "./PullRequestPill";
 import { StatusIndicator } from "./StatusIndicator";
-import type { StackRail } from "./sidebarRow";
+import type { StackDepth } from "./sidebarRow";
 import { useWorktreeRowState } from "./useWorktreeRowState";
 
 interface WorktreeRowProps {
@@ -20,7 +21,7 @@ interface WorktreeRowProps {
   // The peer this worktree is mirrored with, when it is: the row then
   // stands for both copies and wears the peer's badge.
   mirror?: SidebarDeviceBadge;
-  stackRail?: StackRail;
+  stackDepth?: StackDepth;
 }
 
 // The row button's shared shell, also worn by RemoteWorktreeRow so a
@@ -28,25 +29,6 @@ interface WorktreeRowProps {
 // through the next restyle.
 export const WORKTREE_ROW_BUTTON =
   "group relative flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-accent/60";
-
-// The thin line down the gutter beside a stack's rows, running from
-// the run's first row to its last with rounded ends, so the rows read
-// as one group without a box around them. Sits in the tree's indent,
-// left of the row's own box.
-export function StackRailMark({ rail }: { rail: StackRail | undefined }) {
-  if (!rail) return null;
-  return (
-    <span
-      aria-hidden
-      data-slot="stack-rail"
-      className={cn(
-        "absolute -left-2.5 w-0.5 bg-border",
-        rail === "top" ? "top-1.5 rounded-t-full" : "top-0",
-        rail === "bottom" ? "bottom-1.5 rounded-b-full" : "bottom-0",
-      )}
-    />
-  );
-}
 
 // The two-line branch-over-name block both row flavors lead with, faded
 // back for a shelved worktree.
@@ -77,7 +59,40 @@ export function WorktreeRowLabel({
   );
 }
 
-export function WorktreeRow({ worktree, mirror, stackRail }: WorktreeRowProps) {
+// A stack's rows draw as a tree: every layer above the run's lowest
+// one steps in, with the same corner connector a file tree hangs a
+// child on, so the rows read as built on each other. The indent
+// stays shallow and caps early, since a deep stack in a narrow
+// sidebar would otherwise crush its own labels.
+const STACK_STEP_PX = 12;
+const STACK_MAX_STEPS = 4;
+
+export function stackIndentStyle(
+  depth: StackDepth | undefined,
+): CSSProperties | undefined {
+  if (!depth) return undefined;
+  const inset = Math.min(depth, STACK_MAX_STEPS) * STACK_STEP_PX;
+  return { marginLeft: inset, width: `calc(100% - ${inset}px)` };
+}
+
+// The corner is two filled strips rather than a bordered box: doubutsu
+// clears every border color, and a connector that vanishes with the
+// theme would leave the indent unexplained.
+export function StackConnector({ depth }: { depth: StackDepth | undefined }) {
+  if (!depth) return null;
+  return (
+    <span aria-hidden className="absolute top-0 -left-2 h-1/2 w-1.5">
+      <span className="absolute inset-y-0 left-0 w-px bg-muted-foreground/40" />
+      <span className="absolute inset-x-0 bottom-0 h-px bg-muted-foreground/40" />
+    </span>
+  );
+}
+
+export function WorktreeRow({
+  worktree,
+  mirror,
+  stackDepth,
+}: WorktreeRowProps) {
   const { isSelected, open, activity, isDeleting, title } =
     useWorktreeRowState(worktree);
   const { data: prs } = useProjectPullRequests(worktree.projectId);
@@ -95,8 +110,9 @@ export function WorktreeRow({ worktree, mirror, stackRail }: WorktreeRowProps) {
         isSelected && "bg-accent text-accent-foreground",
         isDeleting && "opacity-50",
       )}
+      style={stackIndentStyle(stackDepth)}
     >
-      <StackRailMark rail={stackRail} />
+      <StackConnector depth={stackDepth} />
       <WorktreeRowLabel worktree={worktree} emphasized={isSelected} />
       <RowTrailing
         worktree={worktree}
