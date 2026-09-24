@@ -35,9 +35,9 @@ export function useCheckoutBranch() {
     mutationFn: (input) => api.worktrees.checkoutBranch(input),
     onSuccess: (_data, vars) =>
       invalidateBranchState(queryClient, keys, vars.projectId),
-    // The branch combobox surfaces the error inline so the user can pick a
-    // different branch without leaving the dropdown; toast would duplicate.
-    meta: { silentError: true },
+    // A toast, not the combobox: picking a branch closes the dropdown,
+    // so an error shown inside it would never be seen.
+    meta: { errorTitle: "Couldn't switch branches" },
   });
 }
 

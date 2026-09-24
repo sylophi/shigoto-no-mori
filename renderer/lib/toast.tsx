@@ -1,4 +1,5 @@
 import { toast } from "sonner";
+import { InlineError } from "@/components/ui/inline-error";
 
 function describe(err: unknown): string | undefined {
   if (err instanceof Error) return err.message;
@@ -12,7 +13,11 @@ export function notifyError(message: string, err?: unknown): void {
   const description = describe(err);
   toast.error(message, {
     id: `error:${message}:${description ?? ""}`,
-    description,
+    // Clamped: a git or hook failure can be pages of stderr, which the
+    // Details dialog holds instead of the toast.
+    description: description && (
+      <InlineError message={description} title={message} multiline />
+    ),
   });
 }
 

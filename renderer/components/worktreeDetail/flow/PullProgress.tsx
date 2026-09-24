@@ -296,15 +296,19 @@ function ProgressView({
             ))}
           </ol>
 
-          {failed && (
-            <ErrorBanner>
-              {isCommandRefusedError(error)
-                ? peerReadOnlyNote(
-                    landing.onPeer ? thisDeviceLabel : sourceDeviceLabel,
-                  )
-                : errorMessageOf(error)}
-            </ErrorBanner>
-          )}
+          {failed &&
+            (isCommandRefusedError(error) ? (
+              <ErrorBanner>
+                {peerReadOnlyNote(
+                  landing.onPeer ? thisDeviceLabel : sourceDeviceLabel,
+                )}
+              </ErrorBanner>
+            ) : (
+              <ErrorBanner
+                message={errorMessageOf(error)}
+                title="The transfer failed"
+              />
+            ))}
         </div>
       </FlowBody>
 

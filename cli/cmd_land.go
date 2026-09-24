@@ -124,7 +124,7 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 			if errors.As(err, &ce) {
 				doc["cleanupError"] = cleanupErrorDoc(ce)
 			} else {
-				doc["error"] = err.Error()
+				doc["error"] = jsonErrorMessage(err)
 				if kind := errorKindOf(err); kind != "" {
 					doc["code"] = kind
 				}

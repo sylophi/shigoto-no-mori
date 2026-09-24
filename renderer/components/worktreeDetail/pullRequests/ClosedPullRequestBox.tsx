@@ -25,7 +25,10 @@ export function ClosedPullRequestBox({ worktree }: { worktree: Worktree }) {
         />
       </div>
       {deleteMutation.error && (
-        <ErrorBanner>{deleteMutation.error.message}</ErrorBanner>
+        <ErrorBanner
+          message={deleteMutation.error.message}
+          title="Couldn't delete the worktree"
+        />
       )}
     </div>
   );

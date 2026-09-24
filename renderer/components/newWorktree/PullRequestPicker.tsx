@@ -40,7 +40,10 @@ export function PullRequestSource({
           Loading pull requests…
         </p>
       ) : query.isError ? (
-        <ErrorBanner>{query.error.message}</ErrorBanner>
+        <ErrorBanner
+          message={query.error.message}
+          title="Couldn't load pull requests"
+        />
       ) : unavailableText ? (
         <p className="px-3 py-6 text-center text-sm text-muted-foreground">
           {unavailableText}

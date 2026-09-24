@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Check, Pencil, X } from "lucide-react";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { CopyButton } from "@/components/ui/copy-button";
+import { InlineError } from "@/components/ui/inline-error";
 import { Input } from "@/components/ui/input";
 import { useRenameBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import { sanitizeBranchName } from "@shared/git/branches";
@@ -46,7 +47,7 @@ export function BranchTitle({ worktree }: { worktree: Worktree }) {
 
   if (editing) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Input
           // oxlint-disable-next-line jsx-a11y/no-autofocus -- intentional: editing
           autoFocus
@@ -81,9 +82,11 @@ export function BranchTitle({ worktree }: { worktree: Worktree }) {
           <X className="size-4" />
         </IconButton>
         {rename.error && (
-          <span className="truncate text-xs text-destructive select-text">
-            {rename.error.message}
-          </span>
+          <InlineError
+            message={rename.error.message}
+            title="Couldn't rename the branch"
+            className="basis-full text-xs text-destructive"
+          />
         )}
       </div>
     );

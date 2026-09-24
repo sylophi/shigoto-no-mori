@@ -1,11 +1,20 @@
+import { InlineError } from "@/components/ui/inline-error";
 import { cn } from "@/lib/utils";
 
-interface ErrorBannerProps {
-  children: React.ReactNode;
-  className?: string;
-}
+// Copy written here goes in as children. An error's own text (git, gh,
+// a hook) goes in as `message`, clamped with the rest behind Details,
+// with `title` naming what failed for that dialog.
+type ErrorBannerProps = { className?: string } & (
+  | { children: React.ReactNode; message?: never; title?: never }
+  | { message: string; title: string; children?: never }
+);
 
-export function ErrorBanner({ children, className }: ErrorBannerProps) {
+export function ErrorBanner({
+  children,
+  message,
+  title,
+  className,
+}: ErrorBannerProps) {
   return (
     <div
       className={cn(
@@ -13,7 +22,11 @@ export function ErrorBanner({ children, className }: ErrorBannerProps) {
         className,
       )}
     >
-      {children}
+      {message === undefined ? (
+        children
+      ) : (
+        <InlineError message={message} title={title} multiline />
+      )}
     </div>
   );
 }

@@ -514,7 +514,12 @@ function NewWorktreeForm({
         </p>
       </div>
 
-      {errorMessage && <ErrorBanner>{errorMessage}</ErrorBanner>}
+      {errorMessage && (
+        <ErrorBanner
+          message={errorMessage}
+          title="Couldn't create the worktree"
+        />
+      )}
 
       <div className="flex items-center justify-end gap-2">
         <Button

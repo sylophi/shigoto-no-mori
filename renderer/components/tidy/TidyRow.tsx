@@ -3,6 +3,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { RowStatusBadge, type RowStatus } from "@/components/ui/row-status";
 import { RowTag } from "@/components/ui/row-tag";
 import { Skeleton } from "@/components/ui/skeleton";
+import { InlineError } from "@/components/ui/inline-error";
 import { useNow } from "@/hooks/ui/useNow";
 import { formatBytes } from "@/lib/formatBytes";
 import { formatRelativeTime } from "@/lib/relativeTime";
@@ -110,9 +111,11 @@ export function TidyRow({
 
         <p className="text-xs text-muted-foreground">{verdict.reason}</p>
         {status.kind === "error" && (
-          <p className="text-xs text-destructive select-text">
-            {status.message}
-          </p>
+          <InlineError
+            message={status.message}
+            title="Couldn't tidy the worktree"
+            className="text-xs text-destructive"
+          />
         )}
       </div>
 

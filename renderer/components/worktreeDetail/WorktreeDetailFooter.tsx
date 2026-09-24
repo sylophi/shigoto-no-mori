@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { InlineError } from "@/components/ui/inline-error";
 import {
   useSetAutoPull,
   useSetShelved,
@@ -160,9 +161,11 @@ function NeedsForceRow({
 }) {
   return (
     <>
-      <span className="min-w-0 flex-1 truncate text-xs text-destructive select-text">
-        {errorMessage ?? "Has uncommitted changes."}
-      </span>
+      <InlineError
+        message={errorMessage ?? "Has uncommitted changes."}
+        title="Couldn't delete the worktree"
+        className="flex-1 text-xs text-destructive"
+      />
       <Button
         variant="ghost"
         size="xs"
