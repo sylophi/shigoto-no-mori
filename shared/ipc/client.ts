@@ -3,7 +3,6 @@ import type { ContractModule, ContractScope } from "@shared/ipc/contract";
 import { accountContract } from "@shared/ipc/modules/account";
 import { branchesContract } from "@shared/ipc/modules/branches";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
-import { deviceContract } from "@shared/ipc/modules/device";
 import { dialogContract } from "@shared/ipc/modules/dialog";
 import { directContract } from "@shared/ipc/modules/direct";
 import { forwardContract } from "@shared/ipc/modules/forward";
@@ -61,7 +60,6 @@ export const allContractModules: readonly ContractModule[] = [
   accountContract,
   branchesContract,
   clientConfigContract,
-  deviceContract,
   dialogContract,
   directContract,
   forwardContract,
@@ -107,7 +105,6 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const accountClient = c(accountContract);
   const branchesClient = c(branchesContract);
   const clientConfigClient = c(clientConfigContract);
-  const deviceClient = c(deviceContract);
   const dialogClient = c(dialogContract);
   const forwardClient = c(forwardContract);
   const fsClient = c(fsContract);
@@ -172,11 +169,6 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       shellStatus: cliClient.shellStatus,
       shellInstall: cliClient.shellInstall,
       shellUninstall: cliClient.shellUninstall,
-    },
-
-    device: {
-      detectedIcon: deviceClient.detectedIcon,
-      setIcon: deviceClient.setIcon,
     },
 
     dialog: {

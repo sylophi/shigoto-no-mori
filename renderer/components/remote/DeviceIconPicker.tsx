@@ -1,5 +1,5 @@
-// A device's icon, picked in place: the mark on its Devices page row
-// is the trigger, and the menu lays out every icon the catalog has
+// This device's icon, picked in place: the mark on its Devices page
+// row is the trigger, and the menu lays out every icon the catalog has
 // (shared/account/deviceIcon.ts) as one grid of tiles: the device
 // shapes as the first row, with what the device detected about itself
 // named as such, then under a hairline the marks that are only ever
@@ -10,10 +10,6 @@
 // no override that a later, better detection could not move. The pick
 // rides the same path a rename does, so every other device sees the new
 // mark on its next registry read.
-//
-// This device's row picks for itself. A peer's row picks for the peer
-// when the peer allows control from here: the pick is still the peer's
-// own, made through its host api (shared/ipc/modules/device.ts).
 import { ChevronDown } from "lucide-react";
 import {
   DEVICE_ICON_LABELS,
@@ -31,8 +27,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import type { StatusTone } from "@/components/ui/status-dot";
 import { useAccountStatus, useSetDeviceIcon } from "@/hooks/account/useAccount";
-import type { HostApi } from "@/hooks/remote/useHostScope";
-import { useSetPeerDeviceIcon } from "@/hooks/remote/usePeerDeviceIcon";
 import { cn } from "@/lib/utils";
 
 export function DeviceIconPicker({
@@ -49,71 +43,14 @@ export function DeviceIconPicker({
   // What this device detected about itself, for the tile that means
   // "back to the default". The icon worn now until the status lands,
   // moments before the picker re-renders with the real answer.
-  const detectedIcon = useAccountStatus().data?.detectedDeviceIcon ?? icon;
-  return (
-    <IconPickerMenu
-      icon={icon}
-      tone={tone}
-      label={label}
-      detected={detectedIcon}
-      pending={setDeviceIcon.isPending}
-      onPick={(next) => setDeviceIcon.mutate(next)}
-    />
-  );
-}
-
-export function PeerDeviceIconPicker({
-  deviceId,
-  api,
-  icon,
-  detected,
-  tone,
-  // The peer's name, for the control's accessible name and the error.
-  name,
-}: {
-  deviceId: string;
-  api: HostApi;
-  icon: DeviceIcon;
-  // What the peer detected about itself (usePeerDetectedIcon), read by
-  // the row, which offers this picker only once the peer answered.
-  detected: DeviceIcon;
-  tone: StatusTone;
-  name: string;
-}) {
-  const setPeerIcon = useSetPeerDeviceIcon(deviceId, api, name);
-  return (
-    <IconPickerMenu
-      icon={icon}
-      tone={tone}
-      label={name}
-      detected={detected}
-      pending={setPeerIcon.isPending}
-      onPick={(next) => setPeerIcon.mutate(next)}
-    />
-  );
-}
-
-function IconPickerMenu({
-  icon,
-  tone,
-  label,
-  detected,
-  pending,
-  onPick,
-}: {
-  icon: DeviceIcon;
-  tone: StatusTone;
-  label: string;
-  detected: DeviceIcon | undefined;
-  pending: boolean;
-  onPick: (icon: DeviceIcon) => void;
-}) {
+  const detected = useAccountStatus().data?.detectedDeviceIcon ?? icon;
+  const onPick = (next: DeviceIcon) => setDeviceIcon.mutate(next);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label={`${label} icon: ${DEVICE_ICON_LABELS[icon]}. Change`}
         title="Change icon"
-        disabled={pending}
+        disabled={setDeviceIcon.isPending}
         className="group relative shrink-0 rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60"
       >
         <DeviceMark icon={icon} tone={tone} size="lg" />
@@ -155,7 +92,7 @@ function IconTiles({
 }: {
   icons: readonly DeviceIcon[];
   picked: DeviceIcon;
-  detected: DeviceIcon | undefined;
+  detected: DeviceIcon;
   onPick: (icon: DeviceIcon) => void;
 }) {
   return (

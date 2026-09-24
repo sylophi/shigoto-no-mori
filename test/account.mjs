@@ -543,9 +543,9 @@ async function main() {
         accountId: "a",
         deviceName: "d",
       });
-      // Picking the detected icon is the same as dropping the pick (a
-      // peer's picker sends the icon itself): it clears a stored pick,
-      // and with none stored there is nothing to write.
+      // Picking the detected icon is the same as dropping the pick (the
+      // picker sends the icon itself): it clears a stored pick, and with
+      // none stored there is nothing to write.
       assert.equal(setDeviceIcon(deps, "mini"), true);
       assert.equal(setDeviceIcon(deps, "laptop"), true);
       assert.equal(store.read().deviceIcon, undefined);
