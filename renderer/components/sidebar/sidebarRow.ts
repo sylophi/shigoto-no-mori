@@ -19,10 +19,11 @@ export interface RemoteProjectMember {
 // PR pill.
 export type StackPosition = { index: number; size: number };
 
-// How deep a row nests when it sits in a run of its stack's rows: 0
-// for the run's lowest layer, one more for each layer built on it.
-// Absent outside such a run.
-export type StackDepth = number;
+// A row's place under its stack's lowest row when the two sit in a
+// run of the stack's rows: one of the layers built on it, drawn as a
+// child in a tree, the last one closing the branch. Absent on the
+// lowest row and outside such a run.
+export type StackChild = "middle" | "last";
 
 export type SidebarRow =
   // A project header, for one repo wherever it is checked out: on this
@@ -53,7 +54,7 @@ export type SidebarRow =
       key: string;
       worktree: Worktree;
       mirror?: SidebarDeviceBadge;
-      stackDepth?: StackDepth;
+      stackChild?: StackChild;
     }
   // The inbox's own row: taller, cross-project, and built to be triaged
   // rather than picked out of a short list. See InboxRow. The project
@@ -98,7 +99,7 @@ export type SidebarRow =
       // row's off this machine's.
       pr: PullRequest | undefined;
       stack: StackPosition | null;
-      stackDepth?: StackDepth;
+      stackChild?: StackChild;
       groupId: string;
     }
   | {

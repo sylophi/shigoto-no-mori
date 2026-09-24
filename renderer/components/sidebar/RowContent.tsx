@@ -45,7 +45,7 @@ export function RowContent({
         <WorktreeRow
           worktree={row.worktree}
           mirror={row.mirror}
-          stackDepth={row.stackDepth}
+          stackChild={row.stackChild}
         />
       );
     case "remote-worktree":
@@ -59,7 +59,7 @@ export function RowContent({
           tone={row.tone}
           pr={row.pr}
           stack={row.stack}
-          stackDepth={row.stackDepth}
+          stackChild={row.stackChild}
         />
       );
     case "inbox-worktree":

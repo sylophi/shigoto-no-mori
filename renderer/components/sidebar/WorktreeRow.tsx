@@ -13,7 +13,7 @@ import type { PullRequest, Worktree } from "@shared/schemas";
 import { ActivityIcon } from "./ActivityIcon";
 import { PullRequestPill } from "./PullRequestPill";
 import { StatusIndicator } from "./StatusIndicator";
-import type { StackDepth } from "./sidebarRow";
+import type { StackChild } from "./sidebarRow";
 import { useWorktreeRowState } from "./useWorktreeRowState";
 
 interface WorktreeRowProps {
@@ -21,7 +21,7 @@ interface WorktreeRowProps {
   // The peer this worktree is mirrored with, when it is: the row then
   // stands for both copies and wears the peer's badge.
   mirror?: SidebarDeviceBadge;
-  stackDepth?: StackDepth;
+  stackChild?: StackChild;
 }
 
 // The row button's shared shell, also worn by RemoteWorktreeRow so a
@@ -59,31 +59,35 @@ export function WorktreeRowLabel({
   );
 }
 
-// A stack's rows draw as a tree: every layer above the run's lowest
-// one steps in, with the same corner connector a file tree hangs a
-// child on, so the rows read as built on each other. The indent
-// stays shallow and caps early, since a deep stack in a narrow
-// sidebar would otherwise crush its own labels.
-const STACK_STEP_PX = 12;
-const STACK_MAX_STEPS = 4;
-
-export function stackIndentStyle(
-  depth: StackDepth | undefined,
-): CSSProperties | undefined {
-  if (!depth) return undefined;
-  const inset = Math.min(depth, STACK_MAX_STEPS) * STACK_STEP_PX;
-  return { marginLeft: inset, width: `calc(100% - ${inset}px)` };
-}
-
-// The corner is two filled strips rather than a bordered box: doubutsu
+// A stack's rows draw as a file tree: the lowest layer is the parent
+// and every layer built on it a child one step in, hung on the same
+// connectors a file tree uses (a tee, the last child a corner). The
+// connector is filled strips rather than a bordered box: doubutsu
 // clears every border color, and a connector that vanishes with the
 // theme would leave the indent unexplained.
-export function StackConnector({ depth }: { depth: StackDepth | undefined }) {
-  if (!depth) return null;
+const STACK_CHILD_INSET_PX = 12;
+
+export function stackIndentStyle(
+  child: StackChild | undefined,
+): CSSProperties | undefined {
+  if (!child) return undefined;
+  return {
+    marginLeft: STACK_CHILD_INSET_PX,
+    width: `calc(100% - ${STACK_CHILD_INSET_PX}px)`,
+  };
+}
+
+export function StackConnector({ child }: { child: StackChild | undefined }) {
+  if (!child) return null;
   return (
-    <span aria-hidden className="absolute top-0 -left-2 h-1/2 w-1.5">
-      <span className="absolute inset-y-0 left-0 w-px bg-muted-foreground/40" />
-      <span className="absolute inset-x-0 bottom-0 h-px bg-muted-foreground/40" />
+    <span aria-hidden className="absolute inset-y-0 -left-2 w-1.5">
+      <span
+        className={cn(
+          "absolute top-0 left-0 w-px bg-muted-foreground/40",
+          child === "last" ? "h-1/2" : "bottom-0",
+        )}
+      />
+      <span className="absolute inset-x-0 top-1/2 h-px bg-muted-foreground/40" />
     </span>
   );
 }
@@ -91,7 +95,7 @@ export function StackConnector({ depth }: { depth: StackDepth | undefined }) {
 export function WorktreeRow({
   worktree,
   mirror,
-  stackDepth,
+  stackChild,
 }: WorktreeRowProps) {
   const { isSelected, open, activity, isDeleting, title } =
     useWorktreeRowState(worktree);
@@ -110,9 +114,9 @@ export function WorktreeRow({
         isSelected && "bg-accent text-accent-foreground",
         isDeleting && "opacity-50",
       )}
-      style={stackIndentStyle(stackDepth)}
+      style={stackIndentStyle(stackChild)}
     >
-      <StackConnector depth={stackDepth} />
+      <StackConnector child={stackChild} />
       <WorktreeRowLabel worktree={worktree} emphasized={isSelected} />
       <RowTrailing
         worktree={worktree}

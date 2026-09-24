@@ -418,11 +418,11 @@ export function deviceBadgeOf(item: RemoteForestItem): SidebarDeviceBadge {
 type LocalRow = Extract<SidebarRow, { kind: "worktree" }>;
 type RemoteRow = Extract<SidebarRow, { kind: "remote-worktree" }>;
 
-// A stack's rows as a tree: each run of two or more consecutive rows
-// of one stack (keyed by its bottom PR) nests each row by how many
-// layers it sits above the run's lowest one, so the rows read as
-// built on each other. A stack with a single row showing (its other
-// layers shelved, or on a device the filter hides) nests nothing.
+// A stack's rows as a tree: in each run of two or more consecutive
+// rows of one stack (keyed by its bottom PR), the lowest row is the
+// parent and every row above it a child under it, the last closing
+// the branch. A stack with a single row showing (its other layers
+// shelved, or on a device the filter hides) nests nothing.
 function nestStacks(
   rows: (LocalRow | RemoteRow)[],
   prs: Record<string, PullRequest> | undefined,
@@ -441,9 +441,8 @@ function nestStacks(
       while (end + 1 < rows.length && keyAt(end + 1) === key) end += 1;
     }
     if (key !== null && end > start) {
-      const lowest = stacks[start]!.index;
-      for (let i = start; i <= end; i++) {
-        rows[i] = { ...rows[i]!, stackDepth: stacks[i]!.index - lowest };
+      for (let i = start + 1; i <= end; i++) {
+        rows[i] = { ...rows[i]!, stackChild: i === end ? "last" : "middle" };
       }
     }
     start = end + 1;
