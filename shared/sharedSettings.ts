@@ -33,7 +33,52 @@ export const sharedSettingKeys = {
   // like every other key, so the rule's paths never spend the
   // document's entry budget, and a pick replaces the rule whole.
   leaveOutPreset: (identity: string) => `leaveOutPreset/${identity}`,
+  // The worktrees the sidebar hides the way it hides shelved ones, in
+  // every project. The value is the prefixes, one per line
+  // (hiddenPrefixesValue).
+  hiddenWorktreePrefixes: "hiddenWorktreePrefixes",
 };
+
+// The prefixes trimmed, deduped and sorted, so the same list is the
+// same value. Blank ones are nothing to match.
+export function normalizeHiddenPrefixes(prefixes: readonly string[]): string[] {
+  const trimmed = prefixes.map((prefix) => prefix.trim()).filter(Boolean);
+  return [...new Set(trimmed)].toSorted();
+}
+
+// The hidden-worktree prefixes as their entry holds them.
+export function parseHiddenPrefixes(value: string | undefined): string[] {
+  return value === undefined ? [] : normalizeHiddenPrefixes(value.split("\n"));
+}
+
+// The prefixes as their entry's value, or null when they outgrow what
+// a value holds.
+export function hiddenPrefixesValue(
+  prefixes: readonly string[],
+): string | null {
+  const value = normalizeHiddenPrefixes(prefixes).join("\n");
+  return SharedSettingValueSchema.safeParse(value).success ? value : null;
+}
+
+// Whether a worktree's name or branch starts with one of the prefixes.
+// A primary is never hidden, the same way it can never be shelved. A
+// detached worktree has no branch, only a commit hash in its place.
+export function isHiddenByPrefix(
+  worktree: {
+    name: string;
+    branch: string;
+    isPrimary: boolean;
+    detached: boolean;
+  },
+  prefixes: readonly string[],
+): boolean {
+  if (worktree.isPrimary) return false;
+  return prefixes.some(
+    (prefix) =>
+      worktree.name.startsWith(prefix) ||
+      (!worktree.detached && worktree.branch.startsWith(prefix)),
+  );
+}
 
 // The preset: the base in force and each base's exceptions as
 // root-relative paths, both kept so a switch of base and back loses

@@ -1,4 +1,4 @@
-import { Archive, ChevronDown, GitMerge } from "lucide-react";
+import { Archive, ChevronDown, EyeOff, GitMerge } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { InboxShelf } from "../sidebarRow";
 
@@ -16,6 +16,11 @@ const SHELVES: Record<
     Icon: GitMerge,
     hint: "Branches already landed on the primary, or with a merged PR",
   },
+  hidden: {
+    label: "Hidden",
+    Icon: EyeOff,
+    hint: "Worktrees that start with a hidden prefix",
+  },
 };
 
 interface InboxShelfRowProps {
@@ -26,8 +31,8 @@ interface InboxShelfRowProps {
 }
 
 // A shelf header: label, hairline rule, chevron. Collapsed, the count is
-// the shelf's whole footprint. That's the point, since both shelves
-// hold work the user has already decided not to look at.
+// the shelf's whole footprint. That's the point, since every shelf
+// holds work the user has already decided not to look at.
 export function InboxShelfRow({
   shelf,
   count,

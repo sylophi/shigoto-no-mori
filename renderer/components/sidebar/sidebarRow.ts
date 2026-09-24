@@ -4,9 +4,14 @@ import type { Project, PullRequest, Worktree } from "@shared/schemas";
 import type { StatusTone } from "@/components/ui/status-dot";
 import type { SidebarDeviceBadge } from "./DeviceBadge";
 
-// The two shelves the inbox view folds shut by default. The third box
-// (the live one) has no header and no toggle, so it isn't in this union.
-export type InboxShelf = "shelved" | "merged";
+// The shelves the inbox view folds shut by default. The live box has
+// no header and no toggle, so it isn't in this union.
+export type InboxShelf = "shelved" | "merged" | "hidden";
+
+// The folds under a tree group's rows, in order: the worktrees the
+// user shelved, and those the hidden prefixes match.
+export const GROUP_SHELVES = ["shelved", "hidden"] as const;
+export type GroupShelf = (typeof GROUP_SHELVES)[number];
 
 // One peer device's checkout of a project group.
 export interface RemoteProjectMember {
@@ -103,6 +108,7 @@ export type SidebarRow =
       // The shelf is the group's: a local project's, or a peer-only
       // group's (remoteGroupId).
       groupId: string;
+      shelf: GroupShelf;
       count: number;
       expanded: boolean;
     }

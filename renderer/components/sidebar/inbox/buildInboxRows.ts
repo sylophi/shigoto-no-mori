@@ -12,6 +12,7 @@ import {
 } from "@shared/schemas";
 import {
   deviceBadgeOf,
+  groupShelfOf,
   mirrorBadgeLookup,
   mirrorPairsOf,
   remoteWorktreeKey,
@@ -27,7 +28,7 @@ interface BuildInboxRowsArgs {
   pullRequestQueries: ProjectPullRequestQueries;
   // Carries each project's showPrimaryInInbox opt-in.
   configQueries: ProjectShigomoriConfigQueries;
-  // Peers' forests, filed into the same three boxes as this machine's:
+  // Peers' forests, filed into the same boxes as this machine's:
   // the inbox is one list of everything in flight, wherever it lives.
   // Each item already carries the peer's PR map and its primary opt-in,
   // the same two facts the local queries above answer per project.
@@ -40,6 +41,8 @@ interface BuildInboxRowsArgs {
   // folded on every launch, the same reasoning as the per-group
   // "Show shelved" reveal in the classic view.
   openShelves: Set<InboxShelf>;
+  // Worktrees starting with one of these go on the Hidden shelf.
+  hiddenPrefixes: readonly string[];
 }
 
 interface Entry {
@@ -55,15 +58,18 @@ interface Entry {
 
 // A worktree lands in exactly one box. Shelving is an explicit user
 // decision, so it outranks mergedness: a shelved branch that also merged
-// stays where the user filed it. A primary is always live: it can't be
+// stays where the user filed it. The hidden prefixes are one too, just
+// made ahead of time. A primary is always live: it can't be
 // shelved, and a merged PR on whatever branch it happens to have checked
 // out doesn't make the project's root "done".
 function bucketFor(
   worktree: Worktree,
   pr: PullRequest | undefined,
+  prefixes: readonly string[],
 ): InboxShelf | "live" {
   if (worktree.isPrimary) return "live";
-  if (worktree.shelved) return "shelved";
+  const shelf = groupShelfOf(worktree, prefixes);
+  if (shelf !== null) return shelf;
   if (worktree.mergedIntoPrimary || pr?.state === "MERGED") return "merged";
   return "live";
 }
@@ -96,8 +102,8 @@ function worktreeRow(entry: Entry): SidebarRow {
 }
 
 // Flattens every project's worktrees (this machine's and every peer's)
-// into the inbox view's three boxes: live work at the top with no
-// header, then the Shelved and Merged shelves. Primary checkouts are
+// into the inbox view's boxes: live work at the top with no header,
+// then the Shelved, Merged and Hidden shelves. Primary checkouts are
 // left out unless the project opts in
 // (ShigomoriConfigSchema.showPrimaryInInbox). They're a project's
 // root, not a piece of in-flight work, and one per project would crowd
@@ -114,6 +120,7 @@ export function buildInboxRows({
   mirrors,
   deviceBadges,
   openShelves,
+  hiddenPrefixes,
 }: BuildInboxRowsArgs): SidebarViewModel {
   const { peerRowsFolded, peerOfLocal } = mirrorPairsOf(mirrors);
   // Failed listings, local or remote, hold the empty message back (the
@@ -125,10 +132,17 @@ export function buildInboxRows({
   const mirrorBadgeFor = mirrorBadgeLookup(peerOfLocal, deviceBadges);
 
   const live: Entry[] = [];
-  const shelves: Record<InboxShelf, Entry[]> = { shelved: [], merged: [] };
+  const shelves: Record<InboxShelf, Entry[]> = {
+    shelved: [],
+    merged: [],
+    hidden: [],
+  };
   // Filed for every shelved worktree, open shelf or not. It's the
   // folded case that revealKey needs an answer for. Keyed like the rows.
   const shelfOf = new Map<string, InboxShelf>();
+  // Where each of this machine's entries filed, for the peers' rows to
+  // fold into.
+  const localBucket = new Map<string, InboxShelf | "live">();
   const file = (
     project: Project,
     trees: Worktree[],
@@ -148,7 +162,8 @@ export function buildInboxRows({
         mirror: device === undefined ? mirrorBadgeFor(worktree) : undefined,
         activityAt: worktreeLastActivityAt(worktree),
       };
-      const bucket = bucketFor(worktree, entry.pr);
+      const bucket = bucketFor(worktree, entry.pr, hiddenPrefixes);
+      if (device === undefined) localBucket.set(worktree.id, bucket);
       if (bucket === "live") {
         live.push(entry);
       } else {
@@ -167,33 +182,39 @@ export function buildInboxRows({
       undefined,
     );
   });
-  // A peer's row folds only into a local entry that files as live: a
-  // local copy on a shelf would take the peer's healthy worktree off
-  // the list with it.
-  const liveLocal = new Set(
-    live.filter((e) => e.device === undefined).map((e) => e.worktree.id),
-  );
-  const foldedInto = (peerKey: string): string | undefined => {
-    const local = peerRowsFolded.get(peerKey);
-    return local !== undefined && liveLocal.has(local) ? local : undefined;
-  };
+  // A peer's row folds only into a local entry filed in the same box:
+  // a local copy on a shelf would take the peer's live worktree off
+  // the list with it. The local row a folded peer's reveal lands on,
+  // by the peer's key.
+  const foldedPeers = new Map<string, string>();
   for (const item of remote) {
     file(
       item.project,
-      item.worktrees.filter(
-        (worktree) =>
-          foldedInto(remoteWorktreeKey(item.deviceId, worktree.id)) ===
-          undefined,
-      ),
+      item.worktrees.filter((worktree) => {
+        const key = remoteWorktreeKey(item.deviceId, worktree.id);
+        const local = peerRowsFolded.get(key);
+        if (local === undefined) return true;
+        const pr = item.pullRequests[worktree.branch];
+        if (
+          localBucket.get(local) !== bucketFor(worktree, pr, hiddenPrefixes)
+        ) {
+          return true;
+        }
+        foldedPeers.set(key, local);
+        return false;
+      }),
       item.pullRequests,
       item.showPrimaryInInbox,
       deviceBadges.get(item.deviceId) ?? deviceBadgeOf(item),
     );
   }
 
-  const total = live.length + shelves.shelved.length + shelves.merged.length;
+  const total = Object.values(shelves).reduce(
+    (sum, entries) => sum + entries.length,
+    live.length,
+  );
   const rows: SidebarRow[] = live.toSorted(byRecency).map(worktreeRow);
-  for (const shelf of ["shelved", "merged"] as const) {
+  for (const shelf of ["shelved", "merged", "hidden"] as const) {
     const entries = shelves[shelf];
     if (entries.length === 0) continue;
     const expanded = openShelves.has(shelf);
@@ -222,13 +243,13 @@ export function buildInboxRows({
         ? "No worktrees yet."
         : null,
     revealKey: (_projectId, worktreeId, deviceId) => {
-      const key = entryKey(worktreeId, deviceId);
+      // A peer's worktree folded into its local mirror: reveal that.
+      const peerKey = entryKey(worktreeId, deviceId);
+      const local = foldedPeers.get(peerKey);
+      const key = local === undefined ? peerKey : `w:${local}`;
       const shelf = shelfOf.get(key);
       if (shelf && !openShelves.has(shelf)) return `shelf:${shelf}`;
-      if (rows.some((r) => r.key === key)) return key;
-      // A peer's worktree folded into its local mirror: reveal that.
-      const local = deviceId === undefined ? undefined : foldedInto(key);
-      return local !== undefined ? `w:${local}` : null;
+      return rows.some((r) => r.key === key) ? key : null;
     },
   };
 }

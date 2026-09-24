@@ -1,5 +1,6 @@
 import { placeByStack, trunkOf } from "@shared/pullRequestStack";
 import { MACHINE_FALLBACK_ICON } from "@shared/account/deviceIcon";
+import { isHiddenByPrefix } from "@shared/sharedSettings";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
@@ -11,10 +12,12 @@ import type {
   Worktree,
 } from "@shared/schemas";
 import type { SidebarDeviceBadge } from "./DeviceBadge";
-import type {
-  RemoteProjectMember,
-  SidebarRow,
-  SidebarViewModel,
+import {
+  GROUP_SHELVES,
+  type GroupShelf,
+  type RemoteProjectMember,
+  type SidebarRow,
+  type SidebarViewModel,
 } from "./sidebarRow";
 import { sortByProject } from "@/lib/sortProjects";
 
@@ -29,7 +32,10 @@ interface BuildSidebarRowsArgs {
   // Re-applied over the groups, so a peer-only project sorts among the
   // local ones (`projects` arrives already in this order).
   sortMode: ProjectSortMode;
-  shelvedExpanded: Set<string>;
+  // The groups whose shelf is open, per shelf.
+  openShelves: Record<GroupShelf, Set<string>>;
+  // Worktrees starting with one of these fold away like shelved ones.
+  hiddenPrefixes: readonly string[];
   arrangeMode: boolean;
   // Peer devices' forests, merged into the tree: a remote project
   // sharing a local project's repo identity contributes its worktrees
@@ -88,6 +94,17 @@ export function mirrorBadgeLookup(
   };
 }
 
+// Which fold a worktree sits behind in its group, if any. Shelving is
+// the user's own call, so it outranks the prefixes. The inbox files by
+// the same rule.
+export function groupShelfOf(
+  worktree: Worktree,
+  prefixes: readonly string[],
+): GroupShelf | null {
+  if (worktree.shelved) return "shelved";
+  return isHiddenByPrefix(worktree, prefixes) ? "hidden" : null;
+}
+
 // Flattens `projects` plus their per-project worktree queries into the
 // SidebarRow list the virtualizer renders. A plain function, not a hook:
 // the queries are subscribed once by the Sidebar and handed to whichever
@@ -103,7 +120,8 @@ export function buildSidebarRows({
   pullRequestQueries,
   collapsed,
   sortMode,
-  shelvedExpanded,
+  openShelves,
+  hiddenPrefixes,
   arrangeMode,
   remote,
   mirrors,
@@ -113,36 +131,42 @@ export function buildSidebarRows({
   const mirrorBadgeFor = mirrorBadgeLookup(peerOfLocal, deviceBadges);
   // The local rows this build lists, decided up front: a peer's row
   // folds only into a local row that is really on screen. Its listing
-  // still loading or failed, or its shelf folded, the peer's row stays
+  // still loading or failed, or its fold shut, the peer's row stays
   // its own, or a healthy worktree would vanish behind a local gap. The
-  // one exception is a peer's shelved row in the same group: it only
-  // shows with that group's shelf open, where every listed local row
-  // shows too, so it folds into any of them and the shelf's count holds
-  // still across the toggle.
-  const listedLocal = new Map<string, { groupId: string; shown: boolean }>();
+  // one exception is a peer's row behind the same fold of the same
+  // group as the local row: the two only ever show together, so it
+  // folds in and the fold's count holds still across the toggle.
+  const listedLocal = new Map<
+    string,
+    { groupId: string; shelf: GroupShelf | null; shown: boolean }
+  >();
   projects.forEach((project, i) => {
     if (collapsed.has(project.id) || project.pathExists === false) return;
     const query = worktreeQueries[i];
     // A failed refetch keeps its last data, but the group draws the
     // error row instead of it.
     if (!query || query.error) return;
-    const shelfOpen = shelvedExpanded.has(project.id);
     for (const worktree of (query.data ?? []) as Worktree[]) {
+      const shelf = groupShelfOf(worktree, hiddenPrefixes);
       listedLocal.set(worktree.id, {
         groupId: project.id,
-        shown: !worktree.shelved || shelfOpen,
+        shelf,
+        shown: shelf === null || openShelves[shelf].has(project.id),
       });
     }
   });
   const foldedInto = (
     peerKey: string,
-    shelved: boolean,
+    shelf: GroupShelf | null,
     groupId: string,
   ): boolean => {
     const local = peerRowsFolded.get(peerKey);
     const listed = local === undefined ? undefined : listedLocal.get(local);
     if (!listed) return false;
-    return listed.shown || (shelved && listed.groupId === groupId);
+    return (
+      listed.shown ||
+      (shelf !== null && listed.shelf === shelf && listed.groupId === groupId)
+    );
   };
   const localRows = (trees: Worktree[]): LocalRow[] =>
     trees.map((worktree) => ({
@@ -234,6 +258,8 @@ export function buildSidebarRows({
   const rows: SidebarRow[] = [];
   // The header a folded group's peer rows stand behind, for revealKey.
   const foldedPeerRows = new Map<string, string>();
+  // The toggle each row behind a shut fold stands behind, likewise.
+  const shutFoldRows = new Map<string, string>();
   for (const group of sortByProject(groups, sortMode, (g) => g.project)) {
     const { groupId, project, query } = group;
     const expanded = !collapsed.has(groupId);
@@ -265,18 +291,21 @@ export function buildSidebarRows({
     // path below: a claimed group that then skipped rendering (local
     // listing still loading, or errored) would vanish from the tree
     // entirely, hiding the peer's perfectly healthy worktrees behind a
-    // local-only failure. Their shelved ones share the group's shelf
-    // with the local ones, so a device showing only peers' work (the
-    // web client) can still reach them.
+    // local-only failure. Their shelved and hidden ones share the
+    // group's folds with the local ones, so a device showing only
+    // peers' work (the web client) can still reach them.
     const remoteVisible: RemoteRow[] = [];
-    const remoteShelved: RemoteRow[] = [];
+    const remoteShelves = emptyShelves<RemoteRow>();
+    const folded = (peerKey: string, worktree: Worktree) =>
+      foldedInto(peerKey, groupShelfOf(worktree, hiddenPrefixes), groupId);
     for (const item of group.remote) {
-      for (const row of remoteWorktreeRows(item, groupId, foldedInto)) {
-        (row.worktree.shelved ? remoteShelved : remoteVisible).push(row);
+      for (const row of remoteWorktreeRows(item, groupId, folded)) {
+        const shelf = groupShelfOf(row.worktree, hiddenPrefixes);
+        (shelf === null ? remoteVisible : remoteShelves[shelf]).push(row);
       }
     }
-    const localShelved: Worktree[] = [];
     const localVisible: Worktree[] = [];
+    const localShelves = emptyShelves<Worktree>();
     if (query?.isLoading) {
       rows.push({
         kind: "worktree-skeleton",
@@ -291,7 +320,8 @@ export function buildSidebarRows({
       });
     } else if (query) {
       for (const worktree of (query.data ?? []) as Worktree[]) {
-        (worktree.shelved ? localShelved : localVisible).push(worktree);
+        const shelf = groupShelfOf(worktree, hiddenPrefixes);
+        (shelf === null ? localVisible : localShelves[shelf]).push(worktree);
       }
     }
     // A stack's rows sit together as a tree, bottom layer first,
@@ -314,17 +344,30 @@ export function buildSidebarRows({
         return item;
       });
     rows.push(...placed(localVisible, remoteVisible));
-    const shelvedCount = localShelved.length + remoteShelved.length;
-    if (shelvedCount > 0) {
-      const shelfOpen = shelvedExpanded.has(groupId);
-      if (shelfOpen) rows.push(...placed(localShelved, remoteShelved));
+    for (const shelf of GROUP_SHELVES) {
+      const count = localShelves[shelf].length + remoteShelves[shelf].length;
+      if (count === 0) continue;
+      const shelfOpen = openShelves[shelf].has(groupId);
+      const toggleKey = `${shelf}:${groupId}`;
+      if (shelfOpen) {
+        rows.push(...placed(localShelves[shelf], remoteShelves[shelf]));
+      } else {
+        for (const worktree of localShelves[shelf]) {
+          shutFoldRows.set(`w:${worktree.id}`, toggleKey);
+        }
+        for (const row of remoteShelves[shelf]) {
+          shutFoldRows.set(row.key, toggleKey);
+        }
+      }
       // Always anchored at the bottom of the project's section:
-      // "N shelved" reveals, "Hide shelved" collapses.
+      // "N shelved" reveals, "Hide shelved" collapses (and the same
+      // for hidden).
       rows.push({
         kind: "shelved-toggle",
-        key: `shelf:${groupId}`,
+        key: toggleKey,
         groupId,
-        count: shelvedCount,
+        shelf,
+        count,
         expanded: shelfOpen,
       });
     }
@@ -336,32 +379,41 @@ export function buildSidebarRows({
     // "no projects", which the shell already has its own answer for.
     emptyMessage: null,
     revealKey: (projectId, worktreeId, deviceId) => {
+      // A row behind a shut shelved or hidden fold: its toggle
+      // stands in for it.
+      const shown = (key: string) =>
+        rows.some((r) => r.key === key) ? key : shutFoldRows.get(key);
       // A peer's row is device-qualified (remoteWorktreeRows). It
       // is absent while its listing is in flight, which reveals
       // nothing, or while its group is folded, where the header stands
       // in for it the way a local worktree's does.
       if (deviceId !== undefined) {
         const key = remoteWorktreeKey(deviceId, worktreeId);
-        if (rows.some((r) => r.key === key)) return key;
         // A peer's worktree folded into its local mirror: reveal that.
         const local = peerRowsFolded.get(key);
-        if (local !== undefined && rows.some((r) => r.key === `w:${local}`)) {
-          return `w:${local}`;
-        }
-        return foldedPeerRows.get(key) ?? null;
+        return (
+          shown(key) ??
+          (local === undefined ? undefined : shown(`w:${local}`)) ??
+          foldedPeerRows.get(key) ??
+          null
+        );
       }
-      return rows.some((r) => r.key === `w:${worktreeId}`)
-        ? `w:${worktreeId}`
-        : // Only a folded project stands in for its worktree. A missing
-          // row in an open project means the listing hasn't landed yet,
-          // and settling for the header there would mark the reveal done
-          // and never scroll to the row once it appears.
-          collapsed.has(projectId)
-          ? headerKeyIfPresent(rows, projectId)
-          : null;
+      return (
+        shown(`w:${worktreeId}`) ??
+        // Only a folded project stands in for its worktree. A missing
+        // row in an open project means the listing hasn't landed yet,
+        // and settling for the header there would mark the reveal done
+        // and never scroll to the row once it appears.
+        (collapsed.has(projectId) ? headerKeyIfPresent(rows, projectId) : null)
+      );
     },
   };
 }
+
+const emptyShelves = <T>(): Record<GroupShelf, T[]> => ({
+  shelved: [],
+  hidden: [],
+});
 
 // A collapsed project hides its worktree rows, so its header is the
 // closest thing there is to reveal.
@@ -417,13 +469,13 @@ type RemoteRow = Extract<SidebarRow, { kind: "remote-worktree" }>;
 function remoteWorktreeRows(
   item: RemoteForestItem,
   groupId: string,
-  foldedInto: (peerKey: string, shelved: boolean, groupId: string) => boolean,
+  folded: (peerKey: string, worktree: Worktree) => boolean,
 ): RemoteRow[] {
   const rows: RemoteRow[] = [];
   for (const worktree of item.worktrees) {
     const key = remoteWorktreeKey(item.deviceId, worktree.id);
     // The local row of a mirrored pair stands for both copies.
-    if (foldedInto(key, worktree.shelved, groupId)) continue;
+    if (folded(key, worktree)) continue;
     rows.push({
       kind: "remote-worktree",
       key,
