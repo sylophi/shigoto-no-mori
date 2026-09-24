@@ -12,9 +12,11 @@ import { countWithin, maxTimestamp, pruneAndPush } from "../util/useLog";
 
 const USE_LOG_KEY = "packageScriptUseLog";
 const SORT_KEY = "packageScriptSort";
+const ORDER_KEY = "packageScriptOrder";
 
 type UseLog = Record<string, Record<string, number[]>>;
 type SortMap = Record<string, PackageScriptSortMode>;
+type OrderMap = Record<string, string[]>;
 
 // "frequent" is the implicit default: new repos open with the most-used
 // scripts on top, and switching back to it deletes the persisted entry
@@ -46,6 +48,51 @@ export function writeScriptSort(
     map[projectId] = mode;
   }
   stateStore.writeKey<SortMap>(SORT_KEY, map);
+}
+
+export function readScriptOrder(projectId: string): string[] {
+  const map = stateStore.readHint<OrderMap>(ORDER_KEY, {});
+  return map[projectId] ?? [];
+}
+
+// `arranged` is one worktree's scripts in their new order. Merged here,
+// against the stored order read under the lock, rather than by the
+// client against its cached copy, which another window may have written
+// past.
+export function writeScriptOrder(projectId: string, arranged: string[]): void {
+  stateStore.updateKey<OrderMap>(ORDER_KEY, {}, (map) => {
+    const current = map[projectId] ?? [];
+    const next = mergeArrangedOrder(current, arranged);
+    const unchanged =
+      current.length === next.length &&
+      current.every((name, i) => name === next[i]);
+    return unchanged ? undefined : { ...map, [projectId]: next };
+  });
+}
+
+// The stored order after one worktree arranges its scripts. Scripts it
+// lacks (another branch's) stay stored, each right behind the nearest
+// script it followed that this worktree does have, so "deploy comes
+// after dev" survives a branch without deploy moving dev. One with no
+// such script before it keeps to the front.
+export function mergeArrangedOrder(
+  stored: readonly string[],
+  arranged: readonly string[],
+): string[] {
+  const shown = new Set(arranged);
+  const followers = new Map<string | null, string[]>();
+  let anchor: string | null = null;
+  for (const name of stored) {
+    if (shown.has(name)) {
+      anchor = name;
+    } else {
+      followers.set(anchor, [...(followers.get(anchor) ?? []), name]);
+    }
+  }
+  return [
+    ...(followers.get(null) ?? []),
+    ...arranged.flatMap((name) => [name, ...(followers.get(name) ?? [])]),
+  ];
 }
 
 export function usageFor(

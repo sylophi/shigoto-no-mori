@@ -29,12 +29,17 @@ export type StoreCipher = {
 // that does not parse yields "", see token.ts), deviceName is always
 // set. deviceIcon is the owner's pick of what this device looks like
 // (shared/account/deviceIcon.ts), present only once they picked one:
-// absent, the device reports what it detected about itself.
+// absent, the device reports what it detected about itself. hubName
+// and hubIcon are what the device hub last held for this device as far
+// as this device knows (enroll.ts syncHubDevice), absent until the
+// first enrollment or registry read that tells it.
 export type StoredAccount = {
   credential: string;
   accountId: string;
   deviceName: string;
   deviceIcon?: DeviceIcon;
+  hubName?: string;
+  hubIcon?: DeviceIcon;
 };
 
 // The stored shape. `v` guards a future format change, `enc` records
@@ -46,6 +51,8 @@ type StoredShape = {
   accountId: string;
   deviceName: string;
   deviceIcon?: DeviceIcon;
+  hubName?: string;
+  hubIcon?: DeviceIcon;
 };
 
 // What a sign-out leaves behind, in the same slot: the device's name
@@ -106,16 +113,21 @@ function iconOf(
 }
 
 // The opened credential plus the identity the document keeps beside
-// it: the name always, the icon only when one was picked.
+// it: the name always, the icon only when one was picked, and the
+// hub's copies once known (a signed-out document keeps none: the row
+// they described is gone).
 function withIdentity(
   doc: StoredShape | SignedOutShape,
   opened: { credential: string; accountId: string },
 ): StoredAccount {
   const icon = iconOf(doc);
+  const hub: Partial<StoredShape> = "signedOut" in doc ? {} : doc;
   return {
     ...opened,
     deviceName: doc.deviceName,
     ...(icon === undefined ? {} : { deviceIcon: icon }),
+    ...(typeof hub.hubName === "string" ? { hubName: hub.hubName } : {}),
+    ...(isDeviceIcon(hub.hubIcon) ? { hubIcon: hub.hubIcon } : {}),
   };
 }
 
@@ -211,6 +223,8 @@ export function createAccountStore(opts: {
         deviceName: account.deviceName,
       };
       if (account.deviceIcon !== undefined) doc.deviceIcon = account.deviceIcon;
+      if (account.hubName !== undefined) doc.hubName = account.hubName;
+      if (account.hubIcon !== undefined) doc.hubIcon = account.hubIcon;
       storage.writeRaw(JSON.stringify(doc));
     },
 

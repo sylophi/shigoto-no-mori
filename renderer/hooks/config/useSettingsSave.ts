@@ -30,6 +30,7 @@ export interface SettingsFormState {
   autoPullNew: boolean;
   autoPullPrimaryOnly: boolean;
   doubutsuNames: boolean;
+  codexWorktreeNames: boolean;
   portPool: boolean;
   terrier: boolean;
   githubCli: boolean;
@@ -58,6 +59,7 @@ export function fromConfig(
     autoPullNew: config.autoPullNew ?? false,
     autoPullPrimaryOnly: config.autoPullPrimaryOnly ?? false,
     doubutsuNames: config.doubutsuNames ?? false,
+    codexWorktreeNames: config.codexWorktreeNames ?? false,
     portPool: config.portPool ?? false,
     terrier: config.terrier ?? false,
     githubCli: config.githubCli ?? true,
@@ -88,6 +90,7 @@ function managedDeviceConfig(state: SettingsFormState): GlobalConfig {
     autoPullNew: state.autoPullNew ? true : undefined,
     autoPullPrimaryOnly: state.autoPullPrimaryOnly ? true : undefined,
     doubutsuNames: state.doubutsuNames ? true : undefined,
+    codexWorktreeNames: state.codexWorktreeNames ? true : undefined,
     portPool: state.portPool ? true : undefined,
     terrier: state.terrier ? true : undefined,
     // Default is true; same opt-out serialization as deleteBranchOnRemove.
@@ -124,6 +127,7 @@ export function toDeviceSettingsPatch(
     autoPullNew: state.autoPullNew,
     autoPullPrimaryOnly: state.autoPullPrimaryOnly,
     doubutsuNames: state.doubutsuNames,
+    codexWorktreeNames: state.codexWorktreeNames,
     portPool: state.portPool,
     terrier: state.terrier,
     githubCli: state.githubCli,
@@ -202,6 +206,7 @@ interface SettingsSaveResult {
 export function invalidateDeviceSettingsQueries(
   queryClient: QueryClient,
   keys: QueryKeyRegistry,
+  worktreeNamesChanged: boolean,
 ): void {
   void queryClient.invalidateQueries({ queryKey: keys.globalConfig() });
   // Launcher catalogs for every project depend on global custom launchers.
@@ -215,6 +220,12 @@ export function invalidateDeviceSettingsQueries(
   // readiness depends only on the binary, not the toggle, so it
   // has nothing to invalidate here.)
   void queryClient.invalidateQueries({ queryKey: keys.projects() });
+  // Toggling Codex-style worktree names renames external worktrees in
+  // every project's list. Gated on the change because this refetch
+  // costs a git fan-out per worktree, unlike the ones above.
+  if (worktreeNamesChanged) {
+    void queryClient.invalidateQueries({ queryKey: keys.worktreesAll() });
+  }
 }
 
 // One Save over two stores, as ONE mutation so isPending, isSuccess and
@@ -241,6 +252,12 @@ export function useSettingsSave({
   const initialClientDoc = serialize(toClientConfig(initialState));
 
   return useMutation({
+    // Decided up front: initialState follows the live config query, which
+    // can refetch the saved value before onSuccess runs.
+    onMutate: (state: SettingsFormState) => ({
+      worktreeNamesChanged:
+        state.codexWorktreeNames !== initialState.codexWorktreeNames,
+    }),
     mutationFn: async (
       state: SettingsFormState,
     ): Promise<SettingsSaveResult> => {
@@ -284,7 +301,11 @@ export function useSettingsSave({
         clientConfig: persistedClientConfig,
       };
     },
-    onSuccess: ({ devicePersisted, clientPersisted, clientConfig }) => {
+    onSuccess: (
+      { devicePersisted, clientPersisted, clientConfig },
+      _state,
+      { worktreeNamesChanged },
+    ) => {
       if (clientPersisted) {
         // setQueryData where the device half invalidates: the
         // divergence is deliberate. No CLI merge can change the client
@@ -294,15 +315,23 @@ export function useSettingsSave({
         queryClient.setQueryData(queryKeys.clientConfig(), clientConfig);
       }
       if (devicePersisted) {
-        invalidateDeviceSettingsQueries(queryClient, queryKeys);
+        invalidateDeviceSettingsQueries(
+          queryClient,
+          queryKeys,
+          worktreeNamesChanged,
+        );
       }
     },
-    onError: (error) => {
+    onError: (error, _state, context) => {
       // A SettingsSaveError with devicePersisted means the device write
       // landed before the appearance write failed, so its caches are
       // stale exactly as on success.
       if (error instanceof SettingsSaveError && error.devicePersisted) {
-        invalidateDeviceSettingsQueries(queryClient, queryKeys);
+        invalidateDeviceSettingsQueries(
+          queryClient,
+          queryKeys,
+          context?.worktreeNamesChanged ?? true,
+        );
       }
     },
     meta: { errorTitle: "Couldn't save settings" },

@@ -7,7 +7,7 @@
 // AccountService, AccountStore, AccountServiceConfig), so the
 // account check script drives both paths with stubs.
 import { errorMessageOf } from "../errors";
-import type { EnrollResponse } from "../hub/protocol";
+import type { DeviceInfo, EnrollResponse } from "../hub/protocol";
 import { HubRequestError, isHubRefusal, type AccountService } from "./service";
 import type { AccountStore, StoredAccount } from "./credentialStore";
 import { isConfigured, type AccountServiceConfig } from "./serviceConfig";
@@ -89,6 +89,8 @@ export async function enrollDevice(
     accountId: deriveAccountId(token),
     deviceName,
     ...(deviceIcon === null ? {} : { deviceIcon }),
+    hubName: deviceName,
+    hubIcon: fields.icon,
   });
 }
 
@@ -160,62 +162,204 @@ export async function retryParkedRevoke(deps: {
   return true;
 }
 
-// A rename, both halves: the local store write (the name every status
-// read reports), then the hub push, best-effort like the sign-out
-// revoke, so the registry every other device lists carries the new
-// name at once. Signed out there is nothing to rename: the name is
-// the default until the next sign-in. The push is fire-and-forget on
-// purpose: an unreachable hub must not hold the caller, and a peer
-// that misses it sees the stored name at this device's next
-// enrollment anyway. Resolves true when a name was written.
-export function renameDevice(
-  deps: Pick<EnrollDeviceDeps, "config" | "service" | "store" | "deviceId">,
-  name: string,
-): boolean {
-  const record = deps.store.read();
-  if (record === null) return false;
-  deps.store.write({ ...record, deviceName: name });
-  pushDeviceUpdate(deps, record.credential, { name });
-  return true;
-}
+// A change to a device's name, its icon, or both.
+export type DeviceFields = { name?: string; icon?: DeviceIcon };
 
-// The icon pick, the rename's twin: the local store write (null drops
-// the pick, so the device goes back to what it detected), then the
-// best-effort hub push of the icon the device now reports. Picking
-// the detected icon drops the pick too, so a device put back to its
-// default carries no override a later, better detection could not
-// move. Resolves true when a pick was written. Signed out there is
-// nothing to pick against, like the rename, and a pick that changes
-// nothing (the current tile clicked again) writes and pushes nothing.
-export function setDeviceIcon(
+// A device's name and icon live on the hub, so any device of the
+// account can change them, this one or a peer, online or not. The
+// change is the hub write, awaited: one the hub never took did not
+// happen, so it throws rather than leave a name or mark only this
+// device shows. A change to THIS device is kept locally too, so the
+// status it resolves to already wears it. A peer takes its change from
+// the hub on its next registry read (syncHubDevice).
+export async function updateDevice(
   deps: Pick<
     EnrollDeviceDeps,
-    "config" | "service" | "store" | "deviceId" | "detectedIcon"
+    "service" | "store" | "deviceId" | "detectedIcon"
   >,
-  picked: DeviceIcon | null,
-): boolean {
-  const icon = picked === deps.detectedIcon ? null : picked;
-  const record = deps.store.read();
-  if (record === null || (record.deviceIcon ?? null) === icon) return false;
-  const { deviceIcon: _dropped, ...rest } = record;
-  deps.store.write(icon === null ? rest : { ...rest, deviceIcon: icon });
-  pushDeviceUpdate(deps, record.credential, {
-    icon: icon ?? deps.detectedIcon,
+  record: StoredAccount,
+  deviceId: string,
+  patch: DeviceFields,
+): Promise<void> {
+  // A stale push of this device's own values still out lands first, or
+  // it could land over this change.
+  const pending = stalePushes.get(deviceId);
+  if (pending !== undefined) {
+    await pending;
+    record = deps.store.read() ?? record;
+  }
+  await deps.service.update(record.credential, deviceId, patch);
+  if (deviceId !== deps.deviceId) return;
+  keepFields(deps, record, {
+    ...(patch.name === undefined
+      ? {}
+      : { deviceName: patch.name, hubName: patch.name }),
+    ...(patch.icon === undefined
+      ? {}
+      : { deviceIcon: pickOf(deps, patch.icon), hubIcon: patch.icon }),
   });
-  return true;
 }
 
-function pushDeviceUpdate(
-  deps: Pick<EnrollDeviceDeps, "config" | "service" | "deviceId">,
+// A change to this device's name made here without the hub (main's
+// default-name migration). The hub still holds the name it left, unless
+// it moved since, so the next registry read pushes the new one over it
+// (syncHubDevice).
+export function renameLocally(
+  store: AccountStore,
+  record: StoredAccount,
+  name: string,
+): StoredAccount {
+  const renamed = {
+    ...record,
+    deviceName: name,
+    hubName: record.hubName ?? record.deviceName,
+  };
+  store.write(renamed);
+  return renamed;
+}
+
+// Squares this device's name and icon with the registry the hub just
+// listed. hubName and hubIcon, what the hub last held as far as this
+// device knows, tell the two ways a field can differ apart:
+// - The hub moved: another device changed this one, adopted here.
+// - The hub did not move but this device did: a default name it
+//   migrated forward (renameLocally), a detection that improved with an
+//   upgrade (it has no pick, so it wears what it detects now). The hub
+//   copy is stale and gets this device's value, best-effort, recorded
+//   as the hub's once it lands.
+// A record from before these fields existed has no answer, so each
+// field takes the likelier one. A name only ever changed on this
+// device before, so a hub name that differs is a peer's rename and is
+// adopted. An icon differs most likely by a detection that improved
+// since the enrollment, so the listing is taken as where the hub was
+// and this device's icon corrects it rather than being pinned.
+// `listedUnder` is the record the listing was fetched under: a change
+// here that raced the read wins over it (keepFields). Resolves true
+// when the name or icon this device wears changed.
+export function syncHubDevice(
+  deps: Pick<
+    EnrollDeviceDeps,
+    "service" | "store" | "deviceId" | "detectedIcon"
+  >,
+  listedUnder: StoredAccount,
+  devices: readonly DeviceInfo[],
+): boolean {
+  const listed = devices.find((device) => device.deviceId === deps.deviceId);
+  if (listed === undefined) return false;
+  const changes: HubFieldChanges = {
+    hubName: listed.name,
+    hubIcon: listed.icon,
+  };
+  const stale: DeviceFields = {};
+  if (listedUnder.hubName !== listed.name) {
+    changes.deviceName = listed.name;
+  } else if (listedUnder.deviceName !== listed.name) {
+    stale.name = listedUnder.deviceName;
+  }
+  if (listed.icon !== (listedUnder.hubIcon ?? listed.icon)) {
+    changes.deviceIcon = pickOf(deps, listed.icon);
+  } else if (wornIcon(deps, listedUnder) !== listed.icon) {
+    stale.icon = wornIcon(deps, listedUnder);
+  }
+  const worn = keepFields(deps, listedUnder, changes);
+  if (
+    (stale.name !== undefined || stale.icon !== undefined) &&
+    !stalePushes.has(deps.deviceId)
+  ) {
+    stalePushes.set(
+      deps.deviceId,
+      pushStale(deps, listedUnder.credential, stale).finally(() =>
+        stalePushes.delete(deps.deviceId),
+      ),
+    );
+  }
+  return worn;
+}
+
+// The stale push in flight per device, so the registry reads that land
+// while one is out (a focus, several windows) do not repeat it, and a
+// change made here waits it out (updateDevice).
+const stalePushes = new Map<string, Promise<void>>();
+
+// The best-effort push of this device's own values over a stale hub
+// copy, recorded as the hub's once it lands, so a peer that later
+// changes a field back to the old value reads as the hub moving. A
+// value this device stopped wearing meanwhile is not recorded.
+async function pushStale(
+  deps: Pick<
+    EnrollDeviceDeps,
+    "service" | "store" | "deviceId" | "detectedIcon"
+  >,
   credential: string,
-  patch: Parameters<AccountService["update"]>[2],
-): void {
-  if (!isConfigured(deps.config)) return;
-  void deps.service
-    .update(credential, deps.deviceId, patch)
-    .catch((error: unknown) => {
-      console.warn(
-        `[account] could not push the device update to the device hub: ${errorMessageOf(error)}`,
-      );
-    });
+  stale: DeviceFields,
+): Promise<void> {
+  try {
+    await deps.service.update(credential, deps.deviceId, stale);
+  } catch (error) {
+    console.warn(
+      `[account] could not push this device's name or icon to the device hub: ${errorMessageOf(error)}`,
+    );
+    return;
+  }
+  const current = deps.store.read();
+  if (current === null || current.credential !== credential) return;
+  keepFields(deps, current, {
+    ...(current.deviceName === stale.name ? { hubName: stale.name } : {}),
+    ...(wornIcon(deps, current) === stale.icon ? { hubIcon: stale.icon } : {}),
+  });
+}
+
+// The icon this device wears: its owner's pick, else what it detects.
+// effectiveDeviceIcon's rule for a signed-in record, without its read
+// of the signed-out remainder.
+function wornIcon(
+  deps: Pick<EnrollDeviceDeps, "detectedIcon">,
+  record: StoredAccount,
+): DeviceIcon {
+  return record.deviceIcon ?? deps.detectedIcon;
+}
+
+// The detected icon is no pick, so a device put back to its default
+// carries no override a later, better detection could not move.
+function pickOf(
+  deps: Pick<EnrollDeviceDeps, "detectedIcon">,
+  icon: DeviceIcon,
+): DeviceIcon | undefined {
+  return icon === deps.detectedIcon ? undefined : icon;
+}
+
+// The fields keepFields may move: what this device wears, and what it
+// last saw on the hub.
+const HUB_FIELDS = ["deviceName", "deviceIcon", "hubName", "hubIcon"] as const;
+
+// A present deviceIcon key set to undefined drops the pick.
+type HubFieldChanges = Partial<
+  Pick<StoredAccount, (typeof HUB_FIELDS)[number]>
+>;
+
+// Writes `changes` over the record the caller started from. Re-reads
+// before writing, since the caller may have awaited the hub in between:
+// a sign-out or re-enrollment meanwhile, or a change or sync that
+// already moved one of these fields, wins over this write. Resolves
+// true when the name or icon this device wears changed.
+function keepFields(
+  deps: Pick<EnrollDeviceDeps, "store">,
+  startedFrom: StoredAccount,
+  changes: HubFieldChanges,
+): boolean {
+  const moves = (key: keyof HubFieldChanges) =>
+    key in changes && changes[key] !== startedFrom[key];
+  if (!HUB_FIELDS.some(moves)) return false;
+  const current = deps.store.read();
+  if (
+    current === null ||
+    current.credential !== startedFrom.credential ||
+    HUB_FIELDS.some((key) => current[key] !== startedFrom[key])
+  ) {
+    return false;
+  }
+  const next: StoredAccount = { ...current, ...changes };
+  if (next.deviceIcon === undefined) delete next.deviceIcon;
+  deps.store.write(next);
+  return moves("deviceName") || moves("deviceIcon");
 }

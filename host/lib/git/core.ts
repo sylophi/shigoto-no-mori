@@ -133,9 +133,9 @@ async function exec(
     : null;
   const { env: overlay, ...execOptions } = options;
   try {
-    // LC_ALL=C pins git's messages to English: deleteAnyLocalBranch and
-    // removeWorktreeForce match on stderr text, which gettext would
-    // otherwise translate.
+    // LC_ALL=C pins git's messages to English: deleteAnyLocalBranch
+    // matches on stderr text, which gettext would otherwise translate,
+    // and the errors the app relays read the same on every machine.
     const result = await execFileP("git", args, {
       env: { ...process.env, ...overlay, LC_ALL: "C" },
       ...execOptions,

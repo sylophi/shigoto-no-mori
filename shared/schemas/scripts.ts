@@ -41,6 +41,7 @@ export const PackageScriptSortModeSchema = z.enum([
   "alphabetical",
   "recent",
   "frequent",
+  "manual",
 ]);
 export type PackageScriptSortMode = z.infer<typeof PackageScriptSortModeSchema>;
 
@@ -53,6 +54,27 @@ export const RunPackageScriptPayloadSchema = WorktreeScopedPayloadSchema.extend(
 export const SetPackageScriptSortPayloadSchema =
   ProjectScopedPayloadSchema.extend({
     mode: PackageScriptSortModeSchema,
+  });
+
+// "manual" is newer than the other modes, and a client from before it
+// has no case for it. getSort only answers "manual" to a caller that
+// says it knows the mode. Anyone else gets the package.json order.
+export const GetPackageScriptSortPayloadSchema =
+  ProjectScopedPayloadSchema.extend({
+    knowsManual: z.boolean().optional(),
+  });
+
+// The "manual" sort's order, as script names. Project-wide while the
+// scripts themselves are per worktree, so it can name scripts a given
+// worktree's package.json lacks (those are skipped), and a script it
+// doesn't name trails the list in package.json order.
+export const PackageScriptOrderSchema = z.array(z.string().min(1));
+
+// One worktree's scripts, all of them, in the order they were arranged
+// into. The host merges it into the stored order under its lock.
+export const SetPackageScriptOrderPayloadSchema =
+  ProjectScopedPayloadSchema.extend({
+    arranged: PackageScriptOrderSchema,
   });
 
 export const CancelScriptPayloadSchema = z.object({

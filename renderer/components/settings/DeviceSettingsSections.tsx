@@ -75,6 +75,14 @@ export function DeviceToggleSections({
           label="Doubutsu names"
           description="Name new worktrees after Animal Crossing villagers and characters, like raymond, instead of adjective-animal pairs like snug-otter."
         />
+        <ToggleRow
+          checked={form.codexWorktreeNames}
+          onCheckedChange={(v) =>
+            setForm((prev) => ({ ...prev, codexWorktreeNames: v }))
+          }
+          label="Name Codex-style worktrees by their parent folder"
+          description="Codex and some other tools create worktrees as worktree-name/repo-name. When an external worktree's folder is just the repo's name, show the folder above it instead."
+        />
       </section>
 
       <section className="space-y-3">

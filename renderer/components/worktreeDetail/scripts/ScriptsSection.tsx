@@ -83,7 +83,11 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
 
   return (
     <div className="space-y-4">
-      {pkg && pkgHasScripts && <PackageScripts worktree={worktree} pkg={pkg} />}
+      {/* Keyed so arranging (and the search) stays with the worktree it
+          started in rather than following the page to the next one. */}
+      {pkg && pkgHasScripts && (
+        <PackageScripts key={worktree.id} worktree={worktree} pkg={pkg} />
+      )}
 
       {lifecycleRows.length > 0 && (
         <div className="space-y-2">

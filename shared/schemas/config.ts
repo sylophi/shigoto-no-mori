@@ -198,6 +198,14 @@ export const GlobalConfigSchema = z.object({
   // CLI at create time (cli/names.go) and by the host for the New
   // Worktree form's pre-pick (host/lib/worktrees/names.ts).
   doubutsuNames: z.boolean().optional(),
+  // When true, an external worktree whose folder is just the repo's
+  // name (Codex and other tools lay worktrees out as
+  // <worktree-name>/<repo-name>) is named after the folder above it.
+  // Off by default: a worktree that merely shares the repo's folder
+  // name would take whatever folder it sits in. Applied wherever
+  // worktrees are listed, by the host (host/lib/git/worktrees.ts) and
+  // the CLI (cli/gitx.go).
+  codexWorktreeNames: z.boolean().optional(),
   // When true, projects with a valid port-pool.config.json run
   // `port-pool provision` after setup at create and
   // `port-pool release` before teardown at delete.
@@ -308,6 +316,7 @@ export const DeviceSettingsPatchSchema = z.strictObject(
     autoPullNew: true,
     autoPullPrimaryOnly: true,
     doubutsuNames: true,
+    codexWorktreeNames: true,
     portPool: true,
     terrier: true,
     githubCli: true,

@@ -14,6 +14,7 @@
   "launchers:forProject",
   "mirror:history",
   "mirror:list",
+  "packageScripts:getOrder",
   "packageScripts:getSort",
   "packageScripts:list",
   "portPool:isActive",

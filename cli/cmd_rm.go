@@ -143,12 +143,12 @@ func execRemove(proj project, id worktreeIdentity, opts removeOptions) (string, 
 		}
 	}
 
-	if opts.force {
-		if err := removeWorktreeForce(proj.Path, id.Path); err != nil {
-			return "", err
-		}
-	} else if err := gitWorktreeRemove(proj.Path, id.Path, false); err != nil {
-		return "", err
+	// An orphaned checkout is git's side done, so the bookkeeping below
+	// still runs and the error follows it out.
+	removeErr := removeWorktreeDir(proj.Path, id.Path, opts.force)
+	var orphaned *orphanedWorktreeError
+	if removeErr != nil && !errors.As(removeErr, &orphaned) {
+		return "", removeErr
 	}
 	invalidateWorktreeIdentities(proj.ID)
 	if !id.IsExternal {
@@ -163,6 +163,9 @@ func execRemove(proj project, id worktreeIdentity, opts removeOptions) (string, 
 		(global.DeleteBranchOnRemove == nil || *global.DeleteBranchOnRemove)
 	deleteBranchAfterWorktreeRemoval(proj.Path, id, deleteBranch)
 	deleteWorktreeData(proj.ID, id.ID)
+	if removeErr != nil {
+		return "", removeErr
+	}
 
 	if cwdInside(id.Path) {
 		return proj.Path, nil

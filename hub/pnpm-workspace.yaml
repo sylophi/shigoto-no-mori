@@ -16,3 +16,9 @@ trustPolicy: no-downgrade
 allowBuilds:
   esbuild: true
   workerd: true
+# Force sharp >= 0.35.4 to patch the bundled libheif (GHSA-g89c-p67h-r497,
+# GHSA-2jg2-4ch7-h545). miniflare pins sharp to an exact version, and even
+# the newest @cloudflare/vitest-pool-workers still pins a miniflare on
+# 0.35.2. Drop this once wrangler and vitest-pool-workers ship past it.
+overrides:
+  "sharp@<0.35.4": "^0.35.4"

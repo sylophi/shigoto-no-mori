@@ -64,7 +64,7 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	// against proj/new paths), but warn so the user knows to move.
 	wasInside := cwdInside(id.Path)
 
-	if err := removeWorktreeForce(proj.Path, id.Path); err != nil {
+	if err := removeWorktreeDir(proj.Path, id.Path, true); err != nil {
 		return 1, err
 	}
 	invalidateWorktreeIdentities(proj.ID)

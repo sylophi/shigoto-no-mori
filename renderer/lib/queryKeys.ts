@@ -71,6 +71,7 @@ function buildQueryKeys(deviceId: string) {
     shigomoriConfig: (projectId: string | null) => host("shigomori", projectId),
 
     worktrees: (projectId: string | null) => host("worktrees", projectId),
+    worktreesAll: () => host("worktrees"),
     worktreeData: (projectId: string | null, worktreeId: string | null) =>
       host("worktreeData", projectId, worktreeId),
     // Every file diff of one worktree sits under this prefix, so the
@@ -130,6 +131,8 @@ function buildQueryKeys(deviceId: string) {
       host("packageScripts", projectId, worktreeId),
     packageScriptSort: (projectId: string | null) =>
       host("packageScriptSort", projectId),
+    packageScriptOrder: (projectId: string | null) =>
+      host("packageScriptOrder", projectId),
 
     portPoolInstalled: () => host("portPoolInstalled"),
     // The merged pool + custom port list with its liveness probe. Polled

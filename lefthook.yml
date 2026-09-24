@@ -166,6 +166,11 @@ pre-commit:
     shared-settings:
       glob: "{shared/sharedSettings.ts,shared/schemas/sharedSettings.ts,shared/ipc/modules/sharedSettings.ts,host/lib/sharedSettings/**,web/ipc/register.ts,test/shared-settings.mjs,test/lib/checkKit.mjs}"
       run: pnpm test shared-settings
+    # The scripts' manual order is one per project across branches whose
+    # package.json differ, so the merge must keep another branch's.
+    script-order:
+      glob: "{host/lib/scripts/packageScriptStats.ts,host/lib/config/store.ts,test/script-order.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test script-order
     # Drives stack detection (shared/pullRequestStack.ts), the pure
     # read behind the sidebar's stack pill, the worktree page's stack
     # list and the stack merge button.

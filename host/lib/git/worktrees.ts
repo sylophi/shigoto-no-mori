@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
-import { mkdir, rm, stat } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
-import { errorMessageOf, unknownWorktreeError } from "@shared/errors";
+import { mkdir, readFile, rm, stat } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join } from "node:path";
+import {
+  errorCodeOf,
+  errorMessageOf,
+  unknownWorktreeError,
+} from "@shared/errors";
+import { isValidWorktreeDirName } from "@shared/git/branches";
 import {
   type CommitSummary,
   isCommitHash,
@@ -277,9 +282,10 @@ export async function listWorktreeIdentities(
   projectId: string,
   projectPath: string,
 ): Promise<WorktreeIdentity[]> {
-  const [stdout, config] = await Promise.all([
+  const [stdout, config, globalConfig] = await Promise.all([
     run(projectPath, ["worktree", "list", "--porcelain"]),
     readShigomoriConfig(projectId).catch(() => null),
+    readGlobalConfig().catch(() => null),
   ]);
   // A worktree counts as managed if it sits under any layout we know
   // about (managed root, in-project, or the configured custom path).
@@ -316,8 +322,13 @@ export async function listWorktreeIdentities(
     const isPrimary = entry.path === primaryPath;
     // Primary checkout sits at the project root, so its "name" is just
     // the project's directory basename. Managed worktrees use the picked
-    // animal dirname; external ones use whatever the user named them.
-    const name = basename(entry.path);
+    // animal dirname. External ones use whatever the user named them, or
+    // with codexWorktreeNames on, possibly the folder above it.
+    const isExternal = !isManagedPath(entry.path, managedBases);
+    const name =
+      globalConfig?.codexWorktreeNames && isExternal && !isPrimary
+        ? externalWorktreeName(entry.path, projectPath)
+        : basename(entry.path);
     identities.push({
       id: worktreeIdFromPath(entry.path),
       projectId,
@@ -325,11 +336,25 @@ export async function listWorktreeIdentities(
       branch,
       path: entry.path,
       isPrimary,
-      isExternal: !isManagedPath(entry.path, managedBases),
+      isExternal,
       detached: entry.detached ?? false,
     });
   }
   return identities;
+}
+
+// A leaf that just repeats the repo's folder name (the Codex layout,
+// see codexWorktreeNames) takes its parent's name instead, when that
+// passes as a folder name of our own. Mirrored in cli/gitx.go.
+function externalWorktreeName(
+  worktreePath: string,
+  projectPath: string,
+): string {
+  const leaf = basename(worktreePath);
+  const repo = basename(projectPath).replace(/\.git$/, "");
+  if (leaf.toLowerCase() !== repo.toLowerCase()) return leaf;
+  const parent = basename(dirname(worktreePath));
+  return isValidWorktreeDirName(parent) ? parent : leaf;
 }
 
 // How many recent commits to surface on the worktree detail page. The
@@ -611,33 +636,70 @@ async function removeWorktree(
   await run(projectPath, args);
 }
 
-// Force-removes a worktree, falling back to a manual wipe when git's
-// recursive rmdir fails with ENOTEMPTY (untracked content git couldn't
-// sweep: caches, files held open). We don't retry `git worktree
-// remove` after fs.rm because once the dir is gone, remove errors out
-// on "not on disk". Other failures (corrupt repo, EACCES) rethrow so
-// real bugs stay visible.
+// Force-removes a worktree, finishing the sweep when git couldn't. Git
+// drops the admin entry under $GIT_DIR/worktrees whether or not its
+// sweep of the checkout finished, so a sweep that stops short (a file
+// landing mid-sweep) leaves a directory no later `git worktree remove`
+// can reach. The wipe takes only what git had already agreed to
+// delete: it runs when the admin entry was there before and is gone
+// after. A refusal keeps the entry and rethrows, so real bugs stay
+// visible. The CLI twin is removeWorktreeDir in cli/worktree.go.
 export async function removeWorktreeForce(
   projectPath: string,
   worktreePath: string,
 ): Promise<void> {
+  const adminDir = await worktreeAdminDir(worktreePath);
   try {
     await removeWorktree(projectPath, worktreePath, true);
     return;
   } catch (err) {
-    const msg = errorMessageOf(err);
-    if (!/Directory not empty|ENOTEMPTY/i.test(msg)) {
+    if (adminDir === null || !(await dirGone(adminDir))) {
       throw err;
     }
-    console.warn(`[worktrees] force-wipe fallback: ${msg}`);
+    console.warn(`[worktrees] wipe fallback: ${errorMessageOf(err)}`);
   }
-  await rm(worktreePath, { recursive: true, force: true });
-  await pruneStaleWorktrees(projectPath);
+  // Linear backoff, about five seconds in all: the same budget the CLI
+  // gives a writer still landing files.
+  await rm(worktreePath, {
+    recursive: true,
+    force: true,
+    maxRetries: 4,
+    retryDelay: 500,
+  });
+}
+
+// The admin directory git keeps for a linked checkout, read from the
+// checkout's own .git file ("gitdir: <dir>", relative to the checkout
+// under worktree.useRelativePaths). Null when the path isn't a linked
+// worktree, which keeps the wipe away from any directory git never
+// registered.
+async function worktreeAdminDir(worktreePath: string): Promise<string | null> {
+  let contents: string;
+  try {
+    contents = await readFile(join(worktreePath, ".git"), "utf8");
+  } catch {
+    return null;
+  }
+  const line = contents.trim();
+  if (!line.startsWith("gitdir: ")) return null;
+  const dir = line.slice("gitdir: ".length);
+  return isAbsolute(dir) ? dir : join(worktreePath, dir);
+}
+
+// Only a definite "not there" counts: an unreadable admin dir must not
+// pass for a finished sweep.
+async function dirGone(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return false;
+  } catch (err) {
+    return errorCodeOf(err) === "ENOENT";
+  }
 }
 
 // Drops admin entries under $GIT_DIR/worktrees whose checkout dir is
-// gone. Used after a fallback fs.rm and after the nuke-everything root
-// wipe to keep `git worktree list` honest.
+// gone. Used after the nuke-everything root wipe to keep `git worktree
+// list` honest.
 export async function pruneStaleWorktrees(projectPath: string): Promise<void> {
   await run(projectPath, ["worktree", "prune"]);
 }

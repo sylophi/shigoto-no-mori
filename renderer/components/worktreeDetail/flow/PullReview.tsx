@@ -399,7 +399,6 @@ export function ReviewDevicesColumn({
               thisDeviceLabel={thisDeviceLabel}
               checked={pull.runSetup}
               onChange={pull.setRunSetup}
-              pinned={pull.setupPinned}
             />
           </>
         )}

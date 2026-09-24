@@ -30,3 +30,41 @@ export function useSetPackageScriptSort(projectId: string | null) {
     "Couldn't save script sort preference",
   );
 }
+
+export const NO_ORDER: readonly string[] = [];
+
+// The stored "manual" order, read only while the sort is manual: the
+// list reads it for nothing else, and a host too old to know the call
+// never reports a manual sort, so it's never asked.
+export function usePackageScriptOrder(
+  projectId: string | null,
+  sortMode: PackageScriptSortMode,
+) {
+  const { api, keys } = useHostScope();
+  return useQuery<string[]>({
+    queryKey: keys.packageScriptOrder(projectId),
+    queryFn: () => {
+      if (!projectId) return [];
+      return api.packageScripts.getOrder(projectId);
+    },
+    enabled: projectId !== null && sortMode === "manual",
+    staleTime: Number.POSITIVE_INFINITY,
+    meta: { errorTitle: "Couldn't read script order" },
+  });
+}
+
+// Takes one worktree's scripts in their arranged order. That is also the
+// optimistic value, which orders this worktree's list exactly as the
+// host's merged order will. The refetch once the write settles brings
+// in the names only other branches have.
+export function useSetPackageScriptOrder(projectId: string | null) {
+  const { api, keys } = useHostScope();
+  return useOptimisticPreference<string[]>(
+    keys.packageScriptOrder(projectId),
+    async (arranged) => {
+      if (!projectId) return;
+      await api.packageScripts.setOrder(projectId, arranged);
+    },
+    "Couldn't save script order",
+  );
+}

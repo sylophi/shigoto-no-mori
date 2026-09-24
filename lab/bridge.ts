@@ -377,6 +377,7 @@ function hostHandlersFor(
       },
     }),
     "packageScripts:getSort": () => "manifest",
+    "packageScripts:getOrder": () => [],
     "githubCli:readiness": () => ({ installed: true, authed: true }),
     // One repo, one set of PRs: every checkout of shigoto-no-mori
     // answers with the same map, as the real sweep would on each
@@ -943,10 +944,14 @@ let acceptsCommands = true;
 // so the revoke handler records the id here and the list filters it.
 const revoked = new Set<string>();
 let deviceName = "Studio Mac";
-// The icon pick on this device's row: null is "what it detected",
+// This device's icon pick: null is "what it detected",
 // which depends on the shell posed (set at install, so read late).
 let deviceIcon: DeviceIcon | null = null;
 const detectedIcon = (): DeviceIcon => (WEB_SHELL ? "browser" : "mini");
+// A peer's registry entry, where a rename or icon pick made for it
+// lands, as the hub write would.
+const peerEntry = (deviceId: string) =>
+  accountDevices.find((device) => device.deviceId === deviceId);
 
 // The web-shell pose (lab/web-main.tsx): this page is an enrolled
 // BROWSER device, every machine forest (Studio Mac included) is a
@@ -1103,14 +1108,36 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
       revoked.add(deviceId);
       client.emit("account:changed", { accountId: accountStatus().accountId });
     },
-    "account:setDeviceName": (name: string) => {
-      deviceName = name;
+    "account:setDeviceName": ({
+      deviceId,
+      name,
+    }: {
+      deviceId: string;
+      name: string;
+    }) => {
+      if (deviceId === selfDeviceId) {
+        deviceName = name;
+      } else {
+        const entry = peerEntry(deviceId);
+        if (entry !== undefined) entry.name = name;
+      }
       client.emit("account:changed", { accountId: accountStatus().accountId });
       return accountStatus();
     },
-    "account:setDeviceIcon": (icon: DeviceIcon | null) => {
-      // The store's rule: the detected icon is no pick.
-      deviceIcon = icon === detectedIcon() ? null : icon;
+    "account:setDeviceIcon": ({
+      deviceId,
+      icon,
+    }: {
+      deviceId: string;
+      icon: DeviceIcon;
+    }) => {
+      if (deviceId === selfDeviceId) {
+        // The store's rule: the detected icon is no pick.
+        deviceIcon = icon === detectedIcon() ? null : icon;
+      } else {
+        const entry = peerEntry(deviceId);
+        if (entry !== undefined) entry.icon = icon;
+      }
       client.emit("account:changed", { accountId: accountStatus().accountId });
       return accountStatus();
     },
