@@ -266,9 +266,13 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       list: packageScriptsClient.list,
       run: packageScriptsClient.run,
       getSort: (projectId: string) =>
-        packageScriptsClient.getSort({ projectId }),
+        packageScriptsClient.getSort({ projectId, knowsManual: true }),
       setSort: (projectId: string, mode: PackageScriptSortMode) =>
         packageScriptsClient.setSort({ projectId, mode }),
+      getOrder: (projectId: string) =>
+        packageScriptsClient.getOrder({ projectId }),
+      setOrder: (projectId: string, arranged: string[]) =>
+        packageScriptsClient.setOrder({ projectId, arranged }),
     },
 
     portForward: {

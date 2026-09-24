@@ -3,7 +3,11 @@ import { Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLocalGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
-import { usePackageScriptSort } from "@/hooks/scripts/usePackageScriptSort";
+import {
+  NO_ORDER,
+  usePackageScriptOrder,
+  usePackageScriptSort,
+} from "@/hooks/scripts/usePackageScriptSort";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { hasLocalHost } from "@/lib/localHost";
@@ -40,6 +44,10 @@ export function useScriptLaunchCandidates(worktree: Worktree): {
   const { data: sortMode = "frequent" } = usePackageScriptSort(
     worktree.projectId,
   );
+  const { data: order = NO_ORDER } = usePackageScriptOrder(
+    worktree.projectId,
+    sortMode,
+  );
 
   // The switch is this window's preference, so it reads this machine's
   // config even on a peer's page. A hostless client has no config to switch
@@ -57,6 +65,7 @@ export function useScriptLaunchCandidates(worktree: Worktree): {
       Object.entries(pkg.scripts),
       sortMode,
       pkg.usage,
+      order,
     ).slice(0, MAX_CANDIDATES),
     loading: false,
   };

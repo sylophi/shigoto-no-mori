@@ -377,6 +377,7 @@ function hostHandlersFor(
       },
     }),
     "packageScripts:getSort": () => "manifest",
+    "packageScripts:getOrder": () => [],
     "githubCli:readiness": () => ({ installed: true, authed: true }),
     // One repo, one set of PRs: every checkout of shigoto-no-mori
     // answers with the same map, as the real sweep would on each
