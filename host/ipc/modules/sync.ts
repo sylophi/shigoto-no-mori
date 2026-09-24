@@ -613,9 +613,9 @@ async function tearDown(
     // Force only when the dirty state was actually captured and
     // applied here. The CLI's --force does more than skip its own
     // clean-tree guard (cmd_rm.go requireClean): it also switches to
-    // `git worktree remove --force` and enables the ENOTEMPTY
-    // force-wipe fallback, which would silently destroy work a
-    // capture cannot carry (submodule-only dirt captures as clean,
+    // `git worktree remove --force`, which skips git's own dirty check
+    // and so would silently destroy work a capture cannot carry
+    // (submodule-only dirt captures as clean,
     // see the cli/cmd_dirty.go header) or edits made after the
     // capture. So on a capture that said clean, git's own pre-removal
     // check must independently agree before the source dies, and a

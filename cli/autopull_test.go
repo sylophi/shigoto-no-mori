@@ -43,10 +43,10 @@ func createViaCmd(t *testing.T, proj project, name string) worktreeIdentity {
 		t.Fatalf("create %s: %d, %v", name, code, err)
 	}
 	config := readProjectConfig(proj.ID)
-	return autoPullIdentityAt(t, proj, filepath.Join(resolveWorktreeBase(proj.Path, config), name))
+	return identityAt(t, proj, filepath.Join(resolveWorktreeBase(proj.Path, config), name))
 }
 
-func autoPullIdentityAt(t *testing.T, proj project, path string) worktreeIdentity {
+func identityAt(t *testing.T, proj project, path string) worktreeIdentity {
 	t.Helper()
 	identities, err := listWorktreeIdentities(proj)
 	if err != nil {
@@ -77,7 +77,7 @@ func TestAutoPullNewMarksCreatedWorktree(t *testing.T) {
 
 	// rm drops the mark so a checkout that reappears at the same path
 	// starts unmarked.
-	if _, err := execRemove(proj, autoPullIdentityAt(t, proj, on.Path), removeOptions{force: true, skipCleanup: true}); err != nil {
+	if _, err := execRemove(proj, identityAt(t, proj, on.Path), removeOptions{force: true, skipCleanup: true}); err != nil {
 		t.Fatal(err)
 	}
 	if autoPullMarks(t)[on.ID] {
