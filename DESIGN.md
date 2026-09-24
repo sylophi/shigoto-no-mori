@@ -81,6 +81,11 @@ Rules that keep that working:
   `data-icon-button`: use `ui/icon-button.tsx`, which carries it. A
   page's `<footer>` bar and the back button stay bare, since their
   place on the screen already says control.
+- **Raw `:hover` in CSS goes inside `@media (hover: hover)`.** A tap on
+  a touch screen leaves `:hover` stuck on the tapped control. Tailwind's
+  `hover:` variant is already gated that way (index.css). Hand-written
+  theme CSS has to do it itself, and may pair it with `:active` for a
+  pressed state (doubutsu's stripes do).
 - The `data-*` hooks phone.css selects are verified by
   `pnpm test theme-contract`, like doubutsu's.
 - When changing UI, check it at phone width as well. The UI lab's web
