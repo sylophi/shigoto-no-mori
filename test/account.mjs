@@ -43,6 +43,7 @@ import {
   retryParkedRevoke,
   setDeviceIcon,
   signOutDevice,
+  syncHubDeviceIcon,
 } from "../shared/account/enroll.ts";
 import {
   HubRequestError,
@@ -111,6 +112,12 @@ const DEVICE = {
   lastSeenAt: null,
   online: true,
 };
+
+// A registry listing holding a peer and this device, wearing `icon`.
+const ownRowListing = (icon) => [
+  { ...DEVICE, deviceId: "peer-uuid", platform: "linux", icon: "server" },
+  { ...DEVICE, icon },
+];
 
 const dmi = (chassisType, vendor = null, product = null) =>
   deviceShapeFromDmi({ chassisType, vendor, product });
@@ -405,6 +412,8 @@ async function main() {
         credential: "cred-1",
         accountId: "user_abc",
         deviceName: "Fallback Mac",
+        // What it enrolled under is where the hub starts.
+        hubIcon: "laptop",
       });
       // With no pick stored, the device enrolls under what it detected.
       assert.equal(JSON.parse(calls[0].init.body).icon, "laptop");
@@ -481,6 +490,7 @@ async function main() {
         accountId: "user_other",
         deviceName: "Renamed",
         deviceIcon: "server",
+        hubIcon: "server",
       });
       assert.equal(store.readParked(), null);
 
@@ -506,10 +516,93 @@ async function main() {
   );
 
   await check(
-    "icon pick: setDeviceIcon stores the pick and pushes it, null (or the detected icon) drops the pick and pushes the detection, and signed out there is nothing to pick",
+    "icon sync: syncHubDeviceIcon adopts a pick made on another device, the detected icon as no pick, and never over a pick or sign-out that landed during the read",
     async () => {
       const { fetchImpl, calls } = recordingFetch(
         () => new Response(null, { status: 204 }),
+      );
+      const store = memoryStore();
+      const deps = {
+        service: createAccountService({ baseUrl: CONFIG.hubUrl, fetchImpl }),
+        store,
+        deviceId: "device-uuid",
+        detectedIcon: "laptop",
+      };
+      const sync = (listing, listedUnder = store.read()) =>
+        syncHubDeviceIcon(deps, listedUnder, listing);
+      store.write({ credential: "c", accountId: "a", deviceName: "d" });
+      // A record from before hubIcon takes the listing as its baseline.
+      assert.equal(sync(ownRowListing("laptop")), false);
+      assert.equal(store.read().hubIcon, "laptop");
+      assert.equal(sync(ownRowListing("cat")), true);
+      assert.equal(store.read().deviceIcon, "cat");
+      assert.equal(store.read().hubIcon, "cat");
+      // The detected icon drops the pick outright.
+      assert.equal(sync(ownRowListing("laptop")), true);
+      assert.equal(store.read().deviceIcon, undefined);
+      // A listing without this device changes nothing.
+      assert.equal(sync(ownRowListing("cat").slice(0, 1)), false);
+      // A pick here while the listing was in flight wins over it.
+      const listedUnder = store.read();
+      store.write({ ...listedUnder, deviceIcon: "rocket", hubIcon: "rocket" });
+      assert.equal(sync(ownRowListing("cat"), listedUnder), false);
+      assert.equal(store.read().deviceIcon, "rocket");
+      // So does a sign-out: the record is not written back.
+      const beforeSignOut = store.read();
+      store.clear();
+      assert.equal(sync(ownRowListing("cat"), beforeSignOut), false);
+      assert.equal(store.read(), null);
+      assert.equal(calls.length, 0, "nothing was pushed");
+    },
+  );
+
+  await check(
+    "icon sync: a hub copy that did not move but went stale (a detection that improved with an upgrade) gets this device's icon, not pinned as a pick",
+    async () => {
+      const { fetchImpl, calls } = recordingFetch(
+        () => new Response(null, { status: 204 }),
+      );
+      const store = memoryStore();
+      const deps = {
+        service: createAccountService({ baseUrl: CONFIG.hubUrl, fetchImpl }),
+        store,
+        deviceId: "device-uuid",
+        detectedIcon: "mini",
+      };
+      // Enrolled by a build that took this Mac mini for a laptop.
+      store.write({ credential: "c", accountId: "a", deviceName: "d" });
+      assert.equal(
+        syncHubDeviceIcon(deps, store.read(), ownRowListing("laptop")),
+        false,
+      );
+      // The push is fire-and-forget: give it a tick to land.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      assert.deepEqual(
+        calls.map((c) => [c.url, JSON.parse(c.init.body)]),
+        [
+          [
+            CONFIG.hubUrl + HUB_ROUTES.updateDevice.path("device-uuid"),
+            { icon: "mini" },
+          ],
+        ],
+      );
+      assert.equal(store.read().deviceIcon, undefined);
+      assert.equal(store.read().hubIcon, "mini");
+      // The hub caught up, so the next listing moves nothing.
+      assert.equal(
+        syncHubDeviceIcon(deps, store.read(), ownRowListing("mini")),
+        false,
+      );
+      assert.equal(calls.length, 1);
+    },
+  );
+
+  await check(
+    "icon pick: setDeviceIcon writes the hub first and keeps a pick for this device only, the detected icon drops the pick, and a pick the hub refused keeps nothing",
+    async () => {
+      let status = 204;
+      const { fetchImpl, calls } = recordingFetch(
+        () => new Response(null, { status }),
       );
       const service = createAccountService({
         baseUrl: CONFIG.hubUrl,
@@ -517,50 +610,53 @@ async function main() {
       });
       const store = memoryStore();
       const deps = {
-        config: CONFIG,
         service,
         store,
         deviceId: "device-uuid",
         detectedIcon: "laptop",
       };
-      assert.equal(setDeviceIcon(deps, "mini"), false, "picked signed out");
-      assert.equal(calls.length, 0);
+      const pick = (deviceId, icon) =>
+        setDeviceIcon(deps, store.read(), { deviceId, icon });
       store.write({ credential: "c", accountId: "a", deviceName: "d" });
       assert.equal(
         effectiveDeviceIcon(store.read(), store, "laptop"),
         "laptop",
       );
-      assert.equal(setDeviceIcon(deps, "mini"), true);
+      await pick("device-uuid", "mini");
       assert.equal(store.read().deviceIcon, "mini");
       assert.equal(effectiveDeviceIcon(store.read(), store, "laptop"), "mini");
-      // The current tile clicked again changes nothing, so nothing moves.
-      assert.equal(setDeviceIcon(deps, "mini"), false);
-      // Dropping the pick removes the key outright, so the next
+      // Picking the detected icon removes the key outright, so the next
       // enrollment sends whatever the machine detects by then.
-      assert.equal(setDeviceIcon(deps, null), true);
+      await pick("device-uuid", "laptop");
       assert.deepEqual(store.read(), {
         credential: "c",
         accountId: "a",
         deviceName: "d",
+        hubIcon: "laptop",
       });
-      // Picking the detected icon is the same as dropping the pick (the
-      // picker sends the icon itself): it clears a stored pick, and with
-      // none stored there is nothing to write.
-      assert.equal(setDeviceIcon(deps, "mini"), true);
-      assert.equal(setDeviceIcon(deps, "laptop"), true);
+      // A peer's pick is the hub's alone.
+      await pick("peer-uuid", "cat");
       assert.equal(store.read().deviceIcon, undefined);
-      assert.equal(setDeviceIcon(deps, "laptop"), false);
-      // The push is fire-and-forget: give it a tick to land.
-      await new Promise((resolve) => setTimeout(resolve, 0));
       assert.deepEqual(
-        calls.map((c) => [c.init.method, JSON.parse(c.init.body)]),
+        calls.map((c) => [c.url, JSON.parse(c.init.body)]),
         [
-          ["PATCH", { icon: "mini" }],
-          ["PATCH", { icon: "laptop" }],
-          ["PATCH", { icon: "mini" }],
-          ["PATCH", { icon: "laptop" }],
+          [
+            CONFIG.hubUrl + HUB_ROUTES.updateDevice.path("device-uuid"),
+            { icon: "mini" },
+          ],
+          [
+            CONFIG.hubUrl + HUB_ROUTES.updateDevice.path("device-uuid"),
+            { icon: "laptop" },
+          ],
+          [
+            CONFIG.hubUrl + HUB_ROUTES.updateDevice.path("peer-uuid"),
+            { icon: "cat" },
+          ],
         ],
       );
+      status = 500;
+      await assert.rejects(pick("device-uuid", "mini"));
+      assert.equal(store.read().deviceIcon, undefined);
       // The pick outlives a sign-out, like the name.
       store.write({ ...store.read(), deviceIcon: "server" });
       store.clear();

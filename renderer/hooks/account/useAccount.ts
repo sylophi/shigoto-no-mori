@@ -158,12 +158,16 @@ export function useSetDeviceName() {
   });
 }
 
-// The icon pick, on the rename's pattern. Null drops the pick, so the
-// device goes back to what it detected.
+// The icon pick for any device of the account, this one or a peer.
+// Picking a device's detected icon puts it back to its default.
 export function useSetDeviceIcon() {
-  return useMutation<AccountStatus, Error, DeviceIcon | null>({
-    mutationFn: (icon) => window.api.account.setDeviceIcon(icon),
-    meta: { errorTitle: "Couldn't change this device's icon" },
+  return useMutation<
+    AccountStatus,
+    Error,
+    { deviceId: string; icon: DeviceIcon }
+  >({
+    mutationFn: (target) => window.api.account.setDeviceIcon(target),
+    meta: { errorTitle: "Couldn't change the device's icon" },
   });
 }
 

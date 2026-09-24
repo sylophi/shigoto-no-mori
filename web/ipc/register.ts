@@ -49,6 +49,7 @@ import {
   renameDevice,
   retryParkedRevoke,
   signOutDevice,
+  syncHubDeviceIcon,
 } from "@shared/account/enroll";
 import { createHubConnection } from "../hub/connection";
 import { webServiceConfig } from "../account/config";
@@ -322,7 +323,17 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     listDevices: async () => {
       const record = store.read();
       if (record === null || !isConfigured(config)) return [];
-      return service.listDevices(record.credential);
+      const devices = await service.listDevices(record.credential);
+      if (
+        syncHubDeviceIcon(
+          { service, store, deviceId, detectedIcon },
+          record,
+          devices,
+        )
+      ) {
+        accountChanged();
+      }
+      return devices;
     },
 
     setDeviceName: (name) => {
@@ -332,12 +343,17 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
       return readStatus();
     },
 
-    setDeviceIcon: (icon) => {
-      if (
-        setDeviceIcon({ config, service, store, deviceId, detectedIcon }, icon)
-      ) {
-        accountChanged();
+    setDeviceIcon: async (target) => {
+      const record = store.read();
+      if (record === null || !isConfigured(config)) {
+        throw new Error("cannot change a device's icon while signed out");
       }
+      await setDeviceIcon(
+        { service, store, deviceId, detectedIcon },
+        record,
+        target,
+      );
+      accountChanged();
       return readStatus();
     },
 

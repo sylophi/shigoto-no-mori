@@ -1108,9 +1108,24 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
       client.emit("account:changed", { accountId: accountStatus().accountId });
       return accountStatus();
     },
-    "account:setDeviceIcon": (icon: DeviceIcon | null) => {
-      // The store's rule: the detected icon is no pick.
-      deviceIcon = icon === detectedIcon() ? null : icon;
+    "account:setDeviceIcon": ({
+      deviceId,
+      icon,
+    }: {
+      deviceId: string;
+      icon: DeviceIcon;
+    }) => {
+      if (deviceId === selfDeviceId) {
+        // The store's rule: the detected icon is no pick.
+        deviceIcon = icon === detectedIcon() ? null : icon;
+      } else {
+        // A peer's pick lands on its registry entry, as the hub write
+        // would.
+        const entry = accountDevices.find(
+          (device) => device.deviceId === deviceId,
+        );
+        if (entry !== undefined) entry.icon = icon;
+      }
       client.emit("account:changed", { accountId: accountStatus().accountId });
       return accountStatus();
     },

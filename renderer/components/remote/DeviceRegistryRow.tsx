@@ -1,9 +1,10 @@
 // One machine on the account, as a row of the registry: its mark and
-// name (both changeable on THIS device's row: the mark opens the icon
-// picker, Rename the name), one line saying what state it is in and
-// what it runs, the projects it hosts, and -- on THIS device's row --
-// the two things it exposes to the others: whether they may control
-// it and whether it stays reachable to them. A peer's row makes no decision about the
+// name (the mark opens the icon picker on every row, since the icon
+// lives on the device hub, while Rename is on THIS device's row
+// only), one line saying what state it is in and what it runs, the
+// projects it hosts, and -- on THIS device's row -- the two things it
+// exposes to the others: whether they may control it and whether it
+// stays reachable to them. A peer's row makes no decision about the
 // peer: what a machine allows is decided on that machine, so a peer
 // row only reports the answer (read-only from here, or not) and holds
 // the forwards this machine has open against it.
@@ -19,7 +20,6 @@ import { AlertTriangle, Trash2 } from "lucide-react";
 import type { TunnelState } from "@shared/ipc/modules/hub";
 import type { DeviceInfo } from "@shared/hub/protocol";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
-import { DeviceMark } from "@/components/shared/DeviceGlyph";
 import { Button } from "@/components/ui/button";
 import { RowTag } from "@/components/ui/row-tag";
 import { StatusDot, TONE_TEXT } from "@/components/ui/status-dot";
@@ -139,15 +139,13 @@ export function DeviceRegistryRow({
     // the sake of a column it does not belong to.
     <li className="flex flex-col gap-3 py-5 first:pt-1 last:pb-1">
       <div className="flex gap-3.5">
-        {isThisDevice ? (
-          <DeviceIconPicker
-            icon={icon}
-            tone={status.tone}
-            label={traits.selfLabel}
-          />
-        ) : (
-          <DeviceMark icon={icon} tone={status.tone} size="lg" />
-        )}
+        <DeviceIconPicker
+          deviceId={device.deviceId}
+          isThisDevice={isThisDevice}
+          icon={icon}
+          tone={status.tone}
+          label={isThisDevice ? traits.selfLabel : namedDevice}
+        />
 
         <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-3 gap-y-2">
           <div className="flex min-w-0 flex-1 flex-col gap-1">

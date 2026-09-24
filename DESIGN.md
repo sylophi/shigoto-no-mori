@@ -101,8 +101,10 @@ are only ever picked (a leaf, a cat, a rocket), for telling two laptops
 apart. The device detects its own shape at
 enrollment (`main/core/account/defaultDeviceIcon.ts` on a machine,
 `web/account/deviceIcon.ts` in a browser), its owner can pick another
-on its Devices page row, and the hub stores the result beside the
-name so every device draws every other one the same way.
+on its row of any device's Devices page, online or not, and the hub
+stores the result beside the name so every device draws every other
+one the same way. The device itself takes its icon from the hub on
+each registry read (`syncHubDeviceIcon` in `shared/account/enroll.ts`).
 
 Rules that keep a machine looking like itself everywhere:
 

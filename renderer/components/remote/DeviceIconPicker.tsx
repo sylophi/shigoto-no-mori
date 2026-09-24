@@ -1,5 +1,5 @@
-// This device's icon, picked in place: the mark on its Devices page
-// row is the trigger, and the menu lays out every icon the catalog has
+// A device's icon, picked in place: the mark on its Devices page row
+// is the trigger, and the menu lays out every icon the catalog has
 // (shared/account/deviceIcon.ts) as one grid of tiles: the device
 // shapes as the first row, with what the device detected about itself
 // named as such, then under a hairline the marks that are only ever
@@ -8,8 +8,9 @@
 // Picking the detected shape drops the pick (the store's rule: no pick
 // means "what I detected"), so a device put back to its default carries
 // no override that a later, better detection could not move. The pick
-// rides the same path a rename does, so every other device sees the new
-// mark on its next registry read.
+// is made on the device hub, so any row offers it, a peer's included,
+// online or not: every device sees the new mark on its next registry
+// read, the picked one too (shared/account/enroll.ts).
 import { ChevronDown } from "lucide-react";
 import {
   DEVICE_ICON_LABELS,
@@ -30,21 +31,32 @@ import { useAccountStatus, useSetDeviceIcon } from "@/hooks/account/useAccount";
 import { cn } from "@/lib/utils";
 
 export function DeviceIconPicker({
+  deviceId,
+  isThisDevice,
   icon,
   tone,
-  // "This device" / "This browser", for the control's accessible name.
+  // "This device" for this one, the peer's name otherwise, for the
+  // control's accessible name.
   label,
 }: {
+  deviceId: string;
+  isThisDevice: boolean;
   icon: DeviceIcon;
   tone: StatusTone;
   label: string;
 }) {
   const setDeviceIcon = useSetDeviceIcon();
+  const status = useAccountStatus().data;
   // What this device detected about itself, for the tile that means
-  // "back to the default". The icon worn now until the status lands,
-  // moments before the picker re-renders with the real answer.
-  const detected = useAccountStatus().data?.detectedDeviceIcon ?? icon;
-  const onPick = (next: DeviceIcon) => setDeviceIcon.mutate(next);
+  // "back to the default": the icon worn now until the status lands,
+  // moments before the picker re-renders with the real answer. A peer
+  // reports no detection to the hub, so its tiles name none.
+  const detected = isThisDevice
+    ? (status?.detectedDeviceIcon ?? icon)
+    : undefined;
+  const onPick = (next: DeviceIcon) => {
+    if (next !== icon) setDeviceIcon.mutate({ deviceId, icon: next });
+  };
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -92,7 +104,7 @@ function IconTiles({
 }: {
   icons: readonly DeviceIcon[];
   picked: DeviceIcon;
-  detected: DeviceIcon;
+  detected: DeviceIcon | undefined;
   onPick: (icon: DeviceIcon) => void;
 }) {
   return (

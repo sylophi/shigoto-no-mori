@@ -7,7 +7,7 @@
 // AccountService, AccountStore, AccountServiceConfig), so the
 // account check script drives both paths with stubs.
 import { errorMessageOf } from "../errors";
-import type { EnrollResponse } from "../hub/protocol";
+import type { DeviceInfo, EnrollResponse } from "../hub/protocol";
 import { HubRequestError, isHubRefusal, type AccountService } from "./service";
 import type { AccountStore, StoredAccount } from "./credentialStore";
 import { isConfigured, type AccountServiceConfig } from "./serviceConfig";
@@ -89,6 +89,7 @@ export async function enrollDevice(
     accountId: deriveAccountId(token),
     deviceName,
     ...(deviceIcon === null ? {} : { deviceIcon }),
+    hubIcon: fields.icon,
   });
 }
 
@@ -179,30 +180,111 @@ export function renameDevice(
   return true;
 }
 
-// The icon pick, the rename's twin: the local store write (null drops
-// the pick, so the device goes back to what it detected), then the
-// best-effort hub push of the icon the device now reports. Picking
-// the detected icon drops the pick too, so a device put back to its
-// default carries no override a later, better detection could not
-// move. Resolves true when a pick was written. Signed out there is
-// nothing to pick against, like the rename, and a pick that changes
-// nothing (the current tile clicked again) writes and pushes nothing.
-export function setDeviceIcon(
+// A device's icon lives on the hub, so any device of the account can
+// pick it, this one or a peer, online or not. The pick is the hub
+// write, awaited: one the hub never took did not happen, so it throws
+// rather than leave a mark only this device draws. A pick for THIS
+// device is kept locally too, so the status it resolves to already
+// wears it. A peer takes its new icon from the hub on its next
+// registry read (syncHubDeviceIcon).
+export async function setDeviceIcon(
   deps: Pick<
     EnrollDeviceDeps,
-    "config" | "service" | "store" | "deviceId" | "detectedIcon"
+    "service" | "store" | "deviceId" | "detectedIcon"
   >,
-  picked: DeviceIcon | null,
-): boolean {
-  const icon = picked === deps.detectedIcon ? null : picked;
-  const record = deps.store.read();
-  if (record === null || (record.deviceIcon ?? null) === icon) return false;
-  const { deviceIcon: _dropped, ...rest } = record;
-  deps.store.write(icon === null ? rest : { ...rest, deviceIcon: icon });
-  pushDeviceUpdate(deps, record.credential, {
-    icon: icon ?? deps.detectedIcon,
+  record: StoredAccount,
+  target: { deviceId: string; icon: DeviceIcon },
+): Promise<void> {
+  await deps.service.update(record.credential, target.deviceId, {
+    icon: target.icon,
   });
-  return true;
+  if (target.deviceId === deps.deviceId) {
+    keepIcon(deps, record, pickOf(deps, target.icon), target.icon);
+  }
+}
+
+// Squares this device's icon with the registry the hub just listed.
+// hubIcon, the icon the hub last held as far as this device knows,
+// tells the two ways they can differ apart:
+// - The hub moved: another device picked for this one, adopted here.
+// - The hub did not move but this device did: its detection improved
+//   with an upgrade (it has no pick, so it wears what it detects now).
+//   The hub copy is stale and gets this device's icon, best-effort.
+// A record from before hubIcon existed takes the listed icon as where
+// the hub was, so an upgrade corrects a stale detection rather than
+// pinning it as a pick. `listedUnder` is the record the listing was
+// fetched under: a pick here that raced the read wins over it
+// (keepIcon). Resolves true when the icon this device wears changed.
+export function syncHubDeviceIcon(
+  deps: Pick<
+    EnrollDeviceDeps,
+    "service" | "store" | "deviceId" | "detectedIcon"
+  >,
+  listedUnder: StoredAccount,
+  devices: readonly DeviceInfo[],
+): boolean {
+  const listed = devices.find(
+    (device) => device.deviceId === deps.deviceId,
+  )?.icon;
+  if (listed === undefined) return false;
+  if (listed !== (listedUnder.hubIcon ?? listed)) {
+    return keepIcon(deps, listedUnder, pickOf(deps, listed), listed);
+  }
+  const worn = listedUnder.deviceIcon ?? deps.detectedIcon;
+  if (worn === listed) {
+    keepIcon(deps, listedUnder, listedUnder.deviceIcon, listed);
+    return false;
+  }
+  void deps.service
+    .update(listedUnder.credential, deps.deviceId, { icon: worn })
+    .then(() => keepIcon(deps, listedUnder, listedUnder.deviceIcon, worn))
+    .catch((error: unknown) => {
+      console.warn(
+        `[account] could not push this device's icon to the device hub: ${errorMessageOf(error)}`,
+      );
+    });
+  return false;
+}
+
+// The detected icon is no pick, so a device put back to its default
+// carries no override a later, better detection could not move.
+function pickOf(
+  deps: Pick<EnrollDeviceDeps, "detectedIcon">,
+  icon: DeviceIcon,
+): DeviceIcon | undefined {
+  return icon === deps.detectedIcon ? undefined : icon;
+}
+
+// Stores this device's pick and the hub's icon against the record the
+// caller started from. Re-reads before writing, since the caller may
+// have awaited the hub in between: a sign-out or re-enrollment
+// meanwhile, or a pick or sync that already moved either field, wins
+// over this write. Resolves true when the stored pick changed.
+function keepIcon(
+  deps: Pick<EnrollDeviceDeps, "store">,
+  startedFrom: StoredAccount,
+  pick: DeviceIcon | undefined,
+  hubIcon: DeviceIcon,
+): boolean {
+  if (startedFrom.deviceIcon === pick && startedFrom.hubIcon === hubIcon) {
+    return false;
+  }
+  const current = deps.store.read();
+  if (
+    current === null ||
+    current.credential !== startedFrom.credential ||
+    current.deviceIcon !== startedFrom.deviceIcon ||
+    current.hubIcon !== startedFrom.hubIcon
+  ) {
+    return false;
+  }
+  const { deviceIcon: _dropped, ...rest } = current;
+  deps.store.write({
+    ...rest,
+    hubIcon,
+    ...(pick === undefined ? {} : { deviceIcon: pick }),
+  });
+  return startedFrom.deviceIcon !== pick;
 }
 
 function pushDeviceUpdate(

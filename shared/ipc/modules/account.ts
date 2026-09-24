@@ -83,13 +83,14 @@ export const accountContract = defineContract("client", {
     z.string().min(1).max(256),
     AccountStatusSchema,
   ),
-  // Picks this device's icon (drawn for it everywhere), the rename's twin:
-  // the stored pick, then (best-effort) the device hub's registry. Null
-  // drops the pick, so the device reports what it detected again.
-  // Resolves to the updated status.
+  // Picks the icon of any device of the account (drawn for it
+  // everywhere), this one or a peer, online or not: the device hub's
+  // registry holds it (shared/account/enroll.ts setDeviceIcon). Picking
+  // a device's detected icon puts it back to its default. Throws when
+  // the hub did not take the pick. Resolves to the updated status.
   setDeviceIcon: invoke(
     "account:setDeviceIcon",
-    DeviceIconSchema.nullable(),
+    z.object({ deviceId: DeviceIdSchema, icon: DeviceIconSchema }),
     AccountStatusSchema,
   ),
   // Whether THIS host accepts commands from the account's other

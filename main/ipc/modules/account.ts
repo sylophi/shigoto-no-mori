@@ -41,6 +41,7 @@ import {
   retryParkedRevoke,
   setDeviceIcon,
   signOutDevice,
+  syncHubDeviceIcon,
 } from "@shared/account/enroll";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import {
@@ -569,6 +570,17 @@ export function makeAccountHandlers(
       const devices = await signedIn.service.listDevices(
         signedIn.record.credential,
       );
+      const adopted = syncHubDeviceIcon(
+        {
+          service: signedIn.service,
+          store: store(),
+          deviceId: getDeviceId(),
+          detectedIcon: await detectedDeviceIcon(),
+        },
+        signedIn.record,
+        devices,
+      );
+      if (adopted) accountChanged();
       onDeviceList(devices);
       return devices;
     },
@@ -588,19 +600,23 @@ export function makeAccountHandlers(
       return readStatus();
     },
 
-    setDeviceIcon: async (icon) => {
-      const config = serviceConfig();
-      const picked = setDeviceIcon(
+    setDeviceIcon: async (target) => {
+      const signedIn = signedInService();
+      if (signedIn === null) {
+        throw new Error("cannot change a device's icon while signed out");
+      }
+      await setDeviceIcon(
         {
-          config,
-          service: createAccountService({ baseUrl: config.hubUrl }),
+          service: signedIn.service,
           store: store(),
           deviceId: getDeviceId(),
           detectedIcon: await detectedDeviceIcon(),
         },
-        icon,
+        signedIn.record,
+        target,
       );
-      if (picked) accountChanged();
+      // Every window re-reads the registry, the peer's new icon with it.
+      accountChanged();
       return readStatus();
     },
 
