@@ -10,6 +10,7 @@
 import assert from "node:assert/strict";
 import {
   pullRequestStackFor,
+  groupByStack,
   pullRequestStackPosition,
   stackMergeSet,
   trunkOf,
@@ -147,6 +148,29 @@ try {
           wt("x", { primaryRef: "release/2.0" }),
         ]),
         "release/2.0",
+      );
+    },
+  );
+
+  await proof.check(
+    "rows of a stack gather where its first row was, top first, peers' copies beside",
+    () => {
+      const rows = [
+        "main",
+        "hotfix",
+        "layer-a",
+        "other",
+        "layer-c",
+        "layer-b",
+        "layer-b",
+      ];
+      assert.deepEqual(
+        groupByStack(rows, (r) => r, prs, "main"),
+        ["main", "hotfix", "layer-c", "layer-b", "layer-b", "layer-a", "other"],
+      );
+      assert.deepEqual(
+        groupByStack(rows, (r) => r, undefined, "main"),
+        rows,
       );
     },
   );

@@ -397,10 +397,11 @@ function hostHandlersFor(
       LAB_SM_PROJECT_IDS.has(projectId) ? LAB_PRS : {},
     "githubCli:worktreePullRequest": ({ branch }) =>
       labPullRequestDetail(branch),
+    // Every method allowed, so the merge button poses its dropdown.
     "githubCli:repoMergeConfig": () => ({
-      merge: false,
+      merge: true,
       squash: true,
-      rebase: false,
+      rebase: true,
     }),
     "sync:worktreeFolder": ({ relative }: { relative: string }) => [
       ...(LAB_TREE[relative] ?? []),

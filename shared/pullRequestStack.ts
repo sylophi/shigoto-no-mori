@@ -94,6 +94,39 @@ export function stackMergeSet(
   return range.filter((entry) => entry.pr.state === "OPEN");
 }
 
+// One repo's rows with every stack's members brought together, in
+// stack order with the top first (the way the worktree page lists a
+// stack), at the place the first member held. Rows outside a stack
+// keep their order. Two rows on one branch (a peer's copy beside the
+// local one) stay adjacent in their own order.
+export function groupByStack<T>(
+  items: readonly T[],
+  branchOf: (item: T) => string,
+  prs: Record<string, PullRequest> | undefined,
+  trunk?: string,
+): T[] {
+  if (!prs) return [...items];
+  // By position, not identity: two rows may be equal values.
+  const placed = new Set<number>();
+  const out: T[] = [];
+  items.forEach((item, index) => {
+    if (placed.has(index)) return;
+    const stack = pullRequestStackFor(prs, branchOf(item), trunk);
+    if (!stack) {
+      out.push(item);
+      return;
+    }
+    for (const entry of stack.entries.toReversed()) {
+      items.forEach((member, at) => {
+        if (placed.has(at) || branchOf(member) !== entry.branch) return;
+        placed.add(at);
+        out.push(member);
+      });
+    }
+  });
+  return out;
+}
+
 // Where a branch's PR sits in its stack, for the sidebar's pill: null
 // for a PR that stands alone.
 export function pullRequestStackPosition(

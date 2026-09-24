@@ -1,9 +1,19 @@
-import { pullRequestStackPosition, trunkOf } from "@shared/pullRequestStack";
+import {
+  groupByStack,
+  pullRequestStackPosition,
+  trunkOf,
+} from "@shared/pullRequestStack";
 import { MACHINE_FALLBACK_ICON } from "@shared/account/deviceIcon";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
-import type { Project, ProjectSortMode, Worktree } from "@shared/schemas";
+import type { ProjectPullRequestQueries } from "@/hooks/projects/useProjectPullRequests";
+import type {
+  Project,
+  ProjectSortMode,
+  PullRequest,
+  Worktree,
+} from "@shared/schemas";
 import type { SidebarDeviceBadge } from "./DeviceBadge";
 import type {
   RemoteProjectMember,
@@ -14,8 +24,10 @@ import { sortByProject } from "@/lib/sortProjects";
 
 interface BuildSidebarRowsArgs {
   projects: Project[];
-  // Positionally aligned with `projects`.
+  // Both positionally aligned with `projects`. The PR maps are what
+  // gathers a stack's rows together.
   worktreeQueries: ProjectWorktreeQueries;
+  pullRequestQueries: ProjectPullRequestQueries;
   // Folded group ids: local project ids and peer-only group ids alike.
   collapsed: Set<string>;
   // Re-applied over the groups, so a peer-only project sorts among the
@@ -92,6 +104,7 @@ export function mirrorBadgeLookup(
 export function buildSidebarRows({
   projects,
   worktreeQueries,
+  pullRequestQueries,
   collapsed,
   sortMode,
   shelvedExpanded,
@@ -135,7 +148,7 @@ export function buildSidebarRows({
     if (!listed) return false;
     return listed.shown || (shelved && listed.groupId === groupId);
   };
-  const localRows = (trees: Worktree[]): SidebarRow[] =>
+  const localRows = (trees: Worktree[]): LocalRow[] =>
     trees.map((worktree) => ({
       kind: "worktree",
       key: `w:${worktree.id}`,
@@ -196,6 +209,7 @@ export function buildSidebarRows({
       groupId: project.id,
       project,
       query: worktreeQueries[i],
+      pullRequests: pullRequestQueries[i]?.data,
       local: true,
       remote: remoteHere,
     };
@@ -212,6 +226,9 @@ export function buildSidebarRows({
       groupId: remoteGroupId(groupKey),
       project: first.project,
       query: undefined,
+      // One repo has one set of PRs wherever it is checked out, so the
+      // first peer's map serves the group.
+      pullRequests: first.pullRequests,
       local: false,
       remote: items,
     });
@@ -254,14 +271,15 @@ export function buildSidebarRows({
     // local-only failure. Their shelved ones share the group's shelf
     // with the local ones, so a device showing only peers' work (the
     // web client) can still reach them.
-    const remoteVisible: SidebarRow[] = [];
-    const remoteShelved: SidebarRow[] = [];
+    const remoteVisible: RemoteRow[] = [];
+    const remoteShelved: RemoteRow[] = [];
     for (const item of group.remote) {
       for (const row of remoteWorktreeRows(item, groupId, foldedInto)) {
         (row.worktree.shelved ? remoteShelved : remoteVisible).push(row);
       }
     }
     const localShelved: Worktree[] = [];
+    const localVisible: Worktree[] = [];
     if (query?.isLoading) {
       rows.push({
         kind: "worktree-skeleton",
@@ -275,13 +293,26 @@ export function buildSidebarRows({
         projectId: project.id,
       });
     } else if (query) {
-      const localVisible: Worktree[] = [];
       for (const worktree of (query.data ?? []) as Worktree[]) {
         (worktree.shelved ? localShelved : localVisible).push(worktree);
       }
-      rows.push(...localRows(localVisible));
     }
-    rows.push(...remoteVisible);
+    // A stack's rows sit together, top of the stack first, wherever
+    // its layers are checked out: a peer's row moves up beside the
+    // local ones it stacks with. The trunk comes off whichever listing
+    // the group has.
+    const trunk =
+      trunkOf(
+        localVisible.length > 0 ? (query?.data as Worktree[]) : undefined,
+      ) ?? trunkOf(group.remote[0]?.worktrees);
+    rows.push(
+      ...groupByStack(
+        [...localRows(localVisible), ...remoteVisible],
+        (row) => row.worktree.branch,
+        group.pullRequests,
+        trunk,
+      ),
+    );
     const shelvedCount = localShelved.length + remoteShelved.length;
     if (shelvedCount > 0) {
       const shelfOpen = shelvedExpanded.has(groupId);
@@ -344,6 +375,8 @@ interface ProjectGroup {
   groupId: string;
   project: Project;
   query: ProjectWorktreeQueries[number] | undefined;
+  // The repo's branch -> PR map, off whichever checkout the group has.
+  pullRequests: Record<string, PullRequest> | undefined;
   local: boolean;
   remote: RemoteForestItem[];
 }
@@ -377,6 +410,7 @@ export function deviceBadgeOf(item: RemoteForestItem): SidebarDeviceBadge {
   };
 }
 
+type LocalRow = Extract<SidebarRow, { kind: "worktree" }>;
 type RemoteRow = Extract<SidebarRow, { kind: "remote-worktree" }>;
 
 function remoteWorktreeRows(

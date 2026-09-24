@@ -284,6 +284,7 @@ function Forest({
     : buildSidebarRows({
         projects: local.projects,
         worktreeQueries: local.worktreeQueries,
+        pullRequestQueries: local.pullRequestQueries,
         collapsed,
         sortMode,
         shelvedExpanded,
