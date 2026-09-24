@@ -287,11 +287,12 @@ func cmdUpdateInstall() (int, error) {
 	}
 	if app == nil {
 		spin.set("installing " + man.Version)
-		if err := installStaged(man, bundle); err != nil {
+		installed, err := installStaged(bundle)
+		if err != nil {
 			return 1, err
 		}
 		spin.stop()
-		reportUpdated(version, man.Version)
+		reportUpdated(version, installed.Version)
 		return 0, nil
 	}
 
@@ -333,18 +334,17 @@ func cmdUpdateFinishInstall(pidArg string) (int, error) {
 		appendInstallLog("finish-install: %v", bundleErr)
 		return 1, bundleErr
 	}
-	man := readStagedManifest()
-	if man == nil {
-		appendInstallLog("finish-install: no staged update to install")
-		return 1, errf("No staged update to install.")
-	}
-	appendInstallLog("finish-install: waiting for app pid %d to exit (installing %s)", pid, man.Version)
+	appendInstallLog("finish-install: waiting for app pid %d to exit", pid)
 	if err := waitForPidExit(pid); err != nil {
 		appendInstallLog("finish-install: %v (aborting)", err)
 		return 1, err
 	}
-	if err := installStaged(man, bundle); err != nil {
-		appendInstallLog("finish-install: %v", err)
+	man, err := installStaged(bundle)
+	if err != nil {
+		// The app quit for a restart, so bring the current version back
+		// rather than leave it closed. A failed swap has restored it.
+		appendInstallLog("finish-install: %v (relaunching the current app)", err)
+		_ = exec.Command("open", bundle).Run()
 		return 1, err
 	}
 	// Relaunch by path, foreground: the user asked the app to restart.

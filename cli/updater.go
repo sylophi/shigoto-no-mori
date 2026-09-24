@@ -628,8 +628,10 @@ func stageUpdate(installedBundle string, progress func(phase, version string)) (
 	if man := readStagedManifest(); man != nil && man.Version == release.Version {
 		return man, nil
 	}
-	clearStaged()
 
+	// A bundle staged earlier stays installable until the newer one is
+	// verified: a failed download must not cost the user the update
+	// they already have.
 	progress("downloading", release.Version)
 	zipPath := filepath.Join(updatesDir(), "download.zip")
 	if err := downloadFile(release.URL, zipPath); err != nil {
@@ -662,6 +664,7 @@ func stageUpdate(installedBundle string, progress func(phase, version string)) (
 		_ = os.RemoveAll(extractDir)
 		return nil, err
 	}
+	clearStaged()
 	if err := os.MkdirAll(stagedDir(), 0o755); err != nil {
 		return nil, errf("Couldn't create %s: %v", stagedDir(), err)
 	}
@@ -789,23 +792,35 @@ func swapBundle(stagedApp, targetBundle string) error {
 }
 
 // Install the staged update over targetBundle and clean up the staging
-// area. Runs under the staging lock: the swap's scratch names
-// (.new-*/.old-*) are exactly what pruneUpdateLeftovers sweeps, so a
-// concurrent stager's prune must be kept out of the swap window. The
-// staged dir is cleared even though swapBundle already moved the
-// bundle out of it: the manifest and any strays must not survive a
-// completed install.
-func installStaged(man *stagedManifest, targetBundle string) error {
+// area, returning what was installed. Runs under the staging lock: the
+// swap's scratch names (.new-*/.old-*) are exactly what
+// pruneUpdateLeftovers sweeps, so a concurrent stager's prune must be
+// kept out of the swap window. A stager that holds the lock is waited
+// out (for a bounded time): the app's periodic check can be mid-run
+// when a restart is asked for, and it dies with the app a moment
+// later. The manifest is read only once the lock is held, since that
+// stager may have replaced the bundle. The staged dir is cleared even
+// though swapBundle already moved the bundle out of it: the manifest
+// and any strays must not survive a completed install.
+func installStaged(targetBundle string) (*stagedManifest, error) {
 	unlock, err := acquireStagingLock()
+	for deadline := time.Now().Add(appQuitTimeout); errorKindOf(err) == "update-in-progress" && time.Now().Before(deadline); {
+		time.Sleep(pollInterval)
+		unlock, err = acquireStagingLock()
+	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer unlock()
+	man := readStagedManifest()
+	if man == nil {
+		return nil, errf("No staged update to install.")
+	}
 	if err := swapBundle(stagedBundlePath(man), targetBundle); err != nil {
-		return err
+		return nil, err
 	}
 	clearStaged()
-	return nil
+	return man, nil
 }
 
 // --- install log (finish-install runs headless) ---
