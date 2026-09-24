@@ -130,7 +130,7 @@ type githubStack struct {
 
 type githubStackEntry struct {
 	Number int `json:"number"`
-	// "open" or "closed"; a merged PR is closed.
+	// "open" or "closed". A merged PR is closed.
 	State string `json:"state"`
 }
 
@@ -203,8 +203,8 @@ func mergeStackAsync(projectPath string, number int, method string) error {
 }
 
 // One PR at a time from the bottom, for a chain GitHub doesn't know as
-// a stack. Each PR above the bottom is retargeted at the trunk first;
-// merging it into its old base (a branch that already landed) would
+// a stack. Each PR above the bottom is retargeted at the trunk first.
+// Merging it into its old base (a branch that already landed) would
 // merge nothing. Stops at the first failure, reporting what landed.
 func mergeStackSequentially(projectPath string, set []prSummary, trunk, method string, onMerged func(prSummary)) error {
 	for i, pr := range set {
@@ -233,7 +233,7 @@ func stackStepError(landed []prSummary, failed prSummary, err error) error {
 	return errf("merged %s, then PR #%d failed: %s", strings.Join(numbers, ", "), failed.Number, err)
 }
 
-// GitHub recomputes a PR's mergeability after a retarget; merging in
+// GitHub recomputes a PR's mergeability after a retarget. Merging in
 // that window fails with a bare "not mergeable". Wait for the verdict,
 // briefly: the merge itself is the real check.
 func awaitMergeability(projectPath string, number int) {

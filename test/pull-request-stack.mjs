@@ -1,10 +1,10 @@
 // Durable proof for stack detection (shared/pullRequestStack.ts), the
 // pure read the sidebar pill, the worktree page and the merge button
-// all share: a chain of PRs based on each other's heads is a stack,
-// bottom first; a merged bottom stays in it; the trunk is never a
-// member (a "main -> production" PR must not sit under every stack);
-// a fork ends the walk up; stale rows that loop still end the walk;
-// and the merge set skips landed PRs and refuses a broken stack.
+// all share. A chain of PRs based on each other's heads is a stack,
+// bottom first, and a merged bottom stays in it. The trunk is never a
+// member (a "main -> production" PR must not sit under every stack).
+// A fork ends the walk up, and stale rows that loop still end the
+// walk. The merge set skips landed PRs and refuses a broken stack.
 // Runs under test/lib/register-ts-alias.mjs. See package.json
 // pnpm test pull-request-stack.
 import assert from "node:assert/strict";
@@ -83,7 +83,7 @@ try {
   );
 
   await proof.check(
-    "a fork ends the walk up; a loop in stale rows still ends",
+    "a fork ends the walk up, and a loop in stale rows still ends",
     () => {
       const forked = { ...prs, "layer-b2": pr("layer-a") };
       // Walking up from the fork point stops there, and a chain of one

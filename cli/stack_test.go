@@ -45,7 +45,7 @@ func TestStackBelowWalksToTheTrunk(t *testing.T) {
 	}
 }
 
-// Without the trunk guard the promotion PR is a parent; with a cycle
+// Without the trunk guard the promotion PR is a parent. With a cycle
 // in stale rows the walk still ends.
 func TestStackBelowIsBounded(t *testing.T) {
 	prs := []prSummary{
