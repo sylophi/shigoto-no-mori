@@ -89,7 +89,7 @@ export function TidyConfirm({
                 .join(", ")}
               . Their changes exist nowhere else.
             </p>
-            <label className="mt-3 flex cursor-pointer items-center gap-2 select-none">
+            <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-md select-none">
               <Checkbox
                 variant="destructive"
                 checked={acknowledged}

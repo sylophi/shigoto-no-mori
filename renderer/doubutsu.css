@@ -38,6 +38,7 @@
  *      diff-view                 diff/DiffView.tsx
  *      diff-index                diff/DiffFileIndex.tsx
  *      diff-index-row, diff-index-jump   diff/DiffFileIndex.tsx
+ *      accept-commands-panel     remote/AcceptCommandsToggle.tsx
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
  *      dropdown-menu-sub-trigger (+ data-variant)   ui/dropdown-menu.tsx
@@ -885,6 +886,34 @@
 .doubutsu [data-slot="diff-index-jump"]:is(:hover, :active) {
   background-image: none;
   animation: none;
+}
+
+/* The Allow control switch governs everything in its panel, which
+   spells out what the grant covers, so hovering or holding the switch
+   row stripes the whole panel instead of the row alone. The click
+   target stays the row: a stray click in the list shouldn't flip the
+   app's most sensitive switch. */
+.doubutsu [data-slot="accept-commands-panel"] {
+  & label:active {
+    background-image: none;
+    animation: none;
+  }
+  &:has(label:active input:not(:disabled)) {
+    background-image: var(--doubutsu-stripe-image);
+    background-size: 20px 20px;
+    animation: var(--doubutsu-stripe-animation);
+  }
+  @media (hover: hover) {
+    & label:hover {
+      background-image: none;
+      animation: none;
+    }
+    &:has(label:hover input:not(:disabled)) {
+      background-image: var(--doubutsu-stripe-image);
+      background-size: 20px 20px;
+      animation: var(--doubutsu-stripe-animation);
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

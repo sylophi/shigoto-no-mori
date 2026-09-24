@@ -98,6 +98,7 @@ export function AcceptCommandsToggle() {
 
   return (
     <section
+      data-slot="accept-commands-panel"
       className={cn(
         // Filled as well as outlined: doubutsu strips borders and lets
         // the fill carry the panel.

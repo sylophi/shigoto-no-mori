@@ -21,7 +21,7 @@ export function ToggleRow({
   return (
     <label
       className={cn(
-        "flex items-start gap-3",
+        "flex items-start gap-3 rounded-md",
         disabled ? "cursor-not-allowed" : "cursor-pointer",
       )}
     >
