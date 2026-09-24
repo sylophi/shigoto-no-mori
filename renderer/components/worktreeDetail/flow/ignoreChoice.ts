@@ -123,7 +123,6 @@ export function usePullChoice(
       !sameSelection(picked, selectionOfPreset(preset)),
     saveAsPreset: () => savePreset(presetOfSelection(selection)),
     runSetup,
-    setupPinned: setupChoice !== null,
     setRunSetup: setSetupChoice,
     waiting: needsList || !presetRead,
     // Why Start is held, when the wait will not end on its own: the
