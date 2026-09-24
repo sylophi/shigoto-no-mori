@@ -1,13 +1,18 @@
 import type { Dispatch, SetStateAction } from "react";
 import { cn } from "@/lib/utils";
 import { RowContent } from "./RowContent";
-import { ROW_LAYOUT, type InboxShelf, type SidebarRow } from "./sidebarRow";
+import {
+  ROW_LAYOUT,
+  type GroupShelf,
+  type InboxShelf,
+  type SidebarRow,
+} from "./sidebarRow";
 
 // What a row needs from the sidebar but this wrapper only forwards,
 // grouped so VirtualRow's own props stay about positioning and hover.
 export interface RowHandlers {
   onToggle: (groupId: string) => void;
-  onToggleShelved: (groupId: string) => void;
+  onToggleShelved: (groupId: string, shelf: GroupShelf) => void;
   onToggleShelf: (shelf: InboxShelf) => void;
   arrangeMode: boolean;
 }

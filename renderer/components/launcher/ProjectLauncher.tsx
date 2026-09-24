@@ -13,6 +13,8 @@ import { useProjects } from "@/hooks/projects/useProjects";
 import { useProjectSort } from "@/hooks/projects/useProjectSort";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { useHiddenWorktreePrefixes } from "@/hooks/sharedSettings/useHiddenWorktreePrefixes";
+import { isHiddenByPrefix } from "@shared/sharedSettings";
 import { rankByScore } from "@/lib/fuzzyMatch";
 import { getRecentWorktree } from "@/lib/recentWorktrees";
 import type { Project, Worktree } from "@shared/schemas";
@@ -78,6 +80,7 @@ function LauncherOverlay({ onClose }: { onClose: () => void }) {
   // Lazy fan-out: this component only mounts while the launcher is open,
   // and the queries share cache keys with the sidebar so they're warm.
   const worktreeQueries = useAllProjectWorktrees(projects, true);
+  const hiddenPrefixes = useHiddenWorktreePrefixes();
 
   // Base order follows the user's sidebar sort; a query re-ranks by match.
   const ordered = sortProjects(projects, sortMode);
@@ -115,9 +118,12 @@ function LauncherOverlay({ onClose }: { onClose: () => void }) {
     const queryIndex = projects.findIndex((p) => p.id === project.id);
     const trees = (worktreeQueries[queryIndex]?.data ?? []) as Worktree[];
     const recentId = getRecentWorktree(project.id);
+    // Never one the sidebar is keeping out of sight.
+    const listed = (t: Worktree) =>
+      !t.shelved && !isHiddenByPrefix(t, hiddenPrefixes);
     const target =
-      trees.find((t) => t.id === recentId && !t.shelved) ??
-      trees.find((t) => !t.shelved) ??
+      trees.find((t) => t.id === recentId && listed(t)) ??
+      trees.find(listed) ??
       trees[0];
     if (target) {
       void navigate({

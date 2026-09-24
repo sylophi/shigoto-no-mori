@@ -29,9 +29,12 @@ import {
   createSharedSettingsCopy,
   EMPTY_SHARED_SETTINGS,
   exchangeSharedSettings,
+  hiddenPrefixesValue,
+  isHiddenByPrefix,
   leaveOutPresetValue,
   mergeSharedSettings,
   NO_LEAVE_OUT_PRESET,
+  parseHiddenPrefixes,
   parseLeaveOutPreset,
   sharedSettingKeys,
   sharedSettingsAhead,
@@ -71,6 +74,14 @@ function webBridge() {
 // Paths enough to crowd a leave-out preset's one value.
 const many = (count) =>
   Array.from({ length: count }, (_, at) => `packages/app-${at}/dist`);
+
+// The fields isHiddenByPrefix reads off a worktree.
+const tree = (name, branch, { isPrimary = false, detached = false } = {}) => ({
+  name,
+  branch,
+  isPrimary,
+  detached,
+});
 
 // The exchange the renderer runs on a session landing
 // (renderer/lib/remote/sharedSettingsSync.ts), over two bridges.
@@ -212,6 +223,43 @@ async function main() {
         brought: many(6).toSorted(),
       });
       assert.equal(leaveOutPresetValue({ ...preset, brought: many(40) }), null);
+    },
+  );
+
+  await check(
+    "hidden worktree prefixes: one value, the same list is the same value, a primary never hides, a detached hash never matches, a list too long for a value is refused",
+    () => {
+      assert.deepEqual(parseHiddenPrefixes(undefined), []);
+      assert.deepEqual(parseHiddenPrefixes(" exp/ \n\n tmp-"), [
+        "exp/",
+        "tmp-",
+      ]);
+      const value = hiddenPrefixesValue(["tmp-", "exp/", "tmp-", " "]);
+      assert.equal(value, "exp/\ntmp-");
+      assert.equal(hiddenPrefixesValue(["exp/", "tmp-"]), value);
+
+      const prefixes = parseHiddenPrefixes(value);
+      assert.equal(
+        isHiddenByPrefix(tree("snug-otter", "exp/x"), prefixes),
+        true,
+      );
+      assert.equal(isHiddenByPrefix(tree("tmp-1", "fix"), prefixes), true);
+      assert.equal(
+        isHiddenByPrefix(tree("snug-otter", "fix"), prefixes),
+        false,
+      );
+      assert.equal(
+        isHiddenByPrefix(tree("main", "exp/x", { isPrimary: true }), prefixes),
+        false,
+      );
+      assert.equal(
+        isHiddenByPrefix(tree("snug-otter", "tmp-9f2", { detached: true }), [
+          "tmp-9",
+        ]),
+        false,
+      );
+
+      assert.equal(hiddenPrefixesValue(many(40)), null);
     },
   );
 

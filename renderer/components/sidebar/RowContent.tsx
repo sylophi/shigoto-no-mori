@@ -6,12 +6,12 @@ import { ProjectRow } from "./ProjectRow";
 import { RemoteWorktreeRow } from "./RemoteWorktreeRow";
 import { ShelvedToggleRow } from "./ShelvedToggleRow";
 import { WorktreeRow } from "./WorktreeRow";
-import type { InboxShelf, SidebarRow } from "./sidebarRow";
+import type { GroupShelf, InboxShelf, SidebarRow } from "./sidebarRow";
 
 interface RowContentProps {
   row: SidebarRow;
   onToggle: (groupId: string) => void;
-  onToggleShelved: (groupId: string) => void;
+  onToggleShelved: (groupId: string, shelf: GroupShelf) => void;
   onToggleShelf: (shelf: InboxShelf) => void;
   arrangeMode: boolean;
   isHovered: boolean;
@@ -84,9 +84,10 @@ export function RowContent({
     case "shelved-toggle":
       return (
         <ShelvedToggleRow
+          shelf={row.shelf}
           count={row.count}
           expanded={row.expanded}
-          onToggle={() => onToggleShelved(row.groupId)}
+          onToggle={() => onToggleShelved(row.groupId, row.shelf)}
         />
       );
     case "inbox-shelf":

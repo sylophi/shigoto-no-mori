@@ -33,6 +33,7 @@ import {
 } from "@/hooks/projects/useSidebarView";
 import { useMirrorLinks } from "@/hooks/remote/useMirrors";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
+import { useHiddenWorktreePrefixes } from "@/hooks/sharedSettings/useHiddenWorktreePrefixes";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SettingsSidebarNav } from "@/components/settings/SettingsSidebarNav";
@@ -50,7 +51,7 @@ import { DeviceFilterBar } from "./DeviceFilterBar";
 import { buildInboxRows } from "./inbox/buildInboxRows";
 import { NewWorktreeButton } from "./inbox/NewWorktreeButton";
 import { ProjectDragPreview } from "./ProjectDragPreview";
-import type { InboxShelf, SidebarViewModel } from "./sidebarRow";
+import type { GroupShelf, InboxShelf, SidebarViewModel } from "./sidebarRow";
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarToolbar } from "./SidebarToolbar";
@@ -177,17 +178,25 @@ function Forest({
   for (const key of collapsedRemoteKeys) {
     if (!localIdByIdentity.has(key)) collapsed.add(remoteGroupId(key));
   }
-  // Per-group "Show shelved" reveal. Transient on purpose, since the
-  // whole point of shelving is to keep the noise down on a fresh window.
-  // One per repo like the fold: a repo this machine holds keeps its
-  // reveal under the local id while narrowed to a peer.
-  const [shelvedOpenIds, setShelvedOpenIds] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const shelvedExpanded = new Set(shelvedOpenIds);
-  for (const [identity, id] of localIdByIdentity) {
-    if (shelvedOpenIds.has(id)) shelvedExpanded.add(remoteGroupId(identity));
-  }
+  // Per-group "Show shelved" and "Show hidden" reveals. Transient on
+  // purpose, since the whole point of both is to keep the noise down on
+  // a fresh window. One per repo like the fold: a repo this machine
+  // holds keeps its reveal under the local id while narrowed to a peer.
+  const [shelfOpenIds, setShelfOpenIds] = useState<
+    Record<GroupShelf, Set<string>>
+  >(() => ({ shelved: new Set(), hidden: new Set() }));
+  const withRemoteGroups = (ids: Set<string>) => {
+    const expanded = new Set(ids);
+    for (const [identity, id] of localIdByIdentity) {
+      if (ids.has(id)) expanded.add(remoteGroupId(identity));
+    }
+    return expanded;
+  };
+  const groupShelvesOpen: Record<GroupShelf, Set<string>> = {
+    shelved: withRemoteGroups(shelfOpenIds.shelved),
+    hidden: withRemoteGroups(shelfOpenIds.hidden),
+  };
+  const hiddenPrefixes = useHiddenWorktreePrefixes();
   // Inbox shelves, same transient-by-design reasoning as the per-group
   // reveal above: both start folded on every launch.
   const [openShelves, setOpenShelves] = useState<Set<InboxShelf>>(
@@ -208,11 +217,14 @@ function Forest({
     else if (remoteKey !== undefined) toggleCollapsedRemote.mutate(remoteKey);
   };
 
-  const toggleShelved = (groupId: string) => {
+  const toggleShelved = (groupId: string, shelf: GroupShelf) => {
     const remoteKey = remoteGroupKeyOf(groupId);
     const localId =
       remoteKey === undefined ? undefined : localIdByIdentity.get(remoteKey);
-    setShelvedOpenIds(withToggled(localId ?? groupId));
+    setShelfOpenIds((prev) => ({
+      ...prev,
+      [shelf]: withToggled(localId ?? groupId)(prev[shelf]),
+    }));
   };
 
   const toggleShelf = (shelf: InboxShelf) => {
@@ -280,6 +292,7 @@ function Forest({
         mirrors,
         deviceBadges,
         openShelves,
+        hiddenPrefixes,
       })
     : buildSidebarRows({
         projects: local.projects,
@@ -287,7 +300,8 @@ function Forest({
         pullRequestQueries: local.pullRequestQueries,
         collapsed,
         sortMode,
-        shelvedExpanded,
+        openShelves: groupShelvesOpen,
+        hiddenPrefixes,
         arrangeMode,
         remote: shownRemote,
         mirrors,

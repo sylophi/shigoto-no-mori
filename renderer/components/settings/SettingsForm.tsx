@@ -24,6 +24,7 @@ import type { ClientConfig, GlobalConfig, Theme } from "@shared/schemas";
 import type { RemoteDevice } from "@/lib/remote/devices";
 import { AppearanceSection } from "./AppearanceSection";
 import { DeviceStatusPill } from "@/components/settings/DeviceStatusPill";
+import { HiddenWorktreesSection } from "./HiddenWorktreesSection";
 import { LaunchToolsPanel } from "./LaunchToolsPanel";
 import { LocalDevicePanel } from "./LocalDevicePanel";
 import { PeerDeviceSettings } from "./PeerDeviceSettings";
@@ -198,6 +199,7 @@ export function SettingsForm({
                 setForm((prev) => ({ ...prev, pauseAnimationsOnBattery: next }))
               }
             />
+            <HiddenWorktreesSection />
             {/* The desktop states its build in this device's section.
                 A hostless client has no such section, and its build is
                 still worth a line, so it goes with the other setting
