@@ -1,4 +1,4 @@
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouter } from "@tanstack/react-router";
 import { WORKTREE_ROW_BUTTON } from "@/components/sidebar/WorktreeRow";
 import { BackButton } from "@/components/ui/back-button";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -29,6 +29,7 @@ import { UpdateAllButton } from "./UpdateAllButton";
 // which the phone layout's chip row draws too.
 export function SettingsSidebarNav() {
   const navigate = useNavigate();
+  const router = useRouter();
   const devices = useHostDevices();
   const { activeTab } = useActiveSettingsTab(devices);
   const local = useLocalDevice();
@@ -38,13 +39,20 @@ export function SettingsSidebarNav() {
 
   return (
     <nav aria-label="Settings sections" className="flex flex-col px-2 pb-2">
-      {/* The tree is gone while this list is up, so the way back to the
-          forest is the first row. "/" lands on the first worktree, the
-          same place a fresh window opens. */}
+      {/* The tree is gone while this list is up, so the way out is the
+          first row: back to wherever Settings was opened from. Switching
+          sections pushes no history, so one step always leaves the page.
+          A window that opened straight onto Settings has nothing behind
+          it and goes to "/", which lands on the first worktree, the same
+          place a fresh window opens. */}
       <div className="mb-1 pl-2">
         <BackButton
-          label="Projects"
-          onClick={() => void navigate({ to: "/" })}
+          label="Back"
+          onClick={() =>
+            router.history.canGoBack()
+              ? router.history.back()
+              : void navigate({ to: "/" })
+          }
         />
       </div>
 
