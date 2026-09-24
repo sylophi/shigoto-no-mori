@@ -390,14 +390,18 @@ function hostHandlersFor(
     }),
     "packageScripts:getSort": () => "manifest",
     "githubCli:readiness": () => ({ installed: true, authed: true }),
+    // One repo, one set of PRs: every checkout of shigoto-no-mori
+    // answers with the same map, as the real sweep would on each
+    // device, so a stack reads the same from every device's rows.
     "githubCli:projectPullRequests": ({ projectId }) =>
-      projectId === "p_sm" ? { "v2-exp/remote-ui-flows": LAB_PR_SLIM } : {},
+      LAB_SM_PROJECT_IDS.has(projectId) ? LAB_PRS : {},
     "githubCli:worktreePullRequest": ({ branch }) =>
-      branch === "v2-exp/remote-ui-flows" ? LAB_PR_DETAIL : null,
+      labPullRequestDetail(branch),
+    // Every method allowed, so the merge button poses its dropdown.
     "githubCli:repoMergeConfig": () => ({
-      merge: false,
+      merge: true,
       squash: true,
-      rebase: false,
+      rebase: true,
     }),
     "sync:worktreeFolder": ({ relative }: { relative: string }) => [
       ...(LAB_TREE[relative] ?? []),
@@ -822,18 +826,73 @@ const LAB_DETECTED = [
   { kind: "detected", id: "finder", label: "Finder", available: true },
 ] as const;
 
-const LAB_PR_SLIM = {
-  number: 148,
-  url: "https://github.com/sylophi/shigoto-no-mori/pull/148",
-  title: "Aggregate worktrees across devices",
-  state: "OPEN" as const,
+const LAB_SM_PROJECT_IDS = new Set(["p_sm", "tp_sm", "mini_sm"]);
+
+const labPullRequest = (
+  number: number,
+  title: string,
+  baseRefName: string,
+  state: "OPEN" | "MERGED" | "CLOSED" = "OPEN",
+) => ({
+  number,
+  url: `https://github.com/sylophi/shigoto-no-mori/pull/${number}`,
+  title,
+  state,
   isDraft: false,
+  baseRefName,
+});
+
+// The repo's PRs by head branch. Three of them are a stack across two
+// devices (brave-badger and quiet-quail here, gentle-gecko on the
+// Thinkpad), with the bottom already landed, so the stack list, the
+// pill positions and the "merge up to here" button all pose.
+const LAB_PRS = {
+  "v2-exp/remote-ui-flows": labPullRequest(
+    148,
+    "Aggregate worktrees across devices",
+    "main",
+  ),
+  "fix-stale-locks": labPullRequest(
+    150,
+    "Refuse a lock file older than the daemon",
+    "main",
+    "MERGED",
+  ),
+  "exp/terrier-sync": labPullRequest(
+    151,
+    "Watch the terrier registry for edits",
+    "fix-stale-locks",
+  ),
+  "port-pool-retry": labPullRequest(
+    152,
+    "Retry the pool lease before giving up",
+    "exp/terrier-sync",
+  ),
+};
+
+const LAB_PR_SLIM = LAB_PRS["v2-exp/remote-ui-flows"];
+
+// The stacked PRs carry no checks, so the stack poses with and without
+// the checks row (#148 keeps its two).
+function labPullRequestDetail(branch: string) {
+  const slim = (LAB_PRS as Record<string, typeof LAB_PR_SLIM>)[branch];
+  if (!slim) return null;
+  if (slim === LAB_PR_SLIM) return LAB_PR_DETAIL;
+  return { ...LAB_PR_DETAIL, ...slim, checks: LAB_NO_CHECKS, checkList: [] };
+}
+
+const LAB_NO_CHECKS = {
+  total: 0,
+  passed: 0,
+  failing: 0,
+  pending: 0,
+  neutral: 0,
+  skipped: 0,
 };
 
 const LAB_PR_DETAIL = {
   ...LAB_PR_SLIM,
   mergeState: "CLEAN" as const,
-  baseRefName: "main",
   authorLogin: "sylophi",
   updatedAt: new Date(Date.now() - 40 * 60_000).toISOString(),
   additions: 412,

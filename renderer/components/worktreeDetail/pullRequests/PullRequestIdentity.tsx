@@ -2,7 +2,8 @@ import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useLayoutEffect, useRef, useState } from "react";
 import { useNow } from "@/hooks/ui/useNow";
 import { formatRelativeTime } from "@/lib/relativeTime";
-import type { PullRequestDetail, Worktree } from "@shared/schemas";
+import { cn } from "@/lib/utils";
+import type { PullRequest, PullRequestDetail, Worktree } from "@shared/schemas";
 import { DiffButton } from "../DiffButton";
 import { PullRequestStateLabel } from "./PullRequestStateLabel";
 import { openPullRequest } from "./pullRequestShared";
@@ -140,12 +141,23 @@ function MetaSentence({
   );
 }
 
-function PullRequestTitleLink({ pr }: { pr: PullRequestDetail }) {
+// The PR's title as the link to it on GitHub. Shared with the stack
+// list, whose rows are the same link one per layer.
+export function PullRequestTitleLink({
+  pr,
+  className,
+}: {
+  pr: PullRequest;
+  className?: string;
+}) {
   return (
     <button
       type="button"
       onClick={() => openPullRequest(pr.url)}
-      className="rounded text-left text-foreground transition-colors select-text hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"
+      className={cn(
+        "rounded text-left text-foreground transition-colors select-text hover:text-primary focus-visible:outline-2 focus-visible:outline-ring",
+        className,
+      )}
       title={`Open #${pr.number} on GitHub`}
     >
       {pr.title}

@@ -1,4 +1,4 @@
-import { ChevronDown, CircleSlash, Loader2 } from "lucide-react";
+import { ChevronDown, CircleSlash, Layers2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -7,11 +7,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import { SimpleTooltip } from "@/components/ui/tooltip";
+import type { PullRequestStack } from "@shared/pullRequestStack";
 import { cn } from "@/lib/utils";
-import {
-  MERGE_METHOD_LABEL,
-  MERGE_METHOD_SHORT_LABEL,
-} from "@/lib/pullRequest";
+import { MERGE_METHOD_LABEL } from "@/lib/pullRequest";
 import type {
   MergeMethod,
   PullRequestDetail,
@@ -20,18 +20,20 @@ import type {
 } from "@shared/schemas";
 import { MergeStateIcon } from "./MergeStateIcon";
 import { TONE_TEXT } from "./pullRequestShared";
-import { useMergeBox } from "./useMergeBox";
+import { STACK_REACH_OPTIONS, useMergeBox } from "./useMergeBox";
 
 export function MergeBox({
   worktree,
   pr,
   repoConfig,
   lastMergeMethod,
+  stack,
 }: {
   worktree: Worktree;
   pr: PullRequestDetail;
   repoConfig: RepoMergeConfig | null;
   lastMergeMethod: MergeMethod | undefined;
+  stack: PullRequestStack | null;
 }) {
   const {
     merge,
@@ -43,10 +45,17 @@ export function MergeBox({
     mergeState,
     disabled,
     others,
+    blocked,
+    label,
+    landsStack,
+    pendingLabel,
+    reach,
+    showReach,
     runMerge,
     pickMethod,
+    pickReach,
     toggleDraft,
-  } = useMergeBox({ worktree, pr, repoConfig, lastMergeMethod });
+  } = useMergeBox({ worktree, pr, repoConfig, lastMergeMethod, stack });
 
   if (!primary || !activeMethod) {
     return (
@@ -56,6 +65,31 @@ export function MergeBox({
       </p>
     );
   }
+
+  const mergeButton = (
+    <Button
+      type="button"
+      size="sm"
+      variant={armed ? "default" : "outline"}
+      disabled={disabled}
+      onClick={() => trigger(() => runMerge(activeMethod))}
+      className={cn(others.length > 0 && "rounded-r-none border-r-0")}
+    >
+      {merge.isPending ? (
+        <>
+          <Loader2 aria-hidden className="size-3.5 animate-spin" />
+          {pendingLabel}
+        </>
+      ) : armed ? (
+        "Click again to confirm"
+      ) : (
+        <>
+          {landsStack && <Layers2 aria-hidden className="size-3.5" />}
+          {label}
+        </>
+      )}
+    </Button>
+  );
 
   return (
     <div className="space-y-2">
@@ -84,26 +118,22 @@ export function MergeBox({
               "Convert to draft"
             )}
           </Button>
+          {showReach && (
+            <SegmentedControl
+              value={reach}
+              onChange={pickReach}
+              options={STACK_REACH_OPTIONS}
+              disabled={merge.isPending}
+              aria-label="How far up the stack to merge"
+              optionClassName="px-2 py-0.5 text-xs"
+            />
+          )}
           <div className="inline-flex items-stretch">
-            <Button
-              type="button"
-              size="sm"
-              variant={armed ? "default" : "outline"}
-              disabled={disabled}
-              onClick={() => trigger(() => runMerge(activeMethod))}
-              className={cn(others.length > 0 && "rounded-r-none border-r-0")}
-            >
-              {merge.isPending ? (
-                <>
-                  <Loader2 aria-hidden className="size-3.5 animate-spin" />
-                  Merging…
-                </>
-              ) : armed ? (
-                "Click again to confirm"
-              ) : (
-                MERGE_METHOD_SHORT_LABEL[activeMethod]
-              )}
-            </Button>
+            {blocked ? (
+              <SimpleTooltip tip={blocked}>{mergeButton}</SimpleTooltip>
+            ) : (
+              mergeButton
+            )}
             {others.length > 0 && (
               <DropdownMenu>
                 <DropdownMenuTrigger

@@ -18,7 +18,11 @@ import { isManagedPath, managedBasesFor } from "../worktrees/paths";
 import { createLimiter } from "@shared/util/limit";
 import { listChangedFiles } from "./changes";
 import { run } from "./core";
-import { listRemotes, resolveDefaultBranch } from "./remotes";
+import {
+  listRemotes,
+  resolveDefaultBranch,
+  splitRemoteRefSync,
+} from "./remotes";
 
 interface RawWorktreeEntry {
   path: string;
@@ -464,6 +468,7 @@ async function getPrimaryRelation(
 interface BuildContext {
   hasRemote: boolean;
   primaryRef: string | null;
+  primaryBranch: string | null;
   shelvedSet: ReadonlySet<string>;
   autoPullSet: ReadonlySet<string>;
   primaryChain: PrimaryChainReader;
@@ -484,6 +489,10 @@ async function loadBuildContext(
   return {
     hasRemote: remotes.length > 0,
     primaryRef,
+    primaryBranch:
+      primaryRef === null
+        ? null
+        : (splitRemoteRefSync(primaryRef, remotes)?.branch ?? primaryRef),
     shelvedSet: readShelvedSet(),
     autoPullSet: readAutoPullSet(),
     primaryChain: primaryChainReader(projectPath, primaryRef),
@@ -516,6 +525,7 @@ async function buildWorktree(
     behindPrimary: primary.behindPrimary,
     unpushedCount,
     primaryRef: ctx.primaryRef ?? undefined,
+    primaryBranch: ctx.primaryBranch ?? undefined,
     mergedIntoPrimary: primary.mergedIntoPrimary,
     changedCount: changes.count,
     lastChangeAt: changes.lastChangeAt,

@@ -4,11 +4,13 @@ import type {
   RepoMergeConfig,
   Worktree,
 } from "@shared/schemas";
+import { usePullRequestStack } from "@/hooks/pullRequests/usePullRequestStack";
 import { ChecksRow } from "./ChecksRow";
 import { ClosedPullRequestBox } from "./ClosedPullRequestBox";
 import { MergedPrimaryBranchBox } from "./MergedPrimaryBranchBox";
 import { MergeBox } from "./MergeBox";
 import { PullRequestIdentity } from "./PullRequestIdentity";
+import { StackList } from "./StackList";
 
 export function PullRequestBody({
   worktree,
@@ -23,10 +25,12 @@ export function PullRequestBody({
 }) {
   const isOpen = pr.state === "OPEN";
   const hasChecks = pr.checks.total > 0;
+  const stack = usePullRequestStack(worktree.projectId, worktree.branch);
 
   return (
     <div className="space-y-4">
       <PullRequestIdentity worktree={worktree} pr={pr} />
+      {stack && <StackList worktree={worktree} stack={stack} />}
       {isOpen && hasChecks && (
         <div className="-mx-2">
           <ChecksRow pr={pr} />
@@ -38,6 +42,7 @@ export function PullRequestBody({
           pr={pr}
           repoConfig={repoConfig}
           lastMergeMethod={lastMergeMethod}
+          stack={stack}
         />
       )}
       {!isOpen && !worktree.isPrimary && (

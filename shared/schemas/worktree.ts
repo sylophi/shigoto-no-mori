@@ -81,6 +81,11 @@ export const WorktreeSchema = z.object({
   // so the renderer can show it on the pill without implying the source
   // is a local branch.
   primaryRef: z.string().optional(),
+  // The primary branch's local name ("main" for a primaryRef of
+  // "origin/main"), the branch a stack of pull requests lands on
+  // (shared/pullRequestStack.ts). Resolved by the host with the
+  // remote list in hand, so the renderer never has to split the ref.
+  primaryBranch: z.string().optional(),
   // True when this branch's work is already in the primary branch. See
   // landedOnPrimary in host/lib/git/worktrees.ts for what does and
   // doesn't count. Notably a local fast-forward merge doesn't, since

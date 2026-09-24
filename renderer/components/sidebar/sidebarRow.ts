@@ -1,3 +1,4 @@
+import type { StackChild, StackPosition } from "@shared/pullRequestStack";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import type { Project, PullRequest, Worktree } from "@shared/schemas";
 import type { StatusTone } from "@/components/ui/status-dot";
@@ -44,6 +45,11 @@ export type SidebarRow =
       key: string;
       worktree: Worktree;
       mirror?: SidebarDeviceBadge;
+      // The PR's place in its stack, off the project's map, and its
+      // place under the stack's lowest row when the two sit together
+      // (shared/pullRequestStack.ts).
+      stack: StackPosition | null;
+      stackChild?: StackChild;
     }
   // The inbox's own row: taller, cross-project, and built to be triaged
   // rather than picked out of a short list. See InboxRow. The project
@@ -58,6 +64,8 @@ export type SidebarRow =
       worktree: Worktree;
       project: Project;
       pr: PullRequest | undefined;
+      // The PR's place in its stack, off the same map as `pr`.
+      stack: StackPosition | null;
       device: SidebarDeviceBadge | undefined;
       // The peer a local row is mirrored with, when it is (the tree's
       // worktree row wears the same).
@@ -85,6 +93,8 @@ export type SidebarRow =
       // Its PR on that device, off the peer's own map like a local
       // row's off this machine's.
       pr: PullRequest | undefined;
+      stack: StackPosition | null;
+      stackChild?: StackChild;
       groupId: string;
     }
   | {

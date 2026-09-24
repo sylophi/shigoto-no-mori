@@ -8,6 +8,9 @@ package main
 // `gh pr merge`, and persist the method used so both surfaces default
 // to it next time. --method overrides the resolution explicitly.
 //
+// --stack merges the PR together with every open PR under it in its
+// stack, bottom first (stack.go).
+//
 // Local cleanup (landing the checkout back on primary, removing the
 // worktree) stays separate: `sm done` / `sm rm`.
 
@@ -72,24 +75,30 @@ type prSummary struct {
 	URL     string `json:"url"`
 	// The branch the PR merges into, which is not always the repo's
 	// default. land needs it to tell whether the primary branch is even
-	// a party to the merge.
+	// a party to the merge, and a stack is read off it (stack.go).
 	BaseRefName string `json:"baseRefName"`
+	HeadRefName string `json:"headRefName"`
 }
+
+// The gh projection prSummary decodes.
+const prSummaryFields = "number,title,state,isDraft,url,baseRefName,headRefName"
 
 // How a branch's PR is located: gh's server-side --head filter, any
 // state, newest first. Shared so `merge` and `status` can never end up
 // looking at different pull requests. extraFields is for callers that
 // need more than prSummary carries.
 func prLookupArgs(branch string, extraFields ...string) []string {
-	fields := "number,title,state,isDraft,url,baseRefName"
+	fields := prSummaryFields
 	for _, field := range extraFields {
 		fields += "," + field
 	}
 	return []string{"pr", "list", "--state", "all", "--head", branch, "--limit", "1", "--json", fields}
 }
 
-func findPullRequest(projectPath, branch string) (*prSummary, error) {
-	stdout, err := runGh(projectPath, prLookupArgs(branch)...)
+// One `gh pr list` call decoded into prSummary rows, for every
+// projection built on prSummaryFields.
+func ghPrList(projectPath string, args ...string) ([]prSummary, error) {
+	stdout, err := runGh(projectPath, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -97,8 +106,13 @@ func findPullRequest(projectPath, branch string) (*prSummary, error) {
 	if err := json.Unmarshal([]byte(stdout), &prs); err != nil {
 		return nil, errf("unexpected gh pr list output: %s", err)
 	}
-	if len(prs) == 0 {
-		return nil, nil
+	return prs, nil
+}
+
+func findPullRequest(projectPath, branch string) (*prSummary, error) {
+	prs, err := ghPrList(projectPath, prLookupArgs(branch)...)
+	if err != nil || len(prs) == 0 {
+		return nil, err
 	}
 	return &prs[0], nil
 }
@@ -177,6 +191,7 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 	// App plumbing: merge this PR number directly, skipping the
 	// branch -> PR lookup (the app already resolved it).
 	spec.strings["number"] = nil
+	spec.bools["stack"] = []string{}
 	parsed, err := parseCmdArgs(args, spec)
 	if err != nil {
 		return exitCodeOf(err), err
@@ -185,6 +200,7 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
+	stack := parsed.bools["stack"]
 
 	if numberFlag := parsed.strings["number"]; numberFlag != "" {
 		number, err := strconv.Atoi(numberFlag)
@@ -194,6 +210,10 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 		proj, err := resolveProjectArgs(ctx, parsed)
 		if err != nil {
 			return exitCodeOf(err), err
+		}
+		if stack {
+			// nil: the stack lookups fetch the allowed methods alongside.
+			return cmdMergeStack(proj, number, methodFlag, nil)
 		}
 		method, err := execMerge(proj, number, methodFlag, allowedMergeMethods(proj.Path))
 		if err != nil {
@@ -226,6 +246,9 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 	if pr.State != "OPEN" {
 		return 1, errf("PR #%d for %s is %s, not open", pr.Number, id.Branch, strings.ToLower(pr.State))
 	}
+	if stack {
+		return cmdMergeStack(proj, pr.Number, methodFlag, allowed)
+	}
 
 	method, err := execMerge(proj, pr.Number, methodFlag, allowed)
 	if err != nil {
@@ -249,29 +272,64 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 // branch-lookup path and the app's --number path. Callers pass the
 // repo's allowed methods so the settings read can overlap other work.
 func execMerge(proj project, number int, methodFlag string, allowed []string) (string, error) {
+	method, err := resolveMergeMethod(proj, methodFlag, allowed)
+	if err != nil {
+		return "", err
+	}
+	if _, err := runGh(proj.Path, "pr", "merge", fmt.Sprint(number), "--"+method); err != nil {
+		if err := mergeStackedAlone(proj.Path, number, method, err); err != nil {
+			return "", err
+		}
+	}
+	persistMergeMethod(proj, method)
+	return method, nil
+}
+
+// A PR in a stack GitHub knows refuses the plain merge: only its
+// asynchronous merge API lands those, and it lands every open PR
+// under the asked one too. So the plain merge of a stacked PR is
+// honoured only for the lowest open PR of its stack, where it is that
+// PR alone. Anything else is a stack merge, which `merge --stack` and
+// the app's stack merge say explicitly. Any other failure is reported
+// as it came: the refusal's wording is the cheap gate, the stacks API
+// the answer, so a merge that failed for any other reason pays no
+// extra round trip.
+func mergeStackedAlone(projectPath string, number int, method string, mergeErr error) error {
+	if !strings.Contains(mergeErr.Error(), "part of a stack") {
+		return mergeErr
+	}
+	ghStack, err := githubStackFor(projectPath, number)
+	if err != nil || ghStack == nil {
+		return mergeErr
+	}
+	if lowest, ok := ghStack.lowestOpen(); !ok || lowest != number {
+		return errf("PR #%d sits above open pull requests in its GitHub stack; merge the stack instead (`%s merge --stack`)", number, binaryName)
+	}
+	return mergeStackAsync(projectPath, number, method)
+}
+
+func resolveMergeMethod(proj project, methodFlag string, allowed []string) (string, error) {
 	if len(allowed) == 0 {
 		return "", errf("The repo's settings allow no merge method")
 	}
-	method := methodFlag
-	if method != "" {
-		if !slices.Contains(allowed, method) {
+	if methodFlag != "" {
+		if !slices.Contains(allowed, methodFlag) {
 			return "", errf("The repo's settings don't allow %s merges (allowed: %s)",
-				method, strings.Join(allowed, ", "))
+				methodFlag, strings.Join(allowed, ", "))
 		}
-	} else {
-		method = allowed[0]
-		config := readProjectConfig(proj.ID)
-		if config != nil && slices.Contains(allowed, config.LastMergeMethod) {
-			method = config.LastMergeMethod
-		}
+		return methodFlag, nil
 	}
-
-	if _, err := runGh(proj.Path, "pr", "merge", fmt.Sprint(number), "--"+method); err != nil {
-		return "", err
+	method := allowed[0]
+	config := readProjectConfig(proj.ID)
+	if config != nil && slices.Contains(allowed, config.LastMergeMethod) {
+		method = config.LastMergeMethod
 	}
+	return method, nil
+}
 
-	// Best-effort preference persist, same as the app. The config
-	// engine's lock and backfill hooks apply.
+// Best-effort preference persist, same as the app. The config engine's
+// lock and backfill hooks apply.
+func persistMergeMethod(proj project, method string) {
 	err := projectConfigScope(proj).update(func(doc map[string]any) error {
 		configDocSet(doc, "lastMergeMethod", method)
 		return nil
@@ -279,5 +337,35 @@ func execMerge(proj project, number int, methodFlag string, allowed []string) (s
 	if err != nil {
 		vlog("[merge] persist lastMergeMethod: %v", err)
 	}
-	return method, nil
+}
+
+// The --stack arm of both paths: every open PR from the bottom of the
+// stack up to and including `number`, one JSON event per landed PR in
+// --json mode so a caller can follow along. `allowed` is the repo's
+// merge methods when the caller already fetched them, else nil and
+// the stack lookups fetch them alongside their own round trips.
+func cmdMergeStack(proj project, number int, methodFlag string, allowed []string) (int, error) {
+	lk, err := lookupStack(proj, number, allowed)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	method, err := resolveMergeMethod(proj, methodFlag, lk.allowed)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	onMerged := func(pr prSummary) {
+		if jsonMode {
+			emit(map[string]any{"event": "merged", "number": pr.Number, "branch": pr.HeadRefName, "method": method})
+		} else {
+			out(greenOut(fmt.Sprintf("merged PR #%d (%s): %s", pr.Number, method, pr.Title)))
+		}
+	}
+	if err := execMergeStack(proj, number, method, lk, onMerged); err != nil {
+		return exitCodeOf(err), err
+	}
+	persistMergeMethod(proj, method)
+	if jsonMode {
+		emit(map[string]any{"ok": true, "method": method})
+	}
+	return 0, nil
 }

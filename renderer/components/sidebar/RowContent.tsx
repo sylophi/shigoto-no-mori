@@ -41,7 +41,14 @@ export function RowContent({
         />
       );
     case "worktree":
-      return <WorktreeRow worktree={row.worktree} mirror={row.mirror} />;
+      return (
+        <WorktreeRow
+          worktree={row.worktree}
+          mirror={row.mirror}
+          stack={row.stack}
+          stackChild={row.stackChild}
+        />
+      );
     case "remote-worktree":
       return (
         <RemoteWorktreeRow
@@ -52,6 +59,8 @@ export function RowContent({
           reachable={row.reachable}
           tone={row.tone}
           pr={row.pr}
+          stack={row.stack}
+          stackChild={row.stackChild}
         />
       );
     case "inbox-worktree":
@@ -60,6 +69,7 @@ export function RowContent({
           worktree={row.worktree}
           project={row.project}
           pr={row.pr}
+          stack={row.stack}
           device={row.device}
           mirror={row.mirror}
         />

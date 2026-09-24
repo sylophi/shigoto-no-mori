@@ -1,4 +1,5 @@
 import { RefreshCw } from "lucide-react";
+import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -10,6 +11,7 @@ import type { PullRequest, Worktree } from "@shared/schemas";
 import { ActivityIcon } from "./ActivityIcon";
 import { PullRequestPill } from "./PullRequestPill";
 import { StatusIndicator } from "./StatusIndicator";
+import type { StackChild, StackPosition } from "@shared/pullRequestStack";
 import { useWorktreeRowState } from "./useWorktreeRowState";
 
 interface WorktreeRowProps {
@@ -17,13 +19,17 @@ interface WorktreeRowProps {
   // The peer this worktree is mirrored with, when it is: the row then
   // stands for both copies and wears the peer's badge.
   mirror?: SidebarDeviceBadge;
+  // Both off the tree builder, which places the project's rows by
+  // stack once (buildSidebarRows).
+  stack: StackPosition | null;
+  stackChild?: StackChild;
 }
 
 // The row button's shared shell, also worn by RemoteWorktreeRow so a
 // peer's worktree reads as a sibling of a local one -- and stays one
 // through the next restyle.
 export const WORKTREE_ROW_BUTTON =
-  "group flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-accent/60";
+  "group relative flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-accent/60";
 
 // The two-line branch-over-name block both row flavors lead with, faded
 // back for a shelved worktree.
@@ -54,7 +60,45 @@ export function WorktreeRowLabel({
   );
 }
 
-export function WorktreeRow({ worktree, mirror }: WorktreeRowProps) {
+// A stack's rows draw as a file tree: the lowest layer is the parent
+// and every layer built on it a child one step in, hung on the same
+// connectors a file tree uses (a tee, the last child a corner). The
+// connector is filled strips rather than a bordered box: doubutsu
+// clears every border color, and a connector that vanishes with the
+// theme would leave the indent unexplained.
+const STACK_CHILD_INSET_PX = 12;
+
+export function stackIndentStyle(
+  child: StackChild | undefined,
+): CSSProperties | undefined {
+  if (!child) return undefined;
+  return {
+    marginLeft: STACK_CHILD_INSET_PX,
+    width: `calc(100% - ${STACK_CHILD_INSET_PX}px)`,
+  };
+}
+
+export function StackConnector({ child }: { child: StackChild | undefined }) {
+  if (!child) return null;
+  return (
+    <span aria-hidden className="absolute inset-y-0 -left-2 w-1.5">
+      <span
+        className={cn(
+          "absolute top-0 left-0 w-px bg-muted-foreground/40",
+          child === "last" ? "h-1/2" : "bottom-0",
+        )}
+      />
+      <span className="absolute inset-x-0 top-1/2 h-px bg-muted-foreground/40" />
+    </span>
+  );
+}
+
+export function WorktreeRow({
+  worktree,
+  mirror,
+  stack,
+  stackChild,
+}: WorktreeRowProps) {
   const { isSelected, open, activity, isDeleting, title } =
     useWorktreeRowState(worktree);
   const { data: prs } = useProjectPullRequests(worktree.projectId);
@@ -69,13 +113,16 @@ export function WorktreeRow({ worktree, mirror }: WorktreeRowProps) {
         isSelected && "bg-accent text-accent-foreground",
         isDeleting && "opacity-50",
       )}
+      style={stackIndentStyle(stackChild)}
     >
+      <StackConnector child={stackChild} />
       <WorktreeRowLabel worktree={worktree} emphasized={isSelected} />
       <RowTrailing
         worktree={worktree}
         activity={activity}
         isDeleting={isDeleting}
         pr={prs?.[worktree.branch]}
+        stack={stack}
       />
       {mirror && <MirrorBadge mirror={mirror} />}
     </button>
@@ -105,6 +152,8 @@ interface RowTrailingProps {
   // Resolved by the row: the local one off its project's map, a peer's
   // off the map that came with its forest.
   pr: PullRequest | undefined;
+  // The PR's place in its stack, off the same map.
+  stack?: StackPosition | null;
 }
 
 // The right-edge cluster, shared with RemoteWorktreeRow so a peer's row
@@ -117,6 +166,7 @@ export function RowTrailing({
   activity,
   isDeleting,
   pr,
+  stack,
 }: RowTrailingProps) {
   // Deletion spans cleanup scripts + the final git remove; the script
   // activity covers only cleanup, so keep the trash pulsing for the
@@ -128,7 +178,7 @@ export function RowTrailing({
     <>
       {activity && <ActivityIcon kind={activity} />}
       <StatusIndicator worktree={worktree} />
-      <PullRequestPill pr={pr} />
+      <PullRequestPill pr={pr} stack={stack} />
       <WorktreeKindIcon worktree={worktree} showTooltip={false} />
     </>
   );

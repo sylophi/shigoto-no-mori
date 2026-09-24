@@ -24,6 +24,7 @@ import { MirrorBadge } from "../WorktreeRow";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { ProjectMenuItems, useProjectMenuRemoveArm } from "../ProjectMenuItems";
 import { PullRequestPill } from "../PullRequestPill";
+import type { StackPosition } from "@shared/pullRequestStack";
 import { ChangedFilesPill, RemoteSyncPill } from "../StatusIndicator";
 import { useWorktreeRowState } from "../useWorktreeRowState";
 
@@ -31,6 +32,7 @@ interface InboxRowProps {
   worktree: Worktree;
   project: Project;
   pr: PullRequest | undefined;
+  stack: StackPosition | null;
   // The peer this worktree lives on, or undefined for this machine's own.
   device: SidebarDeviceBadge | undefined;
   mirror?: SidebarDeviceBadge;
@@ -59,6 +61,7 @@ export function InboxRow({
   worktree,
   project,
   pr,
+  stack,
   device,
   mirror,
 }: InboxRowProps) {
@@ -117,7 +120,7 @@ export function InboxRow({
         </span>
         <ChangedFilesPill worktree={worktree} />
         <RemoteSyncPill worktree={worktree} />
-        <PullRequestPill pr={pr} showNumber />
+        <PullRequestPill pr={pr} showNumber stack={stack} />
       </div>
 
       {/* The worktree's own name gets a line to itself rather than
