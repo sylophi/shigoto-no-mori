@@ -11,10 +11,14 @@
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { buildApi } from "@shared/ipc/client";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
-import type {
-  Project,
-  SharedSettingsDoc,
-  ShigomoriWorktreeData,
+import {
+  summarizeChecks,
+  type Project,
+  type PullRequestCheck,
+  type PullRequestCheckBucket,
+  type PullRequestMergeState,
+  type SharedSettingsDoc,
+  type ShigomoriWorktreeData,
 } from "@shared/schemas";
 import { repoNameFromUrl } from "@shared/cloneUrl";
 import { normalizeRemoteUrl } from "@shared/git/repoIdentity.mts";
@@ -862,43 +866,165 @@ const LAB_PRS = {
 const LAB_PR_SLIM = LAB_PRS["v2-exp/remote-ui-flows"];
 
 // The stacked PRs carry no checks, so the stack poses with and without
-// the checks row (#148 keeps its two).
+// the checks chip. #148 carries whatever ?checks= poses.
 function labPullRequestDetail(branch: string) {
   const slim = (LAB_PRS as Record<string, typeof LAB_PR_SLIM>)[branch];
   if (!slim) return null;
-  if (slim === LAB_PR_SLIM) return LAB_PR_DETAIL;
-  return { ...LAB_PR_DETAIL, ...slim, checks: LAB_NO_CHECKS, checkList: [] };
+  if (slim === LAB_PR_SLIM) return labPosedChecksDetail();
+  return { ...LAB_PR_DETAIL, ...slim, ...labChecks([]) };
 }
 
-const LAB_NO_CHECKS = {
-  total: 0,
-  passed: 0,
-  failing: 0,
-  pending: 0,
-  neutral: 0,
-  skipped: 0,
+const labCheck = (
+  name: string,
+  bucket: PullRequestCheckBucket,
+  linked = true,
+): PullRequestCheck => ({
+  name,
+  bucket,
+  ...(linked && {
+    url: `https://github.com/sylophi/shigoto-no-mori/actions/runs/9120#${encodeURIComponent(name)}`,
+  }),
+});
+
+const labChecks = (checkList: PullRequestCheck[]) => ({
+  checks: summarizeChecks(checkList),
+  checkList,
+});
+
+// One CI run, all passing: the poses below set a few jobs' buckets.
+const labCiRun = (
+  buckets: Partial<Record<string, PullRequestCheckBucket>> = {},
+) => [
+  ...[
+    "typecheck",
+    "lint",
+    "test (macos-latest)",
+    "test (ubuntu-latest)",
+    "theme:check",
+  ].map((name) => labCheck(name, buckets[name] ?? "passed")),
+  labCheck("Vercel", buckets["Vercel"] ?? "passed", false),
+];
+
+// ?checks=<variant> poses #148's CI rollup, paired with the merge state
+// GitHub would report beside it. Unknown or absent keeps the default
+// two passing checks.
+const LAB_CHECK_POSES: Record<
+  string,
+  { mergeState: PullRequestMergeState; checkList: PullRequestCheck[] }
+> = {
+  none: { mergeState: "CLEAN", checkList: [] },
+  "single-passed": {
+    mergeState: "CLEAN",
+    checkList: [labCheck("battery", "passed")],
+  },
+  "single-failing": {
+    mergeState: "UNSTABLE",
+    checkList: [labCheck("battery", "failing")],
+  },
+  passed: { mergeState: "CLEAN", checkList: labCiRun() },
+  "passed-some-skipped": {
+    mergeState: "CLEAN",
+    checkList: [
+      ...labCiRun().slice(0, 4),
+      labCheck("release-mac", "skipped"),
+      labCheck("CodeQL", "neutral"),
+    ],
+  },
+  "all-skipped": {
+    mergeState: "CLEAN",
+    checkList: [
+      labCheck("release-mac", "skipped"),
+      labCheck("web-client-prod", "skipped"),
+      labCheck("CodeQL", "neutral"),
+    ],
+  },
+  pending: {
+    mergeState: "BLOCKED",
+    checkList: labCiRun({
+      "test (macos-latest)": "pending",
+      "test (ubuntu-latest)": "pending",
+      Vercel: "pending",
+    }),
+  },
+  failing: {
+    mergeState: "UNSTABLE",
+    checkList: labCiRun({ lint: "failing" }),
+  },
+  "failing-blocked": {
+    mergeState: "BLOCKED",
+    checkList: labCiRun({
+      typecheck: "failing",
+      "test (macos-latest)": "failing",
+      "test (ubuntu-latest)": "failing",
+    }),
+  },
+  "failing-and-pending": {
+    mergeState: "BLOCKED",
+    checkList: [
+      ...labCiRun({
+        lint: "failing",
+        "test (macos-latest)": "pending",
+        "test (ubuntu-latest)": "pending",
+      }).slice(0, 5),
+      labCheck("release-mac", "skipped"),
+    ],
+  },
+  many: {
+    mergeState: "UNSTABLE",
+    checkList: [
+      ...[
+        "typecheck",
+        "lint",
+        "format:check",
+        "licenses:check",
+        "theme:check",
+        "test (macos-latest, node 22)",
+        "test (ubuntu-latest, node 22)",
+        "test (windows-latest, node 22)",
+        "hub / go test ./...",
+        "cli / go vet ./...",
+        "e2e / remote-smoke",
+        "build (darwin-arm64)",
+        "build (darwin-x64)",
+      ].map((name) => labCheck(name, "passed")),
+      labCheck(
+        "e2e / web shell on a narrow phone viewport with the inbox open",
+        "failing",
+      ),
+      labCheck("build (linux-x64)", "pending"),
+      labCheck("build (win32-x64)", "pending"),
+      labCheck("release-mac", "skipped"),
+      labCheck("web-client-prod", "skipped"),
+      labCheck("CodeQL", "neutral"),
+      labCheck("Vercel (shigomori-web)", "passed", false),
+      labCheck("Vercel (shigomori-site)", "passed", false),
+    ],
+  },
 };
+
+function labPosedChecksDetail() {
+  const variant = new URLSearchParams(location.search).get("checks");
+  const pose = variant ? LAB_CHECK_POSES[variant] : undefined;
+  if (!pose) return LAB_PR_DETAIL;
+  return {
+    ...LAB_PR_DETAIL,
+    mergeState: pose.mergeState,
+    ...labChecks(pose.checkList),
+  };
+}
 
 const LAB_PR_DETAIL = {
   ...LAB_PR_SLIM,
-  mergeState: "CLEAN" as const,
+  mergeState: "CLEAN" as PullRequestMergeState,
   authorLogin: "sylophi",
   updatedAt: new Date(Date.now() - 40 * 60_000).toISOString(),
   additions: 412,
   deletions: 96,
   changedFiles: 14,
-  checks: {
-    total: 2,
-    passed: 2,
-    failing: 0,
-    pending: 0,
-    neutral: 0,
-    skipped: 0,
-  },
-  checkList: [
-    { name: "battery", bucket: "passed" as const },
-    { name: "theme:check", bucket: "passed" as const },
-  ],
+  ...labChecks([
+    { name: "battery", bucket: "passed" },
+    { name: "theme:check", bucket: "passed" },
+  ]),
 };
 
 // Three files, so the diff pages pose their file index too (the rail

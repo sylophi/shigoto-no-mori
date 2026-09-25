@@ -18,6 +18,7 @@ import type {
   RepoMergeConfig,
   Worktree,
 } from "@shared/schemas";
+import { ChecksPopover } from "./ChecksPopover";
 import { MergeStateIcon } from "./MergeStateIcon";
 import { TONE_TEXT } from "./pullRequestShared";
 import { STACK_REACH_OPTIONS, useMergeBox } from "./useMergeBox";
@@ -57,14 +58,26 @@ export function MergeBox({
     toggleDraft,
   } = useMergeBox({ worktree, pr, repoConfig, lastMergeMethod, stack });
 
-  if (!primary || !activeMethod) {
-    return (
-      <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-        <CircleSlash aria-hidden className="size-3.5 shrink-0" />
-        No merge methods are enabled for this repo.
-      </p>
-    );
-  }
+  // The merge verdict (or why there's no merge button) with the checks
+  // chip beside it, whichever way the box renders.
+  const statusLine = (
+    <div className="inline-flex flex-wrap items-center gap-x-3 gap-y-2">
+      {primary && activeMethod ? (
+        <span className="inline-flex items-center gap-2 text-sm">
+          <MergeStateIcon tone={mergeState.tone} />
+          <span className={TONE_TEXT[mergeState.tone]}>{mergeState.label}</span>
+        </span>
+      ) : (
+        <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+          <CircleSlash aria-hidden className="size-3.5 shrink-0" />
+          No merge methods are enabled for this repo.
+        </p>
+      )}
+      <ChecksPopover pr={pr} />
+    </div>
+  );
+
+  if (!primary || !activeMethod) return statusLine;
 
   const mergeButton = (
     <Button
@@ -94,10 +107,7 @@ export function MergeBox({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="inline-flex items-center gap-2 text-sm">
-          <MergeStateIcon tone={mergeState.tone} />
-          <span className={TONE_TEXT[mergeState.tone]}>{mergeState.label}</span>
-        </span>
+        {statusLine}
         <div className="inline-flex items-center gap-2">
           <Button
             type="button"

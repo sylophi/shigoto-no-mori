@@ -3,11 +3,11 @@ import {
   type PullRequest,
   type PullRequestCheck,
   type PullRequestCheckBucket,
-  type PullRequestChecksSummary,
   type PullRequestDetail,
   PullRequestMergeStateSchema,
   PullRequestStateSchema,
   pullRequestsEqual,
+  summarizeChecks,
 } from "@shared/schemas";
 import { execGh } from "./exec";
 import { ghReadyForRepo } from "./remote";
@@ -214,21 +214,6 @@ function toCheckUrl(value: string | undefined): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function summarizeChecks(checks: PullRequestCheck[]): PullRequestChecksSummary {
-  const summary: PullRequestChecksSummary = {
-    total: checks.length,
-    passed: 0,
-    failing: 0,
-    pending: 0,
-    neutral: 0,
-    skipped: 0,
-  };
-  for (const c of checks) {
-    summary[c.bucket] += 1;
-  }
-  return summary;
 }
 
 // Single-branch lookup for the currently open worktree page. Uncached,

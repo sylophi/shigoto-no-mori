@@ -6,11 +6,14 @@ import {
 } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import { forkBranchCandidates } from "@shared/git/branches";
+import { pluralize } from "./pluralize";
 import {
   MergeMethodSchema,
   type MergeMethod,
   type PullRequest,
   type PullRequestCandidate,
+  type PullRequestCheck,
+  type PullRequestCheckBucket,
   type PullRequestChecksSummary,
   type PullRequestDetail,
   type PullRequestMergeState,
@@ -182,21 +185,26 @@ export interface ChecksDescriptor {
 }
 
 // Returns null when the PR has no checks at all. Callers should skip
-// rendering the row entirely rather than show "0 checks".
+// the checks control entirely rather than show "0 checks". The label
+// leads with the worst news, and a failing run still says what's
+// pending, since either is a reason the PR isn't green yet.
 export function describeChecks(
   summary: PullRequestChecksSummary,
 ): ChecksDescriptor | null {
   if (summary.total === 0) return null;
-  const checks = summary.total === 1 ? "check" : "checks";
   if (summary.failing > 0) {
+    const failing = `${pluralize(summary.failing, "check")} failing`;
     return {
-      label: `${summary.failing} of ${summary.total} ${checks} failing`,
+      label:
+        summary.pending > 0
+          ? `${failing}, ${summary.pending} pending`
+          : failing,
       tone: "rose",
     };
   }
   if (summary.pending > 0) {
     return {
-      label: `${summary.pending} of ${summary.total} ${checks} pending`,
+      label: `${pluralize(summary.pending, "check")} pending`,
       tone: "amber",
     };
   }
@@ -204,20 +212,41 @@ export function describeChecks(
   // just didn't fail. Calling that "passed" would be misleading.
   if (summary.passed === 0) {
     return {
-      label: `${summary.total} ${checks} skipped`,
+      label: `${pluralize(summary.total, "check")} skipped`,
       tone: "slate",
     };
   }
-  if (summary.passed === summary.total) {
-    return {
-      label: `${summary.total} ${checks} passed`,
-      tone: "emerald",
-    };
-  }
   return {
-    label: `${summary.passed} of ${summary.total} ${checks} passed`,
+    label: `${pluralize(summary.passed, "check")} passed`,
     tone: "emerald",
   };
+}
+
+// Worst first, so a failing run leads.
+const CHECK_BUCKET_ORDER: readonly PullRequestCheckBucket[] = [
+  "failing",
+  "pending",
+  "passed",
+  "neutral",
+  "skipped",
+];
+
+// The rollup's counts, worst first, zeros left out: "1 failing,
+// 2 pending, 3 passed".
+export function checksBreakdown(summary: PullRequestChecksSummary): string {
+  return CHECK_BUCKET_ORDER.filter((bucket) => summary[bucket] > 0)
+    .map((bucket) => `${summary[bucket]} ${bucket}`)
+    .join(", ");
+}
+
+export function sortChecksWorstFirst(
+  checks: readonly PullRequestCheck[],
+): PullRequestCheck[] {
+  return checks.toSorted(
+    (a, b) =>
+      CHECK_BUCKET_ORDER.indexOf(a.bucket) -
+      CHECK_BUCKET_ORDER.indexOf(b.bucket),
+  );
 }
 
 export const MERGE_METHOD_LABEL: Record<MergeMethod, string> = {
