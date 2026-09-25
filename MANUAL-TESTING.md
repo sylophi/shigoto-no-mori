@@ -494,9 +494,12 @@ and assert through the bridge and the disk.
 
 ## Other tools
 
-- **UI lab** (`lab/README.md`). The real UI over a fixture bridge with
+- **UI lab** (`pnpm lab`, `lab/README.md`). The real UI over a fixture bridge with
   four fake devices. Use it to pose and screenshot every multi-device
   surface without a hub or a second device. Visual only, no behavior.
+  Screenshot it headless with `lab/shoot.mjs`, not a browser preview
+  in the chat thread: that browser runs on the viewer's machine and
+  can't reach a dev server here over a remote connection.
   It is also the place to record a video of a flow (`lab/record.mjs`):
   the transfer and mirror verbs are posed there, so a recording shows
   the UI, not a real transfer. A video of the real two-device flow
