@@ -13,12 +13,13 @@ package main
 // Configure view tidy-up is app-only.
 
 import (
+	"cmp"
 	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -58,13 +59,7 @@ func listOthersIgnored(projectPath, excludeArg string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	var paths []string
-	for _, p := range strings.Split(stdout, "\x00") {
-		if p != "" {
-			paths = append(paths, p)
-		}
-	}
-	return paths, nil
+	return nulFields(stdout), nil
 }
 
 // gitPaths.ts makeIgnoreMatcher: leaf match, dir-form match, or any
@@ -156,11 +151,9 @@ func resolveWorktreeIncludeAcross(sources []worktreeIdentity, config *projectCon
 	errs := make([]error, len(sources))
 	var wg sync.WaitGroup
 	for i, source := range sources {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			resolved[i], errs[i] = resolveWorktreeInclude(source.Path, config)
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -184,13 +177,7 @@ func resolveWorktreeIncludeAcross(sources []worktreeIdentity, config *projectCon
 // stored entry paths against git output. Must stay in lockstep with
 // normalizeRelPath in shared/git/gitPaths.ts.
 func normalizeRelPath(p string) string {
-	var parts []string
-	for _, seg := range strings.Split(p, "/") {
-		if seg != "" {
-			parts = append(parts, seg)
-		}
-	}
-	return strings.Join(parts, "/")
+	return strings.Join(strings.FieldsFunc(p, func(r rune) bool { return r == '/' }), "/")
 }
 
 func pathsOverlap(a, b string) bool {
@@ -205,13 +192,7 @@ func mergeCarryOver(manual, include []carryOverEntry) []carryOverEntry {
 	}
 	merged := append([]carryOverEntry{}, manual...)
 	for _, e := range include {
-		overlaps := false
-		for _, m := range manualPaths {
-			if pathsOverlap(e.Path, m) {
-				overlaps = true
-				break
-			}
-		}
+		overlaps := slices.ContainsFunc(manualPaths, func(m string) bool { return pathsOverlap(e.Path, m) })
 		if !overlaps {
 			merged = append(merged, e)
 		}
@@ -259,12 +240,8 @@ func orderCarryOverSources(identities []worktreeIdentity, destPath, baseBranch s
 			sources = append(sources, id)
 		}
 	}
-	sort.SliceStable(sources, func(i, j int) bool {
-		ri, rj := rank(sources[i]), rank(sources[j])
-		if ri != rj {
-			return ri < rj
-		}
-		return sources[i].Name < sources[j].Name
+	slices.SortStableFunc(sources, func(a, b worktreeIdentity) int {
+		return cmp.Or(cmp.Compare(rank(a), rank(b)), strings.Compare(a.Name, b.Name))
 	})
 	return sources
 }
@@ -355,10 +332,7 @@ func applyOneCarryOver(sources []worktreeIdentity, destPath string, entry carryO
 	}
 	cmd := exec.Command("cp", "-R", "-P", src, dst)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		reason := strings.TrimSpace(string(output))
-		if reason == "" {
-			reason = err.Error()
-		}
+		reason := cmp.Or(strings.TrimSpace(string(output)), err.Error())
 		return &carryOverFailure{Path: entry.Path, Reason: reason}, "", source
 	}
 	return nil, "", source

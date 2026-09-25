@@ -95,18 +95,7 @@ func pickWorktree(proj project, opts pickOpts) (located, error) {
 		}
 	}
 	if opts.primaryLast {
-		ordered := make([]worktreeJSON, 0, len(choices))
-		for _, w := range choices {
-			if !w.IsPrimary {
-				ordered = append(ordered, w)
-			}
-		}
-		for _, w := range choices {
-			if w.IsPrimary {
-				ordered = append(ordered, w)
-			}
-		}
-		choices = ordered
+		choices = partitionStable(choices, func(w worktreeJSON) bool { return !w.IsPrimary })
 	}
 	if len(choices) == 0 {
 		return located{}, errf("%s has no other worktrees. Create one with `%s create`.",

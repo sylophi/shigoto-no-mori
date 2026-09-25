@@ -25,8 +25,3 @@ func terminalSize() (int, int) {
 	}
 	return 0, 0
 }
-
-func terminalWidth() int {
-	width, _ := terminalSize()
-	return width
-}

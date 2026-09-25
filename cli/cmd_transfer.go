@@ -16,8 +16,10 @@ package main
 // be left off.
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 )
 
@@ -107,10 +109,7 @@ func transferProgress() func(string, json.RawMessage) {
 		if json.Unmarshal(payload, &progress) != nil {
 			return
 		}
-		line := transferStepLabels[progress.Step]
-		if line == "" {
-			line = progress.Step
-		}
+		line := cmp.Or(transferStepLabels[progress.Step], progress.Step)
 		if progress.CreatePhase != "" && progress.CreatePhase != "idle" {
 			line += " (" + progress.CreatePhase + ")"
 		}
@@ -190,9 +189,7 @@ func emitAppDoc(raw json.RawMessage, extra map[string]any) {
 	doc := map[string]any{}
 	_ = json.Unmarshal(raw, &doc)
 	doc["ok"] = true
-	for key, value := range extra {
-		doc[key] = value
-	}
+	maps.Copy(doc, extra)
 	emit(doc)
 }
 
@@ -412,11 +409,7 @@ type controlMirror struct {
 func cmdUnmirror(ctx cliContext, args []string) (int, error) {
 	spec := worktreeTargetSpec()
 	spec.bools["force"] = []string{"f"}
-	parsed, err := parseCmdArgs(args, spec)
-	if err != nil {
-		return exitCodeOf(err), err
-	}
-	target, err := resolveWorktreeArgs(ctx, parsed, true)
+	parsed, target, err := parseWorktreeArgs(ctx, args, spec, true)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -500,11 +493,7 @@ func cmdMirrors(_ cliContext, args []string) (int, error) {
 		if mirror.Conflicts > 0 {
 			state += fmt.Sprintf(" (%d conflicts)", mirror.Conflicts)
 		}
-		git := mirror.Git
-		if git == "" {
-			git = "-"
-		}
-		rows = append(rows, []string{mirror.LocalRoot, mirror.Device.Name, copyAt, state, git})
+		rows = append(rows, []string{mirror.LocalRoot, mirror.Device.Name, copyAt, state, cmp.Or(mirror.Git, "-")})
 	}
 	out(renderTable([]string{"WORKTREE", "DEVICE", "COPY", "FILES", "GIT"}, rows))
 	return 0, nil
@@ -566,12 +555,9 @@ func cmdDevices(ctx cliContext, args []string) (int, error) {
 			state = greenOut("connected")
 		}
 		if device.Block != "" {
-			label, known := deviceBlockLabels[device.Block]
-			if !known {
-				// A reason from a newer app than this CLI.
-				label = device.Block
-			}
-			state = yellowOut(label)
+			// Falls back to the raw reason for one from a newer app
+			// than this CLI.
+			state = yellowOut(cmp.Or(deviceBlockLabels[device.Block], device.Block))
 		}
 		rows = append(rows, []string{device.Name, device.Platform, state})
 	}

@@ -10,6 +10,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 )
 
@@ -186,9 +187,7 @@ func reportRemoved(proj project, id worktreeIdentity, hint string, extra map[str
 				"path": id.Path, "projectName": proj.Name,
 			},
 		}
-		for key, value := range extra {
-			result[key] = value
-		}
+		maps.Copy(result, extra)
 		if hint != "" {
 			result["cdHint"] = hint
 		}
@@ -204,11 +203,7 @@ func reportRemoved(proj project, id worktreeIdentity, hint string, extra map[str
 func cmdRm(ctx cliContext, args []string) (int, error) {
 	spec := worktreeTargetSpec()
 	addRemoveFlags(spec)
-	parsed, err := parseCmdArgs(args, spec)
-	if err != nil {
-		return exitCodeOf(err), err
-	}
-	target, err := resolveWorktreeArgs(ctx, parsed, false)
+	parsed, target, err := parseWorktreeArgs(ctx, args, spec, false)
 	if err != nil {
 		return exitCodeOf(err), err
 	}

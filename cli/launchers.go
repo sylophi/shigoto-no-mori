@@ -9,6 +9,7 @@ package main
 // vice versa.
 
 import (
+	"cmp"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -17,7 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -159,11 +160,9 @@ func sortLaunchersByUse(entries []launcherEntry) {
 			}
 		}
 	}
-	sort.SliceStable(entries, func(a, b int) bool {
-		if diff := counts[entries[a].id] - counts[entries[b].id]; diff != 0 {
-			return diff > 0
-		}
-		return strings.ToLower(entries[a].label) < strings.ToLower(entries[b].label)
+	slices.SortStableFunc(entries, func(a, b launcherEntry) int {
+		return cmp.Or(cmp.Compare(counts[b.id], counts[a.id]),
+			strings.Compare(strings.ToLower(a.label), strings.ToLower(b.label)))
 	})
 }
 
@@ -174,12 +173,7 @@ func sortLaunchersByUse(entries []launcherEntry) {
 func pruneAndAppendUse(times []int64) []int64 {
 	now := time.Now().UnixMilli()
 	cutoff := now - useLogWindow.Milliseconds()
-	fresh := []int64{}
-	for _, t := range times {
-		if t >= cutoff {
-			fresh = append(fresh, t)
-		}
-	}
+	fresh := slices.DeleteFunc(times, func(t int64) bool { return t < cutoff })
 	return append(fresh, now)
 }
 
@@ -216,9 +210,6 @@ func launchCustomCommand(command, worktreePath string) error {
 	cmd := exec.Command("/bin/sh", "-c", command)
 	cmd.Dir = worktreePath
 	cmd.Env = append(envWithoutCdFile(), "SHIGOMORI_WORKSPACE_PATH="+worktreePath)
-	cmd.Stdin = nil
-	cmd.Stdout = nil
-	cmd.Stderr = nil
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {
 		return err

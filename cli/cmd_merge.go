@@ -16,6 +16,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -58,10 +59,7 @@ func runGhContext(ctx context.Context, cwd string, args ...string) (string, erro
 	err := cmd.Run()
 	vlog("[gh] %s", strings.Join(args, " "))
 	if err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = err.Error()
-		}
+		msg := cmp.Or(strings.TrimSpace(stderr.String()), err.Error())
 		return stdout.String(), errf("%s", msg)
 	}
 	return stdout.String(), nil
@@ -154,9 +152,8 @@ func allowedMergeMethods(projectPath string) []string {
 // land. pr is nil when the branch has no PR at all.
 func resolveMergeTarget(projectPath, branch string) (pr *prSummary, allowed []string, err error) {
 	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() { defer wg.Done(); pr, err = findPullRequest(projectPath, branch) }()
-	go func() { defer wg.Done(); allowed = allowedMergeMethods(projectPath) }()
+	wg.Go(func() { pr, err = findPullRequest(projectPath, branch) })
+	wg.Go(func() { allowed = allowedMergeMethods(projectPath) })
 	wg.Wait()
 	return pr, allowed, err
 }
@@ -219,11 +216,8 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 		if err != nil {
 			return exitCodeOf(err), err
 		}
-		if jsonMode {
-			emit(map[string]any{"ok": true, "number": number, "method": method})
-		} else {
-			out(greenOut(fmt.Sprintf("merged PR #%d (%s)", number, method)))
-		}
+		emitOrOut(map[string]any{"ok": true, "number": number, "method": method},
+			greenOut(fmt.Sprintf("merged PR #%d (%s)", number, method)))
 		return 0, nil
 	}
 
@@ -354,11 +348,8 @@ func cmdMergeStack(proj project, number int, methodFlag string, allowed []string
 		return exitCodeOf(err), err
 	}
 	onMerged := func(pr prSummary) {
-		if jsonMode {
-			emit(map[string]any{"event": "merged", "number": pr.Number, "branch": pr.HeadRefName, "method": method})
-		} else {
-			out(greenOut(fmt.Sprintf("merged PR #%d (%s): %s", pr.Number, method, pr.Title)))
-		}
+		emitOrOut(map[string]any{"event": "merged", "number": pr.Number, "branch": pr.HeadRefName, "method": method},
+			greenOut(fmt.Sprintf("merged PR #%d (%s): %s", pr.Number, method, pr.Title)))
 	}
 	if err := execMergeStack(proj, number, method, lk, onMerged); err != nil {
 		return exitCodeOf(err), err

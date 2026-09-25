@@ -466,11 +466,7 @@ func statusCard(status statusJSON, accent string) string {
 func cmdStatus(ctx cliContext, args []string) (int, error) {
 	spec := worktreeTargetSpec()
 	spec.bools["no-pr"] = nil
-	parsed, err := parseCmdArgs(args, spec)
-	if err != nil {
-		return exitCodeOf(err), err
-	}
-	target, err := resolveWorktreeArgs(ctx, parsed, true)
+	parsed, target, err := parseWorktreeArgs(ctx, args, spec, true)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -503,13 +499,11 @@ func cmdStatus(ctx cliContext, args []string) (int, error) {
 		pool     portPoolJSON
 		wg       sync.WaitGroup
 	)
-	wg.Add(6)
-	go func() { defer wg.Done(); counts = readChangeCounts(id.Path) }()
-	go func() { defer wg.Done(); stashes = stashCount(id.Path) }()
-	go func() { defer wg.Done(); commits = listCommits(id.Path, 0, 1) }()
-	go func() { defer wg.Done(); upstream = getRemoteSync(id.Path) }()
-	go func() {
-		defer wg.Done()
+	wg.Go(func() { counts = readChangeCounts(id.Path) })
+	wg.Go(func() { stashes = stashCount(id.Path) })
+	wg.Go(func() { commits = listCommits(id.Path, 0, 1) })
+	wg.Go(func() { upstream = getRemoteSync(id.Path) })
+	wg.Go(func() {
 		// One read of the project's remotes, base ref, config, and
 		// shelved set (the same context list builds its rows from), then
 		// the divergence it exists for here.
@@ -517,9 +511,8 @@ func cmdStatus(ctx cliContext, args []string) (int, error) {
 		if ahead, behind, ok := aheadBehind(id.Path, build.primaryRef); ok {
 			base = &baseJSON{Ref: build.primaryRef, syncJSON: syncJSON{Ahead: ahead, Behind: behind}}
 		}
-	}()
-	go func() {
-		defer wg.Done()
+	})
+	wg.Go(func() {
 		// One read of port-pool.config.json answers both "which ports
 		// does this worktree hold" and "is it configured at all".
 		config := readPortPoolConfig(id.Path)
@@ -529,7 +522,7 @@ func cmdStatus(ctx cliContext, args []string) (int, error) {
 			Installed:  portPoolInstalled(),
 			Configured: config.configured(),
 		}
-	}()
+	})
 	wg.Wait()
 
 	status := statusJSON{

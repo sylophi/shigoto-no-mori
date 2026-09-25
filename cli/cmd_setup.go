@@ -12,11 +12,7 @@ package main
 // matching release for them, so provisioning would leak a port.
 
 func cmdSetup(ctx cliContext, args []string) (int, error) {
-	parsed, err := parseCmdArgs(args, worktreeTargetSpec())
-	if err != nil {
-		return exitCodeOf(err), err
-	}
-	target, err := resolveWorktreeArgs(ctx, parsed, true)
+	_, target, err := parseWorktreeArgs(ctx, args, worktreeTargetSpec(), true)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -25,12 +21,9 @@ func cmdSetup(ctx cliContext, args []string) (int, error) {
 	config := readProjectConfig(proj.ID)
 	failures, ran := runProvisionScripts(proj, id, config, false)
 	if len(ran) == 0 {
-		if jsonMode {
-			emit(map[string]any{"ok": true, "ran": []string{}})
-		} else {
-			note(dimErr("nothing to run: no setup script configured" +
+		emitScriptEvent(map[string]any{"ok": true, "ran": []string{}},
+			dimErr("nothing to run: no setup script configured"+
 				" and port-pool isn't active for this worktree"))
-		}
 		return 0, nil
 	}
 	emitPhase("idle")

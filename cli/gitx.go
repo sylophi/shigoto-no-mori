@@ -7,6 +7,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"os"
@@ -60,10 +61,7 @@ func runGitStdin(cwd string, extraEnv []string, stdin string, args ...string) (s
 	err := cmd.Run()
 	vlog("[git] %s (cwd %s)", strings.Join(args, " "), cwd)
 	if err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = err.Error()
-		}
+		msg := cmp.Or(strings.TrimSpace(stderr.String()), err.Error())
 		return stdout.String(), &gitError{args: args, msg: msg}
 	}
 	return stdout.String(), nil

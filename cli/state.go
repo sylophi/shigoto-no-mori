@@ -139,12 +139,9 @@ const (
 var stateFiles = []string{registryFile, stateFile, configFile}
 
 func hasStateFiles(entries []os.DirEntry) bool {
-	for _, entry := range entries {
-		if slices.Contains(stateFiles, entry.Name()) {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(entries, func(entry os.DirEntry) bool {
+		return slices.Contains(stateFiles, entry.Name())
+	})
 }
 
 // Whether a directory has been used as a data dir: one of the state
@@ -376,6 +373,19 @@ func readJSONDoc(path string, decode func([]byte) error) (found bool, err error)
 		return true, errf("%s is not valid JSON (%v). Fix the file or move it aside, then retry.", path, err)
 	}
 	return true, nil
+}
+
+// The lenient read, for files a caller can do without: ok is false
+// when the file is missing, unreadable or malformed, and the caller
+// then treats it as absent.
+func readJSONFile[T any](path string) (T, bool) {
+	var value T
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return value, false
+	}
+	err = json.Unmarshal(raw, &value)
+	return value, err == nil
 }
 
 // Only a genuinely absent file reads as empty. updateFileKey rewrites
@@ -646,12 +656,10 @@ func ensureRegistrySplit() error {
 }
 
 func holdsAnyRegistryKey(doc map[string]json.RawMessage) bool {
-	for _, key := range registryKeys {
-		if _, ok := doc[key]; ok {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(registryKeys, func(key string) bool {
+		_, ok := doc[key]
+		return ok
+	})
 }
 
 // Runs under the state.json lock.
@@ -738,16 +746,6 @@ func setShelved(worktreeID string, shelved bool) error {
 	})
 }
 
-func dropShelved(worktreeID string) error {
-	return setShelved(worktreeID, false)
-}
-
-// The auto-pull mark (autoPullKey). Same map shape as the shelf, and
-// the same helper as the app's registryIdSet.ts.
-func setAutoPull(worktreeID string, on bool) error {
-	return setRegistryMark(autoPullKey, worktreeID, on)
-}
-
 // The autoPullNew setting, applied to a worktree the CLI just created
 // or the primary checkout of a project it just added: autoPullNew
 // opts in, autoPullPrimaryOnly narrows it to primaries. Best-effort,
@@ -758,7 +756,9 @@ func markAutoPullIfNew(global globalConfig, worktreeID string, isPrimary bool) {
 	if !on(global.AutoPullNew) || (on(global.AutoPullPrimaryOnly) && !isPrimary) {
 		return
 	}
-	if err := setAutoPull(worktreeID, true); err != nil {
+	// The auto-pull mark (autoPullKey). Same map shape as the shelf, and
+	// the same helper as the app's registryIdSet.ts.
+	if err := setRegistryMark(autoPullKey, worktreeID, true); err != nil {
 		vlog("[state] set auto-pull: %v", err)
 	}
 }

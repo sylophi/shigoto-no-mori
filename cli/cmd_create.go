@@ -10,6 +10,7 @@ package main
 // when the worktree was created but a lifecycle step failed.
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 )
@@ -63,11 +64,8 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 	// worktree is new (adopt reuses createWorktree for one that
 	// already existed and carries its marks over instead).
 	markAutoPullIfNew(readGlobalConfigHints(), worktree.ID, false)
-	if jsonMode {
-		emit(map[string]any{"event": "created", "worktree": worktree})
-	} else {
-		note("created " + cyanErr(worktree.Name) + " (branch " + cyanErr(worktree.Branch) + ")")
-	}
+	emitScriptEvent(map[string]any{"event": "created", "worktree": worktree},
+		"created "+cyanErr(worktree.Name)+" (branch "+cyanErr(worktree.Branch)+")")
 	code := finishCreateLifecycle(proj, worktree, parsed.strings["base"], parsed.bools["no-setup"])
 	// Callers who can be moved land in the new worktree (a subshell,
 	// or their own shell via the integration directive, same as
@@ -78,10 +76,7 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 		return code, nil
 	}
 	shellCode, err := enterWorktreeShell(worktree.Name, worktree.Path)
-	if code != 0 {
-		return code, err
-	}
-	return shellCode, err
+	return cmp.Or(code, shellCode), err
 }
 
 // Shared tail of create and adopt: run the lifecycle, report script
@@ -198,7 +193,9 @@ func runProvisionScripts(proj project, id worktreeIdentity, config *projectConfi
 	if config != nil && !skipSetup {
 		setupCommand = strings.TrimSpace(config.Scripts.Setup)
 	}
-	portPoolNeeded := willRunPortPool(id)
+	// portPoolActiveFor against the tolerant read of the global config,
+	// since this path only wants to know whether anything will run.
+	portPoolNeeded := portPoolActiveFor(readGlobalConfigHints(), id)
 	if setupCommand == "" && !portPoolNeeded {
 		return failures, ran
 	}

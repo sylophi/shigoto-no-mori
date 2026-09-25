@@ -153,6 +153,16 @@ func emit(value any) {
 	os.Stdout.Write(append(data, '\n'))
 }
 
+// emitOrOut prints a command's result: the JSON document in --json
+// mode, the human line otherwise.
+func emitOrOut(doc any, line string) {
+	if jsonMode {
+		emit(doc)
+	} else {
+		out(line)
+	}
+}
+
 func note(line string) { fmt.Fprintln(os.Stderr, line) }
 
 func vlog(format string, args ...any) {
@@ -190,6 +200,16 @@ func alignRows(rows [][]string) []string {
 		lines[r] = strings.TrimRight(line.String(), " ")
 	}
 	return lines
+}
+
+// joinMapped renders each item with f and joins the results with ", ",
+// the list form the "Available: ..." style messages use.
+func joinMapped[T any](items []T, f func(T) string) string {
+	parts := make([]string, len(items))
+	for i, item := range items {
+		parts[i] = f(item)
+	}
+	return strings.Join(parts, ", ")
 }
 
 func renderTable(header []string, rows [][]string) string {

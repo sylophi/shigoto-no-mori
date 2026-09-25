@@ -33,24 +33,16 @@ type dirtyCaptureResult struct {
 	changedFiles int
 }
 
-// The number of paths the capture commit changes against its parent
-// tree. diff-tree over two objects prints only the paths; -z so
-// unusual filenames still count as one field each.
-func dirtyChangedFiles(projectPath, from, to string) (int, error) {
-	stdout, err := runGit(projectPath,
-		"diff-tree", "-r", "-z", "--name-only", "--no-renames", "--end-of-options", from, to)
-	if err != nil {
-		return 0, err
-	}
-	return len(nulFields(stdout)), nil
-}
-
-// The paths the capture commit adds against its parent tree: the files
-// apply would create, and so the ones to probe for collisions.
-// --no-renames keeps every add an add.
-func dirtyAddedPaths(projectPath, from, to string) ([]string, error) {
-	stdout, err := runGit(projectPath,
-		"diff-tree", "-r", "-z", "--name-only", "--diff-filter=A", "--no-renames", "--end-of-options", from, to)
+// The paths the capture commit changes against its parent tree (the
+// changed-file count is their number). diff-tree over two objects
+// prints only the paths; -z so unusual filenames still count as one
+// field each. filter narrows the diff: with --diff-filter=A, the paths
+// the capture adds, i.e. the files apply would create, and so the ones
+// to probe for collisions. --no-renames keeps every add an add.
+func dirtyDiffPaths(projectPath, from, to string, filter ...string) ([]string, error) {
+	args := append([]string{"diff-tree", "-r", "-z", "--name-only"}, filter...)
+	args = append(args, "--no-renames", "--end-of-options", from, to)
+	stdout, err := runGit(projectPath, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -134,11 +126,11 @@ func captureDirtyState(projectPath, worktreePath, worktreeID string) (dirtyCaptu
 	if _, err := runGit(projectPath, "update-ref", "--end-of-options", dirtyRef(worktreeID), commit); err != nil {
 		return dirtyCaptureResult{}, err
 	}
-	changed, err := dirtyChangedFiles(projectPath, parent, commit)
+	changed, err := dirtyDiffPaths(projectPath, parent, commit)
 	if err != nil {
 		return dirtyCaptureResult{}, err
 	}
-	return dirtyCaptureResult{captured: true, commit: commit, parent: parent, changedFiles: changed}, nil
+	return dirtyCaptureResult{captured: true, commit: commit, parent: parent, changedFiles: len(changed)}, nil
 }
 
 type dirtyApplyResult struct {
@@ -200,7 +192,7 @@ func applyDirtyState(projectPath, worktreePath, worktreeID string, force bool) (
 	// cleanliness probe and must never make apply destructive. A user
 	// who truly wants the overwrite deletes the file. Lstat so a
 	// dangling symlink still counts as occupying its path.
-	added, err := dirtyAddedPaths(projectPath, parent, commit)
+	added, err := dirtyDiffPaths(projectPath, parent, commit, "--diff-filter=A")
 	if err != nil {
 		return dirtyApplyResult{}, err
 	}
@@ -226,7 +218,7 @@ func applyDirtyState(projectPath, worktreePath, worktreeID string, force bool) (
 	// not-yet-started apply instead of mislabeling a finished one, and
 	// the count never depends on a commit the consumed ref no longer
 	// reaches.
-	changed, err := dirtyChangedFiles(projectPath, parent, commit)
+	changed, err := dirtyDiffPaths(projectPath, parent, commit)
 	if err != nil {
 		return dirtyApplyResult{}, err
 	}
@@ -245,7 +237,7 @@ func applyDirtyState(projectPath, worktreePath, worktreeID string, force bool) (
 		return dirtyApplyResult{}, err
 	}
 	dropDirtyCapture(projectPath, worktreeID)
-	return dirtyApplyResult{commit: commit, changedFiles: changed}, nil
+	return dirtyApplyResult{commit: commit, changedFiles: len(changed)}, nil
 }
 
 // Deletes the capture ref. Absence is fine, update-ref -d on a
@@ -308,10 +300,7 @@ func cmdDirty(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	if jsonMode {
-		emit(map[string]any{"ok": true, "applied": true, "commit": res.commit, "changedFiles": res.changedFiles})
-	} else {
-		out(greenOut(fmt.Sprintf("applied %d change(s) to %s", res.changedFiles, id.Name)))
-	}
+	emitOrOut(map[string]any{"ok": true, "applied": true, "commit": res.commit, "changedFiles": res.changedFiles},
+		greenOut(fmt.Sprintf("applied %d change(s) to %s", res.changedFiles, id.Name)))
 	return 0, nil
 }

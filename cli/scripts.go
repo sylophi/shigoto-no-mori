@@ -129,9 +129,7 @@ func runLifecycleScript(command string, in scriptEnvInputs, slot scriptSlot) (in
 	cmd.Stderr = pipeW
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		buf := make([]byte, 8192)
 		for {
 			n, err := pipeR.Read(buf)
@@ -149,7 +147,7 @@ func runLifecycleScript(command string, in scriptEnvInputs, slot scriptSlot) (in
 				return
 			}
 		}
-	}()
+	})
 
 	code := 0
 	if err := cmd.Start(); err != nil {
@@ -230,12 +228,8 @@ func (c portPoolConfig) configured() bool { return len(c.SchemaVersion) > 0 }
 // One read of the file, so a caller that wants both the declared ports
 // and "is this worktree configured at all" doesn't parse it twice.
 func readPortPoolConfig(dir string) portPoolConfig {
-	raw, err := os.ReadFile(filepath.Join(dir, "port-pool.config.json"))
-	if err != nil {
-		return portPoolConfig{}
-	}
-	var keys map[string]json.RawMessage
-	if json.Unmarshal(raw, &keys) != nil {
+	keys, ok := readJSONFile[map[string]json.RawMessage](filepath.Join(dir, "port-pool.config.json"))
+	if !ok {
 		return portPoolConfig{}
 	}
 	// Key by key, tolerantly: "is this worktree configured" is the
@@ -246,10 +240,6 @@ func readPortPoolConfig(dir string) portPoolConfig {
 	_ = json.Unmarshal(keys["portNames"], &config.PortNames)
 	_ = json.Unmarshal(keys["envFiles"], &config.EnvFiles)
 	return config
-}
-
-func portPoolConfigured(dir string) bool {
-	return readPortPoolConfig(dir).configured()
 }
 
 // The global toggle on its own, for the callers that ask about it
@@ -265,7 +255,7 @@ func portPoolActiveFor(global globalConfig, id worktreeIdentity) bool {
 	if id.IsExternal || !portPoolEnabled(global) {
 		return false
 	}
-	return portPoolInstalled() && portPoolConfigured(id.Path)
+	return portPoolInstalled() && readPortPoolConfig(id.Path).configured()
 }
 
 // --- provisioned ports (the reverse lookup) ---
@@ -345,12 +335,6 @@ func provisionedPorts(worktreePath string, config portPoolConfig) []portInfo {
 		}
 	}
 	return matchPorts(config, files)
-}
-
-// Same rule against the tolerant read of the global config, for the
-// paths that only want to know whether anything will run.
-func willRunPortPool(id worktreeIdentity) bool {
-	return portPoolActiveFor(readGlobalConfigHints(), id)
 }
 
 func shellQuote(s string) string {

@@ -17,7 +17,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"strings"
 	"syscall"
 )
 
@@ -75,11 +74,8 @@ func cmdRun(ctx cliContext, args []string) (int, error) {
 		if len(scripts) == 0 {
 			return 1, errf("package.json in %s has no scripts.", target.worktree.Path)
 		}
-		names := make([]string, len(scripts))
-		for i, s := range scripts {
-			names[i] = s.Name
-		}
-		return 1, errf("No script named %q. Scripts: %s.", name, strings.Join(names, ", "))
+		names := joinMapped(scripts, func(s packageScript) string { return s.Name })
+		return 1, errf("No script named %q. Scripts: %s.", name, names)
 	}
 
 	in := runEnvInputs(target, parsed, name)

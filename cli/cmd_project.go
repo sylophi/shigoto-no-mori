@@ -10,10 +10,12 @@ package main
 // else the app may have written.
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -52,16 +54,8 @@ func removeProjectRegistration(projectID string, missingOK bool) error {
 			}
 			projects = nil
 		}
-		kept := make([]project, 0, len(projects))
-		found := false
-		for _, p := range projects {
-			if p.ID == projectID {
-				found = true
-				continue
-			}
-			kept = append(kept, p)
-		}
-		if !found {
+		kept := slices.DeleteFunc(projects, func(p project) bool { return p.ID == projectID })
+		if len(kept) == len(projects) {
 			if missingOK {
 				return nil, nil
 			}
@@ -175,11 +169,8 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 		dropWorktreeMarks(worktreeIDFromPath(proj.Path))
 	}
 
-	if jsonMode {
-		emit(map[string]any{"ok": true, "removed": proj.Name, "path": proj.Path})
-	} else {
-		out("removed " + proj.Name + " (" + proj.Path + ")")
-	}
+	emitOrOut(map[string]any{"ok": true, "removed": proj.Name, "path": proj.Path},
+		"removed "+proj.Name+" ("+proj.Path+")")
 	return 0, nil
 }
 
@@ -198,13 +189,7 @@ func cmdProjectList(ctx cliContext) (int, error) {
 	}
 	// The VIA column only appears once there is something to put in it,
 	// so the table stays two columns for anyone not using terrier.
-	hasSource := false
-	for _, p := range ctx.projects {
-		if p.Source != "" {
-			hasSource = true
-			break
-		}
-	}
+	hasSource := slices.ContainsFunc(ctx.projects, func(p project) bool { return p.Source != "" })
 	headers := []string{"NAME", "PATH"}
 	if hasSource {
 		headers = append(headers, "VIA")
@@ -234,10 +219,7 @@ func cmdProjectAdd(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	rawPath := parsed.positional(0)
-	if rawPath == "" {
-		rawPath = "."
-	}
+	rawPath := cmp.Or(parsed.positional(0), ".")
 	if parsed.bools["all"] {
 		return cmdProjectAddAll(ctx, toAbsolute(rawPath), parsed.bools["yes"])
 	}
@@ -259,11 +241,7 @@ func cmdProjectAdd(ctx cliContext, args []string) (int, error) {
 	}
 	seedNewProject(proj)
 
-	if jsonMode {
-		emit(proj)
-	} else {
-		out(greenOut(fmt.Sprintf("added %s (%s)", proj.Name, proj.Path)))
-	}
+	emitOrOut(proj, greenOut(fmt.Sprintf("added %s (%s)", proj.Name, proj.Path)))
 	return 0, nil
 }
 
@@ -589,11 +567,7 @@ func cmdConfig(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return 1, err
 	}
-	if jsonMode {
-		emit(map[string]any{"ok": true, "project": proj.Name})
-	} else {
-		out(greenOut("configured " + proj.Name))
-	}
+	emitOrOut(map[string]any{"ok": true, "project": proj.Name}, greenOut("configured "+proj.Name))
 	return 0, nil
 }
 
@@ -737,13 +711,10 @@ func projectCarryOverVerb(proj project, scope configDocScope, parsed parsedArgs)
 		}
 		err = scope.update(func(doc map[string]any) error {
 			entries, _ := doc["carryOver"].([]any)
-			kept := make([]any, 0, len(entries))
-			for _, entry := range entries {
-				if m, ok := entry.(map[string]any); ok && m["path"] == path {
-					continue
-				}
-				kept = append(kept, entry)
-			}
+			kept := slices.DeleteFunc(slices.Clone(entries), func(entry any) bool {
+				m, ok := entry.(map[string]any)
+				return ok && m["path"] == path
+			})
 			if len(kept) == len(entries) {
 				return errf("No carry-over entry for %q.%s", path, scope.suffix)
 			}
@@ -753,11 +724,7 @@ func projectCarryOverVerb(proj project, scope configDocScope, parsed parsedArgs)
 		if err != nil {
 			return exitCodeOf(err), err
 		}
-		if jsonMode {
-			scope.emitOK(map[string]any{"removed": path})
-		} else {
-			out(greenOut("removed carry-over " + path + scope.suffix))
-		}
+		scope.report(map[string]any{"removed": path}, greenOut("removed carry-over "+path+scope.suffix))
 		return 0, nil
 	default:
 		return 2, scope.usageErr("carryover [add <path> [--copy|--symlink] | rm <path>]")

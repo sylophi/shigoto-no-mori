@@ -128,12 +128,10 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 	results := make([]projectResult, len(scope))
 	var wg sync.WaitGroup
 	for i, proj := range scope {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			worktrees, err := listWorktrees(proj)
 			results[i] = projectResult{proj: proj, worktrees: worktrees, err: err}
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -202,26 +200,18 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 }
 
 func cmdPath(ctx cliContext, args []string) (int, error) {
-	parsed, err := parseCmdArgs(args, worktreeTargetSpec())
+	_, target, err := parseWorktreeArgs(ctx, args, worktreeTargetSpec(), true)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	target, err := resolveWorktreeArgs(ctx, parsed, true)
-	if err != nil {
-		return exitCodeOf(err), err
-	}
-	if jsonMode {
-		emit(map[string]any{
-			"id":          target.worktree.ID,
-			"name":        target.worktree.Name,
-			"branch":      target.worktree.Branch,
-			"path":        target.worktree.Path,
-			"projectName": target.proj.Name,
-			"projectId":   target.proj.ID,
-			"isPrimary":   target.worktree.IsPrimary,
-		})
-	} else {
-		out(target.worktree.Path)
-	}
+	emitOrOut(map[string]any{
+		"id":          target.worktree.ID,
+		"name":        target.worktree.Name,
+		"branch":      target.worktree.Branch,
+		"path":        target.worktree.Path,
+		"projectName": target.proj.Name,
+		"projectId":   target.proj.ID,
+		"isPrimary":   target.worktree.IsPrimary,
+	}, target.worktree.Path)
 	return 0, nil
 }
