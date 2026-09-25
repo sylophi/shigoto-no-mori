@@ -14,8 +14,10 @@ import {
   type WorktreeLayout,
 } from "@shared/schemas";
 import { worktreePathFor } from "@shared/git/worktreeLayout";
+import { pluralize } from "@/lib/pluralize";
 import { LayoutOptionItem, type LayoutOption } from "./LayoutOptionItem";
-import { RelocateRow } from "./RelocateRow";
+import { WorktreeMoveDetails } from "@/components/shared/WorktreeMoveDetails";
+import { tildify } from "@/lib/projectPaths";
 
 const LAYOUT_OPTIONS: LayoutOption[] = [
   {
@@ -208,9 +210,7 @@ export function LocationForm({
             Heads up
           </p>
           <p className="mt-2 leading-relaxed">
-            {toMove.length === 1
-              ? "1 worktree will move to the new location. "
-              : `${toMove.length} worktrees will move to the new location. `}
+            {`${pluralize(toMove.length, "worktree")} will move to the new location. `}
             Uncommitted changes and untracked files are preserved. Repoint any
             open editors, terminals, or IDE projects to the new paths.
           </p>
@@ -219,15 +219,30 @@ export function LocationForm({
 
       {toMove.length > 0 && (
         <div className="divide-y divide-border overflow-hidden rounded-md border border-border">
-          {toMove.map((wt) => (
-            <RelocateRow
-              key={wt.id}
-              worktree={wt}
-              destination={proposedFor(wt)}
-              status={status.get(wt.id) ?? { kind: "idle" }}
-              home={home}
-            />
-          ))}
+          {toMove.map((wt) => {
+            const destination = proposedFor(wt);
+            return (
+              <div
+                key={wt.id}
+                className="flex items-start gap-3 px-3 py-3 text-sm"
+              >
+                <WorktreeMoveDetails
+                  branch={wt.branch}
+                  detached={wt.detached}
+                  fromPath={tildify(wt.path, home)}
+                  fromTitle={wt.path}
+                  toPath={tildify(destination, home)}
+                  toTitle={destination}
+                  status={status.get(wt.id) ?? { kind: "idle" }}
+                  labels={{
+                    running: "Moving",
+                    done: "Moved",
+                    error: "Move failed",
+                  }}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
 

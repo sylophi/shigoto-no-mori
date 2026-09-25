@@ -19,7 +19,6 @@ import {
   pullBranchCollision,
   pullFolderCollision,
 } from "@shared/pullCollision";
-import { worktreeBaseFor } from "@shared/git/worktreeLayout";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import { Button } from "@/components/ui/button";
@@ -28,7 +27,7 @@ import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusDot } from "@/components/ui/status-dot";
-import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
+import { useWorktreeBaseLabel } from "@/hooks/config/useWorktreeBaseLabel";
 import { useBranches } from "@/hooks/git/useBranches";
 import {
   DestinationScope,
@@ -42,7 +41,7 @@ import {
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
-import { tildify } from "@/lib/projectPaths";
+import { pluralize } from "@/lib/pluralize";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { cn } from "@/lib/utils";
 import {
@@ -50,8 +49,9 @@ import {
   type LandingTarget,
 } from "./cloneDestination";
 import type { PullChoiceState } from "./ignoreChoice";
+import { PullLeaveOut } from "./PullLeaveOut";
 import { SetupToggle } from "./SetupToggle";
-import { FlowFooter } from "./FlowChrome";
+import { FlowBody, FlowFooter } from "./FlowChrome";
 import { isReadyTarget, type PeerTarget } from "./peerTargets";
 import { type Landing, LANDS_HERE } from "./pullSteps";
 
@@ -469,6 +469,117 @@ export function PullReviewFooter({
   );
 }
 
+// What a flow's review step takes, the transplant's and the mirror's.
+export type PullReviewProps = {
+  worktree: Worktree;
+  project: Project;
+  // Where it lands (flow/cloneDestination.tsx): this machine's
+  // project or the clone that makes one, or the picked peer's when the
+  // flow goes to one (`toPeer`), null until one is picked.
+  target: LandingTarget | null;
+  sourceDeviceLabel: string;
+  thisDeviceLabel: string;
+  landing?: Landing;
+  toPeer?: DestinationPick;
+  // The leave-out rule and the setup switch, the flows' shared pair.
+  pull: PullChoiceState;
+  onCancel: () => void;
+  onStart: () => void;
+};
+
+// Step 1 of either flow: the source, what stays out, and the two
+// devices that will hold the branch, with the footer band under them.
+// The source half reads the device the page is scoped to. The device
+// half and the footer re-pin to the landing device (DestinationScope).
+// A flow's own sections go before or after the leave-out rule.
+export function PullReviewStep({
+  worktree,
+  project,
+  target,
+  sourceDeviceLabel,
+  thisDeviceLabel,
+  landing,
+  toPeer,
+  pull,
+  onCancel,
+  onStart,
+  heading,
+  sourceNote,
+  sourceKeeps,
+  idleNote,
+  startLabel,
+  beforeLeaveOut,
+  afterLeaveOut,
+}: PullReviewProps & {
+  // The devices column's heading and the source row's note (and tick).
+  heading: string;
+  sourceNote: string;
+  sourceKeeps?: boolean;
+  // The footer's reassurance and its start button.
+  idleNote: string;
+  startLabel: string;
+  beforeLeaveOut?: ReactNode;
+  afterLeaveOut?: ReactNode;
+}) {
+  return (
+    <>
+      <FlowBody>
+        <div className="grid gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+          <div className="flex min-w-0 flex-col gap-5">
+            <section className="space-y-2">
+              <SectionHeading>Source</SectionHeading>
+              <SourceCard
+                worktree={worktree}
+                project={project}
+                sourceDeviceLabel={sourceDeviceLabel}
+              />
+            </section>
+
+            {beforeLeaveOut}
+
+            <PullLeaveOut
+              pull={pull}
+              worktree={{
+                projectId: project.id,
+                id: worktree.id,
+                path: worktree.path,
+              }}
+            />
+
+            {afterLeaveOut}
+          </div>
+
+          <ReviewDevicesColumn
+            heading={heading}
+            sourceNote={sourceNote}
+            sourceKeeps={sourceKeeps}
+            toPeer={toPeer}
+            worktree={worktree}
+            target={target}
+            sourceDeviceLabel={sourceDeviceLabel}
+            thisDeviceLabel={thisDeviceLabel}
+            pull={pull}
+          />
+        </div>
+      </FlowBody>
+
+      <DestinationScope>
+        <PullReviewFooter
+          worktree={worktree}
+          target={target}
+          landing={landing}
+          waiting={pull.waiting}
+          blocked={pull.blocked}
+          idleNote={idleNote}
+          startLabel={startLabel}
+          onCancel={onCancel}
+          onStart={onStart}
+        />
+      </DestinationScope>
+    </>
+  );
+}
+
 export function SourceCard({
   worktree,
   project,
@@ -533,9 +644,7 @@ export function SourceCard({
           </Chip>
           <Chip>
             {worktree.changedCount > 0
-              ? `${worktree.changedCount} uncommitted ${
-                  worktree.changedCount === 1 ? "file" : "files"
-                }`
+              ? pluralize(worktree.changedCount, "uncommitted file")
               : "clean tree"}
           </Chip>
           {!prPending && <Chip>{pr ? `PR #${pr.number}` : "no PR yet"}</Chip>}
@@ -558,21 +667,9 @@ function DestinationFolder({
   thisDeviceLabel: string;
   name: string | undefined;
 }) {
-  const { data: config } = useShigomoriConfig(localProject.id);
-  const { data: runtime } = useRuntimeInfo();
   // Plain text on purpose: a measured PathSpan would abbreviate the
   // base folder to make room for the placeholder beside it.
-  const base = runtime
-    ? tildify(
-        worktreeBaseFor({
-          layout: config?.worktreeLayout ?? "managed-root",
-          projectPath: localProject.path,
-          dataDir: runtime.dataDir,
-          customPath: config?.customWorktreePath ?? null,
-        }),
-        runtime.homedir,
-      )
-    : null;
+  const base = useWorktreeBaseLabel(localProject);
   const shownName = name ?? "‹new name›";
   return (
     <section className="space-y-2">

@@ -4,7 +4,7 @@ import { useMergePullRequest } from "@/hooks/pullRequests/useMergePullRequest";
 import { useSetPullRequestDraft } from "@/hooks/pullRequests/useSetPullRequestDraft";
 import {
   describeMergeState,
-  MERGE_METHOD_SHORT_LABEL,
+  MERGE_METHOD_LABEL,
   resolveMergeMethod,
 } from "@/lib/pullRequest";
 import { stackMergeSet, type PullRequestStack } from "@shared/pullRequestStack";
@@ -183,7 +183,7 @@ function mergeLabel(
   reach: StackReach,
   count: number,
 ): string {
-  const base = MERGE_METHOD_SHORT_LABEL[method];
+  const base = MERGE_METHOD_LABEL[method];
   if (count < 2) return base;
   return reach === "stack"
     ? `${base} stack (${count})`

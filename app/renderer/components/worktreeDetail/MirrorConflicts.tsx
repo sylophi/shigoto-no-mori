@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { type StatusTone, TONE_TEXT } from "@/components/ui/status-dot";
 import { pluralize } from "@/lib/pluralize";
-import { notifyError } from "@/lib/toast";
+import { revealInFolder } from "@/lib/openExternal";
 import { cn } from "@/lib/utils";
 
 type MirrorConflict = MirrorSession["conflicts"][number];
@@ -93,11 +93,7 @@ export function MirrorConflictsChip({
     ? (root: string) => {
         const path =
           root === "" ? session.localRoot : `${session.localRoot}/${root}`;
-        window.api.shell
-          .showItemInFolder(path)
-          .catch((err: unknown) =>
-            notifyError("Couldn't reveal the path", err),
-          );
+        revealInFolder(path, "Couldn't reveal the path");
       }
     : null;
   return (

@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowDown,
   ArrowLeft,
-  ArrowUp,
   CornerLeftUp,
   Folder,
   Loader2,
@@ -10,10 +8,10 @@ import {
   X,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { PathSpan } from "@/components/ui/path-span";
+import { BrowseKeyHints } from "./BrowseListParts";
 import { type PickerEntry, PickerRow } from "./PickerRow";
 import { IconButton } from "@/components/ui/icon-button";
 
@@ -211,27 +209,7 @@ export function PathPickerModal<E extends PickerEntry>({
       </div>
 
       <div className="flex items-center gap-3 border-t border-border px-4 py-2 text-xs text-muted-foreground">
-        <KbdGroup>
-          <Kbd>
-            <ArrowUp />
-          </Kbd>
-          <Kbd>
-            <ArrowDown />
-          </Kbd>
-          <span className="text-muted-foreground/80">Navigate</span>
-        </KbdGroup>
-        <KbdGroup>
-          <Kbd>↩</Kbd>
-          <span className="text-muted-foreground/80">Enter folder</span>
-        </KbdGroup>
-        {!atRoot && (
-          <KbdGroup>
-            <Kbd>
-              <ArrowLeft />
-            </Kbd>
-            <span className="text-muted-foreground/80">Go up</span>
-          </KbdGroup>
-        )}
+        <BrowseKeyHints enterFolder goUp={!atRoot} />
       </div>
     </ModalShell>
   );

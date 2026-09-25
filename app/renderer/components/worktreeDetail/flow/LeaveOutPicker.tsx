@@ -196,33 +196,27 @@ function Trailing({
       <span className="px-2 text-2xs text-muted-foreground">{copy.done}</span>
     );
   }
-  if (unreachable) {
+  // Why the row cannot be picked, as its tag and the tag's tooltip.
+  const why: [string, string] | null = unreachable
+    ? [
+        "in ignored folder",
+        "This is inside an ignored folder. Bring the whole folder instead.",
+      ]
+    : !ignored
+      ? [
+          "tracked",
+          "Git tracks this, so it is always copied. Only ignored files and folders can be picked.",
+        ]
+      : full
+        ? [
+            "limit reached",
+            `You can bring up to ${BRING_PATHS_LIMIT} paths. Bring a parent folder instead, or remove one.`,
+          ]
+        : null;
+  if (why !== null) {
     return (
-      <span
-        className="px-2 text-2xs text-muted-foreground/70"
-        title="This is inside an ignored folder. Bring the whole folder instead."
-      >
-        in ignored folder
-      </span>
-    );
-  }
-  if (!ignored) {
-    return (
-      <span
-        className="px-2 text-2xs text-muted-foreground/70"
-        title="Git tracks this, so it is always copied. Only ignored files and folders can be picked."
-      >
-        tracked
-      </span>
-    );
-  }
-  if (full) {
-    return (
-      <span
-        className="px-2 text-2xs text-muted-foreground/70"
-        title={`You can bring up to ${BRING_PATHS_LIMIT} paths. Bring a parent folder instead, or remove one.`}
-      >
-        limit reached
+      <span className="px-2 text-2xs text-muted-foreground/70" title={why[1]}>
+        {why[0]}
       </span>
     );
   }

@@ -3,6 +3,7 @@ import { Command } from "cmdk";
 import { ArrowLeft, FolderSearch } from "lucide-react";
 import { PathSpan } from "@/components/ui/path-span";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { pluralize } from "@/lib/pluralize";
 import { ResultRow } from "./ResultRow";
 import { IconButton } from "@/components/ui/icon-button";
 
@@ -45,7 +46,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
             <span className="text-sm text-foreground">
               {props.results.length === 0
                 ? "No new git repos found"
-                : `${props.results.length} new git repo${props.results.length === 1 ? "" : "s"}`}
+                : pluralize(props.results.length, "new git repo")}
             </span>
             <span className="flex font-mono text-xs text-muted-foreground/70">
               <span className="shrink-0">in&nbsp;</span>
@@ -96,7 +97,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
             <span>
               {props.bulkAdding
                 ? "Adding…"
-                : `Add ${props.selected.size} project${props.selected.size === 1 ? "" : "s"}`}
+                : `Add ${pluralize(props.selected.size, "project")}`}
             </span>
             <KbdGroup className="pointer-events-none">
               <Kbd>⌘↩</Kbd>

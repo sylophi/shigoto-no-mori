@@ -84,30 +84,19 @@ function renderFooterContent(
 ): ReactNode {
   switch (state.kind) {
     case "cleanupError":
-      return <CleanupErrorRow error={state.error} actions={actions} />;
+      return <CleanupErrorRow {...state} actions={actions} />;
     case "needsForce":
-      return (
-        <NeedsForceRow
-          errorMessage={state.errorMessage}
-          busy={state.busy}
-          actions={actions}
-        />
-      );
+      return <NeedsForceRow {...state} actions={actions} />;
     case "cleanupRunning":
       return (
         <CleanupRunningRow
-          cancelling={state.cancelling}
+          {...state}
           onCancelCleanup={actions.onCancelCleanup}
         />
       );
     case "normal":
       return (
-        <NormalRow
-          worktree={worktree}
-          confirmDelete={state.confirmDelete}
-          busy={state.busy}
-          onDelete={actions.onDelete}
-        />
+        <NormalRow worktree={worktree} {...state} onDelete={actions.onDelete} />
       );
     default:
       return assertNever(state);

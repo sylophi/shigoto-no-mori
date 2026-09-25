@@ -73,11 +73,7 @@ function ChangesView({
   const [pickedKey, setPickedKey] = useState<string | null>(null);
   const picked =
     files?.find((file) => changeKey(file) === pickedKey) ?? files?.[0] ?? null;
-  const {
-    data: patch,
-    isLoading,
-    error,
-  } = useFileDiff(
+  const diff = useFileDiff(
     projectId,
     worktreeId,
     picked ? changedFilePaths(picked) : [],
@@ -172,9 +168,7 @@ function ChangesView({
 
   return (
     <DiffView
-      patch={patch}
-      isLoading={isLoading}
-      error={error}
+      diff={diff}
       onBack={onBack}
       backLabel={worktree.branch}
       title="Uncommitted changes"

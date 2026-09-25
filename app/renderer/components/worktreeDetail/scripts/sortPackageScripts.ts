@@ -9,6 +9,17 @@ export interface SortableEntry {
   command: string;
 }
 
+// Most-used first by one usage figure, ties by name.
+const byUsage =
+  (
+    field: "lastUsed" | "recentCount",
+    usage: Record<string, PackageScriptUsage>,
+  ) =>
+  (a: SortableEntry, b: SortableEntry) => {
+    const diff = (usage[b.name]?.[field] ?? 0) - (usage[a.name]?.[field] ?? 0);
+    return diff !== 0 ? diff : a.name.localeCompare(b.name);
+  };
+
 export function sortEntries(
   entries: ReadonlyArray<[string, string]>,
   mode: PackageScriptSortMode,
@@ -35,17 +46,9 @@ export function sortEntries(
     case "alphabetical":
       return mapped.toSorted((a, b) => a.name.localeCompare(b.name));
     case "recent":
-      return mapped.toSorted((a, b) => {
-        const diff =
-          (usage[b.name]?.lastUsed ?? 0) - (usage[a.name]?.lastUsed ?? 0);
-        return diff !== 0 ? diff : a.name.localeCompare(b.name);
-      });
+      return mapped.toSorted(byUsage("lastUsed", usage));
     case "frequent":
-      return mapped.toSorted((a, b) => {
-        const diff =
-          (usage[b.name]?.recentCount ?? 0) - (usage[a.name]?.recentCount ?? 0);
-        return diff !== 0 ? diff : a.name.localeCompare(b.name);
-      });
+      return mapped.toSorted(byUsage("recentCount", usage));
     default:
       return assertNever(mode);
   }

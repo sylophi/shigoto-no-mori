@@ -54,7 +54,7 @@ const STATUS_DETAIL: Partial<Record<MirrorStatus, string>> = {
   saving: "saving state",
 };
 
-export function describeMirror(session: MirrorSession): {
+type MirrorLook = {
   tone: StatusTone;
   label: string;
   detail: string;
@@ -62,7 +62,16 @@ export function describeMirror(session: MirrorSession): {
   // Set only by the conflict branch, which is the one chip with a
   // list behind it (MirrorConflicts.tsx).
   showConflicts?: boolean;
-} {
+};
+
+const look = (
+  tone: StatusTone,
+  label: string,
+  detail = "",
+  spinning = false,
+): MirrorLook => ({ tone, label, detail, spinning });
+
+export function describeMirror(session: MirrorSession): MirrorLook {
   const problems =
     session.local.problems.length +
     session.remote.problems.length +
@@ -75,105 +84,66 @@ export function describeMirror(session: MirrorSession): {
   const quietCheck = CHECKING.has(session.status) && !firstPass;
   const lifecycle =
     STATUS_DETAIL[quietCheck ? "watching" : session.status] ?? "";
-  if (session.paused) {
-    return { tone: "slate", label: "Paused", detail: "", spinning: false };
-  }
+  if (session.paused) return look("slate", "Paused");
   if (isHaltedStatus(session.status)) {
-    return {
-      tone: "rose",
-      label: "Halted",
-      detail: session.statusText,
-      spinning: false,
-    };
+    return look("rose", "Halted", session.statusText);
   }
-  if (session.lastError) {
-    return {
-      tone: "rose",
-      label: "Error",
-      detail: session.lastError,
-      spinning: false,
-    };
-  }
+  if (session.lastError) return look("rose", "Error", session.lastError);
   // The git half's verdict outranks file-level news: a diverged or
   // blocked branch is the thing to act on. Files keep mirroring
   // meanwhile. Only the git state is frozen.
   if (session.git?.status === "diverged") {
-    return {
-      tone: "amber",
-      label: "Git diverged",
-      detail: `${session.git.detail}. Files keep syncing. Git waits until one side is put back.`,
-      spinning: false,
-    };
+    return look(
+      "amber",
+      "Git diverged",
+      `${session.git.detail}. Files keep syncing. Git waits until one side is put back.`,
+    );
   }
-  if (session.git?.status === "blocked") {
-    return {
-      tone: "rose",
-      label: "Git blocked",
-      detail: session.git.detail,
-      spinning: false,
-    };
-  }
-  if (session.git?.status === "error") {
-    return {
-      tone: "rose",
-      label: "Git error",
-      detail: session.git.detail,
-      spinning: false,
-    };
+  if (session.git?.status === "blocked" || session.git?.status === "error") {
+    return look(
+      "rose",
+      session.git.status === "blocked" ? "Git blocked" : "Git error",
+      session.git.detail,
+    );
   }
   if (conflicts > 0) {
     return {
-      tone: "amber",
-      label: pluralize(conflicts, "conflict"),
-      detail: "",
-      spinning: false,
+      ...look("amber", pluralize(conflicts, "conflict")),
       showConflicts: true,
     };
   }
   if (problems > 0) {
-    return {
-      tone: "rose",
-      label: pluralize(problems, "problem"),
-      detail: [...session.local.problems, ...session.remote.problems]
+    return look(
+      "rose",
+      pluralize(problems, "problem"),
+      [...session.local.problems, ...session.remote.problems]
         .map((p) => `${p.path}: ${p.error}`)
         .slice(0, 5)
         .join("\n"),
-      spinning: false,
-    };
+    );
   }
   if (
     session.status === "connecting-local" ||
     session.status === "connecting-remote" ||
     session.status === "disconnected"
   ) {
-    return {
-      tone: "amber",
-      label: "Reconnecting",
-      detail: lifecycle,
-      spinning: true,
-    };
+    return look("amber", "Reconnecting", lifecycle, true);
   }
   if (
     MOVING.has(session.status) ||
     (CHECKING.has(session.status) && firstPass) ||
     session.git?.status === "following"
   ) {
-    return {
-      tone: "sky",
-      label: "Syncing",
-      detail:
-        session.git?.status === "following"
-          ? `git ${session.git.detail}`
-          : lifecycle,
-      spinning: true,
-    };
+    return look(
+      "sky",
+      "Syncing",
+      session.git?.status === "following"
+        ? `git ${session.git.detail}`
+        : lifecycle,
+      true,
+    );
   }
-  return {
-    tone: "emerald",
-    label: "Live",
-    detail: lifecycle,
-    spinning: false,
-  };
+  return look("emerald", "Live", lifecycle);
 }
 
 // The git half in two or three words, for the manage dialog's stat.

@@ -7,16 +7,7 @@ import {
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Command } from "cmdk";
-import {
-  ArrowDown,
-  ArrowLeft,
-  ArrowUp,
-  CornerLeftUp,
-  Folder,
-  FolderGit2,
-  FolderSearch,
-  GitBranch,
-} from "lucide-react";
+import { Folder, FolderGit2, FolderSearch, GitBranch } from "lucide-react";
 import { repoNameFromUrl, stripUrlCredentials } from "@shared/cloneUrl";
 import { normalizeRemoteUrl } from "@shared/git/repoIdentity.mts";
 import {
@@ -30,6 +21,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { ChipButton } from "@/components/ui/chip-button";
 import { FileManagerIcon } from "@/components/ui/file-manager";
+import {
+  BrowseKeyHints,
+  BrowseUpItem,
+} from "@/components/shared/BrowseListParts";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import {
   useAddProject,
@@ -45,7 +40,7 @@ import { notifyError, toast } from "@/lib/toast";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { Kbd, KbdGroup, KbdHint } from "@/components/ui/kbd";
 import { ITEM_CLASS, keepFocusInInput } from "@/components/ui/cmdk-classes";
 import { CloneDestination, CloningPanel } from "./ClonePanel";
 import { defaultCloneParent } from "./cloneDestination";
@@ -498,17 +493,7 @@ export function AddProjectView({
           onMouseDown={keepFocusInInput}
           className={cloneMode ? "hidden" : "max-h-96 overflow-y-auto p-2"}
         >
-          {canBrowseUp && (
-            <Command.Item
-              value="browse:up"
-              keywords={[".."]}
-              onSelect={browseUp}
-              className={ITEM_CLASS}
-            >
-              <CornerLeftUp className="size-4 text-muted-foreground/80" />
-              <span className="font-mono text-muted-foreground">..</span>
-            </Command.Item>
-          )}
+          {canBrowseUp && <BrowseUpItem onSelect={browseUp} />}
 
           {filtered.map((entry) => {
             const entryPath = `${browseDir}${entry.name}`;
@@ -572,36 +557,13 @@ export function AddProjectView({
 
         <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
           <div className="flex items-center gap-3">
-            {cloneMode ? (
-              <KbdGroup>
-                <Kbd>↩</Kbd>
-                <span className="text-muted-foreground/80">Clone</span>
-              </KbdGroup>
-            ) : (
-              <KbdGroup>
-                <Kbd>
-                  <ArrowUp />
-                </Kbd>
-                <Kbd>
-                  <ArrowDown />
-                </Kbd>
-                <span className="text-muted-foreground/80">Navigate</span>
-              </KbdGroup>
-            )}
-            {hasHighlighted && (
-              <KbdGroup>
-                <Kbd>↩</Kbd>
-                <span className="text-muted-foreground/80">Enter folder</span>
-              </KbdGroup>
-            )}
-            {canBrowseUp && (
-              <KbdGroup>
-                <Kbd>
-                  <ArrowLeft />
-                </Kbd>
-                <span className="text-muted-foreground/80">Go up</span>
-              </KbdGroup>
-            )}
+            <BrowseKeyHints
+              lead={
+                cloneMode ? <KbdHint keys={["↩"]} label="Clone" /> : undefined
+              }
+              enterFolder={hasHighlighted}
+              goUp={canBrowseUp}
+            />
           </div>
           {/* The native dialog is this machine's, so it can't pick a
             folder on a peer's disk. */}

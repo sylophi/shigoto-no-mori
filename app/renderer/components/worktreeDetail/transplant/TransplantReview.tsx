@@ -15,129 +15,49 @@ import { changeEntries } from "@/lib/patchFiles";
 import { DestinationScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
 import { cn } from "@/lib/utils";
-import type { LandingTarget } from "../flow/cloneDestination";
-import type { PullChoiceState } from "../flow/ignoreChoice";
-import type { Landing } from "../flow/pullSteps";
-import { PullLeaveOut } from "../flow/PullLeaveOut";
 import { useCarryOverRows } from "../flow/createPlan";
-import {
-  type DestinationPick,
-  PullReviewFooter,
-  ReviewDevicesColumn,
-  SourceCard,
-} from "../flow/PullReview";
-import {
-  CARD_NOTE,
-  CardList,
-  CardSkeleton,
-  MAX_LIST_ROWS as MAX_ROWS,
-  FlowBody,
-} from "../flow/FlowChrome";
+import { type PullReviewProps, PullReviewStep } from "../flow/PullReview";
+import { CARD_NOTE, CardList, CardSkeleton } from "../flow/FlowChrome";
 
-export function TransplantReview({
-  worktree,
-  project,
-  target,
-  sourceDeviceLabel,
-  thisDeviceLabel,
-  landing,
-  toPeer,
-  pull,
-  onCancel,
-  onStart,
-}: {
-  worktree: Worktree;
-  project: Project;
-  // Where it lands (flow/cloneDestination.tsx): this machine's
-  // project or the clone that makes one, or the picked peer's when the
-  // transplant goes to one (`toPeer`), null until one is picked.
-  target: LandingTarget | null;
-  sourceDeviceLabel: string;
-  thisDeviceLabel: string;
-  landing?: Landing;
-  toPeer?: DestinationPick;
-  // The leave-out rule and the setup switch, the mirror's pair.
-  pull: PullChoiceState;
-  onCancel: () => void;
-  onStart: () => void;
-}) {
+export function TransplantReview(props: PullReviewProps) {
+  const { worktree, project, target, sourceDeviceLabel, thisDeviceLabel } =
+    props;
   const dirty = worktree.changedCount > 0;
   return (
-    <>
-      <FlowBody>
-        <div className="grid gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-          <div className="flex min-w-0 flex-col gap-5">
-            <section className="space-y-2">
-              <SectionHeading>Source</SectionHeading>
-              <SourceCard
-                worktree={worktree}
-                project={project}
-                sourceDeviceLabel={sourceDeviceLabel}
-              />
-            </section>
-
-            <section className="space-y-2">
-              <SectionHeading>
-                Uncommitted changes
-                <span className="ml-1.5 font-normal tracking-normal normal-case">
-                  {dirty ? "(re-applied on arrival)" : "(none)"}
-                </span>
-              </SectionHeading>
-              {dirty ? (
-                <ChangedFiles worktree={worktree} project={project} />
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  The tree is clean, so only the branch travels.
-                </p>
-              )}
-            </section>
-
-            <PullLeaveOut
-              pull={pull}
-              worktree={{
-                projectId: project.id,
-                id: worktree.id,
-                path: worktree.path,
-              }}
+    <PullReviewStep
+      {...props}
+      heading="Destination"
+      sourceNote="where it is now"
+      idleNote={`Nothing on ${sourceDeviceLabel} is deleted until you say so at the last step.`}
+      startLabel="Start transplant"
+      beforeLeaveOut={
+        <section className="space-y-2">
+          <SectionHeading>
+            Uncommitted changes
+            <span className="ml-1.5 font-normal tracking-normal normal-case">
+              {dirty ? "(re-applied on arrival)" : "(none)"}
+            </span>
+          </SectionHeading>
+          {dirty ? (
+            <ChangedFiles worktree={worktree} project={project} />
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              The tree is clean, so only the branch travels.
+            </p>
+          )}
+        </section>
+      }
+      afterLeaveOut={
+        target?.project && (
+          <DestinationScope>
+            <CarryOverList
+              localProject={target.project}
+              thisDeviceLabel={thisDeviceLabel}
             />
-
-            {target?.project && (
-              <DestinationScope>
-                <CarryOverList
-                  localProject={target.project}
-                  thisDeviceLabel={thisDeviceLabel}
-                />
-              </DestinationScope>
-            )}
-          </div>
-
-          <ReviewDevicesColumn
-            heading="Destination"
-            sourceNote="where it is now"
-            toPeer={toPeer}
-            worktree={worktree}
-            target={target}
-            sourceDeviceLabel={sourceDeviceLabel}
-            thisDeviceLabel={thisDeviceLabel}
-            pull={pull}
-          />
-        </div>
-      </FlowBody>
-
-      <DestinationScope>
-        <PullReviewFooter
-          worktree={worktree}
-          target={target}
-          landing={landing}
-          waiting={pull.waiting}
-          blocked={pull.blocked}
-          idleNote={`Nothing on ${sourceDeviceLabel} is deleted until you say so at the last step.`}
-          startLabel="Start transplant"
-          onCancel={onCancel}
-          onStart={onStart}
-        />
-      </DestinationScope>
-    </>
+          </DestinationScope>
+        )
+      }
+    />
   );
 }
 
@@ -171,8 +91,9 @@ function ChangedFiles({
     return <p className={CARD_NOTE}>No uncommitted changes to list.</p>;
   }
   return (
-    <CardList total={files.length}>
-      {files.slice(0, MAX_ROWS).map((entry) => {
+    <CardList
+      items={files}
+      renderRow={(entry) => {
         const { mark, stats } = entry;
         return (
           <li key={entry.key} className="flex items-center gap-2">
@@ -193,8 +114,8 @@ function ChangedFiles({
             )}
           </li>
         );
-      })}
-    </CardList>
+      }}
+    />
   );
 }
 
@@ -221,8 +142,9 @@ function CarryOverList({
       ) : rows.length === 0 ? (
         <p className="text-xs text-muted-foreground">None configured.</p>
       ) : (
-        <CardList total={rows.length}>
-          {rows.slice(0, MAX_ROWS).map((row) => (
+        <CardList
+          items={rows}
+          renderRow={(row) => (
             <li key={row.path} className="flex items-center gap-2">
               <Check
                 aria-hidden
@@ -233,8 +155,8 @@ function CarryOverList({
               </span>
               <RowTag>{row.tag}</RowTag>
             </li>
-          ))}
-        </CardList>
+          )}
+        />
       )}
     </section>
   );

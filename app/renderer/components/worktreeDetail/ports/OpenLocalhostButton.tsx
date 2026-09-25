@@ -4,7 +4,7 @@
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { notifyError } from "@/lib/toast";
+import { openExternalUrl } from "@/lib/openExternal";
 
 export function OpenLocalhostButton({
   port,
@@ -29,11 +29,7 @@ export function OpenLocalhostButton({
           aria-label={`Open ${url}`}
           disabled={disabled}
           className="text-muted-foreground hover:text-foreground"
-          onClick={() =>
-            window.api.shell
-              .openExternal(url)
-              .catch((err) => notifyError("Couldn't open the port", err))
-          }
+          onClick={() => openExternalUrl(url, "Couldn't open the port")}
         >
           <ExternalLink />
         </Button>

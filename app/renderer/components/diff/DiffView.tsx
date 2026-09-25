@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { UseQueryResult } from "@tanstack/react-query";
 // parsePatchFiles lives in the root entry, not /react (the docs example
 // is slightly off: `@pierre/diffs/react` only re-exports the React
 // components and shared types). The two imports are friendly together.
@@ -18,12 +19,19 @@ import { cn } from "@/lib/utils";
 import type { DiffChangesControls } from "./changesControls";
 import { CODE_STYLE, CODE_THEME } from "./codeTheme";
 import { DiffFileIndex } from "./DiffFileIndex";
-import { DiffStyleToggle, type DiffStyle } from "./DiffStyleToggle";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { changeEntries, fileKey, patchEntries } from "@/lib/patchFiles";
 import { useFileScrollSpy } from "./useFileScrollSpy";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { readStored, writeStored } from "@/lib/localStorage";
 import { withMember } from "@/lib/toggleSet";
+
+type DiffStyle = "unified" | "split";
+
+const DIFF_STYLE_OPTIONS = [
+  { value: "unified", label: "Unified" },
+  { value: "split", label: "Split" },
+] as const;
 
 const DIFF_THEME = {
   ...CODE_THEME,
@@ -97,9 +105,7 @@ function readStoredIndexPref(): boolean | null {
 }
 
 export function DiffView({
-  patch,
-  isLoading,
-  error,
+  diff,
   onBack,
   backLabel,
   title,
@@ -108,9 +114,8 @@ export function DiffView({
   changes,
   railFooter,
 }: {
-  patch: string | undefined;
-  isLoading: boolean;
-  error: Error | null;
+  // The patch's read, whichever of the three pages asked for it.
+  diff: UseQueryResult<string>;
   onBack: () => void;
   backLabel: string;
   title: ReactNode;
@@ -124,6 +129,7 @@ export function DiffView({
   // Mounted at the foot of the rail: the commit composer.
   railFooter?: ReactNode;
 }) {
+  const { data: patch, isLoading, error } = diff;
   const [diffStyle, setDiffStyle] = useState<DiffStyle>("unified");
   const [indexPref, setIndexPref] = useState(readStoredIndexPref);
   const [collapsedKeys, setCollapsedKeys] = useState<ReadonlySet<string>>(
@@ -165,6 +171,7 @@ export function DiffView({
   // diff hands over the whole patch, reads as one scroll, and its rail
   // is optional.
   const singleFile = changes !== undefined;
+  const filesLabel = singleFile ? "Changed files" : "Files in this patch";
 
   const parsedPatches = patch ? parsePatchFiles(patch) : [];
   // Path order, which is how git emits a commit or a PR anyway, so this
@@ -251,6 +258,19 @@ export function DiffView({
   // Which row the rail marks: the picked path, or whatever the scroll
   // has reached in a combined read.
   const currentKey = changes ? changes.selectedKey : activeKey;
+  // What the rail and the phone's sheet both list.
+  const indexProps = {
+    entries: indexEntries,
+    activeKey: currentKey,
+    collapsedKeys,
+    allCollapsed,
+    // Folding is a combined-read affordance: with one file in the pane
+    // there is nothing for it to collapse, so the header drops the
+    // control with its handler.
+    onToggleAll: singleFile ? undefined : toggleAll,
+    changes,
+    footer: railFooter,
+  };
 
   return (
     // Measured rather than left to a container query: the chip has to
@@ -279,8 +299,8 @@ export function DiffView({
             {phone && (singleFile || allFiles.length >= INDEX_MIN_FILES) && (
               <ChipButton
                 onClick={() => setFileSheetOpen(true)}
-                title={singleFile ? "Changed files" : "Files in this patch"}
-                aria-label={`${singleFile ? "Changed files" : "Files in this patch"} (${indexEntries.length})`}
+                title={filesLabel}
+                aria-label={`${filesLabel} (${indexEntries.length})`}
                 className="py-1.5"
               >
                 <Files aria-hidden className="size-3.5" />
@@ -298,7 +318,14 @@ export function DiffView({
                 <PanelLeft aria-hidden className="size-3.5" />
               </ChipButton>
             )}
-            <DiffStyleToggle value={diffStyle} onChange={setDiffStyle} />
+            <SegmentedControl
+              aria-label="Diff layout"
+              className="self-center"
+              optionClassName="px-2 py-1 text-xs"
+              value={diffStyle}
+              onChange={setDiffStyle}
+              options={DIFF_STYLE_OPTIONS}
+            />
           </div>
         </div>
       </header>
@@ -306,17 +333,8 @@ export function DiffView({
       <div className="flex min-h-0 flex-1">
         {showIndex && (
           <DiffFileIndex
-            entries={indexEntries}
-            activeKey={currentKey}
-            collapsedKeys={collapsedKeys}
-            // Folding is a combined-read affordance: with one file in
-            // the pane there is nothing for it to collapse, so the
-            // header drops the control with its handler.
-            allCollapsed={allCollapsed}
+            {...indexProps}
             onSelect={selectFile}
-            onToggleAll={singleFile ? undefined : toggleAll}
-            changes={changes}
-            footer={railFooter}
             width={rail.width}
           />
         )}
@@ -393,21 +411,13 @@ export function DiffView({
             showCloseButton={false}
             className="gap-0 p-0"
           >
-            <SheetTitle className="sr-only">
-              {singleFile ? "Changed files" : "Files in this patch"}
-            </SheetTitle>
+            <SheetTitle className="sr-only">{filesLabel}</SheetTitle>
             <DiffFileIndex
-              entries={indexEntries}
-              activeKey={currentKey}
-              collapsedKeys={collapsedKeys}
-              allCollapsed={allCollapsed}
+              {...indexProps}
               onSelect={(key) => {
                 setFileSheetOpen(false);
                 selectFile(key);
               }}
-              onToggleAll={singleFile ? undefined : toggleAll}
-              changes={changes}
-              footer={railFooter}
               className="h-[70dvh] w-full"
             />
           </SheetContent>

@@ -9,7 +9,8 @@
 // carries. So is the running mirror's button, on a worktree already
 // part of one (mirror/MirrorAction.tsx), in place of "Mirror here": a
 // worktree holds one mirror, the rule the local footer's "Mirror to…"
-// follows. The two transfers need command access, a real branch, and
+// follows. Those two lead the footer on either page
+// (WorktreeDetailInner.tsx), and this file adds the transfers. The two transfers need command access, a real branch, and
 // a repo identity to match a local project by (the handler re-verifies
 // the match). No local project sharing it is not a stop: the dialogs
 // clone the repo here first. A repo with no identity at all gets a
@@ -28,14 +29,12 @@ import {
   useWorktreeMirrorLinks,
 } from "@/hooks/remote/useMirrors";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
-import { FilesButton } from "./FilesButton";
 import { FooterActionButton } from "./FooterActionButton";
-import { MirrorAction } from "./mirror/MirrorAction";
 import { MirrorDialog } from "./mirror/MirrorDialog";
-import { PortsButton } from "./ports/PortsButton";
 import { TransplantDialog } from "./transplant/TransplantDialog";
 
-export function RemoteWorktreeActions({
+// The two transfers, or the one line that explains their absence.
+export function RemoteTransferActions({
   worktree,
   project,
 }: {
@@ -46,18 +45,10 @@ export function RemoteWorktreeActions({
   const transferable =
     granted && !worktree.detached && isRealBranch(worktree.branch);
   return (
-    <>
-      <FilesButton worktree={worktree} />
-      <PortsButton worktree={worktree} />
-      <MirrorAction worktree={worktree} />
-      {transferable && (
-        <TransferActions worktree={worktree} project={project} />
-      )}
-    </>
+    transferable && <TransferActions worktree={worktree} project={project} />
   );
 }
 
-// The two transfers, or the one line that explains their absence.
 function TransferActions({
   worktree,
   project,
@@ -75,22 +66,12 @@ function TransferActions({
   // machine the dialogs clone the repo first (over the device link, so
   // a repo with no remote comes too), and say where.
   return (
-    <>
-      <MirrorButton
-        worktree={worktree}
-        project={project}
-        sourceIdentity={project.identity}
-        localProject={localProject}
-      />
-      {!worktree.isPrimary && (
-        <TransplantButton
-          worktree={worktree}
-          project={project}
-          sourceIdentity={project.identity}
-          localProject={localProject}
-        />
-      )}
-    </>
+    <TransferButtons
+      worktree={worktree}
+      project={project}
+      sourceIdentity={project.identity}
+      localProject={localProject}
+    />
   );
 }
 
@@ -113,10 +94,7 @@ function NoIdentityNote() {
   );
 }
 
-// Transplant is destructive on the remote side, so it opens the review
-// dialog instead of firing on a double-click: the dialog is the
-// confirmation.
-function TransplantButton({
+function TransferButtons({
   worktree,
   project,
   sourceIdentity,
@@ -127,74 +105,57 @@ function TransplantButton({
   sourceIdentity: string;
   localProject: Project | undefined;
 }) {
-  const [open, setOpen] = useState(false);
-  const { deviceId } = useHostScope();
-  const deviceLabel = useRemoteDeviceLabel(deviceId);
-  return (
-    <>
-      <FooterActionButton
-        icon={<Shovel />}
-        label="Transplant here"
-        title="Move this worktree here"
-        onClick={() => setOpen(true)}
-      />
-      {open && (
-        <TransplantDialog
-          worktree={worktree}
-          project={project}
-          sourceIdentity={sourceIdentity}
-          localProject={localProject}
-          sourceDeviceLabel={deviceLabel}
-          onClose={() => setOpen(false)}
-        />
-      )}
-    </>
-  );
-}
-
-// Mirror is a pull followed by a live two-way mirror between the new
-// local worktree and the remote one, driven by the mirror dialog. It
-// only exists in the app: the daemon and the gateway live in main, and
-// the web loopback refuses the mutation. A mirror withdraws the
-// button, not an OPEN dialog: the mirror it starts is what withdraws
-// it, and the dialog's last steps (the report, "Open here") must stay
-// up.
-function MirrorButton({
-  worktree,
-  project,
-  sourceIdentity,
-  localProject,
-}: {
-  worktree: Worktree;
-  project: Project;
-  sourceIdentity: string;
-  localProject: Project | undefined;
-}) {
-  const [open, setOpen] = useState(false);
+  // Two flags, not one: either dialog stays mounted while the other
+  // button is reachable behind it.
+  const [mirrorOpen, setMirrorOpen] = useState(false);
+  const [transplantOpen, setTransplantOpen] = useState(false);
   const { deviceId } = useHostScope();
   const deviceLabel = useRemoteDeviceLabel(deviceId);
   const mirrored = useWorktreeMirrorLinks(worktree).length > 0;
   const blocker = useLocalMirrorBlocker();
-  if (!canForwardPorts) return null;
+  const dialog = {
+    worktree,
+    project,
+    sourceIdentity,
+    localProject,
+    sourceDeviceLabel: deviceLabel,
+  };
   return (
     <>
-      {!mirrored && (
+      {/* Mirror is a pull followed by a live two-way mirror between the
+          new local worktree and the remote one, driven by the mirror
+          dialog. It only exists in the app: the daemon and the gateway
+          live in main, and the web loopback refuses the mutation. A
+          mirror withdraws the button, not an OPEN dialog: the mirror it
+          starts is what withdraws it, and the dialog's last steps (the
+          report, "Open here") must stay up. */}
+      {canForwardPorts && !mirrored && (
         <FooterActionButton
           icon={<RefreshCw />}
           label="Mirror here"
           title="Keep a live copy of this worktree here"
           disabledReason={blocker}
-          onClick={() => setOpen(true)}
+          onClick={() => setMirrorOpen(true)}
         />
       )}
-      {open && (
-        <MirrorDialog
-          worktree={worktree}
-          project={project}
-          sourceIdentity={sourceIdentity}
-          localProject={localProject}
-          sourceDeviceLabel={deviceLabel}
-          onClose={() => setOpen(false)}
+      {mirrorOpen && (
+        <MirrorDialog {...dialog} onClose={() => setMirrorOpen(false)} />
+      )}
+      {/* Transplant is destructive on the remote side, so it opens the
+          review dialog instead of firing on a double-click: the dialog
+          is the confirmation. */}
+      {!worktree.isPrimary && (
+        <FooterActionButton
+          icon={<Shovel />}
+          label="Transplant here"
+          title="Move this worktree here"
+          onClick={() => setTransplantOpen(true)}
+        />
+      )}
+      {transplantOpen && (
+        <TransplantDialog
+          {...dialog}
+          onClose={() => setTransplantOpen(false)}
         />
       )}
     </>

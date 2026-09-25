@@ -50,6 +50,26 @@ export function PullRequestIdentity({
     nav.toPrDiff(worktree.projectId, worktree.id);
   };
 
+  // The meta row's content, drawn twice: visible, and in the measurer.
+  const metaRow = (trailing: string | null) => (
+    <>
+      <MetaSentence
+        authorLogin={pr.authorLogin}
+        baseRefName={pr.baseRefName}
+        updatedTitle={updatedTitle}
+        trailing={trailing}
+      />
+      {pr.changedFiles > 0 && (
+        <DiffButton
+          changedFiles={pr.changedFiles}
+          additions={pr.additions}
+          deletions={pr.deletions}
+          onClick={openDiff}
+        />
+      )}
+    </>
+  );
+
   return (
     <div className="space-y-1.5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -65,20 +85,7 @@ export function PullRequestIdentity({
         ref={containerRef}
         className="relative flex flex-wrap items-center justify-between gap-x-3 gap-y-1"
       >
-        <MetaSentence
-          authorLogin={pr.authorLogin}
-          baseRefName={pr.baseRefName}
-          updatedTitle={updatedTitle}
-          trailing={showUpdated ? updatedLabel : null}
-        />
-        {pr.changedFiles > 0 && (
-          <DiffButton
-            changedFiles={pr.changedFiles}
-            additions={pr.additions}
-            deletions={pr.deletions}
-            onClick={openDiff}
-          />
-        )}
+        {metaRow(showUpdated ? updatedLabel : null)}
         {/* inert keeps the natural-width measurer out of the tab order
             and the accessibility tree; pointer-events-none alone leaves
             the duplicated button focusable. The wrapper is pinned to the
@@ -97,20 +104,7 @@ export function PullRequestIdentity({
             ref={measurerRef}
             className="flex w-max items-center gap-x-3 whitespace-nowrap"
           >
-            <MetaSentence
-              authorLogin={pr.authorLogin}
-              baseRefName={pr.baseRefName}
-              updatedTitle={updatedTitle}
-              trailing={updatedLabel}
-            />
-            {pr.changedFiles > 0 && (
-              <DiffButton
-                changedFiles={pr.changedFiles}
-                additions={pr.additions}
-                deletions={pr.deletions}
-                onClick={openDiff}
-              />
-            )}
+            {metaRow(updatedLabel)}
           </div>
         </div>
       </div>

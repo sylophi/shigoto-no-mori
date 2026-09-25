@@ -12,7 +12,7 @@ import { useConvertExternalWorktree } from "@/hooks/worktrees/useWorktreeMutatio
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { sanitizeBranchForPath } from "@shared/git/branches";
 import type { Project, Worktree } from "@shared/schemas";
-import { worktreePathFor } from "@shared/git/worktreeLayout";
+import { layoutInputsFor, worktreePathFor } from "@shared/git/worktreeLayout";
 import { ConvertRow } from "./ConvertRow";
 import { withToggled } from "@/lib/toggleSet";
 import { PAGE_BODY } from "@/components/shared/PageShell";
@@ -58,12 +58,7 @@ function ConvertExternalBody({ project }: { project: Project }) {
     // leaf.
     return tildify(
       worktreePathFor(
-        {
-          layout: config?.worktreeLayout ?? "managed-root",
-          projectPath: project.path,
-          dataDir: runtime.dataDir,
-          customPath: config?.customWorktreePath ?? null,
-        },
+        layoutInputsFor(config ?? null, project.path, runtime.dataDir),
         proposedName(worktree) || "(generated name)",
       ),
       home,
@@ -74,13 +69,12 @@ function ConvertExternalBody({ project }: { project: Project }) {
     setSelected(withToggled(id));
   };
 
-  const toggleAll = () => {
-    if (selected.size === externals.length) {
-      setSelected(new Set());
-    } else {
-      setSelected(new Set(externals.map((w) => w.id)));
-    }
-  };
+  const toggleAll = () =>
+    setSelected(
+      selected.size === externals.length
+        ? new Set()
+        : new Set(externals.map((w) => w.id)),
+    );
 
   const runConversions = async () => {
     if (batchRunning || selected.size === 0) return;

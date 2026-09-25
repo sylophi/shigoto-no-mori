@@ -11,3 +11,11 @@ export function openExternalUrl(
     .openExternal(url)
     .catch((err) => notifyError(errorTitle, err));
 }
+
+// Shows a local path in the system file manager, the same way: through
+// the shell IPC, reporting failure as a toast.
+export function revealInFolder(path: string, errorTitle: string): void {
+  window.api.shell
+    .showItemInFolder(path)
+    .catch((err: unknown) => notifyError(errorTitle, err));
+}

@@ -178,6 +178,7 @@ function buttonCopy({
     return { label: amending ? "Amending…" : "Committing…", title: "" };
   }
   const what = pluralize(included > 0 ? included : total, "file");
+  const scope = included > 0 ? what : `all ${what}`;
   const title =
     total === 0
       ? "Only the message changes"
@@ -185,17 +186,9 @@ function buttonCopy({
         ? `Commit the ${what} ticked`
         : "Nothing is ticked, so every listed file is committed";
   if (amending) {
-    const label =
-      total === 0
-        ? "Amend the message"
-        : included > 0
-          ? `Amend with ${what}`
-          : `Amend with all ${what}`;
+    const label = total === 0 ? "Amend the message" : `Amend with ${scope}`;
     return { label, title };
   }
   if (total === 0) return { label: "Nothing to commit", title: "" };
-  return {
-    label: included > 0 ? `Commit ${what}` : `Commit all ${what}`,
-    title,
-  };
+  return { label: `Commit ${scope}`, title };
 }

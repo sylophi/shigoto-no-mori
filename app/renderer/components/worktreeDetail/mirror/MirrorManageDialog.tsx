@@ -59,7 +59,13 @@ import {
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { localDeviceId } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
-import { CARD, FlowHeader, FlowBody, FlowFooter } from "../flow/FlowChrome";
+import {
+  CARD,
+  CARD_NOTE,
+  FlowHeader,
+  FlowBody,
+  FlowFooter,
+} from "../flow/FlowChrome";
 import {
   type IgnoreSelection,
   modeOf,
@@ -190,27 +196,19 @@ export function MirrorManageDialog({
         </Button>
         {canControl && (
           <>
-            {session.paused ? (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() => controls.resume.mutate(session.session)}
-              >
-                <Play />
-                Resume
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={busy}
-                onClick={() => controls.pause.mutate(session.session)}
-              >
-                <Pause />
-                Pause
-              </Button>
-            )}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={busy}
+              onClick={() =>
+                (session.paused ? controls.resume : controls.pause).mutate(
+                  session.session,
+                )
+              }
+            >
+              {session.paused ? <Play /> : <Pause />}
+              {session.paused ? "Resume" : "Pause"}
+            </Button>
             <Button
               size="sm"
               variant={armed ? "destructive" : "outline"}
@@ -466,9 +464,7 @@ function HistoryList({ localWorktreeId }: { localWorktreeId: string }) {
     );
   }
   if (events === undefined || events.length === 0) {
-    return (
-      <p className={cn(CARD, "text-xs text-muted-foreground")}>Nothing yet.</p>
-    );
+    return <p className={CARD_NOTE}>Nothing yet.</p>;
   }
   return (
     <ol className="max-h-96 space-y-2.5 overflow-y-auto text-xs">

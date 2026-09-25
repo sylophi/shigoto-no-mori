@@ -1,12 +1,6 @@
 import { useState, type KeyboardEvent } from "react";
 import { Command } from "cmdk";
-import {
-  ArrowDown,
-  ArrowLeft,
-  ArrowUp,
-  CornerLeftUp,
-  Folder,
-} from "lucide-react";
+import { Folder } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChipButton } from "@/components/ui/chip-button";
 import { FileManagerIcon } from "@/components/ui/file-manager";
@@ -22,6 +16,7 @@ import {
   isAnchoredPath,
   normalizeForSubmit,
 } from "@/lib/projectPaths";
+import { BrowseKeyHints, BrowseUpItem } from "./BrowseListParts";
 
 // Prefix used as the cmdk `value` for browse-list items. `hasHighlighted`
 // reads it back to tell "a row is highlighted" from "nothing is".
@@ -174,17 +169,7 @@ export function FolderPickerModal({
           onMouseDown={keepFocusInInput}
           className="max-h-96 overflow-y-auto p-2"
         >
-          {canBrowseUp && (
-            <Command.Item
-              value={`${BROWSE_VALUE_PREFIX}up`}
-              keywords={[".."]}
-              onSelect={browseUp}
-              className={ITEM_CLASS}
-            >
-              <CornerLeftUp className="size-4 text-muted-foreground/80" />
-              <span className="font-mono text-muted-foreground">..</span>
-            </Command.Item>
-          )}
+          {canBrowseUp && <BrowseUpItem onSelect={browseUp} />}
 
           {filtered.map((entry) => {
             const entryPath = `${browseDir}${entry.name}`;
@@ -223,29 +208,7 @@ export function FolderPickerModal({
 
         <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
           <div className="flex items-center gap-3">
-            <KbdGroup>
-              <Kbd>
-                <ArrowUp />
-              </Kbd>
-              <Kbd>
-                <ArrowDown />
-              </Kbd>
-              <span className="text-muted-foreground/80">Navigate</span>
-            </KbdGroup>
-            {hasHighlighted && (
-              <KbdGroup>
-                <Kbd>↩</Kbd>
-                <span className="text-muted-foreground/80">Enter folder</span>
-              </KbdGroup>
-            )}
-            {canBrowseUp && (
-              <KbdGroup>
-                <Kbd>
-                  <ArrowLeft />
-                </Kbd>
-                <span className="text-muted-foreground/80">Go up</span>
-              </KbdGroup>
-            )}
+            <BrowseKeyHints enterFolder={hasHighlighted} goUp={canBrowseUp} />
           </div>
           {!remote && (
             <ChipButton

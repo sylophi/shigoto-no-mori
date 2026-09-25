@@ -22,7 +22,6 @@ import { StatusDot } from "@/components/ui/status-dot";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
 import {
   DestinationProvider,
-  DestinationScope,
   LocalHostScope,
 } from "@/hooks/remote/useHostScope";
 import {
@@ -32,24 +31,11 @@ import {
 } from "@/hooks/remote/useMirrors";
 import type { LandingChoice } from "@/hooks/remote/usePullWorktree";
 import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
-import { type LandingTarget, useLandingTarget } from "../flow/cloneDestination";
 import { FlowBody, FlowFooter, LandedPath } from "../flow/FlowChrome";
 import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
-import { PullProgress } from "../flow/PullProgress";
-import {
-  type DestinationPick,
-  PullReviewFooter,
-  ReviewDevicesColumn,
-  SourceCard,
-} from "../flow/PullReview";
+import { type DestinationPick, PullReviewStep } from "../flow/PullReview";
 import { type Landing, LANDS_HERE, stepHeadline } from "../flow/pullSteps";
-import {
-  selectionSummary,
-  sessionSummary,
-  type PullChoiceState,
-  usePullChoice,
-} from "../flow/ignoreChoice";
-import { PullLeaveOut } from "../flow/PullLeaveOut";
+import { selectionSummary, sessionSummary } from "../flow/ignoreChoice";
 import { describeMirror } from "./mirrorStatus";
 
 const STEPS = ["Review", "Mirror", "Live"] as const;
@@ -172,39 +158,43 @@ function MirrorFlow({
   >;
   onClose: () => void;
 }) {
-  // Under the source scope: its ignored list walks the checkout over
-  // the device link.
-  const pull = usePullChoice(project.id, worktree.id, sourceIdentity);
-  const target = useLandingTarget({
-    localProject,
-    sourceProject: project,
-    toPeer: toPeer !== undefined,
-    submitted: mirror.variables,
-  });
-  const { stage, elapsed, progress, start, open } = usePullFlow({
+  const flow = usePullFlow({
     mutation: mirror,
-    sourceWorktreeId: worktree.id,
-    // The key only when there is a clone: the flows to a peer take the
-    // plain choice, and their payloads are strict.
-    choice: target?.clone
-      ? { ...pull.choice, cloneInto: target.clone.cloneInto }
-      : pull.choice,
-    destinationDeviceId: toPeer?.pickedId ?? undefined,
+    worktree,
+    project,
+    sourceIdentity,
+    localProject,
+    toPeer,
     onClose,
   });
+  const { stage, progress, start, open, pull, target } = flow;
   const summary = selectionSummary(pull.selection);
   const landingBranch = pullLandingBranch(worktree);
   const renamed = landingBranch !== worktree.branch;
 
   return (
     <PullFlowFrame
-      stage={stage}
-      elapsed={elapsed}
+      flow={flow}
+      worktree={worktree}
       reviewIcon={RefreshCw}
       titles={TITLES}
+      sourceDeviceLabel={sourceDeviceLabel}
       thisDeviceLabel={thisDeviceLabel}
+      landing={landing}
       steps={STEPS}
       stepsLabel="Mirror steps"
+      progressExtras={{
+        extraRows: [
+          {
+            title: "Open the mirror",
+            detail: summary ?? "both ways",
+          },
+        ],
+        sourcePart: "source, keeps its copy",
+        progressLabel: "Mirror progress",
+        runningNote: "Keep this window open.",
+        failedNote: `If the worktree already landed ${landing.on}, open it from the sidebar rather than retrying.`,
+      }}
       onClose={onClose}
       headline={
         <>
@@ -249,8 +239,12 @@ function MirrorFlow({
         </>
       }
     >
+      {/* Step 1: the source, what stays out, and the two devices that
+          will hold the branch. The source half reads the device the
+          page is scoped to. The device half re-pins to the landing
+          device (DestinationScope), like the transplant's. */}
       {stage === "review" && (
-        <MirrorReview
+        <PullReviewStep
           worktree={worktree}
           project={project}
           target={target}
@@ -261,32 +255,11 @@ function MirrorFlow({
           pull={pull}
           onCancel={onClose}
           onStart={start}
-        />
-      )}
-      {(stage === "running" || stage === "failed") && target && (
-        <PullProgress
-          frame={progress.frame}
-          phasesSeen={progress.phasesSeen}
-          sourceDeviceLabel={sourceDeviceLabel}
-          thisDeviceLabel={thisDeviceLabel}
-          worktree={worktree}
-          target={target}
-          runSetup={pull.runSetup}
-          landing={landing}
-          phasesReported={!landing.onPeer}
-          error={stage === "failed" ? mirror.error : undefined}
-          onClose={onClose}
-          onRetry={start}
-          extraRows={[
-            {
-              title: "Open the mirror",
-              detail: summary ?? "both ways",
-            },
-          ]}
-          sourcePart="source, keeps its copy"
-          progressLabel="Mirror progress"
-          runningNote="Keep this window open."
-          failedNote={`If the worktree already landed ${landing.on}, open it from the sidebar rather than retrying.`}
+          heading="On both"
+          sourceNote="keeps its copy"
+          sourceKeeps
+          idleNote={`Stop any time. Stopping removes the copy ${landing.on}.`}
+          startLabel="Start mirroring"
         />
       )}
       {stage === "done" && mirror.data && (
@@ -305,88 +278,6 @@ function MirrorFlow({
         </LocalHostScope>
       )}
     </PullFlowFrame>
-  );
-}
-
-// Step 1: the source, what stays out, and the two devices that will
-// hold the branch. The source half reads the device the page is scoped
-// to. The device half re-pins to the landing device (DestinationScope),
-// like the transplant's.
-function MirrorReview({
-  worktree,
-  project,
-  target,
-  sourceDeviceLabel,
-  thisDeviceLabel,
-  landing = LANDS_HERE,
-  toPeer,
-  pull,
-  onCancel,
-  onStart,
-}: {
-  worktree: Worktree;
-  project: Project;
-  target: LandingTarget | null;
-  sourceDeviceLabel: string;
-  thisDeviceLabel: string;
-  landing?: Landing;
-  toPeer?: DestinationPick;
-  pull: PullChoiceState;
-  onCancel: () => void;
-  onStart: () => void;
-}) {
-  return (
-    <>
-      <FlowBody>
-        <div className="grid gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-          <div className="flex min-w-0 flex-col gap-5">
-            <section className="space-y-2">
-              <SectionHeading>Source</SectionHeading>
-              <SourceCard
-                worktree={worktree}
-                project={project}
-                sourceDeviceLabel={sourceDeviceLabel}
-              />
-            </section>
-
-            <PullLeaveOut
-              pull={pull}
-              worktree={{
-                projectId: project.id,
-                id: worktree.id,
-                path: worktree.path,
-              }}
-            />
-          </div>
-
-          <ReviewDevicesColumn
-            heading="On both"
-            sourceNote="keeps its copy"
-            sourceKeeps
-            toPeer={toPeer}
-            worktree={worktree}
-            target={target}
-            sourceDeviceLabel={sourceDeviceLabel}
-            thisDeviceLabel={thisDeviceLabel}
-            pull={pull}
-          />
-        </div>
-      </FlowBody>
-
-      <DestinationScope>
-        <PullReviewFooter
-          worktree={worktree}
-          target={target}
-          landing={landing}
-          waiting={pull.waiting}
-          blocked={pull.blocked}
-          idleNote={`Stop any time. Stopping removes the copy ${landing.on}.`}
-          startLabel="Start mirroring"
-          onCancel={onCancel}
-          onStart={onStart}
-        />
-      </DestinationScope>
-    </>
   );
 }
 
@@ -440,11 +331,10 @@ function MirrorLive({
               <LandedPath path={landed.path} />
               <div className="flex flex-wrap gap-1.5">
                 <Chip>
-                  {view === null ? (
-                    <StatusDot tone="sky" label="opening" />
-                  ) : (
-                    <StatusDot tone={view.tone} label={view.label} />
-                  )}
+                  <StatusDot
+                    tone={view?.tone ?? "sky"}
+                    label={view?.label ?? "opening"}
+                  />
                 </Chip>
                 {summary !== null && <Chip>{summary}</Chip>}
                 {!dirtyApplied && (
