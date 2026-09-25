@@ -198,7 +198,7 @@ pre-commit:
     # The villager manifest names a face for every doubutsu name, so the
     # pool and the manifest agree one to one.
     villager-manifest:
-      glob: "{app/shared/villagers/manifest.json,cli/embed/doubutsu-names.json,app/assets/doubutsu-characters.json,app/test/villager-manifest.mjs,app/test/lib/checkKit.mjs}"
+      glob: "{app/shared/villagers/manifest.json,cli/embed/doubutsu-names.json,app/test/villager-manifest.mjs,app/test/lib/checkKit.mjs}"
       run: pnpm -C app test villager-manifest
     # The villager data download against a fake wiki: progress, the
     # manifest's size and sha1 checks, cancel, resume, the finished

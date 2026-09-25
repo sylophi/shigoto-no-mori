@@ -2,12 +2,13 @@
 // written by scripts/fetch-doubutsu-names.mts): where each doubutsu
 // character's face icon lives on Nookipedia, references only.
 //
-// Asserts: the worktree name pool (cli/embed/doubutsu-names.json) is
-// exactly the characters in the manifest, so every pickable name has a
-// face; every character is either in the manifest or listed missing;
-// each entry names a wiki page and a face file of a known game's kind,
-// with its page, image URL, byte size and sha1; and a slug two
-// characters share takes the one on the bare-name page.
+// Asserts:
+// - the worktree name pool (cli/embed/doubutsu-names.json) is exactly
+//   the characters in the manifest, so every pickable name has a face,
+//   and none of them is also listed missing
+// - each entry names a wiki page and a face file of a known game's
+//   kind, with its page, image URL, byte size and sha1
+// - a slug two characters share takes the one on the bare-name page
 //
 // Run: pnpm test villager-manifest.
 import assert from "node:assert/strict";
@@ -22,7 +23,6 @@ const readJson = (...path) => JSON.parse(readFileSync(join(...path), "utf8"));
 const manifest = readJson(appRoot, "shared", "villagers", "manifest.json");
 // The pool is the CLI's embed, one level up from the app.
 const { names } = readJson(repoRoot, "cli", "embed", "doubutsu-names.json");
-const { characters } = readJson(appRoot, "assets", "doubutsu-characters.json");
 const slugs = Object.keys(manifest.villagers);
 
 // The kinds of face file the fetch script takes, by the file name's
@@ -45,12 +45,12 @@ try {
     assert.deepEqual(slugs, slugs.toSorted(), "the manifest is sorted");
   });
 
-  await proof.check("every character has a face or is missing", () => {
-    const characterSlugs = [...new Set(characters.map((c) => c.slug))];
+  await proof.check("a character has a face or is missing, not both", () => {
+    const missing = new Set(manifest.missing);
+    assert.equal(missing.size, manifest.missing.length, "missing twice");
     assert.deepEqual(
-      [...slugs, ...manifest.missing].toSorted(),
-      characterSlugs.toSorted(),
-      "every character is in the manifest or listed missing, once",
+      slugs.filter((slug) => missing.has(slug)),
+      [],
     );
   });
 
@@ -80,12 +80,8 @@ try {
   });
 
   await proof.check("a shared slug takes the bare-name page", () => {
-    const pages = Map.groupBy(characters, (c) => c.slug);
-    const shared = [...pages].filter(([, group]) => group.length > 1);
-    assert.deepEqual(shared.map(([slug]) => slug).toSorted(), [
-      "carmen",
-      "lulu",
-    ]);
+    // Carmen the rabbit and Carmen the mouse, Lulu the hippo and Lulu
+    // the anteater.
     assert.equal(manifest.villagers.carmen.page, "Carmen");
     assert.equal(
       manifest.villagers.carmen.icon.file,

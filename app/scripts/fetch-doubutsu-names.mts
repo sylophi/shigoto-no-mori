@@ -1,20 +1,19 @@
 // Fetches every Animal Crossing villager and special character from
-// Nookipedia (the community wiki) and writes three files:
+// Nookipedia (the community wiki) and writes two files:
 //
-//   assets/doubutsu-characters.json    every character, with metadata
-//                                      (species, personality, birthday,
-//                                      localized names, games, ...)
-//   shared/villagers/manifest.json     where each character's face icon
-//                                      lives on the wiki (references
-//                                      only, no images)
+//   shared/villagers/manifest.json     where each character's page and
+//                                      face icon live on the wiki
+//                                      (references only)
 //   cli/embed/doubutsu-names.json      the slugged names the worktree
 //                                      name picker draws from: the
 //                                      characters with a face
 //
 // The lists come from the wiki's Category:Villagers and
 // Category:Special characters through its public MediaWiki API (no key
-// needed), and each page's infobox supplies the metadata. Re-run it when
-// a new game or update adds characters, then review the diff.
+// needed). Nothing about the characters beyond their names is kept
+// here: the app downloads their faces and profiles when its user asks
+// (host/lib/villagers.ts). Re-run it when a new game or update adds
+// characters, then review the diff.
 //
 // Run: node scripts/fetch-doubutsu-names.mts
 
@@ -28,13 +27,11 @@ import { isValidWorktreeDirName } from "../shared/git/branches.ts";
 import { VillagerSlugSchema } from "../shared/schemas/villagers.ts";
 import {
   CHARACTER_CATEGORIES,
-  infobox,
   namesOnPage,
   oneBySlug,
   slugify,
   WIKI_API,
   WIKI_USER_AGENT,
-  wikiPageUrl,
 } from "../shared/villagers/wiki.ts";
 import { appRoot, repoRoot } from "./lib/appRoot.mts";
 
@@ -49,28 +46,10 @@ const EXCLUDED = new Set([
   "Xsq",
 ]);
 
-type Kind = "villager" | "special";
-
 interface Character {
   slug: string;
   name: string;
-  kind: Kind;
   page: string;
-  url: string;
-  species?: string;
-  gender?: string;
-  personality?: string;
-  birthday?: string;
-  sign?: string;
-  catchphrase?: string;
-  quote?: string;
-  japaneseName?: string;
-  japaneseNameRomaji?: string;
-  englishLocalization: boolean;
-  debut?: string;
-  games: string[];
-  infobox: Record<string, string>;
-  categories: string[];
 }
 
 async function api(params: Record<string, string>): Promise<any> {
@@ -113,110 +92,23 @@ async function categoryPages(category: string): Promise<string[]> {
   return titles;
 }
 
-interface Page {
-  wikitext: string;
-  categories: string[];
-}
-
-async function pages(titles: string[]): Promise<Map<string, Page>> {
-  const out = new Map<string, Page>();
-  for (let i = 0; i < titles.length; i += 25) {
-    const batch = titles.slice(i, i + 25);
-    for await (const data of paged({
-      action: "query",
-      prop: "revisions|categories",
-      rvprop: "content",
-      rvslots: "main",
-      cllimit: "max",
-      titles: batch.join("|"),
-    })) {
-      for (const page of data.query.pages) {
-        const entry = out.get(page.title) ?? { wikitext: "", categories: [] };
-        const content = page.revisions?.[0]?.slots?.main?.content;
-        if (content) entry.wikitext = content;
-        for (const category of page.categories ?? []) {
-          entry.categories.push(category.title.replace(/^Category:/, ""));
-        }
-        out.set(page.title, entry);
-      }
-    }
-    process.stderr.write(
-      `  ${Math.min(i + 25, titles.length)}/${titles.length}\n`,
-    );
-  }
-  return out;
-}
-
-// Category names that end in " characters" but are not a game.
-const NON_GAME_CATEGORY =
-  /^(Male|Female|Removed|Cut|Special|New characters in|Characters with) |^Characters$/;
-
-// Wiki housekeeping, not facts about the character.
-const MAINTENANCE_CATEGORY = /^(Pages|Articles) with /;
-
-function describe(
-  title: string,
-  name: string,
-  kind: Kind,
-  page: Page,
-): Character {
-  const box = infobox(page.wikitext);
-  const games = page.categories
-    .filter((c) => c.endsWith(" characters") && !NON_GAME_CATEGORY.test(c))
-    .map((c) => c.slice(0, -" characters".length))
-    .toSorted();
-  const debut = page.categories
-    .find((c) => c.startsWith("New characters in "))
-    ?.slice("New characters in ".length);
-  const birthday =
-    box.birthdaymonth && box.birthday
-      ? `${box.birthdaymonth} ${box.birthday}`
-      : undefined;
-  return {
-    slug: slugify(name),
-    name,
-    kind,
-    page: title,
-    url: wikiPageUrl(title),
-    species: box.species,
-    gender: box.gender,
-    personality: box.personality,
-    birthday,
-    sign: box.sign,
-    catchphrase: box.phrase,
-    quote: box.quote,
-    japaneseName: box["ja-name"],
-    japaneseNameRomaji: box["ja-name-r"],
-    englishLocalization: box["no-localization"] !== "Yes",
-    debut,
-    games,
-    infobox: box,
-    categories: page.categories
-      .filter((c) => !MAINTENANCE_CATEGORY.test(c))
-      .toSorted(),
-  };
-}
-
-async function collect(category: string, kind: Kind): Promise<Character[]> {
+async function collect(category: string): Promise<Character[]> {
   process.stderr.write(`${category}\n`);
   const titles = (await categoryPages(category)).filter(
     (t) => !EXCLUDED.has(t),
   );
-  const fetched = await pages(titles);
-  return titles.flatMap((title) => {
-    const page = fetched.get(title);
-    if (!page) throw new Error(`No page data for ${title}`);
-    return namesOnPage(title).map((name) => describe(title, name, kind, page));
-  });
+  return titles.flatMap((page) =>
+    namesOnPage(page).map((name) => ({ slug: slugify(name), name, page })),
+  );
 }
 
 const [villagerCategory, specialCategory] = CHARACTER_CATEGORIES;
-const villagers = await collect(villagerCategory, "villager");
-const specials = await collect(specialCategory, "special");
+const villagers = await collect(villagerCategory);
+const specials = await collect(specialCategory);
 
 // Two villagers can share a name across games (Carmen the rabbit and
-// Carmen the mouse). The picker needs each slug once, and the metadata
-// keeps both.
+// Carmen the mouse). The picker needs each slug once, and the faces
+// below take the one on the bare-name page.
 const characters = [...villagers, ...specials].toSorted(
   (a, b) => a.slug.localeCompare(b.slug) || a.page.localeCompare(b.page),
 );
@@ -382,7 +274,6 @@ const names = Object.keys(withFace);
 const today = new Date().toISOString().slice(0, 10);
 const namesPath = join(repoRoot, "cli", "embed", "doubutsu-names.json");
 const manifestPath = join(appRoot, "shared", "villagers", "manifest.json");
-const charactersPath = join(appRoot, "assets", "doubutsu-characters.json");
 
 // A file's retrieved date moves only when what it records did, so a
 // re-run that finds nothing new leaves no diff.
@@ -420,16 +311,11 @@ writeFileSync(
     ...manifest,
   }),
 );
-writeFileSync(
-  charactersPath,
-  JSON.stringify({ source: { ...source, retrieved: today }, characters }),
-);
 // The repo's formatter owns the layout, so a re-run diffs cleanly.
-execFileSync(
-  "pnpm",
-  ["exec", "oxfmt", namesPath, manifestPath, charactersPath],
-  { cwd: appRoot, stdio: "inherit" },
-);
+execFileSync("pnpm", ["exec", "oxfmt", namesPath, manifestPath], {
+  cwd: appRoot,
+  stdio: "inherit",
+});
 process.stderr.write(
   `${villagers.length} villagers, ${specials.length} special characters, ${bySlug.size} names, ${names.length} with a face in the pool\n`,
 );
