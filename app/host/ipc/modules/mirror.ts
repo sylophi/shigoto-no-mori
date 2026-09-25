@@ -50,11 +50,14 @@ import {
 } from "@host/ipc/peerSync";
 import { deleteAnyLocalBranch } from "@host/lib/git/branches";
 import {
-  findWorktreeIdentityOrThrow,
   removeWorktreeForce,
   worktreeIdFromPath,
 } from "@host/lib/git/worktrees";
-import { findProjectOrThrow } from "@host/lib/projects";
+import {
+  findProjectAndWorktreeOrThrow,
+  findProjectOrThrow,
+  findWorktreePathOrThrow,
+} from "@host/lib/projects";
 import { dropWorktreeMarks } from "@host/lib/worktrees/marks";
 import {
   applyGitState,
@@ -506,12 +509,10 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     ctx,
   ) => {
     requireChannels(ctx, channelId);
-    const project = findProjectOrThrow(projectId);
-    const identity = await findWorktreeIdentityOrThrow(
+    const worktreePath = await findWorktreePathOrThrow({
       projectId,
-      project.path,
       worktreeId,
-    );
+    });
     const child = spawnFileSync(["serve"]);
     if (child === null) {
       throw new Error(
@@ -553,7 +554,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
       stopIndexWatch: null,
     };
     serving.set(key, served);
-    void watchIndexFile(identity.path, () =>
+    void watchIndexFile(worktreePath, () =>
       onServingGitChange?.({ projectId, worktreeId }),
     ).then(
       (stop) => {
@@ -569,20 +570,16 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
   // host/mirror/gitState.ts): the worktree must be one this host
   // lists, and the state is read or applied in place.
   gitState: async ({ projectId, worktreeId }) => {
-    const project = findProjectOrThrow(projectId);
-    const identity = await findWorktreeIdentityOrThrow(
+    const { project, worktree: identity } = await findProjectAndWorktreeOrThrow(
       projectId,
-      project.path,
       worktreeId,
     );
     return readGitState(project.path, identity.path, worktreeId);
   },
 
   applyGitState: async ({ projectId, worktreeId, expect, state, sweep }) => {
-    const project = findProjectOrThrow(projectId);
-    const identity = await findWorktreeIdentityOrThrow(
+    const { project, worktree: identity } = await findProjectAndWorktreeOrThrow(
       projectId,
-      project.path,
       worktreeId,
     );
     const result = await applyGitState(

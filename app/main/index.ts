@@ -552,6 +552,22 @@ app.on("window-all-closed", () => {
 // worktrees, leaving the worktree directory intact (safest partial
 // state). Then we reap everything else with killAllScripts.
 let isQuitting = false;
+
+// The cross-device work, ended on every quit path. Forward teardown
+// first: local listeners die with the process anyway, but stopping
+// before the hub teardown gives the best-effort host-side conn closes
+// a socket to ride out on. The hub and direct closes are fire and
+// forget: the hub close frame either flushes in the handoff window or
+// the DO notices the dead socket on its own, and the direct listener
+// goes down the same way so connected peers see a clean going-away.
+function stopRemoteWork(): void {
+  stopAllPortForwards();
+  stopControlHost();
+  stopMirrorEngine();
+  void stopHubConnection();
+  void stopDirectHost();
+}
+
 app.on("before-quit", (event) => {
   if (isQuitting) return;
   // An update-triggered quit has to flow through Electron's natural quit so
@@ -566,18 +582,7 @@ app.on("before-quit", (event) => {
   // Acceptable for an explicit, user-initiated update.
   if (isInstallingUpdate() || isRelaunching()) {
     markShuttingDown();
-    // Local listeners die with the process anyway. Stopping before the
-    // hub teardown gives the best-effort host-side conn closes a
-    // socket to ride out on.
-    stopAllPortForwards();
-    stopControlHost();
-    stopMirrorEngine();
-    // Fire and forget: the hub close frame either flushes in the
-    // handoff window or the DO notices the dead socket on its own. The
-    // direct listener goes down the same way so connected peers see a
-    // clean going-away.
-    void stopHubConnection();
-    void stopDirectHost();
+    stopRemoteWork();
     signalAllScriptsBestEffort("SIGTERM");
     killAllCli();
     return;
@@ -600,18 +605,9 @@ app.on("before-quit", (event) => {
   isQuitting = true;
   markShuttingDown();
   event.preventDefault();
-  // Same rationale as the install branch: forward teardown first, so
-  // its close frames ride the hub socket while it is still up. The
-  // mirror daemon gets its stdin closed here and is reaped with the
-  // CLI children below if it lingers.
-  stopAllPortForwards();
-  stopControlHost();
-  stopMirrorEngine();
-  // Close the hub socket alongside the script reaping so the DO sees
-  // a clean departure, and the direct listener with it so peers see a
-  // clean going-away. Fire and forget for the same reason as above.
-  void stopHubConnection();
-  void stopDirectHost();
+  // The mirror daemon gets its stdin closed here and is reaped with
+  // the CLI children below if it lingers.
+  stopRemoteWork();
   // Backstop: if a kill chain wedges (unkillable child), don't leave
   // the app running headless after the window is gone.
   setTimeout(() => app.exit(1), 15_000);

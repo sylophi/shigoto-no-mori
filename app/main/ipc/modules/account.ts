@@ -45,6 +45,7 @@ import {
   type DeviceFields,
 } from "@shared/account/enroll";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
+import { singleFlight } from "@shared/util/singleFlight";
 import {
   createAccountService,
   type AccountService,
@@ -74,8 +75,8 @@ let revokeWarned = false;
 // session end) must not race two revokes, where the second would 401
 // against the credential the first already deleted. The second caller
 // rides the in-flight promise.
-let enrollInFlight: Promise<AccountStatus> | null = null;
-let signOutInFlight: Promise<void> | null = null;
+const enrollOnce = singleFlight<AccountStatus>();
+const signOutOnce = singleFlight<void>();
 
 // The safeStorage-backed cipher. `available` is the OS keychain's
 // verdict: when true the credential is encrypted at rest, when false the
@@ -485,8 +486,7 @@ export function makeAccountHandlers(
       // of racing it and rotating the credential twice. This is the
       // authoritative dedupe for the whole app: renderer effects may
       // re-fire, but the credential is a one-per-machine fact.
-      if (enrollInFlight) return enrollInFlight;
-      enrollInFlight = (async (): Promise<AccountStatus> => {
+      return enrollOnce(async () => {
         const config = serviceConfig();
         await enrollDevice(
           {
@@ -507,17 +507,11 @@ export function makeAccountHandlers(
         );
         accountChanged();
         return readStatus();
-      })();
-      try {
-        return await enrollInFlight;
-      } finally {
-        enrollInFlight = null;
-      }
+      });
     },
 
-    signOut: async () => {
-      if (signOutInFlight) return signOutInFlight;
-      signOutInFlight = (async (): Promise<void> => {
+    signOut: () =>
+      signOutOnce(async () => {
         // The command-access switch is off from the first moment of
         // the sign-out, ahead of the revoke's round trip: the grant is
         // this account's, and a peer's mutating invoke landing during
@@ -545,13 +539,7 @@ export function makeAccountHandlers(
           },
         });
         await accountChanged();
-      })();
-      try {
-        return await signOutInFlight;
-      } finally {
-        signOutInFlight = null;
-      }
-    },
+      }),
 
     revokeDevice: async (deviceId) => {
       const signedIn = signedInService();

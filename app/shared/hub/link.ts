@@ -37,6 +37,7 @@ import {
   type ReqFrame,
   type ServerFrame,
   ServerFrameSchema,
+  resError,
 } from "@shared/ipc/socket/frames";
 import {
   decodeEnvelope,
@@ -474,12 +475,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     const fn =
       frame.channel === deps.broker.channel ? deps.broker.handler : undefined;
     if (fn === undefined) {
-      answer = {
-        t: "res",
-        id: frame.id,
-        ok: false,
-        message: noHandlerMessage(frame.channel),
-      };
+      answer = resError(frame.id, noHandlerMessage(frame.channel));
     } else {
       try {
         // Input parsing is unconditional inside fn (the owner's broker
@@ -491,12 +487,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
         // Message text only, mirroring what survives Electron's IPC error
         // serialization, so shared/errors.ts matchers behave the same on
         // every wire.
-        answer = {
-          t: "res",
-          id: frame.id,
-          ok: false,
-          message: errorMessageOf(error),
-        };
+        answer = resError(frame.id, errorMessageOf(error));
       }
     }
     // A re-hello or a presence drop between admission and completion
@@ -512,12 +503,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     if (!encoded.fits) {
       sendAnswer(
         from,
-        {
-          t: "res",
-          id: frame.id,
-          ok: false,
-          message: "response too large for the device hub",
-        },
+        resError(frame.id, "response too large for the device hub"),
         session.epoch,
       );
       return;
@@ -536,11 +522,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       // is still current. An off-roster `from` is a misrouted or
       // spoofable routing field, so it stays a silent throttled drop.
       if (online.has(from)) {
-        sendAnswer(
-          from,
-          { t: "res", id: frame.id, ok: false, message: "no live session" },
-          epoch,
-        );
+        sendAnswer(from, resError(frame.id, "no live session"), epoch);
       } else {
         warnDrop(() => `dropping req from off-roster peer ${truncateId(from)}`);
       }
@@ -550,12 +532,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     if (inFlight >= MAX_HUB_IN_FLIGHT_PER_PEER) {
       sendAnswer(
         from,
-        {
-          t: "res",
-          id: frame.id,
-          ok: false,
-          message: "too many in-flight requests",
-        },
+        resError(frame.id, "too many in-flight requests"),
         session.epoch,
       );
       return;
@@ -601,14 +578,14 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
           return new Promise<unknown>((res, rej) => {
             peer.pending.set(id, { resolve: res, reject: rej });
             try {
-              const channel = deps.broker.channel;
-              // Omit input when undefined so a void contract input
-              // rides as an absent field, matching the LAN wire.
-              const frame =
-                input === undefined
-                  ? ({ t: "req", id, channel } as const)
-                  : ({ t: "req", id, channel, input } as const);
-              sendFrameToPeer(deviceId, frame, peer.epoch);
+              // An undefined input (a void contract input) rides as an
+              // absent field, matching the LAN wire: encodeFrame's
+              // JSON.stringify drops it.
+              sendFrameToPeer(
+                deviceId,
+                { t: "req", id, channel: deps.broker.channel, input },
+                peer.epoch,
+              );
             } catch (error) {
               peer.pending.delete(id);
               rej(error);
@@ -730,12 +707,17 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     for (const deviceId of hostSessions.keys()) {
       if (!online.has(deviceId)) dropHostSession(deviceId);
     }
-    if (deps.onPresence !== undefined) {
-      try {
-        deps.onPresence([...list]);
-      } catch (error) {
-        console.warn(`[hub] onPresence threw: ${errorMessageOf(error)}`);
-      }
+    notifyPresence([...list]);
+  }
+
+  // The presence notice, with the callback's own failure logged rather
+  // than let loose in the link.
+  function notifyPresence(list: string[]): void {
+    if (deps.onPresence === undefined) return;
+    try {
+      deps.onPresence(list);
+    } catch (error) {
+      console.warn(`[hub] onPresence threw: ${errorMessageOf(error)}`);
     }
   }
 
@@ -823,13 +805,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       }
       if (online.size > 0) {
         online = new Set();
-        if (deps.onPresence !== undefined) {
-          try {
-            deps.onPresence([]);
-          } catch (err) {
-            console.warn(`[hub] onPresence threw: ${errorMessageOf(err)}`);
-          }
-        }
+        notifyPresence([]);
       }
     },
   };

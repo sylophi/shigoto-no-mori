@@ -33,6 +33,7 @@ import type { IncomingMessage } from "node:http";
 import { deflateRaw } from "node:zlib";
 import { WebSocket, WebSocketServer } from "ws";
 import { errorMessageOf } from "@shared/errors";
+import { noHandlerMessage } from "@shared/hub/link";
 import { secretsMatch } from "@host/lib/util/secretCompare";
 import { rendererSchemeOrigins } from "@shared/packaging/rendererScheme.mts";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
@@ -55,6 +56,7 @@ import {
   type ReqFrame,
   type ServerFrame,
   TERMINATE_GRACE_MS,
+  resError,
 } from "@shared/ipc/socket/frames";
 import {
   handshakeProof,
@@ -520,12 +522,7 @@ export function createWsServerBinding(
     // null) or a rotated one (different generation), including one still
     // alive inside the terminate grace window, executes nothing.
     if (listener === null || listener.generation !== generation) {
-      send(socket, {
-        t: "res",
-        id: frame.id,
-        ok: false,
-        message: "listener no longer active",
-      });
+      send(socket, resError(frame.id, "listener no longer active"));
       return;
     }
     const fn = handlers.get(frame.channel);
@@ -533,12 +530,7 @@ export function createWsServerBinding(
       // Client-scoped and non-remote host channels are never registered
       // on this binding (main/ipc/register.ts withholds them), so this
       // is also the answer a remote peer gets for them.
-      send(socket, {
-        t: "res",
-        id: frame.id,
-        ok: false,
-        message: `No handler registered for channel "${frame.channel}"`,
-      });
+      send(socket, resError(frame.id, noHandlerMessage(frame.channel)));
       return;
     }
     if (!readOnlyChannels.has(frame.channel)) {
@@ -555,13 +547,10 @@ export function createWsServerBinding(
       // already carries the live verdict, so dispatch asks it rather
       // than re-deriving from the auth seam.
       if (ctx.isCallerCommandGranted?.() !== true) {
-        send(socket, {
-          t: "res",
-          id: frame.id,
-          ok: false,
-          code: COMMAND_REFUSED_CODE,
-          message: COMMAND_REFUSED_MESSAGE,
-        });
+        send(
+          socket,
+          resError(frame.id, COMMAND_REFUSED_MESSAGE, COMMAND_REFUSED_CODE),
+        );
         return;
       }
     }
@@ -572,12 +561,7 @@ export function createWsServerBinding(
       // Message text only, mirroring what survives Electron's IPC
       // error serialization, so the shared/errors.ts matchers behave
       // the same on both wires.
-      send(socket, {
-        t: "res",
-        id: frame.id,
-        ok: false,
-        message: errorMessageOf(error),
-      });
+      send(socket, resError(frame.id, errorMessageOf(error)));
     }
   }
 
@@ -674,35 +658,15 @@ export function createWsServerBinding(
       // both see ctx === null and both authenticate.
       let helloSeen = false;
 
-      const helloTimer = setTimeout(() => {
-        // A hello arriving after this fires must not authenticate.
-        dead = true;
-        leavePreAuth();
-        closeThenTerminate(socket, CLOSE_HELLO_FAILED, "hello timeout");
-      }, helloTimeoutMs);
+      // A hello arriving after this fires must not authenticate.
+      const helloTimer = setTimeout(
+        () => kill(CLOSE_HELLO_FAILED, "hello timeout"),
+        helloTimeoutMs,
+      );
 
-      // End THIS connection now: no frame it delivers after this runs
-      // a handler (dead), its in-flight handlers unwind (the abort),
-      // and it is out of every map before the close frame even
-      // flushes. Registered on the per-device entry so supersede and
-      // the roster close reach it, satisfying closeThenTerminate's
-      // precondition that the caller sets its dead flag first.
-      const kill = (code: number, reason: string): void => {
-        if (dead) return;
-        dead = true;
-        clearTimeout(helloTimer);
-        leavePreAuth();
-        authed.delete(socket);
-        channels.closeAll();
-        const id = ctx?.callerDeviceId;
-        if (id !== undefined && authedByDevice.get(id)?.socket === socket) {
-          authedByDevice.delete(id);
-        }
-        controller.abort();
-        closeThenTerminate(socket, code, reason);
-      };
-
-      socket.on("close", () => {
+      // Out of every map, its channels closed, its in-flight handlers
+      // unwinding. Idempotent: the close after a kill runs it again.
+      const teardown = (): void => {
         clearTimeout(helloTimer);
         leavePreAuth();
         authed.delete(socket);
@@ -719,7 +683,22 @@ export function createWsServerBinding(
         // aborted exactly here (or in kill, which is idempotent with
         // this cleanup).
         controller.abort();
-      });
+      };
+
+      // End THIS connection now: no frame it delivers after this runs
+      // a handler (dead), its in-flight handlers unwind (the abort),
+      // and it is out of every map before the close frame even
+      // flushes. Registered on the per-device entry so supersede and
+      // the roster close reach it, satisfying closeThenTerminate's
+      // precondition that the caller sets its dead flag first.
+      const kill = (code: number, reason: string): void => {
+        if (dead) return;
+        dead = true;
+        teardown();
+        closeThenTerminate(socket, code, reason);
+      };
+
+      socket.on("close", teardown);
       socket.on("error", (error) => {
         console.warn(`[socket] connection error: ${errorMessageOf(error)}`);
       });
@@ -764,17 +743,11 @@ export function createWsServerBinding(
           : decodeFrame(toText(data), ClientFrameSchema);
         if (ctx === null) {
           if (frame === null || frame.t !== "hello") {
-            dead = true;
-            clearTimeout(helloTimer);
-            leavePreAuth();
-            closeThenTerminate(socket, CLOSE_HELLO_FAILED, "malformed hello");
+            kill(CLOSE_HELLO_FAILED, "malformed hello");
             return;
           }
           if (helloSeen) {
-            dead = true;
-            clearTimeout(helloTimer);
-            leavePreAuth();
-            closeThenTerminate(socket, CLOSE_HELLO_FAILED, "duplicate hello");
+            kill(CLOSE_HELLO_FAILED, "duplicate hello");
             return;
           }
           helloSeen = true;
@@ -794,13 +767,10 @@ export function createWsServerBinding(
               ? secretsMatch(frame.token ?? "", opts.token)
               : typeof hostProof === "string";
           if (!authenticated) {
-            dead = true;
-            clearTimeout(helloTimer);
-            leavePreAuth();
             recordAuthFailure(ip);
             // The owner gets a real signal under a brute force attempt.
             console.warn(`[socket] CLOSE_AUTH_FAILED: bad token from ${ip}`);
-            closeThenTerminate(socket, CLOSE_AUTH_FAILED, "auth failed");
+            kill(CLOSE_AUTH_FAILED, "auth failed");
             return;
           }
           clearTimeout(helloTimer);
@@ -890,12 +860,7 @@ export function createWsServerBinding(
           return;
         }
         if (inFlight >= MAX_IN_FLIGHT_PER_PEER) {
-          send(socket, {
-            t: "res",
-            id: frame.id,
-            ok: false,
-            message: "too many in-flight requests",
-          });
+          send(socket, resError(frame.id, "too many in-flight requests"));
           return;
         }
         inFlight += 1;

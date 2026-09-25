@@ -11,7 +11,7 @@ import { coalesce } from "@host/lib/util/coalesce";
 import { join } from "node:path";
 import { app, BrowserWindow, ipcMain, type WebContents } from "electron";
 import { WebSocket as WsWebSocket } from "ws";
-import { errorMessageOf } from "@shared/errors";
+import { logFailure } from "@shared/errors";
 import type { ContractModule } from "@shared/ipc/contract";
 import { gitContract } from "@shared/ipc/modules/git";
 import { projectsContract } from "@shared/ipc/modules/projects";
@@ -397,14 +397,10 @@ export function registerControlContract<M extends ContractModule>(
 // Binds the control listener and publishes it in the data dir. Never
 // throws: the app works without the CLI's cross-device verbs, which
 // then report the app as unreachable.
-export async function startControlHost(): Promise<void> {
-  try {
-    await controlServer.start();
-  } catch (error) {
-    console.warn(
-      `[control] listener failed to start: ${errorMessageOf(error)}`,
-    );
-  }
+export function startControlHost(): Promise<void> {
+  return logFailure("[control] listener failed to start", () =>
+    controlServer.start(),
+  );
 }
 
 // Synchronous, for every quit path: unpublishes first, so a CLI run
@@ -455,9 +451,9 @@ export function broadcastAll<
 // reverted by an overlapping refresh applying a stale read last.
 // Never throws -- a bind failure must not fail the write that requested
 // it, so it degrades to a log line (the binding also records status).
-export async function refreshSocketHost(): Promise<void> {
-  try {
-    await wsServer.refresh(async () => {
+export function refreshSocketHost(): Promise<void> {
+  return logFailure("[socket] listener refresh failed", () =>
+    wsServer.refresh(async () => {
       // Secure by default at enable time: generate and persist a token
       // if hosting is on without one. ensureSocketHostToken drops the
       // module cache itself, so the read below sees the fresh document.
@@ -476,10 +472,8 @@ export async function refreshSocketHost(): Promise<void> {
         // never imports electron.
         appVersion: app.getVersion(),
       };
-    });
-  } catch (error) {
-    console.warn(`[socket] listener refresh failed: ${errorMessageOf(error)}`);
-  }
+    }),
+  );
 }
 
 // Reconciles the hub socket with the account state. Runs at boot and
@@ -489,8 +483,8 @@ export async function refreshSocketHost(): Promise<void> {
 // refreshSocketHost, and a failure degrades to a log line because a
 // connect problem must never fail the account write that triggered it.
 export async function refreshHubConnection(): Promise<void> {
-  try {
-    await hubServer.refresh(async () => {
+  await logFailure("[hub] connection refresh failed", () =>
+    hubServer.refresh(async () => {
       const inputs = hubConnectInputs();
       if (inputs === null) return null;
       return {
@@ -505,10 +499,8 @@ export async function refreshHubConnection(): Promise<void> {
         // never imports electron.
         appVersion: app.getVersion(),
       };
-    });
-  } catch (error) {
-    console.warn(`[hub] connection refresh failed: ${errorMessageOf(error)}`);
-  }
+    }),
+  );
   // The direct listener follows the same enrollment condition (it
   // reads hubConnectInputs too), so it reconciles on exactly the
   // hub's cadence: boot and every account change. Folded here so
@@ -569,8 +561,8 @@ export function stopDirectHost(): Promise<void> {
 // socket authed under the old account. A failure degrades to a log
 // line like the other refresh functions.
 export async function refreshDirectHost(): Promise<void> {
-  try {
-    await directWsServer.refresh(async () => {
+  await logFailure("[direct] listener refresh failed", () =>
+    directWsServer.refresh(async () => {
       const inputs = hubConnectInputs();
       if (inputs === null) return null;
       // The device-scoped opt-out: absent means enrolled, explicit
@@ -591,10 +583,8 @@ export async function refreshDirectHost(): Promise<void> {
         // Undefined means no extra origin, the slice A behavior.
         allowedOrigin: allowedWebOrigin(),
       };
-    });
-  } catch (error) {
-    console.warn(`[direct] listener refresh failed: ${errorMessageOf(error)}`);
-  }
+    }),
+  );
   // The tunnel follows the listener: a running
   // listener wants a tunnel fronting its CURRENT ephemeral port (the
   // runner no-ops when nothing changed and re-provisions when the port
@@ -604,16 +594,14 @@ export async function refreshDirectHost(): Promise<void> {
   // and the belt here keeps this function's never-throws contract even
   // if that classification ever leaks: a tunnel problem must not fail
   // the config write or account change that triggered the refresh.
-  try {
+  await logFailure("[tunnel] reconcile failed", () => {
     const listener = directWsServer.status();
-    await tunnelRunner.reconcile(
+    return tunnelRunner.reconcile(
       listener.listening && listener.port !== null
         ? { port: listener.port }
         : null,
     );
-  } catch (error) {
-    console.warn(`[tunnel] reconcile failed: ${errorMessageOf(error)}`);
-  }
+  });
 }
 
 // The direct broker (direct:connectInfo), constructed here like the

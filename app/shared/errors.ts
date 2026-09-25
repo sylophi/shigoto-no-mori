@@ -10,6 +10,19 @@ export function errorMessageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+// A step that must not take its caller with it: the failure degrades
+// to a log line under the given label, the caller carries on.
+export async function logFailure(
+  label: string,
+  run: () => unknown,
+): Promise<void> {
+  try {
+    await run();
+  } catch (error) {
+    console.warn(`${label}: ${errorMessageOf(error)}`);
+  }
+}
+
 // The machine-readable code an error carries, when it has one (a
 // ControlError, a Node errno). What a wire sends beside the message so
 // the far side keys on the code and not on the prose.

@@ -28,7 +28,7 @@ import {
   MirrorWorktreePayloadSchema,
   mirrorContract,
 } from "@shared/ipc/modules/mirror";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf, logFailure } from "@shared/errors";
 import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
 import { portForwardContract } from "@shared/ipc/modules/portForward";
 import { portPoolContract } from "@shared/ipc/modules/portPool";
@@ -284,12 +284,8 @@ function endAllMirrorsBounded(): Promise<unknown> {
 }
 
 // A step of the account fan-out that must not take the rest with it.
-async function teardownStep(what: string, run: () => unknown): Promise<void> {
-  try {
-    await run();
-  } catch (error) {
-    console.warn(`[account] ${what} failed: ${errorMessageOf(error)}`);
-  }
+function teardownStep(what: string, run: () => unknown): Promise<void> {
+  return logFailure(`[account] ${what} failed`, run);
 }
 // The git half of every session this device runs (host/mirror/
 // gitFollow.ts): reads the daemon's sessions, reaches the peer through
