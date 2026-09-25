@@ -1,9 +1,9 @@
 // Video harness for the UI lab, the moving-picture twin of shoot.mjs.
 // Usage:
 //   node lab/record.mjs <takes.json> [outDir]
-// Same prerequisites as shoot.mjs (playwright-core resolvable, system
-// Chrome, LAB_ORIGIN for the web flavor), plus Playwright's own ffmpeg
-// for the capture: `playwright-core install ffmpeg`, once. Output is
+// Same prerequisites as shoot.mjs (system Chrome, LAB_ORIGIN), plus
+// Playwright's own ffmpeg for the capture:
+// `pnpm exec playwright-core install ffmpeg`, once. Output is
 // webm; set FFMPEG to an ffmpeg binary to also get an mp4 beside it.
 // Each take: { file, query, width?, height?, waitMs?, actions? }
 //   actions: [{ click: "playwright locator" } | { press: "Key" }
@@ -86,6 +86,8 @@ for (const take of takes) {
   page.on("pageerror", (err) => errors.push(String(err).slice(0, 200)));
   await page.addInitScript(CURSOR);
   await page.goto(ORIGIN + (take.query ?? ""), { waitUntil: "load" });
+  // Past a cold vite server's slow first mount (see shoot.mjs).
+  await page.locator("#root > *").first().waitFor({ timeout: 60_000 });
   await page.mouse.move(width / 2, height / 2);
   await page.waitForTimeout(take.waitMs ?? 1500);
   for (const action of take.actions ?? []) {

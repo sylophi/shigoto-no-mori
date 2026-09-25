@@ -1,9 +1,9 @@
 // Screenshot harness for the UI lab. Usage:
 //   node lab/shoot.mjs <shots.json> [outDir]
-// Needs `playwright-core` resolvable (it is not a repo dependency, so
-// run from a scratch dir that has it installed, or point NODE_PATH at
-// one) and system Chrome. LAB_ORIGIN overrides the default desktop
-// lab origin (set it to the web flavor's port for web-shell shots).
+// Needs system Chrome (playwright-core drives it, no browser download).
+// LAB_ORIGIN overrides the default desktop lab origin (set it to the
+// web flavor's port for web-shell shots, or to wherever `pnpm lab`
+// landed when it was given another port).
 // Each shot: { file, query, width?, height?, waitMs?, actions? }
 //   query: the lab pose querystring, e.g. "?theme=light&doubutsu=1&to=/devices"
 //   actions: [{ click: "css or text selector" } | { press: "Key" } | { waitMs: n } | { evaluate: "js" }]
@@ -31,6 +31,11 @@ for (const shot of shots) {
   const errors = [];
   page.on("pageerror", (err) => errors.push(String(err).slice(0, 200)));
   await page.goto(ORIGIN + (shot.query ?? ""), { waitUntil: "load" });
+  // A cold vite server answers "load" long before the app mounts (it
+  // is still transforming modules, and may reload the page once it has
+  // optimized the deps), so a fixed wait alone shoots a blank page.
+  // The locator re-resolves across that reload.
+  await page.locator("#root > *").first().waitFor({ timeout: 60_000 });
   await page.waitForTimeout(shot.waitMs ?? 900);
   for (const action of shot.actions ?? []) {
     try {

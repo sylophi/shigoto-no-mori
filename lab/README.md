@@ -49,16 +49,15 @@ flows show their outcome: a posed mirror session cycles every few
 seconds, keeps a history, and folds the peer's sidebar row into the
 local one.
 
-Screenshots: `lab/shoot.mjs` (playwright-core over system Chrome;
-playwright-core is not a repo dependency, so run it from a scratch dir
-that has it installed). Run `node shoot.mjs shots.json outdir`, with
+Screenshots: `lab/shoot.mjs` (playwright-core over system Chrome).
+Run `node lab/shoot.mjs shots.json outdir`, with
 `LAB_ORIGIN` pointing at the web flavor's port for web-shell shots.
 Each shot is `{ file, query, width?, height?, waitMs?, actions? }`.
 
 Videos: `lab/record.mjs`, the same harness recording a take instead of
 taking a shot, with a drawn cursor so clicks are visible. Same
-prerequisites plus Playwright's own ffmpeg (`playwright-core install
-ffmpeg`, once). Run `node record.mjs takes.json outdir`. Each take has
+prerequisites plus Playwright's own ffmpeg (`pnpm exec playwright-core
+install ffmpeg`, once). Run `node lab/record.mjs takes.json outdir`. Each take has
 the shot shape, with `click` taking a Playwright locator, `type` and
 `paste` putting text into whatever has focus (keyed at a readable pace,
 or all at once as a clipboard would), and a `waitFor` action that
