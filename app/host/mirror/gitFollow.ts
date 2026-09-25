@@ -58,8 +58,7 @@ import { mirrorBranchFor, originalBranchOf } from "@shared/git/branches";
 import { SyncHasCommitsResultSchema } from "@shared/ipc/modules/sync";
 import { hasCommit, isAncestor, localBranchTips } from "@host/lib/git/refs";
 import { findProjectOrThrow } from "@host/lib/projects";
-import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
-import { pushBundleToPeer } from "@host/lib/sync/pushBundle";
+import { offerSource, withPeerSource } from "@host/lib/sync/sourceLink";
 import type { PeerMirrorApi, PeerSyncApi } from "@host/ipc/peerSync";
 import {
   MIRROR_LABEL_LOCAL_PROJECT,
@@ -463,16 +462,17 @@ export function createGitFollower(deps: {
     if ("applied" in carry) return carry;
     const { wantRefs, sweep } = carry;
     if (wantRefs.length > 0) {
-      await fetchBundleFromPeer(peerSync, {
-        sourceProjectId: session.projectId,
-        targetProjectId: project.id,
-        refs: wantRefs,
-        // With the tip already here only the index carrier travels
-        // and the tip is the perfect have. Otherwise every local
-        // branch tip thins the bundle and none can cover a tip we
-        // lack.
-        haves: tipIsLocal ? [peer.tip] : await localBranchTips(project.path),
-      });
+      // With the tip already here only the index carrier travels and
+      // the tip is the perfect have. Otherwise every local branch tip
+      // thins the bundle and none can cover a tip we lack.
+      const haves = tipIsLocal
+        ? [peer.tip]
+        : await localBranchTips(project.path);
+      await withPeerSource(
+        peerSync,
+        { projectId: session.projectId, worktreeId: session.worktreeId },
+        (source) => source.fetch({ refs: wantRefs, haves, into: project }),
+      );
     }
     return applyGitState(project, localWorktree, {
       expect: { tip: local.tip, indexTree: local.indexTree },
@@ -517,12 +517,17 @@ export function createGitFollower(deps: {
     if ("applied" in carry) return carry;
     const { wantRefs, sweep } = carry;
     if (wantRefs.length > 0) {
-      await pushBundleToPeer(peerSync, {
-        localProject: project,
-        peerProjectId: session.projectId,
-        refs: wantRefs,
-        haves: peerHas.has(local.tip) ? [local.tip] : [peer.tip],
-      });
+      // The peer asks this side for the bundle over a link this side
+      // opens (sync:receiveBundle, the peer's grant, the one the whole
+      // session rides).
+      await offerSource(peerSync, project, localWorktreeId, (channelId) =>
+        peerSync.receiveBundle({
+          projectId: session.projectId,
+          refs: wantRefs,
+          haves: peerHas.has(local.tip) ? [local.tip] : [peer.tip],
+          channelId,
+        }),
+      );
     }
     const result = MirrorApplyGitStateResultSchema.parse(
       await peerMirror.applyGitState({

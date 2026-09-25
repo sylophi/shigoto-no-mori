@@ -20,7 +20,7 @@ import {
   type DirectCandidateKind,
   DIRECT_TICKET_TTL_MS,
 } from "@shared/ipc/modules/direct";
-import { mintHexId } from "@host/lib/idleRegistry";
+import { mintHexId } from "@host/lib/hexId";
 
 // The distinguishing prefix, following the hub worker's smrt_/smdc_
 // convention (hub/src/ticket.ts): smpt_ for a peer-to-peer connect

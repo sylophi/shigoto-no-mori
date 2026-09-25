@@ -20,7 +20,7 @@ import {
   isForwardConnectFailedError,
 } from "@shared/ipc/modules/forward";
 import type { Client } from "@shared/ipc/types";
-import { mintHexId } from "@host/lib/idleRegistry";
+import { mintHexId } from "@host/lib/hexId";
 import {
   type BridgedConn,
   bridgeSocket,

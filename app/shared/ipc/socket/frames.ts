@@ -15,39 +15,18 @@
 // ceiling denies a pre-auth peer a large buffering budget. It does NOT
 // limit outbound res/push frames (diffs, script logs), which the
 // server writes and ws never measures against maxPayload. Bulk data
-// (sync bundles, port-forward streams) still crosses in bounded
-// chunks (WIRE_CHUNK_BYTES below) for flow control, and so an uplink
-// req carrying a chunk stays under the inbound cap.
+// (sync bundles, port-forward and mirror streams) never rides a JSON
+// frame: it crosses as binary channel frames (channels.ts), each well
+// under the cap, with credit-based flow control.
 import { z } from "zod";
 import { HANDSHAKE_NONCE_PATTERN } from "./proof";
 
 // Largest inbound (client to server) frame the host will buffer, in
-// bytes. Client frames are tiny by construction (the largest is a req
-// carrying one WIRE_CHUNK_B64_MAX chunk), so 1 MiB is generous and
-// still denies a pre-auth peer an unbounded buffering budget.
+// bytes. Client frames are small by construction (a req, or one
+// channel frame of at most CHANNEL_MAX_FRAME_BYTES), so 1 MiB is
+// generous and still denies a pre-auth peer an unbounded buffering
+// budget.
 export const MAX_INBOUND_FRAME_BYTES = 1 << 20;
-
-// One raw chunk of bulk app data per frame, for callers that move a
-// bundle as base64 inside JSON invokes (the sync transfer, both
-// directions). Chunking is what keeps an uplink req under
-// MAX_INBOUND_FRAME_BYTES and what gives both directions flow control
-// (each chunk is one awaited invoke round trip). The base64 form
-// (853_336 chars) leaves headroom under the 1 MiB inbound cap for the
-// frame fields around it. Byte STREAMS no longer ride this path: they
-// are binary channel frames (channels.ts).
-export const WIRE_CHUNK_BYTES = 640_000;
-const WIRE_CHUNK_B64_MAX = Math.ceil(WIRE_CHUNK_BYTES / 3) * 4;
-
-// The base64 form of one raw chunk, bounded by the cap above and
-// pinned to the base64 charset so a non-base64 payload fails at the
-// schema instead of silently decoding to garbage bytes. The ONE schema
-// for every bulk-data field on both chunked wires (sync's bundleChunk result and pushChunk payload), so an uplink
-// write can never exceed what a downlink chunk may carry and vice
-// versa.
-export const ChunkB64Schema = z
-  .string()
-  .max(WIRE_CHUNK_B64_MAX)
-  .regex(/^[A-Za-z0-9+/]*={0,2}$/);
 
 // Deadline for the first frame (a valid hello) after a socket opens.
 // A shared two-sided protocol fact: the client must send within it.

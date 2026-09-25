@@ -7,11 +7,11 @@ import { listBranches } from "@host/lib/git/branches";
 import { cloneRepo } from "@host/lib/git/clone";
 import { isGitRepo } from "@host/lib/git/core";
 import { listRemoteEntries } from "@host/lib/git/remotes";
-import { listWorktreeIdentities } from "@host/lib/git/worktrees";
 import {
   findProjectOrThrow,
   listProjects,
   listProjectsWithStatus,
+  primaryRefOf,
   refreshProjects,
   registerProject,
 } from "@host/lib/projects";
@@ -114,16 +114,8 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
 
   // The primary ref every row is measured against, which the CLI
   // resolves once per project (the configured override first).
-  defaultBranch: async ({ projectId }) => {
-    const project = await findProjectOrThrow(projectId);
-    const [first] = await listWorktreeIdentities(project.id, {
-      primaryRef: true,
-    });
-    if (first?.primaryRef === undefined) {
-      throw new Error(`No local branches found in ${project.path}`);
-    }
-    return first.primaryRef;
-  },
+  defaultBranch: async ({ projectId }) =>
+    primaryRefOf(await findProjectOrThrow(projectId)),
 
   cloneUrl: async ({ projectId }) => {
     const project = await findProjectOrThrow(projectId);

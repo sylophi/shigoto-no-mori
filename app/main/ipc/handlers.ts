@@ -162,6 +162,13 @@ const peerClient =
   <M extends ContractModule>(contract: M) =>
   (deviceId: string) =>
     buildClient(contract, peerTransportFor(deviceId));
+// A peer's sync surface plus the byte channels of the same session,
+// which the source links of a move or a mirror's git follower ride
+// (host/lib/sync/sourceLink.ts).
+const peerSyncClient = (deviceId: string) => ({
+  ...buildClient(syncContract, peerTransportFor(deviceId)),
+  channels: () => hubHandlers.peerChannels(deviceId),
+});
 
 const mirrorGateway = createMirrorGateway({
   peerApiFor: peerClient(mirrorContract),
@@ -307,7 +314,7 @@ function teardownStep(what: string, run: () => unknown): Promise<void> {
 // (onPeerPush) and the daemon's snapshots (above).
 const gitFollower = createGitFollower({
   sessions: liveMirrorSessions,
-  peerSyncApiFor: peerClient(syncContract),
+  peerSyncApiFor: peerSyncClient,
   peerMirrorApiFor: peerClient(mirrorContract),
   // The states both sides last agreed on, beside the engine's own
   // data so a restart resumes the follow rule rather than falling
@@ -475,9 +482,8 @@ export function registerIpcHandlers(): void {
   // The sync orchestrations' peer reach (host/ipc/peerSync.ts), riding
   // peerTransportFor above.
   setPeerSyncApiImpl({
-    syncApiFor: peerClient(syncContract),
+    syncApiFor: peerSyncClient,
     worktreesApiFor: peerClient(worktreesContract),
-    projectsApiFor: peerClient(projectsContract),
   });
   // The port-forward engine's peer reach, riding the same
   // peerTransportFor as the sync wiring above and for the same reason:

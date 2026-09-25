@@ -34,7 +34,7 @@ import {
   resError,
 } from "@shared/ipc/socket/frames";
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
-import { mintHexId } from "@host/lib/idleRegistry";
+import { mintHexId } from "@host/lib/hexId";
 import { atomicWriteJsonSync } from "@host/lib/util/jsonFile";
 import { lineSplitter } from "@host/lib/util/ndjson";
 import { secretsMatch } from "@host/lib/util/secretCompare";

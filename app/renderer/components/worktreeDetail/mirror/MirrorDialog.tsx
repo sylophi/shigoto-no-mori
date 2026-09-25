@@ -24,12 +24,8 @@ import {
   DestinationProvider,
   LocalHostScope,
 } from "@/hooks/remote/useHostScope";
-import {
-  useMirrors,
-  useStartMirror,
-  useStartMirrorTo,
-} from "@/hooks/remote/useMirrors";
-import type { LandingChoice } from "@/hooks/remote/usePullWorktree";
+import { useMirrors, useStartMirror } from "@/hooks/remote/useMirrors";
+import type { LandingChoice } from "@/hooks/remote/useMoveWorktree";
 import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
 import { FlowBody, FlowFooter, LandedPath } from "../flow/FlowChrome";
 import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
@@ -68,9 +64,8 @@ export function MirrorDialog({
 }) {
   const thisDeviceLabel = useLocalDeviceName();
   const mirror = useStartMirror({
-    worktree,
-    sourceProjectId: project.id,
-    sourceIdentity,
+    direction: "pull",
+    source: { worktree, sourceProjectId: project.id, sourceIdentity },
   });
   return (
     <MirrorFlow
@@ -87,7 +82,8 @@ export function MirrorDialog({
 }
 
 // The same flow the other way: a live copy of one of THIS device's
-// worktrees on a peer that holds the same repo.
+// worktrees on a peer (which clones the repo first when it has no
+// checkout).
 export function MirrorToDialog({
   worktree,
   project,
@@ -99,12 +95,16 @@ export function MirrorToDialog({
   worktree: Worktree;
   project: Project;
   sourceIdentity: string;
-  // The peers holding the same repo (flow/peerTargets.ts).
+  // The peers it could go to (flow/peerTargets.ts).
   targets: PeerTarget[];
   onClose: () => void;
 }) {
   const { picked, flow } = usePeerDestination(targets);
-  const mirror = useStartMirrorTo(worktree, picked?.deviceId);
+  const mirror = useStartMirror({
+    direction: "send",
+    worktree,
+    targetDeviceId: picked?.deviceId,
+  });
   return (
     <DestinationProvider peer={picked}>
       <MirrorFlow

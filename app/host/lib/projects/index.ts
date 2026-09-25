@@ -14,6 +14,7 @@ import type { Project, ProjectRow } from "@shared/schemas";
 import { listProjectsViaCli, projectsAddViaCli } from "@host/ipc/cliDelegate";
 import {
   findWorktreeIdentityOrThrow,
+  listWorktreeIdentities,
   type WorktreeIdentity,
 } from "../git/worktrees";
 import { dataDir, toAbsolute } from "../util/paths";
@@ -94,6 +95,20 @@ export async function listProjectsWithStatus(): Promise<Project[]> {
       identity: row.identity,
     }),
   );
+}
+
+// The primary ref every row of a project is measured against, which
+// the CLI resolves once per project (the configured override first):
+// what projects:defaultBranch answers, and what a clone of the project
+// on another device is made of (host/lib/sync/cloneFromPeer.ts).
+export async function primaryRefOf(project: Project): Promise<string> {
+  const [first] = await listWorktreeIdentities(project.id, {
+    primaryRef: true,
+  });
+  if (first?.primaryRef === undefined) {
+    throw new Error(`No local branches found in ${project.path}`);
+  }
+  return first.primaryRef;
 }
 
 // Resolves which LOCAL project a peer's project corresponds to, by repo

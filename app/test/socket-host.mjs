@@ -925,16 +925,17 @@ async function main() {
       }
       assert.equal(packageScriptsContract.calls.setSort.remote, true);
       assert.equal(packageScriptsContract.calls.setSort.gated, true);
-      // The step-7 sync transfer surface (v2 slice B, refTips added by
-      // slice C): every call is a command, so the whole bundle-transfer
-      // path rides the command grant.
+      // The sync surface a peer drives: every call is a command, so the
+      // whole transfer path rides the command grant. The source links
+      // (openSource, receiveWorktree, receiveBundle) are the only way
+      // commits cross, bytes on a channel the grant already gates.
       for (const key of [
-        "refTips",
-        "captureDirty",
         "ignoredPaths",
-        "bundleStart",
-        "bundleChunk",
-        "bundleAbort",
+        "worktreeFolder",
+        "hasCommits",
+        "openSource",
+        "receiveWorktree",
+        "receiveBundle",
       ]) {
         assert.equal(
           syncContract.calls[key].remote,
@@ -947,17 +948,15 @@ async function main() {
           `sync.${key} must require the command grant`,
         );
       }
-      // The transfer verbs opt out of the viewer cache ping: serving a
-      // transfer moves no state a remote viewer caches, and without the
-      // opt-out every chunk resolution of a multi-minute pull would
-      // re-invalidate every viewing peer's cached forest. captureDirty
-      // stays opted in -- it writes a capture ref, real host state.
+      // The reads and the link open opt out of the viewer cache ping:
+      // they move no state a remote viewer caches (a capture taken over
+      // a link writes a ref the git watcher announces). The two
+      // receives land refs and a worktree, and keep it.
       for (const key of [
-        "refTips",
         "ignoredPaths",
-        "bundleStart",
-        "bundleChunk",
-        "bundleAbort",
+        "worktreeFolder",
+        "hasCommits",
+        "openSource",
       ]) {
         assert.equal(
           syncContract.calls[key].movesHostState,
@@ -965,11 +964,13 @@ async function main() {
           `sync.${key} must opt out of the viewer cache ping`,
         );
       }
-      assert.notEqual(
-        syncContract.calls.captureDirty.movesHostState,
-        false,
-        "sync.captureDirty writes a ref and must keep the viewer cache ping",
-      );
+      for (const key of ["receiveWorktree", "receiveBundle"]) {
+        assert.notEqual(
+          syncContract.calls[key].movesHostState,
+          false,
+          `sync.${key} lands refs and must keep the viewer cache ping`,
+        );
+      }
       // The byte-stream opens (step 8, reworked onto channels): both
       // are grant-gated commands, but neither moves state a remote
       // viewer caches, so both opt out of the mutation cache ping. The
@@ -990,26 +991,13 @@ async function main() {
           `${name} must opt out of the viewer cache ping`,
         );
       }
-      // The pull orchestrator is LOCAL-only: a
-      // device's own renderer drives it, and it must never be servable
-      // to a peer -- a remote:false host invoke is simply not
-      // registered on the direct listener.
-      assert.equal(syncContract.calls.pullWorktree.remote, false);
-      assert.equal(syncContract.calls.pullWorktree.gated, true);
-      // The source teardown after a pull is the same
-      // local-only shape: its remote half is the peer's ordinary
-      // worktrees:delete.
-      assert.equal(syncContract.calls.teardownSource.remote, false);
-      assert.equal(syncContract.calls.teardownSource.gated, true);
-      // The send and its teardown are the pull's pair turned around,
-      // local-only the same way. The receiving half is what a peer
-      // drives, so it rides the command grant.
-      for (const name of ["sendWorktree", "teardownSent"]) {
+      // The move orchestrators and the teardown are LOCAL-only: a
+      // device's own renderer drives them, and they must never be
+      // servable to a peer -- a remote:false host invoke is simply not
+      // registered on the direct listener. What a peer drives is the
+      // landing half above, which rides the command grant.
+      for (const name of ["pullWorktree", "sendWorktree", "teardownSource"]) {
         assert.equal(syncContract.calls[name].remote, false);
-        assert.equal(syncContract.calls[name].gated, true);
-      }
-      for (const name of ["landCheck", "landWorktree"]) {
-        assert.equal(syncContract.calls[name].remote, true);
         assert.equal(syncContract.calls[name].gated, true);
       }
       // The pull's progress frames go back to the invoking renderer

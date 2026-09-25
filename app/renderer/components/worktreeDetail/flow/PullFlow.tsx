@@ -10,7 +10,7 @@ import type { UseMutationResult } from "@tanstack/react-query";
 import type { Project, Worktree } from "@shared/schemas";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { TONE_PILL } from "@/components/ui/status-dot";
-import type { LandingChoice } from "@/hooks/remote/usePullWorktree";
+import type { LandingChoice } from "@/hooks/remote/useMoveWorktree";
 import { usePullProgress } from "@/hooks/remote/usePullProgress";
 import { localDeviceId } from "@/lib/queryKeys";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
@@ -70,11 +70,11 @@ export function usePullFlow<Data extends Landed>({
   const target = useLandingTarget({
     localProject,
     sourceProject: project,
-    toPeer: toPeer !== undefined,
+    unpicked: toPeer !== undefined && toPeer.pickedId === null,
     submitted: mutation.variables,
   });
-  // The key only when there is a clone: the flows to a peer take the
-  // plain choice, and their payloads are strict.
+  // The key only when there is a clone, which the run then reads back
+  // off what it was submitted with (useLandingTarget).
   const choice = target?.clone
     ? { ...pull.choice, cloneInto: target.clone.cloneInto }
     : pull.choice;
@@ -212,7 +212,6 @@ export function PullFlowFrame({
           target={target}
           runSetup={flow.pull.runSetup}
           landing={landing}
-          phasesReported={!landing.onPeer}
           error={stage === "failed" ? flow.error : undefined}
           onClose={onClose}
           onRetry={flow.start}

@@ -466,8 +466,8 @@ export async function shigomoriWriteViaCli(
 // The device-sync verbs. Each shells the CLI and
 // re-validates the crossing document with a zod schema, like every
 // other Go/TS boundary in this file. The paths handed to bundle
-// create/unpack are ALWAYS app-chosen temp paths (the sync host module
-// and fetchBundle own them); the CLI writes/reads exactly where told,
+// create/unpack are ALWAYS app-chosen temp paths (the source link,
+// host/lib/sync/sourceLink.ts, owns them); the CLI writes/reads exactly where told,
 // so path discipline lives on this side of the trust boundary.
 
 export async function dirtyCaptureViaCli(

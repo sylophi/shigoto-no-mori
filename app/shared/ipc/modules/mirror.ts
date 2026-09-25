@@ -30,9 +30,9 @@ import {
 // remote viewer sees them (list is a read). The starts are local
 // orchestrators like sync:pullWorktree: start pulls the peer's
 // worktree here first (branch, commits, uncommitted changes, through
-// the existing transfer) and then opens the mirror on top, so the
-// first cycle has little to move and git agrees on both sides from the
-// first second. The controls (stop, pause, resume, setIgnores) act on
+// the ordinary move), startTo sends one of this device's to the peer,
+// and either then opens the mirror on top, so the first cycle has
+// little to move and git agrees on both sides from the first second. The controls (stop, pause, resume, setIgnores) act on
 // a session this device runs, and are offered to peers too: a mirror
 // pairs two devices, and either side's page controls it, the far end
 // through the device that runs the session. They ride that device's
@@ -67,12 +67,15 @@ export {
 // beginTransfer), so the mark alone says it is a transfer.
 export const MIRROR_LABEL_TRANSFER = "transfer";
 
-// Which side holds the copy the mirror made. A mirror started from a
-// peer's page brings the copy HERE, which is what an unlabelled
-// session means. One started from a local worktree's page (startTo)
-// makes the copy on the PEER, labelled so stopping removes that one
-// and never the original this device holds. A label and not a session
-// field: the session document crosses to peers that parse it strictly.
+// Which side holds the copy the mirror made, set by the start from the
+// way its move went. A pull (start, from a peer's page) brings the copy
+// HERE, which is what an unlabelled session means. A send (startTo,
+// from a local worktree's page) makes the copy on the PEER, labelled
+// so stopping removes that one and never the original this device
+// holds, and so the git follower takes the original here as the
+// reference. Either way the session runs on the device that started
+// it. A label and not a session field: the session document crosses to
+// peers that parse it strictly.
 export const MIRROR_LABEL_COPY_SIDE = "copySide";
 export function mirrorCopyIsRemote(session: {
   labels: Record<string, string>;
@@ -384,12 +387,15 @@ const MirrorStartResultSchema = SyncPullWorktreeResultSchema.extend({
 });
 
 // The mirror turned around, built on the send the way start is built
-// on the pull: one of THIS device's worktrees, copied to a peer and
-// kept in step with it. The session still runs here.
+// on the pull: one of THIS device's worktrees, copied to a peer (cloning
+// the repo there first when the peer has no checkout, like start) and
+// kept in step with it. The session still runs here: it reaches the
+// peer through the peer's grant, which the send already needed.
 export const MirrorStartToPayloadSchema = SyncSendWorktreePayloadSchema.extend({
   ignoreMode: MirrorIgnoreModeSchema,
   ignores: MirrorIgnoresSchema,
 });
+export type MirrorStartToPayload = z.infer<typeof MirrorStartToPayloadSchema>;
 
 const MirrorSessionPayloadSchema = z.strictObject({
   session: MirrorSessionIdSchema,

@@ -33,7 +33,7 @@ import {
   useSaveLeaveOutPreset,
 } from "@/hooks/sharedSettings/useLeaveOutPreset";
 import { useSharedSettingsSettled } from "@/hooks/sharedSettings/useSharedSettings";
-import type { PullChoice } from "@/hooks/remote/usePullWorktree";
+import type { PullChoice } from "@/hooks/remote/useMoveWorktree";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 
 // The rule itself (the selection, its mode, the setup default and the

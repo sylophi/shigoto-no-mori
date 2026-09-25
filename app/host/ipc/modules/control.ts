@@ -595,9 +595,10 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
             ctx,
           ),
         teardown: async () =>
-          syncHandlers.teardownSent(
+          syncHandlers.teardownSource(
             {
-              targetDeviceId: target.deviceId,
+              direction: "send",
+              deviceId: target.deviceId,
               projectId: project.id,
               worktreeId: worktree.id,
             },
@@ -674,9 +675,10 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
       }
       const pulled = await syncHandlers.pullWorktree(payload, ctx);
       const sourceRef = {
-        sourceDeviceId: found.device.deviceId,
-        sourceProjectId: found.projectId,
-        sourceWorktreeId: found.worktree.id,
+        direction: "pull" as const,
+        deviceId: found.device.deviceId,
+        projectId: found.projectId,
+        worktreeId: found.worktree.id,
       };
       const source = await settleSource(input.source ?? "keep", {
         shelve: () =>

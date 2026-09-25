@@ -984,9 +984,10 @@ async function main(): Promise<string[]> {
         sourceError?: string;
       }>(
         `window.api.sync.teardownSource(${JSON.stringify({
-          sourceDeviceId: idB,
-          sourceProjectId: project.id,
-          sourceWorktreeId: source.id,
+          direction: "pull",
+          deviceId: idB,
+          projectId: project.id,
+          worktreeId: source.id,
         })})`,
       );
       assert.ok(result.sourceRemoved, `source kept: ${result.sourceError}`);
@@ -1043,9 +1044,10 @@ async function main(): Promise<string[]> {
     const teardown = (source: Worktree) =>
       a.evaluate<{ sourceRemoved: boolean; sourceError?: string }>(
         `window.api.sync.teardownSource(${JSON.stringify({
-          sourceDeviceId: idB,
-          sourceProjectId: need(bProject, "the remote read").id,
-          sourceWorktreeId: source.id,
+          direction: "pull",
+          deviceId: idB,
+          projectId: need(bProject, "the remote read").id,
+          worktreeId: source.id,
         })})`,
       );
     const mirrorOp = (op: "pause" | "resume" | "stop", session: string) =>
@@ -1402,13 +1404,14 @@ async function main(): Promise<string[]> {
         /The other device answered: edge\/sent is already checked out/,
       );
       const sentRef = JSON.stringify({
-        targetDeviceId: idB,
+        direction: "send",
+        deviceId: idB,
         projectId: own.id,
         worktreeId: source.id,
       });
       const tearDownSent = () =>
         a.evaluate<{ sourceRemoved: boolean; sourceError?: string }>(
-          `window.api.sync.teardownSent(${sentRef})`,
+          `window.api.sync.teardownSource(${sentRef})`,
         );
       writeFileSync(join(source.path, "late.txt"), "written after the send\n");
       const kept = await tearDownSent();
@@ -2214,9 +2217,10 @@ async function main(): Promise<string[]> {
         sourceError?: string;
       }>(
         `window.api.sync.teardownSource(${JSON.stringify({
-          sourceDeviceId: idB,
-          sourceProjectId: lone.id,
-          sourceWorktreeId: source.id,
+          direction: "pull",
+          deviceId: idB,
+          projectId: lone.id,
+          worktreeId: source.id,
         })})`,
       );
       assert.ok(torn.sourceRemoved, `source kept: ${torn.sourceError}`);

@@ -1,58 +1,63 @@
-// Durable proof for the device-sync transfer plumbing (direct-only): git bundles as chunked,
-// grant-gated invoke responses over a REAL DIRECT websocket between the
-// two fixtures, brokered by the stub device hub exactly as production
-// does (test/lib/directBoot.mjs). Nothing here is a double on the
-// sync path itself: device A registers the REAL sync contract and
-// handlers on a real direct listener, the handlers shell the REAL
-// sm binary (built from cli/ by this check), sm runs REAL git against
-// fixture repos, and the receiver drives the REAL fetchBundleFromPeer
-// helper through the real dialer and bridge cache. Asserts:
-//   - an ungranted peer is refused (typed CommandRefusedError) and the
-//     transfer surface never serves it;
-//   - sync:captureDirty over the wire snapshots a dirty worktree to
-//     its refs/shigomori/dirty/<id> ref, and sync:ignoredPaths names
-//     the ignored file that capture leaves out;
+// Durable proof for moving worktrees between devices (direct-only):
+// commits cross as git bundles on SOURCE LINKS, raw bytes on a byte
+// channel of a REAL DIRECT websocket between the two fixtures,
+// brokered by the stub device hub exactly as production does
+// (test/lib/directBoot.mjs). Nothing here is a double on the sync path
+// itself: device A registers the REAL sync contract and handlers on a
+// real direct listener, the handlers shell the REAL sm binary (built
+// from cli/ by this check), sm runs REAL git against fixture repos,
+// and the receiver drives the REAL link helpers (host/lib/sync/
+// sourceLink.ts) through the real dialer and bridge cache. Asserts:
+//   - an ungranted peer is refused (typed CommandRefusedError) every
+//     way a link opens, and the channel the attempt attached is gone;
+//   - a capture over the link snapshots a dirty worktree to its
+//     refs/shigomori/dirty/<id> ref with its tree, and
+//     sync:ignoredPaths names the ignored file that capture leaves out;
 //   - a >2.5 MB bundle (branch + dirty capture, thinned by a have)
-//     crosses in >= 4 chunks (windowed, the final one last) and lands
-//     ONLY under refs/shigomori/ on the receiver with the source's
-//     exact tips, byte-identical content via git cat-file, and no
-//     branch materialized -- while the stub device hub's
-//     forwardedCount stays FLAT (nothing but the one-time broker
-//     frames ever rides the device hub);
-//   - the host drops a finished transfer (a stale chunk request is
-//     refused) and bundleAbort cleans up an abandoned one;
-//   - unpacking a corrupted bundle fails with the coded "bad-bundle".
+//     crosses as many channel frames and lands ONLY under
+//     refs/shigomori/ on the receiver with the source's exact tips,
+//     byte-identical content via git cat-file, and no branch
+//     materialized -- while the stub device hub's forwardedCount stays
+//     FLAT (nothing but the one-time broker frames ever rides it);
+//   - a channel id is single use, a finished link is gone at both
+//     ends, a requester that gives up mid-bundle leaves no temp file on
+//     the source, and an ask outside the ref allowlist resets the link;
+//   - unpacking a corrupted bundle fails with the coded "bad-bundle";
+//   - the push direction (the git follower's) lands a >2.5 MB bundle
+//     under refs/shigomori/ on the peer.
 //
-// The pull orchestration (slice C) and the transplant orchestration on
-// top of it (step 9: pull plus source teardown over the peer's
-// grant-gated worktrees:delete) run end to end below, against the same
-// wire and the same real CLI.
+// The moves run end to end below, against the same wire and the same
+// real CLI: the pull, the transplant on top of it (pull plus source
+// teardown over the peer's grant-gated worktrees:delete), the send
+// (the same landing, run by the peer over a link this device opened),
+// and both of them into a device with no checkout of the repo, which
+// clones it first.
 //
 // Both "devices" share one node process and one sandboxed
 // SHIGOMORI_DATA_DIR holding two projects (source and target repos); what
 // separates them is the direct wire between them, which is exactly the
-// surface this proof pins. Runs under
+// surface this proof pins. The one exception is the send into an
+// empty device: there the sending side's CLI runs against a registry
+// of its own (see sendsAsOtherDevice). Runs under
 // test/lib/register-ts-alias.mjs. Run: pnpm test sync-transfer.
 import assert from "node:assert/strict";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { randomBytes } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
-import {
-  CommandRefusedError,
-  WIRE_CHUNK_BYTES,
-} from "@shared/ipc/socket/frames";
+import { CommandRefusedError } from "@shared/ipc/socket/frames";
 import { buildClient } from "@shared/ipc/buildClient";
-import { projectsContract } from "@shared/ipc/modules/projects";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
+import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
-import { projectsHandlers } from "@host/ipc/modules/projects";
 import {
   runPullWorktree,
   sendWorktree,
@@ -65,12 +70,23 @@ import {
   startScript,
 } from "@host/lib/scripts";
 import { cloneProjectFromPeer } from "@host/lib/sync/cloneFromPeer";
-import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
-import { pushBundleToPeer } from "@host/lib/sync/pushBundle";
+import {
+  attachLink,
+  LINK_GONE,
+  offerSource,
+  withPeerSource,
+} from "@host/lib/sync/sourceLink";
+import { mintHexId } from "@host/lib/hexId";
 import { findProjectOrThrow, listProjects } from "@host/lib/projects";
 import { getRepoIdentity } from "@host/lib/git/repoIdentity";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
-import { makeProof, makeTracker } from "./lib/checkKit.mjs";
+import {
+  cliFailureMessage,
+  createCliRunner,
+  makeProof,
+  makeTracker,
+  waitFor,
+} from "./lib/checkKit.mjs";
 import { cliSandbox } from "./lib/cliSandbox.mjs";
 import { bootDirectWire } from "./lib/directBoot.mjs";
 
@@ -104,32 +120,59 @@ async function refSnapshot(repo) {
 
 const { ok, done, fail } = makeProof("sync-transfer proof");
 
-// A peer whose chunk calls (bundleChunk or pushChunk) are counted: how
-// many were in flight at once, the offsets in the order they were
-// sent, and how many others were in flight when the eof chunk was
-// asked for.
-function observedChunks(peer, method) {
-  const seen = { inFlight: 0, most: 0, offsets: [], othersAtEof: null };
+// A session's byte channels with every one attached through them
+// observed: the ids, and the data frames and bytes each way, so a
+// check can pin that a bundle crossed as channel frames and that a
+// link is gone once done.
+function observedChannels(channelsOf) {
+  const seen = { ids: [], framesIn: 0, bytesIn: 0, framesOut: 0, bytesOut: 0 };
+  let mux = null;
   return {
     seen,
-    peer: {
-      ...peer,
-      [method]: async (input) => {
-        seen.offsets.push(input.offset);
-        seen.inFlight += 1;
-        seen.most = Math.max(seen.most, seen.inFlight);
-        const others = seen.inFlight - 1;
-        try {
-          const result = await peer[method](input);
-          if (result?.eof) seen.othersAtEof = others;
-          return result;
-        } finally {
-          seen.inFlight -= 1;
-        }
-      },
+    has: (channelId) => mux?.has(channelId) ?? false,
+    channels: async () => {
+      mux = await channelsOf();
+      return {
+        has: (channelId) => mux.has(channelId),
+        attach: (channelId, endpoint) => {
+          seen.ids.push(channelId);
+          const handle = mux.attach(channelId, {
+            ...endpoint,
+            onData: (data, consumed) => {
+              seen.framesIn += 1;
+              seen.bytesIn += data.length;
+              endpoint.onData(data, consumed);
+            },
+          });
+          return {
+            channelId,
+            get open() {
+              return handle.open;
+            },
+            write: (data) => {
+              seen.framesOut += 1;
+              seen.bytesOut += data.length;
+              return handle.write(data);
+            },
+            end: () => handle.end(),
+            reset: () => handle.reset(),
+          };
+        },
+      };
     },
   };
 }
+
+// The grant's refusal, typed, as a peer that does not accept commands
+// answers every gated call.
+const refusedTyped = (error) =>
+  error instanceof CommandRefusedError &&
+  /not permitted to run commands/.test(error.message);
+
+// The sm-sync-* temp dirs under a tmp dir: a bundle's own, on either
+// end of a link.
+const syncTempDirs = (dir) =>
+  readdirSync(dir).filter((name) => name.startsWith("sm-sync-"));
 
 async function main() {
   console.log("sync-transfer proof\n");
@@ -205,35 +248,59 @@ async function main() {
       // the Electron binding's concern, so a no-op satisfies the
       // registrar.
       [worktreesContract, worktreesHandlers],
-      // The clone's one read of the peer (its default branch), beside
-      // the grant-gated bundle it then asks for.
-      [projectsContract, projectsHandlers],
     ],
   });
   try {
     const sync = buildClient(syncContract, peerA.transport);
     const worktreesOverWire = buildClient(worktreesContract, peerA.transport);
-    const projectsOverWire = buildClient(projectsContract, peerA.transport);
     const dirtyRef = `refs/shigomori/dirty/${worktreeId}`;
 
-    // (1) Ungranted: the whole surface is refused typed, before any
-    // handler runs -- fetchBundleFromPeer fails on its first call.
+    // The peer as the orchestrations reach it: the sync surface plus
+    // the session's byte channels, observed.
+    const observed = observedChannels(peerA.channels);
+    const peerSync = { ...sync, channels: observed.channels };
+    const worktreeRef = { projectId: sourceProjectId, worktreeId };
+    const targetProject = await findProjectOrThrow(targetProjectId);
+
+    // (1) Ungranted: every way a link opens is refused typed, before
+    // any handler runs, and the channel each attempt attached is gone
+    // again: a pull's link (the source's grant), a send's landing and
+    // a push (the destination's).
     await assert.rejects(
       () =>
-        fetchBundleFromPeer(sync, {
-          sourceProjectId,
-          targetProjectId,
-          refs: ["refs/heads/feature"],
-          haves: [],
-        }),
-      (error) =>
-        error instanceof CommandRefusedError &&
-        /not permitted to run commands/.test(error.message),
+        withPeerSource(peerSync, worktreeRef, (source) =>
+          source.tip("feature"),
+        ),
+      refusedTyped,
     );
     await assert.rejects(
-      () => sync.captureDirty({ projectId: sourceProjectId, worktreeId }),
-      (error) => error instanceof CommandRefusedError,
+      () =>
+        offerSource(peerSync, targetProject, worktreeId, (channelId) =>
+          sync.receiveBundle({
+            projectId: sourceProjectId,
+            refs: ["refs/heads/main"],
+            haves: [],
+            channelId,
+          }),
+        ),
+      refusedTyped,
     );
+    await assert.rejects(
+      () =>
+        offerSource(peerSync, targetProject, worktreeId, (channelId) =>
+          sync.receiveWorktree({
+            identity: "root:0000000000000000000000000000000000000000",
+            branch: "feature",
+            sourceWorktreeId: worktreeId,
+            channelId,
+          }),
+        ),
+      refusedTyped,
+    );
+    assert.equal(observed.seen.ids.length, 3);
+    for (const channelId of observed.seen.ids) {
+      assert.equal(observed.has(channelId), false, "a refused link stayed");
+    }
     // The transplant teardown rides the same gate: worktrees:delete over
     // the wire is refused typed for an ungranted peer too.
     await assert.rejects(
@@ -242,26 +309,30 @@ async function main() {
       (error) => error instanceof CommandRefusedError,
     );
     ok(
-      "ungranted peer: bundleStart, captureDirty and worktrees:delete are refused with the typed CommandRefusedError",
+      "ungranted peer: openSource, receiveBundle, receiveWorktree and worktrees:delete are refused with the typed CommandRefusedError, and no refused link stays attached",
     );
 
     listener.setAccepts(true);
 
-    // (2) captureDirty over the wire: a dirty worktree snapshots to
-    // its capture ref on the host, tip echoed back. An ignored file
-    // sits beside the dirt: the capture has `git add -A` semantics, so
-    // it must stay out of the capture and be named by ignoredPaths,
-    // which is how the transplant dialog says what a teardown takes.
+    // (2) A capture over the link: a dirty worktree snapshots to its
+    // capture ref on the host, its commit and tree answered. An ignored
+    // file sits beside the dirt: the capture has `git add -A`
+    // semantics, so it must stay out of the capture and be named by
+    // ignoredPaths, which is how the transplant dialog says what a
+    // teardown takes.
     writeFileSync(join(worktreePath, "dirty.txt"), "uncommitted work\n");
     writeFileSync(join(worktreePath, ".gitignore"), "secret.env\n");
     writeFileSync(join(worktreePath, "secret.env"), "FIXTURE_ONLY=1\n");
-    const capture = await sync.captureDirty({
-      projectId: sourceProjectId,
-      worktreeId,
-    });
+    const capture = await withPeerSource(peerSync, worktreeRef, (source) =>
+      source.capture(),
+    );
     assert.equal(capture.captured, true, "capture reported clean");
     const captureTip = await gitOut(sourceRepo, "rev-parse", dirtyRef);
     assert.equal(capture.commit, captureTip);
+    assert.equal(
+      capture.tree,
+      await gitOut(sourceRepo, "rev-parse", `${captureTip}^{tree}`),
+    );
     const captured = await gitOut(
       sourceRepo,
       "ls-tree",
@@ -281,41 +352,43 @@ async function main() {
       total: 1,
     });
     ok(
-      "captureDirty over the wire snapshots the worktree to its capture ref, and ignoredPaths names the file it leaves out",
+      "a capture over the link snapshots the worktree to its capture ref with its tree, and ignoredPaths names the file it leaves out",
     );
 
     // (3) The full transfer: branch + capture ref, thinned by the
-    // receiver's base tip, >= 4 chunks, exact tips, allowed namespaces
-    // only, byte-identical objects. The direct session is established
-    // by now (the refusals above dialed it), so the device hub must
-    // stay COMPLETELY flat for the whole transfer: no frame of it may
-    // ride the stub.
+    // receiver's base tip, as many channel frames, exact tips, allowed
+    // namespaces only, byte-identical objects. The direct session is
+    // established by now (the refusals above dialed it), so the device
+    // hub must stay COMPLETELY flat for the whole transfer: no frame of
+    // it may ride the stub.
     const hubBaseline = stub.forwardedCount();
-    const chunksBefore = peerA.invokeCount("sync:bundleChunk");
+    const framesBefore = observed.seen.framesIn;
+    const bytesBefore = observed.seen.bytesIn;
     const refsBefore = await refSnapshot(targetRepo);
-    // The chunk requests are windowed, not one per round trip, and the
-    // final chunk (which makes the host drop the transfer) is asked
-    // for only once every other one has landed.
-    const windowed = observedChunks(sync, "bundleChunk");
-    const { fetched } = await fetchBundleFromPeer(windowed.peer, {
-      sourceProjectId,
-      targetProjectId,
-      refs: ["refs/heads/feature", dirtyRef],
-      haves: [baseSha],
-    });
-    const chunkReqs = peerA.invokeCount("sync:bundleChunk") - chunksBefore;
-    assert.ok(
-      chunkReqs >= 4,
-      `expected >= 4 chunks for the bundle, saw ${chunkReqs}`,
+    const progressed = [];
+    const { fetched } = await withPeerSource(peerSync, worktreeRef, (source) =>
+      source.fetch({
+        refs: ["refs/heads/feature", dirtyRef],
+        haves: [baseSha],
+        into: targetProject,
+        onProgress: (bytes, total) => progressed.push([bytes, total]),
+      }),
     );
+    const bundleBytes = progressed[0]?.[1] ?? 0;
     assert.ok(
-      windowed.seen.most >= 2,
-      `expected the chunk requests to overlap, saw ${windowed.seen.most} in flight`,
+      bundleBytes > 1_500_000,
+      `thin bundle unexpectedly small: ${bundleBytes} bytes`,
     );
-    assert.equal(
-      windowed.seen.othersAtEof,
-      0,
-      "the final chunk was requested while others were still in flight",
+    assert.deepEqual(progressed[0], [0, bundleBytes]);
+    assert.deepEqual(progressed.at(-1), [bundleBytes, bundleBytes]);
+    assert.ok(
+      observed.seen.bytesIn - bytesBefore >= bundleBytes,
+      "the bundle did not cross as channel bytes",
+    );
+    const frames = observed.seen.framesIn - framesBefore;
+    assert.ok(
+      frames >= 4,
+      `expected the bundle in >= 4 channel frames, saw ${frames}`,
     );
     assert.equal(
       stub.forwardedCount(),
@@ -371,39 +444,74 @@ async function main() {
       "transferred blob differs byte-for-byte",
     );
     ok(
-      "granted transfer: >2.5 MB bundle crosses in >= 4 overlapping chunks and lands only under refs/shigomori/ with byte-identical objects",
+      "granted transfer: a >2.5 MB bundle crosses as channel frames with its progress, and lands only under refs/shigomori/ with byte-identical objects",
     );
 
-    // (4) Transfer lifecycle: eof drops the host entry (a stale chunk
-    // is refused), abort drops an abandoned one.
-    const manual = await sync.bundleStart({
-      projectId: sourceProjectId,
-      refs: ["refs/heads/feature"],
-      haves: [baseSha],
-    });
-    assert.ok(
-      manual.bytes > 1_500_000,
-      `thin bundle unexpectedly small: ${manual.bytes} bytes`,
+    // (4) Link lifecycle. Every link so far is gone at both ends. A
+    // channel id is single use: a second open under a live one is
+    // refused. A requester that gives up mid-bundle (a bundle past the
+    // channel's window, so the source is still sending) leaves no temp
+    // file on the source. An ask outside the ref allowlist resets the
+    // link, the same wall the invoke schemas were.
+    await waitFor(
+      () => observed.seen.ids.every((channelId) => !observed.has(channelId)),
+      "every finished link to be gone here",
     );
-    const firstChunk = await sync.bundleChunk({
-      transferId: manual.transferId,
-      offset: 0,
-    });
-    assert.equal(firstChunk.eof, false);
-    assert.equal(
-      Buffer.from(firstChunk.dataB64, "base64").length,
-      WIRE_CHUNK_BYTES,
-    );
-    await sync.bundleAbort({ transferId: manual.transferId });
+    const mux = await peerA.channels();
+    const manualLink = async (channelId = mintHexId()) => {
+      const link = attachLink((endpoint) => mux.attach(channelId, endpoint));
+      await sync.openSource({ ...worktreeRef, channelId });
+      return { channelId, link };
+    };
+    const first = await manualLink();
     await assert.rejects(
-      () => sync.bundleChunk({ transferId: manual.transferId, offset: 0 }),
-      /unknown-transfer/,
+      () => sync.openSource({ ...worktreeRef, channelId: first.channelId }),
+      /channel-taken/,
     );
-    // Idempotent abort: a second abort (or one for a finished
-    // transfer) is a no-op, never a failure.
-    await sync.bundleAbort({ transferId: manual.transferId });
+    first.link.end();
+    await waitFor(
+      () => !mux.has(first.channelId),
+      "an ended link to complete at both ends",
+    );
+
+    await git(sourceRepo, ["checkout", "-q", "-b", "huge"]);
+    await commitFile(sourceRepo, "huge.bin", randomBytes(6_000_000), "huge");
+    await git(sourceRepo, ["checkout", "-q", "main"]);
+    const tmp = join(sandbox, "tmp");
+    mkdirSync(tmp);
+    const tmpBefore = process.env.TMPDIR;
+    process.env.TMPDIR = tmp;
+    try {
+      const giving = await manualLink();
+      await giving.link.write({
+        ask: "bundle",
+        refs: ["refs/heads/huge"],
+        haves: [baseSha],
+      });
+      const header = await giving.link.read();
+      assert.ok(header.bundle.bytes > 5_000_000, "the huge bundle is small");
+      await waitFor(
+        () => syncTempDirs(tmp).length === 1,
+        "the source to hold its bundle while it sends",
+      );
+      // Reading none of it, the source stalls on credit, then this side
+      // gives up.
+      giving.link.reset();
+      await waitFor(
+        () => syncTempDirs(tmp).length === 0,
+        "the source to drop its bundle once the requester gave up",
+      );
+      assert.equal(mux.has(giving.channelId), false);
+    } finally {
+      if (tmpBefore === undefined) delete process.env.TMPDIR;
+      else process.env.TMPDIR = tmpBefore;
+    }
+
+    const bad = await manualLink();
+    await bad.link.write({ ask: "bundle", refs: ["refs/tags/v1"], haves: [] });
+    await assert.rejects(() => bad.link.read(), new RegExp(LINK_GONE));
     ok(
-      "lifecycle: a chunk is WIRE_CHUNK_BYTES raw, abort drops the transfer, and a stale transferId is refused",
+      "lifecycle: finished links are gone at both ends, a channel id is single use, a requester giving up mid-bundle leaves the source no temp file, and an ask outside the allowlist resets the link",
     );
 
     // (5) A corrupted bundle refuses with the coded kind, straight from
@@ -425,11 +533,9 @@ async function main() {
     assert.equal(errorDoc?.code, "bad-bundle");
     ok('corrupted bundle: unpack fails with the coded "bad-bundle" error');
 
-    // (6) The push direction: this device bundles a branch and writes
-    // it to the peer in chunks. Against a host that takes them
-    // pipelined the chunks overlap (in offset order still), against an
-    // older host that never said so they go one at a time, and either
-    // way the ref lands under refs/shigomori/ with the exact tip.
+    // (6) The push direction (the git follower's): this device opens a
+    // link on the peer, which asks it for the bundle, and the ref lands
+    // under refs/shigomori/ there with the exact tip.
     await git(targetRepo, ["checkout", "-q", "-b", "pushed"]);
     await commitFile(
       targetRepo,
@@ -439,14 +545,19 @@ async function main() {
     );
     const pushedTip = await gitOut(targetRepo, "rev-parse", "HEAD");
     await git(targetRepo, ["checkout", "-q", "main"]);
-    const pushInput = {
-      localProject: await findProjectOrThrow(targetProjectId),
-      peerProjectId: sourceProjectId,
-      refs: ["refs/heads/pushed"],
-      haves: [baseSha],
-    };
-    const pipelined = observedChunks(sync, "pushChunk");
-    const pushed = await pushBundleToPeer(pipelined.peer, pushInput);
+    const outBefore = observed.seen.bytesOut;
+    const pushed = await offerSource(
+      peerSync,
+      targetProject,
+      worktreeIdFromPath(targetRepo),
+      (channelId) =>
+        sync.receiveBundle({
+          projectId: sourceProjectId,
+          refs: ["refs/heads/pushed"],
+          haves: [baseSha],
+          channelId,
+        }),
+    );
     assert.deepEqual(pushed.fetched, [
       { ref: "refs/shigomori/incoming/pushed", commit: pushedTip },
     ]);
@@ -460,72 +571,29 @@ async function main() {
       pushedTip,
     );
     assert.ok(
-      pipelined.seen.offsets.length >= 4,
-      `expected >= 4 push chunks, saw ${pipelined.seen.offsets.length}`,
-    );
-    assert.ok(
-      pipelined.seen.most >= 2,
-      `expected the push chunks to overlap, saw ${pipelined.seen.most} in flight`,
-    );
-    assert.deepEqual(
-      pipelined.seen.offsets,
-      pipelined.seen.offsets.toSorted((x, y) => x - y),
-      "push chunks were sent out of offset order",
-    );
-    const olderHost = observedChunks(
-      {
-        ...sync,
-        pushStart: async (input) => {
-          const { transferId } = await sync.pushStart(input);
-          return { transferId };
-        },
-      },
-      "pushChunk",
-    );
-    await pushBundleToPeer(olderHost.peer, pushInput);
-    assert.equal(
-      olderHost.seen.most,
-      1,
-      "chunks overlapped against a host that never said it takes them pipelined",
-    );
-    const strayPush = await sync.pushStart({
-      projectId: sourceProjectId,
-      bytes: 10,
-    });
-    await assert.rejects(
-      () =>
-        sync.pushChunk({
-          transferId: strayPush.transferId,
-          offset: 5,
-          dataB64: Buffer.from("hello").toString("base64"),
-        }),
-      /push chunk out of order/,
+      observed.seen.bytesOut - outBefore > 1_500_000,
+      "the pushed bundle did not cross as channel bytes",
     );
     ok(
-      "push: a >2.5 MB bundle crosses in overlapping in-order chunks and lands under refs/shigomori/, an older host gets them one at a time, and an out-of-order chunk is refused",
+      "push: a >2.5 MB bundle crosses on a link the pusher opened and lands under refs/shigomori/ on the peer",
     );
 
-    // ---- The slice-C pull orchestration, end to end. The handler runs
-    // HERE as device B (the registered surface above is A's), with its
-    // two real seams injected: the CLI runner (already set) and the
-    // peer sync api, which is the SAME direct-wire client the transfer
-    // tests drove. Everything in between -- refTips negotiation,
-    // captureDirty, the chunked bundle, `sm create`, the capture
-    // re-key, `sm dirty apply` -- is production code against real git.
+    // ---- The pull orchestration, end to end. The handler runs HERE
+    // as device B (the registered surface above is A's), with its two
+    // real seams injected: the CLI runner (already set) and the peer
+    // sync api, which is the SAME direct-wire client and channels the
+    // transfer tests drove. Everything in between -- the tip, the
+    // capture, the bundle, `sm create`, the capture re-key, `sm dirty
+    // apply` -- is production code against real git.
     setPeerSyncApiImpl({
       syncApiFor: (deviceId) => {
-        assert.equal(deviceId, "A", "the pull dialed an unexpected device");
-        return sync;
+        assert.equal(deviceId, "A", "the move dialed an unexpected device");
+        return peerSync;
       },
       // The transplant teardown's reach, over the same direct wire.
       worktreesApiFor: (deviceId) => {
         assert.equal(deviceId, "A", "the teardown dialed an unexpected device");
         return worktreesOverWire;
-      },
-      // The clone's reach: the peer's default branch, over the same wire.
-      projectsApiFor: (deviceId) => {
-        assert.equal(deviceId, "A", "the clone dialed an unexpected device");
-        return projectsOverWire;
       },
     });
     const pullCtx = {
@@ -538,9 +606,10 @@ async function main() {
       const pulled = await syncHandlers.pullWorktree(input, pullCtx);
       const torn = await syncHandlers.teardownSource(
         {
-          sourceDeviceId: input.sourceDeviceId,
-          sourceProjectId: input.sourceProjectId,
-          sourceWorktreeId: input.sourceWorktreeId,
+          direction: "pull",
+          deviceId: input.sourceDeviceId,
+          projectId: input.sourceProjectId,
+          worktreeId: input.sourceWorktreeId,
         },
         pullCtx,
       );
@@ -848,9 +917,10 @@ async function main() {
     await assert.rejects(
       syncHandlers.teardownSource(
         {
-          sourceDeviceId: "A",
-          sourceProjectId,
-          sourceWorktreeId: "0123456789ab",
+          direction: "pull",
+          deviceId: "A",
+          projectId: sourceProjectId,
+          worktreeId: "0123456789ab",
         },
         pullCtx,
       ),
@@ -858,7 +928,12 @@ async function main() {
     );
     await assert.rejects(
       syncHandlers.teardownSource(
-        { sourceDeviceId: "A", sourceProjectId, sourceWorktreeId: wt3Id },
+        {
+          direction: "pull",
+          deviceId: "A",
+          projectId: sourceProjectId,
+          worktreeId: wt3Id,
+        },
         pullCtx,
       ),
       /No pull recorded/,
@@ -874,12 +949,19 @@ async function main() {
     writeFileSync(join(wt6Path, "draft.txt"), "draft\n");
     const wt6Id = worktreeIdFromPath(wt6Path);
     const wt6Source = {
-      sourceDeviceId: "A",
-      sourceProjectId,
-      sourceWorktreeId: wt6Id,
+      direction: "pull",
+      deviceId: "A",
+      projectId: sourceProjectId,
+      worktreeId: wt6Id,
     };
     const latePull = await syncHandlers.pullWorktree(
-      { ...wt6Source, sourceIdentity: identity, branch: "feature6" },
+      {
+        sourceDeviceId: "A",
+        sourceProjectId,
+        sourceWorktreeId: wt6Id,
+        sourceIdentity: identity,
+        branch: "feature6",
+      },
       pullCtx,
     );
     assert.equal(latePull.captured, true);
@@ -900,10 +982,11 @@ async function main() {
     );
 
     // ---- The send, the pull turned around: the handler runs HERE as
-    // the device holding the source, and the peer it lands on is the
-    // same wire (its identity scan takes the target repo, registered
-    // first). The push, the peer's landing and the local teardown are
-    // production code against real git.
+    // the device holding the source, and the peer lands it (its
+    // identity scan takes the target repo, registered first), asking
+    // back over the link this side opened. The landing, the relayed
+    // progress and the local teardown are production code against
+    // real git.
     const wt7Path = await addWorktree(
       sourceRepo,
       "wt7",
@@ -918,11 +1001,30 @@ async function main() {
       projectId: sourceProjectId,
       worktreeId: worktreeIdFromPath(wt7Path),
     };
+    const wt7Sent = {
+      direction: "send",
+      deviceId: "A",
+      projectId: sourceProjectId,
+      worktreeId: wt7.worktreeId,
+    };
+    // The peer's frames, relayed here under the local worktree's id.
+    const sendFrames = [];
+    const sendCtx = {
+      ...pullCtx,
+      notifier: () => (frame) => sendFrames.push(frame),
+    };
     await assert.rejects(
-      () => syncHandlers.teardownSent(wt7, pullCtx),
+      () => syncHandlers.teardownSource(wt7Sent, pullCtx),
       /No send recorded/,
     );
-    const sent = await syncHandlers.sendWorktree(wt7, pullCtx);
+    const sent = await syncHandlers.sendWorktree(wt7, sendCtx);
+    assert.ok(
+      sendFrames.every((frame) => frame.sourceWorktreeId === wt7.worktreeId),
+    );
+    const sentSteps = new Set(sendFrames.map((frame) => frame.step));
+    for (const step of ["capture", "transfer", "create", "apply"]) {
+      assert.ok(sentSteps.has(step), `the send never reported ${step}`);
+    }
     assert.equal(sent.captured, true);
     assert.equal(sent.dirtyApplied, true);
     assert.equal(sent.worktree.projectId, targetProjectId);
@@ -955,16 +1057,16 @@ async function main() {
       /The other device answered: feature7 is already checked out/,
     );
     writeFileSync(join(wt7Path, "draft.txt"), "sent draft, then edited\n");
-    const keptSent = await syncHandlers.teardownSent(wt7, pullCtx);
+    const keptSent = await syncHandlers.teardownSource(wt7Sent, pullCtx);
     assert.equal(keptSent.sourceRemoved, false);
     assert.match(keptSent.sourceError ?? "", /changed after/);
     assert.equal(existsSync(wt7Path), true, "a changed source must survive");
     writeFileSync(join(wt7Path, "draft.txt"), "sent draft\n");
-    const tornSent = await syncHandlers.teardownSent(wt7, pullCtx);
+    const tornSent = await syncHandlers.teardownSource(wt7Sent, pullCtx);
     assert.equal(tornSent.sourceRemoved, true, tornSent.sourceError);
     assert.equal(existsSync(wt7Path), false);
     ok(
-      "sendWorktree: a dirty worktree lands on the peer with its commit and its uncommitted work, a repeat is refused by the peer, and teardownSent removes the local source only while it still matches what was sent",
+      "sendWorktree: a dirty worktree lands on the peer with its commit and its uncommitted work and the peer's progress relayed, a repeat is refused by the peer, and the teardown removes the local source only while it still matches what was sent",
     );
 
     // ---- A primary checkout, landing on its mirror branch
@@ -1071,12 +1173,13 @@ async function main() {
 
     // ---- A device with no checkout of the repo: the clone from a peer
     // (host/lib/sync/cloneFromPeer.ts) makes one over the same wire,
-    // the pull's landing project when it is told where (cloneInto).
-    // Both devices share one registry here, so a pull's identity scan
-    // always finds a checkout (the source itself) and never reaches
-    // the clone: the clone is driven directly, and what the pull
-    // proves is that a checkout it has wins over a place named for a
-    // new one. The clone end to end is the remote smoke's.
+    // the landing project when it is told where (cloneInto). Both
+    // devices share one registry here, so a pull's identity scan always
+    // finds a checkout (the source itself) and never reaches the clone:
+    // the clone is driven directly, and what the pull proves is that a
+    // checkout it has wins over a place named for a new one. The send
+    // that follows takes the clone end to end, the sending side on a
+    // registry of its own.
     // The source has a remote, which the clone must carry: it is what a
     // clone of that remote would be, and a repo whose default branch is
     // only its remote's HEAD to go by reads as the same repo through it.
@@ -1085,11 +1188,19 @@ async function main() {
     // A parent this machine does not have yet is made (the dialog's
     // default is the peer's own layout).
     const clonesDir = join(sandbox, "clones", "deep");
-    const peer = { sync, projects: projectsOverWire };
+    // The clone asks the source over a link, as a landing does: here a
+    // pull's, opened on the source's primary.
+    const cloneFrom = (...args) =>
+      withPeerSource(
+        peerSync,
+        {
+          projectId: sourceProjectId,
+          worktreeId: worktreeIdFromPath(sourceRepo),
+        },
+        (source) => cloneProjectFromPeer(source, ...args),
+      );
     const cloneFrames = [];
-    const cloned = await cloneProjectFromPeer(
-      peer,
-      sourceProjectId,
+    const cloned = await cloneFrom(
       { parentDir: clonesDir, name: "lone" },
       "feat/landing",
       (bytes, totalBytes) => cloneFrames.push([bytes, totalBytes]),
@@ -1141,34 +1252,20 @@ async function main() {
     // none leaves a folder or a registration behind.
     const before = (await listProjects()).length;
     await assert.rejects(
-      () =>
-        cloneProjectFromPeer(
-          peer,
-          sourceProjectId,
-          { parentDir: clonesDir, name: "lone" },
-          "feat/landing",
-        ),
+      () => cloneFrom({ parentDir: clonesDir, name: "lone" }, "feat/landing"),
       /already exists/,
     );
     writeFileSync(join(sandbox, "notafolder"), "");
     await assert.rejects(
       () =>
-        cloneProjectFromPeer(
-          peer,
-          sourceProjectId,
+        cloneFrom(
           { parentDir: join(sandbox, "notafolder"), name: "x" },
           "feat/landing",
         ),
       /is not a folder/,
     );
     await assert.rejects(
-      () =>
-        cloneProjectFromPeer(
-          peer,
-          sourceProjectId,
-          { parentDir: clonesDir, name: "y" },
-          "main",
-        ),
+      () => cloneFrom({ parentDir: clonesDir, name: "y" }, "main"),
       /would land on main/,
     );
     assert.equal(existsSync(join(clonesDir, "y")), false);
@@ -1194,6 +1291,129 @@ async function main() {
     ok(
       "cloneProjectFromPeer: the peer's default branch lands as a registered checkout of the same identity with its remote and progress reported, a taken folder, a parent that is a file and a landing on the default branch are refused clean, and a pull with cloneInto beside a checkout it has clones nothing",
     );
+
+    // ---- A send into a device with no checkout of the repo: the peer
+    // clones it from here first, over the same link the branch then
+    // crosses, and lands the copy in the clone. The two ends need
+    // registries of their own for this, or the peer's identity scan
+    // finds the sender's own checkout: the sending side's CLI runs
+    // against a second data dir, chosen by an async context around the
+    // send (the runner seam is process-wide), where the lone repo is
+    // registered. The landing side (A, the shared registry) has never
+    // seen it.
+    const sendsAsOtherDevice = new AsyncLocalStorage();
+    const otherDataDir = join(sandbox, "data-other");
+    mkdirSync(otherDataDir);
+    const otherCli = createCliRunner(fixture.smBinary, {
+      ...fixture.smEnv,
+      SHIGOMORI_DATA_DIR: otherDataDir,
+    });
+    const asOtherDevice = (run) => sendsAsOtherDevice.run(true, run);
+    setCliRunnerImpl({
+      runCli: (args, onDoc) =>
+        (sendsAsOtherDevice.getStore() === true ? otherCli : fixture).runCli(
+          args,
+          onDoc,
+        ),
+      requireCliBinary: () => fixture.smBinary,
+      cliFailureMessage,
+    });
+    try {
+      const loneRepo = join(sandbox, "lone-source");
+      await git(sandbox, ["init", "-q", "-b", "main", "lone-source"]);
+      await fixture.disableAutoGc(loneRepo);
+      await commitFile(loneRepo, "root.txt", "root\n", "root");
+      const loneMainTip = await gitOut(loneRepo, "rev-parse", "HEAD");
+      const loneWtPath = await addWorktree(
+        loneRepo,
+        "lone-wt",
+        "lone-feature",
+        "lone.txt",
+        "lone feature\n",
+        "lone feature",
+      );
+      writeFileSync(join(loneWtPath, "lone-draft.txt"), "lone draft\n");
+      const loneProjectId = (
+        await otherCli.sm("projects", "add", "--", loneRepo)
+      ).docs.findLast((doc) => typeof doc.id === "string").id;
+      const loneWt = {
+        targetDeviceId: "A",
+        projectId: loneProjectId,
+        worktreeId: worktreeIdFromPath(loneWtPath),
+      };
+      const sentInto = join(sandbox, "clones", "sent");
+      const loneFrames = [];
+      const loneSent = await asOtherDevice(() =>
+        syncHandlers.sendWorktree(
+          { ...loneWt, cloneInto: { parentDir: sentInto, name: "lone" } },
+          { ...pullCtx, notifier: () => (frame) => loneFrames.push(frame) },
+        ),
+      );
+      assert.ok(loneSent.cloned, "the send made no clone on the peer");
+      assert.equal(loneSent.cloned.path, join(sentInto, "lone"));
+      assert.equal(
+        (await findProjectOrThrow(loneSent.cloned.id)).path,
+        loneSent.cloned.path,
+        "the clone is registered on the landing side",
+      );
+      assert.equal(
+        await getRepoIdentity(loneSent.cloned.path),
+        await getRepoIdentity(loneRepo),
+        "the clone must read as the same repo",
+      );
+      assert.equal(
+        await gitOut(loneSent.cloned.path, "symbolic-ref", "HEAD"),
+        "refs/heads/main",
+      );
+      assert.equal(
+        await gitOut(loneSent.cloned.path, "rev-parse", "HEAD"),
+        loneMainTip,
+      );
+      assert.equal(loneSent.worktree.projectId, loneSent.cloned.id);
+      assert.equal(loneSent.worktree.branch, "lone-feature");
+      assert.equal(loneSent.dirtyApplied, true);
+      assert.equal(
+        readFileSync(join(loneSent.worktree.path, "lone.txt"), "utf8"),
+        "lone feature\n",
+      );
+      assert.equal(
+        readFileSync(join(loneSent.worktree.path, "lone-draft.txt"), "utf8"),
+        "lone draft\n",
+      );
+      const cloneSteps = loneFrames.filter((frame) => frame.step === "clone");
+      assert.ok(
+        cloneSteps.some((frame) => (frame.totalBytes ?? 0) > 0),
+        "the clone's bytes were never reported",
+      );
+      const loneSteps = new Set(loneFrames.map((frame) => frame.step));
+      for (const step of ["clone", "capture", "transfer", "create", "apply"]) {
+        assert.ok(loneSteps.has(step), `the send never reported ${step}`);
+      }
+      // Its teardown runs on the sending side, against that side's own
+      // registry, on the receipt the peer's landing made.
+      const loneTorn = await asOtherDevice(() =>
+        syncHandlers.teardownSource(
+          {
+            direction: "send",
+            deviceId: "A",
+            projectId: loneProjectId,
+            worktreeId: loneWt.worktreeId,
+          },
+          pullCtx,
+        ),
+      );
+      assert.equal(loneTorn.sourceRemoved, true, loneTorn.sourceError);
+      assert.equal(existsSync(loneWtPath), false);
+      ok(
+        "sendWorktree into a device with no checkout: the peer clones the repo from here over the link (progress relayed), registers it, lands the copy in it with its uncommitted work, and the teardown removes the source here",
+      );
+    } finally {
+      setCliRunnerImpl({
+        runCli: fixture.runCli,
+        requireCliBinary: () => fixture.smBinary,
+        cliFailureMessage,
+      });
+    }
   } finally {
     // Reverse creation order via the shared tracker: the direct
     // sessions and listener first, then the hub connections, then

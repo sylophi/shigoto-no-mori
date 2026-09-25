@@ -473,11 +473,14 @@ function hostHandlersFor(
             return { session: entry.session };
           },
           "sync:teardownSource": (input: any) => {
-            const source = forests[input.sourceDeviceId];
+            // The source is the peer's worktree after a pull, this
+            // device's own after a send.
+            const source =
+              input.direction === "pull" ? forests[input.deviceId] : forest;
             if (source !== undefined) {
-              source.worktrees[input.sourceProjectId] = (
-                source.worktrees[input.sourceProjectId] ?? []
-              ).filter((entry) => entry.id !== input.sourceWorktreeId);
+              source.worktrees[input.projectId] = (
+                source.worktrees[input.projectId] ?? []
+              ).filter((entry) => entry.id !== input.worktreeId);
             }
             return { sourceRemoved: true };
           },

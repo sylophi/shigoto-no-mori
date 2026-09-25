@@ -1,11 +1,14 @@
-// Where a pull lands when this machine has no checkout of the repo:
-// the pulls that land here (a transplant, a mirror) clone it first,
-// into a folder the review names and the user can change. The default
-// mirrors the source's own layout, the peer's path with its home
-// swapped for this one's, so the two machines end up alike without a
-// pick. A path outside the peer's home falls back to where this
-// device keeps its repos (addProject/cloneDestination.ts). The
-// mutation gets the pair as the pull's `cloneInto`.
+// Where a move lands when the destination has no checkout of the repo:
+// every flow (a transplant or a mirror, either way round) clones it
+// there first, into a folder the review names and the user can change.
+// The default mirrors the source's own layout, the source's path with
+// its home swapped for the destination's, so the two machines end up
+// alike without a pick. A path outside the source's home falls back to
+// where the destination keeps its repos (addProject/
+// cloneDestination.ts). The mutation gets the pair as the move's
+// `cloneInto`. The source is the device the dialog sits under, the
+// destination the one DestinationScope names (this machine unless the
+// flow goes to a peer).
 //
 // The landing target is the one fact every piece of a flow reads:
 // the project the copy lands in, or the clone that makes one, or
@@ -22,7 +25,11 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { defaultCloneParent } from "@/components/addProject/cloneDestination";
 import { projectsQueryOptions } from "@/hooks/projects/useProjects";
-import { LocalHostScope, useHostScope } from "@/hooks/remote/useHostScope";
+import {
+  DestinationScope,
+  useDestinationScope,
+  useHostScope,
+} from "@/hooks/remote/useHostScope";
 import { runtimeInfoQueryOptions } from "@/hooks/system/useRuntimeInfo";
 import {
   ensureTrailingSep,
@@ -49,65 +56,76 @@ export type LandingTarget =
   | { project?: undefined; clone: CloneDestination };
 
 // The clone the flow would make, computed only while it is the
-// landing (`enabled`): the reads behind it are this machine's home
-// and projects and the peer's home, none of which a flow into a
-// checkout already here needs.
+// landing (`enabled`): the reads behind it are the destination's home
+// and projects and the source's home, none of which a flow into a
+// checkout already there needs.
 function useCloneDestination(
   sourceProject: Project,
   enabled: boolean,
 ): CloneDestination {
   // The dialog sits under the source's scope, so its runtime info is
-  // the peer's home. This machine's comes from the local scope.
-  const { data: peerRuntime } = useQuery(
+  // the source's home. The destination's comes from its own scope.
+  const destination = useDestinationScope();
+  const { data: sourceRuntime } = useQuery(
     runtimeInfoQueryOptions(useHostScope(), enabled),
   );
-  const { data: localRuntime } = useQuery(runtimeInfoQueryOptions({}, enabled));
-  const { data: localProjects = [] } = useQuery(
-    projectsQueryOptions({}, enabled),
+  const { data: destinationRuntime } = useQuery(
+    runtimeInfoQueryOptions(destination, enabled),
   );
-  const [picked, setPicked] = useState<string | null>(null);
+  const { data: destinationProjects = [] } = useQuery(
+    projectsQueryOptions(destination, enabled),
+  );
+  // A folder picked on one destination means nothing on another.
+  const [picked, setPicked] = useState<{
+    deviceId: string;
+    parent: string;
+  } | null>(null);
 
-  const localHome = localRuntime?.homedir ?? null;
+  const destinationHome = destinationRuntime?.homedir ?? null;
   const name = getBrowseLeafSegment(sourceProject.path);
-  const peerParent = getBrowseParentPath(sourceProject.path);
+  const sourceParent = getBrowseParentPath(sourceProject.path);
   const alike =
-    peerParent === null ? null : tildify(peerParent, peerRuntime?.homedir);
+    sourceParent === null
+      ? null
+      : tildify(sourceParent, sourceRuntime?.homedir);
   const parent =
-    picked ??
+    (picked?.deviceId === destination.deviceId ? picked.parent : null) ??
     (alike?.startsWith("~") ? alike : null) ??
-    (enabled ? defaultCloneParent(localProjects, localHome) : "~/");
+    (enabled ? defaultCloneParent(destinationProjects, destinationHome) : "~/");
   return {
     projectName: sourceProject.name,
     cloneInto: { parentDir: normalizeForSubmit(parent), name },
     dest: `${parent}${name}`,
     setParent: (chosen) =>
-      setPicked(ensureTrailingSep(tildify(chosen, localHome))),
+      setPicked({
+        deviceId: destination.deviceId,
+        parent: ensureTrailingSep(tildify(chosen, destinationHome)),
+      }),
   };
 }
 
 // Where a flow lands, decided once: the picked or held project, or
-// the clone when this machine holds none. A run reads it off what it
-// was submitted with rather than the live project list, since the
+// the clone when the destination holds none. A run reads it off what
+// it was submitted with rather than the live project list, since the
 // clone registers a project mid-run and a live read would turn the
 // running view into a flow that never cloned anything. A flow to a
-// peer never clones: the peer must hold the repo.
+// peer with no device picked yet has no landing at all.
 export function useLandingTarget({
   localProject,
   sourceProject,
-  toPeer,
+  unpicked,
   submitted,
 }: {
   localProject: Project | undefined;
   sourceProject: Project;
-  toPeer: boolean;
+  unpicked: boolean;
   // The running (or finished) mutation's input, absent on the review.
   submitted: { cloneInto?: SyncCloneInto } | undefined;
 }): LandingTarget | null {
   const cloning =
-    !toPeer &&
-    (submitted === undefined
-      ? localProject === undefined
-      : submitted.cloneInto !== undefined);
+    submitted === undefined
+      ? !unpicked && localProject === undefined
+      : submitted.cloneInto !== undefined;
   const clone = useCloneDestination(sourceProject, cloning);
   if (cloning) return { clone };
   return localProject === undefined ? null : { project: localProject };
@@ -115,7 +133,7 @@ export function useLandingTarget({
 
 // The review's clone section, in place of the folder and setup cards
 // a landing project would get: the repo, where its checkout lands,
-// and the way to change that. The picker browses this machine.
+// and the way to change that. The picker browses the destination.
 export function CloneDestinationSection({
   clone,
   thisDeviceLabel,
@@ -157,7 +175,7 @@ export function CloneDestinationSection({
         </p>
       </div>
       {picking && (
-        <LocalHostScope>
+        <DestinationScope>
           <FolderPickerModal
             initialPath={clone.cloneInto.parentDir}
             title="Clone into"
@@ -168,7 +186,7 @@ export function CloneDestinationSection({
             }}
             onClose={() => setPicking(false)}
           />
-        </LocalHostScope>
+        </DestinationScope>
       )}
     </section>
   );

@@ -29,10 +29,9 @@ import type { Worktree } from "@shared/schemas";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import {
   type MirrorIgnoreChoice,
-  type PullSource,
-  useLandingMutation,
-  useLandingOnPeer,
-} from "@/hooks/remote/usePullWorktree";
+  type Move,
+  useMoveMutation,
+} from "@/hooks/remote/useMoveWorktree";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
 import { hasLocalHost } from "@/lib/localHost";
 import {
@@ -324,30 +323,15 @@ export function useWorktreeMirrorLinks(
   return links;
 }
 
-// Bring the peer's worktree here and keep it mirrored, driven by the
-// mirror dialog: the new worktree is LOCAL, so the local registry keys
-// are invalidated, and the dialog's last step is the report, so no
-// toast here. Refusals surface centrally.
-export function useStartMirror(source: PullSource) {
-  return useLandingMutation(source, (payload) =>
-    window.api.mirror.start(payload),
-  );
-}
-
-// The mirror the other way: one of this device's worktrees, copied to
-// a peer and kept in step from here.
-export function useStartMirrorTo(
-  worktree: Worktree,
-  targetDeviceId: string | undefined,
-) {
-  return useLandingOnPeer(targetDeviceId, (target, choice) =>
-    window.api.mirror.startTo({
-      targetDeviceId: target,
-      projectId: worktree.projectId,
-      worktreeId: worktree.id,
-      ...choice,
-    }),
-  );
+// Start a mirror, driven by the mirror dialog: the move (a pull of the
+// peer's worktree, or a send of this device's) and the session opened
+// on top. The dialog's last step is the report, so no toast here.
+// Refusals surface centrally.
+export function useStartMirror(move: Move) {
+  return useMoveMutation(move, {
+    pull: (payload) => window.api.mirror.start(payload),
+    send: (payload) => window.api.mirror.startTo(payload),
+  });
 }
 
 // The mirror's thread of events (mirror:history), read through the

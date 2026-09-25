@@ -87,10 +87,6 @@ export type PullProgressProps = {
   // Where it lands (pullSteps.ts). On a peer, `thisDeviceLabel` names
   // that peer, and a refused command is its refusal, not the source's.
   landing?: Landing;
-  // False when the create's phases are not reported back (it runs on a
-  // peer): a planned phase the run has passed then reads done, where a
-  // reported run would have shown it skipped.
-  phasesReported?: boolean;
 };
 
 // The create's rows read the destination's project while the dialog
@@ -121,7 +117,6 @@ function ProgressView({
   failedNote = `The copy on ${sourceDeviceLabel} is untouched. If the worktree already landed here, open it from the sidebar instead of retrying.`,
   progressLabel = "Transplant progress",
   landing = LANDS_HERE,
-  phasesReported = true,
 }: PullProgressProps) {
   // The two ends as the devices they are: the dialog sits under the
   // source's scope and the destination provider names where it lands
@@ -163,8 +158,7 @@ function ProgressView({
       ...row,
       position: stepPosition(phase),
       skipped:
-        row.skipped ||
-        (phasesReported && at > stepPosition(phase) && !phasesSeen.has(phase)),
+        row.skipped || (at > stepPosition(phase) && !phasesSeen.has(phase)),
     });
 
   // Only what this run will do, or pointedly will not: carry-over and

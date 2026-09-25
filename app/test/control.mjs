@@ -285,9 +285,13 @@ async function main() {
       ],
     });
     setPeerSyncApiImpl({
-      syncApiFor: () => buildClient(syncContract, peerA.transport),
+      // The sync surface and the session's byte channels, which a
+      // move's source link rides.
+      syncApiFor: () => ({
+        ...buildClient(syncContract, peerA.transport),
+        channels: peerA.channels,
+      }),
       worktreesApiFor: () => buildClient(worktreesContract, peerA.transport),
-      projectsApiFor: () => buildClient(projectsContract, peerA.transport),
     });
     // The account as the hub would list it: this device, the peer, a
     // machine that is signed in but away, and a browser.

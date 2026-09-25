@@ -4,7 +4,11 @@
 // as one session between the new worktree and the source, held until
 // its first full cycle has settled, then ended. A send runs the same
 // session the other way: this device holds the source and pushes to
-// the worktree the peer just created. Labelled a transfer so
+// the worktree the peer just created. Either way the session runs on
+// the device that started the move, since it reaches the other side
+// (mirror:openStream) through that side's grant, the one the move
+// already rode: run from the destination of a send, it would need the
+// source's grant too. Labelled a transfer so
 // nothing that lists, follows or narrates mirrors sees it
 // (registry.ts mirrorSessions). Nothing here fails the pull: the
 // worktree is real either way, and the outcome (crossed, with how

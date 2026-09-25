@@ -16,8 +16,8 @@
 // JSON text. The kind shares the first-byte space with the byte-channel
 // frames (channels.ts, kinds 1 to 4) and must stay clear of them.
 //
-// Host to client only. Client frames are small by construction, except
-// an uplink bundle chunk, which is base64 of already-packed bytes.
+// Host to client only. Client frames are small by construction: bulk
+// bytes (a bundle, a stream) cross as channel frames, never as text.
 //
 // Pure and browser safe (the web client reads these frames): the
 // platform DecompressionStream, no node builtins. The host's deflate

@@ -1,14 +1,16 @@
-// A checkout of a peer's repo made on this device over the device
-// link: the pull's landing project when this device has none
-// (sync:pullWorktree's `cloneInto`). The peer's default branch crosses
-// as a bundle, the way the pulled branch does, so a repo with no
-// remote gets here too and the peer's grant is the one gate. The
-// bundle unpacks into a fresh repository at the folder asked for, the
-// branch is checked out, the peer's remote is set up when it has one,
-// and the checkout is registered the way the add-project dialog's
-// clone is (`sm projects add`, config seed included, which is why the
-// register waits for the checkout). Up to the register everything is
-// undone on failure: the folder is this call's own, made here.
+// A checkout of a repo made on this device from another device's copy,
+// over the device link: a landing's project when this device has none
+// (a pull's `cloneInto`, or a send's, where the landing runs here on
+// the source's behalf). The source's default branch crosses as a
+// bundle on the same source link the branch itself then does
+// (sourceLink.ts), so a repo with no remote gets here too, and the
+// link's grant is the one gate. The bundle unpacks into a fresh
+// repository at the folder asked for, the branch is checked out, the
+// source's remote is set up when it has one, and the checkout is
+// registered the way the add-project dialog's clone is (`sm projects
+// add`, config seed included, which is why the register waits for the
+// checkout). Up to the register everything is undone on failure: the
+// folder is this call's own, made here.
 import { mkdir, rm } from "node:fs/promises";
 import { isCloneableRemote } from "@shared/cloneUrl";
 import { errorMessageOf } from "@shared/errors";
@@ -16,42 +18,38 @@ import {
   type SyncCloneInto,
   SyncBundleRefSchema,
 } from "@shared/ipc/modules/sync";
-import { GitRefNameSchema, type Project } from "@shared/schemas";
-import type { PeerProjectsApi, PeerSyncApi } from "@host/ipc/peerSync";
+import type { Project } from "@shared/schemas";
 import { checkCloneDestination } from "@host/lib/git/clone";
 import { run } from "@host/lib/git/core";
 import { deleteRef, updateRef } from "@host/lib/git/refs";
 import { registerProject } from "@host/lib/projects";
 import { expandHome } from "@host/lib/util/paths";
-import { fetchBundleFromPeer, incomingRefFor } from "./fetchBundle";
+import { incomingRefFor, type WorktreeSource } from "./sourceLink";
 
 export async function cloneProjectFromPeer(
-  peer: { sync: PeerSyncApi; projects: PeerProjectsApi },
-  sourceProjectId: string,
+  source: WorktreeSource,
   { parentDir, name }: SyncCloneInto,
-  // The branch the pull lands its copy on afterwards: the clone's own
+  // The branch the landing puts its copy on afterwards: the clone's own
   // branch cannot be it, and that is known before a byte moves.
   landing: string,
   onProgress?: (bytes: number, totalBytes: number) => void,
 ): Promise<Project> {
-  // The peer's default branch is what the checkout is made of, so the
+  // The source's default branch is what the checkout is made of, so the
   // clone reads as the repo (its identity is the root of that branch,
   // shared/git/repoIdentity.mts) and not as one worktree of it. The
   // remote it was cloned from comes along when it has one, so the
   // clone is what a clone of that remote would be, and reads as the
   // same repo even when its default branch is only the remote's HEAD
-  // to go by. Both re-parsed: they flow into refs and argv here. The
-  // parent is made if need be: the dialog's default is the peer's own
-  // layout, which this machine may not have yet. A parent that cannot
-  // be made (a file in its place) is the destination check's to name.
+  // to go by. Both re-parsed by the link: they flow into refs and argv
+  // here. The parent is made if need be: the dialog's default is the
+  // source's own layout, which this machine may not have yet. A parent
+  // that cannot be made (a file in its place) is the destination
+  // check's to name.
   const parent = expandHome(parentDir);
   await mkdir(parent, { recursive: true }).catch(() => {});
-  const [dest, branch, remoteUrl] = await Promise.all([
+  const [dest, { branch, remoteUrl }] = await Promise.all([
     checkCloneDestination(parent, name),
-    peer.projects
-      .defaultBranch({ projectId: sourceProjectId })
-      .then((answer) => GitRefNameSchema.parse(answer)),
-    peer.projects.cloneUrl({ projectId: sourceProjectId }),
+    source.cloneFacts(),
   ]);
   if (
     landing === branch ||
@@ -72,11 +70,10 @@ export async function cloneProjectFromPeer(
     // one reset, and a clone of a repo whose default branch is not
     // git's own default lands on the right one.
     await run(dest, ["symbolic-ref", "HEAD", branchRef]);
-    const { fetched } = await fetchBundleFromPeer(peer.sync, {
-      sourceProjectId,
-      repoPath: dest,
+    const { fetched } = await source.fetch({
       refs: [branchRef],
       haves: [],
+      into: { path: dest },
       onProgress,
     });
     const tip = fetched.find((entry) => entry.ref === incomingRef)?.commit;
@@ -87,7 +84,7 @@ export async function cloneProjectFromPeer(
     await deleteRef(dest, incomingRef);
     await run(dest, ["reset", "--quiet", "--hard"]);
     // The remote as `git clone` would leave it: origin, its HEAD on the
-    // branch, the branch tracking it. The peer answered the URL with
+    // branch, the branch tracking it. The source answered the URL with
     // the clone payload's own rule (shared/cloneUrl.ts), re-checked
     // here before it reaches argv.
     if (remoteUrl !== null && isCloneableRemote(remoteUrl)) {

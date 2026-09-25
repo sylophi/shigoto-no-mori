@@ -424,7 +424,12 @@ async function main() {
     // ---- The git follower, against the same wire ----
     const follower = createGitFollower({
       sessions: () => daemon.sessions(),
-      peerSyncApiFor: () => buildClient(syncContract, peerA.transport),
+      // The sync surface and the session's byte channels, which the
+      // follower's source links ride.
+      peerSyncApiFor: () => ({
+        ...buildClient(syncContract, peerA.transport),
+        channels: peerA.channels,
+      }),
       peerMirrorApiFor: () => buildClient(mirrorContract, peerA.transport),
       sweepMs: 60_000,
       log: (message) => console.log(message),

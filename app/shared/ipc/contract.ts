@@ -27,9 +27,9 @@ export type InvokeDef<
   // worktree), and also a few READS kept behind the switch because of
   // what they disclose: fs:listDirectory, fs:scanForGitRepos,
   // fs:isGitRepo, runtime:info, cli:status, cli:shellStatus and the
-  // sync reads that name arbitrary host paths (refTips, worktreeFolder,
-  // ignoredPaths, hasCommits, landCheck), plus the transfer, stream
-  // and mirror-state calls that hand a peer this host's bytes. So the
+  // sync reads that name arbitrary host paths (worktreeFolder,
+  // ignoredPaths, hasCommits), plus the source links, stream and
+  // mirror-state calls that hand a peer this host's bytes. So the
   // name is the gate, not the effect. `gated: false` is served to every
   // account peer. A call that only refreshes a cache the host keeps for
   // itself (a fetch of remote-tracking refs, a gh listing) is ungated

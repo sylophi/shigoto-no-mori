@@ -7,7 +7,8 @@
 // last step is the report, and the mutation's own status is the
 // stage. The flow runs both ways: TransplantDialog brings a peer's
 // worktree here (the pull), TransplantToDialog sends one of this
-// device's to a peer (the send, under that peer's DestinationProvider).
+// device's to a peer (the send, under that peer's DestinationProvider),
+// both through the one move mutation (hooks/remote/useMoveWorktree.ts).
 import { ArrowRight } from "lucide-react";
 import type { UseMutationResult } from "@tanstack/react-query";
 import {
@@ -19,11 +20,10 @@ import type { Project, Worktree } from "@shared/schemas";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
 import {
   type LandingChoice,
-  usePullWorktree,
-  useSendWorktree,
-  useTeardownSent,
+  type Move,
+  useMoveWorktree,
   useTeardownSource,
-} from "@/hooks/remote/usePullWorktree";
+} from "@/hooks/remote/useMoveWorktree";
 import { DestinationProvider } from "@/hooks/remote/useHostScope";
 import { modeOf, selectionSummary } from "../flow/ignoreChoice";
 import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
@@ -65,12 +65,12 @@ export function TransplantDialog({
   sourceDeviceLabel: string;
   onClose: () => void;
 }) {
-  const pull = usePullWorktree({
-    worktree,
-    sourceProjectId: project.id,
-    sourceIdentity,
-  });
-  const teardown = useTeardownSource({ worktree, sourceProjectId: project.id });
+  const move: Move = {
+    direction: "pull",
+    source: { worktree, sourceProjectId: project.id, sourceIdentity },
+  };
+  const pull = useMoveWorktree(move);
+  const teardown = useTeardownSource(move);
   const thisDeviceLabel = useLocalDeviceName();
   return (
     <TransplantFlow
@@ -88,8 +88,9 @@ export function TransplantDialog({
 }
 
 // The same flow the other way: one of THIS device's worktrees, moved
-// to a peer that holds the same repo. The page's scope is the source
-// (this machine), and the destination's reads go to the picked peer.
+// to a peer (which clones the repo first when it has no checkout). The
+// page's scope is the source (this machine), and the destination's
+// reads go to the picked peer.
 export function TransplantToDialog({
   worktree,
   project,
@@ -101,13 +102,18 @@ export function TransplantToDialog({
   worktree: Worktree;
   project: Project;
   sourceIdentity: string;
-  // The peers holding the same repo (flow/peerTargets.ts).
+  // The peers it could go to (flow/peerTargets.ts).
   targets: PeerTarget[];
   onClose: () => void;
 }) {
   const { picked, flow } = usePeerDestination(targets);
-  const send = useSendWorktree(worktree, picked?.deviceId);
-  const teardown = useTeardownSent(worktree, picked?.deviceId);
+  const move: Move = {
+    direction: "send",
+    worktree,
+    targetDeviceId: picked?.deviceId,
+  };
+  const send = useMoveWorktree(move);
+  const teardown = useTeardownSource(move);
   return (
     <DestinationProvider peer={picked}>
       <TransplantFlow

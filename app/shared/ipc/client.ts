@@ -358,17 +358,11 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
     },
 
     sync: {
-      refTips: syncClient.refTips,
-      captureDirty: syncClient.captureDirty,
       ignoredPaths: syncClient.ignoredPaths,
       worktreeFolder: syncClient.worktreeFolder,
-      bundleStart: syncClient.bundleStart,
-      bundleChunk: syncClient.bundleChunk,
-      bundleAbort: syncClient.bundleAbort,
       pullWorktree: syncClient.pullWorktree,
-      teardownSource: syncClient.teardownSource,
       sendWorktree: syncClient.sendWorktree,
-      teardownSent: syncClient.teardownSent,
+      teardownSource: syncClient.teardownSource,
       onPullProgress: syncClient.pullProgress,
     },
 
