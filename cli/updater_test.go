@@ -4,7 +4,7 @@ package main
 // helpers and the prerelease channel rule, the feed dispatch against
 // stand-in endpoints, and the on-disk release list. Download,
 // signature, and swap need a signed bundle and stay manual
-// (MANUAL-TESTING.md).
+// (app/MANUAL-TESTING.md).
 
 import (
 	"cmp"

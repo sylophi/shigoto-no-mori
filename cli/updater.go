@@ -83,7 +83,7 @@ func stagedBundlePath(man *stagedManifest) string {
 var feedClient = &http.Client{Timeout: feedTimeout}
 
 // Stand-ins for the two endpoints, from `sm update --feed-url` and
-// `--releases-url` (MANUAL-TESTING.md). Flags, not environment
+// `--releases-url` (app/MANUAL-TESTING.md). Flags, not environment
 // variables, so they don't ride `sm run` into script trees. The feed
 // stand-in forces the single-answer path on every build, prerelease or
 // not, so one flag keeps a test build off the real feeds.

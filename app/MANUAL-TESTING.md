@@ -3,9 +3,8 @@
 How to run the real app, drive it from a script, and test remote
 flows on one machine. Written for people and for agents.
 
-Commands and paths are relative to `app/`, where the app lives. The
-exceptions say so: `hub/`, `cli/` and `lefthook.yml` are at the repo
-root.
+Commands and paths are relative to this directory (`app/`). `hub/`,
+`cli/` and `lefthook.yml` are one level up, at the repo root.
 
 The automated checks (`pnpm test <name>` for the proofs in `test/`, and
 the hub's own suite, all listed in `lefthook.yml`) are not covered here.
