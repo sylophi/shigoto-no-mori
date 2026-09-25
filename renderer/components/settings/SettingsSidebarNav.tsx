@@ -44,17 +44,18 @@ export function SettingsSidebarNav() {
           sections pushes no history, so one step always leaves the page.
           A window that opened straight onto Settings has nothing behind
           it and goes to "/", which lands on the first worktree, the same
-          place a fresh window opens. */}
-      <div className="mb-1 pl-2">
-        <BackButton
-          label="Back"
-          onClick={() =>
-            router.history.canGoBack()
-              ? router.history.back()
-              : void navigate({ to: "/" })
-          }
-        />
-      </div>
+          place a fresh window opens. It spans the row like the rows
+          below it, so the whole width is the target and not just the
+          word. */}
+      <BackButton
+        label="Back"
+        className="mb-1 ml-0 w-full justify-start"
+        onClick={() =>
+          router.history.canGoBack()
+            ? router.history.back()
+            : void navigate({ to: "/" })
+        }
+      />
 
       <NavGroup label="Visual">
         {sections.visual.map((section) => (
