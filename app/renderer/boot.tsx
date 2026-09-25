@@ -38,11 +38,11 @@ import { startRemoteSweepRequests } from "./lib/remote/remoteSweep";
 import { documentFocused } from "./lib/focus";
 import { startSharedSettingsSync } from "./lib/remote/sharedSettingsSync";
 import {
+  hostQueriesNaming,
   invalidateHostDevice,
   invalidateHostProject,
   localDeviceId,
   queryKeys,
-  worktreeQueriesOn,
 } from "./lib/queryKeys";
 import { toast } from "./lib/toast";
 import { createAppRouter, type AppRouter } from "./router";
@@ -85,7 +85,7 @@ export function bootApp({
     if (isOwnDeletePending(queryClient, deviceId, removal.worktreeId)) return;
     if (removal.state === "removing") {
       void queryClient.cancelQueries({
-        predicate: worktreeQueriesOn(deviceId, removal.worktreeId),
+        predicate: hostQueriesNaming(deviceId, removal.worktreeId),
       });
     } else if (removal.state === "removed") {
       forgetDeletedWorktree(

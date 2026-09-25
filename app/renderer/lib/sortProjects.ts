@@ -22,23 +22,20 @@ export function sortByProject<T>(
 ): T[] {
   const byName = (a: T, b: T) =>
     projectOf(a).name.localeCompare(projectOf(b).name);
+  // Highest usage first, the name breaking ties.
+  const byUsage = (field: "lastUsed" | "recentCount") => (a: T, b: T) => {
+    const diff = (projectOf(b)[field] ?? 0) - (projectOf(a)[field] ?? 0);
+    return diff !== 0 ? diff : byName(a, b);
+  };
   switch (mode) {
     case "manual":
       return items;
     case "alphabetical":
       return items.toSorted(byName);
     case "recent":
-      return items.toSorted((a, b) => {
-        const diff =
-          (projectOf(b).lastUsed ?? 0) - (projectOf(a).lastUsed ?? 0);
-        return diff !== 0 ? diff : byName(a, b);
-      });
+      return items.toSorted(byUsage("lastUsed"));
     case "frequent":
-      return items.toSorted((a, b) => {
-        const diff =
-          (projectOf(b).recentCount ?? 0) - (projectOf(a).recentCount ?? 0);
-        return diff !== 0 ? diff : byName(a, b);
-      });
+      return items.toSorted(byUsage("recentCount"));
     default:
       return assertNever(mode);
   }

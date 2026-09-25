@@ -14,13 +14,17 @@ import { errorMessageOf } from "@shared/errors";
 //
 // The loop lives at module scope (not inside the hook) because React
 // Compiler skips any component/hook containing a `finally` clause.
-async function runBatchImpl<T>(
-  setStatus: Dispatch<SetStateAction<Map<string, RowStatus>>>,
-  setBatchRunning: Dispatch<SetStateAction<boolean>>,
+type BatchArgs<T> = [
   items: T[],
   keyOf: (item: T) => string,
   process: (item: T) => Promise<void>,
   opts?: { prepare?: () => Promise<boolean> },
+];
+
+async function runBatchImpl<T>(
+  setStatus: Dispatch<SetStateAction<Map<string, RowStatus>>>,
+  setBatchRunning: Dispatch<SetStateAction<boolean>>,
+  ...[items, keyOf, process, opts]: BatchArgs<T>
 ): Promise<void> {
   setBatchRunning(true);
   try {
@@ -33,18 +37,10 @@ async function runBatchImpl<T>(
       try {
         // react-doctor-disable-next-line react-doctor/async-await-in-loop -- sequential by design
         await process(item); // oxlint-disable-line no-await-in-loop -- sequential by design
-        setStatus((prev) => {
-          const next = new Map(prev);
-          next.set(key, { kind: "done" });
-          return next;
-        });
+        setStatus((prev) => new Map(prev).set(key, { kind: "done" }));
       } catch (err) {
         const message = errorMessageOf(err);
-        setStatus((prev) => {
-          const next = new Map(prev);
-          next.set(key, { kind: "error", message });
-          return next;
-        });
+        setStatus((prev) => new Map(prev).set(key, { kind: "error", message }));
       }
     }
   } finally {
@@ -56,20 +52,8 @@ export function useSequentialBatch() {
   const [status, setStatus] = useState<Map<string, RowStatus>>(new Map());
   const [batchRunning, setBatchRunning] = useState(false);
 
-  function runBatch<T>(
-    items: T[],
-    keyOf: (item: T) => string,
-    process: (item: T) => Promise<void>,
-    opts?: { prepare?: () => Promise<boolean> },
-  ): Promise<void> {
-    return runBatchImpl(
-      setStatus,
-      setBatchRunning,
-      items,
-      keyOf,
-      process,
-      opts,
-    );
+  function runBatch<T>(...args: BatchArgs<T>): Promise<void> {
+    return runBatchImpl(setStatus, setBatchRunning, ...args);
   }
 
   return { status, batchRunning, runBatch };

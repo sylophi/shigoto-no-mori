@@ -8,7 +8,7 @@ import type {
   DeleteWorktreeResult,
   Worktree,
 } from "@shared/schemas";
-import { queryKeysFor, worktreeQueriesOn } from "@/lib/queryKeys";
+import { hostQueriesNaming, queryKeysFor } from "@/lib/queryKeys";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { scriptRunsFor } from "@/store/scriptRuns";
@@ -88,25 +88,33 @@ interface ConvertExternalWorktreeInput {
   worktreeId: string;
 }
 
-export function useConvertExternalWorktree() {
+// Convert and relocate both leave the worktree under a new id: refresh
+// the list and drop the script runs cached under the old one.
+function useReplaceWorktree<
+  Input extends { projectId: string; worktreeId: string },
+  Result,
+>(call: (api: HostApi, input: Input) => Promise<Result>) {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
   const scriptRuns = useScriptRuns();
-  return useMutation<CreateWorktreeResult, Error, ConvertExternalWorktreeInput>(
-    {
-      mutationFn: (input) => api.worktrees.convertExternal(input),
-      onSuccess: (_result, vars) => {
-        void queryClient.invalidateQueries({
-          queryKey: keys.worktrees(vars.projectId),
-        });
-        // The old external worktree's id no longer maps to anything on
-        // disk. Drop any cached script runs so they don't linger in the
-        // UI.
-        scriptRuns.clearForWorktree(vars.worktreeId);
-      },
-      // The page surfaces per-row errors inline; a toast on top would be noise.
-      meta: { silentError: true },
+  return useMutation<Result, Error, Input>({
+    mutationFn: (input) => call(api, input),
+    onSuccess: (_data, vars) => {
+      void queryClient.invalidateQueries({
+        queryKey: keys.worktrees(vars.projectId),
+      });
+      scriptRuns.clearForWorktree(vars.worktreeId);
     },
+    // The page surfaces per-row errors inline; a toast on top would be noise.
+    meta: { silentError: true },
+  });
+}
+
+// The old external worktree's id no longer maps to anything on disk.
+// Drop any cached script runs so they don't linger in the UI.
+export function useConvertExternalWorktree() {
+  return useReplaceWorktree<ConvertExternalWorktreeInput, CreateWorktreeResult>(
+    (api, input) => api.worktrees.convertExternal(input),
   );
 }
 
@@ -116,23 +124,12 @@ interface RelocateWorktreeInput {
   destinationPath: string;
 }
 
+// The relocated worktree's id changes (it's derived from path), so
+// any cached script runs keyed by the pre-move id are stranded.
 export function useRelocateWorktree() {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
-  const scriptRuns = useScriptRuns();
-  return useMutation<Worktree, Error, RelocateWorktreeInput>({
-    mutationFn: (input) => api.worktrees.relocate(input),
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({
-        queryKey: keys.worktrees(vars.projectId),
-      });
-      // The relocated worktree's id changes (it's derived from path), so
-      // any cached script runs keyed by the pre-move id are stranded.
-      scriptRuns.clearForWorktree(vars.worktreeId);
-    },
-    // The page surfaces per-row errors inline; a toast on top would be noise.
-    meta: { silentError: true },
-  });
+  return useReplaceWorktree<RelocateWorktreeInput, Worktree>((api, input) =>
+    api.worktrees.relocate(input),
+  );
 }
 
 interface DeleteWorktreeInput {
@@ -197,30 +194,13 @@ export function forgetDeletedWorktree(
   // to go inactive and gc naturally.
   queryClient.removeQueries({
     type: "inactive",
-    predicate: worktreeQueriesOn(deviceId, worktreeId),
+    predicate: hostQueriesNaming(deviceId, worktreeId),
   });
-}
-
-export function useForgetDeletedWorktree() {
-  const { deviceId } = useHostScope();
-  const forgetOn = useForgetDeletedWorktreeOn();
-  return (projectId: string, worktreeId: string) =>
-    forgetOn(deviceId, projectId, worktreeId);
-}
-
-// The same, naming the device: for a caller mounted under one scope
-// whose stop removed a worktree on another (a mirror stop driven
-// through the peer running it, whose copy is here).
-export function useForgetDeletedWorktreeOn() {
-  const queryClient = useQueryClient();
-  return (deviceId: string, projectId: string, worktreeId: string) =>
-    forgetDeletedWorktree(queryClient, deviceId, projectId, worktreeId);
 }
 
 export function useDeleteWorktree() {
   const queryClient = useQueryClient();
   const { api, deviceId } = useHostScope();
-  const forget = useForgetDeletedWorktree();
   return useMutation<DeleteWorktreeResult, Error, DeleteWorktreeInput>({
     mutationKey: deleteWorktreeMutationKey(deviceId),
     mutationFn: (input) => api.worktrees.delete(input),
@@ -232,13 +212,20 @@ export function useDeleteWorktree() {
       // so another device's queries never match on a coincidentally
       // equal worktree id.
       await queryClient.cancelQueries({
-        predicate: worktreeQueriesOn(deviceId, vars.worktreeId),
+        predicate: hostQueriesNaming(deviceId, vars.worktreeId),
       });
     },
     onSuccess: (data, vars) => {
       // Only when the worktree was actually removed. Cleanup failures
       // keep the worktree around for retry.
-      if (data.ok) forget(vars.projectId, vars.worktreeId);
+      if (data.ok) {
+        forgetDeletedWorktree(
+          queryClient,
+          deviceId,
+          vars.projectId,
+          vars.worktreeId,
+        );
+      }
     },
     // The detail page swaps into a force-delete prompt on failure, so a
     // toast on top would be noise.

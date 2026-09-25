@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SectionHeading } from "@/components/ui/section-heading";
+import { SectionIntro } from "@/components/ui/section-heading";
 import { Switch } from "@/components/ui/switch";
 import { ExternalLink } from "@/components/ui/external-link";
 import { useCarryOverStats } from "@/hooks/projects/useCarryOverStats";
@@ -59,16 +59,13 @@ export function CarryOverSection({
 
   return (
     <section className="space-y-3">
-      <div>
-        <SectionHeading className="mb-1">Carry over</SectionHeading>
-        <p className="text-xs text-muted-foreground">
-          Files and folders to copy or symlink into every new worktree, taken
-          from the main checkout or, failing that, another worktree that has
-          them (symlinks only ever point at the main checkout). Useful for
-          things git ignores, like <span className="font-mono">.env</span>,{" "}
-          <span className="font-mono">node_modules</span>, or editor state.
-        </p>
-      </div>
+      <SectionIntro title="Carry over">
+        Files and folders to copy or symlink into every new worktree, taken from
+        the main checkout or, failing that, another worktree that has them
+        (symlinks only ever point at the main checkout). Useful for things git
+        ignores, like <span className="font-mono">.env</span>,{" "}
+        <span className="font-mono">node_modules</span>, or editor state.
+      </SectionIntro>
 
       {(status?.fileExists || !useWorktreeInclude) && (
         <div className="flex items-center gap-3 rounded-md border border-border bg-card px-3 py-2">

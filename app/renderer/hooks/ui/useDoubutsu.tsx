@@ -21,7 +21,6 @@ const DOUBUTSU_STORAGE_KEY = "shigomori.doubutsu";
 function readBootHint(): boolean {
   // Default is ON: only an explicit "false" (a saved opt-out) disables
   // the first paint's doubutsu look.
-  if (typeof window === "undefined") return true;
   return readStored(DOUBUTSU_STORAGE_KEY) !== "false";
 }
 
@@ -47,12 +46,7 @@ export function DoubutsuProvider({ children }: { children: ReactNode }) {
   if (override !== null && saved === override) setOverride(null);
 
   useEffect(() => {
-    const root = document.documentElement;
-    if (applied) {
-      root.classList.add("doubutsu");
-    } else {
-      root.classList.remove("doubutsu");
-    }
+    document.documentElement.classList.toggle("doubutsu", applied);
   }, [applied]);
 
   // Mirror the saved value into localStorage so the next launch can

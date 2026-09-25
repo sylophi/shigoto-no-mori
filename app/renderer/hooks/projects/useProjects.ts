@@ -9,7 +9,7 @@ import { useRouter } from "@tanstack/react-router";
 import type { CloneProjectPayload, Project } from "@shared/schemas";
 import { reorderProjects } from "@shared/reorder";
 import {
-  hostKeyDeviceId,
+  hostQueriesNaming,
   localDeviceId,
   queryKeys,
   queryKeysFor,
@@ -100,9 +100,7 @@ export function useRemoveProject() {
       // scoped device so another device's queries never match on a
       // coincidentally equal project id.
       await queryClient.cancelQueries({
-        predicate: (query) =>
-          hostKeyDeviceId(query.queryKey) === deviceId &&
-          query.queryKey.includes(id),
+        predicate: hostQueriesNaming(deviceId, id),
       });
     },
     onSuccess: async (_data, id) => {
@@ -129,9 +127,7 @@ export function useRemoveProject() {
       // has an observer (a row mid-unmount) would refetch it instead.
       queryClient.removeQueries({
         type: "inactive",
-        predicate: (query) =>
-          hostKeyDeviceId(query.queryKey) === deviceId &&
-          query.queryKey.includes(id),
+        predicate: hostQueriesNaming(deviceId, id),
       });
     },
     meta: { errorTitle: "Couldn't remove project" },

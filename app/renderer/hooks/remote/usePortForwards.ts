@@ -102,12 +102,7 @@ export function usePortForwards(deviceId: string) {
   });
   const stop = useMutation({
     mutationFn: (forwardId: string) => window.api.portForward.stop(forwardId),
-    onError: (err) => {
-      if (!isCommandRefusedError(err)) {
-        notifyError("Couldn't stop forwarding", err);
-      }
-    },
-    meta: { silentError: true },
+    meta: { errorTitle: "Couldn't stop forwarding" },
   });
   return {
     forwards: (data?.forwards ?? []).filter(

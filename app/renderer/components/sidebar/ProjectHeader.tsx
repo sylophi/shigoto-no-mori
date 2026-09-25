@@ -53,11 +53,23 @@ export function ProjectHeader({
   const [nameRef, isTruncated] = useIsTruncated<HTMLSpanElement>(
     `${arrangeMode}:${missing}:${project.name}`,
   );
-  const icon = (
+  // The same lead and name in every branch; only one branch mounts, so
+  // the ref lands once.
+  const lead = missing ? (
+    <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
+  ) : (
     <ProjectIcon
       projectId={iconFrom?.projectId ?? project.id}
       deviceId={iconFrom?.deviceId}
     />
+  );
+  const name = (
+    <span
+      ref={nameRef}
+      className={cn("min-w-0 truncate", missing && "line-through decoration-1")}
+    >
+      {project.name}
+    </span>
   );
   const trigger = arrangeMode ? (
     <div
@@ -72,33 +84,16 @@ export function ProjectHeader({
         missing && "text-muted-foreground/60 hover:text-muted-foreground",
       )}
     >
-      {missing ? (
-        <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
-      ) : (
-        icon
-      )}
-      <span
-        ref={nameRef}
-        className={cn(
-          "min-w-0 truncate",
-          missing && "line-through decoration-1",
-        )}
-      >
-        {project.name}
-      </span>
+      {lead}
+      {name}
     </div>
   ) : missing ? (
     <div
       onContextMenu={onContextMenu}
       className={cn(baseClass, "text-muted-foreground/60")}
     >
-      <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
-      <span
-        ref={nameRef}
-        className="min-w-0 truncate line-through decoration-1"
-      >
-        {project.name}
-      </span>
+      {lead}
+      {name}
       <span className="shrink-0 text-3xs font-medium tracking-normal text-muted-foreground/60 normal-case">
         missing
       </span>
@@ -119,10 +114,8 @@ export function ProjectHeader({
           expanded && "rotate-90",
         )}
       />
-      {icon}
-      <span ref={nameRef} className="min-w-0 truncate">
-        {project.name}
-      </span>
+      {lead}
+      {name}
       {badges}
     </button>
   );

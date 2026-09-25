@@ -38,8 +38,6 @@ type WorktreesApi = Pick<
   "onLifecyclePhase" | "onCarryOverComplete" | "onRemoval"
 >;
 
-type NotifyFn = (title: string, options?: { description?: string }) => unknown;
-
 interface StartDeps {
   // Fired when main auto-removed manual carry-over entries because
   // .worktreeinclude now covers them, so caches over project.json can be
@@ -71,20 +69,10 @@ class WorktreeLifecycleStore {
   private unsubscribes: Array<() => void> = [];
   private deviceId: string;
   private api: WorktreesApi;
-  private warn: NotifyFn;
-  private info: NotifyFn;
-  private onCarryOverReconciled: ((projectId: string) => void) | null = null;
 
-  constructor(
-    deviceId: string,
-    api: WorktreesApi,
-    warn: NotifyFn,
-    info: NotifyFn,
-  ) {
+  constructor(deviceId: string, api: WorktreesApi) {
     this.deviceId = deviceId;
     this.api = api;
-    this.warn = warn;
-    this.info = info;
   }
 
   // The local store is a renderer-lifetime singleton whose
@@ -109,7 +97,6 @@ class WorktreeLifecycleStore {
       }),
     );
     if (this.deviceId !== localDeviceId) return;
-    this.onCarryOverReconciled = deps?.onCarryOverReconciled ?? null;
     this.unsubscribes.push(
       this.api.onLifecyclePhase((evt) => {
         this.setPhase(evt.worktreeId, evt.phase === "idle" ? null : evt.phase);
@@ -117,8 +104,8 @@ class WorktreeLifecycleStore {
       this.api.onCarryOverComplete((evt) => {
         const removed = evt.removedCarryOverPaths ?? [];
         if (removed.length > 0) {
-          this.onCarryOverReconciled?.(evt.projectId);
-          this.info(
+          deps?.onCarryOverReconciled?.(evt.projectId);
+          toast.info(
             `.worktreeinclude replaced ${removed.length} carry-over ${
               removed.length === 1 ? "entry" : "entries"
             }`,
@@ -133,7 +120,7 @@ class WorktreeLifecycleStore {
         const { applied, failures } = evt.report;
         const includeFailures = evt.report.includeFailures ?? [];
         if (includeFailures.length > 0) {
-          this.warn("Couldn't resolve .worktreeinclude", {
+          toast.warning("Couldn't resolve .worktreeinclude", {
             description: clippedLines(
               includeFailures.map((f) =>
                 f.source ? `${f.source}: ${f.reason}` : f.reason,
@@ -144,7 +131,7 @@ class WorktreeLifecycleStore {
         }
         const sourced = evt.report.sourced ?? [];
         if (sourced.length > 0) {
-          this.info("Carried over from other worktrees", {
+          toast.info("Carried over from other worktrees", {
             description: clippedLines(
               sourced.map(
                 (s) =>
@@ -159,7 +146,7 @@ class WorktreeLifecycleStore {
           });
         }
         if (failures.length === 0) return;
-        this.warn(
+        toast.warning(
           `Carried over ${applied} of ${applied + failures.length} entries`,
           {
             description: clippedLines(
@@ -222,8 +209,6 @@ class WorktreeLifecycleStore {
 export const worktreeLifecycle = new WorktreeLifecycleStore(
   localDeviceId,
   window.api.worktrees,
-  (title, options) => toast.warning(title, options),
-  (title, options) => toast.info(title, options),
 );
 
 // A peer's stores, dropped with the account like the script run
@@ -232,7 +217,6 @@ export const worktreeLifecycle = new WorktreeLifecycleStore(
 // rendered, so nothing would open the store before the peer announces
 // the copy's removal, and a broadcast is not replayed.
 const peerStores = new Map<string, WorktreeLifecycleStore>();
-const silent: NotifyFn = () => {};
 
 onAccountLeft(() => {
   for (const store of peerStores.values()) store.stop();
@@ -247,12 +231,7 @@ function worktreeLifecycleFor(deviceId: string): WorktreeLifecycleStore {
   if (deviceId === localDeviceId) return worktreeLifecycle;
   let store = peerStores.get(deviceId);
   if (store === undefined) {
-    store = new WorktreeLifecycleStore(
-      deviceId,
-      apiFor(deviceId).worktrees,
-      silent,
-      silent,
-    );
+    store = new WorktreeLifecycleStore(deviceId, apiFor(deviceId).worktrees);
     store.start();
     peerStores.set(deviceId, store);
   }

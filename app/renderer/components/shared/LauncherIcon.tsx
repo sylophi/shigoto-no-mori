@@ -1,6 +1,7 @@
 // Maps a launcher entry to the right brand asset. Apple- and vendor-provided
 // app icons (Cursor, Zed, VS Code, Ghostty, etc.) are extracted PNGs from
 // each app's bundle; the rest fall back to svgl SVGs.
+import type { ComponentType } from "react";
 import { Sparkles } from "lucide-react";
 import { FileManagerIcon } from "@/components/ui/file-manager";
 import { GithubMark } from "@/components/ui/svgs/github-mark";
@@ -39,9 +40,45 @@ interface LauncherIconProps {
   className?: string;
 }
 
-function AppIcon({ src, className }: { src: string; className: string }) {
-  return <img src={src} alt="" className={className} />;
-}
+// Maps, not object literals, so an id like "constructor" can't reach
+// the prototype.
+const APP_ICON_URL = new Map<string, string>([
+  ["cursor", cursorIconUrl],
+  ["vscode", vscodeIconUrl],
+  ["vscode-insiders", vscodeInsidersIconUrl],
+  ["zed", zedIconUrl],
+  ["cmux", cmuxIconUrl],
+  ["ghostty", ghosttyIconUrl],
+  ["terminal", terminalIconUrl],
+  ["iterm", itermIconUrl],
+  ["github-desktop", githubDesktopIconUrl],
+  ["xcode", xcodeIconUrl],
+  ["antigravity", antigravityIconUrl],
+  ["codex", chatgptIconUrl],
+  ["claude", claudeIconUrl],
+  ["t3code", t3codeIconUrl],
+  ["windsurf", windsurfIconUrl],
+  ["vscodium", vscodiumIconUrl],
+  ["sublime", sublimeIconUrl],
+]);
+
+const SVG_ICON = new Map<string, ComponentType<{ className: string }>>([
+  ["finder", FileManagerIcon],
+  ["intellij", Intellijidea],
+  ["webstorm", Webstorm],
+  ["phpstorm", Phpstorm],
+  ["pycharm", Pycharm],
+  ["rider", Rider],
+  ["rubymine", Rubymine],
+  // JetBrains IDEs without a dedicated logo on svgl fall back to the
+  // generic JetBrains mark.
+  ["aqua", JetbrainsSolid],
+  ["clion", JetbrainsSolid],
+  ["datagrip", JetbrainsSolid],
+  ["dataspell", JetbrainsSolid],
+  ["goland", JetbrainsSolid],
+  ["rustrover", JetbrainsSolid],
+]);
 
 export function LauncherIcon({
   entry,
@@ -57,65 +94,8 @@ export function LauncherIcon({
   }
 
   const appId = parseLauncherId(entry.id)?.id ?? entry.id;
-  switch (appId) {
-    case "cursor":
-      return <AppIcon src={cursorIconUrl} className={className} />;
-    case "vscode":
-      return <AppIcon src={vscodeIconUrl} className={className} />;
-    case "vscode-insiders":
-      return <AppIcon src={vscodeInsidersIconUrl} className={className} />;
-    case "zed":
-      return <AppIcon src={zedIconUrl} className={className} />;
-    case "cmux":
-      return <AppIcon src={cmuxIconUrl} className={className} />;
-    case "ghostty":
-      return <AppIcon src={ghosttyIconUrl} className={className} />;
-    case "terminal":
-      return <AppIcon src={terminalIconUrl} className={className} />;
-    case "iterm":
-      return <AppIcon src={itermIconUrl} className={className} />;
-    case "github-desktop":
-      return <AppIcon src={githubDesktopIconUrl} className={className} />;
-    case "xcode":
-      return <AppIcon src={xcodeIconUrl} className={className} />;
-    case "finder":
-      return <FileManagerIcon className={className} />;
-    case "antigravity":
-      return <AppIcon src={antigravityIconUrl} className={className} />;
-    case "codex":
-      return <AppIcon src={chatgptIconUrl} className={className} />;
-    case "claude":
-      return <AppIcon src={claudeIconUrl} className={className} />;
-    case "t3code":
-      return <AppIcon src={t3codeIconUrl} className={className} />;
-    case "windsurf":
-      return <AppIcon src={windsurfIconUrl} className={className} />;
-    case "vscodium":
-      return <AppIcon src={vscodiumIconUrl} className={className} />;
-    case "sublime":
-      return <AppIcon src={sublimeIconUrl} className={className} />;
-    case "intellij":
-      return <Intellijidea className={className} />;
-    case "webstorm":
-      return <Webstorm className={className} />;
-    case "phpstorm":
-      return <Phpstorm className={className} />;
-    case "pycharm":
-      return <Pycharm className={className} />;
-    case "rider":
-      return <Rider className={className} />;
-    case "rubymine":
-      return <Rubymine className={className} />;
-    // JetBrains IDEs without a dedicated logo on svgl fall back to the
-    // generic JetBrains mark.
-    case "aqua":
-    case "clion":
-    case "datagrip":
-    case "dataspell":
-    case "goland":
-    case "rustrover":
-      return <JetbrainsSolid className={className} />;
-    default:
-      return <Sparkles className={className} />;
-  }
+  const url = APP_ICON_URL.get(appId);
+  if (url !== undefined) return <img src={url} alt="" className={className} />;
+  const Icon = SVG_ICON.get(appId) ?? Sparkles;
+  return <Icon className={className} />;
 }

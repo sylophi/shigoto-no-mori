@@ -1,4 +1,13 @@
+import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useRef, useState } from "react";
+
+// A per-key setter over a form's state setter, so a control bound to
+// one field reads `onCheckedChange={setField("autoPullNew")}`.
+export function fieldSetter<T>(setForm: Dispatch<SetStateAction<T>>) {
+  return <K extends keyof T>(key: K) =>
+    (value: T[K]) =>
+      setForm((prev) => ({ ...prev, [key]: value }));
+}
 
 // Tracks a form value against its last-saved snapshot. Dirty detection
 // is a JSON.stringify comparison, which is fine for the shallow,

@@ -17,3 +17,20 @@ export function SectionHeading({ children, className }: SectionHeadingProps) {
     </h2>
   );
 }
+
+// A settings-style section's heading with the paragraph that explains
+// the section right under it.
+export function SectionIntro({
+  title,
+  children,
+}: {
+  title: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <SectionHeading className="mb-1">{title}</SectionHeading>
+      <p className="text-xs text-muted-foreground">{children}</p>
+    </div>
+  );
+}

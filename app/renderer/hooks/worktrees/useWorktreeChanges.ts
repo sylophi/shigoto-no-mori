@@ -3,6 +3,7 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  skipToken,
 } from "@tanstack/react-query";
 import { changeKey } from "@shared/schemas";
 import type {
@@ -13,7 +14,11 @@ import type {
   ResetSoftResult,
   Worktree,
 } from "@shared/schemas";
-import { useHostScope, type HostScope } from "@/hooks/remote/useHostScope";
+import {
+  useHostScope,
+  type HostApi,
+  type HostScope,
+} from "@/hooks/remote/useHostScope";
 import { clearCommitDraft } from "@/lib/commitDraft";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 
@@ -32,11 +37,9 @@ export function useWorktreeChanges(
   const { api, keys } = useHostScope();
   return useQuery<ChangedFile[]>({
     queryKey: keys.worktreeChanges(projectId, worktreeId),
-    queryFn: () => {
-      if (!worktreeId) return [];
-      return api.worktrees.changeStatus({ projectId, worktreeId });
-    },
-    enabled: !!worktreeId,
+    queryFn: worktreeId
+      ? () => api.worktrees.changeStatus({ projectId, worktreeId })
+      : skipToken,
     refetchOnWindowFocus: options.refetchOnWindowFocus,
     // Same reasoning as the diff: the index is shared with every terminal
     // open on the worktree, so re-entering the page must re-read it.
@@ -106,8 +109,7 @@ export function useSetStaged() {
 function invalidateWorkingTree(
   queryClient: ReturnType<typeof useQueryClient>,
   keys: QueryKeyRegistry,
-  projectId: string,
-  worktreeId: string,
+  { projectId, worktreeId }: { projectId: string; worktreeId: string },
   worktree: Worktree,
 ): void {
   queryClient.setQueryData<Worktree[]>(keys.worktrees(projectId), (list) =>
@@ -118,6 +120,26 @@ function invalidateWorkingTree(
   });
   void queryClient.invalidateQueries({
     queryKey: keys.worktreeChanges(projectId, worktreeId),
+  });
+}
+
+// Discard, restore and undo share one shape: call the api, then write
+// back the worktree the call answers with and refresh the working tree.
+function useWorkingTreeMutation<
+  Input extends { projectId: string; worktreeId: string },
+  Result,
+>(
+  call: (api: HostApi, input: Input) => Promise<Result>,
+  worktreeOf: (result: Result) => Worktree,
+  errorTitle: string,
+) {
+  const queryClient = useQueryClient();
+  const { api, keys } = useHostScope();
+  return useMutation<Result, Error, Input>({
+    mutationFn: (input) => call(api, input),
+    onSuccess: (data, vars) =>
+      invalidateWorkingTree(queryClient, keys, vars, worktreeOf(data)),
+    meta: { errorTitle },
   });
 }
 
@@ -139,13 +161,7 @@ export function useCommitChanges() {
       // The page empties its own draft state. This covers the stored
       // copy when the page was left before the commit landed.
       clearCommitDraft(vars.projectId, vars.worktreeId);
-      invalidateWorkingTree(
-        queryClient,
-        keys,
-        vars.projectId,
-        vars.worktreeId,
-        data.worktree,
-      );
+      invalidateWorkingTree(queryClient, keys, vars, data.worktree);
     },
     // A commit-all stages everything before git can refuse (a hook, no
     // identity), so the ticks have to be re-read either way.
@@ -167,20 +183,11 @@ interface DiscardInput {
 }
 
 export function useDiscardChanges() {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
-  return useMutation<DiscardChangesResult, Error, DiscardInput>({
-    mutationFn: (input) => api.worktrees.discardChanges(input),
-    onSuccess: (data, vars) =>
-      invalidateWorkingTree(
-        queryClient,
-        keys,
-        vars.projectId,
-        vars.worktreeId,
-        data.worktree,
-      ),
-    meta: { errorTitle: "Couldn't discard changes" },
-  });
+  return useWorkingTreeMutation<DiscardInput, DiscardChangesResult>(
+    (api, input) => api.worktrees.discardChanges(input),
+    (data) => data.worktree,
+    "Couldn't discard changes",
+  );
 }
 
 interface RestoreDiscardInput {
@@ -190,20 +197,11 @@ interface RestoreDiscardInput {
 }
 
 export function useRestoreDiscard() {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
-  return useMutation<Worktree, Error, RestoreDiscardInput>({
-    mutationFn: (input) => api.worktrees.restoreDiscard(input),
-    onSuccess: (worktree, vars) =>
-      invalidateWorkingTree(
-        queryClient,
-        keys,
-        vars.projectId,
-        vars.worktreeId,
-        worktree,
-      ),
-    meta: { errorTitle: "Couldn't restore the discarded changes" },
-  });
+  return useWorkingTreeMutation<RestoreDiscardInput, Worktree>(
+    (api, input) => api.worktrees.restoreDiscard(input),
+    (worktree) => worktree,
+    "Couldn't restore the discarded changes",
+  );
 }
 
 // The message of one commit, for prefilling an amend. Immutable per
@@ -234,18 +232,9 @@ interface ResetSoftInput {
 // Undo (and redo) of commits. Both end in the same place: HEAD moved,
 // index and working tree as they were, so the same refresh covers it.
 export function useResetSoft() {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
-  return useMutation<ResetSoftResult, Error, ResetSoftInput>({
-    mutationFn: (input) => api.worktrees.resetSoft(input),
-    onSuccess: (data, vars) =>
-      invalidateWorkingTree(
-        queryClient,
-        keys,
-        vars.projectId,
-        vars.worktreeId,
-        data.worktree,
-      ),
-    meta: { errorTitle: "Couldn't undo the commit" },
-  });
+  return useWorkingTreeMutation<ResetSoftInput, ResetSoftResult>(
+    (api, input) => api.worktrees.resetSoft(input),
+    (data) => data.worktree,
+    "Couldn't undo the commit",
+  );
 }

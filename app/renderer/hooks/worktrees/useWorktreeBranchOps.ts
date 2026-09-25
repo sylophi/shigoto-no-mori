@@ -1,7 +1,5 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Worktree } from "@shared/schemas";
-import { invalidateBranchState } from "@/hooks/git/useBranches";
-import { useHostScope } from "@/hooks/remote/useHostScope";
+import { useBranchMutation } from "@/hooks/git/useBranches";
 
 interface RenameBranchInput {
   projectId: string;
@@ -10,16 +8,12 @@ interface RenameBranchInput {
 }
 
 export function useRenameBranch() {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
-  return useMutation<Worktree, Error, RenameBranchInput>({
-    mutationFn: (input) => api.worktrees.renameBranch(input),
-    onSuccess: (_data, vars) =>
-      invalidateBranchState(queryClient, keys, vars.projectId),
+  return useBranchMutation<RenameBranchInput, Worktree>(
+    (api, input) => api.worktrees.renameBranch(input),
     // The inline rename input surfaces the error next to the field; a
     // global toast on top would be noise.
-    meta: { silentError: true },
-  });
+    { silentError: true },
+  );
 }
 
 interface CheckoutBranchInput {
@@ -29,16 +23,12 @@ interface CheckoutBranchInput {
 }
 
 export function useCheckoutBranch() {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
-  return useMutation<Worktree, Error, CheckoutBranchInput>({
-    mutationFn: (input) => api.worktrees.checkoutBranch(input),
-    onSuccess: (_data, vars) =>
-      invalidateBranchState(queryClient, keys, vars.projectId),
+  return useBranchMutation<CheckoutBranchInput, Worktree>(
+    (api, input) => api.worktrees.checkoutBranch(input),
     // A toast, not the combobox: picking a branch closes the dropdown,
     // so an error shown inside it would never be seen.
-    meta: { errorTitle: "Couldn't switch branches" },
-  });
+    { errorTitle: "Couldn't switch branches" },
+  );
 }
 
 interface SwitchToPrimaryInput {
@@ -56,12 +46,8 @@ interface SwitchToPrimaryInput {
 // replaced).
 // Errors surface via a global toast so they survive the box unmounting.
 export function useSwitchToPrimaryAndDeleteBranch() {
-  const queryClient = useQueryClient();
-  const { api, keys } = useHostScope();
-  return useMutation<Worktree, Error, SwitchToPrimaryInput>({
-    mutationFn: (input) => api.worktrees.switchToPrimaryAndDeleteBranch(input),
-    onSuccess: (_data, vars) =>
-      invalidateBranchState(queryClient, keys, vars.projectId),
-    meta: { errorTitle: "Couldn't clean up the merged branch" },
-  });
+  return useBranchMutation<SwitchToPrimaryInput, Worktree>(
+    (api, input) => api.worktrees.switchToPrimaryAndDeleteBranch(input),
+    { errorTitle: "Couldn't clean up the merged branch" },
+  );
 }

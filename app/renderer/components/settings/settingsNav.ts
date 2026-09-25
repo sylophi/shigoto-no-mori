@@ -138,26 +138,24 @@ export function settingsSections(
   }
   const deviceRows: SettingsSection[] = [];
   if (hasLocalHost) {
-    const update = updates[localDeviceId];
     deviceRows.push({
       id: LOCAL_DEVICE_TAB,
       label: local.name,
       deviceIcon: local.icon,
       tone: solo ? undefined : THIS_DEVICE_VIEW.tone,
       title: "This device: the machine this window runs on",
-      update,
+      update: updates[localDeviceId],
     });
   }
   for (const device of devices) {
     const { tone, label } = deviceStatusView(device.status);
-    const update = updates[device.deviceId];
     deviceRows.push({
       id: deviceTab(device.deviceId),
       label: device.label,
       deviceIcon: device.icon,
       tone,
       title: `${device.label}: ${label}`,
-      update,
+      update: updates[device.deviceId],
     });
   }
   return { visual, devices: deviceRows };

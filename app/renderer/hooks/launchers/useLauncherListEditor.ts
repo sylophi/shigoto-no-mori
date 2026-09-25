@@ -8,30 +8,25 @@ import type { LauncherCommand } from "@shared/schemas";
 export function useLauncherListEditor<
   F extends { launchers: LauncherCommand[] },
 >(setForm: Dispatch<SetStateAction<F>>) {
+  const edit = (f: (launchers: LauncherCommand[]) => LauncherCommand[]) => {
+    setForm((prev) => ({ ...prev, launchers: f(prev.launchers) }));
+  };
+
   const addLauncher = () => {
-    setForm((prev) => ({
-      ...prev,
-      launchers: [
-        ...prev.launchers,
-        { id: crypto.randomUUID(), label: "", command: "" },
-      ],
-    }));
+    edit((launchers) => [
+      ...launchers,
+      { id: crypto.randomUUID(), label: "", command: "" },
+    ]);
   };
 
   const updateLauncher = (id: string, patch: Partial<LauncherCommand>) => {
-    setForm((prev) => ({
-      ...prev,
-      launchers: prev.launchers.map((l) =>
-        l.id === id ? { ...l, ...patch } : l,
-      ),
-    }));
+    edit((launchers) =>
+      launchers.map((l) => (l.id === id ? { ...l, ...patch } : l)),
+    );
   };
 
   const removeLauncher = (id: string) => {
-    setForm((prev) => ({
-      ...prev,
-      launchers: prev.launchers.filter((l) => l.id !== id),
-    }));
+    edit((launchers) => launchers.filter((l) => l.id !== id));
   };
 
   return { addLauncher, updateLauncher, removeLauncher };

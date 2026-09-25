@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { EditorFooter } from "@/components/shared/EditorFooter";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { PathSpan } from "@/components/ui/path-span";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
+import { SectionHeading, SectionIntro } from "@/components/ui/section-heading";
+import { fieldSetter, useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { useLauncherListEditor } from "@/hooks/launchers/useLauncherListEditor";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
@@ -106,6 +106,7 @@ export function ConfigureForm({
 
   const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty, reseed } =
     useDirtyForm<FormState>(fromConfig(initialConfig, resolvedDefaultBranch));
+  const setField = fieldSetter(setForm);
   const canSave = isDirty && form.defaultBranch.trim().length > 0;
 
   // The config can change underneath an open draft: creating a worktree
@@ -202,12 +203,9 @@ export function ConfigureForm({
           </section>
 
           <section className="space-y-3">
-            <div>
-              <SectionHeading className="mb-1">Worktrees</SectionHeading>
-              <p className="text-xs text-muted-foreground">
-                Settings for branches created inside this project.
-              </p>
-            </div>
+            <SectionIntro title="Worktrees">
+              Settings for branches created inside this project.
+            </SectionIntro>
             <div className="space-y-1.5">
               <label
                 htmlFor="default-branch"
@@ -219,9 +217,7 @@ export function ConfigureForm({
                 id="default-branch"
                 projectId={projectId}
                 value={form.defaultBranch}
-                onChange={(v) =>
-                  setForm((prev) => ({ ...prev, defaultBranch: v }))
-                }
+                onChange={setField("defaultBranch")}
                 placeholder={resolvedDefaultBranch}
               />
               <p className="text-xs text-muted-foreground">
@@ -238,9 +234,7 @@ export function ConfigureForm({
             <SectionHeading className="mb-1">Primary checkout</SectionHeading>
             <ToggleRow
               checked={form.showPrimaryInInbox}
-              onCheckedChange={(v) =>
-                setForm((prev) => ({ ...prev, showPrimaryInInbox: v }))
-              }
+              onCheckedChange={setField("showPrimaryInInbox")}
               label="Show in the inbox"
               description="Lists it alongside the worktrees. The project view always shows it."
             />
@@ -251,9 +245,7 @@ export function ConfigureForm({
             projectPath={projectPath}
             entries={form.carryOver}
             useWorktreeInclude={form.useWorktreeInclude}
-            onToggleUseWorktreeInclude={(useWorktreeInclude) =>
-              setForm((prev) => ({ ...prev, useWorktreeInclude }))
-            }
+            onToggleUseWorktreeInclude={setField("useWorktreeInclude")}
             onAdd={addCarryOver}
             onChangeMode={updateCarryOverMode}
             onRemove={removeCarryOver}
@@ -280,49 +272,44 @@ export function ConfigureForm({
               id="script-setup"
               label="Setup"
               value={form.setup}
-              onChange={(setup) => setForm((prev) => ({ ...prev, setup }))}
+              onChange={setField("setup")}
             />
             <ScriptField
               id="script-teardown"
               label="Teardown"
               value={form.teardown}
-              onChange={(teardown) =>
-                setForm((prev) => ({ ...prev, teardown }))
-              }
+              onChange={setField("teardown")}
             />
           </section>
 
           <section className="space-y-3">
-            <div>
-              <SectionHeading className="mb-1">Custom tools</SectionHeading>
-              {/* The Settings link opens THIS machine's launch tools, which
-                  say nothing about a peer's. A remote project's tools run
-                  from the window on that device, so say that instead. */}
-              <p className="text-xs text-muted-foreground">
-                {remote ? (
-                  <>
-                    Tools specific to this project, launched from {deviceLabel}
-                    &apos;s own window.
-                  </>
-                ) : (
-                  <>
-                    Tools specific to this project. For tools you want available
-                    in every project (editors, agents), use{" "}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        selectSettingsTab(LAUNCH_TAB);
-                        void navigate({ to: "/settings" });
-                      }}
-                      className="underline underline-offset-2 hover:text-foreground"
-                    >
-                      Settings
-                    </button>
-                    .
-                  </>
-                )}
-              </p>
-            </div>
+            {/* The Settings link opens THIS machine's launch tools, which
+                say nothing about a peer's. A remote project's tools run
+                from the window on that device, so say that instead. */}
+            <SectionIntro title="Custom tools">
+              {remote ? (
+                <>
+                  Tools specific to this project, launched from {deviceLabel}
+                  &apos;s own window.
+                </>
+              ) : (
+                <>
+                  Tools specific to this project. For tools you want available
+                  in every project (editors, agents), use{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      selectSettingsTab(LAUNCH_TAB);
+                      void navigate({ to: "/settings" });
+                    }}
+                    className="underline underline-offset-2 hover:text-foreground"
+                  >
+                    Settings
+                  </button>
+                  .
+                </>
+              )}
+            </SectionIntro>
             {form.launchers.length === 0 ? (
               <p className="text-xs text-muted-foreground/70">
                 None yet. Add one to run a project-specific command in the

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip-button";
 import { Input } from "@/components/ui/input";
 import { normalizeHiddenPrefixes } from "@shared/sharedSettings";
-import { SectionHeading } from "@/components/ui/section-heading";
+import { SectionIntro } from "@/components/ui/section-heading";
 import {
   useHiddenWorktreePrefixes,
   useSaveHiddenWorktreePrefixes,
@@ -48,12 +48,9 @@ export function HiddenWorktreesSection() {
 
   return (
     <section className="space-y-3">
-      <div>
-        <SectionHeading className="mb-1">Hidden worktrees</SectionHeading>
-        <p className="text-xs text-muted-foreground">
-          Hide worktrees whose name or branch starts with any of these.
-        </p>
-      </div>
+      <SectionIntro title="Hidden worktrees">
+        Hide worktrees whose name or branch starts with any of these.
+      </SectionIntro>
       {prefixes.length > 0 && (
         <ul aria-label="Hidden prefixes" className="flex flex-wrap gap-1.5">
           {prefixes.map((prefix) => (

@@ -1,6 +1,7 @@
 import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";
 import { localDeviceId, queryKeysFor } from "@/lib/queryKeys";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
+import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 
 export interface CommandAccess {
   granted: boolean;
@@ -104,4 +105,17 @@ export function usePeerCommandAccess(
         ]),
       ),
   });
+}
+
+// The api to command a peer through from here, by device id: its
+// session's, while that peer lets this device command it (a verdict
+// still in flight counts, as canCommand has it), else undefined. The
+// lookup the group actions and the inbox's create button share.
+export function useCommandableApi(): (deviceId: string) => HostApi | undefined {
+  const registry = useRemoteDevices();
+  const access = usePeerCommandAccess(registry);
+  return (deviceId) =>
+    commandAccessOf(access, deviceId).canCommand
+      ? registry.find((device) => device.deviceId === deviceId)?.api
+      : undefined;
 }

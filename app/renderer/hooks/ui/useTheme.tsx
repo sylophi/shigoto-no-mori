@@ -20,14 +20,12 @@ const ThemeContext = createContext<ThemeState | null>(null);
 const THEME_STORAGE_KEY = "shigomori.theme";
 
 function getSystemTheme(): "light" | "dark" {
-  if (typeof window === "undefined") return "light";
   return window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";
 }
 
 function readBootHint(): Theme {
-  if (typeof window === "undefined") return "system";
   const stored = readStored(THEME_STORAGE_KEY);
   if (stored === "light" || stored === "dark" || stored === "system") {
     return stored;
@@ -67,12 +65,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const resolved = applied === "system" ? systemTheme : applied;
 
   useEffect(() => {
-    const root = document.documentElement;
-    if (resolved === "dark") {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
+    document.documentElement.classList.toggle("dark", resolved === "dark");
   }, [resolved]);
 
   // Keep the main process in sync so the BrowserWindow background tracks

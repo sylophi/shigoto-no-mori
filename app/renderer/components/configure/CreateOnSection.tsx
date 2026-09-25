@@ -9,7 +9,7 @@
 import { Check } from "lucide-react";
 import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import { RowTag } from "@/components/ui/row-tag";
-import { SectionHeading } from "@/components/ui/section-heading";
+import { SectionIntro } from "@/components/ui/section-heading";
 import { THIS_DEVICE_VIEW } from "@/lib/remote/deviceStatus";
 import {
   useQuickCreateDeviceId,
@@ -41,12 +41,9 @@ export function CreateOnSection({ project }: { project: Project }) {
 
   return (
     <section className="space-y-3">
-      <div>
-        <SectionHeading className="mb-1">Create on</SectionHeading>
-        <p className="text-xs text-muted-foreground">
-          The device where this project&apos;s + button creates new worktrees.
-        </p>
-      </div>
+      <SectionIntro title="Create on">
+        The device where this project&apos;s + button creates new worktrees.
+      </SectionIntro>
       <div
         role="radiogroup"
         aria-label="Create on"

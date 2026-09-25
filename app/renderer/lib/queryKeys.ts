@@ -376,17 +376,17 @@ export function invalidateHostDevice(
   });
 }
 
-// The queries a worktree owns on a device, for cancelling or dropping
-// them together when it goes: every host key of that device that
-// names the worktree id anywhere. Scoped by device, since worktree ids
-// are path hashes that can collide across the owner's machines.
-export function worktreeQueriesOn(
+// The queries a worktree or project owns on a device, for cancelling
+// or dropping them together when it goes: every host key of that
+// device that names the id anywhere. Scoped by device, since worktree
+// ids are path hashes that can collide across the owner's machines
+// (and a project id can coincide likewise).
+export function hostQueriesNaming(
   deviceId: string,
-  worktreeId: string,
+  id: string,
 ): (query: { queryKey: readonly unknown[] }) => boolean {
   return (query) =>
-    hostKeyDeviceId(query.queryKey) === deviceId &&
-    query.queryKey.includes(worktreeId);
+    hostKeyDeviceId(query.queryKey) === deviceId && query.queryKey.includes(id);
 }
 
 // The PROJECT-SCOPED sweep, for git:projectChanged: one project's git
