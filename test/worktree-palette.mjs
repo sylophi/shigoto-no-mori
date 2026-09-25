@@ -5,8 +5,10 @@
 // pair once (as its local row, wearing the peer's badge). Visits lead
 // the order, keyed per device so the same worktree id on two machines
 // is two entries, and last activity orders the rest. A query matches
-// the branch, the folder, "project branch", or a peer's device label.
-// The palette opens highlighting the worktree before the one on screen.
+// the branch, the folder, "project branch", or a peer's device label,
+// and a hidden-prefix worktree shows only for one. The palette opens
+// highlighting the worktree before the one on screen, a mirrored peer's
+// page counting as its local row.
 //
 // Runs under test/lib/register-ts-alias.mjs. Run: pnpm test worktree-palette.
 import assert from "node:assert/strict";
@@ -82,7 +84,7 @@ const mirrors = [
   },
 ];
 
-function entries(visits = {}) {
+function palette(visits = {}, hiddenPrefixes = []) {
   return buildPaletteEntries({
     projects: [forest, lantern],
     worktreeQueries: localTrees.map((data) => ({
@@ -93,9 +95,12 @@ function entries(visits = {}) {
     remote: [peerForest],
     mirrors,
     deviceBadges: new Map(),
+    hiddenPrefixes,
     visits,
   });
 }
+
+const entries = (visits) => palette(visits).entries;
 
 const keys = (list) => list.map((entry) => entry.key);
 const local = (id) => worktreeRowKey(undefined, id);
@@ -177,6 +182,29 @@ try {
       local("wick"),
     );
     assert.equal(initialPaletteKey([], undefined), "");
+  });
+
+  await proof.check("a mirrored peer's page stands for its local row", () => {
+    const peerPage = onPeer("mirror-of-oak");
+    const { entries: list, entryKeyOf } = palette({
+      [peerPage]: 30,
+      [local("wick")]: 20,
+    });
+    assert.equal(entryKeyOf(peerPage), local("oak"));
+    assert.equal(entryKeyOf(onPeer("pine")), onPeer("pine"));
+    assert.equal(list[0].key, local("oak"), "the peer's visit lifts it");
+    assert.equal(
+      initialPaletteKey(list, entryKeyOf(peerPage)),
+      local("wick"),
+      "and the palette opens past it",
+    );
+  });
+
+  await proof.check("hidden prefixes wait for a query", () => {
+    const { entries: list } = palette({}, ["fix/"]);
+    const ranked = (query) => keys(rankPaletteEntries(query, list));
+    assert.ok(!ranked("").includes(local("wick")), "not listed unasked");
+    assert.deepEqual(ranked("wick"), [local("wick")], "found by name");
   });
 
   proof.done();

@@ -2,6 +2,7 @@ import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
 import { rankByScore } from "@/lib/fuzzyMatch";
+import { isHiddenByPrefix } from "@shared/sharedSettings";
 import {
   worktreeLastActivityAt,
   type Project,
@@ -25,6 +26,15 @@ export interface PaletteEntry {
   device: SidebarDeviceBadge | undefined;
   // The peer a local worktree is mirrored with (its peer row folds in).
   mirror: SidebarDeviceBadge | undefined;
+  // Matches a hidden-worktree prefix: listed only for a query.
+  hidden: boolean;
+}
+
+export interface PaletteList {
+  entries: PaletteEntry[];
+  // The entry standing for a row key: a mirrored peer worktree's is
+  // its local copy's, the row it folds into.
+  entryKeyOf: (rowKey: string) => string;
 }
 
 interface BuildPaletteEntriesArgs {
@@ -34,6 +44,7 @@ interface BuildPaletteEntriesArgs {
   remote: RemoteForestItem[];
   mirrors: readonly MirrorLink[];
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
+  hiddenPrefixes: readonly string[];
   // recordWorktreeVisit's record by row key, read once per open.
   visits: Record<string, number>;
 }
@@ -42,19 +53,22 @@ interface BuildPaletteEntriesArgs {
 // without its shelves: shelved, merged and primary checkouts all
 // included, since a palette is for finding things, not triage. Where
 // you were last leads (this window's visits), and the rest follow by
-// their own last activity.
+// their own last activity. Worktrees under a hidden prefix wait for a
+// query, the way the sidebar keeps them behind a fold.
 export function buildPaletteEntries({
   projects,
   worktreeQueries,
   remote,
   mirrors,
   deviceBadges,
+  hiddenPrefixes,
   visits,
-}: BuildPaletteEntriesArgs): PaletteEntry[] {
+}: BuildPaletteEntriesArgs): PaletteList {
   const { peerRowsFolded, peerOfLocal } = mirrorPairsOf(mirrors);
   const mirrorBadgeFor = mirrorBadgeLookup(peerOfLocal, deviceBadges);
   const entries: PaletteEntry[] = [];
   const localIds = new Set<string>();
+  const folds = new Map<string, string>();
 
   projects.forEach((project, i) => {
     const trees = (worktreeQueries[i]?.data ?? []) as Worktree[];
@@ -66,6 +80,7 @@ export function buildPaletteEntries({
         project,
         device: undefined,
         mirror: mirrorBadgeFor(worktree),
+        hidden: isHiddenByPrefix(worktree, hiddenPrefixes),
       });
     }
   });
@@ -75,24 +90,36 @@ export function buildPaletteEntries({
       const key = worktreeRowKey(item.deviceId, worktree.id);
       // The local row of a mirrored pair stands for both copies.
       const folded = peerRowsFolded.get(key);
-      if (folded !== undefined && localIds.has(folded)) continue;
+      if (folded !== undefined && localIds.has(folded)) {
+        folds.set(key, worktreeRowKey(undefined, folded));
+        continue;
+      }
       entries.push({
         key,
         worktree,
         project: item.project,
         device,
         mirror: undefined,
+        hidden: isHiddenByPrefix(worktree, hiddenPrefixes),
       });
     }
   }
 
-  const visitedAt = (entry: PaletteEntry) => visits[entry.key] ?? 0;
-  return entries.toSorted(
+  const entryKeyOf = (rowKey: string) => folds.get(rowKey) ?? rowKey;
+  // A mirrored pair's visits on either side count for its one entry.
+  const lastVisit = new Map<string, number>();
+  for (const [rowKey, at] of Object.entries(visits)) {
+    const key = entryKeyOf(rowKey);
+    lastVisit.set(key, Math.max(lastVisit.get(key) ?? 0, at));
+  }
+  const visitedAt = (entry: PaletteEntry) => lastVisit.get(entry.key) ?? 0;
+  const sorted = entries.toSorted(
     (a, b) =>
       visitedAt(b) - visitedAt(a) ||
       worktreeLastActivityAt(b.worktree) - worktreeLastActivityAt(a.worktree) ||
       a.worktree.name.localeCompare(b.worktree.name),
   );
+  return { entries: sorted, entryKeyOf };
 }
 
 // The row ↩ lands on when the palette opens. The worktree on screen
@@ -111,11 +138,12 @@ export function initialPaletteKey(
 // Best field wins: a query can name the branch, the folder, the
 // project (alone or ahead of the branch, "sm feat"), or the device, so
 // "thinkpad" narrows to that machine's work. Ties keep the recency
-// order, since the sort is stable.
+// order, since the sort is stable. No query lists all but the hidden.
 export function rankPaletteEntries(
   query: string,
   entries: readonly PaletteEntry[],
 ): readonly PaletteEntry[] {
+  if (!query) return entries.filter((entry) => !entry.hidden);
   return rankByScore(query, entries, ({ worktree, project, device }) => [
     worktree.branch,
     worktree.name,

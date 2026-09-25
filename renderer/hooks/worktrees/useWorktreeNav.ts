@@ -117,17 +117,10 @@ export function useWorktreeNav() {
     // remote page) or on a peer (under that device's twin, even
     // though the action ran from a local one).
     toDeviceWorktree(landedOn: string, projectId: string, worktreeId: string) {
-      void navigate(
-        landedOn === localDeviceId
-          ? {
-              to: WORKTREE_ROUTE_PATHS.detail.local,
-              params: { projectId, worktreeId },
-            }
-          : {
-              to: WORKTREE_ROUTE_PATHS.detail.remote,
-              params: { deviceId: landedOn, projectId, worktreeId },
-            },
-      );
+      goOn(landedOn === localDeviceId ? undefined : landedOn, "detail", {
+        projectId,
+        worktreeId,
+      });
     },
 
     // Any worktree page on a NAMED machine, whatever the surrounding

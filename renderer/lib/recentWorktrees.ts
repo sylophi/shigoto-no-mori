@@ -33,8 +33,16 @@ export function getRecentWorktree(projectId: string): string | null {
 const VISITS_KEY = "recentWorktree.visits";
 const MAX_VISITS = 100;
 
+// Anything but a finite timestamp (a hand-edited or corrupt record) is
+// dropped, so the palette's sort always compares numbers.
 export function readWorktreeVisits(): Record<string, number> {
-  return readStoredJson<Record<string, number>>(VISITS_KEY, {});
+  const stored = readStoredJson<Record<string, unknown>>(VISITS_KEY, {});
+  return Object.fromEntries(
+    Object.entries(stored).filter(
+      (entry): entry is [string, number] =>
+        typeof entry[1] === "number" && Number.isFinite(entry[1]),
+    ),
+  );
 }
 
 export function recordWorktreeVisit(rowKey: string): void {

@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useParams } from "@tanstack/react-router";
 import { Command } from "cmdk";
 import { ArrowDown, ArrowUp, FileDiff, Folder, Play } from "lucide-react";
@@ -25,10 +25,11 @@ import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { useSortedPackageScripts } from "@/hooks/scripts/usePackageScriptSort";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
+import { useHiddenWorktreePrefixes } from "@/hooks/sharedSettings/useHiddenWorktreePrefixes";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { isOverlayOpen, isRawKeySurface } from "@/lib/dom";
+import { isEditableTarget, isOverlayOpen } from "@/lib/dom";
 import { rankByScore } from "@/lib/fuzzyMatch";
 import { hasLocalHost } from "@/lib/localHost";
 import { readWorktreeVisits, recordWorktreeVisit } from "@/lib/recentWorktrees";
@@ -63,18 +64,31 @@ export function WorktreePalette() {
     if (pageKey !== undefined) recordWorktreeVisit(pageKey);
   }, [pageKey]);
 
+  // Where focus was when the palette opened, handed back when it
+  // closes. Captured in the keydown, before the input's autoFocus
+  // takes it.
+  const returnFocus = useRef<Element | null>(null);
+  useEffect(() => {
+    if (open) return;
+    const previous = returnFocus.current;
+    returnFocus.current = null;
+    if (previous instanceof HTMLElement) previous.focus();
+  }, [open]);
+
   // On window, like the launcher's backtick, so it works wherever focus
-  // sits. A modifier chord, so it fires from text fields too. The one
-  // exception is Ctrl+K inside the script console's terminal, where it
-  // is the running program's kill-line. Opening waits for any other
-  // overlay to close; closing is the palette's own toggle.
+  // sits. ⌘K fires from text fields too. Ctrl+K doesn't: in a text
+  // field it is kill-line (macOS's text system, and the running
+  // program's in the console's terminal), so there it only closes the
+  // palette. Opening waits for any other overlay to close; closing is
+  // the palette's own toggle.
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key.toLowerCase() !== "k" || e.repeat || e.isComposing) return;
       if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return;
-      if (e.ctrlKey && isRawKeySurface(e.target)) return;
+      if (!open && !e.metaKey && isEditableTarget(e.target)) return;
       if (!open && isOverlayOpen()) return;
       e.preventDefault();
+      if (!open) returnFocus.current = document.activeElement;
       setOpen(!open);
     };
     window.addEventListener("keydown", onKey);
@@ -116,12 +130,14 @@ function PaletteDialog({
   const { items: remote } = useRemoteForests();
   const mirrors = useMirrorLinks();
   const deviceBadges = useDeviceBadges();
-  const entries = buildPaletteEntries({
+  const hiddenPrefixes = useHiddenWorktreePrefixes();
+  const { entries, entryKeyOf } = buildPaletteEntries({
     projects,
     worktreeQueries,
     remote,
     mirrors,
     deviceBadges,
+    hiddenPrefixes,
     visits,
   });
   const shown = rankPaletteEntries(query.trim(), entries);
@@ -129,7 +145,7 @@ function PaletteDialog({
   // reads are warm, so it is already filled). cmdk takes over from
   // there, moving to the top match as the query changes.
   const [highlighted, setHighlighted] = useState(() =>
-    initialPaletteKey(entries, pageKey),
+    initialPaletteKey(shown, pageKey && entryKeyOf(pageKey)),
   );
   const current = shown.find((entry) => entry.key === highlighted) ?? shown[0];
 
@@ -149,6 +165,8 @@ function PaletteDialog({
     setHighlighted("");
   };
 
+  // Back on the list, the worktree the actions were for is highlighted
+  // again (the Command remounts per stage, see below).
   const back = () => {
     setPicked(null);
     setQuery("");
@@ -160,12 +178,16 @@ function PaletteDialog({
       if (e.key === "Backspace" && query === "") {
         e.preventDefault();
         back();
+      } else if (e.key === "Tab") {
+        // Already in the actions. The shell doesn't trap focus, so a
+        // second Tab would leave for the page underneath.
+        e.preventDefault();
       }
       return;
     }
     if (!current) return;
     const atEnd = e.currentTarget.selectionStart === query.length;
-    if (e.key === "Enter" && e.metaKey) {
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       e.stopPropagation();
       go(current, "diff");
@@ -185,7 +207,11 @@ function PaletteDialog({
 
   return (
     <ModalShell onClose={onClose} onEscape={onEscape}>
+      {/* Keyed by stage: a query cleared in place makes cmdk jump to its
+          first row, which would undo the highlight back() restores. A
+          fresh mount keeps the highlight it is handed. */}
       <Command
+        key={picked ? "actions" : "worktrees"}
         label="Worktrees"
         loop
         shouldFilter={false}
