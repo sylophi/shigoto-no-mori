@@ -190,9 +190,10 @@ export const GlobalConfigSchema = z.object({
   // added project. Nothing on its own.
   autoPullPrimaryOnly: z.boolean().optional(),
   // When true, auto-picked worktree names are Animal Crossing villager
-  // and character names (cli/embed/doubutsu-names.json, e.g. `raymond`)
-  // instead of adjective + animal pairs (`snug-otter`). Picked by the
-  // CLI (cli/names.go), at create time and for the New Worktree form's
+  // and character names, the ones with a face on Nookipedia
+  // (cli/embed/doubutsu-names.json, e.g. `raymond`), instead of
+  // adjective + animal pairs (`snug-otter`). Picked by the CLI
+  // (cli/names.go), at create time and for the New Worktree form's
   // pre-pick (`sm worktrees destination`). Absent reads as off, so an
   // install from before it defaulted on keeps its names. A fresh
   // install is seeded with `true` instead (host/lib/bootstrap.ts,

@@ -4,7 +4,9 @@ package main
 // Crossing character names with doubutsuNames on (seeded on for fresh
 // installs, see seedFreshInstall). The pools are embedded from embed/.
 // The app picks no names itself: it asks `sm worktrees destination`
-// for one, and `sm create` picks the same way.
+// for one, and `sm create` picks the same way. The doubutsu pool holds
+// only the characters with a face on Nookipedia
+// (app/shared/villagers/manifest.json).
 
 import (
 	_ "embed"

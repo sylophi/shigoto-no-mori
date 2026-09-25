@@ -26,8 +26,10 @@ func doubutsuSet() map[string]bool {
 // A picked name becomes the folder and, by default, the branch, so
 // every entry has to survive both unchanged.
 func TestNamePoolsAreValidWorktreeNames(t *testing.T) {
+	// The pool is the characters with a face (about 500), not a short
+	// fallback list.
 	if n := len(doubutsuNames()); n < 400 {
-		t.Fatalf("doubutsu pool has %d names, want the full villager list", n)
+		t.Fatalf("doubutsu pool has %d names, want every character with a face", n)
 	}
 	for _, doubutsu := range []bool{true, false} {
 		seen := map[string]bool{}

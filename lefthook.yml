@@ -195,6 +195,11 @@ pre-commit:
     village-life:
       glob: "{cli/cmd_config.go,app/shared/villageLife.ts,app/shared/schemas/config.ts,app/host/lib/bootstrap.ts,app/renderer/hooks/config/useSettingsSave.ts,app/test/village-life.mjs,app/test/lib/checkKit.mjs}"
       run: pnpm -C app test village-life
+    # The villager manifest names a face for every doubutsu name, so the
+    # pool and the manifest agree one to one.
+    villager-manifest:
+      glob: "{app/shared/villagers/manifest.json,cli/embed/doubutsu-names.json,app/assets/doubutsu-characters.json,app/test/villager-manifest.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test villager-manifest
     # The scripts' manual order is one per project across branches whose
     # package.json differ, so the merge must keep another branch's.
     # The launch row pins are per project too.
