@@ -12,13 +12,25 @@ import {
 import type { StatusTone } from "@/components/ui/status-dot";
 import { pluralize } from "@/lib/pluralize";
 
-const BUSY: ReadonlySet<MirrorStatus> = new Set([
-  "scanning",
-  "waiting-for-rescan",
-  "reconciling",
+// The states in which files cross or are written. The engine passes
+// through them on every cycle, but only stays long enough to be seen
+// when there is something to move.
+const MOVING: ReadonlySet<MirrorStatus> = new Set([
   "staging-local",
   "staging-remote",
   "transitioning",
+]);
+
+// The engine's bookkeeping around a cycle. Any filesystem event on
+// either side starts one, ignored paths included (Mutagen's watcher
+// only filters its own temp files), so a build cache or a log being
+// written sends a live mirror through these states and back without
+// a file moving. After the first pass they read as Live. The first
+// pass stays Syncing, since nothing has been brought in step yet.
+const CHECKING: ReadonlySet<MirrorStatus> = new Set([
+  "scanning",
+  "waiting-for-rescan",
+  "reconciling",
   "saving",
 ]);
 
@@ -57,7 +69,12 @@ export function describeMirror(session: MirrorSession): {
     session.local.excludedProblems +
     session.remote.excludedProblems;
   const conflicts = session.conflicts.length + session.excludedConflicts;
-  const lifecycle = STATUS_DETAIL[session.status] ?? "";
+  // A check after the first pass reads as Live and keeps the watching
+  // detail, so the line beside the label holds still through it.
+  const firstPass = session.successfulCycles === 0;
+  const quietCheck = CHECKING.has(session.status) && !firstPass;
+  const lifecycle =
+    STATUS_DETAIL[quietCheck ? "watching" : session.status] ?? "";
   if (session.paused) {
     return { tone: "slate", label: "Paused", detail: "", spinning: false };
   }
@@ -136,7 +153,11 @@ export function describeMirror(session: MirrorSession): {
       spinning: true,
     };
   }
-  if (BUSY.has(session.status) || session.git?.status === "following") {
+  if (
+    MOVING.has(session.status) ||
+    (CHECKING.has(session.status) && firstPass) ||
+    session.git?.status === "following"
+  ) {
     return {
       tone: "sky",
       label: "Syncing",
