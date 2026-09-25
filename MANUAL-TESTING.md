@@ -492,45 +492,14 @@ Prerequisites:
 To add a scenario, add a `scenario("name", async () => { ... })` block
 and assert through the bridge and the disk.
 
-## Screenshotting a UI change
-
-To see a UI change, screenshot it headless on this machine. Don't use
-a browser preview that the chat app shows in the thread: that browser
-runs on the viewer's machine, and over a remote connection it cannot
-reach a dev server here.
-
-```sh
-# 1. Start the UI lab (lab/README.md). Pick a free port: other
-#    sessions may hold the defaults (5191, and 5192 for lab:web).
-pnpm lab --port 5291
-# 2. In another terminal, describe the shots and take them.
-cat > /tmp/shots.json <<'JSON'
-[{ "file": "devices-dark", "query": "?theme=dark&to=/devices" },
- { "file": "phone", "query": "?theme=light", "width": 390, "height": 844 }]
-JSON
-LAB_ORIGIN=http://localhost:5291/ node lab/shoot.mjs /tmp/shots.json /tmp
-```
-
-- `pnpm lab:web` serves the web shell, which renders the phone layout
-  under 768px.
-- Each shot can click, press, and evaluate before it captures. The
-  shot format is in `lab/shoot.mjs`.
-- `lab/record.mjs` takes the same input and records a video instead.
-- `playwright-core` is a dev dependency, so a one-off script can
-  `import { chromium } from "playwright-core"` and launch
-  `{ channel: "chrome", headless: true }` for anything the shot format
-  can't express.
-- For the real app rather than the lab, launch it with a debug port
-  and use `drive.mts shot` ([Driving a window over CDP](#driving-a-window-over-cdp)).
-- Stop the lab when you're done.
-
 ## Other tools
 
-- **UI lab** (`lab/README.md`). The real UI over a fixture bridge with
+- **UI lab** (`pnpm lab`, `lab/README.md`). The real UI over a fixture bridge with
   four fake devices. Use it to pose and screenshot every multi-device
-  surface without a hub or a second device (see
-  [Screenshotting a UI change](#screenshotting-a-ui-change)). Visual
-  only, no behavior.
+  surface without a hub or a second device. Visual only, no behavior.
+  Screenshot it headless with `lab/shoot.mjs`, not a browser preview
+  in the chat thread: that browser runs on the viewer's machine and
+  can't reach a dev server here over a remote connection.
   It is also the place to record a video of a flow (`lab/record.mjs`):
   the transfer and mirror verbs are posed there, so a recording shows
   the UI, not a real transfer. A video of the real two-device flow
