@@ -1,23 +1,20 @@
 import { portForwardContract } from "@shared/ipc/modules/portForward";
 import type { Handlers } from "@shared/ipc/types";
 import type { PortForwardEngine } from "../../core/portForward/engine";
+import { implSlot } from "@host/lib/util/implSlot";
 
 // Thin shell over the engine (main/core/portForward/engine.ts), injected at
 // boot following the setUpdaterImpl precedent: the wiring (the
 // bridge's direct peer sessions, the changed broadcast) lives in
 // main/ipc/handlers.ts, so this module stays a pure handler map.
-let impl: PortForwardEngine | null = null;
-
-export function setPortForwardEngine(next: PortForwardEngine): void {
-  impl = next;
-}
-
-function engine(): PortForwardEngine {
-  if (impl === null) {
-    throw new Error("port-forward handler invoked before the engine was wired");
-  }
-  return impl;
-}
+const {
+  set: setPortForwardEngine,
+  get: engine,
+  orNull: engineOrNull,
+} = implSlot<PortForwardEngine>(
+  "port-forward handler invoked before the engine was wired",
+);
+export { setPortForwardEngine };
 
 export const portForwardHandlers: Handlers<typeof portForwardContract> = {
   start: (input) => engine().startForward(input),
@@ -33,11 +30,11 @@ export const portForwardHandlers: Handlers<typeof portForwardContract> = {
 // sweep. Safe before wiring: a boot that never reached the engine has
 // nothing to stop.
 export function stopAllPortForwards(): void {
-  impl?.stopAll();
+  engineOrNull()?.stopAll();
 }
 
 // The forwards onto devices no longer on the account, stopped (the
 // account fan-out's listDevices hook in main/ipc/handlers.ts).
 export function stopPortForwardsTo(keep: (deviceId: string) => boolean): void {
-  impl?.stopForwardsTo(keep);
+  engineOrNull()?.stopForwardsTo(keep);
 }

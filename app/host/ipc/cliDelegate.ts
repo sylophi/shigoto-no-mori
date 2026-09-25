@@ -29,6 +29,7 @@ import {
 import { unknownProjectError, unknownWorktreeError } from "@shared/errors";
 import { forgetRepoIdentity } from "@host/lib/git/repoIdentity";
 import { shellQuote } from "@host/lib/scripts/process";
+import { implSlot } from "@host/lib/util/implSlot";
 
 // One NDJSON document from the CLI's --json stream. `event` is set on
 // streamed progress documents (created/phase/carryOver/script/done);
@@ -61,20 +62,10 @@ type CliRunnerImpl = {
   cliFailureMessage: (result: CliResult, fallback: string) => string;
 };
 
-let impl: CliRunnerImpl | null = null;
-
-export function setCliRunnerImpl(next: CliRunnerImpl): void {
-  impl = next;
-}
-
-function runner(): CliRunnerImpl {
-  if (impl === null) {
-    throw new Error(
-      "cli delegate invoked before setCliRunnerImpl registered one",
-    );
-  }
-  return impl;
-}
+const { set: setCliRunnerImpl, get: runner } = implSlot<CliRunnerImpl>(
+  "cli delegate invoked before setCliRunnerImpl registered one",
+);
+export { setCliRunnerImpl };
 
 // Renderer-bound emit callbacks supplied by the IPC handler, fed from
 // the CLI's streamed lifecycle documents.

@@ -66,6 +66,7 @@ import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
 import { mirrorHandlers } from "./mirror";
 import { syncHandlers } from "./sync";
 import { worktreesHandlers } from "./worktrees";
+import { implSlot } from "@host/lib/util/implSlot";
 
 // The Electron layer injects the account and the peer reach at boot
 // (main/ipc/handlers.ts), like the other peer seams (peerSync.ts): the
@@ -83,18 +84,10 @@ type ControlImpl = {
   peerTransportFor: (deviceId: string) => ClientTransport;
 };
 
-let impl: ControlImpl | null = null;
-
-export function setControlImpl(next: ControlImpl): void {
-  impl = next;
-}
-
-function requireImpl(): ControlImpl {
-  if (impl === null) {
-    throw new Error("control op requested before setControlImpl ran");
-  }
-  return impl;
-}
+const { set: setControlImpl, get: requireImpl } = implSlot<ControlImpl>(
+  "control op requested before setControlImpl ran",
+);
+export { setControlImpl };
 
 type Named = { deviceId: string; name: string };
 

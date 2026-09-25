@@ -29,6 +29,7 @@ import {
   findProjectOrThrow,
 } from "@host/lib/projects";
 import { countWithin, pruneAndPush } from "@host/lib/util/useLog";
+import { implSlot } from "@host/lib/util/implSlot";
 
 // The electron layer injects shell.openExternal at boot. Keeping it
 // behind a setter keeps this module and lib/launchers free of
@@ -37,20 +38,10 @@ type LaunchersImpl = {
   openExternal: (url: string) => Promise<void>;
 };
 
-let impl: LaunchersImpl | null = null;
-
-export function setLaunchersImpl(next: LaunchersImpl): void {
-  impl = next;
-}
-
-function launchersImpl(): LaunchersImpl {
-  if (impl === null) {
-    throw new Error(
-      "launchers handler invoked before setLaunchersImpl registered one",
-    );
-  }
-  return impl;
-}
+const { set: setLaunchersImpl, get: launchersImpl } = implSlot<LaunchersImpl>(
+  "launchers handler invoked before setLaunchersImpl registered one",
+);
+export { setLaunchersImpl };
 
 // Rolling-window usage so the launcher row adapts when the user switches
 // tools. Each entry in the log is a launch timestamp; the score is the

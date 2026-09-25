@@ -10,6 +10,7 @@ import type { mirrorContract } from "@shared/ipc/modules/mirror";
 import type { projectsContract } from "@shared/ipc/modules/projects";
 import type { syncContract } from "@shared/ipc/modules/sync";
 import type { worktreesContract } from "@shared/ipc/modules/worktrees";
+import { implSlot } from "@host/lib/util/implSlot";
 import type { Client } from "@shared/ipc/types";
 import { type Worktree, WorktreeSchema } from "@shared/schemas";
 
@@ -64,18 +65,10 @@ type PeerSyncImpl = {
   projectsApiFor: (deviceId: string) => PeerProjectsApi;
 };
 
-let impl: PeerSyncImpl | null = null;
-
-export function setPeerSyncApiImpl(next: PeerSyncImpl): void {
-  impl = next;
-}
-
-function requireImpl(): PeerSyncImpl {
-  if (impl === null) {
-    throw new Error("peer api requested before setPeerSyncApiImpl ran");
-  }
-  return impl;
-}
+const { set: setPeerSyncApiImpl, get: requireImpl } = implSlot<PeerSyncImpl>(
+  "peer api requested before setPeerSyncApiImpl ran",
+);
+export { setPeerSyncApiImpl };
 
 export function peerSyncApiFor(deviceId: string): PeerSyncApi {
   return requireImpl().syncApiFor(deviceId);

@@ -6,6 +6,7 @@ import type { Handlers } from "@shared/ipc/types";
 import type { NukeProgress } from "@shared/schemas";
 import { nukeEverything } from "@host/lib/nuke";
 import { moveDataDir } from "@host/lib/dataDirMove";
+import { implSlot } from "@host/lib/util/implSlot";
 import {
   canonicalDataDirName,
   dataDir,
@@ -36,20 +37,10 @@ type RuntimeImpl = {
   unattendedMoveRefusal: () => string | null;
 };
 
-let impl: RuntimeImpl | null = null;
-
-export function setRuntimeImpl(next: RuntimeImpl): void {
-  impl = next;
-}
-
-function runtimeImpl(): RuntimeImpl {
-  if (impl === null) {
-    throw new Error(
-      "runtime handler invoked before setRuntimeImpl registered one",
-    );
-  }
-  return impl;
-}
+const { set: setRuntimeImpl, get: runtimeImpl } = implSlot<RuntimeImpl>(
+  "runtime handler invoked before setRuntimeImpl registered one",
+);
+export { setRuntimeImpl };
 
 let moveInFlight = false;
 
