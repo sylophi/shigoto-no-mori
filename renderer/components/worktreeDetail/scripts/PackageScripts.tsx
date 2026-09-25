@@ -19,11 +19,9 @@ import {
 import { Check, ChevronRight, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
-  NO_ORDER,
-  usePackageScriptOrder,
-  usePackageScriptSort,
   useSetPackageScriptOrder,
   useSetPackageScriptSort,
+  useSortedPackageScripts,
 } from "@/hooks/scripts/usePackageScriptSort";
 import { rankByScore } from "@/lib/fuzzyMatch";
 import { cn } from "@/lib/utils";
@@ -32,7 +30,6 @@ import { ArrangeScriptRow, ScriptDragPreview } from "./ArrangeScriptRow";
 import { ScriptList } from "./ScriptList";
 import { ScriptRow } from "./ScriptRow";
 import { SortMenu } from "../SortMenu";
-import { sortEntries } from "./sortPackageScripts";
 
 interface PackageScriptsProps {
   worktree: Worktree;
@@ -44,18 +41,9 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
   const [query, setQuery] = useState("");
   const [arrangeRequested, setArrangeRequested] = useState(false);
   const [dragging, setDragging] = useState<string | null>(null);
-  const { data: sortMode = "frequent" } = usePackageScriptSort(
-    worktree.projectId,
-  );
+  const { sortMode, sorted } = useSortedPackageScripts(worktree.projectId, pkg);
   const setSortMode = useSetPackageScriptSort(worktree.projectId);
-  const { data: order = NO_ORDER } = usePackageScriptOrder(
-    worktree.projectId,
-    sortMode,
-  );
   const setOrder = useSetPackageScriptOrder(worktree.projectId);
-  const entries = Object.entries(pkg.scripts);
-
-  const sorted = sortEntries(entries, sortMode, pkg.usage, order);
   const names = sorted.map((e) => e.name);
   // Drags write the stored order, so arranging only lasts while the list
   // shows it: a refused or failed switch to "manual" (or another device

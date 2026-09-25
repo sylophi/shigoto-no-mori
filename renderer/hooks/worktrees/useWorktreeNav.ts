@@ -26,36 +26,49 @@ export function useScopedWorktreeParams() {
   };
 }
 
+type WorktreePage = keyof typeof WORKTREE_ROUTE_PATHS;
+
+interface WorktreePageParams {
+  projectId: string;
+  worktreeId: string;
+  hash?: string;
+  scriptKey?: string;
+}
+
 export function useWorktreeNav() {
   const navigate = useNavigate();
   const { deviceId, remote } = useHostScope();
 
   // The local path and the remote twin differ only by the
   // /devices/$deviceId prefix and the param that fills it, so the two
-  // arms every helper used to spell out collapse to this. The router
-  // can only check params against ONE literal `to`, and this one is a
-  // union of the pair, hence the single cast -- the paths come from the
-  // same constants the route trees are built from, so a path the tree
-  // doesn't serve still can't slip through.
-  const go = (
-    page: keyof typeof WORKTREE_ROUTE_PATHS,
-    params: {
-      projectId: string;
-      worktreeId: string;
-      hash?: string;
-      scriptKey?: string;
-    },
+  // arms every helper used to spell out collapse to this. `on` names
+  // the peer whose twin to use, undefined for this machine's path. The
+  // router can only check params against ONE literal `to`, and this one
+  // is a union of the pair, hence the single cast -- the paths come
+  // from the same constants the route trees are built from, so a path
+  // the tree doesn't serve still can't slip through.
+  const goOn = (
+    on: string | undefined,
+    page: WorktreePage,
+    params: WorktreePageParams,
     replace = false,
     search?: Record<string, unknown>,
   ) => {
     const paths = WORKTREE_ROUTE_PATHS[page];
     void navigate({
-      to: remote ? paths.remote : paths.local,
-      params: remote ? { ...params, deviceId } : params,
+      to: on === undefined ? paths.local : paths.remote,
+      params: on === undefined ? params : { ...params, deviceId: on },
       ...(search === undefined ? {} : { search }),
       replace,
     } as never);
   };
+  // The tree the current host scope lives in.
+  const go = (
+    page: WorktreePage,
+    params: WorktreePageParams,
+    replace = false,
+    search?: Record<string, unknown>,
+  ) => goOn(remote ? deviceId : undefined, page, params, replace, search);
 
   return {
     // True under a /devices/$deviceId twin route: local-only
@@ -104,17 +117,21 @@ export function useWorktreeNav() {
     // remote page) or on a peer (under that device's twin, even
     // though the action ran from a local one).
     toDeviceWorktree(landedOn: string, projectId: string, worktreeId: string) {
-      void navigate(
-        landedOn === localDeviceId
-          ? {
-              to: WORKTREE_ROUTE_PATHS.detail.local,
-              params: { projectId, worktreeId },
-            }
-          : {
-              to: WORKTREE_ROUTE_PATHS.detail.remote,
-              params: { deviceId: landedOn, projectId, worktreeId },
-            },
-      );
+      goOn(landedOn === localDeviceId ? undefined : landedOn, "detail", {
+        projectId,
+        worktreeId,
+      });
+    },
+
+    // Any worktree page on a NAMED machine, whatever the surrounding
+    // scope: this one's for undefined, else that peer's twin. For a
+    // surface that spans every device at once (the ⌘K palette).
+    toPageOn(
+      on: string | undefined,
+      page: WorktreePage,
+      params: WorktreePageParams,
+    ) {
+      goOn(on, page, params);
     },
 
     // Where "leave this worktree's pages" lands. The root in both

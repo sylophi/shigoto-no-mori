@@ -171,7 +171,7 @@ export function buildSidebarRows({
   const localRows = (trees: Worktree[]): LocalRow[] =>
     trees.map((worktree) => ({
       kind: "worktree",
-      key: `w:${worktree.id}`,
+      key: worktreeRowKey(undefined, worktree.id),
       worktree,
       mirror: mirrorBadgeFor(worktree),
       stack: null,
@@ -328,7 +328,7 @@ export function buildSidebarRows({
         rows.push(...placed(localShelves[shelf], remoteShelves[shelf]));
       } else {
         for (const worktree of localShelves[shelf]) {
-          shutFoldRows.set(`w:${worktree.id}`, toggleKey);
+          shutFoldRows.set(worktreeRowKey(undefined, worktree.id), toggleKey);
         }
         for (const row of remoteShelves[shelf]) {
           shutFoldRows.set(row.key, toggleKey);
@@ -368,13 +368,15 @@ export function buildSidebarRows({
         const local = peerRowsFolded.get(key);
         return (
           shown(key) ??
-          (local === undefined ? undefined : shown(`w:${local}`)) ??
+          (local === undefined
+            ? undefined
+            : shown(worktreeRowKey(undefined, local))) ??
           foldedPeerRows.get(key) ??
           null
         );
       }
       return (
-        shown(`w:${worktreeId}`) ??
+        shown(worktreeRowKey(undefined, worktreeId)) ??
         // Only a folded project stands in for its worktree. A missing
         // row in an open project means the listing hasn't landed yet,
         // and settling for the header there would mark the reveal done
@@ -537,6 +539,17 @@ export const remoteGroupKeyOf = (groupId: string): string | undefined =>
 // peer's row has one key in both views.
 export const remoteWorktreeKey = (deviceId: string, worktreeId: string) =>
   `rw:${deviceId}:${worktreeId}`;
+
+// A worktree's row key wherever it lives: this machine's (deviceId
+// undefined) or a peer's. One spelling for the tree, the inbox and the
+// ⌘K palette, so a worktree has one identity in all three.
+export const worktreeRowKey = (
+  deviceId: string | undefined,
+  worktreeId: string,
+) =>
+  deviceId === undefined
+    ? `w:${worktreeId}`
+    : remoteWorktreeKey(deviceId, worktreeId);
 
 // A peer's badge, as the rows and menus draw it.
 export function deviceBadgeOf(item: RemoteForestItem): SidebarDeviceBadge {

@@ -12,6 +12,7 @@ import { useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { AddProjectModal } from "@/components/AddProjectModal";
 import { ProjectLauncher } from "@/components/launcher/ProjectLauncher";
+import { WorktreePalette } from "@/components/palette/WorktreePalette";
 import {
   forestTabFor,
   isTabRoute,
@@ -136,11 +137,13 @@ export function AppShell() {
 
       {phone && <ForestKeepalive />}
 
-      {/* The two app-wide overlays. They live here, under the router,
-          so their navigation is plain useNavigate. The ⌘K launcher acts
-          on local projects, so it mounts only where there are some. Add
-          project picks its device, so a hostless client has it too. */}
+      {/* The app-wide overlays. They live here, under the router, so
+          their navigation is plain useNavigate. The project launcher
+          acts on local projects, so it mounts only where there are some.
+          The ⌘K worktree palette spans every device, and add project
+          picks its device, so a hostless client has both. */}
       {hasLocalHost && <ProjectLauncher />}
+      <WorktreePalette />
       <AddProjectModal />
     </div>
   );

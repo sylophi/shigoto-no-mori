@@ -24,16 +24,21 @@ export function scoreMatch(query: string, target: string): number {
 
 // Filter + rank items by scoreMatch, best match first. An empty query
 // returns the list as-is so callers keep their existing order (matches
-// scoreMatch's "empty query = stable sort" contract).
+// scoreMatch's "empty query = stable sort" contract). An item offering
+// several fields scores by its best one, and ties keep the list's order.
 export function rankByScore<T>(
   query: string,
   items: readonly T[],
-  text: (item: T) => string,
+  text: (item: T) => string | readonly string[],
 ): readonly T[] {
   if (!query) return items;
   const scored: { item: T; score: number }[] = [];
   for (const item of items) {
-    const score = scoreMatch(query, text(item));
+    const fields = text(item);
+    const score =
+      typeof fields === "string"
+        ? scoreMatch(query, fields)
+        : Math.max(0, ...fields.map((field) => scoreMatch(query, field)));
     if (score > 0) scored.push({ item, score });
   }
   scored.sort((a, b) => b.score - a.score);

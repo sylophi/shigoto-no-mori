@@ -16,6 +16,7 @@ import {
   mirrorBadgeLookup,
   mirrorPairsOf,
   remoteWorktreeKey,
+  worktreeRowKey,
 } from "../buildSidebarRows";
 import type { SidebarDeviceBadge } from "../DeviceBadge";
 import type { StackPosition } from "@shared/pullRequestStack";
@@ -81,17 +82,10 @@ function byRecency(a: Entry, b: Entry): number {
   return diff !== 0 ? diff : a.worktree.name.localeCompare(b.worktree.name);
 }
 
-// A local row's key, or the tree's device-qualified one for a peer's.
-function entryKey(worktreeId: string, deviceId: string | undefined): string {
-  return deviceId === undefined
-    ? `w:${worktreeId}`
-    : remoteWorktreeKey(deviceId, worktreeId);
-}
-
 function worktreeRow(entry: Entry): SidebarRow {
   return {
     kind: "inbox-worktree",
-    key: entryKey(entry.worktree.id, entry.device?.deviceId),
+    key: worktreeRowKey(entry.device?.deviceId, entry.worktree.id),
     worktree: entry.worktree,
     project: entry.project,
     pr: entry.pr,
@@ -168,7 +162,7 @@ export function buildInboxRows({
         live.push(entry);
       } else {
         shelves[bucket].push(entry);
-        shelfOf.set(entryKey(worktree.id, device?.deviceId), bucket);
+        shelfOf.set(worktreeRowKey(device?.deviceId, worktree.id), bucket);
       }
     }
   };
@@ -244,9 +238,10 @@ export function buildInboxRows({
         : null,
     revealKey: (_projectId, worktreeId, deviceId) => {
       // A peer's worktree folded into its local mirror: reveal that.
-      const peerKey = entryKey(worktreeId, deviceId);
+      const peerKey = worktreeRowKey(deviceId, worktreeId);
       const local = foldedPeers.get(peerKey);
-      const key = local === undefined ? peerKey : `w:${local}`;
+      const key =
+        local === undefined ? peerKey : worktreeRowKey(undefined, local);
       const shelf = shelfOf.get(key);
       if (shelf && !openShelves.has(shelf)) return `shelf:${shelf}`;
       return rows.some((r) => r.key === key) ? key : null;
