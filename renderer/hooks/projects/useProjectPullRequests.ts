@@ -61,7 +61,8 @@ export function useWatchProjectPullRequests(): void {
 // GithubCliProjectPullRequestsRefreshed only when the data actually
 // changed; useWatchProjectPullRequests invalidates this query off that
 // broadcast. The open worktree page reads its PR through
-// useWorktreePullRequest instead.
+// useWorktreePullRequest, and checks this map only to decide whether to
+// hold the section's place while that loads.
 // Scope rule as worktreesQueryOptions: a peer's map caches under its
 // own device id, and a device with no session never fetches.
 export function projectPullRequestsQueryOptions(
