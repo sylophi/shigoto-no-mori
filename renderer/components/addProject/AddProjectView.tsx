@@ -608,7 +608,7 @@ export function AddProjectView({
           {!scope.remote && !cloneMode && (
             <ChipButton onClick={() => void pickViaDialog()}>
               <FileManagerIcon />
-              Open in Finder
+              Add project from Finder
             </ChipButton>
           )}
         </div>
