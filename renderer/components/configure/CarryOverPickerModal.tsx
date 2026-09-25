@@ -27,10 +27,12 @@ export function CarryOverPickerModal({
   onPick,
   onClose,
 }: CarryOverPickerModalProps) {
+  const useListing = (relative: string) =>
+    useCarryOverListing(projectId, relative);
   return (
     <PathPickerModal
       rootPath={projectPath}
-      useListing={(relative) => useCarryOverListing(projectId, relative)}
+      useListing={useListing}
       renderProvenance={(entry) => (
         <OnlyInWorktrees
           inPrimary={entry.inPrimary}
