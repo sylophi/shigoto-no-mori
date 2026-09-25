@@ -20,6 +20,7 @@ import {
 } from "@tanstack/react-query";
 import {
   mirrorCopyOf,
+  mirrorEngineBlocker,
   type MirrorEvent,
   type MirrorListResult,
   type MirrorSession,
@@ -38,6 +39,7 @@ import { hasLocalHost } from "@/lib/localHost";
 import {
   invalidateHostDevice,
   localDeviceId,
+  queryKeys,
   queryKeysFor,
 } from "@/lib/queryKeys";
 import { useForgetDeletedWorktreeOn } from "@/hooks/worktrees/useWorktreeMutations";
@@ -60,6 +62,26 @@ export function useMirrors(): MirrorListResult {
     enabled: hasHost,
   });
   return query.data ?? EMPTY;
+}
+
+// Why this machine can't start a mirror right now, or undefined when
+// it can. Every start ("Mirror here" on a peer's page, "Mirror to…" on
+// this device's own) runs on the local daemon, so this reads this
+// device's list whatever the scope, and disables the button instead of
+// letting the click end in the host's refusal. A list not read yet
+// blocks nothing: the refusal still stands behind it. The broadcast
+// keeps the list live, so a mount need not re-ask (as in
+// useOtherHostMirrors).
+export function useLocalMirrorBlocker(): string | undefined {
+  const query = useQuery({
+    queryKey: queryKeys.mirrors(),
+    queryFn: () => window.api.mirror.list(),
+    select: (list) => mirrorEngineBlocker(list.daemon),
+    enabled: hasLocalHost,
+    staleTime: 30_000,
+    meta: { silentError: true },
+  });
+  return query.data;
 }
 
 // One device's mirror:changed written into that device's list entry,

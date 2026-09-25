@@ -8,11 +8,14 @@ export function FooterActionButton({
   icon,
   label,
   title,
+  disabledReason,
   onClick,
 }: {
   icon: ReactNode;
   label: string;
   title?: string;
+  // Disables the button and becomes its title.
+  disabledReason?: string;
   onClick: () => void;
 }) {
   return (
@@ -21,7 +24,8 @@ export function FooterActionButton({
       size="xs"
       variant="ghost"
       className="shrink-0 text-muted-foreground hover:text-foreground"
-      title={title}
+      title={disabledReason ?? title}
+      disabled={disabledReason !== undefined}
       onClick={onClick}
     >
       {icon}
