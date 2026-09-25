@@ -16,10 +16,10 @@ function ContextMenu({ ...props }: ContextMenuPrimitive.Root.Props) {
   return <ContextMenuPrimitive.Root {...props} />;
 }
 
+// No data-slot: it would replace the wrapped row's own (see
+// DropdownMenuTrigger).
 function ContextMenuTrigger({ ...props }: ContextMenuPrimitive.Trigger.Props) {
-  return (
-    <ContextMenuPrimitive.Trigger data-slot="context-menu-trigger" {...props} />
-  );
+  return <ContextMenuPrimitive.Trigger {...props} />;
 }
 
 // No placement props: left unset, Base UI puts the first item under the

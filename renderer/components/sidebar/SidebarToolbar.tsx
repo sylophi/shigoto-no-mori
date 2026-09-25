@@ -59,8 +59,7 @@ export function SidebarToolbar({ onArrange }: SidebarToolbarProps) {
     <div className="flex items-center gap-1 px-2 pb-1">
       <DropdownMenu open={sortMenuOpen} onOpenChange={setSortMenuOpen}>
         {/* The tooltip hangs on a wrapper span, not the trigger button:
-            merged onto the button, the tooltip's attributes would
-            overwrite data-slot="dropdown-menu-trigger" and put
+            merged onto the button, the tooltip would put
             data-popup-open next to aria-haspopup, which doubutsu
             styles as "menu open". Disabled while the menu is open so
             the tip can't cover the popup. */}
