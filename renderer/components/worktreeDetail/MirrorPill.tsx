@@ -8,9 +8,9 @@
 // button (mirror/MirrorAction.tsx), which drives the session through
 // the device running it.
 // Built on the shared chip (ui/chip-button.tsx) and the status tones
-// (ui/status-dot.tsx): emerald for a settled live mirror, sky while
-// cycles run, amber for conflicts and reconnects, rose for a halt or
-// an error, slate for paused.
+// (ui/status-dot.tsx): emerald for a live mirror, sky while files or
+// git state move (mirror/mirrorStatus.ts), amber for conflicts and
+// reconnects, rose for a halt or an error, slate for paused.
 import { RefreshCw } from "lucide-react";
 import type { ComponentType, SVGProps } from "react";
 import type { Worktree } from "@shared/schemas";
