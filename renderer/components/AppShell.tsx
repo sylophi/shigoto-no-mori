@@ -118,11 +118,14 @@ export function AppShell() {
         >
           {/* The window's title-bar drag strip over the page. Only
               where there is a title bar: in a browser the strip would
-              be an invisible layer swallowing taps along the top. */}
+              be an invisible layer swallowing taps along the top. The
+              drag region is the OS's, so the page's own hit testing
+              passes through to a no-drag control under it (the device
+              tabs, which sit on the traffic-light line). */}
           {hasLocalHost && (
             <div
               aria-hidden
-              className="absolute inset-x-0 top-0 z-30 h-7"
+              className="pointer-events-none absolute inset-x-0 top-0 z-30 h-7"
               style={dragRegion("drag")}
             />
           )}

@@ -223,9 +223,12 @@ const createWindow = () => {
     minHeight: 420,
     // Inset traffic lights over a transparent shell so the
     // NSVisualEffectView material set via `vibrancy` shows through where
-    // the renderer paints no background (the sidebar column).
+    // the renderer paints no background (the sidebar column). Inset as
+    // far from the top as from the left, which centers the 14pt buttons
+    // on y=23: the renderer's title bars line up on that (SidebarHeader,
+    // PageHeader's device tabs).
     titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 16, y: 18 },
+    trafficLightPosition: { x: 16, y: 16 },
     backgroundColor: "#00000000",
     vibrancy: "sidebar",
     visualEffectState: "active",
