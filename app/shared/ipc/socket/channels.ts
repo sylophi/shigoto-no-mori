@@ -27,6 +27,7 @@
 // Pure: Uint8Array in, Uint8Array out, no node builtins, so the
 // browser transport carries it unchanged (a browser never opens a
 // channel, but it must not choke on the code).
+import { createThrottledWarn } from "@shared/util/throttledWarn";
 
 // Frame layout: 1 byte kind, 16 bytes channel id, then the payload.
 // The id is the 32-hex client-minted id (shared/ipc/hexId.ts) as raw
@@ -122,24 +123,17 @@ function decodeChannelFrame(bytes: Uint8Array): ChannelFrame | null {
   };
 }
 
+// A credit payload is the byte count as a 4-byte big-endian unsigned
+// integer (DataView's default byte order).
 function encodeCredit(bytes: number): Uint8Array {
   const payload = new Uint8Array(4);
-  payload[0] = (bytes >>> 24) & 0xff;
-  payload[1] = (bytes >>> 16) & 0xff;
-  payload[2] = (bytes >>> 8) & 0xff;
-  payload[3] = bytes & 0xff;
+  new DataView(payload.buffer).setUint32(0, bytes);
   return payload;
 }
 
 function decodeCredit(payload: Uint8Array): number | null {
   if (payload.length !== 4) return null;
-  return (
-    (((payload[0] as number) << 24) |
-      ((payload[1] as number) << 16) |
-      ((payload[2] as number) << 8) |
-      (payload[3] as number)) >>>
-    0
-  );
+  return new DataView(payload.buffer, payload.byteOffset, 4).getUint32(0);
 }
 
 // The local side of a channel, supplied by whoever attaches it.
@@ -415,13 +409,9 @@ export function createChannelMux(deps: {
       channel.gone = true;
       channel.queue = [];
       channel.endpoint.onReset();
-      if (tellPeer) {
-        try {
-          send(CHANNEL_FRAME_RESET, channelId);
-        } catch {
-          // The socket died under the drop, and closeAll follows.
-        }
-      }
+      // send() swallows a socket that died under the drop, and
+      // closeAll follows.
+      if (tellPeer) send(CHANNEL_FRAME_RESET, channelId);
     }
   }
 }
@@ -430,13 +420,10 @@ export function createChannelMux(deps: {
 // that names no attached channel (a late frame after a reset, or
 // garbage): one line per fifty, never one per frame.
 export function createUnknownChannelFrameWarner(label: string): () => void {
-  let dropped = 0;
-  return () => {
-    dropped += 1;
-    if (dropped % 50 === 1) {
-      console.warn(
+  const warn = createThrottledWarn();
+  return () =>
+    warn(
+      (dropped) =>
         `[${label}] dropping a binary frame for no attached channel (dropped ${dropped} so far)`,
-      );
-    }
-  };
+    );
 }

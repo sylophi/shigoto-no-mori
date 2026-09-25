@@ -200,9 +200,8 @@ type DirectDialerDeps = {
   // package so a failed candidate names its errno instead of a bare
   // 1006 (see ClientSocket in wsClientTransport.ts).
   openSocket?: OpenClientSocket;
-  // Test seams. Real callers take the defaults and real time.
+  // Test seam. Real callers take the default.
   deadlineMs?: number;
-  now?: () => number;
 };
 
 export type DirectDialer = {
@@ -282,8 +281,10 @@ function exhaustionError(
 }
 
 // A leg abandoned by the deadline may still resolve later. Its
-// session must not linger half-owned, so close it on arrival.
-function closeWhenSettled(promise: Promise<{ close(): void }>): void {
+// session must not linger half-owned, so close it on arrival. Also
+// the bridge's close of a cached session whose dial may still be in
+// flight (shared/hub/bridgeHandlers.ts).
+export function closeWhenSettled(promise: Promise<{ close(): void }>): void {
   promise
     .then((session) => {
       session.close();
@@ -299,7 +300,6 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
   // leg below (the hub hello, the connectInfo invoke, every
   // candidate handshake) individually stays under it.
   const deadlineMs = deps.deadlineMs ?? HELLO_TIMEOUT_MS;
-  const now = deps.now ?? Date.now;
   const dialableKinds = new Set<DirectCandidateKind>(
     deps.dialableKinds ?? ALL_DIRECT_CANDIDATE_KINDS,
   );
@@ -550,7 +550,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       deviceId,
       opts,
       dialable,
-      Math.max(1, deadlineAt - now()),
+      Math.max(1, deadlineAt - Date.now()),
       deadline,
     );
   }
@@ -559,7 +559,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
     deviceId: string,
     opts?: ConnectPeerOpts,
   ): Promise<PeerConnection> {
-    const at = now();
+    const at = Date.now();
     // One deadline over the ENTIRE attempt, so the bridge's cached
     // promise always settles: without it a wedged connectInfo would
     // park every consumer of this peer behind a promise nothing ever

@@ -104,6 +104,20 @@ function jsonError(status: number, body: ErrorBody): Response {
   return Response.json(body, { status });
 }
 
+// Whether a request is a fixed-path route's method on its exact path.
+function isRoute(
+  request: Request,
+  url: URL,
+  route: { method: string; path: string },
+): boolean {
+  return request.method === route.method && url.pathname === route.path;
+}
+
+// The 409 an enroll answers when the deviceId belongs to another
+// account, from the fast-path pre-read and the SQL guard alike.
+const ENROLLED_ELSEWHERE =
+  "deviceId is enrolled under a different account, revoke it there first";
+
 function bearerToken(request: Request): string | null {
   const header = request.headers.get("Authorization");
   if (header === null || !header.startsWith("Bearer ")) return null;
@@ -280,10 +294,7 @@ export function createWorker(deps: HubDeps): HubWorker {
         // GET /connect is routed before the CORS append: a successful
         // upgrade is a 101 with immutable headers, and websocket
         // clients ignore CORS anyway.
-        if (
-          request.method === HUB_ROUTES.connect.method &&
-          url.pathname === HUB_ROUTES.connect.path
-        ) {
+        if (isRoute(request, url, HUB_ROUTES.connect)) {
           if (await rateLimited(request, env.RATE_LIMIT_OPEN)) {
             return tooManyRequests();
           }
@@ -334,18 +345,13 @@ export function createWorker(deps: HubDeps): HubWorker {
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204 });
     }
-    const isEnroll =
-      request.method === HUB_ROUTES.enroll.method &&
-      url.pathname === HUB_ROUTES.enroll.path;
+    const isEnroll = isRoute(request, url, HUB_ROUTES.enroll);
     const limiter = isEnroll ? env.RATE_LIMIT_OPEN : env.RATE_LIMIT;
     if (await rateLimited(request, limiter)) return tooManyRequests();
     if (isEnroll) {
       return await enroll(request, env, ctx);
     }
-    if (
-      request.method === HUB_ROUTES.listDevices.method &&
-      url.pathname === HUB_ROUTES.listDevices.path
-    ) {
+    if (isRoute(request, url, HUB_ROUTES.listDevices)) {
       return await listAccountDevices(request, env);
     }
     const deviceMatch =
@@ -370,16 +376,10 @@ export function createWorker(deps: HubDeps): HubWorker {
         return await updateAccountDevice(request, env, targetId);
       }
     }
-    if (
-      request.method === HUB_ROUTES.mintTicket.method &&
-      url.pathname === HUB_ROUTES.mintTicket.path
-    ) {
+    if (isRoute(request, url, HUB_ROUTES.mintTicket)) {
       return await mintTicket(request, env);
     }
-    if (
-      request.method === HUB_ROUTES.provisionTunnel.method &&
-      url.pathname === HUB_ROUTES.provisionTunnel.path
-    ) {
+    if (isRoute(request, url, HUB_ROUTES.provisionTunnel)) {
       return await provisionDeviceTunnel(request, env);
     }
     return jsonError(404, { error: "not found" });
@@ -395,10 +395,7 @@ export function createWorker(deps: HubDeps): HubWorker {
     const { deviceId, name, platform, icon } = body.data;
     const existing = await getDeviceById(env.DB, deviceId);
     if (existing !== null && existing.account_id !== login.accountId) {
-      return jsonError(409, {
-        error:
-          "deviceId is enrolled under a different account, revoke it there first",
-      });
+      return jsonError(409, { error: ENROLLED_ELSEWHERE });
     }
     // The cap counts NEW devices only, so a full account can still
     // re-enroll the devices it has. A pre-read rather than a SQL guard:
@@ -467,10 +464,7 @@ export function createWorker(deps: HubDeps): HubWorker {
     if (!wrote) {
       // The abandoned presence promise needs no guard: accountPresenceSafe
       // never rejects.
-      return jsonError(409, {
-        error:
-          "deviceId is enrolled under a different account, revoke it there first",
-      });
+      return jsonError(409, { error: ENROLLED_ELSEWHERE });
     }
     const online = await presence;
     const response = {

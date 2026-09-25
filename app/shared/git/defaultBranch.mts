@@ -12,40 +12,33 @@ export type GitRunner = (cwd: string, args: string[]) => Promise<string>;
 // so a change here changes that sentence.
 export const DEFAULT_BRANCH_CANDIDATES = ["main", "master", "dev"] as const;
 
-export async function localBranchExists(
+async function refExists(
   run: GitRunner,
   projectPath: string,
-  branch: string,
+  fullRef: string,
 ): Promise<boolean> {
   try {
-    await run(projectPath, [
-      "show-ref",
-      "--verify",
-      "--quiet",
-      `refs/heads/${branch}`,
-    ]);
+    await run(projectPath, ["show-ref", "--verify", "--quiet", fullRef]);
     return true;
   } catch {
     return false;
   }
 }
 
-export async function remoteRefExists(
+export function localBranchExists(
+  run: GitRunner,
+  projectPath: string,
+  branch: string,
+): Promise<boolean> {
+  return refExists(run, projectPath, `refs/heads/${branch}`);
+}
+
+export function remoteRefExists(
   run: GitRunner,
   projectPath: string,
   ref: string,
 ): Promise<boolean> {
-  try {
-    await run(projectPath, [
-      "show-ref",
-      "--verify",
-      "--quiet",
-      `refs/remotes/${ref}`,
-    ]);
-    return true;
-  } catch {
-    return false;
-  }
+  return refExists(run, projectPath, `refs/remotes/${ref}`);
 }
 
 export async function listRemotes(
@@ -54,12 +47,10 @@ export async function listRemotes(
 ): Promise<string[]> {
   try {
     const stdout = await run(projectPath, ["remote"]);
-    const remotes: string[] = [];
-    for (const line of stdout.split("\n")) {
-      const trimmed = line.trim();
-      if (trimmed.length > 0) remotes.push(trimmed);
-    }
-    return remotes;
+    return stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
   } catch {
     return [];
   }

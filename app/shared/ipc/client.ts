@@ -136,6 +136,8 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const windowClient = c(windowContract);
   const worktreesClient = c(worktreesContract);
 
+  // A namespace whose contract's calls all keep their names (no
+  // payload ergonomics, no on- prefix) spreads its contract client.
   return {
     account: {
       status: accountClient.status,
@@ -151,25 +153,14 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       onCommandAccessChanged: accountClient.commandAccessChanged,
     },
 
-    branches: {
-      create: branchesClient.create,
-      rename: branchesClient.rename,
-      delete: branchesClient.delete,
-    },
+    branches: { ...branchesClient },
 
     clientConfig: {
       read: clientConfigClient.read,
       write: (config: ClientConfig) => clientConfigClient.write({ config }),
     },
 
-    cli: {
-      status: cliClient.status,
-      install: cliClient.install,
-      uninstall: cliClient.uninstall,
-      shellStatus: cliClient.shellStatus,
-      shellInstall: cliClient.shellInstall,
-      shellUninstall: cliClient.shellUninstall,
-    },
+    cli: { ...cliClient },
 
     dialog: {
       // Optional-arg ergonomics on top of the contract client. The payload
@@ -186,9 +177,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
     // available:false). It stays in allContractModules above so the
     // wire inventory still carries it.
 
-    forward: {
-      open: forwardClient.open,
-    },
+    forward: { ...forwardClient },
 
     fs: {
       listDirectory: (path: string) => fsClient.listDirectory({ path }),
@@ -289,10 +278,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
         portsClient.list({ projectId, worktreeId }),
     },
 
-    portPool: {
-      isActive: portPoolClient.isActive,
-      isInstalled: portPoolClient.isInstalled,
-    },
+    portPool: { ...portPoolClient },
 
     projectLauncher: {
       onToggle: projectLauncherClient.toggle,
@@ -411,9 +397,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       onPullProgress: syncClient.pullProgress,
     },
 
-    terrier: {
-      readiness: terrierClient.readiness,
-    },
+    terrier: { ...terrierClient },
 
     updater: {
       get: updaterClient.get,

@@ -19,12 +19,9 @@
 // through an injected clock so a test can advance it and assert the
 // ladder and the reset without sleeping real seconds.
 import {
-  connectDevice,
-  type ConnectDeviceOptions,
   type DeviceConnection,
   RemoteConnectError,
 } from "@shared/ipc/socket/wsClientTransport";
-import { CLOSE_AUTH_FAILED } from "@shared/ipc/socket/frames";
 
 // Backoff delays in milliseconds, capped at the last rung. Fixed and
 // jitter-free so a test asserts the exact sequence.
@@ -69,26 +66,26 @@ export const defaultSupervisorClock: SupervisorClock = {
   clearTimeout: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
 };
 
-// The hello facts and target for one device, minus the callbacks the
-// supervisor owns.
-type SupervisorParams = {
-  url: string;
-  token: string;
-  appVersion: string;
-  localDeviceId: string;
-};
+// The part of an established connection the supervisor and its owner
+// touch: the owner close, the probe, and the remote identity the
+// connected status names.
+export type SupervisedConnection = Pick<
+  DeviceConnection,
+  "close" | "probe" | "remoteDeviceId" | "remoteAppVersion"
+>;
 
-// The connect function, injectable so a test drives a stub instead of a
-// real socket. Defaults to the real connectDevice.
+// The connect function: one attempt, handed the supervisor's close
+// handler, resolving with the established connection. The owner (the
+// hub connection) supplies it, and a test can drive a stub instead of
+// a real socket.
 export type ConnectFn = (
-  opts: ConnectDeviceOptions,
-) => Promise<DeviceConnection>;
+  onClose: (code: number | null) => void,
+) => Promise<SupervisedConnection>;
 
-// The block-vs-retry verdict for a close code, injectable because each
+// The block-vs-retry verdict for a close code, injected because each
 // wire has its own terminal codes. A non-null verdict blocks with its
-// message. The default is the LAN rule: only a wrong token blocks.
-// The hub connection supplies its own classifier for the revoked and
-// superseded close codes.
+// message. The hub connection supplies its classifier for the revoked
+// and superseded close codes.
 //
 // Every classifier here is an ALLOWLIST of blocking codes, so an
 // unrecognized code retries rather than wedging a device in a blocked
@@ -111,32 +108,16 @@ export type CloseClassifier = (
   code: number | null,
 ) => { reason: BlockReason; message: string } | null;
 
-const AUTH_FAILED_MESSAGE = "authentication failed";
-
-// Not exported: it is only the default classifier for this module. The
-// hub path injects its own, and nothing else references it. The
-// host's failed-auth lockout (CLOSE_AUTH_LOCKED_OUT) is pointedly NOT
-// here: it is a temporary bench on the client IP, not a verdict on
-// this device's token, so a LAN supervisor rides it out on the ladder
-// instead of surfacing "authentication failed" for a credential that
-// was never even read.
-const lanCloseClassifier: CloseClassifier = (code) =>
-  code === CLOSE_AUTH_FAILED
-    ? { reason: "auth", message: AUTH_FAILED_MESSAGE }
-    : null;
-
 type SupervisorOptions = {
-  params: SupervisorParams;
-  connect?: ConnectFn;
+  connect: ConnectFn;
   clock?: SupervisorClock;
-  classifyClose?: CloseClassifier;
+  classifyClose: CloseClassifier;
   // Status observer for a device registry / a live UI.
   onStatus?: (status: SupervisorStatus) => void;
   // The live connection on a successful handshake, and null the moment
   // it is lost or torn down, so the registry can build or drop the
   // per-device api against it.
-  onConnection?: (connection: DeviceConnection | null) => void;
-  helloTimeoutMs?: number;
+  onConnection?: (connection: SupervisedConnection | null) => void;
 };
 
 export type Supervisor = {
@@ -156,9 +137,8 @@ export function backoffDelayMs(
 }
 
 export function createSupervisor(options: SupervisorOptions): Supervisor {
-  const connect = options.connect ?? connectDevice;
   const clock = options.clock ?? defaultSupervisorClock;
-  const classifyClose = options.classifyClose ?? lanCloseClassifier;
+  const classifyClose = options.classifyClose;
 
   let status: SupervisorStatus = { phase: "idle" };
   // True between start() and stop(). Guards every async continuation so
@@ -167,7 +147,7 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
   // Ladder position for the current failure streak. Reset to 0 on a
   // stable disconnect, advanced on every scheduled backoff.
   let attempt = 0;
-  let connection: DeviceConnection | null = null;
+  let connection: SupervisedConnection | null = null;
   // When the live connection opened, by the injected clock, so a close
   // can measure how long it stayed up.
   let connectedAt = 0;
@@ -222,7 +202,7 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
     scheduleBackoff(openMs >= STABLE_CONNECTION_MS);
   }
 
-  function onConnected(next: DeviceConnection): void {
+  function onConnected(next: SupervisedConnection): void {
     if (!running) {
       // Torn down while the handshake was in flight. Close the orphan so
       // it does not leak a live socket.
@@ -260,16 +240,7 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
 
   function attemptConnect(): void {
     setStatus({ phase: "connecting" });
-    connect({
-      url: options.params.url,
-      token: options.params.token,
-      appVersion: options.params.appVersion,
-      localDeviceId: options.params.localDeviceId,
-      onClose: handleClose,
-      helloTimeoutMs: options.helloTimeoutMs,
-    })
-      .then(onConnected)
-      .catch(onConnectError);
+    options.connect(handleClose).then(onConnected).catch(onConnectError);
   }
 
   return {

@@ -69,39 +69,65 @@ interface CfEnvelope {
   result: unknown;
 }
 
-// One CF API round trip: bearer auth, JSON in and out, throws on a
-// non-2xx status or success:false so a CF failure can never be read as
-// a valid result. The type parameter names the `result` slice the
-// caller reads; CF envelopes are not schema-validated here, so it is
-// an assertion, kept in this one place.
-async function cfCall<T>(
-  cf: TunnelEnv,
-  cfFetch: typeof fetch,
-  method: string,
-  path: string,
-  body?: unknown,
-): Promise<T> {
-  const response = await cfFetch(`${CF_API_BASE}${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${cf.apiToken}`,
-      "content-type": "application/json",
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  let envelope: CfEnvelope | null = null;
-  try {
-    envelope = (await response.json()) as CfEnvelope;
-  } catch {
-    // Non-JSON body, the status check below reports it.
+// The CF API bound to one tunnel env and fetch, so provisioning and
+// teardown do not thread both through every call.
+function cfApi(cf: TunnelEnv, cfFetch: typeof fetch) {
+  // One CF API round trip: bearer auth, JSON in and out, throws on a
+  // non-2xx status or success:false so a CF failure can never be read as
+  // a valid result. The type parameter names the `result` slice the
+  // caller reads; CF envelopes are not schema-validated here, so it is
+  // an assertion, kept in this one place.
+  async function call<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+  ): Promise<T> {
+    const response = await cfFetch(`${CF_API_BASE}${path}`, {
+      method,
+      headers: {
+        authorization: `Bearer ${cf.apiToken}`,
+        "content-type": "application/json",
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    let envelope: CfEnvelope | null = null;
+    try {
+      envelope = (await response.json()) as CfEnvelope;
+    } catch {
+      // Non-JSON body, the status check below reports it.
+    }
+    if (!response.ok || envelope === null || envelope.success !== true) {
+      throw new Error(
+        `cloudflare api ${method} ${path} failed with status ${response.status}`,
+      );
+    }
+    return envelope.result as T;
   }
-  if (!response.ok || envelope === null || envelope.success !== true) {
-    throw new Error(
-      `cloudflare api ${method} ${path} failed with status ${response.status}`,
-    );
+
+  // GET a CF list endpoint and take the first entry, the shape both
+  // finders share (the query narrows to at most one match).
+  async function findFirst<T>(path: string): Promise<T | null> {
+    const result = await call<T[] | null>("GET", path);
+    if (!Array.isArray(result) || result.length === 0) return null;
+    return result[0];
   }
-  return envelope.result as T;
+
+  return {
+    call,
+    // Finds this device's tunnel by its deterministic name, excluding
+    // deleted tunnels (CF keeps them listed as tombstones).
+    findTunnel: (name: string): Promise<CfTunnel | null> =>
+      findFirst<CfTunnel>(
+        `/accounts/${cf.accountId}/cfd_tunnel?name=${encodeURIComponent(name)}&is_deleted=false`,
+      ),
+    findDnsRecord: (fqdn: string): Promise<CfDnsRecord | null> =>
+      findFirst<CfDnsRecord>(
+        `/zones/${cf.zoneId}/dns_records?type=CNAME&name=${encodeURIComponent(fqdn)}`,
+      ),
+  };
 }
+
+type CfApi = ReturnType<typeof cfApi>;
 
 interface CfTunnel {
   id: string;
@@ -113,44 +139,6 @@ interface CfDnsRecord {
   proxied?: boolean;
 }
 
-// GET a CF list endpoint and take the first entry, the shape both
-// finders share (the query narrows to at most one match).
-async function findFirst<T>(
-  cf: TunnelEnv,
-  cfFetch: typeof fetch,
-  path: string,
-): Promise<T | null> {
-  const result = await cfCall<T[] | null>(cf, cfFetch, "GET", path);
-  if (!Array.isArray(result) || result.length === 0) return null;
-  return result[0];
-}
-
-// Finds this device's tunnel by its deterministic name, excluding
-// deleted tunnels (CF keeps them listed as tombstones).
-function findTunnel(
-  cf: TunnelEnv,
-  cfFetch: typeof fetch,
-  name: string,
-): Promise<CfTunnel | null> {
-  return findFirst<CfTunnel>(
-    cf,
-    cfFetch,
-    `/accounts/${cf.accountId}/cfd_tunnel?name=${encodeURIComponent(name)}&is_deleted=false`,
-  );
-}
-
-function findDnsRecord(
-  cf: TunnelEnv,
-  cfFetch: typeof fetch,
-  fqdn: string,
-): Promise<CfDnsRecord | null> {
-  return findFirst<CfDnsRecord>(
-    cf,
-    cfFetch,
-    `/zones/${cf.zoneId}/dns_records?type=CNAME&name=${encodeURIComponent(fqdn)}`,
-  );
-}
-
 // Ensures the proxied CNAME `<hostname>` points at the tunnel edge:
 // created when absent, corrected in place when stale (a re-created
 // tunnel has a new id that would otherwise be shadowed).
@@ -158,7 +146,7 @@ function findDnsRecord(
 // caller can tell a brand-new hostname from one that resolved before.
 async function ensureDnsRecord(
   cf: TunnelEnv,
-  cfFetch: typeof fetch,
+  api: CfApi,
   hostname: string,
   tunnelId: string,
 ): Promise<boolean> {
@@ -169,19 +157,13 @@ async function ensureDnsRecord(
     content: target,
     proxied: true,
   };
-  const record = await findDnsRecord(cf, cfFetch, hostname);
+  const record = await api.findDnsRecord(hostname);
   if (record === null) {
-    await cfCall(cf, cfFetch, "POST", `/zones/${cf.zoneId}/dns_records`, body);
+    await api.call("POST", `/zones/${cf.zoneId}/dns_records`, body);
     return true;
   }
   if (record.content !== target || record.proxied !== true) {
-    await cfCall(
-      cf,
-      cfFetch,
-      "PUT",
-      `/zones/${cf.zoneId}/dns_records/${record.id}`,
-      body,
-    );
+    await api.call("PUT", `/zones/${cf.zoneId}/dns_records/${record.id}`, body);
   }
   return false;
 }
@@ -207,14 +189,13 @@ export async function provisionTunnel(
   deviceId: string,
   port: number,
 ): Promise<{ hostname: string; connectorToken: string; dnsCreated: boolean }> {
+  const api = cfApi(cf, cfFetch);
   const name = await tunnelNameFor(accountId, deviceId);
   const hostname = `${name}.${cf.domain}`;
 
-  let tunnel = await findTunnel(cf, cfFetch, name);
+  let tunnel = await api.findTunnel(name);
   if (tunnel === null) {
-    tunnel = await cfCall<CfTunnel>(
-      cf,
-      cfFetch,
+    tunnel = await api.call<CfTunnel>(
       "POST",
       `/accounts/${cf.accountId}/cfd_tunnel`,
       // config_src cloudflare = remotely managed: the ingress lives in
@@ -225,9 +206,7 @@ export async function provisionTunnel(
   }
 
   const [, dnsCreated, connectorToken] = await Promise.all([
-    cfCall(
-      cf,
-      cfFetch,
+    api.call(
       "PUT",
       `/accounts/${cf.accountId}/cfd_tunnel/${tunnel.id}/configurations`,
       {
@@ -239,10 +218,8 @@ export async function provisionTunnel(
         },
       },
     ),
-    ensureDnsRecord(cf, cfFetch, hostname, tunnel.id),
-    cfCall<string>(
-      cf,
-      cfFetch,
+    ensureDnsRecord(cf, api, hostname, tunnel.id),
+    api.call<string>(
       "GET",
       `/accounts/${cf.accountId}/cfd_tunnel/${tunnel.id}/token`,
     ),
@@ -262,38 +239,33 @@ export async function teardownTunnel(
   accountId: string,
   deviceId: string,
 ): Promise<void> {
+  const api = cfApi(cf, cfFetch);
   const names = await Promise.all([
     tunnelNameFor(accountId, deviceId),
     tunnelNameFor(accountId, deviceId, LEGACY_NAME_HEX),
   ]);
+  // Deletes what a finder found, if anything.
+  const deleteFound = async (
+    find: Promise<{ id: string } | null>,
+    path: (id: string) => string,
+  ): Promise<void> => {
+    try {
+      const found = await find;
+      if (found !== null) await api.call("DELETE", path(found.id));
+    } catch {
+      // Best-effort, see above.
+    }
+  };
   await Promise.all(
     names.flatMap((name) => [
-      (async () => {
-        const tunnel = await findTunnel(cf, cfFetch, name);
-        if (tunnel !== null) {
-          await cfCall(
-            cf,
-            cfFetch,
-            "DELETE",
-            `/accounts/${cf.accountId}/cfd_tunnel/${tunnel.id}?cascade=true`,
-          );
-        }
-      })().catch(() => {
-        // Best-effort, see above.
-      }),
-      (async () => {
-        const record = await findDnsRecord(cf, cfFetch, `${name}.${cf.domain}`);
-        if (record !== null) {
-          await cfCall(
-            cf,
-            cfFetch,
-            "DELETE",
-            `/zones/${cf.zoneId}/dns_records/${record.id}`,
-          );
-        }
-      })().catch(() => {
-        // Best-effort, see above.
-      }),
+      deleteFound(
+        api.findTunnel(name),
+        (id) => `/accounts/${cf.accountId}/cfd_tunnel/${id}?cascade=true`,
+      ),
+      deleteFound(
+        api.findDnsRecord(`${name}.${cf.domain}`),
+        (id) => `/zones/${cf.zoneId}/dns_records/${id}`,
+      ),
     ]),
   );
 }
