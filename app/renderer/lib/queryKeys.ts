@@ -279,16 +279,15 @@ export function queryKeysFor(deviceId: string): QueryKeyRegistry {
   return built;
 }
 
-// The local device's registry: for module-scope, broadcast-driven and
-// deliberately local call sites, which always mean this machine's
-// cache. Anything rendered under a HostScopeProvider must use the
-// scoped registry from useHostScope instead.
+// The local device's registry: for module-scope and deliberately
+// local call sites, which always mean this machine's cache. Anything
+// rendered under a HostScopeProvider must use the scoped registry from
+// useHostScope instead.
 export const queryKeys = queryKeysFor(localDeviceId);
 
 // The "state on this device moved, refetch what you're showing" sweep,
-// shared by both externalChange consumers: the local watcher
-// subscription in renderer/index.tsx (with localDeviceId) and
-// lib/remote/remoteHostWatch.ts (with the pinging device's id). Deliberately broad
+// for every device's externalChange broadcast (lib/hostWatch.ts, with
+// the pinging device's id). Deliberately broad
 // within its scope (the host debounces the signal and only active
 // queries actually refetch), but some domains sit it out:
 //

@@ -13,6 +13,7 @@ import { DeviceBadge, useDeviceBadges } from "@/components/sidebar/DeviceBadge";
 import { StatusIndicator } from "@/components/sidebar/StatusIndicator";
 import { MirrorBadge } from "@/components/sidebar/WorktreeRow";
 import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
+import { rowDeviceId } from "@/lib/routePaths";
 import {
   useLaunch,
   useLauncherForProject,
@@ -58,7 +59,9 @@ export function WorktreePalette() {
     worktreeId?: string;
   };
   const pageKey =
-    worktreeId === undefined ? undefined : worktreeRowKey(deviceId, worktreeId);
+    worktreeId === undefined || deviceId === undefined
+      ? undefined
+      : worktreeRowKey(rowDeviceId(deviceId), worktreeId);
 
   useEffect(() => {
     if (pageKey !== undefined) recordWorktreeVisit(pageKey);

@@ -115,9 +115,8 @@ function NewWorktreeForm({
   deviceLabel: string | undefined;
 }) {
   const navigate = useNavigate();
-  // Scope-aware: under a peer's provider its toWorktree lands on the
-  // device-scoped detail route rather than a local one that wouldn't
-  // exist for that worktree.
+  // Scope-aware: under a peer's provider its toWorktree lands on that
+  // device's detail page, where the new worktree lives.
   const { toWorktree } = useWorktreeNav();
   // Where the worktree lands on the scoped device.
   const destRoot = useWorktreeBaseLabel(project);

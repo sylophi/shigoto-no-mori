@@ -1,9 +1,8 @@
 // Continuous worktree mirroring, renderer side. The list is
 // host-scoped (a device's mirrors and the streams it serves are its
 // own facts), read through the surrounding scope's api. Every device's
-// list is kept live at boot by its own mirror:changed broadcast
-// (renderer/boot.tsx for this machine, lib/remote/remoteHostWatch.ts
-// for the peers), so nothing here subscribes. The starts are local: a
+// list is kept live by its own mirror:changed broadcast, through its
+// push watch (lib/hostWatch.ts), so nothing here subscribes. The starts are local: a
 // pull (or a send) plus a mirror on this machine's daemon. The
 // controls (stop, pause, resume, the ignore rule) go to the device
 // RUNNING the session through the scope they are mounted under, which

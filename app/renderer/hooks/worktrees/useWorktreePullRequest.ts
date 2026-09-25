@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import {
   useQuery,
   useQueryClient,
@@ -12,7 +12,6 @@ import {
 } from "@shared/schemas";
 import {
   isWorktreePullRequestKey,
-  queryKeys,
   type QueryKeyRegistry,
 } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
@@ -25,61 +24,36 @@ import { mergeStateSettling } from "@/lib/pullRequest";
 const SETTLE_POLL_MS = 3_000;
 const SETTLE_WINDOW_MS = 30_000;
 
-// Invalidates per-branch PR queries, scoped to one project when the
-// caller knows which one. The predicate skips project-map queries,
-// which have their own sweep-driven refresh and shouldn't refetch on
-// every window focus.
-function invalidateWorktreePullRequests(
-  qc: ReturnType<typeof useQueryClient>,
-  projectId?: string,
+// One project's per-branch PR queries on a device, for its
+// refsRefreshed broadcast (lib/hostWatch.ts): refs landing (a merge or
+// a push) are what most often move a PR. The predicate skips the
+// project map, which has its own sweep-driven refresh.
+export function invalidateWorktreePullRequests(
+  qc: QueryClient,
+  keys: QueryKeyRegistry,
+  projectId: string,
 ) {
   void qc.invalidateQueries({
-    queryKey:
-      projectId === undefined
-        ? queryKeys.pullRequestsAll()
-        : queryKeys.pullRequestsForProject(projectId),
+    queryKey: keys.pullRequestsForProject(projectId),
     predicate: isWorktreePullRequestKey,
   });
 }
 
-// Refresh the open worktree's PR on the two events most likely to move
-// PR state: refs landing locally (merge or push) and the window regaining
-// focus (PR updated on github.com while the app was backgrounded). The
-// per-branch query opts out of React Query's focus refetch so this
-// listener owns the focus path.
-export function useWatchWorktreePullRequests(): void {
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    // Scoped to the project whose refs moved: the sweep broadcasts per
-    // project, so an unscoped invalidation costs one `gh pr view` per other
-    // project every sweep, each cancelling the last.
-    const offRefs = window.api.git.onRefsRefreshed(({ projectId }) => {
-      invalidateWorktreePullRequests(queryClient, projectId);
-    });
-    const offFocus = window.api.window.onFocused(() => {
-      invalidateWorktreePullRequests(queryClient);
-    });
-    return () => {
-      offRefs();
-      offFocus();
-    };
-  }, [queryClient]);
-}
-
-// Per-branch PR lookup for the open worktree page. Fetches on mount so
-// opening a worktree feels instant; useWatchWorktreePullRequests invalidates
-// it explicitly on window focus and on git refs changing, so we opt out
-// of TanStack's stale-gated focus refetch path. A PR changing on GitHub
-// with neither happening reaches it through the sweep broadcast
-// (syncProjectPullRequests). Silent on error to match
-// the sweep's swallow behavior. A transient gh failure shouldn't toast.
+// Per-branch PR lookup for the open worktree page, on whichever device
+// the scope names. Fetches on mount so opening a worktree feels
+// instant, refetches when the window regains focus (a PR updated on
+// github.com while the app was backgrounded) and when the device's refs
+// move (invalidateWorktreePullRequests). A PR changing on GitHub with
+// none of those happening reaches it through the sweep broadcast
+// (syncProjectPullRequests). Silent on error to match the sweep's
+// swallow behavior. A transient gh failure shouldn't toast.
 export function useWorktreePullRequest(
   projectId: string,
   branch: string,
   options: { enabled?: boolean } = {},
 ) {
   const queryClient = useQueryClient();
-  const { api, keys, remote } = useHostScope();
+  const { api, keys } = useHostScope();
   // When the current settling run began, so the poll below is bounded.
   const settlingSince = useRef<number | null>(null);
   return useQuery<PullRequestDetail | null>({
@@ -99,10 +73,6 @@ export function useWorktreePullRequest(
       return pr;
     },
     enabled: options.enabled ?? true,
-    // Locally the focus path belongs to useWatchWorktreePullRequests,
-    // which invalidates this machine's PR keys. A peer's key has no
-    // watcher, so it refetches on focus itself.
-    refetchOnWindowFocus: remote,
     // Nothing else refetches once the merge state is the only thing
     // lagging (the sweep's map doesn't carry it), so poll briefly. Not
     // while a merge or draft toggle runs: its optimistic write reads as
@@ -123,8 +93,8 @@ export function useWorktreePullRequest(
     },
     // gh failures here are stable (not in a github repo, gh not authed,
     // network down), so the default 3-retry exponential backoff just
-    // turns a fast error into a 7s wait. The focus + refs-changed
-    // invalidations bring us back from a true transient.
+    // turns a fast error into a 7s wait. The focus refetch and the
+    // refs-changed invalidation bring us back from a true transient.
     retry: false,
     meta: { silentError: true },
   });

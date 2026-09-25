@@ -11,8 +11,7 @@
 // forward outlives the peer going to sleep, and stopping one is a purely
 // local act. Taking it from a scope would have tied the stop control to
 // an api the caller does not need.
-import { useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useMutation, useQuery } from "@tanstack/react-query";
 import { errorMessageOf } from "@shared/errors";
 import { FORWARD_TOO_MANY_CONNS } from "@shared/ipc/modules/forward";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
@@ -32,24 +31,19 @@ export const canForwardPorts = hasLocalHost;
 // themselves (the broadcast-owns-invalidation rule, see
 // renderer/hooks/account/useAccount.ts).
 //
-// Mounted ONCE from App.tsx, not per consumer: the devices page mounts a
-// forward surface per peer, and a subscription each would turn one
-// engine signal into N invalidations of the same key. Those do not
-// collapse, since invalidateQueries cancels and restarts an in-flight
-// refetch by default. The engine already coalesces conn bursts to one
-// signal per 150ms, which a per-consumer listener would multiply
-// straight back up.
-export function useWatchPortForwards(): void {
-  const queryClient = useQueryClient();
-  useEffect(
-    () =>
-      window.api.portForward.onChanged(() => {
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.portForwards(),
-        });
-      }),
-    [queryClient],
-  );
+// Subscribed ONCE at boot (renderer/boot.tsx), not per consumer: the
+// devices page mounts a forward surface per peer, and a subscription
+// each would turn one engine signal into N invalidations of the same
+// key. Those do not collapse, since invalidateQueries cancels and
+// restarts an in-flight refetch by default. The engine already
+// coalesces conn bursts to one signal per 150ms, which a per-consumer
+// listener would multiply straight back up.
+export function watchPortForwards(queryClient: QueryClient): void {
+  window.api.portForward.onChanged(() => {
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.portForwards(),
+    });
+  });
 }
 
 function usePortForwardList() {

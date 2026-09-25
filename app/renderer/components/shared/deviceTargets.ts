@@ -6,9 +6,9 @@
 // pull-here control use -- so a peer with a differently-named clone
 // still counts and a same-named unrelated repo never does.
 //
-// The pages serve both trees: under /projects the project is this
-// machine's, under a /devices twin it is the peer's. The scope says
-// which, and the list reads the same either way -- the scoped device's
+// The pages serve every device: under this machine's route the
+// project is this machine's, under a peer's it is the peer's. The
+// scope says which, and the list reads the same either way -- the scoped device's
 // own checkout is the project in hand, every other device's is its
 // identity match.
 import type { Project } from "@shared/schemas";
@@ -69,7 +69,7 @@ export function useDeviceTargets(project: Project | undefined): DeviceTarget[] {
   // page must not kick a fresh re-listing of every peer's projects.
   const { pairs } = useRemoteProjects();
   // This machine's checkout: the project in hand on a local page, its
-  // identity match under a device twin.
+  // identity match on a peer's.
   const localMatch = useLocalProjectForIdentity(project?.identity);
 
   if (project === undefined) return [];

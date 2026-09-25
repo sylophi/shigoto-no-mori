@@ -6,6 +6,8 @@ import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { localDeviceId } from "@/lib/queryKeys";
+import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 
 export function EmptyState() {
   const { data: projects = [], isLoading: projectsLoading } = useProjects();
@@ -40,8 +42,9 @@ export function EmptyState() {
   useEffect(() => {
     if (!redirectProjectId || !redirectWorktreeId) return;
     void navigate({
-      to: "/projects/$projectId/worktrees/$worktreeId",
+      to: WORKTREE_ROUTE_PATHS.detail,
       params: {
+        deviceId: localDeviceId,
         projectId: redirectProjectId,
         worktreeId: redirectWorktreeId,
       },

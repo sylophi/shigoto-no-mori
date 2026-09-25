@@ -9,7 +9,7 @@ import { useWorktreeNav } from "./useWorktreeNav";
 // row's + button and the inbox sidebar's New worktree menu so the two
 // entry points can't drift on error handling. Scope-aware end to end:
 // under a peer's HostScopeProvider the create runs there and the
-// landing page is the device twin.
+// landing page is that device's.
 export function useQuickCreateWorktree() {
   const { api } = useHostScope();
   const { toWorktree } = useWorktreeNav();

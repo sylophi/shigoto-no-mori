@@ -16,7 +16,9 @@ import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useHiddenWorktreePrefixes } from "@/hooks/sharedSettings/useHiddenWorktreePrefixes";
 import { isHiddenByPrefix } from "@shared/sharedSettings";
 import { rankByScore } from "@/lib/fuzzyMatch";
+import { localDeviceId } from "@/lib/queryKeys";
 import { getRecentWorktree } from "@/lib/recentWorktrees";
+import { PROJECT_ROUTE_PATHS, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import type { Project, Worktree } from "@shared/schemas";
 import { LauncherTile } from "./LauncherTile";
 
@@ -127,15 +129,19 @@ function LauncherOverlay({ onClose }: { onClose: () => void }) {
       trees[0];
     if (target) {
       void navigate({
-        to: "/projects/$projectId/worktrees/$worktreeId",
-        params: { projectId: project.id, worktreeId: target.id },
+        to: WORKTREE_ROUTE_PATHS.detail,
+        params: {
+          deviceId: localDeviceId,
+          projectId: project.id,
+          worktreeId: target.id,
+        },
       });
     } else {
       // No worktrees (or the path is gone and the query never ran), so the
       // new-worktree page is the only useful destination.
       void navigate({
-        to: "/projects/$projectId/new",
-        params: { projectId: project.id },
+        to: PROJECT_ROUTE_PATHS.new,
+        params: { deviceId: localDeviceId, projectId: project.id },
       });
     }
   };

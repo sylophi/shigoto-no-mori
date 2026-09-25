@@ -25,11 +25,10 @@ function updaterStateQueryOptions(deviceId: string, api: HostApi) {
   return queryOptions<UpdaterState>({
     queryKey: queryKeysFor(deviceId).updaterState(),
     queryFn: () => api.updater.get(),
-    // Never stale: the updater:state broadcast is mirrored into this
-    // key for the window's lifetime, the local machine's by the boot-scope
-    // subscription (boot.tsx) and a peer's by the push watch
-    // (remoteHostWatch), and a peer's is re-read whenever its session
-    // lands, which covers a restart into the new build.
+    // Never stale: every device's updater:state broadcast is mirrored
+    // into its key by its push watch (lib/hostWatch.ts), and a peer's
+    // is re-read whenever its session lands, which covers a restart
+    // into the new build.
     staleTime: Number.POSITIVE_INFINITY,
     // A focus has nothing to add to that, and an older peer build
     // (whose read never succeeds, so it is always stale) would

@@ -4,11 +4,12 @@
 // bridge for token storage and the system-browser OAuth transport,
 // plain @clerk/react is the browser's) and the router history (memory
 // in a window, real browser history in a tab). Everything else -- the
-// query client, the device registry sync, the peer push watch, the
-// provider tree -- is the same boot. The wiring that only exists on a
-// machine with projects of its own (the script run stream, the
-// orphan sweep report, this machine's git watchers, the worktree
-// lifecycle) starts only where there is a local host.
+// query client, the device registry sync and each peer's push watch,
+// the provider tree -- is the same boot. The wiring that only exists
+// on a machine with projects of its own (this machine's push watch,
+// the script run stream, the orphan sweep report, the worktree
+// lifecycle, the port forwards) starts only where there is a local
+// host.
 //
 // Callers must have installed window.api before importing this module:
 // several renderer modules read the bridge at module scope (queryKeys'
@@ -28,22 +29,15 @@ import {
   ClerkGate,
   type ClerkProviderComponent,
 } from "./components/account/ClerkGate";
-import { writeMirrorList } from "./hooks/remote/useMirrors";
-import { writeUpdaterState } from "./hooks/system/useUpdater";
+import { watchPortForwards } from "./hooks/remote/usePortForwards";
 import { createAppQueryClient } from "./lib/queryClientOptions";
 import { hasLocalHost } from "./lib/localHost";
+import { watchHost } from "./lib/hostWatch";
 import { startRemoteDeviceSync } from "./lib/remote/remoteDeviceSync";
-import { startRemoteHostWatch } from "./lib/remote/remoteHostWatch";
 import { startRemoteSweepRequests } from "./lib/remote/remoteSweep";
 import { documentFocused } from "./lib/focus";
 import { startSharedSettingsSync } from "./lib/remote/sharedSettingsSync";
-import {
-  invalidateHostDevice,
-  invalidateHostProject,
-  localDeviceId,
-  queryKeys,
-  worktreeQueriesOn,
-} from "./lib/queryKeys";
+import { localDeviceId, queryKeys, worktreeQueriesOn } from "./lib/queryKeys";
 import { toast } from "./lib/toast";
 import { createAppRouter, type AppRouter } from "./router";
 import { scriptRuns } from "./store/scriptRuns";
@@ -114,15 +108,13 @@ export function bootApp({
 
   // Remote devices: the remote device registry, rebuilt from the
   // account's device list plus the hub bridge status, on boot and on
-  // every account or hub change.
-  startRemoteDeviceSync(queryClient);
-
-  // A remote host's state moved (its app, its CLI, or a background
-  // fetch there): invalidate that device's cached forest the same way
-  // the local watcher signal does for this machine. On a hostless
-  // client this is the ONLY thing keeping the forest live between
-  // focus refetches.
-  startRemoteHostWatch(queryClient);
+  // every account or hub change. Each peer's pushes reach the cache
+  // through the same watchHost this machine's do (startLocalHost),
+  // from the moment the peer is first seen. On a hostless client that
+  // is the ONLY thing keeping the forest live between focus refetches.
+  startRemoteDeviceSync(queryClient, (deviceId, api) =>
+    watchHost(queryClient, deviceId, api),
+  );
 
   // The other direction: a host sweeps while someone is looking, and
   // this window says so to the hosts it is looking at.
@@ -157,22 +149,11 @@ function syncFocusClass(focused: boolean): void {
 // mounted (e.g. the carry-over failure toast must fire even if the user
 // navigated away from the new worktree's detail page).
 function startLocalHost(queryClient: QueryClient): void {
+  // This machine's broadcasts, into its cache, exactly as a peer's
+  // land in theirs.
+  watchHost(queryClient, localDeviceId, window.api);
   scriptRuns.start();
-
-  // The local machine's updater state rides its broadcast whole, so it is
-  // written rather than re-asked. Boot-scoped so the sidebar's Settings
-  // dot follows a check that finishes with no Version section mounted
-  // (remoteHostWatch mirrors the same channel for every peer).
-  window.api.updater.onState((next) => {
-    writeUpdaterState(queryClient, localDeviceId, next);
-  });
-
-  // The local mirror list the same way: every reader of it (the
-  // always-mounted sidebar's folds, a worktree page's pill and
-  // controls) sees the daemon's snapshot the moment it moves.
-  window.api.mirror.onChanged((list) => {
-    writeMirrorList(queryClient, localDeviceId, list);
-  });
+  watchPortForwards(queryClient);
 
   // Scripts that survived a crash or a force quit are stopped by the
   // host at boot. Their consoles died with the session that started
@@ -224,22 +205,6 @@ function startLocalHost(queryClient: QueryClient): void {
   void queryClient.prefetchQuery({
     queryKey: queryKeys.globalConfig(),
     queryFn: () => window.api.globalConfig.read(),
-  });
-
-  // State changed on disk under the app (a CLI run in a terminal):
-  // invalidate the disk-derived queries so the sidebar reflects it
-  // without a focus change. window.api only ever carries this
-  // machine's watcher signal, so the sweep is scoped to the local
-  // device id. See invalidateHostDevice for the breadth and exemption
-  // rationale.
-  window.api.git.onExternalChange(() => {
-    invalidateHostDevice(queryClient, localDeviceId);
-  });
-  // One project's git state moved on this machine (a commit or
-  // checkout by an agent or a terminal, seen by the host's
-  // git-directory watcher): refetch that project's rows only.
-  window.api.git.onProjectChanged(({ projectId }) => {
-    invalidateHostProject(queryClient, localDeviceId, projectId);
   });
 
   // The host rewrote project.json (carry-over entries removed in favor

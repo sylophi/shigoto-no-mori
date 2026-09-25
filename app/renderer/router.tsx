@@ -1,11 +1,11 @@
 // The one route tree, served by both shells. The desktop mounts it on
 // a memory history, the browser on real history (deep links must
 // survive a reload, which is also why the web deploy rewrites every
-// path to index.html). A hostless client only ever reaches the
-// device-scoped twins: it has no local project for the /projects tree
-// to show. Registering the router type once here is what lets every
-// typed Link and navigate in the shared components check against the
-// same tree whichever shell mounts them.
+// path to index.html). A hostless client only ever reaches its peers'
+// device pages: it has no projects of its own. Registering the router
+// type once here is what lets every typed Link and navigate in the
+// shared components check against the same tree whichever shell
+// mounts them.
 import {
   createRootRoute,
   createRoute,
@@ -22,7 +22,7 @@ import { ForestPage } from "@/components/ForestPage";
 import { NotFoundPage } from "@/components/NotFoundPage";
 import { Settings } from "@/components/settings/Settings";
 import { DevicesPage } from "@/components/remote/DevicesPage";
-import { withRemoteScope } from "@/components/remote/RemoteScope";
+import { withDeviceScope } from "@/components/remote/RemoteScope";
 import { WorktreeDetail } from "@/components/worktreeDetail/WorktreeDetail";
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
 import { hasLocalHost } from "@/lib/localHost";
@@ -76,7 +76,7 @@ const settingsRoute = createRoute({
 // page, the tidy page) does not download it at boot.
 
 // App-wide, like settings: the tidy page spans every project rather than
-// scoping to one, so it hangs off the root instead of /projects.
+// scoping to one, so it hangs off the root instead of a device's.
 const tidyRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/tidy",
@@ -96,9 +96,8 @@ const devicesIndexRoute = createRoute({
 });
 
 // The console brings xterm along (a few hundred KB), which a session
-// that never opens a console has no use for at window open. One lazy
-// component for both trees, so the chunk loads once.
-const scriptConsoleComponent = lazyRouteComponent(
+// that never opens a console has no use for at window open.
+const ScriptConsole = lazyRouteComponent(
   () => import("@/components/scriptConsole/ScriptConsole"),
   "ScriptConsole",
 );
@@ -106,7 +105,7 @@ const scriptConsoleComponent = lazyRouteComponent(
 // The three diff pages bring the diff renderer and the syntax
 // highlighter along, over a quarter of what boot would otherwise
 // download, and a session starts on a forest or a worktree, never on a
-// diff. Lazy like the console, one component per page for both trees.
+// diff. Lazy like the console.
 const WorktreeDiff = lazyRouteComponent(
   () => import("@/components/diff/WorktreeDiff"),
   "WorktreeDiff",
@@ -137,122 +136,110 @@ function validateFilesSearch(search: Record<string, unknown>): {
 }
 
 // `amend` opens the changes page already set to rewrite the last
-// commit (a commit row's "Amend" lands here). Shared by both trees so
-// the twin reads the same search the local page does.
+// commit (a commit row's "Amend" lands here).
 function validateDiffSearch(search: Record<string, unknown>): { amend?: true } {
   return search["amend"] === true ? { amend: true } : {};
 }
 
-// Device-scoped twins of the worktree pages (v2: remote feels local).
-// The SAME components serve both trees: withRemoteScope resolves the
-// device, mounts HostScopeProvider and the push-refresh watcher, and
-// the pages read their params non-strictly. Local-only affordances
-// inside them gate on useWorktreeNav().remote.
-const remoteWorktreeRoute = createRoute({
+// The device pages: every worktree and project page, for this machine
+// and every peer alike, under /devices/$deviceId. withDeviceScope
+// resolves the device (this machine's id to window.api, a peer's to its
+// session) and scopes the page to it, so the page itself never knows
+// which it is showing (v2: remote feels local). Local-only affordances
+// inside them gate on useHostScope().remote.
+//
+// remountDeps on the detail and project pages: the router keeps one
+// component instance across a params change and just re-renders it, so
+// without this a route would keep showing the previous entity's data
+// until its queries happened to refetch. The router keys the match on
+// this value, which is what the hand-written `key={projectId}` wrappers
+// used to do.
+const worktreeRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: WORKTREE_ROUTE_PATHS.detail.remote,
-  component: withRemoteScope(WorktreeDetail),
+  path: WORKTREE_ROUTE_PATHS.detail,
+  component: withDeviceScope(WorktreeDetail),
   remountDeps: ({ params }) => params,
 });
 
-const remoteWorktreeDiffRoute = createRoute({
+const worktreeDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: WORKTREE_ROUTE_PATHS.diff.remote,
-  component: withRemoteScope(WorktreeDiff),
+  path: WORKTREE_ROUTE_PATHS.diff,
+  component: withDeviceScope(WorktreeDiff),
   validateSearch: validateDiffSearch,
 });
 
-const remotePullRequestDiffRoute = createRoute({
+const pullRequestDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: WORKTREE_ROUTE_PATHS.prDiff.remote,
-  component: withRemoteScope(PullRequestDiff),
+  path: WORKTREE_ROUTE_PATHS.prDiff,
+  component: withDeviceScope(PullRequestDiff),
 });
 
-const remoteCommitDiffRoute = createRoute({
+const commitDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: WORKTREE_ROUTE_PATHS.commit.remote,
-  component: withRemoteScope(CommitDiff),
+  path: WORKTREE_ROUTE_PATHS.commit,
+  component: withDeviceScope(CommitDiff),
 });
 
-const remoteWorktreeFilesRoute = createRoute({
+// Params only: a new worktree is a fresh page (its folders), a new
+// pick within one is not.
+const worktreeFilesRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: WORKTREE_ROUTE_PATHS.files.remote,
-  component: withRemoteScope(WorktreeFiles),
+  path: WORKTREE_ROUTE_PATHS.files,
+  component: withDeviceScope(WorktreeFiles),
   validateSearch: validateFilesSearch,
-  // Params only: a new worktree is a fresh page (its folders), a new
-  // pick within one is not.
   remountDeps: ({ params }) => params,
 });
 
-const remoteScriptConsoleRoute = createRoute({
+const scriptConsoleRoute = createRoute({
   getParentRoute: () => rootRoute,
-  path: WORKTREE_ROUTE_PATHS.script.remote,
-  component: withRemoteScope(scriptConsoleComponent),
+  path: WORKTREE_ROUTE_PATHS.script,
+  component: withDeviceScope(ScriptConsole),
 });
 
-// remountDeps on the project- and worktree-scoped routes: the router
-// keeps one component instance across a params change and just
-// re-renders it, so without this a route would keep showing the
-// previous entity's data until its queries happened to refetch. The
-// router keys the match on this value, which is what the hand-written
-// `key={projectId}` wrappers used to do.
-
-// The project pages, each lazy once for both trees so the chunk loads
-// once, and each mounted twice: under /projects for this machine's
-// projects, under /devices/$deviceId for a peer's (withRemoteScope,
-// exactly like the worktree pages). A remote project header offers
-// the same actions a local one does, and they all land here.
-function projectRoutePair(
+// The project pages, each lazy. A peer's project header offers the
+// same actions this machine's does, and they all land here.
+function projectRoute(
   page: keyof typeof PROJECT_ROUTE_PATHS,
   component: ReturnType<typeof lazyRouteComponent>,
 ) {
-  const paths = PROJECT_ROUTE_PATHS[page];
-  return [
-    createRoute({
-      getParentRoute: () => rootRoute,
-      path: paths.local,
-      component,
-      remountDeps: ({ params }) => params,
-    }),
-    createRoute({
-      getParentRoute: () => rootRoute,
-      path: paths.remote,
-      component: withRemoteScope(component),
-      remountDeps: ({ params }) => params,
-    }),
-  ];
+  return createRoute({
+    getParentRoute: () => rootRoute,
+    path: PROJECT_ROUTE_PATHS[page],
+    component: withDeviceScope(component),
+    remountDeps: ({ params }) => params,
+  });
 }
 
 const projectRoutes = [
-  ...projectRoutePair(
+  projectRoute(
     "new",
     lazyRouteComponent(
       () => import("@/components/newWorktree/NewWorktree"),
       "NewWorktree",
     ),
   ),
-  ...projectRoutePair(
+  projectRoute(
     "configure",
     lazyRouteComponent(
       () => import("@/components/configure/ConfigureProject"),
       "ConfigureProject",
     ),
   ),
-  ...projectRoutePair(
+  projectRoute(
     "branches",
     lazyRouteComponent(
       () => import("@/components/manageBranches/ManageBranches"),
       "ManageBranches",
     ),
   ),
-  ...projectRoutePair(
+  projectRoute(
     "convertExternal",
     lazyRouteComponent(
       () => import("@/components/convertExternal/ConvertExternalWorktrees"),
       "ConvertExternalWorktrees",
     ),
   ),
-  ...projectRoutePair(
+  projectRoute(
     "worktreeLocation",
     lazyRouteComponent(
       () => import("@/components/worktreeLocation/WorktreeLocation"),
@@ -261,67 +248,19 @@ const projectRoutes = [
   ),
 ];
 
-const worktreeRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: WORKTREE_ROUTE_PATHS.detail.local,
-  component: WorktreeDetail,
-  remountDeps: ({ params }) => params,
-});
-
-const scriptConsoleRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: WORKTREE_ROUTE_PATHS.script.local,
-  component: scriptConsoleComponent,
-});
-
-const worktreeDiffRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: WORKTREE_ROUTE_PATHS.diff.local,
-  component: WorktreeDiff,
-  validateSearch: validateDiffSearch,
-});
-
-const pullRequestDiffRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: WORKTREE_ROUTE_PATHS.prDiff.local,
-  component: PullRequestDiff,
-});
-
-const commitDiffRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: WORKTREE_ROUTE_PATHS.commit.local,
-  component: CommitDiff,
-});
-
-const worktreeFilesRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: WORKTREE_ROUTE_PATHS.files.local,
-  component: WorktreeFiles,
-  validateSearch: validateFilesSearch,
-  // Params only: a new worktree is a fresh page (its folders), a new
-  // pick within one is not.
-  remountDeps: ({ params }) => params,
-});
-
 const routeTree = rootRoute.addChildren([
   indexRoute,
   forestRoute,
   settingsRoute,
   tidyRoute,
   devicesIndexRoute,
-  remoteWorktreeRoute,
-  remoteWorktreeDiffRoute,
-  remotePullRequestDiffRoute,
-  remoteCommitDiffRoute,
-  remoteScriptConsoleRoute,
-  remoteWorktreeFilesRoute,
-  ...projectRoutes,
   worktreeRoute,
-  scriptConsoleRoute,
   worktreeDiffRoute,
   pullRequestDiffRoute,
   commitDiffRoute,
   worktreeFilesRoute,
+  scriptConsoleRoute,
+  ...projectRoutes,
 ]);
 
 function RouteErrorFallback({

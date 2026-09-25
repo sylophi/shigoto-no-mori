@@ -102,8 +102,8 @@ function StackConnector({ child }: { child: StackChild | undefined }) {
 // reads as local: the PR pill off the peer's own map, a delete
 // dispatched to the peer from here off that device's mutation, script
 // activity off its run store. It opens the worktree's own detail page
-// under the device-scoped twin route, exactly like clicking a local
-// row. An unreachable device's rows fade back: last known state, not
+// under its device's route, exactly like clicking a local row. An
+// unreachable device's rows fade back: last known state, not
 // an error.
 export function WorktreeRow({
   worktree,

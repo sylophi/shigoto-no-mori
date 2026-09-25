@@ -1,5 +1,6 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
+import { useHostScope } from "@/hooks/remote/useHostScope";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { usePortPoolActive } from "@/hooks/ports/usePortPoolActive";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
@@ -16,7 +17,8 @@ interface ScriptsSectionProps {
 export function ScriptsSection({ worktree }: ScriptsSectionProps) {
   // The rows run on whichever device the scope names (see
   // useScriptRunner). Only the local-page CTA below gates on the scope.
-  const { remote, toProjectPage } = useProjectNav();
+  const { remote } = useHostScope();
+  const { toProjectPage } = useProjectNav();
   const { data: config, isLoading: configLoading } = useShigomoriConfig(
     worktree.projectId,
   );

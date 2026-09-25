@@ -66,7 +66,7 @@ export function WorktreeDetailInner({
   siblings,
 }: InnerProps) {
   const { toScript } = useWorktreeNav();
-  // Configure lives in both trees, so the breadcrumb links there
+  // Configure exists for every device, so the breadcrumb links there
   // whichever device the page is scoped to.
   const { toProjectPage } = useProjectNav();
   // Which device this page is scoped to. Everything data-shaped below

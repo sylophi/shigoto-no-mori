@@ -1,22 +1,17 @@
-// Scope-aware navigation for the worktree detail tree. The same page
-// components serve the local /projects/... routes and the
-// /devices/$deviceId/projects/... twins, so their internal links must
-// target whichever tree the current host scope lives in. One `go`
-// picks the twin and splices the device param. The paths themselves
-// come from lib/routePaths so the route trees and these links cannot
-// drift apart.
+// Scope-aware navigation for the worktree detail tree. Every worktree
+// page lives under /devices/$deviceId, so its internal links target the
+// device the current host scope names. The paths themselves come from
+// lib/routePaths so the route tree and these links cannot drift apart.
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { localDeviceId } from "@/lib/queryKeys";
-import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
+import { routeDeviceId, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 import { slotToParam, type ScriptSlot } from "@/store/scriptSlot";
 
-// The worktree pages' params, read non-strictly because each page
-// serves both its local route and the /devices/$deviceId twin (the
-// router can only type params against ONE route). `hash` exists only
-// under the commit pair and `scriptKey` only under the console pair.
-// Keeping the one unavoidable cast here gives the twin pattern a single
-// seam instead of a copy per page.
+// The worktree pages' params, read non-strictly because the pages
+// share them across five routes (the router can only type params
+// against ONE route). `hash` exists only under the commit page and
+// `scriptKey` only under the console. Keeping the one unavoidable cast
+// here gives the pages a single seam instead of a copy each.
 export function useScopedWorktreeParams() {
   return useParams({ strict: false }) as {
     projectId: string;
@@ -37,45 +32,36 @@ interface WorktreePageParams {
 
 export function useWorktreeNav() {
   const navigate = useNavigate();
-  const { deviceId, remote } = useHostScope();
+  const { deviceId } = useHostScope();
 
-  // The local path and the remote twin differ only by the
-  // /devices/$deviceId prefix and the param that fills it, so the two
-  // arms every helper used to spell out collapse to this. `on` names
-  // the peer whose twin to use, undefined for this machine's path. The
-  // router can only check params against ONE literal `to`, and this one
-  // is a union of the pair, hence the single cast -- the paths come
-  // from the same constants the route trees are built from, so a path
-  // the tree doesn't serve still can't slip through.
+  // `on` names the device whose page to open. The router can only
+  // check params against ONE literal `to`, and this one is a union of
+  // the pages, hence the single cast -- the paths come from the same
+  // constants the route tree is built from, so a path the tree doesn't
+  // serve still can't slip through.
   const goOn = (
-    on: string | undefined,
+    on: string,
     page: WorktreePage,
     params: WorktreePageParams,
     replace = false,
     search?: Record<string, unknown>,
   ) => {
-    const paths = WORKTREE_ROUTE_PATHS[page];
     void navigate({
-      to: on === undefined ? paths.local : paths.remote,
-      params: on === undefined ? params : { ...params, deviceId: on },
+      to: WORKTREE_ROUTE_PATHS[page],
+      params: { ...params, deviceId: on },
       ...(search === undefined ? {} : { search }),
       replace,
     } as never);
   };
-  // The tree the current host scope lives in.
+  // The device the current host scope names.
   const go = (
     page: WorktreePage,
     params: WorktreePageParams,
     replace = false,
     search?: Record<string, unknown>,
-  ) => goOn(remote ? deviceId : undefined, page, params, replace, search);
+  ) => goOn(deviceId, page, params, replace, search);
 
   return {
-    // True under a /devices/$deviceId twin route: local-only
-    // affordances (configure and settings links) gate on this instead
-    // of re-deriving the scope comparison.
-    remote,
-
     toWorktree(projectId: string, worktreeId: string, replace = false) {
       go("detail", { projectId, worktreeId }, replace);
     },
@@ -120,38 +106,35 @@ export function useWorktreeNav() {
       );
     },
 
-    // The script's console, in whichever tree this page lives in: a
+    // The script's console, on the device this page is scoped to: a
     // run on a peer streams back over its direct session, so its
-    // console is a page under the device twin like the diffs are.
+    // console is a page of that device like the diffs are.
     toScript(projectId: string, worktreeId: string, slot: ScriptSlot) {
       go("script", { projectId, worktreeId, scriptKey: slotToParam(slot) });
     },
 
-    // Explicitly a NAMED device's tree, whatever the surrounding scope:
-    // a mirrored or transplanted worktree lands on this machine (its
-    // page lives under /projects even when the action ran from a
-    // remote page) or on a peer (under that device's twin, even
-    // though the action ran from a local one).
+    // Explicitly a NAMED device's page, whatever the surrounding scope:
+    // a mirrored or transplanted worktree lands on this machine even
+    // when the action ran from a peer's page, or on a peer even though
+    // the action ran from a local one.
     toDeviceWorktree(landedOn: string, projectId: string, worktreeId: string) {
-      goOn(landedOn === localDeviceId ? undefined : landedOn, "detail", {
-        projectId,
-        worktreeId,
-      });
+      goOn(landedOn, "detail", { projectId, worktreeId });
     },
 
     // Any worktree page on a NAMED machine, whatever the surrounding
-    // scope: this one's for undefined, else that peer's twin. For a
-    // surface that spans every device at once (the ⌘K palette).
+    // scope: this one's for undefined (a row's spelling, routeDeviceId),
+    // else that peer's. For a surface that spans every device at once
+    // (the ⌘K palette).
     toPageOn(
       on: string | undefined,
       page: WorktreePage,
       params: WorktreePageParams,
     ) {
-      goOn(on, page, params);
+      goOn(routeDeviceId(on), page, params);
     },
 
-    // Where "leave this worktree's pages" lands. The root in both
-    // scopes: a remote worktree has no place of its own to fall back
+    // Where "leave this worktree's pages" lands. The root for every
+    // device: a peer's worktree has no place of its own to fall back
     // to, and the root is the merged tree's home either way (the web
     // shell's root dispatches to /devices).
     toFallback(replace = false) {

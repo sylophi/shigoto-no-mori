@@ -30,7 +30,7 @@ function commandAccessQueryOptions(deviceId: string, api: HostApi | undefined) {
     enabled: api !== undefined && deviceId !== localDeviceId,
     // A permission verdict only moves when the host grants or revokes,
     // which it pushes (remoteAccess:commandAccessChanged, handled in
-    // remoteHostWatch), so the honest refreshes are that push, the
+    // lib/hostWatch.ts), so the honest refreshes are that push, the
     // session-landed sweep (invalidateDeviceSession) and a window
     // focus -- not a hub round-trip per mount, which is what the
     // client's staleTime 0 would buy.

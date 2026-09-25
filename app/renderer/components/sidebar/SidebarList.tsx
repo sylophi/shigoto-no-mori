@@ -1,6 +1,10 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useLocation } from "@tanstack/react-router";
-import { matchRoutePath, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
+import {
+  matchRoutePath,
+  rowDeviceId,
+  WORKTREE_ROUTE_PATHS,
+} from "@/lib/routePaths";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import {
   rowSizeHint,
@@ -21,24 +25,20 @@ interface SidebarListProps {
 // its enclosing component out of React Compiler memoization and
 // re-renders it on every scroll offset. Isolating it here keeps
 // Sidebar's row-model build memoized.
-// The worktree an open detail page shows, local or on a peer.
+// The worktree an open detail page shows, local or on a peer, its
+// device spelled the way the rows spell it (none for this machine's).
 function matchWorktreeDetail(pathname: string): {
   deviceId?: string;
   projectId: string;
   worktreeId: string;
 } | null {
-  const remote = matchRoutePath(WORKTREE_ROUTE_PATHS.detail.remote, pathname);
-  if (remote) {
-    return {
-      deviceId: remote.deviceId!,
-      projectId: remote.projectId!,
-      worktreeId: remote.worktreeId!,
-    };
-  }
-  const local = matchRoutePath(WORKTREE_ROUTE_PATHS.detail.local, pathname);
-  return local
-    ? { projectId: local.projectId!, worktreeId: local.worktreeId! }
-    : null;
+  const match = matchRoutePath(WORKTREE_ROUTE_PATHS.detail, pathname);
+  if (!match) return null;
+  return {
+    deviceId: rowDeviceId(match.deviceId!),
+    projectId: match.projectId!,
+    worktreeId: match.worktreeId!,
+  };
 }
 
 export function SidebarList({
@@ -79,8 +79,7 @@ export function SidebarList({
   // lag the route (worktree queries still loading), so this retries every
   // render until it exists; the ref stops repeat scrolls afterwards so
   // the user can still scroll away freely.
-  // Both detail routes: the local one and its device-scoped twin, so a
-  // peer's worktree is revealed too.
+  // Any device's detail page, so a peer's worktree is revealed too.
   const { pathname } = useLocation();
   const open = matchWorktreeDetail(pathname);
   const lastRevealedRef = useRef<string | null>(null);

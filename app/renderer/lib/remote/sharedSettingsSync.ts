@@ -9,8 +9,8 @@
 // Three moves, all through the local copy:
 //
 //   - A peer's copy moved (its sharedSettings:changed push, carrying
-//     the copy whole, routed here by remoteHostWatch): merge it into
-//     the local copy. A merge that
+//     the copy whole, followed from its first session landing): merge
+//     it into the local copy. A merge that
 //     learns something makes the local host announce in turn, one that
 //     learns nothing announces nothing, and that is what ends the
 //     round.
@@ -35,10 +35,11 @@ import {
 } from "@shared/sharedSettings";
 import { clientConfigQueryOptions } from "@/hooks/config/useClientConfig";
 import { mergeClientConfigWrite } from "@/hooks/config/mergeClientConfigWrite";
+import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
 import { queryKeys } from "@/lib/queryKeys";
 import { deviceStatusView } from "./deviceStatus";
 import { remoteDeviceStore } from "./devices";
-import { apiFor, onSessionLanded } from "./remoteDeviceSync";
+import { apiFor, onAccountLeft, onSessionLanded } from "./remoteDeviceSync";
 
 // Offers entries to every peer in reach. Best-effort by design (see the
 // header): a peer with no grant, an older build with no such channel
@@ -65,12 +66,16 @@ export async function writeSharedSetting(
   return doc;
 }
 
-// A peer's copy moved (remoteHostWatch routes its push here, already
-// parsed): fold it into the local copy. Unconditional on purpose. The
-// host settles an echo cheaply, and asking it every time is what lets a
-// local copy that was reset behind the window fill back in.
-export function mergePeerSharedSettings(doc: SharedSettingsDoc): void {
-  window.api.sharedSettings.merge(doc).catch(() => undefined);
+// A peer's copy moved: fold it into the local copy. Unconditional on
+// purpose. The host settles an echo cheaply, and asking it every time
+// is what lets a local copy that was reset behind the window fill back
+// in. The bridge forwards a peer's pushes wholesale, so the copy is
+// parsed against the contract's schema rather than trusted.
+function mergePeerSharedSettings(payload: unknown): void {
+  const parsed =
+    sharedSettingsContract.calls.changed.payload.safeParse(payload);
+  if (!parsed.success) return;
+  window.api.sharedSettings.merge(parsed.data).catch(() => undefined);
 }
 
 // The one writer of the cached local copy. Merged in rather than set,
@@ -128,11 +133,22 @@ export function startSharedSettingsSync(queryClient: QueryClient): void {
   window.api.sharedSettings.onChanged((doc) => {
     noteLocalCopy(queryClient, doc);
   });
+  // Each peer's pushes are followed from its first landing on, which
+  // is also the first moment it can push at all, and the exchange that
+  // runs on every landing covers whatever it sent while unfollowed.
+  const followed = new Map<string, () => void>();
+  onAccountLeft(() => {
+    for (const unfollow of followed.values()) unfollow();
+    followed.clear();
+  });
   onSessionLanded((deviceId) => {
-    exchangeSharedSettings(
-      window.api.sharedSettings,
-      apiFor(deviceId).sharedSettings,
-    ).catch(() => undefined);
+    const peer = apiFor(deviceId).sharedSettings;
+    if (!followed.has(deviceId)) {
+      followed.set(deviceId, peer.onChanged(mergePeerSharedSettings));
+    }
+    exchangeSharedSettings(window.api.sharedSettings, peer).catch(
+      () => undefined,
+    );
   });
   migrateQuickCreateDevices(queryClient).catch((error: unknown) => {
     console.warn("[sharedSettings] create-device migration failed", error);

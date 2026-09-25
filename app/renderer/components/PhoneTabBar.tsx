@@ -1,7 +1,7 @@
 // The phone layout's primary navigation: the sidebar's two views and
 // the two places its footer cluster reaches on a wide viewport, as
 // thumb-sized tabs along the bottom edge. A tab lights on its page
-// exactly (the rule NavIconButton follows: a peer's worktree under
+// exactly (the rule NavIconButton follows: a worktree under
 // /devices/$deviceId is ordinary work, not a device page), and for
 // everything else the forest tab the layout preference names lights,
 // since every other page is reached from one of them (the forest page

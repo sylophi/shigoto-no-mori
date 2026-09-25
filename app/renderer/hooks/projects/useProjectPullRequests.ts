@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import {
   queryOptions,
   useQueries,
@@ -14,7 +13,6 @@ import {
 } from "@shared/schemas";
 import {
   isWorktreePullRequestKey,
-  queryKeys,
   queryKeysFor,
   worktreePullRequestKeyBranch,
   type QueryKeyRegistry,
@@ -53,8 +51,8 @@ export function pullRequestMutationKey(keys: QueryKeyRegistry) {
 // an open page within a sweep, not at the next focus. Cascading to
 // every per-branch query instead would fire an extra `gh pr list
 // --head` per open page on every broadcast, most of them for PRs that
-// didn't move. Also serves a peer's broadcast (remoteHostWatch), under
-// that peer's keys.
+// didn't move. Every device's broadcast lands here (lib/hostWatch.ts),
+// under that device's keys.
 export async function syncProjectPullRequests(
   qc: QueryClient,
   keys: QueryKeyRegistry,
@@ -92,21 +90,10 @@ export async function syncProjectPullRequests(
   }
 }
 
-export function useWatchProjectPullRequests(): void {
-  const queryClient = useQueryClient();
-  useEffect(
-    () =>
-      window.api.githubCli.onProjectPullRequestsRefreshed(({ projectId }) => {
-        void syncProjectPullRequests(queryClient, queryKeys, projectId);
-      }),
-    [queryClient],
-  );
-}
-
 // Branch -> PR for a project, feeding the sidebar dots. The background
 // sweep in main/electron/fetch.ts refreshes it and broadcasts
 // GithubCliProjectPullRequestsRefreshed only when the data actually
-// changed; useWatchProjectPullRequests invalidates this query off that
+// changed; syncProjectPullRequests above refetches it off that
 // broadcast. The open worktree page reads its PR through
 // useWorktreePullRequest, and checks this map only to decide whether to
 // hold the section's place while that loads.
