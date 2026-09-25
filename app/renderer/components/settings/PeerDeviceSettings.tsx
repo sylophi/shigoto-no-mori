@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { errorMessageOf } from "@shared/errors";
-import type { ReadGlobalConfig } from "@shared/schemas";
+import type { GlobalConfig } from "@shared/schemas";
 import { EmptyPanel } from "@/components/ui/empty-panel";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { useDeviceSettingsSave } from "@/hooks/config/useDeviceSettingsSave";
@@ -126,7 +126,7 @@ function PeerSettingsForm({
   offline,
 }: {
   device: RemoteDevice;
-  initialConfig: ReadGlobalConfig;
+  initialConfig: GlobalConfig;
   offline: boolean;
 }) {
   const save = useDeviceSettingsSave();

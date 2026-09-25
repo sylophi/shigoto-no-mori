@@ -1,6 +1,7 @@
 // Wire frames for the websocket host transport: the same contract
-// modules the Electron bridge serves, carried over a LAN socket to a
-// remote client. One JSON object per text frame.
+// modules the Electron bridge serves, carried over a direct socket to
+// a peer device. The hub link multiplexes the same frames through the
+// device hub. One JSON object per text frame.
 //
 // PROTOCOL INVARIANT: a field whose value is undefined is OMITTED from
 // the frame. JSON.stringify already drops undefined object properties,
@@ -20,11 +21,6 @@
 // req carrying a chunk stays under the inbound cap.
 import { z } from "zod";
 import { HANDSHAKE_NONCE_PATTERN } from "./proof";
-
-// One well-known default keeps the app listener and a client's connect
-// form aligned without either hardcoding it. High and unregistered so
-// it stays clear of common dev servers.
-export const DEFAULT_SOCKET_PORT = 42017;
 
 // Largest inbound (client to server) frame the host will buffer, in
 // bytes. Client frames are tiny by construction (the largest is a req
@@ -55,8 +51,8 @@ export const ChunkB64Schema = z
   .regex(/^[A-Za-z0-9+/]*={0,2}$/);
 
 // Deadline for the first frame (a valid hello) after a socket opens.
-// A shared two-sided protocol fact: slice B's client must send within
-// it. Tests override via WsServerStartOpts.helloTimeoutMs.
+// A shared two-sided protocol fact: the client must send within it.
+// Tests override via WsServerStartOpts.helloTimeoutMs.
 export const HELLO_TIMEOUT_MS = 10_000;
 
 // Liveness. A websocket over a NAT, a tunnel edge or a laptop that just
@@ -89,8 +85,8 @@ export const PROBE_TIMEOUT_MS = 5_000;
 // judged, so a host can roll out ahead of its clients.
 export const HOST_LIVENESS_TIMEOUT_MS = 120_000;
 
-// Concurrent dispatched requests per connection, shared by the LAN
-// binding (per socket) and the hub link (per peer). Over the cap a
+// Concurrent dispatched requests per connection, shared by the direct
+// listener (per socket) and the hub link (per peer). Over the cap a
 // request is refused rather than spawning yet another git or CLI
 // subprocess. 64: byte streams no longer park anything here (they are
 // binary channel frames, channels.ts), but the headroom stays for a
@@ -98,7 +94,7 @@ export const HOST_LIVENESS_TIMEOUT_MS = 120_000;
 export const MAX_IN_FLIGHT_PER_PEER = 64;
 
 // Skip a push once the outbound socket buffer passes this, shared by
-// the LAN binding and the hub link, so a stalled peer or hub cannot
+// the direct listener and the hub link, so a stalled peer or hub cannot
 // grow main-process memory without bound via queued pushes. Pushes are
 // recoverable refresh signals, so dropping one is safe.
 export const PUSH_BUFFER_LIMIT_BYTES = 1 << 23;
@@ -110,8 +106,8 @@ export const TERMINATE_GRACE_MS = 1_500;
 
 // Application close codes (the 4000-4999 range websockets reserve for
 // apps). AUTH_FAILED means the credential itself was wrong: the client
-// must surface it and never auto-retry, or a typo'd token turns into a
-// hammering loop. HELLO_FAILED covers a missing, late or malformed
+// must surface it and never auto-retry, or a refused ticket turns into
+// a hammering loop. HELLO_FAILED covers a missing, late or malformed
 // hello and is safe to retry.
 //
 // AUTH_LOCKED_OUT is the one the HOST must not conflate with
@@ -120,7 +116,7 @@ export const TERMINATE_GRACE_MS = 1_500;
 // read, purely because this client identity spent its attempts
 // recently. It says nothing about the credential the refused client
 // holds -- often nothing at all, since the lockout keys on IP and one
-// device's typo benches every device behind the same NAT. It is
+// device's bad tickets bench every device behind the same NAT. It is
 // TEMPORARY by construction (AUTH_LOCKOUT_MS, and a refused connection
 // does not extend the window), so it is retryable and the client
 // backs off through it. Only the host can tell the two apart, so the
@@ -143,14 +139,13 @@ export const CLOSE_OVER_CAPACITY = 1013;
 // carried so the server can log or gate version skew later without a
 // protocol change.
 //
-// The credential comes in one of two shapes, fixed by how the listener
-// was constructed and never chosen by the frame: the legacy LAN wire
-// reads `token`, the direct data plane reads `nonce` and `proof`
-// (shared/ipc/socket/proof.ts). Both are optional so one schema serves
-// both wires, and each listener fails closed without its own.
+// The credential is `nonce` and `proof` (shared/ipc/socket/proof.ts),
+// read by the direct listener. Optional because the hub link's hello
+// carries none (the device hub already authenticated the account), and
+// the direct listener fails closed without them. An older build's hub
+// hello still carries an empty `token`, which the parse strips.
 const HelloFrameSchema = z.object({
   t: z.literal("hello"),
-  token: z.string().optional(),
   deviceId: z.string(),
   appVersion: z.string(),
   // The client's nonce, and its HMAC of both nonces under the ticket.
@@ -176,8 +171,8 @@ export type ReqFrame = z.infer<typeof ReqFrameSchema>;
 // next presence drop and fan every broadcast at it through the Durable
 // Object. Additive per the version-skew policy: an old host fails to
 // parse the frame and drops it, so the session then dies on presence
-// exactly as before. The direct and LAN sockets have a real socket
-// close, so they never need it and ignore it.
+// exactly as before. A direct socket has a real socket close, so it
+// never needs it and ignores it.
 const ByeFrameSchema = z.object({
   t: z.literal("bye"),
 });
@@ -209,8 +204,8 @@ const WelcomeFrameSchema = z.object({
   t: z.literal("welcome"),
   deviceId: z.string(),
   appVersion: z.string(),
-  // The host's half of the mutual proof, direct data plane only. A
-  // proof-mode client refuses a welcome without it.
+  // The host's half of the mutual proof, direct data plane only. The
+  // direct client refuses a welcome without it.
   proof: z.string().optional(),
 });
 
@@ -229,23 +224,22 @@ const ResOkFrameSchema = z.object({
   result: z.unknown().optional(),
 });
 
-// The one refusal code either remote gate stamps on a res error today:
-// the device hub's per-peer command-grant gate and the LAN wire's
-// read-only gate. One shared constant so both
-// client roles mint one typed error for "that machine will not run
+// The one refusal code a remote gate stamps on a res error: the direct
+// listener's command-access gate. One shared constant so the client
+// transport mints one typed error for "that machine will not run
 // commands from here", distinct from a real handler failure.
 export const COMMAND_REFUSED_CODE = "command-refused";
 
-// The refusal message both gates carry. The exact text predates the
+// The refusal message the gate carries. The exact text predates the
 // code (the hub grant gate shipped it in step 4), so an OLD peer
 // still sends it WITHOUT a code and message-based matching keeps
 // working across version skew in both directions.
 export const COMMAND_REFUSED_MESSAGE =
   "this device is not permitted to run commands on the remote machine";
 
-// The typed client-side surface of a command refusal, minted by both
-// client roles (the LAN socket client transport and the hub link's
-// client role) when a res error carries COMMAND_REFUSED_CODE. The
+// The typed client-side surface of a command refusal, minted by the
+// direct client transport when a res error carries
+// COMMAND_REFUSED_CODE. The
 // message is preserved verbatim so every message-text matcher keeps
 // behaving as before.
 export class CommandRefusedError extends Error {

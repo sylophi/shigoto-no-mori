@@ -1,16 +1,16 @@
-// Browser-side client transport for the websocket host binding (v2
-// step 3, slice B). It is the renderer's ClientTransport onto a remote
-// device AND, verbatim, the step-8 web client's transport, so it must
-// use only browser-global APIs: no electron, no node. The global
-// WebSocket is the one platform dependency. Node 22+ ships that same
-// global, which is what lets the browser-only transport run under node
-// in the durable proof.
+// Client transport for the direct listener (host/socket/server.ts): the
+// direct dialer's ClientTransport onto a peer device, in main and,
+// verbatim, in the web client, so it must use only browser-global
+// APIs: no electron, no node. The global WebSocket is the one platform
+// dependency (main injects `ws` instead, see ClientSocket). Node 22+
+// ships that same global, which is what lets the browser-only
+// transport run under node in the durable proof.
 //
 // It speaks the frames.ts contract: one JSON object per text frame,
-// hello first, then req/res correlated by a monotonic id, with push
-// frames fanned out to local subscribers. It owns exactly one socket.
-// Reconnect and backoff live one layer up in the supervisor, which is
-// the single owner of retry.
+// the challenge/hello proof handshake first, then req/res correlated
+// by a monotonic id, with push frames fanned out to local subscribers.
+// It owns exactly one socket. Redials live one layer up in the direct
+// keeper, which is the single owner of retry.
 import { errorMessageOf } from "@shared/errors";
 import {
   CLOSE_AUTH_FAILED,
@@ -43,8 +43,9 @@ import { createLimiter } from "@shared/util/limit";
 // A connect attempt failed before the welcome landed. `code` is the
 // close code when the failure came from a socket close (null on a
 // welcome timeout or a pre-open error). `blocked` is the block-vs-retry
-// verdict the supervisor keys on: a wrong credential (CLOSE_AUTH_FAILED)
-// must never auto-retry, or a typo turns into a hammering loop.
+// verdict the keeper and the hub supervisor key on: a wrong credential
+// (CLOSE_AUTH_FAILED) must never auto-retry, or a refused credential
+// turns into a hammering loop.
 // Everything else is safe to back off and retry, INCLUDING the host's
 // failed-auth lockout (CLOSE_AUTH_LOCKED_OUT), which is a temporary
 // bench keyed on client IP rather than a verdict on our credential.
@@ -114,16 +115,12 @@ export type OpenClientSocket = (url: string) => ClientSocket;
 const openGlobalSocket: OpenClientSocket = (url) => new WebSocket(url);
 
 export type ConnectDeviceOptions = {
-  // ws:// URL of the host listener.
+  // ws:// or wss:// URL of the host listener.
   url: string;
-  // The credential: the device config's shared secret on the legacy
-  // LAN wire, a single-use connect ticket on the direct data plane.
-  token: string;
-  // "token" (the default) sends the credential in the hello. "proof"
-  // never sends it: both ends prove they hold it instead, and the
-  // welcome is only trusted once the host's half checks out
-  // (shared/ipc/socket/proof.ts). The direct dialer uses "proof".
-  auth?: "token" | "proof";
+  // The single-use connect ticket. It never travels: both ends prove
+  // they hold it instead, and the welcome is only trusted once the
+  // host's half checks out (shared/ipc/socket/proof.ts).
+  ticket: string;
   // This client build's version, carried in the hello so the host can
   // log or gate skew later.
   appVersion: string;
@@ -133,12 +130,10 @@ export type ConnectDeviceOptions = {
   // A pre-welcome close rejects the connect promise instead, so this
   // fires at most once and never for a failed attempt.
   onClose: (code: number | null) => void;
-  // Identity pin for the direct data plane: when
-  // set and the welcome's self-asserted deviceId differs, the
-  // handshake fails and the socket closes, so a dial that landed on
-  // the wrong machine can never be cached under the intended peer.
-  // Absent for the legacy LAN dial, whose caller keys on whatever the
-  // welcome says.
+  // Identity pin: when set and the welcome's self-asserted deviceId
+  // differs, the handshake fails and the socket closes, so a dial that
+  // landed on the wrong machine can never be cached under the intended
+  // peer. The direct dialer always sets it.
   expectedDeviceId?: string;
   // Wildcard push tap, fired for EVERY push frame before the
   // per-channel subscribers, so a bridge can forward this connection's
@@ -204,7 +199,7 @@ export type PendingDeviceConnection = {
 // The block-vs-retry verdict for a close code. An ALLOWLIST of the
 // codes that block, so a code this build has never heard of is
 // retryable by default rather than terminal by accident. Only a wrong
-// credential blocks: the supervisor must not spin on it. The lockout
+// credential blocks: the keeper must not spin on it. The lockout
 // (CLOSE_AUTH_LOCKED_OUT) deliberately does NOT block -- it is
 // temporary, it is keyed on client IP so it may have nothing to do
 // with us, and a refused connection does not extend its window, so
@@ -215,15 +210,6 @@ export type PendingDeviceConnection = {
 // logic so the one rule has a single owner.
 function isBlockingCloseCode(code: number | null): boolean {
   return code === CLOSE_AUTH_FAILED;
-}
-
-// The single-phase connect every non-racing caller uses (the socket
-// and direct-plane proofs, the wire bench): open and hello in one
-// motion, the behavior this function always had.
-export function connectDevice(
-  options: ConnectDeviceOptions,
-): Promise<DeviceConnection> {
-  return openDevice(options).authenticate();
 }
 
 export function openDevice(
@@ -284,7 +270,7 @@ export function openDevice(
   // Set when the owner tears the connection down via close(), so the
   // ensuing close event stays silent: onClose must fire only for a
   // socket that dropped on its own, never for a deliberate teardown,
-  // or the supervisor would schedule a reconnect against its own stop.
+  // or the keeper would schedule a redial against its own stop.
   let ownerClosed = false;
   // Non-null once the welcome landed. Distinguishes a pre-welcome
   // close (reject the connect promise) from a post-welcome close
@@ -292,13 +278,11 @@ export function openDevice(
   let welcome: { remoteDeviceId: string; remoteAppVersion: string } | null =
     null;
   // The two-phase hello state: requested by authenticate(), sent once
-  // the socket is open too. connectDevice requests it up front, so the
-  // single-phase path hellos on open exactly as before.
+  // the socket is open and the host's challenge has arrived too.
   let opened = false;
   let helloRequested = false;
   let helloWasSent = false;
-  const proofMode = options.auth === "proof";
-  // The nonce pair. Proof mode cannot hello until the host's arrives.
+  // The nonce pair. The hello waits for the host's.
   let hostNonce: string | null = null;
   let clientNonce: string | null = null;
 
@@ -307,21 +291,6 @@ export function openDevice(
   // latches below land before any yield.
   const sendHello = async (): Promise<void> => {
     if (helloWasSent || closed || !opened || !helloRequested) return;
-    if (!proofMode) {
-      helloWasSent = true;
-      // Hello must be the first frame, within the host's hello timeout.
-      socket.send(
-        encodeFrame({
-          t: "hello",
-          token: options.token,
-          deviceId: options.localDeviceId,
-          appVersion: options.appVersion,
-          // Asks the host for deflated frames (deflatedFrame.ts).
-          deflate: canInflateFrames(),
-        }),
-      );
-      return;
-    }
     // Not challenged yet: the challenge frame calls back in here.
     const challenge = hostNonce;
     if (challenge === null) return;
@@ -329,12 +298,13 @@ export function openDevice(
     const nonce = newHandshakeNonce();
     clientNonce = nonce;
     const proof = await handshakeProof(
-      options.token,
+      options.ticket,
       "client",
       challenge,
       nonce,
     );
     if (closed) return;
+    // Hello must be the first frame, within the host's hello timeout.
     socket.send(
       encodeFrame({
         t: "hello",
@@ -342,6 +312,7 @@ export function openDevice(
         appVersion: options.appVersion,
         nonce,
         proof,
+        // Asks the host for deflated frames (deflatedFrame.ts).
         deflate: canInflateFrames(),
       }),
     );
@@ -395,7 +366,7 @@ export function openDevice(
 
   // Liveness (shared/ipc/socket/heartbeat.ts), armed after the welcome.
   // A death is reported exactly like a socket close (pending rejected,
-  // onClose fired) so the supervisor or keeper redials on it.
+  // onClose fired) so the keeper redials on it.
   const heartbeat = createHeartbeat({
     ...options.heartbeat,
     sendPing: () => socket.send(encodeFrame({ t: "ping" })),
@@ -415,9 +386,9 @@ export function openDevice(
     sendHello().catch(proofFailed);
   });
 
-  // The one place a welcome becomes an established connection. In
-  // proof mode it runs only after the host's proof checked out, so the
-  // identity pin's blocking verdict is never handed to an impostor.
+  // The one place a welcome becomes an established connection. It runs
+  // only after the host's proof checked out, so the identity pin's
+  // blocking verdict is never handed to an impostor.
   const acceptWelcome = (deviceId: string, appVersion: string): void => {
     if (closed || welcome !== null) return;
     if (
@@ -453,7 +424,7 @@ export function openDevice(
     nonce: string,
     frame: { deviceId: string; appVersion: string },
   ): Promise<void> => {
-    const want = await handshakeProof(options.token, "host", challenge, nonce);
+    const want = await handshakeProof(options.ticket, "host", challenge, nonce);
     if (closed) return;
     if (!proofsMatch(expected, want)) {
       failHandshake(
@@ -486,7 +457,7 @@ export function openDevice(
   // Frames are handled where they land, in arrival order. Two steps
   // are async and must not be overtaken by the frames behind them:
   // inflating a deflated frame (script output is ordered pushes), and
-  // in proof mode checking the host's proof before its welcome counts.
+  // checking the host's proof before its welcome counts.
   // So while one is outstanding every later frame, text or bytes,
   // queues behind it, and with none outstanding, nearly always, a
   // frame pays nothing.
@@ -573,7 +544,7 @@ export function openDevice(
   });
 
   // A promise only for the one frame whose handling is async, the
-  // proof-mode welcome.
+  // welcome.
   function handleText(text: string): void | Promise<void> {
     if (closed) return;
     const frame = decodeFrame(text, ServerFrameSchema);
@@ -587,10 +558,10 @@ export function openDevice(
     heartbeat.noteInbound();
 
     if (welcome === null) {
-      // The challenge opens proof mode's handshake, so it is the one
-      // other frame that can legitimately arrive before the welcome.
+      // The challenge opens the handshake, so it is the one other
+      // frame that can legitimately arrive before the welcome.
       if (frame.t === "challenge") {
-        if (!proofMode || hostNonce !== null) return;
+        if (hostNonce !== null) return;
         hostNonce = frame.nonce;
         sendHello().catch(proofFailed);
         return;
@@ -601,25 +572,21 @@ export function openDevice(
         console.warn("[socket] dropping pre-welcome frame");
         return;
       }
-      if (proofMode) {
-        // The far end must prove it holds the ticket too, before the
-        // welcome is recorded.
-        const expected = frame.proof;
-        const challenge = hostNonce;
-        const nonce = clientNonce;
-        if (expected === undefined || challenge === null || nonce === null) {
-          failHandshake(
-            "welcome carried no proof of the connect ticket",
-            frame.deviceId,
-          );
-          return;
-        }
-        return verifyHostProof(expected, challenge, nonce, frame).catch(
-          proofFailed,
+      // The far end must prove it holds the ticket too, before the
+      // welcome is recorded.
+      const expected = frame.proof;
+      const challenge = hostNonce;
+      const nonce = clientNonce;
+      if (expected === undefined || challenge === null || nonce === null) {
+        failHandshake(
+          "welcome carried no proof of the connect ticket",
+          frame.deviceId,
         );
+        return;
       }
-      acceptWelcome(frame.deviceId, frame.appVersion);
-      return;
+      return verifyHostProof(expected, challenge, nonce, frame).catch(
+        proofFailed,
+      );
     }
 
     if (frame.t === "pong") return;
@@ -635,8 +602,8 @@ export function openDevice(
       if (frame.ok) {
         entry.resolve(frame.result);
       } else if (frame.code === COMMAND_REFUSED_CODE) {
-        // The host's gate refused the command (the LAN wire is
-        // read-only). Typed, message preserved, so a caller can
+        // The host's gate refused the command (it does not accept
+        // commands from its peers). Typed, message preserved, so a caller can
         // distinguish "that machine will not run commands from here"
         // from a real handler failure. An old host sends no code and
         // falls through to the plain Error below.
@@ -726,7 +693,7 @@ export function openDevice(
     closed = true;
     if (!wasWelcomed) {
       // Closed before the handshake finished. The close code decides
-      // block vs retry, and the supervisor reads it off the error.
+      // block vs retry, and the dialer reads it off the error.
       const code = event.code;
       const error = new RemoteConnectError(
         `connection closed before welcome (code ${code}${

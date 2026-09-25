@@ -27,16 +27,17 @@ pre-commit:
     file-sync-test:
       glob: "file-sync/**"
       run: CGO_CFLAGS=-Wno-deprecated-declarations go test -C file-sync ./...
-    # Boots the real ws binding on an ephemeral port and asserts the
-    # auth/dispatch/broadcast/framing paths plus the hardening (terminate
-    # on bad token, oversized-frame and Origin rejection, in-flight cap,
-    # generation guard) and the explicit remote-tag contract. Gated to
-    # the socket surface plus the whole contract layer (shared/ipc/**
-    # and the shared/schemas the contracts are built from, which feed
-    # the invariant through allContractModules), so adding an untagged
-    # host invoke also trips it.
+    # Boots the real direct listener on an ephemeral port and asserts the
+    # ticket-proof handshake, the dispatch/broadcast/framing paths plus
+    # the hardening (terminate on bad proof, oversized-frame and Origin
+    # rejection, in-flight cap, generation guard, the command gate,
+    # liveness, deflated frames) and the explicit remote-tag contract.
+    # Gated to the socket surface plus the whole contract layer
+    # (shared/ipc/** and the shared/schemas the contracts are built
+    # from, which feed the invariant through allContractModules), so
+    # adding an untagged host invoke also trips it.
     socket-host:
-      glob: "{app/host/socket/**,app/host/ipc/modules/globalConfig.ts,app/host/ipc/modules/remoteAccess.ts,app/shared/ipc/**,app/shared/schemas/**,app/shared/hub/protocol.ts,app/main/ipc/register.ts,app/test/socket-host.mjs,app/test/lib/checkKit.mjs}"
+      glob: "{app/host/socket/**,app/host/direct/tickets.ts,app/shared/packaging/rendererScheme.mts,app/host/ipc/modules/globalConfig.ts,app/host/ipc/modules/remoteAccess.ts,app/shared/ipc/**,app/shared/schemas/**,app/shared/hub/protocol.ts,app/main/ipc/register.ts,app/test/socket-host.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
       run: pnpm -C app test socket-host
     # Typechecks the hub Worker package and runs its vitest suite
     # inside workerd (real D1, Durable Object and websocket bindings)
@@ -58,13 +59,13 @@ pre-commit:
     # correlation, the void-field framing invariant, broadcast gating,
     # message-only error serialization, the local outbound size guard,
     # offline nacks, presence-driven peer teardown, fresh-ticket
-    # redials, the revoked/superseded blocked verdicts, the ignored
-    # hello token and the per-peer in-flight cap. Gated to the hub
+    # redials, the revoked/superseded blocked verdicts, an older build's
+    # hello token stripped and the per-peer in-flight cap. Gated to the hub
     # transport surface plus the sm frame layer it multiplexes.
     hub-link:
       glob: "{app/shared/hub/**,app/shared/remote/**,app/host/hub/**,app/shared/ipc/socket/**,app/shared/ipc/registerContract.ts,app/shared/ipc/modules/remoteAccess.ts,app/host/ipc/modules/remoteAccess.ts,app/shared/util/limit.ts,app/test/hub-link.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs}"
       run: pnpm -C app test hub-link
-    # Durable proof for the direct data plane (supervised by the keeper): boots the stub Durable Object plus a REAL ticket-mode
+    # Durable proof for the direct data plane (supervised by the keeper): boots the stub Durable Object plus a REAL direct
     # listener on an ephemeral loopback port, brokers connect tickets
     # over the device hub via direct:connectInfo, and asserts the whole
     # plane: fail-closed brokering without a caller identity, ticket

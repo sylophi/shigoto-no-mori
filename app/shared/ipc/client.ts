@@ -38,7 +38,6 @@ import type { ClientTransport } from "@shared/ipc/transport";
 import type {
   ClientConfig,
   DeviceSettingsPatch,
-  GlobalConfig,
   LaunchToolMenuEntry,
   PackageScriptSortMode,
   PickFolderPayload,
@@ -214,15 +213,8 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
 
     globalConfig: {
       read: globalConfigClient.read,
-      // Local unredacted read. Carries remoteDevices and the hosting
-      // token, so it is remote false and callers must keep the result
-      // out of any broadly-cached query (the registry reconcile and the
-      // hosting/remote-device write base read it imperatively).
-      readLocal: globalConfigClient.readLocal,
-      write: (config: GlobalConfig) => globalConfigClient.write({ config }),
-      // The remote-writable device-settings subset: patch semantics,
-      // strict schema, structurally unable to carry socketHost or
-      // remoteDevices.
+      // The one settings write, local or remote: patch semantics,
+      // strict schema, structurally unable to carry an unmanaged key.
       writeDeviceSettings: (patch: DeviceSettingsPatch) =>
         globalConfigClient.writeDeviceSettings({ patch }),
     },
@@ -326,6 +318,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       // The preflight "am I granted command access on this host?" read,
       // answered per calling peer by the serving transport.
       commandAccess: remoteAccessClient.commandAccess,
+      onCommandAccessChanged: remoteAccessClient.commandAccessChanged,
     },
 
     runtime: {

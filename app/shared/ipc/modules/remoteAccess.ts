@@ -8,7 +8,6 @@ import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 // so every wire serves it ungated. The verdict comes from the transport
 // binding via HandlerContext.isCallerCommandGranted:
 //   - Electron (local window): always granted.
-//   - LAN socket: never granted, that wire is read-only by policy.
 //   - Direct data plane: the host's live command-access switch (does
 //     it accept commands from the account's other devices at all).
 // The answer is a single boolean about the caller alone. The switch

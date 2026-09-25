@@ -420,8 +420,8 @@ func writeJSONObject(path string, doc map[string]json.RawMessage) error {
 	return atomicWriteJSONMode(path, doc, configFileMode(path))
 }
 
-// config.json carries socketHost.token, a bearer secret, so it is
-// 0600 like the app's own writer (host/lib/config/global.ts).
+// config.json is owner-only (0600), like the app's own writer
+// (host/lib/config/global.ts).
 func configFileMode(path string) os.FileMode {
 	if filepath.Base(path) == "config.json" {
 		return 0o600

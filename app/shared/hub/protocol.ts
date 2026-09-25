@@ -17,8 +17,8 @@
 // holds a long-lived credential it exchanges for short-lived single-use
 // connect tickets, and the DO authenticates the account when it burns
 // the ticket, so every deliverable peer is by construction a device of
-// the same account. That is why the app-level hello token is ignored on
-// the hub path. Authorization stays host-local: mutating calls ride the
+// the same account. That is why the app-level hello carries no
+// credential on the hub path. Authorization stays host-local: mutating calls ride the
 // direct sockets only, where dispatch gates them on per-peer command
 // grants fail-closed (host/socket/server.ts), and the hub wire itself
 // serves nothing but the broker surface (see shared/hub/link.ts). The
@@ -91,7 +91,7 @@ export const MAX_ONLINE_DEVICES = 64;
 export const MAX_ACCOUNT_DEVICES = 16;
 
 // Application close codes for the hub socket. Deliberately disjoint
-// from the LAN socket's 4001/4002 (frames.ts) so a log line's code
+// from the direct socket's 4001-4003 (frames.ts) so a log line's code
 // names its transport. TICKET_REJECTED covers unknown, expired and
 // replayed tickets alike: every case means "mint a fresh ticket and
 // reconnect", and distinguishing them would only tell an attacker
@@ -373,7 +373,7 @@ export function encodeEnvelope(
   return JSON.stringify(envelope);
 }
 
-// The one sanctioned reader is literally the LAN socket's: invalid
+// The one sanctioned reader is literally the direct socket's: invalid
 // JSON or a schema miss returns null, and callers treat that as a
 // dropped message, never as fatal. Re-exported under the envelope
 // name so hub callers stay in this file's vocabulary.

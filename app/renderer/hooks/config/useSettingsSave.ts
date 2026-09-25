@@ -3,15 +3,15 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
-import type {
-  ClientConfig,
-  DeviceSettingsPatch,
-  GlobalConfig,
-  LauncherCommand,
-  Theme,
+import {
+  type ClientConfig,
+  DEVICE_SETTINGS_DEFAULTS as DEFAULTS,
+  type DeviceSettingsPatch,
+  type GlobalConfig,
+  type LauncherCommand,
+  type Theme,
 } from "@shared/schemas";
 import { errorMessageOf } from "@shared/errors";
-import { updateLocalGlobalConfig } from "@/lib/config/localGlobalConfig";
 import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
 
@@ -37,8 +37,8 @@ export interface SettingsFormState {
 }
 
 // Decode lives beside the encoders so encode, decode and the dirty
-// diff below share one file: the diff compares docs produced by these
-// functions, never respelled default literals.
+// diff below share one file. Device defaults come from the shared table
+// the host's patch write stores by omission, never respelled here.
 export function fromConfig(
   config: GlobalConfig,
   clientConfig: ClientConfig,
@@ -53,48 +53,20 @@ export function fromConfig(
     // hiding is set-semantic -- without this, re-hiding a tool in a
     // different order would read as an unsaved change.
     hiddenLaunchers: (config.hiddenLaunchers ?? []).toSorted(),
-    launchScripts: config.launchScripts ?? true,
-    deleteBranchOnRemove: config.deleteBranchOnRemove ?? true,
-    autoPopulateInstall: config.autoPopulateInstall ?? false,
-    autoPullNew: config.autoPullNew ?? false,
-    autoPullPrimaryOnly: config.autoPullPrimaryOnly ?? false,
-    doubutsuNames: config.doubutsuNames ?? false,
-    codexWorktreeNames: config.codexWorktreeNames ?? false,
-    portPool: config.portPool ?? false,
-    terrier: config.terrier ?? false,
-    githubCli: config.githubCli ?? true,
-  };
-}
-
-// The managed device keys only, without a base document under them. Two
-// jobs: it is the dirty projection (an unchanged managed set skips the
-// CLI spawn), and it is what gets spread over the unredacted base at
-// save time to form the write. Keeping it base free is what lets the
-// dirty check ignore socketHost, which the form never manages and which
-// the redacted read it was built from carries only in redacted form.
-function managedDeviceConfig(state: SettingsFormState): GlobalConfig {
-  const valid = validLaunchers(state);
-  return {
-    launchers: valid.length > 0 ? valid : undefined,
-    // Default is everything shown; omit the key entirely when nothing is
-    // hidden rather than persisting an empty array.
-    hiddenLaunchers:
-      state.hiddenLaunchers.length > 0 ? state.hiddenLaunchers : undefined,
-    // Default is on; same opt-out serialization as deleteBranchOnRemove.
-    launchScripts: state.launchScripts ? undefined : false,
-    // Default is true; omit when on, store explicit `false` when off so
-    // the user's opt-out survives reads.
-    deleteBranchOnRemove: state.deleteBranchOnRemove ? undefined : false,
-    // Default is false; only persist when explicitly enabled.
-    autoPopulateInstall: state.autoPopulateInstall ? true : undefined,
-    autoPullNew: state.autoPullNew ? true : undefined,
-    autoPullPrimaryOnly: state.autoPullPrimaryOnly ? true : undefined,
-    doubutsuNames: state.doubutsuNames ? true : undefined,
-    codexWorktreeNames: state.codexWorktreeNames ? true : undefined,
-    portPool: state.portPool ? true : undefined,
-    terrier: state.terrier ? true : undefined,
-    // Default is true; same opt-out serialization as deleteBranchOnRemove.
-    githubCli: state.githubCli ? undefined : false,
+    launchScripts: config.launchScripts ?? DEFAULTS.launchScripts,
+    deleteBranchOnRemove:
+      config.deleteBranchOnRemove ?? DEFAULTS.deleteBranchOnRemove,
+    autoPopulateInstall:
+      config.autoPopulateInstall ?? DEFAULTS.autoPopulateInstall,
+    autoPullNew: config.autoPullNew ?? DEFAULTS.autoPullNew,
+    autoPullPrimaryOnly:
+      config.autoPullPrimaryOnly ?? DEFAULTS.autoPullPrimaryOnly,
+    doubutsuNames: config.doubutsuNames ?? DEFAULTS.doubutsuNames,
+    codexWorktreeNames:
+      config.codexWorktreeNames ?? DEFAULTS.codexWorktreeNames,
+    portPool: config.portPool ?? DEFAULTS.portPool,
+    terrier: config.terrier ?? DEFAULTS.terrier,
+    githubCli: config.githubCli ?? DEFAULTS.githubCli,
   };
 }
 
@@ -107,17 +79,15 @@ function validLaunchers(state: SettingsFormState): LauncherCommand[] {
   );
 }
 
-// The remote encoding: the globalConfig.writeDeviceSettings
-// patch, carrying ONLY the keys a peer's Settings section edits. The
-// host applies the patch as absent-means-keep, which is what keeps the
+// The peer encoding: the globalConfig.writeDeviceSettings patch,
+// carrying ONLY the keys a peer's Settings section edits. The host
+// applies the patch as absent-means-keep, which is what keeps the
 // launch catalog (launchers, hiddenLaunchers, launchScripts) out of it:
 // those keys are local by nature and edited only on this machine's
 // Launch tools section, so a peer save must not re-send a snapshot of
-// them taken when the peer's form was seeded. The keys it does carry
-// are EXPLICIT values, where managedDeviceConfig omits a key at its
-// default: an undefined key cannot survive the wire, so the
-// omit-on-default encoding would silently fail to revert a remote key
-// back to its default. No default literal is respelled here.
+// them taken when the peer's form was seeded. Every key carries an
+// EXPLICIT value, default included: absent means keep, so only an
+// explicit default reverts a key (the host then stores it by omission).
 export function toDeviceSettingsPatch(
   state: SettingsFormState,
 ): DeviceSettingsPatch {
@@ -134,24 +104,22 @@ export function toDeviceSettingsPatch(
   };
 }
 
-// The full write document: the managed keys spread over an unredacted
-// base. The CLI write is whole document for its registered keys (an
-// omitted registered key is deleted, socketHost.token included), so the
-// base MUST be the unredacted local doc rather than the redacted read
-// the form was built from. Spread order matters: the managed keys carry
-// their own undefined defaults, which override the base so the omit on
-// default serialization still holds. Everything the form does not
-// manage (socketHost with its token, any unknown key) rides through
-// from the base untouched.
-function toWriteDoc(
-  base: GlobalConfig,
+// This machine's encoding: the peer patch plus the launch catalog,
+// which this window's Launch tools section edits. Also the dirty
+// projection, so an unchanged device half skips the CLI spawn.
+function toLocalDeviceSettingsPatch(
   state: SettingsFormState,
-): GlobalConfig {
-  return { ...base, ...managedDeviceConfig(state) };
+): DeviceSettingsPatch {
+  return {
+    ...toDeviceSettingsPatch(state),
+    launchers: validLaunchers(state),
+    hiddenLaunchers: state.hiddenLaunchers,
+    launchScripts: state.launchScripts,
+  };
 }
 
 // Appearance saves through the client-scoped store, not the device
-// config. Same omit-on-default serialization as managedDeviceConfig.
+// config, omitting a key at its default to keep the file tidy.
 function toClientConfig(state: SettingsFormState): ClientConfig {
   return {
     // Default is "system"; omit when on the default to keep the file tidy.
@@ -169,7 +137,7 @@ function toClientConfig(state: SettingsFormState): ClientConfig {
 // The docs are canonical by construction (one encoder, undefined keys
 // dropped by JSON.stringify), so equal serializations mean an
 // unchanged store.
-function serialize(doc: GlobalConfig | ClientConfig): string {
+function serialize(doc: DeviceSettingsPatch | ClientConfig): string {
   return JSON.stringify(doc);
 }
 
@@ -197,12 +165,10 @@ interface SettingsSaveResult {
 }
 
 // What a device-settings write stales, for whichever device's registry
-// it is handed: the local save below passes the LOCAL keys (paired with
-// its write path -- updateLocalGlobalConfig's readLocal/write are
-// local-only by design, so the caches it staled are exactly this
-// machine's, see the exception list in hooks/remote/useHostScope), and
-// useDeviceSettingsSave passes the scoped registry of the peer it
-// patched.
+// it is handed: the local save below passes the LOCAL keys (it writes
+// through window.api, so the caches it staled are exactly this
+// machine's), and useDeviceSettingsSave passes the scoped registry of
+// the peer it patched.
 export function invalidateDeviceSettingsQueries(
   queryClient: QueryClient,
   keys: QueryKeyRegistry,
@@ -231,9 +197,10 @@ export function invalidateDeviceSettingsQueries(
 // One Save over two stores, as ONE mutation so isPending, isSuccess and
 // error reset atomically per save (two mutations left a failed half's
 // error sticky across later successful saves). Each store gets a dirty
-// guard on its canonical serialized doc: an unchanged device doc skips
-// the CLI spawn entirely (a device write costs a CLI run plus launcher
-// re-detection), and an unchanged appearance doc skips clientConfig.json.
+// guard on its canonical serialized doc: an unchanged device patch
+// skips the CLI spawn entirely (a device write costs a CLI run plus
+// launcher re-detection), and an unchanged appearance doc skips
+// clientConfig.json.
 // Writes run device first, then client, sequentially: a device failure
 // persists nothing, and a client failure after a landed device write
 // throws SettingsSaveError so the form can advance the persisted half.
@@ -246,9 +213,9 @@ export function useSettingsSave({
 }) {
   const queryClient = useQueryClient();
   const initialState = fromConfig(initialConfig, initialClientConfig);
-  // Dirty against the managed projection, not a base-spread doc: the base
-  // is read fresh at save time and carries keys the form never touches.
-  const initialManagedDoc = serialize(managedDeviceConfig(initialState));
+  const initialDevicePatch = serialize(
+    toLocalDeviceSettingsPatch(initialState),
+  );
   const initialClientDoc = serialize(toClientConfig(initialState));
 
   return useMutation({
@@ -262,18 +229,15 @@ export function useSettingsSave({
       state: SettingsFormState,
     ): Promise<SettingsSaveResult> => {
       const clientConfig = toClientConfig(state);
-      const devicePersisted =
-        serialize(managedDeviceConfig(state)) !== initialManagedDoc;
+      const devicePatch = toLocalDeviceSettingsPatch(state);
+      const devicePersisted = serialize(devicePatch) !== initialDevicePatch;
       const clientPersisted = serialize(clientConfig) !== initialClientDoc;
       if (devicePersisted) {
-        // Route through the single serialized writer so this save cannot
-        // race a hosting or remote-device write and clobber its domain.
-        // updateLocalGlobalConfig owns the read-unredacted-base-then-write
-        // -full-doc invariant: it reads the base imperatively (so the
-        // token never lands in a cached query) and the whole-document CLI
-        // write keeps socketHost.token, which the redacted read the
-        // form was built from omits.
-        await updateLocalGlobalConfig((base) => toWriteDoc(base, state));
+        // The same patch write a peer's save rides, on this machine's
+        // own api: the host applies it over the stored document under
+        // its config write lock, so everything the form does not manage
+        // rides through untouched.
+        await window.api.globalConfig.writeDeviceSettings(devicePatch);
       }
       // keepReachable rides the same client store but is written
       // immediately by useKeepReachableUpdate, never staged in this form.

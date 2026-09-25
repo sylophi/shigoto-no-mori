@@ -22,8 +22,8 @@ import {
 // start registers a bundle on the host, chunk streams it out in
 // WIRE_CHUNK_BYTES pieces, abort cleans up a receiver that gave up. Every
 // transfer verb (refTips through bundleAbort) is {remote:true,
-// mutating:true}, so that whole surface rides the per-peer command
-// grant -- and the LAN wire, read-only by policy, refuses it outright.
+// mutating:true}, so that whole surface rides the host's command
+// grant.
 // The transfer verbs also set movesHostState:false: serving a transfer
 // moves no state a remote viewer caches, and without the opt-out every
 // chunk resolution of a multi-minute pull would fire the registrar's

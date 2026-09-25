@@ -153,12 +153,9 @@ export type ShigomoriWorktreeData = z.infer<typeof ShigomoriWorktreeDataSchema>;
 // so both the host and the CLI read it. How the app instance looks
 // (theme, doubutsu) is client config and lives in ClientConfigSchema
 // below.
-// Doubles as the globalConfig:write IPC input. z.object STRIPS unknown
-// keys rather than rejecting them, and it must not become .strict():
-// pre-split installs can still carry legacy client keys (and keys from
-// newer builds) in config.json, and those have to keep passing through
-// the write path unrejected. The stripping is also what drops a key
-// the renderer invents at the boundary instead of persisting it.
+// Reads use the loose Stored variant below: pre-split installs can
+// still carry legacy client keys (and keys from newer builds) in
+// config.json, and those have to pass through unrejected.
 export const GlobalConfigSchema = z.object({
   launchers: z.array(LauncherCommandSchema).optional(),
   // Launcher entry ids (`app:cursor`, `web:github`, `custom:<uuid>`) the
@@ -222,90 +219,36 @@ export const GlobalConfigSchema = z.object({
   // Activates only when `gh` is on PATH and authenticated. On by
   // default; matches the integration being opt-out rather than opt-in.
   githubCli: z.boolean().optional(),
-  // Remote hosting: when enabled with a nonempty
-  // token, the app serves the REMOTE-tagged host IPC to clients over a
-  // websocket (host/socket/server.ts). Off by default, and gated on the
-  // token so a bare `enabled: true` can never open an unauthenticated
-  // listener. Secure by default: enabling binds LOOPBACK only. Exposing
-  // the port to the network is a separate explicit opt-in (`lan`). The
-  // token is high-entropy generated at enable time, never echoed back
-  // over a read (the read contract redacts it, see RedactedSocketHost
-  // below). Step 4 replaces this shared-token auth wholesale with
-  // pairing, so nothing else should grow to depend on the token's
-  // shape. Direct data plane: when false, this
-  // device neither runs the direct listener nor is advertised to peers,
-  // so all its remote traffic stays on the device hub. ON by default
-  // (absent = enrolled, explicit `false` is the opt-out), matching the
-  // feature being an internal transport optimization rather than a
-  // capability. Config-only for now (no Settings UI, like socketHost
-  // below): toggle by editing config.json or `sm config edit`.
+  // Direct data plane: when false, this device neither runs the direct
+  // listener nor is advertised to peers, so it serves no peers at all
+  // (its own dials to peers are unaffected). ON by default (absent =
+  // enrolled, explicit `false` is the opt-out). Config-only (no
+  // Settings UI): toggle by editing config.json or `sm config edit`.
   directConnections: z.boolean().optional(),
   // Tunnel endpoints: absolute path to the
   // cloudflared binary, for installs not on PATH. Absent means PATH
   // discovery. A missing binary reads as tunnels off with a typed
   // status, never an error loop. Config-only, like directConnections.
   cloudflaredPath: z.string().optional(),
-  socketHost: z
-    .object({
-      enabled: z.boolean().optional(),
-      // Absent = DEFAULT_SOCKET_PORT (shared/ipc/socket/frames.ts).
-      port: z.number().int().min(1).max(65535).optional(),
-      // When true, bind 0.0.0.0 so other machines on the LAN can reach
-      // the listener. Absent or false binds 127.0.0.1: enabling hosting
-      // alone never exposes the port to the network.
-      lan: z.boolean().optional(),
-      token: z.string().optional(),
-    })
-    .optional(),
 });
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
 
-// Read-side counterpart, loose like StoredShigomoriConfigSchema.
+// Read-side counterpart, loose like StoredShigomoriConfigSchema. Also
+// the globalConfig:read output, so legacy and newer keys pass through.
 export const StoredGlobalConfigSchema = GlobalConfigSchema.loose();
 
-// The socketHost shape a globalConfig READ is allowed to return. The
-// token is a secret and must be structurally absent from any wire, so
-// this schema has no token field at all. A derived `tokenSet` boolean
-// lets a future Settings UI show that hosting is configured without
-// ever carrying the value. The redaction itself happens in the read
-// handler (host/lib/config/global.ts), since packaged builds skip
-// output re-parsing, so this schema documents and validates the shape
-// rather than being the thing that strips the secret.
-const RedactedSocketHostSchema = z.object({
-  enabled: z.boolean().optional(),
-  port: z.number().int().min(1).max(65535).optional(),
-  lan: z.boolean().optional(),
-  tokenSet: z.boolean().optional(),
-});
-
-// Output schema for globalConfig:read. Loose like the stored variant so
-// legacy and newer keys pass through, but with socketHost forced to the
-// redacted shape so a token can never ride out on a read. The read
-// handler also drops the legacy `remoteDevices` key wholesale
-// (host/lib/config/global.ts): the removed LAN feature stored per-host
-// tokens under it, and an old config may still carry them.
-export const ReadGlobalConfigSchema = GlobalConfigSchema.extend({
-  socketHost: RedactedSocketHostSchema.optional(),
-}).loose();
-export type ReadGlobalConfig = z.infer<typeof ReadGlobalConfigSchema>;
-
-export const WriteGlobalConfigPayloadSchema = z.object({
-  config: GlobalConfigSchema,
-});
-
-// The device-scoped settings subset a REMOTE peer may write: exactly
-// the keys the Settings form manages (managedDeviceConfig in
-// renderer/hooks/config/useSettingsSave.ts). STRICT on purpose, unlike
-// GlobalConfigSchema: an unknown key REJECTS rather than strips, so the
-// schema itself proves that `socketHost` (the hosting token), like any
-// other unmanaged or legacy key, can never ride a remote write. Patch
-// semantics: every key optional, only provided
-// keys change, and the host handler spreads them over the local unredacted
+// The device settings the Settings form writes, this machine's and a
+// peer's alike: exactly the keys the form manages. STRICT on purpose,
+// unlike GlobalConfigSchema: an unknown key REJECTS rather than
+// strips, so the schema itself proves that no unmanaged key
+// (directConnections, cloudflaredPath, anything legacy) can ride a
+// settings write. Patch semantics: every key optional, only provided
+// keys change, and the host handler applies them over the stored
 // document so everything the patch does not name rides through intact.
 // Derived by picking from GlobalConfigSchema rather than respelling the
-// field types, so a managed key's shape cannot drift between the local
-// write and the remote patch. A NEW managed device setting still has to
-// be named here, or the strict reject makes it un-writable remotely.
+// field types, so a managed key's shape cannot drift. A NEW managed
+// device setting has to be named here and in DEVICE_SETTINGS_DEFAULTS
+// below, or the strict reject makes it un-writable.
 export const DeviceSettingsPatchSchema = z.strictObject(
   GlobalConfigSchema.pick({
     launchers: true,
@@ -328,12 +271,35 @@ export const WriteDeviceSettingsPayloadSchema = z.object({
   patch: DeviceSettingsPatchSchema,
 });
 
+// The value each device setting takes while its key is absent from
+// config.json. One table for both ends of the settings write: the form
+// decodes a missing key with it (fromConfig in
+// renderer/hooks/config/useSettingsSave.ts), and the host's patch
+// handler stores a key equal to its default by deleting it, so the file
+// stays tidy whichever device saved it. The CLI's key registry
+// (cli/cmd_config.go globalConfigKeys) mirrors these defaults.
+export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
+  launchers: [],
+  hiddenLaunchers: [],
+  launchScripts: true,
+  deleteBranchOnRemove: true,
+  autoPopulateInstall: false,
+  autoPullNew: false,
+  autoPullPrimaryOnly: false,
+  doubutsuNames: false,
+  codexWorktreeNames: false,
+  portPool: false,
+  terrier: false,
+  githubCli: true,
+};
+
 // Client config: how this app instance looks, kept in clientConfig.json
 // under Electron's userData and owned by the main process alone. The
 // CLI never reads or writes it, unlike the device config above.
-// Doubles as the clientConfig:write IPC input, stripping unknown keys
-// at the boundary like GlobalConfigSchema (and with the same
-// must-not-become-.strict() constraint).
+// Doubles as the clientConfig:write IPC input. z.object STRIPS unknown
+// keys rather than rejecting them, which drops a key the renderer
+// invents at the boundary, and it must not become .strict(): a key
+// from a newer build has to keep passing through unrejected.
 export const ClientConfigSchema = z.object({
   theme: ThemeSchema.optional(),
   // "Animal Crossing" visual mode. Orthogonal to theme: when on, both

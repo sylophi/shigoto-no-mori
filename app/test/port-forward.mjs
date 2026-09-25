@@ -4,7 +4,7 @@
 // (shared/ipc/socket/channels.ts), brokered by the stub device hub
 // exactly as production does (test/lib/directBoot.mjs). Nothing
 // here is a double on the forward path: device A registers the REAL
-// forward contract and handlers on a real ticket-mode listener, B
+// forward contract and handlers on a real direct listener, B
 // attaches channels on the real client transport and opens them
 // through the real dialer and bridge cache, and A's handler dials REAL
 // loopback TCP fixture servers. Asserts:
@@ -207,7 +207,7 @@ async function main() {
 
   const echo = await startLoopbackServer((socket) => socket.pipe(socket));
 
-  // The direct wire: A hosts the forward surface on a real ticket-mode
+  // The direct wire: A hosts the forward surface on a real direct
   // listener, B drives it through the real dialer and bridge cache,
   // and the stub device hub carries only the broker exchange
   // (bootDirectWire, the shared fixture).

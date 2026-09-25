@@ -2,14 +2,12 @@
 // spelling must agree across the runtime protocol handler and Clerk
 // bridge (main/electron/clerk.ts), the packaged Info.plist registration
 // (forge.config.ts protocols), the dev per-worktree bundle
-// registration (scripts/lib/devBundle.mts), the socket host's Origin
-// gate (host/socket/server.ts, the renderer's WebSocket dials carry
-// this origin), and the Clerk instance's allowed_origins
-// (hub/README.md).
-// A divergence breaks packaged OAuth deep links or direct dials with
-// no build error, so every consumer derives from here. Constant-only
-// module aside from the flavor switch: forge config, main, host and
-// check scripts all import it.
+// registration (scripts/lib/devBundle.mts), and the Clerk instance's
+// allowed_origins (hub/README.md).
+// A divergence breaks packaged OAuth deep links with no build error,
+// so every consumer derives from here. Constant-only module aside from
+// the flavor switch: forge config, main and check scripts all import
+// it.
 import type { CliFlavor } from "./cliDist.mts";
 
 export const RENDERER_SCHEME_HOST = "app";
@@ -23,10 +21,4 @@ export function rendererSchemeName(flavor: CliFlavor): string {
 
 export function rendererSchemeOrigin(flavor: CliFlavor): string {
   return `${rendererSchemeName(flavor)}://${RENDERER_SCHEME_HOST}`;
-}
-
-// Both flavors' origins, for gates that must admit the app's own
-// renderer regardless of which build is dialing.
-export function rendererSchemeOrigins(): string[] {
-  return (["prod", "dev"] as const).map(rendererSchemeOrigin);
 }

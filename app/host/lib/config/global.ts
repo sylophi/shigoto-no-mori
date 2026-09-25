@@ -5,16 +5,13 @@
 // at <dataDir>/projects/<projectId>.json. Appearance is client
 // config and lives in main/electron/clientConfig.ts instead.
 import { z } from "zod";
-import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { errorMessageOf } from "@shared/errors";
-import { DEFAULT_SOCKET_PORT } from "@shared/ipc/socket/frames";
 import { createLimiter } from "@shared/util/limit";
 import {
   type ClientConfig,
   ClientConfigSchema,
   type GlobalConfig,
-  type ReadGlobalConfig,
   StoredGlobalConfigSchema,
 } from "@shared/schemas";
 import {
@@ -43,27 +40,26 @@ export async function readGlobalConfig(): Promise<GlobalConfig> {
 
 // Cache-bypassing read for a read-modify-write base. Drops the TTL entry
 // and reloads from disk, then refreshes the cache with what it read.
-// INVARIANT: the device-settings whole-document write MUST base itself on
-// this, never on the 5s-TTL readGlobalConfig, because the CLI clears every
-// registered key the payload omits (see globalConfigWriteViaCli). A base
-// up to the TTL stale would resurrect a just-rotated socketHost.token or
-// re-enable a just-disabled host by writing the stale value back as
-// authoritative. Unlike invalidateGlobalConfigCache this fires no change
-// listeners: it is a read, not a config change.
+// INVARIANT: the device-settings patch write MUST base itself on this,
+// never on the 5s-TTL readGlobalConfig, because it hands the CLI a whole
+// document and the CLI clears every registered key the payload omits
+// (see globalConfigWriteViaCli). A base up to the TTL stale would write
+// back a value a CLI `set` just changed, as authoritative. Unlike
+// invalidateGlobalConfigCache this fires no change listeners: it is a
+// read, not a config change.
 export async function readGlobalConfigFresh(): Promise<GlobalConfig> {
   cache.invalidate();
   return cache.get();
 }
 
-// INVARIANT: every host-side global-config write runs its whole
-// read-modify-write under this lock. The local whole-document `write`
-// handler and the remote `writeDeviceSettings` patch handler both acquire
-// it, so a remote patch and a local write cannot interleave and lose an
-// update. The CLI's file lock serializes across processes, this serializes
-// the in-process read-then-write window the file lock cannot see:
+// INVARIANT: every async host-side global-config write runs its whole
+// read-modify-write under this lock. Today that is the
+// `writeDeviceSettings` patch handler, which serves this window's save
+// and every peer's, so two saves cannot interleave and lose an update.
+// The CLI's file lock serializes across processes, this serializes the
+// in-process read-then-write window the file lock cannot see:
 // writeDeviceSettings reads a fresh base and then writes the whole
-// document, and the renderer writeChain that serializes local writes never
-// sees the remote path.
+// document. The sync boot drains below run before the first window.
 const configWriteQueue = createLimiter(1);
 export function withGlobalConfigWriteLock<T>(
   task: () => Promise<T>,
@@ -76,11 +72,10 @@ export function withGlobalConfigWriteLock<T>(
 // Config-change reconcilers. Every change path (the IPC write, an
 // external CLI write picked up by the state watcher, and nuke wiping
 // config.json) drops the cache through invalidateGlobalConfigCache, so
-// a listener registered here runs on all of them. Hosting is toggled
-// this slice mainly by editing config.json or the CLI (no Settings UI),
-// which never touches the IPC write handler, so this subscriber is what
-// makes EVERY change reconcile the socket listener, nuke included (a
-// wiped config must stop the listener, not keep serving the old token).
+// a listener registered here runs on all of them. directConnections has
+// no Settings UI (it is toggled by editing config.json or the CLI,
+// which never touch the IPC write handler), so this subscriber is what
+// makes EVERY change reconcile the direct listener, nuke included.
 // Host owns the mechanism, main registers the one reconciler.
 type ConfigChangeListener = () => void;
 const configChangeListeners = new Set<ConfigChangeListener>();
@@ -95,7 +90,7 @@ export function onGlobalConfigChange(
 // For callers that delete config.json out from under the cache (nuke):
 // without this, reads for up to the TTL would keep serving the wiped
 // preferences as if the nuke hadn't happened. Also fans the change out
-// to every subscriber so downstream state (the socket listener)
+// to every subscriber so downstream state (the direct listener)
 // reconciles no matter which path changed config.
 export function invalidateGlobalConfigCache(): void {
   cache.invalidate();
@@ -108,82 +103,10 @@ export function invalidateGlobalConfigCache(): void {
   }
 }
 
-// The one home for the socketHost enablement rule, shared by the boot
-// reconcile, the config-change reconcile and a future Settings UI (the
-// githubCli readiness precedent). A blank token means OFF regardless of
-// enabled, so a bare enabled:true never opens an unauthenticated
-// listener. Absent port falls back to the well-known default, and the
-// bind address is loopback unless LAN is explicitly opted in.
-export type ResolvedSocketHost = {
-  port: number;
-  token: string;
-  bindAddress: string;
-};
-
-export function resolveSocketHostConfig(
-  config: GlobalConfig,
-): ResolvedSocketHost | null {
-  const socketHost = config.socketHost;
-  const token = socketHost?.token ?? "";
-  if (socketHost?.enabled !== true || token === "") return null;
-  return {
-    port: socketHost.port ?? DEFAULT_SOCKET_PORT,
-    token,
-    // Secure by default: only the explicit LAN opt-in exposes the port
-    // to the network. Everything else stays on loopback.
-    bindAddress: socketHost.lan === true ? "0.0.0.0" : "127.0.0.1",
-  };
-}
-
-// Secure by default at enable time: when hosting is enabled but no token
-// is set, generate a high-entropy one (32 random bytes, base64url) and
-// persist it, rather than leaving an enabled-but-unauthable config that
-// the resolver treats as off. Runs under the in-process
-// withGlobalConfigWriteLock (the INVARIANT above: every host-side
-// read-modify-write serializes on it, or a queued app-side write based
-// on a pre-mint read could clobber the fresh token) and, inside that,
-// the CLI's sibling .lock (the dropLegacyAppearance precedent) so app
-// and CLI writes exclude each other. Async only for the write lock,
-// which is why the caller (refreshSocketHost's resolver) awaits it.
-// Resolves true when it wrote, so the caller can re-read. The token is
-// NOT logged: retrieve it with `sm config get socketHost.token` to copy
-// to the client device. Invalidates the module cache directly rather
-// than through the subscriber-firing helper, since the caller is
-// already inside a reconcile.
-export async function ensureSocketHostToken(): Promise<boolean> {
-  // A plain fresh read answers the common case (hosting off, or a
-  // token already minted) without the cross-process lock below, which
-  // spins the main thread while a CLI write holds it. Fresh rather
-  // than cached: the decision must see the file as it is now.
-  const current = (await readGlobalConfigFresh()).socketHost;
-  if (current?.enabled !== true) return false;
-  if (typeof current.token === "string" && current.token !== "") return false;
-  return withGlobalConfigWriteLock(async () => {
-    const minted = updateConfigDocSync((doc) => {
-      const socketHost = doc.socketHost;
-      if (socketHost?.enabled !== true) return false;
-      const token =
-        typeof socketHost.token === "string" ? socketHost.token : "";
-      if (token !== "") return false;
-      doc.socketHost = {
-        ...socketHost,
-        token: randomBytes(32).toString("base64url"),
-      };
-      return true;
-    });
-    if (minted) {
-      console.info(
-        "[socket] generated a hosting token. Copy it to the client device with `sm config get socketHost.token`.",
-      );
-    }
-    return minted;
-  });
-}
-
-// One locked read-mutate-write of config.json for the drains and the
-// token mint: `mutate` edits the parsed doc in place and says whether
-// it changed anything, and only a change is written back (schemaVersion
-// restamped) and invalidates the cache. Runs under the same sibling
+// One locked read-mutate-write of config.json for the drains: `mutate`
+// edits the parsed doc in place and says whether it changed anything,
+// and only a change is written back (schemaVersion restamped) and
+// invalidates the cache. Runs under the same sibling
 // .lock the CLI's updateConfigDoc takes (cli/cmd_config.go,
 // host/lib/util/lockFile.ts), so app and CLI writes exclude each
 // other. Sync because two callers sit on the boot path before the
@@ -195,49 +118,26 @@ function updateConfigDocSync(
   return withFileLock(`${path}.lock`, () => {
     const doc = readJsonOrNullSync(path, StoredGlobalConfigSchema);
     if (doc === null || !mutate(doc)) return false;
-    // 0o600 like the credential and grant stores: this document carries
-    // socketHost.token, the LAN wire's bearer secret.
+    // Owner-only, like the CLI's writes of this file (cli/state.go
+    // configFileMode).
     atomicWriteJsonSync(path, withSchemaVersion(doc), { mode: 0o600 });
     cache.invalidate();
     return true;
   });
 }
 
-// Read-boundary redaction: a secret never crosses any wire. socketHost
-// keeps its shape minus the token (a derived tokenSet boolean stands
-// in), and the legacy `remoteDevices` key is dropped WHOLESALE: the
-// removed LAN feature stored per-host tokens under it, an old config
-// may still carry them, and the loose stored schema rides unknown keys
-// through. Both are stripped here rather than only in the schema:
-// packaged builds skip output re-parsing, so the read schema alone
-// would not strip them in production.
-export function redactGlobalConfigForRead(
-  config: GlobalConfig,
-): ReadGlobalConfig {
-  const { socketHost, ...rest } = config;
-  const redacted: ReadGlobalConfig = { ...rest };
-  delete (redacted as Record<string, unknown>).remoteDevices;
-  if (socketHost !== undefined) {
-    const { token, ...withoutToken } = socketHost;
-    redacted.socketHost = {
-      ...withoutToken,
-      tokenSet: typeof token === "string" && token !== "",
-    };
-  }
-  return redacted;
-}
-
-// One-shot drain of the removed LAN feature's outbound device list out
-// of config.json. Nothing reads or writes `remoteDevices` anymore, but
-// an old config may still carry it (per-host tokens in plaintext), and
-// both writers preserve keys they don't manage (the CLI's merge only
-// clears registered keys, the app's write parses through a schema that
-// no longer models this one), so an explicit delete is the only thing
-// that ever removes them. Runs every boot, and reads without writing
-// when the key is absent.
-export function dropLegacyRemoteDevices(): void {
+// One-shot drain of the removed LAN listener's keys out of config.json:
+// `socketHost` (its settings and bearer token) and `remoteDevices` (an
+// older client's per-host tokens). Nothing reads either anymore, but an
+// old config may still carry them in plaintext, and both writers
+// preserve keys they don't manage (the CLI's merge only clears
+// registered keys, the settings patch spreads the stored document), so
+// an explicit delete is the only thing that ever removes them. Runs
+// every boot, and reads without writing when neither key is present.
+export function dropRemovedLanKeys(): void {
   updateConfigDocSync((doc) => {
-    if (!("remoteDevices" in doc)) return false;
+    if (!("socketHost" in doc) && !("remoteDevices" in doc)) return false;
+    delete doc["socketHost"];
     delete doc["remoteDevices"];
     return true;
   });

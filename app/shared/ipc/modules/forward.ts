@@ -18,9 +18,8 @@ import { PortNumberSchema } from "@shared/schemas";
 // side a remote peer drives. The client half is
 // main/core/portForward/bridge.ts.
 //
-// {remote:true, mutating:true}: the surface rides the per-peer command
-// grant, fail-closed, and the LAN wire (read-only by policy) refuses
-// it outright. open dials 127.0.0.1 only, because the feature IS
+// {remote:true, mutating:true}: the surface rides the host's command
+// grant, fail-closed. open dials 127.0.0.1 only, because the feature IS
 // reaching the remote machine's own loopback dev server, never a hop
 // beyond it. movesHostState:false: an open changes nothing a remote
 // viewer caches.

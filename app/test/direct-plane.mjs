@@ -6,7 +6,7 @@
 //
 // Boots the stub Durable Object (test/lib/hubStub.mjs) with two
 // REAL hub connections (A the dialing client, B the host) plus a
-// REAL ticket-mode ws listener instance (host/socket/server.ts with a
+// REAL direct ws listener (host/socket/server.ts with a
 // WsServerTicketAuth) on an ephemeral loopback port, and drives the
 // real broker (direct:connectInfo wired into the binding's one slot)
 // and the REAL shared composition (shared/hub/directPlane.ts: the
@@ -75,7 +75,7 @@
 //     retires only its own candidate, and when it is the one the
 //     attempt EXHAUSTS on it comes out transient (message and close
 //     code kept, blocked dropped) rather than parking the peer.
-//   - the ticket-mode listener keys lockout on CF-Connecting-IP for
+//   - the listener keys lockout on CF-Connecting-IP for
 //     loopback (tunnel-borne) connections, so one hostile client
 //     cannot bench every tunnel dial behind the shared 127.0.0.1.
 //   - the kind-to-scheme invariant: a tunnel-kind ws:// candidate is
@@ -127,7 +127,8 @@
 //     reconciles) against stub deps and a fake clock, with the
 //     connector token never in any status object.
 //
-// The legacy LAN listener's unchanged behavior is pinned by
+// The listener's own hardening (framing, the Origin gate, frame and
+// in-flight caps, the generation guard) is pinned by
 // test/socket-host.mjs, which the battery runs alongside.
 //
 // Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
@@ -144,7 +145,7 @@ import {
   CommandRefusedError,
 } from "@shared/ipc/socket/frames";
 import {
-  connectDevice,
+  openDevice,
   RemoteConnectError,
 } from "@shared/ipc/socket/wsClientTransport";
 import { DirectCandidateSchema } from "@shared/ipc/modules/direct";
@@ -236,17 +237,16 @@ async function startDirectListener(track, opts = {}) {
 // the happy path (A dialing B with the identity pin), and each caller
 // overrides only what its scenario varies.
 function dialWith(port, ticket, overrides = {}) {
-  return connectDevice({
+  return openDevice({
     url: `ws://127.0.0.1:${port}`,
-    token: ticket,
-    auth: "proof",
+    ticket,
     appVersion: "1.0.0",
     localDeviceId: "A",
     expectedDeviceId: "B",
     onClose: () => {},
     helloTimeoutMs: 800,
     ...overrides,
-  });
+  }).authenticate();
 }
 
 // A dialer over a FAKE broker answering a fixed candidate list, for
@@ -326,7 +326,7 @@ async function delayProxy(track, targetPort, delayMs) {
 }
 
 // A stub host opens the handshake the way a real listener does. Without
-// the challenge a proof-mode client never sends its hello, so a stub
+// the challenge the client never sends its hello, so a stub
 // that waits for one would just stall until the deadline.
 function sendChallenge(socket) {
   socket.send(JSON.stringify({ t: "challenge", nonce: newHandshakeNonce() }));
@@ -353,7 +353,7 @@ async function consumeTicket(store, ticket, peer, kind = "lan") {
   return matched !== null;
 }
 
-// One raw ticket-mode dial through the `ws` client (which, unlike the
+// One raw direct dial through the `ws` client (which, unlike the
 // browser-global WebSocket, can set headers), for the lockout-identity
 // scenario. Resolves with the close code and whether a welcome landed.
 function rawHeaderDial(port, ticket, cfConnectingIp) {
@@ -490,8 +490,7 @@ async function main() {
         candidateAddresses: () => ["127.0.0.1"],
       });
       // The context a non-peer wire supplies: no callerDeviceId (the
-      // Electron wire, the legacy LAN socket and loopbacks never set
-      // one). connectInfo reads nothing else off its context.
+      // Electron wire and loopbacks never set one). connectInfo reads nothing else off its context.
       const anonymous = {};
       assert.deepEqual(handlers.connectInfo(undefined, anonymous), {
         available: false,

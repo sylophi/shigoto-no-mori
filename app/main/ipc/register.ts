@@ -1,5 +1,5 @@
 // Transport wiring for the shared contract registrar: the Electron
-// binding, the websocket binding (host/socket/server.ts), and the
+// binding, the direct listener (host/socket/server.ts), and the
 // scope routing that decides which modules ride which wires. This
 // module owns the only sanctioned calls to `webContents.send` in
 // main/. Anything else that needs to push to the renderer should go
@@ -37,11 +37,7 @@ import {
   CLOUDFLARED_DIST_DIR,
 } from "@shared/packaging/cloudflaredDist.mts";
 import { getDeviceId } from "@host/lib/config/deviceId";
-import {
-  ensureSocketHostToken,
-  readGlobalConfig,
-  resolveSocketHostConfig,
-} from "@host/lib/config/global";
+import { readGlobalConfig } from "@host/lib/config/global";
 import { recordProjectActionUsage } from "@host/lib/projects/usage";
 import {
   createCloudflaredRunner,
@@ -132,20 +128,13 @@ const electronServer: ServerTransport = {
   },
 };
 
-// The websocket binding exists unconditionally so registration can
-// record handlers whether or not the device config ever enables the
-// listener. Listening itself is gated in refreshSocketHost below.
-const wsServer = createWsServerBinding();
-
-// The direct data plane: a SECOND ws listener
-// instance in ticket mode. Auth consumes single-use connect tickets
-// minted by direct:connectInfo over the device hub, and dispatch gates
-// mutating channels on the host's live command-access switch
-// (acceptsPeerCommands: every ticketed peer is a device of this
+// The direct data plane's listener. Auth consumes single-use connect
+// tickets minted by direct:connectInfo over the device hub, and
+// dispatch gates mutating channels on the host's live command-access
+// switch (acceptsPeerCommands: every ticketed peer is a device of this
 // account, so the switch is the whole verdict). Unconditional like the
-// other bindings so
-// registration records handlers at boot, while listening is gated on
-// enrollment in refreshDirectHost below.
+// other bindings so registration records handlers at boot, while
+// listening is gated on enrollment in refreshDirectHost below.
 const directTickets = createConnectTicketStore();
 const directWsServer = createWsServerBinding({
   matchTicket: (deviceId, arrivedAs, matches) =>
@@ -257,47 +246,33 @@ const hubServer = createHubConnection({
   onChange: () => directPlane.handleConnectionChange(),
 });
 
-// The remote wires (LAN socket, direct listener), looped wherever a
-// channel or broadcast must reach them all so a new wire lands in one
-// place. The device hub is deliberately NOT here:
-// it is orchestration only, its wire serves nothing but the broker
-// surface registered below, and host broadcasts and viewer pings reach
-// remote peers over their direct sessions alone.
-const remoteWires: readonly ServerTransport[] = [wsServer, directWsServer];
-
 // Host-scoped calls are served on every wire that may carry them.
 // Client-scoped calls stay structurally unreachable over the remote
 // wires: their channels are never registered on any remote binding,
 // so a remote req gets a no-handler res instead of a native dialog or
 // an app-menu mutation.
 const hostServer: ServerTransport = {
-  // The Electron wire always serves host calls. The remote wires (LAN
-  // socket and direct listener) serve a call ONLY when its def opted
-  // into remote exposure, so a host-scoped-but-not-remote channel
-  // (runtime:nuke, launchers:launch, globalConfig:write) is
-  // never even registered on them. A remote req for it gets the same
-  // no-handler res a client-scoped channel does.
+  // The Electron wire always serves host calls. The direct listener,
+  // the one remote wire, serves a call ONLY when its def opted into
+  // remote exposure, so a host-scoped-but-not-remote channel
+  // (runtime:nuke, launchers:launch) is never even registered on it. A
+  // remote req for it gets the same no-handler res a client-scoped
+  // channel does. The device hub is deliberately NOT a wire here: it is
+  // orchestration only, its wire serves nothing but the broker surface
+  // registered below, and host broadcasts and viewer pings reach remote
+  // peers over their direct sessions alone.
   handle(channel, fn, opts) {
     electronServer.handle(channel, fn);
     if (opts?.remote === true) {
-      // Both remote wires receive the mutating flag. The direct
-      // listener gates a mutating channel on a per-peer command grant.
-      // The LAN binding has no grant model at all, so it enforces
-      // read-only at dispatch, fail-closed: only channels explicitly
-      // registered mutating:false are served over the LAN socket, and
-      // everything else (mutating, or untagged) is refused with the
-      // shared command-refused code before its handler runs
-      // (host/socket/server.ts).
-      for (const wire of remoteWires) {
-        wire.handle(channel, fn, { mutating: opts.mutating });
-      }
+      // The mutating flag rides along: the direct listener gates
+      // everything not explicitly mutating:false on the host's
+      // command-access switch (host/socket/server.ts).
+      directWsServer.handle(channel, fn, { mutating: opts.mutating });
     }
   },
   broadcastAll(channel, payload, opts) {
     electronServer.broadcastAll(channel, payload);
-    if (opts?.remote === true) {
-      for (const wire of remoteWires) wire.broadcastAll(channel, payload);
-    }
+    if (opts?.remote === true) directWsServer.broadcastAll(channel, payload);
   },
 };
 
@@ -307,16 +282,16 @@ const serverFor = (module: ContractModule): ServerTransport =>
 // App-driven host mutations never reach viewers through the fs
 // watcher: its self-write suppression exists precisely so the app's own
 // writes don't echo (stateWatcher.ts). So after any mutating host
-// invoke resolves (whichever wire carried it), ping the REMOTE wires
-// with the existing git:externalChange broadcast, the same signal a
-// truly external write produces. The Electron wire is pinged only when
-// the acting client was a REMOTE peer: the acting local renderer is
-// already fresh via its mutation's targeted invalidation and must not
-// start paying a broad invalidation for every one of its own writes,
-// while a change a peer drove is external to this window exactly like
-// a CLI write, and would otherwise sit unseen until a focus refetch.
-// A trailing coalesce
-// folds a burst of mutations into one ping per wire set without
+// invoke resolves (whichever wire carried it), ping the direct
+// listener's peers with the existing git:externalChange broadcast, the
+// same signal a truly external write produces. The Electron wire is
+// pinged only when the acting client was a REMOTE peer: the acting
+// local renderer is already fresh via its mutation's targeted
+// invalidation and must not start paying a broad invalidation for every
+// one of its own writes, while a change a peer drove is external to
+// this window exactly like a CLI write, and would otherwise sit unseen
+// until a focus refetch.
+// A trailing coalesce folds a burst of mutations into one ping without
 // re-arming, so a steady stream still pings at a bounded rate. If the
 // watcher fires for the same change anyway, viewer-side invalidation
 // is idempotent, so the overlap is harmless.
@@ -337,13 +312,13 @@ const flushMutationPing = coalesce(() => {
   // resolveBroadcast runs the (void) payload through the contract
   // schema, exactly like the composite broadcastAll path.
   // externalChange is remote:true by contract, and must stay that
-  // way: this path pushes to the remote wires unconditionally.
+  // way: this path pushes to the direct peers unconditionally.
   const { channel, parsed } = resolveBroadcast(
     gitContract,
     "externalChange",
     undefined,
   );
-  for (const wire of remoteWires) wire.broadcastAll(channel, parsed);
+  directWsServer.broadcastAll(channel, parsed);
   if (pingLocal) electronServer.broadcastAll(channel, parsed);
   for (const listener of mutationSettledListeners) listener();
 }, MUTATION_PING_MS);
@@ -431,7 +406,7 @@ export function broadcast<M extends ContractModule, K extends BroadcastKeys<M>>(
 // Fan-out broadcast for state every window cares about (updater,
 // background refreshes). Scope picks the wire set: host-scoped
 // fan-outs (git refresh, script events, nuke progress, updater state)
-// reach every window AND every authenticated socket peer, while
+// reach every window AND every authenticated direct peer, while
 // client-scoped ones (port forwards, account changes) stay on the
 // Electron wire -- they are about THIS install, not the host a remote
 // client is looking at.
@@ -442,46 +417,13 @@ export function broadcastAll<
   broadcastAllCore(module, key, payload, serverFor(module));
 }
 
-// Reconciles the websocket listener with the device config. Runs at
-// boot (the ready handler) and on every config change (the host-side
-// onGlobalConfigChange subscriber, wired in installHostImpls), so
-// toggling the setting through the app, the CLI or a nuke needs no
-// relaunch. The config read runs INSIDE the binding's serialized
-// lifecycle (the resolver below), so a token rotation can never be
-// reverted by an overlapping refresh applying a stale read last.
-// Never throws -- a bind failure must not fail the write that requested
-// it, so it degrades to a log line (the binding also records status).
-export function refreshSocketHost(): Promise<void> {
-  return logFailure("[socket] listener refresh failed", () =>
-    wsServer.refresh(async () => {
-      // Secure by default at enable time: generate and persist a token
-      // if hosting is on without one. ensureSocketHostToken drops the
-      // module cache itself, so the read below sees the fresh document.
-      // Awaited because the mint serializes on the global-config write
-      // lock, and the read below must see the post-mint document.
-      await ensureSocketHostToken();
-      const config = await readGlobalConfig();
-      const resolved = resolveSocketHostConfig(config);
-      if (resolved === null) return null;
-      return {
-        port: resolved.port,
-        bindAddress: resolved.bindAddress,
-        token: resolved.token,
-        deviceId: getDeviceId(),
-        // appVersion is an Electron fact, injected here so host/socket
-        // never imports electron.
-        appVersion: app.getVersion(),
-      };
-    }),
-  );
-}
-
 // Reconciles the hub socket with the account state. Runs at boot and
 // after every account change (sign-in, sign-out, rename), so the
 // socket follows the credential without a relaunch. The account read
-// runs INSIDE the binding's serialized lifecycle, mirroring
-// refreshSocketHost, and a failure degrades to a log line because a
-// connect problem must never fail the account write that triggered it.
+// runs INSIDE the binding's serialized lifecycle, so an overlapping
+// refresh can never apply a stale read last, and a failure degrades to
+// a log line because a connect problem must never fail the account
+// write that triggered it.
 export async function refreshHubConnection(): Promise<void> {
   await logFailure("[hub] connection refresh failed", () =>
     hubServer.refresh(async () => {
@@ -554,7 +496,9 @@ export function stopDirectHost(): Promise<void> {
 // exactly the device hub's condition: a device with no hub peers has
 // nobody to serve directly) and on every global-config change (the
 // hostImpls subscriber), so the directConnections opt-out applies
-// without a relaunch. Dual-stack bind ("::", both families accept)
+// without a relaunch. The config read runs INSIDE the binding's
+// serialized lifecycle (the resolver below), so an overlapping refresh
+// can never apply a stale read last. Dual-stack bind ("::", both families accept)
 // because connectInfo advertises IPv6 candidates too, on an ephemeral
 // port read back from status. accountId rides the opts as an identity
 // field, so an account switch restarts the listener and drops every
@@ -566,21 +510,20 @@ export async function refreshDirectHost(): Promise<void> {
       const inputs = hubConnectInputs();
       if (inputs === null) return null;
       // The device-scoped opt-out: absent means enrolled, explicit
-      // false stops the listener (peers then get available:false and
-      // stay on the device hub).
+      // false stops the listener (peers then get available:false, so
+      // this device serves no peers).
       const config = await readGlobalConfig();
       if (config.directConnections === false) return null;
       return {
         port: 0,
         bindAddress: "::",
-        // Ticket mode has no static token, the injected verifier is
-        // the auth.
-        token: "",
         deviceId: getDeviceId(),
+        // appVersion is an Electron fact, injected here so host/socket
+        // never imports electron.
         appVersion: app.getVersion(),
         accountId: inputs.accountId,
-        // Admit the configured web client origin so a browser can dial the wss tunnel candidate.
-        // Undefined means no extra origin, the slice A behavior.
+        // Admit the configured web client origin so a browser can dial
+        // the wss tunnel candidate. Undefined means no extra origin.
         allowedOrigin: allowedWebOrigin(),
       };
     }),
@@ -629,8 +572,9 @@ export const directHandlers = makeDirectHandlers({
 // brokerHandlerFor supplies the channel-plus-handler pair, built on
 // the shared registrar's own per-call wrapper so the brokered path
 // serves the same dispatch policy as every other wire. index.ts still
-// registers the same handlers on the Electron and remote wires, where
-// connectInfo fails closed without an authenticated caller.
+// registers the same handlers on the Electron wire and the direct
+// listener, where connectInfo fails closed without an authenticated
+// caller.
 hubServer.registerBroker(
   brokerHandlerFor(directHandlers, { validateOutputs: VALIDATE_OUTPUTS }),
 );

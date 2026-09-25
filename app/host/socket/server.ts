@@ -1,30 +1,23 @@
-// Websocket binding of the shared ServerTransport: the host side of
-// remote hosting. Registration and listening are
-// decoupled on purpose: main/ipc/register.ts records every REMOTE host
-// handler here at boot whether or not the device config ever enables
-// the listener, so flipping the setting later only starts the socket.
+// Websocket binding of the shared ServerTransport: the host side of the
+// direct data plane, serving device-to-device data over direct sockets.
+// Registration and listening are decoupled on purpose:
+// main/ipc/register.ts records every REMOTE host handler here at boot
+// whether or not the device is enrolled, so signing in later only
+// starts the socket.
 //
-// This listener may sit on an open LAN port, so it is written to be
-// hostile-safe by default: loopback bind unless LAN is opted in, a
-// small inbound frame cap, an Origin gate, connection and in-flight
-// caps, failed-auth lockout, backpressure on pushes, and hard
-// termination (not advisory close) on every rejection and shutdown.
+// Auth is a single-use connect ticket minted over the device hub and
+// bound to the hello deviceId (WsServerTicketAuth). Dispatch serves a
+// channel registered mutating:false to every authed peer, and anything
+// else (a mutation, or an untagged channel) only under the host's live
+// command-access switch, refused with the shared command-refused code
+// before its handler runs otherwise. One authed socket per deviceId,
+// with supersede.
 //
-// READ-ONLY WIRE: the LAN token has no grant
-// model, so this binding enforces read-only at dispatch, fail-closed:
-// only channels explicitly registered mutating:false are served, and
-// anything else (a mutation, or an untagged channel) is refused with
-// the shared command-refused code before its handler can run. Commands
-// for a remote peer ride the host's command-access switch instead.
-//
-// DIRECT DATA PLANE: the same binding, created
-// with a WsServerTicketAuth, serves a SECOND instance for direct
-// device-to-device data. It differs from the legacy LAN instance in
-// auth (single-use connect tickets bound to the hello deviceId instead
-// of the static token), in dispatch (mutating channels served under a
-// live per-peer command grant instead of hardcoded read-only), and in
-// peer tracking (one authed socket per deviceId with supersede). All
-// the hardening above is shared between both instances.
+// The listener sits on every interface (and behind the tunnel), so it
+// is written to be hostile-safe: a small inbound frame cap, an Origin
+// gate, connection and in-flight caps, failed-auth lockout,
+// backpressure on pushes, and hard termination (not advisory close) on
+// every rejection and shutdown.
 //
 // This file must stay Electron free (pnpm test host-boundary). The
 // Electron facts a listener needs (appVersion) arrive through start
@@ -34,8 +27,6 @@ import { deflateRaw } from "node:zlib";
 import { WebSocket, WebSocketServer } from "ws";
 import { errorMessageOf } from "@shared/errors";
 import { noHandlerMessage } from "@shared/hub/link";
-import { secretsMatch } from "@host/lib/util/secretCompare";
-import { rendererSchemeOrigins } from "@shared/packaging/rendererScheme.mts";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
 import {
   CLOSE_AUTH_FAILED,
@@ -77,13 +68,9 @@ import {
 import type { RawData } from "ws";
 import { toBytes, toText } from "./rawData";
 
-// Ticket-mode auth for the direct data plane: a
-// SECOND binding instance serves device-to-device data over direct
-// sockets, brokered by short-lived single-use connect tickets minted
+// The binding's auth: short-lived single-use connect tickets minted
 // over the device hub. Injected at binding creation so this module
-// stays free of the ticket store and the grant store alike. Absent
-// means the legacy LAN behavior: static-token auth and the read-only
-// dispatch gate, unchanged.
+// stays free of the ticket store and the grant store alike.
 export type WsServerTicketAuth = {
   // Consumes the connect ticket the client proved possession of (it
   // never travels, see shared/ipc/socket/proof.ts), for the claimed
@@ -104,33 +91,26 @@ export type WsServerTicketAuth = {
 
 export type WsServerStartOpts = {
   port: number;
-  // Where the listener binds. Loopback ("127.0.0.1") is the default the
-  // config resolver picks. "0.0.0.0" only under the explicit LAN opt-in
-  // (socketHost.lan). The direct listener binds "::" (dual stack: both
+  // Where the listener binds. main binds "::" (dual stack: both
   // families accept), because it advertises IPv6 candidates too and an
-  // IPv4-only bind would make every one of them guaranteed dead. Kept
-  // as a resolved string so this module never reads config.
+  // IPv4-only bind would make every one of them guaranteed dead. Tests
+  // bind loopback. Kept as a resolved string so this module never
+  // reads config.
   bindAddress: string;
-  // Shared secret from the device config. Never empty: startNow throws
-  // on an empty token, so an unset config can never degrade into an
-  // accept-everything listener even if a caller forgets the gate.
-  // Ignored in ticket mode (the injected verifier is the auth), where
-  // callers pass "".
-  token: string;
   // The host root's id and the host app's version, echoed in the
   // welcome frame. appVersion is an Electron fact, so the caller
   // injects it here rather than this module importing electron.
   deviceId: string;
   appVersion: string;
-  // Ticket mode: the account the listener serves. An IDENTITY field,
-  // compared in sameListener, so an account switch restarts the
-  // listener and drops every authed socket from the old account
-  // instead of leaving them live under the new one. The legacy LAN
-  // listener has no account and leaves it unset.
+  // The account the listener serves. An IDENTITY field, compared in
+  // sameListener, so an account switch restarts the listener and drops
+  // every authed socket from the old account instead of leaving them
+  // live under the new one. Unset in tests.
   accountId?: string;
-  // Extra exact-match Origin the upgrade gate admits: the configured web client's origin, so a browser dial
-  // arriving through the wss tunnel passes. Unset keeps the slice A
-  // behavior (origin-less and app-local origins only).
+  // Extra exact-match Origin the upgrade gate admits: the configured
+  // web client's origin, so a browser dial arriving through the wss
+  // tunnel passes. Unset admits origin-less and loopback http origins
+  // only (see isAllowedOrigin).
   allowedOrigin?: string;
   // Test seam. Real callers take the 10s default.
   helloTimeoutMs?: number;
@@ -149,21 +129,21 @@ export type WsServerStatus = {
 };
 
 export type WsServerBinding = ServerTransport & {
-  // Resolves with the bound port (meaningful when opts.port is 0 in
-  // tests), rejects when the bind fails or the token is empty. Rejects
-  // when already started: reconciliation goes through refresh.
+  // Resolves with the bound port (meaningful when opts.port is 0),
+  // rejects when the bind fails. Rejects when already started:
+  // reconciliation goes through refresh.
   start(opts: WsServerStartOpts): Promise<number>;
   stop(): Promise<void>;
   // Reconciles the listener with the wanted state. The resolver runs
-  // INSIDE the serialized lifecycle so the config read and the reconcile
-  // are atomic: two overlapping refreshes cannot apply a stale config
-  // last (a rotated token can never be silently reverted). It returns
+  // INSIDE the serialized lifecycle so the state read and the reconcile
+  // are atomic: two overlapping refreshes cannot apply a stale read
+  // last (an account switch can never be silently reverted). It returns
   // null to stop, or opts to (re)start unless the running listener
   // already matches them.
   refresh(resolve: () => Promise<WsServerStartOpts | null>): Promise<void>;
   status(): WsServerStatus;
-  // Ticket mode: kill the authed sockets whose peer deviceId is not in
-  // the given roster. Presence scopes the data plane: the
+  // Kill the authed sockets whose peer deviceId is not in the given
+  // roster. Presence scopes the data plane: the
   // hub brokers membership, so a peer absent from a live roster (a
   // revoked device, an account switch on its side) loses its direct
   // socket within one presence broadcast. The caller must only pass a
@@ -184,13 +164,12 @@ const MAX_PREAUTH_CONNECTIONS = 16;
 // so the peer sees the code. The dead flag already blocks any frame
 // arriving in this gap, so correctness does not depend on the delay.
 const REJECT_TERMINATE_DELAY_MS = 50;
-// Wrong-token attempts from one client identity before a lockout
-// window starts, so a wrong token is not a free infinite retry loop.
+// Failed-proof attempts from one client identity before a lockout
+// window starts, so a bad ticket is not a free infinite retry loop.
 const AUTH_FAILURE_LIMIT = 5;
 const AUTH_LOCKOUT_MS = 30_000;
 
-// How often at most the ticket-mode listener logs a refused web
-// Origin. A deployment whose desktop never set SM_ACCOUNT_WEB_ORIGIN
+// How often at most the listener logs a refused web Origin. A deployment whose desktop never set SM_ACCOUNT_WEB_ORIGIN
 // would otherwise be a silent stream of bare upgrade refusals with no
 // clue on either side.
 const ORIGIN_REJECT_LOG_THROTTLE_MS = 60_000;
@@ -203,26 +182,23 @@ function isLoopbackAddress(address: string): boolean {
   );
 }
 
-// The identity lockout, caps and log lines key on. The legacy LAN
-// listener keys on the socket's remoteAddress untouched. The
-// ticket-mode listener additionally serves connections arriving
-// through the local cloudflared connector, which ALL land on loopback:
-// keying those on remoteAddress would collapse every tunnel-borne
-// client into one 127.0.0.1 bucket, letting 5 bad tickets from
-// anywhere on the internet bench every tunnel dial for the lockout
-// window, forever renewable. cloudflared forwards the real client
-// address in CF-Connecting-IP, so a loopback connection in ticket mode
-// keys on that header instead when present. Only loopback connections
-// may delegate to the header: a LAN peer cannot spoof its way into
-// another bucket because its remoteAddress is not loopback.
+// The identity lockout, caps and log lines key on: the socket's
+// remoteAddress, except for connections arriving through the local
+// cloudflared connector, which ALL land on loopback: keying those on
+// remoteAddress would collapse every tunnel-borne client into one
+// 127.0.0.1 bucket, letting 5 bad tickets from anywhere on the internet
+// bench every tunnel dial for the lockout window, forever renewable.
+// cloudflared forwards the real client address in CF-Connecting-IP, so
+// a loopback connection keys on that header instead when present. Only
+// loopback connections may delegate to the header: a LAN peer cannot
+// spoof its way into another bucket because its remoteAddress is not
+// loopback.
 export function clientIdentityOf(
   remoteAddress: string | undefined,
   cfConnectingIp: string | undefined,
-  ticketMode: boolean,
 ): string {
-  const address = remoteAddress ?? "unknown";
-  if (!ticketMode || !tunnelBorne(remoteAddress, cfConnectingIp)) {
-    return address;
+  if (!tunnelBorne(remoteAddress, cfConnectingIp)) {
+    return remoteAddress ?? "unknown";
   }
   return (cfConnectingIp ?? "").trim();
 }
@@ -240,8 +216,8 @@ function tunnelBorne(
   );
 }
 
-// Which advertised candidate a ticket-mode connection came in on, so a
-// ticket can be held to the kind it was minted for.
+// Which advertised candidate a connection came in on, so a ticket can
+// be held to the kind it was minted for.
 export function arrivalKindOf(
   remoteAddress: string | undefined,
   cfConnectingIp: string | undefined,
@@ -249,8 +225,8 @@ export function arrivalKindOf(
   return tunnelBorne(remoteAddress, cfConnectingIp) ? "tunnel" : "lan";
 }
 
-// Ticket mode's hello check. Resolves the host's half of the mutual
-// proof when the client proved one of its pending tickets, else null.
+// The hello check. Resolves the host's half of the mutual proof when
+// the client proved one of its pending tickets, else null.
 async function answerProof(
   auth: WsServerTicketAuth,
   hostNonce: string,
@@ -273,26 +249,21 @@ async function answerProof(
 }
 
 // Origin pre-filter for the upgrade, NOT the security boundary: the
-// hello token is what actually authenticates a peer (a bad token
-// terminates the socket). Legitimate clients are node and main-process
-// sockets, which send no Origin, plus the app's own renderer, whose
-// browser-global WebSocket always sends one: the renderer-scheme
-// origin (shigomori://app or shigomori-dev://app, both builds load
-// over it, see main/electron/clerk.ts), or a loopback http origin from
-// a locally served web client. Anything else is a drive-by browser
-// page, refused before it can even attempt a hello. The direct
-// listener may additionally admit ONE configured
-// web-client origin, so the web client can dial wss tunnel URLs: the
-// exact-match `allowedOrigin` arrives through start opts from the same
-// SM_ACCOUNT_WEB_ORIGIN env the app's account layer reads, never
-// hardcoded. The legacy LAN listener passes none and keeps its pinned
-// behavior.
+// hello's ticket proof is what actually authenticates a peer (a bad
+// proof terminates the socket). Legitimate clients are the desktop's
+// main-process dialer, which sends no Origin, and the web client,
+// whose browser-global WebSocket always sends one: a loopback http
+// origin from a locally served web client, or the ONE configured
+// web-client origin, so the deployed web client can dial wss tunnel
+// URLs. The exact-match `allowedOrigin` arrives through start opts
+// from the same SM_ACCOUNT_WEB_ORIGIN env the app's account layer
+// reads, never hardcoded. Anything else is a drive-by browser page,
+// refused before it can even attempt a hello.
 export function isAllowedOrigin(
   origin: string | undefined,
   allowedOrigin?: string,
 ): boolean {
   if (origin === undefined) return true;
-  if (rendererSchemeOrigins().includes(origin)) return true;
   if (allowedOrigin !== undefined && origin === allowedOrigin) return true;
   try {
     const url = new URL(origin);
@@ -379,18 +350,16 @@ function send(socket: WebSocket, frame: ServerFrame): void {
 }
 
 export function createWsServerBinding(
-  auth?: WsServerTicketAuth,
+  auth: WsServerTicketAuth,
 ): WsServerBinding {
   const handlers = new Map<
     string,
     (ctx: HandlerContext, raw: unknown) => Promise<unknown>
   >();
   // The channel names EXPLICITLY registered read-only (mutating:false),
-  // collected fail-closed exactly like the hub binding's set: dispatch
-  // serves a channel over this wire ONLY when it is in here, so a
-  // mutation or an untagged channel is refused even though it is
-  // registered. Registration stays unconditional (the Electron wire
-  // serves everything); only the LAN dispatch consults this.
+  // collected fail-closed: dispatch serves a channel ungated ONLY when
+  // it is in here, so a mutation or an untagged channel needs the
+  // command-access switch even though it is registered.
   const readOnlyChannels = new Set<string>();
   // Sockets past hello, each with its liveness record
   // (HOST_LIVENESS_TIMEOUT_MS in frames.ts): when its last frame
@@ -407,7 +376,7 @@ export function createWsServerBinding(
   };
   const authed = new Map<WebSocket, Liveness>();
   let livenessTimer: NodeJS.Timeout | null = null;
-  // Ticket mode only: the one authed peer per deviceId. A device dials
+  // The one authed peer per deviceId. A device dials
   // at most one direct socket to a given peer, so a duplicate authed
   // connection from the same deviceId supersedes the older one,
   // mirroring the DO's behavior for its own sockets. The entry carries
@@ -434,7 +403,7 @@ export function createWsServerBinding(
   let droppedPushes = 0;
   // Last time an Origin refusal was logged, for the throttle.
   let originRejectLoggedAt = 0;
-  // Wrong-token attempts per client identity (clientIdentityOf), for
+  // Failed-proof attempts per client identity (clientIdentityOf), for
   // lockout.
   const failedAuth = new Map<string, { count: number; until: number }>();
   let status: WsServerStatus = {
@@ -443,8 +412,9 @@ export function createWsServerBinding(
     bindAddress: null,
     error: null,
   };
-  // Serializes start/stop/refresh so a fast settings double-toggle
-  // cannot interleave one refresh's stop with another's start.
+  // Serializes start/stop/refresh so two quick reconciles (an account
+  // change racing a config write) cannot interleave one refresh's stop
+  // with another's start.
   const lifecycle = createLimiter(1);
 
   function isLockedOut(ip: string): boolean {
@@ -535,17 +505,14 @@ export function createWsServerBinding(
     }
     if (!readOnlyChannels.has(frame.channel)) {
       // Fail-closed gate on anything not proven a read (explicitly
-      // registered mutating:false). Legacy mode: the LAN wire has no
-      // grant model, so a mutation or an untagged channel is always
-      // refused BEFORE its handler runs. Ticket mode (the direct data
-      // plane): mirror the hub link's dispatch and consult the
-      // injected command-access switch LIVE at each call, never cached
-      // on the session, so flipping it takes effect without a
-      // reconnect. Either refusal carries the typed code so the client
-      // transport surfaces "that machine will not run commands from
-      // here" distinctly from a real failure. The session's context
-      // already carries the live verdict, so dispatch asks it rather
-      // than re-deriving from the auth seam.
+      // registered mutating:false): consult the injected
+      // command-access switch LIVE at each call, never cached on the
+      // session, so flipping it takes effect without a reconnect. The
+      // refusal carries the typed code so the client transport
+      // surfaces "that machine will not run commands from here"
+      // distinctly from a real failure. The session's context already
+      // carries the live verdict, so dispatch asks it rather than
+      // re-deriving from the auth seam.
       if (ctx.isCallerCommandGranted?.() !== true) {
         send(
           socket,
@@ -576,11 +543,7 @@ export function createWsServerBinding(
       const cfConnectingIp = Array.isArray(forwardedFor)
         ? forwardedFor[0]
         : forwardedFor;
-      const ip = clientIdentityOf(
-        req.socket.remoteAddress,
-        cfConnectingIp,
-        auth !== undefined,
-      );
+      const ip = clientIdentityOf(req.socket.remoteAddress, cfConnectingIp);
       const arrivalKind = arrivalKindOf(
         req.socket.remoteAddress,
         cfConnectingIp,
@@ -629,8 +592,9 @@ export function createWsServerBinding(
       // even though ws may still deliver buffered frames while closing.
       let dead = false;
       // Non-null once the hello handshake succeeded. Everything before
-      // that is answered only with a close code: this listener may sit
-      // on an open LAN port, so pre-auth traffic gets nothing else.
+      // that is answered only with the challenge and a close code: this
+      // listener sits on every interface, so pre-auth traffic gets
+      // nothing else.
       let ctx: HandlerContext | null = null;
       let inFlight = 0;
       const controller = new AbortController();
@@ -647,12 +611,10 @@ export function createWsServerBinding(
       });
       const warnUnknownChannelFrame = createUnknownChannelFrameWarner("socket");
 
-      // Ticket mode opens the handshake: the client cannot hello until
-      // it has this nonce. Not a secret, so it goes out pre-auth.
-      const hostNonce = auth === undefined ? null : newHandshakeNonce();
-      if (hostNonce !== null) {
-        send(socket, { t: "challenge", nonce: hostNonce });
-      }
+      // The host opens the handshake: the client cannot hello until it
+      // has this nonce. Not a secret, so it goes out pre-auth.
+      const hostNonce = newHandshakeNonce();
+      send(socket, { t: "challenge", nonce: hostNonce });
       // One hello per connection, latched before the proof check
       // awaits: two hellos racing through the await would otherwise
       // both see ctx === null and both authenticate.
@@ -674,7 +636,7 @@ export function createWsServerBinding(
         // A superseded socket must not evict its replacement, so the
         // per-device entry is dropped only while it still names THIS
         // socket, mirroring the DO. The authed identity lives on the
-        // context, ticket mode only.
+        // context.
         const id = ctx?.callerDeviceId;
         if (id !== undefined && authedByDevice.get(id)?.socket === socket) {
           authedByDevice.delete(id);
@@ -751,25 +713,21 @@ export function createWsServerBinding(
             return;
           }
           helloSeen = true;
-          // Legacy mode compares the static token. Ticket mode never
-          // receives a ticket, only a proof of holding one, and a hello
-          // that carries no proof proves nothing. Both failures take
-          // the same lockout-counted auth path.
-          const hostProof =
-            auth === undefined || hostNonce === null
-              ? undefined
-              : await answerProof(auth, hostNonce, arrivalKind, frame);
+          // The host never receives a ticket, only a proof of holding
+          // one, and a hello that carries no proof proves nothing.
+          const hostProof = await answerProof(
+            auth,
+            hostNonce,
+            arrivalKind,
+            frame,
+          );
           // The await yielded, so re-read the liveness flag a close or
           // a timeout may have set meanwhile.
           if (dead) return;
-          const authenticated =
-            auth === undefined
-              ? secretsMatch(frame.token ?? "", opts.token)
-              : typeof hostProof === "string";
-          if (!authenticated) {
+          if (hostProof === null) {
             recordAuthFailure(ip);
             // The owner gets a real signal under a brute force attempt.
-            console.warn(`[socket] CLOSE_AUTH_FAILED: bad token from ${ip}`);
+            console.warn(`[socket] CLOSE_AUTH_FAILED: bad proof from ${ip}`);
             kill(CLOSE_AUTH_FAILED, "auth failed");
             return;
           }
@@ -791,37 +749,29 @@ export function createWsServerBinding(
                 encodeFrame({ t: "push", channel, payload: parsed }),
               );
             };
-          // Legacy wire: the static token proves nothing about
-          // identity, so callerDeviceId stays undefined and the grant
-          // predicate answers false without consulting any store (the
-          // LAN wire is read-only by policy). Ticket mode: the ticket
-          // bound this hello to a deviceId, so the context carries the
-          // authenticated peer identity and the host's command-access
-          // answer, read live from the injected predicate so a toggle
-          // applies without a reconnect.
-          const callerDeviceId =
-            auth === undefined ? undefined : frame.deviceId;
+          // The ticket bound this hello to a deviceId, so the context
+          // carries the authenticated peer identity and the host's
+          // command-access answer, read live from the injected
+          // predicate so a toggle applies without a reconnect.
+          const callerDeviceId = frame.deviceId;
           ctx = {
             signal: controller.signal,
-            isCallerCommandGranted:
-              auth === undefined ? () => false : () => auth.isCommandGranted(),
+            isCallerCommandGranted: () => auth.isCommandGranted(),
             callerDeviceId,
             notifier,
             channels,
           };
-          if (callerDeviceId !== undefined) {
-            // A device dials at most one direct socket to a given
-            // peer, so a duplicate authed connection from the same
-            // deviceId supersedes the older one, like the DO does for
-            // its own sockets. The old connection is KILLED, not just
-            // closed: kill sets its dead flag and aborts its signal,
-            // so nothing it delivers during the close grace window
-            // executes, and no push reaches it either.
-            authedByDevice
-              .get(callerDeviceId)
-              ?.kill(CLOSE_GOING_AWAY, "superseded");
-            authedByDevice.set(callerDeviceId, { socket, kill });
-          }
+          // A device dials at most one direct socket to a given peer,
+          // so a duplicate authed connection from the same deviceId
+          // supersedes the older one, like the DO does for its own
+          // sockets. The old connection is KILLED, not just closed:
+          // kill sets its dead flag and aborts its signal, so nothing
+          // it delivers during the close grace window executes, and no
+          // push reaches it either.
+          authedByDevice
+            .get(callerDeviceId)
+            ?.kill(CLOSE_GOING_AWAY, "superseded");
+          authedByDevice.set(callerDeviceId, { socket, kill });
           authed.set(socket, {
             lastInboundAt: Date.now(),
             heartbeats: false,
@@ -837,7 +787,7 @@ export function createWsServerBinding(
             t: "welcome",
             deviceId: opts.deviceId,
             appVersion: opts.appVersion,
-            proof: hostProof ?? undefined,
+            proof: hostProof,
           });
           return;
         }
@@ -877,14 +827,6 @@ export function createWsServerBinding(
         reject(new Error("[socket] listener already started"));
         return;
       }
-      // The invariant, enforced where WsServerBinding owns it: an empty
-      // token can never open a legacy listener, whatever config said
-      // upstream. Ticket mode has no static token at all (the injected
-      // verifier is the auth), so the guard does not apply there.
-      if (auth === undefined && opts.token === "") {
-        reject(new Error("[socket] refusing to start with an empty token"));
-        return;
-      }
       const generation = ++generationCounter;
       const wss = new WebSocketServer({
         host: opts.bindAddress,
@@ -893,19 +835,18 @@ export function createWsServerBinding(
         // tiny, so a small ceiling costs nothing and denies a hostile
         // peer a large buffer. Outbound frames are unaffected.
         maxPayload: MAX_INBOUND_FRAME_BYTES,
-        // Origin gate: no Origin (node and main-process clients), one
-        // of the app's own renderer origins, or the configured web
-        // origin passes, anything else is refused. See isAllowedOrigin
-        // for why this is a coarse pre-filter and the hello token is
-        // the real auth. A ticket-mode refusal logs (throttled) with
-        // the rejected origin, because the likeliest cause is a web
-        // client reaching a desktop that never set
-        // SM_ACCOUNT_WEB_ORIGIN, and without the log the web dial dies
-        // as a bare refusal with no clue on either side.
+        // Origin gate: no Origin (node and main-process clients), a
+        // loopback http origin, or the configured web origin passes,
+        // anything else is refused. See isAllowedOrigin for why this is
+        // a coarse pre-filter and the hello's proof is the real auth. A
+        // refusal logs (throttled) with the rejected origin, because
+        // the likeliest cause is a web client reaching a desktop that
+        // never set SM_ACCOUNT_WEB_ORIGIN, and without the log the web
+        // dial dies as a bare refusal with no clue on either side.
         verifyClient: (info: { req: IncomingMessage }) => {
           const origin = info.req.headers.origin;
           const allowed = isAllowedOrigin(origin, opts.allowedOrigin);
-          if (!allowed && auth !== undefined) {
+          if (!allowed) {
             const at = Date.now();
             if (at - originRejectLoggedAt >= ORIGIN_REJECT_LOG_THROTTLE_MS) {
               originRejectLoggedAt = at;
@@ -1019,14 +960,13 @@ export function createWsServerBinding(
   function sameListener(opts: WsServerStartOpts): boolean {
     if (listener === null) return false;
     const current = listener.opts;
-    // deviceId and appVersion are process constants, so port, token,
+    // deviceId and appVersion are process constants, so port,
     // bindAddress and accountId are the fields a config write or an
     // account switch can change under us. accountId is an identity
     // field: a switch must restart the listener so every socket authed
     // under the old account drops.
     return (
       current.port === opts.port &&
-      current.token === opts.token &&
       current.bindAddress === opts.bindAddress &&
       current.accountId === opts.accountId &&
       // Env-derived and process-constant in practice, compared anyway
@@ -1046,10 +986,10 @@ export function createWsServerBinding(
       }
       handlers.set(channel, fn);
       // Record an EXPLICITLY read-only channel (mutating:false) so
-      // dispatch may serve it over this wire. Fail-closed, mirroring
-      // the hub binding: a channel left untagged, or tagged
-      // mutating:true, is deliberately NOT recorded, so the read-only
-      // gate refuses it.
+      // dispatch may serve it ungated. Fail-closed: a channel left
+      // untagged, or tagged mutating:true, is deliberately NOT
+      // recorded, so dispatch serves it only under the command-access
+      // switch.
       if (opts?.mutating === false) readOnlyChannels.add(channel);
     },
     // Payloads arrive already parsed from the shared fan-out path.
@@ -1064,8 +1004,7 @@ export function createWsServerBinding(
     },
     closePeersNotIn(online) {
       // Deleting the visited entry (kill does) is fine under Map
-      // iteration. Ticket mode only in practice: the legacy wire never
-      // populates authedByDevice.
+      // iteration.
       const live = new Set(online);
       for (const [deviceId, peer] of authedByDevice) {
         if (!live.has(deviceId)) {

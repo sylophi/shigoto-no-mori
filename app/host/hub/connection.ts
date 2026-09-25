@@ -48,7 +48,7 @@ export type HubConnectionBinding = {
   // The HOST half: the ONE broker slot this wire serves, as the
   // channel-plus-handler pair the composition supplies (so this
   // binding never imports a contract). Registration is decoupled from
-  // connecting, exactly like the LAN binding: the pair recorded at
+  // connecting, exactly like the direct listener: the pair recorded at
   // boot is served whenever a socket is up. Throws on a second
   // registration (mirroring ipcMain.handle's one-handler-per-channel
   // rule) and on a pair naming a different channel than the one this

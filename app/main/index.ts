@@ -10,7 +10,7 @@ import { gitContract } from "@shared/ipc/modules/git";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { windowContract } from "@shared/ipc/modules/window";
 import { ensureDataDir } from "@host/lib/bootstrap";
-import { dropLegacyRemoteDevices } from "@host/lib/config/global";
+import { dropRemovedLanKeys } from "@host/lib/config/global";
 import { getDeviceId } from "@host/lib/config/deviceId";
 import {
   createDesktopClerkBridge,
@@ -47,7 +47,6 @@ import {
   broadcast,
   broadcastAll,
   refreshHubConnection,
-  refreshSocketHost,
   startControlHost,
   stopControlHost,
   stopDirectHost,
@@ -427,13 +426,13 @@ app.on("ready", async () => {
   // Before the first createWindow, whose theme read must already see
   // values migrated out of the pre-split device config.
   await seedClientConfigFromLegacy();
-  // Scrub the removed LAN feature's plaintext tokens off disk. An
+  // Scrub the removed LAN listener's plaintext tokens off disk. An
   // unreadable config must never block boot, and the drain retries
   // next boot.
   try {
-    dropLegacyRemoteDevices();
+    dropRemovedLanKeys();
   } catch (error) {
-    console.warn("[config] legacy remoteDevices drain failed:", error);
+    console.warn("[config] LAN key drain failed:", error);
   }
   buildAppMenu();
   // Host liveness. Install the crash guards before
@@ -454,12 +453,6 @@ app.on("ready", async () => {
   await refreshTerrierListings();
   startBackgroundFetch();
   startUpdater();
-  // Remote hosting: serve host-scoped calls over
-  // the LAN when the device config enables it. After getDeviceId so
-  // the welcome frame's identity is final. The same reconcile reruns
-  // after every globalConfig write (hostImpls wiring), making this the
-  // boot-time pass only.
-  void refreshSocketHost();
   // The control wire the CLI's cross-device verbs ride (`sm worktrees
   // send|bring|mirror`). Here, past the single-instance lock and the
   // data dir, so only the instance that owns the data dir publishes

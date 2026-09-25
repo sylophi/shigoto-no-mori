@@ -18,14 +18,14 @@
 // error serialization (message only), the local outbound size guard at
 // the shrunken control-frame budget, offline nacks, presence-driven
 // peer teardown, supervisor redial with a fresh ticket per attempt, the
-// blocked verdicts for the revoked and superseded close codes, the
-// ignored hello token, the per-peer in-flight cap surviving a hostile
-// presence flap and a re-hello, an off-roster hello refused, an
-// oversize RESPONSE downgraded to ok:false rather than a hang, a
-// stale-epoch res dropped after a re-hello, bye tearing the host
-// session down (epoch-guarded), stop() during in-flight work running no
-// further handler, and malformed inbound frames dropped without killing
-// the process.
+// blocked verdicts for the revoked and superseded close codes, an
+// older build's hello token stripped, the per-peer in-flight cap
+// surviving a hostile presence flap and a re-hello, an off-roster
+// hello refused, an oversize RESPONSE downgraded to ok:false rather
+// than a hang, a stale-epoch res dropped after a re-hello, bye tearing
+// the host session down (epoch-guarded), stop() during in-flight work
+// running no further handler, and malformed inbound frames dropped
+// without killing the process.
 //
 // Every sm frame the device hub carries is wrapped as { epoch, sm }
 // (see the SESSION EPOCH note in shared/hub/link.ts), so the stub
@@ -207,7 +207,7 @@ async function main() {
         to: "B",
         frame: {
           epoch: 1,
-          sm: { t: "hello", token: "", deviceId: "C", appVersion: "9" },
+          sm: { t: "hello", deviceId: "C", appVersion: "9" },
         },
       });
       const welcome = await raw.nextHub();
@@ -450,7 +450,7 @@ async function main() {
   );
 
   await check(
-    "token ignored: a hello carrying a garbage token still gets a welcome",
+    "hello skew: an older build's hello, still carrying a token field, gets a welcome",
     async (track) => {
       const stub = await startStubHub(track);
       await bootDevice(
@@ -472,6 +472,8 @@ async function main() {
           epoch: 1,
           sm: {
             t: "hello",
+            // Older builds sent an empty token here. The parse strips
+            // it, whatever it holds.
             token: "garbage",
             deviceId: "C",
             appVersion: "9",
@@ -504,7 +506,7 @@ async function main() {
           to: "B",
           frame: {
             epoch,
-            sm: { t: "hello", token: "", deviceId: "C", appVersion: "9" },
+            sm: { t: "hello", deviceId: "C", appVersion: "9" },
           },
         });
       const req = (epoch, id) =>
@@ -624,7 +626,7 @@ async function main() {
         from: "ghost",
         frame: {
           epoch: 1,
-          sm: { t: "hello", token: "", deviceId: "ghost", appVersion: "9" },
+          sm: { t: "hello", deviceId: "ghost", appVersion: "9" },
         },
       });
       await delay(200);

@@ -49,8 +49,7 @@ export type DirectHandlerDeps = {
   // The wss URL of this host's tunnel endpoint while the cloudflared
   // child is currently healthy, else null. When
   // present it is advertised as one more candidate with its own
-  // ticket. Absent means no tunnel support, so slice A callers change
-  // nothing.
+  // ticket. Absent means no tunnel support.
   tunnelUrl?(): string | null;
   // Test seam for the interface enumeration.
   candidateAddresses?(): string[];
@@ -71,7 +70,7 @@ export function makeDirectHandlers(
       // Fail closed without an authenticated peer identity: a ticket
       // is bound to the deviceId it is minted for, and only the hub
       // link and the direct listener supply one. Every other wire
-      // (Electron, legacy LAN, loopback) reads as unavailable.
+      // (Electron, loopback) reads as unavailable.
       const peerDeviceId = ctx.callerDeviceId;
       if (peerDeviceId === undefined) return { available: false };
       if (!deps.isPeerOnline(peerDeviceId)) return { available: false };

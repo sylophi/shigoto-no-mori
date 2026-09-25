@@ -30,7 +30,7 @@ const HubSocketStatusSchema = z.discriminatedUnion("phase", [
   }),
   z.object({
     phase: z.literal("blocked"),
-    reason: z.enum(["revoked", "superseded", "refused", "auth"]),
+    reason: z.enum(["revoked", "superseded", "refused"]),
     message: z.string(),
   }),
   z.object({ phase: z.literal("stopped") }),

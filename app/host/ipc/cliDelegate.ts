@@ -382,9 +382,8 @@ export function cliRunScriptSpawn(args: {
 // REGISTERED key the payload omits it CLEARS that key on disk (that is
 // how a settings save serializes a default by omission), so only
 // UNREGISTERED keys the payload does not carry survive untouched. A
-// caller must therefore hand a COMPLETE, unredacted base or a registered
-// key it left out (socketHost.token, an enabled it meant to keep) is
-// written away. It re-checks the shape so engine drift fails loudly.
+// caller must therefore hand a COMPLETE base or a registered key it
+// left out is written away. It re-checks the shape so engine drift fails loudly.
 // Callers must invalidate the TTL caches themselves: runCli's self-write
 // note suppresses the state watcher for these writes.
 //

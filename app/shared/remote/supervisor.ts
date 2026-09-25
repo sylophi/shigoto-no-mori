@@ -9,10 +9,10 @@
 //                              \-> blocked (terminal until inputs change)
 // A connection that STAYS OPEN past the stable threshold resets the
 // ladder to the bottom, so a healthy link that blips once does not
-// inherit a punishing delay. A blocking close (a wrong token on the LAN
-// path, a revoked device on the hub path) goes to blocked with NO
-// further retry: those failures must block rather than spin into a
-// hammering loop. Every other close backs off.
+// inherit a punishing delay. A blocking close (a revoked device, a
+// superseded socket) goes to blocked with NO further retry: those
+// failures must block rather than spin into a hammering loop. Every
+// other close backs off.
 //
 // Deterministic on purpose: the ladder is fixed with no random jitter
 // (the renderer runtime forbids Math.random anyway), and time is read
@@ -96,8 +96,8 @@ export type ConnectFn = (
 // ticket mint the hub would not serve, any 401/403, which a misdeployed
 // hub produces for every device at once and which recovers on its own.
 // "superseded" is another instance of this device taking the socket
-// over, and "auth" is the LAN path's bad token.
-export type BlockReason = "revoked" | "superseded" | "refused" | "auth";
+// over.
+export type BlockReason = "revoked" | "superseded" | "refused";
 
 // The one block a device acts on by leaving the account.
 export function credentialRevoked(status: SupervisorStatus): boolean {
@@ -166,8 +166,8 @@ export function createSupervisor(options: SupervisorOptions): Supervisor {
   }
 
   function block(reason: BlockReason, message: string): void {
-    // Terminal until inputs change: the owner drops and recreates the
-    // supervisor when the url or token changes, which is what unblocks.
+    // Terminal until the owner's next refresh, which drops and
+    // recreates the supervisor: that is what unblocks.
     connection = null;
     setStatus({ phase: "blocked", reason, message });
   }

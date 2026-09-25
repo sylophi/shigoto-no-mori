@@ -1,24 +1,25 @@
-// Durable proof for the websocket host binding (host/socket/server.ts).
-// Starts a real binding on an ephemeral loopback port and drives a real
-// ws client against it, asserting the auth, dispatch, broadcast and
-// framing paths PLUS the security behaviors the hardening added:
-// terminate-on-bad-token, post-timeout hello rejection, oversized-frame
-// rejection, the Origin gate (the app's own renderer origins pass and
-// reach welcome, a foreign web origin is refused), empty-token start
-// refusal, the no-handler answer a non-remote channel gets, the
-// per-socket in-flight cap, the stopped-listener generation guard, and
-// the contract invariant that every host invoke is explicitly tagged
+// Durable proof for the direct listener (host/socket/server.ts).
+// Starts a real listener on an ephemeral loopback port (the shared
+// fixture in test/lib/directBoot.mjs) and drives real ws clients
+// against it through the ticket-proof handshake, asserting the
+// dispatch, broadcast and framing paths PLUS the hardening:
+// terminate-on-bad-proof (a hello with no proof, the retired
+// token-only shape, included), post-timeout hello rejection,
+// oversized-frame rejection, the Origin gate (origin-less, loopback
+// and the configured web origin pass, the renderer scheme and a
+// foreign web origin are refused), the no-handler answer a non-remote
+// channel gets, the per-socket in-flight cap, the stopped-listener
+// generation guard, liveness on both ends, deflated frames, and the
+// contract invariant that every host invoke is explicitly tagged
 // remote true or false.
 //
-// The LAN read-only gate: the LAN wire serves
-// ONLY channels explicitly registered mutating:false, refusing a
-// mutating or untagged channel with the shared command-refused code
-// BEFORE its handler runs. The client transport maps that code to the
-// typed CommandRefusedError, the preflight remoteAccess:commandAccess
-// answers granted:false over this wire, and the contract spot-checks
-// pin the step-6 flips (fs, the projects and packageScripts preference
-// writes, globalConfig.writeDeviceSettings with its strict patch schema
-// that structurally rejects socketHost and any unmanaged key).
+// The command gate: the listener serves a channel registered
+// mutating:false to every authed peer, and anything else (a mutating
+// or untagged channel) only while the host accepts commands, refusing
+// it with the shared command-refused code BEFORE its handler runs. The
+// client transport maps that code to the typed CommandRefusedError.
+// The grant flipping live on one session, the ticket rules and the
+// brokering are direct-plane.mjs's.
 //
 // The golden read surface: every channel servable ungated (remote:true,
 // mutating:false) is pinned in read-surface.golden.json, so flipping a
@@ -43,14 +44,13 @@ import {
   MAX_IN_FLIGHT_PER_PEER,
 } from "@shared/ipc/socket/frames";
 import { DEFLATED_FRAME_KIND } from "@shared/ipc/socket/deflatedFrame";
-import { connectDevice } from "@shared/ipc/socket/wsClientTransport";
-import { rendererSchemeOrigins } from "@shared/packaging/rendererScheme.mts";
+import { handshakeProof, newHandshakeNonce } from "@shared/ipc/socket/proof";
+import { openDevice } from "@shared/ipc/socket/wsClientTransport";
+import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { registerContract } from "@shared/ipc/registerContract";
-import { createWsServerBinding } from "@host/socket/server";
 import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
-import { remoteAccessHandlers } from "@host/ipc/modules/remoteAccess";
 // The authoritative contract registry (the same source check-host-boundary
 // rule 6 derives from), so the explicit-remote-tag invariant covers every
 // host module automatically instead of a hand-maintained list a new module
@@ -71,9 +71,16 @@ import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { delay, makeProof, waitFor } from "./lib/checkKit.mjs";
+import { startDirectListener } from "./lib/directBoot.mjs";
 
-const TOKEN = "correct-horse-battery-staple-token-of-good-length";
 const WS_CLOSE_TOO_BIG = 1009;
+// The dialing peer every ticket below is minted for.
+const CLIENT = "client";
+// A ticket the listener never minted: its proof answers nothing.
+const UNMINTED = "smpt_never_minted";
+// What the local cloudflared connector adds to a tunnel-borne
+// connection, which the listener reads as the "tunnel" candidate kind.
+const TUNNEL_HEADERS = { "cf-connecting-ip": "203.0.113.7" };
 
 // Shared handler state referenced by registerTestHandlers. Reset by the
 // tests that use it.
@@ -84,9 +91,9 @@ let untaggedExecutions = 0;
 
 function registerTestHandlers(binding) {
   // The generic-path handlers are EXPLICIT reads (mutating:false): the
-  // LAN gate is fail-closed and serves only channels proven read-only,
-  // so tagging them keeps the dispatch/framing/broadcast tests serving
-  // as before.
+  // command gate is fail-closed and serves only channels proven
+  // read-only while commands are off (the fixture's default), so
+  // tagging them keeps the dispatch/framing/broadcast tests serving.
   binding.handle("test:echo", async (_ctx, raw) => raw, { mutating: false });
   binding.handle(
     "test:hang",
@@ -127,22 +134,21 @@ function registerTestHandlers(binding) {
   });
 }
 
-// `track`, when passed, registers the binding's stop on the check's
-// tracker, so it runs even when the assertions throw.
-async function startBinding(overrides = {}, track) {
-  const binding = createWsServerBinding();
-  registerTestHandlers(binding);
-  const port = await binding.start({
-    port: 0,
-    bindAddress: "127.0.0.1",
-    token: TOKEN,
+// The shared listener fixture with this check's test handlers, a short
+// hello timeout, and a mint for the one peer every dial here claims to
+// be. `kind` is the candidate kind the connection will arrive as:
+// "tunnel" for one carrying TUNNEL_HEADERS, "lan" otherwise.
+async function startListener(track, start = {}) {
+  const listener = await startDirectListener(track, {
     deviceId: "host-device",
-    appVersion: "9.9.9",
-    helloTimeoutMs: 300,
-    ...overrides,
+    registerHandlers: registerTestHandlers,
+    start: { helloTimeoutMs: 300, ...start },
   });
-  track?.(() => binding.stop());
-  return { binding, url: `ws://127.0.0.1:${port}` };
+  return {
+    ...listener,
+    url: `ws://127.0.0.1:${listener.port}`,
+    mint: (kind = "lan") => listener.tickets.mint(CLIENT, [kind])[0],
+  };
 }
 
 function connect(url, headers) {
@@ -168,7 +174,6 @@ function connect(url, headers) {
       ws.once("error", (error) => reject(error));
     }),
     send: (frame) => ws.send(encodeFrame(frame)),
-    sendText: (text) => ws.send(text),
     pending: () => frames.length,
     nextFrame: () =>
       new Promise((resolve) => {
@@ -185,32 +190,94 @@ function connect(url, headers) {
   };
 }
 
-async function authenticate(url, token = TOKEN) {
-  const client = connect(url);
+// The client half of the handshake on a raw socket: read the host's
+// challenge, then hello with a proof of `ticket` over both nonces.
+// Resolves with what the host's welcome proof must be. `extra` rides
+// the hello (a deflate ask).
+async function sendProvenHello(client, ticket, extra = {}) {
+  const challenge = await client.nextFrame();
+  assert.equal(challenge.t, "challenge", "the host must open with a nonce");
+  const nonce = newHandshakeNonce();
+  client.send({
+    t: "hello",
+    deviceId: CLIENT,
+    appVersion: "1",
+    nonce,
+    proof: await handshakeProof(ticket, "client", challenge.nonce, nonce),
+    ...extra,
+  });
+  return handshakeProof(ticket, "host", challenge.nonce, nonce);
+}
+
+async function authenticate(listener, { headers, kind, extra } = {}) {
+  const client = connect(listener.url, headers);
   await client.opened;
-  client.send({ t: "hello", token, deviceId: "client", appVersion: "1" });
+  const hostProof = await sendProvenHello(
+    client,
+    listener.mint(kind ?? (headers === undefined ? "lan" : "tunnel")),
+    extra,
+  );
   const welcome = await client.nextFrame();
   assert.equal(
     welcome.t,
     "welcome",
-    "expected a welcome frame after a valid hello",
+    "expected a welcome frame after a proven hello",
   );
-  return { client, welcome };
+  return { client, welcome, hostProof };
 }
 
-// A stand-in host, to put exact bytes on the wire: welcomes any
-// hello, then hands the socket to the check.
-async function fakeHost(track, afterWelcome) {
+// The real client transport against a URL, holding `ticket`.
+function dial(url, ticket, overrides = {}) {
+  return openDevice({
+    url,
+    ticket,
+    appVersion: "1",
+    localDeviceId: CLIENT,
+    onClose: () => {},
+    ...overrides,
+  }).authenticate();
+}
+
+// A stand-in host, to put exact bytes on the wire: runs the proof
+// handshake for FAKE_TICKET, then hands the socket to the check.
+// `onFrame` sees every client frame after the welcome.
+const FAKE_TICKET = "smpt_fake_host_ticket";
+async function fakeHost(track, { afterWelcome, onFrame } = {}) {
   const wss = new WebSocketServer({ port: 0, host: "127.0.0.1" });
   await new Promise((resolve) => wss.once("listening", resolve));
-  track(() => new Promise((resolve) => wss.close(resolve)));
+  track(
+    () =>
+      new Promise((resolve) => {
+        for (const ws of wss.clients) ws.terminate();
+        wss.close(() => resolve());
+      }),
+  );
   wss.on("connection", (ws) => {
-    track(() => ws.terminate());
-    ws.once("message", () => {
-      ws.send(
-        encodeFrame({ t: "welcome", deviceId: "fake-host", appVersion: "1" }),
+    const hostNonce = newHandshakeNonce();
+    ws.send(encodeFrame({ t: "challenge", nonce: hostNonce }));
+    let welcomed = false;
+    ws.on("message", async (data) => {
+      const frame = JSON.parse(data.toString("utf8"));
+      if (welcomed) {
+        onFrame?.(ws, frame);
+        return;
+      }
+      welcomed = true;
+      const proof = await handshakeProof(
+        FAKE_TICKET,
+        "host",
+        hostNonce,
+        frame.nonce,
       );
-      afterWelcome(ws);
+      ws.send(
+        encodeFrame({
+          t: "welcome",
+          deviceId: "fake-host",
+          appVersion: "1",
+          proof,
+        }),
+      );
+      afterWelcome?.(ws);
     });
   });
   return `ws://127.0.0.1:${wss.address().port}`;
@@ -234,12 +301,13 @@ async function main() {
   console.log("socket-host security proof\n");
 
   await check(
-    "auth handshake: a valid token gets a welcome carrying host identity",
+    "auth handshake: a proven ticket gets a welcome carrying host identity and the host's half of the proof",
     async (track) => {
-      const { url } = await startBinding({}, track);
-      const { client, welcome } = await authenticate(url);
+      const listener = await startListener(track);
+      const { client, welcome, hostProof } = await authenticate(listener);
       assert.equal(welcome.deviceId, "host-device");
-      assert.equal(welcome.appVersion, "9.9.9");
+      assert.equal(welcome.appVersion, "2.0.0");
+      assert.equal(welcome.proof, hostProof);
       client.close();
     },
   );
@@ -247,8 +315,7 @@ async function main() {
   await check(
     "dispatch: a req gets a matching res echoing the handler result",
     async (track) => {
-      const { url } = await startBinding({}, track);
-      const { client } = await authenticate(url);
+      const { client } = await authenticate(await startListener(track));
       client.send({
         t: "req",
         id: 7,
@@ -267,8 +334,7 @@ async function main() {
   await check(
     "framing: a void input round-trips as an absent field",
     async (track) => {
-      const { url } = await startBinding({}, track);
-      const { client } = await authenticate(url);
+      const { client } = await authenticate(await startListener(track));
       client.send({ t: "req", id: 1, channel: "test:echo" });
       const res = await client.nextFrame();
       assert.equal(res.ok, true);
@@ -281,9 +347,9 @@ async function main() {
   await check(
     "broadcast: broadcastAll pushes a frame to an authed socket",
     async (track) => {
-      const { binding, url } = await startBinding({}, track);
-      const { client } = await authenticate(url);
-      binding.broadcastAll("test:ping", { n: 5 });
+      const listener = await startListener(track);
+      const { client } = await authenticate(listener);
+      listener.binding.broadcastAll("test:ping", { n: 5 });
       const push = await client.nextFrame();
       assert.equal(push.t, "push");
       assert.equal(push.channel, "test:ping");
@@ -293,42 +359,62 @@ async function main() {
   );
 
   await check(
-    "terminate on bad token: a wrong token closes CLOSE_AUTH_FAILED and no later frame is processed",
+    "terminate on bad proof: a proof of no pending ticket, and a hello with no proof at all, close CLOSE_AUTH_FAILED with nothing answered",
     async (track) => {
-      const { url } = await startBinding({}, track);
-      const client = connect(url);
-      await client.opened;
-      client.send({
-        t: "hello",
-        token: "wrong",
-        deviceId: "c",
-        appVersion: "1",
-      });
-      // A req riding right behind the bad hello must never be answered.
-      client.send({ t: "req", id: 42, channel: "test:echo", input: 1 });
-      const close = await client.waitClose();
-      assert.equal(close.code, CLOSE_AUTH_FAILED);
-      assert.equal(
-        client.pending(),
-        0,
-        "a frame after the rejected hello was processed",
-      );
+      const listener = await startListener(track);
+      const hellos = [
+        (client) => sendProvenHello(client, UNMINTED),
+        // The retired token-only hello: a credential in the clear
+        // proves nothing here.
+        async (client) => {
+          assert.equal((await client.nextFrame()).t, "challenge");
+          client.send({
+            t: "hello",
+            token: listener.mint(),
+            deviceId: CLIENT,
+            appVersion: "1",
+          });
+        },
+      ];
+      for (const hello of hellos) {
+        const client = connect(listener.url);
+        // oxlint-disable-next-line no-await-in-loop -- one socket at a time
+        await client.opened;
+        // oxlint-disable-next-line no-await-in-loop -- one socket at a time
+        await hello(client);
+        // Nothing is pipelined behind the hello: the proof check is
+        // async, and a req landing before the verdict is itself a
+        // malformed hello, a different refusal.
+        // oxlint-disable-next-line no-await-in-loop -- one socket at a time
+        const close = await client.waitClose();
+        assert.equal(close.code, CLOSE_AUTH_FAILED, close.reason);
+        assert.equal(client.pending(), 0, "the rejected hello was answered");
+      }
     },
   );
 
   await check(
     "post-timeout hello: a hello after the hello timeout cannot authenticate",
     async (track) => {
-      const { url } = await startBinding({ helloTimeoutMs: 100 }, track);
-      const client = connect(url);
+      const listener = await startListener(track, { helloTimeoutMs: 100 });
+      const client = connect(listener.url);
       await client.opened;
+      const challenge = await client.nextFrame();
       await delay(250);
-      // The timeout already fired. A late (correct) hello must not auth.
+      // The timeout already fired. A late (correctly proven) hello must
+      // not auth.
+      const nonce = newHandshakeNonce();
       client.send({
         t: "hello",
-        token: TOKEN,
-        deviceId: "c",
+        deviceId: CLIENT,
         appVersion: "1",
+        nonce,
+        proof: await handshakeProof(
+          listener.mint(),
+          "client",
+          challenge.nonce,
+          nonce,
+        ),
       });
       const close = await client.waitClose();
       assert.equal(close.code, CLOSE_HELLO_FAILED);
@@ -341,10 +427,9 @@ async function main() {
   );
 
   await check(
-    "non-remote channel: a host channel the ws binding never registered gets a no-handler res",
+    "non-remote channel: a host channel the listener never registered gets a no-handler res",
     async (track) => {
-      const { url } = await startBinding({}, track);
-      const { client } = await authenticate(url);
+      const { client } = await authenticate(await startListener(track));
       // runtime:nuke is a real host channel tagged remote:false, so it
       // is never registered on this binding and can never execute.
       client.send({ t: "req", id: 3, channel: "runtime:nuke", input: {} });
@@ -358,8 +443,7 @@ async function main() {
   await check(
     "oversized frame: an inbound frame over the 1 MiB cap closes the socket",
     async (track) => {
-      const { url } = await startBinding({}, track);
-      const { client } = await authenticate(url);
+      const { client } = await authenticate(await startListener(track));
       const huge = "x".repeat((1 << 20) + 1024);
       client.send({ t: "req", id: 9, channel: "test:echo", input: huge });
       const close = await client.waitClose();
@@ -368,63 +452,43 @@ async function main() {
   );
 
   await check(
-    "empty-token start: the binding refuses to open without a token",
-    async () => {
-      const binding = createWsServerBinding();
-      await assert.rejects(
-        () =>
-          binding.start({
-            port: 0,
-            bindAddress: "127.0.0.1",
-            token: "",
-            deviceId: "d",
-            appVersion: "1",
-          }),
-        /empty token/,
-      );
-    },
-  );
-
-  await check(
-    "Origin gate: the app's own renderer origins complete hello/welcome",
+    "Origin gate: origin-less, loopback and the configured web origin complete the handshake, while the renderer scheme and a foreign origin are refused",
     async (track) => {
-      // Browser-global WebSocket clients (the web client's hub path,
-      // and any future in-app consumer of this listener) ALWAYS send
-      // an Origin: the renderer-scheme origin from the app's own
-      // window (both flavors), or a loopback http origin from a
-      // locally served web client. All must be able to authenticate,
-      // or an in-app client could never connect at all.
-      const { url } = await startBinding({}, track);
-      const helloFrom = async (origin) => {
-        const client = connect(url, { origin });
-        await client.opened;
-        client.send({
-          t: "hello",
-          token: TOKEN,
-          deviceId: "client",
-          appVersion: "1",
+      // Browser-global WebSocket clients (the web client's direct dials)
+      // ALWAYS send an Origin: the deployed web client's own, admitted
+      // only when this device names it, or a loopback http origin from
+      // a locally served one. The desktop's dialer sends none.
+      const WEB_ORIGIN = "https://web.example.test";
+      const listener = await startListener(track, {
+        allowedOrigin: WEB_ORIGIN,
+      });
+      for (const origin of [
+        undefined,
+        "http://localhost:5190",
+        "http://127.0.0.1:5190",
+        WEB_ORIGIN,
+      ]) {
+        // oxlint-disable-next-line no-await-in-loop -- one shared listener, sequential hellos
+        const { client } = await authenticate(listener, {
+          headers: origin === undefined ? undefined : { origin },
+          kind: "lan",
         });
-        const welcome = await client.nextFrame();
-        assert.equal(
-          welcome.t,
-          "welcome",
-          `no welcome for a hello from origin ${origin}`,
-        );
         client.close();
-      };
-      for (const origin of rendererSchemeOrigins()) {
-        // oxlint-disable-next-line no-await-in-loop -- one shared binding, sequential hellos
-        await helloFrom(origin);
       }
-      await helloFrom("http://localhost:5173");
-    },
-  );
-
-  await check(
-    "Origin gate: a handshake from a foreign web origin is rejected",
-    async (track) => {
-      const { url } = await startBinding({}, track);
-      const client = connect(url, { origin: "https://evil.example" });
+      // Nothing in the app dials from a renderer page, so its scheme
+      // has no business here.
+      for (const origin of [
+        "https://evil.example",
+        rendererSchemeOrigin("prod"),
+        rendererSchemeOrigin("dev"),
+      ]) {
+        const client = connect(listener.url, { origin });
+        // oxlint-disable-next-line no-await-in-loop -- sequential refusals
+        await assert.rejects(client.opened, `origin ${origin} was admitted`);
+      }
+      // The web origin is admitted only where it is configured.
+      const unconfigured = await startListener(track);
+      const client = connect(unconfigured.url, { origin: WEB_ORIGIN });
       await assert.rejects(client.opened);
     },
   );
@@ -433,8 +497,7 @@ async function main() {
     "in-flight cap: one request past the shared per-peer cap is refused rather than dispatched",
     async (track) => {
       hangResolvers = [];
-      const { url } = await startBinding({}, track);
-      const { client } = await authenticate(url);
+      const { client } = await authenticate(await startListener(track));
       // Fill the shared per-socket cap with requests that never
       // resolve, then send one more.
       for (let id = 1; id <= MAX_IN_FLIGHT_PER_PEER; id += 1) {
@@ -458,13 +521,13 @@ async function main() {
 
   await check(
     "generation guard: no handler executes under a stopped listener",
-    async () => {
+    async (track) => {
       countExecutions = 0;
-      const { binding, url } = await startBinding({ helloTimeoutMs: 2000 });
-      const { client } = await authenticate(url);
+      const listener = await startListener(track, { helloTimeoutMs: 2000 });
+      const { client } = await authenticate(listener);
       // stopNow drops the listener synchronously, so requests arriving
       // during the terminate grace window fail the generation guard.
-      const stopping = binding.stop();
+      const stopping = listener.binding.stop();
       for (let id = 0; id < 3; id += 1) {
         client.send({ t: "req", id, channel: "test:count", input: undefined });
       }
@@ -480,12 +543,12 @@ async function main() {
   );
 
   await check(
-    "LAN read-only gate: a mutating channel is refused with the typed code and its handler never runs, an untagged channel is refused fail-closed, and a read-only channel is still served",
+    "command gate: with commands off a mutating and an untagged channel are refused with the typed code and their handlers never run, a read-only channel is still served, and with commands on both run",
     async (track) => {
       mutateExecutions = 0;
       untaggedExecutions = 0;
-      const { url } = await startBinding({}, track);
-      const { client } = await authenticate(url);
+      const listener = await startListener(track);
+      const { client } = await authenticate(listener);
       // (a) mutating:true is refused with the machine-readable code
       // and the handler body never runs.
       client.send({ t: "req", id: 1, channel: "test:mutate" });
@@ -493,42 +556,34 @@ async function main() {
       assert.equal(mutateRes.ok, false);
       assert.equal(mutateRes.code, COMMAND_REFUSED_CODE);
       assert.match(mutateRes.message, /not permitted to run commands/);
-      assert.equal(
-        mutateExecutions,
-        0,
-        "a mutating handler ran over the LAN wire",
-      );
-      // (b) an UNTAGGED channel is refused too: the gate serves only
-      // channels proven read-only, so unclassified defaults closed.
+      assert.equal(mutateExecutions, 0, "a mutating handler ran ungranted");
+      // (b) an UNTAGGED channel is refused too: only channels proven
+      // read-only are served ungated, so unclassified defaults closed.
       client.send({ t: "req", id: 2, channel: "test:untagged" });
       const untaggedRes = await client.nextFrame();
       assert.equal(untaggedRes.ok, false);
       assert.equal(untaggedRes.code, COMMAND_REFUSED_CODE);
-      assert.equal(
-        untaggedExecutions,
-        0,
-        "an untagged handler ran over the LAN wire",
-      );
+      assert.equal(untaggedExecutions, 0, "an untagged handler ran ungranted");
       // (c) an explicit read on the same socket is served as before.
       client.send({ t: "req", id: 3, channel: "test:echo", input: "read" });
       const echoRes = await client.nextFrame();
       assert.equal(echoRes.ok, true);
       assert.equal(echoRes.result, "read");
+      // (d) the switch on, read live: both run on the same socket.
+      listener.setAccepts(true);
+      client.send({ t: "req", id: 4, channel: "test:mutate" });
+      assert.equal((await client.nextFrame()).result, "mutated");
+      client.send({ t: "req", id: 5, channel: "test:untagged" });
+      assert.equal((await client.nextFrame()).result, "ran");
       client.close();
     },
   );
 
   await check(
-    "LAN typed refusal client-side: the socket client transport maps the code to CommandRefusedError while a real handler failure stays a plain Error",
+    "typed refusal client-side: the client transport maps the code to CommandRefusedError while a real handler failure stays a plain Error",
     async (track) => {
-      const { url } = await startBinding({}, track);
-      const connection = await connectDevice({
-        url,
-        token: TOKEN,
-        appVersion: "1",
-        localDeviceId: "client",
-        onClose: () => {},
-      });
+      const listener = await startListener(track);
+      const connection = await dial(listener.url, listener.mint());
       await assert.rejects(
         () => connection.transport.invoke("test:mutate", undefined),
         (error) =>
@@ -549,41 +604,12 @@ async function main() {
   );
 
   await check(
-    "LAN preflight: remoteAccess:commandAccess answers granted:false over the read-only wire",
-    async (track) => {
-      const binding = createWsServerBinding();
-      registerTestHandlers(binding);
-      // The REAL contract and handler through the shared registrar, so
-      // the mutating:false registration and the transport-supplied
-      // verdict are the production path, not a test double.
-      registerContract(remoteAccessContract, remoteAccessHandlers, binding, {
-        validateOutputs: true,
-      });
-      const port = await binding.start({
-        port: 0,
-        bindAddress: "127.0.0.1",
-        token: TOKEN,
-        deviceId: "host-device",
-        appVersion: "9.9.9",
-        helloTimeoutMs: 300,
-      });
-      track(() => binding.stop());
-      const { client } = await authenticate(`ws://127.0.0.1:${port}`);
-      client.send({ t: "req", id: 1, channel: "remoteAccess:commandAccess" });
-      const res = await client.nextFrame();
-      assert.equal(res.ok, true, "the preflight read was not served");
-      assert.deepEqual(res.result, { granted: false });
-      client.close();
-    },
-  );
-
-  await check(
     "liveness: the host answers pings and kills a heartbeating peer that falls silent, but never judges a peer that never pinged",
     async (track) => {
-      const { url } = await startBinding({ livenessTimeoutMs: 200 }, track);
+      const listener = await startListener(track, { livenessTimeoutMs: 200 });
       // A peer that pings once proves it heartbeats: it gets a pong,
       // and going silent past the timeout then ends its socket.
-      const { client } = await authenticate(url);
+      const { client } = await authenticate(listener);
       client.send({ t: "ping" });
       const pong = await client.nextFrame();
       assert.equal(pong.t, "pong", "a ping must be answered with a pong");
@@ -596,7 +622,7 @@ async function main() {
       // A peer that never pinged (an older build) is left alone,
       // however long it stays silent: the sweep judges only peers
       // that proved they heartbeat.
-      const quiet = await authenticate(url);
+      const quiet = await authenticate(listener);
       await delay(600);
       assert.equal(
         quiet.client.ws.readyState,
@@ -618,105 +644,69 @@ async function main() {
   await check(
     "liveness: the client transport heartbeats, declares a silent host dead within its timeout, and a probe reaches the verdict in its own shorter window",
     async (track) => {
-      // A raw host that welcomes and then answers nothing: pings arrive,
+      // A host that welcomes and then answers nothing: pings arrive,
       // pongs never leave. The real binding always answers, so the
       // dead-host path needs a host of its own.
-      const silent = new WebSocketServer({ host: "127.0.0.1", port: 0 });
       const pingsSeen = [];
-      silent.on("connection", (socket) => {
-        socket.on("message", (data) => {
-          const frame = JSON.parse(data.toString("utf8"));
-          if (frame.t === "hello") {
-            socket.send(
-              encodeFrame({ t: "welcome", deviceId: "mute", appVersion: "1" }),
-            );
-          }
+      const silentUrl = await fakeHost(track, {
+        onFrame: (_ws, frame) => {
           if (frame.t === "ping") pingsSeen.push(Date.now());
-        });
+        },
       });
-      await new Promise((resolve) => silent.on("listening", resolve));
-      const silentUrl = `ws://127.0.0.1:${silent.address().port}`;
-      try {
-        let closedWith = "unset";
-        const startedAt = Date.now();
-        const connection = await connectDevice({
-          url: silentUrl,
-          token: TOKEN,
-          appVersion: "1",
-          localDeviceId: "client",
-          onClose: (code) => {
-            closedWith = code;
-          },
-          heartbeat: { intervalMs: 40, timeoutMs: 150 },
-        });
-        await waitFor(
-          () => closedWith !== "unset",
-          "the heartbeat death",
-          2_000,
-        );
-        assert.equal(
-          closedWith,
-          null,
-          "a heartbeat death must report through onClose with a null code",
-        );
-        const elapsed = Date.now() - startedAt;
-        assert.ok(
-          elapsed >= 150 && elapsed < 1_000,
-          `the death must land after the timeout and well before a socket-level verdict (took ${elapsed}ms)`,
-        );
-        assert.ok(pingsSeen.length >= 1, "the client must have pinged");
-        await assert.rejects(
-          () => connection.transport.invoke("test:echo", 1),
-          /disconnected/,
-          "the dead connection must reject invokes",
-        );
+      let closedWith = "unset";
+      const startedAt = Date.now();
+      const connection = await dial(silentUrl, FAKE_TICKET, {
+        onClose: (code) => {
+          closedWith = code;
+        },
+        heartbeat: { intervalMs: 40, timeoutMs: 150 },
+      });
+      await waitFor(() => closedWith !== "unset", "the heartbeat death", 2_000);
+      assert.equal(
+        closedWith,
+        null,
+        "a heartbeat death must report through onClose with a null code",
+      );
+      const elapsed = Date.now() - startedAt;
+      assert.ok(
+        elapsed >= 150 && elapsed < 1_000,
+        `the death must land after the timeout and well before a socket-level verdict (took ${elapsed}ms)`,
+      );
+      assert.ok(pingsSeen.length >= 1, "the client must have pinged");
+      await assert.rejects(
+        () => connection.transport.invoke("test:echo", 1),
+        /disconnected/,
+        "the dead connection must reject invokes",
+      );
 
-        // The probe: a fresh connection whose heartbeat cadence is far
-        // away, probed at once, reaches the verdict inside the probe
-        // window instead.
-        let probedClose = "unset";
-        const probed = await connectDevice({
-          url: silentUrl,
-          token: TOKEN,
-          appVersion: "1",
-          localDeviceId: "client",
-          onClose: (code) => {
-            probedClose = code;
-          },
-          heartbeat: {
-            intervalMs: 10_000,
-            timeoutMs: 20_000,
-            probeTimeoutMs: 100,
-          },
-        });
-        const probedAt = Date.now();
-        probed.probe();
-        await waitFor(
-          () => probedClose !== "unset",
-          "the probe verdict",
-          2_000,
-        );
-        const probeElapsed = Date.now() - probedAt;
-        assert.ok(
-          probeElapsed >= 100 && probeElapsed < 1_000,
-          `the probe verdict must land in its own window (took ${probeElapsed}ms)`,
-        );
-      } finally {
-        await new Promise((resolve) => {
-          for (const socket of silent.clients) socket.terminate();
-          silent.close(() => resolve());
-        });
-      }
+      // The probe: a fresh connection whose heartbeat cadence is far
+      // away, probed at once, reaches the verdict inside the probe
+      // window instead.
+      let probedClose = "unset";
+      const probed = await dial(silentUrl, FAKE_TICKET, {
+        onClose: (code) => {
+          probedClose = code;
+        },
+        heartbeat: {
+          intervalMs: 10_000,
+          timeoutMs: 20_000,
+          probeTimeoutMs: 100,
+        },
+      });
+      const probedAt = Date.now();
+      probed.probe();
+      await waitFor(() => probedClose !== "unset", "the probe verdict", 2_000);
+      const probeElapsed = Date.now() - probedAt;
+      assert.ok(
+        probeElapsed >= 100 && probeElapsed < 1_000,
+        `the probe verdict must land in its own window (took ${probeElapsed}ms)`,
+      );
 
       // Against the REAL binding the same cadence stays connected: pongs
       // keep answering, so a live host is never misjudged.
-      const { url } = await startBinding({}, track);
+      const listener = await startListener(track);
       let liveClose = "unset";
-      const live = await connectDevice({
-        url,
-        token: TOKEN,
-        appVersion: "1",
-        localDeviceId: "client",
+      const live = await dial(listener.url, listener.mint(), {
         onClose: (code) => {
           liveClose = code;
         },
@@ -738,8 +728,7 @@ async function main() {
     async () => {
       // The remote-viewer externalChange ping (main/ipc/register.ts)
       // hangs off this registrar hook, so pin its semantics at the seam
-      // with an in-memory transport: the LAN wire refuses mutating
-      // invokes outright, and the Electron+hub composite that
+      // with an in-memory transport: the Electron+direct composite that
       // actually emits the ping imports electron, out of reach here.
       const handlers = new Map();
       const server = {
@@ -886,8 +875,6 @@ async function main() {
         assert.equal(def.remote, true);
         assert.equal(def.mutating, true);
       }
-      assert.equal(globalConfigContract.calls.write.remote, false);
-      assert.equal(globalConfigContract.calls.readLocal.remote, false);
       assert.equal(globalConfigContract.calls.read.remote, true);
       assert.equal(worktreesContract.calls.create.remote, true);
       // Spot-check the mutating classification so a read cannot silently
@@ -939,8 +926,7 @@ async function main() {
       assert.equal(packageScriptsContract.calls.setSort.mutating, true);
       // The step-7 sync transfer surface (v2 slice B, refTips added by
       // slice C): every call is a command, so the whole bundle-transfer
-      // path rides the per-peer grant and the read-only LAN wire
-      // refuses it outright.
+      // path rides the command grant.
       for (const key of [
         "refTips",
         "captureDirty",
@@ -1006,7 +992,7 @@ async function main() {
       // The pull orchestrator is LOCAL-only: a
       // device's own renderer drives it, and it must never be servable
       // to a peer -- a remote:false host invoke is simply not
-      // registered on either remote wire.
+      // registered on the direct listener.
       assert.equal(syncContract.calls.pullWorktree.remote, false);
       assert.equal(syncContract.calls.pullWorktree.mutating, true);
       // The source teardown after a pull is the same
@@ -1032,32 +1018,25 @@ async function main() {
       // wire serves it ungated.
       assert.equal(remoteAccessContract.calls.commandAccess.remote, true);
       assert.equal(remoteAccessContract.calls.commandAccess.mutating, false);
-      // The remote device-settings write: a command, and its STRICT
-      // patch schema must reject the keys that could hand a peer the
-      // hosting token or the outbound device list. The rejection is
+      // The device-settings write, the only settings write: a command,
+      // and its STRICT patch schema must reject every key the Settings
+      // form does not manage, so a peer cannot stop this device serving
+      // peers or point it at another connector binary. The rejection is
       // structural (unknown key -> parse error), not a strip.
       const writeDeviceSettings =
         globalConfigContract.calls.writeDeviceSettings;
       assert.equal(writeDeviceSettings.remote, true);
       assert.equal(writeDeviceSettings.mutating, true);
-      assert.equal(
-        writeDeviceSettings.input.safeParse({
-          patch: { socketHost: { enabled: true, lan: true, token: "x" } },
-        }).success,
-        false,
-        "writeDeviceSettings accepted a socketHost key",
-      );
-      assert.equal(
-        writeDeviceSettings.input.safeParse({
-          patch: {
-            remoteDevices: [{ url: "ws://evil", token: "t" }],
-          },
-        }).success,
-        false,
-        // Legacy key of the removed LAN feature. As an unknown key the
-        // strict patch schema must keep rejecting it.
-        "writeDeviceSettings accepted a remoteDevices key",
-      );
+      for (const patch of [
+        { directConnections: false },
+        { cloudflaredPath: "/tmp/not-cloudflared" },
+      ]) {
+        assert.equal(
+          writeDeviceSettings.input.safeParse({ patch }).success,
+          false,
+          `writeDeviceSettings accepted ${JSON.stringify(patch)}`,
+        );
+      }
       assert.equal(
         writeDeviceSettings.input.safeParse({ patch: {} }).success,
         true,
@@ -1121,20 +1100,14 @@ async function main() {
   // Deflated frames (shared/ipc/socket/deflatedFrame.ts). The host
   // deflates a large text frame only for a tunnel-borne connection
   // (loopback plus the connector's CF-Connecting-IP) whose hello asked.
-  const TUNNEL_HEADERS = { "cf-connecting-ip": "203.0.113.7" };
   const bigValue = { patch: "a line of a diff that repeats\n".repeat(4_000) };
 
   await check(
     "deflate: a tunnel-borne client that asks gets a large res deflated, and reads it",
     async (track) => {
-      const { url } = await startBinding({}, track);
+      const listener = await startListener(track);
       let socket;
-      const connection = await connectDevice({
-        url,
-        token: TOKEN,
-        appVersion: "1",
-        localDeviceId: "client",
-        onClose: () => {},
+      const connection = await dial(listener.url, listener.mint("tunnel"), {
         openSocket: (target) => {
           socket = new WebSocket(target, { headers: TUNNEL_HEADERS });
           return socket;
@@ -1160,13 +1133,8 @@ async function main() {
   await check(
     "deflate: frames behind a deflating one keep their order",
     async (track) => {
-      const { binding, url } = await startBinding({}, track);
-      const connection = await connectDevice({
-        url,
-        token: TOKEN,
-        appVersion: "1",
-        localDeviceId: "client",
-        onClose: () => {},
+      const listener = await startListener(track);
+      const connection = await dial(listener.url, listener.mint("tunnel"), {
         openSocket: (target) =>
           new WebSocket(target, { headers: TUNNEL_HEADERS }),
       });
@@ -1176,10 +1144,10 @@ async function main() {
       );
       // A big push (deflated, async on both ends) chased by small
       // ones (text, sync on both ends).
-      binding.broadcastAll("test:ping", { n: 1, pad: bigValue });
-      binding.broadcastAll("test:ping", { n: 2 });
-      binding.broadcastAll("test:ping", { n: 3, pad: bigValue });
-      binding.broadcastAll("test:ping", { n: 4 });
+      listener.binding.broadcastAll("test:ping", { n: 1, pad: bigValue });
+      listener.binding.broadcastAll("test:ping", { n: 2 });
+      listener.binding.broadcastAll("test:ping", { n: 3, pad: bigValue });
+      listener.binding.broadcastAll("test:ping", { n: 4 });
       await waitFor(() => order.length === 4, "four pushes");
       assert.deepEqual(order, [1, 2, 3, 4]);
       connection.close();
@@ -1189,16 +1157,11 @@ async function main() {
   await check(
     "deflate: a LAN-borne client, and one that never asked, get plain text",
     async (track) => {
-      const { url } = await startBinding({}, track);
-      // Asks (connectDevice always does where it can inflate), but
-      // arrives without the connector's header: a LAN peer.
+      const listener = await startListener(track);
+      // Asks (the client transport always does where it can inflate),
+      // but arrives without the connector's header: a LAN peer.
       let lanSocket;
-      const lan = await connectDevice({
-        url,
-        token: TOKEN,
-        appVersion: "1",
-        localDeviceId: "client",
-        onClose: () => {},
+      const lan = await dial(listener.url, listener.mint("lan"), {
         openSocket: (target) => {
           lanSocket = new WebSocket(target);
           return lanSocket;
@@ -1217,15 +1180,9 @@ async function main() {
       lan.close();
 
       // Tunnel-borne, but an old client whose hello carries no ask.
-      const old = connect(url, TUNNEL_HEADERS);
-      await old.opened;
-      old.send({
-        t: "hello",
-        token: TOKEN,
-        deviceId: "old",
-        appVersion: "1",
+      const { client: old } = await authenticate(listener, {
+        headers: TUNNEL_HEADERS,
       });
-      assert.equal((await old.nextFrame()).t, "welcome");
       old.send({ t: "req", id: 1, channel: "test:echo", input: bigValue });
       // The helper JSON-parses every message, so a binary frame
       // would have thrown there.
@@ -1237,19 +1194,20 @@ async function main() {
   await check(
     "deflate: a deflated frame sent in the same tick as the welcome is read, not lost",
     async (track) => {
-      const url = await fakeHost(track, (ws) => {
-        ws.send(
-          deflatedFrame({ t: "push", channel: "test:ping", payload: bigValue }),
-        );
-        ws.send(encodeFrame({ t: "push", channel: "test:ping", payload: 2 }));
+      const url = await fakeHost(track, {
+        afterWelcome: (ws) => {
+          ws.send(
+            deflatedFrame({
+              t: "push",
+              channel: "test:ping",
+              payload: bigValue,
+            }),
+          );
+          ws.send(encodeFrame({ t: "push", channel: "test:ping", payload: 2 }));
+        },
       });
       const pushes = [];
-      const connection = await connectDevice({
-        url,
-        token: TOKEN,
-        appVersion: "1",
-        localDeviceId: "client",
-        onClose: () => {},
+      const connection = await dial(url, FAKE_TICKET, {
         onAnyPush: (_channel, payload) => pushes.push(payload),
         openSocket: (target) => new WebSocket(target),
       });
@@ -1262,22 +1220,18 @@ async function main() {
   await check(
     "deflate: a frame that fails to inflate closes the connection, so the invoke it answered rejects instead of hanging",
     async (track) => {
-      const url = await fakeHost(track, (ws) => {
-        ws.once("message", () => {
+      const url = await fakeHost(track, {
+        onFrame: (ws) => {
           ws.send(
             Buffer.concat([
               Buffer.from([DEFLATED_FRAME_KIND]),
               Buffer.from("not a deflate stream at all"),
             ]),
           );
-        });
+        },
       });
       let closedWith;
-      const connection = await connectDevice({
-        url,
-        token: TOKEN,
-        appVersion: "1",
-        localDeviceId: "client",
+      const connection = await dial(url, FAKE_TICKET, {
         onClose: (code) => {
           closedWith = code;
         },

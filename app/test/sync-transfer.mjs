@@ -3,7 +3,7 @@
 // two fixtures, brokered by the stub device hub exactly as production
 // does (test/lib/directBoot.mjs). Nothing here is a double on the
 // sync path itself: device A registers the REAL sync contract and
-// handlers on a real ticket-mode listener, the handlers shell the REAL
+// handlers on a real direct listener, the handlers shell the REAL
 // sm binary (built from cli/ by this check), sm runs REAL git against
 // fixture repos, and the receiver drives the REAL fetchBundleFromPeer
 // helper through the real dialer and bridge cache. Asserts:
@@ -192,7 +192,7 @@ async function main() {
   const sourceProjectId = await projectIdOf(sourceRepo);
 
   // ---- The direct wire: A hosts the real sync surface on a real
-  // ticket-mode listener, B receives through the real dialer and
+  // listener, B receives through the real dialer and
   // bridge cache, with the stub device hub carrying ONLY the broker
   // exchange (bootDirectWire, the shared fixture). Teardowns collect
   // on the shared tracker for the finally below.

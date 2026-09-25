@@ -309,7 +309,7 @@ export class DeviceHub implements DurableObject {
     // The protocol is JSON text. Binary frames are not part of it.
     if (typeof message !== "string") return;
     // Malformed envelopes are dropped, never fatal, mirroring
-    // decodeFrame's philosophy on the LAN socket: one bad message must
+    // decodeFrame's philosophy on the direct socket: one bad message must
     // not tear down a socket carrying live traffic.
     const envelope = decodeEnvelope(message, DeviceEnvelopeSchema);
     if (!envelope) return;

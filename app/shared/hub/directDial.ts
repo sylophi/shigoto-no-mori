@@ -84,7 +84,7 @@
 //
 // Pure browser-global-plus-shared code: no node builtins, no electron,
 // so the direct-plane check drives it headlessly under node (whose
-// global WebSocket serves connectDevice, as in the LAN client checks).
+// global WebSocket serves openDevice).
 import {
   ALL_DIRECT_CANDIDATE_KINDS,
   candidateUrlMatchesKind,
@@ -342,8 +342,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
             // the wire: a candidate address is answered by whoever
             // holds it on the network we happen to be on, so both ends
             // prove possession instead (shared/ipc/socket/proof.ts).
-            token: candidate.ticket,
-            auth: "proof",
+            ticket: candidate.ticket,
             appVersion: deps.localAppVersion,
             localDeviceId: deps.localDeviceId,
             // Identity pin: a welcome from any other deviceId fails

@@ -19,7 +19,7 @@ import {
 
 type DirectPresenceDeps = {
   // Kill the host-side authed direct sockets whose peer deviceId is
-  // not in the roster (the ticket-mode listener's targeted close).
+  // not in the roster (the direct listener's targeted close).
   // Optional because a platform with no direct listener (the web
   // client) has no host half at all.
   closeHostPeersNotIn?(online: readonly string[]): void;

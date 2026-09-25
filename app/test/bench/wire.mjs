@@ -1,4 +1,4 @@
-// Wire benchmark: the real socket binding (host/socket/server.ts) and
+// Wire benchmark: the real direct listener (host/socket/server.ts) and
 // the real client transport (shared/ipc/socket/wsClientTransport.ts)
 // talking through a link shaped like an internet path
 // (lib/shapedLink.mjs), so a change to the wire shows up as time and
@@ -22,6 +22,7 @@ import { randomBytes } from "node:crypto";
 import { Resolver } from "node:dns";
 import { join } from "node:path";
 import { WebSocket } from "ws";
+import { createConnectTicketStore } from "@host/direct/tickets";
 import { createWsServerBinding } from "@host/socket/server";
 import { receiveBundleChunks } from "@host/lib/sync/fetchBundle";
 import { sendBundleChunks } from "@host/lib/sync/pushBundle";
@@ -30,11 +31,9 @@ import {
   CLOUDFLARED_BINARY_NAME,
   CLOUDFLARED_DIST_DIR,
 } from "@shared/packaging/cloudflaredDist.mts";
-import { connectDevice } from "@shared/ipc/socket/wsClientTransport";
+import { openDevice } from "@shared/ipc/socket/wsClientTransport";
 import { delay, appRoot } from "../lib/checkKit.mjs";
 import { startShapedLink } from "./lib/shapedLink.mjs";
-
-const TOKEN = "bench-token-of-a-comfortably-long-length";
 
 function flag(name, fallback) {
   const hit = process.argv.find((arg) => arg.startsWith(`--${name}=`));
@@ -53,7 +52,7 @@ if (noDeflate) delete globalThis.DecompressionStream;
 
 // A quick tunnel onto the binding: no account, a throwaway
 // trycloudflare.com hostname that dies with the process. The binding
-// behind it still demands the token.
+// behind it still demands a ticket proof.
 function startQuickTunnel(targetPort) {
   const child = spawn(
     join(appRoot, CLOUDFLARED_DIST_DIR, CLOUDFLARED_BINARY_NAME),
@@ -164,7 +163,15 @@ const payloads = {
 };
 
 async function main() {
-  const binding = createWsServerBinding();
+  // A connect ticket per dial, as the broker mints them. Every dial
+  // arrives tunnel-borne (the shaped link carries the connector's
+  // header, see connect below), so every ticket is the tunnel kind.
+  const tickets = createConnectTicketStore();
+  const binding = createWsServerBinding({
+    matchTicket: (deviceId, arrivedAs, matches) =>
+      tickets.consumeProven(deviceId, arrivedAs, matches),
+    isCommandGranted: () => false,
+  });
   for (const [name, value] of Object.entries(payloads)) {
     binding.handle(`bench:${name}`, async () => value, { mutating: false });
   }
@@ -185,7 +192,6 @@ async function main() {
   const port = await binding.start({
     port: 0,
     bindAddress: "127.0.0.1",
-    token: TOKEN,
     deviceId: "bench-host",
     appVersion: "0.0.0",
   });
@@ -212,9 +218,9 @@ async function main() {
   }
 
   const connect = () =>
-    connectDevice({
+    openDevice({
       url: link.url,
-      token: TOKEN,
+      ticket: tickets.mint("bench-client", ["tunnel"])[0],
       appVersion: "0.0.0",
       localDeviceId: "bench-client",
       onClose: () => {},
@@ -228,7 +234,7 @@ async function main() {
             ? { lookup: publicLookup }
             : { headers: { "cf-connecting-ip": "203.0.113.7" } }),
         }),
-    });
+    }).authenticate();
   // A quick tunnel's hostname takes a few seconds to resolve
   // everywhere, so the first dials can miss. Warm it, then measure.
   if (viaTunnel) {
@@ -247,7 +253,7 @@ async function main() {
     }
   }
   let connection;
-  await measure("connect (open + hello + welcome)", async () => {
+  await measure("connect (open + challenge + hello + welcome)", async () => {
     connection = await connect();
   });
   const deflate = noDeflate ? "off" : "on";

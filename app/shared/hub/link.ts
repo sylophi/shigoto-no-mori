@@ -14,7 +14,7 @@
 // service. Enrollment is Clerk-verified, the per-device credential is
 // exchanged for short-lived connect tickets, so every deliverable peer
 // is by construction a device of the same account, which is why the
-// hello token is ignored here. There is no command surface to
+// hello carries no credential here. There is no command surface to
 // authorize here: the broker channel is a read by contract, and every
 // mutating call rides the direct wire, where dispatch gates it on the
 // host's command-access switch. The remaining defenses are sanity
@@ -51,8 +51,8 @@ import {
 // The device hub's own per-peer in-flight bound. Legitimate broker
 // concurrency is ~1 (one connectInfo exchange per dial), so this is a
 // small sanity cap, deliberately NOT the shared data-wire budget in
-// frames.ts (the direct and LAN bindings keep 64 for long-polls and
-// chunk streams). The in-flight count is tracked per deviceId and
+// frames.ts (the direct listener keeps 64 for long-polls and chunk
+// streams). The in-flight count is tracked per deviceId and
 // survives both a re-hello and a presence flap, so neither a peer
 // re-helloing nor a flapping roster can reset the cap while old
 // dispatches are still running.
@@ -63,7 +63,7 @@ const InnerFrameSchema = z.union([ClientFrameSchema, ServerFrameSchema]);
 
 // Every sm frame the device hub carries is wrapped with the session
 // epoch. The wrapper lives in the hub layer only, so frames.ts and the
-// LAN binding never learn about epochs. The DO forwards this whole
+// direct listener never learn about epochs. The DO forwards this whole
 // object verbatim as the opaque `frame`, so the epoch survives the hop
 // exactly as the sm frame does. The CLIENT owns the epoch: it mints a
 // fresh one per connectBroker and sends it in hello, the HOST records
@@ -321,7 +321,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
   // The one send path for pre-encoded answers a caller is awaiting
   // (welcome, res). A send failure here is logged, not thrown: the
   // peer's side times out or sees the disconnect, exactly as it would
-  // on a dead LAN socket.
+  // on a dead direct socket.
   function sendAnswerText(to: string, text: string): void {
     try {
       deps.send(text);
@@ -420,10 +420,11 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     // any late frame stamped with the old one.
     const previous = hostSessions.get(from);
     if (previous !== undefined) previous.controller.abort();
-    // The hello's token is deliberately IGNORED, never compared: the DO
-    // already authenticated the account when it consumed the connect
-    // ticket, and every deliverable peer is by construction a device of
-    // the same account. See the trust-model note at the top of the file.
+    // The hello carries no credential, and an older build's empty
+    // `token` is stripped at the parse: the DO already authenticated
+    // the account when it consumed the connect ticket, and every
+    // deliverable peer is by construction a device of the same account.
+    // See the trust-model note at the top of the file.
     const controller = new AbortController();
     const session: HostSession = {
       epoch,
@@ -480,7 +481,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       try {
         // Input parsing is unconditional inside fn (the owner's broker
         // wiring parses against the contract schema), exactly as the
-        // shared registrar does on the LAN binding.
+        // shared registrar does on the direct listener.
         const result = await fn(session.ctx, frame.input);
         answer = { t: "res", id: frame.id, ok: true, result };
       } catch (error) {
@@ -579,7 +580,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
             peer.pending.set(id, { resolve: res, reject: rej });
             try {
               // An undefined input (a void contract input) rides as an
-              // absent field, matching the LAN wire: encodeFrame's
+              // absent field, matching the direct wire: encodeFrame's
               // JSON.stringify drops it.
               sendFrameToPeer(
                 deviceId,
@@ -607,13 +608,12 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       };
       clientPeers.set(deviceId, peer);
       try {
-        // The token is sent empty and the receiving side ignores it,
-        // see handleHello. The DO already authenticated the account.
+        // No credential rides the hello, see handleHello. The DO
+        // already authenticated the account.
         sendFrameToPeer(
           deviceId,
           {
             t: "hello",
-            token: "",
             deviceId: deps.localDeviceId,
             appVersion: deps.localAppVersion,
           },
@@ -749,7 +749,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       const envelope = decodeEnvelope(text, ServerEnvelopeSchema);
       if (envelope === null) {
         // Malformed messages are dropped, never fatal, mirroring the
-        // LAN socket. One bad message must not kill live traffic.
+        // direct socket. One bad message must not kill live traffic.
         warnDrop(() => "dropping unparseable envelope");
         return;
       }

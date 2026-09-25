@@ -1,6 +1,6 @@
 // Shared fixtures for the checks that run a REAL direct data plane
-// beside the stub device hub (test/lib/hubStub.mjs): a ticket-mode
-// ws listener (host/socket/server.ts), the broker slot registration on
+// beside the stub device hub (test/lib/hubStub.mjs): a direct ws
+// listener (host/socket/server.ts), the broker slot registration on
 // a hub host device, and the REAL shared composition
 // (shared/hub/directPlane.ts) a client drives. Extracted from
 // direct-plane.mjs so sync-transfer.mjs and
@@ -17,12 +17,13 @@ import { startStubHub } from "./hubStub.mjs";
 import { bootDevice } from "./hubBoot.mjs";
 import { waitFor } from "./checkKit.mjs";
 
-// A REAL ticket-mode listener on an ephemeral loopback port, with its
+// A REAL direct listener on an ephemeral loopback port, with its
 // ticket store and a toggleable command-access switch (the host-wide
 // "accepts commands from its account's devices" answer the real
 // binding reads from main). `registerHandlers`, when
 // set, mounts the check's contracts or test channels on the binding
-// before it starts.
+// before it starts, and `start` overrides the start opts (the hello
+// and liveness seams, the admitted web origin).
 export async function startDirectListener(track, opts = {}) {
   const tickets = createConnectTicketStore(opts.ticketOpts);
   let accepts = false;
@@ -35,12 +36,10 @@ export async function startDirectListener(track, opts = {}) {
   const port = await binding.start({
     port: 0,
     bindAddress: "127.0.0.1",
-    // Ticket mode has no static token, the injected verifier is the
-    // auth.
-    token: "",
     deviceId: opts.deviceId ?? "B",
     appVersion: "2.0.0",
     helloTimeoutMs: 1000,
+    ...opts.start,
   });
   track(() => binding.stop());
   return {
@@ -100,7 +99,7 @@ export async function bootBrokeredPair(stub, track, listener, opts = {}) {
 }
 
 // The whole direct wire the transfer checks share, exactly as
-// production composes it: the stub device hub, a REAL ticket-mode
+// production composes it: the stub device hub, a REAL direct
 // listener on device A serving the check's contracts, the brokered hub
 // pair (A hosting the broker, B the dialing client), the REAL shared
 // composition as B's bridge, and a counting peer transport aimed at A.
