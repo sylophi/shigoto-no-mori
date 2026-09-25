@@ -50,7 +50,7 @@ import { rendererSchemeOrigin } from "@shared/packaging/rendererScheme.mts";
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { registerContract } from "@shared/ipc/registerContract";
-import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
+import { accountContract } from "@shared/ipc/modules/account";
 // The authoritative contract registry (the same source check-host-boundary
 // rule 6 derives from), so the explicit-remote-tag invariant covers every
 // host module automatically instead of a hand-maintained list a new module
@@ -569,8 +569,15 @@ async function main() {
       const echoRes = await client.nextFrame();
       assert.equal(echoRes.ok, true);
       assert.equal(echoRes.result, "read");
-      // (d) the switch on, read live: both run on the same socket.
+      // (d) the switch on, read live: both run on the same socket. The
+      // flip itself reaches the peer first, as the push that carries
+      // the switch (what its bridge records for its UI and CLI).
       listener.setAccepts(true);
+      assert.deepEqual(await client.nextFrame(), {
+        t: "push",
+        channel: "account:commandAccessChanged",
+        payload: true,
+      });
       client.send({ t: "req", id: 4, channel: "test:mutate" });
       assert.equal((await client.nextFrame()).result, "mutated");
       client.send({ t: "req", id: 5, channel: "test:untagged" });
@@ -834,8 +841,8 @@ async function main() {
           );
           // Every remote:true invoke also classifies itself as a command
           // or a read, so a new remote call cannot silently join the wire
-          // without declaring whether the hub grant model must gate it.
-          // remote:false invokes never reach the grant check, so theirs
+          // without declaring whether the command-access gate covers it.
+          // remote:false invokes never reach the gate, so theirs
           // may stay undefined.
           if (def.remote === true) {
             assert.equal(
@@ -1008,10 +1015,17 @@ async function main() {
       // The pull's progress frames go back to the invoking renderer
       // only: an untagged broadcast never reaches a remote wire.
       assert.notEqual(syncContract.calls.pullProgress.remote, true);
-      // The preflight read is remote and explicitly a read, so every
-      // wire serves it ungated.
-      assert.equal(remoteAccessContract.calls.commandAccess.remote, true);
-      assert.equal(remoteAccessContract.calls.commandAccess.mutating, false);
+      // The command-access switch reaches peers as a push carrying it:
+      // the one client-scoped broadcast tagged remote. The switch's
+      // read and write stay client-scoped and untagged, so neither is
+      // ever served to a peer.
+      const { commandAccessChanged, acceptsCommands, setAcceptsCommands } =
+        accountContract.calls;
+      assert.equal(accountContract.scope, "client");
+      assert.equal(commandAccessChanged.remote, true);
+      assert.equal(commandAccessChanged.payload.safeParse(true).success, true);
+      assert.notEqual(acceptsCommands.remote, true);
+      assert.notEqual(setAcceptsCommands.remote, true);
       // The device-settings write, the only settings write: a command,
       // and its STRICT patch schema must reject every key the Settings
       // form does not manage, so a peer cannot stop this device serving

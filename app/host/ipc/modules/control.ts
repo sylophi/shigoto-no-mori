@@ -24,7 +24,6 @@ import {
   mirrorContract,
 } from "@shared/ipc/modules/mirror";
 import { projectsContract } from "@shared/ipc/modules/projects";
-import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { hostsProjects } from "@shared/account/platform";
@@ -76,11 +75,13 @@ type ControlImpl = {
   // The account's device registry. Empty when signed out.
   listDevices: () => Promise<DeviceInfo[]>;
   thisDeviceId: () => string;
-  // The devices a direct session is established to, the only ones a
-  // call can reach.
-  connectedDeviceIds: () => Promise<readonly string[]>;
-  // For the two asks outside the peer sync seam (peerSync.ts): what a
-  // peer hosts and whether it accepts commands.
+  // The devices a direct session is established to (the only ones a
+  // call can reach), each with whether it runs this device's commands:
+  // the hub status snapshot's peerAcceptsCommands, the same reading
+  // the app's windows show.
+  directPeers: () => Promise<Readonly<Record<string, boolean>>>;
+  // For the asks outside the peer sync seam (peerSync.ts): what a peer
+  // hosts, and its mirrors.
   peerTransportFor: (deviceId: string) => ClientTransport;
 };
 
@@ -150,27 +151,29 @@ function peersOf(devices: DeviceInfo[], hereId: string): DeviceInfo[] {
   );
 }
 
-const GRANTED = { granted: true };
-
 // Where each peer stands for one repo: the dialogs' three blocks in
 // the dialogs' order (renderer/components/shared/deviceTargets.ts),
-// read fresh off the peers themselves. A read skips the grant ask,
-// since reads are ungated.
+// the checkout read fresh off the peer and the command access off the
+// status snapshot. A read leaves the access out, since reads are
+// ungated.
 async function standingsOf(
   devices: DeviceInfo[],
   identity: string | null,
   { grant }: { grant: boolean },
 ): Promise<ControlDevice[]> {
-  const connected = new Set(await requireImpl().connectedDeviceIds());
+  const direct = await requireImpl().directPeers();
   return Promise.all(
-    devices.map((device) => standingOf(device, identity, connected, grant)),
+    devices.map((device) =>
+      standingOf(device, identity, direct[device.deviceId], grant),
+    ),
   );
 }
 
 async function standingOf(
   device: DeviceInfo,
   identity: string | null,
-  connected: ReadonlySet<string>,
+  // Undefined when no direct session is established.
+  acceptsCommands: boolean | undefined,
   grant: boolean,
 ): Promise<ControlDevice> {
   const base = {
@@ -179,20 +182,14 @@ async function standingOf(
     platform: device.platform,
   };
   const offline = { ...base, block: "offline" as const };
-  if (!connected.has(device.deviceId)) return offline;
+  if (acceptsCommands === undefined) return offline;
   const transport = requireImpl().peerTransportFor(device.deviceId);
   try {
-    const asked = await within(
-      Promise.all([
-        buildClient(projectsContract, transport).list(),
-        grant
-          ? buildClient(remoteAccessContract, transport).commandAccess()
-          : GRANTED,
-      ]),
+    const projects = await within(
+      buildClient(projectsContract, transport).list(),
       () => null,
     );
-    if (asked === null) return offline;
-    const [projects, access] = asked;
+    if (projects === null) return offline;
     // A null identity never matches: it means this device couldn't
     // tell what repo this is, not "the same unknown repo".
     const held =
@@ -206,7 +203,7 @@ async function standingOf(
     return {
       ...base,
       projectId: held.id,
-      ...(access.granted ? {} : { block: "no-grant" as const }),
+      ...(grant && !acceptsCommands ? { block: "no-grant" as const } : {}),
     };
   } catch {
     // The session dropped between the roster read and the ask.
@@ -411,9 +408,9 @@ function peerMirrorApi(deviceId: string) {
 // looked at.
 async function peerMirrors(registry: DeviceInfo[]): Promise<PeerMirror[]> {
   const hereId = requireImpl().thisDeviceId();
-  const connected = new Set(await requireImpl().connectedDeviceIds());
-  const peers = peersOf(registry, hereId).filter((device) =>
-    connected.has(device.deviceId),
+  const direct = await requireImpl().directPeers();
+  const peers = peersOf(registry, hereId).filter(
+    (device) => direct[device.deviceId] !== undefined,
   );
   const found = await Promise.all(
     peers.map(async (device): Promise<PeerMirror[]> => {
@@ -512,20 +509,22 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
     devices: async ({ projectId }) => {
       const { here, peers } = await roster();
       if (projectId === undefined) {
-        const connected = await requireImpl().connectedDeviceIds();
+        const direct = await requireImpl().directPeers();
         return {
           thisDevice: here,
           devices: peers.map((device) => ({
             deviceId: device.deviceId,
             name: nameOf(device),
             platform: device.platform,
-            ...(connected.includes(device.deviceId)
+            ...(direct[device.deviceId] !== undefined
               ? {}
               : { block: "offline" as const }),
           })),
         };
       }
-      const identity = await repoIdentityOf(findProjectOrThrow(projectId));
+      const identity = await repoIdentityOf(
+        await findProjectOrThrow(projectId),
+      );
       return {
         thisDevice: here,
         devices: await standingsOf(peers, identity, { grant: true }),
@@ -534,7 +533,7 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
 
     peerWorktrees: async ({ projectId, device }) => {
       const { standings } = await candidates(
-        findProjectOrThrow(projectId),
+        await findProjectOrThrow(projectId),
         device,
         { grant: false },
       );
@@ -609,7 +608,7 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
     },
 
     bring: async (input, ctx): Promise<ControlTransferResult> => {
-      const project = findProjectOrThrow(input.projectId);
+      const project = await findProjectOrThrow(input.projectId);
       const { identity, standings } = await candidates(project, input.device, {
         grant: true,
       });
@@ -713,7 +712,7 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
     // Stops the mirror the worktree is part of, whichever device runs
     // it: a session this device runs is stopped here, one a peer runs
     // against the worktree is stopped through that peer (mirror:stop
-    // is served to peers on the runner's grant). The names are only
+    // is gated on the runner's command-access switch). The names are only
     // for the answer, so the registry is read beside the stop and not
     // after it, once for the peer scan too.
     mirrorStop: async ({ force, ...target }, ctx) => {
@@ -740,8 +739,8 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
         afar.api.stop({ session: afar.session.session, force }),
       );
       // A copy the peer could not remove may be the one HERE: the peer
-      // removes it through this device's grant, which need not be on
-      // for a peer this device only asked something of. The session is
+      // removes it through this device's command-access switch, which
+      // need not be on for a peer this device only asked something of. The session is
       // gone either way, so this device's own forced delete finishes
       // what the runner's stop would have.
       const copy = mirrorCopyOf(afar.session, afar.deviceId);

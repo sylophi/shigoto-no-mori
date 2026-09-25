@@ -19,10 +19,7 @@ import { DeviceLead } from "@/components/shared/DeviceGlyph";
 import { hostsProjects } from "@/lib/remote/deviceTraits";
 import { EmptyPanel } from "@/components/ui/empty-panel";
 import { useLocalDevice } from "@/hooks/account/useAccount";
-import {
-  commandAccessOf,
-  usePeerCommandAccess,
-} from "@/hooks/remote/useCommandAccess";
+import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import {
   HostScopeProvider,
   LocalHostScope,
@@ -111,14 +108,17 @@ export function useDeviceRoster(): DeviceRosterEntry[] {
 // rule, rather than flashing a refusal that turns into a body a moment
 // later.
 export function useDeviceTabs(): DeviceTab[] {
-  const access = usePeerCommandAccess(useRemoteDevices());
+  const devices = useRemoteDevices();
   const tabs: DeviceTab[] = [];
   for (const entry of useDeviceRoster()) {
     const block = entry.isThisDevice
       ? undefined
       : !entry.status?.reachable || entry.api === undefined
         ? "offline"
-        : commandAccessOf(access, entry.deviceId).canCommand
+        : commandAccessOf(
+              entry.deviceId,
+              devices.find((device) => device.deviceId === entry.deviceId),
+            ).canCommand
           ? undefined
           : "no-grant";
     tabs.push({ ...entry, block });

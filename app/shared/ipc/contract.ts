@@ -19,19 +19,23 @@ export type InvokeDef<
   // can never silently join the remote surface by inheriting a default.
   // Routing treats anything other than exactly true as local-only.
   remote?: boolean;
-  // Command-vs-read axis for the hub grant model. `mutating`
-  // marks a call that changes state the user owns (writes files or
-  // config, runs a script, moves a branch or a worktree), as opposed to
-  // a read. A call that only refreshes a cache the host keeps for
-  // itself (a fetch of remote-tracking refs, a gh listing) is a read
-  // even though it spawns a process and touches the network. Reads are always served to any account
-  // peer, while mutations require a per-peer command grant enforced at
-  // the hub link's dispatch. Optional in the type because only
-  // remote:true host invokes need it (the socket check enforces that a
-  // remote invoke classifies itself), while client-scoped and
-  // remote:false calls never reach the grant check. A remote mutating
-  // call is something the grant hands to other devices, so it needs a
-  // line in the list AcceptCommandsToggle shows the user (GRANTS).
+  // The gate axis for the direct listener. `mutating: true` marks a
+  // call served to another device only while this host's command-access
+  // switch is on (host/socket/server.ts's dispatch gate, the one place
+  // that decides): every call that changes state the user owns (writes
+  // files or config, runs a script, moves a branch or a worktree), plus
+  // a few reads kept behind the switch because of what they disclose
+  // (fs:listDirectory, runtime:info, cli:status and the like name
+  // arbitrary host paths). `mutating: false` is served to every account
+  // peer. A call that only refreshes a cache the host keeps for itself
+  // (a fetch of remote-tracking refs, a gh listing) is a read even
+  // though it spawns a process and touches the network. Optional in the
+  // type because only remote:true host invokes need it (the socket
+  // check enforces that a remote invoke classifies itself), while
+  // client-scoped and remote:false calls never reach the gate. A
+  // remote gated call is something the switch hands to other devices,
+  // so it needs a line in the list AcceptCommandsToggle shows the user
+  // (GRANTS).
   mutating?: boolean;
   // Whether a resolved mutating call moved host state a remote viewer
   // caches. Defaults to true for mutating invokes: the registrar fires
@@ -40,7 +44,7 @@ export type InvokeDef<
   // are invisible to viewers, like forward's byte shuttling, so an open
   // stream does not re-invalidate a peer's cached view of this host on
   // every poll or send resolution. Orthogonal to `mutating`, which is
-  // the grant axis and stays true on such channels.
+  // the gate axis and stays true on such channels.
   movesHostState?: boolean;
 };
 

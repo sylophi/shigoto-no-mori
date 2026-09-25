@@ -7,10 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { errorMessageOf } from "@shared/errors";
 import type { UpdaterState } from "@shared/schemas";
-import {
-  commandAccessOf,
-  usePeerCommandAccess,
-} from "@/hooks/remote/useCommandAccess";
+import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
 import { hasLocalHost } from "@/lib/localHost";
@@ -89,8 +86,8 @@ export function useUpdater() {
 
 // The devices this window could update right now: itself, plus every
 // peer that is reachable and lets this device command it (a staged
-// update behind a refused grant has no button to lead to). A peer is
-// asked only once its grant verdict has landed, not on the optimistic
+// update behind a refused switch has no button to lead to). A peer is
+// asked only once its verdict has landed, not on the optimistic
 // in-flight reading the forms use: a dot that lights and then goes out
 // is worse than one that lights a moment later.
 function useUpdateTargets(): {
@@ -98,15 +95,13 @@ function useUpdateTargets(): {
   local: HostApi | undefined;
   peers: { deviceId: string; label: string; api: HostApi }[];
 } {
-  // Reach first, so a peer with no session is never preflighted.
   const reachable = useHostDevices().filter(
     (peer) => deviceStatusView(peer.status).reachable,
   );
-  const access = usePeerCommandAccess(reachable);
   return {
     local: hasLocalHost ? window.api : undefined,
     peers: reachable.flatMap((peer) =>
-      peer.api !== undefined && commandAccessOf(access, peer.deviceId).granted
+      peer.api !== undefined && commandAccessOf(peer.deviceId, peer).granted
         ? [{ deviceId: peer.deviceId, label: peer.label, api: peer.api }]
         : [],
     ),

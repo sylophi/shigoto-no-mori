@@ -22,7 +22,6 @@ import { portsContract } from "@shared/ipc/modules/ports";
 import { projectLauncherContract } from "@shared/ipc/modules/projectLauncher";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { hubContract } from "@shared/ipc/modules/hub";
-import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
@@ -77,7 +76,6 @@ export const allContractModules: readonly ContractModule[] = [
   projectLauncherContract,
   projectsContract,
   hubContract,
-  remoteAccessContract,
   runtimeContract,
   scriptsContract,
   sharedSettingsContract,
@@ -121,7 +119,6 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const projectLauncherClient = c(projectLauncherContract);
   const projectsClient = c(projectsContract);
   const hubClient = c(hubContract);
-  const remoteAccessClient = c(remoteAccessContract);
   const runtimeClient = c(runtimeContract);
   const scriptsClient = c(scriptsContract);
   const sharedSettingsClient = c(sharedSettingsContract);
@@ -306,13 +303,6 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       invokePeer: hubClient.invokePeer,
       onStatusChanged: hubClient.statusChanged,
       onPeerPush: hubClient.peerPush,
-    },
-
-    remoteAccess: {
-      // The preflight "am I granted command access on this host?" read,
-      // answered per calling peer by the serving transport.
-      commandAccess: remoteAccessClient.commandAccess,
-      onCommandAccessChanged: remoteAccessClient.commandAccessChanged,
     },
 
     runtime: {

@@ -51,7 +51,6 @@ export type HostApi = Pick<
   | "portPool"
   | "ports"
   | "projects"
-  | "remoteAccess"
   | "runtime"
   | "scripts"
   | "sharedSettings"

@@ -1,9 +1,11 @@
 // Host side of the direct data plane's brokering: the answer to a
-// peer's connectInfo ask over the device hub (shared/hub/link.ts). A
+// peer's connectInfo ask over the device hub (shared/hub/link.ts): how
+// to reach this device, and whether it runs the asker's commands. A
 // factory rather than a plain function because the deps are owned by
 // whoever assembled the direct listener: main wires the real listener
-// status, ticket store and tunnel runner in, and the direct-plane check
-// drives the same factory with its own instances.
+// status, ticket store, tunnel runner and command-access switch in,
+// and the direct-plane check drives the same factory with its own
+// instances.
 //
 // This file must stay Electron free (pnpm test host-boundary).
 import {
@@ -32,6 +34,10 @@ type ConnectInfoDeps = {
   // child is currently healthy, else null. When present it is
   // advertised as one more candidate with its own ticket.
   tunnelUrl(): string | null;
+  // The command-access switch the direct listener's dispatch gate
+  // reads, reported to the asker so its UI and CLI know up front. The
+  // gate stays the only thing that enforces it.
+  acceptsCommands(): boolean;
   // Test seam for the interface enumeration.
   candidateAddresses?(): string[];
 };
@@ -91,6 +97,7 @@ export function makeConnectInfo(
         url: candidate.url,
         ticket: tickets[index],
       })),
+      acceptsCommands: deps.acceptsCommands(),
     };
   };
 }

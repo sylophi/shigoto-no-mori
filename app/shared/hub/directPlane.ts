@@ -18,6 +18,12 @@
 //
 // Pure aside from the injected deps (no electron, no node builtins),
 // like the pieces it composes.
+
+// The peer's command-access switch flipping, as its direct listener
+// pushes it. The bridge records it on the peer's session so the status
+// snapshot's peerAcceptsCommands follows the switch live.
+const COMMAND_ACCESS_CHANGED = accountContract.calls.commandAccessChanged;
+import { accountContract } from "@shared/ipc/modules/account";
 import type { DirectCandidateKind } from "@shared/ipc/modules/direct";
 import type { HubPeerPush, HubStatus } from "@shared/ipc/modules/hub";
 import type { HubConnectionStatus } from "@shared/hub/connectionTypes";
@@ -88,8 +94,8 @@ type DirectPlane = {
   // Teardown is stop() below, not a call in here.
   handlers: HubHandlers;
   // The status snapshot: the connection's own status plus the direct
-  // surface (peerAppVersions, whose keys are the live direct sessions)
-  // plus the host half's tunnel state. The one shape the status
+  // surface (peerAppVersions, whose keys are the live direct sessions,
+  // and peerAcceptsCommands) plus the host half's tunnel state. The one shape the status
   // handler and every statusChanged fan-out report.
   status(): HubStatus;
   // Fan a fresh snapshot out, for owner-side transitions outside the
@@ -133,6 +139,12 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
       // peer's deviceId and fanned through the owner's peerPush sink
       // so the renderer's subscriber registry stays wire-agnostic.
       onAnyPush: (deviceId, channel, payload) => {
+        if (channel === COMMAND_ACCESS_CHANGED.channel) {
+          const accepts = COMMAND_ACCESS_CHANGED.payload.safeParse(payload);
+          if (accepts.success) {
+            handlers.setPeerAcceptsCommands(deviceId, accepts.data);
+          }
+        }
         deps.broadcastPeerPush({ deviceId, channel, payload });
       },
       dialableKinds: deps.dialableKinds,
@@ -153,6 +165,7 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
       // membership here IS the direct-session set (the renderer
       // derives connectedness from the keys).
       peerAppVersions: handlers.directPeerVersions(),
+      peerAcceptsCommands: handlers.directPeerAccess(),
     };
     // THIS device's tunnel endpoint state. The
     // state only, never the hostname or token. Absent without a host

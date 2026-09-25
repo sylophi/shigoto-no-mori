@@ -75,6 +75,17 @@ export type HubHandlers = Handlers<typeof hubContract> & {
   // renderer derives connectedness from the keys, and the skew check
   // reads the values).
   directPeerVersions(): Record<string, string>;
+  // Whether each ESTABLISHED direct session's peer runs this device's
+  // commands, keyed like directPeerVersions: the connectInfo answer's
+  // reading at dial time, moved since by the peer's own push
+  // (setPeerAcceptsCommands). The owner folds it into
+  // HubStatus.peerAcceptsCommands.
+  directPeerAccess(): Record<string, boolean>;
+  // The peer's account:commandAccessChanged push, which carries its
+  // switch: records it on the established session and fans a fresh
+  // status out when it moved. A push for a peer with no established
+  // session is dropped; its next dial's answer carries the switch.
+  setPeerAcceptsCommands(deviceId: string, accepts: boolean): void;
   // Close and drop the cached direct sessions for peers no longer in
   // the live roster: the client half of "presence scopes the data
   // plane", so a peer the control plane no longer vouches for loses
@@ -114,10 +125,12 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
   // after an await could stamp a NEW entry if this one was dropped and
   // replaced mid-dial). A non-null version is also the established
   // marker directPeerVersions derives from, so a still-dialing entry
-  // is never reported as a live session.
+  // is never reported as a live session. acceptsCommands rides the
+  // same entry for the same reason, set with the version.
   type PeerEntry = {
     promise: Promise<PeerConnection>;
     version: string | null;
+    acceptsCommands: boolean;
   };
   const peers = new Map<string, PeerEntry>();
 
@@ -168,12 +181,14 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
     const entry: PeerEntry = {
       promise: undefined as unknown as Promise<PeerConnection>,
       version: null,
+      acceptsCommands: false,
     };
     entry.promise = (async (): Promise<PeerConnection> => {
       const connection = await deps.connectDirect(deviceId, {
         onClose: () => dropPeer(deviceId, entry, true),
       });
       entry.version = connection.remoteAppVersion;
+      entry.acceptsCommands = connection.acceptsCommands;
       // A dial can complete after a sweep already evicted this entry
       // (the peer left the roster mid-dial). The sweep's continuation
       // closes the connection, and an orphan must not fan a status
@@ -234,6 +249,22 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
         if (entry.version !== null) versions[deviceId] = entry.version;
       }
       return versions;
+    },
+
+    directPeerAccess: () => {
+      const access: Record<string, boolean> = {};
+      for (const [deviceId, entry] of peers) {
+        if (entry.version !== null) access[deviceId] = entry.acceptsCommands;
+      }
+      return access;
+    },
+
+    setPeerAcceptsCommands: (deviceId, accepts) => {
+      const entry = peers.get(deviceId);
+      if (entry === undefined || entry.version === null) return;
+      if (entry.acceptsCommands === accepts) return;
+      entry.acceptsCommands = accepts;
+      deps.onDirectChange?.();
     },
 
     probeDirectPeers: () => {

@@ -1,121 +1,80 @@
-import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";
-import { localDeviceId, queryKeysFor } from "@/lib/queryKeys";
+import { useSyncExternalStore } from "react";
+import { localDeviceId } from "@/lib/queryKeys";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import { type RemoteDevice, remoteDeviceStore } from "@/lib/remote/devices";
 
+// Whether THIS device may command a device: the other machine's own
+// "allow control from other devices" switch, as its connectInfo answer
+// and its live push report it (HubStatus.peerAcceptsCommands, carried
+// on the registry entry). A reading for the UI only: the peer's direct
+// listener enforces the switch on every call regardless.
 export interface CommandAccess {
   granted: boolean;
+  // No direct session yet, so the peer has not said.
   isLoading: boolean;
   // Whether a surface should offer commands right now: granted, or the
-  // verdict still in flight (assume granted rather than flash a
-  // disabled control that turns live a moment later).
+  // verdict not in yet (assume granted rather than flash a disabled
+  // control that turns live a moment later).
   canCommand: boolean;
-  // The preflight itself failed (no session to ask over, a transport
-  // error), so `granted: false` is the fail-closed default, not the
-  // peer's answer. A surface that would tell the user to flip the
-  // peer's switch checks this first.
-  isError: boolean;
 }
 
-// The per-caller preflight, as options so the scoped hook below and the
-// picker's fan-out ask the same question under the same key. The api is
-// optional because a device with no session has none: the query is
-// disabled there, and the arm keeps that expressible without an
-// assertion (same shape as projectsQueryOptions).
-function commandAccessQueryOptions(deviceId: string, api: HostApi | undefined) {
-  return queryOptions<{ granted: boolean }>({
-    queryKey: queryKeysFor(deviceId).commandAccess(),
-    queryFn: () =>
-      api ? api.remoteAccess.commandAccess() : { granted: false },
-    enabled: api !== undefined && deviceId !== localDeviceId,
-    // A permission verdict only moves when the host grants or revokes,
-    // which it pushes (remoteAccess:commandAccessChanged, handled in
-    // lib/hostWatch.ts), so the honest refreshes are that push, the
-    // session-landed sweep (invalidateDeviceSession) and a window
-    // focus -- not a hub round-trip per mount, which is what the
-    // client's staleTime 0 would buy.
-    staleTime: 30_000,
-    meta: { silentError: true },
-  });
-}
+const GRANTED: CommandAccess = {
+  granted: true,
+  isLoading: false,
+  canCommand: true,
+};
+const PENDING: CommandAccess = {
+  granted: false,
+  isLoading: true,
+  canCommand: true,
+};
+const REFUSED: CommandAccess = {
+  granted: false,
+  isLoading: false,
+  canCommand: false,
+};
 
-// The local device is always granted by contract, so it never asks.
-function verdictOf(
-  deviceId: string,
-  query:
-    | { data?: { granted: boolean }; isPending: boolean; isError: boolean }
-    | undefined,
-): CommandAccess {
-  const verdict =
-    deviceId === localDeviceId
-      ? { granted: true, isLoading: false, isError: false }
-      : query === undefined
-        ? { granted: false, isLoading: true, isError: false }
-        : {
-            granted: query.data?.granted ?? false,
-            isLoading: query.isPending,
-            isError: query.isError,
-          };
-  return { ...verdict, canCommand: verdict.granted || verdict.isLoading };
-}
-
-// Does the CALLING device hold command access on the scoped host? Drives
-// whether a scoped page renders mutation controls. The
-// local device is always granted by contract, so it short-circuits with
-// no IPC. A remote device answers via the per-caller remoteAccess
-// preflight, cached under its own host key. A refused verdict is a
-// normal read-only state, not an error to toast — the UI reads `granted`
-// and renders a read-only note instead.
-export function useCommandAccess(): CommandAccess {
-  const { deviceId, api } = useHostScope();
-  return verdictOf(
-    deviceId,
-    useQuery(commandAccessQueryOptions(deviceId, api)),
-  );
-}
-
-// The verdict for one device out of a usePeerCommandAccess result: the
-// local device is granted by contract, and a device the list was not
-// asked about (a peer the hub has not rostered) is still loading, the
-// same fail-closed reading verdictOf gives a query that has not run.
+// The verdict for one device, given its registry entry (undefined for
+// this device, which the registry does not list, and for a peer it no
+// longer knows). This device always commands itself.
 export function commandAccessOf(
-  access: ReadonlyMap<string, CommandAccess>,
   deviceId: string,
+  device: Pick<RemoteDevice, "acceptsCommands"> | undefined,
 ): CommandAccess {
-  return access.get(deviceId) ?? verdictOf(deviceId, undefined);
+  if (deviceId === localDeviceId) return GRANTED;
+  const accepts = device?.acceptsCommands;
+  if (accepts === undefined) return PENDING;
+  return accepts ? GRANTED : REFUSED;
 }
 
-// The same verdict for a LIST of peers at once, for a chooser that has to
-// grey out the machines that would refuse before anything is scoped to
-// them (the new-worktree device picker). One query per device under that
-// device's own key, so a card and a later HostScopeProvider over the same
-// machine share the cache rather than re-asking.
-export function usePeerCommandAccess(
-  peers: readonly { deviceId: string; api?: HostApi }[],
-): ReadonlyMap<string, CommandAccess> {
-  return useQueries({
-    queries: peers.map((peer) =>
-      commandAccessQueryOptions(peer.deviceId, peer.api),
-    ),
-    combine: (results) =>
-      new Map(
-        peers.map((peer, index) => [
-          peer.deviceId,
-          verdictOf(peer.deviceId, results[index]),
-        ]),
-      ),
-  });
+// Does THIS device hold command access on the scoped host? Drives
+// whether a scoped page renders mutation controls or a read-only note.
+// A selector over the registry, so another peer's churn leaves the
+// value, and the render, alone.
+export function useCommandAccess(): CommandAccess {
+  const { deviceId } = useHostScope();
+  const select = () =>
+    remoteDeviceStore.getSnapshot().find((entry) => entry.deviceId === deviceId)
+      ?.acceptsCommands;
+  const accepts = useSyncExternalStore(
+    remoteDeviceStore.subscribe,
+    select,
+    select,
+  );
+  return commandAccessOf(deviceId, { acceptsCommands: accepts });
 }
 
 // The api to command a peer through from here, by device id: its
 // session's, while that peer lets this device command it (a verdict
-// still in flight counts, as canCommand has it), else undefined. The
-// lookup the group actions and the inbox's create button share.
+// not in yet counts, as canCommand has it), else undefined. The lookup
+// the group actions and the inbox's create button share.
 export function useCommandableApi(): (deviceId: string) => HostApi | undefined {
   const registry = useRemoteDevices();
-  const access = usePeerCommandAccess(registry);
-  return (deviceId) =>
-    commandAccessOf(access, deviceId).canCommand
-      ? registry.find((device) => device.deviceId === deviceId)?.api
+  return (deviceId) => {
+    const device = registry.find((entry) => entry.deviceId === deviceId);
+    return commandAccessOf(deviceId, device).canCommand
+      ? device?.api
       : undefined;
+  };
 }

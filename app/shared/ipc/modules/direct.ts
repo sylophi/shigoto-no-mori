@@ -12,7 +12,10 @@ import { defineContract, invoke } from "@shared/ipc/contract";
 // once: a candidate that reaches the host but loses the race burns only
 // its own ticket, never another candidate's. Knowing how to dial grants
 // nothing by itself: the direct wire gates every command on the host's
-// command-access switch.
+// command-access switch. The answer also reports that switch
+// (acceptsCommands), so the dialer knows up front whether this host
+// will run its commands, and the host's account:commandAccessChanged
+// push keeps that reading live afterwards.
 
 // How long a minted connect ticket stays valid. Long enough for the
 // peer's dial to reach us over any candidate address, short enough
@@ -103,12 +106,17 @@ export type DirectConnectInfoInput = z.infer<
 
 // Candidates exactly when available, and never an empty list: a host
 // with nothing dialable (for this caller's declared kinds) answers
-// available:false instead.
+// available:false instead. acceptsCommands is the host's
+// command-access switch: whether its direct listener runs the asker's
+// gated calls. Every asker is a device of the same account, so it is
+// the same bit for all of them. It informs the asker's UI and CLI
+// only; the listener's dispatch gate still decides every call.
 export const DirectConnectInfoSchema = z.discriminatedUnion("available", [
   z.object({ available: z.literal(false) }),
   z.object({
     available: z.literal(true),
     candidates: z.array(DirectCandidateSchema).min(1),
+    acceptsCommands: z.boolean(),
   }),
 ]);
 export type DirectConnectInfo = z.infer<typeof DirectConnectInfoSchema>;

@@ -35,7 +35,6 @@ import { portPoolContract } from "@shared/ipc/modules/portPool";
 import { portsContract } from "@shared/ipc/modules/ports";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { hubContract } from "@shared/ipc/modules/hub";
-import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
@@ -80,7 +79,6 @@ import {
 import { portPoolHandlers } from "@host/ipc/modules/portPool";
 import { portsHandlers } from "@host/ipc/modules/ports";
 import { projectsHandlers } from "@host/ipc/modules/projects";
-import { remoteAccessHandlers } from "@host/ipc/modules/remoteAccess";
 import { runtimeHandlers } from "@host/ipc/modules/runtime";
 import { scriptsHandlers } from "@host/ipc/modules/scripts";
 import { sharedSettingsHandlers } from "@host/ipc/modules/sharedSettings";
@@ -113,7 +111,11 @@ import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
 import { spawnFileSync } from "@host/fileSync/spawn";
 import { dataDir } from "@host/lib/util/paths";
 import { getDeviceId } from "@host/lib/config/deviceId";
-import { accountSignedIn, makeAccountHandlers } from "./modules/account";
+import {
+  acceptsPeerCommands,
+  accountSignedIn,
+  makeAccountHandlers,
+} from "./modules/account";
 import { hubConnectInputs } from "./modules/account";
 import { reconcileLaunchAtLogin } from "../electron/liveness";
 import { withoutPeerState } from "@shared/schemas/config";
@@ -286,11 +288,11 @@ function endAllMirrorsBounded(): Promise<unknown> {
   ]);
 }
 
-// The command-access switch flipping, on both channels it fans out on
-// (the account's and the remote-access surface's).
+// The command-access switch as it now stands, to this device's windows
+// (the Devices page toggle) and, the broadcast being tagged remote, to
+// every connected peer, whose bridge records it for its UI and CLI.
 function broadcastCommandAccessChanged(): void {
-  broadcastAll(accountContract, "commandAccessChanged", undefined);
-  broadcastAll(remoteAccessContract, "commandAccessChanged", undefined);
+  broadcastAll(accountContract, "commandAccessChanged", acceptsPeerCommands());
 }
 
 // A step of the account fan-out that must not take the rest with it.
@@ -411,11 +413,12 @@ export function registerIpcHandlers(): void {
       broadcastAll(accountContract, "changed", { accountId });
       // A direct account switch that stays signed in changes the
       // command-access answer, so refresh the renderer's switch query
-      // too. Main's grant cache is already invalidated in
+      // too. Main's mirror of the switch is already dropped in
       // makeAccountHandlers, so enforcement is correct without this.
-      // This only keeps the renderer display fresh, since `changed`
-      // invalidates the ["account"] prefix but not
-      // ["accountCommandAccess"].
+      // This only keeps the display fresh, since `changed` invalidates
+      // the ["account"] prefix but not ["accountCommandAccess"]. (An
+      // account switch also restarts the direct listener, so peers
+      // learn the new answer from their next dial either way.)
       broadcastCommandAccessChanged();
       // Also reconciles the direct listener from its tail, which
       // follows the same enrollment condition.
@@ -432,9 +435,9 @@ export function registerIpcHandlers(): void {
       }
     },
     // The switch flipping fans out on its own channel so the toggle
-    // does not thrash the account status and device queries. No hub
-    // reconnect: the listener reads the predicate live. The peers
-    // hear it too (remote:true), so their verdict refreshes at once.
+    // does not thrash the account status and device queries. No
+    // reconnect: the listener reads the predicate live. The peers hear
+    // it too (remote:true), so their reading follows at once.
     broadcastCommandAccessChanged,
     // The registry as the hub last reported it is the one place this
     // device learns a peer was removed from the account (the hub
@@ -584,9 +587,6 @@ export function registerIpcHandlers(): void {
   });
   registerContract(mirrorContract, mirrorHandlers);
   registerContract(windowContract, windowHandlers);
-  // Host-scoped preflight for the remote execution surface: each wire's
-  // binding supplies the calling peer's grant verdict on the context.
-  registerContract(remoteAccessContract, remoteAccessHandlers);
   registerContract(projectsContract, projectsHandlers);
   registerContract(dialogContract, dialogHandlers);
   registerContract(runtimeContract, runtimeHandlers);
@@ -614,18 +614,16 @@ export function registerIpcHandlers(): void {
   setControlImpl({
     listDevices: async () => accountHandlers.listDevices(undefined, undefined),
     thisDeviceId: getDeviceId,
-    connectedDeviceIds: async () =>
-      Object.keys(
-        (await hubHandlers.status(undefined, undefined)).peerAppVersions,
-      ),
+    directPeers: async () =>
+      (await hubHandlers.status(undefined, undefined)).peerAcceptsCommands,
     peerTransportFor,
   });
   registerControlContract(controlContract, controlHandlers);
   registerContract(shigomoriContract, shigomoriHandlers);
   registerContract(syncContract, syncHandlers);
   // Host side of the port-forward wire: host-scoped, so it mounts on
-  // the Electron wire and both remote wires, where the grant model
-  // gates every verb (all mutating:true).
+  // the Electron wire and the direct listener, whose command-access
+  // gate covers every verb (all mutating:true).
   registerContract(forwardContract, forwardHandlers);
   // Host-scoped: a peer's Settings page reads this device's update
   // state and, when granted, checks or restarts into an update here.

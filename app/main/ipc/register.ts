@@ -102,9 +102,6 @@ function contextFor(sender: WebContents): HandlerContext {
   const controller = new AbortController();
   const ctx: HandlerContext = {
     signal: controller.signal,
-    // A local window always commands its own machine, so the preflight
-    // read answers granted:true over the Electron wire.
-    isCallerCommandGranted: () => true,
     notifier: (module, key) => (payload) => {
       if (sender.isDestroyed()) return;
       broadcast(module, key, payload, sender);
@@ -128,10 +125,12 @@ const electronServer: ServerTransport = {
 };
 
 // The direct data plane's listener. Auth consumes single-use connect
-// tickets minted by connectInfo over the device hub, and
-// dispatch gates mutating channels on the host's live command-access
-// switch (acceptsPeerCommands: every ticketed peer is a device of this
-// account, so the switch is the whole verdict). Unconditional like the
+// tickets minted by connectInfo over the device hub, and dispatch gates
+// every channel not registered mutating:false on the host's live
+// command-access switch (acceptsPeerCommands: every ticketed peer is a
+// device of this account, so the switch is the whole verdict). That
+// gate is the only enforcement; everything else that shows the switch
+// is a reading of it. Unconditional like the
 // other bindings so registration records handlers at boot, while
 // listening is gated on enrollment in refreshDirectHost below.
 const directTickets = createConnectTicketStore();
@@ -232,7 +231,8 @@ export const hubHandlers = directPlane.handlers;
 
 // The answer to a peer's connectInfo ask (host/direct/connectInfo.ts),
 // the one question the device hub carries, built from deps this module
-// owns: the listener's port, the ticket store and the tunnel runner.
+// owns: the listener's port, the ticket store and the tunnel runner,
+// plus the switch the listener's gate reads, reported to the asker.
 const serveConnectInfo = makeConnectInfo({
   listenerPort: () => {
     const current = directWsServer.status();
@@ -242,6 +242,7 @@ const serveConnectInfo = makeConnectInfo({
   // The tunnel candidate, advertised only while
   // the cloudflared child is currently healthy (probed routable).
   tunnelUrl: () => tunnelRunner.tunnelUrl(),
+  acceptsCommands: acceptsPeerCommands,
 });
 
 // The hub connection, unconditional like the listener bindings:
@@ -415,17 +416,19 @@ export function broadcast<M extends ContractModule, K extends BroadcastKeys<M>>(
 }
 
 // Fan-out broadcast for state every window cares about (updater,
-// background refreshes). Scope picks the wire set: host-scoped
-// fan-outs (git refresh, script events, nuke progress, updater state)
-// reach every window AND every authenticated direct peer, while
-// client-scoped ones (port forwards, account changes) stay on the
-// Electron wire -- they are about THIS install, not the host a remote
-// client is looking at.
+// background refreshes). Every broadcast reaches every window, and one
+// tagged remote reaches every authenticated direct peer too. That tag
+// is the whole rule, whatever the module's scope: host-scoped fan-outs
+// (git refresh, script events, updater state) carry it where a peer
+// caches the state, and a client-scoped one carries it only when it is
+// this host's answer to its peers (account:commandAccessChanged). The
+// rest of the client-scoped ones (port forwards, account changes) are
+// about THIS install and stay on the Electron wire.
 export function broadcastAll<
   M extends ContractModule,
   K extends BroadcastKeys<M>,
 >(module: M, key: K, payload: BroadcastProducerPayload<M, K>): void {
-  broadcastAllCore(module, key, payload, serverFor(module));
+  broadcastAllCore(module, key, payload, hostServer);
 }
 
 // Reconciles the hub socket with the account state. Runs at boot and

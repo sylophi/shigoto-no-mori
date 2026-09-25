@@ -32,7 +32,11 @@ export type StoreCipher = {
 // absent, the device reports what it detected about itself. hubName
 // and hubIcon are what the device hub last held for this device as far
 // as this device knows (enroll.ts syncHubDevice), absent until the
-// first enrollment or registry read that tells it.
+// first enrollment or registry read that tells it. acceptsCommands is
+// the command-access switch (whether this host runs its account's
+// other devices' commands), kept on the record so it belongs to this
+// account alone: a sign-out drops it with the credential, and another
+// account's enrollment writes a record without it. Absent is off.
 export type StoredAccount = {
   credential: string;
   accountId: string;
@@ -40,6 +44,7 @@ export type StoredAccount = {
   deviceIcon?: DeviceIcon;
   hubName?: string;
   hubIcon?: DeviceIcon;
+  acceptsCommands?: boolean;
 };
 
 // The stored shape. `v` guards a future format change, `enc` records
@@ -53,6 +58,7 @@ type StoredShape = {
   deviceIcon?: DeviceIcon;
   hubName?: string;
   hubIcon?: DeviceIcon;
+  acceptsCommands?: true;
 };
 
 // What a sign-out leaves behind, in the same slot: the device's name
@@ -112,10 +118,10 @@ function iconOf(
   return isDeviceIcon(picked) ? picked : undefined;
 }
 
-// The opened credential plus the identity the document keeps beside
-// it: the name always, the icon only when one was picked, and the
-// hub's copies once known (a signed-out document keeps none: the row
-// they described is gone).
+// The opened credential plus what the document keeps beside it: the
+// name always, the icon only when one was picked, the hub's copies
+// once known and the command-access switch when on (a signed-out
+// document keeps neither: the row they described is gone).
 function withIdentity(
   doc: StoredShape | SignedOutShape,
   opened: { credential: string; accountId: string },
@@ -128,6 +134,7 @@ function withIdentity(
     ...(icon === undefined ? {} : { deviceIcon: icon }),
     ...(typeof hub.hubName === "string" ? { hubName: hub.hubName } : {}),
     ...(isDeviceIcon(hub.hubIcon) ? { hubIcon: hub.hubIcon } : {}),
+    ...(hub.acceptsCommands === true ? { acceptsCommands: true } : {}),
   };
 }
 
@@ -225,6 +232,7 @@ export function createAccountStore(opts: {
       if (account.deviceIcon !== undefined) doc.deviceIcon = account.deviceIcon;
       if (account.hubName !== undefined) doc.hubName = account.hubName;
       if (account.hubIcon !== undefined) doc.hubIcon = account.hubIcon;
+      if (account.acceptsCommands === true) doc.acceptsCommands = true;
       storage.writeRaw(JSON.stringify(doc));
     },
 

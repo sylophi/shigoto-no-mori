@@ -184,26 +184,23 @@ export function useAcceptsCommands() {
   });
 }
 
-// Invalidate the command-access query whenever main fans out a flip,
-// so every window's toggle reflects the new state without polling.
-// Separate from the account.changed watch so the toggle never re-reads
-// status or the device list.
+// Write the switch into its query whenever main fans out a flip (the
+// broadcast carries it), so every window's toggle reflects the new
+// state without polling. Separate from the account.changed watch so
+// the toggle never re-reads status or the device list.
 export function useWatchCommandAccessChanges(): void {
   const queryClient = useQueryClient();
   useEffect(
     () =>
-      window.api.account.onCommandAccessChanged(() => {
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.accountCommandAccess(),
-        });
+      window.api.account.onCommandAccessChanged((accepts) => {
+        queryClient.setQueryData(queryKeys.accountCommandAccess(), accepts);
       }),
     [queryClient],
   );
 }
 
-// An imperative write. It does not invalidate itself: main emits
-// commandAccessChanged and useWatchCommandAccessChanges invalidates
-// off it.
+// An imperative write. It does not update itself: main emits
+// commandAccessChanged and useWatchCommandAccessChanges writes it.
 export function useSetAcceptsCommands() {
   return useMutation<void, Error, boolean>({
     mutationFn: (enabled) => window.api.account.setAcceptsCommands(enabled),

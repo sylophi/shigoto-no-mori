@@ -26,10 +26,7 @@ import {
   useAccountIdentity,
   useClerkSessionMissing,
 } from "@/hooks/account/useClerkAccount";
-import {
-  commandAccessOf,
-  usePeerCommandAccess,
-} from "@/hooks/remote/useCommandAccess";
+import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import {
   useHubBlock,
@@ -75,12 +72,6 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
         : block.message;
   const hosts = useHostChipIndex(localDeviceId);
   const now = useNow();
-  // Whether THIS device may drive verbs on each peer: the peer's own
-  // "allow control from other devices" switch, as it answers us. Asked
-  // once for the whole list (the rows' forward strips would otherwise
-  // each mount their own copy under the same keys), and only for
-  // peers, since the local device is granted by contract.
-  const peerAccess = usePeerCommandAccess(hubDevices);
 
   // This device first, everything else in the order the device hub
   // listed it, so the peers keep their registry order.
@@ -100,7 +91,9 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
       name: isThisDevice ? local.name : device.name,
       icon: isThisDevice ? local.icon : device.icon,
       status: deviceRowStatus(device, isThisDevice, hubDevice, socket, now),
-      access: commandAccessOf(peerAccess, device.deviceId),
+      // Whether THIS device may drive verbs on the peer: the peer's own
+      // "allow control from other devices" switch, as it reports it.
+      access: commandAccessOf(device.deviceId, hubDevice),
       // This machine knows its own version synchronously. A peer
       // confirms one only once its direct session's welcome lands.
       appVersion: isThisDevice

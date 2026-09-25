@@ -52,7 +52,7 @@ function FilesView({
   // Every read here rides the command grant (worktrees:readFile). Local
   // is granted by contract, and a verdict in flight counts as granted,
   // so only a peer that said no gets the note instead of the tree.
-  const { canCommand, isError: accessUnknown } = useCommandAccess();
+  const { canCommand } = useCommandAccess();
   const { projectId, id: worktreeId } = worktree;
   const { path } = useSearch({ strict: false }) as { path?: string };
   const selected = path ?? null;
@@ -152,11 +152,7 @@ function FilesView({
 
       {!canCommand ? (
         <CenteredMessage className="px-6 text-center">
-          {/* A failed preflight is no answer from the peer, so it
-              mustn't be told to flip a switch that may be on. */}
-          {accessUnknown
-            ? "Couldn't ask that device whether it allows browsing its files."
-            : peerFilesHiddenNote()}
+          {peerFilesHiddenNote()}
         </CenteredMessage>
       ) : phone ? (
         // No width beside the viewer on a phone: the tree is the page

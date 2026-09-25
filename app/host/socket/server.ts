@@ -69,8 +69,9 @@ import type { RawData } from "ws";
 import { toBytes, toText } from "./rawData";
 
 // The binding's auth: short-lived single-use connect tickets minted
-// over the device hub. Injected at binding creation so this module
-// stays free of the ticket store and the grant store alike.
+// over the device hub, and the host's command-access switch. Injected
+// at binding creation so this module stays free of the ticket store
+// and the account layer alike.
 export type WsServerTicketAuth = {
   // Consumes the connect ticket the client proved possession of (it
   // never travels, see shared/ipc/socket/proof.ts), for the claimed
@@ -81,11 +82,13 @@ export type WsServerTicketAuth = {
     arrivedAs: DirectCandidateKind,
     matches: (ticket: string) => Promise<boolean>,
   ): Promise<string | null>;
-  // Whether this host runs MUTATING calls from its ticketed peers at
-  // all (every ticketed peer is a device of the same account), read
-  // live at every dispatch (never cached on the session) so flipping
-  // the switch takes effect without a reconnect, mirroring the hub
-  // link.
+  // Whether this host runs gated calls (anything not registered
+  // mutating:false) from its ticketed peers at all: every ticketed peer
+  // is a device of the same account, so this one switch is the whole
+  // verdict. Read live at every dispatch and every byte-channel frame
+  // (never cached on the session), so flipping the switch takes effect
+  // without a reconnect. This gate is the one place a peer's command
+  // is allowed or refused.
   isCommandGranted(): boolean;
 };
 
@@ -510,10 +513,8 @@ export function createWsServerBinding(
       // session, so flipping it takes effect without a reconnect. The
       // refusal carries the typed code so the client transport
       // surfaces "that machine will not run commands from here"
-      // distinctly from a real failure. The session's context already
-      // carries the live verdict, so dispatch asks it rather than
-      // re-deriving from the auth seam.
-      if (ctx.isCallerCommandGranted?.() !== true) {
+      // distinctly from a real failure.
+      if (!auth.isCommandGranted()) {
         send(
           socket,
           resError(frame.id, COMMAND_REFUSED_MESSAGE, COMMAND_REFUSED_CODE),
@@ -687,13 +688,13 @@ export function createWsServerBinding(
         // hello. One naming no attached channel (late, after a reset)
         // is dropped, throttled.
         if (isBinary && ctx !== null) {
-          // Bytes never pass through dispatch, so the grant is
-          // re-read here: every open was grant-gated, and a grant
-          // revoked since (the host turning peer commands off) drops
-          // every channel on the connection the moment the peer
-          // sends anything on one. Credit frames flow back during any
-          // transfer, so a live stream notices within a window.
-          if (ctx.isCallerCommandGranted?.() !== true) {
+          // Bytes never pass through dispatch, so the switch is
+          // re-read here: every open was gated on it, and the host
+          // turning peer commands off since drops every channel on
+          // the connection the moment the peer sends anything on one.
+          // Credit frames flow back during any transfer, so a live
+          // stream notices within a window.
+          if (!auth.isCommandGranted()) {
             channels.dropAll();
             return;
           }
@@ -750,13 +751,10 @@ export function createWsServerBinding(
               );
             };
           // The ticket bound this hello to a deviceId, so the context
-          // carries the authenticated peer identity and the host's
-          // command-access answer, read live from the injected
-          // predicate so a toggle applies without a reconnect.
+          // carries the authenticated peer identity.
           const callerDeviceId = frame.deviceId;
           ctx = {
             signal: controller.signal,
-            isCallerCommandGranted: () => auth.isCommandGranted(),
             callerDeviceId,
             notifier,
             channels,

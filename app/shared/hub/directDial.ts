@@ -83,10 +83,12 @@ import {
 import { HELLO_TIMEOUT_MS } from "@shared/ipc/socket/frames";
 import { HubAskRefusedError, NO_LISTENER_CODE, PeerVersionError } from "./link";
 
-// The LAN DeviceConnection shape verbatim, so everything downstream of
-// a direct dial (the bridge cache, sync, port-forward) is transport
-// agnostic.
-export type PeerConnection = DeviceConnection;
+// The DeviceConnection shape, so everything downstream of a direct
+// dial (the bridge cache, sync, port-forward) is transport agnostic,
+// plus the one fact the connectInfo answer carried beside the
+// candidates: whether the peer runs this device's commands. The
+// bridge keeps it current from the peer's commandAccessChanged push.
+export type PeerConnection = DeviceConnection & { acceptsCommands: boolean };
 
 export type ConnectPeerOpts = {
   // Called once when an ESTABLISHED direct connection dies on its own
@@ -254,8 +256,8 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
     opts: ConnectPeerOpts | undefined,
     candidates: DirectCandidate[],
     remainingMs: number,
-  ): Promise<PeerConnection> {
-    return new Promise<PeerConnection>((resolvePromise, rejectPromise) => {
+  ): Promise<DeviceConnection> {
+    return new Promise<DeviceConnection>((resolvePromise, rejectPromise) => {
       let done = false;
       // Out of budget: the remembered refusal if there is one, else the
       // deadline itself.
@@ -272,7 +274,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       }, remainingMs);
       // Every settlement clears the deadline timer, so a settled race
       // leaves nothing armed.
-      const resolve = (connection: PeerConnection): void => {
+      const resolve = (connection: DeviceConnection): void => {
         clearTimeout(deadlineTimer);
         resolvePromise(connection);
       };
@@ -438,12 +440,13 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
     }
     // The fan-out cap keeps a hostile or buggy answer from dialing an
     // unbounded burst.
-    return raceCandidates(
+    const connection = await raceCandidates(
       deviceId,
       opts,
       info.candidates.slice(0, MAX_DIAL_CANDIDATES),
       Math.max(1, deadlineAt - now()),
     );
+    return { ...connection, acceptsCommands: info.acceptsCommands };
   }
 
   return { connectDirect };

@@ -22,13 +22,7 @@
 // Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
 // and @shared imports resolve. Run: pnpm test account.
 import assert from "node:assert/strict";
-import {
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -54,7 +48,6 @@ import {
 import { deriveAccountId } from "../shared/account/token.ts";
 import { createAccountStore } from "../main/core/account/credentialStore.ts";
 import { createAccountStore as createCoreAccountStore } from "../shared/account/credentialStore.ts";
-import { createGrantStore } from "../main/core/account/grantStore.ts";
 import { shortHostname } from "../main/core/account/defaultDeviceName.ts";
 import {
   appleProductNameOf,
@@ -1046,103 +1039,81 @@ async function main() {
     );
 
     await check(
-      "grants: set then enabled reads the switch, and a mismatched account reads as off",
-      () => {
-        const filePath = join(tmp, "grants.json");
-        const grants = createGrantStore({ filePath });
-        assert.equal(grants.enabled("acct-1"), false, "a fresh store is off");
-        grants.set("acct-1", true);
-        assert.equal(grants.enabled("acct-1"), true);
-        // Setting the same value again is idempotent.
-        grants.set("acct-1", true);
-        assert.equal(grants.enabled("acct-1"), true);
-        grants.set("acct-1", false);
-        assert.equal(grants.enabled("acct-1"), false);
-        grants.set("acct-1", true);
-        // A different account never reads acct-1's switch, so the
-        // answer cannot leak across accounts even from the same file.
-        assert.equal(
-          grants.enabled("acct-2"),
-          false,
-          "a mismatched account read another account's switch",
-        );
-        const record = grants.read();
-        assert.equal(record.accountId, "acct-1");
-        assert.equal(record.enabled, true);
-      },
-    );
-
-    await check(
-      "grants: a set under a new account resets the record, dropping the old account's answer",
-      () => {
-        const filePath = join(tmp, "grants-reset.json");
-        const grants = createGrantStore({ filePath });
-        grants.set("acct-1", true);
-        // Setting under a DIFFERENT account resets to the new account,
-        // so the old answer is gone rather than kept beside it.
-        grants.set("acct-2", false);
-        assert.equal(grants.enabled("acct-2"), false);
-        assert.equal(
-          grants.enabled("acct-1"),
-          false,
-          "the old account's switch survived a reset",
-        );
-        assert.equal(grants.read().accountId, "acct-2");
-      },
-    );
-
-    await check(
-      "grants: a missing file and corrupt JSON read as off, a v1 per-peer file reads as on only if it trusted someone, and clear removes the file",
-      () => {
-        const missing = createGrantStore({
-          filePath: join(tmp, "grants-missing.json"),
+      "command access: the switch rides the account record (absent is off), survives a rename's rewrite, is dropped by a sign-out, and a re-enrollment keeps it only under the same account",
+      async () => {
+        const filePath = join(tmp, "access.json");
+        const store = createAccountStore({
+          filePath,
+          cipher: PLAINTEXT_CIPHER,
         });
-        assert.equal(missing.read(), null, "missing file should read null");
-        assert.equal(missing.enabled("acct-1"), false, "missing file is off");
-
-        const corruptPath = join(tmp, "grants-corrupt.json");
-        writeFileSync(corruptPath, "{ not valid json");
-        const corrupt = createGrantStore({ filePath: corruptPath });
-        assert.equal(corrupt.read(), null, "corrupt JSON should read null");
-
-        // The pre-switch format listed trusted peer ids. A host that
-        // trusted any of its account's devices keeps accepting the
-        // account's commands, so an update cannot lock out a machine
-        // driven remotely. One that trusted none stays closed, and the
-        // account scoping still applies.
-        const v1Path = join(tmp, "grants-v1.json");
-        writeFileSync(
-          v1Path,
-          JSON.stringify({ v: 1, accountId: "acct-1", grantedPeers: ["p"] }),
+        const record = {
+          credential: "c",
+          accountId: "acct-1",
+          deviceName: "d",
+        };
+        store.write(record);
+        assert.equal(store.read().acceptsCommands, undefined, "absent is off");
+        store.write({ ...record, acceptsCommands: true });
+        assert.equal(store.read().acceptsCommands, true);
+        assert.equal(
+          JSON.parse(readFileSync(filePath, "utf8")).acceptsCommands,
+          true,
         );
-        const v1 = createGrantStore({ filePath: v1Path });
-        assert.equal(v1.enabled("acct-1"), true, "a trusting v1 file is on");
-        assert.equal(v1.enabled("acct-2"), false, "v1 is still account-scoped");
-        writeFileSync(
-          v1Path,
-          JSON.stringify({ v: 1, accountId: "acct-1", grantedPeers: [] }),
+        // A rewrite of the record (a rename) carries it along.
+        store.write({ ...store.read(), deviceName: "renamed" });
+        assert.equal(store.read().acceptsCommands, true);
+        // Off is stored as absent, not as a false beside the credential.
+        store.write({ ...store.read(), acceptsCommands: false });
+        assert.equal(
+          "acceptsCommands" in JSON.parse(readFileSync(filePath, "utf8")),
+          false,
         );
-        assert.equal(v1.enabled("acct-1"), false, "an empty v1 file is off");
-
-        const clearPath = join(tmp, "grants-clear.json");
-        const store = createGrantStore({ filePath: clearPath });
-        store.set("acct-1", true);
-        assert.notEqual(store.read(), null);
+        // A sign-out keeps the name and drops the switch with the
+        // credential, so signing back in starts with it off.
+        store.write({ ...store.read(), acceptsCommands: true });
         store.clear();
-        assert.equal(store.read(), null, "clear should remove the file");
+        assert.equal(store.read(), null);
+        assert.equal(
+          "acceptsCommands" in JSON.parse(readFileSync(filePath, "utf8")),
+          false,
+          "a sign-out left the switch behind",
+        );
+        assert.equal(store.rememberedDeviceName(), "renamed");
+
+        const { service } = stubService(
+          () => json({ credential: "cred-2", device: DEVICE }),
+          CONFIG.hubUrl,
+        );
+        const enrolled = memoryStore();
+        const enrollAs = (sub) =>
+          enrollDevice(
+            {
+              config: CONFIG,
+              service,
+              store: enrolled,
+              deviceId: "device-uuid",
+              fallbackDeviceName: "Mac",
+              platform: "darwin",
+              detectedIcon: "laptop",
+            },
+            fakeSessionJwt(sub),
+          );
+        await enrollAs("user_abc");
+        enrolled.write({ ...enrolled.read(), acceptsCommands: true });
+        await enrollAs("user_abc");
+        assert.equal(
+          enrolled.read().acceptsCommands,
+          true,
+          "a same-account re-enrollment turned the switch off",
+        );
+        await enrollAs("user_other");
+        assert.equal(
+          enrolled.read().acceptsCommands,
+          undefined,
+          "another account inherited the switch",
+        );
       },
     );
-
-    await check("grants: the atomic write leaves the file mode 0o600", () => {
-      const filePath = join(tmp, "grants-mode.json");
-      const grants = createGrantStore({ filePath });
-      grants.set("acct-1", true);
-      // The switch is not world-readable in a shared userData dir.
-      // Mode bits are a unix concept, so skip the check on win32.
-      if (process.platform !== "win32") {
-        assert.equal(statSync(filePath).mode & 0o777, 0o600);
-      }
-    });
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }

@@ -15,8 +15,8 @@
 // outputs the walker refuses to fabricate), the step-6 remote flips
 // (fs, the projects/packageScripts preference writes,
 // globalConfig.writeDeviceSettings) keep rejecting as mutating-rejects,
-// the preflight grant read answers the structural granted:false rather
-// than a fabricated grant, shell.openExternal reaches
+// the status snapshot reports no peer's command access it was not told
+// (never a fabricated one), shell.openExternal reaches
 // the injected opener, an unconfigured build keeps the socket stopped,
 // and a device hub refusal blocks the supervisor (terminal, no retry
 // loop) the way it does on the desktop.
@@ -239,7 +239,7 @@ async function main() {
         bridge.api.scripts.run({ projectId: "p", worktreeId: "w" }),
         refused,
       );
-      // A read that rides the command grant is classified mutating, so
+      // A read gated on the command-access switch is classified mutating, so
       // it rejects too, which also covers the affirmative-biased enum
       // its output would otherwise stub to (cli.status's first arm is
       // "installed").
@@ -266,8 +266,8 @@ async function main() {
       // The step-6 flips (v2 slice B): these were unclassified-rejects
       // before (remote:false, no mutating tag) and are mutating-rejects
       // now (remote:true, mutating:true). Either way the loopback wire
-      // must refuse them: the fs reads because they ride the command
-      // grant, the preference/registry writes and the device-settings
+      // must refuse them: the fs reads because they are gated on the
+      // command-access switch, the preference/registry writes and the device-settings
       // write because they are commands.
       await assert.rejects(bridge.api.fs.listDirectory("/tmp"), refused);
       await assert.rejects(bridge.api.fs.scanForGitRepos("/tmp"), refused);
@@ -281,14 +281,10 @@ async function main() {
         bridge.api.globalConfig.writeDeviceSettings({ githubCli: false }),
         refused,
       );
-      // The preflight grant read is the permission-shaped query the
-      // stub walker exists to protect: it may answer, but ONLY the
-      // structural (never fabricated) verdict, and structural emptiness
-      // for { granted: boolean } is granted:false. A web loopback must
-      // never manufacture a grant.
-      assert.deepEqual(await bridge.api.remoteAccess.commandAccess(), {
-        granted: false,
-      });
+      // Peers' command access is reported only from what their dials
+      // answered, so with no session there is none to report. A web
+      // loopback must never manufacture a verdict.
+      assert.deepEqual((await bridge.api.hub.status()).peerAcceptsCommands, {});
       // The real refuse-all handler names its refusal precisely.
       await assert.rejects(
         bridge.api.account.setAcceptsCommands(true),

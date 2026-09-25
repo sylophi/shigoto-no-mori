@@ -151,9 +151,6 @@ export function createControlServer(deps: {
     };
     const ctx: HandlerContext = {
       signal: controller.signal,
-      // A local process of this user commands its own machine, like a
-      // local window.
-      isCallerCommandGranted: () => true,
       notifier,
     };
     const inFlight = { count: 0 };

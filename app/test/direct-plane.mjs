@@ -86,9 +86,9 @@
 //     stays transient.
 //   - the roster sweeps cover mid-dial entries (a session completing
 //     after its peer left the roster is closed and never reported,
-//     quit closes an in-flight dial's socket), and the
-//     remoteAccess:commandAccess preflight flips live with the grant
-//     on one direct session.
+//     quit closes an in-flight dial's socket), and the peer's command
+//     access rides the connectInfo answer into the bridge's snapshot,
+//     then follows the host's switch live on one direct session.
 //
 // SUPERVISION makes sessions desired state, the presence
 // roster the input, and the keeper (shared/hub/directKeeper.ts) the
@@ -143,8 +143,6 @@ import {
   RemoteConnectError,
 } from "@shared/ipc/socket/wsClientTransport";
 import { DirectCandidateSchema } from "@shared/ipc/modules/direct";
-import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
-import { registerContract } from "@shared/ipc/registerContract";
 import { makeHubHandlers } from "@shared/hub/bridgeHandlers";
 import {
   createDirectDialer,
@@ -153,7 +151,6 @@ import {
 } from "@shared/hub/directDial";
 import { createDirectKeeper } from "@shared/hub/directKeeper";
 import { applyDirectPresence } from "@shared/hub/directPresence";
-import { remoteAccessHandlers } from "@host/ipc/modules/remoteAccess";
 import {
   BACKOFF_LADDER_MS,
   backoffDelayMs,
@@ -396,6 +393,7 @@ function heldDial() {
       socket: { phase: "connected" },
       onlineDeviceIds: [],
       peerAppVersions: {},
+      peerAcceptsCommands: {},
     }),
     connectDirect: () =>
       new Promise((resolve) => {
@@ -410,6 +408,7 @@ function heldDial() {
             },
             remoteDeviceId: "B",
             remoteAppVersion: "9",
+            acceptsCommands: false,
           });
       }),
     onDirectChange: () => {
@@ -632,6 +631,7 @@ async function main() {
       const [ticket] = mintTickets(listener.tickets, "A", 1);
       const { dialer } = fakeAskDialer({
         available: true,
+        acceptsCommands: false,
         candidates: [
           {
             kind: "lan",
@@ -660,6 +660,7 @@ async function main() {
       const [slowTicket, fastTicket] = mintTickets(listener.tickets, "A", 2);
       const { dialer } = fakeAskDialer({
         available: true,
+        acceptsCommands: false,
         candidates: [
           {
             kind: "lan",
@@ -719,6 +720,7 @@ async function main() {
       const [ticket] = mintTickets(listener.tickets, "A", 1);
       const { dialer } = fakeAskDialer({
         available: true,
+        acceptsCommands: false,
         candidates: [
           { kind: "lan", url: `ws://127.0.0.1:${listener.port}`, ticket },
         ],
@@ -769,6 +771,7 @@ async function main() {
       const listener = await startDirectListener(track);
       const { dialer } = fakeAskDialer({
         available: true,
+        acceptsCommands: false,
         candidates: [
           {
             kind: "lan",
@@ -846,6 +849,7 @@ async function main() {
       const { dialer } = fakeAskDialer(
         {
           available: true,
+          acceptsCommands: false,
           candidates: [
             {
               kind: "tunnel",
@@ -1215,7 +1219,7 @@ async function main() {
         0,
         "a mutating handler ran for an ungranted peer",
       );
-      // Reads are served pre-grant on this wire, like the device hub.
+      // Reads are served with the switch off.
       assert.equal(
         await connection.transport.invoke("test:echo", "read"),
         "read",
@@ -1550,51 +1554,63 @@ async function main() {
   );
 
   await check(
-    "grant preflight on the direct wire: remoteAccess:commandAccess answers false pre-grant and true post-grant over the SAME direct session, no reconnect",
+    "command access on the answer and live: the connectInfo answer's switch lands in the bridge's snapshot, the host's flips reach it as pushes over the SAME direct session, and a redial's answer carries the switch as it stands",
     async (track) => {
-      const listener = await startListenerFixture(track, {
-        registerHandlers: (binding) => {
-          registerContract(
-            remoteAccessContract,
-            remoteAccessHandlers,
-            binding,
-            {
-              validateOutputs: true,
-            },
-          );
-        },
+      const stub = await startStubHub(track);
+      const listener = await startDirectListener(track);
+      const { client } = await bootPair(stub, track, listener);
+      const snapshots = [];
+      const { plane, bridge } = makeDirectBridge(client, {
+        onStatusChange: (status) => snapshots.push(status),
       });
-      const connection = await dialWith(
-        listener.port,
-        mintTickets(listener.tickets, "A", 1)[0],
-      );
-      track(() => connection.close());
-      // The preflight is a read, served ungated, and fail-closed about
-      // the CALLER: no grant means granted:false, never an error.
-      assert.deepEqual(
-        await connection.transport.invoke(
-          "remoteAccess:commandAccess",
-          undefined,
-        ),
-        { granted: false },
-      );
+      track(() => plane.stop());
+      await bridge.dialPeer("B");
+      // Off at dial time: the answer said so, before any call.
+      assert.deepEqual(bridge.directPeerAccess(), { B: false });
+      assert.deepEqual(plane.status().peerAcceptsCommands, { B: false });
+      // On: the host's push moves the snapshot, and fans it out.
+      const fannedBefore = snapshots.length;
       listener.setAccepts(true);
-      assert.deepEqual(
-        await connection.transport.invoke(
-          "remoteAccess:commandAccess",
-          undefined,
-        ),
-        { granted: true },
+      await waitFor(
+        () => bridge.directPeerAccess().B === true,
+        "the switch-on push to reach the bridge",
       );
-      // And a revoke flips the verdict live on the same socket.
+      assert.ok(
+        snapshots
+          .slice(fannedBefore)
+          .some((status) => status.peerAcceptsCommands.B === true),
+        "the flip never fanned a fresh status out",
+      );
+      // The gate agrees with what the snapshot says.
+      assert.equal(
+        await bridge.invokePeer({
+          deviceId: "B",
+          channel: "test:mutate",
+          input: undefined,
+        }),
+        "mutated",
+      );
+      // Off again, live on the same socket, and the gate refuses.
       listener.setAccepts(false);
-      assert.deepEqual(
-        await connection.transport.invoke(
-          "remoteAccess:commandAccess",
-          undefined,
-        ),
-        { granted: false },
+      await waitFor(
+        () => bridge.directPeerAccess().B === false,
+        "the switch-off push to reach the bridge",
       );
+      await assert.rejects(
+        () =>
+          bridge.invokePeer({
+            deviceId: "B",
+            channel: "test:mutate",
+            input: undefined,
+          }),
+        (error) => error instanceof CommandRefusedError,
+      );
+      // A fresh dial reads the switch off its answer again.
+      listener.setAccepts(true);
+      bridge.closeDirectPeers();
+      assert.deepEqual(bridge.directPeerAccess(), {});
+      await bridge.dialPeer("B");
+      assert.deepEqual(bridge.directPeerAccess(), { B: true });
     },
   );
 
@@ -1780,12 +1796,15 @@ async function main() {
         },
         candidateAddresses: () => ["127.0.0.1", "fd00::1"],
         tunnelUrl: () => tunnel,
+        acceptsCommands: () => false,
       });
       const all = { dialableKinds: ["lan", "tunnel"] };
       // Unhealthy tunnel: lan candidates only, with IPv6 literals
       // bracketed into dialable URLs.
       const without = connectInfo("A", all);
       assert.equal(without.available, true);
+      // Beside the candidates, the host's command-access switch.
+      assert.equal(without.acceptsCommands, false);
       assert.deepEqual(
         without.candidates.map(({ kind, url }) => ({ kind, url })),
         [
@@ -1816,6 +1835,7 @@ async function main() {
           kinds.map((_kind, i) => `smpt_only_${i}`),
         candidateAddresses: () => [],
         tunnelUrl: () => tunnel,
+        acceptsCommands: () => false,
       })("A", all);
       assert.equal(only.available, true);
       assert.deepEqual(
@@ -1937,6 +1957,7 @@ async function main() {
               mintTickets: (peer, kinds) => listener.tickets.mint(peer, kinds),
               candidateAddresses: () => ["127.0.0.1"],
               tunnelUrl: () => null,
+              acceptsCommands: () => false,
             }),
           },
           track,

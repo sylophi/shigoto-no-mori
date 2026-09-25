@@ -14,7 +14,8 @@
 //     and a signed-out window shows no peers, whatever the cached
 //     device list still says.
 //   - a direct session established (a peerAppVersions key): phase
-//     "connected" with the appVersion the session's welcome confirmed,
+//     "connected" with the appVersion the session's welcome confirmed
+//     and the command access the peer reports (peerAcceptsCommands),
 //     WHATEVER the hub socket is doing. Data is direct or nothing (v2
 //     step 10, slice C), so an established direct session is the only
 //     thing "connected" may mean, and it is also sufficient: the
@@ -43,7 +44,11 @@ import type { DeviceInfo } from "@shared/hub/protocol";
 import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
 import { directPresenceRule } from "@shared/hub/directPresence";
 import { publishHubStatus, seedHubStatus } from "@/hooks/remote/useHubStatus";
-import { hostKeyDeviceId, invalidateDeviceSession } from "@/lib/queryKeys";
+import {
+  hostKeyDeviceId,
+  invalidateDeviceSession,
+  queryKeysFor,
+} from "@/lib/queryKeys";
 import {
   rejectingClientTransport,
   type RemoteDevice,
@@ -114,6 +119,10 @@ function boundClient(): QueryClient {
 // read as "connected before, connected after" and its landing would
 // go unswept.
 let liveSessions: ReadonlySet<string> = new Set();
+
+// Each live session's command access in the last snapshot seen, so a
+// peer's switch flipping mid-session can be spotted (noteSessions).
+let lastAccess: Readonly<Record<string, boolean>> = {};
 
 // Coalesce reconciles to latest-wins: presence events can arrive faster
 // than a reconcile drains, and an unbounded promise chain would grow one
@@ -242,16 +251,36 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
 // the two worktree cost domains) name exactly the queries that
 // hard-failed during the dial window, so sweeping through them would
 // refetch everything except what is broken.
+//
+// A peer's command access flipping on a session that stays up is the
+// other thing only the snapshot says. Runtime info is gated on it (a
+// peer refuses it to a device it will not take commands from), caches
+// forever and sits outside the state-moved sweep, so it is re-asked
+// here or the peer's paths stay raw until a focus. Either direction
+// re-asks: the read is silent, so an off flip costs one refused round
+// trip and no toast. The full session sweep is deliberately not used:
+// it would refetch every gated read, and on an off flip each of those
+// would toast a refusal.
 function noteSessions(status: HubStatus): void {
   const now = new Set(Object.keys(status.peerAppVersions));
   for (const deviceId of now) {
-    if (liveSessions.has(deviceId)) continue;
+    if (liveSessions.has(deviceId)) {
+      const before = lastAccess[deviceId];
+      const after = status.peerAcceptsCommands[deviceId];
+      if (before !== undefined && before !== after && boundQueryClient) {
+        void boundQueryClient.invalidateQueries({
+          queryKey: queryKeysFor(deviceId).runtimeInfo(),
+        });
+      }
+      continue;
+    }
     if (boundQueryClient !== null) {
       invalidateDeviceSession(boundQueryClient, deviceId);
     }
     for (const listener of sessionLandedListeners) listener(deviceId);
   }
   liveSessions = now;
+  lastAccess = status.peerAcceptsCommands;
 }
 
 // Followers of a session landing that have more to do than refetch:
@@ -284,6 +313,7 @@ function leaveAccount(queryClient: QueryClient): void {
   for (const { unwatch } of apis.values()) unwatch();
   apis.clear();
   liveSessions = new Set();
+  lastAccess = {};
   queryClient.removeQueries({
     queryKey: accountDevicesQueryOptions.queryKey,
     exact: true,
@@ -297,11 +327,11 @@ function leaveAccount(queryClient: QueryClient): void {
   for (const listener of accountLeftListeners) listener();
 }
 
-// Pure and synchronous: the peer's appVersion now rides the status
-// snapshot (current.peerAppVersions), so an entry no longer fires a
-// peerInfo IPC per device (M3). One lookup answers both questions: a
-// peerAppVersions key IS the established-direct-session fact, and its
-// value is the session's welcome-confirmed version.
+// Pure and synchronous: the peer's appVersion and command access ride
+// the status snapshot (current.peerAppVersions, peerAcceptsCommands),
+// so an entry asks the peer nothing. A peerAppVersions key IS the
+// established-direct-session fact, and its value is the session's
+// welcome-confirmed version.
 function buildEntry(
   info: DeviceInfo,
   current: HubStatus,
@@ -345,6 +375,7 @@ function buildEntry(
     icon: info.icon,
     status,
     appVersion: version ?? "",
+    acceptsCommands: current.peerAcceptsCommands[info.deviceId],
     api,
   };
 }

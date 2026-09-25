@@ -60,14 +60,12 @@ import {
   MIRROR_LABEL_TRANSFER,
 } from "@shared/ipc/modules/mirror";
 import { projectsContract } from "@shared/ipc/modules/projects";
-import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
 import { controlHandlers, setControlImpl } from "@host/ipc/modules/control";
 import { setMirrorImpl } from "@host/ipc/modules/mirror";
 import { projectsHandlers } from "@host/ipc/modules/projects";
-import { remoteAccessHandlers } from "@host/ipc/modules/remoteAccess";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import {
   setWorktreeRemovalBroadcaster,
@@ -284,7 +282,6 @@ async function main() {
         [syncContract, syncHandlers],
         [worktreesContract, worktreesHandlers],
         [projectsContract, projectsHandlers],
-        [remoteAccessContract, remoteAccessHandlers],
       ],
     });
     setPeerSyncApiImpl({
@@ -319,7 +316,10 @@ async function main() {
     setControlImpl({
       listDevices: async () => registry,
       thisDeviceId: () => "B",
-      connectedDeviceIds: async () => connected,
+      directPeers: async () =>
+        Object.fromEntries(
+          connected.map((id) => [id, listener.acceptsCommands()]),
+        ),
       peerTransportFor: () => peerTransport,
     });
     const engine = fakeMirrorEngine();

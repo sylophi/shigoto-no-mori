@@ -29,7 +29,6 @@
   "projects:listBranches",
   "projects:pickWorktreeName",
   "projects:worktreeIncludeStatus",
-  "remoteAccess:commandAccess",
   "scripts:orphanReport",
   "sharedSettings:read",
   "shigomori:read",

@@ -58,7 +58,7 @@ function parsed<S extends z.ZodTypeAny>(
 
 export type WatchedHostApi = Pick<
   HostApi,
-  "git" | "githubCli" | "mirror" | "projects" | "remoteAccess" | "updater"
+  "git" | "githubCli" | "mirror" | "projects" | "updater"
 >;
 
 // Subscribes for as long as the device's api lives: this machine's for
@@ -121,22 +121,6 @@ export function watchHost(
         },
       ),
     ),
-    // Its command-access switch moved: re-ask its preflight so
-    // read-only notes and mutation controls follow without a focus.
-    // Runtime info is refused without a grant, caches forever, and sits
-    // outside the state-moved sweep, so a grant flipping on has to
-    // re-ask it here or the peer's paths stay raw until a focus. The
-    // broadcast says nothing about which way the switch went, and this
-    // read is silent, so re-asking on an off flip costs one refused
-    // round trip and no toast. The full session sweep is deliberately
-    // not used: it would refetch every grant-gated read, and on an off
-    // flip each of those would toast a refusal. This machine's own
-    // verdict is never asked (always granted), so there the first key
-    // matches nothing.
-    api.remoteAccess.onCommandAccessChanged(() => {
-      void queryClient.invalidateQueries({ queryKey: keys.commandAccess() });
-      void queryClient.invalidateQueries({ queryKey: keys.runtimeInfo() });
-    }),
     // Its updater moved. The state rides the push whole, so it is
     // written rather than re-asked, and always on, so the update flags
     // (the sidebar's Settings dot, the Settings device rows) follow a

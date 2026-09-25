@@ -30,14 +30,6 @@ export type HandlerContext = {
   // a per-call cancellation. Consumers that attach listeners should
   // remove them when the call completes.
   signal: AbortSignal;
-  // Whether the CALLING peer currently holds command access on the
-  // process serving this call, supplied by the transport binding so a
-  // handler can answer the preflight "am I granted?" read per caller
-  // without ever seeing the grant list. The Electron binding says yes
-  // (a local window commands its own machine), and the direct
-  // data-plane listener reads the host's live command-access switch. Optional and FAIL-CLOSED: a transport that supplies no
-  // verdict reads as not granted.
-  isCallerCommandGranted?: () => boolean;
   // The AUTHENTICATED deviceId of the calling peer, supplied only by a
   // wire that verified one: the direct data-plane listener (the connect
   // ticket bound the hello to a deviceId). The Electron wire and

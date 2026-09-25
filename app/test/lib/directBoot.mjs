@@ -11,7 +11,8 @@ import { makeConnectInfo } from "@host/direct/connectInfo";
 import { createWsServerBinding } from "@host/socket/server";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createDirectPlane } from "@shared/hub/directPlane";
-import { registerContract } from "@shared/ipc/registerContract";
+import { accountContract } from "@shared/ipc/modules/account";
+import { broadcastAll, registerContract } from "@shared/ipc/registerContract";
 import { WebSocket as WsClient } from "ws";
 import { startStubHub } from "./hubStub.mjs";
 import { bootDevice } from "./hubBoot.mjs";
@@ -20,7 +21,9 @@ import { waitFor } from "./checkKit.mjs";
 // A REAL direct listener on an ephemeral loopback port, with its
 // ticket store and a toggleable command-access switch (the host-wide
 // "accepts commands from its account's devices" answer the real
-// binding reads from main). `registerHandlers`, when
+// binding reads from main). Flipping it pushes the switch to every
+// connected peer, as main's broadcastCommandAccessChanged does, so a
+// peer's bridge follows it live. `registerHandlers`, when
 // set, mounts the check's contracts or test channels on the binding
 // before it starts, and `start` overrides the start opts (the hello
 // and liveness seams, the admitted web origin).
@@ -45,8 +48,10 @@ export async function startDirectListener(track, opts = {}) {
   return {
     binding,
     tickets,
+    acceptsCommands: () => accepts,
     setAccepts: (next) => {
       accepts = next;
+      broadcastAll(accountContract, "commandAccessChanged", next, binding);
     },
     port,
     listenerPort: () => {
@@ -79,6 +84,9 @@ export async function bootBrokeredPair(stub, track, listener, opts = {}) {
           // LAN addresses.
           candidateAddresses: opts.candidateAddresses ?? (() => ["127.0.0.1"]),
           tunnelUrl: opts.tunnelUrl ?? (() => null),
+          // A bare broker stand-in (no real listener behind it)
+          // reports the switch off.
+          acceptsCommands: () => listener.acceptsCommands?.() ?? false,
         }),
       },
       track,
