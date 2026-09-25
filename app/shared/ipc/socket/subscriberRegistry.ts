@@ -11,7 +11,6 @@
 // caller keys by whatever it likes, a bare channel on the LAN and hub
 // link paths or a composite deviceId plus channel on the renderer path.
 import { errorMessageOf } from "@shared/errors";
-import { createThrottledWarn } from "@shared/util/throttledWarn";
 
 type SubscriberRegistry = {
   // Register a handler under a key. The returned function removes it and
@@ -27,7 +26,7 @@ type SubscriberRegistry = {
 
 export function createSubscriberRegistry(label: string): SubscriberRegistry {
   const sets = new Map<string, Set<(payload: unknown) => void>>();
-  const warnThrew = createThrottledWarn();
+  let threw = 0;
 
   return {
     subscribe(key, handler) {
@@ -54,10 +53,12 @@ export function createSubscriberRegistry(label: string): SubscriberRegistry {
         try {
           handler(payload);
         } catch (error) {
-          warnThrew(
-            (threw) =>
+          threw += 1;
+          if (threw % 50 === 1) {
+            console.warn(
               `[${label}] push handler threw: ${errorMessageOf(error)} (threw ${threw} so far)`,
-          );
+            );
+          }
         }
       }
     },

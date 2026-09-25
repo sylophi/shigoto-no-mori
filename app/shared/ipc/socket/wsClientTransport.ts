@@ -39,7 +39,6 @@ import {
 } from "@shared/ipc/socket/channels";
 import type { ClientTransport } from "@shared/ipc/transport";
 import { createLimiter } from "@shared/util/limit";
-import { createThrottledWarn } from "@shared/util/throttledWarn";
 
 // A connect attempt failed before the welcome landed. `code` is the
 // close code when the failure came from a socket close (null on a
@@ -278,10 +277,10 @@ export function openDevice(
   // Flips true the instant this socket is unusable (closed or errored),
   // so an invoke after close rejects immediately rather than hanging.
   let closed = false;
-  // Throttled warn for the onAnyPush containment below, mirroring
+  // Throttle counter for the onAnyPush containment below, mirroring
   // the subscriber registry's throttled warn: a throwing tap on a
   // chatty push stream must not warn once per frame.
-  const warnAnyPushThrew = createThrottledWarn();
+  let anyPushThrew = 0;
   // Set when the owner tears the connection down via close(), so the
   // ensuing close event stays silent: onClose must fire only for a
   // socket that dropped on its own, never for a deliberate teardown,
@@ -659,10 +658,12 @@ export function openDevice(
         try {
           options.onAnyPush(frame.channel, frame.payload);
         } catch (error) {
-          warnAnyPushThrew(
-            (threw) =>
-              `[socket] onAnyPush threw: ${errorMessageOf(error)} (threw ${threw} so far)`,
-          );
+          anyPushThrew += 1;
+          if (anyPushThrew % 50 === 1) {
+            console.warn(
+              `[socket] onAnyPush threw: ${errorMessageOf(error)} (threw ${anyPushThrew} so far)`,
+            );
+          }
         }
       }
       subscribers.emit(frame.channel, frame.payload);

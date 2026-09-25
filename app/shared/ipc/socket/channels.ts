@@ -27,7 +27,6 @@
 // Pure: Uint8Array in, Uint8Array out, no node builtins, so the
 // browser transport carries it unchanged (a browser never opens a
 // channel, but it must not choke on the code).
-import { createThrottledWarn } from "@shared/util/throttledWarn";
 
 // Frame layout: 1 byte kind, 16 bytes channel id, then the payload.
 // The id is the 32-hex client-minted id (shared/ipc/hexId.ts) as raw
@@ -420,10 +419,13 @@ export function createChannelMux(deps: {
 // that names no attached channel (a late frame after a reset, or
 // garbage): one line per fifty, never one per frame.
 export function createUnknownChannelFrameWarner(label: string): () => void {
-  const warn = createThrottledWarn();
-  return () =>
-    warn(
-      (dropped) =>
+  let dropped = 0;
+  return () => {
+    dropped += 1;
+    if (dropped % 50 === 1) {
+      console.warn(
         `[${label}] dropping a binary frame for no attached channel (dropped ${dropped} so far)`,
-    );
+      );
+    }
+  };
 }

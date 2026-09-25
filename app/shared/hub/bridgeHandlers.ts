@@ -33,11 +33,7 @@
 import type { hubContract, HubStatus } from "@shared/ipc/modules/hub";
 import type { ChannelMux } from "@shared/ipc/socket/channels";
 import type { Handlers } from "@shared/ipc/types";
-import {
-  closeWhenSettled,
-  type ConnectPeerOpts,
-  type PeerConnection,
-} from "@shared/hub/directDial";
+import type { ConnectPeerOpts, PeerConnection } from "@shared/hub/directDial";
 import { NO_DIRECT_CONNECTION_PREFIX } from "@shared/errors";
 
 type HubHandlerDeps = {
@@ -151,8 +147,13 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
   // drop happens here rather than waiting on a callback.
   function closeDirectPeer(deviceId: string, entry: PeerEntry): void {
     dropPeer(deviceId, entry);
-    // A handshake that failed on its own has nothing to close.
-    closeWhenSettled(entry.promise);
+    entry.promise
+      .then((connection) => {
+        connection.close();
+      })
+      .catch(() => {
+        // The handshake failed on its own. Nothing to close.
+      });
   }
 
   function openPeer(deviceId: string): Promise<PeerConnection> {

@@ -21,16 +21,24 @@ interface SidebarListProps {
 // its enclosing component out of React Compiler memoization and
 // re-renders it on every scroll offset. Isolating it here keeps
 // Sidebar's row-model build memoized.
-// The worktree an open detail page shows, local or on a peer. The
-// params are the templates' named segments, so only the device-scoped
-// twin carries a deviceId.
-function matchWorktreeDetail(pathname: string) {
-  return (matchRoutePath(WORKTREE_ROUTE_PATHS.detail.remote, pathname) ??
-    matchRoutePath(WORKTREE_ROUTE_PATHS.detail.local, pathname)) as {
-    deviceId?: string;
-    projectId: string;
-    worktreeId: string;
-  } | null;
+// The worktree an open detail page shows, local or on a peer.
+function matchWorktreeDetail(pathname: string): {
+  deviceId?: string;
+  projectId: string;
+  worktreeId: string;
+} | null {
+  const remote = matchRoutePath(WORKTREE_ROUTE_PATHS.detail.remote, pathname);
+  if (remote) {
+    return {
+      deviceId: remote.deviceId!,
+      projectId: remote.projectId!,
+      worktreeId: remote.worktreeId!,
+    };
+  }
+  const local = matchRoutePath(WORKTREE_ROUTE_PATHS.detail.local, pathname);
+  return local
+    ? { projectId: local.projectId!, worktreeId: local.worktreeId! }
+    : null;
 }
 
 export function SidebarList({

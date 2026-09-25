@@ -17,7 +17,12 @@ import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
 import { cn } from "@/lib/utils";
 import { useCarryOverRows } from "../flow/createPlan";
 import { type PullReviewProps, PullReviewStep } from "../flow/PullReview";
-import { CARD_NOTE, CardList, CardSkeleton } from "../flow/FlowChrome";
+import {
+  CARD_NOTE,
+  CardList,
+  CardSkeleton,
+  MAX_LIST_ROWS as MAX_ROWS,
+} from "../flow/FlowChrome";
 
 export function TransplantReview(props: PullReviewProps) {
   const { worktree, project, target, sourceDeviceLabel, thisDeviceLabel } =
@@ -91,9 +96,8 @@ function ChangedFiles({
     return <p className={CARD_NOTE}>No uncommitted changes to list.</p>;
   }
   return (
-    <CardList
-      items={files}
-      renderRow={(entry) => {
+    <CardList total={files.length}>
+      {files.slice(0, MAX_ROWS).map((entry) => {
         const { mark, stats } = entry;
         return (
           <li key={entry.key} className="flex items-center gap-2">
@@ -114,8 +118,8 @@ function ChangedFiles({
             )}
           </li>
         );
-      }}
-    />
+      })}
+    </CardList>
   );
 }
 
@@ -142,9 +146,8 @@ function CarryOverList({
       ) : rows.length === 0 ? (
         <p className="text-xs text-muted-foreground">None configured.</p>
       ) : (
-        <CardList
-          items={rows}
-          renderRow={(row) => (
+        <CardList total={rows.length}>
+          {rows.slice(0, MAX_ROWS).map((row) => (
             <li key={row.path} className="flex items-center gap-2">
               <Check
                 aria-hidden
@@ -155,8 +158,8 @@ function CarryOverList({
               </span>
               <RowTag>{row.tag}</RowTag>
             </li>
-          )}
-        />
+          ))}
+        </CardList>
       )}
     </section>
   );

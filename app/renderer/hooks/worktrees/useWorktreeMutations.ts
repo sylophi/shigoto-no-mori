@@ -8,7 +8,7 @@ import type {
   DeleteWorktreeResult,
   Worktree,
 } from "@shared/schemas";
-import { hostQueriesNaming, queryKeysFor } from "@/lib/queryKeys";
+import { worktreeQueriesOn, queryKeysFor } from "@/lib/queryKeys";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { scriptRunsFor } from "@/store/scriptRuns";
@@ -194,7 +194,7 @@ export function forgetDeletedWorktree(
   // to go inactive and gc naturally.
   queryClient.removeQueries({
     type: "inactive",
-    predicate: hostQueriesNaming(deviceId, worktreeId),
+    predicate: worktreeQueriesOn(deviceId, worktreeId),
   });
 }
 
@@ -212,7 +212,7 @@ export function useDeleteWorktree() {
       // so another device's queries never match on a coincidentally
       // equal worktree id.
       await queryClient.cancelQueries({
-        predicate: hostQueriesNaming(deviceId, vars.worktreeId),
+        predicate: worktreeQueriesOn(deviceId, vars.worktreeId),
       });
     },
     onSuccess: (data, vars) => {

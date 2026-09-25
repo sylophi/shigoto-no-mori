@@ -18,6 +18,9 @@ interface AppearanceSectionProps {
   onDoubutsuChange: (next: boolean) => void;
   pauseAnimationsOnBattery: boolean;
   onPauseAnimationsOnBatteryChange: (next: boolean) => void;
+  // "Appearance" where the section stands alone (the web page). The
+  // desktop's Appearance section already says that and names it "Theme".
+  heading?: string;
 }
 
 export function AppearanceSection({
@@ -27,6 +30,7 @@ export function AppearanceSection({
   onDoubutsuChange,
   pauseAnimationsOnBattery,
   onPauseAnimationsOnBatteryChange,
+  heading = "Appearance",
 }: AppearanceSectionProps) {
   // A three-way pick, so it wears the house segmented control: the
   // chosen option carries the accent fill, the other two stay quiet.
@@ -42,9 +46,7 @@ export function AppearanceSection({
   }));
   return (
     <section className="space-y-3">
-      {/* The page's Appearance section already says that, so this names
-          the pick instead. */}
-      <SectionHeading className="mb-1">Theme</SectionHeading>
+      <SectionHeading className="mb-1">{heading}</SectionHeading>
       <SegmentedControl
         aria-label="Theme"
         value={theme}

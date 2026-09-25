@@ -161,19 +161,19 @@ export const MAX_LIST_ROWS = 8;
 export const CARD = "rounded-lg border border-border bg-card p-3";
 export const CARD_NOTE = `${CARD} text-xs text-muted-foreground`;
 
-export function CardList<T>({
-  items,
-  renderRow,
+export function CardList({
+  total,
+  children,
 }: {
-  items: readonly T[];
-  renderRow: (item: T) => ReactNode;
+  total: number;
+  children: ReactNode;
 }) {
   return (
     <ul className={`${CARD} space-y-1 font-mono text-xs`}>
-      {items.slice(0, MAX_LIST_ROWS).map((item) => renderRow(item))}
-      {items.length > MAX_LIST_ROWS && (
+      {children}
+      {total > MAX_LIST_ROWS && (
         <li className="text-muted-foreground">
-          and {items.length - MAX_LIST_ROWS} more
+          and {total - MAX_LIST_ROWS} more
         </li>
       )}
     </ul>
