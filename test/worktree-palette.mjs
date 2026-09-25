@@ -57,7 +57,7 @@ const localTrees = [
 ];
 
 // The peer holds forest too. "shared-id" is its own worktree that
-// happens to carry the same id as one here; "mirror-of-oak" is the
+// happens to carry the same id as one here. "mirror-of-oak" is the
 // peer's half of a mirrored pair with the local "oak".
 const peerForest = {
   deviceId: PEER,

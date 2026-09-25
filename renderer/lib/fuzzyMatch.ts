@@ -25,7 +25,7 @@ export function scoreMatch(query: string, target: string): number {
 // Filter + rank items by scoreMatch, best match first. An empty query
 // returns the list as-is so callers keep their existing order (matches
 // scoreMatch's "empty query = stable sort" contract). An item offering
-// several fields scores by its best one; ties keep the list's order.
+// several fields scores by its best one, and ties keep the list's order.
 export function rankByScore<T>(
   query: string,
   items: readonly T[],

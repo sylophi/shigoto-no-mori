@@ -124,7 +124,7 @@ export function buildPaletteEntries({
 
 // The row ↩ lands on when the palette opens. The worktree on screen
 // leads the recency order (it was visited last), so opening on it
-// would make ⌘K ↩ a no-op; the one before it is where a quick switch
+// would make ⌘K ↩ a no-op. The one before it is where a quick switch
 // means to go, the way ⌘⇥ lands on the previous app.
 export function initialPaletteKey(
   entries: readonly PaletteEntry[],

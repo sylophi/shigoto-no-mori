@@ -79,8 +79,8 @@ export function WorktreePalette() {
   // sits. ⌘K fires from text fields too. Ctrl+K doesn't: in a text
   // field it is kill-line (macOS's text system, and the running
   // program's in the console's terminal), so there it only closes the
-  // palette. Opening waits for any other overlay to close; closing is
-  // the palette's own toggle.
+  // palette. Opening waits for any other overlay to close, and closing
+  // is the palette's own toggle.
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key.toLowerCase() !== "k" || e.repeat || e.isComposing) return;
