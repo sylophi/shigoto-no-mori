@@ -174,19 +174,25 @@ func TestPickRelease(t *testing.T) {
 	})
 }
 
+// Sets a package-level string for the test's duration.
+func stubString(t *testing.T, p *string, v string) {
+	t.Helper()
+	saved := *p
+	*p = v
+	t.Cleanup(func() { *p = saved })
+}
+
 func stubVersion(t *testing.T, v string) {
 	t.Helper()
-	saved := version
-	version = v
-	t.Cleanup(func() { version = saved })
+	stubString(t, &version, v)
 }
 
 // A stand-in for one endpoint, torn down with the test.
-func stubEndpoint(t *testing.T, envVar string, handler http.HandlerFunc) *httptest.Server {
+func stubEndpoint(t *testing.T, override *string, handler http.HandlerFunc) *httptest.Server {
 	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
-	t.Setenv(envVar, server.URL)
+	stubString(t, override, server.URL)
 	return server
 }
 
@@ -195,8 +201,8 @@ func stubEndpoint(t *testing.T, envVar string, handler http.HandlerFunc) *httpte
 // window closed so every call asks the stand-in.
 func stubReleaseList(t *testing.T, v string, handler http.HandlerFunc) *httptest.Server {
 	t.Helper()
-	server := stubEndpoint(t, "SHIGOMORI_UPDATE_RELEASES_URL", handler)
-	t.Setenv("SHIGOMORI_UPDATE_FEED_URL", "")
+	server := stubEndpoint(t, &releasesURLOverride, handler)
+	stubString(t, &feedURLOverride, "")
 	sandboxDataDir(t)
 	stubVersion(t, v)
 	saved := releaseListMaxAge
@@ -241,7 +247,7 @@ func TestQueryFeedAsksTheUpdateServerForFullReleaseBuilds(t *testing.T) {
 		listHits++
 		w.WriteHeader(http.StatusInternalServerError)
 	})
-	stubEndpoint(t, "SHIGOMORI_UPDATE_FEED_URL", func(w http.ResponseWriter, r *http.Request) {
+	stubEndpoint(t, &feedURLOverride, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
@@ -263,7 +269,7 @@ func TestQueryFeedOverrideKeepsAPrereleaseBuildOffTheReleaseList(t *testing.T) {
 		listHits++
 		w.WriteHeader(http.StatusInternalServerError)
 	})
-	stubEndpoint(t, "SHIGOMORI_UPDATE_FEED_URL", func(w http.ResponseWriter, r *http.Request) {
+	stubEndpoint(t, &feedURLOverride, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
@@ -364,7 +370,7 @@ func TestFetchReleaseListIgnoresACopyFromAnotherEndpoint(t *testing.T) {
 	}
 
 	hits := 0
-	stubEndpoint(t, "SHIGOMORI_UPDATE_RELEASES_URL", func(w http.ResponseWriter, r *http.Request) {
+	stubEndpoint(t, &releasesURLOverride, func(w http.ResponseWriter, r *http.Request) {
 		hits++
 		serveReleases(labRelease("v2.0.0-beta.3", "arm64"))(w, r)
 	})

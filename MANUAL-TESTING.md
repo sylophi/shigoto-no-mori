@@ -152,6 +152,11 @@ smd projects add <dir> --all --yes     # set SHIGOMORI_DATA_DIR if the data dir 
 | `SHIGOMORI_UPDATE_FEED_URL`        | Stand-in for the update server. Forces that path on prerelease builds too.    |
 | `SHIGOMORI_UPDATE_RELEASES_URL`    | Stand-in for the GitHub release list (prerelease builds).                     |
 
+The app passes the two update stand-ins to its own update check and
+removes them from its environment, so scripts it runs don't inherit
+them. From a terminal, pass them to the command instead:
+`sm update --feed-url <url>` or `--releases-url <url>`.
+
 ### Theme hotkeys
 
 In a dev build, `Ctrl+T` toggles light/dark, `Ctrl+D` toggles

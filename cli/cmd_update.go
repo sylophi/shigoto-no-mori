@@ -25,6 +25,9 @@ package main
 //                     before it quits. Waits for <n> to exit, swaps
 //                     the staged bundle in, relaunches the app.
 //
+// --feed-url and --releases-url point any mode that queries at test
+// stand-ins (updater.go feedURLOverride).
+//
 // macOS-only, and the dev CLI refuses. Dev builds run from a checkout
 // and have no update channel.
 
@@ -138,11 +141,13 @@ func emitEvent(name string) {
 func cmdUpdate(_ cliContext, args []string) (int, error) {
 	parsed, err := parseCmdArgs(args, argSpec{
 		bools:   map[string][]string{"check": {}, "stage": {}, "finish-install": {}},
-		strings: map[string][]string{"pid": {}},
+		strings: map[string][]string{"pid": {}, "feed-url": {}, "releases-url": {}},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
 	}
+	feedURLOverride = strings.TrimSpace(parsed.strings["feed-url"])
+	releasesURLOverride = strings.TrimSpace(parsed.strings["releases-url"])
 	if len(parsed.positionals) > 0 {
 		return 2, usageErrf("update takes no arguments (flags: --check).")
 	}
