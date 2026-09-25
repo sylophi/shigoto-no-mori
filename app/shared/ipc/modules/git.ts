@@ -3,14 +3,14 @@ import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
 
 export const gitContract = defineContract("host", {
-  // mutating: beyond the fetch (a cache refresh, read-class on its
+  // gated: beyond the fetch (a cache refresh, read-class on its
   // own) it always ends in an auto-pull pass, which fast-forwards the
   // project's marked worktrees, and it does so on every call.
   refreshProject: invoke(
     "git:refreshProject",
     ProjectScopedPayloadSchema,
     z.void(),
-    { remote: true, mutating: true },
+    { remote: true, gated: true },
   ),
   // A peer saying it is looking at this host: runs the host's
   // background sweep (refs and PRs, every project) if it is stale, and
@@ -21,7 +21,7 @@ export const gitContract = defineContract("host", {
   // decides when it runs, never more often than its interval.
   sweep: invoke("git:sweep", z.void(), z.object({ leaseMs: z.number() }), {
     remote: true,
-    mutating: false,
+    gated: false,
   }),
   refsRefreshed: broadcast("git:refsRefreshed", ProjectScopedPayloadSchema, {
     remote: true,

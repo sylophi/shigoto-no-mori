@@ -18,7 +18,7 @@ import { PortNumberSchema } from "@shared/schemas";
 // side a remote peer drives. The client half is
 // main/core/portForward/bridge.ts.
 //
-// {remote:true, mutating:true}: the surface rides the host's command
+// {remote:true, gated:true}: the surface rides the host's command
 // grant, fail-closed. open dials 127.0.0.1 only, because the feature IS
 // reaching the remote machine's own loopback dev server, never a hop
 // beyond it. movesHostState:false: an open changes nothing a remote
@@ -55,7 +55,7 @@ const ForwardOpenPayloadSchema = z.strictObject({
 export const forwardContract = defineContract("host", {
   open: invoke("forward:open", ForwardOpenPayloadSchema, z.void(), {
     remote: true,
-    mutating: true,
+    gated: true,
     movesHostState: false,
   }),
 });

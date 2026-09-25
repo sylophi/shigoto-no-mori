@@ -210,12 +210,12 @@ async function startDirectListener(track, opts = {}) {
     ...opts,
     registerHandlers: (binding) => {
       binding.handle("test:echo", async (_ctx, raw) => raw, {
-        mutating: false,
+        gated: false,
       });
       binding.handle(
         "test:whoami",
         async (ctx) => ctx.callerDeviceId ?? "none",
-        { mutating: false },
+        { gated: false },
       );
       binding.handle(
         "test:mutate",
@@ -223,7 +223,7 @@ async function startDirectListener(track, opts = {}) {
           mutateRuns += 1;
           return "mutated";
         },
-        { mutating: true },
+        { gated: true },
       );
     },
   });

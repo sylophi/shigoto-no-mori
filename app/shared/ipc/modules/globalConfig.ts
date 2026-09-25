@@ -10,11 +10,11 @@ export const globalConfigContract = defineContract("host", {
   // It carries no secret, so every wire serves it ungated.
   read: invoke("globalConfig:read", z.void(), StoredGlobalConfigSchema, {
     remote: true,
-    mutating: false,
+    gated: false,
   }),
   // The one settings write, for this window's own device and for a
   // peer's: a patch of exactly the device-scoped settings the Settings
-  // form manages. remote:true, mutating:true, so over the direct wire
+  // form manages. remote:true, gated:true, so over the direct wire
   // it only ever runs for a peer while this host accepts commands. The
   // STRICT patch schema (DeviceSettingsPatchSchema) rejects unknown keys
   // outright, so nothing the form does not manage is reachable from
@@ -25,6 +25,6 @@ export const globalConfigContract = defineContract("host", {
     "globalConfig:writeDeviceSettings",
     WriteDeviceSettingsPayloadSchema,
     z.void(),
-    { remote: true, mutating: true },
+    { remote: true, gated: true },
   ),
 });

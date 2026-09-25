@@ -17,7 +17,7 @@ export const sharedSettingsContract = defineContract("host", {
   // say.
   read: invoke("sharedSettings:read", z.void(), SharedSettingsDocSchema, {
     remote: true,
-    mutating: false,
+    gated: false,
   }),
   // A write made at this device: the handler stamps it, so the stamp
   // and the device id are never the caller's to claim. Local only. A
@@ -26,7 +26,7 @@ export const sharedSettingsContract = defineContract("host", {
     "sharedSettings:set",
     SetSharedSettingPayloadSchema,
     SharedSettingsDocSchema,
-    { remote: false, mutating: true, movesHostState: false },
+    { remote: false, gated: true, movesHostState: false },
   ),
   // Folds another copy's entries into this one and answers the result.
   // Mutating, so a peer needs the command grant to push. A device that
@@ -38,7 +38,7 @@ export const sharedSettingsContract = defineContract("host", {
     "sharedSettings:merge",
     MergeSharedSettingsPayloadSchema,
     SharedSettingsDocSchema,
-    { remote: true, mutating: true, movesHostState: false },
+    { remote: true, gated: true, movesHostState: false },
   ),
   // This copy moved, carrying it whole. Fired only when a set or a
   // merge actually changed something, which is what ends the exchange:

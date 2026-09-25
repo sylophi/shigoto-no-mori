@@ -173,13 +173,13 @@ async function main() {
     isCommandGranted: () => false,
   });
   for (const [name, value] of Object.entries(payloads)) {
-    binding.handle(`bench:${name}`, async () => value, { mutating: false });
+    binding.handle(`bench:${name}`, async () => value, { gated: false });
   }
   binding.handle(
     "bench:bundleChunk",
     async (_ctx, input) => bundleChunk(input),
     {
-      mutating: false,
+      gated: false,
     },
   );
   binding.handle(
@@ -187,7 +187,7 @@ async function main() {
     async (_ctx, input) => {
       Buffer.from(input.dataB64, "base64");
     },
-    { mutating: false },
+    { gated: false },
   );
   const port = await binding.start({
     port: 0,

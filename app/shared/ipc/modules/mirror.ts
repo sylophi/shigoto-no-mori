@@ -491,7 +491,7 @@ const MirrorHistoryResultSchema = z.strictObject({
 export const mirrorContract = defineContract("host", {
   list: invoke("mirror:list", z.void(), MirrorListResultSchema, {
     remote: true,
-    mutating: false,
+    gated: false,
   }),
   start: invoke(
     "mirror:start",
@@ -499,7 +499,7 @@ export const mirrorContract = defineContract("host", {
     MirrorStartResultSchema,
     {
       remote: false,
-      mutating: true,
+      gated: true,
     },
   ),
   startTo: invoke(
@@ -508,7 +508,7 @@ export const mirrorContract = defineContract("host", {
     MirrorStartResultSchema,
     {
       remote: false,
-      mutating: true,
+      gated: true,
     },
   ),
   // The controls, served to peers on the command grant: the device at
@@ -519,21 +519,21 @@ export const mirrorContract = defineContract("host", {
   // ping.
   stop: invoke("mirror:stop", MirrorStopPayloadSchema, z.void(), {
     remote: true,
-    mutating: true,
+    gated: true,
   }),
   pause: invoke("mirror:pause", MirrorSessionPayloadSchema, z.void(), {
     remote: true,
-    mutating: true,
+    gated: true,
   }),
   resume: invoke("mirror:resume", MirrorSessionPayloadSchema, z.void(), {
     remote: true,
-    mutating: true,
+    gated: true,
   }),
   setIgnores: invoke(
     "mirror:setIgnores",
     MirrorSetIgnoresPayloadSchema,
     z.strictObject({ session: MirrorSessionIdSchema }),
-    { remote: true, mutating: true },
+    { remote: true, gated: true },
   ),
   // Host-scoped like list: a peer viewing this device's mirror reads
   // the same thread. Nothing here moves state.
@@ -541,7 +541,7 @@ export const mirrorContract = defineContract("host", {
     "mirror:history",
     MirrorHistoryPayloadSchema,
     MirrorHistoryResultSchema,
-    { remote: true, mutating: false },
+    { remote: true, gated: false },
   ),
   // Grant-gated like every byte-stream open. The stream changes nothing
   // a viewer caches (the serving set fans out on `changed` below).
@@ -549,16 +549,16 @@ export const mirrorContract = defineContract("host", {
     "mirror:openStream",
     MirrorOpenStreamPayloadSchema,
     z.void(),
-    { remote: true, mutating: true, movesHostState: false },
+    { remote: true, gated: true, movesHostState: false },
   ),
   // The git half, served to the device mirroring FROM here: read a
   // worktree's git state (minting the index carrier ref, hence
-  // mutating) and apply one. Both ride the command grant.
+  // gated) and apply one. Both ride the command grant.
   gitState: invoke(
     "mirror:gitState",
     MirrorWorktreePayloadSchema,
     GitStateSchema,
-    { remote: true, mutating: true, movesHostState: false },
+    { remote: true, gated: true, movesHostState: false },
   ),
   // Moves refs and the index here, which every viewer of this host
   // caches, so it keeps the host-state ping.
@@ -566,7 +566,7 @@ export const mirrorContract = defineContract("host", {
     "mirror:applyGitState",
     MirrorApplyGitStatePayloadSchema,
     MirrorApplyGitStateResultSchema,
-    { remote: true, mutating: true },
+    { remote: true, gated: true },
   ),
   // Fired on every daemon snapshot and every serving-set change, so
   // the list query refreshes without polling, locally and on the

@@ -19,31 +19,35 @@ export type InvokeDef<
   // can never silently join the remote surface by inheriting a default.
   // Routing treats anything other than exactly true as local-only.
   remote?: boolean;
-  // The gate axis for the direct listener. `mutating: true` marks a
-  // call served to another device only while this host's command-access
+  // The gate axis for the direct listener. `gated: true` marks a call
+  // served to another device only while this host's command-access
   // switch is on (host/socket/server.ts's dispatch gate, the one place
-  // that decides): every call that changes state the user owns (writes
-  // files or config, runs a script, moves a branch or a worktree), plus
-  // a few reads kept behind the switch because of what they disclose
-  // (fs:listDirectory, runtime:info, cli:status and the like name
-  // arbitrary host paths). `mutating: false` is served to every account
-  // peer. A call that only refreshes a cache the host keeps for itself
-  // (a fetch of remote-tracking refs, a gh listing) is a read even
-  // though it spawns a process and touches the network. Optional in the
-  // type because only remote:true host invokes need it (the socket
-  // check enforces that a remote invoke classifies itself), while
-  // client-scoped and remote:false calls never reach the gate. A
+  // that decides). That is every call that changes state the user owns
+  // (writes files or config, runs a script, moves a branch or a
+  // worktree), and also a few READS kept behind the switch because of
+  // what they disclose: fs:listDirectory, fs:scanForGitRepos,
+  // fs:isGitRepo, runtime:info, cli:status, cli:shellStatus and the
+  // sync reads that name arbitrary host paths (refTips, worktreeFolder,
+  // ignoredPaths, hasCommits, landCheck), plus the transfer, stream
+  // and mirror-state calls that hand a peer this host's bytes. So the
+  // name is the gate, not the effect. `gated: false` is served to every
+  // account peer. A call that only refreshes a cache the host keeps for
+  // itself (a fetch of remote-tracking refs, a gh listing) is ungated
+  // even though it spawns a process and touches the network. Optional
+  // in the type because only remote:true host invokes need it (the
+  // socket check enforces that a remote invoke classifies itself),
+  // while client-scoped and remote:false calls never reach the gate. A
   // remote gated call is something the switch hands to other devices,
   // so it needs a line in the list AcceptCommandsToggle shows the user
   // (GRANTS).
-  mutating?: boolean;
-  // Whether a resolved mutating call moved host state a remote viewer
-  // caches. Defaults to true for mutating invokes: the registrar fires
+  gated?: boolean;
+  // Whether a resolved gated call moved host state a remote viewer
+  // caches. Defaults to true for gated invokes: the registrar fires
   // onMutationResolved (the remote-viewer cache ping) unless a def sets
-  // exactly false. Set false only on mutating channels whose effects
+  // exactly false. Set false only on gated channels whose effects
   // are invisible to viewers, like forward's byte shuttling, so an open
   // stream does not re-invalidate a peer's cached view of this host on
-  // every poll or send resolution. Orthogonal to `mutating`, which is
+  // every poll or send resolution. Orthogonal to `gated`, which is
   // the gate axis and stays true on such channels.
   movesHostState?: boolean;
 };
@@ -81,7 +85,7 @@ export const invoke = <I extends z.ZodTypeAny, O extends z.ZodTypeAny>(
   opts?: {
     tracksProjectUsage?: boolean;
     remote?: boolean;
-    mutating?: boolean;
+    gated?: boolean;
     movesHostState?: boolean;
   },
 ): InvokeDef<I, O> => ({
@@ -99,8 +103,8 @@ export const invoke = <I extends z.ZodTypeAny, O extends z.ZodTypeAny>(
   // classify itself (enforced by the socket check) so a new remote call
   // cannot silently join the wire without declaring whether it mutates.
   // Reads and remote:false calls leave it undefined.
-  mutating: opts?.mutating,
-  // Undefined means "moves host state" for a mutating def. Only an
+  gated: opts?.gated,
+  // Undefined means "moves host state" for a gated def. Only an
   // explicit false opts a channel out of the cache ping.
   movesHostState: opts?.movesHostState,
 });

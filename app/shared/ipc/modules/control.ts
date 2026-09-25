@@ -14,7 +14,7 @@ import { WorktreeIdSchema, WorktreeSchema } from "@shared/schemas";
 //
 // Served on the control wire ONLY (main/ipc/handlers.ts), so no call
 // carries a remote tag. Its caller is a local process of this user and
-// commands this machine without a grant. `mutating` is what pings the
+// commands this machine without a grant. `gated` is what pings the
 // app's windows and the remote viewers once an op moved state.
 //
 // Each op takes what a person would say (a device by name, a worktree
@@ -164,7 +164,7 @@ export const controlContract = defineContract("host", {
     "control:send",
     ControlSendPayloadSchema,
     ControlTransferResultSchema,
-    { mutating: true },
+    { gated: true },
   ),
   // A peer's worktree to this device, the same two ways. Progress is
   // keyed by the peer's worktree id.
@@ -172,7 +172,7 @@ export const controlContract = defineContract("host", {
     "control:bring",
     ControlBringPayloadSchema,
     ControlTransferResultSchema,
-    { mutating: true },
+    { gated: true },
   ),
   mirrors: invoke(
     "control:mirrors",
@@ -194,7 +194,7 @@ export const controlContract = defineContract("host", {
       // reason. Absent when the copy went too.
       copyStayed: z.string().optional(),
     }),
-    { mutating: true },
+    { gated: true },
   ),
 });
 

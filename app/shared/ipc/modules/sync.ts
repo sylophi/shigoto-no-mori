@@ -22,7 +22,7 @@ import {
 // start registers a bundle on the host, chunk streams it out in
 // WIRE_CHUNK_BYTES pieces, abort cleans up a receiver that gave up. Every
 // transfer verb (refTips through bundleAbort) is {remote:true,
-// mutating:true}, so that whole surface rides the host's command
+// gated:true}, so that whole surface rides the host's command
 // grant.
 // The transfer verbs also set movesHostState:false: serving a transfer
 // moves no state a remote viewer caches, and without the opt-out every
@@ -522,7 +522,7 @@ export const syncContract = defineContract("host", {
     SyncRefTipsResultSchema,
     // A read, but it discloses repo state, so it rides the command
     // grant with the rest of the transfer surface.
-    { remote: true, mutating: true, movesHostState: false },
+    { remote: true, gated: true, movesHostState: false },
   ),
   // Writes a capture ref, so unlike the transfer verbs around it this
   // one KEEPS the viewer cache ping (no movesHostState opt-out).
@@ -530,7 +530,7 @@ export const syncContract = defineContract("host", {
     "sync:captureDirty",
     SyncCaptureDirtyPayloadSchema,
     SyncCaptureDirtyResultSchema,
-    { remote: true, mutating: true },
+    { remote: true, gated: true },
   ),
   // A read that discloses repo state (the names of ignored files), so
   // it rides the command grant like refTips.
@@ -538,19 +538,19 @@ export const syncContract = defineContract("host", {
     "sync:worktreeFolder",
     SyncWorktreeFolderPayloadSchema,
     z.array(SyncWorktreeFolderEntrySchema),
-    { remote: true, mutating: true, movesHostState: false },
+    { remote: true, gated: true, movesHostState: false },
   ),
   ignoredPaths: invoke(
     "sync:ignoredPaths",
     SyncIgnoredPathsPayloadSchema,
     SyncIgnoredPathsResultSchema,
-    { remote: true, mutating: true, movesHostState: false },
+    { remote: true, gated: true, movesHostState: false },
   ),
   bundleStart: invoke(
     "sync:bundleStart",
     SyncBundleStartPayloadSchema,
     SyncBundleStartResultSchema,
-    { remote: true, mutating: true, movesHostState: false },
+    { remote: true, gated: true, movesHostState: false },
   ),
   bundleChunk: invoke(
     "sync:bundleChunk",
@@ -558,23 +558,23 @@ export const syncContract = defineContract("host", {
     SyncBundleChunkResultSchema,
     // Reads a host temp file, but it rides the command grant with the
     // rest of the transfer surface: chunk data is repo content.
-    { remote: true, mutating: true, movesHostState: false },
+    { remote: true, gated: true, movesHostState: false },
   ),
   bundleAbort: invoke(
     "sync:bundleAbort",
     SyncBundleAbortPayloadSchema,
     z.void(),
-    { remote: true, mutating: true, movesHostState: false },
+    { remote: true, gated: true, movesHostState: false },
   ),
   pushStart: invoke(
     "sync:pushStart",
     SyncPushStartPayloadSchema,
     SyncPushStartResultSchema,
-    { remote: true, mutating: true, movesHostState: false },
+    { remote: true, gated: true, movesHostState: false },
   ),
   pushChunk: invoke("sync:pushChunk", SyncPushChunkPayloadSchema, z.void(), {
     remote: true,
-    mutating: true,
+    gated: true,
     movesHostState: false,
   }),
   // Lands refs, so it keeps the viewer cache ping.
@@ -582,14 +582,14 @@ export const syncContract = defineContract("host", {
     "sync:pushFinish",
     SyncPushFinishPayloadSchema,
     SyncPushFinishResultSchema,
-    { remote: true, mutating: true },
+    { remote: true, gated: true },
   ),
   hasCommits: invoke(
     "sync:hasCommits",
     SyncHasCommitsPayloadSchema,
     SyncHasCommitsResultSchema,
     // A read that discloses repo state, like refTips.
-    { remote: true, mutating: true, movesHostState: false },
+    { remote: true, gated: true, movesHostState: false },
   ),
   // The receiving half of a send (see the header note). The check
   // moves nothing, but it discloses repo state like refTips.
@@ -597,22 +597,22 @@ export const syncContract = defineContract("host", {
     "sync:landCheck",
     SyncLandTargetSchema,
     SyncLandCheckResultSchema,
-    { remote: true, mutating: true, movesHostState: false },
+    { remote: true, gated: true, movesHostState: false },
   ),
   landWorktree: invoke(
     "sync:landWorktree",
     SyncLandWorktreePayloadSchema,
     SyncLandWorktreeResultSchema,
-    { remote: true, mutating: true },
+    { remote: true, gated: true },
   ),
   // The local orchestrator (see the header note): remote:false keeps
-  // it off every remote wire, mutating:true documents intent and keeps
+  // it off every remote wire, gated:true documents intent and keeps
   // the web loopback's fail-closed refusal.
   pullWorktree: invoke(
     "sync:pullWorktree",
     SyncPullWorktreePayloadSchema,
     SyncPullWorktreeResultSchema,
-    { remote: false, mutating: true },
+    { remote: false, gated: true },
   ),
   // The source teardown after a pull (see the header note): local-only
   // like the pull, its remote half is the peer's ordinary grant-gated
@@ -621,20 +621,20 @@ export const syncContract = defineContract("host", {
     "sync:teardownSource",
     SyncTeardownSourcePayloadSchema,
     SyncTeardownSourceResultSchema,
-    { remote: false, mutating: true },
+    { remote: false, gated: true },
   ),
   // The send and its teardown, local-only like the pull and its own.
   sendWorktree: invoke(
     "sync:sendWorktree",
     SyncSendWorktreePayloadSchema,
     SyncPullWorktreeResultSchema,
-    { remote: false, mutating: true },
+    { remote: false, gated: true },
   ),
   teardownSent: invoke(
     "sync:teardownSent",
     SyncTeardownSentPayloadSchema,
     SyncTeardownSourceResultSchema,
-    { remote: false, mutating: true },
+    { remote: false, gated: true },
   ),
   // Untagged (local-only): the pull runs on the device whose renderer
   // invoked it, and the notifier hands the frames back to that caller.

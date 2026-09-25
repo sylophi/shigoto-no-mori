@@ -276,10 +276,10 @@ const hostServer: ServerTransport = {
   handle(channel, fn, opts) {
     electronServer.handle(channel, fn);
     if (opts?.remote === true) {
-      // The mutating flag rides along: the direct listener gates
-      // everything not explicitly mutating:false on the host's
+      // The gate flag rides along: the direct listener gates
+      // everything not explicitly gated:false on the host's
       // command-access switch (host/socket/server.ts).
-      directWsServer.handle(channel, fn, { mutating: opts.mutating });
+      directWsServer.handle(channel, fn, { gated: opts.gated });
     }
   },
   broadcastAll(channel, payload, opts) {

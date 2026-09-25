@@ -2,8 +2,8 @@ import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { DirectoryListingSchema, PathPayloadSchema } from "@shared/schemas";
 
-// Every fs call is remote:true, mutating:true.
-// They are reads, but the `mutating` axis is enforced as "gated on the
+// Every fs call is remote:true, gated:true.
+// They are reads, but the `gated` axis is enforced as "gated on the
 // command-access switch", and these handlers disclose ARBITRARY
 // absolute paths. So instead of waiting for remote path confinement
 // they sit behind that switch: while this host does not accept
@@ -14,16 +14,16 @@ export const fsContract = defineContract("host", {
     "fs:listDirectory",
     PathPayloadSchema,
     DirectoryListingSchema,
-    { remote: true, mutating: true },
+    { remote: true, gated: true },
   ),
   scanForGitRepos: invoke(
     "fs:scanForGitRepos",
     PathPayloadSchema,
     z.array(z.string()),
-    { remote: true, mutating: true },
+    { remote: true, gated: true },
   ),
   isGitRepo: invoke("fs:isGitRepo", PathPayloadSchema, z.boolean(), {
     remote: true,
-    mutating: true,
+    gated: true,
   }),
 });

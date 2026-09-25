@@ -4,7 +4,6 @@ import { accountContract } from "@shared/ipc/modules/account";
 import { branchesContract } from "@shared/ipc/modules/branches";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
 import { dialogContract } from "@shared/ipc/modules/dialog";
-import { directContract } from "@shared/ipc/modules/direct";
 import { forwardContract } from "@shared/ipc/modules/forward";
 import { fsContract } from "@shared/ipc/modules/fs";
 import { gitContract } from "@shared/ipc/modules/git";
@@ -58,7 +57,6 @@ export const allContractModules: readonly ContractModule[] = [
   branchesContract,
   clientConfigContract,
   dialogContract,
-  directContract,
   forwardContract,
   fsContract,
   gitContract,

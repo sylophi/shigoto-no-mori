@@ -7,7 +7,7 @@
 //
 // Auth is a single-use connect ticket minted over the device hub and
 // bound to the hello deviceId (WsServerTicketAuth). Dispatch serves a
-// channel registered mutating:false to every authed peer, and anything
+// channel registered gated:false to every authed peer, and anything
 // else (a mutation, or an untagged channel) only under the host's live
 // command-access switch, refused with the shared command-refused code
 // before its handler runs otherwise. One authed socket per deviceId,
@@ -83,7 +83,7 @@ export type WsServerTicketAuth = {
     matches: (ticket: string) => Promise<boolean>,
   ): Promise<string | null>;
   // Whether this host runs gated calls (anything not registered
-  // mutating:false) from its ticketed peers at all: every ticketed peer
+  // gated:false) from its ticketed peers at all: every ticketed peer
   // is a device of the same account, so this one switch is the whole
   // verdict. Read live at every dispatch and every byte-channel frame
   // (never cached on the session), so flipping the switch takes effect
@@ -359,7 +359,7 @@ export function createWsServerBinding(
     string,
     (ctx: HandlerContext, raw: unknown) => Promise<unknown>
   >();
-  // The channel names EXPLICITLY registered read-only (mutating:false),
+  // The channel names EXPLICITLY registered read-only (gated:false),
   // collected fail-closed: dispatch serves a channel ungated ONLY when
   // it is in here, so a mutation or an untagged channel needs the
   // command-access switch even though it is registered.
@@ -508,7 +508,7 @@ export function createWsServerBinding(
     }
     if (!readOnlyChannels.has(frame.channel)) {
       // Fail-closed gate on anything not proven a read (explicitly
-      // registered mutating:false): consult the injected
+      // registered gated:false): consult the injected
       // command-access switch LIVE at each call, never cached on the
       // session, so flipping it takes effect without a reconnect. The
       // refusal carries the typed code so the client transport
@@ -979,12 +979,12 @@ export function createWsServerBinding(
         );
       }
       handlers.set(channel, fn);
-      // Record an EXPLICITLY read-only channel (mutating:false) so
+      // Record an EXPLICITLY read-only channel (gated:false) so
       // dispatch may serve it ungated. Fail-closed: a channel left
-      // untagged, or tagged mutating:true, is deliberately NOT
+      // untagged, or tagged gated:true, is deliberately NOT
       // recorded, so dispatch serves it only under the command-access
       // switch.
-      if (opts?.mutating === false) readOnlyChannels.add(channel);
+      if (opts?.gated === false) readOnlyChannels.add(channel);
     },
     // Payloads arrive already parsed from the shared fan-out path.
     // Encode once, then fan the identical text out to every authed

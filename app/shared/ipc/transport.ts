@@ -74,13 +74,13 @@ export function isRemoteCaller(
 // and the two are independent decisions. Single-wire transports ignore
 // it (they already know their reach).
 //
-// `opts.mutating` is the command-vs-read axis: the registrar passes each
-// call's `def.mutating` here so a remote binding can gate commands. The
+// `opts.gated` is the command-vs-read axis: the registrar passes each
+// call's `def.gated` here so a remote binding can gate commands. The
 // direct data-plane listener serves channels explicitly registered
-// mutating:false to every peer and gates everything else on the host's
+// gated:false to every peer and gates everything else on the host's
 // command-access switch (fail-closed). The Electron binding ignores
 // it: a local window commands its own machine.
-type TransportCallOpts = { remote?: boolean; mutating?: boolean };
+type TransportCallOpts = { remote?: boolean; gated?: boolean };
 
 export type ServerTransport = {
   handle(

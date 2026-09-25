@@ -49,12 +49,12 @@ export type ShellIntegrationStatus = z.infer<
 // device of the account, and a peer holding the command grant may
 // manage that device's CLI links and shell hooks from there, the same
 // way it may already run scripts on it. Every call rides the grant,
-// the two status reads included (tagged mutating like runtime:info and
+// the two status reads included (tagged gated like runtime:info and
 // the fs reads), because they name the host's home, bin dir and rc
 // files. None of them pings viewers: links and rc hooks are no part of
 // the forest state a ping re-reads, and the caller seeds its own cache
 // from each reply.
-const gated = { remote: true, mutating: true, movesHostState: false };
+const gated = { remote: true, gated: true, movesHostState: false };
 
 export const cliContract = defineContract("host", {
   status: invoke("cli:status", z.void(), CliStatusSchema, gated),

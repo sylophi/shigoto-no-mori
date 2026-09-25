@@ -14,7 +14,7 @@
 // remote true or false.
 //
 // The command gate: the listener serves a channel registered
-// mutating:false to every authed peer, and anything else (a mutating
+// gated:false to every authed peer, and anything else (a mutating
 // or untagged channel) only while the host accepts commands, refusing
 // it with the shared command-refused code BEFORE its handler runs. The
 // client transport maps that code to the typed CommandRefusedError.
@@ -22,7 +22,7 @@
 // brokering are direct-plane.mjs's.
 //
 // The golden read surface: every channel servable ungated (remote:true,
-// mutating:false) is pinned in read-surface.golden.json, so flipping a
+// gated:false) is pinned in read-surface.golden.json, so flipping a
 // mutating tag shows up as a reviewed diff instead of silently opening
 // or closing the ungated wire. Regenerate deliberately with
 // `pnpm test socket-host --update`.
@@ -90,22 +90,22 @@ let mutateExecutions = 0;
 let untaggedExecutions = 0;
 
 function registerTestHandlers(binding) {
-  // The generic-path handlers are EXPLICIT reads (mutating:false): the
+  // The generic-path handlers are EXPLICIT reads (gated:false): the
   // command gate is fail-closed and serves only channels proven
   // read-only while commands are off (the fixture's default), so
   // tagging them keeps the dispatch/framing/broadcast tests serving.
-  binding.handle("test:echo", async (_ctx, raw) => raw, { mutating: false });
+  binding.handle("test:echo", async (_ctx, raw) => raw, { gated: false });
   binding.handle(
     "test:hang",
     () => new Promise((resolve) => hangResolvers.push(resolve)),
-    { mutating: false },
+    { gated: false },
   );
   binding.handle(
     "test:count",
     async () => {
       countExecutions += 1;
     },
-    { mutating: false },
+    { gated: false },
   );
   // A read-classified handler that throws, so the typed-error test can
   // prove a REAL failure stays a plain Error rather than the refusal
@@ -115,7 +115,7 @@ function registerTestHandlers(binding) {
     async () => {
       throw new Error("boom");
     },
-    { mutating: false },
+    { gated: false },
   );
   // A mutating handler and an untagged one, each with an execution
   // counter, so the gate tests can prove the handler body never ran on
@@ -126,7 +126,7 @@ function registerTestHandlers(binding) {
       mutateExecutions += 1;
       return "mutated";
     },
-    { mutating: true },
+    { gated: true },
   );
   binding.handle("test:untagged", async () => {
     untaggedExecutions += 1;
@@ -549,7 +549,7 @@ async function main() {
       untaggedExecutions = 0;
       const listener = await startListener(track);
       const { client } = await authenticate(listener);
-      // (a) mutating:true is refused with the machine-readable code
+      // (a) gated:true is refused with the machine-readable code
       // and the handler body never runs.
       client.send({ t: "req", id: 1, channel: "test:mutate" });
       const mutateRes = await client.nextFrame();
@@ -745,21 +745,21 @@ async function main() {
       const pingContract = defineContract("host", {
         mutate: invoke("pingtest:mutate", z.void(), z.void(), {
           remote: true,
-          mutating: true,
+          gated: true,
         }),
         read: invoke("pingtest:read", z.void(), z.void(), {
           remote: true,
-          mutating: false,
+          gated: false,
         }),
         failMutate: invoke("pingtest:failMutate", z.void(), z.void(), {
           remote: true,
-          mutating: true,
+          gated: true,
         }),
         // A command whose effects are invisible to remote viewers, the
         // forward-verb shape: still grant-gated, never pinged.
         shuttle: invoke("pingtest:shuttle", z.void(), z.void(), {
           remote: true,
-          mutating: true,
+          gated: true,
           movesHostState: false,
         }),
       });
@@ -846,7 +846,7 @@ async function main() {
           // may stay undefined.
           if (def.remote === true) {
             assert.equal(
-              typeof def.mutating,
+              typeof def.gated,
               "boolean",
               `${name}.${key} (${def.channel}) is remote but not explicitly tagged mutating`,
             );
@@ -856,9 +856,9 @@ async function main() {
           // presence there is a tagging mistake.
           if (def.movesHostState !== undefined) {
             assert.equal(
-              def.mutating,
+              def.gated,
               true,
-              `${name}.${key} (${def.channel}) tags movesHostState without mutating:true`,
+              `${name}.${key} (${def.channel}) tags movesHostState without gated:true`,
             );
           }
         }
@@ -867,44 +867,44 @@ async function main() {
       assert.equal(runtimeContract.calls.nuke.remote, false);
       // A peer may relocate the data folder, but only as a command.
       assert.equal(runtimeContract.calls.moveDataDir.remote, true);
-      assert.equal(runtimeContract.calls.moveDataDir.mutating, true);
+      assert.equal(runtimeContract.calls.moveDataDir.gated, true);
       // info is the one runtime call a peer may make: the project pages
       // under a device twin spell worktree paths off its data dir. It
       // rides the command grant like the fs reads, since it names the
       // host's paths.
       assert.equal(runtimeContract.calls.info.remote, true);
-      assert.equal(runtimeContract.calls.info.mutating, true);
+      assert.equal(runtimeContract.calls.info.gated, true);
       assert.equal(runtimeContract.calls.info.movesHostState, false);
       assert.equal(launchersContract.calls.launch.remote, false);
       // The cli module rides the wire wholly behind the grant: even
       // its status reads name host paths, so none of it is ungated.
       for (const def of Object.values(cliContract.calls)) {
         assert.equal(def.remote, true);
-        assert.equal(def.mutating, true);
+        assert.equal(def.gated, true);
       }
       assert.equal(globalConfigContract.calls.read.remote, true);
       assert.equal(worktreesContract.calls.create.remote, true);
       // Spot-check the mutating classification so a read cannot silently
       // become a command (served ungated to every peer) or a command a
       // read (served ungated too).
-      assert.equal(worktreesContract.calls.create.mutating, true);
-      assert.equal(worktreesContract.calls.list.mutating, false);
-      assert.equal(worktreesContract.calls.push.mutating, true);
-      assert.equal(scriptsContract.calls.run.mutating, true);
-      assert.equal(gitContract.calls.refreshProject.mutating, true);
+      assert.equal(worktreesContract.calls.create.gated, true);
+      assert.equal(worktreesContract.calls.list.gated, false);
+      assert.equal(worktreesContract.calls.push.gated, true);
+      assert.equal(scriptsContract.calls.run.gated, true);
+      assert.equal(gitContract.calls.refreshProject.gated, true);
       // The sweep is the host's own scheduled pass. A peer's request
       // only decides when it runs, so it is read-class despite the git
       // and gh it spawns.
-      assert.equal(gitContract.calls.sweep.mutating, false);
-      assert.equal(globalConfigContract.calls.read.mutating, false);
+      assert.equal(gitContract.calls.sweep.gated, false);
+      assert.equal(globalConfigContract.calls.read.gated, false);
       // The step-6 flips (v2 slice B). Every fs call is remote AND
-      // mutating: they read, but they disclose arbitrary absolute
+      // gated: they read, but they disclose arbitrary absolute
       // paths, so they ride the command grant rather than the ungated
       // read set.
       for (const key of ["listDirectory", "scanForGitRepos", "isGitRepo"]) {
         assert.equal(fsContract.calls[key].remote, true, `fs.${key} remote`);
         assert.equal(
-          fsContract.calls[key].mutating,
+          fsContract.calls[key].gated,
           true,
           `fs.${key} must require the command grant`,
         );
@@ -918,13 +918,13 @@ async function main() {
           `projects.${key} remote`,
         );
         assert.equal(
-          projectsContract.calls[key].mutating,
+          projectsContract.calls[key].gated,
           true,
           `projects.${key} mutating`,
         );
       }
       assert.equal(packageScriptsContract.calls.setSort.remote, true);
-      assert.equal(packageScriptsContract.calls.setSort.mutating, true);
+      assert.equal(packageScriptsContract.calls.setSort.gated, true);
       // The step-7 sync transfer surface (v2 slice B, refTips added by
       // slice C): every call is a command, so the whole bundle-transfer
       // path rides the command grant.
@@ -942,7 +942,7 @@ async function main() {
           `sync.${key} remote`,
         );
         assert.equal(
-          syncContract.calls[key].mutating,
+          syncContract.calls[key].gated,
           true,
           `sync.${key} must require the command grant`,
         );
@@ -980,7 +980,7 @@ async function main() {
       ]) {
         assert.equal(call.remote, true, `${name} remote`);
         assert.equal(
-          call.mutating,
+          call.gated,
           true,
           `${name} must require the command grant`,
         );
@@ -995,22 +995,22 @@ async function main() {
       // to a peer -- a remote:false host invoke is simply not
       // registered on the direct listener.
       assert.equal(syncContract.calls.pullWorktree.remote, false);
-      assert.equal(syncContract.calls.pullWorktree.mutating, true);
+      assert.equal(syncContract.calls.pullWorktree.gated, true);
       // The source teardown after a pull is the same
       // local-only shape: its remote half is the peer's ordinary
       // worktrees:delete.
       assert.equal(syncContract.calls.teardownSource.remote, false);
-      assert.equal(syncContract.calls.teardownSource.mutating, true);
+      assert.equal(syncContract.calls.teardownSource.gated, true);
       // The send and its teardown are the pull's pair turned around,
       // local-only the same way. The receiving half is what a peer
       // drives, so it rides the command grant.
       for (const name of ["sendWorktree", "teardownSent"]) {
         assert.equal(syncContract.calls[name].remote, false);
-        assert.equal(syncContract.calls[name].mutating, true);
+        assert.equal(syncContract.calls[name].gated, true);
       }
       for (const name of ["landCheck", "landWorktree"]) {
         assert.equal(syncContract.calls[name].remote, true);
-        assert.equal(syncContract.calls[name].mutating, true);
+        assert.equal(syncContract.calls[name].gated, true);
       }
       // The pull's progress frames go back to the invoking renderer
       // only: an untagged broadcast never reaches a remote wire.
@@ -1034,7 +1034,7 @@ async function main() {
       const writeDeviceSettings =
         globalConfigContract.calls.writeDeviceSettings;
       assert.equal(writeDeviceSettings.remote, true);
-      assert.equal(writeDeviceSettings.mutating, true);
+      assert.equal(writeDeviceSettings.gated, true);
       for (const patch of [
         { directConnections: false },
         { cloudflaredPath: "/tmp/not-cloudflared" },
@@ -1064,7 +1064,7 @@ async function main() {
     "golden read surface: the ungated read channels match read-surface.golden.json",
     async () => {
       // The spot-checks above prove chosen tags, but nothing proved the
-      // WHOLE read/mutate axis: a single mutating:true flipped to false
+      // WHOLE read/mutate axis: a single gated:true flipped to false
       // would serve that channel ungated to any account peer with the
       // battery still green. Pinning the full ungated surface in a
       // committed golden file turns any such flip into a reviewed diff.
@@ -1074,9 +1074,7 @@ async function main() {
         .flatMap((module) => Object.values(module.calls))
         .filter(
           (def) =>
-            def.kind === "invoke" &&
-            def.remote === true &&
-            def.mutating === false,
+            def.kind === "invoke" && def.remote === true && def.gated === false,
         )
         .map((def) => def.channel)
         .toSorted();

@@ -97,7 +97,7 @@ export const accountContract = defineContract("client", {
   ),
   // Whether THIS host accepts commands from the account's other
   // devices: on, its direct listener serves their gated calls (every
-  // channel not registered mutating:false) instead of refusing them.
+  // channel not registered gated:false) instead of refusing them.
   // One switch for the whole account, made on the machine being
   // driven and enforced there alone, by the listener's dispatch gate.
   // False when signed out.

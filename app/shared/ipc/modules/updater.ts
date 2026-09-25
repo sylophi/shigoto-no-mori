@@ -13,16 +13,16 @@ import { UpdaterStateSchema } from "@shared/schemas";
 export const updaterContract = defineContract("host", {
   get: invoke("updater:get", z.void(), UpdaterStateSchema, {
     remote: true,
-    mutating: false,
+    gated: false,
   }),
   check: invoke("updater:check", z.void(), z.void(), {
     remote: true,
-    mutating: true,
+    gated: true,
     movesHostState: false,
   }),
   install: invoke("updater:install", z.void(), z.void(), {
     remote: true,
-    mutating: true,
+    gated: true,
     movesHostState: false,
   }),
   state: broadcast("updater:state", UpdaterStateSchema, { remote: true }),

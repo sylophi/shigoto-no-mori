@@ -22,7 +22,7 @@ import {
 export const runtimeContract = defineContract("host", {
   info: invoke("runtime:info", z.void(), RuntimeInfoSchema, {
     remote: true,
-    mutating: true,
+    gated: true,
     movesHostState: false,
   }),
   nuke: invoke("runtime:nuke", z.void(), z.void(), { remote: false }),
@@ -33,7 +33,7 @@ export const runtimeContract = defineContract("host", {
     // The host restarts right after, and the session that comes back
     // refetches everything, so the viewer ping would only race the
     // quit.
-    { remote: true, mutating: true, movesHostState: false },
+    { remote: true, gated: true, movesHostState: false },
   ),
   nukeProgress: broadcast("runtime:nukeProgress", NukeProgressSchema, {
     remote: true,

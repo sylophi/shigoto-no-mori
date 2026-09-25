@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { defineContract, invoke } from "@shared/ipc/contract";
 
 // Brokering vocabulary for the direct data plane: a peer asks this
 // host, with the device hub's one ask (connectInfo, shared/hub/link.ts),
@@ -120,19 +119,3 @@ export const DirectConnectInfoSchema = z.discriminatedUnion("available", [
   }),
 ]);
 export type DirectConnectInfo = z.infer<typeof DirectConnectInfoSchema>;
-
-// Served on no wire: the device hub answers connectInfo itself
-// (shared/hub/link.ts). Kept only while shared/ipc/client.ts still
-// lists it in allContractModules; drop it together with that entry and
-// its line in test/read-surface.golden.json.
-export const directContract = defineContract("host", {
-  connectInfo: invoke(
-    "direct:connectInfo",
-    DirectConnectInfoInputSchema,
-    DirectConnectInfoSchema,
-    {
-      remote: true,
-      mutating: false,
-    },
-  ),
-});
