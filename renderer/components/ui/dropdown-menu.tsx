@@ -13,8 +13,12 @@ function DropdownMenuPortal({ ...props }: MenuPrimitive.Portal.Props) {
   return <MenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />;
 }
 
+// No data-slot: Base UI merges a trigger's props over the element in
+// its render prop, so a slot set here would replace the rendered
+// Button's data-slot="button", and doubutsu.css would stop styling it
+// as a button.
 function DropdownMenuTrigger({ ...props }: MenuPrimitive.Trigger.Props) {
-  return <MenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />;
+  return <MenuPrimitive.Trigger {...props} />;
 }
 
 type MenuPopupSurfaceProps = MenuPrimitive.Popup.Props &

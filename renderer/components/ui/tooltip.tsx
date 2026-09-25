@@ -25,8 +25,10 @@ function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
   return <TooltipPrimitive.Root data-slot="tooltip" {...props} />;
 }
 
+// No data-slot: it would replace the wrapped element's own (see
+// DropdownMenuTrigger).
 function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
+  return <TooltipPrimitive.Trigger {...props} />;
 }
 
 function TooltipContent({
