@@ -182,11 +182,6 @@ func stubString(t *testing.T, p *string, v string) {
 	t.Cleanup(func() { *p = saved })
 }
 
-func stubVersion(t *testing.T, v string) {
-	t.Helper()
-	stubString(t, &version, v)
-}
-
 // A stand-in for one endpoint, torn down with the test.
 func stubEndpoint(t *testing.T, override *string, handler http.HandlerFunc) *httptest.Server {
 	t.Helper()
@@ -204,7 +199,7 @@ func stubReleaseList(t *testing.T, v string, handler http.HandlerFunc) *httptest
 	server := stubEndpoint(t, &releasesURLOverride, handler)
 	stubString(t, &feedURLOverride, "")
 	sandboxDataDir(t)
-	stubVersion(t, v)
+	stubString(t, &version, v)
 	saved := releaseListMaxAge
 	releaseListMaxAge = 0
 	t.Cleanup(func() { releaseListMaxAge = saved })

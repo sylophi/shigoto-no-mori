@@ -148,6 +148,17 @@ func cmdUpdate(_ cliContext, args []string) (int, error) {
 	}
 	feedURLOverride = strings.TrimSpace(parsed.strings["feed-url"])
 	releasesURLOverride = strings.TrimSpace(parsed.strings["releases-url"])
+	// The environment variables these flags replaced are refused, not
+	// ignored: one still exported in a tester's shell would otherwise
+	// send a test build to the real feeds.
+	for name, flag := range map[string]string{
+		"SHIGOMORI_UPDATE_FEED_URL":     "--feed-url",
+		"SHIGOMORI_UPDATE_RELEASES_URL": "--releases-url",
+	} {
+		if os.Getenv(name) != "" {
+			return 2, usageErrf("%s is no longer read. Pass %s instead.", name, flag)
+		}
+	}
 	if len(parsed.positionals) > 0 {
 		return 2, usageErrf("update takes no arguments (flags: --check).")
 	}

@@ -11,6 +11,7 @@
 import { writeFileSync } from "node:fs";
 import { app } from "electron";
 import { DEV_RELAUNCH_FILE_ENV } from "@shared/packaging/appName.mts";
+import { restoreUpdateEndpointOverrides } from "./updateEndpoints";
 
 let requested = false;
 
@@ -47,6 +48,7 @@ export function scheduleRelaunch(): void {
       console.warn(`[relaunch] could not write the dev marker: ${error}`);
     }
   }
+  restoreUpdateEndpointOverrides();
   app.relaunch();
 }
 

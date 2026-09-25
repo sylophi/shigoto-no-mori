@@ -18,8 +18,8 @@
 // `SHIGOMORI_UPDATE_FEED_URL` still overrides the feed for end-to-end
 // testing of a signed build, and `SHIGOMORI_UPDATE_RELEASES_URL` the
 // release list a prerelease build ranks instead (cli/updater.go).
-// takeUpdateEndpointOverrides moves both out of our environment and
-// into flags on the check's own CLI child.
+// updateEndpoints.ts moves both out of our environment and into flags
+// on the check's own CLI child.
 import { join } from "node:path";
 import { app } from "electron";
 import { updaterContract } from "@shared/ipc/modules/updater";
@@ -37,6 +37,7 @@ import { busyActionRemoteRefusal, confirmBusyAction } from "./busyPrompt";
 import { cliFailureMessage, runCli, spawnCliDetached } from "./cliRunner";
 import { UNATTENDED_QUIT_DELAY_MS } from "./relaunch";
 import { publishUpdaterState, startUpdaterBridge } from "./updaterBridge";
+import { updateEndpointFlags } from "./updateEndpoints";
 import { errorMessageOf } from "@shared/errors";
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
@@ -52,23 +53,6 @@ const MAX_BACKOFF_TICKS = 6;
 // wedged child would otherwise pin checkInFlight forever and silently
 // disable checks for the app's lifetime.
 const STAGE_TIMEOUT_MS = 30 * 60 * 1000;
-
-const endpointFlags: string[] = [];
-
-// Everything the app spawns inherits process.env, and `sm run` passes
-// it on to package scripts, so an override left there would point any
-// `sm update` in those trees at the stand-in. Called once at startup,
-// before anything is spawned.
-export function takeUpdateEndpointOverrides(): void {
-  for (const [name, flag] of [
-    ["SHIGOMORI_UPDATE_FEED_URL", "--feed-url"],
-    ["SHIGOMORI_UPDATE_RELEASES_URL", "--releases-url"],
-  ] as const) {
-    const url = process.env[name];
-    delete process.env[name];
-    if (url) endpointFlags.push(`${flag}=${url}`);
-  }
-}
 
 let state: UpdaterState = { kind: "idle" };
 let started = false;
@@ -165,7 +149,7 @@ async function runCheck(): Promise<void> {
     let next: UpdaterState;
     try {
       const result = await runCli(
-        ["update", "--stage", ...endpointFlags],
+        ["update", "--stage", ...updateEndpointFlags()],
         (doc) => {
           // "verifying" arrives too, and the renderer's machine
           // collapses everything between "found one" and "staged" into

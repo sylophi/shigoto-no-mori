@@ -89,8 +89,8 @@ import {
   installUpdaterImpl,
   isInstallingUpdate,
   startUpdater,
-  takeUpdateEndpointOverrides,
 } from "./electron/updater";
+import { takeUpdateEndpointOverrides } from "./electron/updateEndpoints";
 
 enableDevCdpPort();
 
