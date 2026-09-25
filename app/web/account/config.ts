@@ -6,15 +6,6 @@
 // here is a public endpoint or a public Clerk publishable key, never a
 // secret (serviceConfig.ts), so inlining the values into the shipped
 // bundle is safe by design.
-import {
-  isConfigured,
-  resolveServiceConfig,
-  type AccountServiceConfig,
-} from "@shared/account/serviceConfig";
-
-export type { AccountServiceConfig };
-export { isConfigured };
-
 // import.meta.env exists in every Vite context but not under plain node,
 // where the headless bridge check imports this module and injects its
 // own env instead. The structural cast keeps the node path honest
@@ -33,10 +24,4 @@ export function viteEnv(): Record<string, string | undefined> {
       }
     ).env ?? {}
   );
-}
-
-export function webServiceConfig(
-  env: Record<string, string | undefined>,
-): AccountServiceConfig {
-  return resolveServiceConfig(env);
 }

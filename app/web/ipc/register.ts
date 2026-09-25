@@ -33,7 +33,6 @@ import { shellContract } from "@shared/ipc/modules/shell";
 import { broadcastAll, registerContract } from "@shared/ipc/registerContract";
 import type { Handlers } from "@shared/ipc/types";
 import { createDirectPlane } from "@shared/hub/directPlane";
-import { isConfigured } from "@shared/account/serviceConfig";
 import {
   SharedSettingsDocSchema,
   StoredClientConfigSchema,
@@ -53,7 +52,10 @@ import {
   type DeviceFields,
 } from "@shared/account/enroll";
 import { createHubConnection } from "../hub/connection";
-import { webServiceConfig } from "../account/config";
+import {
+  isConfigured,
+  resolveServiceConfig,
+} from "@shared/account/serviceConfig";
 import { getWebDeviceId } from "../account/deviceId";
 import { defaultWebDeviceName, type BrowserHints } from "../account/deviceName";
 import { defaultWebDeviceShape } from "../account/deviceIcon";
@@ -111,7 +113,7 @@ export type WebBridge = {
 const CLIENT_CONFIG_KEY = "sm.web.clientConfig";
 const SHARED_SETTINGS_KEY = "sm.web.sharedSettings";
 export function createWebBridge(deps: WebBridgeDeps): WebBridge {
-  const config = webServiceConfig(deps.env);
+  const config = resolveServiceConfig(deps.env);
   const store = createWebAccountStore(deps.localStorage);
   const deviceId = getWebDeviceId(deps.localStorage);
   const service = createAccountService({
