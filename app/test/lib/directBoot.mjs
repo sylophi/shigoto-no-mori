@@ -11,6 +11,7 @@ import { brokerHandlerFor, makeDirectHandlers } from "@host/ipc/modules/direct";
 import { createWsServerBinding } from "@host/socket/server";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createDirectPlane } from "@shared/hub/directPlane";
+import { registerContract } from "@shared/ipc/registerContract";
 import { WebSocket as WsClient } from "ws";
 import { startStubHub } from "./hubStub.mjs";
 import { bootDevice } from "./hubBoot.mjs";
@@ -109,12 +110,24 @@ export async function bootBrokeredPair(stub, track, listener, opts = {}) {
 // what establishes the B->A session -- eagerly, before any invoke,
 // which is the supervised model the transfer checks now ride.
 // Everything registers its teardown on the caller's tracker.
+// `opts.contracts` lists the [contract, handlers] pairs A serves, each
+// registered with output validation and a no-op usage hook: the hook is
+// the Electron binding's concern, and the registrar only calls it for
+// defs marked tracksProjectUsage (and requires it for a module that has
+// one), so passing it everywhere satisfies the registrar and changes
+// nothing else.
 export async function bootDirectWire(track, opts = {}) {
-  const stub = await startStubHub();
-  track(() => stub.close());
+  const stub = await startStubHub(track);
   const listener = await startDirectListener(track, {
     deviceId: "A",
-    registerHandlers: opts.registerHandlers,
+    registerHandlers: (binding) => {
+      for (const [contract, handlers] of opts.contracts ?? []) {
+        registerContract(contract, handlers, binding, {
+          validateOutputs: true,
+          onUsageTracked: () => {},
+        });
+      }
+    },
   });
   let onPlaneChange = null;
   const { client } = await bootBrokeredPair(stub, track, listener, {

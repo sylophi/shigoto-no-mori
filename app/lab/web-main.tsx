@@ -4,10 +4,12 @@
 // ?peers), minus ?to: the route comes from the path itself, since the web router
 // rides real browser history.
 import { applyPose } from "./pose";
-import { installWebBridge } from "./webInstall";
+import { installLabBridge } from "./bridge";
 
 applyPose();
 
-installWebBridge();
+// Lab stand-in for web/preload.ts: the web page boots on the fixture
+// window.api instead of the real hub-backed bridge.
+installLabBridge({ webShell: true });
 
 void import("../web/boot");

@@ -15,15 +15,14 @@
 // so it is only a note.
 
 import { chmod, readdir, stat } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join, resolve } from "node:path";
 import {
   NODE_PTY_PREBUILDS,
   NODE_PTY_SPAWN_HELPER,
   nodePtyPrebuildDir,
 } from "../shared/packaging/nodePty.mts";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = resolve(import.meta.dirname, "..");
 
 // True when a helper was found (and is now executable).
 async function makeExecutable(dir) {

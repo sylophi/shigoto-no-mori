@@ -15,26 +15,24 @@
 // pnpm test worktree-ports.
 import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
-import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { poolPortsFor } from "@host/lib/portPool";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import { dialLoopback, isLoopbackPortListening } from "@host/lib/net";
-import { freeLoopbackPort, makeProof } from "./lib/checkKit.mjs";
+import {
+  freeLoopbackPort,
+  makeProof,
+  startLoopbackServer,
+} from "./lib/checkKit.mjs";
 
 const proof = makeProof("worktree-ports proof");
 console.log("worktree-ports proof\n");
 
-function listenOn(host, track) {
-  return new Promise((resolve, reject) => {
-    const server = createServer((socket) => socket.end());
-    server.once("error", reject);
-    server.listen(0, host, () => {
-      track(() => new Promise((done) => server.close(() => done())));
-      resolve(server.address().port);
-    });
-  });
+async function listenOn(host, track) {
+  const server = await startLoopbackServer((socket) => socket.end(), { host });
+  track(server.close);
+  return server.port;
 }
 
 try {

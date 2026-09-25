@@ -3,14 +3,13 @@
 // and test/dmg-art.mjs compares the two, so both read it from here.
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import {
   DMG_ART_DIR,
   dmgBackgroundName,
 } from "../../shared/packaging/dmgLayout.mts";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const ROOT = join(import.meta.dirname, "..", "..");
 
 // The design the pixels are rendered from: the stylesheet the art is
 // drawn with, the art itself, the geometry both it and the maker read,

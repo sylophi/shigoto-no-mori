@@ -64,12 +64,7 @@ function makeDeps(overrides = {}) {
   };
 }
 
-function jsonResponse(status, body) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
-}
+const jsonResponse = (status, body) => Response.json(body, { status });
 
 const STORED_ENVELOPE = JSON.stringify({
   v: 1,

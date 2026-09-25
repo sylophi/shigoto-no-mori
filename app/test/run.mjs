@@ -14,10 +14,10 @@
 // proof covers. `lefthook run pre-commit --all-files` runs the lot.
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
-const testDir = dirname(fileURLToPath(import.meta.url));
+const testDir = import.meta.dirname;
 const SELF = "run.mjs";
 
 const SUFFIXES = [".mjs", ".mts"];

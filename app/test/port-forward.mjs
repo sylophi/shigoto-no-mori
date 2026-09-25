@@ -48,19 +48,23 @@
 // Run: pnpm test port-forward.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { connect, createServer } from "node:net";
+import { connect } from "node:net";
 import { CommandRefusedError } from "@shared/ipc/socket/frames";
 import { CHANNEL_MAX_FRAME_BYTES } from "@shared/ipc/socket/channels";
 import { buildClient } from "@shared/ipc/buildClient";
 import { forwardContract } from "@shared/ipc/modules/forward";
-import { registerContract } from "@shared/ipc/registerContract";
 import { forwardHandlers } from "@host/ipc/modules/forward";
 import { mintHexId } from "@host/lib/idleRegistry";
 import {
   createPortForwardEngine,
   MAX_CONNS_PER_DEVICE,
 } from "../main/core/portForward/engine.ts";
-import { freeLoopbackPort, makeProof, makeTracker } from "./lib/checkKit.mjs";
+import {
+  freeLoopbackPort,
+  makeProof,
+  makeTracker,
+  startLoopbackServer,
+} from "./lib/checkKit.mjs";
 import { bootDirectWire } from "./lib/directBoot.mjs";
 import { waitFor } from "./lib/checkKit.mjs";
 
@@ -75,44 +79,6 @@ function onceWithin(emitter, event, what, timeoutMs = 10_000) {
     emitter.once(event, () => {
       clearTimeout(timer);
       resolve();
-    });
-  });
-}
-
-// A loopback fixture server, on an ephemeral port unless one is named.
-// `onConnection` is the per-socket behavior (echo, greet, close).
-// `connections` counts accepted sockets so the grant proof can assert
-// the handler never dialed.
-function startFixtureServer(onConnection, port = 0) {
-  return new Promise((resolve, reject) => {
-    const state = { connections: 0 };
-    const sockets = new Set();
-    const server = createServer((socket) => {
-      state.connections += 1;
-      sockets.add(socket);
-      socket.on("close", () => sockets.delete(socket));
-      // A host-side destroy can surface as ECONNRESET here, and an
-      // unlistened socket error would take down the whole check.
-      socket.on("error", () => {});
-      onConnection(socket);
-    });
-    // A named port can be taken: fail the check, not the process.
-    server.once("error", reject);
-    server.listen(port, "127.0.0.1", () => {
-      server.off("error", reject);
-      resolve({
-        port: server.address().port,
-        connections: () => state.connections,
-        close: () =>
-          new Promise((done) => {
-            // server.close waits out live connections, and an assertion
-            // failure reaches this finally with host-side conns still
-            // open, so destroy accepted sockets or the process hangs
-            // with no diagnostic instead of reporting the failure.
-            for (const socket of sockets) socket.destroy();
-            server.close(done);
-          }),
-      });
     });
   });
 }
@@ -239,7 +205,7 @@ const { ok, done, fail } = makeProof("port-forward proof");
 async function main() {
   console.log("port-forward proof\n");
 
-  const echo = await startFixtureServer((socket) => socket.pipe(socket));
+  const echo = await startLoopbackServer((socket) => socket.pipe(socket));
 
   // The direct wire: A hosts the forward surface on a real ticket-mode
   // listener, B drives it through the real dialer and bridge cache,
@@ -248,11 +214,7 @@ async function main() {
   const { track, teardown } = makeTracker();
   track(() => echo.close());
   const { stub, listener, peerA } = await bootDirectWire(track, {
-    registerHandlers: (binding) => {
-      registerContract(forwardContract, forwardHandlers, binding, {
-        validateOutputs: true,
-      });
-    },
+    contracts: [[forwardContract, forwardHandlers]],
   });
   // Torn down in the finally so an assertion failure mid-scenario does
   // not leave listeners holding the process open.
@@ -293,7 +255,7 @@ async function main() {
 
     // (3) Server-initiated bytes: a greeting the service pushes on
     // connect arrives with no write from this side first.
-    const greeter = await startFixtureServer((socket) => {
+    const greeter = await startLoopbackServer((socket) => {
       socket.write("welcome\n");
     });
     const greeted = await openChannel(peerA, forward, greeter.port);
@@ -332,7 +294,7 @@ async function main() {
 
     // (5) The server closes: the tail bytes land, then the peer's end,
     // and ending this side completes the channel.
-    const closer = await startFixtureServer((socket) => {
+    const closer = await startLoopbackServer((socket) => {
       socket.end("tail");
     });
     const closing = await openChannel(peerA, forward, closer.port);
@@ -351,7 +313,7 @@ async function main() {
     // than one credit window and hangs up must still deliver every
     // byte. The bytes the channel holds while waiting for credit
     // outlive the socket's close.
-    const dumper = await startFixtureServer((socket) => {
+    const dumper = await startLoopbackServer((socket) => {
       socket.end(big);
     });
     const dumped = await openChannel(peerA, forward, dumper.port);
@@ -368,7 +330,7 @@ async function main() {
     // (6) A dead port: nothing listens once the fixture closed, so the
     // dial refuses with the coded "connect-failed". A channel id that
     // is already attached on the connection refuses "channel-taken".
-    const dead = await startFixtureServer(() => {});
+    const dead = await startLoopbackServer(() => {});
     const deadPort = dead.port;
     await dead.close();
     await assert.rejects(
@@ -487,7 +449,7 @@ async function main() {
 
     // (11) eof propagation: the fixture ends its socket after a tail,
     // and the local client must see the bytes AND its own 'end'.
-    const byeServer = await startFixtureServer((socket) => {
+    const byeServer = await startLoopbackServer((socket) => {
       socket.end("bye");
     });
     const byeForward = await engine.startForward({
@@ -546,9 +508,9 @@ async function main() {
       "the dial to a dead remote port to close",
     );
     assert.equal(deadDialBytes, 0);
-    const lateServer = await startFixtureServer(
+    const lateServer = await startLoopbackServer(
       (socket) => socket.pipe(socket),
-      latePort,
+      { port: latePort },
     );
     const lateEcho = await dialAndCollect(
       early.localPort,

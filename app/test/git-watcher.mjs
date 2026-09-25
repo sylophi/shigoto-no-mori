@@ -14,8 +14,7 @@
 // Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
 // imports resolve. Run: pnpm test git-watcher.
 import assert from "node:assert/strict";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   gitDirOf,
@@ -29,6 +28,7 @@ import {
   makeProof,
   sandboxGit,
   scrubbedGitEnv,
+  tempDir,
   waitFor,
 } from "./lib/checkKit.mjs";
 
@@ -86,8 +86,7 @@ async function main() {
       // realpath: macOS puts tmpdir behind a symlink and git records the real
       // path in a worktree's .git file, so the paths compared below must
       // agree on it.
-      const root = realpathSync(mkdtempSync(join(tmpdir(), "sm-gitwatch-")));
-      track(() => rmSync(root, { recursive: true, force: true }));
+      const root = tempDir("sm-gitwatch-", track);
       const repo = join(root, "repo");
       const worktree = join(root, "feat");
       git(root, "init", "-q", "-b", "main", repo);

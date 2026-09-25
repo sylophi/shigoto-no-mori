@@ -23,7 +23,6 @@
 // Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
 // imports resolve. Run: pnpm test web-hub.
 import assert from "node:assert/strict";
-import { directContract } from "@shared/ipc/modules/direct";
 import { CLOSE_DEVICE_REVOKED, CLOSE_SUPERSEDED } from "@shared/hub/protocol";
 import { createHubConnection as createWebConnection } from "../web/hub/connection.ts";
 import { makeProof } from "./lib/checkKit.mjs";
@@ -38,31 +37,17 @@ import { startStubHub } from "./lib/hubStub.mjs";
 const echoBroker = async (_ctx, raw) => raw;
 
 // Boots the BROWSER connection (the one under test) on the global
-// WebSocket.
-async function bootWeb(stub, deviceId, opts = {}, track) {
-  let mints = 0;
-  const connection = createWebConnection({
-    // The channel the composition supplies in production
-    // (createWebBridge), so the client role can frame its broker reqs.
-    brokerChannel: directContract.calls.connectInfo.channel,
-  });
-  if (track) track(() => connection.stop());
-  await connection.refresh(async () => ({
-    hubUrl: stub.hubUrl,
-    accountId: opts.accountId ?? "acct",
-    mintTicket: async () => {
-      mints += 1;
-      return `t:${deviceId}:${mints}`;
-    },
+// WebSocket, through the shared boot with the web binding swapped in.
+// The shared boot supplies the broker channel the composition supplies
+// in production (createWebBridge), so the client role can frame its
+// broker reqs.
+const bootWeb = (stub, deviceId, track) =>
+  bootHost(
+    stub,
     deviceId,
-    appVersion: opts.appVersion ?? "1.0.0",
-  }));
-  await waitFor(
-    () => connection.status().socket.phase === "connected",
-    `web ${deviceId} to connect`,
+    { createConnection: createWebConnection, label: `web ${deviceId}` },
+    track,
   );
-  return { connection, mints: () => mints };
-}
 
 const { check, done, fail } = makeProof("web hub proof");
 
@@ -72,9 +57,8 @@ async function main() {
   await check(
     "connect: the browser connection reaches the DO and its status goes connected on the first presence, minting one ticket",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const a = await bootWeb(stub, "A", {}, track);
+      const stub = await startStubHub(track);
+      const a = await bootWeb(stub, "A", track);
       assert.equal(a.connection.status().socket.phase, "connected");
       assert.equal(
         a.mints(),
@@ -87,16 +71,14 @@ async function main() {
   await check(
     "connectBroker: the web client completes the sm hello/welcome with a host peer and learns its appVersion",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const a = await bootWeb(stub, "A", {}, track);
-      const b = await bootHost(
+      const stub = await startStubHub(track);
+      const a = await bootWeb(stub, "A", track);
+      await bootHost(
         stub,
         "B",
         { appVersion: "2.2.2", brokerHandler: echoBroker },
         track,
       );
-      void b;
       const peer = await a.connection.connectBroker("B");
       assert.equal(peer.remoteDeviceId, "B");
       assert.equal(peer.remoteAppVersion, "2.2.2");
@@ -106,11 +88,9 @@ async function main() {
   await check(
     "invoke: the broker channel round-trips through the device hub",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const a = await bootWeb(stub, "A", {}, track);
-      const b = await bootHost(stub, "B", { brokerHandler: echoBroker }, track);
-      void b;
+      const stub = await startStubHub(track);
+      const a = await bootWeb(stub, "A", track);
+      await bootHost(stub, "B", { brokerHandler: echoBroker }, track);
       const peer = await a.connection.connectBroker("B");
       const result = await peer.brokerInvoke({ hi: 1 });
       assert.deepEqual(result, { hi: 1 });
@@ -127,9 +107,8 @@ async function main() {
   await check(
     "presence: the web client's status learns a peer is online and drops it when the peer leaves",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const a = await bootWeb(stub, "A", {}, track);
+      const stub = await startStubHub(track);
+      const a = await bootWeb(stub, "A", track);
       const b = await bootHost(stub, "B", { brokerHandler: echoBroker }, track);
       await waitFor(
         () => a.connection.status().onlineDeviceIds.includes("B"),
@@ -152,9 +131,8 @@ async function main() {
   await check(
     "blocked: a 4102 revoked close blocks with no redial, and a 4103 superseded close blocks with its own message",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const a = await bootWeb(stub, "A", {}, track);
+      const stub = await startStubHub(track);
+      const a = await bootWeb(stub, "A", track);
       stub.dropSocket("A", CLOSE_DEVICE_REVOKED, "device revoked");
       await waitFor(
         () => a.connection.status().socket.phase === "blocked",
@@ -171,7 +149,7 @@ async function main() {
         /removed from the account/,
       );
 
-      const c = await bootWeb(stub, "C", {}, track);
+      const c = await bootWeb(stub, "C", track);
       stub.dropSocket("C", CLOSE_SUPERSEDED, "superseded");
       await waitFor(
         () => c.connection.status().socket.phase === "blocked",
@@ -184,11 +162,9 @@ async function main() {
   await check(
     "reconnect: a dropped socket redials with a fresh minted ticket and serves a peer again",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const a = await bootWeb(stub, "A", {}, track);
-      const b = await bootHost(stub, "B", { brokerHandler: echoBroker }, track);
-      void b;
+      const stub = await startStubHub(track);
+      const a = await bootWeb(stub, "A", track);
+      await bootHost(stub, "B", { brokerHandler: echoBroker }, track);
       assert.equal(a.mints(), 1);
       stub.dropSocket("A", 1001, "going away");
       await waitFor(

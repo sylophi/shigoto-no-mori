@@ -134,7 +134,7 @@
 // imports resolve. Run: pnpm test direct-plane.
 import assert from "node:assert/strict";
 import { rmSync, writeFileSync } from "node:fs";
-import { createServer, connect as netConnect } from "node:net";
+import { connect as netConnect } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WebSocket as WsClient, WebSocketServer } from "ws";
@@ -147,10 +147,7 @@ import {
   connectDevice,
   RemoteConnectError,
 } from "@shared/ipc/socket/wsClientTransport";
-import {
-  DirectCandidateSchema,
-  directContract,
-} from "@shared/ipc/modules/direct";
+import { DirectCandidateSchema } from "@shared/ipc/modules/direct";
 import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { registerContract } from "@shared/ipc/registerContract";
 import { makeHubHandlers } from "@shared/hub/bridgeHandlers";
@@ -192,7 +189,7 @@ import {
   TunnelUnconfiguredError,
 } from "@shared/account/service";
 import { createHubConnection as createWebConnection } from "../web/hub/connection.ts";
-import { fakeClock, makeProof } from "./lib/checkKit.mjs";
+import { fakeClock, makeProof, startLoopbackServer } from "./lib/checkKit.mjs";
 import {
   bootBrokeredPair as bootPair,
   makeDirectBridge,
@@ -308,68 +305,24 @@ function stubKeeper(rejectWith) {
   };
 }
 
-// A device booted on the BROWSER binding (web/hub/connection.ts):
-// the broker channel with NO handler, so its host role is empty by
-// construction and every req comes back as the no-handler shape. The
-// real binding rather than a stub, because the thing under test is
-// exactly what that binding puts on the wire when a desktop dials a
-// browser tab.
-async function bootWebPeer(stub, deviceId, track) {
-  let mints = 0;
-  const connection = createWebConnection({
-    brokerChannel: directContract.calls.connectInfo.channel,
-  });
-  track(() => connection.stop());
-  await connection.refresh(async () => ({
-    hubUrl: stub.hubUrl,
-    accountId: "acct",
-    mintTicket: async () => {
-      mints += 1;
-      return `t:${deviceId}:${mints}`;
-    },
-    deviceId,
-    appVersion: "1.0.0",
-  }));
-  await waitFor(
-    () => connection.status().socket.phase === "connected",
-    `web ${deviceId} to connect`,
-  );
-  return connection;
-}
-
 // A loopback TCP proxy that delays the ACCEPTED connection before
 // piping it to the target, so a candidate's socket opens late by a
 // controlled amount (a slow route stand-in).
-function delayProxy(track, targetPort, delayMs) {
-  return new Promise((resolve) => {
-    const sockets = new Set();
-    const server = createServer((socket) => {
-      sockets.add(socket);
-      socket.on("close", () => sockets.delete(socket));
-      const timer = setTimeout(() => {
-        const upstream = netConnect(targetPort, "127.0.0.1");
-        sockets.add(upstream);
-        upstream.on("close", () => sockets.delete(upstream));
-        upstream.on("error", () => socket.destroy());
-        socket.on("error", () => upstream.destroy());
-        upstream.on("connect", () => {
-          socket.pipe(upstream);
-          upstream.pipe(socket);
-        });
-      }, delayMs);
-      socket.on("close", () => clearTimeout(timer));
-    });
-    server.listen(0, "127.0.0.1", () => {
-      track(
-        () =>
-          new Promise((done) => {
-            for (const socket of sockets) socket.destroy();
-            server.close(() => done());
-          }),
-      );
-      resolve(server.address().port);
-    });
+async function delayProxy(track, targetPort, delayMs) {
+  const proxy = await startLoopbackServer((socket, hold) => {
+    const timer = setTimeout(() => {
+      const upstream = hold(netConnect(targetPort, "127.0.0.1"));
+      upstream.on("error", () => socket.destroy());
+      socket.on("error", () => upstream.destroy());
+      upstream.on("connect", () => {
+        socket.pipe(upstream);
+        upstream.pipe(socket);
+      });
+    }, delayMs);
+    socket.on("close", () => clearTimeout(timer));
   });
+  track(proxy.close);
+  return proxy.port;
 }
 
 // A stub host opens the handshake the way a real listener does. Without
@@ -489,8 +442,7 @@ async function main() {
   await check(
     "brokering: connectInfo over the device hub carries fully dialable candidates with one ticket each while the listener is up, and available:false when it is down",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
+      const stub = await startStubHub(track);
       const listener = await startDirectListener(track);
       const { client } = await bootPair(stub, track, listener, {
         candidateAddresses: () => ["127.0.0.1", "192.0.2.9"],
@@ -561,8 +513,7 @@ async function main() {
   await check(
     "direct dial: the handshake completes with the pinned identity and invokes flow while the device hub's forwardedCount stays flat",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
+      const stub = await startStubHub(track);
       const listener = await startDirectListener(track);
       const { client } = await bootPair(stub, track, listener);
       const { bridge } = makeDirectBridge(client);
@@ -602,8 +553,7 @@ async function main() {
   await check(
     "concurrent race: a junk candidate enumerating first no longer defeats a reachable one, and per-candidate tickets keep every candidate authable",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
+      const stub = await startStubHub(track);
       const listener = await startDirectListener(track);
       // The junk candidate FIRST, exactly the ordering that made the
       // sequential walk fail deterministically on multi-interface
@@ -635,8 +585,7 @@ async function main() {
   await check(
     "blocked verdict is terminal but does not end the race: an auth-refused candidate still rejects the attempt as blocked once the remaining candidates have had their turn, never as a transient timeout",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
+      const stub = await startStubHub(track);
       // The advertised port belongs to a DIFFERENT device's listener
       // with its own ticket store, so the loopback candidate fails
       // auth (blocked). The blackhole candidate would otherwise hold
@@ -1224,11 +1173,10 @@ async function main() {
   await check(
     "deadline: a wedged connectInfo cannot hang the bridge cache, whose attempt rejects typed within the budget, an invoke joins the in-flight dial's fate, and with nothing cached an invoke refuses at once instead of dialing",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
+      const stub = await startStubHub(track);
       // B serves a connectInfo that NEVER answers (a wedged peer),
       // wired raw into its one broker slot.
-      const host = await bootDevice(
+      await bootDevice(
         stub,
         "B",
         { brokerHandler: () => new Promise(() => {}) },
@@ -1283,7 +1231,6 @@ async function main() {
         baseline,
         "a sessionless invoke started a dial (broker traffic seen)",
       );
-      void host;
     },
   );
 
@@ -1475,8 +1422,7 @@ async function main() {
   await check(
     "bye: a winning dial closes its throwaway broker session with a bye the host acts on, so the hub-side session dies at once and no broker garbage lingers",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
+      const stub = await startStubHub(track);
       const listener = await startDirectListener(track);
       const { client } = await bootPair(stub, track, listener);
       const { bridge } = makeDirectBridge(client);
@@ -1522,8 +1468,7 @@ async function main() {
         remoteDeviceId: "",
         remoteAppVersion: "",
       };
-      const stub = await startStubHub();
-      track(() => stub.close());
+      const stub = await startStubHub(track);
       const listener = await startDirectListener(track);
       const { client } = await bootPair(stub, track, listener);
       const { bridge } = makeDirectBridge(client);
@@ -1681,8 +1626,7 @@ async function main() {
   await check(
     "supervised and eager: presence alone establishes the session (no invoke anywhere), a host-side drop is redialed by the keeper on the shared ladder, and quit's stop() latches the schedule",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
+      const stub = await startStubHub(track);
       const listener = await startDirectListener(track);
       // The plane's presence path wired to the client connection
       // exactly as production wires it (late-bound plus one catch-up
@@ -1800,8 +1744,7 @@ async function main() {
   await check(
     "routing: the cache is direct or nothing, directPeerVersions reports the direct session, and a closed direct socket drops the cache, refuses sessionless invokes and rejects typed on the next dial",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
+      const stub = await startStubHub(track);
       const listener = await startDirectListener(track);
       const { client } = await bootPair(stub, track, listener);
       // The plane fans a status snapshot out on every direct open and
@@ -1886,8 +1829,7 @@ async function main() {
   await check(
     "unreachable is typed: a failed direct dial rejects the invoke with the dial error and creates no hub data session",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
+      const stub = await startStubHub(track);
       const listener = await startDirectListener(track);
       // Free the port, then keep ADVERTISING it: the broker hands out
       // tickets and a port nobody listens on, so the dial itself fails
@@ -1944,8 +1886,7 @@ async function main() {
   await check(
     "pushes: a host broadcast reaches a direct-connected client through the shared peerPush path, tagged with the peer's deviceId",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
+      const stub = await startStubHub(track);
       const listener = await startDirectListener(track);
       const { client } = await bootPair(stub, track, listener);
       const pushes = [];
@@ -2072,8 +2013,7 @@ async function main() {
   await check(
     "dialableKinds (the web path): the declared capability reaches the host over the wire, which mints only the tunnel ticket, and a tunnel-less peer is the plain unreachable outcome",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
+      const stub = await startStubHub(track);
       const listener = await startDirectListener(track);
       // A well-formed but unroutable tunnel hostname: a check cannot
       // stand up a real wss endpoint (the no-port invariant pins the
@@ -2116,8 +2056,7 @@ async function main() {
       // outcome, distinguishable from the structural skew error below.
       const bare = await startDirectListener(track);
       const bareMinted = [];
-      const stub2 = await startStubHub();
-      track(() => stub2.close());
+      const stub2 = await startStubHub(track);
       const pair2 = await bootPair(stub2, track, bare, {
         candidateAddresses: () => ["127.0.0.1"],
         onMinted: (tickets) => {
@@ -2192,15 +2131,25 @@ async function main() {
   await check(
     "a refuse-all peer is a TERMINAL verdict: the browser binding's no-handler answer yields NoDialableCandidateError and PARKS, while a peer whose broker merely threw stays on the ladder",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
+      const stub = await startStubHub(track);
       // B is the REAL browser binding: broker channel, no handler, so
       // its host role is empty by construction. C is a node peer whose
       // broker THREW (mid-boot, a transient failure of one call). Both
       // fail the same dial, and telling them apart is the point: eager
       // supervision would otherwise redial every open browser tab in
       // the roster at the ladder's cap forever.
-      await bootWebPeer(stub, "B", track);
+      // A device booted on the BROWSER binding (web/hub/connection.ts):
+      // the broker channel with NO handler, so its host role is empty by
+      // construction and every req comes back as the no-handler shape.
+      // The real binding rather than a stub, because the thing under
+      // test is exactly what that binding puts on the wire when a
+      // desktop dials a browser tab.
+      await bootDevice(
+        stub,
+        "B",
+        { createConnection: createWebConnection, label: "web B" },
+        track,
+      );
       await bootDevice(
         stub,
         "C",
