@@ -17,8 +17,9 @@
 //
 // `SHIGOMORI_UPDATE_FEED_URL` still overrides the feed for end-to-end
 // testing of a signed build, and `SHIGOMORI_UPDATE_RELEASES_URL` the
-// release list a prerelease build ranks instead (cli/updater.go). The
-// CLI child inherits both from our environment.
+// release list a prerelease build ranks instead (cli/updater.go).
+// updateEndpoints.ts moves both out of our environment and into flags
+// on the check's own CLI child.
 import { join } from "node:path";
 import { app } from "electron";
 import { updaterContract } from "@shared/ipc/modules/updater";
@@ -36,6 +37,7 @@ import { busyActionRemoteRefusal, confirmBusyAction } from "./busyPrompt";
 import { cliFailureMessage, runCli, spawnCliDetached } from "./cliRunner";
 import { UNATTENDED_QUIT_DELAY_MS } from "./relaunch";
 import { publishUpdaterState, startUpdaterBridge } from "./updaterBridge";
+import { updateEndpointFlags } from "./updateEndpoints";
 import { errorMessageOf } from "@shared/errors";
 
 const CHECK_INTERVAL_MS = 10 * 60 * 1000;
@@ -147,7 +149,7 @@ async function runCheck(): Promise<void> {
     let next: UpdaterState;
     try {
       const result = await runCli(
-        ["update", "--stage"],
+        ["update", "--stage", ...updateEndpointFlags()],
         (doc) => {
           // "verifying" arrives too, and the renderer's machine
           // collapses everything between "found one" and "staged" into

@@ -82,29 +82,28 @@ func stagedBundlePath(man *stagedManifest) string {
 
 var feedClient = &http.Client{Timeout: feedTimeout}
 
-// `SHIGOMORI_UPDATE_FEED_URL` points a signed build at a stand-in for
-// the update server (MANUAL-TESTING.md). It forces that single-answer
-// path on every build, prerelease or not, so the variable a tester
-// has always used keeps a test build off the real feeds.
-func feedOverride() string {
-	return strings.TrimSpace(os.Getenv("SHIGOMORI_UPDATE_FEED_URL"))
-}
+// Stand-ins for the two endpoints, from `sm update --feed-url` and
+// `--releases-url` (MANUAL-TESTING.md). Flags, not environment
+// variables, so they don't ride `sm run` into script trees. The feed
+// stand-in forces the single-answer path on every build, prerelease or
+// not, so one flag keeps a test build off the real feeds.
+var feedURLOverride, releasesURLOverride string
 
 func updateServerURL() string {
-	if override := feedOverride(); override != "" {
-		return override
+	if feedURLOverride != "" {
+		return feedURLOverride
 	}
 	return "https://update.electronjs.org/" + updateFeedRepo + "/darwin-" + feedArch() + "/" + version
 }
 
-// `SHIGOMORI_UPDATE_RELEASES_URL` is the prerelease path's stand-in:
-// a URL serving the GitHub release-list JSON. 100 is the API's page
-// maximum. The list is ordered by the tagged commit's date, not by
-// version, so a prerelease cut from an old commit sinks. Once the repo
-// passes 100 releases such a tag could fall off the page.
+// The release-list stand-in serves the GitHub release-list JSON. 100
+// is the API's page maximum. The list is ordered by the tagged
+// commit's date, not by version, so a prerelease cut from an old
+// commit sinks. Once the repo passes 100 releases such a tag could
+// fall off the page.
 func releaseListURL() string {
-	if override := strings.TrimSpace(os.Getenv("SHIGOMORI_UPDATE_RELEASES_URL")); override != "" {
-		return override
+	if releasesURLOverride != "" {
+		return releasesURLOverride
 	}
 	return "https://api.github.com/repos/" + updateFeedRepo + "/releases?per_page=100"
 }
@@ -128,7 +127,7 @@ func feedArch() string {
 // workflow stamps the tag into package.json, so v2.0.0-beta.2 ships as
 // "2.0.0-beta.2"). Every other build lets the update server compare.
 func queryFeed() (release *releaseInfo, confirmed bool, err error) {
-	if feedOverride() == "" {
+	if feedURLOverride == "" {
 		if current, ok := parseSemver(version); ok && current.isPrerelease() {
 			return queryReleaseList(current)
 		}

@@ -90,6 +90,7 @@ import {
   isInstallingUpdate,
   startUpdater,
 } from "./electron/updater";
+import { takeUpdateEndpointOverrides } from "./electron/updateEndpoints";
 
 enableDevCdpPort();
 
@@ -135,6 +136,7 @@ if (!app.isPackaged) {
 // other Electron project started from here would silently boot our
 // binary instead of its own.
 delete process.env.ELECTRON_OVERRIDE_DIST_PATH;
+takeUpdateEndpointOverrides();
 
 // One live instance per data dir. A second copy (typically a fresh
 // download in ~/Downloads beside the installed app) would run its own

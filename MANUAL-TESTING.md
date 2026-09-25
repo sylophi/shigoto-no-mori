@@ -149,8 +149,14 @@ smd projects add <dir> --all --yes     # set SHIGOMORI_DATA_DIR if the data dir 
 | `SM_DEVICE_HUB_URL`                | Device hub URL. Normally from `.env.local`; a real env var overrides it.      |
 | `SM_ACCOUNT_CLERK_PUBLISHABLE_KEY` | Clerk key. Same override rule.                                                |
 | `SM_ACCOUNT_WEB_ORIGIN`            | Web client origin the desktop admits. Same override rule.                     |
-| `SHIGOMORI_UPDATE_FEED_URL`        | Stand-in for the update server. Forces that path on prerelease builds too.    |
-| `SHIGOMORI_UPDATE_RELEASES_URL`    | Stand-in for the GitHub release list (prerelease builds).                     |
+| `SHIGOMORI_UPDATE_FEED_URL`        | App only. Stand-in for the update server, on prerelease builds too.          |
+| `SHIGOMORI_UPDATE_RELEASES_URL`    | App only. Stand-in for the GitHub release list (prerelease builds).          |
+
+The app passes the two update stand-ins to its own update check and
+removes them from its environment, so scripts it runs don't inherit
+them. `sm update` refuses to run with either set. From a terminal,
+pass them to the command instead: `sm update --feed-url <url>` or
+`--releases-url <url>`.
 
 ### Theme hotkeys
 
