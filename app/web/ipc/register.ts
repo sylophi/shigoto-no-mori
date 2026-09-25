@@ -243,9 +243,10 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     if (accountId !== settingsAccountId) {
       settingsAccountId = accountId;
       sharedSettingsCopy.clear();
-      // And the client config's peer-keyed picks (withoutPeerState):
-      // in localStorage they would outlive even the person, on a
-      // shared browser profile.
+      // And the client config's peer-keyed picks (withoutPeerState),
+      // every fold among them since a tab hosts no projects: in
+      // localStorage they would outlive even the person, on a shared
+      // browser profile.
       writeKey(
         deps.localStorage,
         CLIENT_CONFIG_KEY,
@@ -257,6 +258,7 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
               StoredClientConfigSchema,
               {},
             ),
+            false,
           ),
         ),
       );

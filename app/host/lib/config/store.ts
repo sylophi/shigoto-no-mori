@@ -7,10 +7,10 @@
 // Two files, split by what it costs to lose them. registry.json holds
 // the durable record of what the user has set up: the project list and
 // the worktree shelf. state.json holds what the app can rebuild by
-// being used: the three use logs, the two sort preferences and the
-// sidebar collapse set. The registry is only rewritten when projects
-// or the shelf actually change, so the writes that fire on nearly
-// every click never touch it.
+// being used: the three use logs and the package scripts' sort and
+// order. The registry is only rewritten when projects or the shelf
+// actually change, so the writes that fire on nearly every click never
+// touch it.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -169,6 +169,10 @@ interface JsonStore {
     fallback: T,
     update: (current: T) => T | undefined,
   ): void;
+  // Deletes the keys, under the lock, for a one-time migration that
+  // drains a key it has moved elsewhere. Writes nothing when none of
+  // them is there.
+  dropKeys(keys: readonly string[]): void;
 }
 
 // The two stores say exactly two things: which file they own, and
@@ -203,10 +207,20 @@ function makeStore(file: string, beforeAccess?: () => void): JsonStore {
       enter();
       updateKeyIn(file, key, fallback, update);
     },
+    dropKeys(keys: readonly string[]): void {
+      enter();
+      withStoreLock(file, () => {
+        const all = readAll(file);
+        const present = keys.filter((key) => key in all);
+        if (present.length === 0) return;
+        for (const key of present) delete all[key];
+        writeAll(file, all);
+      });
+    },
   };
 }
 
-// Use logs, sort preferences, sidebar collapse set.
+// Use logs, the package scripts' sort and order.
 export const stateStore = makeStore(STATE_FILE);
 
 // Project list and worktree shelf. Every entry point drains an

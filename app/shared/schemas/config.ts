@@ -3,7 +3,7 @@ import { isSafeRelPath } from "../git/gitPaths";
 import { ProjectScopedPayloadSchema } from "./payloads";
 import { MergeMethodSchema } from "./pullRequest";
 import { CustomPortSchema, MAX_CUSTOM_PORTS, PortNumberSchema } from "./ports";
-import { SidebarViewSchema } from "./project";
+import { ProjectSortModeSchema, SidebarViewSchema } from "./project";
 
 const ThemeSchema = z.enum(["light", "dark", "system"]);
 export type Theme = z.infer<typeof ThemeSchema>;
@@ -342,32 +342,64 @@ export const ClientConfigSchema = z.object({
   // of a host, so a hostless client keeps one too. Absent means the
   // tree.
   sidebarView: SidebarViewSchema.optional(),
-  // The sidebar's folded projects that have no checkout on this
-  // machine, by group key (repo identity, or `${deviceId}/${projectId}`
-  // for an identity-less one). A local project's fold is its host's
-  // (state.json, host/lib/projects/collapsed.ts). A peer-only project
-  // has no host here to keep one, and a hostless client has no host at
-  // all, so the window keeps theirs
-  // (renderer/hooks/projects/useCollapsedRemoteProjects.ts is the only
-  // reader and writer).
-  collapsedRemoteProjects: z.array(z.string()).optional(),
+  // How the sidebar orders its projects. A preference of the window,
+  // like the view above: the CLI never reads it, and a peer has no say
+  // in how this machine lists them. Absent means the manual order
+  // (renderer/hooks/projects/useProjectSort.ts is the only reader and
+  // writer, and stores the default as nothing).
+  projectsSort: ProjectSortModeSchema.optional(),
+  // The sidebar's folded projects, by group key (projectGroupKey in
+  // renderer/components/sidebar/buildSidebarRows.ts): the repo identity
+  // when the project has one, so a repo held here and on peers is one
+  // fold; peerProjectKey for a peer's project with no identity; the
+  // project id for such a local one. Absence == expanded
+  // (renderer/hooks/projects/useCollapsedProjects.ts is the only reader
+  // and writer).
+  collapsedProjects: z.array(z.string()).optional(),
 });
 export type ClientConfig = z.infer<typeof ClientConfigSchema>;
 
+// The group key of a peer's project with no repo identity: it can only
+// group with itself, so it is named by its device and its id. The
+// prefix sets it apart from a repo identity (`root:` or `remote:`,
+// shared/git/repoIdentity.mts) and from a local project id (a folder
+// name, never holding a `/`), which is what lets withoutPeerState find
+// it by shape alone.
+const PEER_PROJECT_KEY_PREFIX = "device:";
+export const peerProjectKey = (deviceId: string, projectId: string) =>
+  `${PEER_PROJECT_KEY_PREFIX}${deviceId}/${projectId}`;
+
 // The client config without what was keyed by the account's peers:
 // a device leaving the account (a sign-out, a sign-in under another)
-// leaves the local port picks, the folded peer projects and the
-// legacy create-device picks behind, since every one of them names a
-// device of the account that is gone, and a device of a later
-// account with the same id must not inherit them.
-export function withoutPeerState(config: ClientConfig): ClientConfig {
+// leaves the local port picks, the legacy create-device picks and the
+// folds of peers' identity-less projects behind, since every one of
+// them names a device of the account that is gone, and a device of a
+// later account with the same id must not inherit them. On a machine
+// with projects of its own (`hostsProjects`) the rest of the fold list
+// stays: a local project id is this machine's own, and a repo identity
+// names a repository, not a device, so it can't land on the wrong
+// machine. That holds for an identity only peers hold too, which is
+// kept rather than told apart from a local one: this runs where the
+// project list isn't at hand (the main process's sign-out), and a
+// leftover fold of a repo nobody lists costs nothing. A hostless
+// client (the browser) has no projects of its own, so every fold it
+// keeps is a peer's and all of them go, the repo names with them.
+export function withoutPeerState(
+  config: ClientConfig,
+  hostsProjects = true,
+): ClientConfig {
   const {
     forwardLocalPorts: _forwardLocalPorts,
-    collapsedRemoteProjects: _collapsedRemoteProjects,
     quickCreateDevices: _quickCreateDevices,
+    collapsedProjects,
     ...rest
   } = config;
-  return rest;
+  const kept = collapsedProjects?.filter(
+    (key) => hostsProjects && !key.startsWith(PEER_PROJECT_KEY_PREFIX),
+  );
+  return kept !== undefined && kept.length > 0
+    ? { ...rest, collapsedProjects: kept }
+    : rest;
 }
 
 // The one reading of keepReachable: on unless switched off. Every

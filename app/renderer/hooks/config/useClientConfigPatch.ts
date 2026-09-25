@@ -1,7 +1,8 @@
 // The immediate client-config writer, for the keys that take effect on
 // the spot rather than staging behind a Save: keepReachable, the
-// forward local-port preferences. One hook body carries the protocol
-// every such key needs, so the concurrency rule lives once:
+// forward local-port preferences, the sidebar's view, sort and folds.
+// One hook body carries the protocol every such key needs, so the
+// concurrency rule lives once:
 //
 // The patch is computed once, off the doc as it is when mutate is
 // called, and becomes the mutation's variable. The cache takes it

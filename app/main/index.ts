@@ -32,7 +32,10 @@ import {
   applyThemeSource,
   readClientConfigSync,
 } from "./electron/clientConfig";
-import { seedClientConfigFromLegacy } from "./electron/clientConfigMigration";
+import {
+  seedClientConfigFromLegacy,
+  seedProjectsSortFromState,
+} from "./electron/clientConfigMigration";
 import {
   announceProjectChanged,
   registerIpcHandlers,
@@ -424,8 +427,10 @@ app.on("ready", async () => {
   // the killing in the background.
   startOrphanScriptSweep();
   // Before the first createWindow, whose theme read must already see
-  // values migrated out of the pre-split device config.
+  // values migrated out of the pre-split device config, and whose
+  // sidebar must already see the sort moved out of state.json.
   await seedClientConfigFromLegacy();
+  await seedProjectsSortFromState();
   // Scrub the removed LAN listener's plaintext tokens off disk. An
   // unreadable config must never block boot, and the drain retries
   // next boot.

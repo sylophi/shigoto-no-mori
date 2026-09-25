@@ -24,8 +24,6 @@
   "projects:carryOverStats",
   "projects:cloneUrl",
   "projects:defaultBranch",
-  "projects:getCollapsed",
-  "projects:getSort",
   "projects:icon",
   "projects:list",
   "projects:listBranches",

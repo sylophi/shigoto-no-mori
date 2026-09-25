@@ -902,15 +902,9 @@ async function main() {
           `fs.${key} must require the command grant`,
         );
       }
-      // The projects and packageScripts preference/registry writes are
-      // commands on the remote surface now.
-      for (const key of [
-        "add",
-        "remove",
-        "reorder",
-        "setSort",
-        "toggleCollapsed",
-      ]) {
+      // The projects registry writes and the packageScripts preference
+      // write are commands on the remote surface now.
+      for (const key of ["add", "remove", "reorder"]) {
         assert.equal(
           projectsContract.calls[key].remote,
           true,

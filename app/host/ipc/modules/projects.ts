@@ -18,12 +18,6 @@ import {
 } from "@host/lib/projects";
 import { forgetProjectIcon, readProjectIcon } from "@host/lib/projects/icon";
 import {
-  dropCollapsedProject,
-  readCollapsedProjects,
-  toggleCollapsedProject,
-} from "@host/lib/projects/collapsed";
-import { readProjectSort, writeProjectSort } from "@host/lib/projects/usage";
-import {
   listCarryOverCandidates,
   statCarryOverPaths,
 } from "@host/lib/worktrees/carryOver";
@@ -114,11 +108,9 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     } finally {
       clearProjectDeleteInflight(id);
     }
-    // Drop the icon-cache entry and collapsed pref so neither leaks
-    // across re-adds of the same path. The CLI already deleted the
-    // per-project state dir.
+    // Drop the icon-cache entry so it doesn't leak across re-adds of
+    // the same path. The CLI already deleted the per-project state dir.
     await forgetProjectIcon(removed.path);
-    dropCollapsedProject(id);
   },
 
   reorder: ({ draggedId, targetId, position }) => {
@@ -130,14 +122,6 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
       reorderProjects(current, draggedId, targetId, position),
     );
   },
-
-  getSort: () => readProjectSort(),
-
-  setSort: ({ mode }) => writeProjectSort(mode),
-
-  getCollapsed: () => readCollapsedProjects(),
-
-  toggleCollapsed: ({ projectId }) => toggleCollapsedProject(projectId),
 
   defaultBranch: async ({ projectId }) => {
     const project = findProjectOrThrow(projectId);

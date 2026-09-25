@@ -7,11 +7,8 @@ import {
   ProjectIconSchema,
   ProjectSchema,
   ProjectScopedPayloadSchema,
-  ProjectSortModeSchema,
   RemoveProjectPayloadSchema,
   ReorderProjectsPayloadSchema,
-  SetProjectSortPayloadSchema,
-  ToggleCollapsedProjectPayloadSchema,
   CarryOverCandidateSchema,
   CarryOverListingPayloadSchema,
   CarryOverStatSchema,
@@ -42,25 +39,6 @@ export const projectsContract = defineContract("host", {
     remote: true,
     mutating: true,
   }),
-  getSort: invoke("projects:getSort", z.void(), ProjectSortModeSchema, {
-    remote: true,
-    mutating: false,
-  }),
-  setSort: invoke("projects:setSort", SetProjectSortPayloadSchema, z.void(), {
-    remote: true,
-    mutating: true,
-  }),
-  getCollapsed: invoke("projects:getCollapsed", z.void(), z.array(z.string()), {
-    remote: true,
-    mutating: false,
-  }),
-  // Returns the post-toggle list so the renderer can sync to disk truth.
-  toggleCollapsed: invoke(
-    "projects:toggleCollapsed",
-    ToggleCollapsedProjectPayloadSchema,
-    z.array(z.string()),
-    { remote: true, mutating: true },
-  ),
   // Emitted after an action bumps a project's usage so the renderer can
   // refresh its usage-sorted sidebar list.
   usageBumped: broadcast("projects:usageBumped", ProjectScopedPayloadSchema, {

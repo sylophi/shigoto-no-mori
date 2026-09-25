@@ -64,8 +64,6 @@ function buildQueryKeys(deviceId: string) {
     globalConfig: () => host("globalConfig"),
 
     projects: () => host("projects"),
-    projectsSort: () => host("projectsSort"),
-    projectsCollapsed: () => host("projectsCollapsed"),
     projectIcon: (projectId: string) => host("projectIcon", projectId),
 
     shigomoriConfig: (projectId: string | null) => host("shigomori", projectId),

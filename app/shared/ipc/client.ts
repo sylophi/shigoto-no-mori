@@ -41,7 +41,6 @@ import type {
   LaunchToolMenuEntry,
   PackageScriptSortMode,
   PickFolderPayload,
-  ProjectSortMode,
   SharedSettingsDoc,
   SharedSettingValue,
   ShigomoriConfig,
@@ -287,11 +286,6 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
         targetId: string;
         position: "before" | "after";
       }) => projectsClient.reorder(input),
-      getSort: projectsClient.getSort,
-      setSort: (mode: ProjectSortMode) => projectsClient.setSort({ mode }),
-      getCollapsed: projectsClient.getCollapsed,
-      toggleCollapsed: (projectId: string) =>
-        projectsClient.toggleCollapsed({ projectId }),
       onUsageBumped: projectsClient.usageBumped,
       defaultBranch: (projectId: string) =>
         projectsClient.defaultBranch({ projectId }),

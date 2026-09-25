@@ -1,27 +1,22 @@
-import { useQuery } from "@tanstack/react-query";
+// How the sidebar and the launcher order this machine's projects. A
+// preference of the window, kept in its client config like the sidebar
+// view, so a peer has no say in it. Resolved, not the raw doc: an
+// absent key reads as the manual order, in one place, and the manual
+// order is stored as nothing. A hostless client never shows the sort
+// menu, so it stays on the manual order: the tree it draws is the
+// peers', which the merge orders.
 import type { ProjectSortMode } from "@shared/schemas";
-import { useOptimisticPreference } from "@/hooks/ui/useOptimisticPreference";
-import { useHostScope } from "@/hooks/remote/useHostScope";
-import { hasLocalHost } from "@/lib/localHost";
+import { useClientConfig } from "@/hooks/config/useClientConfig";
+import { useClientConfigPatch } from "@/hooks/config/useClientConfigPatch";
 
-// A hostless client has no projects of its own to order, so it never
-// asks: the tree it draws is the peers', which the merge orders.
-export function useProjectSort() {
-  const { api, keys } = useHostScope();
-  return useQuery<ProjectSortMode>({
-    queryKey: keys.projectsSort(),
-    queryFn: () => api.projects.getSort(),
-    enabled: hasLocalHost,
-    staleTime: Number.POSITIVE_INFINITY,
-    meta: { errorTitle: "Couldn't read project sort preference" },
-  });
+export function useProjectSort(): ProjectSortMode {
+  const { data: config } = useClientConfig();
+  return config?.projectsSort ?? "manual";
 }
 
 export function useSetProjectSort() {
-  const { api, keys } = useHostScope();
-  return useOptimisticPreference<ProjectSortMode>(
-    keys.projectsSort(),
-    (mode) => api.projects.setSort(mode),
+  return useClientConfigPatch<ProjectSortMode>(
+    (mode) => ({ projectsSort: mode === "manual" ? undefined : mode }),
     "Couldn't save project sort preference",
   );
 }

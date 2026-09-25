@@ -1,21 +1,14 @@
-// Per-project action usage log and the sidebar sort preference. Same
-// rolling-window algorithm as the launcher row and package.json scripts list
-// (see ../util/useLog) so the "most used" sort behaves identically across the
-// app. Stored in the global state.json, since sort and usage are
-// app-managed UI state, not the user-editable per-project shigomori config.
-import type { ProjectSortMode } from "@shared/schemas";
+// Per-project action usage log. Same rolling-window algorithm as the
+// launcher row and package.json scripts list (see ../util/useLog) so the
+// "most used" sort behaves identically across the app. Stored in the
+// global state.json, since usage is app-managed state, not the
+// user-editable per-project shigomori config.
 import { stateStore } from "../config/store";
 import { pruneAndPush, usageByName } from "../util/useLog";
 
 const USE_LOG_KEY = "projectUseLog";
-const SORT_KEY = "projectsSort";
 
 type UseLog = Record<string, number[]>;
-
-// "manual" is the implicit default: a fresh install reads back "manual"
-// without the key ever being written, so existing users keep their
-// drag-arranged order until they pick a different sort.
-const IMPLICIT_MODE: ProjectSortMode = "manual";
 
 export interface ProjectUsage {
   lastUsed: number;
@@ -24,17 +17,9 @@ export interface ProjectUsage {
 
 // state.json is display-only from here on. The project list and the
 // shelf live in registry.json, so an unreadable state.json should cost
-// the sidebar its usage decoration and its sort preference, nothing
-// more, which is what readHint buys. bumpProjectUseCount below
-// deliberately stays on the strict read.
-export function readProjectSort(): ProjectSortMode {
-  return stateStore.readHint<ProjectSortMode>(SORT_KEY, IMPLICIT_MODE);
-}
-
-export function writeProjectSort(mode: ProjectSortMode): void {
-  stateStore.writeKey<ProjectSortMode>(SORT_KEY, mode);
-}
-
+// the sidebar its usage decoration, nothing more, which is what
+// readHint buys. bumpProjectUseCount below deliberately stays on the
+// strict read.
 export function usageFor(projectIds: string[]): Record<string, ProjectUsage> {
   return usageByName(projectIds, stateStore.readHint<UseLog>(USE_LOG_KEY, {}));
 }

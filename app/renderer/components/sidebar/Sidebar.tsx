@@ -14,14 +14,7 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import {
-  useCollapsedProjects,
-  useToggleCollapsedProject,
-} from "@/hooks/projects/useCollapsedProjects";
-import {
-  useCollapsedRemoteProjects,
-  useToggleCollapsedRemoteProject,
-} from "@/hooks/projects/useCollapsedRemoteProjects";
+import { useCollapsedProjects } from "@/hooks/projects/useCollapsedProjects";
 import { useAccountStatus } from "@/hooks/account/useAccount";
 import { useAllProjectShigomoriConfigs } from "@/hooks/config/useShigomoriConfig";
 import { useAllProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
@@ -42,9 +35,9 @@ import { localDeviceId } from "@/lib/queryKeys";
 import { useFanOutErrorToast } from "./useFanOutErrorToast";
 import {
   buildSidebarRows,
-  claimsPeers,
+  type GroupIdSet,
+  projectGroupKey,
   projectGroupOrder,
-  remoteGroupId,
   remoteGroupKeyOf,
 } from "./buildSidebarRows";
 import { useDeviceBadges } from "./DeviceBadge";
@@ -150,49 +143,39 @@ function Forest({
   const { data: status } = useAccountStatus();
   const signedIn = hasLocalHost || status?.signedIn === true;
   const { data: projects = [], isLoading } = useProjects();
-  const { data: sortMode = "manual" } = useProjectSort();
+  const sortMode = useProjectSort();
   const preferredView = useSidebarView();
   const inbox = (pinnedView ?? preferredView) === "inbox";
   const reorderProjects = useReorderProjects();
-  // Absence == expanded, so new projects default open. Persisted in
-  // state.json (like the sort preference) so a relaunch keeps the tree
-  // the way the user pruned it; the remove handler prunes deleted ids.
-  // A project only peers hold folds the same way, its fold kept by
-  // this window since no host here has the project.
-  const { data: collapsedIds = [] } = useCollapsedProjects();
-  const toggleCollapsed = useToggleCollapsedProject();
-  const collapsedRemoteKeys = useCollapsedRemoteProjects();
-  const toggleCollapsedRemote = useToggleCollapsedRemoteProject();
-  // One fold per repo: narrowed to a peer, a repo this machine also
-  // holds is drawn as that peer's group, and its fold is still the
-  // local project's, read and written under the local id.
-  const localIdByIdentity = new Map<string, string>();
-  for (const project of projects) {
-    if (claimsPeers(project))
-      localIdByIdentity.set(project.identity, project.id);
-  }
-  // A set of local ids plus the peer group of every repo among them.
-  const withRemoteGroups = (ids: Set<string>) => {
-    const expanded = new Set(ids);
-    for (const [identity, id] of localIdByIdentity) {
-      if (ids.has(id)) expanded.add(remoteGroupId(identity));
-    }
-    return expanded;
-  };
-  const collapsed = withRemoteGroups(new Set(collapsedIds));
-  for (const key of collapsedRemoteKeys) {
-    if (!localIdByIdentity.has(key)) collapsed.add(remoteGroupId(key));
-  }
+  // Folds and shelf reveals are kept by group key (projectGroupKey),
+  // one per repo: narrowed to a peer, a repo this machine also holds is
+  // drawn as that peer's group, and it still reads and writes the one
+  // key the local project's group goes by.
+  const localGroupKeys = new Map(
+    projects.map((project) => [
+      project.id,
+      projectGroupKey(project, undefined),
+    ]),
+  );
+  const groupKeyOf = (groupId: string): string =>
+    remoteGroupKeyOf(groupId) ?? localGroupKeys.get(groupId) ?? groupId;
+  const byGroupKey = (keys: ReadonlySet<string>): GroupIdSet => ({
+    has: (groupId) => keys.has(groupKeyOf(groupId)),
+  });
+  // Absence == expanded, so new projects default open. Kept in this
+  // window's client config so a relaunch keeps the tree the way the
+  // user pruned it.
+  const { collapsedKeys, toggleCollapsed } = useCollapsedProjects();
+  const collapsed = byGroupKey(collapsedKeys);
   // Per-group "Show shelved" and "Show hidden" reveals. Transient on
   // purpose, since the whole point of both is to keep the noise down on
-  // a fresh window. One per repo like the fold: a repo this machine
-  // holds keeps its reveal under the local id while narrowed to a peer.
-  const [shelfOpenIds, setShelfOpenIds] = useState<
+  // a fresh window.
+  const [shelfOpenKeys, setShelfOpenKeys] = useState<
     Record<GroupShelf, Set<string>>
   >(() => ({ shelved: new Set(), hidden: new Set() }));
-  const groupShelvesOpen: Record<GroupShelf, Set<string>> = {
-    shelved: withRemoteGroups(shelfOpenIds.shelved),
-    hidden: withRemoteGroups(shelfOpenIds.hidden),
+  const groupShelvesOpen: Record<GroupShelf, GroupIdSet> = {
+    shelved: byGroupKey(shelfOpenKeys.shelved),
+    hidden: byGroupKey(shelfOpenKeys.hidden),
   };
   const hiddenPrefixes = useHiddenWorktreePrefixes();
   // Inbox shelves, same transient-by-design reasoning as the per-group
@@ -208,20 +191,13 @@ function Forest({
   );
 
   const toggleExpanded = (groupId: string) => {
-    const remoteKey = remoteGroupKeyOf(groupId);
-    const localId =
-      remoteKey === undefined ? groupId : localIdByIdentity.get(remoteKey);
-    if (localId !== undefined) toggleCollapsed.mutate(localId);
-    else if (remoteKey !== undefined) toggleCollapsedRemote.mutate(remoteKey);
+    toggleCollapsed(groupKeyOf(groupId));
   };
 
   const toggleShelved = (groupId: string, shelf: GroupShelf) => {
-    const remoteKey = remoteGroupKeyOf(groupId);
-    const localId =
-      remoteKey === undefined ? undefined : localIdByIdentity.get(remoteKey);
-    setShelfOpenIds((prev) => ({
+    setShelfOpenKeys((prev) => ({
       ...prev,
-      [shelf]: withToggled(localId ?? groupId)(prev[shelf]),
+      [shelf]: withToggled(groupKeyOf(groupId))(prev[shelf]),
     }));
   };
 

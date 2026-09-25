@@ -522,8 +522,8 @@ export async function bundleUnpackViaCli(
 }
 
 // Registry removal and per-project state deletion only; the app-side
-// extras (script reaping, icon cache, collapsed prefs) stay with the
-// caller because those registries live in the app's process.
+// extras (script reaping, icon cache) stay with the caller because
+// those registries live in the app's process.
 export async function projectsRemoveViaCli(projectId: string): Promise<void> {
   const result = await runner().runCli([
     "projects",

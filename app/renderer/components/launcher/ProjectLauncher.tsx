@@ -73,7 +73,7 @@ export function ProjectLauncher() {
 
 function LauncherOverlay({ onClose }: { onClose: () => void }) {
   const { data: projects = [] } = useProjects();
-  const { data: sortMode = "manual" } = useProjectSort();
+  const sortMode = useProjectSort();
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const gridRef = useRef<HTMLDivElement>(null);

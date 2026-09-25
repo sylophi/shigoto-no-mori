@@ -273,8 +273,6 @@ async function main() {
       await assert.rejects(bridge.api.fs.scanForGitRepos("/tmp"), refused);
       await assert.rejects(bridge.api.fs.isGitRepo("/tmp"), refused);
       await assert.rejects(bridge.api.projects.remove("p1"), refused);
-      await assert.rejects(bridge.api.projects.setSort("name"), refused);
-      await assert.rejects(bridge.api.projects.toggleCollapsed("p1"), refused);
       await assert.rejects(
         bridge.api.packageScripts.setSort("p1", "alphabetical"),
         refused,

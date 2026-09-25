@@ -200,7 +200,6 @@ function hostHandlersFor(
   forest: DeviceForest,
   emit: FixtureWire["emit"],
 ): FixtureHandlers {
-  const collapsed = new Set<string>();
   const disk = labDisks[forest.deviceId] ?? { home: "/home/rin", dirs: {} };
   mirrorWires.set(forest.deviceId, emit);
   // The worktree data files, seeded from the fixtures and mutated by
@@ -276,13 +275,6 @@ function hostHandlersFor(
               .map((entry) => `${folder}/${entry.name}`)
           : [],
       );
-    },
-    "projects:getSort": () => "manual",
-    "projects:getCollapsed": () => [...collapsed],
-    "projects:toggleCollapsed": ({ projectId }) => {
-      if (collapsed.has(projectId)) collapsed.delete(projectId);
-      else collapsed.add(projectId);
-      return [...collapsed];
     },
     "projects:defaultBranch": () => "main",
     "projects:listBranches": () => ({

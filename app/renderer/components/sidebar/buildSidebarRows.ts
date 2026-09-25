@@ -1,5 +1,6 @@
 import { placeByStack, trunkOf } from "@shared/pullRequestStack";
 import { MACHINE_FALLBACK_ICON } from "@shared/account/deviceIcon";
+import { peerProjectKey } from "@shared/schemas/config";
 import { isHiddenByPrefix } from "@shared/sharedSettings";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
@@ -21,6 +22,11 @@ import {
 } from "./sidebarRow";
 import { sortByProject } from "@/lib/sortProjects";
 
+// A set of group ids as the builder asks it: only whether one is in.
+// The shell keeps its folds by group key (projectGroupKey), so it hands
+// a view over those rather than the ids spelled out.
+export type GroupIdSet = Pick<ReadonlySet<string>, "has">;
+
 interface BuildSidebarRowsArgs {
   projects: Project[];
   // Both positionally aligned with `projects`. The PR maps are what
@@ -28,12 +34,12 @@ interface BuildSidebarRowsArgs {
   worktreeQueries: ProjectWorktreeQueries;
   pullRequestQueries: ProjectPullRequestQueries;
   // Folded group ids: local project ids and peer-only group ids alike.
-  collapsed: Set<string>;
+  collapsed: GroupIdSet;
   // Where each group sits (projectGroupOrder), decided over every
   // device's projects so the device filter never reorders the groups.
   order: ProjectGroupOrder;
   // The groups whose shelf is open, per shelf.
-  openShelves: Record<GroupShelf, Set<string>>;
+  openShelves: Record<GroupShelf, GroupIdSet>;
   // Worktrees starting with one of these fold away like shelved ones.
   hiddenPrefixes: readonly string[];
   arrangeMode: boolean;
@@ -426,6 +432,24 @@ export const claimsPeers = (
 ): project is Project & { identity: string } =>
   project.pathExists !== false && project.identity != null;
 
+// The key a group goes by: what the peers' checkouts are grouped
+// under, and what the shell keeps the group's fold and shelf reveals by
+// (clientConfig.collapsedProjects). The repo identity when the project
+// has one, so every checkout of a repo is one group with one fold. A
+// peer's project with no identity can only group with itself, so its
+// device names it (peerProjectKey). A local project that claims no
+// peers (no identity, or missing on disk) is its own group, by id.
+// `deviceId` is the peer holding the project, undefined for this
+// machine's.
+export function projectGroupKey(
+  project: Project,
+  deviceId: string | undefined,
+): string {
+  if (deviceId === undefined)
+    return claimsPeers(project) ? project.identity : project.id;
+  return project.identity ?? peerProjectKey(deviceId, project.id);
+}
+
 // The peers' checkouts split between the groups: each local project's
 // claim (aligned with `projects`), then the rest by group key. Remote
 // items are grouped up front by repo identity (an identity-less
@@ -444,8 +468,7 @@ function claimRemote(
 } {
   const peerOnly = new Map<string, RemoteForestItem[]>();
   for (const item of remote) {
-    const groupKey =
-      item.project.identity ?? `${item.deviceId}/${item.project.id}`;
+    const groupKey = projectGroupKey(item.project, item.deviceId);
     const group = peerOnly.get(groupKey);
     if (group) group.push(item);
     else peerOnly.set(groupKey, [item]);
@@ -526,10 +549,9 @@ function withMergedUsage(
   };
 }
 
-// A peer-only group's id: its key (repo identity, or device and
-// project for an identity-less one) behind a prefix, so it can never
-// collide with a local project's id and the shell can tell whose fold a
-// toggle is. The key alone is what the fold is stored under.
+// A peer-only group's id: its key (projectGroupKey) behind a prefix,
+// so it can never collide with a local project's id and the shell can
+// read the key back off a toggle.
 const REMOTE_GROUP_PREFIX = "rp:";
 export const remoteGroupId = (groupKey: string) =>
   `${REMOTE_GROUP_PREFIX}${groupKey}`;
