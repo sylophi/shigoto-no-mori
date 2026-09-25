@@ -1,5 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import type { PackageScriptSortMode } from "@shared/schemas";
+import type {
+  PackageScriptSortMode,
+  PackageScriptsResult,
+} from "@shared/schemas";
+import {
+  sortEntries,
+  type SortableEntry,
+} from "@/components/worktreeDetail/scripts/sortPackageScripts";
 import { useOptimisticPreference } from "@/hooks/ui/useOptimisticPreference";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
@@ -51,6 +58,21 @@ export function usePackageScriptOrder(
     staleTime: Number.POSITIVE_INFINITY,
     meta: { errorTitle: "Couldn't read script order" },
   });
+}
+
+// A worktree's package.json scripts in the project's chosen order: the
+// one order the Scripts section, the launch row and the ⌘K palette all
+// list them in. Empty while `pkg` is still being read, or absent.
+export function useSortedPackageScripts(
+  projectId: string,
+  pkg: PackageScriptsResult | null | undefined,
+): { sortMode: PackageScriptSortMode; sorted: SortableEntry[] } {
+  const { data: sortMode = DEFAULT_MODE } = usePackageScriptSort(projectId);
+  const { data: order = NO_ORDER } = usePackageScriptOrder(projectId, sortMode);
+  const sorted = pkg
+    ? sortEntries(Object.entries(pkg.scripts), sortMode, pkg.usage, order)
+    : [];
+  return { sortMode, sorted };
 }
 
 // Takes one worktree's scripts in their arranged order. That is also the

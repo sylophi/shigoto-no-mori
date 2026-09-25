@@ -3,16 +3,12 @@ import { Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLocalGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
-import {
-  NO_ORDER,
-  usePackageScriptOrder,
-  usePackageScriptSort,
-} from "@/hooks/scripts/usePackageScriptSort";
+import { useSortedPackageScripts } from "@/hooks/scripts/usePackageScriptSort";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { hasLocalHost } from "@/lib/localHost";
 import type { Worktree } from "@shared/schemas";
-import { sortEntries, type SortableEntry } from "./scripts/sortPackageScripts";
+import type { SortableEntry } from "./scripts/sortPackageScripts";
 
 // Matches the `gap-2` on both the visible row and the measurer.
 const GAP_PX = 8;
@@ -41,13 +37,7 @@ export function useScriptLaunchCandidates(worktree: Worktree): {
     worktree.projectId,
     worktree.id,
   );
-  const { data: sortMode = "frequent" } = usePackageScriptSort(
-    worktree.projectId,
-  );
-  const { data: order = NO_ORDER } = usePackageScriptOrder(
-    worktree.projectId,
-    sortMode,
-  );
+  const { sorted } = useSortedPackageScripts(worktree.projectId, pkg);
 
   // The switch is this window's preference, so it reads this machine's
   // config even on a peer's page. A hostless client has no config to switch
@@ -61,12 +51,7 @@ export function useScriptLaunchCandidates(worktree: Worktree): {
   if (!enabled || !pkg)
     return { candidates: [], loading: enabled && isPending };
   return {
-    candidates: sortEntries(
-      Object.entries(pkg.scripts),
-      sortMode,
-      pkg.usage,
-      order,
-    ).slice(0, MAX_CANDIDATES),
+    candidates: sorted.slice(0, MAX_CANDIDATES),
     loading: false,
   };
 }

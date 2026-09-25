@@ -8,15 +8,12 @@ import { CenteredMessage } from "@/components/ui/centered-message";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
-import {
-  recordRecentWorktree,
-  recordWorktreeVisit,
-} from "@/lib/recentWorktrees";
+import { recordRecentWorktree } from "@/lib/recentWorktrees";
 import { WorktreeDetailInner } from "./WorktreeDetailInner";
 
 export function WorktreeDetail() {
   const { projectId, worktreeId } = useScopedWorktreeParams();
-  const { remote, deviceId } = useHostScope();
+  const { remote } = useHostScope();
   const { data: projects = [], isPending: projectsPending } = useProjects();
   const {
     data: worktrees = [],
@@ -46,12 +43,6 @@ export function WorktreeDetail() {
       nav.toFallback(true);
     }
   }, [worktree, worktreesPending, worktreesError, key, nav]);
-
-  // The palette's recency covers every device, so this one is recorded
-  // on a peer's page too.
-  useEffect(() => {
-    recordWorktreeVisit(remote ? deviceId : undefined, worktreeId);
-  }, [remote, deviceId, worktreeId]);
 
   useEffect(() => {
     // Local-only page-open work: refreshProject is a mutating invoke

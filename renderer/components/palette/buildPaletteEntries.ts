@@ -1,8 +1,7 @@
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
-import { scoreMatch } from "@/lib/fuzzyMatch";
-import { worktreeVisitKey } from "@/lib/recentWorktrees";
+import { rankByScore } from "@/lib/fuzzyMatch";
 import {
   worktreeLastActivityAt,
   type Project,
@@ -12,7 +11,7 @@ import {
   deviceBadgeOf,
   mirrorBadgeLookup,
   mirrorPairsOf,
-  remoteWorktreeKey,
+  worktreeRowKey,
 } from "@/components/sidebar/buildSidebarRows";
 import type { SidebarDeviceBadge } from "@/components/sidebar/DeviceBadge";
 
@@ -28,16 +27,6 @@ export interface PaletteEntry {
   mirror: SidebarDeviceBadge | undefined;
 }
 
-// The sidebar's row key for a worktree on a peer (deviceId) or here.
-export function paletteEntryKey(
-  deviceId: string | undefined,
-  worktreeId: string,
-): string {
-  return deviceId === undefined
-    ? `w:${worktreeId}`
-    : remoteWorktreeKey(deviceId, worktreeId);
-}
-
 interface BuildPaletteEntriesArgs {
   projects: Project[];
   // Positionally aligned with `projects`.
@@ -45,7 +34,7 @@ interface BuildPaletteEntriesArgs {
   remote: RemoteForestItem[];
   mirrors: readonly MirrorLink[];
   deviceBadges: ReadonlyMap<string, SidebarDeviceBadge>;
-  // recordWorktreeVisit's record, read once when the palette opens.
+  // recordWorktreeVisit's record by row key, read once per open.
   visits: Record<string, number>;
 }
 
@@ -72,7 +61,7 @@ export function buildPaletteEntries({
     for (const worktree of trees) {
       localIds.add(worktree.id);
       entries.push({
-        key: paletteEntryKey(undefined, worktree.id),
+        key: worktreeRowKey(undefined, worktree.id),
         worktree,
         project,
         device: undefined,
@@ -83,7 +72,7 @@ export function buildPaletteEntries({
   for (const item of remote) {
     const device = deviceBadgeOf(item);
     for (const worktree of item.worktrees) {
-      const key = paletteEntryKey(item.deviceId, worktree.id);
+      const key = worktreeRowKey(item.deviceId, worktree.id);
       // The local row of a mirrored pair stands for both copies.
       const folded = peerRowsFolded.get(key);
       if (folded !== undefined && localIds.has(folded)) continue;
@@ -97,8 +86,7 @@ export function buildPaletteEntries({
     }
   }
 
-  const visitedAt = (entry: PaletteEntry) =>
-    visits[worktreeVisitKey(entry.device?.deviceId, entry.worktree.id)] ?? 0;
+  const visitedAt = (entry: PaletteEntry) => visits[entry.key] ?? 0;
   return entries.toSorted(
     (a, b) =>
       visitedAt(b) - visitedAt(a) ||
@@ -128,18 +116,10 @@ export function rankPaletteEntries(
   query: string,
   entries: readonly PaletteEntry[],
 ): readonly PaletteEntry[] {
-  if (!query) return entries;
-  const scored: { entry: PaletteEntry; score: number }[] = [];
-  for (const entry of entries) {
-    const { worktree, project, device } = entry;
-    const score = Math.max(
-      scoreMatch(query, worktree.branch),
-      scoreMatch(query, worktree.name),
-      scoreMatch(query, `${project.name} ${worktree.branch}`),
-      device ? scoreMatch(query, device.label) : 0,
-    );
-    if (score > 0) scored.push({ entry, score });
-  }
-  scored.sort((a, b) => b.score - a.score);
-  return scored.map((x) => x.entry);
+  return rankByScore(query, entries, ({ worktree, project, device }) => [
+    worktree.branch,
+    worktree.name,
+    `${project.name} ${worktree.branch}`,
+    device?.label ?? "",
+  ]);
 }

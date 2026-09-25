@@ -179,7 +179,7 @@ pre-commit:
     # The ⌘K palette lists every device's worktrees once, visits first,
     # and opens on the one before the page on screen.
     worktree-palette:
-      glob: "{renderer/components/palette/buildPaletteEntries.ts,renderer/lib/recentWorktrees.ts,renderer/lib/fuzzyMatch.ts,renderer/components/sidebar/buildSidebarRows.ts,test/worktree-palette.mjs,test/lib/checkKit.mjs}"
+      glob: "{renderer/components/palette/buildPaletteEntries.ts,renderer/lib/fuzzyMatch.ts,renderer/components/sidebar/buildSidebarRows.ts,test/worktree-palette.mjs,test/lib/checkKit.mjs}"
       run: pnpm test worktree-palette
     # The mirror's status line reads a cycle that moves no files as
     # Live, so events on ignored paths do not flash Syncing.

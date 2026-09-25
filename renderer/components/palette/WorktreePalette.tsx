@@ -1,5 +1,5 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { useParams } from "@tanstack/react-router";
 import { Command } from "cmdk";
 import { ArrowDown, ArrowUp, FileDiff, Folder, Play } from "lucide-react";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
@@ -12,7 +12,7 @@ import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { DeviceBadge, useDeviceBadges } from "@/components/sidebar/DeviceBadge";
 import { StatusIndicator } from "@/components/sidebar/StatusIndicator";
 import { MirrorBadge } from "@/components/sidebar/WorktreeRow";
-import { sortEntries } from "@/components/worktreeDetail/scripts/sortPackageScripts";
+import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
 import {
   useLaunch,
   useLauncherForProject,
@@ -23,24 +23,20 @@ import { useMirrorLinks } from "@/hooks/remote/useMirrors";
 import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
-import {
-  NO_ORDER,
-  usePackageScriptOrder,
-  usePackageScriptSort,
-} from "@/hooks/scripts/usePackageScriptSort";
+import { useSortedPackageScripts } from "@/hooks/scripts/usePackageScriptSort";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
+import { useOverlays } from "@/hooks/ui/useOverlays";
+import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { isOverlayOpen, isRawKeySurface } from "@/lib/dom";
 import { rankByScore } from "@/lib/fuzzyMatch";
 import { hasLocalHost } from "@/lib/localHost";
-import { readWorktreeVisits } from "@/lib/recentWorktrees";
-import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
+import { readWorktreeVisits, recordWorktreeVisit } from "@/lib/recentWorktrees";
 import { cn } from "@/lib/utils";
 import { slotToParam, type ScriptSlot } from "@/store/scriptSlot";
 import {
   buildPaletteEntries,
   initialPaletteKey,
-  paletteEntryKey,
   rankPaletteEntries,
   type PaletteEntry,
 } from "./buildPaletteEntries";
@@ -52,7 +48,20 @@ import {
 // picks the worktree itself, so a peer's is one keystroke away like a
 // local one and drawn the same, its device a badge on the row.
 export function WorktreePalette() {
-  const [open, setOpen] = useState(false);
+  const { paletteOpen: open, setPaletteOpen: setOpen } = useOverlays();
+  // The worktree page on screen, if any, on this machine or a peer's:
+  // any of its pages (detail, changes, a commit, a console) counts as
+  // a visit, and the palette opens past it.
+  const { deviceId, worktreeId } = useParams({ strict: false }) as {
+    deviceId?: string;
+    worktreeId?: string;
+  };
+  const pageKey =
+    worktreeId === undefined ? undefined : worktreeRowKey(deviceId, worktreeId);
+
+  useEffect(() => {
+    if (pageKey !== undefined) recordWorktreeVisit(pageKey);
+  }, [pageKey]);
 
   // On window, like the launcher's backtick, so it works wherever focus
   // sits. A modifier chord, so it fires from text fields too. The one
@@ -70,10 +79,10 @@ export function WorktreePalette() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
+  }, [open, setOpen]);
 
   if (!open) return null;
-  return <PaletteDialog onClose={() => setOpen(false)} />;
+  return <PaletteDialog pageKey={pageKey} onClose={() => setOpen(false)} />;
 }
 
 type GoTo = (
@@ -82,22 +91,28 @@ type GoTo = (
   extra?: { scriptKey?: string },
 ) => void;
 
-function PaletteDialog({ onClose }: { onClose: () => void }) {
+function PaletteDialog({
+  pageKey,
+  onClose,
+}: {
+  pageKey: string | undefined;
+  onClose: () => void;
+}) {
   const [query, setQuery] = useState("");
   // The worktree whose actions are showing, or null on the list.
   const [picked, setPicked] = useState<PaletteEntry | null>(null);
   // Read once per open: a visit recorded while the palette is up can't
   // happen, and re-reading storage every render would.
   const [visits] = useState(readWorktreeVisits);
-  const navigate = useNavigate();
-  // The worktree page on screen, if any, on this machine or a peer's.
-  const { deviceId: pageDeviceId, worktreeId: pageWorktreeId } = useParams({
-    strict: false,
-  }) as { deviceId?: string; worktreeId?: string };
+  const { toPageOn } = useWorktreeNav();
 
-  // The sidebar's own reads, so they are warm and cost nothing extra.
+  // The sidebar's own reads, so they are warm. The sidebar's observers
+  // and push invalidation keep the worktree lists fresh, so opening
+  // doesn't re-list every project's worktrees in git.
   const { data: projects = [] } = useProjects();
-  const worktreeQueries = useAllProjectWorktrees(projects);
+  const worktreeQueries = useAllProjectWorktrees(projects, true, {
+    refetchOnMount: false,
+  });
   const { items: remote } = useRemoteForests();
   const mirrors = useMirrorLinks();
   const deviceBadges = useDeviceBadges();
@@ -114,32 +129,18 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
   // reads are warm, so it is already filled). cmdk takes over from
   // there, moving to the top match as the query changes.
   const [highlighted, setHighlighted] = useState(() =>
-    initialPaletteKey(
-      entries,
-      pageWorktreeId && paletteEntryKey(pageDeviceId, pageWorktreeId),
-    ),
+    initialPaletteKey(entries, pageKey),
   );
   const current = shown.find((entry) => entry.key === highlighted) ?? shown[0];
 
-  // A worktree page on whichever machine the entry lives on: the local
-  // route, or the device twin (the pattern useWorktreeNav follows for
-  // the scope it is mounted in; the palette spans every scope at once).
+  // A worktree page on whichever machine the entry lives on.
   const go: GoTo = (entry, page, extra = {}) => {
     onClose();
-    const paths = WORKTREE_ROUTE_PATHS[page];
-    const params = {
+    toPageOn(entry.device?.deviceId, page, {
       projectId: entry.worktree.projectId,
       worktreeId: entry.worktree.id,
       ...extra,
-    };
-    void navigate(
-      (entry.device
-        ? {
-            to: paths.remote,
-            params: { ...params, deviceId: entry.device.deviceId },
-          }
-        : { to: paths.local, params }) as never,
-    );
+    });
   };
 
   const pick = (entry: PaletteEntry) => {
@@ -349,8 +350,7 @@ function ActionList({
   const reachable = deviceId === undefined || api !== undefined;
   // The worktree list's fuzzy match, each group ranked on its own so
   // the groups keep their places.
-  const rank: Rank = (items, text) => rankByScore(query, items, text);
-  const pages = rank(PAGE_ACTIONS, (action) => action.label);
+  const pages = rankByScore(query, PAGE_ACTIONS, (action) => action.label);
   return (
     <>
       {pages.length > 0 && (
@@ -371,18 +371,16 @@ function ActionList({
       {/* Launch tools open on the machine showing this window, so only a
           worktree here has any (LaunchSection's rule). */}
       {deviceId === undefined && hasLocalHost && (
-        <LauncherItems entry={entry} rank={rank} onClose={onClose} />
+        <LauncherItems entry={entry} query={query} onClose={onClose} />
       )}
       {reachable && (
         <MaybeHostScope deviceId={deviceId ?? ""} api={api}>
-          <ScriptItems entry={entry} rank={rank} go={go} />
+          <ScriptItems entry={entry} query={query} go={go} />
         </MaybeHostScope>
       )}
     </>
   );
 }
-
-type Rank = <T>(items: readonly T[], text: (item: T) => string) => readonly T[];
 
 const PAGE_ACTIONS = [
   { page: "detail", label: "Open worktree", Icon: Folder },
@@ -394,16 +392,17 @@ const GROUP_CLASS =
 
 function LauncherItems({
   entry,
-  rank,
+  query,
   onClose,
 }: {
   entry: PaletteEntry;
-  rank: Rank;
+  query: string;
   onClose: () => void;
 }) {
   const { data } = useLauncherForProject(entry.worktree.projectId);
   const launch = useLaunch();
-  const launchers = rank(
+  const launchers = rankByScore(
+    query,
     data?.entries ?? [],
     (launcher) => `Open in ${launcher.label}`,
   );
@@ -434,27 +433,17 @@ function LauncherItems({
 
 function ScriptItems({
   entry,
-  rank,
+  query,
   go,
 }: {
   entry: PaletteEntry;
-  rank: Rank;
+  query: string;
   go: GoTo;
 }) {
   const { worktree } = entry;
   const { data: pkg } = usePackageScripts(worktree.projectId, worktree.id);
-  const { data: sortMode = "frequent" } = usePackageScriptSort(
-    worktree.projectId,
-  );
-  const { data: order = NO_ORDER } = usePackageScriptOrder(
-    worktree.projectId,
-    sortMode,
-  );
-  if (!pkg) return null;
-  const scripts = rank(
-    sortEntries(Object.entries(pkg.scripts), sortMode, pkg.usage, order),
-    (script) => script.name,
-  );
+  const { sorted } = useSortedPackageScripts(worktree.projectId, pkg);
+  const scripts = rankByScore(query, sorted, (script) => script.name);
   if (scripts.length === 0) return null;
   return (
     <Command.Group heading="Scripts" className={GROUP_CLASS}>

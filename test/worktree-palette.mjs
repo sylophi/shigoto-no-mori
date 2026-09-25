@@ -13,10 +13,9 @@ import assert from "node:assert/strict";
 import {
   buildPaletteEntries,
   initialPaletteKey,
-  paletteEntryKey,
   rankPaletteEntries,
 } from "@/components/palette/buildPaletteEntries";
-import { worktreeVisitKey } from "@/lib/recentWorktrees";
+import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
 import { makeProof } from "./lib/checkKit.mjs";
 
 const proof = makeProof("worktree-palette proof");
@@ -99,8 +98,8 @@ function entries(visits = {}) {
 }
 
 const keys = (list) => list.map((entry) => entry.key);
-const local = (id) => paletteEntryKey(undefined, id);
-const onPeer = (id) => paletteEntryKey(PEER, id);
+const local = (id) => worktreeRowKey(undefined, id);
+const onPeer = (id) => worktreeRowKey(PEER, id);
 
 try {
   await proof.check("every device's worktrees, a mirrored pair once", () => {
@@ -131,8 +130,8 @@ try {
 
   await proof.check("visits lead, per device, newest first", () => {
     const list = entries({
-      [worktreeVisitKey(PEER, "shared-id")]: 20,
-      [worktreeVisitKey(undefined, "wick")]: 10,
+      [onPeer("shared-id")]: 20,
+      [local("wick")]: 10,
     });
     assert.deepEqual(keys(list).slice(0, 3), [
       onPeer("shared-id"),
@@ -159,8 +158,8 @@ try {
 
   await proof.check("opens on the worktree before the one on screen", () => {
     const list = entries({
-      [worktreeVisitKey(undefined, "wick")]: 20,
-      [worktreeVisitKey(undefined, "oak")]: 10,
+      [local("wick")]: 20,
+      [local("oak")]: 10,
     });
     assert.equal(initialPaletteKey(list, local("wick")), local("oak"));
     assert.equal(

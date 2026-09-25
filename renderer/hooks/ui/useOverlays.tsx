@@ -4,6 +4,9 @@ interface OverlaysState {
   launcherOpen: boolean;
   setLauncherOpen: (open: boolean) => void;
   toggleLauncher: () => void;
+  // The ⌘K worktree palette.
+  paletteOpen: boolean;
+  setPaletteOpen: (open: boolean) => void;
   addProjectOpen: boolean;
   setAddProjectOpen: (open: boolean) => void;
   // What the dialog opens on, for a caller that already knows.
@@ -29,6 +32,7 @@ const OverlaysContext = createContext<OverlaysState | null>(null);
 
 export function OverlaysProvider({ children }: { children: ReactNode }) {
   const [launcherOpen, setLauncherOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [addProjectOpen, setAddProjectOpen] = useState(false);
   const [addProjectTarget, setAddProjectTarget] = useState(NO_TARGET);
   const [addProjectRequest, setAddProjectRequest] = useState(0);
@@ -36,15 +40,23 @@ export function OverlaysProvider({ children }: { children: ReactNode }) {
   const value: OverlaysState = {
     launcherOpen,
     setLauncherOpen,
-    toggleLauncher: () => setLauncherOpen((v) => !v),
+    // The menu's ⌘⇧P reaches here with the palette up (the backtick
+    // doesn't open over a modal), so opening the launcher closes it.
+    toggleLauncher: () => {
+      setPaletteOpen(false);
+      setLauncherOpen((v) => !v);
+    },
+    paletteOpen,
+    setPaletteOpen,
     addProjectOpen,
     setAddProjectOpen,
     addProjectTarget,
     addProjectRequest,
-    // Closing the launcher first keeps ⌘N sane while it's open. The
-    // modal shouldn't stack on top of the full-screen overlay.
+    // Closing the launcher and the palette first keeps ⌘N sane while
+    // either is open. The modal shouldn't stack on top of them.
     openAddProject: (target = NO_TARGET) => {
       setLauncherOpen(false);
+      setPaletteOpen(false);
       setAddProjectTarget(target);
       if (target !== NO_TARGET) setAddProjectRequest((n) => n + 1);
       setAddProjectOpen(true);
