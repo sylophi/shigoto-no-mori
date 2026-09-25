@@ -45,6 +45,7 @@ import { terrierContract } from "@shared/ipc/modules/terrier";
 import { shigomoriContract } from "@shared/ipc/modules/shigomori";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { updaterContract } from "@shared/ipc/modules/updater";
+import { villagersContract } from "@shared/ipc/modules/villagers";
 import { windowContract } from "@shared/ipc/modules/window";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { branchesHandlers } from "@host/ipc/modules/branches";
@@ -91,6 +92,7 @@ import { terrierHandlers } from "@host/ipc/modules/terrier";
 import { shigomoriHandlers } from "@host/ipc/modules/shigomori";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import { updaterHandlers } from "@host/ipc/modules/updater";
+import { villagersHandlers } from "@host/ipc/modules/villagers";
 import { windowHandlers } from "./modules/window";
 import {
   setWorktreeRemovalBroadcaster,
@@ -645,4 +647,7 @@ export function registerIpcHandlers(): void {
   // Host-scoped: a peer's Settings page reads this device's update
   // state and, when granted, checks or restarts into an update here.
   registerContract(updaterContract, updaterHandlers);
+  // Host-scoped: a peer's Settings manages this device's villager
+  // data, and every device showing its worktrees reads the faces here.
+  registerContract(villagersContract, villagersHandlers);
 }

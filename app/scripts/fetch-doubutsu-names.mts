@@ -25,11 +25,18 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { isValidWorktreeDirName } from "../shared/git/branches.ts";
+import { VillagerSlugSchema } from "../shared/schemas/villagers.ts";
+import {
+  CHARACTER_CATEGORIES,
+  infobox,
+  namesOnPage,
+  oneBySlug,
+  slugify,
+  WIKI_API,
+  WIKI_USER_AGENT,
+  wikiPageUrl,
+} from "../shared/villagers/wiki.ts";
 import { appRoot, repoRoot } from "./lib/appRoot.mts";
-
-const API = "https://nookipedia.com/w/api.php";
-const WIKI = "https://nookipedia.com/wiki/";
-const USER_AGENT = "shigoto-no-mori/doubutsu-names (github.com/sylophi)";
 
 // Category members that are not characters with a name of their own:
 // concept pages, the player, a placeholder puppet, an unused internal ID.
@@ -40,20 +47,6 @@ const EXCLUDED = new Set([
   "Somebody",
   "Special character",
   "Xsq",
-]);
-
-// One page covering two characters, split into one name each.
-const SPLIT: Record<string, string[]> = {
-  "Timmy and Tommy": ["Timmy", "Tommy"],
-};
-
-// Infobox fields that only style the wiki page.
-const PRESENTATION_FIELDS = new Set([
-  "titlecolor",
-  "textcolor",
-  "image",
-  "imagesize",
-  "caption",
 ]);
 
 type Kind = "villager" | "special";
@@ -81,10 +74,10 @@ interface Character {
 }
 
 async function api(params: Record<string, string>): Promise<any> {
-  const url = `${API}?${new URLSearchParams({ format: "json", formatversion: "2", ...params })}`;
+  const url = `${WIKI_API}?${new URLSearchParams({ format: "json", formatversion: "2", ...params })}`;
   for (let attempt = 1; ; attempt++) {
     const response = await fetch(url, {
-      headers: { "User-Agent": USER_AGENT },
+      headers: { "User-Agent": WIKI_USER_AGENT },
     });
     if (response.ok) return response.json();
     if (attempt >= 4) {
@@ -154,99 +147,6 @@ async function pages(titles: string[]): Promise<Map<string, Page>> {
   return out;
 }
 
-// Splits `text` on `separator` wherever it sits outside {{ }} and [[ ]].
-function splitTopLevel(text: string, separator: string): string[] {
-  const parts: string[] = [];
-  let depth = 0;
-  let start = 0;
-  for (let i = 0; i < text.length; i++) {
-    const pair = text.slice(i, i + 2);
-    if (pair === "{{" || pair === "[[") {
-      depth++;
-      i++;
-    } else if (pair === "}}" || pair === "]]") {
-      depth--;
-      i++;
-    } else if (depth === 0 && text[i] === separator) {
-      parts.push(text.slice(start, i));
-      start = i + 1;
-    }
-  }
-  parts.push(text.slice(start));
-  return parts;
-}
-
-// The body of the page's first `{{Infobox ...}}`, as field → raw value.
-function infobox(wikitext: string): Record<string, string> {
-  const start = wikitext.search(/\{\{\s*Infobox/i);
-  if (start < 0) return {};
-  let depth = 0;
-  let end = start;
-  for (; end < wikitext.length; end++) {
-    const pair = wikitext.slice(end, end + 2);
-    if (pair === "{{") depth++;
-    else if (pair === "}}") depth--;
-    else continue;
-    end++;
-    if (depth === 0) break;
-  }
-  const body = wikitext.slice(start + 2, end - 1);
-  const fields: Record<string, string> = {};
-  for (const part of splitTopLevel(body, "|").slice(1)) {
-    const eq = part.indexOf("=");
-    if (eq < 0) continue;
-    const key = part.slice(0, eq).trim();
-    const value = clean(part.slice(eq + 1));
-    if (key && value && value !== "N/A" && !PRESENTATION_FIELDS.has(key)) {
-      fields[key] = value;
-    }
-  }
-  return fields;
-}
-
-// Wikitext to plain text: drops refs, notes and comments, keeps link
-// labels, and turns line breaks into "; ".
-function clean(value: string): string {
-  let text = value
-    .replace(/<!--[\s\S]*?-->/g, "")
-    .replace(/<ref[^>]*\/>/g, "")
-    .replace(/<ref[\s\S]*?<\/ref>/g, "")
-    .replace(/<br\s*\/?>/gi, "; ");
-  // Innermost templates first, so nested ones collapse outward.
-  for (let previous = ""; previous !== text;) {
-    previous = text;
-    text = text.replace(/\{\{([^{}]*)\}\}/g, (_, inner: string) => {
-      const [name, ...args] = inner.split("|").map((s) => s.trim());
-      if (/^(note|efn|clear)$/i.test(name)) return "";
-      const positional = args.find(
-        (a) => !a.includes("=") && a !== "short" && a !== "nolink",
-      );
-      return positional ?? name;
-    });
-  }
-  return text
-    .replace(/\[\[(?:[^|\]]*\|)?([^\]]*)\]\]/g, "$1")
-    .replace(/'''?/g, "")
-    .replace(/<[^>]+>/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function slugify(name: string): string {
-  return name
-    .normalize("NFKD")
-    .replace(/\p{Diacritic}/gu, "")
-    .toLowerCase()
-    .replace(/[.']/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-}
-
-// "Carmen (mouse)" → "Carmen": the wiki disambiguates, the game doesn't.
-function displayName(title: string): string {
-  return title.replace(/\s*\([^)]*\)$/, "");
-}
-
 // Category names that end in " characters" but are not a game.
 const NON_GAME_CATEGORY =
   /^(Male|Female|Removed|Cut|Special|New characters in|Characters with) |^Characters$/;
@@ -277,7 +177,7 @@ function describe(
     name,
     kind,
     page: title,
-    url: WIKI + encodeURIComponent(title.replaceAll(" ", "_")),
+    url: wikiPageUrl(title),
     species: box.species,
     gender: box.gender,
     personality: box.personality,
@@ -306,13 +206,13 @@ async function collect(category: string, kind: Kind): Promise<Character[]> {
   return titles.flatMap((title) => {
     const page = fetched.get(title);
     if (!page) throw new Error(`No page data for ${title}`);
-    const names = SPLIT[title] ?? [displayName(title)];
-    return names.map((name) => describe(title, name, kind, page));
+    return namesOnPage(title).map((name) => describe(title, name, kind, page));
   });
 }
 
-const villagers = await collect("Category:Villagers", "villager");
-const specials = await collect("Category:Special characters", "special");
+const [villagerCategory, specialCategory] = CHARACTER_CATEGORIES;
+const villagers = await collect(villagerCategory, "villager");
+const specials = await collect(specialCategory, "special");
 
 // Two villagers can share a name across games (Carmen the rabbit and
 // Carmen the mouse). The picker needs each slug once, and the metadata
@@ -323,7 +223,10 @@ const characters = [...villagers, ...specials].toSorted(
 // Each name can become a folder and a branch, so fail before writing
 // anything that isn't plain kebab-case or that the app would refuse.
 for (const { slug } of characters) {
-  if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) || !isValidWorktreeDirName(slug))
+  if (
+    !VillagerSlugSchema.safeParse(slug).success ||
+    !isValidWorktreeDirName(slug)
+  )
     throw new Error(`Bad slug: ${slug}`);
 }
 
@@ -447,15 +350,8 @@ async function resolveFaces(titles: string[]): Promise<Map<string, Icon>> {
   return found;
 }
 
-// A slug two characters share goes to the one whose page is the bare
-// name, the one the wiki considers the main one.
-const bySlug = new Map<string, Character>();
-for (const character of characters) {
-  const held = bySlug.get(character.slug);
-  if (held === undefined || character.page === character.name) {
-    bySlug.set(character.slug, character);
-  }
-}
+// A slug two characters share goes to the one on the bare-name page.
+const bySlug = oneBySlug(characters);
 for (const slug of Object.keys(OVERRIDES)) {
   if (!bySlug.has(slug)) {
     throw new Error(`Override for ${slug}, which is not a character`);
@@ -502,7 +398,7 @@ const source = {
   name: "Nookipedia",
   url: "https://nookipedia.com/",
   license: "CC-BY-SA-4.0",
-  categories: ["Category:Villagers", "Category:Special characters"],
+  categories: [...CHARACTER_CATEGORIES],
 };
 const pool = { names };
 const manifest = { villagers: withFace, missing };

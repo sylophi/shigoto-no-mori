@@ -58,6 +58,7 @@ export type HostApi = Pick<
   | "sync"
   | "terrier"
   | "updater"
+  | "villagers"
   | "worktreeData"
   | "worktrees"
 >;

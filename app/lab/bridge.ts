@@ -64,6 +64,7 @@ import {
   projectIconFor,
   worktree as worktreeFixture,
 } from "./fixtures";
+import { villagerHandlersFor } from "./villagerData";
 
 type FixtureHandler = (input: any) => unknown;
 type FixtureHandlers = Record<string, FixtureHandler>;
@@ -218,6 +219,7 @@ function hostHandlersFor(
   ];
   return {
     ...sharedSettingsHandlersFor(forest.deviceId, emit),
+    ...villagerHandlersFor(),
     // A copy, as a wire would hand over: projects:add and projects:clone
     // push onto the list, and the same array back would read as "nothing
     // changed" to the query cache's structural sharing.
@@ -336,7 +338,7 @@ function hostHandlersFor(
       launchers: [],
     }),
     "portPool:isActive": () => true,
-    "globalConfig:read": () => labGlobalConfig,
+    "globalConfig:read": () => ({ ...labGlobalConfig, villageLife }),
     "globalConfig:writeDeviceSettings": () => undefined,
     // The devices ?updates poses (Thinkpad alone by default) have an
     // update staged, so their Settings sections' restart-to-update
@@ -1127,6 +1129,10 @@ const peerEntry = (deviceId: string) =>
 // before any entry-file code runs.
 let WEB_SHELL = false;
 const WEB_DEVICE_ID = "dev_beefcafe01";
+// Village life on every device's fixture config: ?villageLife=1, or the
+// villager contact sheet's say. Off otherwise, as a fresh install has
+// it. The villager data itself is lab/villagerData.ts.
+let villageLife = false;
 
 // Presence the lab can pose: which peers are in the roster, and which
 // of those have an established direct session. ?peers=tp:connected,
@@ -1184,8 +1190,13 @@ function hubSnapshot(): HubStatus {
   };
 }
 
-export function installLabBridge(opts: { webShell?: boolean } = {}) {
+export function installLabBridge(
+  opts: { webShell?: boolean; villageLife?: boolean } = {},
+) {
   WEB_SHELL = opts.webShell === true;
+  villageLife =
+    opts.villageLife ??
+    new URLSearchParams(location.search).get("villageLife") === "1";
   initPresence();
   // Remote hosts: one fixture wire per device, reached only through
   // hub:invokePeer exactly like the real hub bridge, and broadcasting

@@ -120,10 +120,13 @@ export function startStateWatcher(poke: () => void): void {
           // running-scripts record (scripts/persistence.ts) is the same
           // kind of plumbing, rewritten on every script spawn and exit,
           // and so is the control wire's address (core/control/server.ts).
+          // The villager data (host/lib/villagers.ts) is a download the
+          // app polls for itself.
           if (
             file === "updater.json" ||
             file === "control.json" ||
             file === "running-scripts.json" ||
+            file === "villagers" ||
             file?.startsWith("updater-request.json")
           ) {
             return;

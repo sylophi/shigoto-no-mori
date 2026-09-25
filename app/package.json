@@ -32,6 +32,7 @@
     "format": "cd .. && oxfmt .",
     "format:check": "cd .. && oxfmt --check .",
     "licenses": "node scripts/generate-third-party-licenses.mjs",
+    "villagers:fetch": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --import ./test/lib/register-ts-alias.mjs scripts/fetch-villager-data.mts",
     "licenses:check": "node scripts/generate-third-party-licenses.mjs --check",
     "extract-icon": "scripts/extract-app-icon.sh",
     "dmg:background": "electron scripts/build-dmg-background.cjs",

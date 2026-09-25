@@ -1,0 +1,4 @@
+/* The app's stylesheet, plus this page: index.css only scans renderer/
+   and web/ for utilities, so the contact sheet's own would drop out. */
+@import "../renderer/index.css";
+@source "./villagerSheet.tsx";
