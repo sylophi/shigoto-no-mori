@@ -1,0 +1,231 @@
+@import "@fontsource-variable/geist";
+@import "tailwindcss";
+@import "tw-animate-css";
+/* Explicit content roots, relative to this file. Auto-detection scans
+   under the Vite root only, and the web build's root is web/ -- without
+   naming renderer/ here, every utility that appears only in renderer
+   components silently drops out of the web bundle (unstyled reused
+   pages). The desktop build (app root) is unaffected but keeps the
+   same explicit inventory. */
+@source "./";
+@source "../web";
+/* xterm's stylesheet (the script console) goes under the base layer so
+   any utility on the console's own elements outranks it without
+   fighting its specificity. */
+@import "@xterm/xterm/css/xterm.css" layer(base);
+/* Default-on Animal Crossing overlay (opt-out in Settings). Self-
+   contained; see the CONTRACT
+   header in the file for the hooks it depends on (token blocks in it
+   use :root.doubutsu so this early import position can't lose to the
+   :root/.dark blocks below). */
+@import "./doubutsu.css";
+/* Everything the phone layout resizes: see the file's header. */
+@import "./phone.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* The phone layout (AppShell marks <html> with data-layout="phone" on
+   a phone-width browser tab): `phone:` utilities restyle for a thumb
+   instead of a cursor, the way `dark:` follows the theme class. */
+@custom-variant phone (&:is([data-layout="phone"] *));
+
+/* Disabled controls keep pointer events so the not-allowed cursor and
+   title tooltips work (see the base-layer cursor rule below). In turn,
+   `hover:` must never style a disabled element, or dead controls light
+   up on hover; guarding it here covers every call site instead of
+   requiring `not-disabled:` prefixes everywhere. */
+@custom-variant hover {
+  @media (hover: hover) {
+    &:hover:not(:disabled, [aria-disabled="true"], [data-disabled]) {
+      @slot;
+    }
+  }
+}
+
+:root {
+  --background: var(--color-white);
+  --foreground: var(--color-neutral-950);
+  --card: var(--color-white);
+  --card-foreground: var(--color-neutral-950);
+  --popover: var(--color-white);
+  --popover-foreground: var(--color-neutral-950);
+  --primary: var(--color-neutral-900);
+  --primary-foreground: var(--color-neutral-50);
+  --secondary: var(--color-neutral-100);
+  --secondary-foreground: var(--color-neutral-900);
+  --muted: var(--color-neutral-100);
+  --muted-foreground: var(--color-neutral-500);
+  --accent: var(--color-neutral-100);
+  --accent-foreground: var(--color-neutral-900);
+  --destructive: var(--color-rose-500);
+  --border: var(--color-neutral-200);
+  --input: var(--color-neutral-200);
+  --ring: var(--color-neutral-400);
+  --radius: 0.625rem;
+}
+
+.dark {
+  /* Canvas is lifted one step above pure-black neutral-950. That
+     matches the lighter main panel in apps like Codex, and reads less
+     heavy against the vibrancy-blurred sidebar. Card/popover then sit
+     a step above the canvas so dropdowns and modal overlays still
+     elevate cleanly. */
+  --background: var(--color-neutral-900);
+  --foreground: var(--color-neutral-50);
+  --card: oklch(0.245 0 0);
+  --card-foreground: var(--color-neutral-50);
+  --popover: oklch(0.245 0 0);
+  --popover-foreground: var(--color-neutral-50);
+  --primary: var(--color-neutral-200);
+  --primary-foreground: var(--color-neutral-900);
+  --secondary: var(--color-neutral-800);
+  --secondary-foreground: var(--color-neutral-50);
+  --muted: var(--color-neutral-800);
+  --muted-foreground: var(--color-neutral-400);
+  --accent: var(--color-neutral-800);
+  --accent-foreground: var(--color-neutral-50);
+  --destructive: var(--color-rose-500);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: var(--color-neutral-500);
+}
+
+/* The type steps under Tailwind's text-xs, as named tokens so they sit
+   on the scale the phone layout remaps (phone.css). A `text-[11px]`
+   literal would stay 11px on a phone. Outside the inline block below
+   on purpose: inlined values leave no variable to remap. They carry no
+   line-height, as the literals they replace never did. */
+@theme {
+  --text-2xs: 0.6875rem;
+  --text-3xs: 0.625rem;
+  --text-4xs: 0.5625rem;
+}
+
+@theme inline {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body {
+    /* Stays transparent so the BrowserWindow vibrancy material shows
+       through under the sidebar. The main detail pane paints its own
+       opaque `bg-background`. */
+    background: transparent;
+  }
+  body {
+    @apply font-sans text-foreground antialiased;
+    font-feature-settings: "tnum" 1;
+    user-select: none;
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Disabled controls show the not-allowed cursor. Only reaches elements
+     that keep pointer events, so components must not pair disabled state
+     with pointer-events-none (see button.tsx / dropdown-menu.tsx). */
+  :disabled,
+  [data-disabled],
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  /*
+   * Token overrides scoped to the vibrancy sidebar surface (marked
+   * with `data-sidebar` on the <aside>). The global muted/accent
+   * shades are tuned for an opaque card surface and read as washed-out
+   * icons + sticker-like selection on top of the NSVisualEffectView
+   * material. Both themes get tuned values; the rest of the app's
+   * palette is untouched because nothing else carries `data-sidebar`.
+   */
+  [data-sidebar] {
+    /* Push muted labels and icons darker on the lightly-tinted white,
+       so footer icons and project headers don't fade into the blur. */
+    --muted-foreground: var(--color-neutral-600);
+    /* Translucent black for hover/selection. A solid neutral-100 fill
+       barely shows on the translucent surface and an opaque fill looks
+       pasted on. */
+    --accent: oklch(0 0 0 / 0.06);
+  }
+  .dark [data-sidebar] {
+    --muted-foreground: var(--color-neutral-300);
+    /* Translucent white mirrors the light-mode pattern: blends with
+       the vibrancy instead of stamping a solid neutral-800 rectangle. */
+    --accent: oklch(1 0 0 / 0.1);
+  }
+}
+
+/*
+ * Nobody is looking (boot.tsx keeps `.unfocused` on <html>): freeze
+ * the infinite utilities, which sit on long-lived state (a running
+ * script's badge, the status dot) for as long as the operation does.
+ * One-shot enter/exit animations are left alone so a toast that fires
+ * into a blurred window doesn't stall mid-fade. Unlayered on purpose:
+ * the utilities layer sets the `animation` shorthand, which resets
+ * play-state, and a layered rule would lose to it.
+ */
+.unfocused .animate-spin,
+.unfocused .animate-pulse,
+.unfocused .animate-bounce,
+.unfocused .animate-ping {
+  animation-play-state: paused;
+}
+
+/*
+ * ANSI 16-color palette for the script console. xterm reads these (and
+ * the --background / --foreground tokens) through
+ * scriptConsole/terminalTheme.ts whenever <html>'s theme classes
+ * change, so a theme can restyle the console by overriding them. OKLCH
+ * values are tuned for legibility against both light and dark
+ * backgrounds without a theme-specific override. The dim 8 colors
+ * match what tools normally use for severity (red = error, yellow =
+ * warn, etc.) and the bright 8 are punchier for emphasis.
+ */
+:root {
+  --ansi-black: oklch(0.55 0.005 270);
+  --ansi-red: oklch(0.6 0.18 25);
+  --ansi-green: oklch(0.62 0.17 145);
+  --ansi-yellow: oklch(0.72 0.15 85);
+  --ansi-blue: oklch(0.62 0.17 250);
+  --ansi-magenta: oklch(0.62 0.2 320);
+  --ansi-cyan: oklch(0.68 0.13 200);
+  --ansi-white: oklch(0.85 0.005 270);
+  --ansi-bright-black: oklch(0.65 0.005 270);
+  --ansi-bright-red: oklch(0.72 0.2 25);
+  --ansi-bright-green: oklch(0.78 0.2 145);
+  --ansi-bright-yellow: oklch(0.85 0.16 85);
+  --ansi-bright-blue: oklch(0.75 0.2 250);
+  --ansi-bright-magenta: oklch(0.74 0.22 320);
+  --ansi-bright-cyan: oklch(0.8 0.15 200);
+  --ansi-bright-white: oklch(0.97 0.005 270);
+}

@@ -1,9 +1,9 @@
 # hub/ is a standalone pnpm project, exactly like cli/ is a
 # standalone Go module: this file makes pnpm treat this directory as
 # its own workspace root, so installs here never touch the Electron
-# app's hoisted node_modules at the repo root.
+# app's hoisted node_modules in app/.
 #
-# Supply-chain hardening replicated from the root pnpm-workspace.yaml
+# Supply-chain hardening replicated from app/pnpm-workspace.yaml
 # so it holds for every clone: delay installs of newly published
 # versions by 7 days (minutes), and refuse updates whose trust signals
 # (provenance, signatures) weaken.

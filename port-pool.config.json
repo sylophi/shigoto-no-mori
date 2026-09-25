@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "portNames": ["renderer"],
   "envFiles": {
-    ".env.ports": {
+    "app/.env.ports": {
       "PORT": "${renderer}"
     }
   }

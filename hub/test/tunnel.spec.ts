@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
   TUNNEL_UNCONFIGURED_STATUS,
   TunnelProvisionResponseSchema,
-} from "../../shared/hub/protocol.ts";
+} from "../../app/shared/hub/protocol.ts";
 import { sha256Hex } from "../src/crypto.ts";
 import type { Env } from "../src/env.ts";
 import {

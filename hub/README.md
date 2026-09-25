@@ -6,16 +6,16 @@ holds one outbound websocket to its account's `DeviceHub` Durable
 Object, which forwards opaque envelopes between them. No sm logic runs
 here: the Worker verifies Clerk tokens, keeps a device registry in D1,
 mints short-lived connection tickets and forwards frames it never
-parses. The wire contract lives in `../shared/hub/protocol.ts`.
+parses. The wire contract lives in `../app/shared/hub/protocol.ts`.
 
 This directory is a standalone pnpm project (like `cli/` is a
 standalone Go module) with its own lockfile. Install and run its
 scripts from `hub/`. One caveat on isolation: the shared contract it
-imports (`../shared/hub/protocol.ts` and the `frames.ts` that file
-re-exports) lives outside `hub/`, so its `zod` import resolves from
-the repo-root `node_modules`, not `hub/node_modules`. Both installs
-pin the same zod, so a repo-root install is a prerequisite for building
-or deploying the shared half.
+imports (`../app/shared/hub/protocol.ts` and the `frames.ts` that
+file re-exports) lives outside `hub/`, so its `zod` import resolves
+from `app/node_modules`, not `hub/node_modules`. Both installs pin the
+same zod, so an `app/` install is a prerequisite for building or
+deploying the shared half.
 
 ## Domains (production)
 
@@ -226,7 +226,7 @@ Revoking a device best-effort deletes its tunnel and DNS record.
 The desktop app's Account settings (sign in, enroll this device, view the
 account's device registry) are driven by non-secret environment variables.
 Packaged builds take them from the environment **at build time**: set them
-when running `pnpm run package` / `pnpm run make` and they are baked into
+when running `pnpm run package` / `pnpm run make` in `app/` and they are baked into
 the bundle, because an app launched from Finder or the Dock inherits
 launchd's environment, not a shell's, and would otherwise never see them.
 Environment variables present at launch still override the baked values.
@@ -312,7 +312,8 @@ social providers against a packaged build before a release that
 touches it.
 
 The production web client deploys from the `web-client-prod` branch,
-Vercel's production branch for the project. The release workflow
+Vercel's production branch for the project. The Vercel project's Root
+Directory is `app`, where `vercel.json` and the app's lockfile live. The release workflow
 fast-forwards it to the tagged commit at the end of every full
 (non-prerelease) release, once the desktop assets are uploaded, so the
 web client ships the same source as the `.app` without a push by hand.
@@ -320,14 +321,14 @@ A push by hand is still fine for a web-only fix between releases: the
 workflow leaves a branch that is already past the tag alone, and goes
 red rather than overwrite one that has diverged from it.
 
-The web deploy's CSP (vercel.json) allowlists both Clerk script
+The web deploy's CSP (`app/vercel.json`) allowlists both Clerk script
 hosts: `https://*.clerk.accounts.dev` for the development instance and
 `https://clerk.shigomori.com`, the production (`pk_live`) instance's own
 Frontend API host. One static file serves every Vercel environment, so
 both stay listed.
 
 For local development, put the account service values above in a gitignored
-`.env.local` in the repo root (simple `KEY=value` lines). Both the
+`.env.local` in `app/` (simple `KEY=value` lines). Both the
 desktop and the web build read it. Baked and real environment variables
 override it, and packaged builds never read it.
 

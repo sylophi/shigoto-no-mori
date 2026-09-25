@@ -32,7 +32,7 @@ import {
   TUNNEL_UNCONFIGURED_STATUS,
   type TunnelProvisionResponse,
   TunnelProvisionRequestSchema,
-} from "../../shared/hub/protocol.ts";
+} from "../../app/shared/hub/protocol.ts";
 import { provisionTunnel, teardownTunnel, tunnelEnvOf } from "./tunnel.ts";
 import {
   DEVICE_CREDENTIAL_PREFIX,

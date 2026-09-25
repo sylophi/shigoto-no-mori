@@ -8,7 +8,7 @@ import {
   EnrollResponseSchema,
   HUB_ROUTES,
   MAX_ACCOUNT_DEVICES,
-} from "../../shared/hub/protocol.ts";
+} from "../../app/shared/hub/protocol.ts";
 import {
   DEVICE_CREDENTIAL_PREFIX,
   TICKET_PREFIX,

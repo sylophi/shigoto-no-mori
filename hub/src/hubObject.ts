@@ -24,7 +24,7 @@ import {
   HUB_PING,
   HUB_PONG,
   hubTextWithinLimit,
-} from "../../shared/hub/protocol.ts";
+} from "../../app/shared/hub/protocol.ts";
 import type { Env } from "./env.ts";
 import { deleteDevice, getDeviceById, touchLastSeen } from "./db.ts";
 import { randomBase64url } from "./crypto.ts";
