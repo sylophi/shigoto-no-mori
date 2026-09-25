@@ -198,6 +198,16 @@ export const GlobalConfigSchema = z.object({
   // install is seeded with `true` instead (host/lib/bootstrap.ts,
   // cli/state.go seedFreshInstall).
   doubutsuNames: z.boolean().optional(),
+  // Village life: the purely visual villager extras on doubutsu-named
+  // worktrees. Read by the app only, and only while doubutsuNames is
+  // on (villageLifeEnabled in shared/villageLife.ts). Off by default
+  // (absent = off, and a fresh install does not seed it), explicit
+  // `true` is the opt-in. A device setting rather than client config
+  // because it rides with doubutsuNames: the device that names a
+  // worktree after a villager decides whether that villager comes with
+  // extras. The CLI registers the key (so a whole-document save can
+  // clear it) but never reads it.
+  villageLife: z.boolean().optional(),
   // When true, an external worktree whose folder is just the repo's
   // name (Codex and other tools lay worktrees out as
   // <worktree-name>/<repo-name>) is named after the folder above it.
@@ -261,6 +271,7 @@ export const DeviceSettingsPatchSchema = z.strictObject(
     autoPullNew: true,
     autoPullPrimaryOnly: true,
     doubutsuNames: true,
+    villageLife: true,
     codexWorktreeNames: true,
     portPool: true,
     terrier: true,
@@ -289,6 +300,7 @@ export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
   autoPullNew: false,
   autoPullPrimaryOnly: false,
   doubutsuNames: false,
+  villageLife: false,
   codexWorktreeNames: false,
   portPool: false,
   terrier: false,

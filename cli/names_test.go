@@ -73,8 +73,8 @@ func TestPickWorktreeNameSkipsUsedAndFallsBackToSuffixes(t *testing.T) {
 }
 
 // Off when unset, so an install from before fresh installs were seeded
-// keeps its names. The app's pre-pick reads the same default (pinned
-// by the app's fresh-install proof).
+// keeps its names. The app's pre-pick reads the same default
+// (shared/villageLife.ts, pinned by the app's fresh-install proof).
 func TestDoubutsuNamesUnsetIsOff(t *testing.T) {
 	yes, no := true, false
 	for _, tc := range []struct {

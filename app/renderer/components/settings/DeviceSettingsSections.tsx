@@ -78,6 +78,24 @@ export function DeviceToggleSections({
           label="Doubutsu names"
           description="Name new worktrees after Animal Crossing villagers and characters, like raymond, instead of adjective-animal pairs like snug-otter."
         />
+        {/* A sub-option of Doubutsu names, nested like Primary
+            checkouts only. Unlike that row it keeps showing its stored
+            value while disabled: turning names back on brings the
+            villagers back as they were. What it gates reads
+            useVillageLife, never this field alone. */}
+        <div className="pl-11">
+          <ToggleRow
+            checked={form.villageLife}
+            onCheckedChange={setField("villageLife")}
+            disabled={!form.doubutsuNames}
+            label="Village life"
+            description={
+              form.doubutsuNames
+                ? "Your villagers come to life with a little extra flair around the app. Purely cosmetic."
+                : "Turn on Doubutsu names to invite the villagers."
+            }
+          />
+        </div>
         <ToggleRow
           checked={form.codexWorktreeNames}
           onCheckedChange={setField("codexWorktreeNames")}

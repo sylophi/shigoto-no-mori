@@ -43,8 +43,9 @@ var doubutsuNames = sync.OnceValue(func() []string {
 })
 
 // Off unless set: an install from before fresh installs were seeded
-// with it on keeps the names it had. The app's New Worktree pre-pick
-// reads the same default.
+// with it on keeps the names it had. Matches doubutsuNamesEnabled in
+// the app's shared/villageLife.ts, which the New Worktree form's
+// pre-pick reads.
 func doubutsuNamesEnabled(global globalConfig) bool {
 	return global.DoubutsuNames != nil && *global.DoubutsuNames
 }

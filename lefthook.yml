@@ -189,6 +189,12 @@ pre-commit:
     fresh-install:
       glob: "{cli/names.go,cli/cmd_config.go,cli/state.go,cli/main.go,app/shared/schemas/config.ts,app/host/lib/bootstrap.ts,app/host/lib/util/paths.ts,app/renderer/hooks/config/useSettingsSave.ts,app/test/fresh-install.mjs,app/test/lib/checkKit.mjs}"
       run: pnpm -C app test fresh-install
+    # Village life reads the same in both engines: off when unset,
+    # counted only while Doubutsu names is on, and the Settings form's
+    # save lands through the real sm binary.
+    village-life:
+      glob: "{cli/cmd_config.go,app/shared/villageLife.ts,app/shared/schemas/config.ts,app/host/lib/bootstrap.ts,app/renderer/hooks/config/useSettingsSave.ts,app/test/village-life.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test village-life
     # The scripts' manual order is one per project across branches whose
     # package.json differ, so the merge must keep another branch's.
     # The launch row pins are per project too.

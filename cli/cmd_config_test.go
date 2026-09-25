@@ -135,13 +135,13 @@ func TestGlobalConfigSetNormalizesDefaults(t *testing.T) {
 }
 
 // doubutsuNames is off when unset (fresh installs get it seeded on,
-// see state_test.go): list shows the default, a non-default value is
-// the one stored, setting the default removes the key, and a
-// whole-document write that omits the key (the app's omit-on-default
-// save) puts it back to its default.
-func TestGlobalConfigDoubutsuDefaults(t *testing.T) {
+// see state_test.go) and so is villageLife: list shows each default,
+// a non-default value is the one stored, setting the default removes
+// the key, and a whole-document write that omits a key (the app's
+// omit-on-default save) puts it back to its default.
+func TestGlobalConfigVillageDefaults(t *testing.T) {
 	sandboxDataDir(t)
-	for name, def := range map[string]bool{"doubutsuNames": false} {
+	for name, def := range map[string]bool{"doubutsuNames": false, "villageLife": false} {
 		key, err := lookupConfigKey(globalConfigKeys, name)
 		if err != nil {
 			t.Fatal(err)

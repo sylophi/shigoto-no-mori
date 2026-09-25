@@ -30,6 +30,10 @@ export interface SettingsFormState {
   autoPullNew: boolean;
   autoPullPrimaryOnly: boolean;
   doubutsuNames: boolean;
+  // The stored value, shown as is while doubutsuNames is off (the row
+  // is disabled then). Whether villager extras show is
+  // villageLifeEnabled's call, never this field alone.
+  villageLife: boolean;
   codexWorktreeNames: boolean;
   portPool: boolean;
   terrier: boolean;
@@ -62,6 +66,7 @@ export function fromConfig(
     autoPullPrimaryOnly:
       config.autoPullPrimaryOnly ?? DEFAULTS.autoPullPrimaryOnly,
     doubutsuNames: config.doubutsuNames ?? DEFAULTS.doubutsuNames,
+    villageLife: config.villageLife ?? DEFAULTS.villageLife,
     codexWorktreeNames:
       config.codexWorktreeNames ?? DEFAULTS.codexWorktreeNames,
     portPool: config.portPool ?? DEFAULTS.portPool,
@@ -97,6 +102,7 @@ export function toDeviceSettingsPatch(
     autoPullNew: state.autoPullNew,
     autoPullPrimaryOnly: state.autoPullPrimaryOnly,
     doubutsuNames: state.doubutsuNames,
+    villageLife: state.villageLife,
     codexWorktreeNames: state.codexWorktreeNames,
     portPool: state.portPool,
     terrier: state.terrier,

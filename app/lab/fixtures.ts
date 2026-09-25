@@ -548,7 +548,7 @@ export const labGlobalConfig = {
   autoPopulateInstall: true,
   autoPullNew: false,
   autoPullPrimaryOnly: false,
-  // A fresh install's seed.
+  // A fresh install's seed: names on, Village life unset (off).
   doubutsuNames: true,
   codexWorktreeNames: false,
   portPool: true,
