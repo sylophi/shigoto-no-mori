@@ -91,8 +91,10 @@ var globalConfigKeys = []configKey{
 		desc: "Start new worktrees (and added projects' primaries) with auto-pull on"},
 	{name: "autoPullPrimaryOnly", kind: boolKind, def: false,
 		desc: "autoPullNew applies to added projects' primaries only"},
+	// Off when unset, which is what an install from before this setting
+	// has. Fresh installs are seeded with it on (seedFreshInstall).
 	{name: "doubutsuNames", kind: boolKind, def: false,
-		desc: "Name new worktrees after Animal Crossing characters"},
+		desc: "Name new worktrees after Animal Crossing characters (on for new installs)"},
 	{name: "codexWorktreeNames", kind: boolKind, def: false,
 		desc: "Name Codex-style <name>/<repo> worktrees by their parent folder"},
 	{name: "portPool", kind: boolKind, def: false,

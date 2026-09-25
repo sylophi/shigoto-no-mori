@@ -1,9 +1,10 @@
 package main
 
 // Names for worktree directories: adjective + animal pairs, or Animal
-// Crossing character names with doubutsuNames on. The pools are
-// embedded from embed/. The app picks no names itself: it asks
-// `sm worktrees destination` for one, and `sm create` picks the same way.
+// Crossing character names with doubutsuNames on (seeded on for fresh
+// installs, see seedFreshInstall). The pools are embedded from embed/.
+// The app picks no names itself: it asks `sm worktrees destination`
+// for one, and `sm create` picks the same way.
 
 import (
 	_ "embed"
@@ -41,6 +42,9 @@ var doubutsuNames = sync.OnceValue(func() []string {
 	return doc.Names
 })
 
+// Off unless set: an install from before fresh installs were seeded
+// with it on keeps the names it had. The app's New Worktree pre-pick
+// reads the same default.
 func doubutsuNamesEnabled(global globalConfig) bool {
 	return global.DoubutsuNames != nil && *global.DoubutsuNames
 }

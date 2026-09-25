@@ -719,6 +719,7 @@ func run() int {
 		reportError(err)
 		return 2
 	}
+	seedFreshInstall()
 	var ctx cliContext
 	if !cmd.noContext {
 		// An unreadable or malformed registry.json fails here rather

@@ -548,7 +548,8 @@ export const labGlobalConfig = {
   autoPopulateInstall: true,
   autoPullNew: false,
   autoPullPrimaryOnly: false,
-  doubutsuNames: false,
+  // A fresh install's seed.
+  doubutsuNames: true,
   codexWorktreeNames: false,
   portPool: true,
   terrier: false,

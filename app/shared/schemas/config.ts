@@ -193,7 +193,10 @@ export const GlobalConfigSchema = z.object({
   // and character names (cli/embed/doubutsu-names.json, e.g. `raymond`)
   // instead of adjective + animal pairs (`snug-otter`). Picked by the
   // CLI (cli/names.go), at create time and for the New Worktree form's
-  // pre-pick (`sm worktrees destination`).
+  // pre-pick (`sm worktrees destination`). Absent reads as off, so an
+  // install from before it defaulted on keeps its names. A fresh
+  // install is seeded with `true` instead (host/lib/bootstrap.ts,
+  // cli/state.go seedFreshInstall).
   doubutsuNames: z.boolean().optional(),
   // When true, an external worktree whose folder is just the repo's
   // name (Codex and other tools lay worktrees out as

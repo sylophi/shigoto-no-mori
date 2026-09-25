@@ -183,6 +183,12 @@ pre-commit:
     shared-settings:
       glob: "{app/shared/sharedSettings.ts,app/shared/schemas/sharedSettings.ts,app/shared/ipc/modules/sharedSettings.ts,app/host/lib/sharedSettings/**,app/web/ipc/register.ts,app/test/shared-settings.mjs,app/test/lib/checkKit.mjs}"
       run: pnpm -C app test shared-settings
+    # A never-used data dir is seeded with Doubutsu names on by the app
+    # or the CLI, whichever runs first, and an existing install is left
+    # alone, with both engines reading the same values.
+    fresh-install:
+      glob: "{cli/names.go,cli/cmd_config.go,cli/state.go,cli/main.go,app/shared/schemas/config.ts,app/host/lib/bootstrap.ts,app/host/lib/util/paths.ts,app/renderer/hooks/config/useSettingsSave.ts,app/test/fresh-install.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test fresh-install
     # The scripts' manual order is one per project across branches whose
     # package.json differ, so the merge must keep another branch's.
     # The launch row pins are per project too.

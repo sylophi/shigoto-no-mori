@@ -168,6 +168,87 @@ func holdsState(dir string) stateProbe {
 	return stateAbsent
 }
 
+// The settings a fresh install starts with, beyond the defaults every
+// install shares. doubutsuNames reads as off when unset, so installs
+// from before it defaulted on keep their adjective-animal names. A new
+// install gets it written out instead. The app seeds the same document
+// (FRESH_CONFIG_SEED in host/lib/bootstrap.ts). Keep the two in sync.
+func freshConfigSeed() map[string]any {
+	doc := map[string]any{"doubutsuNames": true}
+	stampSchemaVersion(doc)
+	return doc
+}
+
+// Seeds config.json when the data dir has never been used (holdsState
+// finds none of its files), before anything else writes to it. Runs at
+// the top of every command. The app's bootstrap makes the same check at
+// launch (ensureDataDir in host/lib/bootstrap.ts, which explains why
+// that is the test), so whichever runs first seeds and the exclusive
+// create keeps the other from replacing it. A data dir that isn't there
+// yet is left for whatever creates it (the app's first launch), so a
+// read-only command never conjures one, at a pointer's target say.
+// Best-effort: a data dir that can't be written fails on the command's
+// own write instead.
+func seedFreshInstall() {
+	dir := dataDir()
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() || holdsState(dir) != stateAbsent {
+		return
+	}
+	data, err := json.MarshalIndent(freshConfigSeed(), "", "  ")
+	if err == nil {
+		err = createFileWhole(configJSONPath(), append(data, '\n'))
+	}
+	if err != nil && !errors.Is(err, os.ErrExist) {
+		vlog("[state] seed fresh install: %v", err)
+	}
+}
+
+// createFileWhole creates path holding data, or fails with os.ErrExist
+// when it's already there. The bytes go to a temp file first and are
+// linked into place, so a command reading path at the same moment sees
+// either no file or the whole thing, never an empty one mid-write. On a
+// filesystem without hard links it creates the file in place instead
+// (ensureFile in host/lib/bootstrap.ts does the same).
+func createFileWhole(path string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	_, err = tmp.Write(data)
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Chmod(tmp.Name(), configFileMode(path))
+	}
+	if err == nil {
+		err = os.Link(tmp.Name(), path)
+	}
+	if err != nil && !errors.Is(err, os.ErrExist) && linkUnsupported(err) {
+		err = createFileInPlace(path, data)
+	}
+	return err
+}
+
+// Whether a failed link says the filesystem has no hard links.
+func linkUnsupported(err error) bool {
+	return errors.Is(err, syscall.EPERM) || errors.Is(err, syscall.ENOTSUP) ||
+		errors.Is(err, syscall.EOPNOTSUPP) || errors.Is(err, syscall.EXDEV)
+}
+
+func createFileInPlace(path string, data []byte) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, configFileMode(path))
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	return err
+}
+
 func dataDir() string {
 	if cachedDataDir == "" {
 		panic("shigomori data dir not initialized")

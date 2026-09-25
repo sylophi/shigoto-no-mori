@@ -134,6 +134,46 @@ func TestGlobalConfigSetNormalizesDefaults(t *testing.T) {
 	}
 }
 
+// doubutsuNames is off when unset (fresh installs get it seeded on,
+// see state_test.go): list shows the default, a non-default value is
+// the one stored, setting the default removes the key, and a
+// whole-document write that omits the key (the app's omit-on-default
+// save) puts it back to its default.
+func TestGlobalConfigDoubutsuDefaults(t *testing.T) {
+	sandboxDataDir(t)
+	for name, def := range map[string]bool{"doubutsuNames": false} {
+		key, err := lookupConfigKey(globalConfigKeys, name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if key.def != def {
+			t.Errorf("%s default = %v, want %v", name, key.def, def)
+		}
+		for _, entry := range configListEntries(globalConfigKeys, map[string]any{}) {
+			if entry.Key == name && (entry.Value != def || entry.Set) {
+				t.Errorf("list %s = %v (set %v), want %v (default)", name, entry.Value, entry.Set, def)
+			}
+		}
+
+		setGlobalBool(t, name, !def)
+		if got := readDoc(t, configJSONPath())[name]; got != !def {
+			t.Errorf("%s = %v after set %v, want it stored", name, got, !def)
+		}
+		setGlobalBool(t, name, def)
+		if _, ok := readDoc(t, configJSONPath())[name]; ok {
+			t.Errorf("%s still stored after being set to its default", name)
+		}
+
+		setGlobalBool(t, name, !def)
+		if code, err := runConfigWrite(globalConfigScope(), `{"launchScripts": false}`); code != 0 || err != nil {
+			t.Fatalf("write omitting %s: %d, %v", name, code, err)
+		}
+		if _, ok := readDoc(t, configJSONPath())[name]; ok {
+			t.Errorf("%s survived a whole-document write that omitted it", name)
+		}
+	}
+}
+
 func TestGlobalConfigPreservesOtherKeys(t *testing.T) {
 	sandboxDataDir(t)
 	// theme is a legacy client key the registry no longer models. It
