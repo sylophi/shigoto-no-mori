@@ -8,6 +8,13 @@
 # (provenance, signatures) weaken.
 minimumReleaseAge: 10080
 trustPolicy: no-downgrade
+# trustPolicy waiver, approved: chokidar 4.0.3 (reached through
+# @astrojs/check) was published without the provenance its 4.0.1 had.
+# Verified on the registry: the same sole maintainer (paulmillr)
+# published both, and 5.0.0 is back to provenance from CI. The waiver
+# names the exact version, so it stops applying once the pin moves.
+trustPolicyExclude:
+  - chokidar@4.0.3
 # Per-package build-script trust. esbuild (Astro's bundler, through
 # vite) validates its platform binary in a postinstall, the binary
 # itself arriving as an optional dependency. sharp needs no script: its

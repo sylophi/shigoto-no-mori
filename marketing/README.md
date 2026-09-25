@@ -6,9 +6,12 @@ The site for shigomori.com, built with Astro into plain static HTML
 ```sh
 pnpm install
 pnpm dev      # local preview with reload
-pnpm check    # type-check the TypeScript (build runs it too)
+pnpm check    # type-check the pages, components and scripts (build runs it too)
 pnpm build    # static output in dist/
 ```
+
+TypeScript stays on 6.x for now: `astro check` needs its programmatic
+API, which the native TypeScript 7 compiler doesn't ship yet.
 
 It deploys as its own Vercel project with the Root Directory set to
 `marketing`. `vercel.json` pins the Astro preset and holds the headers.
