@@ -1,11 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import {
   useQuery,
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
 import {
-  pullRequestsEqual,
+  matchesMapEntry,
   toSlimPullRequest,
   type PullRequest,
   type PullRequestDetail,
@@ -16,6 +16,14 @@ import {
   type QueryKeyRegistry,
 } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { pullRequestMutationKey } from "@/hooks/projects/useProjectPullRequests";
+import { mergeStateSettling } from "@/lib/pullRequest";
+
+// How often, and for how long, to re-ask while GitHub is still
+// computing the merge state. Some PRs sit at UNKNOWN until something
+// else nudges GitHub, so the poll gives up rather than run forever.
+const SETTLE_POLL_MS = 3_000;
+const SETTLE_WINDOW_MS = 30_000;
 
 // Invalidates per-branch PR queries, scoped to one project when the
 // caller knows which one. The predicate skips project-map queries,
@@ -61,7 +69,9 @@ export function useWatchWorktreePullRequests(): void {
 // Per-branch PR lookup for the open worktree page. Fetches on mount so
 // opening a worktree feels instant; useWatchWorktreePullRequests invalidates
 // it explicitly on window focus and on git refs changing, so we opt out
-// of TanStack's stale-gated focus refetch path. Silent on error to match
+// of TanStack's stale-gated focus refetch path. A PR changing on GitHub
+// with neither happening reaches it through the sweep broadcast
+// (syncProjectPullRequests). Silent on error to match
 // the sweep's swallow behavior. A transient gh failure shouldn't toast.
 export function useWorktreePullRequest(
   projectId: string,
@@ -70,6 +80,8 @@ export function useWorktreePullRequest(
 ) {
   const queryClient = useQueryClient();
   const { api, keys, remote } = useHostScope();
+  // When the current settling run began, so the poll below is bounded.
+  const settlingSince = useRef<number | null>(null);
   return useQuery<PullRequestDetail | null>({
     queryKey: keys.worktreePullRequest(projectId, branch),
     queryFn: async () => {
@@ -91,6 +103,24 @@ export function useWorktreePullRequest(
     // which invalidates this machine's PR keys. A peer's key has no
     // watcher, so it refetches on focus itself.
     refetchOnWindowFocus: remote,
+    // Nothing else refetches once the merge state is the only thing
+    // lagging (the sweep's map doesn't carry it), so poll briefly. Not
+    // while a merge or draft toggle runs: its optimistic write reads as
+    // settling too, and a poll landing mid-mutation would put the old
+    // state back. Its own settle refetch starts the poll if needed.
+    refetchInterval: (query) => {
+      const pr = query.state.data;
+      if (!pr || !mergeStateSettling(pr)) {
+        settlingSince.current = null;
+        return false;
+      }
+      if (queryClient.isMutating({ mutationKey: pullRequestMutationKey(keys) }))
+        return false;
+      settlingSince.current ??= Date.now();
+      return Date.now() - settlingSince.current < SETTLE_WINDOW_MS
+        ? SETTLE_POLL_MS
+        : false;
+    },
     // gh failures here are stable (not in a github repo, gh not authed,
     // network down), so the default 3-retry exponential backoff just
     // turns a fast error into a 7s wait. The focus + refs-changed
@@ -113,19 +143,15 @@ function mirrorIntoProjectMap(
   // map.
   const key = keys.projectPullRequests(projectId);
   const prev = queryClient.getQueryData<Record<string, PullRequest>>(key);
-  if (!prev) return;
-  const current = prev[branch];
+  if (!prev || matchesMapEntry(pr, prev[branch])) return;
   if (pr === null) {
-    if (current === undefined) return;
     const next = { ...prev };
     delete next[branch];
     queryClient.setQueryData<Record<string, PullRequest>>(key, next);
     return;
   }
-  const slim = toSlimPullRequest(pr);
-  if (current && pullRequestsEqual(current, slim)) return;
   queryClient.setQueryData<Record<string, PullRequest>>(key, {
     ...prev,
-    [branch]: slim,
+    [branch]: toSlimPullRequest(pr),
   });
 }

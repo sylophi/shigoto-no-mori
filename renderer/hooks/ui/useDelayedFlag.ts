@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 // Shows `true` only when `active` has been continuously on for at least
 // `delayMs`. Used to suppress sub-second indicator flicker on quick
 // refetches: if `active` flips on then off inside the delay window, the
-// hook never reports `true`.
-export function useDelayedFlag(active: boolean, delayMs: number): boolean {
+// hook never reports `true`. The default is the page's indicator delay:
+// sub-second refetches would otherwise flash on/off too fast to read.
+export function useDelayedFlag(active: boolean, delayMs = 250): boolean {
   const [visible, setVisible] = useState(false);
 
   // Reset during render (not in an effect) so consumers never commit a

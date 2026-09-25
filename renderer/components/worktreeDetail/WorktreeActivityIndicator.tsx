@@ -5,16 +5,13 @@ import { useDelayedFlag } from "@/hooks/ui/useDelayedFlag";
 import { useProjectGitFetching } from "@/hooks/git/useProjectGitFetching";
 import type { Worktree } from "@shared/schemas";
 
-// Sub-second refetches would otherwise flash on/off too fast to read.
-const REFRESH_DELAY_MS = 250;
-
 export function WorktreeActivityIndicator({
   worktree,
 }: {
   worktree: Worktree;
 }) {
   const label = useActivityLabel(worktree);
-  const visible = useDelayedFlag(label !== null, REFRESH_DELAY_MS);
+  const visible = useDelayedFlag(label !== null);
   if (!visible || label === null) return null;
   return (
     <span className="inline-flex shrink-0 items-center gap-1.5 self-center text-xs text-muted-foreground/70 italic">

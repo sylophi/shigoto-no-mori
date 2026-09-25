@@ -12,6 +12,7 @@ import {
   type PullRequest,
   type PullRequestCandidate,
   type PullRequestChecksSummary,
+  type PullRequestDetail,
   type PullRequestMergeState,
   type PullRequestSourceUnavailable,
   type RepoMergeConfig,
@@ -150,8 +151,10 @@ export function describeMergeState(
       };
     case "DIRTY":
       return { label: "Conflicts with base", tone: "rose", canMerge: false };
+    // DRAFT on a PR that isn't one is GitHub still recomputing the
+    // merge state after the PR was marked ready, not a verdict
+    // (mergeStateSettling).
     case "DRAFT":
-      return { label: "Draft", tone: "slate", canMerge: false };
     case "UNKNOWN":
       return {
         label: "Mergeable state unknown",
@@ -159,6 +162,18 @@ export function describeMergeState(
         canMerge: false,
       };
   }
+}
+
+// GitHub computes mergeStateStatus in the background, so right after a
+// PR is marked ready gh still reports DRAFT (or UNKNOWN) for a while
+// even though isDraft has already flipped. The worktree page polls
+// while this holds (useWorktreePullRequest).
+export function mergeStateSettling(pr: PullRequestDetail): boolean {
+  return (
+    pr.state === "OPEN" &&
+    !pr.isDraft &&
+    (pr.mergeState === "UNKNOWN" || pr.mergeState === "DRAFT")
+  );
 }
 
 export interface ChecksDescriptor {

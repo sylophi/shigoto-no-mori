@@ -2,7 +2,10 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { PullRequestDetail } from "@shared/schemas";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { invalidatePullRequestsForProject } from "../projects/useProjectPullRequests";
+import {
+  invalidatePullRequestsForProject,
+  pullRequestMutationKey,
+} from "../projects/useProjectPullRequests";
 
 interface SetDraftVariables {
   projectId: string;
@@ -22,6 +25,7 @@ export function useSetPullRequestDraft() {
   const qc = useQueryClient();
   const { api, keys } = useHostScope();
   return useMutation<void, Error, SetDraftVariables, Context>({
+    mutationKey: pullRequestMutationKey(keys),
     mutationFn: ({ projectId, number, draft }) =>
       api.githubCli.setPullRequestDraft({ projectId, number, draft }),
     onMutate: async ({ projectId, branch, draft }) => {
