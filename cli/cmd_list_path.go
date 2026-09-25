@@ -45,7 +45,7 @@ func syncCell(p palette, w worktreeJSON) string {
 // primary before external, and never both: the primary checkout isn't
 // under the managed base either, and calling it external would only
 // confuse. Shared with the status card's header.
-func worktreeFlags(isPrimary, isExternal, shelved bool) []string {
+func worktreeFlags(isPrimary, isExternal, shelved, autoPull bool) []string {
 	var flags []string
 	if isPrimary {
 		flags = append(flags, "primary")
@@ -55,11 +55,14 @@ func worktreeFlags(isPrimary, isExternal, shelved bool) []string {
 	if shelved {
 		flags = append(flags, "shelved")
 	}
+	if autoPull {
+		flags = append(flags, "auto-pull")
+	}
 	return flags
 }
 
 func flagsCell(p palette, w worktreeJSON) string {
-	return p.dim(strings.Join(worktreeFlags(w.IsPrimary, w.IsExternal, w.Shelved), ", "))
+	return p.dim(strings.Join(worktreeFlags(w.IsPrimary, w.IsExternal, w.Shelved, w.AutoPull), ", "))
 }
 
 func changesCell(p palette, w worktreeJSON) string {
@@ -71,11 +74,32 @@ func changesCell(p palette, w worktreeJSON) string {
 
 func cmdList(ctx cliContext, args []string) (int, error) {
 	parsed, err := parseCmdArgs(args, argSpec{
-		strings: map[string][]string{"project": {"p"}, "from": nil},
-		bools:   map[string][]string{"all": {"a"}, "remote": nil},
+		strings: map[string][]string{
+			"project": {"p"}, "from": nil,
+			// App plumbing: exact addressing by the ids the app holds.
+			// --worktree-id narrows the list to that one row (the app's
+			// describe after a mutation).
+			"project-id": {}, "worktree-id": {},
+		},
+		bools: map[string][]string{"all": {"a"}, "remote": nil},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
+	}
+	if wid := parsed.strings["worktree-id"]; wid != "" {
+		target, err := resolveWorktreeByID(ctx, parsed.strings["project-id"], wid)
+		if err != nil {
+			return exitCodeOf(err), err
+		}
+		row := buildWorktree(target.proj, target.worktree, loadBuildContext(target.proj))
+		if jsonMode {
+			emit([]worktreeJSON{row})
+			return 0, nil
+		}
+		out(renderTable([]string{"NAME", "BRANCH", "SYNC", "CHANGES", ""}, [][]string{{
+			row.Name, row.Branch, syncCell(outPalette, row), changesCell(outPalette, row), flagsCell(outPalette, row),
+		}}))
+		return 0, nil
 	}
 	// The project's worktrees on the user's other devices, which the
 	// running app reads for us (cmd_transfer.go).
@@ -93,12 +117,19 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 		return listRemoteWorktrees(proj, parsed.strings["from"])
 	}
 
-	if len(ctx.projects) == 0 {
+	if len(ctx.projects) == 0 && parsed.strings["project-id"] == "" {
 		return 1, errf("No projects are registered yet. Add a repo in the Shigoto no Mori app first.")
 	}
 
 	scope := ctx.projects
-	if !parsed.bools["all"] && (parsed.strings["project"] != "" || ctx.current != nil) {
+	switch {
+	case parsed.strings["project-id"] != "":
+		proj, err := resolveProjectByID(ctx, parsed.strings["project-id"])
+		if err != nil {
+			return exitCodeOf(err), err
+		}
+		scope = []project{proj}
+	case !parsed.bools["all"] && (parsed.strings["project"] != "" || ctx.current != nil):
 		proj, err := resolveProject(ctx, parsed.strings["project"])
 		if err != nil {
 			return exitCodeOf(err), err

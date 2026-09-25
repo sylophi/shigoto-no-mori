@@ -1,16 +1,15 @@
 package main
 
-// Carry-over, ported from host/lib/worktrees/{carryOver,
-// worktreeInclude}.ts and host/lib/git/branches.ts: manual
-// entries (symlink/copy) from project.json merged with the repo's
-// .worktreeinclude resolution, applied best-effort into the new
-// worktree, with directory symlinks hidden via .git/info/exclude.
-//
-// Known delta vs the app: the app also rewrites project.json to drop
-// manual entries now covered by .worktreeinclude (reconciliation).
-// The CLI skips that write-back. mergeCarryOver dedupes at apply
-// time, so behavior in the worktree is identical; only the app's
-// Configure view tidy-up is app-only.
+// Carry-over: manual entries (symlink/copy) from project.json merged
+// with the repo's .worktreeinclude resolution, applied best-effort
+// into the new worktree, with directory symlinks hidden via
+// .git/info/exclude. Creation-time carry-over lives only here (the app
+// creates worktrees through `sm create`). The app's
+// host/lib/worktrees/worktreeInclude.ts still resolves the same
+// patterns for its Configure view's read, so the resolution rules
+// must agree while that read stays app-side. mergeCarryOver dedupes
+// manual entries a .worktreeinclude already covers at apply time;
+// nothing rewrites project.json to drop them.
 
 import (
 	"cmp"

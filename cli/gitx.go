@@ -1,9 +1,11 @@
 package main
 
-// Git plumbing, ported from host/lib/git/{core,worktrees,remotes,
-// branches}.ts. One chokepoint (runGit) like the app's core.ts;
-// everything downstream parses the same porcelain the app does so both
-// surfaces describe worktrees identically.
+// Git plumbing for the worktree engine. One chokepoint (runGit), and
+// every probe the worktree rows are built from. The app's
+// host/lib/git/{worktrees,remotes}.ts row builders are the former
+// copies of these probes, to be deleted once the app reads rows
+// through `sm worktrees list --json`; until then a probe changed here
+// changes what the two surfaces report, so change both or neither.
 
 import (
 	"bytes"

@@ -63,7 +63,10 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 	// Here rather than in createWorktree: this command is where a
 	// worktree is new (adopt reuses createWorktree for one that
 	// already existed and carries its marks over instead).
-	markAutoPullIfNew(readGlobalConfigHints(), worktree.ID, false)
+	// The row was built before the mark existed, so it's set on it here.
+	if markAutoPullIfNew(readGlobalConfigHints(), worktree.ID, false) {
+		worktree.AutoPull = true
+	}
 	emitScriptEvent(map[string]any{"event": "created", "worktree": worktree},
 		"created "+cyanErr(worktree.Name)+" (branch "+cyanErr(worktree.Branch)+")")
 	code := finishCreateLifecycle(proj, worktree, parsed.strings["base"], parsed.bools["no-setup"])

@@ -4,10 +4,12 @@ package main
 // registry of repo paths, merged into the project list when the global
 // `terrier` toggle is on. Terrier's stable surface is `terrier ls
 // --json` plus the rule that a minor version bump is the compatibility
-// signal, so that is all this file consumes. Ported alongside
-// host/lib/terrier.ts. The two engines must produce the same merged
-// list or the app and the CLI would disagree about which projects
-// exist.
+// signal, so that is all this file consumes. The CLI owns the merge:
+// every command sees the merged list (main.go), and the app reads it
+// through `sm projects list --json`. host/lib/terrier.ts is the app's
+// former copy; while it still merges, the two must produce the same
+// list and the same ids or the app and the CLI would disagree about
+// which projects exist.
 //
 // Merge semantics: registry.json wins by path. A repo registered in
 // both is an ordinary project (removable), while one only terrier

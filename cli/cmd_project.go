@@ -27,7 +27,9 @@ func cmdProject(ctx cliContext, args []string) (int, error) {
 	}
 	switch canonicalProjectsSub(args[0]) {
 	case "list":
-		return cmdProjectList(ctx)
+		return cmdProjectList(ctx, args[1:])
+	case "icon":
+		return cmdProjectIcon(ctx, args[1:])
 	case "add":
 		return cmdProjectAdd(ctx, args[1:])
 	case "remove":
@@ -35,7 +37,7 @@ func cmdProject(ctx cliContext, args []string) (int, error) {
 	case "config":
 		return cmdConfig(ctx, args[1:])
 	default:
-		return 2, usageErrf("Unknown subcommand %q. Usage: %s projects <list|add|remove|config> [args]", args[0], binaryName)
+		return 2, usageErrf("Unknown subcommand %q. Usage: %s projects <list|add|remove|config|icon> [args]", args[0], binaryName)
 	}
 }
 
@@ -174,28 +176,20 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 	return 0, nil
 }
 
-func cmdProjectList(ctx cliContext) (int, error) {
-	if jsonMode {
-		projects := ctx.projects
-		if projects == nil {
-			projects = []project{}
-		}
-		emit(projects)
-		return 0, nil
-	}
-	if len(ctx.projects) == 0 {
+func printProjectTable(projects []project) (int, error) {
+	if len(projects) == 0 {
 		note("No projects registered.")
 		return 0, nil
 	}
 	// The VIA column only appears once there is something to put in it,
 	// so the table stays two columns for anyone not using terrier.
-	hasSource := slices.ContainsFunc(ctx.projects, func(p project) bool { return p.Source != "" })
+	hasSource := slices.ContainsFunc(projects, func(p project) bool { return p.Source != "" })
 	headers := []string{"NAME", "PATH"}
 	if hasSource {
 		headers = append(headers, "VIA")
 	}
-	rows := make([][]string, len(ctx.projects))
-	for i, p := range ctx.projects {
+	rows := make([][]string, len(projects))
+	for i, p := range projects {
 		rows[i] = []string{p.Name, p.Path}
 		if hasSource {
 			rows[i] = append(rows[i], p.Source)
@@ -602,14 +596,15 @@ func cmdConfigVerb(proj project, parsed parsedArgs) (int, error) {
 
 func projectConfigScope(proj project) configDocScope {
 	return configDocScope{
-		path:        projectConfigJSONPath(proj.ID),
-		keys:        projectConfigKeys,
-		usagePrefix: "projects config",
-		usageSuffix: " [-p <project>]",
-		suffix:      " for " + proj.Name,
-		project:     proj.Name,
-		beforeWrite: func(doc map[string]any) error { return ensureDefaultBranchField(doc, proj) },
-		afterWrite:  func(doc map[string]any) { maybeExcludeInProjectDir(proj, doc) },
+		path:           projectConfigJSONPath(proj.ID),
+		keys:           projectConfigKeys,
+		usagePrefix:    "projects config",
+		usageSuffix:    " [-p <project>]",
+		suffix:         " for " + proj.Name,
+		project:        proj.Name,
+		beforeWrite:    func(doc map[string]any) error { return ensureDefaultBranchField(doc, proj) },
+		afterWrite:     func(doc map[string]any) { maybeExcludeInProjectDir(proj, doc) },
+		nullWhenAbsent: true,
 	}
 }
 

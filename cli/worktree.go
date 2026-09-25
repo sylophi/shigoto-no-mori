@@ -1,8 +1,10 @@
 package main
 
-// Full worktree status objects in the same shape the app's IPC returns
-// (shared/schemas/worktree.ts WorktreeSchema) plus projectName, so
-// --json consumers and the future app-as-CLI-caller read one format.
+// Full worktree status objects: the row the app's WorktreeSchema
+// (shared/schemas/worktree.ts) parses, plus projectName. The CLI owns
+// this data model. The app reads rows through `sm worktrees list
+// --json` (all, -p/--project-id, or one --worktree-id) instead of
+// building its own, so a field added here is added for both surfaces.
 
 import (
 	"cmp"
@@ -31,6 +33,7 @@ type worktreeJSON struct {
 	BehindPrimary     int             `json:"behindPrimary"`
 	UnpushedCount     int             `json:"unpushedCount"`
 	PrimaryRef        string          `json:"primaryRef,omitempty"`
+	PrimaryBranch     string          `json:"primaryBranch,omitempty"`
 	MergedIntoPrimary bool            `json:"mergedIntoPrimary"`
 	ChangedCount      int             `json:"changedCount"`
 	LastChangeAt      int64           `json:"lastChangeAt,omitempty"`
@@ -39,6 +42,7 @@ type worktreeJSON struct {
 	IsExternal        bool            `json:"isExternal"`
 	Detached          bool            `json:"detached"`
 	Shelved           bool            `json:"shelved"`
+	AutoPull          bool            `json:"autoPull"`
 	ProjectName       string          `json:"projectName"`
 }
 
@@ -47,8 +51,12 @@ const recentCommitsCount = 4
 type buildContext struct {
 	hasRemote  bool
 	primaryRef string
-	shelved    map[string]bool
-	chain      *primaryChain
+	// The primary ref's local branch name ("main" for "origin/main"),
+	// the branch a stack of pull requests lands on.
+	primaryBranch string
+	shelved       map[string]bool
+	autoPull      map[string]bool
+	chain         *primaryChain
 	// The project config the primary ref was resolved from, kept so
 	// callers that need more of it don't read the file a second time.
 	config *projectConfig
@@ -69,19 +77,38 @@ func primaryRefFor(proj project, config *projectConfig) string {
 }
 
 func loadBuildContext(proj project) buildContext {
-	// listRemotes feeds both hasRemote and the default-branch
-	// resolution; one spawn covers both.
+	// listRemotes feeds hasRemote, the default-branch resolution and
+	// the primary branch split; one spawn covers all three.
 	remotes := listRemotes(proj.Path)
 	config := readProjectConfig(proj.ID)
 	primaryRef := resolveDefaultBranchWithRemotes(proj.Path,
 		defaultBranchOverride(config), remotes)
+	return newBuildContext(proj, remotes, primaryRef, config)
+}
+
+// The build context from project facts a caller already resolved
+// (done and land hold the remotes and primary ref by then).
+func newBuildContext(proj project, remotes []string, primaryRef string, config *projectConfig) buildContext {
+	marks := readWorktreeMarkSets()
 	return buildContext{
-		hasRemote:  len(remotes) > 0,
-		primaryRef: primaryRef,
-		shelved:    readShelvedSet(),
-		chain:      &primaryChain{path: proj.Path, ref: primaryRef},
-		config:     config,
+		hasRemote:     len(remotes) > 0,
+		primaryRef:    primaryRef,
+		primaryBranch: primaryBranchOf(primaryRef, remotes),
+		shelved:       marks[shelvedKey],
+		autoPull:      marks[autoPullKey],
+		chain:         &primaryChain{path: proj.Path, ref: primaryRef},
+		config:        config,
 	}
+}
+
+// The local branch behind a primary ref: the ref minus its remote when
+// it is a remote-tracking ref, the ref itself when it is local, "" when
+// there is no primary ref.
+func primaryBranchOf(primaryRef string, remotes []string) string {
+	if remote, branch := splitRemoteRef(primaryRef, remotes); remote != "" {
+		return branch
+	}
+	return primaryRef
 }
 
 // Only worktrees the app manages carry a shelved mark: the primary
@@ -131,6 +158,7 @@ func buildWorktree(proj project, id worktreeIdentity, ctx buildContext) worktree
 		BehindPrimary:     primary.behindPrimary,
 		UnpushedCount:     unpushed,
 		PrimaryRef:        ctx.primaryRef,
+		PrimaryBranch:     ctx.primaryBranch,
 		MergedIntoPrimary: primary.mergedIntoPrimary,
 		ChangedCount:      changes.count,
 		LastChangeAt:      changes.lastChangeAt,
@@ -139,7 +167,10 @@ func buildWorktree(proj project, id worktreeIdentity, ctx buildContext) worktree
 		IsExternal:        id.IsExternal,
 		Detached:          id.Detached,
 		Shelved:           shelvedFlag(id, ctx),
-		ProjectName:       proj.Name,
+		// Unlike the shelf, any checkout can follow its upstream: the
+		// primary is the mark's main customer.
+		AutoPull:    ctx.autoPull[id.ID],
+		ProjectName: proj.Name,
 	}
 }
 

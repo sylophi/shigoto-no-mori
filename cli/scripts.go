@@ -1,13 +1,17 @@
 package main
 
-// Lifecycle script execution (setup / teardown / port-pool), ported
-// from host/lib/scripts/. The CLI runs scripts in the foreground and
-// shares the terminal's process group, so Ctrl-C reaches the whole
-// tree naturally. None of the app's background kill machinery is
-// needed. Env, shell selection, and event shapes match the app so
-// scripts and --json consumers see identical behavior.
+// Lifecycle script execution (setup / teardown / port-pool). This is
+// the runner: the app runs lifecycle scripts through `sm create`,
+// `sm rm` and `sm setup`, reading the NDJSON script events below. The
+// CLI runs scripts in the foreground and shares the caller's process
+// group, so Ctrl-C (or the app signaling the CLI's group) reaches the
+// whole tree. The app's host/lib/scripts runner is the remaining
+// twin, for its in-app console, and is slated to go: shell selection
+// and the unattended-run env (pager off) match it so the switch-over
+// changes nothing a script can observe.
 
 import (
+	"cmp"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -15,7 +19,9 @@ import (
 	"maps"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -43,15 +49,59 @@ type scriptEnvInputs struct {
 	defaultBranch string
 }
 
-// Login shell (no -i), same selection as scripts/process.ts.
-// The app also consults the passwd entry for GUI launches with an
-// empty $SHELL; a CLI always runs from a terminal, where $SHELL is
-// set, so /bin/sh is a sufficient fallback.
+// The user's login shell, run as a login shell (no -i) so .zprofile /
+// .bash_profile set up PATH without zsh's interactive init getting in
+// the way. $SHELL first; the passwd entry when it is empty, which is
+// the GUI case: the app spawns the CLI from a launchd-started process
+// whose environment may carry no $SHELL at all. /bin/sh only when
+// neither names one.
 func resolveShell() (string, []string) {
-	if fromEnv := os.Getenv("SHELL"); fromEnv != "" {
-		return fromEnv, []string{"-l", "-c"}
+	if shell := cmp.Or(os.Getenv("SHELL"), passwdShell()); shell != "" {
+		return shell, []string{"-l", "-c"}
 	}
 	return "/bin/sh", []string{"-c"}
+}
+
+// Test seam for the passwd lookup.
+var passwdShell = sync.OnceValue(lookupPasswdShell)
+
+// The login shell the account database records for this user, or "".
+// os/user can't say (its User has no shell field), so this reads the
+// passwd file directly, which is authoritative on Linux, and asks
+// Directory Services on macOS, where /etc/passwd lists only system
+// accounts.
+func lookupPasswdShell() string {
+	u, err := user.Current()
+	if err != nil {
+		return ""
+	}
+	if data, err := os.ReadFile("/etc/passwd"); err == nil {
+		if shell := passwdShellFor(string(data), u.Uid); shell != "" {
+			return shell
+		}
+	}
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
+	out, err := exec.Command("dscl", ".", "-read", "/Users/"+u.Username, "UserShell").Output()
+	if err != nil {
+		return ""
+	}
+	// "UserShell: /bin/zsh"
+	_, shell, _ := strings.Cut(strings.TrimSpace(string(out)), ":")
+	return strings.TrimSpace(shell)
+}
+
+// The shell field of the passwd line whose uid matches, or "".
+// name:password:uid:gid:gecos:home:shell.
+func passwdShellFor(passwd, uid string) string {
+	for _, line := range strings.Split(passwd, "\n") {
+		fields := strings.Split(line, ":")
+		if len(fields) == 7 && fields[2] == uid {
+			return strings.TrimSpace(fields[6])
+		}
+	}
+	return ""
 }
 
 // The SHIGOMORI_* contract vars (shared/scriptEnv.ts) on top of the
@@ -91,6 +141,29 @@ func scriptEnv(in scriptEnvInputs) []string {
 	return env
 }
 
+// The lifecycle run's environment: the contract env, then the
+// terminal-faking trio (output is piped, through the CLI or into the
+// app's console, so tools need convincing to emit ANSI), then pagers
+// off, since nobody is there to page: git, gh and friends would
+// otherwise wait in less. Under --json the output lands in the app's
+// xterm, which renders truecolor. In a terminal the user's own
+// COLORTERM stands. `sm run` deliberately skips all of this, since its
+// script inherits the real terminal. Appended after the ambient env so
+// these win (exec keeps the last of a duplicated key).
+func lifecycleEnv(in scriptEnvInputs) []string {
+	env := append(scriptEnv(in),
+		"FORCE_COLOR=1",
+		"TERM=xterm-256color",
+		"COLUMNS=120",
+		"PAGER=cat",
+		"GIT_PAGER=cat",
+	)
+	if jsonMode {
+		env = append(env, "COLORTERM=truecolor")
+	}
+	return env
+}
+
 func newRunID() string {
 	b := make([]byte, 16)
 	_, _ = rand.Read(b)
@@ -113,15 +186,7 @@ func runLifecycleScript(command string, in scriptEnvInputs, slot scriptSlot) (in
 	shell, shellArgs := resolveShell()
 	cmd := exec.Command(shell, append(shellArgs, command)...)
 	cmd.Dir = in.worktree.Path
-	// The terminal-faking trio on top of the contract env: lifecycle
-	// output is piped (through the CLI or the app's console), so tools
-	// need convincing to emit ANSI. `sm run` deliberately skips these,
-	// since its script inherits the real terminal.
-	cmd.Env = append(scriptEnv(in),
-		"FORCE_COLOR=1",
-		"TERM=xterm-256color",
-		"COLUMNS=120",
-	)
+	cmd.Env = lifecycleEnv(in)
 
 	// Merge stdout+stderr into one ordered stream like the app does.
 	pipeR, pipeW := io.Pipe()

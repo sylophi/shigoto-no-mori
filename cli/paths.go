@@ -1,10 +1,11 @@
 package main
 
-// Path math ported from shared/git/worktreeLayout.ts and
-// host/lib/worktrees/paths.ts: path-derived worktree ids and the
-// managed-layout bases. Must stay behavior-identical to the TS side.
-// Both compute the same ids and "is this managed?" answers over the
-// same state.
+// Path math: path-derived worktree ids and the managed-layout bases.
+// The ids are an on-disk format (registry marks, per-worktree data
+// files, dirty-capture refs are keyed by them), so the hash is fixed
+// for good. The app's shared/git/worktreeLayout.ts and
+// host/lib/worktrees/paths.ts compute the same answers while the app
+// still derives any of them itself.
 
 import (
 	"crypto/sha256"

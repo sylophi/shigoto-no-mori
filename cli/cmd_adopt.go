@@ -78,6 +78,8 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	if err := moveRegistryMark(autoPullKey, id.ID, worktree.ID); err != nil {
 		vlog("[state] move auto-pull: %v", err)
 	}
+	// The row was built before the mark moved onto its id.
+	worktree.AutoPull = readRegistryMarkSet(autoPullKey)[worktree.ID]
 	emitScriptEvent(map[string]any{"event": "created", "worktree": worktree},
 		"adopted "+id.Path+" as "+cyanErr(worktree.Name)+" (branch "+cyanErr(worktree.Branch)+")")
 	code := finishCreateLifecycle(proj, worktree, "", false)

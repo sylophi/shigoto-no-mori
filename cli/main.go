@@ -1,17 +1,24 @@
 package main
 
-// sm is the Shigoto no Mori CLI, a Go port of the app's worktree
-// engine (host/lib/) with the same on-disk state, ids, lock protocol,
-// and JSON output shapes. The data dir follows the compiled-in
-// flavor (sm -> ~/.sm, smd -> ~/.smd, see flavor.go). A
+// sm is the Shigoto no Mori CLI, and the owner of the worktree data
+// model: on-disk state, ids, the lock protocol, and the JSON documents
+// the app parses. The app runs its worktree and project mutations
+// through this binary (host/ipc/cliDelegate.ts) and reads rows,
+// projects, config and usage through its --json verbs; the TypeScript
+// copies of this engine under host/lib/ are leftovers slated for
+// deletion, not twins to keep in step. Every document the app reads is
+// validated against a shared/schemas zod schema on its side, so a
+// field renamed here is a breaking change there. The data dir follows
+// the compiled-in flavor (sm -> ~/.sm, smd -> ~/.smd, see flavor.go). A
 // ~/.config/<flavor-name>/data-dir pointer file relocates it
 // (state.go), and SHIGOMORI_DATA_DIR overrides both (tests, sandboxes).
+// The on-disk formats stay byte-compatible with 2.x apps and CLIs.
 //
-// Known deltas vs the app: project-usage stats aren't bumped,
-// .worktreeinclude reconciliation doesn't rewrite project.json, the
-// `port` field isn't populated, and `rm` / `project remove` can't reap
-// scripts the app spawned into a worktree. That registry lives in
-// the app's process, so stop those from the app (or quit it) first.
+// What stays in the app, because it lives in the app's process:
+// scripts it spawned into a worktree (so `rm`, `move` and `project
+// remove` can't reap them: stop those from the app, or quit it,
+// first), mirror sessions, and the project use log's bumps (it counts
+// the app's UI actions, not CLI verbs; the CLI only reads it).
 
 import (
 	"cmp"
@@ -36,7 +43,9 @@ var generalItems = []helpItem{
 	{"cd [<name>]", "Open a subshell in any worktree",
 		"Picks a project, then a worktree. Exit the shell to return. With shell integration (see `shell`), your current shell cd's instead."},
 	{"run [<script>] [<args>...]", "Run a package.json script here",
-		"Works inside any registered project's checkout or worktree. Detects the package manager from the lockfile (bun/pnpm/yarn/npm) and execs `<manager> run <script>` at the worktree root, so output, signals, and the exit code are the script's own. Extra args pass through to the script (put dashed ones after --). With no script, lists them."},
+		"Works inside any registered project's checkout or worktree. Detects the package manager from the lockfile (bun/pnpm/yarn/npm), sets the SHIGOMORI_* script env, counts the run in the shared use log, and execs `<manager> run <script>` at the worktree root, so output, signals, and the exit code are the script's own. Extra args pass through to the script (put dashed ones after --). With no script, lists them; with --json that list is {ok, packageManager, scripts: [{name, command}] in package.json order, usage: {<name>: {lastUsed, recentCount}}, sort, order}, where sort and order are the project's saved script sort and manual order."},
+	{"launchers [-p <project>]", "List a project's launcher row",
+		"The tools `open` offers, in the app's order (recent use, then label), hidden ones left out. --json prints {ok, entries: [{kind, id, label, available?}], hiddenCount, usage: {<id>: {lastUsed, recentCount}}}, kind being detected, custom or web."},
 	{"app", "Open the Shigoto no Mori app", ""},
 	{"devices [-p <project>]", "List your other devices",
 		"The machines signed in to your account, by the names --to and --from take. Inside a project (or with -p) each says whether it can take part in a send, bring or mirror, and if not, why. Needs the app open."},
@@ -50,7 +59,8 @@ var generalItems = []helpItem{
 
 var worktreeItems = []helpItem{
 	{"worktrees list [--all] [--remote] [--from <device>]", "List worktrees",
-		"All projects when outside one, or with --all. --remote lists this project's worktrees on your other devices (--from narrows it to one), and needs the app open."},
+		"All projects when outside one, or with --all; -p <project> picks one from anywhere. --remote lists this project's worktrees on your other devices (--from narrows it to one), and needs the app open. " +
+			"--json prints one array of rows, primary first within each project. A row is the app's Worktree document plus projectName: id, projectId, name, branch, path, ahead, behind, hasUpstream, hasRemote, divergedClean, behindPrimary, unpushedCount, primaryRef, primaryBranch, mergedIntoPrimary, changedCount, lastChangeAt, recentCommits, isPrimary, isExternal, detached, shelved, autoPull. --worktree-id <id> narrows the array to that one row."},
 	{"worktrees status [<name>] [--no-pr]", "Status card for one worktree",
 		"Where the worktree you're standing in stands: branch, base, changes, stash, last commit, ports, scripts, PR. The PR lookup needs gh and degrades to a note rather than stalling the card. --no-pr skips it."},
 	{"worktrees switch [<name>]", "Open a subshell in this project's worktrees",
@@ -90,12 +100,19 @@ var worktreeItems = []helpItem{
 		"Removes the copy, wherever it is, and never the original. Refuses until both sides hold the same commits. -f stops anyway."},
 	{"worktrees mirrors", "List the mirrors this device is part of", ""},
 	{"worktrees shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`, ""},
+	{"worktrees autopull [on|off] [<name>]", "Set or show the app's auto-pull mark",
+		"While on, the running app fast-forwards the worktree onto its upstream after each background fetch, as long as it has no local commits, changes or running scripts. Any checkout can carry it, the primary included. With no on/off it reports the state. --json prints {ok, worktree: <row>} (a `list` row)."},
+	{"worktrees move [<name>] <new-path>", "Move a worktree's checkout",
+		"git worktree move, then carries what is keyed by the worktree's path-derived id (shelf and auto-pull marks, its notes and ports, a pending dirty capture) over to the new id. Refuses the primary and an existing destination. Prints the new path; --json prints {ok, worktree: <row>, previousId}. Stop scripts the app runs there first."},
 	{"worktrees open [<tool>] [<name>]", "Launch a launcher-row tool in a worktree",
 		"Finder, editors, custom commands. With no tool, shows the row as a menu."},
 }
 
 var projectItems = []helpItem{
-	{"projects list", "List registered projects", ""},
+	{"projects list [--refresh-icons]", "List registered projects",
+		"Registry entries, then terrier-registered repos when that integration is on. --json prints one array of rows: id, name, path, source (\"terrier\" or absent), pathExists, identity (the cross-device repo key, or null), lastUsed and recentCount (the app's project use log), icon ({path, mime}, or null) and hue (the icon's OKLCH hue in degrees, or null when it has no color). Icons resolve through the shared icon cache; --refresh-icons re-scans projects it remembers as icon-less."},
+	{"projects icon [<name>]", "Print a project's icon file",
+		"--json prints {mime, base64}, or null when the project has no icon."},
 	{"projects add [<path>] [--all]", "Register a repo",
 		"The repo at <path> (default .). --all registers every repo beneath it after confirmation (--yes skips)."},
 	{"projects remove [<name-or-path>]", "Unregister a project",
@@ -105,7 +122,7 @@ var projectItems = []helpItem{
 	{"projects config [<command>] [args]",
 		"Show or set per-project config",
 		"Bare: prints project.json. The global config's verbs work here too, scoped by -p: " +
-			"list, get <key>, set <key> <value>, unset <key>, edit. Keys: `" + binaryName +
+			"list, get <key>, set <key> <value>, unset <key>, edit, read. Keys: `" + binaryName +
 			" projects config list`. Structured lists get element verbs: launcher add " +
 			"<label> <command> / rm <label-or-id>, and carryover add <path> [--copy|--symlink] " +
 			"/ rm <path> (add upserts, so re-adding switches the mode). The flags --setup <cmd>, " +
@@ -115,7 +132,9 @@ var projectItems = []helpItem{
 
 var configItems = []helpItem{
 	{"config list", "Show every setting",
-		"Effective values, with (default) marking keys not present in config.json."},
+		"Effective values, with (default) marking keys not present in config.json. --json prints {ok, settings: [{key, value, set}]}."},
+	{"config read", "Print config.json as stored (--json)",
+		"{ok, config: {...}}, unknown keys included and no defaults filled in ({} when there is no file). projects config read answers the same for project.json, with config null when the project has none."},
 	{"config get <key>", "Print one setting's effective value", ""},
 	{"config set <key> <value>", "Change a setting",
 		"Booleans accept true/false, on/off, yes/no, 1/0. Setting a key to its default removes " +
@@ -425,6 +444,9 @@ var commands = []command{
 	// App plumbing for device sync (bundle create/unpack); hidden from
 	// the help catalog on purpose, like the config `write --data` verbs.
 	{name: "bundle", run: cmdBundle},
+	{name: "autopull", aliases: []string{"auto-pull"}, worktree: true, run: cmdAutoPull},
+	{name: "move", aliases: []string{"mv"}, worktree: true, run: cmdMove},
+	{name: "launchers", aliases: []string{"launcher"}, run: cmdLaunchers},
 	{name: "shelve", worktree: true,
 		run: func(ctx cliContext, args []string) (int, error) { return cmdShelve(ctx, args, true) }},
 	{name: "unshelve", worktree: true,

@@ -1,14 +1,14 @@
 package main
 
-// Project icon resolution, ported from host/lib/projects/icon.ts so
-// the CLI can color projects by logo without the app having run. The
-// shared cache in front of this scan lives in iconcache.go; what's
-// here is the resolution itself, and it must produce the same answer
-// as the app's: every package root (repo top level plus each
+// Project icon resolution, the one resolver: `sm projects list
+// --json` carries each project's icon and accent hue, and `sm projects
+// icon` its bytes, so the app no longer needs host/lib/projects/icon.ts
+// (its former copy, kept agreeing with this one until it is deleted).
+// The cache in front of this scan lives in iconcache.go; what's here is
+// the resolution itself: every package root (repo top level plus each
 // package.json directory, shallowest first) is probed for the
 // conventional icon files, then for a <link rel="icon"> href in the
-// usual source files. The candidate lists must stay in sync with
-// icon.ts.
+// usual source files.
 
 import (
 	"cmp"

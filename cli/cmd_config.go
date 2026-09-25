@@ -15,11 +15,13 @@ package main
 // path, output decoration, key registry, and write hooks), so every
 // verb body lives here once and cmd_project.go contributes hooks.
 //
-// `write --data '<json>'` is plumbing for the app: the delegated
-// globalConfig:writeDeviceSettings / shigomori:write IPC handlers push
-// whole documents through it so both surfaces run the same engine. Those
-// writes merge into the file too, so a key only a newer version knows
-// about survives an older build's save.
+// `write --data '<json>'` and `read` are plumbing for the app: the
+// delegated globalConfig:writeDeviceSettings / shigomori:write IPC
+// handlers push whole documents through write so both surfaces run the
+// same engine, and read hands back the stored document so the app
+// needn't open config.json or project.json itself. Writes merge into
+// the file, so a key only a newer version knows about survives an
+// older build's save. These two are the only whole-document paths.
 
 import (
 	"bytes"
@@ -526,6 +528,10 @@ type configDocScope struct {
 	// Runs after any successful update with the document that landed
 	// (the project scope's in-project exclude side effect).
 	afterWrite func(doc map[string]any)
+	// `read` answers null rather than {} for a missing file: a project
+	// without project.json is unconfigured, which the app's reader
+	// tells apart from configured-with-defaults.
+	nullWhenAbsent bool
 }
 
 func globalConfigScope() configDocScope {
@@ -828,6 +834,35 @@ func runConfigWrite(scope configDocScope, data string) (int, error) {
 	return 0, nil
 }
 
+// Plumbing read for the app, the counterpart of `write --data`: the
+// stored document whole, as on disk (no defaults filled in: the app's
+// schemas and DEVICE_SETTINGS_DEFAULTS apply those, and a document
+// with defaults written into it would persist them on the next
+// whole-document write). {"ok": true, "config": {...}}, where config
+// is {} for a missing global config.json and null for a missing
+// project.json. A malformed file is an error, like every read here.
+// The two app readers parse it with StoredGlobalConfigSchema and
+// StoredShigomoriConfigSchema.
+func runConfigRead(scope configDocScope) (int, error) {
+	if !jsonMode {
+		return 2, usageErrf("read is plumbing for --json. For people: %s %s list.", binaryName, scope.usagePrefix)
+	}
+	var doc any
+	found, err := readJSONDoc(scope.path, func(raw []byte) error {
+		decoded, err := decodeConfigDoc(raw)
+		doc = decoded
+		return err
+	})
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	if !found && !scope.nullWhenAbsent {
+		doc = map[string]any{}
+	}
+	scope.emitOK(map[string]any{"config": doc})
+	return 0, nil
+}
+
 // The verbs both dispatchers share. handled=false means the verb
 // belongs to the caller (bare/edit/carryover/unknown).
 func runSharedConfigVerb(scope configDocScope, parsed parsedArgs) (bool, int, error) {
@@ -857,6 +892,8 @@ func runSharedConfigVerb(scope configDocScope, parsed parsedArgs) (bool, int, er
 		code, err = runLauncherVerb(scope, parsed.positionals[1:])
 	case "write":
 		code, err = runConfigWrite(scope, parsed.strings["data"])
+	case "read":
+		code, err = runConfigRead(scope)
 	default:
 		return false, 0, nil
 	}

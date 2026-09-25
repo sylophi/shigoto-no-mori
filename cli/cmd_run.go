@@ -2,15 +2,18 @@ package main
 
 // sm run: run (or list) the package.json scripts of the worktree
 // containing the cwd. It's the CLI face of the app's scripts panel,
-// and the engine behind it (the app delegates its own runs through
-// `sm run --worktree-id ...`, see host/ipc/modules/packageScripts.ts).
-// The CLI picks the package manager, injects the SHIGOMORI_* env
-// contract, bumps the shared use log, then replaces itself with the
-// manager via exec: the script owns the terminal, signals, and exit
-// code exactly as if the user had typed `pnpm run <script>` there.
+// and the engine behind it: the app spawns `sm run --project-id P
+// --worktree-id W -- <script>` in its console, and the CLI picks the
+// package manager, injects the SHIGOMORI_* env contract, bumps the
+// shared use log, then replaces itself with the manager via exec: the
+// script owns the terminal, signals, and exit code exactly as if the
+// user had typed `pnpm run <script>` there. The list form's --json is
+// the panel's read: scripts, manager, per-script use stats, and the
+// project's saved sort and manual order.
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -18,6 +21,7 @@ import (
 	"path/filepath"
 	"slices"
 	"syscall"
+	"time"
 )
 
 // One package.json scripts entry. A slice, not a map: the list form
@@ -32,16 +36,16 @@ func cmdRun(ctx cliContext, args []string) (int, error) {
 		strings: map[string][]string{
 			"project-id":  {},
 			"worktree-id": {},
-			// Supplied by the app so a delegated run reuses the branch
-			// resolution its IPC handler already performed instead of
-			// re-spawning git here.
+			// Transitional app plumbing, still honored while the app
+			// passes them: branch values its IPC handler resolved, reused
+			// instead of re-resolved. Without them the CLI resolves both
+			// itself (runEnvInputs), which is the intended end state.
 			"project-branch": {},
 			"default-branch": {},
 		},
-		// App plumbing: the app records the use itself, in-process, so
-		// its state watcher can suppress the write as a self-echo. A
-		// bump from this child would look like an external state.json
-		// change and trigger a full refetch on every panel run.
+		// Transitional app plumbing: the app bumps the use log itself
+		// while it passes this. Without it the CLI bumps it, the
+		// intended end state (one engine counting every run).
 		bools: map[string][]string{"skip-use-log": {}},
 	})
 	if err != nil {
@@ -61,7 +65,7 @@ func cmdRun(ctx cliContext, args []string) (int, error) {
 	manager := detectPackageManager(target.worktree.Path)
 
 	if len(positionals) == 0 {
-		return listPackageScripts(manager, scripts)
+		return listPackageScripts(target.proj, manager, scripts)
 	}
 	if jsonMode {
 		return 2, usageErrf(
@@ -147,12 +151,33 @@ func runTarget(ctx cliContext, parsed parsedArgs) (located, error) {
 		binaryName, projectHint(ctx))
 }
 
-func listPackageScripts(manager string, scripts []packageScript) (int, error) {
+// --json: {ok, packageManager, scripts: [{name, command}] in manifest
+// order, usage: {<name>: {lastUsed, recentCount}}, sort, order}. The
+// app's PackageScriptsResultSchema is this with scripts folded into a
+// name -> command record (an array here, because a record can't hold
+// manifest order across every JSON reader). sort is the project's
+// saved PackageScriptSortMode ("frequent" when unset) and order the
+// "manual" sort's stored script order ([] when unset).
+func listPackageScripts(proj project, manager string, scripts []packageScript) (int, error) {
 	if jsonMode {
 		if scripts == nil {
 			scripts = []packageScript{}
 		}
-		emit(map[string]any{"ok": true, "packageManager": manager, "scripts": scripts})
+		useLog := readStateHintKey[map[string]map[string][]int64]("packageScriptUseLog")[proj.ID]
+		now := time.Now()
+		usage := make(map[string]useStat, len(scripts))
+		for _, script := range scripts {
+			usage[script.Name] = useStatOf(useLog[script.Name], now)
+		}
+		sortMode := readStateHintKey[map[string]string]("packageScriptSort")[proj.ID]
+		order := readStateHintKey[map[string][]string]("packageScriptOrder")[proj.ID]
+		if order == nil {
+			order = []string{}
+		}
+		emit(map[string]any{
+			"ok": true, "packageManager": manager, "scripts": scripts, "usage": usage,
+			"sort": cmp.Or(sortMode, "frequent"), "order": order,
+		})
 		return 0, nil
 	}
 	if len(scripts) == 0 {
@@ -170,16 +195,18 @@ func listPackageScripts(manager string, scripts []packageScript) (int, error) {
 	return 0, nil
 }
 
-// Ordered port of readPackageScripts (host/lib/scripts/
-// packageScripts.ts): only string-valued entries count, and a missing
-// or non-object scripts block means "no scripts". The TS side returns
-// null for a missing or unparseable file. Here those are real errors
-// with the path in them, since someone asked for this directory.
+// package.json's scripts in manifest order: only string-valued
+// entries count, and a missing or non-object scripts block means "no
+// scripts". A missing or unparseable file is an error with the path in
+// it (coded no-package-json for the missing case, which the app's
+// panel shows as "no scripts").
 func readWorktreePackageScripts(dir string) ([]packageScript, error) {
 	raw, err := os.ReadFile(filepath.Join(dir, "package.json"))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, errf("No package.json in %s.", dir)
+			// Coded: the app's panel reads "no package.json" as "no
+			// scripts section", not as a failure.
+			return nil, codedErrf("no-package-json", "No package.json in %s.", dir)
 		}
 		return nil, errf("package.json: %v", err)
 	}
@@ -234,9 +261,10 @@ func runArgv(manager, script string, extra []string) []string {
 	return append(argv, extra...)
 }
 
-// Port of bumpScriptUseCount (host/lib/scripts/packageScriptStats.ts):
-// same state.json key, same rolling window, so the app's "most used"
-// sort counts terminal runs too.
+// One run in state.json's packageScriptUseLog, the rolling log the
+// scripts panel's "most used" sort ranks by (read back by `sm run
+// --json`'s usage). The app's bumpScriptUseCount writes the same key
+// while it still counts its own runs.
 func bumpPackageScriptUse(projectID, script string) {
 	err := updateStateKey("packageScriptUseLog", func(raw json.RawMessage) (any, error) {
 		log := map[string]map[string][]int64{}

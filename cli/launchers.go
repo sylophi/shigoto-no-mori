@@ -1,12 +1,13 @@
 package main
 
-// The app's launcher row, ported for `sm open`: detected macOS apps,
-// custom launcher commands from global and project config, and the
-// GitHub web entry. The tool catalog is one embedded JSON file shared
-// with host/lib/launchers/index.ts. Ordering and the rolling 14-day
-// use log are shared with the app through state.json's launcherUseLog
-// key, so launching from the terminal reorders the row in the app and
-// vice versa.
+// The launcher row: detected macOS apps, custom launcher commands from
+// global and project config, and the GitHub web entry, behind `sm
+// open` and `sm launchers` (whose --json is the row the app renders).
+// The tool catalog is one embedded JSON file shared with
+// host/lib/launchers/index.ts, which still launches from the app.
+// Ordering and the rolling 14-day use log live in state.json's
+// launcherUseLog key, which both surfaces bump, so launching from the
+// terminal reorders the row in the app and vice versa.
 
 import (
 	"cmp"
@@ -175,6 +176,42 @@ func pruneAndAppendUse(times []int64) []int64 {
 	cutoff := now - useLogWindow.Milliseconds()
 	fresh := slices.DeleteFunc(times, func(t int64) bool { return t < cutoff })
 	return append(fresh, now)
+}
+
+// The app's usage shape (PackageScriptUsageSchema and the project
+// row's pair): newest use, epoch ms (0 = never), and uses within the
+// rolling window.
+type useStat struct {
+	LastUsed    int64 `json:"lastUsed"`
+	RecentCount int   `json:"recentCount"`
+}
+
+// Latest use and in-window count for one name in a use log, the
+// usageByName fold the app's sorts rank by.
+func useStatOf(times []int64, now time.Time) useStat {
+	cutoff := now.Add(-useLogWindow).UnixMilli()
+	var stat useStat
+	for _, t := range times {
+		stat.LastUsed = max(stat.LastUsed, t)
+		if t >= cutoff {
+			stat.RecentCount++
+		}
+	}
+	return stat
+}
+
+// One state.json key read for display (use logs, sort preferences):
+// an unreadable file or a wrong-shaped key reads as empty (with the
+// one-time warning), since losing it costs a sort order, not
+// correctness.
+func readStateHintKey[T any](key string) T {
+	var log T
+	if err := decodeKey(statePath(), key, readStateHints()[key], &log); err != nil {
+		noteStateTrouble(err)
+		var zero T
+		return zero
+	}
+	return log
 }
 
 func bumpLauncherUse(id string) {

@@ -142,6 +142,13 @@ func resolveProject(ctx cliContext, ref string) (project, error) {
 	case 1:
 		return matches[0], nil
 	case 0:
+		// The id the app and --json rows name it by works too. Names
+		// win: an id is never a directory basename anyone typed.
+		for _, p := range ctx.projects {
+			if p.ID == ref {
+				return p, nil
+			}
+		}
 		return project{}, usageErrf("Unknown project %q. %s", ref, projectHint(ctx))
 	default:
 		// Never guess which one: the path is how to say which, and it

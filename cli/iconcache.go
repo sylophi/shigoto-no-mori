@@ -1,13 +1,16 @@
 package main
 
-// The icon cache shared with the app: iconCache/index.json under the
-// data dir, keyed by project path. Both surfaces read AND write it,
-// so a project resolved by either never pays the git scan again, and
-// the accent hue rides along with the icon entry. Every
-// read-modify-write holds index.json.lock (the state.json protocol).
+// The project icon cache: iconCache/index.json under the data dir,
+// keyed by project path, so a resolved project never pays the git
+// scan again, and the accent hue rides along with the icon entry. The
+// CLI owns resolution and this cache: the app reads icons through
+// `sm projects list --json` (path, mime, hue) and `sm projects icon`
+// (the bytes). The app's host/lib/projects/icon.ts still writes the
+// same file until it is removed, which is why every read-modify-write
+// merges under index.json.lock (the state.json protocol) and why the
+// schema below still matches its IconCacheEntry.
 //
-// Schema, mirrored by IconCacheEntry in host/lib/projects/icon.ts
-// (change them together):
+// Schema:
 //   sourcePath     absolute icon path, or "" for "resolved to no
 //                  icon". Negative entries are CLI-only: the app
 //                  skips them (a freshly added icon must show up in
@@ -164,26 +167,43 @@ func accentFrom(hue float64) (float64, bool) {
 
 // The accent hue for a project, resolving and revalidating through
 // the shared cache. false = no accent (no icon, or a monochrome one).
-// Steady state is one stat per project; everything heavier (git scan,
-// image decode, hashing) happens once and lands back in the cache.
 func projectHue(proj project) (float64, bool) {
+	entry, ok := projectIcon(proj, false)
+	if !ok {
+		return 0, false
+	}
+	return accentFrom(*entry.Hue)
+}
+
+// The project's icon as a complete cache entry (source path, mime,
+// hue always set), resolving and revalidating through the shared
+// cache; false when the project has no icon. Steady state is one stat
+// per project; everything heavier (git scan, image decode, hashing)
+// happens once and lands back in the cache (queued; the caller
+// flushes). rescanMisses ignores cached "no icon" answers, for a
+// caller that must notice an icon added since (the app's sidebar,
+// which used to re-resolve icon-less projects every session).
+func projectIcon(proj project, rescanMisses bool) (iconCacheEntry, bool) {
 	if entry, ok := cachedIconIndex()[proj.Path]; ok {
 		if entry.SourcePath == "" {
-			if time.Since(time.UnixMilli(entry.UpdatedAt)) < iconMissTTL {
-				return 0, false
+			if !rescanMisses && time.Since(time.UnixMilli(entry.UpdatedAt)) < iconMissTTL {
+				return iconCacheEntry{}, false
 			}
-			// Expired miss: fall through to a fresh scan.
+			// Expired or ignored miss: fall through to a fresh scan.
 		} else if info, err := os.Stat(entry.SourcePath); err == nil {
 			unchanged := info.Size() == entry.SourceSize &&
 				math.Abs(mtimeMs(info)-entry.SourceMtimeMs) < 0.001
 			if unchanged && entry.Hue != nil {
-				return accentFrom(*entry.Hue)
+				if entry.Mime == "" {
+					entry.Mime = mimeForPath(entry.SourcePath)
+				}
+				return entry, true
 			}
-			// Touched, changed, or app-resolved without a hue yet:
-			// rebuild the entry from the bytes and write it back.
+			// Touched, changed, or resolved without a hue yet: rebuild
+			// the entry from the bytes and write it back.
 			if rebuilt, ok := buildIconEntry(entry.SourcePath); ok {
 				queueIconCacheUpdate(proj.Path, rebuilt)
-				return accentFrom(*rebuilt.Hue)
+				return rebuilt, true
 			}
 			// Vanished mid-flight: fall through to a fresh scan.
 		}
@@ -191,12 +211,12 @@ func projectHue(proj project) (float64, bool) {
 	sourcePath := resolveIconPath(proj.Path)
 	if sourcePath == "" {
 		queueIconCacheUpdate(proj.Path, iconCacheEntry{UpdatedAt: time.Now().UnixMilli()})
-		return 0, false
+		return iconCacheEntry{}, false
 	}
 	entry, ok := buildIconEntry(sourcePath)
 	if !ok {
-		return 0, false
+		return iconCacheEntry{}, false
 	}
 	queueIconCacheUpdate(proj.Path, entry)
-	return accentFrom(*entry.Hue)
+	return entry, true
 }
