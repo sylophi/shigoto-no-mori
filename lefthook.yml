@@ -171,6 +171,11 @@ pre-commit:
     script-order:
       glob: "{host/lib/scripts/packageScriptStats.ts,host/lib/config/store.ts,test/script-order.mjs,test/lib/checkKit.mjs}"
       run: pnpm test script-order
+    # The tree's project group order is decided over every device, so
+    # the device filter drops groups without reordering the rest.
+    project-order:
+      glob: "{renderer/components/sidebar/buildSidebarRows.ts,renderer/lib/sortProjects.ts,test/project-order.mjs,test/lib/checkKit.mjs}"
+      run: pnpm test project-order
     # Drives stack detection (shared/pullRequestStack.ts), the pure
     # read behind the sidebar's stack pill, the worktree page's stack
     # list and the stack merge button.
