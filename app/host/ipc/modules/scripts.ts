@@ -34,7 +34,7 @@ function resolveScriptCommand(
 export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
   {
     run: async ({ projectId, worktreeId, script }, handlerCtx) => {
-      const project = findProjectOrThrow(projectId);
+      const project = await findProjectOrThrow(projectId);
       const ctx = await prepareScriptRun(project, worktreeId);
 
       const command = resolveScriptCommand(
@@ -51,8 +51,10 @@ export const scriptsHandlers: Handlers<typeof scriptsContract, HandlerContext> =
         scriptName: script,
         worktree: ctx.worktree,
         project,
-        projectBranch: ctx.projectBranch,
-        defaultBranch: ctx.defaultBranch,
+        scriptEnv: {
+          projectBranch: ctx.projectBranch,
+          defaultBranch: ctx.defaultBranch,
+        },
         notify: scriptEventNotifier(handlerCtx),
       });
       return { runId };

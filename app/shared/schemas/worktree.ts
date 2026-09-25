@@ -87,8 +87,7 @@ export const WorktreeSchema = z.object({
   // remote list in hand, so the renderer never has to split the ref.
   primaryBranch: z.string().optional(),
   // True when this branch's work is already in the primary branch. See
-  // landedOnPrimary in host/lib/git/worktrees.ts for what does and
-  // doesn't count. Notably a local fast-forward merge doesn't, since
+  // landedOnPrimary in cli/gitx.go for what does and doesn't count. Notably a local fast-forward merge doesn't, since
   // its history is indistinguishable from a worktree that never
   // committed. False for the primary worktree and for detached HEAD.
   mergedIntoPrimary: z.boolean(),
@@ -126,6 +125,28 @@ export const WorktreeSchema = z.object({
   autoPull: z.boolean().default(false),
 });
 export type Worktree = z.infer<typeof WorktreeSchema>;
+
+// A worktree without its git probes: what `sm worktrees list
+// --identities` prints, for the host's lookups (which checkout an id
+// names, where it sits, its marks). Only `git worktree list` stands
+// behind it, so it is the cheap read every worktree-scoped handler
+// opens with. With --primary-ref each one also carries the project's
+// primary ref, resolved once per project the way the rows resolve it.
+export const WorktreeIdentitySchema = WorktreeSchema.pick({
+  id: true,
+  projectId: true,
+  name: true,
+  branch: true,
+  path: true,
+  isPrimary: true,
+  isExternal: true,
+  detached: true,
+  shelved: true,
+  autoPull: true,
+  primaryRef: true,
+  primaryBranch: true,
+});
+export type WorktreeIdentity = z.infer<typeof WorktreeIdentitySchema>;
 
 // A worktree's relationship to its upstream, derived from the raw counts
 // on Worktree. The renderer switches on `kind` to pick the right pill;

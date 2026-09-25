@@ -286,7 +286,7 @@ export function createGitFollower(deps: {
     const localWorktreeId = session.labels[LABEL_LOCAL_WORKTREE] ?? "";
     let project: Project;
     try {
-      project = findProjectOrThrow(localProjectId);
+      project = await findProjectOrThrow(localProjectId);
     } catch (error) {
       setStatus(record, { status: "error", detail: errorMessageOf(error) });
       return;

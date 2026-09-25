@@ -5,10 +5,12 @@ package main
 // `sm rm` and `sm setup`, reading the NDJSON script events below. The
 // CLI runs scripts in the foreground and shares the caller's process
 // group, so Ctrl-C (or the app signaling the CLI's group) reaches the
-// whole tree. The app's host/lib/scripts runner is the remaining
-// twin, for its in-app console, and is slated to go: shell selection
-// and the unattended-run env (pager off) match it so the switch-over
-// changes nothing a script can observe.
+// whole tree. The app's own runner (host/lib/scripts) only hosts
+// scripts in its console: package.json scripts through `sm run`, and
+// the lifecycle scripts its Scripts panel re-runs by hand, which it
+// still starts itself with the SHIGOMORI_* env of scriptEnv below.
+// Shell selection and the unattended-run env (pager off) match it, so
+// the two runners differ in nothing a script can observe.
 
 import (
 	"cmp"

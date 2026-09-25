@@ -173,17 +173,17 @@ export const GlobalConfigSchema = z.object({
   launchScripts: z.boolean().optional(),
   // When false, deleting a worktree keeps its checked-out local branch
   // (deletion is skipped anyway if the branch is the primary's or in
-  // use by another worktree). ON by default. Unset means delete, in
-  // both engines (cli/cmd_config.go and host/lib/nuke.ts).
+  // use by another worktree). ON by default. Unset means delete
+  // (cli/cmd_rm.go, which every removal runs through).
   deleteBranchOnRemove: z.boolean().optional(),
   // When true, adding a project with a package.json seeds its setup
   // script with `<detected-pm> install`. Only fires at project-add
   // time; existing projects are untouched.
   autoPopulateInstall: z.boolean().optional(),
   // When true, a new worktree, and the primary checkout of a newly
-  // added project, start out with auto-pull on
-  // (host/lib/worktrees/autoPull.ts). Only fires at create and add
-  // time, in the CLI (cli/state.go markAutoPullIfNew). Existing
+  // added project, start out with auto-pull on (the mark `sm worktrees
+  // autopull` sets). Only fires at create and add time, in the CLI
+  // (cli/state.go markAutoPullIfNew). Existing
   // worktrees keep their footer toggle as they are.
   autoPullNew: z.boolean().optional(),
   // When true, autoPullNew covers only the primary checkout of a newly
@@ -192,16 +192,15 @@ export const GlobalConfigSchema = z.object({
   // When true, auto-picked worktree names are Animal Crossing villager
   // and character names (cli/embed/doubutsu-names.json, e.g. `raymond`)
   // instead of adjective + animal pairs (`snug-otter`). Picked by the
-  // CLI at create time (cli/names.go) and by the host for the New
-  // Worktree form's pre-pick (host/lib/worktrees/names.ts).
+  // CLI (cli/names.go), at create time and for the New Worktree form's
+  // pre-pick (`sm worktrees destination`).
   doubutsuNames: z.boolean().optional(),
   // When true, an external worktree whose folder is just the repo's
   // name (Codex and other tools lay worktrees out as
   // <worktree-name>/<repo-name>) is named after the folder above it.
   // Off by default: a worktree that merely shares the repo's folder
-  // name would take whatever folder it sits in. Applied wherever
-  // worktrees are listed, by the host (host/lib/git/worktrees.ts) and
-  // the CLI (cli/gitx.go).
+  // name would take whatever folder it sits in. Applied wherever the
+  // CLI lists worktrees (cli/gitx.go), the app's rows included.
   codexWorktreeNames: z.boolean().optional(),
   // When true, projects with a valid port-pool.config.json run
   // `port-pool provision` after setup at create and
@@ -213,7 +212,7 @@ export const GlobalConfigSchema = z.object({
   // path registered in both is an ordinary removable project, and
   // removing its registry entry demotes it back to terrier-sourced. Off by
   // default, and only active while `terrier` is on PATH at a version
-  // this build understands (host/lib/terrier.ts, cli/terrier.go).
+  // this build understands (cli/terrier.go).
   terrier: z.boolean().optional(),
   // When true, GitHub CLI features light up wherever they apply.
   // Activates only when `gh` is on PATH and authenticated. On by
@@ -427,8 +426,8 @@ export const WriteShigomoriPayloadSchema = ProjectScopedPayloadSchema.extend({
 // worktree list first). Constrain it to the exact 12-hex shape that
 // `worktreeIdFromPath` produces so a malformed id can't escape the
 // projects/<id>/worktrees/ directory.
-// The derived worktree id (host/lib/git/worktrees.ts worktreeIdFromPath):
-// the first 12 hex chars of the path's sha256. One schema for every
+// The derived worktree id (worktreeIDFromPath in cli/paths.go): the
+// first 12 hex chars of the path's sha256. One schema for every
 // payload that names one.
 export const WorktreeIdSchema = z.string().regex(/^[0-9a-f]{12}$/);
 

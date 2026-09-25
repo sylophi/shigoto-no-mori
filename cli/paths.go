@@ -3,9 +3,10 @@ package main
 // Path math: path-derived worktree ids and the managed-layout bases.
 // The ids are an on-disk format (registry marks, per-worktree data
 // files, dirty-capture refs are keyed by them), so the hash is fixed
-// for good. The app's shared/git/worktreeLayout.ts and
-// host/lib/worktrees/paths.ts compute the same answers while the app
-// still derives any of them itself.
+// for good. The app's worktreeIdFromPath computes the same id (an app
+// proof pins it against this function's output), and
+// shared/git/worktreeLayout.ts mirrors the layout bases for display
+// only; destinations come from `sm worktrees destination`.
 
 import (
 	"crypto/sha256"
@@ -16,9 +17,8 @@ import (
 	"strings"
 )
 
-// sha256(path)[:12], identical to worktreeIdFromPath in
-// host/lib/git/worktrees.ts. The same path must hash to the same id
-// from the app and the CLI.
+// sha256(path)[:12], identical to the app's worktreeIdFromPath. The
+// same path must hash to the same id from the app and the CLI.
 func worktreeIDFromPath(path string) string {
 	sum := sha256.Sum256([]byte(path))
 	return hex.EncodeToString(sum[:])[:12]
@@ -90,8 +90,8 @@ func cwdInside(dir string) bool {
 }
 
 // Every base directory whose direct children count as "managed" for a
-// project; all layouts included unconditionally (matches
-// managedBasesFor in host/lib/worktrees/paths.ts).
+// project; all layouts included unconditionally, so switching layouts
+// doesn't turn existing worktrees external.
 func managedBasesFor(projectPath string, config *projectConfig) []string {
 	bases := []string{
 		filepath.Join(dataDir(), "worktrees", filepath.Base(projectPath)),
@@ -123,9 +123,8 @@ func isManagedPath(worktreePath string, bases []string) bool {
 	return false
 }
 
-// Where new worktrees go for this project (worktreeBaseFor +
-// resolveWorktreeBase in TS). Custom without a path falls back to the
-// managed root.
+// Where new worktrees go for this project. Custom without a path falls
+// back to the managed root.
 func resolveWorktreeBase(projectPath string, config *projectConfig) string {
 	layout := "managed-root"
 	if config != nil && config.WorktreeLayout != "" {

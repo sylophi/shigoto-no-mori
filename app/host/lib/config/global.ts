@@ -3,7 +3,10 @@
 // and is kept separate from registry.json (projects, shelf), state.json
 // (use logs, sort and collapse preferences) and the per-project configs
 // at <dataDir>/projects/<projectId>.json. Appearance is client
-// config and lives in main/electron/clientConfig.ts instead.
+// config and lives in main/electron/clientConfig.ts instead. The CLI
+// owns the file: reads go through `sm config read` and writes through
+// `sm config write` (host/ipc/cliDelegate.ts). The one-time drains at
+// the bottom are the exception, sync on the boot path.
 import { z } from "zod";
 import { join } from "node:path";
 import { errorMessageOf } from "@shared/errors";
@@ -14,9 +17,9 @@ import {
   type GlobalConfig,
   StoredGlobalConfigSchema,
 } from "@shared/schemas";
+import { globalConfigReadViaCli } from "@host/ipc/cliDelegate";
 import {
   atomicWriteJsonSync,
-  readJsonOrNull,
   readJsonOrNullSync,
   withSchemaVersion,
 } from "../util/jsonFile";
@@ -28,18 +31,16 @@ function configPath(): string {
   return join(dataDir(), CONFIG_FILE);
 }
 
-const cache = ttlValueCache<GlobalConfig>(
-  5_000,
-  async () =>
-    (await readJsonOrNull(configPath(), StoredGlobalConfigSchema)) ?? {},
-);
+// The stored document, no defaults filled in: each reader applies its
+// own, as it always has.
+const cache = ttlValueCache<GlobalConfig>(5_000, globalConfigReadViaCli);
 
 export async function readGlobalConfig(): Promise<GlobalConfig> {
   return cache.get();
 }
 
 // Cache-bypassing read for a read-modify-write base. Drops the TTL entry
-// and reloads from disk, then refreshes the cache with what it read.
+// and reads through the CLI again, then refreshes the cache with it.
 // INVARIANT: the device-settings patch write MUST base itself on this,
 // never on the 5s-TTL readGlobalConfig, because it hands the CLI a whole
 // document and the CLI clears every registered key the payload omits

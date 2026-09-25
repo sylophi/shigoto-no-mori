@@ -4,13 +4,16 @@
 // Shigomori manages these itself; we don't touch the user's repo. Per-worktree
 // files exist for managed worktrees and the primary checkout (the main repo
 // root); other external worktrees deliberately have no persisted state.
+// project.json is the CLI's: read through `sm projects config read` and
+// written through `sm projects config write` (host/ipc/cliDelegate.ts).
+// The per-worktree files (notes) are the app's own.
 import { join } from "node:path";
 import {
   type ShigomoriConfig,
-  StoredShigomoriConfigSchema,
   type ShigomoriWorktreeData,
   ShigomoriWorktreeDataSchema,
 } from "@shared/schemas";
+import { shigomoriReadViaCli } from "@host/ipc/cliDelegate";
 import {
   atomicWriteJson,
   readJsonOrNull,
@@ -29,10 +32,6 @@ function projectDir(projectId: string): string {
   return join(dataDir(), "projects", projectId);
 }
 
-function projectConfigPath(projectId: string): string {
-  return join(projectDir(projectId), "project.json");
-}
-
 function worktreeDataPath(projectId: string, worktreeId: string): string {
   return join(projectDir(projectId), "worktrees", `${worktreeId}.json`);
 }
@@ -41,8 +40,7 @@ function worktreeDataPath(projectId: string, worktreeId: string): string {
 // user notices and fixes it.
 const configCache = ttlMapCache<string, ShigomoriConfig | null>(
   5_000,
-  (projectId) =>
-    readJsonOrNull(projectConfigPath(projectId), StoredShigomoriConfigSchema),
+  shigomoriReadViaCli,
 );
 
 const worktreeCache = ttlMapCache<string, ShigomoriWorktreeData | null>(

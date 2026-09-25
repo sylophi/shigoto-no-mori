@@ -134,3 +134,35 @@ func rekeyWorktree(proj project, from, to string) {
 		}
 	}
 }
+
+// sm worktrees rekey --project-id P --from-id A --to-path X: app
+// plumbing for the data-folder move, which relocates managed worktree
+// checkouts itself. It runs BEFORE the directories move, so nothing
+// here asks git about X or requires it to exist: it only carries what
+// is keyed by A (rekeyWorktree) over to the id X will have, and answers
+// with that id. Best-effort like the re-key after `move`.
+func cmdRekey(ctx cliContext, args []string) (int, error) {
+	parsed, err := parseCmdArgs(args, argSpec{
+		strings: map[string][]string{"project-id": {}, "from-id": {}, "to-path": {}},
+	})
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	pid, from, to := parsed.strings["project-id"], parsed.strings["from-id"], parsed.strings["to-path"]
+	if pid == "" || from == "" || to == "" || len(parsed.positionals) > 0 {
+		return 2, usageErrf("Usage: %s worktrees rekey --project-id <id> --from-id <id> --to-path <path>", binaryName)
+	}
+	if !filepath.IsAbs(to) {
+		return 2, usageErrf("--to-path must be absolute: %s", to)
+	}
+	proj, err := resolveProjectByID(ctx, pid)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	newID := worktreeIDFromPath(filepath.Clean(to))
+	if newID != from {
+		rekeyWorktree(proj, from, newID)
+	}
+	emitOrOut(map[string]any{"ok": true, "id": newID}, newID)
+	return 0, nil
+}

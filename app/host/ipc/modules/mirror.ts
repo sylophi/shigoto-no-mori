@@ -38,7 +38,8 @@ import {
   mirrorStopIsSafe,
   summarizeIgnores,
 } from "@shared/ipc/modules/mirror";
-import { DeleteWorktreeResultSchema } from "@shared/schemas";
+import { DeleteWorktreeResultSchema, type Worktree } from "@shared/schemas";
+import { forceRemoveViaCli } from "@host/ipc/cliDelegate";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { errorMessageOf, unknownWorktreeError } from "@shared/errors";
@@ -49,16 +50,12 @@ import {
   peerWorktreesApiFor,
 } from "@host/ipc/peerSync";
 import { deleteAnyLocalBranch } from "@host/lib/git/branches";
-import {
-  removeWorktreeForce,
-  worktreeIdFromPath,
-} from "@host/lib/git/worktrees";
+import { localBranchExists } from "@host/lib/git/remotes";
 import {
   findProjectAndWorktreeOrThrow,
   findProjectOrThrow,
   findWorktreePathOrThrow,
 } from "@host/lib/projects";
-import { dropWorktreeMarks } from "@host/lib/worktrees/marks";
 import {
   applyGitState,
   readGitState,
@@ -157,17 +154,19 @@ function annotateMirrorSession(
   });
 }
 
-async function rollBackPull(worktree: {
-  projectId: string;
-  path: string;
-  branch: string;
-}): Promise<void> {
-  const project = findProjectOrThrow(worktree.projectId);
-  await removeWorktreeForce(project.path, worktree.path);
-  // The create ran through the CLI, which may have seeded an auto-pull
-  // mark (autoPullNew). This removal does not, so retire it here.
-  dropWorktreeMarks(worktreeIdFromPath(worktree.path));
-  await deleteAnyLocalBranch(project.path, worktree.branch, true);
+// Undoes a pull whose session never started. The worktree goes through
+// `sm rm` like any removal, so the port-pool lease its create took is
+// released, its teardown runs and the CLI retires the marks it seeded.
+// The branch goes whatever deleteBranchOnRemove says: a retry would
+// refuse on the one this attempt left behind.
+async function rollBackPull(
+  worktree: Pick<Worktree, "id" | "projectId" | "branch">,
+): Promise<void> {
+  const project = await findProjectOrThrow(worktree.projectId);
+  await forceRemoveViaCli(project, worktree.id);
+  if (await localBranchExists(project.path, worktree.branch)) {
+    await deleteAnyLocalBranch(project.path, worktree.branch, true);
+  }
 }
 
 // A session created for a start, noted on the worktree's thread. A

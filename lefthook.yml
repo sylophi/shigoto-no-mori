@@ -15,10 +15,21 @@ pre-commit:
     dmg-art:
       run: pnpm -C app test dmg-art
     # Glob-gated: the identity test costs ~140 git spawns, so it should
-    # not run on unrelated commits.
+    # not run on unrelated commits. It holds the CLI's identity (the
+    # project rows' `identity`) to the same fixtures, so cli/ gates it
+    # too.
     identity:
-      glob: "{app/shared/git/repoIdentity.mts,app/shared/git/defaultBranch.mts,app/shared/fixtures/**,app/test/identity.mjs}"
+      glob: "{cli/**,app/shared/git/repoIdentity.mts,app/shared/git/defaultBranch.mts,app/shared/fixtures/**,app/test/identity.mjs,app/test/lib/smBinary.mjs}"
       run: pnpm -C app test identity
+    # The host reads the data model through the CLI: projects, rows,
+    # identities, the marks, relocate, reorder, config, launchers and
+    # package scripts answered by the real sm binary through the real
+    # handlers, plus the two rules the app still mirrors (the worktree
+    # id and the renderer's layout math) pinned against the CLI's own
+    # answers, and a forced removal running the teardown through sm rm.
+    cli-reads:
+      glob: "{cli/**,app/host/ipc/cliDelegate.ts,app/host/ipc/modules/projects.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/modules/launchers.ts,app/host/ipc/modules/packageScripts.ts,app/host/ipc/modules/globalConfig.ts,app/host/ipc/modules/shigomori.ts,app/host/lib/projects/**,app/host/lib/git/worktrees.ts,app/host/lib/config/**,app/shared/schemas/**,app/shared/git/worktreeLayout.ts,app/test/cli-reads.mjs,app/test/lib/checkKit.mjs,app/test/lib/smBinary.mjs}"
+      run: pnpm -C app test cli-reads
     go-test:
       glob: "cli/**"
       run: go test -C cli ./...
@@ -37,7 +48,7 @@ pre-commit:
     # from, which feed the invariant through allContractModules), so
     # adding an untagged host invoke also trips it.
     socket-host:
-      glob: "{app/host/socket/**,app/host/direct/tickets.ts,app/shared/packaging/rendererScheme.mts,app/host/ipc/modules/globalConfig.ts,app/host/ipc/modules/remoteAccess.ts,app/shared/ipc/**,app/shared/schemas/**,app/shared/hub/protocol.ts,app/main/ipc/register.ts,app/test/socket-host.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
+      glob: "{app/host/socket/**,app/host/direct/tickets.ts,app/shared/packaging/rendererScheme.mts,app/host/ipc/modules/globalConfig.ts,app/shared/ipc/**,app/shared/schemas/**,app/shared/hub/protocol.ts,app/main/ipc/register.ts,app/test/socket-host.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
       run: pnpm -C app test socket-host
     # Typechecks the hub Worker package and runs its vitest suite
     # inside workerd (real D1, Durable Object and websocket bindings)
@@ -82,7 +93,7 @@ pre-commit:
     # peerPush path. Gated to the direct surface plus the socket and hub
     # layers it composes.
     direct-plane:
-      glob: "{app/host/direct/**,app/shared/packaging/cloudflaredDist.mts,app/host/socket/**,app/host/lib/util/binaries.ts,app/host/lib/scripts/process.ts,app/shared/ipc/modules/direct.ts,app/shared/ipc/socket/**,app/shared/ipc/transport.ts,app/shared/ipc/registerContract.ts,app/shared/hub/**,app/host/hub/**,app/shared/account/service.ts,app/shared/remote/supervisor.ts,app/test/direct-plane.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
+      glob: "{app/host/direct/**,app/shared/packaging/cloudflaredDist.mts,app/host/socket/**,app/host/lib/util/binaries.ts,app/host/lib/scripts/process.ts,app/shared/ipc/modules/direct.ts,app/shared/ipc/modules/account.ts,app/shared/ipc/modules/hub.ts,app/shared/ipc/socket/**,app/shared/ipc/transport.ts,app/shared/ipc/registerContract.ts,app/shared/hub/**,app/host/hub/**,app/shared/account/service.ts,app/shared/remote/supervisor.ts,app/test/direct-plane.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
       run: pnpm -C app test direct-plane
     # End-to-end proof for the device-sync transfer plumbing: builds the
     # real sm binary, seeds fixture repos in a sandboxed SHIGOMORI_DATA_DIR,
@@ -93,7 +104,7 @@ pre-commit:
     # transfer cleanup, and the coded corrupted-bundle error. Gated to
     # the sync surface plus the CLI engine it shells.
     sync-transfer:
-      glob: "{cli/**,app/shared/ipc/modules/sync.ts,app/shared/ipc/modules/worktrees.ts,app/shared/ipc/hexId.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/shared/ipc/socket/frames.ts,app/shared/hub/protocol.ts,app/host/ipc/modules/sync.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/peerSync.ts,app/host/ipc/cliDelegate.ts,app/host/hub/**,app/host/lib/sync/**,app/host/lib/idleRegistry.ts,app/host/lib/git/**,app/host/lib/scripts/**,app/host/lib/util/paths.ts,app/test/sync-transfer.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
+      glob: "{cli/**,app/shared/ipc/modules/sync.ts,app/shared/ipc/modules/worktrees.ts,app/shared/ipc/hexId.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/shared/ipc/socket/frames.ts,app/shared/hub/protocol.ts,app/host/ipc/modules/sync.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/peerSync.ts,app/host/ipc/cliDelegate.ts,app/host/hub/**,app/host/lib/sync/**,app/host/lib/idleRegistry.ts,app/host/lib/git/**,app/host/lib/scripts/**,app/host/lib/util/paths.ts,app/test/sync-transfer.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs,app/host/lib/projects/**,app/test/lib/cliSandbox.mjs,app/test/lib/smBinary.mjs}"
       run: pnpm -C app test sync-transfer
     # End-to-end proof for the CLI's cross-device verbs: the real sm
     # binary finds the real control server through control.json in a
@@ -106,7 +117,7 @@ pre-commit:
     # exit 3 on a caveat, and the mirror stop guard. Gated to the
     # control surface plus the sync surface and CLI it rides.
     control:
-      glob: "{cli/**,app/shared/ipc/modules/control.ts,app/shared/ipc/modules/sync.ts,app/shared/ipc/modules/mirror.ts,app/shared/ipc/modules/worktrees.ts,app/shared/ipc/modules/projects.ts,app/shared/ipc/modules/remoteAccess.ts,app/shared/leaveOutRule.ts,app/shared/sharedSettings.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/host/ipc/modules/control.ts,app/host/ipc/modules/sync.ts,app/host/ipc/modules/mirror.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/peerSync.ts,app/host/ipc/cliDelegate.ts,app/host/mirror/**,app/host/lib/sync/**,app/host/lib/git/**,app/host/lib/util/paths.ts,app/main/core/control/**,app/main/core/portForward/bridge.ts,app/test/control.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
+      glob: "{cli/**,app/shared/ipc/modules/control.ts,app/shared/ipc/modules/sync.ts,app/shared/ipc/modules/mirror.ts,app/shared/ipc/modules/worktrees.ts,app/shared/ipc/modules/projects.ts,app/shared/ipc/modules/hub.ts,app/shared/leaveOutRule.ts,app/shared/sharedSettings.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/host/ipc/modules/control.ts,app/host/ipc/modules/sync.ts,app/host/ipc/modules/mirror.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/peerSync.ts,app/host/ipc/cliDelegate.ts,app/host/mirror/**,app/host/lib/sync/**,app/host/lib/git/**,app/host/lib/util/paths.ts,app/main/core/control/**,app/main/core/portForward/bridge.ts,app/test/control.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs,app/host/lib/projects/**,app/test/lib/cliSandbox.mjs,app/test/lib/smBinary.mjs}"
       run: pnpm -C app test control
     # End-to-end proof for the port-forward wire: drives the host-side
     # forward verbs between two REAL hub connections against real
@@ -132,7 +143,7 @@ pre-commit:
     # serve child on terminate, and the device hub staying flat. Gated
     # to the mirror surface plus the byte wire and CLI it rides.
     mirror:
-      glob: "{file-sync/**,cli/**,app/host/fileSync/**,app/host/mirror/**,app/shared/packaging/fileSyncDist.mts,app/shared/ipc/modules/mirror.ts,app/shared/ipc/modules/forward.ts,app/shared/ipc/modules/sync.ts,app/host/ipc/modules/sync.ts,app/host/ipc/peerSync.ts,app/shared/ipc/hexId.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/shared/ipc/socket/frames.ts,app/shared/hub/protocol.ts,app/host/ipc/modules/forward.ts,app/host/ipc/modules/mirror.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/cliDelegate.ts,app/host/hub/**,app/host/lib/idleRegistry.ts,app/host/lib/net.ts,app/host/lib/git/**,app/host/lib/util/paths.ts,app/main/core/portForward/bridge.ts,app/main/core/mirror/**,app/shared/ipc/socket/channels.ts,app/host/socket/channelStreams.ts,app/test/mirror.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
+      glob: "{file-sync/**,cli/**,app/host/fileSync/**,app/host/mirror/**,app/shared/packaging/fileSyncDist.mts,app/shared/ipc/modules/mirror.ts,app/shared/ipc/modules/forward.ts,app/shared/ipc/modules/sync.ts,app/host/ipc/modules/sync.ts,app/host/ipc/peerSync.ts,app/shared/ipc/hexId.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/shared/ipc/socket/frames.ts,app/shared/hub/protocol.ts,app/host/ipc/modules/forward.ts,app/host/ipc/modules/mirror.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/cliDelegate.ts,app/host/hub/**,app/host/lib/idleRegistry.ts,app/host/lib/net.ts,app/host/lib/git/**,app/host/lib/util/paths.ts,app/main/core/portForward/bridge.ts,app/main/core/mirror/**,app/shared/ipc/socket/channels.ts,app/host/socket/channelStreams.ts,app/test/mirror.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs,app/host/lib/projects/**,app/test/lib/cliSandbox.mjs,app/test/lib/smBinary.mjs}"
       run: pnpm -C app test mirror
     # Proves the worktree port list's pure parts under plain Node: the
     # port-pool state reader (XDG_DATA_HOME, declared order, malformed
@@ -233,17 +244,10 @@ pre-commit:
     # make the pull anything else (a local commit, a modified or
     # untracked file, a detached HEAD, no upstream, a running script)
     # leaves it untouched. Also the sweep's marked-only selection and
-    # the mark's registry.json round trip.
+    # the mark's registry.json round trip, both through the CLI.
     auto-pull:
-      glob: "{app/host/lib/worktrees/autoPull.ts,app/host/lib/worktrees/autoPullSweep.ts,app/host/lib/git/sync.ts,app/host/lib/git/core.ts,app/host/lib/config/store.ts,app/test/auto-pull.mjs,app/test/lib/checkKit.mjs}"
+      glob: "{cli/**,app/host/lib/worktrees/autoPullSweep.ts,app/host/lib/git/sync.ts,app/host/lib/git/core.ts,app/host/lib/git/worktrees.ts,app/host/ipc/cliDelegate.ts,app/test/auto-pull.mjs,app/test/lib/checkKit.mjs,app/test/lib/smBinary.mjs}"
       run: pnpm -C app test auto-pull
-    # Drives the shelf's auto-unshelve against a REAL repository: the
-    # first listing of a shelved worktree snapshots it, changes it was
-    # shelved with keep it shelved, and an edit, a commit or a deletion
-    # made since unshelves it. An auto-pull fast-forward doesn't.
-    shelf:
-      glob: "{app/host/lib/worktrees/shelved.ts,app/host/lib/worktrees/autoPull.ts,app/host/lib/worktrees/autoPullSweep.ts,app/host/lib/git/worktrees.ts,app/host/lib/git/changes.ts,app/host/lib/config/store.ts,app/test/shelf.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test shelf
     # Drives the electron-free account layer (main/core/account/*,
     # shared/account/*) end to end with stubs: the hub client's
     # route/method/auth-tier discipline against the shared schemas

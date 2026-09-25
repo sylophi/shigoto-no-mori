@@ -10,21 +10,18 @@
 // it.
 //
 // Two kinds of stored paths go stale and are carried along: worktree
-// ids are hashes of the worktree's absolute path (git/worktrees.ts
-// worktreeIdFromPath), so the shelf flag and per-worktree data file of
-// every managed worktree under the data dir are re-keyed, and git's
-// own worktree links are re-pointed by `git worktree repair`.
+// ids are hashes of the worktree's absolute path, so everything the CLI
+// keys by the id of every managed worktree under the data dir (marks,
+// the per-worktree data file, a pending dirty capture) is re-keyed
+// through `sm worktrees rekey`, and git's own worktree links are
+// re-pointed by `git worktree repair`.
 import { cp, mkdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { isSameOrInside } from "@shared/git/worktreeLayout";
-import {
-  deleteWorktreeData,
-  readWorktreeData,
-  writeWorktreeData,
-} from "./config/project";
+import { rekeyViaCli } from "@host/ipc/cliDelegate";
 import { run } from "./git/core";
-import { listWorktreeIdentities, worktreeIdFromPath } from "./git/worktrees";
-import { findProjectInsideDataDir, loadProjects } from "./projects";
+import { listWorktreeIdentities } from "./git/worktrees";
+import { findProjectInsideDataDir, listProjects } from "./projects";
 import {
   clearDeleteInflight,
   getBusyOperations,
@@ -41,9 +38,13 @@ import {
   isENOENT,
   legacyDataDirPointerPath,
 } from "./util/paths";
-import { moveWorktreeMarks } from "./worktrees/marks";
-
-type MovedWorktree = { oldId: string; newId: string; newPath: string };
+// newId is filled in by the re-key, which the CLI answers with.
+type MovedWorktree = {
+  oldId: string;
+  oldPath: string;
+  newPath: string;
+  newId?: string;
+};
 
 export async function moveDataDir(
   // The new parent, or undefined to reset to the default location.
@@ -79,7 +80,7 @@ export async function moveDataDir(
   }
   // Same trap as nukeEverything: a project repo registered from inside
   // the data dir would be dragged along, breaking its recorded path.
-  const projects = loadProjects();
+  const projects = await listProjects();
   const trapped = findProjectInsideDataDir(projects);
   if (trapped) {
     throw new Error(
@@ -116,19 +117,17 @@ export async function moveDataDir(
   const repairTargets = await Promise.all(
     projects.map(async (project) => {
       try {
-        const identities = await listWorktreeIdentities(
-          project.id,
-          project.path,
-        );
+        const identities = await listWorktreeIdentities(project.id);
         const moved: MovedWorktree[] = identities
           .filter((i) => !i.isPrimary && isSameOrInside(i.path, oldDir))
-          .map((i) => {
-            const newPath = join(
+          .map((i) => ({
+            oldId: i.id,
+            oldPath: i.path,
+            newPath: join(
               newDir,
               i.path.slice(oldDir.length).replace(/^[/\\]/, ""),
-            );
-            return { oldId: i.id, newId: worktreeIdFromPath(newPath), newPath };
-          });
+            ),
+          }));
         return { project, moved };
       } catch {
         // Repo moved or deleted, so nothing to repair for this one.
@@ -160,9 +159,9 @@ export async function moveDataDir(
       pointerStaged = true;
     }
 
-    // Re-key the shelf and per-worktree data while the stores still
-    // point at the old location (they derive paths from dataDir()).
-    // Undone below if the rename never happens.
+    // Re-key the marks and per-worktree data while the CLI still reads
+    // the old location (the pointer file moves below). Undone below if
+    // the rename never happens.
     await rekeyWorktrees(repairTargets, false);
     rekeyed = true;
 
@@ -234,24 +233,21 @@ export async function moveDataDir(
   }
 }
 
-// Carries each moved worktree's marks (shelf, auto-pull) and data file
-// from its old id to its new one (or back, on `reverse`). The relocate
-// flow does the same for a single worktree (worktrees/relocate.ts).
+// Carries what the CLI keys by each moved worktree's id from its old id
+// to the one its new path hashes to (or back, on `reverse`). The
+// relocate flow's `sm worktrees move` does the same for one worktree.
 async function rekeyWorktrees(
   targets: { project: { id: string }; moved: MovedWorktree[] }[],
   reverse: boolean,
 ): Promise<void> {
   for (const { project, moved } of targets) {
     for (const m of moved) {
-      const [from, to] = reverse ? [m.newId, m.oldId] : [m.oldId, m.newId];
-      moveWorktreeMarks(from, to);
-      // oxlint-disable-next-line no-await-in-loop -- each step is a read-modify-write on the same files
-      const data = await readWorktreeData(project.id, from);
-      if (data) {
+      if (!reverse) {
+        // oxlint-disable-next-line no-await-in-loop -- each re-key is a locked read-modify-write of the same files
+        m.newId = await rekeyViaCli(project.id, m.oldId, m.newPath);
+      } else if (m.newId !== undefined) {
         // oxlint-disable-next-line no-await-in-loop -- see above
-        await writeWorktreeData(project.id, to, data);
-        // oxlint-disable-next-line no-await-in-loop -- see above
-        await deleteWorktreeData(project.id, from);
+        await rekeyViaCli(project.id, m.newId, m.oldPath);
       }
     }
   }

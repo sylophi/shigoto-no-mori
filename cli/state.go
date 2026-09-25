@@ -291,12 +291,13 @@ func noteNewerSchema(path string, raw []byte) {
 		path, doc.SchemaVersion, schemaVersion)))
 }
 
-// The registry keys this CLI writes. The app names the same ones in
-// host/lib/config/store.ts. autoPullKey holds the worktree ids the app
-// fast-forwards on its fetch cadence (host/lib/worktrees/autoPull.ts):
-// the app flips it from the detail footer, and the CLI seeds it for a
-// new worktree or project when the autoPullNew setting says so
-// (markAutoPullIfNew).
+// The registry keys this CLI writes; the app reads them only through
+// `sm` (its host/lib/config/store.ts names the two the one-time split
+// moves). autoPullKey holds the worktree ids the app fast-forwards on
+// its fetch cadence (host/lib/worktrees/autoPullSweep.ts): the app
+// flips it from the detail footer through `sm worktrees autopull`, and
+// the CLI seeds it for a new worktree or project when the autoPullNew
+// setting says so (markAutoPullIfNew).
 const (
 	projectsKey = "projects"
 	shelvedKey  = "shelvedWorktrees"
@@ -315,8 +316,9 @@ const shelfSnapshotsKey = "shelfSnapshots"
 // true }` marks and the shelf snapshots. A worktree's id is
 // derived from its path, so the flows that retire an id (rm, project
 // remove) clear it from each of these through dropWorktreeMarks, and a
-// new mark only has to be added to this list. The app keeps the same
-// list in host/lib/worktrees/marks.ts.
+// new mark only has to be added to this list. The app reads the marks
+// off rows and identities (`sm worktrees list`); `sm shelve` and `sm
+// autopull` flip them, and the listing keeps the shelf snapshots.
 var worktreeMarkKeys = []string{shelvedKey, autoPullKey, shelfSnapshotsKey}
 
 // deviceId (app-written, host/lib/config/deviceId.ts) is deliberately
@@ -775,8 +777,7 @@ func markAutoPullIfNew(global globalConfig, worktreeID string, isPrimary bool) b
 	if !on(global.AutoPullNew) || (on(global.AutoPullPrimaryOnly) && !isPrimary) {
 		return false
 	}
-	// The auto-pull mark (autoPullKey). Same map shape as the shelf, and
-	// the same helper as the app's registryIdSet.ts.
+	// The auto-pull mark (autoPullKey). Same map shape as the shelf.
 	if err := setRegistryMark(autoPullKey, worktreeID, true); err != nil {
 		vlog("[state] set auto-pull: %v", err)
 		return false
@@ -838,15 +839,20 @@ func moveWorktreeMarks(from, to string) {
 			}
 			changed := false
 			for _, key := range worktreeMarkKeys {
-				m := map[string]bool{}
+				m := map[string]json.RawMessage{}
 				if err := decodeKey(registryPath(), key, all[key], &m); err != nil {
 					return err
 				}
-				if !m[from] {
+				if _, marked := m[from]; !marked {
 					continue
 				}
+				// A shelf snapshot stays behind: a move can copy the
+				// files and give every one a fresh mtime, so the next
+				// listing takes a new one (the app's rule too).
+				if key != shelfSnapshotsKey {
+					m[to] = m[from]
+				}
 				delete(m, from)
-				m[to] = true
 				encoded, err := json.Marshal(m)
 				if err != nil {
 					return err

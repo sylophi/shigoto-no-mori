@@ -33,8 +33,9 @@ export async function fastForwardToUpstream(
 // `status.showUntrackedFiles = no`: the guards below decide whether a
 // tree can be overwritten or fast-forwarded, and an untracked file the
 // upstream now tracks is exactly what those would land on.
-// getWorkingTreeChanges (git/worktrees.ts) deliberately does NOT pin
-// it. It runs per worktree on every window focus, and `-uno` is a
+// The row's change count (getWorkingTreeChanges in cli/gitx.go)
+// deliberately does NOT pin it. It runs per worktree on every window
+// focus, and `-uno` is a
 // setting people choose to make exactly that scan cheap. The only cost
 // of the mismatch is a button showing when the guard will refuse, and
 // the guard still refuses.

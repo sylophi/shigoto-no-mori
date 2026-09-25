@@ -1,4 +1,6 @@
-// The pull behind the auto-pull mark (autoPull.ts): after the app's
+// The pull behind the auto-pull mark (`sm worktrees autopull`, which
+// the CLI keeps in registry.json and reports on every identity): after
+// the app's
 // background fetch, every marked worktree in the project that has
 // nothing of its own fast-forwards onto its upstream, so a checkout
 // that only follows the remote never sits behind. "Nothing of its
@@ -20,7 +22,6 @@ import {
   listWorktreeIdentities,
   type WorktreeIdentity,
 } from "../git/worktrees";
-import { readAutoPullSet } from "./autoPull";
 
 export type AutoPullSkipReason =
   | "detached"
@@ -77,15 +78,12 @@ export interface AutoPullSweepResult {
 // pull behind.
 export async function sweepAutoPull(
   projectId: string,
-  projectPath: string,
   busyWorktreeIds: ReadonlySet<string>,
 ): Promise<AutoPullSweepResult> {
   const result: AutoPullSweepResult = { pulled: [], failed: [] };
-  const marked = readAutoPullSet();
-  if (marked.size === 0) return result;
-  const identities = await listWorktreeIdentities(projectId, projectPath);
+  const identities = await listWorktreeIdentities(projectId);
   for (const worktree of identities) {
-    if (!marked.has(worktree.id)) continue;
+    if (!worktree.autoPull) continue;
     // oxlint-disable-next-line no-await-in-loop -- one git at a time, by design (see above)
     const outcome = await autoPullWorktree(worktree, {
       busy: busyWorktreeIds.has(worktree.id),

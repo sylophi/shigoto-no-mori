@@ -4,7 +4,6 @@
 // Electron-backed capability they need arrives through a setter here.
 // Must run before registerIpcHandlers so the first renderer call never
 // lands on a throwing default.
-import { shell } from "electron";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
 import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
@@ -12,7 +11,6 @@ import { onGlobalConfigChange } from "@host/lib/config/global";
 import { onSharedSettingsChange } from "@host/lib/sharedSettings/store";
 import { setCliImpl } from "@host/ipc/modules/cli";
 import { setGitImpl } from "@host/ipc/modules/git";
-import { setLaunchersImpl } from "@host/ipc/modules/launchers";
 import { setRuntimeImpl } from "@host/ipc/modules/runtime";
 import {
   broadcastAll,
@@ -59,7 +57,6 @@ export function installHostImpls(): void {
   onGlobalConfigChange(() => {
     void refreshDirectHost();
   });
-  setLaunchersImpl({ openExternal: (url) => shell.openExternal(url) });
   setRuntimeImpl({
     uninstallCliEverything,
     stopStateWatcher,

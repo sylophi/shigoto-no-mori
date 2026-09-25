@@ -2,7 +2,6 @@ import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import type { Project, Worktree, WorktreeRemoval } from "@shared/schemas";
-import { readShigomoriConfig } from "@host/lib/config/project";
 import { checkoutBranch, renameBranch } from "@host/lib/git/branches";
 import {
   commitStaged,
@@ -14,7 +13,6 @@ import {
   setStaged,
 } from "@host/lib/git/changes";
 import { getCommitDiff, getFileDiff } from "@host/lib/git/diff";
-import { resolveDefaultBranch } from "@host/lib/git/remotes";
 import {
   overwriteFromUpstream,
   publishCurrentBranch,
@@ -41,15 +39,15 @@ import {
   getRunningScriptWorktrees,
   withDeleteInflight,
 } from "@host/lib/scripts";
-import { setAutoPull } from "@host/lib/worktrees/autoPull";
 import { readWorktreeFile } from "@host/lib/worktrees/files";
-import { relocateWorktreeToManagedPath } from "@host/lib/worktrees/relocate";
 import { scriptEventNotifier } from "../scriptRun";
 import {
   adoptViaCli,
   createViaCli,
   deleteViaCli,
   doneViaCli,
+  moveViaCli,
+  setAutoPullViaCli,
   setShelvedViaCli,
 } from "../cliDelegate";
 
@@ -82,10 +80,9 @@ export const worktreesHandlers: Handlers<
   typeof worktreesContract,
   HandlerContext
 > = {
-  list: async ({ projectId }) => {
-    const project = findProjectOrThrow(projectId);
-    return listWorktrees(project.id, project.path);
-  },
+  // The rows are the CLI's (`sm worktrees list`), which also answers
+  // an unknown project id with the entity-gone error.
+  list: ({ projectId }) => listWorktrees(projectId),
 
   // Lifecycle mutations route through the bundled CLI so the app and a
   // terminal run the same engine.
@@ -93,26 +90,46 @@ export const worktreesHandlers: Handlers<
     { projectId, worktreeName, branchName, base, checkout },
     ctx,
   ) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     const input = { worktreeName, branchName, base, checkout };
     return createViaCli(project, input, notifierFor(ctx));
   },
 
   convertExternal: async ({ projectId, worktreeId }, ctx) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     return adoptViaCli(project, worktreeId, notifierFor(ctx));
   },
 
+  // `sm worktrees move` moves the checkout and carries what is keyed by
+  // its path-derived id (marks, notes, a pending dirty capture) to the
+  // new id. What lives in this process stays here: the tombstone that
+  // refuses a concurrent delete or move, the reaping of the scripts
+  // running there, and the stop of mirrors rooted in it.
   relocate: async ({ projectId, worktreeId, destinationPath }) => {
-    const project = findProjectOrThrow(projectId);
-    return relocateWorktreeToManagedPath(project, worktreeId, destinationPath);
+    const { project, worktree } = await findProjectAndWorktreeOrThrow(
+      projectId,
+      worktreeId,
+    );
+    if (worktree.isPrimary) {
+      throw new Error("The primary checkout can't be relocated");
+    }
+    // Already where it should be: refresh the row, and leave its
+    // scripts running.
+    if (worktree.path === destinationPath) {
+      return describeWorktree(project.id, worktreeId);
+    }
+    return withDeleteInflight(
+      worktreeId,
+      "This worktree is already being removed or moved.",
+      () => moveViaCli(project, worktreeId, destinationPath),
+    );
   },
 
   delete: async (
     { projectId, worktreeId, force, skipCleanup, refuseRunningScripts },
     ctx,
   ) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     // Local delete kills scripts by design (withDeleteInflight reaps
     // them). The transplant orchestrator refuses instead, since its
     // teardown must never take down work still running on the source
@@ -169,14 +186,17 @@ export const worktreesHandlers: Handlers<
       setShelvedViaCli(project, worktreeId, shelved),
     ),
 
-  // A flag flip only, like setShelved. The pull itself has one entry
-  // point, the fetch scheduler's sweep (main/electron/fetch.ts): the
-  // renderer follows a mark with git:refreshProject so the first pull
-  // happens right away, through the same path as every later one.
-  setAutoPull: ({ projectId, worktreeId, autoPull }) =>
-    mutateAndDescribe({ projectId, worktreeId }, async () => {
-      setAutoPull(worktreeId, autoPull);
-    }),
+  // A flag flip only, like setShelved, answered with the refreshed row.
+  // The pull itself has one entry point, the fetch scheduler's sweep
+  // (main/electron/fetch.ts): the renderer follows a mark with
+  // git:refreshProject so the first pull happens right away, through
+  // the same path as every later one.
+  setAutoPull: async ({ projectId, worktreeId, autoPull }) =>
+    setAutoPullViaCli(
+      await findProjectOrThrow(projectId),
+      worktreeId,
+      autoPull,
+    ),
 
   renameBranch: (input) =>
     mutateAndDescribe(input, (wt) => renameBranch(wt.path, input.newBranch)),
@@ -258,31 +278,26 @@ export const worktreesHandlers: Handlers<
           "Detached worktrees can't be synced with the primary branch",
         );
       }
-      const primaryRef = await resolvePrimaryRef(
-        target.projectId,
-        project.path,
+      const { primaryRef } = await findWorktreeIdentityOrThrow(
+        project.id,
+        target.id,
+        { primaryRef: true },
       );
+      if (primaryRef === undefined) {
+        throw new Error(`No primary branch resolves in ${project.path}`);
+      }
       await syncWithPrimary(target.path, project.path, primaryRef);
     }),
   switchToPrimaryAndDeleteBranch: async (input) => {
-    const project = findProjectOrThrow(input.projectId);
+    const project = await findProjectOrThrow(input.projectId);
     return doneViaCli(project, input.worktreeId);
   },
 };
 
-// Resolve the project's primary ref, honoring the configured override.
-async function resolvePrimaryRef(
-  projectId: string,
-  projectPath: string,
-): Promise<string> {
-  const config = await readShigomoriConfig(projectId).catch(() => null);
-  return resolveDefaultBranch(projectPath, config?.defaultBranch);
-}
-
 // Worktree mutations (remote syncs, local branch ops, commits) all share
 // the same shape: resolve the worktree, run a git action, return the
-// freshly-described worktree so the renderer can replace its cached row
-// in one round trip. The `With` form also hands back what the action
+// freshly-described worktree (the CLI's row) so the renderer can
+// replace its cached row in one round trip. The `With` form also hands back what the action
 // produced (a commit hash, a snapshot ref) for the calls that have one.
 async function mutateAndDescribeWith<T>(
   { projectId, worktreeId }: { projectId: string; worktreeId: string },
@@ -294,12 +309,7 @@ async function mutateAndDescribeWith<T>(
     worktreeId,
   );
   const result = await action(worktree, project);
-  const refreshed = await findWorktreeIdentityOrThrow(
-    project.id,
-    project.path,
-    worktreeId,
-  );
-  return { result, worktree: await describeWorktree(refreshed, project.path) };
+  return { result, worktree: await describeWorktree(project.id, worktreeId) };
 }
 
 async function mutateAndDescribe(

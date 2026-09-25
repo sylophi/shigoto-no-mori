@@ -50,6 +50,18 @@ export const PackageScriptSortModeSchema = z.enum([
 ]);
 export type PackageScriptSortMode = z.infer<typeof PackageScriptSortModeSchema>;
 
+// `sm run --json` with no script: the worktree's package.json scripts
+// in manifest order, the manager its lockfile selects, each script's
+// use stats, and the project's saved sort and manual order.
+export const PackageScriptsDocSchema = z.object({
+  packageManager: PackageManagerSchema,
+  scripts: z.array(z.object({ name: z.string(), command: z.string() })),
+  usage: z.record(z.string(), PackageScriptUsageSchema),
+  sort: PackageScriptSortModeSchema,
+  order: z.array(z.string()),
+});
+export type PackageScriptsDoc = z.infer<typeof PackageScriptsDocSchema>;
+
 export const RunPackageScriptPayloadSchema = WorktreeScopedPayloadSchema.extend(
   {
     scriptName: z.string().min(1),

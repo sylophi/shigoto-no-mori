@@ -378,7 +378,7 @@ async function applyGitStateUnswept(
       // it carries commits the incoming tip does not (moving it would
       // orphan them). Otherwise create it or fast-forward it, then
       // point HEAD at it.
-      const identities = await listWorktreeIdentities(project.id, project.path);
+      const identities = await listWorktreeIdentities(project.id);
       const elsewhere = identities.find(
         (w) => w.branch === target && w.path !== worktree.path,
       );

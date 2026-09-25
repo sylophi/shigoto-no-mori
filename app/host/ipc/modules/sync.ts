@@ -49,6 +49,7 @@ import {
   createViaCli,
   dirtyApplyViaCli,
   dirtyCaptureViaCli,
+  worktreeDestinationViaCli,
 } from "@host/ipc/cliDelegate";
 import {
   peerProjectsApiFor,
@@ -62,9 +63,6 @@ import {
 } from "@shared/ipc/socket/frames";
 import { createIdleRegistry } from "@host/lib/idleRegistry";
 import { listBranches } from "@host/lib/git/branches";
-import { readShigomoriConfig } from "@host/lib/config/project";
-import { pathExists } from "@host/lib/util/paths";
-import { worktreePathForProject } from "@host/lib/worktrees/paths";
 import { listIgnoreRules } from "@host/lib/git/ignoreRules";
 import {
   cachedIgnoredPaths,
@@ -201,7 +199,7 @@ const pushes = createIdleRegistry<IncomingPush>({
 
 export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
   pushStart: async ({ projectId, bytes }) => {
-    findProjectOrThrow(projectId);
+    await findProjectOrThrow(projectId);
     const dir = await mkdtemp(join(tmpdir(), "sm-sync-recv-"));
     const path = join(dir, "push.bundle");
     const handle = await open(path, "w");
@@ -263,7 +261,7 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
         );
       }
       await push.handle.close();
-      const project = findProjectOrThrow(push.projectId);
+      const project = await findProjectOrThrow(push.projectId);
       // The CLI re-validates every dst under refs/shigomori/ before any
       // git spawn (cli/cmd_bundle.go), the same wall the pull's unpack
       // stands behind.
@@ -274,7 +272,7 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
   },
 
   hasCommits: async ({ projectId, commits }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     const present: string[] = [];
     for (const commit of commits) {
       // oxlint-disable-next-line no-await-in-loop -- a handful of cheap probes
@@ -284,7 +282,7 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
   },
 
   refTips: async ({ projectId, refs }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     const tips: { ref: string; commit: string }[] = [];
     for (const ref of refs) {
       // oxlint-disable-next-line no-await-in-loop -- a handful of cheap probes
@@ -295,7 +293,7 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
   },
 
   captureDirty: async ({ projectId, worktreeId }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     return dirtyCaptureViaCli(project, worktreeId);
   },
 
@@ -319,7 +317,7 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
   },
 
   bundleStart: async ({ projectId, refs, haves }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     // refs/haves passed the contract's fail-closed allowlist schemas
     // already; the CLI re-validates with its own complementary shape
     // (see the gate note in shared/ipc/modules/sync.ts) before argv.
@@ -531,7 +529,7 @@ async function sourceChangedSince(
   if (!receipt.captured || receipt.captureTree === undefined) {
     return "the source worktree has uncommitted changes that were never brought here.";
   }
-  const project = findProjectOrThrow(receipt.targetProjectId);
+  const project = await findProjectOrThrow(receipt.targetProjectId);
   const dirtyRef = dirtyRefFor(source.sourceWorktreeId);
   try {
     await fetchBundleFromPeer(peer, {
@@ -554,7 +552,7 @@ async function sentSourceChangedSince(
   sent: SentRef,
   receipt: SendReceipt,
 ): Promise<string | undefined> {
-  const project = findProjectOrThrow(sent.projectId);
+  const project = await findProjectOrThrow(sent.projectId);
   const tip = await refTip(project.path, `refs/heads/${receipt.branch}`);
   if (tip !== receipt.branchTip) {
     return "the branch moved after it was sent.";
@@ -644,7 +642,7 @@ async function refuseLandingCollision(
 ): Promise<void> {
   const [{ local }, existing] = await Promise.all([
     listBranches(project.path),
-    listWorktreeIdentities(project.id, project.path),
+    listWorktreeIdentities(project.id),
   ]);
   if (local.includes(branch)) {
     // Name the worktree holding it when one does: that is the thing
@@ -665,20 +663,16 @@ async function refuseLandingCollision(
     );
   }
   // The copy keeps the source's folder name, and the CLI create
-  // refuses a taken one (cli/worktree.go: a worktree of this project
-  // by that name, case-insensitively, or anything at the path). That
-  // refusal lands at the create, after the bundle crossed. The same
-  // two checks here refuse before a byte moves.
+  // refuses a taken one (a worktree of this project by that name,
+  // case-insensitively, or anything at the path). That refusal lands at
+  // the create, after the bundle crossed. The CLI's destination read
+  // makes the same two checks here, before a byte moves.
   if (worktreeName !== undefined) {
-    const wanted = worktreeName.toLowerCase();
-    const config = await readShigomoriConfig(project.id).catch(() => null);
-    const target = worktreePathForProject(project.path, config, worktreeName);
-    if (
-      existing.some((w) => w.name.toLowerCase() === wanted) ||
-      (await pathExists(target))
-    ) {
-      throw new Error(pullFolderCollision(worktreeName, target));
-    }
+    const { path, taken } = await worktreeDestinationViaCli(
+      project.id,
+      worktreeName,
+    );
+    if (taken) throw new Error(pullFolderCollision(worktreeName, path));
   }
 }
 

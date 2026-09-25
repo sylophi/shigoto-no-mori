@@ -5,12 +5,11 @@ import (
 	"testing"
 )
 
-// Pinned vector shared with the TS engine: terrierProjectId in
-// host/lib/terrier.ts must mint this exact id for this exact path. A
-// drift here means the app and the CLI address the same terrier
-// project by two different ids, orphaning per-project state between
-// them, so never "fix" the expectation to match a changed
-// implementation without changing both engines together.
+// Pinned vector: earlier builds (the app's former TypeScript merge
+// included) minted this exact id for this exact path. A drift here
+// re-addresses every terrier project, orphaning its per-project state
+// and the app's id-keyed caches, so never "fix" the expectation to
+// match a changed implementation.
 func TestTerrierProjectIDVector(t *testing.T) {
 	got := terrierProjectID("/tmp/repo")
 	want := "B6FE87A9-B936-BEA6-5048-1980F473639B"

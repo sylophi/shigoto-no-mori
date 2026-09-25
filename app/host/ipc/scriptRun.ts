@@ -1,13 +1,13 @@
 // Shared plumbing for the two script-run entry points (configured
-// project scripts and package.json scripts). Both need the same
-// project-level context resolved before startScript, and the same
-// connection-guarded notifier. Only command resolution differs.
+// project scripts and package.json scripts): the connection-guarded
+// notifier, and for the configured scripts, the context startScript
+// needs to set the SHIGOMORI_* env (package.json scripts run through
+// `sm run`, which sets it itself).
 import { unknownWorktreeError } from "@shared/errors";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Project, ShigomoriConfig } from "@shared/schemas";
 import { readShigomoriConfig } from "@host/lib/config/project";
-import { resolveDefaultBranch } from "@host/lib/git/remotes";
 import {
   listWorktreeIdentities,
   type WorktreeIdentity,
@@ -27,17 +27,11 @@ export async function prepareScriptRun(
   project: Pick<Project, "id" | "path">,
   worktreeId: string,
 ): Promise<ScriptRunContext> {
-  // The default-branch resolution only needs the config, so chain it off
-  // that read rather than the full join, since resolveDefaultBranch
-  // spawns several sequential git calls and shouldn't wait on the
-  // worktree list.
-  const configPromise = readShigomoriConfig(project.id);
-  const [config, identities, defaultBranch] = await Promise.all([
-    configPromise,
-    listWorktreeIdentities(project.id, project.path),
-    configPromise
-      .then((c) => resolveDefaultBranch(project.path, c?.defaultBranch))
-      .catch(() => ""),
+  // One CLI read answers the worktree, the primary's branch and the
+  // project's primary ref alike.
+  const [config, identities] = await Promise.all([
+    readShigomoriConfig(project.id),
+    listWorktreeIdentities(project.id, { primaryRef: true }),
   ]);
   const worktree = identities.find((i) => i.id === worktreeId);
   if (!worktree) throw unknownWorktreeError(worktreeId);
@@ -45,7 +39,7 @@ export async function prepareScriptRun(
     config,
     worktree,
     projectBranch: identities.find((i) => i.isPrimary)?.branch ?? "",
-    defaultBranch,
+    defaultBranch: worktree.primaryRef ?? "",
   };
 }
 

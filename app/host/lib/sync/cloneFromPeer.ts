@@ -17,11 +17,11 @@ import {
   SyncBundleRefSchema,
 } from "@shared/ipc/modules/sync";
 import { GitRefNameSchema, type Project } from "@shared/schemas";
-import { projectsAddViaCli } from "@host/ipc/cliDelegate";
 import type { PeerProjectsApi, PeerSyncApi } from "@host/ipc/peerSync";
 import { checkCloneDestination } from "@host/lib/git/clone";
 import { run } from "@host/lib/git/core";
 import { deleteRef, updateRef } from "@host/lib/git/refs";
+import { registerProject } from "@host/lib/projects";
 import { expandHome } from "@host/lib/util/paths";
 import { fetchBundleFromPeer, incomingRefFor } from "./fetchBundle";
 
@@ -112,7 +112,7 @@ export async function cloneProjectFromPeer(
   }
   // The checkout stays if registering fails, so the error says where
   // it is: a retry would only find the folder taken.
-  return projectsAddViaCli(dest).catch((error: unknown) => {
+  return registerProject(dest).catch((error: unknown) => {
     throw new Error(
       `Cloned into ${dest}, but couldn't add it as a project: ${errorMessageOf(error)}`,
     );

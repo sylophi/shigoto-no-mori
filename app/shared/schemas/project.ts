@@ -39,13 +39,27 @@ export const ProjectSchema = z.object({
   lastUsed: z.number().int().nonnegative().optional(),
   recentCount: z.number().int().nonnegative().optional(),
   // "terrier" marks a project merged from the terrier registry rather
-  // than registry.json. Never persisted: the merge layer decorates it
-  // at read time (host/lib/projects, cli/terrier.go), and the id is
-  // minted deterministically from the path so both engines agree
-  // without coordination. Terrier-sourced projects can't be removed.
+  // than registry.json. Never persisted: the CLI's merge decorates it
+  // at read time (cli/terrier.go), and the id is minted
+  // deterministically from the path. Terrier-sourced projects can't be
+  // removed.
   source: z.literal("terrier").optional(),
 });
 export type Project = z.infer<typeof ProjectSchema>;
+
+// One row of `sm projects list --json`: the project decorated the way
+// ProjectsList serves it, plus the icon the CLI resolved (a file path
+// and its type) and that icon's accent hue. Host-internal: the icon
+// bytes reach the renderer through projects:icon, the hue nowhere yet.
+export const ProjectRowSchema = ProjectSchema.extend({
+  pathExists: z.boolean(),
+  identity: z.string().nullable(),
+  lastUsed: z.number().int().nonnegative(),
+  recentCount: z.number().int().nonnegative(),
+  icon: z.object({ path: z.string(), mime: z.string() }).nullable(),
+  hue: z.number().nullable(),
+});
+export type ProjectRow = z.infer<typeof ProjectRowSchema>;
 
 // Sidebar project ordering. `manual` is the user-arranged drag order and the
 // implicit default; `frequent` = most used, `recent` = most recently

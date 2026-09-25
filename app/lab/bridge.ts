@@ -323,7 +323,6 @@ function hostHandlersFor(
         Object.assign(entry, { listening: labListeningPorts.has(entry.port) }),
       ),
     }),
-    "remoteAccess:commandAccess": () => ({ granted: forest.grantsCaller }),
     // The stub's shape with a full create lifecycle on it (carry-over,
     // a setup script, and ports below), so the pull dialogs' setup
     // switch and their running steps have every phase to name.
@@ -1150,11 +1149,16 @@ let socketPhase: HubStatus["socket"] = {
 
 function hubSnapshot(): HubStatus {
   const peerAppVersions: Record<string, string> = {};
-  for (const id of directSessions) peerAppVersions[id] = LAB_APP_VERSION;
+  const peerAcceptsCommands: Record<string, boolean> = {};
+  for (const id of directSessions) {
+    peerAppVersions[id] = LAB_APP_VERSION;
+    peerAcceptsCommands[id] = forests[id]?.grantsCaller ?? false;
+  }
   return {
     socket: socketPhase,
     onlineDeviceIds: [...roster],
     peerAppVersions,
+    peerAcceptsCommands,
     tunnel: "up",
   };
 }
@@ -1246,7 +1250,7 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
     "account:acceptsCommands": () => acceptsCommands,
     "account:setAcceptsCommands": (enabled: boolean) => {
       acceptsCommands = enabled;
-      client.emit("account:commandAccessChanged", undefined);
+      client.emit("account:commandAccessChanged", enabled);
     },
     "account:revokeDevice": (deviceId: string) => {
       // Mirrors the real handler's registry effect: the device leaves

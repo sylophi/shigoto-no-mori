@@ -12,6 +12,8 @@ package main
 import (
 	"cmp"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -237,6 +239,8 @@ func codeOrNil(code int) any {
 }
 
 // $SHIGOMORI_PROJECT_BRANCH + $SHIGOMORI_DEFAULT_BRANCH for scripts.
+// The project branch is the primary checkout's, so it is empty for a
+// bare repo, which has no primary (primaryCheckoutPath).
 func lifecycleEnvInputs(proj project, id worktreeIdentity, config *projectConfig) scriptEnvInputs {
 	projectBranch := ""
 	if primary, err := primaryOf(proj); err == nil {
@@ -248,4 +252,67 @@ func lifecycleEnvInputs(proj project, id worktreeIdentity, config *projectConfig
 		projectBranch: projectBranch,
 		defaultBranch: primaryRefFor(proj, config),
 	}
+}
+
+// sm worktrees destination --project-id P [--name N]: where a new
+// worktree would land, for the app's create dialog. name is N, or a
+// fresh pick (the same one create makes without a name); path is the
+// folder under the project's configured layout; taken says N collides
+// with one of the project's worktree names (case-insensitively) or
+// something already sits at path, the two things create refuses.
+// Nothing is created or reserved: a pick can still be taken by the time
+// create runs, which create reports.
+func cmdDestination(ctx cliContext, args []string) (int, error) {
+	parsed, err := parseCmdArgs(args, argSpec{
+		strings: map[string][]string{"project": {"p"}, "project-id": {}, "name": {}},
+	})
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	if len(parsed.positionals) > 0 {
+		return 2, usageErrf("Usage: %s worktrees destination [-p <project>] [--name <name>]", binaryName)
+	}
+	proj, err := resolveProjectArgs(ctx, parsed)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	name := strings.TrimSpace(parsed.strings["name"])
+	if isPrimaryKeyword(name) {
+		return 2, usageErrf("%q is reserved. It addresses the project's primary checkout.", name)
+	}
+	if name != "" && !isValidWorktreeDirName(name) {
+		return 2, usageErrf("%q is not a valid worktree folder name.", name)
+	}
+	dest, err := worktreeDestination(proj, name)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	line := dest.Path
+	if dest.Taken {
+		line += dimOut(" (taken)")
+	}
+	emitOrOut(map[string]any{"ok": true, "name": dest.Name, "path": dest.Path, "taken": dest.Taken}, line)
+	return 0, nil
+}
+
+type destination struct {
+	Name, Path string
+	Taken      bool
+}
+
+func worktreeDestination(proj project, name string) (destination, error) {
+	existing, err := listWorktreeIdentities(proj)
+	if err != nil {
+		return destination{}, err
+	}
+	used := worktreeNamesUsed(existing)
+	taken := name != "" && used[strings.ToLower(name)]
+	if name == "" {
+		name = pickNewWorktreeName(proj, used)
+	}
+	path := filepath.Join(resolveWorktreeBase(proj.Path, readProjectConfig(proj.ID)), name)
+	if _, err := os.Lstat(path); err == nil {
+		taken = true
+	}
+	return destination{Name: name, Path: path, Taken: taken}, nil
 }

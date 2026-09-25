@@ -67,7 +67,7 @@ import {
 import { cloneProjectFromPeer } from "@host/lib/sync/cloneFromPeer";
 import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
 import { pushBundleToPeer } from "@host/lib/sync/pushBundle";
-import { findProjectOrThrow, loadProjects } from "@host/lib/projects";
+import { findProjectOrThrow, listProjects } from "@host/lib/projects";
 import { getRepoIdentity } from "@host/lib/git/repoIdentity";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
 import { makeProof, makeTracker } from "./lib/checkKit.mjs";
@@ -440,7 +440,7 @@ async function main() {
     const pushedTip = await gitOut(targetRepo, "rev-parse", "HEAD");
     await git(targetRepo, ["checkout", "-q", "main"]);
     const pushInput = {
-      localProject: findProjectOrThrow(targetProjectId),
+      localProject: await findProjectOrThrow(targetProjectId),
       peerProjectId: sourceProjectId,
       refs: ["refs/heads/pushed"],
       haves: [baseSha],
@@ -1107,7 +1107,7 @@ async function main() {
       await gitOut(cloned.path, "rev-parse", "--abbrev-ref", "main@{upstream}"),
       "origin/main",
     );
-    assert.equal(findProjectOrThrow(cloned.id).path, cloned.path);
+    assert.equal((await findProjectOrThrow(cloned.id)).path, cloned.path);
     // The source's default branch (main, not the primary-branch its
     // primary sits on), checked out at the source's tip, the tree
     // populated, and the incoming ref swept.
@@ -1139,7 +1139,7 @@ async function main() {
     // A taken folder, a parent that is a file, and a landing branch the
     // clone itself checks out are refused before anything is made, and
     // none leaves a folder or a registration behind.
-    const before = loadProjects().length;
+    const before = (await listProjects()).length;
     await assert.rejects(
       () =>
         cloneProjectFromPeer(
@@ -1172,7 +1172,7 @@ async function main() {
       /would land on main/,
     );
     assert.equal(existsSync(join(clonesDir, "y")), false);
-    assert.equal(loadProjects().length, before);
+    assert.equal((await listProjects()).length, before);
     // A pull told where to clone beside a checkout it already has
     // takes the checkout: nothing is cloned and the result says so.
     const wtBesidePath = await addWorktree(sourceRepo, "wt-beside", "beside");

@@ -51,7 +51,7 @@ func TestMoveRekeysEverythingKeyedByID(t *testing.T) {
 	if _, err := os.Stat(wt.Path); !os.IsNotExist(err) {
 		t.Errorf("old checkout still there: %v", err)
 	}
-	for _, key := range worktreeMarkKeys {
+	for _, key := range []string{shelvedKey, autoPullKey} {
 		marks := readRegistryMarkSet(key)
 		if marks[wt.ID] || !marks[newID] {
 			t.Errorf("%s: old %v new %v, want the mark moved", key, marks[wt.ID], marks[newID])

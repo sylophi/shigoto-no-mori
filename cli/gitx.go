@@ -1,11 +1,10 @@
 package main
 
 // Git plumbing for the worktree engine. One chokepoint (runGit), and
-// every probe the worktree rows are built from. The app's
-// host/lib/git/{worktrees,remotes}.ts row builders are the former
-// copies of these probes, to be deleted once the app reads rows
-// through `sm worktrees list --json`; until then a probe changed here
-// changes what the two surfaces report, so change both or neither.
+// every probe the worktree rows are built from. The app has no copy of
+// these probes: it reads rows through `sm worktrees list --json` (and
+// the cheap `--identities` form), so a probe changed here changes what
+// both surfaces report.
 
 import (
 	"bytes"
@@ -41,7 +40,8 @@ func runGit(cwd string, args ...string) (string, error) {
 // inherited one (the dirty-state capture points GIT_INDEX_FILE at a
 // temporary index). LC_ALL=C pins git's messages to English on every
 // spawn, so the errors sm relays read the same on every machine. The
-// TS twin pins it in host/lib/git/core.ts for the same reason.
+// app's own git spawns (host/lib/git/core.ts) pin it for the same
+// reason.
 func runGitEnv(cwd string, extraEnv []string, args ...string) (string, error) {
 	return runGitStdin(cwd, extraEnv, "", args...)
 }
@@ -212,19 +212,19 @@ func listWorktreeIdentitiesUncached(proj project) ([]worktreeIdentity, error) {
 	codexNames := sync.OnceValue(func() bool {
 		return codexWorktreeNamesEnabled(readGlobalConfigHints())
 	})
+	entries := parsePorcelain(stdout)
+	primaryPath := primaryCheckoutPath(entries, proj.Path)
 	var identities []worktreeIdentity
-	index := 0
-	for _, entry := range parsePorcelain(stdout) {
+	for _, entry := range entries {
 		if entry.bare {
 			continue
 		}
-		isPrimary := entry.path == proj.Path || index == 0
+		isPrimary := entry.path == primaryPath
 		isExternal := !isManagedPath(entry.path, bases)
 		name := filepath.Base(entry.path)
-		// Against the project path rather than isPrimary, whose index-0
-		// fallback would crown a bare repo's first worktree, which the
-		// app (primaryPath null for bare repos) renames like the rest.
-		if isExternal && entry.path != proj.Path && codexNames() {
+		// The primary keeps its own folder name; the Codex fold is for
+		// worktrees whose leaf merely repeats the repo's name.
+		if isExternal && !isPrimary && codexNames() {
 			name = externalWorktreeName(entry.path, proj.Path)
 		}
 		identities = append(identities, worktreeIdentity{
@@ -237,9 +237,32 @@ func listWorktreeIdentitiesUncached(proj project) ([]worktreeIdentity, error) {
 			IsExternal: isExternal,
 			Detached:   entry.detached,
 		})
-		index++
 	}
 	return identities, nil
+}
+
+// Which listed checkout is the project's primary, "" for none. A bare
+// repo has none: every checkout of it is a linked worktree, and
+// crowning the first would make it unremovable and unmovable. Otherwise
+// the checkout at the project path is the primary wherever git lists
+// it, and when none sits there (a project registered through a path git
+// spells differently) the first checkout stands in. So at most one
+// entry is ever primary. Callers that want a primary (the root/primary
+// names, lifecycle env, carry-over's symlink source) degrade when there
+// is none; see primaryOf.
+func primaryCheckoutPath(entries []porcelainEntry, projectPath string) string {
+	if slices.ContainsFunc(entries, func(e porcelainEntry) bool { return e.bare }) {
+		return ""
+	}
+	for _, entry := range entries {
+		if entry.path == projectPath {
+			return entry.path
+		}
+	}
+	if len(entries) > 0 {
+		return entries[0].path
+	}
+	return ""
 }
 
 func codexWorktreeNamesEnabled(global globalConfig) bool {
@@ -248,8 +271,7 @@ func codexWorktreeNamesEnabled(global globalConfig) bool {
 
 // A leaf that just repeats the repo's folder name (the Codex layout,
 // see codexWorktreeNames) takes its parent's name instead, when that
-// passes as a folder name of our own. Mirrors externalWorktreeName in
-// host/lib/git/worktrees.ts.
+// passes as a folder name of our own.
 func externalWorktreeName(worktreePath, projectPath string) string {
 	leaf := filepath.Base(worktreePath)
 	if !strings.EqualFold(leaf, strings.TrimSuffix(filepath.Base(projectPath), ".git")) {
@@ -263,8 +285,9 @@ func externalWorktreeName(worktreePath, projectPath string) string {
 
 // --- status probes (buildWorktree parity) ---
 
-// How many changed paths get stat'd for their mtime. Mirrors
-// CHANGE_MTIME_STAT_LIMIT in host/lib/git/worktrees.ts.
+// How many changed paths get stat'd for their mtime (lastChangeAt).
+// Past it the newest change is almost certainly already seen, and a
+// huge dirty tree shouldn't cost a stat per file on every list.
 const changeMtimeStatLimit = 64
 
 type workingTreeChanges struct {
@@ -439,7 +462,7 @@ func getRemoteSync(worktreePath string) remoteSync {
 }
 
 // How many of HEAD's newest commits no remote has: what amend and undo
-// may touch (the TS twin is getUnpushedCount in host/lib/git/worktrees.ts).
+// may touch (the row's unpushedCount).
 // Measured against every remote-tracking ref, not just the upstream, so
 // a commit pushed under another name counts as shared too. A repo with
 // no remotes has nothing shared, so all of HEAD is its own. Capped: past
@@ -516,14 +539,26 @@ type primaryRelation struct {
 	mergedIntoPrimary bool
 }
 
-// Ceiling on the first-parent walk in landedOnPrimary. Mirrors
-// FIRST_PARENT_SCAN_LIMIT in host/lib/git/worktrees.ts.
+// Ceiling on the first-parent walk in landedOnPrimary. A worktree this
+// far behind is stale enough that the answer has stopped mattering, and
+// hitting the cap reports "not landed", which only leaves the row where
+// it already was.
 const firstParentScanLimit = 2000
 
-// Whether the branch's work is in the primary branch. See
-// landedOnPrimary in host/lib/git/worktrees.ts for why this walks the
-// primary's first-parent chain rather than asking `git branch --merged`,
-// and which merge styles it deliberately reports as "not landed".
+// Whether the branch's work is in the primary branch. A branch can be
+// an ancestor of the primary for two very different reasons: its work
+// was merged in, or it never left the primary's own history (a worktree
+// created and then left alone while the primary moved on). `git branch
+// --merged` can't tell those apart, which is why this walks the
+// primary's first-parent chain instead: a branch that landed via a
+// merge commit hangs off that chain, an untouched one sits on it.
+// Keeping the second case out stops fresh, idle worktrees from piling
+// into the sidebar's Merged box every time something else lands.
+//
+// A local fast-forward or rebase merge is genuinely indistinguishable
+// from "never started" here (the resulting history is identical), so it
+// reads as not landed. That errs toward leaving a row visible, and
+// GitHub-hosted repos get the answer from the PR state anyway.
 func landedOnPrimary(worktreePath string, behindPrimary int, chain *primaryChain) bool {
 	if behindPrimary > firstParentScanLimit {
 		return false
@@ -546,7 +581,6 @@ func landedOnPrimary(worktreePath string, behindPrimary int, chain *primaryChain
 // The primary's first-parent chain, read once per project and shared by
 // every worktree in it: one object store, one ref, one answer. Lazy,
 // so a project whose worktrees are all ahead of the primary never asks.
-// Mirrors primaryChainReader in host/lib/git/worktrees.ts.
 type primaryChain struct {
 	path string
 	ref  string
@@ -603,7 +637,7 @@ func getPrimaryRelation(id worktreeIdentity, ctx buildContext) primaryRelation {
 	}
 }
 
-// --- remotes / default branch (remotes.ts parity) ---
+// --- remotes / default branch ---
 
 func listRemotes(projectPath string) []string {
 	stdout, err := runGit(projectPath, "remote")
@@ -757,7 +791,10 @@ func shortRefName(fullRef string) string {
 
 // Short-name variant for merge-target callers, who additionally accept
 // the first local branch as a last resort (a merge target only has to
-// exist, while an identity must be stable across devices).
+// exist, while an identity must be stable across devices). This is the
+// primary ref every row carries; the app has no resolver of its own and
+// reads it through `sm worktrees list --json` (or `--identities
+// --primary-ref`).
 func resolveDefaultBranchWithRemotes(projectPath, override string, remotes []string) string {
 	scan, err := scanBranchRefs(projectPath)
 	if err != nil {
@@ -789,7 +826,7 @@ func splitRemoteRef(ref string, remotes []string) (string, string) {
 	return bestRemote, bestBranch
 }
 
-// --- worktree mutation (worktrees.ts parity) ---
+// --- worktree mutation ---
 
 func gitWorktreeAdd(projectPath, worktreePath, branch, base string) error {
 	args := []string{"worktree", "add", "-b", branch, "--", worktreePath}

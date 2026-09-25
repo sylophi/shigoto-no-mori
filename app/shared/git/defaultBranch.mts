@@ -1,9 +1,11 @@
-// Default-branch resolution, extracted from host/lib/git/remotes.ts so
-// the parity harness (test/identity.mjs) can run the same
-// policy under its own scrubbed git runner instead of a hand-written
-// mirror. Pure module: the runner is injected. Mirrored by
-// resolveDefaultBranchWithRemotes in cli/gitx.go. Keep the precedence
-// in sync.
+// The default-ref half of repo identity (shared/git/repoIdentity.mts),
+// which peers compute for each other's repos: which branch keys the
+// identity's root commit. Pure module, the runner is injected, so the
+// parity harness (test/identity.mjs) runs it under its own scrubbed
+// git. The CLI's resolver (pickDefaultRef in cli/gitx.go) makes the
+// same pick for identity and for the primary ref it measures rows
+// against, and test/identity.mjs pins the identities the two compute
+// against each other.
 
 // Runs git in `cwd`, resolves stdout, rejects on non-zero exit.
 export type GitRunner = (cwd: string, args: string[]) => Promise<string>;
@@ -104,24 +106,6 @@ async function remoteHeadTarget(
   }
 }
 
-async function firstLocalBranch(
-  run: GitRunner,
-  projectPath: string,
-): Promise<string | null> {
-  try {
-    const stdout = await run(projectPath, [
-      "for-each-ref",
-      "--format=%(refname:short)",
-      "--count=1",
-      "refs/heads/",
-    ]);
-    const name = stdout.trim();
-    return name.length > 0 ? name : null;
-  } catch {
-    return null;
-  }
-}
-
 // Fully qualified default ref (`refs/heads/<b>` or `refs/remotes/<r>/<b>`),
 // or null when no override, candidate, remote-tracking candidate, or
 // remote HEAD matches. Deliberately WITHOUT the first-local-branch
@@ -176,29 +160,4 @@ export async function resolveDefaultRef(
     if (target !== null) return target;
   }
   return null;
-}
-
-// resolveDefaultRef only ever yields these two namespaces, so a
-// two-branch strip recovers exactly the short names the pre-qualified
-// resolver returned ("main", "origin/main").
-function shortRefName(fullRef: string): string {
-  return fullRef.startsWith("refs/heads/")
-    ? fullRef.slice("refs/heads/".length)
-    : fullRef.slice("refs/remotes/".length);
-}
-
-// Short-name variant for merge-target callers, who additionally accept
-// an arbitrary first local branch as a last resort (a merge target only
-// has to exist, while an identity must be stable across devices, hence
-// the split from resolveDefaultRef).
-export async function resolveDefaultBranch(
-  run: GitRunner,
-  projectPath: string,
-  override?: string,
-): Promise<string> {
-  const full = await resolveDefaultRef(run, projectPath, override);
-  if (full !== null) return shortRefName(full);
-  const first = await firstLocalBranch(run, projectPath);
-  if (first) return first;
-  throw new Error(`No local branches found in ${projectPath}`);
 }

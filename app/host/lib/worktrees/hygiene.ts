@@ -15,10 +15,13 @@ import {
 } from "@shared/schemas";
 import { run, runLenient } from "../git/core";
 import { treeOf } from "../git/refs";
-import { localBranchExists, splitRemoteRefSync } from "../git/remotes";
+import {
+  listRemotes,
+  localBranchExists,
+  splitRemoteRefSync,
+} from "../git/remotes";
 import {
   listWorktreeIdentities,
-  loadPrimaryRef,
   type WorktreeIdentity,
 } from "../git/worktrees";
 import { measureDirectory } from "../util/dirSize";
@@ -135,7 +138,7 @@ async function contentAlreadyIn(
 
 // Every ref that counts as "the primary branch" for containment.
 //
-// `resolveDefaultBranch` prefers the remote-tracking ref (origin/main)
+// The primary ref prefers the remote-tracking ref (origin/main)
 // because it's the source of truth for how far behind you are. But for
 // "is it safe to delete this?", work merged into the *local* main is
 // equally safe. It isn't lost, it just hasn't been pushed yet. Asking
@@ -280,11 +283,13 @@ export async function collectProjectHygiene(
   // branch name behind the primary ref ("main" for "origin/main") is so
   // a linked worktree that has it checked out can be recognised and kept
   // off the tick list.
-  const [identities, { remotes, primaryRef, primaryBranch }] =
-    await Promise.all([
-      projectIdentities(projectId, projectPath),
-      loadPrimaryRef(projectId, projectPath),
-    ]);
+  const [identities, remotes] = await Promise.all([
+    projectIdentities(projectId),
+    listRemotes(projectPath),
+  ]);
+  // Resolved once per project by the CLI and carried on every identity.
+  const primaryRef = identities[0]?.primaryRef ?? null;
+  const primaryBranch = identities[0]?.primaryBranch ?? null;
   const candidates = await primaryRefCandidates(
     projectPath,
     primaryRef,
@@ -299,35 +304,31 @@ export async function collectProjectHygiene(
   );
 }
 
-// The worktree list, cached for long enough to serve one page load.
+// The worktree identities (with the project's primary ref), cached for
+// long enough to serve one page load.
 //
 // The renderer asks for disk usage one worktree at a time, and each of
 // those calls needs the same id-to-path lookup. Without this, opening
-// the page re-runs `git worktree list` once per row on top of the once
-// per project the facts already paid for.
-const identityCache = ttlMapCache(10_000, (key: string) => {
-  const [projectId, projectPath] = key.split("\u0000");
-  return listWorktreeIdentities(projectId, projectPath);
-});
+// the page re-runs the CLI's identity list once per row on top of the
+// once per project the facts already paid for.
+const identityCache = ttlMapCache(10_000, (projectId: string) =>
+  listWorktreeIdentities(projectId, { primaryRef: true }),
+);
 
 // The renderer asks for every worktree's disk usage at once, so the
 // whole burst arrives before the first lookup has resolved and a
 // value-only cache would miss on all of them. identityCache holding the
 // in-flight promise (ttlMapCache coalesces concurrent misses) is what
-// makes it one `git worktree list` per project rather than one per row.
-function projectIdentities(
-  projectId: string,
-  projectPath: string,
-): Promise<WorktreeIdentity[]> {
-  return identityCache.get(`${projectId}\u0000${projectPath}`);
+// makes it one identity list per project rather than one per row.
+function projectIdentities(projectId: string): Promise<WorktreeIdentity[]> {
+  return identityCache.get(projectId);
 }
 
 export async function findWorktreeForDisk(
   projectId: string,
-  projectPath: string,
   worktreeId: string,
 ): Promise<WorktreeIdentity> {
-  const identities = await projectIdentities(projectId, projectPath);
+  const identities = await projectIdentities(projectId);
   const found = identities.find((identity) => identity.id === worktreeId);
   if (!found) throw unknownWorktreeError(worktreeId);
   return found;
@@ -357,14 +358,13 @@ const diskCache = ttlMapCache(60_000, (key: string) => {
 
 export async function measureWorktreeDisk(
   projectId: string,
-  projectPath: string,
   worktree: WorktreeIdentity,
 ): Promise<WorktreeDiskUsage> {
   const worktreePath = worktree.path;
   // Under the in-project layout a project's worktrees live inside its
   // primary checkout. Each one is measured as its own row, so the
   // enclosing walk steps over them rather than counting them twice.
-  const identities = await projectIdentities(projectId, projectPath);
+  const identities = await projectIdentities(projectId);
   const nested = identities
     .map((identity) => identity.path)
     .filter(

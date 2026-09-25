@@ -9,17 +9,17 @@ import { findProjectOrThrow } from "@host/lib/projects";
 
 export const branchesHandlers: Handlers<typeof branchesContract> = {
   create: async ({ projectId, name, base }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     await createLocalBranch(project.path, name, base);
   },
 
   rename: async ({ projectId, oldName, newName }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     await renameAnyLocalBranch(project.path, oldName, newName);
   },
 
   delete: async ({ projectId, name, force }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     await deleteAnyLocalBranch(project.path, name, force ?? false);
   },
 };

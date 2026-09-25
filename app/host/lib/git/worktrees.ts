@@ -1,138 +1,83 @@
+// The worktree reads the host makes. The rows and identities come from
+// the CLI, which owns the data model (`sm worktrees list`, see
+// host/ipc/cliDelegate.ts). What stays here is plain git the CLI has no
+// verb for: the paged commit history, the upstream counts the
+// auto-pull sweep decides on right before it pulls, and the prune
+// after a data dir wipe.
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, stat } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join } from "node:path";
-import {
-  errorCodeOf,
-  errorMessageOf,
-  unknownWorktreeError,
-} from "@shared/errors";
-import { isValidWorktreeDirName } from "@shared/git/branches";
+import { unknownWorktreeError } from "@shared/errors";
 import {
   type CommitSummary,
   isCommitHash,
-  UNKNOWN_BRANCH,
   type Worktree,
+  type WorktreeIdentity,
 } from "@shared/schemas";
-import { readAutoPullSet } from "../worktrees/autoPull";
-import { listBranches } from "./branches";
 import {
-  readShelvedSet,
-  settleShelf,
-  type ShelfSnapshot,
-  shelfSnapshots,
-} from "../worktrees/shelved";
-import { readGlobalConfig } from "../config/global";
-import { readShigomoriConfig } from "../config/project";
-import { pickWorktreeName } from "../worktrees/names";
-import { isManagedPath, managedBasesFor } from "../worktrees/paths";
+  describeWorktreeViaCli,
+  listWorktreeIdentitiesViaCli,
+  listWorktreesViaCli,
+} from "@host/ipc/cliDelegate";
 import { createLimiter } from "@shared/util/limit";
-import { listChangedFiles } from "./changes";
 import { run } from "./core";
-import {
-  listRemotes,
-  resolveDefaultBranch,
-  splitRemoteRefSync,
-} from "./remotes";
 
-interface RawWorktreeEntry {
-  path: string;
-  head?: string;
-  branch?: string;
-  bare?: boolean;
-  detached?: boolean;
+export type { WorktreeIdentity };
+
+// The sidebar asks for every project's rows at once on a refresh, and
+// each list runs up to six rows' probes at a time in the CLI (five git
+// processes a row), so a couple of lists at a time keeps a refresh from
+// forking hundreds of gits at once.
+const rowLists = createLimiter(2);
+
+// A project's rows, primary first.
+export function listWorktrees(projectId: string): Promise<Worktree[]> {
+  return rowLists(() => listWorktreesViaCli(projectId));
 }
 
-function parsePorcelain(stdout: string): RawWorktreeEntry[] {
-  const entries: RawWorktreeEntry[] = [];
-  let current: Partial<RawWorktreeEntry> = {};
-
-  for (const line of stdout.split("\n")) {
-    if (line === "") {
-      if (current.path) entries.push(current as RawWorktreeEntry);
-      current = {};
-      continue;
-    }
-    const [key, ...rest] = line.split(" ");
-    const value = rest.join(" ");
-    if (key === "worktree") current.path = value;
-    else if (key === "HEAD") current.head = value;
-    else if (key === "branch") current.branch = value;
-    else if (key === "bare") current.bare = true;
-    else if (key === "detached") current.detached = true;
-  }
-  if (current.path) entries.push(current as RawWorktreeEntry);
-  return entries;
+// One row, freshly probed.
+export function describeWorktree(
+  projectId: string,
+  worktreeId: string,
+): Promise<Worktree> {
+  return describeWorktreeViaCli(projectId, worktreeId);
 }
 
-function deriveBranch(entry: RawWorktreeEntry): string {
-  if (entry.branch) return entry.branch.replace(/^refs\/heads\//, "");
-  if (entry.detached) return entry.head?.slice(0, 7) ?? "detached";
-  return UNKNOWN_BRANCH;
+// A project's checkouts without git probes. `primaryRef` also resolves
+// the project's primary ref onto each.
+export function listWorktreeIdentities(
+  projectId: string,
+  opts: { primaryRef?: boolean } = {},
+): Promise<WorktreeIdentity[]> {
+  return listWorktreeIdentitiesViaCli({ projectId }, opts);
 }
 
-// How many changed paths get stat'd for their mtime. Only the newest
-// timestamp survives, so a worktree in the middle of a huge refactor
-// doesn't need every path measured. The cap keeps the per-worktree
-// cost flat no matter how dirty the tree is.
-const CHANGE_MTIME_STAT_LIMIT = 64;
-
-interface WorkingTreeChanges {
-  // Null when the status failed, which reads as clean everywhere but
-  // the shelf check (buildWorktree).
-  count: number | null;
-  // Newest mtime across the changed paths, epoch ms. Undefined for a
-  // clean worktree, and when every stat failed (an all-deletions diff).
-  lastChangeAt?: number;
+// The checkout `worktreeId` names, or the entity-gone error.
+export async function findWorktreeIdentityOrThrow(
+  projectId: string,
+  worktreeId: string,
+  opts: { primaryRef?: boolean } = {},
+): Promise<WorktreeIdentity> {
+  const [identity] = await listWorktreeIdentitiesViaCli(
+    { projectId, worktreeId },
+    opts,
+  );
+  if (!identity) throw unknownWorktreeError(worktreeId);
+  return identity;
 }
 
-async function getWorkingTreeChanges(
-  worktreePath: string,
-): Promise<WorkingTreeChanges> {
-  try {
-    // Deliberately NOT pinned to an --untracked-files mode, unlike the
-    // dirty guard in overwriteFromUpstream: this runs per worktree on
-    // every window focus, and `-uno` users chose that setting to make
-    // exactly this scan cheap. See the comment there.
-    const paths = (await listChangedFiles(worktreePath)).map((f) => f.path);
-    if (paths.length === 0) return { count: 0 };
-    // A deleted path stats as a failure, an untracked directory stats as
-    // the directory. Both are fine, we only want the newest hit.
-    const times = await Promise.all(
-      paths.slice(0, CHANGE_MTIME_STAT_LIMIT).map((rel) =>
-        stat(join(worktreePath, rel)).then(
-          (info) => info.mtimeMs,
-          () => 0,
-        ),
-      ),
-    );
-    const newest = Math.max(0, ...times);
-    return {
-      count: paths.length,
-      lastChangeAt: newest > 0 ? Math.round(newest) : undefined,
-    };
-  } catch {
-    return { count: null };
-  }
+// The CLI's id rule (worktreeIDFromPath in cli/paths.go), for the few
+// places that key something by a checkout path rather than by a listed
+// identity (the mirror's scratch index dir). sha256 of the absolute
+// path, 12 hex chars: the same path produces the same id anywhere.
+// test/cli-reads.mjs pins it against the ids the CLI prints.
+export function worktreeIdFromPath(path: string): string {
+  return createHash("sha256").update(path).digest("hex").slice(0, 12);
 }
 
-interface RemoteSync {
-  ahead: number;
-  behind: number;
-  hasUpstream: boolean;
-  divergedClean: boolean;
-}
-
-// Probes how the worktree's HEAD relates to its upstream. Failure of the
-// rev-list call is taken as "no upstream": either the branch was never
-// pushed, or HEAD is detached. `divergedClean` runs a `merge-tree`
-// probe only when both sides have unique commits; it tells the UI
-// whether a whole-tree merge would land cleanly. The action behind
-// the "Pull and push" button tries `rebase` first and falls back to
-// `merge` on a per-commit conflict, so this probe gates that fallback.
 // Commits HEAD has that the upstream lacks, and vice versa. Null when
 // there is no upstream to measure against: the branch was never
-// pushed, its remote branch is gone, or HEAD is detached. Shared with
-// the auto-pull sweep, which decides on the same two numbers.
+// pushed, its remote branch is gone, or HEAD is detached. The auto-pull
+// sweep asks right before it pulls, never trusting a row that can be a
+// focus old.
 export async function getUpstreamCounts(
   worktreePath: string,
 ): Promise<{ ahead: number; behind: number } | null> {
@@ -147,56 +92,6 @@ export async function getUpstreamCounts(
     return { ahead: Number(a) || 0, behind: Number(b) || 0 };
   } catch {
     return null;
-  }
-}
-
-async function getRemoteSync(worktreePath: string): Promise<RemoteSync> {
-  const counts = await getUpstreamCounts(worktreePath);
-  if (counts === null) {
-    return { ahead: 0, behind: 0, hasUpstream: false, divergedClean: false };
-  }
-  const { ahead, behind } = counts;
-  // Diverged: ask git whether a merge would land without conflicts.
-  // `merge-tree --write-tree` exits 0 on a clean merge and non-zero
-  // when conflicts would arise (or on git < 2.38, where we treat the
-  // unknown as "not clean", the safer default).
-  const divergedClean =
-    ahead > 0 &&
-    behind > 0 &&
-    (await run(worktreePath, [
-      "merge-tree",
-      "--write-tree",
-      "HEAD",
-      "@{u}",
-    ]).then(
-      () => true,
-      () => false,
-    ));
-  return { ahead, behind, hasUpstream: true, divergedClean };
-}
-
-// How many of HEAD's newest commits no remote has: what amend and undo
-// may touch. Measured against every remote-tracking ref, not just the
-// upstream, so a commit pushed under another name (`git push origin
-// HEAD:review`) counts as shared too. A repo with no remotes has
-// nothing shared, so all of HEAD is its own. Capped: past the cap the
-// exact number stops mattering and the walk stops paying for it.
-const UNPUSHED_SCAN_LIMIT = 1000;
-
-async function getUnpushedCount(worktreePath: string): Promise<number> {
-  try {
-    const stdout = await run(worktreePath, [
-      "rev-list",
-      "--count",
-      `--max-count=${UNPUSHED_SCAN_LIMIT}`,
-      "HEAD",
-      "--not",
-      "--remotes",
-    ]);
-    return Number(stdout.trim()) || 0;
-  } catch {
-    // An unborn branch has no HEAD to count from.
-    return 0;
   }
 }
 
@@ -263,501 +158,9 @@ export async function listCommits(
   }
 }
 
-// Worktree identity: the subset of fields the main process needs to
-// route operations (path, ids, layout flags) without doing the extra
-// git work to populate ahead/behind/recentCommits/etc.
-export type WorktreeIdentity = Pick<
-  Worktree,
-  | "id"
-  | "projectId"
-  | "name"
-  | "branch"
-  | "path"
-  | "isPrimary"
-  | "isExternal"
-  | "detached"
->;
-
-// Derived purely from the absolute worktree path so the same path always
-// produces the same id, anywhere. Paths are globally unique on a
-// filesystem, so the hash is too. 12 hex chars (48 bits) leaves plenty
-// of collision headroom for the handful of worktrees a project holds.
-export function worktreeIdFromPath(path: string): string {
-  return createHash("sha256").update(path).digest("hex").slice(0, 12);
-}
-
-export async function listWorktreeIdentities(
-  projectId: string,
-  projectPath: string,
-): Promise<WorktreeIdentity[]> {
-  const [stdout, config, globalConfig] = await Promise.all([
-    run(projectPath, ["worktree", "list", "--porcelain"]),
-    readShigomoriConfig(projectId).catch(() => null),
-    readGlobalConfig().catch(() => null),
-  ]);
-  // A worktree counts as managed if it sits under any layout we know
-  // about (managed root, in-project, or the configured custom path).
-  // This keeps mixed states (some worktrees still in the old layout
-  // after a partial migration) from mislabeling rows as external.
-  const managedBases = managedBasesFor(projectPath, config);
-  const entries = parsePorcelain(stdout);
-  // Which entry, if any, is the project's own checkout. Resolved once up
-  // front rather than per entry, so at most one row can carry the flag:
-  // every caller reads it as a singular ("the primary"), and the tidy
-  // page filters rows on it.
-  //
-  // A bare repo has none. Every entry git lists under one is a linked
-  // worktree with work in it, and this is the case that actually shows
-  // up: registration folds a path to the repo's common dir, so adding a
-  // project from inside a worktree of a bare repo registers the bare
-  // directory. A per-entry `index === 0` fallback would then crown
-  // whichever worktree git happened to list first, because the bare
-  // entry is skipped before the counter moves.
-  //
-  // Otherwise the project path wins wherever git lists it, which is what
-  // the flag means, and the first entry covers a project registered
-  // deeper in the repo. Registration folds that away, so the fallback is
-  // for a layout that changed under an existing registry entry.
-  const checkouts = entries.filter((entry) => !entry.bare);
-  const primaryPath = entries.some((entry) => entry.bare)
-    ? null
-    : (checkouts.find((entry) => entry.path === projectPath)?.path ??
-      checkouts[0]?.path ??
-      null);
-  const identities: WorktreeIdentity[] = [];
-  for (const entry of checkouts) {
-    const branch = deriveBranch(entry);
-    const isPrimary = entry.path === primaryPath;
-    // Primary checkout sits at the project root, so its "name" is just
-    // the project's directory basename. Managed worktrees use the picked
-    // animal dirname. External ones use whatever the user named them, or
-    // with codexWorktreeNames on, possibly the folder above it.
-    const isExternal = !isManagedPath(entry.path, managedBases);
-    const name =
-      globalConfig?.codexWorktreeNames && isExternal && !isPrimary
-        ? externalWorktreeName(entry.path, projectPath)
-        : basename(entry.path);
-    identities.push({
-      id: worktreeIdFromPath(entry.path),
-      projectId,
-      name,
-      branch,
-      path: entry.path,
-      isPrimary,
-      isExternal,
-      detached: entry.detached ?? false,
-    });
-  }
-  return identities;
-}
-
-// A leaf that just repeats the repo's folder name (the Codex layout,
-// see codexWorktreeNames) takes its parent's name instead, when that
-// passes as a folder name of our own. Mirrored in cli/gitx.go.
-function externalWorktreeName(
-  worktreePath: string,
-  projectPath: string,
-): string {
-  const leaf = basename(worktreePath);
-  const repo = basename(projectPath).replace(/\.git$/, "");
-  if (leaf.toLowerCase() !== repo.toLowerCase()) return leaf;
-  const parent = basename(dirname(worktreePath));
-  return isValidWorktreeDirName(parent) ? parent : leaf;
-}
-
-// How many recent commits to surface on the worktree detail page. The
-// teaser renders the first 3; the 4th (if present) is what tells the
-// renderer there's more history to scroll, so it can show the "Show
-// all" affordance without a second round trip.
-const RECENT_COMMITS_COUNT = 4;
-
-interface PrimaryRelation {
-  behindPrimary: number;
-  mergedIntoPrimary: boolean;
-}
-
-// Ceiling on the first-parent walk in landedOnPrimary. A worktree this
-// far behind is stale enough that the answer has stopped mattering, and
-// hitting the cap reports "not landed", which only leaves the row where
-// it already was.
-const FIRST_PARENT_SCAN_LIMIT = 2000;
-
-// A branch can be an ancestor of the primary for two very different
-// reasons: its work was merged in, or it never left the primary's own
-// history, like a worktree created and then left alone while the
-// primary moved on. `git branch --merged` can't tell those apart, which
-// is why this walks the primary's first-parent chain instead: a branch
-// that landed via a merge commit hangs off that chain, an untouched one
-// sits on it. Keeping the second case out is what stops fresh, idle
-// worktrees from piling into the sidebar's Merged box every time
-// something else lands.
-//
-// A local fast-forward or rebase merge is genuinely indistinguishable
-// from "never started" here: the resulting history is identical, so it
-// reads as not landed. That errs toward leaving a row visible, and
-// GitHub-hosted repos get the answer from the PR state anyway.
-async function landedOnPrimary(
-  worktreePath: string,
-  behindPrimary: number,
-  readChain: PrimaryChainReader,
-): Promise<boolean> {
-  if (behindPrimary > FIRST_PARENT_SCAN_LIMIT) return false;
-  try {
-    const [head, chain] = await Promise.all([
-      run(worktreePath, ["rev-parse", "HEAD"]),
-      readChain(),
-    ]);
-    const tip = head.trim();
-    return chain !== null && tip.length > 0 && !chain.has(tip);
-  } catch {
-    return false;
-  }
-}
-
-// The primary's first-parent chain is the same answer for every worktree
-// in the project (one object store, one ref), so it's read once and
-// shared. Lazily, because a project whose worktrees are all ahead of the
-// primary never asks the question and shouldn't pay for it.
-//
-// Null means "couldn't read it", which callers must treat as "not
-// landed": an empty set would say every HEAD is off the chain, i.e.
-// everything merged.
-type PrimaryChainReader = () => Promise<ReadonlySet<string> | null>;
-
-function primaryChainReader(
-  projectPath: string,
-  primaryRef: string | null,
-): PrimaryChainReader {
-  let pending: Promise<ReadonlySet<string> | null> | null = null;
-  return () => (pending ??= readPrimaryChain(projectPath, primaryRef));
-}
-
-async function readPrimaryChain(
-  projectPath: string,
-  primaryRef: string | null,
-): Promise<ReadonlySet<string> | null> {
-  if (!primaryRef) return null;
-  try {
-    // FIRST_PARENT_SCAN_LIMIT bounds how far behind a worktree can be
-    // and still be asked about, so a chain that long covers every HEAD
-    // that could be on it.
-    const stdout = await run(projectPath, [
-      "rev-list",
-      "--first-parent",
-      `-n${FIRST_PARENT_SCAN_LIMIT + 1}`,
-      primaryRef,
-    ]);
-    return new Set(stdout.trim().split("\n").filter(Boolean));
-  } catch {
-    return null;
-  }
-}
-
-// How the worktree sits against the project's primary branch. Both
-// answers are "no relation" where the question doesn't apply (no
-// primary, the primary worktree itself, detached HEAD).
-async function getPrimaryRelation(
-  identity: WorktreeIdentity,
-  ctx: BuildContext,
-): Promise<PrimaryRelation> {
-  const none: PrimaryRelation = {
-    behindPrimary: 0,
-    mergedIntoPrimary: false,
-  };
-  if (!ctx.primaryRef || identity.isPrimary || identity.detached) return none;
-  try {
-    // `--left-right` on the symmetric difference prints "<left>\t<right>":
-    // commits only on HEAD, then commits only on the primary.
-    const stdout = await run(identity.path, [
-      "rev-list",
-      "--count",
-      "--left-right",
-      `HEAD...${ctx.primaryRef}`,
-    ]);
-    const [ahead, behind] = stdout.trim().split(/\s+/);
-    const aheadOfPrimary = Number(ahead) || 0;
-    const behindPrimary = Number(behind) || 0;
-    // Anything HEAD still holds on its own hasn't landed yet, and a
-    // branch level with the primary has nothing to have landed.
-    if (aheadOfPrimary > 0 || behindPrimary === 0) {
-      return { behindPrimary, mergedIntoPrimary: false };
-    }
-    return {
-      behindPrimary,
-      mergedIntoPrimary: await landedOnPrimary(
-        identity.path,
-        behindPrimary,
-        ctx.primaryChain,
-      ),
-    };
-  } catch {
-    return none;
-  }
-}
-
-// Project-level inputs every row in a list/describe/create call needs.
-// Resolved once, passed by reference, so per-row work stays O(git probes
-// per row) instead of O(git probes per row + project-level reads).
-interface BuildContext {
-  hasRemote: boolean;
-  primaryRef: string | null;
-  primaryBranch: string | null;
-  shelvedSet: ReadonlySet<string>;
-  shelfSnapshots: Readonly<Record<string, ShelfSnapshot>>;
-  autoPullSet: ReadonlySet<string>;
-  primaryChain: PrimaryChainReader;
-}
-
-// The project's primary ref (null when no default branch resolves), the
-// local branch behind it ("main" for "origin/main"), and the remotes the
-// ref was split against. Shared by the worktree list and the tidy
-// surface, which both compare every row to the same primary.
-interface PrimaryRefContext {
-  remotes: string[];
-  primaryRef: string | null;
-  primaryBranch: string | null;
-}
-
-export async function loadPrimaryRef(
-  projectId: string,
-  projectPath: string,
-): Promise<PrimaryRefContext> {
-  const [remotes, config] = await Promise.all([
-    listRemotes(projectPath),
-    readShigomoriConfig(projectId).catch(() => null),
-  ]);
-  const primaryRef = await resolveDefaultBranch(
-    projectPath,
-    config?.defaultBranch,
-  ).catch(() => null);
-  return {
-    remotes,
-    primaryRef,
-    primaryBranch:
-      primaryRef === null
-        ? null
-        : (splitRemoteRefSync(primaryRef, remotes)?.branch ?? primaryRef),
-  };
-}
-
-async function loadBuildContext(
-  projectId: string,
-  projectPath: string,
-): Promise<BuildContext> {
-  const { remotes, primaryRef, primaryBranch } = await loadPrimaryRef(
-    projectId,
-    projectPath,
-  );
-  const shelvedSet = readShelvedSet();
-  return {
-    hasRemote: remotes.length > 0,
-    primaryRef,
-    primaryBranch,
-    shelvedSet,
-    // Nothing shelved, nothing to compare against.
-    shelfSnapshots: shelvedSet.size > 0 ? shelfSnapshots.read() : {},
-    autoPullSet: readAutoPullSet(),
-    primaryChain: primaryChainReader(projectPath, primaryRef),
-  };
-}
-
-async function buildWorktree(
-  identity: WorktreeIdentity,
-  ctx: BuildContext,
-): Promise<Worktree> {
-  const probedAt = Date.now();
-  const [changes, recentCommits, remoteSync, primary, unpushedCount] =
-    await Promise.all([
-      getWorkingTreeChanges(identity.path),
-      listCommits(identity.path, { skip: 0, count: RECENT_COMMITS_COUNT }),
-      getRemoteSync(identity.path),
-      getPrimaryRelation(identity, ctx),
-      getUnpushedCount(identity.path),
-    ]);
-  const autoPull = ctx.autoPullSet.has(identity.id);
-  return {
-    id: identity.id,
-    projectId: identity.projectId,
-    name: identity.name,
-    branch: identity.branch,
-    path: identity.path,
-    ahead: remoteSync.ahead,
-    behind: remoteSync.behind,
-    hasUpstream: remoteSync.hasUpstream,
-    hasRemote: ctx.hasRemote,
-    divergedClean: remoteSync.divergedClean,
-    behindPrimary: primary.behindPrimary,
-    unpushedCount,
-    primaryRef: ctx.primaryRef ?? undefined,
-    primaryBranch: ctx.primaryBranch ?? undefined,
-    mergedIntoPrimary: primary.mergedIntoPrimary,
-    changedCount: changes.count ?? 0,
-    lastChangeAt: changes.lastChangeAt,
-    recentCommits,
-    isPrimary: identity.isPrimary,
-    isExternal: identity.isExternal,
-    detached: identity.detached,
-    shelved:
-      !identity.isPrimary &&
-      !identity.isExternal &&
-      ctx.shelvedSet.has(identity.id) &&
-      settleShelf(identity.id, ctx.shelfSnapshots[identity.id], {
-        at: probedAt,
-        head: recentCommits[0]?.hash ?? null,
-        changed: changes.count,
-        lastChangeAt: changes.lastChangeAt,
-        followsUpstream: autoPull && unpushedCount === 0,
-      }),
-    autoPull,
-  };
-}
-
-// Each buildWorktree starts four to six git processes and the sidebar
-// asks for every project at once on focus. Unbounded, that is hundreds
-// of simultaneous forks. Same window as tidy's gitProbes.
-const rowProbes = createLimiter(6);
-
-export async function listWorktrees(
-  projectId: string,
-  projectPath: string,
-): Promise<Worktree[]> {
-  const [identities, ctx] = await Promise.all([
-    listWorktreeIdentities(projectId, projectPath),
-    loadBuildContext(projectId, projectPath),
-  ]);
-  // Primary first so it anchors the sidebar list as the canonical checkout.
-  const ordered = identities.toSorted((a, b) =>
-    a.isPrimary === b.isPrimary ? 0 : a.isPrimary ? -1 : 1,
-  );
-  return Promise.all(
-    ordered.map((id) => rowProbes(() => buildWorktree(id, ctx))),
-  );
-}
-
-export async function describeWorktree(
-  identity: WorktreeIdentity,
-  projectPath: string,
-): Promise<Worktree> {
-  const ctx = await loadBuildContext(identity.projectId, projectPath);
-  return buildWorktree(identity, ctx);
-}
-
-export async function findWorktreeIdentityOrThrow(
-  projectId: string,
-  projectPath: string,
-  worktreeId: string,
-): Promise<WorktreeIdentity> {
-  const identities = await listWorktreeIdentities(projectId, projectPath);
-  const identity = identities.find((w) => w.id === worktreeId);
-  if (!identity) throw unknownWorktreeError(worktreeId);
-  return identity;
-}
-
-export async function pickAvailableWorktreeName(
-  projectId: string,
-  projectPath: string,
-): Promise<string> {
-  const [existing, branches, { doubutsuNames }] = await Promise.all([
-    listWorktreeIdentities(projectId, projectPath),
-    listBranches(projectPath),
-    readGlobalConfig(),
-  ]);
-  // The picked name seeds the branch name too, so a kept branch (a
-  // removed worktree's, say) takes its name out of the pool.
-  const used = new Set(
-    [...existing.map((w) => w.name), ...branches.local].map((name) =>
-      name.toLowerCase(),
-    ),
-  );
-  return pickWorktreeName(used, doubutsuNames ?? false);
-}
-
-async function removeWorktree(
-  projectPath: string,
-  worktreePath: string,
-  force: boolean,
-): Promise<void> {
-  const args = ["worktree", "remove", worktreePath];
-  if (force) args.push("--force");
-  await run(projectPath, args);
-}
-
-// Force-removes a worktree, finishing the sweep when git couldn't. Git
-// drops the admin entry under $GIT_DIR/worktrees whether or not its
-// sweep of the checkout finished, so a sweep that stops short (a file
-// landing mid-sweep) leaves a directory no later `git worktree remove`
-// can reach. The wipe takes only what git had already agreed to
-// delete: it runs when the admin entry was there before and is gone
-// after. A refusal keeps the entry and rethrows, so real bugs stay
-// visible. The CLI twin is removeWorktreeDir in cli/worktree.go.
-export async function removeWorktreeForce(
-  projectPath: string,
-  worktreePath: string,
-): Promise<void> {
-  const adminDir = await worktreeAdminDir(worktreePath);
-  try {
-    await removeWorktree(projectPath, worktreePath, true);
-    return;
-  } catch (err) {
-    if (adminDir === null || !(await dirGone(adminDir))) {
-      throw err;
-    }
-    console.warn(`[worktrees] wipe fallback: ${errorMessageOf(err)}`);
-  }
-  // Linear backoff, about five seconds in all: the same budget the CLI
-  // gives a writer still landing files.
-  await rm(worktreePath, {
-    recursive: true,
-    force: true,
-    maxRetries: 4,
-    retryDelay: 500,
-  });
-}
-
-// The admin directory git keeps for a linked checkout, read from the
-// checkout's own .git file ("gitdir: <dir>", relative to the checkout
-// under worktree.useRelativePaths). Null when the path isn't a linked
-// worktree, which keeps the wipe away from any directory git never
-// registered.
-async function worktreeAdminDir(worktreePath: string): Promise<string | null> {
-  const contents = await readFile(join(worktreePath, ".git"), "utf8").catch(
-    () => null,
-  );
-  if (contents === null) return null;
-  const line = contents.trim();
-  if (!line.startsWith("gitdir: ")) return null;
-  const dir = line.slice("gitdir: ".length);
-  return isAbsolute(dir) ? dir : join(worktreePath, dir);
-}
-
-// Only a definite "not there" counts: an unreadable admin dir must not
-// pass for a finished sweep.
-async function dirGone(path: string): Promise<boolean> {
-  try {
-    await stat(path);
-    return false;
-  } catch (err) {
-    return errorCodeOf(err) === "ENOENT";
-  }
-}
-
 // Drops admin entries under $GIT_DIR/worktrees whose checkout dir is
 // gone. Used after the nuke-everything root wipe to keep `git worktree
 // list` honest.
 export async function pruneStaleWorktrees(projectPath: string): Promise<void> {
   await run(projectPath, ["worktree", "prune"]);
-}
-
-// Moves a worktree's checkout to a new directory. `git worktree move`
-// preserves the working tree, index, and untracked files; the absolute
-// carry-over symlinks stay valid because their targets don't change. Git
-// refuses if the worktree is locked, dirty in a way that conflicts with
-// the move, or the destination already exists.
-export async function relocateWorktree(
-  projectPath: string,
-  oldPath: string,
-  newPath: string,
-): Promise<void> {
-  await mkdir(dirname(newPath), { recursive: true });
-  await run(projectPath, ["worktree", "move", oldPath, newPath]);
 }

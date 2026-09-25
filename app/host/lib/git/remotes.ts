@@ -2,14 +2,13 @@ import {
   listRemotes as listRemotesWith,
   localBranchExists as localBranchExistsWith,
   remoteRefExists as remoteRefExistsWith,
-  resolveDefaultBranch as resolveDefaultBranchWith,
   resolveDefaultRef as resolveDefaultRefWith,
 } from "@shared/git/defaultBranch.mts";
 import { run } from "./core";
 
-// Default-branch policy lives in shared/git/defaultBranch.mts so the
-// identity parity harness resolves through the same code. These
-// wrappers bind the app's git runner.
+// The ref probes the repo identity shares with its parity harness
+// (shared/git/defaultBranch.mts), bound to the app's git runner. The
+// primary ref a worktree row is measured against is the CLI's.
 export function localBranchExists(
   projectPath: string,
   branch: string,
@@ -51,13 +50,6 @@ export async function listRemoteEntries(
   } catch {
     return [];
   }
-}
-
-export function resolveDefaultBranch(
-  projectPath: string,
-  override?: string,
-): Promise<string> {
-  return resolveDefaultBranchWith(run, projectPath, override);
 }
 
 // Qualified, fallback-free variant for repo identity. See

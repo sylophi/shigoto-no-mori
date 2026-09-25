@@ -1,6 +1,9 @@
-// Pure path math for worktree layouts. Shared between the main process
-// (where it backs createWorktree and the IPC handler) and the renderer
-// (so the Worktree Location page can show accurate previews).
+// Pure path math for worktree layouts, for the renderer: the Worktree
+// Location page's previews and the destinations it asks relocate for,
+// the New Worktree form's destination label, the convert-external
+// preview. A display-side mirror of resolveWorktreeBase in
+// cli/paths.go, which decides where a worktree actually lands;
+// test/cli-reads.mjs pins the two against each other for every layout.
 //
 // Kept dependency-free so it can run in either environment.
 
@@ -11,17 +14,12 @@ import type { WorktreeLayout } from "../schemas";
 // `.git/info/exclude` so it stays out of `git status`.
 const IN_PROJECT_ROOT_DIR = ".shigomori";
 const IN_PROJECT_SUBDIR = `${IN_PROJECT_ROOT_DIR}/worktrees`;
-export const ALL_WORKTREE_LAYOUTS: readonly WorktreeLayout[] = [
-  "managed-root",
-  "in-project",
-  "custom",
-];
 
 // Containment test: true when `path` IS `ancestor` or sits anywhere
 // beneath it. Prefix matching by intent. Callers guarding destructive
-// flows (nuke, data dir move) want the whole subtree. Contrast
-// isManagedPath (host/lib/worktrees/paths.ts), which deliberately uses
-// parent equality instead.
+// flows (nuke, data dir move) want the whole subtree. Contrast the
+// CLI's isManagedPath (cli/paths.go), which deliberately uses parent
+// equality instead.
 export function isSameOrInside(path: string, ancestor: string): boolean {
   const folded = path.replace(/\/+$/, "");
   const base = ancestor.replace(/\/+$/, "");

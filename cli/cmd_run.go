@@ -33,20 +33,8 @@ type packageScript struct {
 
 func cmdRun(ctx cliContext, args []string) (int, error) {
 	parsed, err := parseCmdArgs(args, argSpec{
-		strings: map[string][]string{
-			"project-id":  {},
-			"worktree-id": {},
-			// Transitional app plumbing, still honored while the app
-			// passes them: branch values its IPC handler resolved, reused
-			// instead of re-resolved. Without them the CLI resolves both
-			// itself (runEnvInputs), which is the intended end state.
-			"project-branch": {},
-			"default-branch": {},
-		},
-		// Transitional app plumbing: the app bumps the use log itself
-		// while it passes this. Without it the CLI bumps it, the
-		// intended end state (one engine counting every run).
-		bools: map[string][]string{"skip-use-log": {}},
+		// App plumbing: exact addressing by the ids the app holds.
+		strings: map[string][]string{"project-id": {}, "worktree-id": {}},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
@@ -82,7 +70,7 @@ func cmdRun(ctx cliContext, args []string) (int, error) {
 		return 1, errf("No script named %q. Scripts: %s.", name, names)
 	}
 
-	in := runEnvInputs(target, parsed, name)
+	in := runEnvInputs(target, name)
 
 	managerPath, lookErr := exec.LookPath(manager)
 	if lookErr != nil {
@@ -94,39 +82,17 @@ func cmdRun(ctx cliContext, args []string) (int, error) {
 	if err := os.Chdir(target.worktree.Path); err != nil {
 		return 1, errf("cannot enter %s: %v", target.worktree.Path, err)
 	}
-	if !parsed.bools["skip-use-log"] {
-		bumpPackageScriptUse(target.proj.ID, name)
-	}
+	bumpPackageScriptUse(target.proj.ID, name)
 	execErr := syscall.Exec(managerPath, runArgv(manager, name, positionals[1:]), scriptEnv(in))
 	return 1, errf("failed to exec %s: %v", managerPath, execErr)
 }
 
-// The env-contract values for the run. The app-plumbing branch flags
-// win when present: a delegated run's IPC handler resolved both
-// branches moments earlier, so recomputing them here would only
-// re-spawn git for answers the caller already has. Anything not
-// supplied comes from lifecycleEnvInputs, the same resolver the
-// lifecycle scripts use, so the two paths can't drift.
-func runEnvInputs(target located, parsed parsedArgs, scriptName string) scriptEnvInputs {
-	projectBranch, haveProject := parsed.strings["project-branch"]
-	defaultBranch, haveDefault := parsed.strings["default-branch"]
-	in := scriptEnvInputs{
-		worktree:      target.worktree,
-		proj:          target.proj,
-		scriptName:    scriptName,
-		projectBranch: projectBranch,
-		defaultBranch: defaultBranch,
-	}
-	if haveProject && haveDefault {
-		return in
-	}
-	computed := lifecycleEnvInputs(target.proj, target.worktree, readProjectConfig(target.proj.ID))
-	if !haveProject {
-		in.projectBranch = computed.projectBranch
-	}
-	if !haveDefault {
-		in.defaultBranch = computed.defaultBranch
-	}
+// The env-contract values for the run, from lifecycleEnvInputs, the
+// same resolver the lifecycle scripts use, so the two paths can't
+// drift.
+func runEnvInputs(target located, scriptName string) scriptEnvInputs {
+	in := lifecycleEnvInputs(target.proj, target.worktree, readProjectConfig(target.proj.ID))
+	in.scriptName = scriptName
 	return in
 }
 
@@ -263,8 +229,8 @@ func runArgv(manager, script string, extra []string) []string {
 
 // One run in state.json's packageScriptUseLog, the rolling log the
 // scripts panel's "most used" sort ranks by (read back by `sm run
-// --json`'s usage). The app's bumpScriptUseCount writes the same key
-// while it still counts its own runs.
+// --json`'s usage). Every run counts here, the app's included: its
+// scripts panel runs through `sm run`.
 func bumpPackageScriptUse(projectID, script string) {
 	err := updateStateKey("packageScriptUseLog", func(raw json.RawMessage) (any, error) {
 		log := map[string]map[string][]int64{}

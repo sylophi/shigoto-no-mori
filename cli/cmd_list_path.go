@@ -81,15 +81,27 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 			// describe after a mutation).
 			"project-id": {}, "worktree-id": {},
 		},
-		bools: map[string][]string{"all": {"a"}, "remote": nil},
+		// --identities: the cheap listing (listIdentities). --primary-ref
+		// adds each project's primary ref to it.
+		bools: map[string][]string{"all": {"a"}, "remote": nil, "identities": nil, "primary-ref": nil},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
+	}
+	identitiesOnly := parsed.bools["identities"]
+	withPrimaryRef := parsed.bools["primary-ref"]
+	if withPrimaryRef && !identitiesOnly {
+		return 2, usageErrf("--primary-ref only applies to --identities (full rows always carry primaryRef).")
 	}
 	if wid := parsed.strings["worktree-id"]; wid != "" {
 		target, err := resolveWorktreeByID(ctx, parsed.strings["project-id"], wid)
 		if err != nil {
 			return exitCodeOf(err), err
+		}
+		if identitiesOnly {
+			return emitIdentities(ctx, []identityGroup{
+				identityGroupFor(target.proj, []worktreeIdentity{target.worktree}, withPrimaryRef),
+			})
 		}
 		row := buildWorktree(target.proj, target.worktree, loadBuildContext(target.proj))
 		if jsonMode {
@@ -107,6 +119,9 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 		return 2, err
 	}
 	if parsed.bools["remote"] || parsed.strings["from"] != "" {
+		if identitiesOnly {
+			return 2, usageErrf("--identities lists this device's worktrees; it doesn't combine with --remote or --from.")
+		}
 		if parsed.bools["all"] {
 			return 2, usageErrf("--remote lists one project's worktrees. Name it with -p, or run from inside it.")
 		}
@@ -135,6 +150,10 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 			return exitCodeOf(err), err
 		}
 		scope = []project{proj}
+	}
+
+	if identitiesOnly {
+		return listIdentities(ctx, scope, withPrimaryRef)
 	}
 
 	// Accent colors need per-project git+icon work; overlap it with
@@ -225,6 +244,133 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 	if len(rows) == 0 {
 		note("No worktrees found.")
 		return 0, nil
+	}
+	out(renderTable(header, rows))
+	return 0, nil
+}
+
+// One `--identities` document entry: a worktree's identity plus its
+// registry marks, and with --primary-ref the project's primary ref.
+// No per-row git probes go into it, which is the point: the app polls
+// this where it needs to know which worktrees exist, and the full row
+// only where it shows sync and change state.
+type worktreeIdentityJSON struct {
+	ID            string `json:"id"`
+	ProjectID     string `json:"projectId"`
+	Name          string `json:"name"`
+	Branch        string `json:"branch"`
+	Path          string `json:"path"`
+	IsPrimary     bool   `json:"isPrimary"`
+	IsExternal    bool   `json:"isExternal"`
+	Detached      bool   `json:"detached"`
+	Shelved       bool   `json:"shelved"`
+	AutoPull      bool   `json:"autoPull"`
+	PrimaryRef    string `json:"primaryRef,omitempty"`
+	PrimaryBranch string `json:"primaryBranch,omitempty"`
+}
+
+// One project's identities, primary first, with the primary ref when
+// it was asked for (resolved once for the whole project).
+type identityGroup struct {
+	proj                      project
+	identities                []worktreeIdentity
+	primaryRef, primaryBranch string
+}
+
+func identityGroupFor(proj project, identities []worktreeIdentity, withPrimaryRef bool) identityGroup {
+	group := identityGroup{
+		proj:       proj,
+		identities: partitionStable(identities, func(id worktreeIdentity) bool { return id.IsPrimary }),
+	}
+	if withPrimaryRef {
+		remotes, primaryRef, _ := loadPrimaryRef(proj)
+		group.primaryRef, group.primaryBranch = primaryRef, primaryBranchOf(primaryRef, remotes)
+	}
+	return group
+}
+
+// sm worktrees list --identities: `git worktree list` (memoized) per
+// project and one registry read for the marks, nothing per row. Same
+// scope, order and skip-with-warning as the full list.
+func listIdentities(ctx cliContext, scope []project, withPrimaryRef bool) (int, error) {
+	type result struct {
+		group identityGroup
+		err   error
+	}
+	results := make([]result, len(scope))
+	var wg sync.WaitGroup
+	for i, proj := range scope {
+		wg.Go(func() {
+			identities, err := listWorktreeIdentities(proj)
+			if err != nil {
+				results[i] = result{err: err}
+				return
+			}
+			results[i] = result{group: identityGroupFor(proj, identities, withPrimaryRef)}
+		})
+	}
+	wg.Wait()
+	var groups []identityGroup
+	for i, r := range results {
+		if r.err != nil {
+			note(fmt.Sprintf("warning: skipping %s: %s", scope[i].Name, r.err))
+			continue
+		}
+		groups = append(groups, r.group)
+	}
+	return emitIdentities(ctx, groups)
+}
+
+// The --identities document (one JSON array across every group), or a
+// NAME/BRANCH/flags table.
+func emitIdentities(ctx cliContext, groups []identityGroup) (int, error) {
+	sets := readWorktreeMarkSets()
+	marks := buildContext{shelved: sets[shelvedKey], autoPull: sets[autoPullKey]}
+	flat := []worktreeIdentityJSON{}
+	for _, group := range groups {
+		for _, id := range group.identities {
+			flat = append(flat, worktreeIdentityJSON{
+				ID: id.ID, ProjectID: id.ProjectID, Name: id.Name, Branch: id.Branch, Path: id.Path,
+				IsPrimary: id.IsPrimary, IsExternal: id.IsExternal, Detached: id.Detached,
+				Shelved:       shelvedFlag(id, marks),
+				AutoPull:      marks.autoPull[id.ID],
+				PrimaryRef:    group.primaryRef,
+				PrimaryBranch: group.primaryBranch,
+			})
+		}
+	}
+	if jsonMode {
+		emit(flat)
+		return 0, nil
+	}
+	if len(flat) == 0 {
+		note("No worktrees found.")
+		return 0, nil
+	}
+	currentID := ""
+	if ctx.current != nil {
+		currentID = ctx.current.worktree.ID
+	}
+	names := map[string]string{}
+	for _, group := range groups {
+		names[group.proj.ID] = group.proj.Name
+	}
+	multi := len(groups) > 1
+	header := []string{"", "NAME", "BRANCH", ""}
+	if multi {
+		header = []string{"", "PROJECT", "NAME", "BRANCH", ""}
+	}
+	rows := make([][]string, len(flat))
+	for i, w := range flat {
+		marker := ""
+		if w.ID == currentID {
+			marker = cyanOut("@")
+		}
+		flags := dimOut(strings.Join(worktreeFlags(w.IsPrimary, w.IsExternal, w.Shelved, w.AutoPull), ", "))
+		rows[i] = []string{marker, w.Name, w.Branch, flags}
+		if multi {
+			rows[i] = []string{marker, names[w.ProjectID], w.Name, w.Branch, flags}
+		}
 	}
 	out(renderTable(header, rows))
 	return 0, nil

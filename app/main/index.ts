@@ -65,7 +65,7 @@ import {
   signalAllScriptsBestEffort,
 } from "@host/lib/scripts";
 import { startOrphanScriptSweep } from "@host/lib/scripts/persistence";
-import { refreshTerrierListings } from "@host/lib/terrier";
+import { refreshProjects } from "@host/lib/projects";
 import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktrees";
 import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
@@ -450,12 +450,13 @@ app.on("ready", async () => {
   installFatalRecovery({ isShuttingDown });
   createWindow();
   reconcileLaunchAtLogin();
-  // The sweeps below read the merged project list synchronously, so
-  // wait for the terrier listings (bounded by the spawn timeout).
-  // Otherwise the first fetch pass and the state watcher's reaper run
-  // against a registry-only list. The window is already up, so this
-  // delays only the background machinery.
-  await refreshTerrierListings();
+  // The sweeps below read the project list synchronously, from the
+  // snapshot host/lib/projects keeps of the CLI's list, so read it once
+  // before they start. The window is already up, so this delays only
+  // the background machinery.
+  await refreshProjects().catch((error: unknown) => {
+    console.warn(`[projects] first list failed: ${errorMessageOf(error)}`);
+  });
   startBackgroundFetch();
   startUpdater();
   // The control wire the CLI's cross-device verbs ride (`sm worktrees
@@ -488,8 +489,11 @@ app.on("ready", async () => {
   startStateWatcher(() => {
     broadcastAll(gitContract, "externalChange", undefined);
     // The registry may have changed (a project added or removed by
-    // the CLI): follow it with the git-directory watches.
-    reconcileGitWatchers();
+    // the CLI): re-read the project list, then follow it with the
+    // git-directory watches.
+    void refreshProjects()
+      .catch(() => undefined)
+      .then(reconcileGitWatchers);
     // The same refresh is the app's only chance to notice an `sm rm`
     // run in a terminal: the CLI removes the worktree without knowing
     // the app exists, leaving any script the app started in it running

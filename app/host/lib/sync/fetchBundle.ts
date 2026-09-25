@@ -158,7 +158,7 @@ export async function fetchBundleFromPeer(
 ): Promise<{ fetched: { ref: string; commit: string }[] }> {
   const target =
     "targetProjectId" in input
-      ? findProjectOrThrow(input.targetProjectId)
+      ? await findProjectOrThrow(input.targetProjectId)
       : { path: input.repoPath };
   // Re-parsed here because the byte count flows into the progress
   // frames' strict schema and bounds the loop below: the peer's own

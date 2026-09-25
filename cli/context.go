@@ -186,6 +186,9 @@ func resolveProjectByPath(ctx cliContext, ref string) (project, error) {
 	return project{}, usageErrf("No registered project at %s. %s", abs, projectHint(ctx))
 }
 
+// The project's primary checkout. A bare repo has none
+// (primaryCheckoutPath), so root/primary there is an error naming the
+// way out rather than a guess at one of its linked worktrees.
 func primaryOf(proj project) (located, error) {
 	identities, err := listWorktreeIdentities(proj)
 	if err != nil {
@@ -196,7 +199,9 @@ func primaryOf(proj project) (located, error) {
 			return located{proj: proj, worktree: id}, nil
 		}
 	}
-	return located{}, errf("%s has no primary checkout.", proj.Name)
+	return located{}, errf(
+		"%s has no primary checkout (a bare repository's checkouts are all linked worktrees). Name one of them instead (see `%s list -p %s`).",
+		proj.Name, binaryName, proj.Name)
 }
 
 // The checkout sitting on branch, if any. git allows a branch in at

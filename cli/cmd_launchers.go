@@ -7,16 +7,18 @@ package main
 // entries + hiddenCount), plus each shown entry's use stats.
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 )
 
 // One launcher-row entry, the app's LauncherEntrySchema
 // (shared/schemas/launchers.ts): kind "detected" carries available
-// (always true here, since only installed tools are listed), "custom"
-// and "web" don't.
+// (always true in the row, since only installed tools are listed there;
+// either way in --catalog), "custom" and "web" don't.
 type launcherEntryJSON struct {
 	Kind      string `json:"kind"`
 	ID        string `json:"id"`
@@ -37,12 +39,17 @@ func (e launcherEntry) kind() string {
 func cmdLaunchers(ctx cliContext, args []string) (int, error) {
 	parsed, err := parseCmdArgs(args, argSpec{
 		strings: map[string][]string{"project": {"p"}, "project-id": {}},
+		bools:   map[string][]string{"catalog": {}},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
 	}
 	if sub := parsed.positional(0); sub != "" && sub != "list" && sub != "ls" {
-		return 2, usageErrf("Unknown subcommand %q. Usage: %s launchers [list] [-p <project>]", sub, binaryName)
+		return 2, usageErrf("Unknown subcommand %q. Usage: %s launchers [list] [-p <project>] [--catalog]", sub, binaryName)
+	}
+	if parsed.bools["catalog"] {
+		// Project-free: the whole catalog reads the same from anywhere.
+		return listLauncherCatalog()
 	}
 	proj, err := resolveProjectArgs(ctx, parsed)
 	if err != nil {
@@ -89,5 +96,37 @@ func cmdLaunchers(ctx cliContext, args []string) (int, error) {
 	if n := len(all) - len(shown); n > 0 {
 		note(dimErr(fmt.Sprintf("%d hidden", n)))
 	}
+	return 0, nil
+}
+
+// sm launchers --catalog: every tool the catalog knows, installed or
+// not, for the app's Settings panel that lists them all. Sorted by
+// label case-insensitively, a lowercase-first tie-break after that,
+// which is where JS's localeCompare lands for plain ASCII labels.
+func listLauncherCatalog() (int, error) {
+	apps := make([]launcherEntryJSON, len(launcherCatalog))
+	for i, a := range launcherCatalog {
+		available := launcherAvailable(a)
+		apps[i] = launcherEntryJSON{Kind: "detected", ID: "app:" + a.id, Label: a.label, Available: &available}
+	}
+	slices.SortStableFunc(apps, func(a, b launcherEntryJSON) int {
+		return cmp.Or(
+			strings.Compare(strings.ToLower(a.Label), strings.ToLower(b.Label)),
+			// Byte order puts uppercase first; localeCompare doesn't.
+			-strings.Compare(a.Label, b.Label))
+	})
+	if jsonMode {
+		emit(map[string]any{"ok": true, "apps": apps})
+		return 0, nil
+	}
+	rows := make([][]string, len(apps))
+	for i, a := range apps {
+		state := dimOut("not installed")
+		if *a.Available {
+			state = greenOut("installed")
+		}
+		rows[i] = []string{a.Label, dimOut(a.ID), state}
+	}
+	out(renderTable([]string{"TOOL", "ID", ""}, rows))
 	return 0, nil
 }

@@ -2,8 +2,7 @@ package main
 
 // Project icon resolution, the one resolver: `sm projects list
 // --json` carries each project's icon and accent hue, and `sm projects
-// icon` its bytes, so the app no longer needs host/lib/projects/icon.ts
-// (its former copy, kept agreeing with this one until it is deleted).
+// icon` its bytes, which is how the app gets them.
 // The cache in front of this scan lives in iconcache.go; what's here is
 // the resolution itself: every package root (repo top level plus each
 // package.json directory, shallowest first) is probed for the
@@ -96,8 +95,8 @@ var iconSourceFiles = []string{
 	"src/index.html",
 }
 
-// icon.ts matches these with lookaheads; RE2 has none, so scan the
-// enclosing chunk (a <link> tag, or an object literal up to its `}`)
+// A lookahead regex would match these in one go; RE2 has none, so scan
+// the enclosing chunk (a <link> tag, or an object literal up to its `}`)
 // and test rel/href separately.
 var (
 	linkTagRe  = regexp.MustCompile(`(?i)<link\b[^>]*>`)

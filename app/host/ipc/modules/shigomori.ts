@@ -10,10 +10,10 @@ import { findProjectOrThrow } from "@host/lib/projects";
 import { shigomoriWriteViaCli } from "../cliDelegate";
 
 export const shigomoriHandlers: Handlers<typeof shigomoriContract> = {
-  read: async ({ projectId }) => {
-    const project = findProjectOrThrow(projectId);
-    return readShigomoriConfig(project.id);
-  },
+  // project.json as stored, read through the CLI (`sm projects config
+  // read`), which answers an unknown project id with the entity-gone
+  // error. Cached for a few seconds (host/lib/config/project.ts).
+  read: ({ projectId }) => readShigomoriConfig(projectId),
 
   write: async ({ projectId, config }) => {
     // Same engine rule as the other mutations: the CLI performs the
@@ -29,17 +29,17 @@ export const shigomoriHandlers: Handlers<typeof shigomoriContract> = {
   worktreeDataRead: async ({ projectId, worktreeId }) => {
     // Validate projectId against the in-memory project list before any
     // path construction, so a bogus id can't read outside projects/.
-    findProjectOrThrow(projectId);
+    await findProjectOrThrow(projectId);
     return readWorktreeData(projectId, worktreeId);
   },
 
   worktreeDataWrite: async ({ projectId, worktreeId, data }) => {
     // The renderer only surfaces a notes UI for managed worktrees and the
     // primary checkout, so we don't re-verify here. Enforcing the "no
-    // external state" rule would mean shelling out to `git worktree list`
-    // on every save. findProjectOrThrow + the WorktreeIdSchema regex keep
+    // external state" rule would mean asking the CLI for the worktree
+    // list on every save. findProjectOrThrow + the WorktreeIdSchema regex keep
     // the path-build safe against malformed input.
-    findProjectOrThrow(projectId);
+    await findProjectOrThrow(projectId);
     await writeWorktreeData(projectId, worktreeId, data);
   },
 };

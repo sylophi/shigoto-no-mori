@@ -5,10 +5,9 @@ package main
 // scan again, and the accent hue rides along with the icon entry. The
 // CLI owns resolution and this cache: the app reads icons through
 // `sm projects list --json` (path, mime, hue) and `sm projects icon`
-// (the bytes). The app's host/lib/projects/icon.ts still writes the
-// same file until it is removed, which is why every read-modify-write
-// merges under index.json.lock (the state.json protocol) and why the
-// schema below still matches its IconCacheEntry.
+// (the bytes). Every read-modify-write still merges under
+// index.json.lock (the state.json protocol): concurrent sm processes
+// share the file, and 2.x apps that wrote it read the same schema.
 //
 // Schema:
 //   sourcePath     absolute icon path, or "" for "resolved to no
@@ -117,6 +116,20 @@ func flushIconCache() {
 	_ = withFileLock(iconCachePath(), func() error {
 		index := readIconCache()
 		maps.Copy(index, pending)
+		return atomicWriteJSON(iconCachePath(), index)
+	})
+}
+
+// Drops a project's entry, for its removal: a project added later at
+// the same path starts from a fresh scan rather than inheriting a
+// remembered miss. Best-effort, like every write of this cache.
+func forgetIconCacheEntry(projectPath string) {
+	_ = withFileLock(iconCachePath(), func() error {
+		index := readIconCache()
+		if _, ok := index[projectPath]; !ok {
+			return nil
+		}
+		delete(index, projectPath)
 		return atomicWriteJSON(iconCachePath(), index)
 	})
 }

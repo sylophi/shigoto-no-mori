@@ -740,6 +740,12 @@ func checkProjectRepo(report *doctorReport, proj project) bool {
 		return false
 	}
 	_, primaryPath, err := locateRepo(proj.Path)
+	if err != nil && isBareRepo(proj.Path) {
+		// A bare repo has no work tree for locateRepo to find, and no
+		// primary checkout to compare against; its linked worktrees are
+		// checked below like any others.
+		return true
+	}
 	if err != nil {
 		report.fail(groupProjects, "project-repo", proj.Name,
 			collapseHome(proj.Path)+" is no longer a git repository",
@@ -764,6 +770,11 @@ func checkProjectRepo(report *doctorReport, proj project) bool {
 		return false
 	}
 	return true
+}
+
+func isBareRepo(path string) bool {
+	out, err := runGit(path, "rev-parse", "--is-bare-repository")
+	return err == nil && strings.TrimSpace(out) == "true"
 }
 
 // Whether two paths name the same directory once symlinks are gone

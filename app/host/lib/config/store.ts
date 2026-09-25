@@ -1,16 +1,17 @@
-// Tiny JSON-file persistence in the shigomori data dir. Atomic via tmp+rename.
-// Writes are read-modify-write of the whole file, and both the app and
-// the CLI go through this module, so every write cycle holds the
-// cross-process lock. Reads stay lock-free: the rename keeps the file
-// itself always consistent.
+// Tiny JSON-file persistence in the shigomori data dir, for the keys the
+// app itself owns in the two files it shares with the CLI. Atomic via
+// tmp+rename. Writes are read-modify-write of the whole file, and the
+// CLI writes these files too, so every write cycle holds the
+// cross-process lock (the CLI takes the same one). Reads stay
+// lock-free: the rename keeps the file itself always consistent.
 //
 // Two files, split by what it costs to lose them. registry.json holds
-// the durable record of what the user has set up: the project list and
-// the worktree shelf. state.json holds what the app can rebuild by
-// being used: the three use logs and the package scripts' sort and
-// order. The registry is only rewritten when projects or the shelf
-// actually change, so the writes that fire on nearly every click never
-// touch it.
+// the durable record of what the user has set up; its project list and
+// worktree marks are the CLI's (read through `sm`, never here), while
+// this device's id and its copy of the shared settings are the app's.
+// state.json holds what can be rebuilt by being used: the use logs
+// (the app bumps the project one, the CLI the launcher and script
+// ones) and the package scripts' sort and order, which the app writes.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -21,11 +22,10 @@ import {
 import { withFileLock } from "../util/lockFile";
 import { dataDir, isENOENT, REGISTRY_FILE, STATE_FILE } from "../util/paths";
 
-// The registry's keys live here rather than in their feature modules
-// so the accessors and the split below can't drift apart. cli/state.go
-// names the same set.
-export const PROJECTS_KEY = "projects";
-export const SHELVED_KEY = "shelvedWorktrees";
+// The registry's keys: the two the one-time split below moves (the
+// CLI's, read and written through `sm`), and the app's own.
+const PROJECTS_KEY = "projects";
+const SHELVED_KEY = "shelvedWorktrees";
 // UUID naming this data dir, not this machine: a dev data dir and a
 // prod data dir on one laptop are two devices. Generated on first read by
 // host/lib/config/deviceId.ts. The CLI only preserves it.
@@ -34,14 +34,6 @@ export const DEVICE_ID_KEY = "deviceId";
 // (host/lib/sharedSettings/store.ts). App-written like deviceId: the
 // CLI never reads it and only preserves it.
 export const SHARED_SETTINGS_KEY = "sharedSettings";
-// Worktree ids that fast-forward from their upstream on the app's own
-// fetch cadence (host/lib/worktrees/autoPull.ts). Written by the app
-// and the CLI alike (cli/state.go autoPullKey).
-export const AUTO_PULL_KEY = "autoPullWorktrees";
-// What each shelved worktree looked like when it went on the shelf
-// (host/lib/worktrees/shelved.ts). App-written. The CLI only clears
-// entries (cli/state.go shelfSnapshotsKey), on every shelf change.
-export const SHELF_SNAPSHOTS_KEY = "shelfSnapshots";
 
 // Drives only the state.json→registry.json split below. deviceId is
 // deliberately absent because it postdates the split, so no old-format
@@ -220,10 +212,10 @@ function makeStore(file: string, beforeAccess?: () => void): JsonStore {
   };
 }
 
-// Use logs, the package scripts' sort and order.
+// The project use log, the package scripts' sort and order.
 export const stateStore = makeStore(STATE_FILE);
 
-// Project list and worktree shelf. Every entry point drains an
+// This device's id and shared settings. Every entry point drains an
 // old-format data dir first, so no caller has to know the split happened.
 export const registryStore = makeStore(REGISTRY_FILE, ensureRegistrySplit);
 

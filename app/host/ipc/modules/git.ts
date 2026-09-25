@@ -18,7 +18,7 @@ export { setGitImpl };
 
 export const gitHandlers: Handlers<typeof gitContract> = {
   refreshProject: async ({ projectId }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     await gitImpl().refreshProject(project.id, project.path);
   },
   sweep: async () => gitImpl().sweepForPeer(),

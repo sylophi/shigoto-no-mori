@@ -204,7 +204,9 @@ func mergeCarryOver(manual, include []carryOverEntry) []carryOverEntry {
 // Where entries are looked up, in order: the worktree holding the base
 // branch (its gitignored files are the ones a branch-from of it
 // expects), then the primary, then every other checkout by name. The
-// destination itself is never a source. Mirrors the Configure picker,
+// destination itself is never a source. A bare repo has no primary, so
+// its checkouts are all siblings here and symlink entries are copied
+// (applyOneCarryOver only links into a primary). Mirrors the Configure picker,
 // which unions the same checkouts so an entry can name a file the
 // primary doesn't have.
 func carryOverSources(proj project, destPath, base string) []worktreeIdentity {

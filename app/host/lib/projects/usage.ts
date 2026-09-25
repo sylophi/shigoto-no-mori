@@ -1,33 +1,34 @@
-// Per-project action usage log. Same rolling-window algorithm as the
-// launcher row and package.json scripts list (see ../util/useLog) so the
-// "most used" sort behaves identically across the app. Stored in the
-// global state.json, since usage is app-managed state, not the
-// user-editable per-project shigomori config.
+// Per-project action usage log: every successful action whose contract
+// entry sets `tracksProjectUsage` counts as a use of its project. The
+// app records the uses (they are the app's UI actions, not CLI verbs),
+// and the CLI reads the log back into the project list's lastUsed and
+// recentCount (`sm projects list`, cli/cmd_project_list.go), which
+// feed the sidebar's recency and frequency sorts. Stored in the global
+// state.json, since usage is app-managed state, not the user-editable
+// per-project config.
 import { stateStore } from "../config/store";
-import { pruneAndPush, usageByName } from "../util/useLog";
 
 const USE_LOG_KEY = "projectUseLog";
 
+// The rolling window the readers count uses in (useStatOf in
+// cli/launchers.go): older timestamps are pruned on each bump.
+const USE_LOG_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
 type UseLog = Record<string, number[]>;
 
-export interface ProjectUsage {
-  lastUsed: number;
-  recentCount: number;
-}
-
-// state.json is display-only from here on. The project list and the
-// shelf live in registry.json, so an unreadable state.json should cost
-// the sidebar its usage decoration, nothing more, which is what
-// readHint buys. bumpProjectUseCount below deliberately stays on the
-// strict read.
-export function usageFor(projectIds: string[]): Record<string, ProjectUsage> {
-  return usageByName(projectIds, stateStore.readHint<UseLog>(USE_LOG_KEY, {}));
-}
-
-export function bumpProjectUseCount(projectId: string): void {
-  const log = stateStore.readKey<UseLog>(USE_LOG_KEY, {});
-  log[projectId] = pruneAndPush(log[projectId] ?? [], Date.now());
-  stateStore.writeKey<UseLog>(USE_LOG_KEY, log);
+function bumpProjectUseCount(projectId: string): void {
+  // updateKey so the read happens under the cross-process lock: the CLI
+  // writes state.json too (its own use logs), and a read taken outside
+  // the lock would clobber a concurrent write.
+  stateStore.updateKey<UseLog>(USE_LOG_KEY, {}, (log) => {
+    const now = Date.now();
+    const cutoff = now - USE_LOG_WINDOW_MS;
+    log[projectId] = [
+      ...(log[projectId] ?? []).filter((t) => t >= cutoff),
+      now,
+    ];
+    return log;
+  });
 }
 
 function hasStringProjectId(input: unknown): input is { projectId: string } {

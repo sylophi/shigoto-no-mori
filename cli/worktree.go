@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,13 +78,20 @@ func primaryRefFor(proj project, config *projectConfig) string {
 }
 
 func loadBuildContext(proj project) buildContext {
-	// listRemotes feeds hasRemote, the default-branch resolution and
-	// the primary branch split; one spawn covers all three.
-	remotes := listRemotes(proj.Path)
-	config := readProjectConfig(proj.ID)
-	primaryRef := resolveDefaultBranchWithRemotes(proj.Path,
-		defaultBranchOverride(config), remotes)
+	remotes, primaryRef, config := loadPrimaryRef(proj)
 	return newBuildContext(proj, remotes, primaryRef, config)
+}
+
+// The project's primary ref, resolved once per project the way every
+// row's is: the project config's default-branch override honored, and
+// the remotes returned alongside (listRemotes feeds hasRemote, the
+// default-branch resolution and the primary branch split; one spawn
+// covers all three).
+func loadPrimaryRef(proj project) (remotes []string, primaryRef string, config *projectConfig) {
+	remotes = listRemotes(proj.Path)
+	config = readProjectConfig(proj.ID)
+	primaryRef = resolveDefaultBranchWithRemotes(proj.Path, defaultBranchOverride(config), remotes)
+	return remotes, primaryRef, config
 }
 
 // The build context from project facts a caller already resolved
@@ -192,6 +200,12 @@ func partitionStable[T any](items []T, first func(T) bool) []T {
 	return out
 }
 
+// Each row starts five git processes, and the app lists every project
+// at once on a refresh, so the rows are built a few at a time: the cap
+// costs a 30-row project no time (the probes are the bottleneck, not
+// the fan-out) and keeps a refresh from forking hundreds of gits.
+const rowProbeSlots = 6
+
 // Primary first, matching the app's sidebar ordering.
 func listWorktrees(proj project) ([]worktreeJSON, error) {
 	identities, err := listWorktreeIdentities(proj)
@@ -202,17 +216,22 @@ func listWorktrees(proj project) ([]worktreeJSON, error) {
 	ordered := partitionStable(identities, func(id worktreeIdentity) bool { return id.IsPrimary })
 	results := make([]worktreeJSON, len(ordered))
 	var wg sync.WaitGroup
+	slots := make(chan struct{}, rowProbeSlots)
 	for i, id := range ordered {
-		wg.Go(func() { results[i] = buildWorktree(proj, id, ctx) })
+		wg.Go(func() {
+			slots <- struct{}{}
+			defer func() { <-slots }()
+			results[i] = buildWorktree(proj, id, ctx)
+		})
 	}
 	wg.Wait()
 	return results, nil
 }
 
-// createWorktree ports the createWorktree flow from
-// host/lib/git/worktrees.ts: pick/validate the dirname, resolve the
-// layout base, refresh the remote base ref, `git worktree add`, and
-// re-read the identity so the returned branch is what git settled on.
+// createWorktree is the one worktree-creation flow (the app creates
+// through `sm create`): pick/validate the dirname, resolve the layout
+// base, refresh the remote base ref, `git worktree add`, and re-read
+// the identity so the returned branch is what git settled on.
 // checkout=true reuses the existing branch `base` (no -b) for the adopt
 // path; otherwise a new branch is created (branchName, or the dirname).
 func createWorktree(proj project, requestedName, branchName, base string, checkout bool) (worktreeJSON, error) {
@@ -220,24 +239,14 @@ func createWorktree(proj project, requestedName, branchName, base string, checko
 	if err != nil {
 		return worktreeJSON{}, err
 	}
-	used := map[string]bool{}
-	for _, id := range existing {
-		used[strings.ToLower(id.Name)] = true
-	}
+	used := worktreeNamesUsed(existing)
 	if requestedName != "" && used[strings.ToLower(requestedName)] {
 		return worktreeJSON{}, errf(
 			`A worktree folder named "%s" already exists in this project.`, requestedName)
 	}
 	name := requestedName
 	if name == "" {
-		// The picked name doubles as the branch name, so skip names a
-		// kept branch already holds (a removed worktree's, say).
-		if scan, err := scanBranchRefs(proj.Path); err == nil {
-			for _, branch := range scan.locals {
-				used[strings.ToLower(branch)] = true
-			}
-		}
-		name = pickWorktreeName(used, doubutsuNamesEnabled(readGlobalConfigHints()))
+		name = pickNewWorktreeName(proj, used)
 	}
 	config := readProjectConfig(proj.ID)
 	worktreePath := filepath.Join(resolveWorktreeBase(proj.Path, config), name)
@@ -293,6 +302,31 @@ func createWorktree(proj project, requestedName, branchName, base string, checko
 		}
 	}
 	return worktreeJSON{}, errors.New("worktree disappeared after creation")
+}
+
+// The project's worktree folder names, lowercased: what a new folder
+// name must not collide with (case-insensitively, since the default
+// macOS volume is).
+func worktreeNamesUsed(identities []worktreeIdentity) map[string]bool {
+	used := make(map[string]bool, len(identities))
+	for _, id := range identities {
+		used[strings.ToLower(id.Name)] = true
+	}
+	return used
+}
+
+// A fresh folder name for a new worktree, the pick behind both `create`
+// without a name and `worktrees destination`. The picked name doubles
+// as the branch name, so names a kept local branch already holds (a
+// removed worktree's, say) are skipped too. used is not modified.
+func pickNewWorktreeName(proj project, used map[string]bool) string {
+	used = maps.Clone(used)
+	if scan, err := scanBranchRefs(proj.Path); err == nil {
+		for _, branch := range scan.locals {
+			used[strings.ToLower(branch)] = true
+		}
+	}
+	return pickWorktreeName(used, doubutsuNamesEnabled(readGlobalConfigHints()))
 }
 
 // Test seam: the sweep failure below is a race, so tests stub git's

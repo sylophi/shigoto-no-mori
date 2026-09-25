@@ -10,7 +10,12 @@
 // mutation invalidation already covered. Events are dropped while a
 // delegated CLI child runs and within a short window of any app-side
 // data dir write; a genuinely external write in that window is picked up
-// by the next focus refetch instead.
+// by the next focus refetch instead. The CLI's own writes on the app's
+// behalf count as the app's: a delegated verb's (cliRunner.ts notes
+// them when it exits), and the use-log bump of a package script the
+// app starts through `sm run`, which lands just after the spawn
+// (packageScripts.run notes it then). CLI reads write nothing here and
+// mute nothing.
 import { type FSWatcher, mkdirSync, watch } from "node:fs";
 import { join } from "node:path";
 import { invalidateGlobalConfigCache } from "@host/lib/config/global";

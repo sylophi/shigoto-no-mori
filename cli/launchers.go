@@ -2,12 +2,12 @@ package main
 
 // The launcher row: detected macOS apps, custom launcher commands from
 // global and project config, and the GitHub web entry, behind `sm
-// open` and `sm launchers` (whose --json is the row the app renders).
-// The tool catalog is one embedded JSON file shared with
-// host/lib/launchers/index.ts, which still launches from the app.
+// open` and `sm launchers` (whose --json is the row the app renders;
+// --catalog is the full tool list for its Settings panel). The app
+// launches through `sm open` too, so this is the only launcher engine.
 // Ordering and the rolling 14-day use log live in state.json's
-// launcherUseLog key, which both surfaces bump, so launching from the
-// terminal reorders the row in the app and vice versa.
+// launcherUseLog key, which `sm open` bumps for every launch, the
+// app's included.
 
 import (
 	"cmp"
@@ -34,8 +34,7 @@ type launcherApp struct {
 
 const t3codeID = "t3code"
 
-// The tool catalog is embedded from embed/launcher-catalog.json, which
-// host/lib/launchers/index.ts imports too. One list, two consumers.
+// The tool catalog is embedded from embed/launcher-catalog.json.
 // bundleNames resolve against appRoots; "__finder__" is the
 // always-available Finder sentinel.
 //
@@ -168,9 +167,9 @@ func sortLaunchersByUse(entries []launcherEntry) {
 }
 
 // One rolling-window bump step, shared by every use log: launchers
-// here, package scripts in cmd_run.go. Ports pruneAndPush from
-// host/lib/util/useLog.ts: drop timestamps older than the window,
-// append now.
+// here, package scripts in cmd_run.go (the app bumps the project log,
+// host/lib/projects/usage.ts, the same way): drop timestamps older
+// than the window, append now.
 func pruneAndAppendUse(times []int64) []int64 {
 	now := time.Now().UnixMilli()
 	cutoff := now - useLogWindow.Milliseconds()
@@ -255,7 +254,7 @@ func launchCustomCommand(command, worktreePath string) error {
 }
 
 // Protocol deep links for apps whose only "open this folder" API is
-// their URL scheme (see deepLinkFor in host/lib/launchers/index.ts).
+// their URL scheme.
 func deepLinkFor(appID, worktreePath string) string {
 	switch appID {
 	case "codex":
@@ -294,9 +293,15 @@ func launchDetectedApp(a launcherApp, worktreePath string) error {
 	return errf("No installed app found for %s.", a.label)
 }
 
-// T3 Code can't be handed a folder; register the worktree through the
-// CLI bundled inside the app, then activate it (see the app's
-// t3code.ts for the full story).
+// T3 Code can't be handed a folder: its desktop app parses no argv
+// path, and its t3code:// scheme serves only its own renderer and OAuth
+// callbacks. The one way in is the bundled `t3 project add`, which
+// registers the worktree in its project list (live when the app runs,
+// straight into its store when it doesn't). So run that CLI from inside
+// the installed bundle through the app's own Electron in node mode (no
+// npm-installed t3, no version skew), treat "already exists" as
+// success, then activate the app. Its window opens a draft for the
+// project with the newest activity, which a just-added one is.
 func launchT3Code(a launcherApp, worktreePath string) error {
 	bundle := ""
 	for _, name := range a.bundleNames {

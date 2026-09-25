@@ -25,6 +25,8 @@ function isDefault(key: keyof DeviceSettingsPatch, value: unknown): boolean {
 }
 
 export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
+  // config.json as stored, read through the CLI (`sm config read`) and
+  // cached for a few seconds (host/lib/config/global.ts).
   read: async () => readGlobalConfig(),
   // The zod boundary already rejected any key outside the managed set
   // (the patch schema is strict), so by the time this runs the patch can
@@ -54,8 +56,9 @@ export const globalConfigHandlers: Handlers<typeof globalConfigContract> = {
       // fans out to the config-change subscribers too, so the direct
       // listener reconciles with the just-written document.
       invalidateGlobalConfigCache();
-      // The terrier merge gates on the toggle just written. Without this
-      // the sidebar would keep the pre-save project list for a TTL.
+      // The terrier toggle may have flipped: re-probe its readiness on
+      // the next ask. (The merge itself is the CLI's, read fresh on
+      // every project list.)
       invalidateTerrierCaches();
     }),
 };

@@ -173,3 +173,42 @@ func TestProjectIconBytes(t *testing.T) {
 		t.Errorf("icon-less project = %s, want null", onlyDoc(t, docs))
 	}
 }
+
+// Removing a project drops its icon cache entry (keyed by path), and
+// only its own.
+func TestProjectRemoveForgetsIcon(t *testing.T) {
+	root := sandboxDataDir(t)
+	resetIconSnapshot(t)
+	repo := seedRepo(t, root, "repo")
+	writeFileT(t, filepath.Join(repo, "public", "favicon.svg"), redIconSVG)
+	other := seedRepo(t, root, "other")
+	seedRegistry(t, fmt.Sprintf(
+		`{"projects":[{"id":"P1","name":"repo","path":%q},{"id":"P2","name":"other","path":%q}]}`,
+		repo, other))
+	ctx := cliContext{projects: []project{
+		{ID: "P1", Name: "repo", Path: repo},
+		{ID: "P2", Name: "other", Path: other},
+	}}
+	captureJSON(t, func() {
+		for _, id := range []string{"P1", "P2"} {
+			if code, err := cmdProjectIcon(ctx, []string{"--project-id", id}); code != 0 || err != nil {
+				t.Fatalf("icon %s: %d, %v", id, code, err)
+			}
+		}
+	})
+	if index := readIconCache(); len(index) != 2 {
+		t.Fatalf("icon cache holds %d entries, want 2", len(index))
+	}
+	captureJSON(t, func() {
+		if code, err := cmdProjectRemove(ctx, []string{"--project-id", "P1", "--yes"}); code != 0 || err != nil {
+			t.Fatalf("remove: %d, %v", code, err)
+		}
+	})
+	index := readIconCache()
+	if _, ok := index[repo]; ok {
+		t.Errorf("the removed project's icon entry survived")
+	}
+	if _, ok := index[other]; !ok {
+		t.Errorf("another project's icon entry went with it")
+	}
+}
