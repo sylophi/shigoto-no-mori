@@ -21,18 +21,16 @@ import type {
   MirrorSessionRaw,
 } from "@host/ipc/modules/mirror";
 import { lineSplitter } from "@host/lib/util/ndjson";
+import {
+  mirrorEngineBlocker,
+  type MirrorDaemonStatus,
+} from "@shared/ipc/modules/mirror";
 import { MIRROR_GATEWAY_TOKEN_ENV } from "./gateway";
 import {
   BACKOFF_LADDER_MS,
   backoffDelayMs,
   STABLE_CONNECTION_MS,
 } from "@shared/remote/supervisor";
-
-export type MirrorDaemonStatus =
-  | "stopped"
-  | "starting"
-  | "running"
-  | "unavailable";
 
 type DaemonResponse = {
   id?: string;
@@ -242,9 +240,8 @@ export function createMirrorDaemon(deps: {
     if (current === null || status !== "running") {
       return Promise.reject(
         new Error(
-          status === "unavailable"
-            ? "Mirroring is unavailable: the file-sync engine is missing."
-            : "The mirror daemon is not running yet.",
+          mirrorEngineBlocker(status) ??
+            "The mirror daemon is not running yet.",
         ),
       );
     }

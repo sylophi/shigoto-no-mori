@@ -10,7 +10,10 @@
 import { useState } from "react";
 import { RefreshCw, Shovel } from "lucide-react";
 import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
-import { useWorktreeMirrorLinks } from "@/hooks/remote/useMirrors";
+import {
+  useLocalMirrorBlocker,
+  useWorktreeMirrorLinks,
+} from "@/hooks/remote/useMirrors";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import { FooterActionButton } from "./FooterActionButton";
 import { usePeerTargets } from "./flow/peerTargets";
@@ -55,6 +58,7 @@ function TransferButtons({
   // its Mirror button beside these (MirrorAction), which is where that
   // one is managed, and a worktree holds one mirror.
   const mirrored = useWorktreeMirrorLinks(worktree).length > 0;
+  const mirrorBlocker = useLocalMirrorBlocker();
   // The buttons need a target. An OPEN dialog does not: a run in
   // progress keeps its progress, its finish-up step and its report
   // when the roster empties under it (a sign-out, a revoke), and says
@@ -76,6 +80,7 @@ function TransferButtons({
           icon={<RefreshCw />}
           label="Mirror to…"
           title="Keep a live copy of this worktree on another device"
+          disabledReason={mirrorBlocker}
           onClick={() => setOpen("mirror")}
         />
       )}

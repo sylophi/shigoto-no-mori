@@ -9,12 +9,14 @@ import { randomUUID } from "node:crypto";
 import {
   isTransferSession,
   MIRROR_LABEL_TRANSFER,
+  type MirrorDaemonStatus,
   type MirrorEvent,
   type MirrorEventKind,
   type MirrorGitStatus,
   type MirrorIgnoreMode,
   MirrorIgnoreModeSchema,
   type MirrorSession,
+  mirrorEngineBlocker,
 } from "@shared/ipc/modules/mirror";
 import { errorMessageOf } from "@shared/errors";
 
@@ -64,7 +66,7 @@ export type MirrorCreateInput = {
 };
 
 export type MirrorImpl = {
-  status: () => "stopped" | "starting" | "running" | "unavailable";
+  status: () => MirrorDaemonStatus;
   sessions: () => MirrorSessionRaw[];
   create: (input: MirrorCreateInput) => Promise<string>;
   // Ends a session and opens a fresh one in its place, whatever hangs
@@ -111,14 +113,8 @@ export function setMirrorImpl(next: MirrorImpl): void {
 // the mirror start and the transplant's file transfer both begin here.
 export function requireRunningEngine(): MirrorImpl {
   const daemon = engine();
-  const status = daemon.status();
-  if (status !== "running") {
-    throw new Error(
-      status === "unavailable"
-        ? "Mirroring is unavailable on this device: the file-sync engine is missing."
-        : "The mirror engine is still starting. Try again in a moment.",
-    );
-  }
+  const blocker = mirrorEngineBlocker(daemon.status());
+  if (blocker !== undefined) throw new Error(blocker);
   return daemon;
 }
 

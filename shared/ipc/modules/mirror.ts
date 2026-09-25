@@ -344,6 +344,25 @@ const MirrorDaemonStatusSchema = z.enum([
   "running",
   "unavailable",
 ]);
+export type MirrorDaemonStatus = z.infer<typeof MirrorDaemonStatusSchema>;
+
+// Why this device's daemon can't take a mirror start, or undefined
+// when it can: the host's refusal (requireRunningEngine) and the
+// start buttons' disabled title, so the two say the same thing.
+export function mirrorEngineBlocker(
+  status: MirrorDaemonStatus,
+): string | undefined {
+  switch (status) {
+    case "running":
+      return undefined;
+    case "unavailable":
+      return "Mirroring is unavailable on this device: the file-sync engine is missing.";
+    case "starting":
+      return "The mirror engine on this device is still starting. Try again in a moment.";
+    case "stopped":
+      return "The mirror engine on this device isn't running.";
+  }
+}
 
 const MirrorListResultSchema = z.strictObject({
   daemon: MirrorDaemonStatusSchema,

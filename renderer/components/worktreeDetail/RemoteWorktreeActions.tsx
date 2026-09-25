@@ -22,7 +22,10 @@ import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useLocalProjectForIdentity } from "@/hooks/remote/useLocalProjectForIdentity";
-import { useWorktreeMirrorLinks } from "@/hooks/remote/useMirrors";
+import {
+  useLocalMirrorBlocker,
+  useWorktreeMirrorLinks,
+} from "@/hooks/remote/useMirrors";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { FooterActionButton } from "./FooterActionButton";
 import { MirrorAction } from "./mirror/MirrorAction";
@@ -168,6 +171,7 @@ function MirrorButton({
   const { deviceId } = useHostScope();
   const deviceLabel = useRemoteDeviceLabel(deviceId);
   const mirrored = useWorktreeMirrorLinks(worktree).length > 0;
+  const blocker = useLocalMirrorBlocker();
   if (!canForwardPorts) return null;
   return (
     <>
@@ -176,6 +180,7 @@ function MirrorButton({
           icon={<RefreshCw />}
           label="Mirror here"
           title="Keep a live copy of this worktree here"
+          disabledReason={blocker}
           onClick={() => setOpen(true)}
         />
       )}
