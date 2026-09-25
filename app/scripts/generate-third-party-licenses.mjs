@@ -208,7 +208,11 @@ const BUNDLED_BINARIES = [
 
 // Data the CLI and the app embed: the doubutsu worktree names, taken
 // from Nookipedia's character lists (scripts/fetch-doubutsu-names.mts).
+// The entry opens with the Animal Crossing notice the Settings page
+// shows beside Doubutsu names (shared/acNotice.json), so the two never
+// drift, then gives the CC BY-SA attribution.
 const doubutsuSource = require("../../cli/embed/doubutsu-names.json").source;
+const acNotice = require("../shared/acNotice.json").notice;
 const BUNDLED_DATA = [
   normalizeEntry([
     `doubutsu-names@${doubutsuSource.retrieved}`,
@@ -217,10 +221,11 @@ const BUNDLED_DATA = [
       url: doubutsuSource.url,
       publisher: doubutsuSource.name,
       licenseText:
-        "Character names from Nookipedia's Villagers and Special characters " +
-        "categories, licensed under Creative Commons Attribution-ShareAlike " +
-        "4.0 International. Full text: " +
-        "https://creativecommons.org/licenses/by-sa/4.0/legalcode",
+        `${acNotice} Character names from Nookipedia's Villagers and ` +
+        "Special characters categories, by Nookipedia contributors, " +
+        "licensed under Creative Commons Attribution-ShareAlike 4.0 " +
+        "International. Changed: turned into kebab-case worktree names. " +
+        "Full text: https://creativecommons.org/licenses/by-sa/4.0/legalcode",
     },
   ]),
 ];

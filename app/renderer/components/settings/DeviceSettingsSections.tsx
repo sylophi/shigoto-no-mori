@@ -1,5 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
+import { Info } from "lucide-react";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import type { SettingsFormState } from "@/hooks/config/useSettingsSave";
 import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
@@ -7,6 +9,7 @@ import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
 import { ToggleRow } from "@/components/shared/ToggleRow";
 import { ExternalLink } from "@/components/ui/external-link";
 import { fieldSetter } from "@/hooks/ui/useDirtyForm";
+import acNotice from "@shared/acNotice.json";
 
 const PORT_POOL = {
   href: "https://github.com/dittofleet/port-pool",
@@ -17,6 +20,10 @@ const TERRIER = {
   href: "https://github.com/sylophi/terrier",
   errorTitle: "Couldn't open terrier",
 };
+
+// Shown on hover beside Doubutsu names. The name pool's entry in the
+// bundled third-party licenses opens with the same text.
+const AC_NOTICE = acNotice.notice;
 
 // The device-managed toggle sections, shared verbatim between this
 // device's tab and every peer's tab on the Settings page. Everything
@@ -75,7 +82,23 @@ export function DeviceToggleSections({
         <ToggleRow
           checked={form.doubutsuNames}
           onCheckedChange={setField("doubutsuNames")}
-          label="Doubutsu names"
+          label={
+            <span className="inline-flex items-center gap-1.5">
+              Doubutsu names
+              {/* A button, so the icon is focusable and a click on it
+                  (preventDefault) doesn't flip the row's switch. */}
+              <SimpleTooltip tip={AC_NOTICE}>
+                <button
+                  type="button"
+                  aria-label={AC_NOTICE}
+                  onClick={(e) => e.preventDefault()}
+                  className="inline-flex cursor-help rounded-sm text-muted-foreground hover:text-foreground"
+                >
+                  <Info aria-hidden className="size-3.5" />
+                </button>
+              </SimpleTooltip>
+            </span>
+          }
           description="Name new worktrees after Animal Crossing villagers and characters, like raymond, instead of adjective-animal pairs like snug-otter."
         />
         {/* A sub-option of Doubutsu names, nested like Primary
