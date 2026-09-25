@@ -28,6 +28,16 @@ export interface PaletteEntry {
   mirror: SidebarDeviceBadge | undefined;
 }
 
+// The sidebar's row key for a worktree on a peer (deviceId) or here.
+export function paletteEntryKey(
+  deviceId: string | undefined,
+  worktreeId: string,
+): string {
+  return deviceId === undefined
+    ? `w:${worktreeId}`
+    : remoteWorktreeKey(deviceId, worktreeId);
+}
+
 interface BuildPaletteEntriesArgs {
   projects: Project[];
   // Positionally aligned with `projects`.
@@ -62,7 +72,7 @@ export function buildPaletteEntries({
     for (const worktree of trees) {
       localIds.add(worktree.id);
       entries.push({
-        key: `w:${worktree.id}`,
+        key: paletteEntryKey(undefined, worktree.id),
         worktree,
         project,
         device: undefined,
@@ -73,7 +83,7 @@ export function buildPaletteEntries({
   for (const item of remote) {
     const device = deviceBadgeOf(item);
     for (const worktree of item.worktrees) {
-      const key = remoteWorktreeKey(item.deviceId, worktree.id);
+      const key = paletteEntryKey(item.deviceId, worktree.id);
       // The local row of a mirrored pair stands for both copies.
       const folded = peerRowsFolded.get(key);
       if (folded !== undefined && localIds.has(folded)) continue;
@@ -95,6 +105,19 @@ export function buildPaletteEntries({
       worktreeLastActivityAt(b.worktree) - worktreeLastActivityAt(a.worktree) ||
       a.worktree.name.localeCompare(b.worktree.name),
   );
+}
+
+// The row ↩ lands on when the palette opens. The worktree on screen
+// leads the recency order (it was visited last), so opening on it
+// would make ⌘K ↩ a no-op; the one before it is where a quick switch
+// means to go, the way ⌘⇥ lands on the previous app.
+export function initialPaletteKey(
+  entries: readonly PaletteEntry[],
+  currentKey: string | undefined,
+): string {
+  const [first, second] = entries;
+  if (first?.key === currentKey && second) return second.key;
+  return first?.key ?? "";
 }
 
 // Best field wins: a query can name the branch, the folder, the

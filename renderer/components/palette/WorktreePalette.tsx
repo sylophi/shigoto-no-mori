@@ -1,5 +1,5 @@
 import { useEffect, useState, type KeyboardEvent } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import { Command } from "cmdk";
 import { ArrowDown, ArrowUp, FileDiff, Folder, Play } from "lucide-react";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
@@ -23,10 +23,15 @@ import { useMirrorLinks } from "@/hooks/remote/useMirrors";
 import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
-import { usePackageScriptSort } from "@/hooks/scripts/usePackageScriptSort";
+import {
+  NO_ORDER,
+  usePackageScriptOrder,
+  usePackageScriptSort,
+} from "@/hooks/scripts/usePackageScriptSort";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { isOverlayOpen, isRawKeySurface } from "@/lib/dom";
+import { rankByScore } from "@/lib/fuzzyMatch";
 import { hasLocalHost } from "@/lib/localHost";
 import { readWorktreeVisits } from "@/lib/recentWorktrees";
 import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
@@ -34,6 +39,8 @@ import { cn } from "@/lib/utils";
 import { slotToParam, type ScriptSlot } from "@/store/scriptSlot";
 import {
   buildPaletteEntries,
+  initialPaletteKey,
+  paletteEntryKey,
   rankPaletteEntries,
   type PaletteEntry,
 } from "./buildPaletteEntries";
@@ -77,13 +84,16 @@ type GoTo = (
 
 function PaletteDialog({ onClose }: { onClose: () => void }) {
   const [query, setQuery] = useState("");
-  const [highlighted, setHighlighted] = useState("");
   // The worktree whose actions are showing, or null on the list.
   const [picked, setPicked] = useState<PaletteEntry | null>(null);
   // Read once per open: a visit recorded while the palette is up can't
   // happen, and re-reading storage every render would.
   const [visits] = useState(readWorktreeVisits);
   const navigate = useNavigate();
+  // The worktree page on screen, if any, on this machine or a peer's.
+  const { deviceId: pageDeviceId, worktreeId: pageWorktreeId } = useParams({
+    strict: false,
+  }) as { deviceId?: string; worktreeId?: string };
 
   // The sidebar's own reads, so they are warm and cost nothing extra.
   const { data: projects = [] } = useProjects();
@@ -100,6 +110,15 @@ function PaletteDialog({ onClose }: { onClose: () => void }) {
     visits,
   });
   const shown = rankPaletteEntries(query.trim(), entries);
+  // Seeded once, from the order the palette opened on (the sidebar's
+  // reads are warm, so it is already filled). cmdk takes over from
+  // there, moving to the top match as the query changes.
+  const [highlighted, setHighlighted] = useState(() =>
+    initialPaletteKey(
+      entries,
+      pageWorktreeId && paletteEntryKey(pageDeviceId, pageWorktreeId),
+    ),
+  );
   const current = shown.find((entry) => entry.key === highlighted) ?? shown[0];
 
   // A worktree page on whichever machine the entry lives on: the local
@@ -328,14 +347,10 @@ function ActionList({
   const deviceId = entry.device?.deviceId;
   const api = useRemoteDeviceApi(deviceId);
   const reachable = deviceId === undefined || api !== undefined;
-  const matches = (label: string) =>
-    !query || label.toLowerCase().includes(query.toLowerCase());
-  const pages = (
-    [
-      { page: "detail", label: "Open worktree", Icon: Folder },
-      { page: "diff", label: "Open changes", Icon: FileDiff },
-    ] as const
-  ).filter(({ label }) => matches(label));
+  // The worktree list's fuzzy match, each group ranked on its own so
+  // the groups keep their places.
+  const rank: Rank = (items, text) => rankByScore(query, items, text);
+  const pages = rank(PAGE_ACTIONS, (action) => action.label);
   return (
     <>
       {pages.length > 0 && (
@@ -356,33 +371,41 @@ function ActionList({
       {/* Launch tools open on the machine showing this window, so only a
           worktree here has any (LaunchSection's rule). */}
       {deviceId === undefined && hasLocalHost && (
-        <LauncherItems entry={entry} matches={matches} onClose={onClose} />
+        <LauncherItems entry={entry} rank={rank} onClose={onClose} />
       )}
       {reachable && (
         <MaybeHostScope deviceId={deviceId ?? ""} api={api}>
-          <ScriptItems entry={entry} matches={matches} go={go} />
+          <ScriptItems entry={entry} rank={rank} go={go} />
         </MaybeHostScope>
       )}
     </>
   );
 }
 
+type Rank = <T>(items: readonly T[], text: (item: T) => string) => readonly T[];
+
+const PAGE_ACTIONS = [
+  { page: "detail", label: "Open worktree", Icon: Folder },
+  { page: "diff", label: "Open changes", Icon: FileDiff },
+] as const;
+
 const GROUP_CLASS =
   "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-2xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground";
 
 function LauncherItems({
   entry,
-  matches,
+  rank,
   onClose,
 }: {
   entry: PaletteEntry;
-  matches: (label: string) => boolean;
+  rank: Rank;
   onClose: () => void;
 }) {
   const { data } = useLauncherForProject(entry.worktree.projectId);
   const launch = useLaunch();
-  const launchers = (data?.entries ?? []).filter((launcher) =>
-    matches(`Open in ${launcher.label}`),
+  const launchers = rank(
+    data?.entries ?? [],
+    (launcher) => `Open in ${launcher.label}`,
   );
   if (launchers.length === 0) return null;
   return (
@@ -411,11 +434,11 @@ function LauncherItems({
 
 function ScriptItems({
   entry,
-  matches,
+  rank,
   go,
 }: {
   entry: PaletteEntry;
-  matches: (label: string) => boolean;
+  rank: Rank;
   go: GoTo;
 }) {
   const { worktree } = entry;
@@ -423,12 +446,15 @@ function ScriptItems({
   const { data: sortMode = "frequent" } = usePackageScriptSort(
     worktree.projectId,
   );
-  if (!pkg) return null;
-  const scripts = sortEntries(
-    Object.entries(pkg.scripts),
+  const { data: order = NO_ORDER } = usePackageScriptOrder(
+    worktree.projectId,
     sortMode,
-    pkg.usage,
-  ).filter((script) => matches(`Run ${script.name}`));
+  );
+  if (!pkg) return null;
+  const scripts = rank(
+    sortEntries(Object.entries(pkg.scripts), sortMode, pkg.usage, order),
+    (script) => script.name,
+  );
   if (scripts.length === 0) return null;
   return (
     <Command.Group heading="Scripts" className={GROUP_CLASS}>
