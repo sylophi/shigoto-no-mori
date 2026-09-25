@@ -29,9 +29,9 @@ interface BuildSidebarRowsArgs {
   pullRequestQueries: ProjectPullRequestQueries;
   // Folded group ids: local project ids and peer-only group ids alike.
   collapsed: Set<string>;
-  // Re-applied over the groups, so a peer-only project sorts among the
-  // local ones (`projects` arrives already in this order).
-  sortMode: ProjectSortMode;
+  // Where each group sits (projectGroupOrder), decided over every
+  // device's projects so the device filter never reorders the groups.
+  order: ProjectGroupOrder;
   // The groups whose shelf is open, per shelf.
   openShelves: Record<GroupShelf, Set<string>>;
   // Worktrees starting with one of these fold away like shelved ones.
@@ -119,7 +119,7 @@ export function buildSidebarRows({
   worktreeQueries,
   pullRequestQueries,
   collapsed,
-  sortMode,
+  order,
   openShelves,
   hiddenPrefixes,
   arrangeMode,
@@ -195,52 +195,23 @@ export function buildSidebarRows({
     };
   }
 
-  // Remote items grouped up front by repo identity (an identity-less
-  // project can only group with itself). The local pass claims groups
-  // by `get` + `delete`, so whatever remains IS the leftover set -- one
-  // structure, no consumed-tracking, and a group can never be claimed
-  // twice. A peer holding the repo with no worktrees to show still joins
-  // its group: it is a device the header's actions can create on, and a
-  // local project with nothing under it keeps its header too.
-  const remoteByIdentity = new Map<string, RemoteForestItem[]>();
-  for (const item of remote) {
-    const groupKey =
-      item.project.identity ?? `${item.deviceId}/${item.project.id}`;
-    const group = remoteByIdentity.get(groupKey);
-    if (group) group.push(item);
-    else remoteByIdentity.set(groupKey, [item]);
-  }
-
   // One group per header: every local project with the peers' checkouts
   // of the same repo, then the repos only peers hold. A project is a
   // project wherever it is checked out, so both kinds sort together and
   // render through the same rows.
-  const groups: ProjectGroup[] = projects.map((project, i) => {
-    // Claimed by identity even while collapsed or still loading, so a
-    // folded project's remote worktrees fold with it instead of
-    // reappearing as a duplicate peer-only group. A missing local
-    // project claims nothing: its remote counterpart is alive and
-    // belongs under its own header.
-    let remoteHere: RemoteForestItem[] = [];
-    if (project.pathExists !== false && project.identity != null) {
-      remoteHere = remoteByIdentity.get(project.identity) ?? [];
-      if (remoteHere.length > 0) remoteByIdentity.delete(project.identity);
-    }
-    return {
-      groupId: project.id,
-      project,
-      query: worktreeQueries[i],
-      pullRequests: pullRequestQueries[i]?.data,
-      local: true,
-      remote: remoteHere,
-    };
-  });
-  // Whatever the local pass left unclaimed. The same repo on several
-  // devices reads as one project (the per-row device marker tells them
-  // apart), led by the first device's checkout. They have no stored
-  // order, so under the manual sort they trail the list, the way a
-  // terrier project does.
-  for (const [groupKey, items] of remoteByIdentity) {
+  const { claimed, peerOnly } = claimRemote(projects, remote);
+  const groups: ProjectGroup[] = projects.map((project, i) => ({
+    groupId: project.id,
+    project,
+    query: worktreeQueries[i],
+    pullRequests: pullRequestQueries[i]?.data,
+    local: true,
+    remote: claimed[i] ?? [],
+  }));
+  // The same repo on several devices reads as one project (the per-row
+  // device marker tells them apart), led by the first device's
+  // checkout.
+  for (const [groupKey, items] of peerOnly) {
     const [first] = items;
     if (!first) continue;
     groups.push({
@@ -260,7 +231,11 @@ export function buildSidebarRows({
   const foldedPeerRows = new Map<string, string>();
   // The toggle each row behind a shut fold stands behind, likewise.
   const shutFoldRows = new Map<string, string>();
-  for (const group of sortByProject(groups, sortMode, (g) => g.project)) {
+  // Every group is in the order, which was built over a superset of
+  // these inputs. The fallback only keeps the comparator total.
+  const rankOf = (group: ProjectGroup) =>
+    order.get(group.groupId) ?? order.size;
+  for (const group of groups.toSorted((a, b) => rankOf(a) - rankOf(b))) {
     const { groupId, project, query } = group;
     const expanded = !collapsed.has(groupId);
     const headerKey = `p:${groupId}`;
@@ -432,6 +407,117 @@ interface ProjectGroup {
   pullRequests: Record<string, PullRequest> | undefined;
   local: boolean;
   remote: RemoteForestItem[];
+}
+
+// Whether a local project takes the peers' checkouts of its repo.
+// Claimed by identity even while collapsed or still loading, so a
+// folded project's remote worktrees fold with it instead of
+// reappearing as a duplicate peer-only group. A missing local project
+// claims nothing: its remote counterpart is alive and belongs under
+// its own header.
+export const claimsPeers = (
+  project: Project,
+): project is Project & { identity: string } =>
+  project.pathExists !== false && project.identity != null;
+
+// The peers' checkouts split between the groups: each local project's
+// claim (aligned with `projects`), then the rest by group key. Remote
+// items are grouped up front by repo identity (an identity-less
+// project can only group with itself), and the local pass claims
+// groups by `get` + `delete`, so whatever remains IS the leftover set
+// and a group can never be claimed twice. A peer holding the repo with
+// no worktrees to show still joins its group: it is a device the
+// header's actions can create on, and a local project with nothing
+// under it keeps its header too.
+function claimRemote(
+  projects: readonly Project[],
+  remote: readonly RemoteForestItem[],
+): {
+  claimed: RemoteForestItem[][];
+  peerOnly: Map<string, RemoteForestItem[]>;
+} {
+  const peerOnly = new Map<string, RemoteForestItem[]>();
+  for (const item of remote) {
+    const groupKey =
+      item.project.identity ?? `${item.deviceId}/${item.project.id}`;
+    const group = peerOnly.get(groupKey);
+    if (group) group.push(item);
+    else peerOnly.set(groupKey, [item]);
+  }
+  const claimed = projects.map((project) => {
+    if (!claimsPeers(project)) return [];
+    const items = peerOnly.get(project.identity) ?? [];
+    peerOnly.delete(project.identity);
+    return items;
+  });
+  return { claimed, peerOnly };
+}
+
+// Group rank by group id. A repo this machine holds is also ranked
+// under the peer-only id it would have, so narrowed to a peer that
+// holds it too, the peer's group keeps the local project's place.
+export type ProjectGroupOrder = ReadonlyMap<string, number>;
+
+// Where each group sits in the tree, decided over every device's
+// projects before the device filter narrows them, so picking a device
+// only drops groups and never reshuffles the rest. A repo held on
+// several devices sorts as one project: its newest use on any of them,
+// and its uses on all of them summed. The manual sort has only this
+// machine's arranged order to go by, so the repos only peers hold
+// trail it in the order they were merged.
+export function projectGroupOrder({
+  projects,
+  remote,
+  sortMode,
+}: {
+  // This machine's projects as buildSidebarRows is handed them, so a
+  // repo registered twice here has its peers claimed by the same
+  // project in both passes.
+  projects: readonly Project[];
+  remote: readonly RemoteForestItem[];
+  sortMode: ProjectSortMode;
+}): ProjectGroupOrder {
+  const { claimed, peerOnly } = claimRemote(projects, remote);
+  const entries = projects.map((project, i) => ({
+    groupIds: claimsPeers(project)
+      ? [project.id, remoteGroupId(project.identity)]
+      : [project.id],
+    project: withMergedUsage(project, claimed[i] ?? []),
+  }));
+  for (const [groupKey, [first, ...rest]] of peerOnly) {
+    if (!first) continue;
+    entries.push({
+      groupIds: [remoteGroupId(groupKey)],
+      project: withMergedUsage(first.project, rest),
+    });
+  }
+  const order = new Map<string, number>();
+  sortByProject(entries, sortMode, (entry) => entry.project).forEach(
+    (entry, rank) => {
+      // A repo registered twice here keeps its first project's place.
+      for (const id of entry.groupIds) if (!order.has(id)) order.set(id, rank);
+    },
+  );
+  return order;
+}
+
+// One project's usage with every other checkout of it folded in: the
+// newest use anywhere, and the uses everywhere summed.
+function withMergedUsage(
+  project: Project,
+  others: readonly RemoteForestItem[],
+): Project {
+  return {
+    ...project,
+    lastUsed: Math.max(
+      project.lastUsed ?? 0,
+      ...others.map((item) => item.project.lastUsed ?? 0),
+    ),
+    recentCount: others.reduce(
+      (sum, item) => sum + (item.project.recentCount ?? 0),
+      project.recentCount ?? 0,
+    ),
+  };
 }
 
 // A peer-only group's id: its key (repo identity, or device and

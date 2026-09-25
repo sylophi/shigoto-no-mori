@@ -42,6 +42,8 @@ import { localDeviceId } from "@/lib/queryKeys";
 import { useFanOutErrorToast } from "./useFanOutErrorToast";
 import {
   buildSidebarRows,
+  claimsPeers,
+  projectGroupOrder,
   remoteGroupId,
   remoteGroupKeyOf,
 } from "./buildSidebarRows";
@@ -166,9 +168,8 @@ function Forest({
   // local project's, read and written under the local id.
   const localIdByIdentity = new Map<string, string>();
   for (const project of projects) {
-    if (project.identity != null && project.pathExists !== false) {
+    if (claimsPeers(project))
       localIdByIdentity.set(project.identity, project.id);
-    }
   }
   const collapsed = new Set(collapsedIds);
   for (const [identity, id] of localIdByIdentity) {
@@ -230,7 +231,8 @@ function Forest({
     setOpenShelves(withToggled(shelf));
   };
 
-  // Display order only. Drag-reorder still operates on the stored order
+  // The inbox's and the queries' order (the tree re-sorts its groups
+  // with projectGroupOrder). Drag-reorder still operates on the stored order
   // (`projects`), which is safe because dragging is gated to arrange mode and
   // arrange mode is only reachable via the manual sort, where the orders match.
   const orderedProjects = sortProjects(projects, sortMode);
@@ -298,7 +300,13 @@ function Forest({
         worktreeQueries: local.worktreeQueries,
         pullRequestQueries: local.pullRequestQueries,
         collapsed,
-        sortMode,
+        // Over every device's projects, not the filtered ones, so a
+        // pick narrows the tree without reordering it.
+        order: projectGroupOrder({
+          projects: orderedProjects,
+          remote: remoteItems,
+          sortMode,
+        }),
         openShelves: groupShelvesOpen,
         hiddenPrefixes,
         arrangeMode,
