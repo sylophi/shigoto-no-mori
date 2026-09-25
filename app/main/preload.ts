@@ -48,9 +48,9 @@ const api = {
   // Widened past the `as const` below so RendererApi says boolean and
   // the web bridge's false assigns.
   isElectron: true as boolean,
-  // Both scopes ride the same IPC bridge while host and client live in
-  // one process. Step 3 swaps the host entry for a socket transport and
-  // nothing else changes.
+  // Both scopes ride the same IPC bridge: host and client live in one
+  // process here. A peer's host is reached through the hub bridge
+  // (shared/hub/bridgeHandlers.ts), never by swapping this entry.
   ...buildApi({
     host: electronClientTransport,
     client: electronClientTransport,

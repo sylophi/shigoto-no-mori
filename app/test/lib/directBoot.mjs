@@ -1,13 +1,13 @@
 // Shared fixtures for the checks that run a REAL direct data plane
 // beside the stub device hub (test/lib/hubStub.mjs): a direct ws
-// listener (host/socket/server.ts), the broker slot registration on
-// a hub host device, and the REAL shared composition
+// listener (host/socket/server.ts), the connectInfo server on a hub
+// host device, and the REAL shared composition
 // (shared/hub/directPlane.ts) a client drives. Extracted from
 // direct-plane.mjs so sync-transfer.mjs and
 // port-forward.mjs move their transfer scenarios onto a real
 // direct connection without a second copy of the plumbing. Runs under
 // register-ts-alias so the shared TypeScript imports resolve.
-import { brokerHandlerFor, makeDirectHandlers } from "@host/ipc/modules/direct";
+import { makeConnectInfo } from "@host/direct/connectInfo";
 import { createWsServerBinding } from "@host/socket/server";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createDirectPlane } from "@shared/hub/directPlane";
@@ -56,35 +56,30 @@ export async function startDirectListener(track, opts = {}) {
   };
 }
 
-// Boots the hub pair: B wires the REAL direct broker pair into its
-// binding's one slot (the ONLY thing the hub wire serves, with the
-// same channel and zod parse wiring main uses), A is the dialing
-// client. The two devices are independent, so they boot concurrently.
+// Boots the hub pair: B answers connectInfo with the REAL server (the
+// ONLY thing the hub wire answers, wired as main wires it), A is the
+// dialing client. The two devices are independent, so they boot
+// concurrently.
 export async function bootBrokeredPair(stub, track, listener, opts = {}) {
   const [host, client] = await Promise.all([
     bootDevice(
       stub,
       opts.hostDeviceId ?? "B",
       {
-        broker: brokerHandlerFor(
-          makeDirectHandlers({
-            listenerPort: listener.listenerPort,
-            mintTickets: (peerDeviceId, kinds) => {
-              const tickets = listener.tickets.mint(peerDeviceId, kinds);
-              // Observation seam for the mint-alignment assertions.
-              if (tickets !== null) opts.onMinted?.(tickets);
-              return tickets;
-            },
-            isPeerOnline: () => true,
-            // Deterministic candidates: the listener binds loopback,
-            // so real interface enumeration would offer unreachable
-            // LAN addresses.
-            candidateAddresses:
-              opts.candidateAddresses ?? (() => ["127.0.0.1"]),
-            tunnelUrl: opts.tunnelUrl,
-          }),
-          { validateOutputs: true },
-        ),
+        serveConnectInfo: makeConnectInfo({
+          listenerPort: listener.listenerPort,
+          mintTickets: (peerDeviceId, kinds) => {
+            const tickets = listener.tickets.mint(peerDeviceId, kinds);
+            // Observation seam for the mint-alignment assertions.
+            if (tickets !== null) opts.onMinted?.(tickets);
+            return tickets;
+          },
+          // Deterministic candidates: the listener binds loopback,
+          // so real interface enumeration would offer unreachable
+          // LAN addresses.
+          candidateAddresses: opts.candidateAddresses ?? (() => ["127.0.0.1"]),
+          tunnelUrl: opts.tunnelUrl ?? (() => null),
+        }),
       },
       track,
     ),
@@ -101,7 +96,7 @@ export async function bootBrokeredPair(stub, track, listener, opts = {}) {
 // The whole direct wire the transfer checks share, exactly as
 // production composes it: the stub device hub, a REAL direct
 // listener on device A serving the check's contracts, the brokered hub
-// pair (A hosting the broker, B the dialing client), the REAL shared
+// pair (A answering connectInfo, B the dialing client), the REAL shared
 // composition as B's bridge, and a counting peer transport aimed at A.
 // The plane's presence path is wired to the client connection exactly
 // as production wires it (late-bound, plus one catch-up call for the
@@ -147,7 +142,7 @@ export async function bootDirectWire(track, opts = {}) {
 }
 
 // The client-side composition under test: the REAL direct plane
-// (dialer over the connection's broker leg, bridge cache over the
+// (dialer over the connection's connectInfo ask, bridge cache over the
 // dialer) exactly as main and the web bridge assemble it. The fan-out
 // sinks are observation seams the scenarios read, and the deadline
 // is shrunk so failure scenarios settle fast.

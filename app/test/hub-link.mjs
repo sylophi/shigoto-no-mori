@@ -3,34 +3,23 @@
 // node ws server implementing hubObject.ts's envelope behavior:
 // deliver forwarding, full-roster presence on join and leave, offline
 // and too-large nacks, supersede on a duplicate deviceId) and drives
-// TWO real hub connections against it as devices A and B.
+// real hub connections against it as devices, plus raw stub-side
+// sockets where a scenario needs to play a peer by hand.
 //
-// The device hub is ORCHESTRATION ONLY: its host
-// role serves exactly the broker surface (direct:connectInfo) plus the
-// intrinsic frames (hello/welcome, bye, presence), and refuses every
-// other channel with the no-handler shape. There is nothing else to
-// register (the binding exposes one broker slot, not a ServerTransport)
-// and the client side exposes one pinned brokerInvoke (no channel
-// argument), so the refusal scenario drives a raw hand-built req at the
-// wire. The dispatch scenarios all ride the broker channel, multiplexed
-// by an input mode. Also asserted: the sm-level hello/welcome over the
-// device hub, req/res id correlation, the void-field framing invariant,
-// error serialization (message only), the local outbound size guard at
-// the shrunken control-frame budget, offline nacks, presence-driven
-// peer teardown, supervisor redial with a fresh ticket per attempt, the
-// blocked verdicts for the revoked and superseded close codes, an
-// older build's hello token stripped, the per-peer in-flight cap
-// surviving a hostile presence flap and a re-hello, an off-roster
-// hello refused, an oversize RESPONSE downgraded to ok:false rather
-// than a hang, a stale-epoch res dropped after a re-hello, bye tearing
-// the host session down (epoch-guarded), stop() during in-flight work
-// running no further handler, and malformed inbound frames dropped
-// without killing the process.
-//
-// Every sm frame the device hub carries is wrapped as { epoch, sm }
-// (see the SESSION EPOCH note in shared/hub/link.ts), so the stub
-// forwards that wrapper verbatim and the assertions read the inner
-// frame at entry.frame.sm.
+// The device hub carries presence and ONE question between peers, the
+// connectInfo ask, as a single ask/answer pair keyed by an id. Asserted:
+// one exchange per ask, id correlation across concurrent asks, the
+// hub-stamped caller, the void-field framing invariant, error
+// serialization (message only), unknown asks refused, the no-listener
+// refusal of a device serving nothing, the local outbound size guard
+// at the control-frame budget, an oversize answer downgraded to a
+// refusal, offline nacks, the per-ask timeout, presence-driven and
+// teardown rejection of pending asks, misrouted answers dropped, an
+// off-roster ask left unanswered, supervisor redial with a fresh ticket
+// per attempt, the blocked verdicts for the revoked and superseded
+// close codes, liveness, the version floor on both ends, the fail-fast
+// against a peer from before the ask in both directions, and malformed
+// inbound frames dropped without killing the process.
 //
 // Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
 // imports resolve. Run: pnpm test hub-link.
@@ -41,85 +30,63 @@ import {
   CLOSE_SUPERSEDED,
   encodeEnvelope,
 } from "@shared/hub/protocol";
-import { directContract } from "@shared/ipc/modules/direct";
 import {
-  MAX_HUB_IN_FLIGHT_PER_PEER,
+  CONNECT_INFO_ASK,
+  HubAskRefusedError,
+  HubAskTimeoutError,
   HubLinkDownError,
   HubMessageTooLargeError,
   HubPeerOfflineError,
+  MIN_PEER_APP_VERSION,
+  NO_LISTENER_CODE,
+  PeerVersionError,
+  VERSION_REFUSED_CODE,
 } from "@shared/hub/link";
 import { makeProof } from "./lib/checkKit.mjs";
-import { bootDevice as bootHubDevice } from "./lib/hubBoot.mjs";
+import { bootDevice } from "./lib/hubBoot.mjs";
 import { delay, waitFor } from "./lib/checkKit.mjs";
 import { startStubHub } from "./lib/hubStub.mjs";
 
-// The one channel the hub wire serves, from the contract so the
-// check tracks the link's own allowlist source.
-const BROKER_CHANNEL = directContract.calls.connectInfo.channel;
-
 // Larger than MAX_HUB_MESSAGE_BYTES (64 KiB), for the size-guard and
-// oversize-response scenarios.
+// oversize-answer scenarios.
 const OVERSIZE = "x".repeat(70_000);
 
-// The inner sm frame of a recorded device envelope, unwrapped from the
-// epoch wrapper the device hub carries.
-const smOf = (entry) => entry?.frame?.sm;
+// A version from before the floor, and the ask timeout the scenarios
+// use when nothing is supposed to time out.
+const OLD_VERSION = "2.8.0";
+const ASK_MS = 5_000;
 
-// ---- The stub Durable Object ----
-// Lives in test/lib/hubStub.mjs, shared with the direct, sync and
-// forward checks.
-
-// ---- Real hub connections ----
-
-// Shared handler state referenced by the broker test handler. Reset by
-// the tests that use it.
-let hangResolvers = [];
-
-// The broker slot is the only dispatch the link has, so every
-// dispatch-mechanics scenario (echo, error, hang, oversize result)
-// multiplexes through the one handler on an input mode. Registered raw
-// into the slot (no schema), exactly like the old per-channel test
-// handlers: the link's dispatch keys on the channel NAME alone.
-async function brokerTestHandler(_ctx, raw) {
-  const mode = raw !== undefined && raw !== null ? raw.mode : undefined;
+// The connectInfo server B answers with. The link is contract-free, so
+// the scenarios multiplex through the input: echo it (undefined
+// included, for the void framing scenario), throw, return an oversize
+// result, or name the caller the hub stamped.
+function testServer(caller, input) {
+  const mode = input !== undefined && input !== null ? input.mode : undefined;
   if (mode === "fail") throw new Error("boom");
-  if (mode === "hang") {
-    return new Promise((resolve) => hangResolvers.push(resolve));
-  }
   if (mode === "big") return OVERSIZE;
-  // Echo (undefined included, for the void framing scenario).
-  return raw;
+  if (mode === "caller") return caller;
+  return input;
 }
 
-// The shared boot (test/lib/hubBoot.mjs) with this check's
-// registerHandlers:true shorthand mapped onto the broker slot.
-function bootDevice(stub, deviceId, opts = {}, track) {
-  return bootHubDevice(
-    stub,
-    deviceId,
-    {
-      ...opts,
-      brokerHandler: opts.registerHandlers ? brokerTestHandler : undefined,
-    },
-    track,
-  );
-}
-
-// The pair most checks boot, in this order: the stub, A as a plain
-// client, and B serving the broker test handler (plus `bOpts`).
+// The pair most checks boot: the stub, A as a plain asker, and B
+// answering with the test server (plus `bOpts`).
 async function bootLinked(track, bOpts = {}) {
   const stub = await startStubHub(track);
   const a = await bootDevice(stub, "A", {}, track);
   const b = await bootDevice(
     stub,
     "B",
-    { ...bOpts, registerHandlers: true },
+    { serveConnectInfo: testServer, ...bOpts },
     track,
+  );
+  await waitFor(
+    () => a.connection.status().onlineDeviceIds.includes("B"),
+    "A to see B",
   );
   return { stub, a, b };
 }
 
-// A raw stub-side device socket, for driving hand-built envelopes.
+// A raw stub-side device socket, for playing a peer by hand.
 function rawDevice(stub, deviceId) {
   const ws = new WebSocket(
     `ws://127.0.0.1:${stub.port}/connect?ticket=${encodeURIComponent(`t:${deviceId}:1`)}`,
@@ -148,12 +115,37 @@ function rawDevice(stub, deviceId) {
       ws.once("open", resolve);
       ws.once("error", reject);
     }),
-    send: (envelope) => ws.send(encodeEnvelope(envelope)),
+    send: (to, frame) => ws.send(encodeEnvelope({ t: "relay", to, frame })),
     next,
     nextHub,
     close: () => ws.close(),
   };
 }
+
+// A booted asker A plus a raw peer B the scenario answers by hand.
+async function bootWithRawPeer(track) {
+  const stub = await startStubHub(track);
+  const a = await bootDevice(stub, "A", {}, track);
+  const rawB = rawDevice(stub, "B");
+  track(() => rawB.close());
+  await rawB.opened;
+  await waitFor(
+    () => a.connection.status().onlineDeviceIds.includes("B"),
+    "A to see raw B",
+  );
+  return { stub, a, rawB };
+}
+
+// An ask frame as a peer on this build sends it.
+const askFrame = (id, v = MIN_PEER_APP_VERSION, input) => ({
+  ask: CONNECT_INFO_ASK,
+  id,
+  v,
+  ...(input === undefined ? {} : { input }),
+});
+
+// A pre-ask build's frame, the epoch-wrapped sm frame it spoke.
+const legacy = (epoch, sm) => ({ epoch, sm });
 
 const { check, done, fail } = makeProof("hub-link proof");
 
@@ -161,146 +153,119 @@ async function main() {
   console.log("hub-link transport proof\n");
 
   await check(
-    "hello/welcome: connectBroker completes the sm handshake and learns the peer's appVersion",
+    "ask/answer: one ask is one exchange, ids correlate concurrent asks, and the caller is the device the hub stamped",
     async (track) => {
-      const { a } = await bootLinked(track, { appVersion: "2.2.2" });
-      const peer = await a.connection.connectBroker("B");
-      assert.equal(peer.remoteDeviceId, "B");
-      assert.equal(peer.remoteAppVersion, "2.2.2");
-    },
-  );
-
-  await check(
-    "dispatch: an invoke on the broker channel round-trips with id correlation",
-    async (track) => {
-      const { a } = await bootLinked(track);
-      const peer = await a.connection.connectBroker("B");
-      const result = await peer.brokerInvoke({ hi: 1 });
+      const { stub, a } = await bootLinked(track);
+      const before = stub.receivedCount();
+      const result = await a.connection.askConnectInfo("B", { hi: 1 }, ASK_MS);
       assert.deepEqual(result, { hi: 1 });
-      // The res's id matched the req's, or the invoke could not have
-      // resolved with this result. Two concurrent invokes prove the
-      // correlation is per id, not first-come.
+      // One frame each way, no handshake around it.
+      const exchange = stub.received.slice(before);
+      assert.deepEqual(
+        exchange.map((entry) => `${entry.from}>${entry.to}`),
+        ["A>B", "B>A"],
+      );
+      assert.equal(exchange[0].frame.ask, CONNECT_INFO_ASK);
+      assert.equal(exchange[0].frame.v, MIN_PEER_APP_VERSION);
+      assert.equal(exchange[1].frame.answer, CONNECT_INFO_ASK);
+      assert.equal(exchange[1].frame.id, exchange[0].frame.id);
+      // Two concurrent asks prove the correlation is per id, not
+      // first-come.
       const [first, second] = await Promise.all([
-        peer.brokerInvoke({ mode: "echo", n: "one" }),
-        peer.brokerInvoke({ mode: "echo", n: "two" }),
+        a.connection.askConnectInfo("B", { n: "one" }, ASK_MS),
+        a.connection.askConnectInfo("B", { n: "two" }, ASK_MS),
       ]);
       assert.equal(first.n, "one");
       assert.equal(second.n, "two");
+      assert.equal(
+        await a.connection.askConnectInfo("B", { mode: "caller" }, ASK_MS),
+        "A",
+      );
     },
   );
 
   await check(
-    "broker only: any non-broker channel is refused with the no-handler shape while the broker channel is served on the same session",
-    async (track) => {
-      // Nothing else CAN be registered anymore (the binding exposes
-      // one broker slot, not a ServerTransport) and connectBroker's
-      // session has no channel argument, so the probe is a raw
-      // hand-built req: exactly what a hostile or skewed peer could
-      // still aim at the wire.
-      const stub = await startStubHub(track);
-      await bootDevice(stub, "B", { registerHandlers: true }, track);
-      const raw = rawDevice(stub, "C");
-      track(() => raw.close());
-      await raw.opened;
-      raw.send({
-        t: "relay",
-        to: "B",
-        frame: {
-          epoch: 1,
-          sm: { t: "hello", deviceId: "C", appVersion: "9" },
-        },
-      });
-      const welcome = await raw.nextHub();
-      assert.equal(welcome.frame.sm.t, "welcome");
-      // A data channel req on the live session: refused with the
-      // no-handler shape, exactly what a channel not served on a wire
-      // has always answered.
-      raw.send({
-        t: "relay",
-        to: "B",
-        frame: {
-          epoch: 1,
-          sm: { t: "req", id: 1, channel: "test:mutate", input: "data" },
-        },
-      });
-      const refused = await raw.nextHub();
-      assert.equal(refused.frame.sm.ok, false);
-      assert.match(refused.frame.sm.message, /No handler registered/);
-      // The broker channel on the SAME session is served, so the
-      // refusal above is the channel gate, not a dead session.
-      raw.send({
-        t: "relay",
-        to: "B",
-        frame: {
-          epoch: 1,
-          sm: { t: "req", id: 2, channel: BROKER_CHANNEL, input: "served" },
-        },
-      });
-      const served = await raw.nextHub();
-      assert.equal(served.frame.sm.ok, true);
-      assert.equal(served.frame.sm.result, "served");
-    },
-  );
-
-  await check(
-    "framing: void input and void result round-trip as absent fields",
+    "framing: a void input and a void result ride as absent fields",
     async (track) => {
       const { stub, a } = await bootLinked(track);
-      const peer = await a.connection.connectBroker("B");
-      const result = await peer.brokerInvoke(undefined);
+      const before = stub.receivedCount();
+      const result = await a.connection.askConnectInfo("B", undefined, ASK_MS);
       assert.equal(result, undefined);
-      const req = stub.received.find(
-        (entry) =>
-          smOf(entry)?.t === "req" && smOf(entry).channel === BROKER_CHANNEL,
-      );
-      assert.ok(req, "the void req never reached the stub");
-      assert.equal("input" in req.frame.sm, false);
-      const res = stub.received.find(
-        (entry) =>
-          entry.from === "B" &&
-          smOf(entry)?.t === "res" &&
-          smOf(entry).id === req.frame.sm.id,
-      );
-      assert.ok(res, "the void res never reached the stub");
-      assert.equal("result" in res.frame.sm, false);
+      const [ask, answer] = stub.received.slice(before);
+      assert.equal("input" in ask.frame, false);
+      assert.equal(answer.frame.ok, true);
+      assert.equal("result" in answer.frame, false);
     },
   );
 
   await check(
-    "error path: a throwing handler answers ok:false with the message only",
+    "error path: a throwing server answers ok:false with the message only",
     async (track) => {
       const { stub, a } = await bootLinked(track);
-      const peer = await a.connection.connectBroker("B");
       await assert.rejects(
-        () => peer.brokerInvoke({ mode: "fail" }),
-        (error) => error instanceof Error && error.message === "boom",
+        () => a.connection.askConnectInfo("B", { mode: "fail" }, ASK_MS),
+        (error) =>
+          error instanceof HubAskRefusedError &&
+          error.message === "boom" &&
+          error.code === undefined,
       );
-      const res = stub.received.find(
-        (entry) =>
-          entry.from === "B" &&
-          smOf(entry)?.t === "res" &&
-          smOf(entry).ok === false &&
-          smOf(entry).message === "boom",
+      const answer = stub.received.find(
+        (entry) => entry.from === "B" && entry.frame.message === "boom",
       );
-      assert.ok(res, "the err res never reached the stub");
-      // The inner sm frame carries only the message form, no result.
-      assert.deepEqual(Object.keys(res.frame.sm).toSorted(), [
+      assert.ok(answer, "the refusal never reached the stub");
+      assert.deepEqual(Object.keys(answer.frame).toSorted(), [
+        "answer",
         "id",
         "message",
         "ok",
-        "t",
+        "v",
       ]);
     },
   );
 
   await check(
-    "size guard: an oversize outbound invoke fails typed WITHOUT hitting the wire, at the control-frame budget",
+    "one ask only: an unknown ask is refused while connectInfo is answered for the same sender",
+    async (track) => {
+      const stub = await startStubHub(track);
+      await bootDevice(stub, "B", { serveConnectInfo: testServer }, track);
+      const raw = rawDevice(stub, "C");
+      track(() => raw.close());
+      await raw.opened;
+      await delay(50);
+      raw.send("B", { ...askFrame(1), ask: "invokeAnything", input: "x" });
+      const refused = await raw.nextHub();
+      assert.equal(refused.frame.ok, false);
+      assert.match(refused.frame.message, /unknown ask/);
+      raw.send("B", askFrame(2, MIN_PEER_APP_VERSION, "served"));
+      const served = await raw.nextHub();
+      assert.equal(served.frame.ok, true);
+      assert.equal(served.frame.result, "served");
+    },
+  );
+
+  await check(
+    "no listener: a device with no connectInfo server refuses every ask with the no-listener code",
+    async (track) => {
+      const stub = await startStubHub(track);
+      const a = await bootDevice(stub, "A", {}, track);
+      await bootDevice(stub, "D", {}, track);
+      await assert.rejects(
+        () => a.connection.askConnectInfo("D", undefined, ASK_MS),
+        (error) =>
+          error instanceof HubAskRefusedError &&
+          error.code === NO_LISTENER_CODE &&
+          /serves no direct listener/.test(error.message),
+      );
+    },
+  );
+
+  await check(
+    "size guard: an oversize ask fails typed WITHOUT hitting the wire, at the control-frame budget",
     async (track) => {
       const { stub, a } = await bootLinked(track);
-      const peer = await a.connection.connectBroker("B");
       const before = stub.receivedCount();
       await assert.rejects(
-        () => peer.brokerInvoke(OVERSIZE),
+        () => a.connection.askConnectInfo("B", OVERSIZE, ASK_MS),
         (error) => error instanceof HubMessageTooLargeError,
       );
       assert.equal(
@@ -312,43 +277,294 @@ async function main() {
   );
 
   await check(
-    "offline nack: connecting to a deviceId with no socket rejects with the offline error",
+    "oversize answer: a result too large for one envelope is refused at once, not left to time out",
+    async (track) => {
+      const { a } = await bootLinked(track);
+      const startedAt = Date.now();
+      await assert.rejects(
+        () => a.connection.askConnectInfo("B", { mode: "big" }, ASK_MS),
+        (error) =>
+          error instanceof HubAskRefusedError &&
+          /too large/.test(error.message),
+      );
+      assert.ok(Date.now() - startedAt < 1_000, "the refusal waited");
+    },
+  );
+
+  await check(
+    "offline nack: asking a deviceId with no socket rejects with the offline error",
     async (track) => {
       const stub = await startStubHub(track);
       const a = await bootDevice(stub, "A", {}, track);
       await assert.rejects(
-        () => a.connection.connectBroker("ghost"),
+        () => a.connection.askConnectInfo("ghost", undefined, ASK_MS),
         (error) => error instanceof HubPeerOfflineError,
       );
     },
   );
 
   await check(
-    "presence: a departing peer rejects its in-flight calls typed and leaves the session dead for later invokes",
+    "timeout: a peer that never answers fails the ask typed at its timeout, and the late answer is dropped",
     async (track) => {
-      const { a, b } = await bootLinked(track);
-      hangResolvers = [];
-      const peer = await a.connection.connectBroker("B");
-      const inFlight = peer.brokerInvoke({ mode: "hang" });
-      await waitFor(() => hangResolvers.length === 1, "the hang dispatch");
-      await b.connection.stop();
+      const { a, rawB } = await bootWithRawPeer(track);
+      const pending = a.connection.askConnectInfo("B", "hello?", 200);
+      const ask = await rawB.nextHub();
       await assert.rejects(
-        () => inFlight,
+        () => pending,
+        (error) => error instanceof HubAskTimeoutError,
+      );
+      // Answering after the timeout finds nothing to resolve and harms
+      // nothing: the link still asks and answers.
+      rawB.send("A", {
+        answer: CONNECT_INFO_ASK,
+        id: ask.frame.id,
+        v: MIN_PEER_APP_VERSION,
+        ok: true,
+        result: "late",
+      });
+      await delay(50);
+      const again = a.connection.askConnectInfo("B", "again", ASK_MS);
+      const second = await rawB.nextHub();
+      rawB.send("A", {
+        answer: CONNECT_INFO_ASK,
+        id: second.frame.id,
+        v: MIN_PEER_APP_VERSION,
+        ok: true,
+        result: "fresh",
+      });
+      assert.equal(await again, "fresh");
+    },
+  );
+
+  await check(
+    "presence: a peer leaving the roster fails the ask pending to it typed",
+    async (track) => {
+      const { a, rawB } = await bootWithRawPeer(track);
+      const pending = a.connection.askConnectInfo("B", "hello?", ASK_MS);
+      await rawB.nextHub();
+      rawB.close();
+      await assert.rejects(
+        () => pending,
         (error) => error instanceof HubPeerOfflineError,
       );
-      // There is no close callback anymore (the one real broker session
-      // lives inside the dialer's try/finally, which closes it itself),
-      // so the observable teardown fact is the dead session: a later
-      // invoke on it rejects typed instead of hanging.
+    },
+  );
+
+  await check(
+    "teardown: stopping the connection fails pending asks as link-down, and later asks reject at once",
+    async (track) => {
+      const { a, rawB } = await bootWithRawPeer(track);
+      const pending = a.connection.askConnectInfo("B", "hello?", ASK_MS);
+      await rawB.nextHub();
+      await a.connection.stop();
       await assert.rejects(
-        () => peer.brokerInvoke({ mode: "hang" }),
+        () => pending,
+        (error) => error instanceof HubLinkDownError,
+      );
+      await assert.rejects(
+        () => a.connection.askConnectInfo("B", "after", ASK_MS),
         (error) => error instanceof HubLinkDownError,
       );
     },
   );
 
   await check(
-    "reconnect: a dropped socket redials with a fresh ticket and serves again",
+    "misrouted answer: an answer from a device other than the one asked is dropped",
+    async (track) => {
+      const { stub, a, rawB } = await bootWithRawPeer(track);
+      const rawC = rawDevice(stub, "C");
+      track(() => rawC.close());
+      await rawC.opened;
+      const pending = a.connection.askConnectInfo("B", "hello?", ASK_MS);
+      const ask = await rawB.nextHub();
+      const answer = (result) => ({
+        answer: CONNECT_INFO_ASK,
+        id: ask.frame.id,
+        v: MIN_PEER_APP_VERSION,
+        ok: true,
+        result,
+      });
+      rawC.send("A", answer("from C"));
+      await delay(50);
+      rawB.send("A", answer("from B"));
+      assert.equal(await pending, "from B");
+    },
+  );
+
+  await check(
+    "off-roster ask: an ask whose from is not in the presence roster gets no answer",
+    async (track) => {
+      const stub = await startStubHub(track);
+      await bootDevice(stub, "B", { serveConnectInfo: testServer }, track);
+      // Forge a deliver to B from a device that is not in B's roster (a
+      // hostile hub can set any `from`). B must answer nothing.
+      stub.injectTo("B", { t: "relay", from: "ghost", frame: askFrame(1) });
+      stub.injectTo("B", {
+        t: "relay",
+        from: "ghost",
+        frame: legacy(1, {
+          t: "hello",
+          deviceId: "ghost",
+          appVersion: "2.0.0",
+        }),
+      });
+      await delay(200);
+      assert.equal(
+        stub.sentTo("B", "ghost"),
+        false,
+        "B answered an off-roster sender",
+      );
+    },
+  );
+
+  await check(
+    "version floor, answering: an ask from a release below the floor is refused with the version code and an update message, while from-source builds are answered",
+    async (track) => {
+      const stub = await startStubHub(track);
+      await bootDevice(stub, "B", { serveConnectInfo: testServer }, track);
+      const raw = rawDevice(stub, "C");
+      track(() => raw.close());
+      await raw.opened;
+      await delay(50);
+      raw.send("B", askFrame(1, OLD_VERSION, "x"));
+      const refused = await raw.nextHub();
+      assert.equal(refused.frame.ok, false);
+      assert.equal(refused.frame.code, VERSION_REFUSED_CODE);
+      assert.match(refused.frame.message, /update this device/);
+      assert.match(refused.frame.message, new RegExp(OLD_VERSION));
+      // A dev build ("dev", the desktop's "0.0.0") and a tagged web
+      // build ("v" prefix) are not below the floor.
+      for (const [id, v] of [
+        [2, "dev"],
+        [3, "0.0.0"],
+        [4, `v${MIN_PEER_APP_VERSION}`],
+        [5, "unknown"],
+      ]) {
+        raw.send("B", askFrame(id, v, v));
+        // oxlint-disable-next-line no-await-in-loop -- one ask in flight at a time, so each answer pairs with its version
+        const served = await raw.nextHub();
+        assert.equal(served.frame.ok, true, `${v} was refused`);
+      }
+    },
+  );
+
+  await check(
+    "version floor, asking: an answer from a release below the floor, or a refusal of our version, fails the ask with PeerVersionError",
+    async (track) => {
+      const { a, rawB } = await bootWithRawPeer(track);
+      const tooOld = a.connection.askConnectInfo("B", "x", ASK_MS);
+      const ask1 = await rawB.nextHub();
+      rawB.send("A", {
+        answer: CONNECT_INFO_ASK,
+        id: ask1.frame.id,
+        v: OLD_VERSION,
+        ok: true,
+        result: "ignored",
+      });
+      await assert.rejects(
+        () => tooOld,
+        (error) =>
+          error instanceof PeerVersionError &&
+          error.message.includes(OLD_VERSION) &&
+          /update that device/.test(error.message),
+      );
+      const refusedUs = a.connection.askConnectInfo("B", "x", ASK_MS);
+      const ask2 = await rawB.nextHub();
+      rawB.send("A", {
+        answer: CONNECT_INFO_ASK,
+        id: ask2.frame.id,
+        v: "9.0.0",
+        ok: false,
+        message: "update this device",
+        code: VERSION_REFUSED_CODE,
+      });
+      await assert.rejects(
+        () => refusedUs,
+        (error) =>
+          error instanceof PeerVersionError &&
+          error.message === "update this device",
+      );
+    },
+  );
+
+  await check(
+    "pre-ask peer, dialed: every ask carries the old hello, so a build from before the ask welcomes it and the ask fails fast with PeerVersionError",
+    async (track) => {
+      const { a, rawB } = await bootWithRawPeer(track);
+      const startedAt = Date.now();
+      const pending = a.connection.askConnectInfo("B", "x", ASK_MS);
+      const ask = await rawB.nextHub();
+      // What a pre-ask build parses: the epoch wrapper around a hello.
+      assert.equal(typeof ask.frame.epoch, "number");
+      assert.equal(ask.frame.sm.t, "hello");
+      assert.equal(ask.frame.sm.deviceId, "A");
+      rawB.send(
+        "A",
+        legacy(ask.frame.epoch, {
+          t: "welcome",
+          deviceId: "B",
+          appVersion: OLD_VERSION,
+        }),
+      );
+      await assert.rejects(
+        () => pending,
+        (error) =>
+          error instanceof PeerVersionError &&
+          error.message.includes(OLD_VERSION) &&
+          /update that device/.test(error.message),
+      );
+      assert.ok(
+        Date.now() - startedAt < 1_000,
+        "the ask waited instead of failing fast",
+      );
+    },
+  );
+
+  await check(
+    "pre-ask peer, dialing: its hello is welcomed and its connectInfo req refused with an update message, or no-handler from a device serving no listener",
+    async (track) => {
+      const stub = await startStubHub(track);
+      await bootDevice(stub, "B", { serveConnectInfo: testServer }, track);
+      await bootDevice(stub, "D", {}, track);
+      const raw = rawDevice(stub, "C");
+      track(() => raw.close());
+      await raw.opened;
+      await delay(50);
+      raw.send(
+        "B",
+        legacy(7, { t: "hello", deviceId: "C", appVersion: OLD_VERSION }),
+      );
+      const welcome = await raw.nextHub();
+      assert.equal(
+        welcome.frame.epoch,
+        7,
+        "the welcome did not echo the epoch",
+      );
+      assert.equal(welcome.frame.sm.t, "welcome");
+      assert.equal(welcome.frame.sm.deviceId, "B");
+      raw.send(
+        "B",
+        legacy(7, { t: "req", id: 1, channel: "direct:connectInfo" }),
+      );
+      const refused = await raw.nextHub();
+      assert.equal(refused.frame.epoch, 7);
+      assert.equal(refused.frame.sm.t, "res");
+      assert.equal(refused.frame.sm.id, 1);
+      assert.equal(refused.frame.sm.ok, false);
+      assert.match(refused.frame.sm.message, /update this device/);
+      // The web client's shape: the no-handler answer, which a pre-ask
+      // dialer parks on as "serves no direct listener".
+      raw.send(
+        "D",
+        legacy(8, { t: "req", id: 2, channel: "direct:connectInfo" }),
+      );
+      const noHandler = await raw.nextHub();
+      assert.match(noHandler.frame.sm.message, /No handler registered/);
+    },
+  );
+
+  await check(
+    "reconnect: a dropped socket redials with a fresh ticket and answers again",
     async (track) => {
       const { stub, a } = await bootLinked(track);
       assert.equal(a.mints(), 1);
@@ -364,9 +580,14 @@ async function main() {
         "the redial",
       );
       assert.equal(a.mints(), 2, "the redial did not mint a fresh ticket");
-      const peer = await a.connection.connectBroker("B");
-      const result = await peer.brokerInvoke("back");
-      assert.equal(result, "back");
+      await waitFor(
+        () => a.connection.status().onlineDeviceIds.includes("B"),
+        "A to see B again",
+      );
+      assert.equal(
+        await a.connection.askConnectInfo("B", "back", ASK_MS),
+        "back",
+      );
     },
   );
 
@@ -450,328 +671,21 @@ async function main() {
   );
 
   await check(
-    "hello skew: an older build's hello, still carrying a token field, gets a welcome",
-    async (track) => {
-      const stub = await startStubHub(track);
-      await bootDevice(
-        stub,
-        "B",
-        { appVersion: "3.3.3", registerHandlers: true },
-        track,
-      );
-      const raw = rawDevice(stub, "C");
-      track(() => raw.close());
-      await raw.opened;
-      // First inbound message is the presence roster.
-      const presence = await raw.next();
-      assert.equal(presence.t, "presence");
-      raw.send({
-        t: "relay",
-        to: "B",
-        frame: {
-          epoch: 1,
-          sm: {
-            t: "hello",
-            // Older builds sent an empty token here. The parse strips
-            // it, whatever it holds.
-            token: "garbage",
-            deviceId: "C",
-            appVersion: "9",
-          },
-        },
-      });
-      const deliver = await raw.nextHub();
-      assert.equal(deliver.from, "B");
-      assert.equal(
-        deliver.frame.epoch,
-        1,
-        "the welcome did not echo the epoch",
-      );
-      assert.equal(deliver.frame.sm.t, "welcome");
-      assert.equal(deliver.frame.sm.appVersion, "3.3.3");
-    },
-  );
-
-  await check(
-    "bye: a byed session answers no-live-session to its own epoch, while a stale-epoch bye cannot kill the session a fresh hello just built",
-    async (track) => {
-      const stub = await startStubHub(track);
-      await bootDevice(stub, "B", { registerHandlers: true }, track);
-      const raw = rawDevice(stub, "C");
-      track(() => raw.close());
-      await raw.opened;
-      const hello = (epoch) =>
-        raw.send({
-          t: "relay",
-          to: "B",
-          frame: {
-            epoch,
-            sm: { t: "hello", deviceId: "C", appVersion: "9" },
-          },
-        });
-      const req = (epoch, id) =>
-        raw.send({
-          t: "relay",
-          to: "B",
-          frame: {
-            epoch,
-            sm: { t: "req", id, channel: BROKER_CHANNEL, input: "ping" },
-          },
-        });
-      // Session 1 (epoch 1): served.
-      hello(1);
-      assert.equal((await raw.nextHub()).frame.sm.t, "welcome");
-      req(1, 1);
-      const served = await raw.nextHub();
-      assert.equal(served.frame.sm.ok, true);
-      // bye tears the session down at once: the SAME epoch's next req
-      // gets the terminal no-live-session answer instead of dispatch.
-      raw.send({ t: "relay", to: "B", frame: { epoch: 1, sm: { t: "bye" } } });
-      await delay(100);
-      req(1, 2);
-      const refused = await raw.nextHub();
-      assert.equal(refused.frame.sm.ok, false);
-      assert.match(refused.frame.sm.message, /no live session/);
-      // Session 2 (epoch 2), then a LATE bye stamped with epoch 1: the
-      // epoch guard must ignore it, so the fresh session still serves.
-      hello(2);
-      assert.equal((await raw.nextHub()).frame.sm.t, "welcome");
-      raw.send({ t: "relay", to: "B", frame: { epoch: 1, sm: { t: "bye" } } });
-      await delay(100);
-      req(2, 3);
-      const stillServed = await raw.nextHub();
-      assert.equal(
-        stillServed.frame.sm.ok,
-        true,
-        "a stale-epoch bye killed the fresh session",
-      );
-    },
-  );
-
-  await check(
-    "in-flight cap: one request past the hub-local per-peer cap is refused",
-    async (track) => {
-      const { a } = await bootLinked(track);
-      hangResolvers = [];
-      const peer = await a.connection.connectBroker("B");
-      const held = [];
-      for (let i = 0; i < MAX_HUB_IN_FLIGHT_PER_PEER; i += 1) {
-        held.push(peer.brokerInvoke({ mode: "hang" }));
-      }
-      await waitFor(
-        () => hangResolvers.length === MAX_HUB_IN_FLIGHT_PER_PEER,
-        "the held dispatches",
-      );
-      await assert.rejects(
-        () => peer.brokerInvoke({ mode: "hang" }),
-        /too many in-flight/,
-      );
-      // Release the held requests so shutdown is quick and clean.
-      for (const resolve of hangResolvers) resolve("done");
-      await Promise.all(held);
-    },
-  );
-
-  await check(
-    "in-flight cap survives a re-hello after a presence flap: neither a hostile presence drop-then-readd nor a re-connectBroker resets the per-peer cap",
-    async (track) => {
-      const { stub, a } = await bootLinked(track);
-      hangResolvers = [];
-      const peer1 = await a.connection.connectBroker("B");
-      const held = [];
-      for (let i = 0; i < MAX_HUB_IN_FLIGHT_PER_PEER; i += 1) {
-        // The old pairing is torn down on the re-connect, rejecting these;
-        // the HOST's dispatches keep running (the hang mode ignores the
-        // abort signal) and hold the cap.
-        held.push(peer1.brokerInvoke({ mode: "hang" }).catch(() => {}));
-      }
-      await waitFor(
-        () => hangResolvers.length === MAX_HUB_IN_FLIGHT_PER_PEER,
-        "the held dispatches",
-      );
-      // A hostile hub flaps A's presence as seen by B: it forges a
-      // roster that drops A (which runs dropHostSession on B, aborting the
-      // still-hanging dispatches) then one that re-adds A. If dropHostSession
-      // zeroed the in-flight count this would reset B's cap for A, so the
-      // forged flap is the exact attack the fix defends against. The
-      // hanging dispatches still count because they never settle on abort.
-      stub.injectTo("B", { t: "presence", online: ["B"] });
-      await delay(100);
-      stub.injectTo("B", { t: "presence", online: ["A", "B"] });
-      await delay(100);
-      // A fresh connectBroker re-hellos with a new epoch. The host's
-      // in-flight count must survive both the presence flap and the session
-      // swap, so the next request is still refused rather than admitted at a
-      // reset cap.
-      const peer2 = await a.connection.connectBroker("B");
-      await assert.rejects(
-        () => peer2.brokerInvoke({ mode: "hang" }),
-        /too many in-flight/,
-      );
-      for (const resolve of hangResolvers) resolve("done");
-      await Promise.all(held);
-    },
-  );
-
-  await check(
-    "off-roster hello: a hello whose from is not in the presence roster is refused",
-    async (track) => {
-      const stub = await startStubHub(track);
-      await bootDevice(stub, "B", { registerHandlers: true }, track);
-      // Forge a deliver to B from a device that is not in B's roster (a
-      // hostile hub can set any `from`). B must not allocate a session
-      // or answer a welcome for it.
-      stub.injectTo("B", {
-        t: "relay",
-        from: "ghost",
-        frame: {
-          epoch: 1,
-          sm: { t: "hello", deviceId: "ghost", appVersion: "9" },
-        },
-      });
-      await delay(200);
-      assert.equal(
-        stub.sentTo("B", "ghost"),
-        false,
-        "B answered an off-roster hello",
-      );
-    },
-  );
-
-  await check(
-    "oversize response: an oversize handler result yields ok:false, not a hang",
-    async (track) => {
-      const { a } = await bootLinked(track);
-      const peer = await a.connection.connectBroker("B");
-      // The handler returns a result too large for one envelope. Without
-      // the downgrade the caller would hang forever (no per-call
-      // timeout); it must get a normal rejection instead.
-      await assert.rejects(
-        () => peer.brokerInvoke({ mode: "big" }),
-        (error) => error instanceof Error && /too large/.test(error.message),
-      );
-    },
-  );
-
-  await check(
-    "stale epoch: a res from a prior pairing is dropped after a re-hello, not mis-resolved",
-    async (track) => {
-      const stub = await startStubHub(track);
-      const a = await bootDevice(stub, "A", {}, track);
-      // B is a hand-driven host so the test controls exactly which epoch
-      // each res carries.
-      const rawB = rawDevice(stub, "B");
-      track(() => rawB.close());
-      await rawB.opened;
-
-      // First pairing: A dials B (epoch E1), rawB welcomes it.
-      const peer1Promise = a.connection.connectBroker("B");
-      const hello1 = await rawB.nextHub();
-      const epoch1 = hello1.frame.epoch;
-      assert.equal(hello1.frame.sm.t, "hello");
-      rawB.send({
-        t: "relay",
-        to: "A",
-        frame: {
-          epoch: epoch1,
-          sm: { t: "welcome", deviceId: "B", appVersion: "9" },
-        },
-      });
-      const peer1 = await peer1Promise;
-      // A req on the first pairing that rawB never answers.
-      peer1.brokerInvoke("first").catch(() => {});
-      const req1 = await rawB.nextHub();
-      const req1Id = req1.frame.sm.id;
-
-      // Second pairing: a re-connectBroker re-hellos with a new epoch. The
-      // client's req-id counter resets, so the new call reuses id 1 too.
-      const peer2Promise = a.connection.connectBroker("B");
-      const hello2 = await rawB.nextHub();
-      const epoch2 = hello2.frame.epoch;
-      assert.notEqual(epoch2, epoch1, "the re-hello reused the old epoch");
-      rawB.send({
-        t: "relay",
-        to: "A",
-        frame: {
-          epoch: epoch2,
-          sm: { t: "welcome", deviceId: "B", appVersion: "9" },
-        },
-      });
-      const peer2 = await peer2Promise;
-      const invoke2 = peer2.brokerInvoke("second");
-      const req2 = await rawB.nextHub();
-      const req2Id = req2.frame.sm.id;
-
-      // A STALE res from the first pairing (old epoch, same id) must be
-      // dropped, not matched against the fresh call.
-      rawB.send({
-        t: "relay",
-        to: "A",
-        frame: {
-          epoch: epoch1,
-          sm: { t: "res", id: req2Id, ok: true, result: "stale" },
-        },
-      });
-      await delay(100);
-      // The correct res resolves the fresh call.
-      rawB.send({
-        t: "relay",
-        to: "A",
-        frame: {
-          epoch: epoch2,
-          sm: { t: "res", id: req2Id, ok: true, result: "fresh" },
-        },
-      });
-      const result = await invoke2;
-      assert.equal(result, "fresh", "a stale-epoch res was mis-resolved");
-      assert.equal(req1Id, req2Id, "the req-id counter did not reset");
-    },
-  );
-
-  await check(
-    "stop during in-flight: a handler that finishes after stop runs no answer into a dead socket",
-    async (track) => {
-      const { stub, a, b } = await bootLinked(track);
-      hangResolvers = [];
-      const peer = await a.connection.connectBroker("B");
-      const inflight = peer
-        .brokerInvoke({ mode: "hang" })
-        .then(() => "resolved")
-        .catch(() => "rejected");
-      await waitFor(() => hangResolvers.length === 1, "the hang dispatch");
-      const sendsBefore = stub.sendsFrom("B");
-      // Stop B while its handler still runs. Teardown is synchronous, so
-      // the completing handler must not answer into the dead socket.
-      await b.connection.stop();
-      for (const resolve of hangResolvers) resolve("late");
-      await delay(200);
-      assert.equal(stub.sendsFrom("B"), sendsBefore, "B answered after stop");
-      assert.equal(
-        await inflight,
-        "rejected",
-        "the caller was not disconnected",
-      );
-    },
-  );
-
-  await check(
     "malformed inbound: garbage frames are dropped without killing the process",
     async (track) => {
       const { stub, a } = await bootLinked(track);
-      // Non-JSON text, an unparseable envelope, and a valid envelope with
-      // an unparseable inner frame. All must be dropped, not fatal.
+      // Non-JSON text, an unparseable envelope, and a valid envelope
+      // whose frame is none of the ask, the answer or a pre-ask frame.
+      // All must be dropped, not fatal.
       stub.injectTo("A", "this is not json at all");
       stub.injectTo("A", { t: "totally-unknown" });
-      stub.injectTo("A", {
-        t: "relay",
-        from: "B",
-        frame: { epoch: 1, sm: { t: "bogus" } },
-      });
+      stub.injectTo("A", { t: "relay", from: "B", frame: { t: "bogus" } });
       await delay(150);
-      // The link is still live: a real dial and invoke still work.
-      const peer = await a.connection.connectBroker("B");
-      const result = await peer.brokerInvoke("alive");
-      assert.equal(result, "alive");
+      // The link is still live: a real ask still works.
+      assert.equal(
+        await a.connection.askConnectInfo("B", "alive", ASK_MS),
+        "alive",
+      );
     },
   );
 

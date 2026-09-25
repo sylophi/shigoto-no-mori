@@ -21,7 +21,6 @@ import { existsSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
 import { errorCodeOf, errorMessageOf } from "@shared/errors";
-import { noHandlerMessage } from "@shared/hub/link";
 import { isControlErrorCode } from "@shared/ipc/modules/control";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
 import {
@@ -29,6 +28,7 @@ import {
   HELLO_TIMEOUT_MS,
   MAX_IN_FLIGHT_PER_PEER,
   MAX_INBOUND_FRAME_BYTES,
+  noHandlerMessage,
   PUSH_BUFFER_LIMIT_BYTES,
   ReqFrameSchema,
   resError,

@@ -100,8 +100,10 @@ const HubPeerPushSchema = z.object({
 export type HubPeerPush = z.infer<typeof HubPeerPushSchema>;
 
 export const hubContract = defineContract("client", {
-  // The current socket phase plus the online set. Cheap: main reads
-  // its in-memory snapshot, nothing touches the network.
+  // The remote-plane snapshot (HubStatusSchema above): the hub
+  // socket's phase and roster plus the direct sessions and tunnel
+  // state. Cheap: main reads its in-memory snapshot, nothing touches
+  // the network.
   status: invoke("hub:status", z.void(), HubStatusSchema),
   // Forward one sm invoke to a peer device over its DIRECT session.
   // Sessions are supervised desired state (shared/hub/directKeeper.ts):

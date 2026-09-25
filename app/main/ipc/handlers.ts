@@ -11,7 +11,6 @@ import { accountContract } from "@shared/ipc/modules/account";
 import { branchesContract } from "@shared/ipc/modules/branches";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
 import { dialogContract } from "@shared/ipc/modules/dialog";
-import { directContract } from "@shared/ipc/modules/direct";
 import { forwardContract } from "@shared/ipc/modules/forward";
 import { fsContract } from "@shared/ipc/modules/fs";
 import { gitContract } from "@shared/ipc/modules/git";
@@ -125,7 +124,6 @@ import {
 import {
   broadcastAll,
   clearDirectTickets,
-  directHandlers,
   refreshHubConnection,
   registerContract,
   registerControlContract,
@@ -471,14 +469,6 @@ export function registerIpcHandlers(): void {
   // every dep and folds directPeerVersions back into the status
   // snapshot.
   registerContract(hubContract, hubHandlers);
-  // The direct data plane's brokering surface: host-scoped and
-  // remote:true, so a peer asks over the device hub (or an existing
-  // direct session) how to dial this host directly. The handlers are
-  // constructed in register.ts, which owns every dep (the listener, the
-  // ticket store, the hub roster). The handler fails closed without an
-  // authenticated callerDeviceId, so the Electron wire always reads
-  // available:false.
-  registerContract(directContract, directHandlers);
   // The sync orchestrations' peer reach (host/ipc/peerSync.ts), riding
   // peerTransportFor above.
   setPeerSyncApiImpl({

@@ -26,7 +26,6 @@ import {
 } from "@shared/ipc/modules/account";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
 import { withoutPeerState } from "@shared/schemas/config";
-import { directContract } from "@shared/ipc/modules/direct";
 import { hubContract } from "@shared/ipc/modules/hub";
 import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
 import { shellContract } from "@shared/ipc/modules/shell";
@@ -134,9 +133,9 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // differences are exactly the declared deps: identity facts from
   // this bridge, fan-out over the loopback wire, dialableKinds
   // ["tunnel"] (an https page cannot dial ws:// interface candidates,
-  // mixed content, so the broker is asked for wss tunnel candidates
-  // only and a kind-aware host mints no lan ticket for this caller),
-  // and no host half (no direct listener, no cloudflared, so the
+  // mixed content, so peers are asked for wss tunnel candidates only
+  // and mint no lan ticket for this caller), no connectInfo server
+  // (web/hub/connection.ts), and no host half (no direct listener, no cloudflared, so the
   // status snapshot carries no tunnel state).
   const directPlane = createDirectPlane({
     connection: () => connection,
@@ -151,10 +150,6 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   const hubHandlers = directPlane.handlers;
 
   const connection = createHubConnection({
-    // The one channel the wire brokers, supplied here so the binding
-    // stays contract-free: a browser dials the broker leg only, it
-    // never serves it.
-    brokerChannel: directContract.calls.connectInfo.channel,
     onChange: () => directPlane.handleConnectionChange(),
   });
 

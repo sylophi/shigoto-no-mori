@@ -39,9 +39,8 @@ type RegisterContractOpts<Ctx = HandlerContext> = {
 };
 
 // The per-call wrapper: ONE definition of what serving a contract call
-// means, shared by the registrar loop below and any single-slot
-// binding (the hub broker in host/ipc/modules/direct.ts), so
-// dispatch policy cannot diverge between the wires. Input parsing is
+// means, so dispatch policy cannot diverge between the wires the
+// registrar loop below serves. Input parsing is
 // UNCONDITIONAL, never gated by build type: the moment handlers are
 // reachable over a socket, this parse is the wall between a malformed
 // payload and git argv. The hooks are resolved once here (an untracked
@@ -50,7 +49,7 @@ type RegisterContractOpts<Ctx = HandlerContext> = {
 // only for an explicit mutating:true def not opted out via
 // movesHostState:false, exactly the rules RegisterContractOpts
 // documents.
-export function wrapContractCall<Ctx>(
+function wrapContractCall<Ctx>(
   def: InvokeDef,
   handler: (input: unknown, ctx: Ctx) => unknown,
   opts: RegisterContractOpts<Ctx>,

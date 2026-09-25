@@ -1,13 +1,12 @@
 // Wire contract between the app and the hub Worker: the HTTP route table, HTTP body schemas for the
 // device/ticket endpoints, the hub socket envelopes, and the
-// constants both sides must agree on. Imported by the app (a later
-// slice) and by hub/, so the same rules as
-// shared/ipc/socket/frames.ts apply: zod only, no node builtins, no
-// electron.
+// constants both sides must agree on. Imported by the app and by hub/,
+// so the same rules as shared/ipc/socket/frames.ts apply: zod only, no
+// node builtins, no electron.
 //
-// The device hub never parses sm traffic. The `frame` field of a hub
-// envelope is opaque to the Worker. It carries only the broker-surface
-// sm frames (hello/welcome, the direct:connectInfo req/res, bye), but
+// The device hub never parses what devices say to each other. The
+// `frame` field of a hub envelope is opaque to the Worker. It carries
+// only the connectInfo ask and its answer (shared/hub/link.ts), but
 // nothing here may depend on that shape. Contract data never rides this
 // wire: the device hub is orchestration only, and
 // data flows over the direct sockets it brokers.
@@ -17,15 +16,13 @@
 // holds a long-lived credential it exchanges for short-lived single-use
 // connect tickets, and the DO authenticates the account when it burns
 // the ticket, so every deliverable peer is by construction a device of
-// the same account. That is why the app-level hello carries no
-// credential on the hub path. Authorization stays host-local: mutating calls ride the
-// direct sockets only, where dispatch gates them on per-peer command
-// grants fail-closed (host/socket/server.ts), and the hub wire itself
-// serves nothing but the broker surface (see shared/hub/link.ts). The
-// size and count bounds in this file are sanity bounds that keep a bug
-// or a runaway client from ballooning allocations, and the session
-// epoch on the sm frames defends against cross-session mismatch after a
-// redial, not against the device hub itself.
+// the same account. That is why an ask carries no credential.
+// Authorization stays host-local: mutating calls ride the direct
+// sockets only, where dispatch gates them on the host's command-access
+// switch (host/socket/server.ts), and the hub wire itself answers
+// nothing but connectInfo (see shared/hub/link.ts). The size and count
+// bounds in this file are sanity bounds that keep a bug or a runaway
+// client from ballooning allocations.
 //
 // Ticket and credential string mechanics live in hub/src/ticket.ts.
 // To the app both are opaque strings: the credential rides in the
@@ -34,15 +31,14 @@ import { z } from "zod";
 import { fallbackDeviceIcon, isDeviceIcon } from "../account/deviceIcon";
 
 // Largest hub envelope the DO will forward, in bytes of the serialized
-// JSON. The device hub carries orchestration only:
-// hello/welcome, the direct:connectInfo broker exchange, bye and
-// presence, all small control frames, so this is a control-frame budget
-// rather than a data budget. Contract data rides the direct sockets and
-// never this wire. An oversize forward is answered with a `too-large`
-// nack to the sender. The worst legitimate frame is a connectInfo
-// answer (a handful of URLs and tickets), far under this, and the
-// worst-case presence roster fits too (asserted in hub/test/hub.spec.ts
-// against MAX_ONLINE_DEVICES).
+// JSON. The device hub carries orchestration only: the connectInfo ask
+// and answer, and presence, all small control frames, so this is a
+// control-frame budget rather than a data budget. Contract data rides
+// the direct sockets and never this wire. An oversize forward is
+// answered with a `too-large` nack to the sender. The worst legitimate
+// frame is a connectInfo answer (a handful of URLs and tickets), far
+// under this, and the worst-case presence roster fits too (asserted in
+// hub/test/hub.spec.ts against MAX_ONLINE_DEVICES).
 export const MAX_HUB_MESSAGE_BYTES = 64 * 1024;
 
 // Whether a serialized envelope fits under MAX_HUB_MESSAGE_BYTES.

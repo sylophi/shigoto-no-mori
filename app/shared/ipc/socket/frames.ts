@@ -1,7 +1,6 @@
 // Wire frames for the websocket host transport: the same contract
 // modules the Electron bridge serves, carried over a direct socket to
-// a peer device. The hub link multiplexes the same frames through the
-// device hub. One JSON object per text frame.
+// a peer device. One JSON object per text frame.
 //
 // PROTOCOL INVARIANT: a field whose value is undefined is OMITTED from
 // the frame. JSON.stringify already drops undefined object properties,
@@ -140,10 +139,10 @@ export const CLOSE_OVER_CAPACITY = 1013;
 // protocol change.
 //
 // The credential is `nonce` and `proof` (shared/ipc/socket/proof.ts),
-// read by the direct listener. Optional because the hub link's hello
-// carries none (the device hub already authenticated the account), and
-// the direct listener fails closed without them. An older build's hub
-// hello still carries an empty `token`, which the parse strips.
+// read by the direct listener. Optional in the schema so a hello
+// without them still parses and is refused as a failed credential
+// (CLOSE_AUTH_FAILED, counted toward the lockout) rather than dropped
+// as a malformed frame.
 const HelloFrameSchema = z.object({
   t: z.literal("hello"),
   deviceId: z.string(),
@@ -166,17 +165,6 @@ export const ReqFrameSchema = z.object({
 });
 export type ReqFrame = z.infer<typeof ReqFrameSchema>;
 
-// Sent by a client peer when it closes its side on purpose. The device hub carries no per-peer socket close, so without
-// this a host would keep a hostSession for a departed peer until the
-// next presence drop and fan every broadcast at it through the Durable
-// Object. Additive per the version-skew policy: an old host fails to
-// parse the frame and drops it, so the session then dies on presence
-// exactly as before. A direct socket has a real socket close, so it
-// never needs it and ignores it.
-const ByeFrameSchema = z.object({
-  t: z.literal("bye"),
-});
-
 // The liveness pair (see HEARTBEAT_INTERVAL_MS): the client sends
 // pings on its cadence and on a probe, the host only ever answers with
 // pongs, so each frame lives in exactly one direction's union.
@@ -192,7 +180,6 @@ const PongFrameSchema = z.object({ t: z.literal("pong") });
 export const ClientFrameSchema = z.discriminatedUnion("t", [
   HelloFrameSchema,
   ReqFrameSchema,
-  ByeFrameSchema,
   PingFrameSchema,
 ]);
 export type ClientFrame = z.infer<typeof ClientFrameSchema>;
@@ -230,10 +217,8 @@ const ResOkFrameSchema = z.object({
 // commands from here", distinct from a real handler failure.
 export const COMMAND_REFUSED_CODE = "command-refused";
 
-// The refusal message the gate carries. The exact text predates the
-// code (the hub grant gate shipped it in step 4), so an OLD peer
-// still sends it WITHOUT a code and message-based matching keeps
-// working across version skew in both directions.
+// The refusal message the gate carries, matched on its own wherever
+// only the text survives (see isCommandRefusedError).
 export const COMMAND_REFUSED_MESSAGE =
   "this device is not permitted to run commands on the remote machine";
 
@@ -252,8 +237,8 @@ export class CommandRefusedError extends Error {
 // Matcher that survives Electron's IPC error serialization (which
 // flattens an error to its message text): the renderer behind the hub
 // bridge sees a plain Error carrying the refusal message, not the
-// instance minted in main, and an OLD peer sends the message with no
-// code at all. Either form means "ask that machine to allow commands".
+// instance minted in main. Either form means "ask that machine to
+// allow commands".
 export function isCommandRefusedError(error: unknown): boolean {
   if (error instanceof CommandRefusedError) return true;
   const message = error instanceof Error ? error.message : String(error);
@@ -264,9 +249,7 @@ export function isCommandRefusedError(error: unknown): boolean {
 // survives Electron's IPC error serialization too: the matchers in
 // shared/errors.ts key on message text, so both wires degrade handler
 // failures identically. `code` is the machine-readable refusal
-// classification, ADDITIVE per the version-skew policy: an old peer
-// sends no code, and a reader treats absence as an unclassified
-// failure, falling back to the message text.
+// classification, absent on an ordinary handler failure.
 const ResErrFrameSchema = z.object({
   t: z.literal("res"),
   id: z.number().int(),
@@ -293,6 +276,12 @@ export const ServerFrameSchema = z.discriminatedUnion("t", [
   PongFrameSchema,
 ]);
 export type ServerFrame = z.infer<typeof ServerFrameSchema>;
+
+// The answer a wire gives when nothing serves the requested channel,
+// built in one place so every wire words it the same.
+export function noHandlerMessage(channel: string): string {
+  return `No handler registered for channel "${channel}"`;
+}
 
 // The failure answer to a req, on every wire alike: the message alone,
 // plus the code when the refusal has one.

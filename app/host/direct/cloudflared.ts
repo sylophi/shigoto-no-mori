@@ -265,7 +265,7 @@ export type CloudflaredRunner = {
   stop(): Promise<void>;
   status(): TunnelStatus;
   // The wss dial URL while the tunnel is healthy, else null. What the
-  // direct broker advertises.
+  // connectInfo answer advertises.
   tunnelUrl(): string | null;
 };
 

@@ -121,8 +121,7 @@ export type ConnectDeviceOptions = {
   // they hold it instead, and the welcome is only trusted once the
   // host's half checks out (shared/ipc/socket/proof.ts).
   ticket: string;
-  // This client build's version, carried in the hello so the host can
-  // log or gate skew later.
+  // This client build's version, carried in the hello.
   appVersion: string;
   // This client's device id, carried in the hello.
   localDeviceId: string;
@@ -185,11 +184,6 @@ export type PendingDeviceConnection = {
   // handshake failure. Idempotent: repeat calls return the same
   // promise without a second hello.
   authenticate(): Promise<DeviceConnection>;
-  // Whether the hello frame was actually handed to the socket. The
-  // dialer's blocked-verdict rule keys on this: only a hello that was
-  // sent can have consumed its ticket, so a connection-time rejection
-  // (a lockout, a dead route) must not read as a spent credential.
-  helloSent(): boolean;
   // Close without authenticating. Harmless to the host: no hello was
   // presented, so no ticket was spent and no session was superseded.
   // After a successful authenticate, this is an owner close.
@@ -204,10 +198,9 @@ export type PendingDeviceConnection = {
 // temporary, it is keyed on client IP so it may have nothing to do
 // with us, and a refused connection does not extend its window, so
 // backing off through it is exactly right. That distinction can only
-// be made by the code on the wire: this side cannot infer it, and the
-// dialer's helloSent predicate never could (it records that we WROTE
-// a hello, not that the host READ one). Kept here beside the connect
-// logic so the one rule has a single owner.
+// be made by the code on the wire: this side cannot infer it (writing
+// a hello says nothing about whether the host read it). Kept here
+// beside the connect logic so the one rule has a single owner.
 function isBlockingCloseCode(code: number | null): boolean {
   return code === CLOSE_AUTH_FAILED;
 }
@@ -605,8 +598,7 @@ export function openDevice(
         // The host's gate refused the command (it does not accept
         // commands from its peers). Typed, message preserved, so a caller can
         // distinguish "that machine will not run commands from here"
-        // from a real handler failure. An old host sends no code and
-        // falls through to the plain Error below.
+        // from a real handler failure.
         entry.reject(new CommandRefusedError(frame.message));
       } else {
         // A plain Error carrying the host's message text, so the
@@ -763,7 +755,6 @@ export function openDevice(
       }
       return connectPromise;
     },
-    helloSent: () => helloWasSent,
     abandon: close,
   };
 }

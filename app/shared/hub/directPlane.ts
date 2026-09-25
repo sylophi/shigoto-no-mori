@@ -1,14 +1,14 @@
 // The direct data plane's shared composition: one hub
-// connection serving as the dialer's broker transport, the direct
+// connection carrying the dialer's connectInfo ask, the direct
 // dialer, the renderer-facing bridge handlers, the keeper that
 // supervises a direct session per rostered peer (eager,
 // forever-retry, presence as desired state -- directKeeper.ts), the
 // status snapshot that folds the direct-session surface into the
 // connection's own, and the presence reconcile that both scopes direct
 // sessions to a live roster and feeds that roster to the keeper.
-// Data is direct or nothing (slice C): the hub connection is handed
-// to the DIALER only, never to the bridge, so no code path here can
-// open a hub peer session for contract traffic. Both owners (the
+// Data is direct or nothing: the hub connection is handed to the
+// DIALER only, never to the bridge, and all it can do for the dialer
+// is ask a peer for its connect info. Both owners (the
 // Electron main process in main/ipc/register.ts and the web bridge in
 // web/ipc/register.ts) used to hand-assemble exactly this
 // and keep each other in step by comment. Now they differ only by the
@@ -20,7 +20,6 @@
 // like the pieces it composes.
 import type { DirectCandidateKind } from "@shared/ipc/modules/direct";
 import type { HubPeerPush, HubStatus } from "@shared/ipc/modules/hub";
-import type { HubBrokerSession } from "@shared/hub/link";
 import type { HubConnectionStatus } from "@shared/hub/connectionTypes";
 import { makeHubHandlers, type HubHandlers } from "@shared/hub/bridgeHandlers";
 import { createDirectDialer, type DirectDialer } from "@shared/hub/directDial";
@@ -34,12 +33,15 @@ import type { SupervisorClock } from "@shared/remote/supervisor";
 
 // The slice of a hub connection the plane composes over, common to
 // the node connection (host/hub/connection.ts) and the browser one
-// (web/hub/connection.ts). connectBroker resolves the NARROWED
-// broker session (one typed invoke plus close) and is consumed by the
-// dialer's broker leg ONLY (see createDirectPlane below).
+// (web/hub/connection.ts). askConnectInfo is consumed by the dialer
+// ONLY (see createDirectPlane below).
 type DirectPlaneConnection = {
   status(): HubConnectionStatus;
-  connectBroker(deviceId: string): Promise<HubBrokerSession>;
+  askConnectInfo(
+    deviceId: string,
+    input: unknown,
+    timeoutMs: number,
+  ): Promise<unknown>;
 };
 
 type DirectPlaneDeps = {
@@ -119,12 +121,11 @@ export function createDirectPlane(deps: DirectPlaneDeps): DirectPlane {
   let dialer: DirectDialer | null = null;
   function getDialer(): DirectDialer {
     dialer ??= createDirectDialer({
-      // The ONLY consumer of the device hub's client role: the broker
-      // leg that asks a peer for its connect info. The bridge below
-      // never sees connectBroker, and the session it resolves carries
-      // one typed invoke only, so contract traffic structurally cannot
-      // ride the device hub.
-      connectBroker: (deviceId) => deps.connection().connectBroker(deviceId),
+      // The ONLY consumer of the hub connection's ask. The bridge
+      // below never sees it, and it carries one question only, so
+      // contract traffic structurally cannot ride the device hub.
+      askConnectInfo: (deviceId, input, timeoutMs) =>
+        deps.connection().askConnectInfo(deviceId, input, timeoutMs),
       localDeviceId: deps.localDeviceId(),
       localAppVersion: deps.localAppVersion(),
       // Pushes received on a direct connection are the ONLY peer

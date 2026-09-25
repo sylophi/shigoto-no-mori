@@ -15,7 +15,7 @@
 // (NoDialableCandidateError for the structural
 // nothing-this-platform-can-dial verdict, a transient error otherwise),
 // and the entry drops. The device hub rides underneath only as the
-// dialer's broker transport (direct:connectInfo), never as a data path.
+// dialer's connectInfo ask, never as a data path.
 // The web bridge injects the same dialer with a wss-only candidate
 // filter: a browser page cannot dial ws:// from
 // https (mixed content), but wss tunnel URLs dial fine.
@@ -40,8 +40,8 @@ type HubHandlerDeps = {
   status(): HubStatus;
   // The direct dial (shared/hub/directDial.ts), the ONLY way a peer
   // session comes to exist. The hub connection is not a dep here on
-  // purpose: nothing in the bridge may open a hub peer session, so
-  // the broker transport stays private to the dialer.
+  // purpose: nothing in the bridge may ask the device hub anything, so
+  // the connectInfo ask stays private to the dialer.
   connectDirect(
     deviceId: string,
     opts?: ConnectPeerOpts,

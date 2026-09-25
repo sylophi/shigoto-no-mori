@@ -94,8 +94,8 @@ export const allContractModules: readonly ContractModule[] = [
 // Ergonomic namespaces over the raw contract clients. Each module's
 // scope selects its transport, so the caller wires one transport per
 // scope and every contract lands on the right wire. The Electron
-// preload passes its IPC bridge for both scopes today. Step 3 swaps the
-// host entry for a socket transport and nothing else changes.
+// preload passes its IPC bridge for both scopes (host and client live
+// in one process there); the web client passes its loopback wires.
 export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const c = <M extends ContractModule>(m: M) =>
     buildClient(m, transports[m.scope]);

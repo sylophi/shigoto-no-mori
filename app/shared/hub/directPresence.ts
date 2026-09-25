@@ -66,7 +66,7 @@ export function applyDirectPresence(
   // roster, and closing on that would tear down every working direct
   // session exactly when the device hub cannot help. The keeper DOES
   // reconcile to empty though (never the closes): it cannot dial
-  // without the device hub's broker leg anyway, an outage must cancel
+  // without the device hub's connectInfo ask anyway, an outage must cancel
   // its pending retries rather than let them burn against nothing, and
   // the post-reconnect roster then reads as all-new peers, whose eager
   // dials no-op through the cache for every session that survived the

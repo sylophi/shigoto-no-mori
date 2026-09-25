@@ -1,12 +1,16 @@
 # sm device hub
 
-Cloudflare Worker that relays frames between a Clerk account's sm
-devices when they are not on the same LAN. Every device
-holds one outbound websocket to its account's `DeviceHub` Durable
-Object, which forwards opaque envelopes between them. No sm logic runs
-here: the Worker verifies Clerk tokens, keeps a device registry in D1,
-mints short-lived connection tickets and forwards frames it never
-parses. The wire contract lives in `../app/shared/hub/protocol.ts`.
+Cloudflare Worker that keeps a Clerk account's sm devices in touch.
+Every device holds one outbound websocket to its account's `DeviceHub`
+Durable Object, which tells each device which others are online and
+forwards the small opaque envelopes they use to broker direct
+connections (a device asks a peer how to dial it, the peer answers
+with its addresses and one-time tickets). Data never passes through
+here: it flows over the direct sockets those answers set up. No sm
+logic runs here either: the Worker verifies Clerk tokens, keeps a
+device registry in D1, mints short-lived connection tickets and
+forwards envelopes it never parses. The wire contract lives in
+`../app/shared/hub/protocol.ts`.
 
 This directory is a standalone pnpm project (like `cli/` is a
 standalone Go module) with its own lockfile. Install and run its
@@ -109,15 +113,12 @@ or `hub.shigomori.com`, DNS record and certificate) and serves no
 workers.dev route: the workers.dev host carries the account's subdomain
 label, which Cloudflare derives from the account email.
 
-Deploy order when a message cap shrinks (as with the 1 MiB to 64 KiB
-`MAX_HUB_MESSAGE_BYTES` change): update all devices BEFORE
-redeploying the Worker. The devices' inbound socket bound stays
-tolerant at the old cap for exactly this window, so a
-not-yet-redeployed Worker forwarding an old peer's oversize frame does
-not kill a new client's control-plane socket. The reverse skew (an old
-app talking through a new Worker) degrades softly instead: its
-oversize sends get nacked and the calls time out, which is acceptable
-during the owner's own rollout.
+Deploy order if `MAX_HUB_MESSAGE_BYTES` ever shrinks: first ship app
+builds whose inbound socket bound (`maxPayload` in
+`app/host/hub/connection.ts`) still reads the old size, then redeploy
+the Worker. A device reading a frame over its bound closes the socket,
+so a Worker still forwarding at the old size must never meet a device
+that already enforces the new one.
 
 Deploy order for the device icon rename (`0005_device_icon.sql`, which
 renames the `devices.kind` column and the wire field to `icon`): apply

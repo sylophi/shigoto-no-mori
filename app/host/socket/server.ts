@@ -26,7 +26,6 @@ import type { IncomingMessage } from "node:http";
 import { deflateRaw } from "node:zlib";
 import { WebSocket, WebSocketServer } from "ws";
 import { errorMessageOf } from "@shared/errors";
-import { noHandlerMessage } from "@shared/hub/link";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
 import {
   CLOSE_AUTH_FAILED,
@@ -43,6 +42,7 @@ import {
   HOST_LIVENESS_TIMEOUT_MS,
   MAX_IN_FLIGHT_PER_PEER,
   MAX_INBOUND_FRAME_BYTES,
+  noHandlerMessage,
   PUSH_BUFFER_LIMIT_BYTES,
   type ReqFrame,
   type ServerFrame,
@@ -798,10 +798,6 @@ export function createWsServerBinding(
           send(socket, { t: "pong" });
           return;
         }
-        // bye is a hub-wire frame (the device hub has no per-peer
-        // socket close). This wire has a real socket close, so a bye
-        // here is meaningless and silently ignored.
-        if (frame !== null && frame.t === "bye") return;
         // Past hello, a bad frame is dropped rather than fatal: one
         // malformed message must not kill a connection carrying other
         // in-flight calls.

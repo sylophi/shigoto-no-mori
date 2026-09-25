@@ -48,8 +48,7 @@ import { createHubConnection } from "@host/hub/connection";
 import { createWsServerBinding } from "@host/socket/server";
 import { dataDir } from "@host/lib/util/paths";
 import { CONTROL_FILE_NAME, createControlServer } from "../core/control/server";
-import { directContract } from "@shared/ipc/modules/direct";
-import { brokerHandlerFor, makeDirectHandlers } from "@host/ipc/modules/direct";
+import { makeConnectInfo } from "@host/direct/connectInfo";
 import { createDirectPlane } from "@shared/hub/directPlane";
 import {
   acceptsPeerCommands,
@@ -129,7 +128,7 @@ const electronServer: ServerTransport = {
 };
 
 // The direct data plane's listener. Auth consumes single-use connect
-// tickets minted by direct:connectInfo over the device hub, and
+// tickets minted by connectInfo over the device hub, and
 // dispatch gates mutating channels on the host's live command-access
 // switch (acceptsPeerCommands: every ticketed peer is a device of this
 // account, so the switch is the whole verdict). Unconditional like the
@@ -231,18 +230,30 @@ const directPlane = createDirectPlane({
 // it on the contract and lend its invokePeer to the peer transports.
 export const hubHandlers = directPlane.handlers;
 
+// The answer to a peer's connectInfo ask (host/direct/connectInfo.ts),
+// the one question the device hub carries, built from deps this module
+// owns: the listener's port, the ticket store and the tunnel runner.
+const serveConnectInfo = makeConnectInfo({
+  listenerPort: () => {
+    const current = directWsServer.status();
+    return current.listening ? current.port : null;
+  },
+  mintTickets: (peerDeviceId, kinds) => directTickets.mint(peerDeviceId, kinds),
+  // The tunnel candidate, advertised only while
+  // the cloudflared child is currently healthy (probed routable).
+  tunnelUrl: () => tunnelRunner.tunnelUrl(),
+});
+
 // The hub connection, unconditional like the listener bindings:
-// handler registration is recorded at boot, connecting itself is gated
-// in refreshHubConnection below (signed out or unconfigured means no
-// socket). Its onChange hands status transitions to the direct plane,
-// which fans a fresh snapshot out to every window through the
-// client-scoped hub contract and reconciles direct-session presence
-// on each transition. Peer pushes arrive over direct sessions only
-// (the dialer's onAnyPush inside the plane), never over the device hub.
+// connecting itself is gated in refreshHubConnection below (signed out
+// or unconfigured means no socket). Its onChange hands status
+// transitions to the direct plane, which fans a fresh snapshot out to
+// every window through the client-scoped hub contract and reconciles
+// direct-session presence on each transition. Peer pushes arrive over
+// direct sessions only (the dialer's onAnyPush inside the plane), never
+// over the device hub.
 const hubServer = createHubConnection({
-  // The one channel the wire brokers, named at creation so the client
-  // role can dial before the handler pair below is registered.
-  brokerChannel: directContract.calls.connectInfo.channel,
+  serveConnectInfo,
   onChange: () => directPlane.handleConnectionChange(),
 });
 
@@ -257,10 +268,10 @@ const hostServer: ServerTransport = {
   // remote exposure, so a host-scoped-but-not-remote channel
   // (runtime:nuke, launchers:launch) is never even registered on it. A
   // remote req for it gets the same no-handler res a client-scoped
-  // channel does. The device hub is deliberately NOT a wire here: it is
-  // orchestration only, its wire serves nothing but the broker surface
-  // registered below, and host broadcasts and viewer pings reach remote
-  // peers over their direct sessions alone.
+  // channel does. The device hub is deliberately NOT a wire here: it
+  // answers connectInfo and nothing else (serveConnectInfo above), and
+  // host broadcasts and viewer pings reach remote peers over their
+  // direct sessions alone.
   handle(channel, fn, opts) {
     electronServer.handle(channel, fn);
     if (opts?.remote === true) {
@@ -546,35 +557,3 @@ export async function refreshDirectHost(): Promise<void> {
     );
   });
 }
-
-// The direct broker (direct:connectInfo), constructed here like the
-// direct plane above because every dep is owned by this module:
-// index.ts only registers it on the contract. The roster predicate is
-// what stops a peer that fell off the control plane (revoked, account
-// switch) from re-minting tickets over its own still-open direct
-// socket.
-export const directHandlers = makeDirectHandlers({
-  listenerPort: () => {
-    const current = directWsServer.status();
-    return current.listening ? current.port : null;
-  },
-  mintTickets: (peerDeviceId, kinds) => directTickets.mint(peerDeviceId, kinds),
-  isPeerOnline: (peerDeviceId) =>
-    hubServer.status().onlineDeviceIds.includes(peerDeviceId),
-  // The tunnel candidate, advertised only while
-  // the cloudflared child is currently healthy (probed routable).
-  tunnelUrl: () => tunnelRunner.tunnelUrl(),
-});
-
-// The broker surface on the HUB wire: the binding exposes ONE slot
-// (not a ServerTransport), so direct:connectInfo is the only channel
-// it can ever serve and mounting anything else is a type error.
-// brokerHandlerFor supplies the channel-plus-handler pair, built on
-// the shared registrar's own per-call wrapper so the brokered path
-// serves the same dispatch policy as every other wire. index.ts still
-// registers the same handlers on the Electron wire and the direct
-// listener, where connectInfo fails closed without an authenticated
-// caller.
-hubServer.registerBroker(
-  brokerHandlerFor(directHandlers, { validateOutputs: VALIDATE_OUTPUTS }),
-);
