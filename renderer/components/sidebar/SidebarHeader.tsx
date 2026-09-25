@@ -52,10 +52,12 @@ function DoubutsuBrandHeader({ showDevStyle, onRevealProd }: ThemeHeaderProps) {
   return (
     <>
       {/* Draggable spacer reserves the macOS traffic-light area so the
-          pill below doesn't get overlapped by the window controls. */}
+          pill below doesn't get overlapped by the window controls. The
+          lights end at y=30 (main/index.ts), so the pill sits 8px under
+          them, the gap it leaves beneath itself. */}
       {hasLocalHost && (
         <div
-          className="doubutsu-only h-10 shrink-0"
+          className="doubutsu-only h-9.5 shrink-0"
           style={dragRegion("drag")}
         />
       )}
@@ -139,11 +141,12 @@ function DefaultSidebarHeader({
   return (
     <div
       // Title-bar drag region on the desktop, with the left inset
-      // clearing the traffic lights. The web bar keeps the height,
-      // drops both.
+      // clearing the traffic lights and the height centering the title
+      // on them (y=23, main/index.ts). The web bar has no lights to
+      // clear or line up with, and drops all three.
       className={cn(
-        "v1-only flex h-13 items-center gap-2",
-        hasLocalHost ? "px-3 pl-[92px]" : "px-4",
+        "v1-only flex items-center gap-2",
+        hasLocalHost ? "h-11.5 px-3 pl-[92px]" : "h-13 px-4",
       )}
       style={hasLocalHost ? dragRegion("drag") : undefined}
     >

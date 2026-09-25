@@ -42,7 +42,7 @@ import {
   deviceTitle,
   type DeviceStatusView,
 } from "@/lib/remote/deviceStatus";
-import { cn } from "@/lib/utils";
+import { cn, dragRegion } from "@/lib/utils";
 
 export interface DeviceRosterEntry {
   deviceId: string;
@@ -216,6 +216,9 @@ export function DeviceTabBar({
             title={pill.title}
             onClick={() => onSelect(pill.id)}
             onKeyDown={onKeyDown}
+            // A page header puts the row under the window's drag strip
+            // (AppShell): each pill carves its own click out of it.
+            style={dragRegion("no-drag")}
             className={cn(
               DEVICE_PILL_CLASS,
               "transition-colors",

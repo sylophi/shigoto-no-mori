@@ -5,6 +5,7 @@
 // so the header chrome, the inset and the tab wiring live in exactly
 // one place.
 import type React from "react";
+import { hasLocalHost } from "@/lib/localHost";
 import { cn } from "@/lib/utils";
 
 // One padding for both shells: the desktop pages sit under the window
@@ -40,7 +41,9 @@ export function PageHeader({
       className={cn(
         "relative flex flex-col overflow-hidden border-b border-border",
         PAGE_HEADER_PADDING,
-        tabs && "pt-4 phone:pt-3",
+        // On the desktop, 10px centers the 26px pills on the traffic
+        // lights' y=23 (main/index.ts). A browser has no lights.
+        tabs && (hasLocalHost ? "pt-2.5" : "pt-4 phone:pt-3"),
       )}
     >
       {/* Cancels the inset so the bar (which carries it as padding)
