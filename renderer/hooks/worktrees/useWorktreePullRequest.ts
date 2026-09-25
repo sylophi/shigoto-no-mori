@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import {
   useQuery,
   useQueryClient,
@@ -16,6 +16,14 @@ import {
   type QueryKeyRegistry,
 } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
+import { pullRequestMutationKey } from "@/hooks/projects/useProjectPullRequests";
+import { mergeStateSettling } from "@/lib/pullRequest";
+
+// How often, and for how long, to re-ask while GitHub is still
+// computing the merge state. Some PRs sit at UNKNOWN until something
+// else nudges GitHub, so the poll gives up rather than run forever.
+const SETTLE_POLL_MS = 3_000;
+const SETTLE_WINDOW_MS = 30_000;
 
 // Invalidates per-branch PR queries, scoped to one project when the
 // caller knows which one. The predicate skips project-map queries,
@@ -72,6 +80,8 @@ export function useWorktreePullRequest(
 ) {
   const queryClient = useQueryClient();
   const { api, keys, remote } = useHostScope();
+  // When the current settling run began, so the poll below is bounded.
+  const settlingSince = useRef<number | null>(null);
   return useQuery<PullRequestDetail | null>({
     queryKey: keys.worktreePullRequest(projectId, branch),
     queryFn: async () => {
@@ -93,6 +103,24 @@ export function useWorktreePullRequest(
     // which invalidates this machine's PR keys. A peer's key has no
     // watcher, so it refetches on focus itself.
     refetchOnWindowFocus: remote,
+    // Nothing else refetches once the merge state is the only thing
+    // lagging (the sweep's map doesn't carry it), so poll briefly. Not
+    // while a merge or draft toggle runs: its optimistic write reads as
+    // settling too, and a poll landing mid-mutation would put the old
+    // state back. Its own settle refetch starts the poll if needed.
+    refetchInterval: (query) => {
+      const pr = query.state.data;
+      if (!pr || !mergeStateSettling(pr)) {
+        settlingSince.current = null;
+        return false;
+      }
+      if (queryClient.isMutating({ mutationKey: pullRequestMutationKey(keys) }))
+        return false;
+      settlingSince.current ??= Date.now();
+      return Date.now() - settlingSince.current < SETTLE_WINDOW_MS
+        ? SETTLE_POLL_MS
+        : false;
+    },
     // gh failures here are stable (not in a github repo, gh not authed,
     // network down), so the default 3-retry exponential backoff just
     // turns a fast error into a 7s wait. The focus + refs-changed

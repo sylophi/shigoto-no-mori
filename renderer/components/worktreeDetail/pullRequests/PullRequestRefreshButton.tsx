@@ -9,7 +9,8 @@ import type { Worktree } from "@shared/schemas";
 
 // Re-asks gh for this worktree's PR. The page refetches on its own when
 // the window regains focus, refs move, or the sweep sees the PR change,
-// but checks finishing and mergeability moving reach none of those, so
+// and polls briefly while GitHub settles the merge state. Checks
+// finishing, or mergeability moving later on, reach none of those, so
 // this is the way to catch them without leaving the window. The icon
 // spins through any refetch, the automatic ones included.
 export function PullRequestRefreshButton({ worktree }: { worktree: Worktree }) {
