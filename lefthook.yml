@@ -2,23 +2,23 @@ pre-commit:
   parallel: true
   commands:
     typecheck:
-      run: pnpm run typecheck
+      run: pnpm -C app run typecheck
     lint:
-      run: pnpm run lint
+      run: pnpm -C app run lint
     format:
-      run: pnpm run format:check
+      run: pnpm -C app run format:check
     theme-contract:
-      run: pnpm test theme-contract
+      run: pnpm -C app test theme-contract
     host-boundary:
-      glob: "{host/**,main/**,renderer/**,shared/**,web/**,test/host-boundary.mjs,test/lib/checkKit.mjs}"
-      run: pnpm test host-boundary
+      glob: "{app/host/**,app/main/**,app/renderer/**,app/shared/**,app/web/**,app/test/host-boundary.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test host-boundary
     dmg-art:
-      run: pnpm test dmg-art
+      run: pnpm -C app test dmg-art
     # Glob-gated: the identity test costs ~140 git spawns, so it should
     # not run on unrelated commits.
     identity:
-      glob: "{shared/git/repoIdentity.mts,shared/git/defaultBranch.mts,shared/fixtures/**,test/identity.mjs}"
-      run: pnpm test identity
+      glob: "{app/shared/git/repoIdentity.mts,app/shared/git/defaultBranch.mts,app/shared/fixtures/**,app/test/identity.mjs}"
+      run: pnpm -C app test identity
     go-test:
       glob: "cli/**"
       run: go test -C cli ./...
@@ -36,8 +36,8 @@ pre-commit:
     # the invariant through allContractModules), so adding an untagged
     # host invoke also trips it.
     socket-host:
-      glob: "{host/socket/**,host/ipc/modules/globalConfig.ts,host/ipc/modules/remoteAccess.ts,shared/ipc/**,shared/schemas/**,shared/hub/protocol.ts,main/ipc/register.ts,test/socket-host.mjs,test/lib/checkKit.mjs}"
-      run: pnpm test socket-host
+      glob: "{app/host/socket/**,app/host/ipc/modules/globalConfig.ts,app/host/ipc/modules/remoteAccess.ts,app/shared/ipc/**,app/shared/schemas/**,app/shared/hub/protocol.ts,app/main/ipc/register.ts,app/test/socket-host.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test socket-host
     # Typechecks the hub Worker package and runs its vitest suite
     # inside workerd (real D1, Durable Object and websocket bindings)
     # against the shared app-to-worker protocol, so enrollment, ticket,
@@ -46,11 +46,11 @@ pre-commit:
     # its own lockfile, which the check installs first. One caveat: the
     # shared files it imports (shared/hub/protocol.ts and the frames.ts
     # it re-exports) live outside hub/, so their `zod` import resolves
-    # from the repo-root node_modules, not hub/node_modules. The two
-    # installs pin the same zod, so a root install is a prerequisite for
-    # those shared files.
+    # from app/node_modules, not hub/node_modules. The two installs pin
+    # the same zod, so an app/ install is a prerequisite for those
+    # shared files.
     hub:
-      glob: "{hub/**,shared/hub/protocol.ts,shared/ipc/socket/frames.ts}"
+      glob: "{hub/**,app/shared/hub/protocol.ts,app/shared/ipc/socket/frames.ts}"
       run: pnpm -C hub install --frozen-lockfile --prefer-offline && pnpm -C hub run check
     # Boots a stub Durable Object (a node ws server speaking the hub
     # envelope protocol) and drives two REAL hub connections through the
@@ -62,8 +62,8 @@ pre-commit:
     # hello token and the per-peer in-flight cap. Gated to the hub
     # transport surface plus the sm frame layer it multiplexes.
     hub-link:
-      glob: "{shared/hub/**,shared/remote/**,host/hub/**,shared/ipc/socket/**,shared/ipc/registerContract.ts,shared/ipc/modules/remoteAccess.ts,host/ipc/modules/remoteAccess.ts,shared/util/limit.ts,test/hub-link.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs}"
-      run: pnpm test hub-link
+      glob: "{app/shared/hub/**,app/shared/remote/**,app/host/hub/**,app/shared/ipc/socket/**,app/shared/ipc/registerContract.ts,app/shared/ipc/modules/remoteAccess.ts,app/host/ipc/modules/remoteAccess.ts,app/shared/util/limit.ts,app/test/hub-link.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test hub-link
     # Durable proof for the direct data plane (supervised by the keeper): boots the stub Durable Object plus a REAL ticket-mode
     # listener on an ephemeral loopback port, brokers connect tickets
     # over the device hub via direct:connectInfo, and asserts the whole
@@ -77,8 +77,8 @@ pre-commit:
     # direct-connected client through the shared peerPush path. Gated to
     # the direct surface plus the socket and hub layers it composes.
     direct-plane:
-      glob: "{host/direct/**,shared/packaging/cloudflaredDist.mts,host/socket/**,host/ipc/modules/direct.ts,host/lib/util/binaries.ts,host/lib/scripts/process.ts,shared/ipc/modules/direct.ts,shared/ipc/socket/**,shared/ipc/transport.ts,shared/ipc/registerContract.ts,shared/hub/**,host/hub/**,shared/account/service.ts,shared/remote/supervisor.ts,test/direct-plane.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs,test/lib/directBoot.mjs}"
-      run: pnpm test direct-plane
+      glob: "{app/host/direct/**,app/shared/packaging/cloudflaredDist.mts,app/host/socket/**,app/host/ipc/modules/direct.ts,app/host/lib/util/binaries.ts,app/host/lib/scripts/process.ts,app/shared/ipc/modules/direct.ts,app/shared/ipc/socket/**,app/shared/ipc/transport.ts,app/shared/ipc/registerContract.ts,app/shared/hub/**,app/host/hub/**,app/shared/account/service.ts,app/shared/remote/supervisor.ts,app/test/direct-plane.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
+      run: pnpm -C app test direct-plane
     # End-to-end proof for the device-sync transfer plumbing: builds the
     # real sm binary, seeds fixture repos in a sandboxed SHIGOMORI_DATA_DIR,
     # and moves a >1.5 MB git bundle between two REAL hub connections
@@ -88,8 +88,8 @@ pre-commit:
     # transfer cleanup, and the coded corrupted-bundle error. Gated to
     # the sync surface plus the CLI engine it shells.
     sync-transfer:
-      glob: "{cli/**,shared/ipc/modules/sync.ts,shared/ipc/modules/worktrees.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/hub/protocol.ts,host/ipc/modules/sync.ts,host/ipc/modules/worktrees.ts,host/ipc/peerSync.ts,host/ipc/cliDelegate.ts,host/hub/**,host/lib/sync/**,host/lib/idleRegistry.ts,host/lib/git/**,host/lib/scripts/**,host/lib/util/paths.ts,test/sync-transfer.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs,test/lib/directBoot.mjs}"
-      run: pnpm test sync-transfer
+      glob: "{cli/**,app/shared/ipc/modules/sync.ts,app/shared/ipc/modules/worktrees.ts,app/shared/ipc/hexId.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/shared/ipc/socket/frames.ts,app/shared/hub/protocol.ts,app/host/ipc/modules/sync.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/peerSync.ts,app/host/ipc/cliDelegate.ts,app/host/hub/**,app/host/lib/sync/**,app/host/lib/idleRegistry.ts,app/host/lib/git/**,app/host/lib/scripts/**,app/host/lib/util/paths.ts,app/test/sync-transfer.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
+      run: pnpm -C app test sync-transfer
     # End-to-end proof for the CLI's cross-device verbs: the real sm
     # binary finds the real control server through control.json in a
     # sandboxed data dir and drives `devices`, `send`, `bring`,
@@ -101,8 +101,8 @@ pre-commit:
     # exit 3 on a caveat, and the mirror stop guard. Gated to the
     # control surface plus the sync surface and CLI it rides.
     control:
-      glob: "{cli/**,shared/ipc/modules/control.ts,shared/ipc/modules/sync.ts,shared/ipc/modules/mirror.ts,shared/ipc/modules/worktrees.ts,shared/ipc/modules/projects.ts,shared/ipc/modules/remoteAccess.ts,shared/leaveOutRule.ts,shared/sharedSettings.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,host/ipc/modules/control.ts,host/ipc/modules/sync.ts,host/ipc/modules/mirror.ts,host/ipc/modules/worktrees.ts,host/ipc/peerSync.ts,host/ipc/cliDelegate.ts,host/mirror/**,host/lib/sync/**,host/lib/git/**,host/lib/util/paths.ts,main/core/control/**,main/core/portForward/bridge.ts,test/control.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs,test/lib/directBoot.mjs}"
-      run: pnpm test control
+      glob: "{cli/**,app/shared/ipc/modules/control.ts,app/shared/ipc/modules/sync.ts,app/shared/ipc/modules/mirror.ts,app/shared/ipc/modules/worktrees.ts,app/shared/ipc/modules/projects.ts,app/shared/ipc/modules/remoteAccess.ts,app/shared/leaveOutRule.ts,app/shared/sharedSettings.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/host/ipc/modules/control.ts,app/host/ipc/modules/sync.ts,app/host/ipc/modules/mirror.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/peerSync.ts,app/host/ipc/cliDelegate.ts,app/host/mirror/**,app/host/lib/sync/**,app/host/lib/git/**,app/host/lib/util/paths.ts,app/main/core/control/**,app/main/core/portForward/bridge.ts,app/test/control.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
+      run: pnpm -C app test control
     # End-to-end proof for the port-forward wire: drives the host-side
     # forward verbs between two REAL hub connections against real
     # loopback TCP fixture servers, asserting grant refusal before any
@@ -114,8 +114,8 @@ pre-commit:
     # the per-forward conn cap) driven over the same wire. Gated to the
     # forward surface plus the stub device hub it rides.
     port-forward:
-      glob: "{shared/ipc/modules/forward.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/**,shared/hub/protocol.ts,shared/hub/bridgeHandlers.ts,host/ipc/modules/forward.ts,host/socket/**,host/hub/**,host/lib/idleRegistry.ts,host/lib/net.ts,main/core/portForward/**,test/port-forward.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs,test/lib/directBoot.mjs}"
-      run: pnpm test port-forward
+      glob: "{app/shared/ipc/modules/forward.ts,app/shared/ipc/hexId.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/shared/ipc/socket/**,app/shared/hub/protocol.ts,app/shared/hub/bridgeHandlers.ts,app/host/ipc/modules/forward.ts,app/host/socket/**,app/host/hub/**,app/host/lib/idleRegistry.ts,app/host/lib/net.ts,app/main/core/portForward/**,app/test/port-forward.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
+      run: pnpm -C app test port-forward
     # End-to-end proof for continuous worktree mirroring: builds the real
     # file-sync engine (and the sm CLI for the fixture project), then
     # runs a REAL `file-sync daemon` on device B behind the real
@@ -127,16 +127,16 @@ pre-commit:
     # serve child on terminate, and the device hub staying flat. Gated
     # to the mirror surface plus the byte wire and CLI it rides.
     mirror:
-      glob: "{file-sync/**,cli/**,host/fileSync/**,host/mirror/**,shared/packaging/fileSyncDist.mts,shared/ipc/modules/mirror.ts,shared/ipc/modules/forward.ts,shared/ipc/modules/sync.ts,host/ipc/modules/sync.ts,host/ipc/peerSync.ts,shared/ipc/hexId.ts,shared/ipc/buildClient.ts,shared/ipc/registerContract.ts,shared/ipc/socket/frames.ts,shared/hub/protocol.ts,host/ipc/modules/forward.ts,host/ipc/modules/mirror.ts,host/ipc/modules/worktrees.ts,host/ipc/cliDelegate.ts,host/hub/**,host/lib/idleRegistry.ts,host/lib/net.ts,host/lib/git/**,host/lib/util/paths.ts,main/core/portForward/bridge.ts,main/core/mirror/**,shared/ipc/socket/channels.ts,host/socket/channelStreams.ts,test/mirror.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs,test/lib/directBoot.mjs}"
-      run: pnpm test mirror
+      glob: "{file-sync/**,cli/**,app/host/fileSync/**,app/host/mirror/**,app/shared/packaging/fileSyncDist.mts,app/shared/ipc/modules/mirror.ts,app/shared/ipc/modules/forward.ts,app/shared/ipc/modules/sync.ts,app/host/ipc/modules/sync.ts,app/host/ipc/peerSync.ts,app/shared/ipc/hexId.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/shared/ipc/socket/frames.ts,app/shared/hub/protocol.ts,app/host/ipc/modules/forward.ts,app/host/ipc/modules/mirror.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/cliDelegate.ts,app/host/hub/**,app/host/lib/idleRegistry.ts,app/host/lib/net.ts,app/host/lib/git/**,app/host/lib/util/paths.ts,app/main/core/portForward/bridge.ts,app/main/core/mirror/**,app/shared/ipc/socket/channels.ts,app/host/socket/channelStreams.ts,app/test/mirror.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
+      run: pnpm -C app test mirror
     # Proves the worktree port list's pure parts under plain Node: the
     # port-pool state reader (XDG_DATA_HOME, declared order, malformed
     # entries), the pool-then-custom merge with its shadowing rule, and
     # the loopback probe and dial with the ::1 fallback. Gated to those
     # modules plus the check itself.
     worktree-ports:
-      glob: "{host/lib/portPool.ts,shared/ports/mergeWorktreePorts.ts,host/lib/net.ts,host/ipc/modules/ports.ts,shared/schemas/ports.ts,test/worktree-ports.mjs,test/lib/checkKit.mjs}"
-      run: pnpm test worktree-ports
+      glob: "{app/host/lib/portPool.ts,app/shared/ports/mergeWorktreePorts.ts,app/host/lib/net.ts,app/host/ipc/modules/ports.ts,app/shared/schemas/ports.ts,app/test/worktree-ports.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test worktree-ports
     # Boots the same stub Durable Object and drives the BROWSER hub
     # connection (web/hub/connection.ts, built on the global WebSocket)
     # under node against a real node host peer, asserting connect,
@@ -145,8 +145,8 @@ pre-commit:
     # per-dial ticket mint. Gated to the browser connection plus the hub
     # transport surface it drives.
     web-hub:
-      glob: "{web/**,shared/hub/**,shared/remote/**,shared/util/limit.ts,host/hub/**,test/web-hub.mjs,test/lib/hubStub.mjs,test/lib/hubBoot.mjs,test/lib/checkKit.mjs}"
-      run: pnpm test web-hub
+      glob: "{app/web/**,app/shared/hub/**,app/shared/remote/**,app/shared/util/limit.ts,app/host/hub/**,app/test/web-hub.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test web-hub
     # Drives the web client's window.api bridge headlessly: the surface
     # parity against buildApi (so renderer components mount unmodified),
     # the localStorage-backed clientConfig and credential stores, the
@@ -156,55 +156,55 @@ pre-commit:
     # unconfigured/origin-blocked access states that keep a
     # misconfigured deployment from looping the hub supervisor.
     web-bridge:
-      glob: "{web/**,shared/account/**,shared/ipc/**,shared/hub/protocol.ts,test/web-bridge.mjs,test/lib/checkKit.mjs}"
-      run: pnpm test web-bridge
+      glob: "{app/web/**,app/shared/account/**,app/shared/ipc/**,app/shared/hub/protocol.ts,app/test/web-bridge.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test web-bridge
     # Drives the shared settings merge and both places a copy lives
     # (the host's registry.json key, the browser's localStorage) through
     # pairwise exchanges: no server holds the settings, so convergence
     # rests on the merge being order-free, and on a no-op merge staying
     # silent so two copies never announce at each other forever.
     shared-settings:
-      glob: "{shared/sharedSettings.ts,shared/schemas/sharedSettings.ts,shared/ipc/modules/sharedSettings.ts,host/lib/sharedSettings/**,web/ipc/register.ts,test/shared-settings.mjs,test/lib/checkKit.mjs}"
-      run: pnpm test shared-settings
+      glob: "{app/shared/sharedSettings.ts,app/shared/schemas/sharedSettings.ts,app/shared/ipc/modules/sharedSettings.ts,app/host/lib/sharedSettings/**,app/web/ipc/register.ts,app/test/shared-settings.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test shared-settings
     # The scripts' manual order is one per project across branches whose
     # package.json differ, so the merge must keep another branch's.
     script-order:
-      glob: "{host/lib/scripts/packageScriptStats.ts,host/lib/config/store.ts,test/script-order.mjs,test/lib/checkKit.mjs}"
-      run: pnpm test script-order
+      glob: "{app/host/lib/scripts/packageScriptStats.ts,app/host/lib/config/store.ts,app/test/script-order.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test script-order
     # The tree's project group order is decided over every device, so
     # the device filter drops groups without reordering the rest.
     project-order:
-      glob: "{renderer/components/sidebar/buildSidebarRows.ts,renderer/lib/sortProjects.ts,test/project-order.mjs,test/lib/checkKit.mjs}"
-      run: pnpm test project-order
+      glob: "{app/renderer/components/sidebar/buildSidebarRows.ts,app/renderer/lib/sortProjects.ts,app/test/project-order.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test project-order
     # The ⌘K palette lists every device's worktrees once, visits first,
     # and opens on the one before the page on screen.
     worktree-palette:
-      glob: "{renderer/components/palette/buildPaletteEntries.ts,renderer/lib/fuzzyMatch.ts,renderer/components/sidebar/buildSidebarRows.ts,test/worktree-palette.mjs,test/lib/checkKit.mjs}"
-      run: pnpm test worktree-palette
+      glob: "{app/renderer/components/palette/buildPaletteEntries.ts,app/renderer/lib/fuzzyMatch.ts,app/renderer/components/sidebar/buildSidebarRows.ts,app/test/worktree-palette.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test worktree-palette
     # The mirror's status line reads a cycle that moves no files as
     # Live, so events on ignored paths do not flash Syncing.
     mirror-status:
-      glob: "{renderer/components/worktreeDetail/mirror/mirrorStatus.ts,test/mirror-status.mjs,test/lib/checkKit.mjs}"
-      run: pnpm test mirror-status
+      glob: "{app/renderer/components/worktreeDetail/mirror/mirrorStatus.ts,app/test/mirror-status.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test mirror-status
     # Drives stack detection (shared/pullRequestStack.ts), the pure
     # read behind the sidebar's stack pill, the worktree page's stack
     # list and the stack merge button.
     pull-request-stack:
-      glob: "{shared/pullRequestStack.ts,shared/schemas/pullRequest.ts,shared/schemas/worktree.ts,test/pull-request-stack.mjs,test/lib/checkKit.mjs}"
-      run: pnpm test pull-request-stack
+      glob: "{app/shared/pullRequestStack.ts,app/shared/schemas/pullRequest.ts,app/shared/schemas/worktree.ts,app/test/pull-request-stack.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test pull-request-stack
     # Drives the pure liveness rate limiters (renderer crash-loop guard
     # and fatal-relaunch guard) that decide recreate-vs-give-up and
     # relaunch-vs-stand. Gated to the pure module plus the check itself,
     # since the Electron wiring around them is a human-verify item.
     liveness:
-      glob: "{main/core/liveness/**,test/liveness.mjs}"
-      run: pnpm test liveness
+      glob: "{app/main/core/liveness/**,app/test/liveness.mjs}"
+      run: pnpm -C app test liveness
     # The Safe Storage reset contract, and on macOS the real
     # `security` deletion of a probe item. That writes to the login
     # keychain, so the job is gated to the keychain modules alone.
     keychain:
-      glob: "{main/core/keychain/**,test/keychain.mjs}"
-      run: pnpm test keychain
+      glob: "{app/main/core/keychain/**,app/test/keychain.mjs}"
+      run: pnpm -C app test keychain
     # Drives the per-project git-directory watcher against a REAL git
     # repository with a linked worktree: a commit in the worktree, a
     # checkout and a branch delete each land as one project-scoped
@@ -213,14 +213,14 @@ pre-commit:
     # produces none. Loop-safety of the watcher rests on that
     # allowlist, so it is pinned here.
     git-watcher:
-      glob: "{main/core/gitWatcher.ts,test/git-watcher.mjs,test/lib/checkKit.mjs}"
-      run: pnpm test git-watcher
+      glob: "{app/main/core/gitWatcher.ts,app/test/git-watcher.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test git-watcher
     # Clones a real sandbox repository through cloneRepo and walks the
     # projects:clone payload's accept/reject table (remotes only, one
     # folder segment), which is what a peer's clone request is held to.
     clone:
-      glob: "{host/lib/git/clone.ts,shared/cloneUrl.ts,shared/schemas/project.ts,shared/git/repoIdentity.mts,test/clone.mjs,test/lib/checkKit.mjs}"
-      run: pnpm test clone
+      glob: "{app/host/lib/git/clone.ts,app/shared/cloneUrl.ts,app/shared/schemas/project.ts,app/shared/git/repoIdentity.mts,app/test/clone.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test clone
     # Drives auto-pull against a REAL repository with a remote: a clean,
     # strictly-behind worktree fast-forwards, and every state that would
     # make the pull anything else (a local commit, a modified or
@@ -228,8 +228,8 @@ pre-commit:
     # leaves it untouched. Also the sweep's marked-only selection and
     # the mark's registry.json round trip.
     auto-pull:
-      glob: "{host/lib/worktrees/autoPull.ts,host/lib/worktrees/autoPullSweep.ts,host/lib/git/sync.ts,host/lib/git/core.ts,host/lib/config/store.ts,test/auto-pull.mjs,test/lib/checkKit.mjs}"
-      run: pnpm test auto-pull
+      glob: "{app/host/lib/worktrees/autoPull.ts,app/host/lib/worktrees/autoPullSweep.ts,app/host/lib/git/sync.ts,app/host/lib/git/core.ts,app/host/lib/config/store.ts,app/test/auto-pull.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test auto-pull
     # Drives the electron-free account layer (main/core/account/*,
     # shared/account/*) end to end with stubs: the hub client's
     # route/method/auth-tier discipline against the shared schemas
@@ -241,5 +241,5 @@ pre-commit:
     # unrelated commits. Proves enrollment and storage cannot drift
     # from shared/hub/protocol.ts without electron or a browser.
     account:
-      glob: "{main/core/account/**,shared/account/**,shared/ipc/modules/account.ts,shared/hub/protocol.ts,test/account.mjs,test/lib/checkKit.mjs}"
-      run: pnpm test account
+      glob: "{app/main/core/account/**,app/shared/account/**,app/shared/ipc/modules/account.ts,app/shared/hub/protocol.ts,app/test/account.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test account

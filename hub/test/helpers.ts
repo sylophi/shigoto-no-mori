@@ -20,7 +20,7 @@ import {
   TicketResponseSchema,
   decodeEnvelope,
   encodeEnvelope,
-} from "../../shared/hub/protocol.ts";
+} from "../../app/shared/hub/protocol.ts";
 import type { Env } from "../src/env.ts";
 import { createWorker, type HubDeps } from "../src/worker.ts";
 

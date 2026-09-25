@@ -3,6 +3,10 @@
 How to run the real app, drive it from a script, and test remote
 flows on one machine. Written for people and for agents.
 
+Commands and paths are relative to `app/`, where the app lives. The
+exceptions say so: `hub/`, `cli/` and `lefthook.yml` are at the repo
+root.
+
 The automated checks (`pnpm test <name>` for the proofs in `test/`, and
 the hub's own suite, all listed in `lefthook.yml`) are not covered here.
 
@@ -515,9 +519,10 @@ and assert through the bridge and the disk.
   worktrees, run and watch its scripts, change its settings) works
   from a browser tab the same way, and anything local by nature
   (launch tools, this device's section, port forwarding) is absent.
-- **Local hub** (`pnpm -C hub dev`). Set `SM_DEVICE_HUB_URL` to
+- **Local hub** (`pnpm -C ../hub dev`). Set `SM_DEVICE_HUB_URL` to
   `http://localhost:8787` to run against a Worker on this machine
-  instead of `hub-dev`. Needs `CLERK_SECRET_KEY` in `hub/.dev.vars`.
+  instead of `hub-dev`. Needs `CLERK_SECRET_KEY` in the repo root's
+  `hub/.dev.vars`.
 - **Packaged build** (`pnpm make`). The only way to test the prod
   scheme registration. Without `APPLE_SIGNING_IDENTITY` in the build
   environment the bundle is unsigned and, like dev, runs on

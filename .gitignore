@@ -29,13 +29,13 @@ dist-web/
 # scripts/copy-material-icons.mjs (postinstall). Vite serves public/ as a
 # static asset root, which avoids the 1238 per-icon ESM wrappers an eager
 # import.meta.glob would otherwise generate in dev.
-public/material-icons/
+app/public/material-icons/
 
 # Electron-Forge
 out/
 
 # App icon intermediates (icon.icns and icon.png are the committed sources)
-assets/icon.iconset/
+app/assets/icon.iconset/
 
 # sm CLI compiled binary (scripts/build-cli.mjs)
 dist-cli/

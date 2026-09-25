@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <title>Shigoto no Mori</title>
+    <!-- Copies of the desktop app's icon (app-root assets/icon.svg,
+         and icon.png at 180px) in public/, since the dev server cannot
+         serve files from outside this root. The PNG is for browsers
+         that skip SVG icons and for the phone home screen. -->
+    <link rel="icon" type="image/png" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- External on purpose: the deploy's CSP is script-src 'self'
+         with no inline allowance, and a blocking head script keeps the
+         pre-paint theme guarantee. See public/boot-theme.js. -->
+    <script src="/boot-theme.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/main.tsx"></script>
+  </body>
+</html>

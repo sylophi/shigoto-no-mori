@@ -1,5 +1,5 @@
 {
-  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "$schema": "./app/node_modules/oxfmt/configuration_schema.json",
   "semi": true,
   "singleQuote": false,
   "tabWidth": 2,
@@ -7,7 +7,7 @@
   "printWidth": 80,
   "sortPackageJson": false,
   "sortTailwindcss": {
-    "stylesheet": "./renderer/index.css"
+    "stylesheet": "./app/renderer/index.css"
   },
   "ignorePatterns": [
     "**/node_modules/",

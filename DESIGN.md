@@ -2,7 +2,7 @@
 
 Rules for the app's visual layer. They apply to every component in
 `renderer/`, which the desktop window and the web client (`web/`) both
-render.
+render. Paths and commands here are relative to `app/`.
 
 ## Theming: two visual systems, one component tree
 

@@ -4,11 +4,29 @@ A desktop app for managing many git worktrees in parallel.
 
 Comes with a focused GUI and one-click launchers per worktree (editor, shell, agent CLI, anything configurable per project). Agent and platform-agnostic by design.
 
-<img width="1032" height="712" alt="Shigoto no Mori with the doubutsu theme: a mint sidebar of projects and worktrees beside a cream detail pane with launcher pills" src="assets/readme-app.png" />
+<img width="1032" height="712" alt="Shigoto no Mori with the doubutsu theme: a mint sidebar of projects and worktrees beside a cream detail pane with launcher pills" src="app/assets/readme-app.png" />
 
 `Shigoto no Mori` plays on *Doubutsu no Mori* (Animal Crossing), "work forest", and the idea of a forest of worktrees: many pieces of work growing side by side without becoming chaos.
 
+## Repository
+
+| Folder | What it is |
+| --- | --- |
+| `app/` | The Electron desktop app and the web client (one pnpm project) |
+| `cli/` | The `sm` CLI, a Go module bundled into the app |
+| `file-sync/` | The worktree mirroring engine, a Go module bundled into the app |
+| `hub/` | The device hub, a Cloudflare Worker with its own pnpm project |
+| `skills/` | Agent skills for the `sm` workflow (below) |
+
+Install the app's dependencies with `pnpm -C app install` (the root
+`postinstall` script does the same). The root `package.json` forwards
+the app's everyday scripts, so `pnpm dev` and `pnpm test` work from
+either place. The repo-wide checks (`lefthook.yml`,
+`.oxlintrc.json`, `.oxfmtrc.json`) stay at the root.
+
 ## Layout
+
+Paths in this section are under `app/`.
 
 One UI, two shells. The desktop window and the browser tab render the
 same `renderer/` tree over the same `window.api` surface. What differs
