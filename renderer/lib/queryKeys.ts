@@ -432,3 +432,12 @@ export function isWorktreePullRequestKey(query: {
     query.queryKey[prBranchScopeIndex] === PR_BRANCH_SCOPE
   );
 }
+
+// The branch a worktreePullRequest key was built for, the segment after
+// the branch scope.
+// Only for a key isWorktreePullRequestKey matched.
+export function worktreePullRequestKeyBranch(
+  queryKey: readonly unknown[],
+): string {
+  return queryKey[prBranchScopeIndex + 1] as string;
+}

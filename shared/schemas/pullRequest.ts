@@ -45,6 +45,18 @@ export function pullRequestsEqual(a: PullRequest, b: PullRequest): boolean {
   );
 }
 
+// Whether a branch's PR (null: the branch has none) is what the
+// project-wide map holds for it. A PullRequestDetail compares on its
+// slim fields.
+export function matchesMapEntry(
+  pr: PullRequest | null,
+  entry: PullRequest | undefined,
+): boolean {
+  return pr === null
+    ? entry === undefined
+    : entry !== undefined && pullRequestsEqual(pr, entry);
+}
+
 // GraphQL's PullRequest.mergeStateStatus, surfaced verbatim so the
 // renderer can pick the right reason text. UNKNOWN covers both "still
 // computing" and "gh didn't report it". The UI treats both the same.

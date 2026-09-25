@@ -39,6 +39,7 @@ import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
 import { mirrorContract } from "@shared/ipc/modules/mirror";
 import { updaterContract } from "@shared/ipc/modules/updater";
 import { invalidateBranchState } from "@/hooks/git/useBranches";
+import { syncProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import { writeMirrorList } from "@/hooks/remote/useMirrors";
 import { writeUpdaterState } from "@/hooks/system/useUpdater";
 import { mergePeerSharedSettings } from "./sharedSettingsSync";
@@ -94,16 +95,17 @@ export function startRemoteHostWatch(queryClient: QueryClient): void {
     }
     // The peer's PR sweep moved one project's map: the githubCli domain
     // sits outside the git-state sweeps (a PR is not git state), so the
-    // peer's rows and inbox entries refresh off this alone, the way the
-    // local map refreshes off the same broadcast on the local wire.
+    // peer's rows, inbox entries and any open page of its PRs refresh
+    // off this alone, the way the local ones do off the same broadcast
+    // on the local wire.
     if (channel === PULL_REQUESTS_REFRESHED.channel) {
       const parsed = PULL_REQUESTS_REFRESHED.payload.safeParse(payload);
       if (!parsed.success) return;
-      void queryClient.invalidateQueries({
-        queryKey: queryKeysFor(deviceId).projectPullRequests(
-          parsed.data.projectId,
-        ),
-      });
+      void syncProjectPullRequests(
+        queryClient,
+        queryKeysFor(deviceId),
+        parsed.data.projectId,
+      );
       return;
     }
     // The peer's updater moved. The state rides the push whole, so it

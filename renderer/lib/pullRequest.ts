@@ -150,8 +150,9 @@ export function describeMergeState(
       };
     case "DIRTY":
       return { label: "Conflicts with base", tone: "rose", canMerge: false };
+    // DRAFT on a PR that isn't one is GitHub still recomputing the
+    // merge state after the PR was marked ready, not a verdict.
     case "DRAFT":
-      return { label: "Draft", tone: "slate", canMerge: false };
     case "UNKNOWN":
       return {
         label: "Mergeable state unknown",

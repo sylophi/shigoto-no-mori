@@ -5,7 +5,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import {
-  pullRequestsEqual,
+  matchesMapEntry,
   toSlimPullRequest,
   type PullRequest,
   type PullRequestDetail,
@@ -61,7 +61,9 @@ export function useWatchWorktreePullRequests(): void {
 // Per-branch PR lookup for the open worktree page. Fetches on mount so
 // opening a worktree feels instant; useWatchWorktreePullRequests invalidates
 // it explicitly on window focus and on git refs changing, so we opt out
-// of TanStack's stale-gated focus refetch path. Silent on error to match
+// of TanStack's stale-gated focus refetch path. A PR changing on GitHub
+// with neither happening reaches it through the sweep broadcast
+// (syncProjectPullRequests). Silent on error to match
 // the sweep's swallow behavior. A transient gh failure shouldn't toast.
 export function useWorktreePullRequest(
   projectId: string,
@@ -113,19 +115,15 @@ function mirrorIntoProjectMap(
   // map.
   const key = keys.projectPullRequests(projectId);
   const prev = queryClient.getQueryData<Record<string, PullRequest>>(key);
-  if (!prev) return;
-  const current = prev[branch];
+  if (!prev || matchesMapEntry(pr, prev[branch])) return;
   if (pr === null) {
-    if (current === undefined) return;
     const next = { ...prev };
     delete next[branch];
     queryClient.setQueryData<Record<string, PullRequest>>(key, next);
     return;
   }
-  const slim = toSlimPullRequest(pr);
-  if (current && pullRequestsEqual(current, slim)) return;
   queryClient.setQueryData<Record<string, PullRequest>>(key, {
     ...prev,
-    [branch]: slim,
+    [branch]: toSlimPullRequest(pr),
   });
 }

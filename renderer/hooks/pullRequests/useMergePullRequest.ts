@@ -3,7 +3,10 @@ import type { MergeMethod, PullRequestDetail } from "@shared/schemas";
 import type { QueryKeyRegistry } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { invalidateBranchState } from "../git/useBranches";
-import { invalidatePullRequestsForProject } from "../projects/useProjectPullRequests";
+import {
+  invalidatePullRequestsForProject,
+  pullRequestMutationKey,
+} from "../projects/useProjectPullRequests";
 
 interface MergeVariables {
   projectId: string;
@@ -26,6 +29,7 @@ export function useMergePullRequest() {
   const qc = useQueryClient();
   const { api, keys } = useHostScope();
   return useMutation<void, Error, MergeVariables, Context>({
+    mutationKey: pullRequestMutationKey(keys),
     mutationFn: ({ projectId, number, method, stack }) =>
       api.githubCli.mergePullRequest({ projectId, number, method, stack }),
     onMutate: async ({ projectId, branch }) => {

@@ -4,11 +4,19 @@ import {
   useQueries,
   useQuery,
   useQueryClient,
+  type QueryClient,
 } from "@tanstack/react-query";
-import type { Project, PullRequest } from "@shared/schemas";
 import {
+  matchesMapEntry,
+  type Project,
+  type PullRequest,
+  type PullRequestDetail,
+} from "@shared/schemas";
+import {
+  isWorktreePullRequestKey,
   queryKeys,
   queryKeysFor,
+  worktreePullRequestKeyBranch,
   type QueryKeyRegistry,
 } from "@/lib/queryKeys";
 import {
@@ -31,18 +39,57 @@ export function invalidatePullRequestsForProject(
   });
 }
 
-// Narrow invalidator for the sweep broadcast: the sweep already
-// refreshed the project map in main, so the renderer just needs to
-// pick that up. Cascading to per-branch would fire an extra `gh pr
-// list --head` every minute when the detail page is open, even though
-// the focus + refs-changed paths already keep that query fresh.
-function invalidateProjectPullRequests(
-  qc: ReturnType<typeof useQueryClient>,
+// Shared by the PR mutations (merge, draft toggle), which write their
+// outcome into the page ahead of GitHub, so syncProjectPullRequests can
+// hold off while one runs.
+export function pullRequestMutationKey(keys: QueryKeyRegistry) {
+  return keys.pullRequestsAll();
+}
+
+// Answer to the sweep broadcast: the sweep already refreshed the
+// project map in main, so the renderer refetches that, then re-asks
+// only the open worktree pages whose PR the new map disagrees with. A
+// PR flipped to draft or ready (or merged) on github.com thus reaches
+// an open page within a sweep, not at the next focus. Cascading to
+// every per-branch query instead would fire an extra `gh pr list
+// --head` per open page on every broadcast, most of them for PRs that
+// didn't move. Also serves a peer's broadcast (remoteHostWatch), under
+// that peer's keys.
+export async function syncProjectPullRequests(
+  qc: QueryClient,
+  keys: QueryKeyRegistry,
   projectId: string,
-) {
-  void qc.invalidateQueries({
-    queryKey: queryKeys.projectPullRequests(projectId),
+): Promise<void> {
+  const mapKey = keys.projectPullRequests(projectId);
+  // "all": the comparison below needs the fresh map even when nothing
+  // is observing it. Main serves it from the sweep's cache, no gh call.
+  await qc.invalidateQueries({ queryKey: mapKey, refetchType: "all" });
+  const map = qc.getQueryData<Record<string, PullRequest>>(mapKey);
+  // A pending merge or draft toggle has written its optimistic result
+  // into the page, which the map can't match yet. The mutation
+  // refreshes the page itself when it settles.
+  if (!map || qc.isMutating({ mutationKey: pullRequestMutationKey(keys) }))
+    return;
+  const pages = qc.getQueryCache().findAll({
+    queryKey: keys.pullRequestsForProject(projectId),
+    predicate: isWorktreePullRequestKey,
   });
+  for (const page of pages) {
+    const detail = page.state.data as PullRequestDetail | null | undefined;
+    if (detail === undefined) continue;
+    const entry = map[worktreePullRequestKeyBranch(page.queryKey)];
+    // The map holds only the newest 200 PRs (host PR_LIST_LIMIT), so one
+    // missing from it says nothing about that PR.
+    if (detail !== null && entry === undefined) continue;
+    // cancelRefetch: false leaves a fetch already in flight to land
+    // rather than cancelling it and running the gh call again.
+    if (!matchesMapEntry(detail, entry)) {
+      void qc.invalidateQueries(
+        { queryKey: page.queryKey, exact: true },
+        { cancelRefetch: false },
+      );
+    }
+  }
 }
 
 export function useWatchProjectPullRequests(): void {
@@ -50,7 +97,7 @@ export function useWatchProjectPullRequests(): void {
   useEffect(
     () =>
       window.api.githubCli.onProjectPullRequestsRefreshed(({ projectId }) => {
-        invalidateProjectPullRequests(queryClient, projectId);
+        void syncProjectPullRequests(queryClient, queryKeys, projectId);
       }),
     [queryClient],
   );

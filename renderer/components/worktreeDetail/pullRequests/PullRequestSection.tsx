@@ -4,7 +4,7 @@ import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useWorktreePullRequest } from "@/hooks/worktrees/useWorktreePullRequest";
 import type { Worktree } from "@shared/schemas";
 import { PullRequestBody } from "./PullRequestBody";
-import { PullRequestRefreshIndicator } from "./PullRequestRefreshIndicator";
+import { PullRequestRefreshButton } from "./PullRequestRefreshButton";
 
 export function PullRequestSection({ worktree }: { worktree: Worktree }) {
   // Skip the PR query on detached HEAD. There's no branch to ask gh
@@ -22,14 +22,14 @@ export function PullRequestSection({ worktree }: { worktree: Worktree }) {
 
   if (!enabled) return null;
   // While the initial query is in flight we still show the heading +
-  // refresh indicator so the page doesn't pop content in late. Once
+  // refresh button so the page doesn't pop content in late. Once
   // resolved with no PR, the section drops out entirely.
   if (!pr && !isPending) return null;
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-1">
         <SectionHeading>Pull request</SectionHeading>
-        <PullRequestRefreshIndicator worktree={worktree} />
+        <PullRequestRefreshButton worktree={worktree} />
       </div>
       {pr && (
         <PullRequestBody
