@@ -42,7 +42,7 @@ func TestUpdateRefusesTheReplacedEnvironmentVariables(t *testing.T) {
 			stubProdUpdate(t)
 			t.Setenv(name, "http://127.0.0.1:1")
 			if code, err := cmdUpdate(cliContext{}, []string{"--check"}); code != 2 || err == nil {
-				t.Fatalf("code = %d, err = %v; want a usage refusal", code, err)
+				t.Fatalf("code = %d, err = %v, want a usage refusal", code, err)
 			}
 		})
 	}
