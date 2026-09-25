@@ -1,0 +1,481 @@
+---
+import Band from "../components/Band.astro";
+import Card from "../components/Card.astro";
+import DownloadButtons from "../components/DownloadButtons.astro";
+import Icon from "../components/Icon.astro";
+import SectionHead from "../components/SectionHead.astro";
+import Shot from "../components/Shot.astro";
+import Page from "../layouts/Page.astro";
+import { WEB_APP } from "../site";
+
+import create from "../assets/create.webp";
+import dark from "../assets/dark.webp";
+import devices from "../assets/devices.webp";
+import hero from "../assets/hero.webp";
+import launch from "../assets/launch.webp";
+import phone from "../assets/phone.webp";
+import plain from "../assets/plain.webp";
+import row from "../assets/row.webp";
+import stack from "../assets/stack.webp";
+import transplant from "../assets/transplant.webp";
+
+// Widths the layout gives a full-width block on a phone.
+const PHONE = "(max-width: 760px) calc(100vw - 2.5rem)";
+
+// The numbered pins over the sidebar row, placed on the image in
+// percent, in the order the legend lists them.
+const PINS = [
+  { x: "28%", y: "11%", part: "The project" },
+  { x: "57.5%", y: "13%", part: "The Mac it lives on, when that's not this one" },
+  { x: "86%", y: "11%", part: "Last activity" },
+  { x: "2.6%", y: "51%", part: "The branch" },
+  { x: "56.5%", y: "72%", part: "Files with uncommitted changes" },
+  { x: "66.5%", y: "72%", part: "Commits not pushed yet" },
+  { x: "84%", y: "72%", part: "Its pull request, and its place in a stack" },
+  { x: "37.5%", y: "76%", part: "The folder" },
+];
+---
+
+<Page>
+  <Band color="mint" wall="leaf" kanji="mori" kanjiClass="hero-kanji" class="hero">
+    <div class="wrap hero-copy">
+      <h1>A Mac app for managing git worktrees</h1>
+      <p class="lede">
+        Create a worktree in two clicks, open it in the tools you already use,
+        and see where each branch stands, whether it's on this Mac or another
+        one of yours.
+      </p>
+      <DownloadButtons />
+      <p class="fine">
+        For Apple Silicon Macs. Signed, notarized, free and open source.
+      </p>
+    </div>
+    <div class="wrap wide stage">
+      <Shot
+        src={hero}
+        frame="window"
+        class="stage-main"
+        priority
+        sizes={`${PHONE}, min(1075px, 84vw - 2.1rem)`}
+        alt="The app's window: a mint sidebar listing worktrees across projects, each with its changed files, commits ahead and pull request number. The open worktree shows launcher buttons, its pull request with checks passed and a Merge button, and its recent commits."
+      />
+      <Shot
+        src={row}
+        frame="framed"
+        class="stage-row"
+        sizes="min(310px, 24vw)"
+        alt=""
+      />
+      <Shot
+        src={phone}
+        frame="phone"
+        class="stage-phone"
+        eager
+        sizes="(max-width: 760px) calc(34vw - 1.85rem), min(240px, 20vw - 1.5rem)"
+        alt="The same worktrees in the web app on a phone."
+      />
+    </div>
+  </Band>
+
+  <Band>
+    <div class="wrap narrow center">
+      <h2>Worktrees are great. The chores around them aren't.</h2>
+      <p class="section-lede">
+        <code>git worktree</code> gives every branch its own folder, so an agent
+        can work in one while you review a pull request in another. Setting each
+        one up by hand is the slow part, and so is cleaning up after.
+      </p>
+    </div>
+    <div class="wrap compare">
+      <div>
+        <p class="compare-label">By hand</p>
+        <pre
+          class="terminal"><code><span class="p">$</span> git worktree add -b fix-login \
+    ../app-fix-login main
+<span class="p">$</span> cp .env.local ../app-fix-login/
+<span class="p">$</span> cd ../app-fix-login
+<span class="p">$</span> pnpm install
+<span class="p">$</span> cursor .
+
+<span class="c"># a week later, for each one</span>
+<span class="p">$</span> git worktree remove ../app-fix-login
+<span class="p">$</span> git branch -D fix-login</code></pre>
+      </div>
+      <div class="compare-arrow" aria-hidden="true">
+        <Icon name="arrow-right" />
+      </div>
+      <div>
+        <p class="compare-label">In Shigoto no Mori</p>
+        <Shot
+          src={create}
+          frame="card-shot"
+          sizes="(max-width: 900px) calc(100vw - 2.5rem), 540px"
+          alt="The New worktree button with a menu under it listing projects to create the worktree in."
+        />
+        <ol class="steps">
+          <li>Click <b>New worktree</b></li>
+          <li>Pick the project</li>
+          <li>Carry-over and setup run for you</li>
+        </ol>
+      </div>
+    </div>
+  </Band>
+
+  <Band id="create" color="sand" wall="square" kanji="sakusei">
+    <div class="wrap">
+      <SectionHead kicker="Create" title="A new worktree in two clicks">
+        You get a fresh branch off your default branch, in its own folder, ready
+        to open. Everything a new checkout usually needs comes along.
+      </SectionHead>
+      <div class="cards four">
+        <Card icon="copy" chip="mint" title="Carry-over">
+          <p>
+            List the gitignored files a worktree needs, like
+            <code>.env.local</code>, and each new one gets a copy or a symlink.
+            A <code>.worktreeinclude</code> file works too.
+          </p>
+        </Card>
+        <Card icon="play" chip="amber" title="Setup and teardown">
+          <p>
+            Run <code>pnpm install</code>, or anything else, when a worktree is
+            created, and your own cleanup when it's removed.
+          </p>
+        </Card>
+        <Card icon="git-pull-request" chip="sky" title="Start from anywhere">
+          <p>
+            Hold Shift to branch from something other than the default branch,
+            check out an existing branch, or start from an open pull request.
+          </p>
+        </Card>
+        <Card icon="wand" chip="pink" title="Named for you">
+          <p>Every worktree gets a placeholder name until you rename it:</p>
+          <ul class="names" aria-label="Example names">
+            <li>brave-badger</li>
+            <li>gentle-gecko</li>
+            <li>quiet-quail</li>
+          </ul>
+        </Card>
+      </div>
+    </div>
+  </Band>
+
+  <Band wall="leaf" kanji="joutai">
+    <div class="wrap">
+      <SectionHead kicker="Keep track" title="See where every branch stands">
+        Each worktree is one row in the sidebar. It shows enough to act on
+        without opening anything.
+      </SectionHead>
+      <div class="anatomy">
+        <Shot
+          src={row}
+          frame="framed"
+          class="anatomy-row"
+          sizes="(max-width: 900px) calc(100vw - 2.5rem), 620px"
+          alt="One sidebar row: project shigoto-no-mori, a laptop badge, 40m ago, branch exp/terrier-sync, 7 changed files, 1 commit ahead, pull request #151 as 2 of 3, folder gentle-gecko."
+        >
+          {
+            PINS.map((pin, i) => (
+              <span class="pin" style={`--x: ${pin.x}; --y: ${pin.y}`}>
+                {i + 1}
+              </span>
+            ))
+          }
+        </Shot>
+        <ol class="legend">
+          {PINS.map((pin) => <li>{pin.part}</li>)}
+        </ol>
+      </div>
+      <div class="split">
+        <Shot
+          src={stack}
+          frame="window"
+          sizes="(max-width: 900px) calc(100vw - 2.5rem), 650px"
+          alt="A worktree whose pull request is the first of a stack of three, marked Merged, with the other two listed above it and 'lands on main' below."
+        />
+        <div class="points">
+          <div class="point">
+            <Icon name="file-diff" class="chip mint" />
+            <div>
+              <h3>Review and commit</h3>
+              <p>
+                Read the diff of your uncommitted changes, one commit or the
+                whole PR, then commit all of it or only part.
+              </p>
+            </div>
+          </div>
+          <div class="point">
+            <Icon name="git-merge" class="chip mint" />
+            <div>
+              <h3>Merge from the app</h3>
+              <p>
+                Merge, squash or rebase, whichever your repo allows, including a
+                whole stack at once. Then remove the worktree in one more click.
+              </p>
+            </div>
+          </div>
+          <div class="point">
+            <Icon name="inbox" class="chip mint" />
+            <div>
+              <h3>An inbox for active work</h3>
+              <p>
+                Shelve what you're not touching this week, and merged worktrees
+                fold away on their own.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Band>
+
+  <Band color="amber" wall="triangle" kanji="kidou">
+    <div class="wrap">
+      <SectionHead kicker="Launch" title="Opens in the tools you already use" center>
+        Every worktree gets a row of buttons for the apps on your Mac: editors,
+        terminals, Git clients and agent apps. Add your own shell commands too,
+        per project or for all of them, like starting an agent CLI in that
+        folder.
+      </SectionHead>
+      <Shot
+        src={launch}
+        frame="card-shot"
+        class="launch"
+        sizes={`${PHONE}, 720px`}
+        alt="A worktree's launch row: buttons with app icons for cmux, Cursor, Finder, Ghostty, GitHub, GitHub Desktop, Rider, Terminal, VS Code, Xcode and Zed, and under them the project's package.json scripts."
+      />
+      <div class="launch-notes">
+        <div class="keys" role="img" aria-label="Command 1 to Command 9">
+          <kbd>⌘1</kbd><kbd>⌘2</kbd><kbd>⌘3</kbd><span>…</span><kbd>⌘9</kbd>
+        </div>
+        <p>
+          The first nine have shortcuts. Scripts from <code>package.json</code>
+          run in a built-in console with one click.
+        </p>
+      </div>
+      <p class="note center">
+        It doesn't replace your editor, terminal or agent. It opens them in the
+        right folder.
+      </p>
+    </div>
+  </Band>
+
+  <Band id="machines" color="sky" wall="apple" kanji="kiki">
+    <div class="wrap">
+      <SectionHead
+        kicker="Other machines"
+        title="Worktrees on your other Macs, without the networking"
+        center
+      >
+        Sign in on each Mac and their worktrees show up in the same list, looking
+        just like the local ones. Machines connect directly on the same network,
+        or through a tunnel when they aren't. There's no VPN, SSH key or router
+        setting to deal with.
+      </SectionHead>
+      <div class="cards three">
+        <Card icon="cable" chip="sky" title="Forward a port">
+          <p>
+            Start a dev server on the other machine and open it on
+            <code>localhost</code> here. The files stay where they are.
+          </p>
+        </Card>
+        <Card icon="refresh-cw" chip="mint" title="Mirror a worktree">
+          <p>
+            Keep a worktree in sync on two machines: every file, not only what
+            git tracks, in both directions. Edit on either side and git agrees
+            on both.
+          </p>
+        </Card>
+        <Card icon="shovel" chip="amber" title="Transplant it">
+          <p>
+            Move a worktree once, uncommitted changes included, then keep,
+            shelve or remove the copy left behind.
+          </p>
+        </Card>
+      </div>
+      <div class="machines-stage">
+        <Shot
+          src={devices}
+          frame="window"
+          class="machines-main"
+          sizes={`${PHONE}, min(905px, 78vw - 1.95rem)`}
+          alt="The Devices page listing Studio Mac, Thinkpad and Mini with their connection state, their projects, and a port forwarded from Thinkpad."
+        />
+        <Shot
+          src={transplant}
+          frame="floating"
+          class="machines-dialog"
+          sizes="(max-width: 760px) calc(92vw - 2.3rem), min(535px, 46vw - 1.15rem)"
+          alt="The Transplant worktree dialog, moving fix-stale-locks from Studio Mac to Thinkpad with its carry-over files. A note says nothing on Studio Mac is deleted until the last step."
+        />
+      </div>
+      <div class="cards two">
+        <Card icon="smartphone" chip="sky" title="From a browser, or your phone" row>
+          <p>
+            <a href={WEB_APP}>{new URL(WEB_APP).host}</a> shows the same forest
+            in any browser, with a layout made for phones. It doesn't hold
+            projects itself. It works through the Macs on your account.
+          </p>
+        </Card>
+        <Card
+          icon="shield-check"
+          chip="mint"
+          title="Read-only until you say otherwise"
+          row
+        >
+          <p>
+            Other devices can see a machine's worktrees, but can't change
+            anything on it until you turn on
+            <b>Allow control from other devices</b> on that machine.
+          </p>
+        </Card>
+      </div>
+    </div>
+  </Band>
+
+  <Band id="agents" color="wood" wall="square" kanji="meirei">
+    <div class="wrap split agents">
+      <div>
+        <p class="kicker">For agents</p>
+        <h2>A CLI your agents can drive</h2>
+        <p>
+          The app comes with an <code>sm</code> command, mostly so coding agents
+          can do what you do in the app: start a task in a fresh worktree, check
+          its status, merge its PR and clean up, or hand it to another machine.
+          Worktrees an agent makes show up in the app like any other.
+        </p>
+        <p>
+          Install the skills and your agent learns the workflow without you
+          spelling it out each time. The same commands work by hand, too.
+        </p>
+      </div>
+      <pre
+        class="terminal"><code><span class="c"># teach your agent the workflow</span>
+<span class="p">$</span> npx skills add \
+    https://github.com/sylophi/shigoto-no-mori
+
+<span class="c"># what an agent runs for a task</span>
+<span class="p">$</span> sm wt create
+<span class="p">$</span> sm wt status
+
+<span class="c"># move it to another machine</span>
+<span class="p">$</span> sm wt send --to "Studio Mac"
+
+<span class="c"># merge the PR and remove the worktree</span>
+<span class="p">$</span> sm wt land</code></pre>
+    </div>
+  </Band>
+
+  <Band color="pink" wall="flower" kanji="gaikan">
+    <div class="wrap">
+      <SectionHead kicker="Looks" title="Soft by default, plain if you prefer" center>
+        The default look borrows from Animal Crossing, which is where the name
+        comes from: <i lang="ja-Latn">Dōbutsu no Mori</i> is "animal forest", and
+        <i lang="ja-Latn">Shigoto no Mori</i> is "work forest". If that's not for
+        you, a neutral theme is one setting away. Both come in light and dark.
+      </SectionHead>
+      <div class="looks">
+        <Shot
+          src={plain}
+          frame="window"
+          class="looks-back"
+          sizes="min(870px, 75vw - 1.875rem)"
+          alt="The neutral theme in light mode."
+        />
+        <Shot
+          src={dark}
+          frame="window"
+          class="looks-front"
+          sizes="min(870px, 75vw - 1.875rem)"
+          alt="The default theme in dark mode."
+        />
+      </div>
+    </div>
+  </Band>
+
+  <Band wall="flower" kanji="dougu">
+    <div class="wrap">
+      <SectionHead kicker="Also included" title="The smaller things" />
+      <div class="bento">
+        <Card icon="trees" title="Tidy the forest" class="tile mint wide">
+          <p>
+            One page lists every worktree with its size, age and merge state.
+            Only merged worktrees with nothing uncommitted are ticked for
+            removal. Anything else you pick yourself.
+          </p>
+        </Card>
+        <Card icon="download" title="Auto-pull" class="tile sky">
+          <p>
+            Mark a checkout, like your main one, and it fast-forwards from its
+            upstream whenever the app fetches.
+          </p>
+        </Card>
+        <Card icon="folder-input" title="Adopt existing worktrees" class="tile amber">
+          <p>Worktrees made with plain git can be brought into the app.</p>
+        </Card>
+        <Card icon="sticky-note" title="Notes" class="tile pink">
+          <p>Jot down what a worktree is for, right on its page.</p>
+        </Card>
+        <Card icon="archive" title="Shelve" class="tile sand">
+          <p>Put a worktree out of sight without deleting anything.</p>
+        </Card>
+        <Card icon="badge-check" title="Quiet updates" class="tile mint wide">
+          <p>
+            Builds are signed and notarized. New versions download in the
+            background and install the next time you restart.
+          </p>
+        </Card>
+      </div>
+    </div>
+  </Band>
+
+  <Band id="limits" color="sand">
+    <div class="wrap narrow">
+      <p class="kicker">Before you download</p>
+      <h2>What it doesn't do</h2>
+      <dl class="limits">
+        <div class="card">
+          <dt>Mac only, Apple Silicon only.</dt>
+          <dd>
+            There are no Windows, Linux or Intel builds. The web app runs in any
+            browser, but it needs a Mac on your account to work through.
+          </dd>
+        </div>
+        <div class="card">
+          <dt>GitHub only, through <code>gh</code>.</dt>
+          <dd>
+            Pull request status, merging and landing use the GitHub CLI. Other
+            hosts aren't supported, and the app doesn't open pull requests for
+            you.
+          </dd>
+        </div>
+        <div class="card">
+          <dt>Not an editor, terminal or agent.</dt>
+          <dd>
+            The built-in console runs your project's scripts, not a general
+            shell. Everything else opens in the apps you already have.
+          </dd>
+        </div>
+        <div class="card">
+          <dt>An account only for the multi-machine part.</dt>
+          <dd>Everything on a single Mac works without signing in.</dd>
+        </div>
+        <div class="card">
+          <dt>Made by one developer.</dt>
+          <dd>
+            It's built for the author's own daily work, so it's shaped by one
+            person's habits and has no team features. Releases come often.
+          </dd>
+        </div>
+      </dl>
+    </div>
+  </Band>
+
+  <Band color="mint" wall="leaf" kanji="brand" kanjiClass="closing-kanji" class="closing">
+    <div class="wrap narrow center">
+      <img class="closing-icon framed" src="/img/icon.png" alt="" width="96" height="96" />
+      <h2>Download Shigoto no Mori</h2>
+      <p class="fine">For Apple Silicon Macs. Free and open source.</p>
+      <DownloadButtons />
+    </div>
+  </Band>
+</Page>

@@ -6,6 +6,15 @@
 const KEY = "theme";
 const root = document.documentElement;
 const system = matchMedia("(prefers-color-scheme: dark)");
+// The nav's mint in each theme, for the browser bar on phones.
+const BAR = { light: "#cff2de", dark: "#1c2b23" };
+
+function apply(theme) {
+  root.dataset.theme = theme;
+  document
+    .querySelector('meta[name="theme-color"]')
+    ?.setAttribute("content", BAR[theme]);
+}
 
 function stored() {
   try {
@@ -15,16 +24,16 @@ function stored() {
   }
 }
 
-root.dataset.theme = stored() ?? (system.matches ? "dark" : "light");
+apply(stored() ?? (system.matches ? "dark" : "light"));
 
 system.addEventListener("change", (event) => {
-  if (!stored()) root.dataset.theme = event.matches ? "dark" : "light";
+  if (!stored()) apply(event.matches ? "dark" : "light");
 });
 
 document.addEventListener("click", (event) => {
   if (!event.target.closest("[data-theme-toggle]")) return;
   const next = root.dataset.theme === "dark" ? "light" : "dark";
-  root.dataset.theme = next;
+  apply(next);
   const systemTheme = system.matches ? "dark" : "light";
   try {
     if (next === systemTheme) localStorage.removeItem(KEY);

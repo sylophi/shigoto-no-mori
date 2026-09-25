@@ -1,0 +1,21 @@
+---
+// A section's kicker, heading and optional intro (the default slot).
+interface Props {
+  kicker: string;
+  title: string;
+  center?: boolean;
+}
+const { kicker, title, center = false } = Astro.props;
+---
+
+<div class:list={["section-head", { center }]}>
+  <p class="kicker">{kicker}</p>
+  <h2>{title}</h2>
+  {
+    Astro.slots.has("default") && (
+      <p class="section-lede">
+        <slot />
+      </p>
+    )
+  }
+</div>

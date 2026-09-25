@@ -10,7 +10,7 @@
   font-family: "Zen Maru Gothic";
   font-weight: 500;
   font-display: swap;
-  src: url("fonts/zen-maru-gothic-latin-500-normal.woff2") format("woff2");
+  src: url("../fonts/zen-maru-gothic-latin-500-normal.woff2") format("woff2");
   unicode-range:
     U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
     U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
@@ -20,7 +20,7 @@
   font-family: "Zen Maru Gothic";
   font-weight: 700;
   font-display: swap;
-  src: url("fonts/zen-maru-gothic-latin-700-normal.woff2") format("woff2");
+  src: url("../fonts/zen-maru-gothic-latin-700-normal.woff2") format("woff2");
   unicode-range:
     U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
     U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
@@ -30,7 +30,8 @@
   font-family: "Zen Maru Gothic";
   font-weight: 500;
   font-display: swap;
-  src: url("fonts/zen-maru-gothic-latin-ext-500-normal.woff2") format("woff2");
+  src: url("../fonts/zen-maru-gothic-latin-ext-500-normal.woff2")
+    format("woff2");
   unicode-range:
     U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
     U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
@@ -40,7 +41,8 @@
   font-family: "Zen Maru Gothic";
   font-weight: 700;
   font-display: swap;
-  src: url("fonts/zen-maru-gothic-latin-ext-700-normal.woff2") format("woff2");
+  src: url("../fonts/zen-maru-gothic-latin-ext-700-normal.woff2")
+    format("woff2");
   unicode-range:
     U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
     U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
@@ -333,27 +335,27 @@ code {
   mask: var(--wall) repeat 0 0 / var(--wall-size);
   animation: drift var(--wall-time) linear infinite;
 }
-/* wallpaper.js marks bands scrolled out of view, so an idle page stops
+/* wallpaper.ts marks bands scrolled out of view, so an idle page stops
    drawing frames. */
 .wall-idle > .wall::before {
   animation-play-state: paused;
 }
 [data-wall="leaf"] {
-  --wall: url("img/leaf.svg");
+  --wall: url("/img/leaf.svg");
   --wall-size: 80px 40px;
   --dx: -80px;
   --dy: 80px;
   --wall-time: 24s;
 }
 [data-wall="apple"] {
-  --wall: url("img/apple.svg");
+  --wall: url("/img/apple.svg");
   --wall-size: 120px 120px;
   --dx: 0px;
   --dy: 120px;
   --wall-time: 26s;
 }
 [data-wall="square"] {
-  --wall: url("img/square.svg");
+  --wall: url("/img/square.svg");
   --wall-size: 140px 140px;
   --dx: -140px;
   --dy: 0px;
@@ -361,14 +363,14 @@ code {
   --wall-opacity: 0.065;
 }
 [data-wall="flower"] {
-  --wall: url("img/flower.svg");
+  --wall: url("/img/flower.svg");
   --wall-size: 120px 120px;
   --dx: 120px;
   --dy: 120px;
   --wall-time: 36s;
 }
 [data-wall="triangle"] {
-  --wall: url("img/triangle.svg");
+  --wall: url("/img/triangle.svg");
   --wall-size: 160px 160px;
   --dx: 160px;
   --dy: -160px;

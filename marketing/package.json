@@ -1,0 +1,19 @@
+{
+  "name": "shigomori-marketing",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "check": "tsc --noEmit",
+    "build": "tsc --noEmit && astro build",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "astro": "^7.3.3",
+    "sharp": "^0.35.4"
+  },
+  "packageManager": "pnpm@12.4.1",
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}

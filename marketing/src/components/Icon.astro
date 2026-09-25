@@ -1,0 +1,10 @@
+---
+// One of the Lucide icons in public/img/icons.svg.
+interface Props {
+  name: string;
+  class?: string;
+}
+const { name, class: className } = Astro.props;
+---
+
+<svg class:list={["icon", className]}><use href={`/img/icons.svg#i-${name}`} /></svg>
