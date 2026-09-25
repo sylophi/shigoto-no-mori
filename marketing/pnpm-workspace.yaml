@@ -1,0 +1,23 @@
+# marketing/ is a standalone pnpm project, like hub/: this file makes
+# pnpm treat this directory as its own workspace root, so installs here
+# never touch the app's node_modules.
+#
+# Supply-chain hardening replicated from the app's pnpm-workspace.yaml
+# so it holds for every clone: delay installs of newly published
+# versions by 7 days (minutes), and refuse updates whose trust signals
+# (provenance, signatures) weaken.
+minimumReleaseAge: 10080
+trustPolicy: no-downgrade
+# trustPolicy waiver, approved: chokidar 4.0.3 (reached through
+# @astrojs/check) was published without the provenance its 4.0.1 had.
+# Verified on the registry: the same sole maintainer (paulmillr)
+# published both, and 5.0.0 is back to provenance from CI. The waiver
+# names the exact version, so it stops applying once the pin moves.
+trustPolicyExclude:
+  - chokidar@4.0.3
+# Per-package build-script trust. esbuild (Astro's bundler, through
+# vite) validates its platform binary in a postinstall, the binary
+# itself arriving as an optional dependency. sharp needs no script: its
+# prebuilt binary is an optional dependency too.
+allowBuilds:
+  esbuild: true

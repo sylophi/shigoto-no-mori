@@ -1,0 +1,23 @@
+---
+// A card with an icon chip, a title and a body (the default slot).
+import Icon from "./Icon.astro";
+
+interface Props {
+  icon: string;
+  title: string;
+  // The chip's colour. Without one it takes the card's own (a tile's tint).
+  chip?: "mint" | "amber" | "sky" | "pink";
+  // Icon beside the text rather than above it.
+  row?: boolean;
+  class?: string;
+}
+const { icon, title, chip, row = false, class: className } = Astro.props;
+---
+
+<article class:list={["card", { "row-card": row }, className]}>
+  <Icon name={icon} class:list={["chip", chip]} />
+  <div>
+    <h3>{title}</h3>
+    <slot />
+  </div>
+</article>

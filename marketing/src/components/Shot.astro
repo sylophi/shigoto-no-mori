@@ -1,0 +1,39 @@
+---
+// A screenshot in one of the page's frames. Astro renders it at several
+// widths, and `sizes` tells the browser which one fits.
+import type { ImageMetadata } from "astro";
+import { Image } from "astro:assets";
+
+// Width steps for the srcset. Astro drops those past the capture's own
+// width and adds the capture itself, so the last one only says "all".
+// 1200 is there for phones at 3x and desktops at 1x.
+const WIDTHS = [400, 700, 1000, 1200, 1400, 1800, 99999];
+
+interface Props {
+  src: ImageMetadata;
+  // Empty for a decorative shot, which is then hidden from screen readers.
+  alt: string;
+  // How wide the image shows at each viewport, as for <img sizes>.
+  sizes: string;
+  frame: "window" | "phone" | "floating" | "card-shot" | "framed";
+  class?: string;
+  // The one image the first screen waits on: loaded first, not lazily.
+  priority?: boolean;
+  // On the first screen but not the main image: loaded right away, at
+  // normal priority.
+  eager?: boolean;
+}
+const { src, alt, sizes, frame, class: className, priority, eager } = Astro.props;
+---
+
+<figure class:list={[frame, className]} aria-hidden={alt === "" ? "true" : undefined}>
+  <Image
+    src={src}
+    alt={alt}
+    widths={WIDTHS}
+    sizes={sizes}
+    priority={priority}
+    loading={eager ? "eager" : undefined}
+  />
+  <slot />
+</figure>

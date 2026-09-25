@@ -1,0 +1,1109 @@
+/* Tokens and patterns come from the app's doubutsu theme
+   (renderer/doubutsu.css): cream layers, one warm brown for text, leaf
+   green for the loud action, flat "sticker" shadows instead of soft
+   ones. Like the app's pages, each band wears its own tint, wallpaper
+   and kanji watermark. */
+
+/* Latin, plus the latin-ext subset for the odd accented letter (the ō
+   in Dōbutsu). Unicode ranges as fontsource publishes them. */
+@font-face {
+  font-family: "Zen Maru Gothic";
+  font-weight: 500;
+  font-display: swap;
+  src: url("../fonts/zen-maru-gothic-latin-500-normal.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Zen Maru Gothic";
+  font-weight: 700;
+  font-display: swap;
+  src: url("../fonts/zen-maru-gothic-latin-700-normal.woff2") format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: "Zen Maru Gothic";
+  font-weight: 500;
+  font-display: swap;
+  src: url("../fonts/zen-maru-gothic-latin-ext-500-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+    U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Zen Maru Gothic";
+  font-weight: 700;
+  font-display: swap;
+  src: url("../fonts/zen-maru-gothic-latin-ext-700-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304,
+    U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+    U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+:root {
+  --background: oklch(0.974 0.011 84.6);
+  --foreground: oklch(0.39 0.045 74.1);
+  --card: oklch(0.992 0.008 88);
+  --muted: oklch(0.945 0.025 85);
+  --muted-foreground: oklch(0.52 0.031 67.2);
+  --secondary: oklch(0.93 0.038 82);
+  /* Deep enough for white text at 4.5:1. */
+  --primary: oklch(0.53 0.15 155);
+  --primary-edge: oklch(0.42 0.13 155);
+  --primary-foreground: oklch(1 0 0);
+  --edge: oklch(0.39 0.045 74.1 / 0.14);
+  --edge-line: oklch(0.39 0.045 74.1 / 0.08);
+  --window-ring: oklch(0.3 0.03 70 / 0.14);
+  --window-shadow: oklch(0.3 0.04 70 / 0.4);
+  --float-shadow:
+    0 32px 64px -24px var(--window-shadow),
+    0 12px 24px -12px var(--window-shadow);
+  --terminal: oklch(0.3 0.025 70);
+  --terminal-foreground: oklch(0.95 0.01 85);
+
+  /* Band tints, one per room. */
+  --tint-mint: oklch(0.93 0.045 160);
+  --tint-sand: oklch(0.93 0.038 82);
+  --tint-amber: oklch(0.945 0.05 88);
+  --tint-sky: oklch(0.94 0.03 230);
+  --tint-pink: oklch(0.945 0.028 10);
+  --tint-wood: oklch(0.34 0.035 70);
+  --ink-leaf: oklch(0.6 0.15 155);
+  --ink-wood: oklch(0.55 0.07 65);
+  --ink-amber: oklch(0.68 0.13 76);
+  --ink-sky: oklch(0.6 0.11 235);
+  --ink-pink: oklch(0.64 0.14 12);
+  --chip-mint: oklch(0.88 0.07 155);
+  --chip-amber: oklch(0.9 0.08 85);
+  --chip-sky: oklch(0.89 0.05 235);
+  --chip-pink: oklch(0.9 0.05 10);
+  --chip-ink-mint: oklch(0.42 0.11 155);
+  --chip-ink-amber: oklch(0.48 0.1 65);
+  --chip-ink-sky: oklch(0.44 0.1 240);
+  --chip-ink-pink: oklch(0.48 0.13 15);
+
+  --radius: 1.25rem;
+  --scallop: 14px;
+  --sans:
+    "Zen Maru Gothic", "Hiragino Maru Gothic ProN", ui-rounded, system-ui,
+    sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+
+/* Dark follows the system by default. theme.js turns that, or the
+   toggle's choice, into data-theme before first paint. */
+:root[data-theme="dark"] {
+  --background: oklch(0.219 0.008 84.6);
+  --foreground: oklch(0.942 0.011 76.6);
+  --card: oklch(0.29 0.01 85);
+  --muted: oklch(0.325 0.011 67.4);
+  --muted-foreground: oklch(0.76 0.025 73.5);
+  --secondary: oklch(0.36 0.025 70);
+  --primary: oklch(0.7 0.17 155);
+  --primary-edge: oklch(0.52 0.14 155);
+  --primary-foreground: oklch(0.18 0.01 84.6);
+  --edge: oklch(0 0 0 / 0.35);
+  --edge-line: oklch(1 0 0 / 0.06);
+  --window-ring: oklch(1 0 0 / 0.12);
+  --window-shadow: oklch(0 0 0 / 0.6);
+  --float-shadow:
+    0 32px 64px -24px var(--window-shadow),
+    0 12px 24px -12px var(--window-shadow);
+  --terminal: oklch(0.17 0.008 84.6);
+
+  --tint-mint: oklch(0.272 0.025 162);
+  --tint-sand: oklch(0.26 0.02 70);
+  --tint-amber: oklch(0.275 0.03 80);
+  --tint-sky: oklch(0.265 0.028 235);
+  --tint-pink: oklch(0.265 0.025 10);
+  --tint-wood: oklch(0.17 0.012 70);
+  --ink-leaf: oklch(0.72 0.16 155);
+  --ink-wood: oklch(0.75 0.06 70);
+  --ink-amber: oklch(0.78 0.13 80);
+  --ink-sky: oklch(0.72 0.12 235);
+  --ink-pink: oklch(0.72 0.14 12);
+  --chip-mint: oklch(0.38 0.07 155);
+  --chip-amber: oklch(0.4 0.07 75);
+  --chip-sky: oklch(0.38 0.06 235);
+  --chip-pink: oklch(0.38 0.06 10);
+  --chip-ink-mint: oklch(0.88 0.1 155);
+  --chip-ink-amber: oklch(0.9 0.09 85);
+  --chip-ink-sky: oklch(0.88 0.07 235);
+  --chip-ink-pink: oklch(0.9 0.06 10);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: 4.5rem;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--sans);
+  font-weight: 500;
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+figure {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration-color: color-mix(in oklch, currentColor 35%, transparent);
+  text-underline-offset: 0.2em;
+}
+a:hover {
+  text-decoration-color: currentColor;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0 0 0.6em;
+  text-wrap: balance;
+}
+h1 {
+  font-size: clamp(2.3rem, 5.4vw, 3.9rem);
+  letter-spacing: -0.015em;
+}
+h2 {
+  font-size: clamp(1.75rem, 3.4vw, 2.6rem);
+  letter-spacing: -0.01em;
+}
+h3 {
+  font-size: 1.12rem;
+  margin-bottom: 0.4em;
+}
+p {
+  margin: 0 0 1em;
+  text-wrap: pretty;
+}
+b {
+  font-weight: 700;
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--mono);
+  font-size: 0.88em;
+}
+code {
+  background: var(--muted);
+  border-radius: 0.4em;
+  padding: 0.1em 0.35em;
+}
+
+.icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+}
+
+.wrap {
+  width: min(1160px, 100% - 2.5rem);
+  margin-inline: auto;
+}
+.wrap.wide {
+  width: min(1280px, 100% - 2.5rem);
+}
+.wrap.narrow {
+  width: min(780px, 100% - 2.5rem);
+}
+.center {
+  text-align: center;
+}
+
+/* --- Colours --------------------------------------------------------- */
+
+/* One class per colour sets what bands, tiles and icon chips read. */
+.mint {
+  --tint: var(--tint-mint);
+  --chip: var(--chip-mint);
+  --chip-ink: var(--chip-ink-mint);
+}
+.sand {
+  --tint: var(--tint-sand);
+  --ink: var(--ink-wood);
+}
+.amber {
+  --tint: var(--tint-amber);
+  --ink: var(--ink-amber);
+  --chip: var(--chip-amber);
+  --chip-ink: var(--chip-ink-amber);
+}
+.sky {
+  --tint: var(--tint-sky);
+  --ink: var(--ink-sky);
+  --chip: var(--chip-sky);
+  --chip-ink: var(--chip-ink-sky);
+}
+.pink {
+  --tint: var(--tint-pink);
+  --ink: var(--ink-pink);
+  --chip: var(--chip-pink);
+  --chip-ink: var(--chip-ink-pink);
+}
+
+/* --- Bands ---------------------------------------------------------- */
+
+.band {
+  --band-bg: var(--tint, var(--background));
+  --band-ink: var(--ink, var(--ink-leaf));
+  position: relative;
+  isolation: isolate;
+  padding: clamp(4.5rem, 9vw, 7.5rem) 0;
+  background: var(--band-bg);
+  color: var(--foreground);
+}
+/* A dark room in either theme: it brings its own text and surface
+   tokens, so everything inside reads them as usual. */
+.band.wood {
+  --band-bg: var(--tint-wood);
+  --band-ink: oklch(0.85 0.05 80);
+  --foreground: oklch(0.95 0.012 85);
+  --muted-foreground: oklch(0.86 0.02 80);
+  --muted: oklch(1 0 0 / 0.1);
+  --edge: oklch(0 0 0 / 0.3);
+  --terminal: oklch(0.2 0.018 70);
+  --wall-opacity: 0.05;
+  --kanji-opacity: 0.07;
+}
+
+/* Scalloped seam: each band's top edge bulges up into the one above,
+   like the rounded tabs and signs of the game. */
+.band + .band::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(-1 * var(--scallop) + 1px);
+  height: var(--scallop);
+  background: radial-gradient(
+      circle at 50% 100%,
+      var(--band-bg) calc(var(--scallop) - 0.5px),
+      transparent var(--scallop)
+    )
+    0 0 / calc(var(--scallop) * 2) var(--scallop) repeat-x;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Wallpaper: the app's five patterns, tinted through a mask and
+   drifting at the app's speeds. */
+.wall {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: -1;
+  pointer-events: none;
+}
+[data-wall] > .wall::before {
+  content: "";
+  position: absolute;
+  inset: -200px;
+  background: var(--band-ink);
+  opacity: var(--wall-opacity, 0.085);
+  mask: var(--wall) repeat 0 0 / var(--wall-size);
+  animation: drift var(--wall-time) linear infinite;
+}
+/* wallpaper.ts marks bands scrolled out of view, so an idle page stops
+   drawing frames. */
+.wall-idle > .wall::before {
+  animation-play-state: paused;
+}
+[data-wall="leaf"] {
+  --wall: url("/img/leaf.svg");
+  --wall-size: 80px 40px;
+  --dx: -80px;
+  --dy: 80px;
+  --wall-time: 24s;
+}
+[data-wall="apple"] {
+  --wall: url("/img/apple.svg");
+  --wall-size: 120px 120px;
+  --dx: 0px;
+  --dy: 120px;
+  --wall-time: 26s;
+}
+[data-wall="square"] {
+  --wall: url("/img/square.svg");
+  --wall-size: 140px 140px;
+  --dx: -140px;
+  --dy: 0px;
+  --wall-time: 30s;
+  --wall-opacity: 0.065;
+}
+[data-wall="flower"] {
+  --wall: url("/img/flower.svg");
+  --wall-size: 120px 120px;
+  --dx: 120px;
+  --dy: 120px;
+  --wall-time: 36s;
+}
+[data-wall="triangle"] {
+  --wall: url("/img/triangle.svg");
+  --wall-size: 160px 160px;
+  --dx: 160px;
+  --dy: -160px;
+  --wall-time: 48s;
+  --wall-opacity: 0.11;
+}
+@keyframes drift {
+  to {
+    transform: translate3d(var(--dx), var(--dy), 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  [data-wall] > .wall::before {
+    animation: none;
+  }
+}
+
+/* Kanji watermarks, drawn as masks so they take the band's ink. */
+.kanji {
+  position: absolute;
+  display: block;
+  aspect-ratio: var(--r);
+  background: var(--band-ink);
+  mask: var(--k) no-repeat center / contain;
+  opacity: var(--kanji-opacity, 0.1);
+}
+.kanji.corner {
+  top: clamp(1.75rem, 4vw, 3.25rem);
+  right: clamp(1rem, 4vw, 4rem);
+  height: clamp(80px, 12vw, 170px);
+}
+
+/* --- Nav ------------------------------------------------------------ */
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in oklch, var(--tint-mint) 95%, transparent);
+  box-shadow: 0 1px 0 var(--edge-line);
+}
+.nav-inner {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  height: 4rem;
+}
+.brand {
+  flex: none;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 700;
+  font-size: 1.05rem;
+  text-decoration: none;
+}
+.brand img {
+  border-radius: 0.5rem;
+}
+.nav-links {
+  display: flex;
+  gap: 1.35rem;
+  margin-left: auto;
+  font-size: 0.95rem;
+}
+.nav-links a {
+  white-space: nowrap;
+  text-decoration: none;
+  color: var(--muted-foreground);
+}
+.nav-links a:hover {
+  color: var(--foreground);
+}
+.theme-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 2.3rem;
+  height: 2.3rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--card);
+  color: var(--foreground);
+  cursor: pointer;
+  --lift: 3px;
+  transition:
+    transform 80ms ease,
+    box-shadow 80ms ease;
+}
+.theme-toggle:active {
+  transform: translateY(2px);
+  --lift: 1px;
+}
+.theme-toggle .icon {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+/* The toggle needs theme.js, which always sets data-theme. */
+:root:not([data-theme]) .theme-toggle,
+.icon-sun,
+[data-theme="dark"] .icon-moon {
+  display: none;
+}
+[data-theme="dark"] .icon-sun {
+  display: block;
+}
+/* The hero links GitHub and the footer links the changelog, so a
+   narrow nav keeps the web app. */
+@media (max-width: 640px) {
+  .nav-inner {
+    gap: 0.9rem;
+  }
+  .nav-extra {
+    display: none;
+  }
+}
+/* Too narrow for the name, the web app, the toggle and Download in one
+   row: the icon stands in for the name (the brand link keeps an
+   accessible one). */
+@media (max-width: 440px) {
+  .brand-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* --- Buttons: flat stickers that press down ------------------------- */
+
+.button {
+  flex: none;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3.1rem;
+  padding: 0 1.5rem;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 700;
+  text-decoration: none;
+  --lift: 4px;
+  box-shadow: 0 var(--lift) 0 0 var(--primary-edge);
+  transition:
+    transform 80ms ease,
+    box-shadow 80ms ease;
+}
+.button.quiet {
+  background: var(--card);
+  color: var(--foreground);
+}
+.button.small {
+  min-height: 2.3rem;
+  padding: 0 1.05rem;
+  font-size: 0.92rem;
+  --lift: 3px;
+}
+.button:active {
+  transform: translateY(3px);
+  --lift: 1px;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  justify-content: center;
+  margin: 2rem 0 1rem;
+}
+.fine {
+  font-size: 0.88rem;
+  color: var(--muted-foreground);
+}
+
+/* --- Shared pieces -------------------------------------------------- */
+
+.kicker {
+  margin-bottom: 0.6rem;
+  color: color-mix(in oklch, var(--band-ink) 80%, var(--foreground));
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.section-head {
+  max-width: 46rem;
+  margin-bottom: clamp(2.25rem, 5vw, 3.5rem);
+}
+.section-head.center {
+  margin-inline: auto;
+}
+.section-lede {
+  font-size: 1.15rem;
+  color: var(--muted-foreground);
+}
+
+/* The flat sticker drop the app uses in place of soft shadows. Each
+   element sets how far it lifts, and pressing brings it down. */
+.theme-toggle,
+.button.quiet,
+.card,
+.card-shot,
+.keys kbd {
+  box-shadow:
+    0 0 0 1px var(--edge-line),
+    0 var(--lift, 5px) 0 0 var(--edge);
+}
+/* A sticker with a card-coloured border drawn around it. */
+.framed {
+  box-shadow:
+    0 0 0 5px var(--card),
+    0 0 0 6px var(--edge-line),
+    0 11px 0 0 var(--edge);
+}
+
+/* A macOS window: the capture already carries its traffic lights. */
+.window,
+.floating {
+  border-radius: clamp(8px, 1vw, 14px);
+  overflow: hidden;
+  background: var(--card);
+  box-shadow:
+    0 0 0 1px var(--window-ring),
+    var(--float-shadow);
+}
+.floating {
+  border-radius: 1.1rem;
+}
+.phone {
+  padding: 0.5rem;
+  border-radius: 2.4rem;
+  background: oklch(0.22 0.01 70);
+  box-shadow:
+    0 0 0 1px oklch(1 0 0 / 0.08) inset,
+    var(--float-shadow);
+}
+.phone img {
+  border-radius: 1.95rem;
+}
+.card-shot {
+  border-radius: var(--radius);
+  overflow: hidden;
+  --lift: 6px;
+}
+
+.card {
+  padding: 1.5rem;
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.card p,
+.card dd,
+.point p {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+/* An icon on a rounded tile of its colour. */
+.chip {
+  display: block;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0.75rem;
+  border-radius: 0.9rem;
+  background: var(--chip, var(--secondary));
+  color: var(--chip-ink, currentColor);
+}
+.card > .chip {
+  margin-bottom: 1rem;
+}
+.cards {
+  display: grid;
+  gap: 1.25rem;
+}
+.cards.four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.cards.three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.cards.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.row-card {
+  display: flex;
+  gap: 1.1rem;
+  align-items: flex-start;
+}
+.row-card > .chip {
+  margin: 0;
+}
+@media (max-width: 1000px) {
+  .cards.four {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  .cards.four,
+  .cards.three,
+  .cards.two {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.terminal {
+  margin: 0;
+  padding: 1.5rem 1.75rem;
+  border-radius: var(--radius);
+  background: var(--terminal);
+  color: var(--terminal-foreground);
+  font-size: 0.92rem;
+  line-height: 1.8;
+  overflow-x: auto;
+  box-shadow: 0 6px 0 0 var(--edge);
+}
+.terminal code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+.terminal .c {
+  color: color-mix(in oklch, var(--terminal-foreground) 50%, transparent);
+}
+.terminal .p {
+  color: oklch(0.8 0.13 155);
+  user-select: none;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: clamp(2rem, 5vw, 4rem);
+  align-items: center;
+}
+@media (max-width: 900px) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* --- Hero ----------------------------------------------------------- */
+
+.hero {
+  padding-top: clamp(3.5rem, 8vw, 6.5rem);
+  padding-bottom: clamp(5rem, 10vw, 8rem);
+}
+.hero-copy {
+  text-align: center;
+  max-width: 50rem;
+}
+.lede {
+  max-width: 38rem;
+  margin-inline: auto;
+  font-size: 1.25rem;
+  color: var(--muted-foreground);
+}
+.hero-kanji {
+  --kanji-opacity: 0.07;
+  top: 2rem;
+  right: -2rem;
+  height: clamp(220px, 34vw, 520px);
+}
+.stage {
+  position: relative;
+  margin-top: clamp(3rem, 6vw, 4.5rem);
+}
+.stage-main {
+  width: 84%;
+  margin-left: 4%;
+}
+.stage-row {
+  position: absolute;
+  left: 0;
+  bottom: 12%;
+  width: 24%;
+  border-radius: 1.1rem;
+  transform: rotate(-4deg);
+}
+.stage-row img {
+  border-radius: 1.1rem;
+}
+.stage-phone {
+  position: absolute;
+  right: 0;
+  bottom: -9%;
+  width: 20%;
+}
+@media (max-width: 760px) {
+  .stage-main {
+    width: 100%;
+    margin: 0;
+  }
+  .stage-row {
+    display: none;
+  }
+  .stage-phone {
+    width: 34%;
+    right: -3%;
+    bottom: -16%;
+  }
+}
+
+/* --- By hand vs. in the app ----------------------------------------- */
+
+.compare {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: clamp(1rem, 3vw, 2rem);
+  align-items: start;
+  margin-top: clamp(2.5rem, 5vw, 3.5rem);
+}
+.compare-label {
+  margin-bottom: 0.75rem;
+  font-weight: 700;
+  color: var(--muted-foreground);
+  font-size: 0.95rem;
+}
+.compare-arrow {
+  align-self: center;
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  box-shadow: 0 4px 0 0 var(--primary-edge);
+}
+.compare .terminal {
+  font-size: 0.86rem;
+}
+.steps {
+  list-style: none;
+  counter-reset: step;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  margin: 1.1rem 0 0;
+  padding: 0;
+  font-size: 0.95rem;
+}
+.steps li {
+  counter-increment: step;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.steps li::before,
+.legend li::before,
+.pin {
+  display: inline-grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: 0.78rem;
+  font-weight: 700;
+  flex: none;
+}
+.steps li::before {
+  content: counter(step);
+}
+@media (max-width: 900px) {
+  .compare {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .compare-arrow {
+    margin-inline: auto;
+    transform: rotate(90deg);
+  }
+}
+
+/* --- Create --------------------------------------------------------- */
+
+.names {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.8rem 0 0;
+  padding: 0;
+}
+.names li {
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  background: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+}
+
+/* --- Keep track: anatomy of a row ----------------------------------- */
+
+.anatomy {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: clamp(1.5rem, 4vw, 3.5rem);
+  align-items: center;
+  margin-bottom: clamp(3.5rem, 7vw, 5.5rem);
+}
+.anatomy-row {
+  position: relative;
+  border-radius: var(--radius);
+}
+.anatomy-row img {
+  border-radius: var(--radius);
+}
+.pin {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  translate: -50% -50%;
+  box-shadow: 0 0 0 3px var(--card);
+}
+.legend {
+  list-style: none;
+  counter-reset: part;
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+}
+.legend li {
+  counter-increment: part;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+.legend li::before {
+  content: counter(part);
+}
+@media (max-width: 900px) {
+  .anatomy {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pin {
+    width: 1.2rem;
+    height: 1.2rem;
+    font-size: 0.68rem;
+  }
+}
+
+.points {
+  display: grid;
+  gap: 1.5rem;
+}
+.point {
+  display: flex;
+  gap: 1rem;
+}
+
+/* --- Launch --------------------------------------------------------- */
+
+.card-shot.launch {
+  max-width: 720px;
+  margin-inline: auto;
+}
+.launch-notes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin: 2.5rem auto 0;
+  max-width: 44rem;
+  text-align: center;
+}
+.launch-notes p {
+  margin: 0;
+}
+.keys {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+.keys kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 2.6rem;
+  height: 2.4rem;
+  padding: 0 0.5rem;
+  border-radius: 0.6rem;
+  background: var(--card);
+  font-size: 0.9rem;
+  --lift: 4px;
+}
+.keys span {
+  color: var(--muted-foreground);
+}
+.note {
+  margin-top: 1.5rem;
+  color: var(--muted-foreground);
+}
+
+/* --- Other machines ------------------------------------------------- */
+
+.machines-stage {
+  position: relative;
+  margin: clamp(3rem, 6vw, 4.5rem) 0 clamp(5rem, 10vw, 8rem);
+}
+.machines-main {
+  width: 78%;
+}
+.machines-dialog {
+  position: absolute;
+  right: 0;
+  bottom: -14%;
+  width: 46%;
+}
+@media (max-width: 760px) {
+  .machines-main {
+    width: 100%;
+  }
+  .machines-dialog {
+    position: static;
+    width: 92%;
+    margin: -12% 0 0 auto;
+  }
+  .machines-stage {
+    margin-bottom: 3rem;
+  }
+}
+
+/* --- Looks: two windows, overlapping -------------------------------- */
+
+.looks {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  /* Both windows share one row, which the offset front one makes
+     taller; stretching would pad the back frame past its screenshot. */
+  align-items: start;
+}
+.looks-back {
+  grid-area: 1 / 1 / 2 / 10;
+}
+.looks-front {
+  grid-area: 1 / 4 / 2 / 13;
+  margin-top: 16%;
+}
+
+/* --- Also included: bento ------------------------------------------- */
+
+.bento {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+.tile {
+  background: color-mix(in oklch, var(--tint) 70%, var(--card));
+}
+.tile.wide {
+  grid-column: span 2;
+}
+@media (max-width: 900px) {
+  .bento {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  .bento {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tile.wide {
+    grid-column: auto;
+  }
+}
+
+/* --- Limits --------------------------------------------------------- */
+
+.limits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 2rem 0 0;
+}
+.limits > .card {
+  padding: 1.25rem 1.4rem;
+}
+.limits > .card:last-child {
+  grid-column: 1 / -1;
+}
+.limits dt {
+  font-weight: 700;
+  margin-bottom: 0.3rem;
+}
+@media (max-width: 640px) {
+  .limits {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* --- Closing -------------------------------------------------------- */
+
+.closing {
+  padding: clamp(5rem, 11vw, 8.5rem) 0;
+}
+.closing-kanji {
+  --kanji-opacity: 0.07;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  width: min(1100px, 92%);
+}
+.closing-icon {
+  margin: 0 auto 1.5rem;
+  border-radius: 22px;
+}
+.closing h2 {
+  margin-bottom: 0.3rem;
+}
+
+/* --- Footer --------------------------------------------------------- */
+
+.footer {
+  padding: 2rem 0 2.5rem;
+  font-size: 0.9rem;
+  color: var(--muted-foreground);
+  background: var(--tint-mint);
+}
+.footer-inner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--edge-line);
+}
+.footer nav {
+  display: flex;
+  gap: 1.25rem;
+}

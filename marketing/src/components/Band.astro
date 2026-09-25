@@ -1,0 +1,57 @@
+---
+// A full-width section: its tint, the app's wallpaper for that room and
+// a kanji watermark, the way the app's own pages are drawn.
+import type { ImageMetadata } from "astro";
+
+type Color = "mint" | "sand" | "amber" | "sky" | "pink" | "wood";
+type Wall = "leaf" | "apple" | "square" | "flower" | "triangle";
+
+// The watermark images, by file name.
+const KANJI = Object.fromEntries(
+  Object.entries(
+    import.meta.glob<{ default: ImageMetadata }>("../assets/kanji/*.webp", {
+      eager: true,
+    }),
+  ).map(([path, image]) => [
+    path.split("/").pop()!.replace(".webp", ""),
+    image.default,
+  ]),
+);
+
+interface Props {
+  color?: Color;
+  wall?: Wall;
+  // A file in src/assets/kanji, without the extension.
+  kanji?: string;
+  // Where the kanji sits: the top-right corner unless a class says otherwise.
+  kanjiClass?: string;
+  id?: string;
+  class?: string;
+}
+const {
+  color,
+  wall,
+  kanji,
+  kanjiClass = "corner",
+  id,
+  class: className,
+} = Astro.props;
+const image = kanji ? KANJI[kanji] : undefined;
+if (kanji && !image) throw new Error(`No kanji image named ${kanji}`);
+---
+
+<section id={id} class:list={["band", color, className]} data-wall={wall}>
+  {
+    (wall || image) && (
+      <div class="wall" aria-hidden="true">
+        {image && (
+          <i
+            class:list={["kanji", kanjiClass]}
+            style={`--k: url(${image.src}); --r: ${image.width} / ${image.height}`}
+          />
+        )}
+      </div>
+    )
+  }
+  <slot />
+</section>

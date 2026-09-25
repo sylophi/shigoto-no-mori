@@ -1,0 +1,104 @@
+---
+import "../styles/global.css";
+// The two faces the first screen uses, preloaded under the same hashed
+// names the stylesheet asks for.
+import latin500 from "../fonts/zen-maru-gothic-latin-500-normal.woff2?url";
+import latin700 from "../fonts/zen-maru-gothic-latin-700-normal.woff2?url";
+// Copied as is, under a hashed name, so it caches like the rest.
+import themeScript from "../scripts/theme.js?url";
+import Icon from "../components/Icon.astro";
+import { LATEST_RELEASE, RELEASES, REPO, WEB_APP } from "../site";
+
+const SITE_NAME = "Shigoto no Mori";
+const TITLE = "Shigoto no Mori: a git worktree manager for the Mac";
+// Kept under about 160 characters, what search results show in full.
+const DESCRIPTION =
+  "A Mac app for managing git worktrees. Create one in two clicks, open it in the tools you already use, and see where each branch stands, on any of your Macs.";
+
+const canonical = new URL(Astro.url.pathname, Astro.site);
+const ogImage = new URL("/img/og.jpg", Astro.site);
+const ogImageAlt =
+  "The Shigoto no Mori site: the headline, the download buttons and the top of the app's window.";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{TITLE}</title>
+    <meta name="description" content={DESCRIPTION} />
+    <link rel="canonical" href={canonical} />
+
+    {/* Open Graph covers X too: it falls back to these for its card. */}
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={SITE_NAME} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:title" content={TITLE} />
+    <meta property="og:description" content={DESCRIPTION} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={ogImageAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image:alt" content={ogImageAlt} />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/img/icon.png" type="image/png" sizes="256x256" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    {/* The browser bar's colour on phones. theme.js sets it per theme. */}
+    <meta name="theme-color" content="#cff2de" />
+
+    <link rel="preload" href={latin500} as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href={latin700} as="font" type="font/woff2" crossorigin />
+    {/* Blocking on purpose: it sets the theme before first paint. */}
+    <script is:inline src={themeScript}></script>
+  </head>
+  <body>
+    <header class="nav">
+      <div class="wrap nav-inner">
+        <a class="brand" href="/">
+          <img src="/img/icon.png" alt="" width="30" height="30" />
+          <span class="brand-name">Shigoto no Mori</span>
+        </a>
+        <nav class="nav-links" aria-label="Main">
+          <a class="nav-extra" href={RELEASES}>Changelog</a>
+          <a href={WEB_APP}>Web app</a>
+          <a class="nav-extra" href={REPO}>GitHub</a>
+        </nav>
+        <button
+          class="theme-toggle"
+          type="button"
+          data-theme-toggle
+          aria-label="Toggle dark mode"
+        >
+          <Icon name="moon" class="icon-moon" />
+          <Icon name="sun" class="icon-sun" />
+        </button>
+        <a class="button small" data-download href={LATEST_RELEASE}>Download</a>
+      </div>
+    </header>
+
+    <main>
+      <slot />
+    </main>
+
+    <footer class="footer">
+      <div class="wrap footer-inner">
+        <span>© 2026 sylophi</span>
+        <nav aria-label="Footer">
+          <a href={REPO}>GitHub</a>
+          <a href={RELEASES}>Changelog</a>
+          <a href={WEB_APP}>Web app</a>
+        </nav>
+      </div>
+    </footer>
+
+    <script>
+      import { pointDownloadsAtLatestDmg } from "../scripts/download";
+      import { pauseOffscreenWallpaper } from "../scripts/wallpaper";
+      pointDownloadsAtLatestDmg();
+      pauseOffscreenWallpaper();
+    </script>
+  </body>
+</html>
