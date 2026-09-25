@@ -101,23 +101,19 @@ function buildCipher(): StoreCipher {
 }
 
 function store(): AccountStore {
-  if (cachedStore) return cachedStore;
-  cachedStore = createAccountStore({
+  return (cachedStore ??= createAccountStore({
     filePath: join(app.getPath("userData"), "account.json"),
     cipher: buildCipher(),
-  });
-  return cachedStore;
+  }));
 }
 
 // The command-access store, plaintext in userData (the switch is not a
 // bearer secret, see grantStore.ts). Built lazily for the same
 // app-ready reason as the credential store.
 function grantStore(): GrantStore {
-  if (cachedGrantStore) return cachedGrantStore;
-  cachedGrantStore = createGrantStore({
+  return (cachedGrantStore ??= createGrantStore({
     filePath: join(app.getPath("userData"), "grants.json"),
-  });
-  return cachedGrantStore;
+  }));
 }
 
 // In-memory mirror of the command-access switch for the CURRENT

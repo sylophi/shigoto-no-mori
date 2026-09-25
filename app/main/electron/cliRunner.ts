@@ -11,7 +11,7 @@ import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
 import { app } from "electron";
 import { registerInflightContributor } from "@host/lib/scripts";
 import { noteSelfWrite } from "@host/lib/util/selfWrite";
-import { signalTreeBestEffort } from "@host/lib/scripts/process";
+import { signalChildTree } from "@host/lib/scripts/process";
 // The injection seam in the CLI delegate owns the document shapes;
 // this runner is the Electron-side implementation wired in at boot.
 import type { CliDoc, CliResult } from "@host/ipc/cliDelegate";
@@ -54,13 +54,11 @@ export function cliChildCount(): number {
   return children.size - backgroundChildren;
 }
 
-const cliBusyChildCount = cliChildCount;
-
 // CLI children are lifecycle operations in flight (create/delete via
 // the CLI engine); registering them with the busy aggregate means
 // every getBusyOperations consumer counts them, so quitting
 // mid-operation still prompts.
-registerInflightContributor(cliBusyChildCount);
+registerInflightContributor(cliChildCount);
 
 // Registers a stream child (spawnStreamChild in host/fileSync/spawn.ts)
 // for the quit-time reap below, as a background child: a mirror
@@ -85,14 +83,7 @@ export function registerBackgroundChild(child: ChildProcess): void {
 // One CLI child deliberately escapes this reap: the update installer
 // (spawnCliDetached), whose whole job starts after we exit.
 export function killAllCli(): void {
-  for (const child of children) {
-    try {
-      if (child.pid !== undefined) signalTreeBestEffort(child.pid, "SIGTERM");
-      else child.kill("SIGTERM");
-    } catch {
-      // Already gone.
-    }
-  }
+  for (const child of children) signalChildTree(child, "SIGTERM");
 }
 
 // Spawn a CLI command that must outlive this process (the update
@@ -147,15 +138,7 @@ export async function runCli(
     if (opts?.background) backgroundChildren++;
     const killTimer =
       opts?.timeoutMs !== undefined
-        ? setTimeout(() => {
-            try {
-              if (child.pid !== undefined)
-                signalTreeBestEffort(child.pid, "SIGKILL");
-              else child.kill("SIGKILL");
-            } catch {
-              // Already gone.
-            }
-          }, opts.timeoutMs)
+        ? setTimeout(() => signalChildTree(child, "SIGKILL"), opts.timeoutMs)
         : null;
     // error and close can both fire for one child, so release runs once.
     const release = () => {

@@ -12,7 +12,7 @@
 // freshly built binary.
 import { type ChildProcess, spawn } from "node:child_process";
 import { Duplex, type Readable, type Writable } from "node:stream";
-import { signalTreeBestEffort } from "@host/lib/scripts/process";
+import { signalChildTree } from "@host/lib/scripts/process";
 import { implSlot } from "@host/lib/util/implSlot";
 
 // A child whose stdin/stdout are one duplex stream. stderr stays
@@ -55,14 +55,7 @@ export function spawnStreamChild(
     stream,
     stderr: child.stderr,
     pid: child.pid,
-    kill: () => {
-      try {
-        if (child.pid !== undefined) signalTreeBestEffort(child.pid, "SIGTERM");
-        else child.kill("SIGTERM");
-      } catch {
-        // Already gone.
-      }
-    },
+    kill: () => signalChildTree(child, "SIGTERM"),
     onExit: (listener) => {
       child.once("close", (code) => listener(code));
     },

@@ -174,10 +174,6 @@ export function createHubConnection(
       }
       broker = pair;
     },
-    connectBroker: core.connectBroker,
-    refresh: core.refresh,
-    stop: core.stop,
-    status: core.status,
-    probe: core.probe,
+    ...core,
   };
 }

@@ -29,6 +29,7 @@ import {
   mirrorContract,
 } from "@shared/ipc/modules/mirror";
 import { errorMessageOf, logFailure } from "@shared/errors";
+import type { ContractModule } from "@shared/ipc/contract";
 import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
 import { portForwardContract } from "@shared/ipc/modules/portForward";
 import { portPoolContract } from "@shared/ipc/modules/portPool";
@@ -155,9 +156,15 @@ const peerTransportFor = (deviceId: string) => ({
 // engine. Started from main/index.ts once the app is ready and stopped
 // on every quit path. A boot without the engine binary (a dev run
 // before file-sync:build) reports "unavailable" and keeps retrying.
+// A peer's surface for one contract, on the cached direct session
+// (peerTransportFor): built per call, never held.
+const peerClient =
+  <M extends ContractModule>(contract: M) =>
+  (deviceId: string) =>
+    buildClient(contract, peerTransportFor(deviceId));
+
 const mirrorGateway = createMirrorGateway({
-  peerApiFor: (deviceId) =>
-    buildClient(mirrorContract, peerTransportFor(deviceId)),
+  peerApiFor: peerClient(mirrorContract),
   peerChannelsFor: (deviceId) => () => hubHandlers.peerChannels(deviceId),
 });
 // The daemon snapshots on every cycle of every session and the
@@ -225,19 +232,17 @@ const observeMirrorHistory = () =>
   mirrorHistory.observe(liveMirrorSessions(), (session) =>
     gitFollower.statusOf(session),
   );
+// The gateway's facts the daemon is handed, once it has them.
+function listening<T>(value: T | null): T {
+  if (value === null) throw new Error("mirror gateway is not listening");
+  return value;
+}
+
 const mirrorDaemon = createMirrorDaemon({
   spawn: spawnFileSync,
   dataDir: fileSyncDir,
-  gatewayAddress: () => {
-    const address = mirrorGateway.address();
-    if (address === null) throw new Error("mirror gateway is not listening");
-    return address;
-  },
-  gatewayToken: () => {
-    const token = mirrorGateway.token();
-    if (token === null) throw new Error("mirror gateway is not listening");
-    return token;
-  },
+  gatewayAddress: () => listening(mirrorGateway.address()),
+  gatewayToken: () => listening(mirrorGateway.token()),
   onChange: () => {
     broadcastMirrorChanged();
     // The follower compares the session set itself. A snapshot that
@@ -283,6 +288,13 @@ function endAllMirrorsBounded(): Promise<unknown> {
   ]);
 }
 
+// The command-access switch flipping, on both channels it fans out on
+// (the account's and the remote-access surface's).
+function broadcastCommandAccessChanged(): void {
+  broadcastAll(accountContract, "commandAccessChanged", undefined);
+  broadcastAll(remoteAccessContract, "commandAccessChanged", undefined);
+}
+
 // A step of the account fan-out that must not take the rest with it.
 function teardownStep(what: string, run: () => unknown): Promise<void> {
   return logFailure(`[account] ${what} failed`, run);
@@ -291,14 +303,12 @@ function teardownStep(what: string, run: () => unknown): Promise<void> {
 // gitFollow.ts): reads the daemon's sessions, reaches the peer through
 // the same cached direct sessions, and reports through the same
 // changed signal. Its inputs are wired below: the local git watcher
-// (main/index.ts, via notifyLocalProjectChanged), the peers' pushes
+// (main/index.ts, via announceProjectChanged), the peers' pushes
 // (onPeerPush) and the daemon's snapshots (above).
 const gitFollower = createGitFollower({
   sessions: liveMirrorSessions,
-  peerSyncApiFor: (deviceId) =>
-    buildClient(syncContract, peerTransportFor(deviceId)),
-  peerMirrorApiFor: (deviceId) =>
-    buildClient(mirrorContract, peerTransportFor(deviceId)),
+  peerSyncApiFor: peerClient(syncContract),
+  peerMirrorApiFor: peerClient(mirrorContract),
   // The states both sides last agreed on, beside the engine's own
   // data so a restart resumes the follow rule rather than falling
   // back to ancestry.
@@ -315,10 +325,6 @@ const gitFollower = createGitFollower({
   },
 });
 
-export function notifyLocalProjectChanged(projectId: string): void {
-  gitFollower.onLocalProjectChanged(projectId);
-}
-
 // "This project's git state moved on this machine": the project-scoped
 // ping on every wire (this window and every device viewing this host
 // refetch that project's rows), and the mirror's git follower
@@ -328,7 +334,7 @@ export function notifyLocalProjectChanged(projectId: string): void {
 // skips as the app's own when no renderer caller invalidates for them.
 export function announceProjectChanged(projectId: string): void {
   broadcastAll(gitContract, "projectChanged", { projectId });
-  notifyLocalProjectChanged(projectId);
+  gitFollower.onLocalProjectChanged(projectId);
 }
 
 // A gateway that fails to bind (a loopback oddity) is retried on a
@@ -412,8 +418,7 @@ export function registerIpcHandlers(): void {
       // This only keeps the renderer display fresh, since `changed`
       // invalidates the ["account"] prefix but not
       // ["accountCommandAccess"].
-      broadcastAll(accountContract, "commandAccessChanged", undefined);
-      broadcastAll(remoteAccessContract, "commandAccessChanged", undefined);
+      broadcastCommandAccessChanged();
       // Also reconciles the direct listener from its tail, which
       // follows the same enrollment condition.
       await refreshHubConnection();
@@ -432,10 +437,7 @@ export function registerIpcHandlers(): void {
     // does not thrash the account status and device queries. No hub
     // reconnect: the listener reads the predicate live. The peers
     // hear it too (remote:true), so their verdict refreshes at once.
-    () => {
-      broadcastAll(accountContract, "commandAccessChanged", undefined);
-      broadcastAll(remoteAccessContract, "commandAccessChanged", undefined);
-    },
+    broadcastCommandAccessChanged,
     // The registry as the hub last reported it is the one place this
     // device learns a peer was removed from the account (the hub
     // pushes no such thing, and an absent peer looks like an offline
@@ -480,12 +482,9 @@ export function registerIpcHandlers(): void {
   // The sync orchestrations' peer reach (host/ipc/peerSync.ts), riding
   // peerTransportFor above.
   setPeerSyncApiImpl({
-    syncApiFor: (deviceId) =>
-      buildClient(syncContract, peerTransportFor(deviceId)),
-    worktreesApiFor: (deviceId) =>
-      buildClient(worktreesContract, peerTransportFor(deviceId)),
-    projectsApiFor: (deviceId) =>
-      buildClient(projectsContract, peerTransportFor(deviceId)),
+    syncApiFor: peerClient(syncContract),
+    worktreesApiFor: peerClient(worktreesContract),
+    projectsApiFor: peerClient(projectsContract),
   });
   // The port-forward engine's peer reach, riding the same
   // peerTransportFor as the sync wiring above and for the same reason:
@@ -495,8 +494,7 @@ export function registerIpcHandlers(): void {
   // peer sessions and to the renderer's changed signal.
   setPortForwardEngine(
     createPortForwardEngine({
-      forwardApiFor: (deviceId) =>
-        buildClient(forwardContract, peerTransportFor(deviceId)),
+      forwardApiFor: peerClient(forwardContract),
       // The byte channels of the same cached direct session.
       channelsFor: (deviceId) => () => hubHandlers.peerChannels(deviceId),
       onChange: () => {

@@ -57,8 +57,7 @@ async function captureHookPathEnv(): Promise<Record<string, string>> {
 }
 
 function hookPathEnv(): Promise<Record<string, string>> {
-  if (hookEnvPromise === null) hookEnvPromise = captureHookPathEnv();
-  return hookEnvPromise;
+  return (hookEnvPromise ??= captureHookPathEnv());
 }
 
 function runShellCli(
@@ -97,15 +96,24 @@ function statusFrom(shells: ShellHookState[]): ShellIntegrationStatus {
   return { loginShell, shells };
 }
 
-export async function shellIntegrationStatus(): Promise<ShellIntegrationStatus> {
-  const result = await runShellCli(["shell", "status"]);
+// The status a shell subcommand answers with, or the failure it names.
+async function statusAfter(
+  args: string[],
+  fallback: string,
+): Promise<ShellIntegrationStatus> {
+  const result = await runShellCli(args);
   const shells = shellsFromDocs(result.docs);
   if (result.code !== 0 || shells.length === 0) {
-    throw new Error(
-      cliFailureMessage(result, "Couldn't read the shell integration state"),
-    );
+    throw new Error(cliFailureMessage(result, fallback));
   }
   return statusFrom(shells);
+}
+
+export function shellIntegrationStatus(): Promise<ShellIntegrationStatus> {
+  return statusAfter(
+    ["shell", "status"],
+    "Couldn't read the shell integration state",
+  );
 }
 
 // The CLI validates the shell name, and an unsupported one surfaces its
@@ -116,14 +124,10 @@ export async function installShellIntegration(): Promise<ShellIntegrationStatus>
   if (base === null) {
     throw new Error("Couldn't determine your login shell.");
   }
-  const result = await runShellCli(["shell", "install", base]);
-  const shells = shellsFromDocs(result.docs);
-  if (result.code !== 0 || shells.length === 0) {
-    throw new Error(
-      cliFailureMessage(result, "Couldn't install shell integration"),
-    );
-  }
-  return statusFrom(shells);
+  return statusAfter(
+    ["shell", "install", base],
+    "Couldn't install shell integration",
+  );
 }
 
 // Sweeps every supported shell. A partial removal (an edited block the

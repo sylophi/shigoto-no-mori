@@ -262,13 +262,13 @@ async function candidates(
     if (asked.length === 0) {
       throw new ControlError(
         "no-device",
-        `No device is named "${query}". The account's other devices: ${listed(peers.map((device) => ({ name: nameOf(device) })))}.`,
+        `No device is named "${query}". The account's other devices: ${listed(namesOf(peers))}.`,
       );
     }
     if (asked.length > 1) {
       throw new ControlError(
         "ambiguous-device",
-        `"${query}" matches several devices: ${listed(asked.map((device) => ({ name: nameOf(device) })))}. Name one in full, or pass its id.`,
+        `"${query}" matches several devices: ${listed(namesOf(asked))}. Name one in full, or pass its id.`,
       );
     }
   }
