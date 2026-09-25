@@ -30,6 +30,13 @@ Poses ride the URL:
   same keys (default `tp`).
 - `?view=inbox`: open the sidebar in its inbox view (the toggle flips
   it in-session either way).
+- `?checks=<variant>`: the CI rollup on PR #148 (worktree
+  `happy-hummingbird`, `?to=/projects/p_sm/worktrees/wt_sm_hum`), with
+  the merge state GitHub would pair with it. Variants are the keys of
+  `LAB_CHECK_POSES` in `bridge.ts`: `none`, `single-passed`,
+  `single-failing`, `passed`, `passed-some-skipped`, `all-skipped`,
+  `pending`, `failing`, `failing-blocked`, `failing-and-pending`,
+  `many`. Absent, it keeps two passing checks.
 - Desktop: `?to=/devices` navigates the memory router after mount. Web:
   the path itself is the route (`/devices/...`).
 

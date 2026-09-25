@@ -25,17 +25,18 @@ export function isRawKeySurface(target: EventTarget | null): boolean {
 }
 
 // True while something is layered over the page and owns the keyboard:
-// the launcher, a modal shell, a sheet, an open menu or combobox popup,
-// or the blocking veil. None of them trap focus (they mount as siblings
-// of the router, and the popups portal out), so a bare-key shortcut in
-// the page underneath still fires unless it asks. Distinct from the
-// launcher's own narrower check, which asks only "is a modal up" to
-// decide whether it may open on top.
+// the launcher, a modal shell, a sheet, an open menu, popover or
+// combobox popup, or the blocking veil. None of them trap focus (they
+// mount as siblings of the router, and the popups portal out), so a
+// bare-key shortcut in the page underneath still fires unless it asks.
+// Distinct from the launcher's own narrower check, which asks only "is
+// a modal up" to decide whether it may open on top.
 const OVERLAY_SLOTS = [
   "launcher",
   "modal-shell",
   "sheet-content",
   "dropdown-menu-content",
+  "popover-content",
   "combobox-popup",
   "blocking-overlay",
 ]

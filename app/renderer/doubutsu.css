@@ -42,6 +42,7 @@
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
  *      dropdown-menu-sub-trigger (+ data-variant)   ui/dropdown-menu.tsx
+ *      popover-content           ui/popover.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
  *      sidebar-device-filter     sidebar/DeviceFilterBar.tsx
  *      device-chip               shared/DeviceChip.tsx, shared/DeviceTabs.tsx
@@ -361,6 +362,7 @@
 .doubutsu
   :is(
     [data-slot="dropdown-menu-content"],
+    [data-slot="popover-content"],
     [data-slot="combobox-popup"],
     [data-slot="modal-shell"],
     [data-slot="sheet-content"],

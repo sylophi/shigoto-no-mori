@@ -102,6 +102,23 @@ export type PullRequestChecksSummary = z.infer<
   typeof PullRequestChecksSummarySchema
 >;
 
+export function summarizeChecks(
+  checks: PullRequestCheck[],
+): PullRequestChecksSummary {
+  const summary: PullRequestChecksSummary = {
+    total: checks.length,
+    passed: 0,
+    failing: 0,
+    pending: 0,
+    neutral: 0,
+    skipped: 0,
+  };
+  for (const c of checks) {
+    summary[c.bucket] += 1;
+  }
+  return summary;
+}
+
 // Rich projection of the open worktree's PR. Slim PullRequest is kept
 // for the project-wide sweep that feeds the sidebar dots, since the
 // extra fields make `gh pr list` materially slower.
