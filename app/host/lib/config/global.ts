@@ -9,6 +9,7 @@ import { randomBytes } from "node:crypto";
 import { join } from "node:path";
 import { errorMessageOf } from "@shared/errors";
 import { DEFAULT_SOCKET_PORT } from "@shared/ipc/socket/frames";
+import { createLimiter } from "@shared/util/limit";
 import {
   type ClientConfig,
   ClientConfigSchema,
@@ -63,18 +64,13 @@ export async function readGlobalConfigFresh(): Promise<GlobalConfig> {
 // writeDeviceSettings reads a fresh base and then writes the whole
 // document, and the renderer writeChain that serializes local writes never
 // sees the remote path.
-let configWriteChain: Promise<unknown> = Promise.resolve();
+const configWriteQueue = createLimiter(1);
 export function withGlobalConfigWriteLock<T>(
   task: () => Promise<T>,
 ): Promise<T> {
-  const run = configWriteChain.then(task, task);
-  // Keep the chain alive past a rejected task so one failure does not
-  // wedge later writes. The caller still sees run's rejection.
-  configWriteChain = run.then(
-    () => undefined,
-    () => undefined,
-  );
-  return run;
+  // The limiter frees its slot after a rejected task too, so one failure
+  // does not wedge later writes. The caller still sees the rejection.
+  return configWriteQueue(task);
 }
 
 // Config-change reconcilers. Every change path (the IPC write, an

@@ -32,13 +32,8 @@ export function isPortPoolInstalled(): Promise<boolean> {
 const configuredCache = ttlMapCache<string, boolean>(
   STATE_CACHE_TTL_MS,
   async (cwd) => {
-    let raw: string;
     try {
-      raw = await readFile(join(cwd, "port-pool.config.json"), "utf8");
-    } catch {
-      return false;
-    }
-    try {
+      const raw = await readFile(join(cwd, "port-pool.config.json"), "utf8");
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       return "schemaVersion" in parsed;
     } catch {

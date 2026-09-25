@@ -16,12 +16,8 @@ import { run } from "./core";
 export const IGNORE_RULES_LIMIT = 512;
 
 async function readRules(path: string): Promise<string[]> {
-  let text: string;
-  try {
-    text = await readFile(path, "utf8");
-  } catch {
-    return [];
-  }
+  const text = await readFile(path, "utf8").catch(() => null);
+  if (text === null) return [];
   return text
     .split(/\r?\n/)
     .map((line) => line.trimEnd())

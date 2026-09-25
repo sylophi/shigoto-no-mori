@@ -13,7 +13,9 @@ import type {
   StagedState,
 } from "@shared/schemas";
 import { isUntracked } from "@shared/schemas";
+import { createLimiter } from "@shared/util/limit";
 import { chunked, run, runLenient, splitZ, type RunOptions } from "./core";
+import { verifyRev } from "./refs";
 
 // Discard snapshots kept per repository. Pruned by count rather than
 // age, so a repo you touch monthly keeps as useful a tail as one you
@@ -77,17 +79,13 @@ function kindOf(x: string, y: string): ChangeKind {
 // Writes to one worktree's index run one after another. Git takes
 // index.lock for each, so two quick ticks, or a tick racing a commit,
 // would otherwise fail on the lock instead of waiting. A failed task
-// doesn't break the chain.
-const indexQueues = new Map<string, Promise<unknown>>();
+// doesn't block the queue.
+const indexQueues = new Map<string, ReturnType<typeof createLimiter>>();
 
 function onIndex<T>(worktreePath: string, task: () => Promise<T>): Promise<T> {
-  const previous = indexQueues.get(worktreePath) ?? Promise.resolve();
-  const next = previous.then(task, task);
-  indexQueues.set(
-    worktreePath,
-    next.catch(() => undefined),
-  );
-  return next;
+  const queue = indexQueues.get(worktreePath) ?? createLimiter(1);
+  indexQueues.set(worktreePath, queue);
+  return queue(task);
 }
 
 // --- line counts -------------------------------------------------------
@@ -344,29 +342,21 @@ export async function readCommitMessage(
 
 // --- undo --------------------------------------------------------------
 
-async function revParse(worktreePath: string, rev: string): Promise<string> {
-  return (
-    await run(worktreePath, ["rev-parse", "--verify", "--end-of-options", rev])
-  ).trim();
-}
-
-async function isAncestor(
+function isAncestor(
   worktreePath: string,
   ancestor: string,
   descendant: string,
 ): Promise<boolean> {
-  try {
-    await run(worktreePath, [
-      "merge-base",
-      "--is-ancestor",
-      "--end-of-options",
-      ancestor,
-      descendant,
-    ]);
-    return true;
-  } catch {
-    return false;
-  }
+  return run(worktreePath, [
+    "merge-base",
+    "--is-ancestor",
+    "--end-of-options",
+    ancestor,
+    descendant,
+  ]).then(
+    () => true,
+    () => false,
+  );
 }
 
 // `git reset --soft`: HEAD moves and nothing else does, so the commits
@@ -386,8 +376,8 @@ export function resetSoft(
 ): Promise<string> {
   return onIndex(worktreePath, async () => {
     const [head, expected] = await Promise.all([
-      revParse(worktreePath, "HEAD"),
-      expectHead ? revParse(worktreePath, expectHead) : undefined,
+      verifyRev(worktreePath, "HEAD"),
+      expectHead ? verifyRev(worktreePath, expectHead) : undefined,
     ]);
     if (expected !== undefined && head !== expected) {
       throw new Error(

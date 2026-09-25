@@ -116,7 +116,7 @@ async function readHeadFacts(worktreePath: string): Promise<HeadFacts> {
   return { head, tip, headTree, gitDir };
 }
 
-export async function gitDirOfWorktree(worktreePath: string): Promise<string> {
+async function gitDirOfWorktree(worktreePath: string): Promise<string> {
   const out = await run(worktreePath, ["rev-parse", "--absolute-git-dir"]);
   return out.trim();
 }
@@ -235,17 +235,23 @@ async function computeIndexTree(
   return tree;
 }
 
-// The three facts, read-only: nothing is written.
-export async function peekGitState(
+// The three facts, read-only: nothing is written. HEAD's tree rides
+// along for readGitState, which compares the index tree against it.
+async function peekGitState(
   worktreePath: string,
-): Promise<GitStateCore> {
+): Promise<GitStateCore & { headTree: string }> {
   const facts = await readHeadFacts(worktreePath);
   const indexTree = await indexTreeOf(
     worktreePath,
     facts.gitDir,
     facts.headTree,
   );
-  return { head: facts.head, tip: facts.tip, indexTree };
+  return {
+    head: facts.head,
+    tip: facts.tip,
+    indexTree,
+    headTree: facts.headTree,
+  };
 }
 
 // Worktrees this process knows to carry NO index ref, so the clean
@@ -261,15 +267,9 @@ export async function readGitState(
   worktreePath: string,
   worktreeId: string,
 ): Promise<GitState> {
-  const facts = await readHeadFacts(worktreePath);
-  const indexTree = await indexTreeOf(
-    worktreePath,
-    facts.gitDir,
-    facts.headTree,
-  );
-  const core: GitStateCore = { head: facts.head, tip: facts.tip, indexTree };
+  const { headTree, ...core } = await peekGitState(worktreePath);
   const ref = indexRefFor(worktreeId);
-  if (indexTree === facts.headTree) {
+  if (core.indexTree === headTree) {
     if (!carrierClean.has(worktreeId)) {
       await deleteRef(projectPath, ref).catch(() => {});
       carrierClean.add(worktreeId);
@@ -280,7 +280,7 @@ export async function readGitState(
   const existing = await refTip(projectPath, ref);
   if (
     existing !== null &&
-    (await treeOf(projectPath, existing)) === indexTree
+    (await treeOf(projectPath, existing)) === core.indexTree
   ) {
     return { ...core, indexCommit: existing };
   }
@@ -289,9 +289,9 @@ export async function readGitState(
       projectPath,
       [
         "commit-tree",
-        indexTree,
+        core.indexTree,
         "-p",
-        facts.tip,
+        core.tip,
         "-m",
         "shigomori index snapshot",
       ],
@@ -370,13 +370,7 @@ async function applyGitStateUnswept(
       current.head.kind === "branch" ? current.head.branch : null;
     if (target === currentBranch) {
       if (current.tip !== state.tip) {
-        await run(project.path, [
-          "update-ref",
-          "--end-of-options",
-          targetRef,
-          state.tip,
-          current.tip,
-        ]);
+        await updateRef(project.path, targetRef, state.tip, current.tip);
       }
     } else {
       // A branch switch. The branch may exist here already: refuse if
@@ -395,28 +389,23 @@ async function applyGitStateUnswept(
         };
       }
       const existingTip = await refTip(project.path, targetRef);
-      if (existingTip === null) {
-        await run(project.path, [
-          "update-ref",
-          "--end-of-options",
+      if (
+        existingTip !== null &&
+        existingTip !== state.tip &&
+        !(await isAncestor(project.path, existingTip, state.tip))
+      ) {
+        return {
+          applied: false,
+          reason: `branch ${target} on this device has commits the other device does not`,
+        };
+      }
+      if (existingTip !== state.tip) {
+        await updateRef(
+          project.path,
           targetRef,
           state.tip,
-          ZERO_SHA,
-        ]);
-      } else if (existingTip !== state.tip) {
-        if (!(await isAncestor(project.path, existingTip, state.tip))) {
-          return {
-            applied: false,
-            reason: `branch ${target} on this device has commits the other device does not`,
-          };
-        }
-        await run(project.path, [
-          "update-ref",
-          "--end-of-options",
-          targetRef,
-          state.tip,
-          existingTip,
-        ]);
+          existingTip ?? ZERO_SHA,
+        );
       }
       await run(worktree.path, ["symbolic-ref", "HEAD", targetRef]);
     }

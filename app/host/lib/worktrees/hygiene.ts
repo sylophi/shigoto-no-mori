@@ -13,16 +13,12 @@ import {
   type WorktreeDiskUsage,
   type WorktreeHygiene,
 } from "@shared/schemas";
-import { readShigomoriConfig } from "../config/project";
 import { run, runLenient } from "../git/core";
-import {
-  listRemotes,
-  localBranchExists,
-  resolveDefaultBranch,
-  splitRemoteRefSync,
-} from "../git/remotes";
+import { treeOf } from "../git/refs";
+import { localBranchExists, splitRemoteRefSync } from "../git/remotes";
 import {
   listWorktreeIdentities,
+  loadPrimaryRef,
   type WorktreeIdentity,
 } from "../git/worktrees";
 import { measureDirectory } from "../util/dirSize";
@@ -170,20 +166,11 @@ async function primaryRefCandidates(
     }
   }
   return Promise.all(
-    refs.map(async (ref) => ({ ref, tree: await treeOf(projectPath, ref) })),
+    refs.map(async (ref) => ({
+      ref,
+      tree: await treeOf(projectPath, ref).catch(() => null),
+    })),
   );
-}
-
-async function treeOf(
-  projectPath: string,
-  ref: string,
-): Promise<string | null> {
-  try {
-    const stdout = await run(projectPath, ["rev-parse", `${ref}^{tree}`]);
-    return stdout.trim() || null;
-  } catch {
-    return null;
-  }
 }
 
 // The untracked scan is worth a git call only where the answer changes
@@ -287,29 +274,22 @@ export async function collectProjectHygiene(
   projectId: string,
   projectPath: string,
 ): Promise<WorktreeHygiene[]> {
-  const [identities, config, remotes] = await Promise.all([
-    projectIdentities(projectId, projectPath),
-    readShigomoriConfig(projectId).catch(() => null),
-    listRemotes(projectPath),
-  ]);
   // A repo with no resolvable default branch has nothing to compare
   // against. Reported as no candidates rather than as a failed call, so
-  // the rows read "can't tell" instead of loading forever.
-  const primaryRef = await resolveDefaultBranch(
-    projectPath,
-    config?.defaultBranch,
-  ).catch(() => null);
+  // the rows read "can't tell" instead of loading forever. The local
+  // branch name behind the primary ref ("main" for "origin/main") is so
+  // a linked worktree that has it checked out can be recognised and kept
+  // off the tick list.
+  const [identities, { remotes, primaryRef, primaryBranch }] =
+    await Promise.all([
+      projectIdentities(projectId, projectPath),
+      loadPrimaryRef(projectId, projectPath),
+    ]);
   const candidates = await primaryRefCandidates(
     projectPath,
     primaryRef,
     remotes,
   );
-  // The local branch name behind the primary ref ("main" for
-  // "origin/main"), so a linked worktree that has it checked out can be
-  // recognised and kept off the tick list.
-  const primaryBranch = primaryRef
-    ? (splitRemoteRefSync(primaryRef, remotes)?.branch ?? primaryRef)
-    : null;
   return Promise.all(
     identities.map((identity) =>
       gitProbes(() =>
@@ -332,23 +312,14 @@ const identityCache = ttlMapCache(10_000, (key: string) => {
 
 // The renderer asks for every worktree's disk usage at once, so the
 // whole burst arrives before the first lookup has resolved and a
-// value-only cache would miss on all of them. Holding the in-flight
-// promise is what makes it one `git worktree list` per project rather
-// than one per row.
-const identityInFlight = new Map<string, Promise<WorktreeIdentity[]>>();
-
+// value-only cache would miss on all of them. identityCache holding the
+// in-flight promise (ttlMapCache coalesces concurrent misses) is what
+// makes it one `git worktree list` per project rather than one per row.
 function projectIdentities(
   projectId: string,
   projectPath: string,
 ): Promise<WorktreeIdentity[]> {
-  const key = `${projectId}\u0000${projectPath}`;
-  const pending = identityInFlight.get(key);
-  if (pending) return pending;
-  const load = identityCache.get(key).finally(() => {
-    identityInFlight.delete(key);
-  });
-  identityInFlight.set(key, load);
-  return load;
+  return identityCache.get(`${projectId}\u0000${projectPath}`);
 }
 
 export async function findWorktreeForDisk(

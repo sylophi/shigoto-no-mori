@@ -5,7 +5,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
-import type { Stats } from "node:fs";
 import { isAbsolute, join, posix, relative, resolve } from "node:path";
 import type { ProjectIcon } from "@shared/schemas";
 import { listProjectFiles } from "../git/files";
@@ -120,21 +119,11 @@ function isPathWithinProject(
   return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
 }
 
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    const st = await stat(path);
-    return st.isFile();
-  } catch {
-    return false;
-  }
-}
-
-async function statOrNull(path: string): Promise<Stats | null> {
-  try {
-    return await stat(path);
-  } catch {
-    return null;
-  }
+function fileExists(path: string): Promise<boolean> {
+  return stat(path).then(
+    (st) => st.isFile(),
+    () => false,
+  );
 }
 
 async function findFirstExisting(
@@ -234,12 +223,8 @@ async function scanRootForIcon(
   for (const sourceFile of ICON_SOURCE_FILES) {
     const rel = posixJoin(root, sourceFile);
     if (files && !files.has(rel)) continue;
-    let source: string;
-    try {
-      source = await readFile(join(cwd, rel), "utf8");
-    } catch {
-      continue;
-    }
+    const source = await readFile(join(cwd, rel), "utf8").catch(() => null);
+    if (source === null) continue;
     const href = extractIconHref(source);
     if (!href) continue;
     const abs = await resolveHrefOnDisk(cwd, root, href, files);
@@ -463,16 +448,12 @@ function persistCache(map: Map<string, IconCacheEntry>): Promise<void> {
 async function buildEntry(
   sourcePath: string,
 ): Promise<{ entry: IconCacheEntry; bytes: Buffer } | null> {
-  let sourceBytes: Buffer;
-  let st: Stats;
-  try {
-    [sourceBytes, st] = await Promise.all([
-      readFile(sourcePath),
-      stat(sourcePath),
-    ]);
-  } catch {
-    return null;
-  }
+  const read = await Promise.all([
+    readFile(sourcePath),
+    stat(sourcePath),
+  ]).catch(() => null);
+  if (read === null) return null;
+  const [sourceBytes, st] = read;
   return {
     entry: {
       sourcePath,
@@ -494,7 +475,7 @@ async function buildEntry(
 async function revalidateAndRead(
   entry: IconCacheEntry,
 ): Promise<{ entry: IconCacheEntry; bytes: Buffer; dirty: boolean } | null> {
-  const st = await statOrNull(entry.sourcePath);
+  const st = await stat(entry.sourcePath).catch(() => null);
   if (!st) return null;
 
   if (st.size === entry.sourceSize && st.mtimeMs === entry.sourceMtimeMs) {
@@ -504,12 +485,8 @@ async function revalidateAndRead(
 
   // Stat differs, so read + hash to tell a content change from a
   // touch-only edit.
-  let sourceBytes: Buffer;
-  try {
-    sourceBytes = await readFile(entry.sourcePath);
-  } catch {
-    return null;
-  }
+  const sourceBytes = await readFile(entry.sourcePath).catch(() => null);
+  if (sourceBytes === null) return null;
   const hash = sha256(sourceBytes);
   if (hash === entry.sourceHash) {
     return {

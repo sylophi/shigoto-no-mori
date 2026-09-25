@@ -212,11 +212,9 @@ export function splitZ(stdout: string): string[] {
   return stdout.split("\0").filter((entry) => entry.length > 0);
 }
 
-export async function isGitRepo(path: string): Promise<boolean> {
-  try {
-    await exec(["rev-parse", "--git-dir"], { cwd: path });
-    return true;
-  } catch {
-    return false;
-  }
+export function isGitRepo(path: string): Promise<boolean> {
+  return exec(["rev-parse", "--git-dir"], { cwd: path }).then(
+    () => true,
+    () => false,
+  );
 }

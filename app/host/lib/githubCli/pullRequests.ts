@@ -32,10 +32,7 @@ const prCache = new Map<
 
 // Runs `gh pr list ...` with the standard JSON projection. Returns the
 // parsed rows on success or null on any failure (gh exit, JSON, schema).
-async function runGhPrList(
-  cwd: string,
-  extraArgs: string[],
-): Promise<GhPrListItem[] | null> {
+async function runGhPrList(cwd: string): Promise<GhPrListItem[] | null> {
   try {
     const { stdout } = await execGh(
       [
@@ -43,7 +40,8 @@ async function runGhPrList(
         "list",
         "--state",
         "all",
-        ...extraArgs,
+        "--limit",
+        String(PR_LIST_LIMIT),
         "--json",
         "number,url,title,state,isDraft,headRefName,baseRefName",
       ],
@@ -86,7 +84,7 @@ export async function refreshProjectPullRequests(
   cwd: string,
 ): Promise<Map<string, PullRequest>> {
   if (!(await ghReadyForRepo(cwd))) return cacheAndReturn(cwd, new Map());
-  const rows = await runGhPrList(cwd, ["--limit", String(PR_LIST_LIMIT)]);
+  const rows = await runGhPrList(cwd);
   if (rows === null) {
     // Transient gh / network failure. Preserve the previous map so the
     // sidebar dots don't blink out on a single bad sweep. Fall through

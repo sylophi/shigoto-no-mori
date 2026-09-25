@@ -156,22 +156,23 @@ async function getRemoteSync(worktreePath: string): Promise<RemoteSync> {
     return { ahead: 0, behind: 0, hasUpstream: false, divergedClean: false };
   }
   const { ahead, behind } = counts;
-  const hasUpstream = true;
-  if (ahead === 0 || behind === 0) {
-    return { ahead, behind, hasUpstream, divergedClean: false };
-  }
   // Diverged: ask git whether a merge would land without conflicts.
   // `merge-tree --write-tree` exits 0 on a clean merge and non-zero
   // when conflicts would arise (or on git < 2.38, where we treat the
   // unknown as "not clean", the safer default).
-  let divergedClean = false;
-  try {
-    await run(worktreePath, ["merge-tree", "--write-tree", "HEAD", "@{u}"]);
-    divergedClean = true;
-  } catch {
-    divergedClean = false;
-  }
-  return { ahead, behind, hasUpstream, divergedClean };
+  const divergedClean =
+    ahead > 0 &&
+    behind > 0 &&
+    (await run(worktreePath, [
+      "merge-tree",
+      "--write-tree",
+      "HEAD",
+      "@{u}",
+    ]).then(
+      () => true,
+      () => false,
+    ));
+  return { ahead, behind, hasUpstream: true, divergedClean };
 }
 
 // How many of HEAD's newest commits no remote has: what amend and undo
@@ -507,10 +508,20 @@ interface BuildContext {
   primaryChain: PrimaryChainReader;
 }
 
-async function loadBuildContext(
+// The project's primary ref (null when no default branch resolves), the
+// local branch behind it ("main" for "origin/main"), and the remotes the
+// ref was split against. Shared by the worktree list and the tidy
+// surface, which both compare every row to the same primary.
+interface PrimaryRefContext {
+  remotes: string[];
+  primaryRef: string | null;
+  primaryBranch: string | null;
+}
+
+export async function loadPrimaryRef(
   projectId: string,
   projectPath: string,
-): Promise<BuildContext> {
+): Promise<PrimaryRefContext> {
   const [remotes, config] = await Promise.all([
     listRemotes(projectPath),
     readShigomoriConfig(projectId).catch(() => null),
@@ -519,14 +530,29 @@ async function loadBuildContext(
     projectPath,
     config?.defaultBranch,
   ).catch(() => null);
-  const shelvedSet = readShelvedSet();
   return {
-    hasRemote: remotes.length > 0,
+    remotes,
     primaryRef,
     primaryBranch:
       primaryRef === null
         ? null
         : (splitRemoteRefSync(primaryRef, remotes)?.branch ?? primaryRef),
+  };
+}
+
+async function loadBuildContext(
+  projectId: string,
+  projectPath: string,
+): Promise<BuildContext> {
+  const { remotes, primaryRef, primaryBranch } = await loadPrimaryRef(
+    projectId,
+    projectPath,
+  );
+  const shelvedSet = readShelvedSet();
+  return {
+    hasRemote: remotes.length > 0,
+    primaryRef,
+    primaryBranch,
     shelvedSet,
     // Nothing shelved, nothing to compare against.
     shelfSnapshots: shelvedSet.size > 0 ? shelfSnapshots.read() : {},
@@ -694,12 +720,10 @@ export async function removeWorktreeForce(
 // worktree, which keeps the wipe away from any directory git never
 // registered.
 async function worktreeAdminDir(worktreePath: string): Promise<string | null> {
-  let contents: string;
-  try {
-    contents = await readFile(join(worktreePath, ".git"), "utf8");
-  } catch {
-    return null;
-  }
+  const contents = await readFile(join(worktreePath, ".git"), "utf8").catch(
+    () => null,
+  );
+  if (contents === null) return null;
   const line = contents.trim();
   if (!line.startsWith("gitdir: ")) return null;
   const dir = line.slice("gitdir: ".length);
