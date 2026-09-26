@@ -1,5 +1,6 @@
-import { Rocket, Terminal, Trash2 } from "lucide-react";
+import { CircleAlert, Rocket, Terminal, Trash2 } from "lucide-react";
 import type { ScriptActivityKind } from "@/store/scriptRuns";
+import { cn } from "@/lib/utils";
 
 const ACTIVITY: Record<
   ScriptActivityKind,
@@ -12,6 +13,11 @@ const ACTIVITY: Record<
     tone: "text-destructive",
   },
   package: { Icon: Terminal, label: "Script running", tone: "text-violet-500" },
+  failed: {
+    Icon: CircleAlert,
+    label: "A script failed",
+    tone: "text-rose-500",
+  },
 };
 
 interface ActivityIconProps {
@@ -20,10 +26,15 @@ interface ActivityIconProps {
 
 export function ActivityIcon({ kind }: ActivityIconProps) {
   const { Icon, label, tone } = ACTIVITY[kind];
+  // The failure is news, not progress, so it holds still.
   return (
     <Icon
       aria-label={label}
-      className={`size-3 shrink-0 animate-pulse ${tone}`}
+      className={cn(
+        "size-3 shrink-0",
+        kind !== "failed" && "animate-pulse",
+        tone,
+      )}
     />
   );
 }

@@ -101,7 +101,9 @@ interface RunMeta {
   slotKind: SlotKind;
 }
 
-export type ScriptActivityKind = "setup" | "teardown" | "package";
+// What the sidebar row shows for a worktree: the slot running there,
+// or "failed" for a run that ended badly while its page was not open.
+export type ScriptActivityKind = "setup" | "teardown" | "package" | "failed";
 
 export const EMPTY_STATE: ScriptRunState = Object.freeze({
   runId: null,
@@ -142,6 +144,9 @@ export class ScriptRunsStore {
   private pendingByRunId = new Map<string, PostStartEvent[]>();
   private perKeySubs = new KeyedSubscribers<ScriptKey>();
   private worktreeSubs = new KeyedSubscribers<string>();
+  // When each worktree's page was last left. A failure since then is
+  // news (getActivityKind); one from before it has been seen.
+  private seenAt = new Map<string, number>();
   private unsubscribers: Array<() => void> = [];
   private api: ScriptsApi;
   // Whether a removed-worktree notice is worth a toast even for a
@@ -276,6 +281,7 @@ export class ScriptRunsStore {
   // worktrees that no longer exist on disk. Returns whether this store
   // held any run there.
   clearForWorktree(worktreeId: string): boolean {
+    this.seenAt.delete(worktreeId);
     let touched = false;
     for (const [key, m] of this.meta) {
       if (m.worktreeId !== worktreeId) continue;
@@ -325,17 +331,30 @@ export class ScriptRunsStore {
     return this.worktreeSubs.subscribe(worktreeId, cb);
   }
 
+  // The worktree's page was left (or is being left): every failure so
+  // far has had its chance to be seen.
+  markSeen(worktreeId: string): void {
+    this.seenAt.set(worktreeId, Date.now());
+    this.worktreeSubs.notify(worktreeId);
+  }
+
   // Highest-priority active slot for the worktree, or null if nothing is
   // running. Teardown trumps setup trumps package because it's the most
-  // consequential state to surface in the sidebar.
+  // consequential state to surface in the sidebar. With nothing running,
+  // an unseen failure (a nonzero exit since markSeen, so not a stop).
   getActivityKind(worktreeId: string): ScriptActivityKind | null {
     let hasSetup = false;
     let hasPackage = false;
+    let hasUnseenFailure = false;
+    const seenAt = this.seenAt.get(worktreeId) ?? 0;
     for (const [key, m] of this.meta) {
       if (m.worktreeId !== worktreeId) continue;
       const s = this.states.get(key);
       if (!s) continue;
-      if (s.status !== "starting" && s.status !== "running") continue;
+      if (s.status !== "starting" && s.status !== "running") {
+        if (s.exitCode && (s.endedAt ?? 0) > seenAt) hasUnseenFailure = true;
+        continue;
+      }
       // Release is conceptually like teardown, the highest priority tier.
       if (m.slotKind === "teardown" || m.slotKind === "portPoolRelease") {
         return "teardown";
@@ -350,6 +369,7 @@ export class ScriptRunsStore {
     }
     if (hasSetup) return "setup";
     if (hasPackage) return "package";
+    if (hasUnseenFailure) return "failed";
     return null;
   }
 
