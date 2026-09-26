@@ -65,7 +65,27 @@ func namePool(doubutsu bool) []string {
 	return pairs
 }
 
-func pickWorktreeName(used map[string]bool, doubutsu bool) string {
+// `invited` are the names to pick first while one is free: the
+// villagers whose birthday it is (birthdayGuests). The app's
+// host/lib/worktrees/names.ts picks the same way.
+func pickWorktreeName(used map[string]bool, doubutsu bool, invited []string) string {
+	if doubutsu {
+		// Only a name the pool has, so a guest is as safe a folder and
+		// branch name as any pick.
+		pool := map[string]bool{}
+		for _, name := range namePool(true) {
+			pool[name] = true
+		}
+		var guests []string
+		for _, name := range invited {
+			if pool[name] && !used[name] {
+				guests = append(guests, name)
+			}
+		}
+		if len(guests) > 0 {
+			return guests[rand.IntN(len(guests))]
+		}
+	}
 	pool := namePool(doubutsu)
 	var candidates []string
 	for _, name := range pool {

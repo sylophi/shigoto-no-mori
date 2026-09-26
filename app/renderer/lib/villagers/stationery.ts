@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 // A legendary character's stationery, the paper their letters come on
 // (components/villagers/VillagerLetter.tsx), the way every letter in
 // Animal Crossing arrives on its own printed paper. Each is a small
@@ -142,4 +144,20 @@ const STATIONERY: Record<string, Stationery> = {
 // they get paper of their own.
 export function stationeryFor(slug: string): Stationery {
   return STATIONERY[slug] ?? STATIONERY["tom-nook"];
+}
+
+// The print laid over a card: `paper`'s tile as a mask, a tile further
+// out on the top and left so the drift (villager-paper-drift) never
+// uncovers an edge. For an absolutely placed element with the paper's
+// color and `right-0 bottom-0`.
+export function printStyle(paper: Stationery): CSSProperties {
+  const [width, height] = paper.size;
+  return {
+    maskImage: paper.tile,
+    maskSize: `${width}px ${height}px`,
+    top: -height,
+    left: -width,
+    "--tile-x": `${width}px`,
+    "--tile-y": `${height}px`,
+  } as CSSProperties;
 }

@@ -4,6 +4,12 @@
 import { ClerkProvider } from "@clerk/electron/react";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { bootApp } from "@/boot";
+import { poseToday } from "@/hooks/ui/useToday";
+import { posedToday } from "./pose";
+
+// ?today= (lab/pose.ts): a villager's birthday without touching the clock.
+const today = posedToday();
+if (today !== null) poseToday(today);
 
 const router = bootApp({
   ClerkProvider,

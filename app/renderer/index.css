@@ -373,12 +373,78 @@
   animation: villager-paper-drift 20s linear infinite;
 }
 /* Nobody is looking, or the machine is on battery: hold what loops. */
-:is(.unfocused, .battery-pause) :is(.villager-paper-drift, .villager-bob) {
+:is(.unfocused, .battery-pause)
+  :is(.villager-paper-drift, .villager-bob, .villager-balloon) {
   animation-play-state: paused;
 }
 
+/* A villager's birthday (villagers/BirthdayBanner.tsx): the bunting
+   drops in once, the confetti arcs up and away once (each bit reads its
+   arc off --confetti-*), and a legend's balloons drift up past the
+   banner, swaying. */
+@keyframes villager-bunting {
+  from {
+    transform: translateY(-100%) rotate(-12deg);
+  }
+  60% {
+    transform: translateY(0) rotate(6deg);
+  }
+}
+.villager-bunting {
+  animation: villager-bunting 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes villager-confetti {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(0);
+  }
+  10% {
+    opacity: 1;
+  }
+  35% {
+    transform: translate(calc(var(--confetti-dx) * 0.45), -16px)
+      rotate(calc(var(--confetti-spin) * 0.4));
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--confetti-dx), var(--confetti-dy))
+      rotate(var(--confetti-spin));
+  }
+}
+.villager-confetti {
+  animation: villager-confetti 1.5s cubic-bezier(0.3, 0.6, 0.5, 1) both;
+}
+@keyframes villager-balloon-rise {
+  from {
+    translate: 0 110%;
+  }
+  to {
+    translate: 0 -260%;
+  }
+}
+@keyframes villager-balloon-sway {
+  50% {
+    rotate: 7deg;
+  }
+}
+.villager-balloon {
+  transform-origin: 50% 90%;
+  rotate: -5deg;
+  animation:
+    villager-balloon-rise 9s linear infinite backwards,
+    villager-balloon-sway 2.4s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .villager-balloon {
+    animation: none;
+    translate: 0 -30%;
+  }
   :is(
+    .villager-bunting,
     .villager-bob,
     .villager-pack,
     .villager-tape,

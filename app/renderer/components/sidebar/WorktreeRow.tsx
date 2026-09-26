@@ -5,6 +5,7 @@ import { BranchLabel } from "@/components/ui/branch-label";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { DeviceBadge, type SidebarDeviceBadge } from "./DeviceBadge";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
+import { BirthdayBadge } from "@/components/villagers/BirthdayBadge";
 import type { ScriptActivityKind } from "@/store/scriptRuns";
 import type { PullRequest, Worktree } from "@shared/schemas";
 import { ActivityIcon } from "./ActivityIcon";
@@ -35,13 +36,16 @@ export const WORKTREE_ROW_BUTTON =
   "group relative flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-accent/60";
 
 // The two-line branch-over-name block both row flavors lead with, faded
-// back for a shelved worktree.
+// back for a shelved worktree. `deviceId` names the peer a remote row's
+// worktree lives on.
 function WorktreeRowLabel({
   worktree,
   emphasized = false,
+  deviceId,
 }: {
   worktree: Worktree;
   emphasized?: boolean;
+  deviceId?: string;
 }) {
   return (
     <div
@@ -56,8 +60,9 @@ function WorktreeRowLabel({
       >
         <BranchLabel branch={worktree.branch} detached={worktree.detached} />
       </span>
-      <span className="truncate text-3xs text-muted-foreground">
-        {worktree.name}
+      <span className="flex min-w-0 items-center gap-1 text-3xs text-muted-foreground">
+        <span className="truncate">{worktree.name}</span>
+        <BirthdayBadge worktree={worktree} deviceId={deviceId} />
       </span>
     </div>
   );
@@ -135,7 +140,11 @@ export function WorktreeRow({
       style={stackIndentStyle(stackChild)}
     >
       <StackConnector child={stackChild} />
-      <WorktreeRowLabel worktree={worktree} emphasized={isSelected} />
+      <WorktreeRowLabel
+        worktree={worktree}
+        emphasized={isSelected}
+        deviceId={device?.deviceId}
+      />
       <RowTrailing
         worktree={worktree}
         activity={activity}

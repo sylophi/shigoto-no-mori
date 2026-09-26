@@ -1,9 +1,10 @@
 // Durable proof for the Village life setting, and that the app and the
 // CLI read it the same way. It is a device setting in config.json
-// beside Doubutsu names, read by the app alone: the renderer gates
-// villager extras on villageLifeEnabled (shared/villageLife.ts, read
-// through useVillageLife), and the CLI only registers the key so a
-// whole-document save can clear it.
+// beside Doubutsu names: the renderer gates villager extras on
+// villageLifeEnabled (shared/villageLife.ts, read through
+// useVillageLife), and the CLI registers the key so a whole-document
+// save can clear it, and reads it to invite a birthday villager
+// (cli/birthdays.go).
 //
 // Asserts:
 // - unset Village life reads as off, and a fresh install does not seed it

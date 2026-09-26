@@ -64,7 +64,9 @@ import {
   projectIconFor,
   worktree as worktreeFixture,
 } from "./fixtures";
-import { villagerHandlersFor } from "./villagerData";
+import { birthdaySlugsOn } from "@shared/villagers/birthdays";
+import { posedToday } from "./pose";
+import { labProfiles, villagerHandlersFor } from "./villagerData";
 
 type FixtureHandler = (input: any) => unknown;
 type FixtureHandlers = Record<string, FixtureHandler>;
@@ -283,7 +285,20 @@ function hostHandlersFor(
       local: branchesOf(),
       remote: ["origin/main"],
     }),
-    "projects:pickWorktreeName": () => "tender-tanuki",
+    // The real pick's birthday invite (host/lib/worktrees/names.ts): with
+    // Village life on, whoever's birthday it is on the posed day
+    // (?today=) and not taken yet.
+    "projects:pickWorktreeName": async ({ projectId }) => {
+      const profiles = villageLife ? await labProfiles() : null;
+      const used = new Set(
+        (forest.worktrees[projectId] ?? []).map((w) => w.name),
+      );
+      const guests =
+        profiles === null
+          ? []
+          : birthdaySlugsOn(profiles, posedToday() ?? new Date());
+      return guests.find((slug) => !used.has(slug)) ?? "tender-tanuki";
+    },
     "projects:icon": ({ projectId }) =>
       projectIconFor(
         forest.projects.find((project) => project.id === projectId)?.name ?? "",

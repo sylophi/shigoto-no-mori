@@ -95,12 +95,13 @@ var globalConfigKeys = []configKey{
 	// has. Fresh installs are seeded with it on (seedFreshInstall).
 	{name: "doubutsuNames", kind: boolKind, def: false,
 		desc: "Name new worktrees after Animal Crossing characters (on for new installs)"},
-	// Read only by the app (villager extras on doubutsu-named
-	// worktrees), but it lives in config.json beside doubutsuNames, so
-	// it is registered: the write merge deletes an omitted registry key,
-	// which is how a save puts it back to its default.
+	// The app's villager extras on doubutsu-named worktrees, and the
+	// name pick's birthday invite here (birthdays.go). It lives in
+	// config.json beside doubutsuNames and is registered: the write
+	// merge deletes an omitted registry key, which is how a save puts it
+	// back to its default.
 	{name: "villageLife", kind: boolKind, def: false,
-		desc: "Cosmetic villager flair in the app (needs doubutsuNames)"},
+		desc: "Villager flair in the app, and birthday villagers first in the name pick (needs doubutsuNames)"},
 	{name: "codexWorktreeNames", kind: boolKind, def: false,
 		desc: "Name Codex-style <name>/<repo> worktrees by their parent folder"},
 	{name: "portPool", kind: boolKind, def: false,

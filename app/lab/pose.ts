@@ -8,6 +8,17 @@
 // Theme must be seeded BEFORE index.css/providers evaluate, mirroring
 // what boot-theme.js does for the persisted keys, so each entry calls
 // this before installing its bridge and importing the app.
+// ?today=MM-DD (or YYYY-MM-DD): the calendar day the lab poses, for a
+// villager's birthday, or null to keep the clock's. Read by the app
+// (lab/boot.tsx poses useToday) and the fixture name pick alike.
+export function posedToday(): Date | null {
+  const raw = new URLSearchParams(location.search).get("today");
+  const match = raw?.match(/^(?:(\d{4})-)?(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = match[1] ? Number(match[1]) : new Date().getFullYear();
+  return new Date(year, Number(match[2]) - 1, Number(match[3]), 12);
+}
+
 export function applyPose(): void {
   const pose = new URLSearchParams(location.search);
   const theme = pose.get("theme") === "dark" ? "dark" : "light";
