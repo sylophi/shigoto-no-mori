@@ -132,12 +132,15 @@ export const ScriptEventSchema = z.discriminatedUnion("kind", [
   z.object({ runId: z.string(), kind: z.literal("error"), data: z.string() }),
   // Emitted by the CLI when it initiates a lifecycle script (forwarded
   // by cliDelegate); lets the renderer bind runId -> slot before
-  // data/exit arrive.
+  // data/exit arrive. `pid` is the script's process once it has one
+  // (absent when the spawn itself failed), which is what the host
+  // signals to stop the run.
   z.object({
     runId: z.string(),
     kind: z.literal("started"),
     projectId: z.string(),
     worktreeId: z.string(),
+    pid: z.number().int().positive().optional(),
     slot: z.discriminatedUnion("kind", [
       z.object({ kind: z.literal("setup") }),
       z.object({ kind: z.literal("teardown") }),

@@ -178,12 +178,24 @@ func newRunID() string {
 // --json). Returns the exit code (-1 means it never ran or died to a
 // signal, the TS side's `null`) and the run's id, which cleanup-error
 // reports reference so consumers can correlate the failing output.
+//
+// The "started" event carries the script's pid once it has one, which
+// is what lets the app stop the run (its console's Stop signals the
+// pid and its descendants, never this process group, so the CLI goes
+// on to the rest of the lifecycle). It goes out before the output
+// reader starts, and the pipe is unbuffered, so no output precedes it.
 func runLifecycleScript(command string, in scriptEnvInputs, slot scriptSlot) (int, string) {
 	runID := newRunID()
-	emitScriptEvent(map[string]any{
-		"event": "script", "runId": runID, "kind": "started",
-		"projectId": in.proj.ID, "worktreeId": in.worktree.ID, "slot": slot,
-	}, slotMarker(slot)+" running")
+	started := func(pid int) {
+		doc := map[string]any{
+			"event": "script", "runId": runID, "kind": "started",
+			"projectId": in.proj.ID, "worktreeId": in.worktree.ID, "slot": slot,
+		}
+		if pid > 0 {
+			doc["pid"] = pid
+		}
+		emitScriptEvent(doc, slotMarker(slot)+" running")
+	}
 
 	shell, shellArgs := resolveShell()
 	cmd := exec.Command(shell, append(shellArgs, command)...)
@@ -194,6 +206,17 @@ func runLifecycleScript(command string, in scriptEnvInputs, slot scriptSlot) (in
 	pipeR, pipeW := io.Pipe()
 	cmd.Stdout = pipeW
 	cmd.Stderr = pipeW
+
+	if err := cmd.Start(); err != nil {
+		pipeW.Close()
+		started(0)
+		emitScriptEvent(map[string]any{
+			"event": "script", "runId": runID, "kind": "error", "data": err.Error(),
+		}, slotMarker(slot)+" "+err.Error())
+		emitExit(runID, slot, -1)
+		return -1, runID
+	}
+	started(cmd.Process.Pid)
 
 	var wg sync.WaitGroup
 	wg.Go(func() {
@@ -217,15 +240,6 @@ func runLifecycleScript(command string, in scriptEnvInputs, slot scriptSlot) (in
 	})
 
 	code := 0
-	if err := cmd.Start(); err != nil {
-		pipeW.Close()
-		wg.Wait()
-		emitScriptEvent(map[string]any{
-			"event": "script", "runId": runID, "kind": "error", "data": err.Error(),
-		}, slotMarker(slot)+" "+err.Error())
-		emitExit(runID, slot, -1)
-		return -1, runID
-	}
 	err := cmd.Wait()
 	pipeW.Close()
 	wg.Wait()

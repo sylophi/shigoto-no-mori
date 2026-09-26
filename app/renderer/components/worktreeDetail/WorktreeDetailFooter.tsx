@@ -33,7 +33,13 @@ export type WorktreeFooterState =
   | { kind: "cleanupError"; error: CleanupError }
   | { kind: "needsForce"; errorMessage: string | undefined; busy: boolean }
   | { kind: "cleanupRunning"; cancelling: boolean }
-  | { kind: "normal"; confirmDelete: boolean; busy: boolean };
+  | {
+      kind: "normal";
+      confirmDelete: boolean;
+      busy: boolean;
+      // Why delete is off right now, if it is (see useDeleteAndNavigate).
+      deleteBlockedReason: string | undefined;
+    };
 
 export interface WorktreeFooterActions {
   onCancelCleanupError: () => void;
@@ -220,11 +226,13 @@ function NormalRow({
   worktree,
   confirmDelete,
   busy,
+  deleteBlockedReason,
   onDelete,
 }: {
   worktree: Worktree;
   confirmDelete: boolean;
   busy: boolean;
+  deleteBlockedReason: string | undefined;
   onDelete: () => void;
 }) {
   const setShelved = useSetShelved();
@@ -289,9 +297,12 @@ function NormalRow({
           variant="ghost-destructive"
           className="shrink-0"
           aria-pressed={confirmDelete}
-          disabled={busy}
+          disabled={busy || deleteBlockedReason !== undefined}
           onClick={onDelete}
-          title={confirmDelete ? "Click again to confirm" : "Delete worktree"}
+          title={
+            deleteBlockedReason ??
+            (confirmDelete ? "Click again to confirm" : "Delete worktree")
+          }
         />
       )}
     </div>
