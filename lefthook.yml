@@ -168,8 +168,9 @@ pre-commit:
       run: pnpm -C app test shared-settings
     # The scripts' manual order is one per project across branches whose
     # package.json differ, so the merge must keep another branch's.
+    # The launch row pins are per project too.
     script-order:
-      glob: "{app/host/lib/scripts/packageScriptStats.ts,app/host/lib/config/store.ts,app/test/script-order.mjs,app/test/lib/checkKit.mjs}"
+      glob: "{app/host/lib/scripts/packageScriptStats.ts,app/shared/launchRow.ts,app/renderer/components/worktreeDetail/scripts/sortPackageScripts.ts,app/host/lib/config/store.ts,app/test/script-order.mjs,app/test/lib/checkKit.mjs}"
       run: pnpm -C app test script-order
     # The tree's project group order is decided over every device, so
     # the device filter drops groups without reordering the rest.

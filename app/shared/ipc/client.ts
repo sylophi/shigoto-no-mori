@@ -273,6 +273,8 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
         packageScriptsClient.getOrder({ projectId }),
       setOrder: (projectId: string, arranged: string[]) =>
         packageScriptsClient.setOrder({ projectId, arranged }),
+      setLaunchRow: (projectId: string, scriptName: string, onRow: boolean) =>
+        packageScriptsClient.setLaunchRow({ projectId, scriptName, onRow }),
     },
 
     portForward: {

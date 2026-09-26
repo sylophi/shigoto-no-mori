@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   PackageScriptSortMode,
   PackageScriptsResult,
@@ -7,6 +7,7 @@ import {
   sortEntries,
   type SortableEntry,
 } from "@/components/worktreeDetail/scripts/sortPackageScripts";
+import { withLaunchRowScript } from "@shared/launchRow";
 import { useOptimisticPreference } from "@/hooks/ui/useOptimisticPreference";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
@@ -89,4 +90,44 @@ export function useSetPackageScriptOrder(projectId: string | null) {
     },
     "Couldn't save script order",
   );
+}
+
+// Puts one script on the launch row or takes it off. The picks ride
+// every worktree's listing, so the optimistic value goes into each of
+// the project's cached listings, and the refetch once the last write
+// settles has the host's say (and undoes a failed write). Only the last:
+// a refetch while another toggle is in flight would read the host from
+// before it and drop that toggle's pin until it settles.
+export function useSetLaunchRowScript(projectId: string | null) {
+  const { api, keys } = useHostScope();
+  const queryClient = useQueryClient();
+  const queryKey = keys.packageScriptsAll(projectId);
+  const mutationKey = ["setLaunchRow", ...queryKey];
+  return useMutation<void, Error, { scriptName: string; onRow: boolean }>({
+    mutationKey,
+    mutationFn: async ({ scriptName, onRow }) => {
+      if (!projectId) return;
+      await api.packageScripts.setLaunchRow(projectId, scriptName, onRow);
+    },
+    onMutate: ({ scriptName, onRow }) => {
+      void queryClient.cancelQueries({ queryKey });
+      queryClient.setQueriesData<PackageScriptsResult | null>(
+        { queryKey },
+        (pkg) => {
+          if (!pkg) return pkg;
+          const launchRow = pkg.launchRow ?? [];
+          return {
+            ...pkg,
+            launchRow: withLaunchRowScript(launchRow, scriptName, onRow),
+          };
+        },
+      );
+    },
+    // This mutation still counts as pending while it settles.
+    onSettled: () => {
+      if (queryClient.isMutating({ mutationKey }) > 1) return;
+      return queryClient.invalidateQueries({ queryKey });
+    },
+    meta: { errorTitle: "Couldn't update the Launch section" },
+  });
 }

@@ -129,6 +129,10 @@ function buildQueryKeys(deviceId: string) {
 
     packageScripts: (projectId: string | null, worktreeId: string | null) =>
       host("packageScripts", projectId, worktreeId),
+    // Every worktree's listing of one project, which all carry the
+    // project's launch row picks.
+    packageScriptsAll: (projectId: string | null) =>
+      host("packageScripts", projectId),
     packageScriptSort: (projectId: string | null) =>
       host("packageScriptSort", projectId),
     packageScriptOrder: (projectId: string | null) =>

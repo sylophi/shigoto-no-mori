@@ -7,16 +7,19 @@ import type {
   PackageScriptSortMode,
   PackageScriptUsage,
 } from "@shared/schemas";
+import { withLaunchRowScript } from "@shared/launchRow";
 import { stateStore } from "../config/store";
 import { countWithin, maxTimestamp, pruneAndPush } from "../util/useLog";
 
 const USE_LOG_KEY = "packageScriptUseLog";
 const SORT_KEY = "packageScriptSort";
 const ORDER_KEY = "packageScriptOrder";
+const LAUNCH_ROW_KEY = "packageScriptLaunchRow";
 
 type UseLog = Record<string, Record<string, number[]>>;
 type SortMap = Record<string, PackageScriptSortMode>;
 type OrderMap = Record<string, string[]>;
+type LaunchRowMap = Record<string, string[]>;
 
 // "frequent" is the implicit default: new repos open with the most-used
 // scripts on top, and switching back to it deletes the persisted entry
@@ -93,6 +96,32 @@ export function mergeArrangedOrder(
     ...(followers.get(null) ?? []),
     ...arranged.flatMap((name) => [name, ...(followers.get(name) ?? [])]),
   ];
+}
+
+// The scripts put on the launch row by hand, which the row limits itself
+// to under the "manual" sort. Project-wide like the order, so it can
+// name scripts a given worktree lacks. Empty means none were picked.
+export function readLaunchRow(projectId: string): string[] {
+  const map = stateStore.readHint<LaunchRowMap>(LAUNCH_ROW_KEY, {});
+  return map[projectId] ?? [];
+}
+
+// One script on or off the row, applied under the lock rather than as a
+// whole list from the client, so two windows picking different scripts
+// both land. Dropping the last one deletes the project's entry.
+export function writeLaunchRowScript(
+  projectId: string,
+  scriptName: string,
+  onRow: boolean,
+): void {
+  stateStore.updateKey<LaunchRowMap>(LAUNCH_ROW_KEY, {}, (map) => {
+    const current = map[projectId] ?? [];
+    const next = withLaunchRowScript(current, scriptName, onRow);
+    if (next === current) return undefined;
+    if (next.length > 0) return { ...map, [projectId]: next };
+    const { [projectId]: _dropped, ...rest } = map;
+    return rest;
+  });
 }
 
 export function usageFor(

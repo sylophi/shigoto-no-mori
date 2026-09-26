@@ -33,6 +33,11 @@ export const PackageScriptsResultSchema = z.object({
   scripts: z.record(z.string(), z.string()),
   packageManager: PackageManagerSchema,
   usage: z.record(z.string(), PackageScriptUsageSchema),
+  // The scripts picked for the launch row under the "manual" sort,
+  // project-wide (see readLaunchRow). Rides the listing rather than a
+  // call of its own so an older host, which sends none, reads as
+  // nothing picked instead of failing the read.
+  launchRow: z.array(z.string()).optional(),
 });
 export type PackageScriptsResult = z.infer<typeof PackageScriptsResultSchema>;
 
@@ -75,6 +80,12 @@ export const PackageScriptOrderSchema = z.array(z.string().min(1));
 export const SetPackageScriptOrderPayloadSchema =
   ProjectScopedPayloadSchema.extend({
     arranged: PackageScriptOrderSchema,
+  });
+
+export const SetPackageScriptLaunchRowPayloadSchema =
+  ProjectScopedPayloadSchema.extend({
+    scriptName: z.string().min(1),
+    onRow: z.boolean(),
   });
 
 export const CancelScriptPayloadSchema = z.object({

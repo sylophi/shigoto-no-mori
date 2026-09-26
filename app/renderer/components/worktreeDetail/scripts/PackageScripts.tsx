@@ -19,6 +19,7 @@ import {
 import { Check, ChevronRight, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
+  useSetLaunchRowScript,
   useSetPackageScriptOrder,
   useSetPackageScriptSort,
   useSortedPackageScripts,
@@ -44,6 +45,10 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
   const { sortMode, sorted } = useSortedPackageScripts(worktree.projectId, pkg);
   const setSortMode = useSetPackageScriptSort(worktree.projectId);
   const setOrder = useSetPackageScriptOrder(worktree.projectId);
+  const setLaunchRow = useSetLaunchRowScript(worktree.projectId);
+  // A host that predates pinning sends no launchRow, and gets no pins.
+  const launchRow = pkg.launchRow;
+  const pinnedOf = (name: string) => launchRow?.includes(name);
   const names = sorted.map((e) => e.name);
   // Drags write the stored order, so arranging only lasts while the list
   // shows it: a refused or failed switch to "manual" (or another device
@@ -132,6 +137,8 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
         <>
           <p className="px-1 text-xs text-muted-foreground/70">
             Drag scripts into the order you want.
+            {launchRow &&
+              " Pin the ones the Launch section should show, or none to show as many as fit on a line."}
           </p>
           <DndContext
             sensors={sensors}
@@ -145,12 +152,24 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
             <SortableContext items={names} strategy={rectSortingStrategy}>
               <ScriptList>
                 {names.map((name) => (
-                  <ArrangeScriptRow key={name} name={name} />
+                  <ArrangeScriptRow
+                    key={name}
+                    name={name}
+                    pinned={pinnedOf(name)}
+                    onPin={(onRow) =>
+                      setLaunchRow.mutate({ scriptName: name, onRow })
+                    }
+                  />
                 ))}
               </ScriptList>
             </SortableContext>
             <DragOverlay>
-              {dragging !== null && <ScriptDragPreview name={dragging} />}
+              {dragging !== null && (
+                <ScriptDragPreview
+                  name={dragging}
+                  pinned={pinnedOf(dragging)}
+                />
+              )}
             </DragOverlay>
           </DndContext>
         </>

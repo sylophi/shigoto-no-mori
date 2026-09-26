@@ -7,9 +7,11 @@ import {
 import { startScript } from "@host/lib/scripts";
 import {
   bumpScriptUseCount,
+  readLaunchRow,
   readScriptOrder,
   readScriptSort,
   usageFor,
+  writeLaunchRowScript,
   writeScriptOrder,
   writeScriptSort,
 } from "@host/lib/scripts/packageScriptStats";
@@ -35,6 +37,7 @@ export const packageScriptsHandlers: Handlers<
     return {
       ...file,
       usage: usageFor(project.id, Object.keys(file.scripts)),
+      launchRow: readLaunchRow(project.id),
     };
   },
 
@@ -57,6 +60,11 @@ export const packageScriptsHandlers: Handlers<
   setOrder: async ({ projectId, arranged }) => {
     const project = findProjectOrThrow(projectId);
     writeScriptOrder(project.id, arranged);
+  },
+
+  setLaunchRow: async ({ projectId, scriptName, onRow }) => {
+    const project = findProjectOrThrow(projectId);
+    writeLaunchRowScript(project.id, scriptName, onRow);
   },
 
   run: async ({ projectId, worktreeId, scriptName }, handlerCtx) => {
