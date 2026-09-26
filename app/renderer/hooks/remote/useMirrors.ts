@@ -2,12 +2,13 @@
 // host-scoped (a device's mirrors and the streams it serves are its
 // own facts), read through the surrounding scope's api. Every device's
 // list is kept live by its own mirror:changed broadcast, through its
-// push watch (lib/hostWatch.ts), so nothing here subscribes. The starts are local: a
-// pull (or a send) plus a mirror on this machine's daemon. The
-// controls (stop, pause, resume, the ignore rule) go to the device
-// RUNNING the session through the scope they are mounted under, which
-// is that device's: its own page, or the far end's page re-scoped to
-// it (useWorktreeMirrorLinks).
+// push watch (lib/hostWatch.ts), so nothing here subscribes. A mirror
+// runs on the device holding the original: the start is a send plus a
+// mirror on that device's daemon, this machine's for "Mirror to", the
+// peer's for "Mirror here". The controls (stop, pause, resume, the
+// ignore rule) go to the device RUNNING the session through the scope
+// they are mounted under, which is that device's: its own page, or the
+// far end's page re-scoped to it (useWorktreeMirrorLinks).
 import type { QueryClient } from "@tanstack/react-query";
 import {
   queryOptions,
@@ -18,7 +19,6 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import {
-  mirrorCopyOf,
   mirrorEngineBlocker,
   type MirrorEvent,
   type MirrorListResult,
@@ -33,6 +33,7 @@ import {
   useMoveMutation,
 } from "@/hooks/remote/useMoveWorktree";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
+import { useAcceptsCommands } from "@/hooks/account/useAccount";
 import { hasLocalHost } from "@/lib/localHost";
 import {
   invalidateHostDevice,
@@ -62,14 +63,13 @@ export function useMirrors(): MirrorListResult {
   return query.data ?? EMPTY;
 }
 
-// Why this machine can't start a mirror right now, or undefined when
-// it can. Every start ("Mirror here" on a peer's page, "Mirror to…" on
-// this device's own) runs on the local daemon, so this reads this
-// device's list whatever the scope, and disables the button instead of
-// letting the click end in the host's refusal. A list not read yet
-// blocks nothing: the refusal still stands behind it. The broadcast
-// keeps the list live, so a mount need not re-ask (as in
-// useOtherHostMirrors).
+// Why this machine can't start a mirror of one of its worktrees right
+// now ("Mirror to…"), or undefined when it can. The session runs on
+// the local daemon, so this reads this device's list whatever the
+// scope, and disables the button instead of letting the click end in
+// the host's refusal. A list not read yet blocks nothing: the refusal
+// still stands behind it. The broadcast keeps the list live, so a
+// mount need not re-ask (as in useOtherHostMirrors).
 export function useLocalMirrorBlocker(): string | undefined {
   const query = useQuery({
     queryKey: queryKeys.mirrors(),
@@ -80,6 +80,25 @@ export function useLocalMirrorBlocker(): string | undefined {
     meta: { silentError: true },
   });
   return query.data;
+}
+
+// The same for "Mirror here" on a peer's page, whose session runs on
+// that peer (the scope): its daemon must be up, and this device must
+// accept commands, since the peer sends the copy here through them.
+export function useMirrorHereBlocker(peerLabel: string): string | undefined {
+  const { api, keys } = useHostScope();
+  const engine = useQuery({
+    queryKey: keys.mirrors(),
+    queryFn: () => api.mirror.list(),
+    select: (list) => mirrorEngineBlocker(list.daemon, peerLabel),
+    staleTime: 30_000,
+    meta: { silentError: true },
+  });
+  const accepts = useAcceptsCommands();
+  if (accepts.data === false) {
+    return `A mirror runs on the device holding the original, so ${peerLabel} sends the copy here, and this device doesn't accept commands. Turn command access on from this device's Devices page.`;
+  }
+  return engine.data;
 }
 
 // One device's mirror:changed written into that device's list entry,
@@ -104,8 +123,8 @@ export function writeMirrorList(
 
 // A mirrored pair as the sidebar folds it: the peer's row (device,
 // worktree) that folds into a local row, and the peer device the local
-// row wears. A session pairs its local copy with the peer's source. A
-// served stream pairs the served worktree with the peer's copy, when
+// row wears. A session pairs its local original with the peer's copy.
+// A served stream pairs the served copy with the peer's original, when
 // the peer named it.
 export type MirrorLink = {
   peerDeviceId: string;
@@ -192,9 +211,8 @@ export function useMirrorLinks(): MirrorLink[] {
 }
 
 // The one mirror picture a worktree row cares about: the session this
-// device runs ON it (it is the local copy of a peer's worktree, or the
-// original of a copy made on a peer), and the streams this device
-// serves FROM it (peers mirroring it).
+// device runs ON it (it is the original of a copy made on a peer), and
+// the streams this device serves FROM it (it is a peer's copy).
 export function useWorktreeMirror(worktree: Worktree): {
   session: MirrorSession | undefined;
   serving: MirrorServing[];
@@ -270,10 +288,9 @@ export type WorktreeMirrorLink = {
 };
 
 // The mirrors a worktree is part of, seen from its page on whichever
-// device: the session the scoped device runs ON it (it is the copy,
-// or the original of a copy made on a peer), and one link per other
-// device running a session AGAINST it, whose session lives on that
-// device. Those are found off every connected device's list, not off
+// device: the session the scoped device runs ON it (it is the
+// original), and one link per other device running a session AGAINST
+// it (it is the copy), whose session lives on that device. Those are found off every connected device's list, not off
 // the streams the scoped device serves: a paused or disconnected
 // session serves no stream, and that is exactly when the far end
 // wants to resume it. A page at the far end of a mirror gets its
@@ -323,13 +340,33 @@ export function useWorktreeMirrorLinks(
   return links;
 }
 
-// Start a mirror, driven by the mirror dialog: the move (a pull of the
-// peer's worktree, or a send of this device's) and the session opened
-// on top. The dialog's last step is the report, so no toast here.
-// Refusals surface centrally.
+// Start a mirror, driven by the mirror dialog: a send and the session
+// opened on top, on the device holding the original. "Mirror to…"
+// sends one of this device's. "Mirror here" asks the peer the dialog
+// is scoped to, which holds the original, to send it here, the clone
+// place (when this device has no checkout) in this device's terms.
+// The dialog's last step is the report, so no toast here. Refusals
+// surface centrally.
 export function useStartMirror(move: Move) {
+  const { api } = useHostScope();
   return useMoveMutation(move, {
-    pull: (payload) => window.api.mirror.start(payload),
+    pull: ({
+      sourceProjectId,
+      sourceWorktreeId,
+      runSetup,
+      ignoreMode,
+      ignores,
+      cloneInto,
+    }) =>
+      api.mirror.startTo({
+        targetDeviceId: localDeviceId,
+        projectId: sourceProjectId,
+        worktreeId: sourceWorktreeId,
+        runSetup,
+        ignoreMode,
+        ignores,
+        cloneInto,
+      }),
     send: (payload) => window.api.mirror.startTo(payload),
   });
 }
@@ -365,12 +402,12 @@ export function useSetMirrorIgnores() {
 // so a page at the far end drives the session through the peer). The
 // list refreshes off that daemon's own state snapshot.
 export function useMirrorControls() {
-  const { api, deviceId: runnerDeviceId } = useHostScope();
+  const { api } = useHostScope();
   const queryClient = useQueryClient();
-  // Stop removes the copy with the session. The copy is on the runner,
-  // or on its peer for a mirror started to it, and either may be this
-  // machine. A copy here the renderer forgets the way a delete does. A
-  // copy elsewhere is that device's view to refresh.
+  // Stop removes the copy with the session: the runner's peer, the
+  // session's remote side, which may be this machine. A copy here the
+  // renderer forgets the way a delete does. A copy elsewhere is that
+  // device's view to refresh.
   const stop = useMutation({
     mutationFn: ({
       session,
@@ -380,16 +417,15 @@ export function useMirrorControls() {
       force?: boolean;
     }) => api.mirror.stop(session.session, force),
     onSuccess: (_data, { session }) => {
-      const copy = mirrorCopyOf(session, runnerDeviceId);
-      if (copy.deviceId === localDeviceId) {
+      if (session.deviceId === localDeviceId) {
         forgetDeletedWorktree(
           queryClient,
           localDeviceId,
-          copy.projectId,
-          copy.worktreeId,
+          session.projectId,
+          session.worktreeId,
         );
       } else {
-        invalidateHostDevice(queryClient, copy.deviceId);
+        invalidateHostDevice(queryClient, session.deviceId);
       }
     },
     onError: (err) => notifyError("Couldn't stop mirroring", err),

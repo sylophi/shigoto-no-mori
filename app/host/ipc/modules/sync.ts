@@ -644,7 +644,7 @@ async function landIncoming(
 // source (sync:openSource, the PEER's grant), opened on its first
 // question, so this device's own refusals come before any of them.
 // Then the ignored files, pulled by the mirror engine run once.
-export async function runPullWorktree(
+async function runPullWorktree(
   {
     sourceDeviceId,
     sourceProjectId,
@@ -658,10 +658,6 @@ export async function runPullWorktree(
     cloneInto,
   }: z.infer<typeof SyncPullWorktreePayloadSchema>,
   ctx: HandlerContext,
-  // The branch the copy is created on when it is not the source's (the
-  // mirror start's, for a primary: shared/git/branches.ts). Not on the
-  // wire: what lands is decided by what the source is, on the host.
-  { landBranch }: { landBranch?: string } = {},
 ) {
   const progress = progressTo(ctx, sourceWorktreeId);
   const { receipt, ...landed } = await withPeerSource(
@@ -673,7 +669,7 @@ export async function runPullWorktree(
         {
           identity: sourceIdentity,
           branch,
-          landBranch: landBranch ?? branch,
+          landBranch: branch,
           worktreeName,
           runSetup,
           cloneInto,
@@ -687,10 +683,8 @@ export async function runPullWorktree(
   // The ignored files, once the tree has settled: the leave-out rule
   // admits them and git never carried them, so the mirror engine runs
   // once between the two worktrees (host/mirror/oneShot.ts).
-  // Gitignored leaves nothing to carry, and the mirror start passes no
-  // rule (its own session, opened next, carries the files and keeps
-  // carrying them). Never fatal: the worktree is real, and the outcome
-  // rides the result.
+  // Gitignored leaves nothing to carry. Never fatal: the worktree is
+  // real, and the outcome rides the result.
   let files: TransferFilesResult | undefined;
   if (pullBringsIgnoredFiles(ignoreMode)) {
     progress({ step: "files" });

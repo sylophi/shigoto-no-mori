@@ -33,8 +33,12 @@
 //     nothing, and resolving on B brings the session back to synced,
 //   - a checkout on A to a branch another worktree on B holds is
 //     refused with the path, and checking back restores sync,
-//   - A's primary checkout mirrored to a mirror/main worktree on B
-//     carries commits both ways, and B's own main never moves.
+//   - B's primary checkout (the original, on the device running the
+//     session) mirrored to a mirror/main worktree on A carries commits
+//     both ways, and A's own main never moves.
+// And the legacy sweep: a session an older build started from the
+// copy's device is hidden from the mirror surfaces and ended once,
+// its thread told why, with nothing deleted.
 //
 // Both "devices" share one node process and one sandboxed
 // SHIGOMORI_DATA_DIR. What separates them is the direct wire between them,
@@ -55,6 +59,7 @@ import { promisify } from "node:util";
 import { buildClient } from "@shared/ipc/buildClient";
 import { forwardContract } from "@shared/ipc/modules/forward";
 import {
+  MIRROR_LABEL_COPY_SIDE,
   MIRROR_LABEL_MIRROR_BRANCH,
   MIRROR_LABEL_TRANSFER,
   mirrorContract,
@@ -72,8 +77,11 @@ import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { createGitFollower } from "@host/mirror/gitFollow";
 import {
+  endLegacyMirrors,
   endMirrorsWithPeers,
+  LEGACY_MIRROR_DETAIL,
   MIRROR_LABEL_LOCAL_WORKTREE,
+  mirrorSessions,
 } from "@host/mirror/registry";
 import { transferFilesOnce } from "@host/mirror/oneShot";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
@@ -154,7 +162,8 @@ async function main() {
   const worktreeIdA = worktreeIdFromPath(worktreeA);
 
   // B's side is a REAL worktree of a clone of A's repository, on the
-  // same branch at the same tip: the state mirror:start leaves behind,
+  // same branch at the same tip: the state a mirror start leaves behind
+  // (the original here on B, which runs the session, the copy on A),
   // and what the git follower needs to have something to follow.
   const repoB = join(sandbox, "repo-b");
   await git(sandbox, ["clone", "-q", "--", repoA, "repo-b"]);
@@ -587,34 +596,37 @@ async function main() {
     );
     ok("git: checking back on A restores sync, with the device hub still flat");
 
-    // (G7) A primary checkout's mirror: A's repo-a itself, mirrored to
-    // B as a worktree on mirror/main (the session's mirrorBranch
-    // label), beside B's own primary on main. The follower reads the
-    // two names as one: a commit on A's main lands on B's mirror/main,
-    // one there lands on A's main, and B's main never moves.
-    const rootB2 = join(sandbox, "wt-b-primary");
-    await git(repoB, [
+    // (G7) A primary checkout's mirror: B's repo-b itself, the
+    // original on the device running the session, mirrored to A as a
+    // worktree on mirror/main (the session's mirrorBranch label),
+    // beside A's own primary on main. The follower reads the two names
+    // as one: a commit on B's main lands on A's mirror/main, one there
+    // lands on B's main, and A's own main never moves.
+    const rootA2 = join(sandbox, "wt-a-mirror");
+    await git(repoA, [
       "worktree",
       "add",
       "-q",
       "-b",
       "mirror/main",
-      rootB2,
-      "origin/main",
+      rootA2,
+      "main",
     ]);
-    const worktreeIdB2 = worktreeIdFromPath(rootB2);
-    const mainBefore = await gitOut(repoB, "rev-parse", "HEAD");
+    const worktreeIdA2 = worktreeIdFromPath(rootA2);
+    const primaryIdB = worktreeIdFromPath(repoB);
+    const mainBefore = await gitOut(repoA, "rev-parse", "HEAD");
     const session2 = await daemon.create({
-      localRoot: rootB2,
+      localRoot: repoB,
       deviceId: "A",
       projectId: projectIdA,
-      worktreeId: worktreeIdFromPath(repoA),
-      remoteRoot: repoA,
+      worktreeId: worktreeIdA2,
+      remoteRoot: rootA2,
       name: "main",
-      localWorktreeId: worktreeIdB2,
+      localWorktreeId: primaryIdB,
       labels: {
-        localWorktreeId: worktreeIdB2,
+        localWorktreeId: primaryIdB,
         localProjectId: projectIdB,
+        [MIRROR_LABEL_COPY_SIDE]: "remote",
         [MIRROR_LABEL_MIRROR_BRANCH]: "1",
       },
       ignores: [],
@@ -634,63 +646,63 @@ async function main() {
         30_000,
       );
     await waitGit2("synced", "the primary's mirror to report synced");
-    writeFileSync(join(repoA, "primary-a.txt"), "a\n");
+    writeFileSync(join(repoB, "primary-b.txt"), "b\n");
     await waitFor(
-      () => fileEquals(join(rootB2, "primary-a.txt"), "a\n"),
-      "primary-a.txt to mirror",
-      30_000,
-    );
-    await git(repoA, ["add", "primary-a.txt"]);
-    await git(repoA, ["commit", "-qm", "on A's primary"]);
-    const tipA3 = await gitOut(repoA, "rev-parse", "HEAD");
-    follower.onPeerProjectChanged("A", projectIdA);
-    await waitFor(
-      async () => (await gitOut(rootB2, "rev-parse", "HEAD")) === tipA3,
-      "B's mirror/main to follow A's primary",
-      30_000,
-    );
-    assert.equal(
-      await gitOut(rootB2, "symbolic-ref", "HEAD"),
-      "refs/heads/mirror/main",
-    );
-    await waitGit2("synced", "synced after A's primary committed");
-    writeFileSync(join(rootB2, "primary-b.txt"), "b\n");
-    await waitFor(
-      () => fileEquals(join(repoA, "primary-b.txt"), "b\n"),
+      () => fileEquals(join(rootA2, "primary-b.txt"), "b\n"),
       "primary-b.txt to mirror",
       30_000,
     );
-    await git(rootB2, ["add", "primary-b.txt"]);
-    await git(rootB2, ["commit", "-qm", "on B's mirror/main"]);
-    const tipB3 = await gitOut(rootB2, "rev-parse", "HEAD");
+    await git(repoB, ["add", "primary-b.txt"]);
+    await git(repoB, ["commit", "-qm", "on B's primary"]);
+    const tipB3 = await gitOut(repoB, "rev-parse", "HEAD");
     follower.onLocalProjectChanged(projectIdB);
     await waitFor(
-      async () => (await gitOut(repoA, "rev-parse", "HEAD")) === tipB3,
-      "A's primary to follow B's mirror/main",
+      async () => (await gitOut(rootA2, "rev-parse", "HEAD")) === tipB3,
+      "A's mirror/main to follow B's primary",
       30_000,
     );
     assert.equal(
-      await gitOut(repoA, "symbolic-ref", "HEAD"),
+      await gitOut(rootA2, "symbolic-ref", "HEAD"),
+      "refs/heads/mirror/main",
+    );
+    await waitGit2("synced", "synced after B's primary committed");
+    writeFileSync(join(rootA2, "primary-a.txt"), "a\n");
+    await waitFor(
+      () => fileEquals(join(repoB, "primary-a.txt"), "a\n"),
+      "primary-a.txt to mirror",
+      30_000,
+    );
+    await git(rootA2, ["add", "primary-a.txt"]);
+    await git(rootA2, ["commit", "-qm", "on A's mirror/main"]);
+    const tipA3 = await gitOut(rootA2, "rev-parse", "HEAD");
+    follower.onPeerProjectChanged("A", projectIdA);
+    await waitFor(
+      async () => (await gitOut(repoB, "rev-parse", "HEAD")) === tipA3,
+      "B's primary to follow A's mirror/main",
+      30_000,
+    );
+    assert.equal(
+      await gitOut(repoB, "symbolic-ref", "HEAD"),
       "refs/heads/main",
     );
-    await waitGit2("synced", "synced after B's mirror/main committed");
+    await waitGit2("synced", "synced after A's mirror/main committed");
     assert.equal(
-      await gitOut(repoB, "rev-parse", "HEAD"),
+      await gitOut(repoA, "rev-parse", "HEAD"),
       mainBefore,
-      "B's own primary must not move",
+      "A's own primary must not move",
     );
-    // The copy leaving the mirror/ rule is reported, not followed: A's
+    // The copy leaving the mirror/ rule is reported, not followed: B's
     // primary stays on main until the copy is back on a mirror/ branch.
-    await git(rootB2, ["checkout", "-q", "-b", "stray"]);
-    follower.onLocalProjectChanged(projectIdB);
+    await git(rootA2, ["checkout", "-q", "-b", "stray"]);
+    follower.onPeerProjectChanged("A", projectIdA);
     await waitGit2("blocked", "the follower to report the stray branch");
     assert.match(follower.statusOf(session2).detail, /without the mirror\//);
     assert.equal(
-      await gitOut(repoA, "symbolic-ref", "HEAD"),
+      await gitOut(repoB, "symbolic-ref", "HEAD"),
       "refs/heads/main",
     );
-    await git(rootB2, ["checkout", "-q", "mirror/main"]);
-    follower.onLocalProjectChanged(projectIdB);
+    await git(rootA2, ["checkout", "-q", "mirror/main"]);
+    follower.onPeerProjectChanged("A", projectIdA);
     await waitGit2("synced", "synced once the copy is back on mirror/main");
     await daemon.terminate(session2);
     await waitFor(
@@ -698,7 +710,7 @@ async function main() {
       "the primary's session to leave the state stream",
     );
     ok(
-      "git: a primary mirrored to a mirror/main worktree carries commits both ways with B's own main untouched, and a stray branch on the copy is reported rather than followed",
+      "git: a primary mirrored to a mirror/main worktree carries commits both ways with the copy's own main untouched, and a stray branch on the copy is reported rather than followed",
     );
     follower.stop();
 
@@ -796,7 +808,10 @@ async function main() {
           {
             session: "s-with-a",
             deviceId: "A",
-            labels: { [MIRROR_LABEL_LOCAL_WORKTREE]: "wt-a" },
+            labels: {
+              [MIRROR_LABEL_LOCAL_WORKTREE]: "wt-a",
+              [MIRROR_LABEL_COPY_SIDE]: "remote",
+            },
           },
         ],
         [
@@ -804,7 +819,10 @@ async function main() {
           {
             session: "s-with-c",
             deviceId: "C",
-            labels: { [MIRROR_LABEL_LOCAL_WORKTREE]: "wt-c" },
+            labels: {
+              [MIRROR_LABEL_LOCAL_WORKTREE]: "wt-c",
+              [MIRROR_LABEL_COPY_SIDE]: "remote",
+            },
           },
         ],
         [
@@ -839,6 +857,78 @@ async function main() {
     }
     ok(
       "a device leaving the account ends the mirrors with it, copies kept, transfers untouched",
+    );
+
+    // (6d) A mirror an older build started from the copy's device (no
+    // copySide label, host/mirror/registry.ts isLegacyMirror) is hidden
+    // from every mirror surface and ended the first time it is seen,
+    // once, its thread saying why. Nothing is deleted: the fake daemon
+    // offers terminate and nothing else that removes. A labelled mirror
+    // and a transfer session stay.
+    {
+      const legacy = {
+        session: "s-legacy",
+        deviceId: "A",
+        status: "watching",
+        labels: { [MIRROR_LABEL_LOCAL_WORKTREE]: "wt-copy" },
+      };
+      const current = {
+        session: "s-current",
+        deviceId: "A",
+        status: "watching",
+        labels: {
+          [MIRROR_LABEL_LOCAL_WORKTREE]: "wt-original",
+          [MIRROR_LABEL_COPY_SIDE]: "remote",
+        },
+      };
+      const transfer = {
+        session: "t-legacy",
+        deviceId: "A",
+        status: "watching",
+        labels: { [MIRROR_LABEL_TRANSFER]: "token" },
+      };
+      const live = new Map(
+        [legacy, current, transfer].map((raw) => [raw.session, raw]),
+      );
+      const noted = [];
+      const terminated = [];
+      const impl = {
+        ...daemon,
+        status: () => "running",
+        sessions: () => [...live.values()],
+        terminate: async (id) => {
+          terminated.push(id);
+          live.delete(id);
+        },
+        recreate: () => Promise.reject(new Error("not in this check")),
+        gitStatus: () => undefined,
+        history: () => [],
+        noteEvent: (worktreeId, kind, detail) =>
+          noted.push([worktreeId, kind, detail]),
+        forgetHistory: () => {},
+      };
+      setMirrorImpl(impl);
+      assert.deepEqual(
+        mirrorSessions(impl).map((raw) => raw.session),
+        ["s-current"],
+        "a legacy mirror reached the mirror surfaces",
+      );
+      await endLegacyMirrors();
+      assert.deepEqual(terminated, ["s-legacy"]);
+      assert.deepEqual(noted, [["wt-copy", "halted", LEGACY_MIRROR_DETAIL]]);
+      assert.match(LEGACY_MIRROR_DETAIL, /start it again from the original/i);
+      // Seen again (a snapshot that still names it), it is not asked twice.
+      live.set(legacy.session, legacy);
+      await endLegacyMirrors();
+      assert.deepEqual(terminated, ["s-legacy"]);
+      assert.deepEqual([...live.keys()].toSorted(), [
+        "s-current",
+        "s-legacy",
+        "t-legacy",
+      ]);
+    }
+    ok(
+      "a mirror started from the copy's device by an older build is hidden, ended once on sight with a halted note, and nothing is deleted",
     );
 
     // (7) Stopping the daemon ends it cleanly.

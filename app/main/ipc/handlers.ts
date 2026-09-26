@@ -66,6 +66,7 @@ import {
   setMirrorServingListener,
 } from "@host/ipc/modules/mirror";
 import {
+  endLegacyMirrors,
   endMirrorsWithPeers,
   isOrphanedTransfer,
   mirrorSessions,
@@ -144,9 +145,15 @@ const peerTransportFor = (deviceId: string) => ({
     Promise.resolve(
       hubHandlers.invokePeer({ deviceId, channel, input }, undefined),
     ),
-  subscribe: (): (() => void) => {
-    throw new Error("the peer api is invoke-only");
-  },
+  // One channel of the peer's pushes, off the same session's fan-out
+  // (onPeerPush): what a start the peer runs for this device streams
+  // back, which the control ops relay to the CLI.
+  subscribe: (channel: string, handler: (payload: unknown) => void) =>
+    onPeerPush((push) => {
+      if (push.deviceId === deviceId && push.channel === channel) {
+        handler(push.payload);
+      }
+    }),
 });
 
 // Continuous worktree mirroring, this device's half: the loopback
@@ -257,6 +264,9 @@ const mirrorDaemon = createMirrorDaemon({
     gitFollower.sessionsChanged();
     observeMirrorHistory();
     reapOrphanedTransfers();
+    // A mirror an older build started from the copy's device
+    // (registry.ts isLegacyMirror), ended once, the worktree kept.
+    void endLegacyMirrors();
     endMirrorsOfNoAccount();
   },
 });
@@ -620,6 +630,7 @@ export function registerIpcHandlers(): void {
   setControlImpl({
     listDevices: async () => accountHandlers.listDevices(undefined, undefined),
     thisDeviceId: getDeviceId,
+    acceptsCommands: acceptsPeerCommands,
     directPeers: async () =>
       (await hubHandlers.status(undefined, undefined)).peerAcceptsCommands,
     peerTransportFor,

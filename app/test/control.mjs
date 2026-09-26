@@ -31,8 +31,11 @@
 //     the copy on the peer, a second `mirror` answers with the running
 //     one, and `unmirror` is refused until the follower reports synced
 //     (stop-unconfirmed), then removes the peer's copy.
-//   - `mirror --from` copies the peer's worktree here under a session
-//     whose copy is local, which `unmirror` removes, original kept.
+//   - `mirror --from` is refused while this device refuses commands,
+//     then asks the peer to run the mirror (its mirror:startTo, on its
+//     own engine) and send the copy here, relaying its progress. The
+//     copy is local, a repeat from either end answers with it, and
+//     `unmirror` removes it through the peer, original kept.
 //
 // Every worktree is named with -p: a landed copy keeps its source's
 // folder name, and with both projects in one registry the bare name
@@ -58,13 +61,14 @@ import {
   MIRROR_LABEL_COPY_SIDE,
   MIRROR_LABEL_MIRROR_BRANCH,
   MIRROR_LABEL_TRANSFER,
+  mirrorContract,
 } from "@shared/ipc/modules/mirror";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
 import { controlHandlers, setControlImpl } from "@host/ipc/modules/control";
-import { setMirrorImpl } from "@host/ipc/modules/mirror";
+import { mirrorHandlers, setMirrorImpl } from "@host/ipc/modules/mirror";
 import { projectsHandlers } from "@host/ipc/modules/projects";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import {
@@ -277,11 +281,39 @@ async function main() {
 
   const { track, teardown } = makeTracker();
   try {
+    // Each device's mirror engine. B's is the slot's own. The peer
+    // runs the mirrors whose original it holds (mirror --from), on its
+    // own engine: the slot is process-wide, so a mirror call on A's
+    // wire swaps A's in for its duration. The calls come one at a
+    // time (each CLI run is awaited), B's side idle meanwhile.
+    const engine = fakeMirrorEngine();
+    const engineA = fakeMirrorEngine();
+    engineA.state.git = "synced";
+    setMirrorImpl(engine.impl);
+    const asA = (run) => (input, ctx) => {
+      setMirrorImpl(engineA.impl);
+      let result;
+      try {
+        result = run(input, ctx);
+      } catch (error) {
+        setMirrorImpl(engine.impl);
+        throw error;
+      }
+      if (!(result instanceof Promise)) {
+        setMirrorImpl(engine.impl);
+        return result;
+      }
+      return result.finally(() => setMirrorImpl(engine.impl));
+    };
+    const mirrorOnA = Object.fromEntries(
+      Object.entries(mirrorHandlers).map(([key, run]) => [key, asA(run)]),
+    );
     const { listener, peerA } = await bootDirectWire(track, {
       contracts: [
         [syncContract, syncHandlers],
         [worktreesContract, worktreesHandlers],
         [projectsContract, projectsHandlers],
+        [mirrorContract, mirrorOnA],
       ],
     });
     setPeerSyncApiImpl({
@@ -317,24 +349,28 @@ async function main() {
           : result;
       },
     };
+    // This device's own switch, which a mirror --from needs on.
+    let localAccepts = true;
     setControlImpl({
       listDevices: async () => registry,
       thisDeviceId: () => "B",
+      acceptsCommands: () => localAccepts,
       directPeers: async () =>
         Object.fromEntries(
           connected.map((id) => [id, listener.acceptsCommands()]),
         ),
       peerTransportFor: () => peerTransport,
     });
-    const engine = fakeMirrorEngine();
-    setMirrorImpl(engine.impl);
     // The delete's removal, as main fans it out to every window and
     // peer. Each record notes which sessions had ended by then: the
     // copy a stop removes is announced only once its session is gone,
     // since the delete follows the terminate.
     const removals = [];
     setWorktreeRemovalBroadcaster((payload) =>
-      removals.push({ ...payload, endedThen: [...engine.state.terminated] }),
+      removals.push({
+        ...payload,
+        endedThen: [...engine.state.terminated, ...engineA.state.terminated],
+      }),
     );
     const removalsOf = (worktreeId) =>
       removals.filter((entry) => entry.worktreeId === worktreeId);
@@ -692,9 +728,11 @@ async function main() {
       "mirror: sends the worktree and opens a session whose copy is the peer's, a repeat answers with the running one, and unmirror is refused until synced, then removes only the copy",
     );
 
-    // ---- (7b) mirror --from: the peer's worktree is copied HERE and
-    // the session's copy side is this device, so unmirror removes the
-    // local copy and leaves the peer's original.
+    // ---- (7b) mirror --from: the peer holds the original, so the peer
+    // runs the mirror (its mirror:startTo, on its own engine) and sends
+    // the copy HERE, which lands through this device's command access.
+    // unmirror removes the local copy through the peer and leaves the
+    // peer's original.
     peerOwns = sourceProjectId;
     const usageBoth = await runCli([
       "worktrees",
@@ -719,8 +757,11 @@ async function main() {
       "",
     ]);
     assert.equal(blankFrom.code, 2, "a blank --from is a usage error");
-    const inbound = finalDoc(
-      await sm(
+    // The peer would send the copy through this device's switch, so
+    // with it off the ask is refused before the peer hears of it.
+    localAccepts = false;
+    await refused(
+      [
         "worktrees",
         "mirror",
         "feat-in",
@@ -728,21 +769,51 @@ async function main() {
         "target",
         "--from",
         "Studio Mac",
-      ),
+      ],
+      "device-blocked",
+      /this device doesn't accept commands/,
     );
+    assert.equal(engineA.state.created.length, 0, "the peer started nothing");
+    localAccepts = true;
+    const createdHereBefore = mirrorsCreated().length;
+    const inboundRun = await sm(
+      "worktrees",
+      "mirror",
+      "feat-in",
+      "-p",
+      "target",
+      "--from",
+      "Studio Mac",
+    );
+    const inbound = finalDoc(inboundRun);
     assert.equal(inbound.worktree.projectId, targetProjectId);
+    assert.equal(inbound.copySide, "local");
     assert.equal(typeof inbound.session, "string");
-    const inboundInput = mirrorsCreated().at(-1);
-    assert.equal(inboundInput.localRoot, inbound.worktree.path);
-    assert.equal(inboundInput.remoteRoot, inPath);
-    assert.equal(inboundInput.labels[MIRROR_LABEL_COPY_SIDE], undefined);
+    assert.equal(
+      mirrorsCreated().length,
+      createdHereBefore,
+      "the session runs on the peer, not here",
+    );
+    const inboundInput = engineA.state.created.at(-1);
+    assert.equal(inboundInput.localRoot, inPath, "on the original");
+    assert.equal(inboundInput.deviceId, "B");
+    assert.equal(inboundInput.remoteRoot, inbound.worktree.path);
+    assert.equal(inboundInput.labels[MIRROR_LABEL_COPY_SIDE], "remote");
+    const inboundSteps = new Set(progressOf(inboundRun).map((doc) => doc.step));
+    for (const step of ["capture", "create", "apply"]) {
+      assert.ok(
+        inboundSteps.has(step),
+        `the peer's progress never relayed the ${step} step`,
+      );
+    }
     const inboundRow = finalDoc(await sm("worktrees", "mirrors")).mirrors.find(
       (mirror) => mirror.session === inbound.session,
     );
     assert.equal(inboundRow.copySide, "local");
+    assert.equal(inboundRow.device.name, "Studio Mac");
     // Asked again from either end, the answer is the running mirror
-    // and the copy that is HERE, never a second pull.
-    const sessionsBefore = mirrorsCreated().length;
+    // and the copy that is HERE, never a second start.
+    const sessionsBefore = engineA.state.created.length;
     const repeats = await Promise.all(
       [
         ["feat-in", "-p", "target", "--from", "Studio Mac"],
@@ -755,7 +826,7 @@ async function main() {
       assert.equal(asked.copySide, "local");
       assert.equal(asked.worktree.path, inbound.worktree.path);
     }
-    assert.equal(mirrorsCreated().length, sessionsBefore);
+    assert.equal(engineA.state.created.length, sessionsBefore);
     const inboundStop = finalDoc(
       await sm("worktrees", "unmirror", inbound.worktree.path),
     );
@@ -778,7 +849,7 @@ async function main() {
       "announced after the session ended: the delete follows the terminate",
     );
     ok(
-      "mirror --from: the peer's worktree is copied here under a session whose copy is local, a repeat from either end answers with that copy, --to with --from and a blank --from are refused as usage, and unmirror removes the local copy only",
+      "mirror --from: refused while this device refuses commands, then run by the peer on the original with its progress relayed, the copy local, a repeat from either end answers with that copy, --to with --from and a blank --from are refused as usage, and unmirror removes the local copy only",
     );
 
     // ---- (7c) mirror --from of the peer's primary checkout: the copy
@@ -802,8 +873,9 @@ async function main() {
     assert.equal(fromPrimary.worktree.name, "mirror-source");
     assert.equal(fromPrimary.worktree.isPrimary, false);
     assert.equal(fromPrimary.copySide, "local");
-    const fromPrimaryInput = mirrorsCreated().at(-1);
-    assert.equal(fromPrimaryInput.remoteRoot, sourceRepo);
+    const fromPrimaryInput = engineA.state.created.at(-1);
+    assert.equal(fromPrimaryInput.localRoot, sourceRepo);
+    assert.equal(fromPrimaryInput.remoteRoot, fromPrimary.worktree.path);
     assert.equal(fromPrimaryInput.labels[MIRROR_LABEL_MIRROR_BRANCH], "1");
     assert.equal(
       await gitOut(fromPrimary.worktree.path, "rev-parse", "HEAD"),

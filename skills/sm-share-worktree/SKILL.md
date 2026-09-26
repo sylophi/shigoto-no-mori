@@ -24,7 +24,9 @@ sm worktrees mirror <name-or-branch> --from <device>
 ```
 
 It makes a new worktree here, so `cd` to the path it prints. Their original
-stays and follows your work.
+stays and follows your work. The mirror runs on their machine, which sends
+the copy here, so this machine must accept commands too: if it refuses, tell
+the user to turn command access on from this machine's Devices page.
 
 The primary checkout can be mirrored too. Its copy lands as a worktree on
 `mirror/<branch>` beside the other machine's own primary, and commits cross

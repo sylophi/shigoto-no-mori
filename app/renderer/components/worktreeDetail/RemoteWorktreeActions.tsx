@@ -25,7 +25,7 @@ import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useLocalProjectForIdentity } from "@/hooks/remote/useLocalProjectForIdentity";
 import {
-  useLocalMirrorBlocker,
+  useMirrorHereBlocker,
   useWorktreeMirrorLinks,
 } from "@/hooks/remote/useMirrors";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
@@ -112,7 +112,7 @@ function TransferButtons({
   const { deviceId } = useHostScope();
   const deviceLabel = useRemoteDeviceLabel(deviceId);
   const mirrored = useWorktreeMirrorLinks(worktree).length > 0;
-  const blocker = useLocalMirrorBlocker();
+  const blocker = useMirrorHereBlocker(deviceLabel);
   const dialog = {
     worktree,
     project,
@@ -122,10 +122,11 @@ function TransferButtons({
   };
   return (
     <>
-      {/* Mirror is a pull followed by a live two-way mirror between the
-          new local worktree and the remote one, driven by the mirror
-          dialog. It only exists in the app: the daemon and the gateway
-          live in main, and the web loopback refuses the mutation. A
+      {/* Mirror is the peer's send followed by a live two-way mirror
+          between its worktree and the new copy here, both run on the
+          peer, which holds the original, and driven by the mirror
+          dialog. It only exists in the app: the copy lands on this
+          machine, which a browser is not. A
           mirror withdraws the button, not an OPEN dialog: the mirror it
           starts is what withdraws it, and the dialog's last steps (the
           report, "Open here") must stay up. */}

@@ -137,7 +137,16 @@ export async function bootDirectWire(track, opts = {}) {
     clientDeviceId: "B",
     clientOnChange: () => onPlaneChange?.(),
   });
-  const { plane, bridge } = makeDirectBridge(client, { localDeviceId: "B" });
+  // A's pushes on the session, as main's peer-push fan-out hands them
+  // on (main/ipc/register.ts onPeerPush), for the peer transport's
+  // subscribe.
+  const pushListeners = new Set();
+  const { plane, bridge } = makeDirectBridge(client, {
+    localDeviceId: "B",
+    onPeerPush: (push) => {
+      for (const hear of pushListeners) hear(push);
+    },
+  });
   track(() => plane.stop());
   onPlaneChange = () => plane.handleConnectionChange();
   plane.handleConnectionChange();
@@ -145,7 +154,7 @@ export async function bootDirectWire(track, opts = {}) {
     () => bridge.directPeerVersions().A !== undefined,
     "the keeper to establish the direct session to A",
   );
-  const peerA = bridgePeerTransport(bridge, "A");
+  const peerA = bridgePeerTransport(bridge, "A", pushListeners);
   return { stub, listener, client, plane, bridge, peerA };
 }
 
@@ -177,8 +186,10 @@ export function makeDirectBridge(client, opts = {}) {
 // A ClientTransport riding the bridge's cached direct session, with a
 // per-channel invoke counter so a transfer check can pin poll-side
 // chunking as round trips (the hub stub sees none of them, which the
-// checks assert separately via forwardedCount).
-export function bridgePeerTransport(bridge, deviceId) {
+// checks assert separately via forwardedCount). Its subscribe hears
+// the peer's pushes off the bridge's fan-out, the way main's peer
+// transport does.
+export function bridgePeerTransport(bridge, deviceId, pushListeners) {
   const counts = new Map();
   return {
     transport: {
@@ -186,8 +197,14 @@ export function bridgePeerTransport(bridge, deviceId) {
         counts.set(channel, (counts.get(channel) ?? 0) + 1);
         return bridge.invokePeer({ deviceId, channel, input });
       },
-      subscribe: () => {
-        throw new Error("this test transport is invoke-only");
+      subscribe: (channel, handler) => {
+        const listener = (push) => {
+          if (push.deviceId === deviceId && push.channel === channel) {
+            handler(push.payload);
+          }
+        };
+        pushListeners.add(listener);
+        return () => pushListeners.delete(listener);
       },
     },
     invokeCount: (channel) => counts.get(channel) ?? 0,

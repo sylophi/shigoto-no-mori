@@ -5,11 +5,14 @@
 // proof: the session's first verdict, and the way to the copy's page.
 // The flow runs both ways: MirrorDialog copies a peer's worktree here,
 // MirrorToDialog copies one of this device's to a peer (under that
-// peer's DestinationProvider). The session runs on this device either
-// way, and its Mirror button sits on this device's worktree page. A
+// peer's DestinationProvider). Either way the session runs on the
+// device holding the original: the peer this dialog is scoped to for
+// MirrorDialog, which sends the copy here, this device for
+// MirrorToDialog. Its Mirror button sits on both worktrees' pages. A
 // primary checkout takes the same flow, its copy on a branch of its
 // own (shared/git/branches.ts), which the words below say when the
 // two names differ.
+import type { ReactNode } from "react";
 import { ArrowRight, RefreshCw } from "lucide-react";
 import { pullLandingBranch } from "@shared/git/branches";
 import type { UseMutationResult } from "@tanstack/react-query";
@@ -263,7 +266,7 @@ function MirrorFlow({
         />
       )}
       {stage === "done" && mirror.data && (
-        <LocalHostScope>
+        <RunnerScope runsHere={toPeer !== undefined}>
           <MirrorLive
             session={mirror.data.session}
             landed={mirror.data.worktree}
@@ -275,15 +278,27 @@ function MirrorFlow({
             onClose={onClose}
             onOpen={open}
           />
-        </LocalHostScope>
+        </RunnerScope>
       )}
     </PullFlowFrame>
   );
 }
 
+// The scope of the device running the session, the original's: this
+// machine for a flow to a peer, and for a flow here the source peer
+// the dialog is already scoped to.
+function RunnerScope({
+  runsHere,
+  children,
+}: {
+  runsHere: boolean;
+  children: ReactNode;
+}) {
+  return runsHere ? <LocalHostScope>{children}</LocalHostScope> : children;
+}
+
 // Step 3: the copy has landed and the session is up. Read under the
-// local scope: the session is this machine's fact, whichever device
-// holds the copy.
+// runner's scope (RunnerScope): the session is that device's fact.
 function MirrorLive({
   session,
   landed,

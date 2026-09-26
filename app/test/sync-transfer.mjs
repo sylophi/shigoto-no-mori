@@ -48,7 +48,6 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
-  rmSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
@@ -58,11 +57,7 @@ import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
-import {
-  runPullWorktree,
-  sendWorktree,
-  syncHandlers,
-} from "@host/ipc/modules/sync";
+import { sendWorktree, syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import {
   getRunningScriptWorktrees,
@@ -1069,72 +1064,14 @@ async function main() {
       "sendWorktree: a dirty worktree lands on the peer with its commit and its uncommitted work and the peer's progress relayed, a repeat is refused by the peer, and the teardown removes the local source only while it still matches what was sent",
     );
 
-    // ---- A primary checkout, landing on its mirror branch
-    // (landBranch): the copy is an ordinary worktree on mirror/main
-    // carrying main's commits and uncommitted work, and the target's
-    // own primary (on main) is untouched. The source's primary is on
-    // main, one commit ahead of the target's after this.
+    // ---- A primary checkout, sent the way the mirror start sends it:
+    // the copy is an ordinary worktree on mirror/<branch> carrying the
+    // branch's commits and uncommitted work, and the target's own
+    // primary (on main) is untouched. The source's primary moves one
+    // commit ahead of the target's, then onto a fresh branch.
     await commitFile(sourceRepo, "ff.txt", "from main\n", "main moves on");
     const mainTip = await gitOut(sourceRepo, "rev-parse", "HEAD");
-    writeFileSync(join(sourceRepo, "primary-draft.txt"), "primary draft\n");
     const targetMainBefore = await gitOut(targetRepo, "rev-parse", "HEAD");
-    // The landing branch is the mirror start's to decide (off the
-    // peer's list), not the wire's: the orchestration takes it as an
-    // option. A branch named mirror stands in mirror/main's way at
-    // git's ref boundary, refused before anything crosses.
-    const primaryPull = {
-      sourceDeviceId: "A",
-      sourceProjectId,
-      sourceWorktreeId: worktreeIdFromPath(sourceRepo),
-      sourceIdentity: identity,
-      branch: "main",
-      worktreeName: "pulled-primary",
-    };
-    await git(targetRepo, ["branch", "mirror", baseSha]);
-    await assert.rejects(
-      () =>
-        runPullWorktree(primaryPull, pullCtx, { landBranch: "mirror/main" }),
-      /a branch named mirror is in the way/,
-    );
-    await git(targetRepo, ["branch", "-D", "mirror"]);
-    const primaryPulled = await runPullWorktree(primaryPull, pullCtx, {
-      landBranch: "mirror/main",
-    });
-    assert.equal(primaryPulled.worktree.isPrimary, false);
-    assert.equal(primaryPulled.worktree.branch, "mirror/main");
-    assert.equal(primaryPulled.dirtyApplied, true);
-    assert.equal(
-      await gitOut(primaryPulled.worktree.path, "rev-parse", "HEAD"),
-      mainTip,
-    );
-    assert.equal(
-      readFileSync(
-        join(primaryPulled.worktree.path, "primary-draft.txt"),
-        "utf8",
-      ),
-      "primary draft\n",
-    );
-    assert.equal(
-      await gitOut(targetRepo, "rev-parse", "HEAD"),
-      targetMainBefore,
-      "the target's own primary must not move",
-    );
-    assert.equal(
-      await gitOut(targetRepo, "rev-parse", "--abbrev-ref", "HEAD"),
-      "main",
-    );
-    assert.equal(
-      await refExists(targetRepo, "refs/shigomori/incoming/main"),
-      false,
-    );
-    ok(
-      "pullWorktree of a primary: refuses a branch named mirror in the way, then lands as a worktree on mirror/main with main's tip and uncommitted work, leaving the target's primary alone",
-    );
-
-    // The same from the other side: the send reads the mirror branch
-    // off the source being a primary. On a fresh branch here, so the
-    // copy above does not hold the name.
-    rmSync(join(sourceRepo, "primary-draft.txt"));
     await git(sourceRepo, ["checkout", "-q", "-b", "primary-branch"]);
     writeFileSync(join(sourceRepo, "sent-draft.txt"), "sent from primary\n");
     const primarySend = {
@@ -1148,6 +1085,15 @@ async function main() {
       () => syncHandlers.sendWorktree(primarySend, pullCtx),
       /primary checkout can be mirrored but not sent/,
     );
+    // The landing branch is read off the source being a primary, never
+    // taken from the wire. A branch named mirror stands in its way at
+    // git's ref boundary, refused on the peer before anything crosses.
+    await git(targetRepo, ["branch", "mirror", baseSha]);
+    await assert.rejects(
+      () => sendWorktree(primarySend, pullCtx, { mirror: true }),
+      /a branch named mirror is in the way/,
+    );
+    await git(targetRepo, ["branch", "-D", "mirror"]);
     const { result: primarySent } = await sendWorktree(primarySend, pullCtx, {
       mirror: true,
     });
@@ -1167,8 +1113,17 @@ async function main() {
       "main",
       "the peer's primary stays on its branch",
     );
+    assert.equal(
+      await gitOut(targetRepo, "rev-parse", "HEAD"),
+      targetMainBefore,
+      "the peer's own primary must not move",
+    );
+    assert.equal(
+      await refExists(targetRepo, "refs/shigomori/incoming/primary-branch"),
+      false,
+    );
     ok(
-      "sendWorktree from a primary: lands on the peer as a worktree on mirror/<branch> with the uncommitted work, its primary untouched",
+      "sendWorktree from a primary: refuses a branch named mirror in the way, then lands on the peer as a worktree on mirror/<branch> with the tip and the uncommitted work, its primary untouched",
     );
 
     // ---- A device with no checkout of the repo: the clone from a peer

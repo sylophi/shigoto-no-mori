@@ -14,12 +14,11 @@ import {
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
-import type {
-  MirrorStartPayload,
-  MirrorStartToPayload,
-} from "@shared/ipc/modules/mirror";
+import type { z } from "zod";
+import type { MirrorStartToPayload } from "@shared/ipc/modules/mirror";
 import type {
   SyncCloneInto,
+  SyncPullWorktreePayloadSchema,
   SyncPullWorktreeResult,
 } from "@shared/ipc/modules/sync";
 import type { MirrorIgnoreChoice } from "@shared/leaveOutRule";
@@ -91,16 +90,22 @@ export type LandingChoice = PullChoice & { cloneInto?: SyncCloneInto };
 
 type Landed = Pick<SyncPullWorktreeResult, "worktree" | "cloned">;
 
+// A pull as the mutation hands it over: the source named in the peer's
+// terms, the dialog's choice riding along.
+export type PullPayload = z.infer<typeof SyncPullWorktreePayloadSchema> &
+  LandingChoice;
+
 // The mutation every move shares, handed the verbs it lands through
 // (the transplant's or the mirror start's): the payload built from the
 // scope and the move, the dialog's choice riding along. Success only
 // invalidates, the destination's view: this machine's forest for a
-// pull, the peer's for a send. The caller shows the outcome, so the
+// pull (a mirror's too, which the source device runs but lands here),
+// the peer's for a send. The caller shows the outcome, so the
 // conclusion is told once.
 export function useMoveMutation<Result extends Landed>(
   move: Move,
   land: {
-    pull: (payload: MirrorStartPayload) => Promise<Result>;
+    pull: (payload: PullPayload) => Promise<Result>;
     send: (payload: MirrorStartToPayload) => Promise<Result>;
   },
 ) {

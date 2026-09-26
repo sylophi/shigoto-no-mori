@@ -237,7 +237,7 @@ export const SyncPullWorktreePayloadSchema = z.strictObject({
   // the leave-out rule and its patterns: the capture has `git add -A`
   // semantics, so this is the only way an ignored file travels. A
   // one-shot run of the mirror engine carries them (the "files" step).
-  // Absent: nothing beyond the capture, the pull as the mirror start
+  // Absent: nothing beyond the capture, the move as the mirror start
   // drives it (its own session brings the files and keeps bringing
   // them). Gitignored leaves nothing to carry, so it skips the step.
   ignoreMode: MirrorIgnoreModeSchema.optional(),

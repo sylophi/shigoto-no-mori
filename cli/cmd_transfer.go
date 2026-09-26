@@ -10,7 +10,10 @@ package main
 // plus unmirror, mirrors and devices. They run in the app (control.go
 // says why), which takes them through the same transplant and mirror
 // orchestrators its own dialogs use, so a run from a terminal and one
-// from the app's "Transplant to…" are the same run. Names resolve the
+// from the app's "Transplant to…" are the same run. A mirror always
+// runs on the device holding the original: --to runs it here, --from
+// asks the other device to run it and send the copy here, which takes
+// both devices accepting commands. Names resolve the
 // way a person says them: a device by its name, a peer's worktree by
 // its folder name or branch. With one device that qualifies, --to can
 // be left off.
@@ -324,8 +327,8 @@ func cmdBring(ctx cliContext, args []string) (int, error) {
 
 // mirror is send or bring that stays: --to (or no direction) copies
 // one of this device's worktrees to another device, --from copies one
-// of theirs here, and either way the two follow each other until
-// unmirror.
+// of theirs here (the mirror then runs on their device), and either
+// way the two follow each other until unmirror.
 func cmdMirror(ctx cliContext, args []string) (int, error) {
 	parsed, err := parseCmdArgs(args, transferSpec())
 	if err != nil {

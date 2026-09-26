@@ -7,7 +7,6 @@ import {
   MirrorIgnoreModeSchema,
   MirrorIgnoresSchema,
   SyncLandingRefSchema,
-  SyncPullWorktreePayloadSchema,
   SyncPullWorktreeResultSchema,
   SyncSendWorktreePayloadSchema,
 } from "@shared/ipc/modules/sync";
@@ -27,13 +26,16 @@ import {
 // peers mirroring FROM here.
 //
 // Host-scoped: a device's mirrors are facts about that device, and a
-// remote viewer sees them (list is a read). The starts are local
-// orchestrators like sync:pullWorktree: start pulls the peer's
-// worktree here first (branch, commits, uncommitted changes, through
-// the ordinary move), startTo sends one of this device's to the peer,
-// and either then opens the mirror on top, so the first cycle has
-// little to move and git agrees on both sides from the first second. The controls (stop, pause, resume, setIgnores) act on
-// a session this device runs, and are offered to peers too: a mirror
+// remote viewer sees them (list is a read). A mirror always runs on
+// the device holding the original. Its one start, startTo, sends one
+// of this device's worktrees to a peer (branch, commits, uncommitted
+// changes, through the ordinary move) and opens the mirror on top, so
+// the first cycle has little to move and git agrees on both sides
+// from the first second. A mirror asked for from the copy's side (a
+// peer's page, "mirror it here") is the same start, invoked on the
+// device holding the original with this device as the target. The
+// start and the controls (stop, pause, resume, setIgnores) act on a
+// session this device runs, and are offered to peers too: a mirror
 // pairs two devices, and either side's page controls it, the far end
 // through the device that runs the session. They ride that device's
 // command grant like every other mutation.
@@ -67,27 +69,19 @@ export {
 // beginTransfer), so the mark alone says it is a transfer.
 export const MIRROR_LABEL_TRANSFER = "transfer";
 
-// Which side holds the copy the mirror made, set by the start from the
-// way its move went. A pull (start, from a peer's page) brings the copy
-// HERE, which is what an unlabelled session means. A send (startTo,
-// from a local worktree's page) makes the copy on the PEER, labelled
-// so stopping removes that one and never the original this device
-// holds, and so the git follower takes the original here as the
-// reference. Either way the session runs on the device that started
-// it. A label and not a session field: the session document crosses to
-// peers that parse it strictly.
+// Which side holds the copy: always the peer, since a session runs on
+// the device holding the original (its local side) and the copy is
+// its remote side. Every start writes it as "remote". Its one reader
+// is the legacy sweep (host/mirror/registry.ts isLegacyMirror): an
+// older build also started mirrors from the copy's device, and those
+// sessions carry no such label. A label and not a session field: the
+// session document crosses to peers that parse it strictly.
 export const MIRROR_LABEL_COPY_SIDE = "copySide";
-export function mirrorCopyIsRemote(session: {
-  labels: Record<string, string>;
-}): boolean {
-  return session.labels[MIRROR_LABEL_COPY_SIDE] === "remote";
-}
 // A primary checkout's mirror: the copy sits on mirror/<branch> for
 // whatever branch the original is on (shared/git/branches.ts
 // mirrorBranchFor), since the copy's device holds the original's
 // branch in its own primary. The git follower reads the two names as
-// one branch. The label says so, and copySide says which side is the
-// copy.
+// one branch. The label says so.
 export const MIRROR_LABEL_MIRROR_BRANCH = "mirrorBranch";
 export function mirrorOnMirrorBranch(session: {
   labels: Record<string, string>;
@@ -95,33 +89,6 @@ export function mirrorOnMirrorBranch(session: {
   return session.labels[MIRROR_LABEL_MIRROR_BRANCH] === "1";
 }
 
-// Where the copy a mirror made is (the worktree a stop removes), given
-// the device running the session: on its peer for a mirror started to
-// it, otherwise on the runner. The same reading on the host (the CLI's
-// view from either side) and in the renderer (the dialog's words).
-export function mirrorCopyOf(
-  session: {
-    labels: Record<string, string>;
-    deviceId: string;
-    projectId: string;
-    worktreeId: string;
-    localProjectId: string;
-    localWorktreeId: string;
-  },
-  runnerDeviceId: string,
-): { deviceId: string; projectId: string; worktreeId: string } {
-  return mirrorCopyIsRemote(session)
-    ? {
-        deviceId: session.deviceId,
-        projectId: session.projectId,
-        worktreeId: session.worktreeId,
-      }
-    : {
-        deviceId: runnerDeviceId,
-        projectId: session.localProjectId,
-        worktreeId: session.localWorktreeId,
-      };
-}
 export function isTransferSession(session: {
   labels: Record<string, string>;
 }): boolean {
@@ -282,10 +249,10 @@ const MirrorGitStatusSchema = z.strictObject({
 });
 export type MirrorGitStatus = z.infer<typeof MirrorGitStatusSchema>;
 
-// One session this device initiates, as the daemon reports it. The
-// local side is always this device (alpha in Mutagen's terms). The
-// remote side is the peer named by deviceId, at remoteRoot, which is
-// its worktree projectId/worktreeId. localProjectId/localWorktreeId
+// One session this device runs, as the daemon reports it. The local
+// side is always this device (alpha in Mutagen's terms) and holds the
+// original. The remote side is the copy, on the peer named by
+// deviceId, at remoteRoot, which is its worktree projectId/worktreeId. localProjectId/localWorktreeId
 // are lifted out of the labels the start orchestration wrote.
 export const MirrorSessionSchema = z.strictObject({
   session: MirrorSessionIdSchema,
@@ -349,21 +316,23 @@ const MirrorDaemonStatusSchema = z.enum([
 ]);
 export type MirrorDaemonStatus = z.infer<typeof MirrorDaemonStatusSchema>;
 
-// Why this device's daemon can't take a mirror start, or undefined
-// when it can: the host's refusal (requireRunningEngine) and the
-// start buttons' disabled title, so the two say the same thing.
+// Why a device's daemon can't take a mirror start, or undefined when
+// it can: the host's refusal (requireRunningEngine) and the start
+// buttons' disabled title, so the two say the same thing. `where`
+// names the device, which is the one holding the original.
 export function mirrorEngineBlocker(
   status: MirrorDaemonStatus,
+  where = "this device",
 ): string | undefined {
   switch (status) {
     case "running":
       return undefined;
     case "unavailable":
-      return "Mirroring is unavailable on this device: the file-sync engine is missing.";
+      return `Mirroring is unavailable on ${where}: the file-sync engine is missing.`;
     case "starting":
-      return "The mirror engine on this device is still starting. Try again in a moment.";
+      return `The mirror engine on ${where} is still starting. Try again in a moment.`;
     case "stopped":
-      return "The mirror engine on this device isn't running.";
+      return `The mirror engine on ${where} isn't running.`;
   }
 }
 
@@ -374,35 +343,29 @@ const MirrorListResultSchema = z.strictObject({
 });
 export type MirrorListResult = z.infer<typeof MirrorListResultSchema>;
 
-// Same input as the pull it is built on: which peer, which of ITS
-// project/worktree ids, the repo identity to land in, the branch.
-export const MirrorStartPayloadSchema = SyncPullWorktreePayloadSchema.extend({
-  ignoreMode: MirrorIgnoreModeSchema,
-  ignores: MirrorIgnoresSchema,
-});
-export type MirrorStartPayload = z.infer<typeof MirrorStartPayloadSchema>;
-
-const MirrorStartResultSchema = SyncPullWorktreeResultSchema.extend({
-  session: MirrorSessionIdSchema,
-});
-
-// The mirror turned around, built on the send the way start is built
-// on the pull: one of THIS device's worktrees, copied to a peer (cloning
-// the repo there first when the peer has no checkout, like start) and
-// kept in step with it. The session still runs here: it reaches the
-// peer through the peer's grant, which the send already needed.
+// The mirror start, built on the send: one of THIS device's
+// worktrees, copied to a peer (cloning the repo there first when the
+// peer has no checkout, `cloneInto` in the peer's terms) and kept in
+// step with it. The session runs here, on the original's device: it
+// reaches the peer through the peer's grant, which the send already
+// needed. Invoked by the peer itself when the mirror is asked for from
+// the copy's side, the target being the caller.
 export const MirrorStartToPayloadSchema = SyncSendWorktreePayloadSchema.extend({
   ignoreMode: MirrorIgnoreModeSchema,
   ignores: MirrorIgnoresSchema,
 });
 export type MirrorStartToPayload = z.infer<typeof MirrorStartToPayloadSchema>;
 
+// The send's result (the copy as the peer landed it) and the session.
+export const MirrorStartToResultSchema = SyncPullWorktreeResultSchema.extend({
+  session: MirrorSessionIdSchema,
+});
+
 const MirrorSessionPayloadSchema = z.strictObject({
   session: MirrorSessionIdSchema,
 });
 
-// Stopping removes the copy (on this device, or on the peer for a
-// mirror started to it), so it is refused unless the git follower says
+// Stopping removes the copy (on the peer), so it is refused unless the git follower says
 // "synced", the one state where the other side is known to hold the
 // copy's commits. A paused session, an unreachable peer or
 // one too young to have reconciled all report something else. `force`
@@ -499,23 +462,13 @@ export const mirrorContract = defineContract("host", {
     remote: true,
     gated: false,
   }),
-  start: invoke(
-    "mirror:start",
-    MirrorStartPayloadSchema,
-    MirrorStartResultSchema,
-    {
-      remote: false,
-      gated: true,
-    },
-  ),
+  // Served to peers on the command grant: the copy's device asks the
+  // original's to start the mirror into it (see the payload's note).
   startTo: invoke(
     "mirror:startTo",
     MirrorStartToPayloadSchema,
-    MirrorStartResultSchema,
-    {
-      remote: false,
-      gated: true,
-    },
+    MirrorStartToResultSchema,
+    { remote: true, gated: true },
   ),
   // The controls, served to peers on the command grant: the device at
   // the far end of a mirror drives the session from its own page

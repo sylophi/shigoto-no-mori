@@ -100,7 +100,7 @@ var worktreeItems = []helpItem{
 	{"worktrees bring <worktree> [--from <device>]", "Move a worktree here from another device",
 		"send, the other way round. <worktree> is the other device's folder name or branch (`list --remote` shows them), and --from is only needed when several devices have it. Same options as send. Prints the new worktree's path."},
 	{"worktrees mirror [<name>] [--to <device> | --from <device>]", "Keep a worktree in step on two devices",
-		"send or bring that stays: files, commits, staging and branch moves follow each other both ways until unmirror. With --to (or neither) the copy lands on the other device. With --from, <name> is the other device's worktree and the copy lands here, at the path printed. Asking again answers with the running mirror. Takes --leave-out and --setup / --no-setup like send."},
+		"send or bring that stays: files, commits, staging and branch moves follow each other both ways until unmirror. With --to (or neither) the copy lands on the other device. With --from, <name> is the other device's worktree and the copy lands here, at the path printed. The mirror runs on the device holding the original, so --from asks the other device to run it and needs this device to accept commands too. Asking again answers with the running mirror. Takes --leave-out and --setup / --no-setup like send."},
 	{"worktrees unmirror [<name>] [-f]", "Stop mirroring and remove the copy",
 		"Removes the copy, wherever it is, and never the original. Refuses until both sides hold the same commits. -f stops anyway."},
 	{"worktrees mirrors", "List the mirrors this device is part of", ""},

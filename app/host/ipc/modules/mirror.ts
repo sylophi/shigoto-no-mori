@@ -7,21 +7,20 @@
 // registry and the served index watcher behind it), and the git half
 // a peer's follower reads and applies.
 //
-// start = move, then mirror. The move (sync's pull or send, reused
-// verbatim) lands the worktree's branch, commits and uncommitted
-// changes as a new worktree through the ordinary create, so carry-over
-// (and setup, when the dialog asked for it) ride along and git agrees
-// on both sides before a single file is watched. The mirror session
-// then opens between the two worktrees, with almost nothing left to
-// move. Either way round, the session runs HERE, on the device that
-// started it: the session reaches the other side's `file-sync serve`
-// and git state through that device's grant (openStream, gitState,
-// applyGitState), which is the grant the move already needed. A pull
-// (start) leaves the copy here, a send (startTo) leaves it on the
-// peer, and the session's copySide label, set from which way the move
-// went, says which one a stop removes. The peer's root path is read
-// off its own answers over the grant-gated wire, never taken from the
-// caller.
+// start = send, then mirror. The send (sync's, reused verbatim) lands
+// the worktree's branch, commits and uncommitted changes on the peer
+// as a new worktree through the ordinary create, so carry-over (and
+// setup, when the dialog asked for it) ride along and git agrees on
+// both sides before a single file is watched. The mirror session then
+// opens between the two worktrees, with almost nothing left to move.
+// The session always runs HERE, on the device holding the original,
+// whichever device asked for it (the copy's device asks over the
+// grant): it reaches the copy's `file-sync serve` and git state
+// through the peer's grant (openStream, gitState, applyGitState),
+// which is the grant the send already needed. So a stop always
+// removes the peer's worktree. The copy's root path is read off the
+// peer's own landing answer over the grant-gated wire, never taken
+// from the caller.
 //
 // A primary checkout is mirrored the same way, its copy on
 // mirror/<branch> in a mirror-<name> folder (shared/git/branches.ts),
@@ -33,35 +32,24 @@ import {
   MIRROR_LABEL_MIRROR_BRANCH,
   MIRROR_COPY_STAYED,
   MIRROR_STOP_UNCONFIRMED,
-  mirrorCopyIsRemote,
   type MirrorGitStatus,
-  type MirrorIgnoreMode,
   type MirrorListResult,
   type MirrorServing,
   type MirrorSession,
   MirrorSessionSchema,
-  type MirrorStartPayloadSchema,
   type MirrorStartToPayloadSchema,
   mirrorContract,
   mirrorStopIsSafe,
   summarizeIgnores,
 } from "@shared/ipc/modules/mirror";
-import { DeleteWorktreeResultSchema, type Worktree } from "@shared/schemas";
-import { forceRemoveViaCli } from "@host/ipc/cliDelegate";
+import { DeleteWorktreeResultSchema } from "@shared/schemas";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
-import { errorMessageOf, unknownWorktreeError } from "@shared/errors";
-import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
+import { errorMessageOf } from "@shared/errors";
 import { spawnFileSync } from "@host/fileSync/spawn";
-import {
-  peerWorktreeOrUndefined,
-  peerWorktreesApiFor,
-} from "@host/ipc/peerSync";
-import { deleteAnyLocalBranch } from "@host/lib/git/branches";
-import { localBranchExists } from "@host/lib/git/remotes";
+import { peerWorktreesApiFor } from "@host/ipc/peerSync";
 import {
   findProjectAndWorktreeOrThrow,
-  findProjectOrThrow,
   findWorktreePathOrThrow,
 } from "@host/lib/projects";
 import {
@@ -83,8 +71,7 @@ import {
   requireRunningEngine,
 } from "@host/mirror/registry";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
-import { runPullWorktree, sendWorktree } from "./sync";
-import { worktreesHandlers } from "./worktrees";
+import { sendWorktree } from "./sync";
 
 // The daemon slot, the session labels and the raw session shapes live
 // in host/mirror/registry.ts, where the worktree delete can reach them
@@ -99,7 +86,6 @@ export {
   type MirrorImpl,
   type MirrorSessionRaw,
 } from "@host/mirror/registry";
-import type { MirrorCreateInput, MirrorImpl } from "@host/mirror/registry";
 
 // The mirror streams this host currently serves, keyed by the calling
 // device and the channel id it minted (unique per connection, so the
@@ -162,101 +148,6 @@ function annotateMirrorSession(
   });
 }
 
-// Undoes a pull whose session never started. The worktree goes through
-// `sm rm` like any removal, so the port-pool lease its create took is
-// released, its teardown runs and the CLI retires the marks it seeded.
-// The branch goes whatever deleteBranchOnRemove says: a retry would
-// refuse on the one this attempt left behind.
-async function rollBackPull(
-  worktree: Pick<Worktree, "id" | "projectId" | "branch">,
-): Promise<void> {
-  const project = await findProjectOrThrow(worktree.projectId);
-  await forceRemoveViaCli(project, worktree.id);
-  if (await localBranchExists(project.path, worktree.branch)) {
-    await deleteAnyLocalBranch(project.path, worktree.branch, true);
-  }
-}
-
-// A session created for a start, noted on the worktree's thread. A
-// create that fails undoes what the start landed first (the rollback
-// is best effort: its own failure is logged, not thrown over the real
-// error).
-async function openSession(
-  daemon: MirrorImpl,
-  input: MirrorCreateInput,
-  ignoresSummary: string,
-  rollBack: { what: string; run: () => Promise<unknown> },
-): Promise<string> {
-  let session: string;
-  try {
-    session = await daemon.create(input);
-  } catch (error) {
-    await rollBack.run().catch((rollbackError: unknown) => {
-      console.warn(
-        `[mirror] could not remove ${rollBack.what} of a failed start: ${errorMessageOf(rollbackError)}`,
-      );
-    });
-    throw error;
-  }
-  daemon.noteEvent(input.localWorktreeId, "started", ignoresSummary);
-  return session;
-}
-
-// The session a start opens once its move landed, whichever way the
-// move went: between the worktree here and the one on the peer, the
-// copy on the side the move put it. No session, so no copy either: the
-// move is undone (the original still holds the branch and its
-// uncommitted changes), or a retry would refuse on the branch the
-// failed attempt left behind.
-async function openMirror(
-  daemon: MirrorImpl,
-  mirror: {
-    here: Pick<Worktree, "id" | "projectId" | "path" | "branch">;
-    there: Pick<Worktree, "id" | "projectId" | "path"> & { deviceId: string };
-    copy: "here" | "there";
-    branch: string;
-    primary: boolean;
-    ignoreMode: MirrorIgnoreMode;
-    ignores: string[];
-  },
-): Promise<string> {
-  const { here, there } = mirror;
-  return openSession(
-    daemon,
-    {
-      localRoot: here.path,
-      deviceId: there.deviceId,
-      projectId: there.projectId,
-      worktreeId: there.id,
-      remoteRoot: there.path,
-      name: mirror.branch,
-      localWorktreeId: here.id,
-      labels: {
-        [MIRROR_LABEL_LOCAL_PROJECT]: here.projectId,
-        [MIRROR_LABEL_LOCAL_WORKTREE]: here.id,
-        [MIRROR_LABEL_IGNORE_MODE]: mirror.ignoreMode,
-        ...(mirror.copy === "there"
-          ? { [MIRROR_LABEL_COPY_SIDE]: "remote" }
-          : {}),
-        ...(mirror.primary ? { [MIRROR_LABEL_MIRROR_BRANCH]: "1" } : {}),
-      },
-      ignores: mirror.ignores,
-    },
-    summarizeIgnores(mirror.ignoreMode, mirror.ignores),
-    mirror.copy === "here"
-      ? { what: "the worktree", run: () => rollBackPull(here) }
-      : {
-          what: "the peer's copy",
-          run: () =>
-            peerWorktreesApiFor(there.deviceId).delete({
-              projectId: there.projectId,
-              worktreeId: there.id,
-              force: true,
-            }),
-        },
-  );
-}
-
 async function pauseOrResume(
   session: string,
   verb: "pause" | "resume",
@@ -310,60 +201,35 @@ export function currentMirrorList(): MirrorListResult | undefined {
 }
 
 // The stop past the safety check: the engine ends the session, then
-// the copy goes. How the copy goes depends on where it is. What
-// follows does not: a copy that stayed is reported, with the session
-// already gone.
+// the copy on the peer goes. A copy that stayed is reported, with the
+// session already gone. The original here keeps its page, so its
+// thread gets the line either way.
 async function stopAndRemoveCopy(
   daemon: ReturnType<typeof engine>,
   session: string,
   raw: MirrorSessionRaw,
-  ctx: HandlerContext,
 ): Promise<void> {
   await daemon.terminate(session);
-  const localWorktreeId = localWorktreeIdOf(raw);
-  const projectId = raw.labels[MIRROR_LABEL_LOCAL_PROJECT];
-  const onPeer = mirrorCopyIsRemote(raw);
-  let stayed: string | null;
-  if (onPeer) {
-    stayed = await peerWorktreesApiFor(raw.deviceId)
-      .delete({
-        projectId: raw.projectId,
-        worktreeId: raw.worktreeId,
-        force: true,
-      })
-      .then((result) => {
-        const removed = DeleteWorktreeResultSchema.parse(result);
-        return removed.ok
-          ? null
-          : `its ${removed.cleanupError.phase} step failed`;
-      }, errorMessageOf);
-  } else if (localWorktreeId === "" || projectId === undefined) {
-    stayed = "the session did not name its worktree";
-  } else {
-    // The ordinary delete, which takes the worktree's history thread
-    // with it: there is no page left to show a "stopped" line on.
-    const removed = await worktreesHandlers.delete(
-      { projectId, worktreeId: localWorktreeId, force: true },
-      ctx,
-    );
-    stayed = removed.ok
-      ? null
-      : `its ${removed.cleanupError.phase} step failed`;
-  }
-  // A copy on the peer leaves the page this was stopped from
-  // standing, so its thread gets the line either way.
-  if (stayed !== null || onPeer) {
-    daemon.noteEvent(
-      localWorktreeId,
-      "stopped",
-      stayed === null
-        ? ""
-        : `Copy on ${onPeer ? "the other" : "this"} device kept`,
-    );
-  }
+  const stayed = await peerWorktreesApiFor(raw.deviceId)
+    .delete({
+      projectId: raw.projectId,
+      worktreeId: raw.worktreeId,
+      force: true,
+    })
+    .then((result) => {
+      const removed = DeleteWorktreeResultSchema.parse(result);
+      return removed.ok
+        ? null
+        : `its ${removed.cleanupError.phase} step failed`;
+    }, errorMessageOf);
+  daemon.noteEvent(
+    localWorktreeIdOf(raw),
+    "stopped",
+    stayed === null ? "" : "Copy on the other device kept",
+  );
   if (stayed !== null) {
     throw new Error(
-      `${MIRROR_COPY_STAYED} ${onPeer ? "on the other device" : "here"} stayed: ${stayed}. Delete it from its page.`,
+      `${MIRROR_COPY_STAYED} on the other device stayed: ${stayed}. Delete it from its page.`,
     );
   }
 }
@@ -371,85 +237,70 @@ async function stopAndRemoveCopy(
 export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
   list: () => mirrorListOf(engine()),
 
-  start: async (input: z.infer<typeof MirrorStartPayloadSchema>, ctx) => {
-    // Every precondition before the pull, so a refusal creates
-    // nothing: the engine must be up, and the peer's worktree must
-    // exist (its root path is read off the peer's own list, because
-    // it flows into a session this device persists). The branch
-    // collision is the pull's own guard.
-    const daemon = requireRunningEngine();
-    const source = await peerWorktreeOrUndefined(
-      input.sourceDeviceId,
-      input.sourceProjectId,
-      input.sourceWorktreeId,
-    );
-    if (source === undefined)
-      throw unknownWorktreeError(input.sourceWorktreeId);
-
-    // Where a primary's copy lands is decided by what the source is,
-    // off the peer's list, not by the caller. The branch is the
-    // caller's, like the commits fetched under it: the peer may have
-    // switched since it was listed.
-    const { ignoreMode, ignores, ...pullInput } = input;
-    const pulled = await runPullWorktree(
-      source.isPrimary
-        ? { ...pullInput, worktreeName: pullWorktreeName(source) }
-        : pullInput,
-      ctx,
-      {
-        landBranch: pullLandingBranch({
-          branch: input.branch,
-          isPrimary: source.isPrimary,
-        }),
-      },
-    );
-    const session = await openMirror(daemon, {
-      here: pulled.worktree,
-      there: { ...source, deviceId: input.sourceDeviceId },
-      copy: "here",
-      branch: input.branch,
-      primary: source.isPrimary,
-      ignoreMode,
-      ignores,
-    });
-    return { ...pulled, session };
-  },
-
-  // The mirror the other way round: one of this device's worktrees,
-  // sent to a peer and kept in step with the copy made there. No
-  // leave-out rule goes to the send: the session opened next carries
-  // the ignored files and keeps carrying them, as in start.
+  // The mirror: one of this device's worktrees, sent to a peer and kept
+  // in step with the copy made there. No leave-out rule goes to the
+  // send: the session opened next carries the ignored files and keeps
+  // carrying them. No session, so no copy either: the peer's copy is
+  // removed (the original still holds the branch and its uncommitted
+  // changes), or a retry would refuse on the branch the failed attempt
+  // left behind. That removal is best effort: its own failure is
+  // logged, not thrown over the real error.
   startTo: async (input: z.infer<typeof MirrorStartToPayloadSchema>, ctx) => {
     const daemon = requireRunningEngine();
     const { ignoreMode, ignores, ...sendInput } = input;
     const { source, result: sent } = await sendWorktree(sendInput, ctx, {
       mirror: true,
     });
-    const session = await openMirror(daemon, {
-      here: source,
-      // The copy's root as the peer's landing answered it, re-parsed
-      // by the send.
-      there: { ...sent.worktree, deviceId: input.targetDeviceId },
-      copy: "there",
-      branch: source.branch,
-      primary: source.isPrimary,
-      ignoreMode,
-      ignores,
-    });
+    // The copy's root as the peer's landing answered it, re-parsed by
+    // the send.
+    const copy = sent.worktree;
+    let session: string;
+    try {
+      session = await daemon.create({
+        localRoot: source.path,
+        deviceId: input.targetDeviceId,
+        projectId: copy.projectId,
+        worktreeId: copy.id,
+        remoteRoot: copy.path,
+        name: source.branch,
+        localWorktreeId: source.id,
+        labels: {
+          [MIRROR_LABEL_LOCAL_PROJECT]: source.projectId,
+          [MIRROR_LABEL_LOCAL_WORKTREE]: source.id,
+          [MIRROR_LABEL_IGNORE_MODE]: ignoreMode,
+          [MIRROR_LABEL_COPY_SIDE]: "remote",
+          ...(source.isPrimary ? { [MIRROR_LABEL_MIRROR_BRANCH]: "1" } : {}),
+        },
+        ignores,
+      });
+    } catch (error) {
+      await peerWorktreesApiFor(input.targetDeviceId)
+        .delete({ projectId: copy.projectId, worktreeId: copy.id, force: true })
+        .catch((rollbackError: unknown) => {
+          console.warn(
+            `[mirror] could not remove the peer's copy of a failed start: ${errorMessageOf(rollbackError)}`,
+          );
+        });
+      throw error;
+    }
+    daemon.noteEvent(
+      source.id,
+      "started",
+      summarizeIgnores(ignoreMode, ignores),
+    );
     return { ...sent, session };
   },
 
   // Stop ends the session and removes the copy the mirror made: the
   // mirror was the copy's reason to exist, and the source keeps the
-  // branch. The copy is this device's worktree, or the peer's for a
-  // mirror started to it (startTo), where the original here stays. The
-  // delete follows the terminate (the other way round the
+  // branch. The copy is the peer's worktree, and the original here
+  // stays. The delete follows the terminate (the other way round the
   // tombstone protocol would stop the session itself, mid-delete) and
   // is forced, since the copy carries the source's uncommitted state
   // by design. A copy the delete cannot remove is reported with the
   // session already gone: the worktree page then offers the ordinary
   // delete.
-  stop: async ({ session, force }, ctx) => {
+  stop: async ({ session, force }) => {
     const daemon = engine();
     const raw = findSession(daemon, session);
     if (raw === undefined) {
@@ -470,7 +321,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
       stopping: true,
     });
     try {
-      await stopAndRemoveCopy(daemon, session, raw, ctx);
+      await stopAndRemoveCopy(daemon, session, raw);
     } finally {
       stopping.delete(session);
       onServingChange?.();
