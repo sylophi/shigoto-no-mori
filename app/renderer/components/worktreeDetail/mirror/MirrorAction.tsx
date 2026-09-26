@@ -26,6 +26,7 @@ import { useDeviceName } from "@/hooks/remote/useRemoteDevices";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { localDeviceId } from "@/lib/queryKeys";
 import { FooterActionButton } from "../FooterActionButton";
+import { LABEL_RANK } from "../footerFit";
 import { MirrorManageDialog } from "./MirrorManageDialog";
 
 export function MirrorAction({ worktree }: { worktree: Worktree }) {
@@ -68,6 +69,7 @@ function MirrorLinkAction({
   return (
     <>
       <FooterActionButton
+        rank={LABEL_RANK.mirror}
         icon={<RefreshCw />}
         label={`Mirror with ${other}`}
         onClick={() => setOpenFor(session.session)}

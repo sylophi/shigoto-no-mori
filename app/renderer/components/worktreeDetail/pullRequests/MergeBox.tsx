@@ -108,7 +108,9 @@ export function MergeBox({
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-3">
         {statusLine}
-        <div className="inline-flex items-center gap-2">
+        {/* Wraps on a narrow pane. The merge button and its method menu
+            are one item, so they wrap together. */}
+        <div className="inline-flex flex-wrap items-center gap-2">
           <Button
             type="button"
             size="sm"

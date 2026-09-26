@@ -30,6 +30,7 @@ import {
 } from "@/hooks/remote/useMirrors";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
 import { FooterActionButton } from "./FooterActionButton";
+import { LABEL_RANK } from "./footerFit";
 import { MirrorDialog } from "./mirror/MirrorDialog";
 import { TransplantDialog } from "./transplant/TransplantDialog";
 
@@ -132,6 +133,7 @@ function TransferButtons({
           report, "Open here") must stay up. */}
       {canForwardPorts && !mirrored && (
         <FooterActionButton
+          rank={LABEL_RANK.mirrorTo}
           icon={<RefreshCw />}
           label="Mirror here"
           title="Keep a live copy of this worktree here"
@@ -147,6 +149,7 @@ function TransferButtons({
           is the confirmation. */}
       {!worktree.isPrimary && (
         <FooterActionButton
+          rank={LABEL_RANK.transplant}
           icon={<Shovel />}
           label="Transplant here"
           title="Move this worktree here"

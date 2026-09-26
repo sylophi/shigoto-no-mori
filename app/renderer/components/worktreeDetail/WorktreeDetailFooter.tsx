@@ -5,7 +5,7 @@ import {
   RefreshCwOff,
   Trash2,
 } from "lucide-react";
-import { type ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { InlineError } from "@/components/ui/inline-error";
 import {
@@ -19,6 +19,12 @@ import {
   type Worktree,
 } from "@shared/schemas";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import {
+  CollapsedThroughProvider,
+  FooterVerb,
+  LABEL_RANK,
+  useFittedLabels,
+} from "./footerFit";
 
 // The footer is a four-state machine. The parent owns the transitions and
 // hands us a discriminated state plus the actions each state can fire, so
@@ -61,19 +67,31 @@ export function WorktreeDetailFooter({
   leading,
   canMutate = true,
 }: WorktreeDetailFooterProps) {
+  // On a narrow pane the verbs give up their labels one at a time
+  // rather than run into each other (footerFit.tsx).
+  const footerRef = useRef<HTMLElement>(null);
+  const leadingRef = useRef<HTMLDivElement>(null);
+  const collapsedThrough = useFittedLabels(footerRef, leadingRef);
   return (
-    <footer className="flex h-9.5 items-center gap-3 border-t border-border bg-card px-6 phone:h-11 phone:px-4">
-      {state.kind === "normal" && leading && (
-        <div className="flex min-w-0 items-center gap-1">{leading}</div>
-      )}
-      {canMutate ? (
-        renderFooterContent(worktree, state, actions)
-      ) : (
-        <span className="ml-auto text-xs text-muted-foreground">
-          {peerReadOnlyNote()}
-        </span>
-      )}
-    </footer>
+    <CollapsedThroughProvider value={collapsedThrough}>
+      <footer
+        ref={footerRef}
+        className="flex h-9.5 items-center gap-3 border-t border-border bg-card px-6 phone:h-11 phone:px-4"
+      >
+        {state.kind === "normal" && leading && (
+          <div ref={leadingRef} className="flex min-w-0 items-center gap-1">
+            {leading}
+          </div>
+        )}
+        {canMutate ? (
+          renderFooterContent(worktree, state, actions)
+        ) : (
+          <span className="ml-auto text-xs text-muted-foreground">
+            {peerReadOnlyNote()}
+          </span>
+        )}
+      </footer>
+    </CollapsedThroughProvider>
   );
 }
 
@@ -221,9 +239,11 @@ function NormalRow({
   return (
     <div className="ml-auto flex items-center gap-3">
       {canAutoPull && (
-        <Button
+        <FooterVerb
+          rank={LABEL_RANK.autoPull}
+          icon={<autoPullUi.Icon />}
+          label={autoPullUi.label}
           variant="ghost"
-          size="xs"
           className={autoPullUi.className}
           aria-pressed={worktree.autoPull}
           disabled={setAutoPull.isPending || busy}
@@ -235,15 +255,14 @@ function NormalRow({
             })
           }
           title={autoPullUi.title}
-        >
-          <autoPullUi.Icon />
-          {autoPullUi.label}
-        </Button>
+        />
       )}
       {isManagedWorktree(worktree) && (
-        <Button
+        <FooterVerb
+          rank={LABEL_RANK.shelve}
+          icon={worktree.shelved ? <ArchiveRestore /> : <Archive />}
+          label={worktree.shelved ? "Unshelve" : "Shelve"}
           variant="ghost"
-          size="xs"
           className="shrink-0 text-muted-foreground hover:text-foreground"
           disabled={setShelved.isPending || busy}
           onClick={() =>
@@ -258,24 +277,22 @@ function NormalRow({
               ? "Unshelve (bring back to the main list)"
               : "Shelve (hide from the main list)"
           }
-        >
-          {worktree.shelved ? <ArchiveRestore /> : <Archive />}
-          {worktree.shelved ? "Unshelve" : "Shelve"}
-        </Button>
+        />
       )}
       {!worktree.isPrimary && (
-        <Button
+        <FooterVerb
+          // Armed or deleting, the label stays: an icon alone can't ask
+          // for the second click.
+          rank={busy || confirmDelete ? undefined : LABEL_RANK.delete}
+          icon={<Trash2 />}
+          label={deleteButtonLabel(busy, confirmDelete)}
           variant="ghost-destructive"
-          size="xs"
           className="shrink-0"
           aria-pressed={confirmDelete}
           disabled={busy}
           onClick={onDelete}
           title={confirmDelete ? "Click again to confirm" : "Delete worktree"}
-        >
-          <Trash2 />
-          {deleteButtonLabel(busy, confirmDelete)}
-        </Button>
+        />
       )}
     </div>
   );
