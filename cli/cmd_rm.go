@@ -156,14 +156,13 @@ func execRemove(proj project, id worktreeIdentity, opts removeOptions) (string, 
 		pruneEmptyManagedParents(id.Path, proj.Path)
 	}
 
-	dropWorktreeMarks(id.ID)
+	forgetWorktree(proj.ID, id.ID)
 	// A dirty-state capture describes a worktree that no longer exists;
 	// best-effort, and absent for most worktrees.
 	dropDirtyCapture(proj.Path, id.ID)
 	deleteBranch := !opts.keepBranch &&
 		(global.DeleteBranchOnRemove == nil || *global.DeleteBranchOnRemove)
 	deleteBranchAfterWorktreeRemoval(proj.Path, id, deleteBranch)
-	deleteWorktreeData(proj.ID, id.ID)
 	if removeErr != nil {
 		return "", removeErr
 	}

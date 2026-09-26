@@ -510,6 +510,29 @@ func teamIdentifier(bundle string) (string, error) {
 // disagree about which file the lock is.
 func stagingLockPath() string { return filepath.Join(updatesDir(), "staging.pid") }
 
+// Who holds the staging pidfile: present is false when there is none,
+// and pid is 0 when its content isn't one.
+func stagingLockHolder() (present bool, pid int, alive bool) {
+	raw, err := os.ReadFile(stagingLockPath())
+	if err != nil {
+		return false, 0, false
+	}
+	pid, err = strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil || pid < 2 { // kill(0) and kill(-1) always "succeed"
+		return true, 0, false
+	}
+	return true, pid, pidAlive(pid)
+}
+
+// A staging run's scratch space (the download and its extraction), swept
+// at the start of the next run, or by doctor --fix.
+func updateScratchPaths() []string {
+	return []string{filepath.Join(updatesDir(), "download.zip"), filepath.Join(updatesDir(), "extract")}
+}
+
+// The name swapBundle sets the installed app aside under.
+func asideBundleName(bundleBase, suffix string) string { return bundleBase + ".old-" + suffix }
+
 func acquireStagingLock() (func(), error) {
 	if err := os.MkdirAll(updatesDir(), 0o755); err != nil {
 		return nil, errf("Couldn't create %s: %v", updatesDir(), err)
@@ -522,12 +545,9 @@ func acquireStagingLock() (func(), error) {
 			file.Close()
 			return func() { _ = os.Remove(path) }, nil
 		}
-		raw, readErr := os.ReadFile(path)
-		if readErr == nil {
-			if pid, atoiErr := strconv.Atoi(strings.TrimSpace(string(raw))); atoiErr == nil && pidAlive(pid) {
-				return nil, codedErrf("update-in-progress",
-					"Another update is already in progress (pid %d).", pid)
-			}
+		if _, pid, alive := stagingLockHolder(); alive {
+			return nil, codedErrf("update-in-progress",
+				"Another update is already in progress (pid %d).", pid)
 		}
 		// Stale (dead holder) or unreadable. Claim it by rename before
 		// removing: the rename succeeds for exactly one contender, so
@@ -564,14 +584,15 @@ func clearStaged() {
 // surviving copy of the app, and deleting it then would be deleting
 // the app.
 func pruneUpdateLeftovers(targetBundle string) {
-	_ = os.Remove(filepath.Join(updatesDir(), "download.zip"))
-	_ = os.RemoveAll(filepath.Join(updatesDir(), "extract"))
+	for _, path := range updateScratchPaths() {
+		_ = os.RemoveAll(path)
+	}
 	if _, err := os.Stat(targetBundle); err != nil {
 		return
 	}
 	dir := filepath.Dir(targetBundle)
 	base := filepath.Base(targetBundle)
-	for _, pattern := range []string{base + ".old-*", "." + base + ".new-*"} {
+	for _, pattern := range []string{asideBundleName(base, "*"), "." + base + ".new-*"} {
 		matches, _ := filepath.Glob(filepath.Join(dir, pattern))
 		for _, match := range matches {
 			_ = os.RemoveAll(match)
@@ -763,7 +784,7 @@ func swapBundle(stagedApp, targetBundle string) error {
 		_ = os.RemoveAll(incoming)
 		return err
 	}
-	aside := filepath.Join(dir, fmt.Sprintf("%s.old-%d", base, os.Getpid()))
+	aside := filepath.Join(dir, asideBundleName(base, strconv.Itoa(os.Getpid())))
 	_ = os.RemoveAll(aside)
 	if err := os.Rename(targetBundle, aside); err != nil {
 		_ = os.RemoveAll(incoming)

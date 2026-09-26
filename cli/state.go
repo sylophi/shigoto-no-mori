@@ -97,22 +97,41 @@ func initDataDir() error {
 // to the flavor default. initDataDir runs before every command, so a
 // malformed file must not be fatal.
 func readDataDirPointer() string {
+	if pointer := readPointerFile(); pointer.path != "" && pointer.problem == "" {
+		return pointer.target
+	}
+	return ""
+}
+
+// The pointer file as initDataDir sees it: the file consulted ("" when
+// there is none), the target it names, and why that target is refused
+// ("" when usable). One reading, so `sm doctor` can say why a pointer
+// was passed over without re-deriving the rules.
+type pointerFile struct{ path, target, problem string }
+
+func readPointerFile() pointerFile {
 	cfg := configHomeDir()
 	if cfg == "" {
-		return ""
+		return pointerFile{}
 	}
 	for _, name := range []string{dataDirPointerName, legacyDataDirPointerName} {
-		data, err := os.ReadFile(filepath.Join(cfg, configDirName, name))
+		path := filepath.Join(cfg, configDirName, name)
+		data, err := os.ReadFile(path)
 		if err != nil {
 			continue
 		}
-		target := expandHome(strings.TrimSpace(string(data)))
-		if target == "" || !filepath.IsAbs(target) || !looksLikeDataDir(target) {
-			return ""
+		pointer := pointerFile{path: path, target: expandHome(strings.TrimSpace(string(data)))}
+		switch {
+		case pointer.target == "":
+			pointer.problem = "it is empty"
+		case !filepath.IsAbs(pointer.target):
+			pointer.problem = "it isn't an absolute path"
+		case !looksLikeDataDir(pointer.target):
+			pointer.problem = "it holds files that aren't sm's"
 		}
-		return target
+		return pointer
 	}
-	return ""
+	return pointerFile{}
 }
 
 // Guard on what a hand-edited pointer may aim the data dir at: a
@@ -1059,6 +1078,15 @@ func readProjectConfig(projectID string) *projectConfig {
 		return nil
 	}
 	return &cfg
+}
+
+// Clears what sm keeps under a retired worktree id: its registry marks
+// and its data file. Best-effort like each piece. A pending dirty
+// capture is the caller's call, since it may hold the only copy of
+// uncommitted work.
+func forgetWorktree(projectID, worktreeID string) {
+	dropWorktreeMarks(worktreeID)
+	deleteWorktreeData(projectID, worktreeID)
 }
 
 func deleteWorktreeData(projectID, worktreeID string) {
