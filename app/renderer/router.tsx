@@ -120,6 +120,22 @@ const CommitDiff = lazyRouteComponent(
   "CommitDiff",
 );
 
+// The files page shows code through the same highlighter the diffs
+// use, so it is lazy for the same reason.
+const WorktreeFiles = lazyRouteComponent(
+  () => import("@/components/files/WorktreeFiles"),
+  "WorktreeFiles",
+);
+
+// `path` is the file the files page shows. Shared by both trees like
+// the diff search.
+function validateFilesSearch(search: Record<string, unknown>): {
+  path?: string;
+} {
+  const path = search["path"];
+  return typeof path === "string" && path.length > 0 ? { path } : {};
+}
+
 // `amend` opens the changes page already set to rewrite the last
 // commit (a commit row's "Amend" lands here). Shared by both trees so
 // the twin reads the same search the local page does.
@@ -156,6 +172,16 @@ const remoteCommitDiffRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: WORKTREE_ROUTE_PATHS.commit.remote,
   component: withRemoteScope(CommitDiff),
+});
+
+const remoteWorktreeFilesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: WORKTREE_ROUTE_PATHS.files.remote,
+  component: withRemoteScope(WorktreeFiles),
+  validateSearch: validateFilesSearch,
+  // Params only: a new worktree is a fresh page (its folders), a new
+  // pick within one is not.
+  remountDeps: ({ params }) => params,
 });
 
 const remoteScriptConsoleRoute = createRoute({
@@ -267,6 +293,16 @@ const commitDiffRoute = createRoute({
   component: CommitDiff,
 });
 
+const worktreeFilesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: WORKTREE_ROUTE_PATHS.files.local,
+  component: WorktreeFiles,
+  validateSearch: validateFilesSearch,
+  // Params only: a new worktree is a fresh page (its folders), a new
+  // pick within one is not.
+  remountDeps: ({ params }) => params,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   forestRoute,
@@ -278,12 +314,14 @@ const routeTree = rootRoute.addChildren([
   remotePullRequestDiffRoute,
   remoteCommitDiffRoute,
   remoteScriptConsoleRoute,
+  remoteWorktreeFilesRoute,
   ...projectRoutes,
   worktreeRoute,
   scriptConsoleRoute,
   worktreeDiffRoute,
   pullRequestDiffRoute,
   commitDiffRoute,
+  worktreeFilesRoute,
 ]);
 
 function RouteErrorFallback({

@@ -1,4 +1,4 @@
-// The worktree pages' route paths, spelled once. Each of the five
+// The worktree pages' route paths, spelled once. Each of the six
 // exists twice -- under /projects on this machine, and under
 // /devices/$deviceId as the twin serving a peer's worktree -- and the
 // same strings are needed in two places that must agree byte for
@@ -26,6 +26,11 @@ export const WORKTREE_ROUTE_PATHS = {
     local: "/projects/$projectId/worktrees/$worktreeId/commits/$hash",
     remote:
       "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/commits/$hash",
+  },
+  files: {
+    local: "/projects/$projectId/worktrees/$worktreeId/files",
+    remote:
+      "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/files",
   },
   script: {
     local: "/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",

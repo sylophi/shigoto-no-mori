@@ -314,6 +314,7 @@ function hostHandlersFor(
     "worktrees:listCommits": ({ worktreeId, skip }) =>
       skip > 0 ? [] : (findWorktree(worktreeId)?.recentCommits ?? []),
     "worktrees:fileDiff": () => LAB_DIFF,
+    "worktrees:readFile": ({ path }: { path: string }) => labFile(path),
     "worktrees:changeStatus": () => [],
     "worktrees:commitDiff": () => LAB_DIFF,
     "worktreeData:read": ({ worktreeId }) =>
@@ -516,6 +517,34 @@ const LAB_IGNORED_PATHS = [
   "tmp/",
   "tsconfig.tsbuildinfo",
 ];
+
+// What the files page's viewer reads for a LAB_TREE file: something
+// the highlighter can dress by extension, the .env as the ignored file
+// a peer with the grant still reads.
+function labFile(path: string) {
+  const contents = LAB_FILES[path];
+  if (contents === undefined) return { kind: "missing" as const };
+  return { kind: "text" as const, contents, size: contents.length };
+}
+
+const LAB_FILES: Record<string, string> = {
+  ".env": "DATABASE_URL=postgres://localhost:5432/lab\n",
+  ".gitignore": "node_modules\ndist\n.env*\n",
+  "package.json": `{
+  "name": "lab",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "vite", "build": "tsc && vite build" }
+}
+`,
+  "README.md": "# Lab\n\nA posed checkout for the files page.\n",
+  "src/index.ts": `import { render } from "./components/render";
+
+export function main(root: HTMLElement): void {
+  render(root, { greeting: "hello" });
+}
+`,
+};
 
 // The folder tree the mirror picker browses, one posed worktree.
 const LAB_TREE: Record<

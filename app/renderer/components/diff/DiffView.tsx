@@ -16,36 +16,21 @@ import { ChipButton } from "@/components/ui/chip-button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { DiffChangesControls } from "./changesControls";
+import { CODE_STYLE, CODE_THEME } from "./codeTheme";
 import { DiffFileIndex } from "./DiffFileIndex";
 import { DiffStyleToggle, type DiffStyle } from "./DiffStyleToggle";
 import { changeEntries, fileKey, patchEntries } from "@/lib/patchFiles";
 import { useFileScrollSpy } from "./useFileScrollSpy";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { readStored, writeStored } from "@/lib/localStorage";
+import { withMember } from "@/lib/toggleSet";
 
 const DIFF_THEME = {
-  theme: { dark: "pierre-dark", light: "pierre-light" } as const,
+  ...CODE_THEME,
   // 'simple' is the shortest built-in separator (vs 'line-info' default
   // which renders rounded corners and an expansion-control row).
   hunkSeparators: "simple" as const,
-  // Pin the diff's base bg to the app's `--background` token. All the
-  // per-row backgrounds (buffer, context, separator) derive from
-  // `--diffs-bg` via color-mix, so overriding the one variable
-  // cascades through the whole diff surface. Without this the diff
-  // reads as a pitch-black slab against the lifted neutral-900 main
-  // pane that PR #59 introduced. `unsafeCSS` is the documented path
-  // for CSS overrides. See https://diffs.com/docs (Hunk Separators).
-  unsafeCSS: `:host { --diffs-bg: var(--background); }`,
 };
-
-// CSS custom properties inherit through the library's shadow DOM, so
-// setting them on the wrapper applies to every FileDiff child.
-const DIFF_STYLE = {
-  "--diffs-font-size": "12px",
-  "--diffs-line-height": "1.45",
-  "--diffs-gap-block": "4px",
-  "--diffs-gap-inline": "6px",
-} as React.CSSProperties;
 
 // Below this a patch is its own table of contents: two files scroll past
 // in one flick, and a rail would cost more width than it saves.
@@ -78,20 +63,6 @@ function scrollToFile(container: HTMLElement, target: HTMLElement): void {
 
 type CollapsedKeys = ReadonlySet<string>;
 
-// Fold-set updater. Returns the same Set when nothing moves, so a no-op
-// toggle doesn't re-render the patch.
-function withCollapsed(
-  prev: CollapsedKeys,
-  key: string,
-  collapsed: boolean,
-): CollapsedKeys {
-  if (prev.has(key) === collapsed) return prev;
-  const next = new Set(prev);
-  if (collapsed) next.add(key);
-  else next.delete(key);
-  return next;
-}
-
 // What landing on a file means in a combined read: expand it, put it at
 // the top of the view, and take the highlight.
 function jumpToFile(
@@ -110,7 +81,7 @@ function jumpToFile(
   // partway down the view instead of at the top. flushSync is what makes
   // the growth visible to the scroll below. The wrapper node survives
   // the re-render, so `target` stays good.
-  flushSync(() => setCollapsedKeys((prev) => withCollapsed(prev, key, false)));
+  flushSync(() => setCollapsedKeys((prev) => withMember(prev, key, false)));
   scrollToFile(container, target);
   // Claim the highlight immediately. The observer confirms it on the
   // next frame rather than trailing the jump.
@@ -265,7 +236,7 @@ export function DiffView({
   };
 
   const setCollapsed = (key: string, collapsed: boolean) =>
-    setCollapsedKeys((prev) => withCollapsed(prev, key, collapsed));
+    setCollapsedKeys((prev) => withMember(prev, key, collapsed));
 
   // What landing on a file means: the changes page fetches it, a
   // combined read scrolls to it.
@@ -388,7 +359,7 @@ export function DiffView({
             <div
               data-slot="diff-view"
               className="flex flex-col gap-2 p-2 select-text"
-              style={DIFF_STYLE}
+              style={CODE_STYLE}
             >
               {allFiles.map((fileDiff) => {
                 const key = fileKey(fileDiff);

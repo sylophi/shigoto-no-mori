@@ -1,5 +1,6 @@
-// The remote worktree detail's cross-device actions, the three ways
-// to reach work on another machine in one place: its ports ("Ports":
+// The remote worktree detail's cross-device actions, the ways to reach
+// work on another machine in one place: its files ("Files", the same
+// button the local footer leads with, on the grant), its ports ("Ports":
 // forward one here, or see what it serves), a live mirror of the
 // worktree here ("Mirror here"), or moving it here and deciding what
 // becomes of the source ("Transplant"). Text buttons, since the footer
@@ -27,6 +28,7 @@ import {
   useWorktreeMirrorLinks,
 } from "@/hooks/remote/useMirrors";
 import { useRemoteDeviceLabel } from "@/hooks/remote/useRemoteDevices";
+import { FilesButton } from "./FilesButton";
 import { FooterActionButton } from "./FooterActionButton";
 import { MirrorAction } from "./mirror/MirrorAction";
 import { MirrorDialog } from "./mirror/MirrorDialog";
@@ -45,6 +47,7 @@ export function RemoteWorktreeActions({
     granted && !worktree.detached && isRealBranch(worktree.branch);
   return (
     <>
+      <FilesButton worktree={worktree} />
       <PortsButton worktree={worktree} />
       <MirrorAction worktree={worktree} />
       {transferable && (

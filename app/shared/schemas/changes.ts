@@ -67,7 +67,7 @@ export function isUntracked(file: ChangedFile): boolean {
 // like a flag is never one. A remote peer sends whatever it likes, so
 // paths are held to the worktree here: `git diff --no-index` reads any
 // file it is pointed at.
-const RepoRelPathSchema = z.string().min(1).refine(isSafeRelPath, {
+export const RepoRelPathSchema = z.string().min(1).refine(isSafeRelPath, {
   message: "Path must stay within the worktree",
 });
 

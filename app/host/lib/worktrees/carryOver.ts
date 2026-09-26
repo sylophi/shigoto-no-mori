@@ -190,18 +190,38 @@ export async function listWorktreeFolder(
   ]);
   const isIgnored = makeIgnoreMatcher(ignored);
   const pathOf = (name: string) => (relative ? `${relative}/${name}` : name);
-  const listed = entries.filter((entry) => entry.name !== ".git");
+  // A link to a folder is a folder to browse: pnpm's node_modules is
+  // nothing else. A dangling link stays a (dead) file.
+  const listed = await Promise.all(
+    entries
+      .filter((entry) => entry.name !== ".git")
+      .map(async (entry) => ({
+        name: entry.name,
+        isDirectory:
+          entry.isDirectory() ||
+          (entry.isSymbolicLink() &&
+            (await stat(join(worktreePath, pathOf(entry.name))).then(
+              (target) => target.isDirectory(),
+              () => false,
+            ))),
+      })),
+  );
+  // Real folders only: git refuses a pathspec at or past a symlink
+  // ("beyond a symbolic link") and fails the whole call, which would
+  // cost every other folder in it its verdict. A link's own verdict is
+  // in the ignored list already, which names it like a file.
   const byRule = await ruleIgnoredFolders(
     worktreePath,
-    listed
-      .filter((entry) => entry.isDirectory() && !isIgnored(pathOf(entry.name)))
-      .map((entry) => pathOf(entry.name)),
+    entries
+      .filter((entry) => entry.isDirectory() && entry.name !== ".git")
+      .map((entry) => pathOf(entry.name))
+      .filter((path) => !isIgnored(path)),
   );
   return listed
-    .map((entry) => ({
-      name: entry.name,
-      isDirectory: entry.isDirectory(),
-      ignored: isIgnored(pathOf(entry.name)) || byRule.has(pathOf(entry.name)),
+    .map(({ name, isDirectory }) => ({
+      name,
+      isDirectory,
+      ignored: isIgnored(pathOf(name)) || byRule.has(pathOf(name)),
     }))
     .toSorted(foldersFirst);
 }

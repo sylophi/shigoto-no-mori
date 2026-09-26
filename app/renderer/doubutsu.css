@@ -38,6 +38,8 @@
  *      diff-view                 diff/DiffView.tsx
  *      diff-index                diff/DiffFileIndex.tsx
  *      diff-index-row, diff-index-jump   diff/DiffFileIndex.tsx
+ *      file-tree                 files/FileTree.tsx
+ *      file-view                 files/FileViewer.tsx
  *      accept-commands-panel     remote/AcceptCommandsToggle.tsx
  *      sheet-content             ui/sheet.tsx
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
@@ -483,12 +485,14 @@
    footer sets bg-card in component code. This rule is unlayered, so it
    outranks that utility and the pair stays in sync.
 
-   The diff file index joins them rather than restating the recipe: it
-   is bounded by a border-r in v1, which goes transparent here, so the
+   The diff file index (and the files page's tree, the same kind of
+   rail) joins them rather than restating the recipe: it is bounded by
+   a border-r in v1, which goes transparent here, so the
    rail wants the same band to read as its own panel. Keeping it on this
    selector list means the alpha above stays the single knob. */
 .doubutsu [data-doubutsu-zone="main"] :is(header, footer),
-.doubutsu [data-slot="diff-index"] {
+.doubutsu [data-slot="diff-index"],
+.doubutsu [data-slot="file-tree"] {
   background-color: color-mix(in oklab, var(--card) 70%, transparent);
 }
 
@@ -520,7 +524,7 @@
    inheritance, so diff code rendered fat. Pin the mono treatment on
    the wrapper; font-weight and text-stroke are inherited properties,
    so they carry across the shadow boundary. */
-.doubutsu [data-slot="diff-view"] {
+.doubutsu :is([data-slot="diff-view"], [data-slot="file-view"]) {
   font-weight: 500;
   -webkit-text-stroke: 0.2px currentColor;
 }
