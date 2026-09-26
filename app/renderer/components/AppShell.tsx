@@ -21,6 +21,7 @@ import {
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { BackButton } from "@/components/ui/back-button";
 import { useWatchAccountChanges } from "@/hooks/account/useAccount";
+import { useDoctorWatch } from "@/hooks/cli/useDoctor";
 import { useSidebarView } from "@/hooks/projects/useSidebarView";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useResizableWidth } from "@/hooks/ui/useResizableWidth";
@@ -36,6 +37,8 @@ export function AppShell() {
   // The always-mounted account watch, keeping every staleTime-Infinity
   // account read fresh across sign-in, sign-out and renames.
   useWatchAccountChanges();
+  // This machine's daily health check, for Settings' last-check line.
+  useDoctorWatch();
   const phone = usePhoneLayout();
   const { pathname } = useLocation();
   const navigate = useNavigate();
