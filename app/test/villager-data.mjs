@@ -19,8 +19,7 @@
 // - remove clears it all, mid-download too
 // - the wiki is asked in batches of 50 pages with four faces at a time,
 //   every request under the scripts' User-Agent
-// - the Village life row opens only with names on and the data
-//   downloaded
+// - the Village life row opens only with the data downloaded
 // - the Settings line for every state
 //
 // Runs under test/lib/register-ts-alias.mjs. Run: pnpm test villager-data.
@@ -443,11 +442,11 @@ try {
     },
   );
 
-  await proof.check("Village life opens only with names and the data", () => {
+  await proof.check("Village life opens only with the data", () => {
     const flair =
-      "Your villagers come to life with a little extra flair around the app. Purely cosmetic.";
+      "Villagers come to life on worktrees named after them, with a little extra flair around the app. Purely cosmetic.";
     const ready = { kind: "ready", downloadedAt: "", villagers: 499 };
-    assert.deepEqual(villageLifeRow(true, ready), {
+    assert.deepEqual(villageLifeRow(ready), {
       locked: false,
       description: flair,
     });
@@ -456,20 +455,13 @@ try {
       { kind: "downloading", done: 212, villagers: 499 },
       { kind: "failed", done: 212, villagers: 499, message: "" },
     ]) {
-      assert.deepEqual(villageLifeRow(true, status), {
+      assert.deepEqual(villageLifeRow(status), {
         locked: true,
         description: `${flair} Download villager data from Nookipedia to turn it on.`,
       });
     }
-    // Names off comes first, whatever the data.
-    for (const status of [ready, { kind: "absent", villagers: 499 }]) {
-      assert.deepEqual(villageLifeRow(false, status), {
-        locked: true,
-        description: `${flair} Turn on Doubutsu names to use it.`,
-      });
-    }
     // Still loading: locked, and pointing nowhere yet.
-    assert.deepEqual(villageLifeRow(true, undefined), {
+    assert.deepEqual(villageLifeRow(undefined), {
       locked: true,
       description: flair,
     });

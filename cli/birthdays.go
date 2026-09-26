@@ -1,22 +1,20 @@
 package main
 
-// Villager birthdays, for the name pick: with Village life on, a
+// Villager birthdays, for the name pick: with prioritizeBirthdays on, a
 // villager whose birthday it is (local date) is invited first. The
-// birthdays come from the villager data the app downloads into the data
-// dir (app/host/lib/villagers.ts writes villagers/ready/profiles.json
-// once a download is whole), so without it there is no one to invite.
-// The same rules as the app's shared/villagers/birthdays.ts.
+// birthdays ship with the names (embed/doubutsu-names.json, see
+// names.go), so the invite needs no villager data. The same date rules
+// as the app's shared/villagers/birthdays.ts.
 
 import (
-	"path/filepath"
 	"sort"
 	"time"
 )
 
-// Matches villageLifeEnabled in the app's shared/villageLife.ts: only
-// with Doubutsu names on, and off unless set.
-func villageLifeEnabled(global globalConfig) bool {
-	return doubutsuNamesEnabled(global) && global.VillageLife != nil && *global.VillageLife
+// Only with Doubutsu names on, and off unless set: the invite is a
+// pick from the doubutsu pool.
+func prioritizeBirthdaysEnabled(global globalConfig) bool {
+	return doubutsuNamesEnabled(global) && global.PrioritizeBirthdays != nil && *global.PrioritizeBirthdays
 }
 
 // Whether a "MM-DD" birthday falls on the local calendar day of `day`.
@@ -31,22 +29,21 @@ func isBirthdayOn(birthday string, day time.Time) bool {
 	return birthday == "02-29" && today == "02-28" && !leap
 }
 
-// The villagers celebrating on `day`, sorted, from the downloaded
-// profiles. Empty without Village life or the data: a missing or
-// unreadable file just means nobody is invited.
+// The villagers celebrating on `day`, sorted. Empty with
+// prioritizeBirthdays off.
 func birthdayGuests(global globalConfig, day time.Time) []string {
-	if !villageLifeEnabled(global) {
+	if !prioritizeBirthdaysEnabled(global) {
 		return nil
 	}
-	profiles, ok := readJSONFile[map[string]struct {
-		Birthday string `json:"birthday"`
-	}](filepath.Join(dataDir(), "villagers", "ready", "profiles.json"))
-	if !ok {
-		return nil
-	}
+	return celebrating(doubutsuPool(), day)
+}
+
+// Whoever in `pool` celebrates on `day`, sorted. A character without a
+// birthday never does.
+func celebrating(pool map[string]doubutsuName, day time.Time) []string {
 	var guests []string
-	for slug, profile := range profiles {
-		if isBirthdayOn(profile.Birthday, day) {
+	for slug, entry := range pool {
+		if isBirthdayOn(entry.Birthday, day) {
 			guests = append(guests, slug)
 		}
 	}

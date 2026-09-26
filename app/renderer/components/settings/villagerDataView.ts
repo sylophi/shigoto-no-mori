@@ -2,24 +2,17 @@ import type { VillagerDataStatus } from "@shared/schemas";
 import { assertNever } from "@/lib/utils";
 
 // What the Village life row and the villager data control under it say
-// and offer (DeviceSettingsSections.tsx, VillagerDataControl.tsx). Pure,
-// so every state's words are pinned by test/villager-data.mjs.
+// and offer (VillageLifeSetting.tsx, VillagerDataControl.tsx). Pure, so
+// every state's words are pinned by test/villager-data.mjs.
 
-// The Village life row opens once there are villagers to bring along:
-// Doubutsu names on and the villager data downloaded, all of it. Its
-// description always says what it is, and while locked, what it
-// needs. `status` is undefined while it loads, which locks the row
-// without pointing anywhere yet.
-export function villageLifeRow(
-  doubutsuNames: boolean,
-  status: VillagerDataStatus | undefined,
-): { locked: boolean; description: string } {
-  if (!doubutsuNames) {
-    return {
-      locked: true,
-      description: `${VILLAGE_LIFE} Turn on Doubutsu names to use it.`,
-    };
-  }
+// The Village life row opens once this window holds the villager data,
+// all of it. Its description always says what it is, and while locked,
+// what it needs. `status` is undefined while it loads, which locks the
+// row without pointing anywhere yet.
+export function villageLifeRow(status: VillagerDataStatus | undefined): {
+  locked: boolean;
+  description: string;
+} {
   if (status?.kind !== "ready") {
     return {
       locked: true,
@@ -33,7 +26,7 @@ export function villageLifeRow(
 }
 
 const VILLAGE_LIFE =
-  "Your villagers come to life with a little extra flair around the app. Purely cosmetic.";
+  "Villagers come to life on worktrees named after them, with a little extra flair around the app. Purely cosmetic.";
 
 export interface VillagerDataView {
   // Nothing before the first download: the button says it all.

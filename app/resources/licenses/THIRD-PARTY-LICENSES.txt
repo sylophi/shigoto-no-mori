@@ -13554,12 +13554,12 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 --------------------------------------------------------------------------------
-doubutsu-names@2026-09-23
+doubutsu-names@2026-09-26
 License: CC-BY-SA-4.0
 URL: https://nookipedia.com/
 Publisher: Nookipedia
 
-This project is not affiliated with or endorsed by Nintendo. Animal Crossing and related names and characters are properties of Nintendo. Villager data sourced from Nookipedia (https://nookipedia.com/) is used under CC BY-SA 4.0. Villager face icons are sourced from Nookipedia. Character names from Nookipedia's Villagers and Special characters categories, by Nookipedia contributors, licensed under Creative Commons Attribution-ShareAlike 4.0 International. Changed: turned into kebab-case worktree names. Full text: https://creativecommons.org/licenses/by-sa/4.0/legalcode
+This project is not affiliated with or endorsed by Nintendo. Animal Crossing and related names and characters are properties of Nintendo. Villager data sourced from Nookipedia (https://nookipedia.com/) is used under CC BY-SA 4.0. Villager face icons are sourced from Nookipedia. Character names from Nookipedia's Villagers and Special characters categories, and their birthdays from the characters' pages, by Nookipedia contributors, licensed under Creative Commons Attribution-ShareAlike 4.0 International. Changed: names turned into kebab-case worktree names, birthdays into MM-DD dates. Full text: https://creativecommons.org/licenses/by-sa/4.0/legalcode
 
 --------------------------------------------------------------------------------
 ee-first@1.1.1

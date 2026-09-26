@@ -138,7 +138,7 @@ export function InboxRow({
           <WorktreeKindIcon worktree={worktree} showTooltip={false} />
         )}
         <span className="min-w-0 truncate">{worktree.name}</span>
-        <BirthdayBadge worktree={worktree} deviceId={device?.deviceId} />
+        <BirthdayBadge worktree={worktree} />
       </span>
     </button>
   );

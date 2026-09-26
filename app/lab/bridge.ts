@@ -289,8 +289,8 @@ function hostHandlersFor(
       local: branchesOf(),
       remote: ["origin/main"],
     }),
-    // The real pick's birthday invite (host/lib/worktrees/names.ts): with
-    // Village life on, whoever's birthday it is on the posed day
+    // The real pick's birthday invite (cli/birthdays.go): with
+    // Prioritize birthdays on, whoever's birthday it is on the posed day
     // (?today=) and not taken yet.
     "projects:pickWorktreeName": async ({ projectId }) => {
       const profiles = villageLife ? await labProfiles() : null;
@@ -407,7 +407,10 @@ function hostHandlersFor(
       launchers: [],
     }),
     "portPool:isActive": () => true,
-    "globalConfig:read": () => ({ ...labGlobalConfig, villageLife }),
+    "globalConfig:read": () => ({
+      ...labGlobalConfig,
+      prioritizeBirthdays: villageLife,
+    }),
     "globalConfig:writeDeviceSettings": () => undefined,
     // The devices ?updates poses (Thinkpad alone by default) have an
     // update staged, so their Settings sections' restart-to-update
@@ -1244,9 +1247,10 @@ const peerEntry = (deviceId: string) =>
 // before any entry-file code runs.
 let WEB_SHELL = false;
 const WEB_DEVICE_ID = "dev_beefcafe01";
-// Village life on every device's fixture config: ?villageLife=1, or the
+// Village life on in this window's client config, and Prioritize
+// birthdays on every device's fixture config: ?villageLife=1, or the
 // villager contact sheet's say. Off otherwise, as a fresh install has
-// it. The villager data itself is lab/villagerData.ts.
+// them. The villager data itself is lab/villagerData.ts.
 let villageLife = false;
 
 // Presence the lab can pose: which peers are in the roster, and which
@@ -1453,9 +1457,12 @@ export function installLabBridge(
       } catch {
         // Corrupt storage reads as defaults.
       }
+      // The web shell has no Village life to pose.
+      const posed =
+        villageLife && !WEB_SHELL ? { ...stored, villageLife } : stored;
       return posedView === "inbox" || posedView === "projects"
-        ? { ...stored, sidebarView: posedView }
-        : stored;
+        ? { ...posed, sidebarView: posedView }
+        : posed;
     },
     "clientConfig:write": ({ config }) => {
       localStorage.setItem("sm.lab.clientConfig", JSON.stringify(config));

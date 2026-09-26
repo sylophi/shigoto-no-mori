@@ -12,9 +12,8 @@ import { speakerFor, villagerLine } from "@/lib/villagerVoice";
 // The New Worktree form's hello while the folder it will create is a
 // character's name, after the destination line: "Sheldon is moving in,
 // cardio!", with their face. On their birthday (which is also when the
-// name pick invites them), they say so, in a party hat. Nothing for any
-// other name, or without Village life on the device the form creates
-// on.
+// name pick can invite them), they say so, in a party hat. Nothing for
+// any other name, or without Village life on in this window.
 export function VillagerMovingIn({ folderName }: { folderName: string }) {
   const profiles = useVillagerProfiles();
   const speaker =

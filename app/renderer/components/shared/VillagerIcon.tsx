@@ -2,11 +2,11 @@ import type { CSSProperties } from "react";
 import { useVillagerFace } from "@/hooks/villagers/useVillagers";
 import { cn } from "@/lib/utils";
 
-// A doubutsu character's bare face, by name slug, from the villager
-// data of the device the surrounding HostScope names, gated by
-// useVillageLife. A name without a face renders nothing, never a
-// stand-in. The lab's contact sheet draws these. A product surface
-// shows a villager through VillagerFace (VillagerSays.tsx) instead.
+// A doubutsu character's bare face, by name slug, from this device's
+// villager data, gated by useVillageLife. A name without a face renders
+// nothing, never a stand-in. The lab's contact sheet draws these. A
+// product surface shows a villager through VillagerFace (VillagerSays.tsx)
+// instead.
 //
 // `size` is in desktop pixels on the spacing scale (24 draws like
 // size-6), so it grows on a phone like the size-* utilities. Leave it

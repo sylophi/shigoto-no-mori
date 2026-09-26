@@ -153,7 +153,9 @@ function buildQueryKeys(deviceId: string) {
     worktreePorts: (projectId: string, worktreeId: string) =>
       host("worktreePorts", projectId, worktreeId),
     terrierReadiness: () => host("terrierReadiness"),
-    // The villager data (host/lib/villagers.ts).
+    // The villager data (host/lib/villagers.ts): this device's own,
+    // read by its own window only, so only the local registry's are
+    // ever filled.
     villagerData: () => host("villagers", "status"),
     villagerProfiles: () => host("villagers", "profiles"),
     villagerFace: (slug: string) => host("villagers", "face", slug),

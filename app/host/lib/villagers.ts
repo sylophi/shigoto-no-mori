@@ -1,17 +1,17 @@
 // The villager data this device holds: each doubutsu villager's face
 // and profile, downloaded from Nookipedia only when the user asks
-// (Settings, under Village life), kept on disk and served from there
-// from then on, offline included. This module owns all of it: the
-// status, the download (with progress, cancel and resume), removal, and
-// reading a face or the profiles back.
+// (Settings, Appearance, beside Village life), kept on disk and served
+// to this device's own window from then on, offline included. This
+// module owns all of it: the status, the download (with progress,
+// cancel and resume), removal, and reading a face or the profiles back.
 //
 // It lives in the data dir, <data dir>/villagers, because that is where
 // the host keeps what it fetched for itself (the staged app update in
 // updates/, the project icon cache in iconCache/). Electron's userData
 // belongs to the window's own client state and is out of reach of
-// host/, which never imports Electron. Being there also means a peer's
-// Settings manages that device's copy, SHIGOMORI_DATA_DIR sandboxes it,
-// moving the data dir carries it along, and nuke clears it.
+// host/, which never imports Electron. Being there also means
+// SHIGOMORI_DATA_DIR sandboxes it, moving the data dir carries it along,
+// and nuke clears it.
 //
 // Layout:
 //   ready/              a finished download, which only appears whole
@@ -54,6 +54,9 @@ import {
 } from "@shared/villagers/manifest";
 import {
   CHARACTER_CATEGORIES,
+  collectLeadSections,
+  LEAD_SECTION_QUERY,
+  type LeadSection,
   villagerProfile,
   WIKI_API,
   WIKI_USER_AGENT,
@@ -212,25 +215,17 @@ export function createVillagerData({
     const titles = [
       ...new Set(batch.map((slug) => manifest.villagers[slug].page)),
     ];
-    const pages = new Map<string, { wikitext: string; categories: string[] }>();
+    const pages = new Map<string, LeadSection>();
     const pageOf = (title: string) =>
       pages.get(title) ?? { wikitext: "", categories: [] };
-    // The asked title of each page the API answered under another name.
     const asked = new Map<string, string>();
     let cont: Record<string, string> = {};
     for (;;) {
       const params = new URLSearchParams({
-        action: "query",
-        format: "json",
-        formatversion: "2",
+        ...LEAD_SECTION_QUERY,
         prop: "revisions|categories",
-        rvprop: "content",
-        rvslots: "main",
-        // The lead section, which holds the infobox.
-        rvsection: "0",
         clcategories: CHARACTER_CATEGORIES.join("|"),
         cllimit: "max",
-        redirects: "1",
         titles: titles.join("|"),
         ...cont,
       });
@@ -242,25 +237,11 @@ export function createVillagerData({
           `Nookipedia answered with an error (${data.error.code}).`,
         );
       }
-      for (const { from, to } of [
-        ...(data.query?.normalized ?? []),
-        ...(data.query?.redirects ?? []),
-      ]) {
-        asked.set(to, asked.get(from) ?? from);
-      }
-      for (const page of data.query?.pages ?? []) {
-        const title = asked.get(page.title) ?? page.title;
-        // A page moved since the manifest was made: stop rather than
-        // store an empty profile no resume would fetch again.
-        if (page.missing === true) {
-          throw new VillagerDataError(`Nookipedia has no page ${title}.`);
-        }
-        const entry = pageOf(title);
-        entry.wikitext ||= page.revisions?.[0]?.slots?.main?.content ?? "";
-        for (const category of page.categories ?? []) {
-          entry.categories.push(category.title);
-        }
-        pages.set(title, entry);
+      // A page moved since the manifest was made: stop rather than
+      // store an empty profile no resume would fetch again.
+      const gone = collectLeadSections(data, pages, asked);
+      if (gone !== undefined) {
+        throw new VillagerDataError(`Nookipedia has no page ${gone}.`);
       }
       if (data.continue === undefined) break;
       cont = data.continue;

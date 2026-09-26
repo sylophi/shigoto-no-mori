@@ -4,6 +4,8 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import type { Theme } from "@shared/schemas";
 import { ToggleRow } from "@/components/shared/ToggleRow";
 import { batterySupported } from "@/hooks/ui/usePauseAnimationsOnBattery";
+import { hasLocalHost } from "@/lib/localHost";
+import { VillageLifeSetting } from "./VillageLifeSetting";
 
 const THEMES: { value: Theme; label: string; Icon: typeof Sun }[] = [
   { value: "light", label: "Light", Icon: Sun },
@@ -18,6 +20,8 @@ interface AppearanceSectionProps {
   onDoubutsuChange: (next: boolean) => void;
   pauseAnimationsOnBattery: boolean;
   onPauseAnimationsOnBatteryChange: (next: boolean) => void;
+  villageLife: boolean;
+  onVillageLifeChange: (next: boolean) => void;
   // "Appearance" where the section stands alone (the web page). The
   // desktop's Appearance section already says that and names it "Theme".
   heading?: string;
@@ -30,6 +34,8 @@ export function AppearanceSection({
   onDoubutsuChange,
   pauseAnimationsOnBattery,
   onPauseAnimationsOnBatteryChange,
+  villageLife,
+  onVillageLifeChange,
   heading = "Appearance",
 }: AppearanceSectionProps) {
   // A three-way pick, so it wears the house segmented control: the
@@ -69,6 +75,14 @@ export function AppearanceSection({
           disabled={!doubutsu}
           label="Pause always-on animations on battery"
           description="The drifting wallpaper redraws the window every frame, even when nothing else is happening. Pausing it while this machine runs on battery saves energy, and it picks up again when plugged in."
+        />
+      )}
+      {/* Desktop only: the villager data it needs lives in this
+          device's data dir. */}
+      {hasLocalHost && (
+        <VillageLifeSetting
+          villageLife={villageLife}
+          onChange={onVillageLifeChange}
         />
       )}
     </section>

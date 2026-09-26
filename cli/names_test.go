@@ -5,10 +5,9 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -156,32 +155,62 @@ func TestCreateSkipsNamesHeldByBranches(t *testing.T) {
 	}
 }
 
-// With Village life on and the villager data downloaded, the pick
-// invites whoever's birthday it is while they're free, and only with
-// Doubutsu names on. A leap-day birthday is kept on Feb 28 in common
-// years.
+// The birthdays ship with the names: each one a real "MM-DD" date,
+// and most characters have one.
+func TestEmbeddedBirthdays(t *testing.T) {
+	pool := doubutsuPool()
+	if names := doubutsuNames(); !slices.IsSorted(names) || len(names) != len(pool) {
+		t.Error("the doubutsu names aren't the pool's keys, sorted")
+	}
+	withBirthday := 0
+	for slug, entry := range pool {
+		if entry.Birthday == "" {
+			continue
+		}
+		withBirthday++
+		if _, err := time.Parse("01-02", entry.Birthday); err != nil {
+			t.Errorf("%s: birthday %q is not MM-DD", slug, entry.Birthday)
+		}
+	}
+	if withBirthday < len(pool)*9/10 {
+		t.Errorf("%d of %d names have a birthday, want nearly all", withBirthday, len(pool))
+	}
+	if got := pool["mitzi"].Birthday; got != "09-25" {
+		t.Errorf("mitzi's birthday = %q, want 09-25", got)
+	}
+}
+
+// With prioritizeBirthdays on, the pick invites whoever's birthday it
+// is while they're free, and only with Doubutsu names on. A leap-day
+// birthday is kept on Feb 28 in common years.
 func TestBirthdayGuests(t *testing.T) {
-	sandboxDataDir(t)
-	ready := filepath.Join(dataDir(), "villagers", "ready")
-	if err := os.MkdirAll(ready, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	profiles := `{"mitzi":{"name":"Mitzi","birthday":"09-25"},"chester":{"name":"Chester","birthday":"08-06"},"leap":{"name":"Leap","birthday":"02-29"}}`
-	if err := os.WriteFile(filepath.Join(ready, "profiles.json"), []byte(profiles), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	on := true
 	off := false
 	day := time.Date(2026, time.September, 25, 12, 0, 0, 0, time.Local)
 
-	if got := birthdayGuests(globalConfig{DoubutsuNames: &on, VillageLife: &on}, day); len(got) != 1 || got[0] != "mitzi" {
+	birthdays := map[string]doubutsuName{
+		"mitzi":   {Birthday: "09-25"},
+		"chester": {Birthday: "08-06"},
+		"leap":    {Birthday: "02-29"},
+		"snowboy": {},
+	}
+	if got := celebrating(birthdays, day); !slices.Equal(got, []string{"mitzi"}) {
 		t.Errorf("guests on 09-25 = %v, want [mitzi]", got)
 	}
-	if got := birthdayGuests(globalConfig{DoubutsuNames: &on, VillageLife: &off}, day); got != nil {
-		t.Errorf("guests with Village life off = %v, want none", got)
+	if got := birthdayGuests(globalConfig{DoubutsuNames: &on, PrioritizeBirthdays: &on}, day); !slices.Contains(got, "mitzi") {
+		t.Errorf("embedded guests on 09-25 = %v, want mitzi among them", got)
 	}
-	if got := birthdayGuests(globalConfig{DoubutsuNames: &off, VillageLife: &on}, day); got != nil {
+	if got := birthdayGuests(globalConfig{DoubutsuNames: &on}, day); got != nil {
+		t.Errorf("guests with prioritizeBirthdays unset = %v, want none", got)
+	}
+	if got := birthdayGuests(globalConfig{DoubutsuNames: &on, PrioritizeBirthdays: &off}, day); got != nil {
+		t.Errorf("guests with prioritizeBirthdays off = %v, want none", got)
+	}
+	if got := birthdayGuests(globalConfig{DoubutsuNames: &off, PrioritizeBirthdays: &on}, day); got != nil {
 		t.Errorf("guests with names off = %v, want none", got)
+	}
+	if got := celebrating(birthdays, time.Date(2027, time.February, 28, 12, 0, 0, 0, time.Local)); !slices.Equal(got, []string{"leap"}) {
+		t.Errorf("guests on Feb 28 of a common year = %v, want [leap]", got)
 	}
 	common := time.Date(2027, time.February, 28, 12, 0, 0, 0, time.Local)
 	if !isBirthdayOn("02-29", common) {

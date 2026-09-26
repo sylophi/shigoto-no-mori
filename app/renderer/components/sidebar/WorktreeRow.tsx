@@ -67,7 +67,7 @@ function WorktreeRowLabel({
       </span>
       <span className="flex min-w-0 items-center gap-1 text-3xs text-muted-foreground">
         <span className="truncate">{worktree.name}</span>
-        <BirthdayBadge worktree={worktree} deviceId={device?.deviceId} />
+        <BirthdayBadge worktree={worktree} />
         {/* Pulled in vertically: the device tile stands taller than
             the name line, and letting it set the line's height would
             make a peer's row taller than a local one. */}

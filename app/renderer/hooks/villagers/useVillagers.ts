@@ -1,18 +1,19 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import type { VillagerProfiles } from "@shared/schemas";
 import { useVillageLife } from "@/hooks/config/useVillageLife";
-import { type HostReadScope, useHostScope } from "@/hooks/remote/useHostScope";
+import { queryKeys } from "@/lib/queryKeys";
 
-// The villager extras' data, read from the device the surrounding
-// HostScope names and only while useVillageLife() says the extras show.
-// Neither changes once downloaded, so both are read once.
+// The villager extras' data, read from this device's copy
+// (host/lib/villagers.ts) and only while useVillageLife() says the
+// extras show, whichever device a worktree lives on. Neither changes
+// once downloaded, so both are read once.
 
 // A villager's face as a data URL, or null: no face for that name (or
-// no name), or no extras on that device.
+// no name), or no extras in this window.
 export function useVillagerFace(slug: string | null): string | null {
   const shown = useVillageLife();
   const { data } = useQuery({
-    ...villagerFaceQueryOptions(useHostScope(), slug ?? ""),
+    ...villagerFaceQueryOptions(slug ?? ""),
     enabled: shown && slug !== null,
   });
   return shown && slug !== null && data ? faceUrl(data) : null;
@@ -24,7 +25,7 @@ export function useVillagerFace(slug: string | null): string | null {
 export function useVillagerProfiles(): VillagerProfiles | undefined {
   const shown = useVillageLife();
   const { data } = useQuery({
-    ...villagerProfilesQueryOptions(useHostScope()),
+    ...villagerProfilesQueryOptions(),
     enabled: shown,
   });
   return shown ? (data ?? undefined) : undefined;
@@ -32,20 +33,20 @@ export function useVillagerProfiles(): VillagerProfiles | undefined {
 
 // The reads themselves, shared with callers outside React (the villager
 // toasts, lib/villagers/speakers.ts), so both use one cache entry.
-export function villagerFaceQueryOptions(scope: HostReadScope, slug: string) {
+export function villagerFaceQueryOptions(slug: string) {
   return queryOptions({
-    queryKey: scope.keys.villagerFace(slug),
-    queryFn: () => scope.api.villagers.face(slug),
+    queryKey: queryKeys.villagerFace(slug),
+    queryFn: () => window.api.villagers.face(slug),
     staleTime: Number.POSITIVE_INFINITY,
     retry: false,
     meta: { silentError: true },
   });
 }
 
-export function villagerProfilesQueryOptions(scope: HostReadScope) {
+export function villagerProfilesQueryOptions() {
   return queryOptions({
-    queryKey: scope.keys.villagerProfiles(),
-    queryFn: () => scope.api.villagers.profiles(),
+    queryKey: queryKeys.villagerProfiles(),
+    queryFn: () => window.api.villagers.profiles(),
     staleTime: Number.POSITIVE_INFINITY,
     meta: { silentError: true },
   });

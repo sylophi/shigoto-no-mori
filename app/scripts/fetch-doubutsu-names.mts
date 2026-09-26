@@ -5,13 +5,17 @@
 //                                      face icon live on the wiki
 //                                      (references only)
 //   cli/embed/doubutsu-names.json      the slugged names the worktree
-//                                      name picker draws from: the
-//                                      characters with a face
+//                                      name picker draws from (the
+//                                      characters with a face), each
+//                                      with its birthday when the wiki
+//                                      gives one
 //
 // The lists come from the wiki's Category:Villagers and
 // Category:Special characters through its public MediaWiki API (no key
-// needed). Nothing about the characters beyond their names is kept
-// here: the app downloads their faces and profiles when its user asks
+// needed). Nothing about the characters beyond their names and
+// birthdays is kept here: the birthdays let the CLI's name pick invite
+// whoever celebrates today (cli/birthdays.go) with no download, and the
+// app downloads faces and full profiles when its user asks
 // (host/lib/villagers.ts). Re-run it when a new game or update adds
 // characters, then review the diff.
 //
@@ -27,9 +31,13 @@ import { isValidWorktreeDirName } from "../shared/git/branches.ts";
 import { VillagerSlugSchema } from "../shared/schemas/villagers.ts";
 import {
   CHARACTER_CATEGORIES,
+  collectLeadSections,
+  LEAD_SECTION_QUERY,
+  type LeadSection,
   namesOnPage,
   oneBySlug,
   slugify,
+  villagerProfile,
   WIKI_API,
   WIKI_USER_AGENT,
 } from "../shared/villagers/wiki.ts";
@@ -267,7 +275,51 @@ for (const [slug, titles] of tries) {
   }
   withFace[slug] = { page: bySlug.get(slug)!.page, icon: found.get(file)! };
 }
-const names = Object.keys(withFace);
+
+// ---- birthdays ----
+//
+// Each pool character's birthday, read from the infobox in their
+// page's lead section by the same parse the app's download uses
+// (villagerProfile), 50 pages to a request.
+
+async function fetchBirthdays(
+  slugs: string[],
+): Promise<Record<string, { birthday?: string }>> {
+  const titles = [...new Set(slugs.map((slug) => withFace[slug].page))];
+  const pages = new Map<string, LeadSection>();
+  for (let i = 0; i < titles.length; i += 50) {
+    const asked = new Map<string, string>();
+    for await (const data of paged({
+      ...LEAD_SECTION_QUERY,
+      titles: titles.slice(i, i + 50).join("|"),
+    })) {
+      // The API reports its own errors (lag, rate limits) with a 200.
+      if (data.error !== undefined) {
+        throw new Error(`Nookipedia answered with ${data.error.code}`);
+      }
+      const gone = collectLeadSections(data, pages, asked);
+      if (gone !== undefined) throw new Error(`No page ${gone}`);
+    }
+    process.stderr.write(
+      `  ${Math.min(i + 50, titles.length)}/${titles.length} pages for birthdays\n`,
+    );
+    await sleep(250);
+  }
+  const names: Record<string, { birthday?: string }> = {};
+  for (const slug of slugs) {
+    const title = withFace[slug].page;
+    const page = pages.get(title);
+    if (page === undefined) throw new Error(`No wikitext for ${title}`);
+    const { birthday } = villagerProfile(slug, { title, ...page });
+    names[slug] = birthday === undefined ? {} : { birthday };
+  }
+  return names;
+}
+
+const names = await fetchBirthdays(Object.keys(withFace));
+const withBirthday = Object.values(names).filter(
+  (name) => name.birthday !== undefined,
+).length;
 
 // ---- writing ----
 
@@ -317,5 +369,5 @@ execFileSync("pnpm", ["exec", "oxfmt", namesPath, manifestPath], {
   stdio: "inherit",
 });
 process.stderr.write(
-  `${villagers.length} villagers, ${specials.length} special characters, ${bySlug.size} names, ${names.length} with a face in the pool\n`,
+  `${villagers.length} villagers, ${specials.length} special characters, ${bySlug.size} names, ${Object.keys(names).length} with a face in the pool, ${withBirthday} of them with a birthday\n`,
 );
