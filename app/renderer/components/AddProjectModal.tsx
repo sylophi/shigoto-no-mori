@@ -38,8 +38,7 @@ function AddProjectDialog() {
   // change of device: a pasted URL is as good on the next machine, and
   // `~/dev/` means the same folder on each.
   const [query, setQuery] = useState(addProjectTarget.query ?? "~/");
-  // A browser on the account is a device too, but registers no projects.
-  const tabs = useDeviceTabs().filter((tab) => tab.hostsProjects);
+  const tabs = useDeviceTabs();
   const { data: status } = useAccountStatus();
   const [picked, pick] = usePickedDevice(
     tabs,

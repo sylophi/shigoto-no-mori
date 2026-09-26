@@ -78,7 +78,6 @@ export function ProjectDevicePage({
         label: "",
         icon: "desktop",
         isThisDevice: !scope.remote,
-        hostsProjects: true,
         status: null,
         api: scope.api,
         block: undefined,

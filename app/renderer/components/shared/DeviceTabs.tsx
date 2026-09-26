@@ -16,7 +16,6 @@ import { MonitorSmartphone } from "lucide-react";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { DEVICE_PILL_CLASS } from "@/components/shared/DeviceChip";
 import { DeviceLead } from "@/components/shared/DeviceGlyph";
-import { hostsProjects } from "@/lib/remote/deviceTraits";
 import { EmptyPanel } from "@/components/ui/empty-panel";
 import { useLocalDevice } from "@/hooks/account/useAccount";
 import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
@@ -28,6 +27,7 @@ import {
 import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
 import { useRovingPick } from "@/hooks/ui/useRovingPick";
 import {
+  useHostDevices,
   useRemoteDevice,
   useRemoteDevices,
 } from "@/hooks/remote/useRemoteDevices";
@@ -47,9 +47,6 @@ export interface DeviceRosterEntry {
   // What it looks like (DeviceGlyph), so every pick draws it.
   icon: DeviceIcon;
   isThisDevice: boolean;
-  // Registers projects (deviceTraits): a browser on the account is a
-  // device too, but hosts no forest.
-  hostsProjects: boolean;
   // Null for this device, which has no connection to describe.
   status: DeviceStatusView | null;
   // The api the body is scoped to: window.api for this device, a
@@ -63,13 +60,14 @@ export interface DeviceTab extends DeviceRosterEntry {
   block: "offline" | "no-grant" | undefined;
 }
 
-// Every device on the account, in the one order every device pick
+// Every machine on the account, in the one order every device pick
 // uses: this device first (a hostless client has none), then the
 // reachable peers, then the rest, so the machines that can answer sit
-// where the eye starts. The tabs below layer the command grant on it;
-// the sidebar's device filter reads it as is.
+// where the eye starts. A browser on the account is a device too, but
+// hosts no forest, so no pick offers it. The tabs below layer the
+// command grant on it; the sidebar's device filter reads it as is.
 export function useDeviceRoster(): DeviceRosterEntry[] {
-  const devices = useRemoteDevices();
+  const devices = useHostDevices();
   const local = useLocalDevice();
   const here: DeviceRosterEntry[] = hasLocalHost
     ? [
@@ -78,7 +76,6 @@ export function useDeviceRoster(): DeviceRosterEntry[] {
           label: local.name,
           icon: local.icon,
           isThisDevice: true,
-          hostsProjects: true,
           status: null,
           api: window.api,
         },
@@ -90,7 +87,6 @@ export function useDeviceRoster(): DeviceRosterEntry[] {
       label: device.label,
       icon: device.icon,
       isThisDevice: false,
-      hostsProjects: hostsProjects(device.platform),
       status: deviceStatusView(device.status),
       api: device.api,
     }),
