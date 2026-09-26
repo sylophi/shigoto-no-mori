@@ -38,6 +38,10 @@ export const SHARED_SETTINGS_KEY = "sharedSettings";
 // fetch cadence (host/lib/worktrees/autoPull.ts). Written by the app
 // and the CLI alike (cli/state.go autoPullKey).
 export const AUTO_PULL_KEY = "autoPullWorktrees";
+// What each shelved worktree looked like when it went on the shelf
+// (host/lib/worktrees/shelved.ts). App-written. The CLI only clears
+// entries (cli/state.go shelfSnapshotsKey), on every shelf change.
+export const SHELF_SNAPSHOTS_KEY = "shelfSnapshots";
 
 // Drives only the state.json→registry.json split below. deviceId is
 // deliberately absent because it postdates the split, so no old-format

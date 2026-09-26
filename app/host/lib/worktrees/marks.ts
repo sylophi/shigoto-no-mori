@@ -3,9 +3,14 @@
 // a data-dir move) carry each mark to the new id through here, and a
 // new mark only has to be added to this list.
 import { autoPullMarks } from "./autoPull";
-import { shelvedMarks } from "./shelved";
+import type { RegistryIdSet } from "./registryIdSet";
+import { shelfSnapshots, shelvedMarks } from "./shelved";
 
-const worktreeMarks = [shelvedMarks, autoPullMarks];
+const worktreeMarks: Pick<RegistryIdSet, "move" | "drop">[] = [
+  shelvedMarks,
+  autoPullMarks,
+  shelfSnapshots,
+];
 
 export function moveWorktreeMarks(from: string, to: string): void {
   for (const marks of worktreeMarks) marks.move(from, to);

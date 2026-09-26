@@ -758,3 +758,39 @@ func TestRegisterProjectRefusesMalformedProjectsValue(t *testing.T) {
 		t.Errorf("malformed projects value was rewritten to %q", raw)
 	}
 }
+
+// The app writes a snapshot per shelved worktree and compares against
+// it to unshelve one that gets worked in. Any shelf change the CLI
+// makes retires the worktree's snapshot, so a later shelve can't be
+// judged against an earlier one, and leaves every other entry alone.
+func TestShelfChangesRetireTheSnapshot(t *testing.T) {
+	sandboxDataDir(t)
+	seedRegistry(t, `{"shelvedWorktrees":{"w1":true,"w2":true},`+
+		`"shelfSnapshots":{"w1":{"at":1,"head":"abc1234","changed":0},`+
+		`"w2":{"at":2,"head":null,"changed":3}}}`)
+	snapshotIDs := func() []string {
+		var m map[string]json.RawMessage
+		if err := json.Unmarshal(readFile(t, registryPath())[shelfSnapshotsKey], &m); err != nil {
+			t.Fatal(err)
+		}
+		ids := []string{}
+		for id := range m {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+
+	if err := setShelved("w1", false); err != nil {
+		t.Fatal(err)
+	}
+	if got := snapshotIDs(); len(got) != 1 || got[0] != "w2" {
+		t.Errorf("after unshelve: snapshots = %v, want [w2]", got)
+	}
+	dropWorktreeMarks("w2")
+	if got := snapshotIDs(); len(got) != 0 {
+		t.Errorf("after drop: snapshots = %v, want none", got)
+	}
+	if readShelvedSet()["w2"] {
+		t.Error("shelved mark survived the drop")
+	}
+}

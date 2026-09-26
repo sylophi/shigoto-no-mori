@@ -15,7 +15,12 @@ import {
 } from "@shared/schemas";
 import { readAutoPullSet } from "../worktrees/autoPull";
 import { listBranches } from "./branches";
-import { readShelvedSet } from "../worktrees/shelved";
+import {
+  readShelvedSet,
+  settleShelf,
+  type ShelfSnapshot,
+  shelfSnapshots,
+} from "../worktrees/shelved";
 import { readGlobalConfig } from "../config/global";
 import { readShigomoriConfig } from "../config/project";
 import { pickWorktreeName } from "../worktrees/names";
@@ -72,7 +77,9 @@ function deriveBranch(entry: RawWorktreeEntry): string {
 const CHANGE_MTIME_STAT_LIMIT = 64;
 
 interface WorkingTreeChanges {
-  count: number;
+  // Null when the status failed, which reads as clean everywhere but
+  // the shelf check (buildWorktree).
+  count: number | null;
   // Newest mtime across the changed paths, epoch ms. Undefined for a
   // clean worktree, and when every stat failed (an all-deletions diff).
   lastChangeAt?: number;
@@ -104,7 +111,7 @@ async function getWorkingTreeChanges(
       lastChangeAt: newest > 0 ? Math.round(newest) : undefined,
     };
   } catch {
-    return { count: 0 };
+    return { count: null };
   }
 }
 
@@ -495,6 +502,7 @@ interface BuildContext {
   primaryRef: string | null;
   primaryBranch: string | null;
   shelvedSet: ReadonlySet<string>;
+  shelfSnapshots: Readonly<Record<string, ShelfSnapshot>>;
   autoPullSet: ReadonlySet<string>;
   primaryChain: PrimaryChainReader;
 }
@@ -511,6 +519,7 @@ async function loadBuildContext(
     projectPath,
     config?.defaultBranch,
   ).catch(() => null);
+  const shelvedSet = readShelvedSet();
   return {
     hasRemote: remotes.length > 0,
     primaryRef,
@@ -518,7 +527,9 @@ async function loadBuildContext(
       primaryRef === null
         ? null
         : (splitRemoteRefSync(primaryRef, remotes)?.branch ?? primaryRef),
-    shelvedSet: readShelvedSet(),
+    shelvedSet,
+    // Nothing shelved, nothing to compare against.
+    shelfSnapshots: shelvedSet.size > 0 ? shelfSnapshots.read() : {},
     autoPullSet: readAutoPullSet(),
     primaryChain: primaryChainReader(projectPath, primaryRef),
   };
@@ -528,6 +539,7 @@ async function buildWorktree(
   identity: WorktreeIdentity,
   ctx: BuildContext,
 ): Promise<Worktree> {
+  const probedAt = Date.now();
   const [changes, recentCommits, remoteSync, primary, unpushedCount] =
     await Promise.all([
       getWorkingTreeChanges(identity.path),
@@ -536,6 +548,7 @@ async function buildWorktree(
       getPrimaryRelation(identity, ctx),
       getUnpushedCount(identity.path),
     ]);
+  const autoPull = ctx.autoPullSet.has(identity.id);
   return {
     id: identity.id,
     projectId: identity.projectId,
@@ -552,7 +565,7 @@ async function buildWorktree(
     primaryRef: ctx.primaryRef ?? undefined,
     primaryBranch: ctx.primaryBranch ?? undefined,
     mergedIntoPrimary: primary.mergedIntoPrimary,
-    changedCount: changes.count,
+    changedCount: changes.count ?? 0,
     lastChangeAt: changes.lastChangeAt,
     recentCommits,
     isPrimary: identity.isPrimary,
@@ -561,8 +574,15 @@ async function buildWorktree(
     shelved:
       !identity.isPrimary &&
       !identity.isExternal &&
-      ctx.shelvedSet.has(identity.id),
-    autoPull: ctx.autoPullSet.has(identity.id),
+      ctx.shelvedSet.has(identity.id) &&
+      settleShelf(identity.id, ctx.shelfSnapshots[identity.id], {
+        at: probedAt,
+        head: recentCommits[0]?.hash ?? null,
+        changed: changes.count,
+        lastChangeAt: changes.lastChangeAt,
+        followsUpstream: autoPull && unpushedCount === 0,
+      }),
+    autoPull,
   };
 }
 
