@@ -15,13 +15,13 @@ export const scriptsContract = defineContract("host", {
     "scripts:run",
     RunScriptPayloadSchema,
     z.object({ runId: z.string() }),
-    { tracksProjectUsage: true, remote: true, mutating: true },
+    { tracksProjectUsage: true, remote: true, gated: true },
   ),
   cancel: invoke(
     "scripts:cancel",
     CancelScriptPayloadSchema,
     z.object({ cancelled: z.boolean() }),
-    { remote: true, mutating: true },
+    { remote: true, gated: true },
   ),
   // Console input and viewport size for a run the app spawned. Both are
   // no-ops for a run with no PTY here (already exited, or a lifecycle
@@ -31,12 +31,12 @@ export const scriptsContract = defineContract("host", {
   // they don't ping the viewer cache.
   write: invoke("scripts:write", WriteScriptPayloadSchema, z.void(), {
     remote: true,
-    mutating: true,
+    gated: true,
     movesHostState: false,
   }),
   resize: invoke("scripts:resize", ResizeScriptPayloadSchema, z.void(), {
     remote: true,
-    mutating: true,
+    gated: true,
     movesHostState: false,
   }),
   event: broadcast("scripts:event", ScriptEventSchema, { remote: true }),
@@ -56,6 +56,6 @@ export const scriptsContract = defineContract("host", {
     "scripts:orphanReport",
     z.void(),
     OrphanScriptReportSchema,
-    { remote: true, mutating: false },
+    { remote: true, gated: false },
   ),
 });

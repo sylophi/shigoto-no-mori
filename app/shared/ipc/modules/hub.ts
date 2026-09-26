@@ -30,7 +30,7 @@ const HubSocketStatusSchema = z.discriminatedUnion("phase", [
   }),
   z.object({
     phase: z.literal("blocked"),
-    reason: z.enum(["revoked", "superseded", "refused", "auth"]),
+    reason: z.enum(["revoked", "superseded", "refused"]),
     message: z.string(),
   }),
   z.object({ phase: z.literal("stopped") }),
@@ -79,6 +79,13 @@ export const HubStatusSchema = z.object({
   // only kind of data session there is) and the
   // renderer reads it instead of polling peerInfo per device.
   peerAppVersions: z.record(z.string(), z.string()),
+  // Whether each of those peers runs THIS device's commands (its
+  // command-access switch), keyed the same way: the peer's connectInfo
+  // answer at dial time, then its account:commandAccessChanged push.
+  // The renderer's read-only notes and the CLI's no-grant standing
+  // read it here instead of asking the peer. The peer's dispatch gate
+  // is still what enforces it.
+  peerAcceptsCommands: z.record(z.string(), z.boolean()),
   // The tunnel endpoint state, for the devices page. Optional because
   // only a serving side with a host half sets it (the web bridge runs
   // no cloudflared). Not a skew concern: hub:status is
@@ -100,8 +107,10 @@ const HubPeerPushSchema = z.object({
 export type HubPeerPush = z.infer<typeof HubPeerPushSchema>;
 
 export const hubContract = defineContract("client", {
-  // The current socket phase plus the online set. Cheap: main reads
-  // its in-memory snapshot, nothing touches the network.
+  // The remote-plane snapshot (HubStatusSchema above): the hub
+  // socket's phase and roster plus the direct sessions and tunnel
+  // state. Cheap: main reads its in-memory snapshot, nothing touches
+  // the network.
   status: invoke("hub:status", z.void(), HubStatusSchema),
   // Forward one sm invoke to a peer device over its DIRECT session.
   // Sessions are supervised desired state (shared/hub/directKeeper.ts):

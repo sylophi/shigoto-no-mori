@@ -16,7 +16,7 @@
 // the peer's source and the reverse.
 import type { Server, Socket } from "node:net";
 import type { ChannelHandle, ChannelMux } from "@shared/ipc/socket/channels";
-import { mintHexId } from "@host/lib/idleRegistry";
+import { mintHexId } from "@host/lib/hexId";
 import { bridgeDuplexToChannel } from "@host/socket/channelStreams";
 
 // How a caller reaches a peer's channels: the session's multiplexer,

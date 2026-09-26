@@ -264,6 +264,11 @@ type statusJSON struct {
 	PR            *prCard `json:"pr"`
 	PRUnavailable string  `json:"prUnavailable,omitempty"`
 	PRSkipped     bool    `json:"prSkipped,omitempty"`
+	// The app's auto-pull mark, and the project's primary branch by its
+	// local name ("main" for a base ref of "origin/main"; omitted when
+	// no primary ref resolves), both as on a `list` row.
+	AutoPull      bool   `json:"autoPull"`
+	PrimaryBranch string `json:"primaryBranch,omitempty"`
 }
 
 // --- rendering ---
@@ -393,7 +398,7 @@ func statusCard(status statusJSON, accent string) string {
 		project = codeOut(project, accent)
 	}
 	header := project + dimOut("/") + title
-	flags := worktreeFlags(status.IsPrimary, status.IsExternal, status.Shelved)
+	flags := worktreeFlags(status.IsPrimary, status.IsExternal, status.Shelved, status.AutoPull)
 	if status.Detached {
 		flags = append(flags, "detached HEAD")
 	}
@@ -541,8 +546,10 @@ func cmdStatus(ctx cliContext, args []string) (int, error) {
 			changeCounts: counts,
 			StashCount:   stashes,
 		},
-		Ports:    ports,
-		PortPool: pool,
+		Ports:         ports,
+		PortPool:      pool,
+		AutoPull:      build.autoPull[id.ID],
+		PrimaryBranch: build.primaryBranch,
 	}
 	if upstream.hasUpstream {
 		status.Git.Upstream = &syncJSON{Ahead: upstream.ahead, Behind: upstream.behind}

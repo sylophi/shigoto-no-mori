@@ -1,28 +1,32 @@
 // Shared fixtures for the checks that run a REAL direct data plane
-// beside the stub device hub (test/lib/hubStub.mjs): a ticket-mode
-// ws listener (host/socket/server.ts), the broker slot registration on
-// a hub host device, and the REAL shared composition
+// beside the stub device hub (test/lib/hubStub.mjs): a direct ws
+// listener (host/socket/server.ts), the connectInfo server on a hub
+// host device, and the REAL shared composition
 // (shared/hub/directPlane.ts) a client drives. Extracted from
 // direct-plane.mjs so sync-transfer.mjs and
 // port-forward.mjs move their transfer scenarios onto a real
 // direct connection without a second copy of the plumbing. Runs under
 // register-ts-alias so the shared TypeScript imports resolve.
-import { brokerHandlerFor, makeDirectHandlers } from "@host/ipc/modules/direct";
+import { makeConnectInfo } from "@host/direct/connectInfo";
 import { createWsServerBinding } from "@host/socket/server";
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createDirectPlane } from "@shared/hub/directPlane";
-import { registerContract } from "@shared/ipc/registerContract";
+import { accountContract } from "@shared/ipc/modules/account";
+import { broadcastAll, registerContract } from "@shared/ipc/registerContract";
 import { WebSocket as WsClient } from "ws";
 import { startStubHub } from "./hubStub.mjs";
 import { bootDevice } from "./hubBoot.mjs";
 import { waitFor } from "./checkKit.mjs";
 
-// A REAL ticket-mode listener on an ephemeral loopback port, with its
+// A REAL direct listener on an ephemeral loopback port, with its
 // ticket store and a toggleable command-access switch (the host-wide
 // "accepts commands from its account's devices" answer the real
-// binding reads from main). `registerHandlers`, when
+// binding reads from main). Flipping it pushes the switch to every
+// connected peer, as main's broadcastCommandAccessChanged does, so a
+// peer's bridge follows it live. `registerHandlers`, when
 // set, mounts the check's contracts or test channels on the binding
-// before it starts.
+// before it starts, and `start` overrides the start opts (the hello
+// and liveness seams, the admitted web origin).
 export async function startDirectListener(track, opts = {}) {
   const tickets = createConnectTicketStore(opts.ticketOpts);
   let accepts = false;
@@ -35,19 +39,19 @@ export async function startDirectListener(track, opts = {}) {
   const port = await binding.start({
     port: 0,
     bindAddress: "127.0.0.1",
-    // Ticket mode has no static token, the injected verifier is the
-    // auth.
-    token: "",
     deviceId: opts.deviceId ?? "B",
     appVersion: "2.0.0",
     helloTimeoutMs: 1000,
+    ...opts.start,
   });
   track(() => binding.stop());
   return {
     binding,
     tickets,
+    acceptsCommands: () => accepts,
     setAccepts: (next) => {
       accepts = next;
+      broadcastAll(accountContract, "commandAccessChanged", next, binding);
     },
     port,
     listenerPort: () => {
@@ -57,35 +61,33 @@ export async function startDirectListener(track, opts = {}) {
   };
 }
 
-// Boots the hub pair: B wires the REAL direct broker pair into its
-// binding's one slot (the ONLY thing the hub wire serves, with the
-// same channel and zod parse wiring main uses), A is the dialing
-// client. The two devices are independent, so they boot concurrently.
+// Boots the hub pair: B answers connectInfo with the REAL server (the
+// ONLY thing the hub wire answers, wired as main wires it), A is the
+// dialing client. The two devices are independent, so they boot
+// concurrently.
 export async function bootBrokeredPair(stub, track, listener, opts = {}) {
   const [host, client] = await Promise.all([
     bootDevice(
       stub,
       opts.hostDeviceId ?? "B",
       {
-        broker: brokerHandlerFor(
-          makeDirectHandlers({
-            listenerPort: listener.listenerPort,
-            mintTickets: (peerDeviceId, kinds) => {
-              const tickets = listener.tickets.mint(peerDeviceId, kinds);
-              // Observation seam for the mint-alignment assertions.
-              if (tickets !== null) opts.onMinted?.(tickets);
-              return tickets;
-            },
-            isPeerOnline: () => true,
-            // Deterministic candidates: the listener binds loopback,
-            // so real interface enumeration would offer unreachable
-            // LAN addresses.
-            candidateAddresses:
-              opts.candidateAddresses ?? (() => ["127.0.0.1"]),
-            tunnelUrl: opts.tunnelUrl,
-          }),
-          { validateOutputs: true },
-        ),
+        serveConnectInfo: makeConnectInfo({
+          listenerPort: listener.listenerPort,
+          mintTickets: (peerDeviceId, kinds) => {
+            const tickets = listener.tickets.mint(peerDeviceId, kinds);
+            // Observation seam for the mint-alignment assertions.
+            if (tickets !== null) opts.onMinted?.(tickets);
+            return tickets;
+          },
+          // Deterministic candidates: the listener binds loopback,
+          // so real interface enumeration would offer unreachable
+          // LAN addresses.
+          candidateAddresses: opts.candidateAddresses ?? (() => ["127.0.0.1"]),
+          tunnelUrl: opts.tunnelUrl ?? (() => null),
+          // A bare broker stand-in (no real listener behind it)
+          // reports the switch off.
+          acceptsCommands: () => listener.acceptsCommands?.() ?? false,
+        }),
       },
       track,
     ),
@@ -100,9 +102,9 @@ export async function bootBrokeredPair(stub, track, listener, opts = {}) {
 }
 
 // The whole direct wire the transfer checks share, exactly as
-// production composes it: the stub device hub, a REAL ticket-mode
+// production composes it: the stub device hub, a REAL direct
 // listener on device A serving the check's contracts, the brokered hub
-// pair (A hosting the broker, B the dialing client), the REAL shared
+// pair (A answering connectInfo, B the dialing client), the REAL shared
 // composition as B's bridge, and a counting peer transport aimed at A.
 // The plane's presence path is wired to the client connection exactly
 // as production wires it (late-bound, plus one catch-up call for the
@@ -135,7 +137,16 @@ export async function bootDirectWire(track, opts = {}) {
     clientDeviceId: "B",
     clientOnChange: () => onPlaneChange?.(),
   });
-  const { plane, bridge } = makeDirectBridge(client, { localDeviceId: "B" });
+  // A's pushes on the session, as main's peer-push fan-out hands them
+  // on (main/ipc/register.ts onPeerPush), for the peer transport's
+  // subscribe.
+  const pushListeners = new Set();
+  const { plane, bridge } = makeDirectBridge(client, {
+    localDeviceId: "B",
+    onPeerPush: (push) => {
+      for (const hear of pushListeners) hear(push);
+    },
+  });
   track(() => plane.stop());
   onPlaneChange = () => plane.handleConnectionChange();
   plane.handleConnectionChange();
@@ -143,12 +154,12 @@ export async function bootDirectWire(track, opts = {}) {
     () => bridge.directPeerVersions().A !== undefined,
     "the keeper to establish the direct session to A",
   );
-  const peerA = bridgePeerTransport(bridge, "A");
+  const peerA = bridgePeerTransport(bridge, "A", pushListeners);
   return { stub, listener, client, plane, bridge, peerA };
 }
 
 // The client-side composition under test: the REAL direct plane
-// (dialer over the connection's broker leg, bridge cache over the
+// (dialer over the connection's connectInfo ask, bridge cache over the
 // dialer) exactly as main and the web bridge assemble it. The fan-out
 // sinks are observation seams the scenarios read, and the deadline
 // is shrunk so failure scenarios settle fast.
@@ -175,8 +186,10 @@ export function makeDirectBridge(client, opts = {}) {
 // A ClientTransport riding the bridge's cached direct session, with a
 // per-channel invoke counter so a transfer check can pin poll-side
 // chunking as round trips (the hub stub sees none of them, which the
-// checks assert separately via forwardedCount).
-export function bridgePeerTransport(bridge, deviceId) {
+// checks assert separately via forwardedCount). Its subscribe hears
+// the peer's pushes off the bridge's fan-out, the way main's peer
+// transport does.
+export function bridgePeerTransport(bridge, deviceId, pushListeners) {
   const counts = new Map();
   return {
     transport: {
@@ -184,8 +197,14 @@ export function bridgePeerTransport(bridge, deviceId) {
         counts.set(channel, (counts.get(channel) ?? 0) + 1);
         return bridge.invokePeer({ deviceId, channel, input });
       },
-      subscribe: () => {
-        throw new Error("this test transport is invoke-only");
+      subscribe: (channel, handler) => {
+        const listener = (push) => {
+          if (push.deviceId === deviceId && push.channel === channel) {
+            handler(push.payload);
+          }
+        };
+        pushListeners.add(listener);
+        return () => pushListeners.delete(listener);
       },
     },
     invokeCount: (channel) => counts.get(channel) ?? 0,

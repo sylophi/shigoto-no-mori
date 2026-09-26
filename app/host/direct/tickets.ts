@@ -1,7 +1,7 @@
-// In-memory store of the direct data plane's connect tickets (v2 step
-// 10, slice A). direct:connectInfo mints one set per calling peer over
-// the device hub (one ticket per candidate address), and the direct
-// listener's hello consumes them. Tickets are short-lived, single-use
+// In-memory store of the direct data plane's connect tickets.
+// connectInfo (connectInfo.ts) mints one set per asking peer over the
+// device hub (one ticket per candidate address), and the direct listener's
+// hello consumes them. Tickets are short-lived, single-use
 // bearer strings bound to the peer deviceId they were minted for, so a
 // leaked ticket is useless to any other device and goes stale in a
 // minute. Nothing is persisted: a restart simply forgets pending
@@ -20,7 +20,7 @@ import {
   type DirectCandidateKind,
   DIRECT_TICKET_TTL_MS,
 } from "@shared/ipc/modules/direct";
-import { mintHexId } from "@host/lib/idleRegistry";
+import { mintHexId } from "@host/lib/hexId";
 
 // The distinguishing prefix, following the hub worker's smrt_/smdc_
 // convention (hub/src/ticket.ts): smpt_ for a peer-to-peer connect
@@ -31,7 +31,7 @@ export const DIRECT_TICKET_PREFIX = "smpt_";
 // replacement already bounds each peer to one candidate-set (at most
 // the candidate cap of tickets), so this only guards against many
 // distinct peers minting concurrently. At the cap a mint REFUSES (the
-// broker answers available:false) rather than evicting another peer's
+// host answers available:false) rather than evicting another peer's
 // pending set.
 const MAX_PENDING_TICKETS = 256;
 
@@ -39,7 +39,7 @@ export type ConnectTicketStore = {
   // Mints one ticket per candidate KIND, in order, all bound to the
   // named peer deviceId and REPLACING any tickets that peer still had
   // pending. Returns null when the global backstop cap would be
-  // exceeded, which the broker surfaces as available:false.
+  // exceeded, which connectInfo surfaces as available:false.
   mint(
     peerDeviceId: string,
     kinds: readonly DirectCandidateKind[],

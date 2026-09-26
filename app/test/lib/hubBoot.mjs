@@ -3,18 +3,15 @@
 // port-forward.mjs): a REAL hub connection against the stub
 // Durable Object (hubStub.mjs, extracted for the same reason). Runs under
 // register-ts-alias so the shared TypeScript imports resolve.
-import { directContract } from "@shared/ipc/modules/direct";
 import { createHubConnection } from "@host/hub/connection";
 
 import { waitFor } from "./checkKit.mjs";
 
 // Boots one device on the stub device hub and waits until it connects.
 // Returns the connection plus the ticket-mint counter the redial
-// assertions read. The binding's ONE broker slot (the only thing the
-// hub wire can serve) takes a channel-plus-handler pair:
-// `opts.broker` passes one through verbatim, `opts.brokerHandler`
-// wraps a bare handler with the real broker channel. `track`, when
-// passed, registers the teardown immediately, so a boot that fails its
+// assertions read. `opts.serveConnectInfo` is the one thing the hub
+// wire can answer (absent: a dial-only device that refuses every ask
+// as serving no listener). `track`, when passed, registers the teardown immediately, so a boot that fails its
 // wait still gets cleaned up and cannot leak the event loop.
 // `opts.createConnection` swaps in another binding with the same
 // surface (the browser one, web/hub/connection.ts), and `opts.label`
@@ -23,25 +20,13 @@ export async function bootDevice(stub, deviceId, opts = {}, track) {
   let mints = 0;
   const createConnection = opts.createConnection ?? createHubConnection;
   const connection = createConnection({
-    // The channel is creation-time config (the client role dials it
-    // even on devices that never register a handler), matching how
-    // main composes the binding.
-    brokerChannel: directContract.calls.connectInfo.channel,
+    serveConnectInfo: opts.serveConnectInfo,
     onChange: opts.onChange,
     // The heartbeat seams, so the liveness scenario runs in
     // milliseconds instead of the shared production cadence.
     heartbeat: opts.heartbeat,
   });
   if (track) track(() => connection.stop());
-  const broker =
-    opts.broker ??
-    (opts.brokerHandler
-      ? {
-          channel: directContract.calls.connectInfo.channel,
-          handler: opts.brokerHandler,
-        }
-      : undefined);
-  if (broker) connection.registerBroker(broker);
   await connection.refresh(async () => ({
     hubUrl: stub.hubUrl,
     accountId: opts.accountId ?? "acct",
@@ -50,7 +35,6 @@ export async function bootDevice(stub, deviceId, opts = {}, track) {
       return `t:${deviceId}:${mints}`;
     },
     deviceId,
-    appVersion: opts.appVersion ?? "1.0.0",
   }));
   await waitFor(
     () => connection.status().socket.phase === "connected",

@@ -10,12 +10,30 @@
 // mutation invalidation already covered. Events are dropped while a
 // delegated CLI child runs and within a short window of any app-side
 // data dir write; a genuinely external write in that window is picked up
-// by the next focus refetch instead.
-import { type FSWatcher, mkdirSync, watch } from "node:fs";
+// by the next focus refetch instead. The CLI's own writes on the app's
+// behalf count as the app's: a delegated verb's (cliRunner.ts notes
+// them when it exits), and the use-log bump of a package script the
+// app starts through `sm run`, which lands just after the spawn
+// (packageScripts.run notes it then). CLI reads mute nothing.
+//
+// One write a read does make is the full listing's shelf bookkeeping
+// (cli/shelf.go): it records a snapshot of a newly shelved worktree,
+// and unshelves one that has been worked in since. A registry.json
+// change confined to the snapshots is dropped here, like the updater's
+// control files below: nobody displays them, and reacting would relist
+// every project only to find the snapshot already taken. An unshelve
+// clears the shelved mark too, so it goes through like an `sm
+// unshelve` from a terminal: one refresh that brings every window and
+// peer the row's new place, whose listing then has nothing left to
+// write. (An unshelve by the describe right after an app mutation
+// falls inside that mutation's echo window instead, and the acting
+// window already holds the row.)
+import { type FSWatcher, mkdirSync, readFileSync, watch } from "node:fs";
 import { join } from "node:path";
 import { invalidateGlobalConfigCache } from "@host/lib/config/global";
 import { invalidateAllProjectConfigCaches } from "@host/lib/config/project";
-import { dataDir } from "@host/lib/util/paths";
+import { SHELF_SNAPSHOTS_KEY } from "@host/lib/config/store";
+import { dataDir, REGISTRY_FILE } from "@host/lib/util/paths";
 import { SELF_ECHO_MS, selfWroteWithin } from "@host/lib/util/selfWrite";
 import { cliChildCount } from "./cliRunner";
 
@@ -30,11 +48,35 @@ export function stopStateWatcher(): void {
   for (const watcher of activeWatchers.splice(0)) watcher.close();
 }
 
+// registry.json without the shelf snapshots, in a form two reads can
+// be compared by. Null when it can't be read, which compares as a
+// change.
+function registryBesidesSnapshots(): string | null {
+  try {
+    const registry: unknown = JSON.parse(
+      readFileSync(join(dataDir(), REGISTRY_FILE), "utf8"),
+    );
+    if (registry === null || typeof registry !== "object") return null;
+    return JSON.stringify({ ...registry, [SHELF_SNAPSHOTS_KEY]: undefined });
+  } catch {
+    return null;
+  }
+}
+
 // `poke` should nudge the renderer to refetch (the caller broadcasts
 // the same signal window focus does, which drives React Query's
 // refetch-on-focus).
 export function startStateWatcher(poke: () => void): void {
   let timer: NodeJS.Timeout | null = null;
+  // Kept current on every registry.json event, suppressed or not, so
+  // each one is judged against the write before it.
+  let registrySeen = registryBesidesSnapshots();
+  const onlySnapshotsMoved = () => {
+    const now = registryBesidesSnapshots();
+    const same = now !== null && now === registrySeen;
+    registrySeen = now;
+    return same;
+  };
   const changed = () => {
     // Self-echo check at event time, not timer time: a self-write
     // arriving after an external event must not cancel the pending
@@ -59,6 +101,14 @@ export function startStateWatcher(poke: () => void): void {
           if (
             file !== null &&
             (file.includes(".tmp") || file.endsWith(".lock"))
+          ) {
+            return;
+          }
+          // The listing's shelf snapshots (see the header).
+          if (
+            file === REGISTRY_FILE &&
+            dir === dataDir() &&
+            onlySnapshotsMoved()
           ) {
             return;
           }

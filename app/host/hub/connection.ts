@@ -1,27 +1,23 @@
 // The node hub connection: the shared lifecycle
 // core in shared/hub/connection.ts bound to the node `ws` client,
-// owned by the main process and shared by both roles through the hub
-// link. Deliberately NOT a ServerTransport: the
-// wire serves exactly one channel, so the binding exposes a single
-// broker slot instead of handle/broadcastAll, and re-adding the hub
-// to a wire loop that expects a ServerTransport is a type error rather
-// than a discouraged one-liner.
+// owned by the main process, asking peers for their connect info and
+// answering theirs. Deliberately NOT a ServerTransport: the wire
+// answers one question, handed in at creation as a function, so
+// re-adding the hub to a wire loop that expects a ServerTransport is a
+// type error rather than a discouraged one-liner.
 //
 // This file must stay Electron free (pnpm test host-boundary).
-// Everything Electron or account flavored (deviceId, appVersion,
-// accountId, the credential-backed ticket mint) arrives through
-// HubConnectOpts, which main composes.
+// Everything Electron or account flavored (deviceId, accountId, the
+// credential-backed ticket mint) arrives through HubConnectOpts, which
+// main composes.
 import { WebSocket } from "ws";
-import {
-  type HubBroker,
-  type HubBrokerSession,
-  HubLinkDownError,
-} from "@shared/hub/link";
+import { HubLinkDownError, type ServeConnectInfo } from "@shared/hub/link";
 import {
   createHubConnectionCore,
   type HubSocketAdapter,
 } from "@shared/hub/connection";
 import type { HeartbeatOptions } from "@shared/ipc/socket/heartbeat";
+import { MAX_HUB_MESSAGE_BYTES } from "@shared/hub/protocol";
 import type {
   HubConnectOpts,
   HubConnectionStatus,
@@ -29,14 +25,10 @@ import type {
 import { toText } from "@host/socket/rawData";
 
 export type HubConnectionOpts = {
-  // The one channel the hub wire brokers, supplied by the
-  // composition at creation (register.ts derives it from the direct
-  // contract) so this binding stays contract-free. Static config on
-  // purpose, separate from the late-bound handler registration: the
-  // CLIENT role needs the channel to frame its broker reqs even on a
-  // connection that never registers a handler (the check fixtures'
-  // dial-only devices).
-  brokerChannel: string;
+  // Answers peers' connectInfo asks (main/ipc/register.ts wires the
+  // direct listener's). Absent on a dial-only device (the check
+  // fixtures'), whose link refuses every ask as serving no listener.
+  serveConnectInfo?: ServeConnectInfo;
   // Fired on every supervisor or presence transition, so the owner can
   // fan a status snapshot out to its windows.
   onChange?: () => void;
@@ -45,20 +37,13 @@ export type HubConnectionOpts = {
 };
 
 export type HubConnectionBinding = {
-  // The HOST half: the ONE broker slot this wire serves, as the
-  // channel-plus-handler pair the composition supplies (so this
-  // binding never imports a contract). Registration is decoupled from
-  // connecting, exactly like the LAN binding: the pair recorded at
-  // boot is served whenever a socket is up. Throws on a second
-  // registration (mirroring ipcMain.handle's one-handler-per-channel
-  // rule) and on a pair naming a different channel than the one this
-  // connection was created with, so a composition wiring two contracts
-  // together fails at boot instead of serving a channel it never
-  // dials.
-  registerBroker(broker: Required<HubBroker>): void;
-  // The CLIENT half. Rejects with HubLinkDownError while the socket
-  // is down.
-  connectBroker(deviceId: string): Promise<HubBrokerSession>;
+  // Asks a peer for its connect info (HubLink.askConnectInfo). Rejects
+  // with HubLinkDownError while the socket is down.
+  askConnectInfo(
+    deviceId: string,
+    input: unknown,
+    timeoutMs: number,
+  ): Promise<unknown>;
   // Reconciles the connection with the wanted state. The resolver runs
   // INSIDE the serialized lifecycle, and null means stop (signed out or
   // unconfigured).
@@ -69,28 +54,21 @@ export type HubConnectionBinding = {
   probe(): void;
 };
 
-// Deploy-skew tolerance for the INBOUND payload bound: the sender-side
-// guard and the DO's forwarding budget both enforce
-// MAX_HUB_MESSAGE_BYTES (64 KiB), but an old, not-yet-redeployed
-// Worker still forwards up to the previous 1 MiB cap from an old peer,
-// and one oversize inbound frame past ws's maxPayload kills the WHOLE
-// control-plane socket (close 1009) in a reconnect loop. So the reader
-// stays tolerant at the old bound while every writer is strict. This
-// can shrink to MAX_HUB_MESSAGE_BYTES once every Worker and device
-// in the fleet enforces the 64 KiB cap (see hub/README.md's deploy
-// order note).
-const INBOUND_MAX_PAYLOAD_BYTES = 1024 * 1024;
-
 // The node ws half of the shared socket adapter. Everything ws-specific
 // lives here: the inbound payload bound, the disabled compression, the
 // RawData decode, and the hard terminate the shared core prefers for
 // orphan sockets and arms after an owner close.
 function openWsSocket(url: string): HubSocketAdapter {
-  // Bound inbound buffering (tolerantly, see above), and disable
-  // perMessageDeflate so a compression bomb cannot inflate a tiny
-  // frame past the limit (S2).
+  // Bound inbound buffering at the DO's own forwarding limit (nothing
+  // it sends is larger: relays are measured against it and a full
+  // presence roster fits under it), and disable perMessageDeflate so a
+  // compression bomb cannot inflate a tiny frame past the limit (S2).
+  // An oversize frame past maxPayload closes the socket (1009), so
+  // shrinking MAX_HUB_MESSAGE_BYTES means shipping devices that still
+  // read the old size before the Worker enforces the new one
+  // (hub/README.md).
   const socket = new WebSocket(url, {
-    maxPayload: INBOUND_MAX_PAYLOAD_BYTES,
+    maxPayload: MAX_HUB_MESSAGE_BYTES,
     perMessageDeflate: false,
   });
   socket.on("error", () => {
@@ -135,45 +113,10 @@ function openWsSocket(url: string): HubSocketAdapter {
 export function createHubConnection(
   opts: HubConnectionOpts,
 ): HubConnectionBinding {
-  // The late-bound handler slot: registered at boot, read through a
-  // stable closure by every link generation, so the registration
-  // survives reconnects. The channel is creation-time config instead
-  // (the client role dials it with no handler registered), so only the
-  // handler arm needs the not-registered refusal, unreachable in
-  // practice on a serving device (boot registers before refresh ever
-  // connects).
-  let broker: Required<HubBroker> | null = null;
-  const core = createHubConnectionCore({
+  return createHubConnectionCore({
     openSocket: openWsSocket,
     onChange: opts.onChange,
     heartbeat: opts.heartbeat,
-    broker: {
-      channel: opts.brokerChannel,
-      handler: (ctx, raw) => {
-        if (broker === null) {
-          return Promise.reject(new Error("[hub] broker not registered"));
-        }
-        return broker.handler(ctx, raw);
-      },
-    },
+    serveConnectInfo: opts.serveConnectInfo,
   });
-
-  return {
-    registerBroker(pair) {
-      // Mirrors ipcMain.handle's one-handler-per-channel rule, so a
-      // double registration fails at boot on every wire alike.
-      if (broker !== null) {
-        throw new Error("[hub] broker handler already registered");
-      }
-      // The pair's channel must be the one this connection dials and
-      // serves, or the composition wired two different contracts.
-      if (pair.channel !== opts.brokerChannel) {
-        throw new Error(
-          `[hub] broker channel mismatch: registered "${pair.channel}", connection carries "${opts.brokerChannel}"`,
-        );
-      }
-      broker = pair;
-    },
-    ...core,
-  };
 }

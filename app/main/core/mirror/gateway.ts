@@ -22,7 +22,7 @@ import { errorMessageOf } from "@shared/errors";
 import type { mirrorContract } from "@shared/ipc/modules/mirror";
 import type { Client } from "@shared/ipc/types";
 import { WorktreeIdSchema } from "@shared/schemas";
-import { mintHexId } from "@host/lib/idleRegistry";
+import { mintHexId } from "@host/lib/hexId";
 import { secretsMatch } from "@host/lib/util/secretCompare";
 import { MAX_CONNS_PER_DEVICE } from "../portForward/engine";
 import { MAX_CHANNELS_PER_CONNECTION } from "@shared/ipc/socket/channels";

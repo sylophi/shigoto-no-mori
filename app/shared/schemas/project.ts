@@ -39,13 +39,27 @@ export const ProjectSchema = z.object({
   lastUsed: z.number().int().nonnegative().optional(),
   recentCount: z.number().int().nonnegative().optional(),
   // "terrier" marks a project merged from the terrier registry rather
-  // than registry.json. Never persisted: the merge layer decorates it
-  // at read time (host/lib/projects, cli/terrier.go), and the id is
-  // minted deterministically from the path so both engines agree
-  // without coordination. Terrier-sourced projects can't be removed.
+  // than registry.json. Never persisted: the CLI's merge decorates it
+  // at read time (cli/terrier.go), and the id is minted
+  // deterministically from the path. Terrier-sourced projects can't be
+  // removed.
   source: z.literal("terrier").optional(),
 });
 export type Project = z.infer<typeof ProjectSchema>;
+
+// One row of `sm projects list --json`: the project decorated the way
+// ProjectsList serves it, plus the icon the CLI resolved (a file path
+// and its type) and that icon's accent hue. Host-internal: the icon
+// bytes reach the renderer through projects:icon, the hue nowhere yet.
+export const ProjectRowSchema = ProjectSchema.extend({
+  pathExists: z.boolean(),
+  identity: z.string().nullable(),
+  lastUsed: z.number().int().nonnegative(),
+  recentCount: z.number().int().nonnegative(),
+  icon: z.object({ path: z.string(), mime: z.string() }).nullable(),
+  hue: z.number().nullable(),
+});
+export type ProjectRow = z.infer<typeof ProjectRowSchema>;
 
 // Sidebar project ordering. `manual` is the user-arranged drag order and the
 // implicit default; `frequent` = most used, `recent` = most recently
@@ -58,10 +72,6 @@ export const ProjectSortModeSchema = z.enum([
 ]);
 export type ProjectSortMode = z.infer<typeof ProjectSortModeSchema>;
 
-export const SetProjectSortPayloadSchema = z.object({
-  mode: ProjectSortModeSchema,
-});
-
 // Which sidebar layout the user picked. "projects" is the classic tree
 // grouped by project. "inbox" is the flat, cross-project list split into
 // active / shelved / merged boxes, newest work first. "projects" is the
@@ -69,14 +79,6 @@ export const SetProjectSortPayloadSchema = z.object({
 // back the layout it has always had.
 export const SidebarViewSchema = z.enum(["projects", "inbox"]);
 export type SidebarView = z.infer<typeof SidebarViewSchema>;
-
-// Sidebar collapse state: toggles one project id in the persisted
-// collapsed set. A toggle (rather than a whole-list write) keeps the
-// read-modify-write in the main process, so a stale renderer cache
-// can't clobber collapse state it didn't know about.
-export const ToggleCollapsedProjectPayloadSchema = z.object({
-  projectId: z.string().min(1),
-});
 
 // Clone a remote into `parentDir` and register the checkout. What
 // counts as a remote is isCloneableRemote's call (a plain path or

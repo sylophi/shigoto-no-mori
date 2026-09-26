@@ -1,16 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
-import type { ReadGlobalConfig } from "@shared/schemas";
+import type { GlobalConfig } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { hasLocalHost } from "@/lib/localHost";
 import { queryKeys } from "@/lib/queryKeys";
 
-// Read side of the device config. The read is REDACTED: socketHost.token
-// is absent (a derived tokenSet boolean stands in) and remoteDevices is
-// dropped, so the type is ReadGlobalConfig rather than the full stored
-// doc. The hosting and remote-device sections source their real tokens
-// from window.api.globalConfig.readLocal instead. Writes go through
-// useSettingsSave, which owns the dirty diff and the post-save
-// invalidations.
+// Read side of the device config. Writes go through useSettingsSave
+// (this machine) and useDeviceSettingsSave (a peer), which own the dirty
+// diff and the post-save invalidations.
 // silentError lets a call site that renders its own inline read error
 // (the remote settings pane) suppress the global error toast, so a
 // failed read is signalled once, not twice. A hostless client has no
@@ -18,7 +14,7 @@ import { queryKeys } from "@/lib/queryKeys";
 // there (a peer's does).
 export function useGlobalConfig({ silentError = false } = {}) {
   const { api, keys, hasHost } = useHostScope();
-  return useQuery<ReadGlobalConfig>({
+  return useQuery<GlobalConfig>({
     queryKey: keys.globalConfig(),
     queryFn: () => api.globalConfig.read(),
     enabled: hasHost,
@@ -33,7 +29,7 @@ export function useGlobalConfig({ silentError = false } = {}) {
 // (launchScripts on a peer's worktree page). Shares the local scope's
 // cache entry, so it is warm from boot. Never runs on a hostless client.
 export function useLocalGlobalConfig() {
-  return useQuery<ReadGlobalConfig>({
+  return useQuery<GlobalConfig>({
     queryKey: queryKeys.globalConfig(),
     queryFn: () => window.api.globalConfig.read(),
     enabled: hasLocalHost,

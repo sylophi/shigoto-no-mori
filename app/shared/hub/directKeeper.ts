@@ -25,7 +25,9 @@
 // as the input. Parking is also what keeps eager dialing off peers
 // there is structurally nothing to dial ON: a web client serves no
 // direct listener by construction, and without a park every desktop
-// would redial every open browser tab at the ladder's cap forever.
+// would redial every open browser tab at the ladder's cap forever. A
+// peer on a version this one no longer speaks to parks the same way,
+// until it updates and its relaunch round-trips the roster.
 //
 // The mirror of that rule matters just as much: park only on verdicts
 // that really are stuck. Being INSIDE the host's lockout window is
@@ -71,7 +73,7 @@ type DirectKeeperDeps = {
 export type DirectKeeper = {
   // Feed the desired set: the live roster on every hub transition, and
   // [] whenever our own hub link is down (no roster, no verdicts, and
-  // nothing to dial: the broker leg rides the device hub). Peers new to
+  // nothing to dial: the connectInfo ask rides the device hub). Peers new to
   // the set dial at once, peers gone from it drop their keeper state
   // (their sessions are the presence sweep's job), peers steadily in it
   // keep whatever schedule they have.

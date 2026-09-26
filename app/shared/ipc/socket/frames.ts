@@ -1,6 +1,6 @@
 // Wire frames for the websocket host transport: the same contract
-// modules the Electron bridge serves, carried over a LAN socket to a
-// remote client. One JSON object per text frame.
+// modules the Electron bridge serves, carried over a direct socket to
+// a peer device. One JSON object per text frame.
 //
 // PROTOCOL INVARIANT: a field whose value is undefined is OMITTED from
 // the frame. JSON.stringify already drops undefined object properties,
@@ -15,48 +15,22 @@
 // ceiling denies a pre-auth peer a large buffering budget. It does NOT
 // limit outbound res/push frames (diffs, script logs), which the
 // server writes and ws never measures against maxPayload. Bulk data
-// (sync bundles, port-forward streams) still crosses in bounded
-// chunks (WIRE_CHUNK_BYTES below) for flow control, and so an uplink
-// req carrying a chunk stays under the inbound cap.
+// (sync bundles, port-forward and mirror streams) never rides a JSON
+// frame: it crosses as binary channel frames (channels.ts), each well
+// under the cap, with credit-based flow control.
 import { z } from "zod";
 import { HANDSHAKE_NONCE_PATTERN } from "./proof";
 
-// One well-known default keeps the app listener and a client's connect
-// form aligned without either hardcoding it. High and unregistered so
-// it stays clear of common dev servers.
-export const DEFAULT_SOCKET_PORT = 42017;
-
 // Largest inbound (client to server) frame the host will buffer, in
-// bytes. Client frames are tiny by construction (the largest is a req
-// carrying one WIRE_CHUNK_B64_MAX chunk), so 1 MiB is generous and
-// still denies a pre-auth peer an unbounded buffering budget.
+// bytes. Client frames are small by construction (a req, or one
+// channel frame of at most CHANNEL_MAX_FRAME_BYTES), so 1 MiB is
+// generous and still denies a pre-auth peer an unbounded buffering
+// budget.
 export const MAX_INBOUND_FRAME_BYTES = 1 << 20;
 
-// One raw chunk of bulk app data per frame, for callers that move a
-// bundle as base64 inside JSON invokes (the sync transfer, both
-// directions). Chunking is what keeps an uplink req under
-// MAX_INBOUND_FRAME_BYTES and what gives both directions flow control
-// (each chunk is one awaited invoke round trip). The base64 form
-// (853_336 chars) leaves headroom under the 1 MiB inbound cap for the
-// frame fields around it. Byte STREAMS no longer ride this path: they
-// are binary channel frames (channels.ts).
-export const WIRE_CHUNK_BYTES = 640_000;
-const WIRE_CHUNK_B64_MAX = Math.ceil(WIRE_CHUNK_BYTES / 3) * 4;
-
-// The base64 form of one raw chunk, bounded by the cap above and
-// pinned to the base64 charset so a non-base64 payload fails at the
-// schema instead of silently decoding to garbage bytes. The ONE schema
-// for every bulk-data field on both chunked wires (sync's bundleChunk result and pushChunk payload), so an uplink
-// write can never exceed what a downlink chunk may carry and vice
-// versa.
-export const ChunkB64Schema = z
-  .string()
-  .max(WIRE_CHUNK_B64_MAX)
-  .regex(/^[A-Za-z0-9+/]*={0,2}$/);
-
 // Deadline for the first frame (a valid hello) after a socket opens.
-// A shared two-sided protocol fact: slice B's client must send within
-// it. Tests override via WsServerStartOpts.helloTimeoutMs.
+// A shared two-sided protocol fact: the client must send within it.
+// Tests override via WsServerStartOpts.helloTimeoutMs.
 export const HELLO_TIMEOUT_MS = 10_000;
 
 // Liveness. A websocket over a NAT, a tunnel edge or a laptop that just
@@ -89,8 +63,8 @@ export const PROBE_TIMEOUT_MS = 5_000;
 // judged, so a host can roll out ahead of its clients.
 export const HOST_LIVENESS_TIMEOUT_MS = 120_000;
 
-// Concurrent dispatched requests per connection, shared by the LAN
-// binding (per socket) and the hub link (per peer). Over the cap a
+// Concurrent dispatched requests per connection, shared by the direct
+// listener (per socket) and the hub link (per peer). Over the cap a
 // request is refused rather than spawning yet another git or CLI
 // subprocess. 64: byte streams no longer park anything here (they are
 // binary channel frames, channels.ts), but the headroom stays for a
@@ -98,7 +72,7 @@ export const HOST_LIVENESS_TIMEOUT_MS = 120_000;
 export const MAX_IN_FLIGHT_PER_PEER = 64;
 
 // Skip a push once the outbound socket buffer passes this, shared by
-// the LAN binding and the hub link, so a stalled peer or hub cannot
+// the direct listener and the hub link, so a stalled peer or hub cannot
 // grow main-process memory without bound via queued pushes. Pushes are
 // recoverable refresh signals, so dropping one is safe.
 export const PUSH_BUFFER_LIMIT_BYTES = 1 << 23;
@@ -110,8 +84,8 @@ export const TERMINATE_GRACE_MS = 1_500;
 
 // Application close codes (the 4000-4999 range websockets reserve for
 // apps). AUTH_FAILED means the credential itself was wrong: the client
-// must surface it and never auto-retry, or a typo'd token turns into a
-// hammering loop. HELLO_FAILED covers a missing, late or malformed
+// must surface it and never auto-retry, or a refused ticket turns into
+// a hammering loop. HELLO_FAILED covers a missing, late or malformed
 // hello and is safe to retry.
 //
 // AUTH_LOCKED_OUT is the one the HOST must not conflate with
@@ -120,7 +94,7 @@ export const TERMINATE_GRACE_MS = 1_500;
 // read, purely because this client identity spent its attempts
 // recently. It says nothing about the credential the refused client
 // holds -- often nothing at all, since the lockout keys on IP and one
-// device's typo benches every device behind the same NAT. It is
+// device's bad tickets bench every device behind the same NAT. It is
 // TEMPORARY by construction (AUTH_LOCKOUT_MS, and a refused connection
 // does not extend the window), so it is retryable and the client
 // backs off through it. Only the host can tell the two apart, so the
@@ -143,14 +117,13 @@ export const CLOSE_OVER_CAPACITY = 1013;
 // carried so the server can log or gate version skew later without a
 // protocol change.
 //
-// The credential comes in one of two shapes, fixed by how the listener
-// was constructed and never chosen by the frame: the legacy LAN wire
-// reads `token`, the direct data plane reads `nonce` and `proof`
-// (shared/ipc/socket/proof.ts). Both are optional so one schema serves
-// both wires, and each listener fails closed without its own.
+// The credential is `nonce` and `proof` (shared/ipc/socket/proof.ts),
+// read by the direct listener. Optional in the schema so a hello
+// without them still parses and is refused as a failed credential
+// (CLOSE_AUTH_FAILED, counted toward the lockout) rather than dropped
+// as a malformed frame.
 const HelloFrameSchema = z.object({
   t: z.literal("hello"),
-  token: z.string().optional(),
   deviceId: z.string(),
   appVersion: z.string(),
   // The client's nonce, and its HMAC of both nonces under the ticket.
@@ -171,17 +144,6 @@ export const ReqFrameSchema = z.object({
 });
 export type ReqFrame = z.infer<typeof ReqFrameSchema>;
 
-// Sent by a client peer when it closes its side on purpose. The device hub carries no per-peer socket close, so without
-// this a host would keep a hostSession for a departed peer until the
-// next presence drop and fan every broadcast at it through the Durable
-// Object. Additive per the version-skew policy: an old host fails to
-// parse the frame and drops it, so the session then dies on presence
-// exactly as before. The direct and LAN sockets have a real socket
-// close, so they never need it and ignore it.
-const ByeFrameSchema = z.object({
-  t: z.literal("bye"),
-});
-
 // The liveness pair (see HEARTBEAT_INTERVAL_MS): the client sends
 // pings on its cadence and on a probe, the host only ever answers with
 // pongs, so each frame lives in exactly one direction's union.
@@ -197,7 +159,6 @@ const PongFrameSchema = z.object({ t: z.literal("pong") });
 export const ClientFrameSchema = z.discriminatedUnion("t", [
   HelloFrameSchema,
   ReqFrameSchema,
-  ByeFrameSchema,
   PingFrameSchema,
 ]);
 export type ClientFrame = z.infer<typeof ClientFrameSchema>;
@@ -209,8 +170,8 @@ const WelcomeFrameSchema = z.object({
   t: z.literal("welcome"),
   deviceId: z.string(),
   appVersion: z.string(),
-  // The host's half of the mutual proof, direct data plane only. A
-  // proof-mode client refuses a welcome without it.
+  // The host's half of the mutual proof, direct data plane only. The
+  // direct client refuses a welcome without it.
   proof: z.string().optional(),
 });
 
@@ -229,23 +190,20 @@ const ResOkFrameSchema = z.object({
   result: z.unknown().optional(),
 });
 
-// The one refusal code either remote gate stamps on a res error today:
-// the device hub's per-peer command-grant gate and the LAN wire's
-// read-only gate. One shared constant so both
-// client roles mint one typed error for "that machine will not run
+// The one refusal code a remote gate stamps on a res error: the direct
+// listener's command-access gate. One shared constant so the client
+// transport mints one typed error for "that machine will not run
 // commands from here", distinct from a real handler failure.
 export const COMMAND_REFUSED_CODE = "command-refused";
 
-// The refusal message both gates carry. The exact text predates the
-// code (the hub grant gate shipped it in step 4), so an OLD peer
-// still sends it WITHOUT a code and message-based matching keeps
-// working across version skew in both directions.
+// The refusal message the gate carries, matched on its own wherever
+// only the text survives (see isCommandRefusedError).
 export const COMMAND_REFUSED_MESSAGE =
   "this device is not permitted to run commands on the remote machine";
 
-// The typed client-side surface of a command refusal, minted by both
-// client roles (the LAN socket client transport and the hub link's
-// client role) when a res error carries COMMAND_REFUSED_CODE. The
+// The typed client-side surface of a command refusal, minted by the
+// direct client transport when a res error carries
+// COMMAND_REFUSED_CODE. The
 // message is preserved verbatim so every message-text matcher keeps
 // behaving as before.
 export class CommandRefusedError extends Error {
@@ -258,8 +216,8 @@ export class CommandRefusedError extends Error {
 // Matcher that survives Electron's IPC error serialization (which
 // flattens an error to its message text): the renderer behind the hub
 // bridge sees a plain Error carrying the refusal message, not the
-// instance minted in main, and an OLD peer sends the message with no
-// code at all. Either form means "ask that machine to allow commands".
+// instance minted in main. Either form means "ask that machine to
+// allow commands".
 export function isCommandRefusedError(error: unknown): boolean {
   if (error instanceof CommandRefusedError) return true;
   const message = error instanceof Error ? error.message : String(error);
@@ -270,9 +228,7 @@ export function isCommandRefusedError(error: unknown): boolean {
 // survives Electron's IPC error serialization too: the matchers in
 // shared/errors.ts key on message text, so both wires degrade handler
 // failures identically. `code` is the machine-readable refusal
-// classification, ADDITIVE per the version-skew policy: an old peer
-// sends no code, and a reader treats absence as an unclassified
-// failure, falling back to the message text.
+// classification, absent on an ordinary handler failure.
 const ResErrFrameSchema = z.object({
   t: z.literal("res"),
   id: z.number().int(),
@@ -299,6 +255,12 @@ export const ServerFrameSchema = z.discriminatedUnion("t", [
   PongFrameSchema,
 ]);
 export type ServerFrame = z.infer<typeof ServerFrameSchema>;
+
+// The answer a wire gives when nothing serves the requested channel,
+// built in one place so every wire words it the same.
+export function noHandlerMessage(channel: string): string {
+  return `No handler registered for channel "${channel}"`;
+}
 
 // The failure answer to a req, on every wire alike: the message alone,
 // plus the code when the refusal has one.

@@ -1,21 +1,30 @@
-// Durable proof for auto-pull (host/lib/worktrees/autoPull.ts and
-// autoPullSweep.ts) against a REAL git repository with a remote: a
-// marked worktree that is clean and strictly behind fast-forwards, and
-// every state that makes a pull anything other than a plain
-// fast-forward leaves the worktree untouched: a local commit, a
-// modified file, an untracked file, a detached HEAD, a missing
-// upstream, an app-started script. The sweep is checked to pull only
-// the marked worktree of a project, and the mark storage to round-trip
-// through a sandbox registry.json.
+// Durable proof for auto-pull (host/lib/worktrees/autoPullSweep.ts)
+// against a REAL git repository with a remote: a marked worktree that
+// is clean and strictly behind fast-forwards, and every state that
+// makes a pull anything other than a plain fast-forward leaves the
+// worktree untouched: a local commit, a modified file, an untracked
+// file, a detached HEAD, a missing upstream, an app-started script.
+// The sweep is checked to pull only the marked worktree of a project,
+// and the mark (the CLI's, `sm worktrees autopull`) to round-trip
+// through a sandbox registry.json and back out on the identities the
+// sweep reads.
 //
 // Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
-// imports resolve. Run: pnpm test auto-pull.
+// imports resolve, against the sm binary built from cli/
+// (test/lib/smBinary.mjs). Run: pnpm test auto-pull.
 import assert from "node:assert/strict";
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeProof, sandboxGit, scrubbedGitEnv } from "./lib/checkKit.mjs";
 import { scrubProcessGitEnv, tempDir } from "./lib/checkKit.mjs";
+import { wireHostCli } from "./lib/smBinary.mjs";
 
 // The pull runs git under this process's environment. The pre-commit
 // hook's GIT_* variables would point that git at the commit in
@@ -23,19 +32,33 @@ import { scrubProcessGitEnv, tempDir } from "./lib/checkKit.mjs";
 const gitEnv = scrubbedGitEnv();
 scrubProcessGitEnv();
 
-const { initDataDirAt } = await import("../host/lib/util/paths.ts");
-const { isAutoPull, readAutoPullSet, setAutoPull, dropAutoPull } =
-  await import("../host/lib/worktrees/autoPull.ts");
+const dataDir = realpathSync(mkdtempSync(join(tmpdir(), "sm-auto-pull-data-")));
+const { sm } = await wireHostCli(dataDir);
+
 const { autoPullWorktree, sweepAutoPull } =
   await import("../host/lib/worktrees/autoPullSweep.ts");
-const { worktreeIdFromPath } = await import("../host/lib/git/worktrees.ts");
+const { listWorktreeIdentitiesViaCli, setAutoPullViaCli } =
+  await import("../host/ipc/cliDelegate.ts");
 
 const git = sandboxGit(gitEnv);
 
 const { check, done, fail } = makeProof("auto-pull proof");
 
-const dataDir = realpathSync(mkdtempSync(join(tmpdir(), "sm-auto-pull-data-")));
-initDataDirAt(dataDir);
+// Registers a sandbox repo as a project through the CLI.
+async function addProject(path) {
+  const { docs } = await sm("projects", "add", "--", path);
+  const project = docs.findLast((doc) => typeof doc.id === "string");
+  assert.ok(project, `projects add emitted no project for ${path}`);
+  return project;
+}
+
+// The marked ids registry.json holds under the CLI's key.
+function markedInRegistry() {
+  const registry = JSON.parse(
+    readFileSync(join(dataDir, "registry.json"), "utf8"),
+  );
+  return Object.keys(registry.autoPullWorktrees ?? {}).toSorted();
+}
 
 // A bare origin, a "project" clone whose main follows origin/main, and
 // a second clone that plays the colleague pushing new commits.
@@ -191,17 +214,31 @@ async function main() {
 
   await check(
     "the mark round-trips through registry.json and drops cleanly",
-    () => {
-      assert.equal(isAutoPull("wt-a"), false);
-      setAutoPull("wt-a", true);
-      setAutoPull("wt-b", true);
-      assert.equal(isAutoPull("wt-a"), true);
-      assert.deepEqual([...readAutoPullSet()].toSorted(), ["wt-a", "wt-b"]);
-      dropAutoPull("wt-a");
-      dropAutoPull("wt-a");
-      assert.deepEqual([...readAutoPullSet()], ["wt-b"]);
-      dropAutoPull("wt-b");
-      assert.equal(readAutoPullSet().size, 0);
+    async (track) => {
+      const { project, root } = makeSandbox(track);
+      const linked = join(root, "linked");
+      git(project, "worktree", "add", "-q", "-b", "feature", linked);
+      const registered = await addProject(project);
+      const ids = async () =>
+        Object.fromEntries(
+          (
+            await listWorktreeIdentitiesViaCli({ projectId: registered.id })
+          ).map((identity) => [identity.path, identity]),
+        );
+      const before = await ids();
+      assert.equal(before[project].autoPull, false);
+      const primaryId = before[project].id;
+      const linkedId = before[linked].id;
+      const row = await setAutoPullViaCli(registered, primaryId, true);
+      assert.equal(row.autoPull, true, "the answered row carries the mark");
+      await setAutoPullViaCli(registered, linkedId, true);
+      assert.deepEqual(markedInRegistry(), [linkedId, primaryId].toSorted());
+      assert.equal((await ids())[project].autoPull, true);
+      await setAutoPullViaCli(registered, primaryId, false);
+      await setAutoPullViaCli(registered, primaryId, false);
+      assert.deepEqual(markedInRegistry(), [linkedId]);
+      await setAutoPullViaCli(registered, linkedId, false);
+      assert.deepEqual(markedInRegistry(), []);
     },
   );
 
@@ -220,13 +257,16 @@ async function main() {
       git(project, "fetch", "-q");
       git(linked, "fetch", "-q");
       const linkedBefore = head(linked);
-      // Nothing marked: nothing happens, no git spawned for it.
-      let result = await sweepAutoPull("proj", project, new Set());
+      const registered = await addProject(project);
+      // Nothing marked: nothing happens.
+      let result = await sweepAutoPull(registered.id, new Set());
       assert.deepEqual(result, { pulled: [], failed: [] });
-      const projectId = worktreeIdFromPath(project);
-      setAutoPull(projectId, true);
-      track(() => dropAutoPull(projectId));
-      result = await sweepAutoPull("proj", project, new Set());
+      const [primary] = await listWorktreeIdentitiesViaCli({
+        projectId: registered.id,
+      });
+      assert.equal(primary.path, project);
+      await setAutoPullViaCli(registered, primary.id, true);
+      result = await sweepAutoPull(registered.id, new Set());
       assert.equal(result.failed.length, 0);
       assert.deepEqual(
         result.pulled.map((entry) => [entry.worktree.path, entry.commits]),
@@ -239,7 +279,7 @@ async function main() {
       git(seed, "checkout", "-q", "main");
       pushCommit(seed, "main-two.txt");
       git(project, "fetch", "-q");
-      result = await sweepAutoPull("proj", project, new Set([projectId]));
+      result = await sweepAutoPull(registered.id, new Set([primary.id]));
       assert.deepEqual(result, { pulled: [], failed: [] });
     },
   );

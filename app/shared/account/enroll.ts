@@ -84,13 +84,19 @@ export async function enrollDevice(
     }
     enrollment = await deps.service.enroll(token, fields);
   }
+  const accountId = deriveAccountId(token);
   deps.store.write({
     credential: enrollment.credential,
-    accountId: deriveAccountId(token),
+    accountId,
     deviceName,
     ...(deviceIcon === null ? {} : { deviceIcon }),
     hubName: deviceName,
     hubIcon: fields.icon,
+    // A re-enrollment under the same account keeps the command-access
+    // switch. Another account starts with it off.
+    ...(stored?.accountId === accountId && stored.acceptsCommands === true
+      ? { acceptsCommands: true }
+      : {}),
   });
 }
 

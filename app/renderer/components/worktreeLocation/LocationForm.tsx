@@ -17,7 +17,7 @@ import { worktreePathFor } from "@shared/git/worktreeLayout";
 import { pluralize } from "@/lib/pluralize";
 import { LayoutOptionItem, type LayoutOption } from "./LayoutOptionItem";
 import { WorktreeMoveDetails } from "@/components/shared/WorktreeMoveDetails";
-import { tildify } from "@/lib/projectPaths";
+import { tildify } from "@shared/projectPaths";
 
 const LAYOUT_OPTIONS: LayoutOption[] = [
   {

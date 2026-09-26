@@ -3,7 +3,11 @@ import { useWorktreeScriptActivity } from "@/hooks/scripts/useScriptRuns";
 import { useIsDeletingWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import type { ScriptActivityKind } from "@/store/scriptRuns";
 import type { Worktree } from "@shared/schemas";
-import { fillRoutePath, WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
+import {
+  fillRoutePath,
+  routeDeviceId,
+  WORKTREE_ROUTE_PATHS,
+} from "@/lib/routePaths";
 
 export interface WorktreeRowState {
   isSelected: boolean;
@@ -21,7 +25,7 @@ export interface WorktreeRowState {
 // say on hover" have the same answers in both, and answering them twice
 // is how the two silently drift.
 // `deviceId` names the peer a remote row belongs to. Absent, the row
-// is this machine's. The two twin routes differ in nothing else.
+// is this machine's.
 export function useWorktreeRowState(
   worktree: Worktree,
   deviceId?: string,
@@ -31,14 +35,11 @@ export function useWorktreeRowState(
   const activity = useWorktreeScriptActivity(worktree.id, deviceId);
   const isDeleting = useIsDeletingWorktree(worktree.id, deviceId);
   const params = {
-    deviceId: deviceId ?? "",
+    deviceId: routeDeviceId(deviceId),
     projectId: worktree.projectId,
     worktreeId: worktree.id,
   };
-  const route =
-    deviceId === undefined
-      ? WORKTREE_ROUTE_PATHS.detail.local
-      : WORKTREE_ROUTE_PATHS.detail.remote;
+  const route = WORKTREE_ROUTE_PATHS.detail;
   // Not useMatchRoute: its stable function return reads from a hidden
   // store, which React Compiler can't see, so isSelected stays cached at
   // false. location.pathname is already decoded, so no encoding here.

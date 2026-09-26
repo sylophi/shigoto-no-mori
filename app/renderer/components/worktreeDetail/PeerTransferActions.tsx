@@ -3,8 +3,9 @@
 // turned around: a live copy of this worktree on a peer ("Mirror
 // to…"), or moving it there ("Transplant to…"). Both wait on what the
 // remote pair waits on (a real branch of its own, a repo identity) and
-// on a peer holding the same repo. Which peer is the dialog's question
-// (flow/peerTargets.ts), so the buttons only open it. The primary
+// on another device that hosts projects (one without the repo clones
+// it first). Which peer is the dialog's question (flow/peerTargets.ts),
+// so the buttons only open it. The primary
 // checkout can be mirrored but not transplanted: it is the project
 // itself and cannot be torn down.
 import { useState } from "react";

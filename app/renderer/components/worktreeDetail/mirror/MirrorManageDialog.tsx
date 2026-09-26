@@ -27,7 +27,6 @@ import type {
 } from "@shared/ipc/modules/mirror";
 import {
   isMirrorStopUnconfirmed,
-  mirrorCopyOf,
   mirrorStopIsSafe,
 } from "@shared/ipc/modules/mirror";
 import { Button } from "@/components/ui/button";
@@ -97,10 +96,9 @@ export function MirrorManageDialog({
   const { canCommand: canControl } = useCommandAccess();
   const runner = useDeviceName(runnerDeviceId);
   const other = useDeviceName(otherDeviceId);
-  // The worktree the session runs on, on the runner: the copy, or the
-  // original when the mirror was started to a peer. Its .gitignore
-  // files are the tracked ones both copies hold, so the ignore rule
-  // reads off it, and the history thread is keyed by it.
+  // The worktree the session runs on, on the runner: the original. Its
+  // .gitignore files are the tracked ones both copies hold, so the
+  // ignore rule reads off it, and the history thread is keyed by it.
   const worktree = {
     projectId: session.localProjectId,
     id: session.localWorktreeId,
@@ -114,15 +112,13 @@ export function MirrorManageDialog({
   // wording here instead of dead-ending on a raw error.
   const [refused, setRefused] = useState(false);
   const discarding = !mirrorStopIsSafe(session.git?.status) || refused;
-  // Where the copy a stop removes is, and who keeps the original: on
-  // the peer for a mirror started to it, otherwise on the runner.
-  // Either may be this machine.
-  const copy = mirrorCopyOf(session, runnerDeviceId);
-  const keeperDeviceId =
-    copy.deviceId === runnerDeviceId ? session.deviceId : runnerDeviceId;
-  const copyName = useDeviceName(copy.deviceId);
+  // Where the copy a stop removes is (the runner's peer) and who keeps
+  // the original (the runner). Either may be this machine.
+  const copyDeviceId = session.deviceId;
+  const keeperDeviceId = runnerDeviceId;
+  const copyName = useDeviceName(copyDeviceId);
   const keeper = useDeviceName(keeperDeviceId);
-  const copyWhere = copy.deviceId === localDeviceId ? "here" : `on ${copyName}`;
+  const copyWhere = copyDeviceId === localDeviceId ? "here" : `on ${copyName}`;
   // A session the runner lists as stopping is past its controls: the
   // engine has ended it and the copy is on its way out.
   const busy =

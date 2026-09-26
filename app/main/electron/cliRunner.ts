@@ -1,7 +1,7 @@
-// Spawns the bundled CLI as the app's worktree engine. The five
-// lifecycle mutations (create, delete, adopt, done, merge) route
-// through here, so the app and a terminal produce byte-identical
-// behavior. The binary is addressed directly, Resources/ when
+// Spawns the bundled CLI, the app's engine for the data model: the
+// worktree and project mutations and the reads (rows, projects,
+// config, launchers, scripts) route through here, so the app and a
+// terminal produce byte-identical behavior. The binary is addressed directly, Resources/ when
 // packaged and dist-cli/smd in dev (built by `pnpm dev`), so no PATH
 // install is involved: the binary is flavor-stamped at build time and
 // reads the same pointer file the app does, so it lands on the app's
@@ -49,7 +49,12 @@ let backgroundChildren = 0;
 // data dir and the git directories. Background children are NOT
 // counted: the file-sync daemon lives as long as the app, and counting
 // it would mute both watchers for the whole run (its own writes land
-// under its data directory, which neither watcher reads).
+// under its data directory, which neither watcher reads). Neither are
+// reads (opts.readOnly): the app reads rows, projects and config
+// through the CLI on every refresh, and counting those would mute the
+// watchers for most of the session while writing nothing they react
+// to (the listing's shelf bookkeeping is the one exception, and the
+// state watcher tells it apart itself).
 export function cliChildCount(): number {
   return children.size - backgroundChildren;
 }
@@ -116,7 +121,11 @@ export async function spawnCliDetached(args: string[]): Promise<void> {
 // extraEnv overlays the app's environment (used by cliShell.ts to pass
 // the user's real shell-config env vars, which launchd strips).
 // opts.background exempts the child from the busy aggregate (see
-// backgroundChildren). opts.timeoutMs SIGKILLs the child's process
+// backgroundChildren). opts.readOnly does the same for a read (a list,
+// a config read), and also skips the self-write note on close: a read
+// writes nothing the state watcher reacts to (see its header for the
+// listing's shelf writes), so a genuinely external write landing just
+// after it must still refresh the UI. opts.timeoutMs SIGKILLs the child's process
 // group when it runs that long, so a wedged child (a stuck subprocess
 // on the Go side) can't hold the returned promise open forever. The
 // kill surfaces as a normal non-zero close.
@@ -124,9 +133,10 @@ export async function runCli(
   args: string[],
   onDoc?: (doc: CliDoc) => void,
   extraEnv?: Record<string, string>,
-  opts?: { background?: boolean; timeoutMs?: number },
+  opts?: { background?: boolean; readOnly?: boolean; timeoutMs?: number },
 ): Promise<CliResult> {
   const binary = requireCliBinary();
+  const uncounted = opts?.background === true || opts?.readOnly === true;
   return new Promise((resolve, reject) => {
     const child = spawn(binary, ["--json", ...args], {
       env: { ...process.env, ...extraEnv },
@@ -135,7 +145,7 @@ export async function runCli(
       detached: true,
     });
     children.add(child);
-    if (opts?.background) backgroundChildren++;
+    if (uncounted) backgroundChildren++;
     const killTimer =
       opts?.timeoutMs !== undefined
         ? setTimeout(() => signalChildTree(child, "SIGKILL"), opts.timeoutMs)
@@ -143,7 +153,7 @@ export async function runCli(
     // error and close can both fire for one child, so release runs once.
     const release = () => {
       if (killTimer !== null) clearTimeout(killTimer);
-      if (children.delete(child) && opts?.background) backgroundChildren--;
+      if (children.delete(child) && uncounted) backgroundChildren--;
     };
 
     const docs: CliDoc[] = [];
@@ -175,7 +185,7 @@ export async function runCli(
       // The CLI's writes into the data dir are the app's own doing; mark
       // them so the state watcher doesn't refetch-storm on the echo.
       // (While the child runs, the watcher checks cliChildCount().)
-      noteSelfWrite();
+      if (!opts?.readOnly) noteSelfWrite();
       resolve({ code: code ?? -1, docs, stderrTail });
     });
   });

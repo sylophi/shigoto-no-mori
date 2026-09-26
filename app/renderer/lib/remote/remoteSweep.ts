@@ -2,7 +2,7 @@
 // host keeps its background sweep ticking (main/electron/fetch.ts has
 // the design). Asked on this window's focus and on a session landing,
 // then renewed within the lease the host hands back, for as long as
-// this window stays focused. Boot-scoped like remoteHostWatch.
+// this window stays focused. Boot-scoped like the device sync.
 import { focusManager } from "@tanstack/react-query";
 import { documentFocused } from "@/lib/focus";
 import { remoteDeviceStore } from "./devices";

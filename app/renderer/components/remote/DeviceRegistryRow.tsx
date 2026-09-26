@@ -111,17 +111,15 @@ export function DeviceRegistryRow({
   // What the row's controls call the machine: this one by its role, a
   // peer by name.
   const controlLabel = isThisDevice ? traits.selfLabel : namedDevice;
-  // A peer that is up and has ANSWERED "no" is read-only from here.
-  // Nothing is said while the verdict is in flight, when the preflight
-  // itself failed (that is transport, not the peer's switch), when the
-  // peer is unreachable (it cannot run anything anyway), or for a
-  // browser, which has no switch to point at.
+  // A peer that is up and has SAID "no" is read-only from here.
+  // Nothing is said before its session reports, when the peer is
+  // unreachable (it cannot run anything anyway), or for a browser,
+  // which has no switch to point at.
   const readOnlyHere =
     !isThisDevice &&
     traits.exposable &&
     status.reachable &&
     !access.isLoading &&
-    !access.isError &&
     !access.granted;
   const note = isThisDevice
     ? tunnelNote(tunnel)

@@ -1,5 +1,5 @@
 // Tiny in-memory cache with a TTL. Used by the per-project config and
-// the global config to avoid re-reading disk on every IPC call while
+// the global config to avoid a CLI read on every IPC call while
 // keeping invalidation cheap (write paths call `invalidate`).
 
 interface Entry<V> {

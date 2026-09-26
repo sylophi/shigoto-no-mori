@@ -19,7 +19,7 @@ type RegisterContractOpts<Ctx = HandlerContext> = {
   // forgets the hook fails at startup instead of silently freezing the
   // usage sorts.
   onUsageTracked?: (parsedInput: unknown) => void;
-  // Runs after a handler whose def is tagged `mutating: true` resolves
+  // Runs after a handler whose def is tagged `gated: true` resolves
   // (before output validation, which only dev builds run: the mutation
   // happened either way), whichever wire carried the call, with the
   // calling peer's context so the binding can tell which wire that was
@@ -39,25 +39,24 @@ type RegisterContractOpts<Ctx = HandlerContext> = {
 };
 
 // The per-call wrapper: ONE definition of what serving a contract call
-// means, shared by the registrar loop below and any single-slot
-// binding (the hub broker in host/ipc/modules/direct.ts), so
-// dispatch policy cannot diverge between the wires. Input parsing is
+// means, so dispatch policy cannot diverge between the wires the
+// registrar loop below serves. Input parsing is
 // UNCONDITIONAL, never gated by build type: the moment handlers are
 // reachable over a socket, this parse is the wall between a malformed
 // payload and git argv. The hooks are resolved once here (an untracked
-// non-mutating def pays nothing per call): onUsageTracked runs only
+// ungated def pays nothing per call): onUsageTracked runs only
 // for a def opting in via tracksProjectUsage, and onMutationResolved
-// only for an explicit mutating:true def not opted out via
+// only for an explicit gated:true def not opted out via
 // movesHostState:false, exactly the rules RegisterContractOpts
 // documents.
-export function wrapContractCall<Ctx>(
+function wrapContractCall<Ctx>(
   def: InvokeDef,
   handler: (input: unknown, ctx: Ctx) => unknown,
   opts: RegisterContractOpts<Ctx>,
 ): (ctx: Ctx, raw: unknown) => Promise<unknown> {
   const onSuccess = def.tracksProjectUsage ? opts.onUsageTracked : undefined;
   const onMutated =
-    def.mutating === true && def.movesHostState !== false
+    def.gated === true && def.movesHostState !== false
       ? opts.onMutationResolved
       : undefined;
   return async (ctx, raw) => {
@@ -98,14 +97,14 @@ export function registerContract<M extends ContractModule>(
     // undefined, never collapsed to false) so the remote bindings'
     // read-only collections stay fail-closed at the transport level
     // too: they record a channel as servable-ungated only on an
-    // EXPLICIT mutating:false, so a def that never classified itself is
+    // EXPLICIT gated:false, so a def that never classified itself is
     // gated like a command rather than served as a read. The socket
     // check already forbids untagged remote invokes at the contract
     // level, and this keeps the property even for a def that escapes it.
-    const mutating = def.mutating;
+    const gated = def.gated;
     server.handle(def.channel, wrapContractCall(def, handler, opts), {
       remote,
-      mutating,
+      gated,
     });
   }
 }

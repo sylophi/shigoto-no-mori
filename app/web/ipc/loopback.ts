@@ -85,7 +85,7 @@ export function createLoopbackWire(scope: ContractScope): LoopbackWire {
 
   function fallbackVerdict(channel: string, def: InvokeDef): FallbackVerdict {
     const allowlisted = STUB_ALLOWED.has(channel);
-    if (def.mutating !== false && !allowlisted) {
+    if (def.gated !== false && !allowlisted) {
       // Mutations, and local channels that never classified themselves
       // as reads, must not pretend to succeed.
       return {

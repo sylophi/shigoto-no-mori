@@ -1,8 +1,11 @@
 package main
 
-// On-disk state access, ported from host/lib/config/{store,global,
-// project}.ts and host/lib/util/{jsonFile,lockFile}.ts. Layout under
-// the data dir:
+// On-disk state access. The CLI owns these formats; the app's
+// host/lib/config/{store,global,project}.ts and
+// host/lib/util/{jsonFile,lockFile}.ts share them byte for byte (the
+// lock protocol, the atomic writes, the schema marker), and 2.x
+// builds of either still read and write them. Layout under the data
+// dir:
 //   registry.json                           projects, shelved worktrees
 //   state.json                              use logs, sort/collapse prefs
 //   config.json                             global prefs
@@ -288,32 +291,34 @@ func noteNewerSchema(path string, raw []byte) {
 		path, doc.SchemaVersion, schemaVersion)))
 }
 
-// The registry keys this CLI writes. The app names the same ones in
-// host/lib/config/store.ts. autoPullKey holds the worktree ids the app
-// fast-forwards on its fetch cadence (host/lib/worktrees/autoPull.ts):
-// the app flips it from the detail footer, and the CLI seeds it for a
-// new worktree or project when the autoPullNew setting says so
-// (markAutoPullIfNew).
+// The registry keys this CLI writes; the app reads them only through
+// `sm` (its host/lib/config/store.ts names the two the one-time split
+// moves). autoPullKey holds the worktree ids the app fast-forwards on
+// its fetch cadence (host/lib/worktrees/autoPullSweep.ts): the app
+// flips it from the detail footer through `sm worktrees autopull`, and
+// the CLI seeds it for a new worktree or project when the autoPullNew
+// setting says so (markAutoPullIfNew).
 const (
 	projectsKey = "projects"
 	shelvedKey  = "shelvedWorktrees"
 	autoPullKey = "autoPullWorktrees"
 )
 
-// What each shelved worktree looked like when it went on the shelf,
-// which the app compares against to unshelve a worktree that gets
-// worked in (host/lib/worktrees/shelved.ts). The app writes the
-// entries. The CLI only clears them: on every shelve and unshelve, so a
-// fresh shelf starts from a fresh snapshot, and with the worktree's
-// other marks.
+// What each shelved worktree looked like when it went on the shelf
+// ({at, head, changed}, shelf.go), which the listing compares against
+// to unshelve a worktree that gets worked in. The full listing writes
+// the entries (settleShelves). Every shelve and unshelve clears the
+// worktree's entry, so a fresh shelf starts from a fresh snapshot, and
+// it goes with the worktree's other marks.
 const shelfSnapshotsKey = "shelfSnapshots"
 
 // Every map in the registry keyed by worktree id: the `{ worktreeId:
 // true }` marks and the shelf snapshots. A worktree's id is
 // derived from its path, so the flows that retire an id (rm, project
 // remove) clear it from each of these through dropWorktreeMarks, and a
-// new mark only has to be added to this list. The app keeps the same
-// list in host/lib/worktrees/marks.ts.
+// new mark only has to be added to this list. The app reads the marks
+// off rows and identities (`sm worktrees list`); `sm shelve` and `sm
+// autopull` flip them, and the listing keeps the shelf snapshots.
 var worktreeMarkKeys = []string{shelvedKey, autoPullKey, shelfSnapshotsKey}
 
 // deviceId (app-written, host/lib/config/deviceId.ts) is deliberately
@@ -420,8 +425,8 @@ func writeJSONObject(path string, doc map[string]json.RawMessage) error {
 	return atomicWriteJSONMode(path, doc, configFileMode(path))
 }
 
-// config.json carries socketHost.token, a bearer secret, so it is
-// 0600 like the app's own writer (host/lib/config/global.ts).
+// config.json is owner-only (0600), like the app's own writer
+// (host/lib/config/global.ts).
 func configFileMode(path string) os.FileMode {
 	if filepath.Base(path) == "config.json" {
 		return 0o600
@@ -543,9 +548,27 @@ func readShelvedSet() map[string]bool {
 
 // The ids marked under one worktreeMarkKeys entry.
 func readRegistryMarkSet(key string) map[string]bool {
+	return markSetFrom(readRegistryHints(), key)
+}
+
+// The `{ worktreeId: true }` marks every row and identity carries, from
+// one registry read, keyed by mark key. The shelf snapshots are not an
+// id set (shelfSnapshotsFrom reads them).
+func readWorktreeMarkSets() map[string]map[string]bool {
+	return worktreeMarkSetsFrom(readRegistryHints())
+}
+
+func worktreeMarkSetsFrom(all map[string]json.RawMessage) map[string]map[string]bool {
+	return map[string]map[string]bool{
+		shelvedKey:  markSetFrom(all, shelvedKey),
+		autoPullKey: markSetFrom(all, autoPullKey),
+	}
+}
+
+func markSetFrom(all map[string]json.RawMessage, key string) map[string]bool {
 	marked := map[string]bool{}
 	var m map[string]bool
-	if err := decodeKey(registryPath(), key, readRegistryHints()[key], &m); err != nil {
+	if err := decodeKey(registryPath(), key, all[key], &m); err != nil {
 		noteRegistryTrouble(err)
 		return marked
 	}
@@ -705,10 +728,30 @@ func splitLocked() error {
 }
 
 // Flips the id in the shelved map (store.ts writeKey semantics) and
-// retires its snapshot either way, in one pass under the registry lock.
-// The snapshot values are the app's to shape, so they pass through as
-// raw JSON.
+// retires its snapshot either way, so the next listing judges the new
+// shelf against a fresh one.
 func setShelved(worktreeID string, shelved bool) error {
+	return updateShelf(func(marks map[string]bool, snapshots map[string]json.RawMessage) (bool, error) {
+		_, hadSnapshot := snapshots[worktreeID]
+		if marks[worktreeID] == shelved && !hadSnapshot {
+			return false, nil
+		}
+		if shelved {
+			marks[worktreeID] = true
+		} else {
+			delete(marks, worktreeID)
+		}
+		delete(snapshots, worktreeID)
+		return true, nil
+	})
+}
+
+// Read-modify-write of the shelved marks and the shelf snapshots
+// together, in one pass under the registry lock. fn edits both maps in
+// place and reports whether it changed anything; false skips the
+// write. Snapshot values pass through as raw JSON, so an entry fn
+// doesn't touch is written back byte for byte.
+func updateShelf(fn func(marks map[string]bool, snapshots map[string]json.RawMessage) (bool, error)) error {
 	if err := ensureRegistrySplit(); err != nil {
 		return err
 	}
@@ -725,16 +768,10 @@ func setShelved(worktreeID string, shelved bool) error {
 		if err := decodeKey(registryPath(), shelfSnapshotsKey, all[shelfSnapshotsKey], &snapshots); err != nil {
 			return err
 		}
-		_, hadSnapshot := snapshots[worktreeID]
-		if marks[worktreeID] == shelved && !hadSnapshot {
-			return nil
+		changed, err := fn(marks, snapshots)
+		if err != nil || !changed {
+			return err
 		}
-		if shelved {
-			marks[worktreeID] = true
-		} else {
-			delete(marks, worktreeID)
-		}
-		delete(snapshots, worktreeID)
 		for key, value := range map[string]any{shelvedKey: marks, shelfSnapshotsKey: snapshots} {
 			encoded, err := json.Marshal(value)
 			if err != nil {
@@ -751,16 +788,18 @@ func setShelved(worktreeID string, shelved bool) error {
 // opts in, autoPullPrimaryOnly narrows it to primaries. Best-effort,
 // like the config seed beside it: a missing mark is a click in the
 // footer away.
-func markAutoPullIfNew(global globalConfig, worktreeID string, isPrimary bool) {
+// Reports whether the mark landed, so the caller's row can say so.
+func markAutoPullIfNew(global globalConfig, worktreeID string, isPrimary bool) bool {
 	on := func(b *bool) bool { return b != nil && *b }
 	if !on(global.AutoPullNew) || (on(global.AutoPullPrimaryOnly) && !isPrimary) {
-		return
+		return false
 	}
-	// The auto-pull mark (autoPullKey). Same map shape as the shelf, and
-	// the same helper as the app's registryIdSet.ts.
+	// The auto-pull mark (autoPullKey). Same map shape as the shelf.
 	if err := setRegistryMark(autoPullKey, worktreeID, true); err != nil {
 		vlog("[state] set auto-pull: %v", err)
+		return false
 	}
+	return true
 }
 
 // Clears an id from every worktreeMarkKeys map in one pass under the
@@ -800,6 +839,52 @@ func dropWorktreeMarks(worktreeID string) {
 	}
 	if err != nil {
 		vlog("[state] drop worktree marks: %v", err)
+	}
+}
+
+// Carries every worktreeMarkKeys mark from a retired id to the id that
+// replaces it, in one pass under the registry lock: a moved checkout
+// (sm worktrees move) keeps its shelf and auto-pull state. Best-effort
+// like dropWorktreeMarks.
+func moveWorktreeMarks(from, to string) {
+	err := ensureRegistrySplit()
+	if err == nil {
+		err = withFileLock(registryPath(), func() error {
+			all, err := readJSONObject(registryPath())
+			if err != nil {
+				return err
+			}
+			changed := false
+			for _, key := range worktreeMarkKeys {
+				m := map[string]json.RawMessage{}
+				if err := decodeKey(registryPath(), key, all[key], &m); err != nil {
+					return err
+				}
+				if _, marked := m[from]; !marked {
+					continue
+				}
+				// A shelf snapshot stays behind: a move can copy the
+				// files and give every one a fresh mtime, so the next
+				// listing takes a new one (shelf.go).
+				if key != shelfSnapshotsKey {
+					m[to] = m[from]
+				}
+				delete(m, from)
+				encoded, err := json.Marshal(m)
+				if err != nil {
+					return err
+				}
+				all[key] = encoded
+				changed = true
+			}
+			if !changed {
+				return nil
+			}
+			return writeJSONObject(registryPath(), all)
+		})
+	}
+	if err != nil {
+		vlog("[state] move worktree marks: %v", err)
 	}
 }
 

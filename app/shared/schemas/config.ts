@@ -3,7 +3,7 @@ import { isSafeRelPath } from "../git/gitPaths";
 import { ProjectScopedPayloadSchema } from "./payloads";
 import { MergeMethodSchema } from "./pullRequest";
 import { CustomPortSchema, MAX_CUSTOM_PORTS, PortNumberSchema } from "./ports";
-import { SidebarViewSchema } from "./project";
+import { ProjectSortModeSchema, SidebarViewSchema } from "./project";
 
 const ThemeSchema = z.enum(["light", "dark", "system"]);
 export type Theme = z.infer<typeof ThemeSchema>;
@@ -153,12 +153,9 @@ export type ShigomoriWorktreeData = z.infer<typeof ShigomoriWorktreeDataSchema>;
 // so both the host and the CLI read it. How the app instance looks
 // (theme, doubutsu) is client config and lives in ClientConfigSchema
 // below.
-// Doubles as the globalConfig:write IPC input. z.object STRIPS unknown
-// keys rather than rejecting them, and it must not become .strict():
-// pre-split installs can still carry legacy client keys (and keys from
-// newer builds) in config.json, and those have to keep passing through
-// the write path unrejected. The stripping is also what drops a key
-// the renderer invents at the boundary instead of persisting it.
+// Reads use the loose Stored variant below: pre-split installs can
+// still carry legacy client keys (and keys from newer builds) in
+// config.json, and those have to pass through unrejected.
 export const GlobalConfigSchema = z.object({
   launchers: z.array(LauncherCommandSchema).optional(),
   // Launcher entry ids (`app:cursor`, `web:github`, `custom:<uuid>`) the
@@ -176,17 +173,17 @@ export const GlobalConfigSchema = z.object({
   launchScripts: z.boolean().optional(),
   // When false, deleting a worktree keeps its checked-out local branch
   // (deletion is skipped anyway if the branch is the primary's or in
-  // use by another worktree). ON by default. Unset means delete, in
-  // both engines (cli/cmd_config.go and host/lib/nuke.ts).
+  // use by another worktree). ON by default. Unset means delete
+  // (cli/cmd_rm.go, which every removal runs through).
   deleteBranchOnRemove: z.boolean().optional(),
   // When true, adding a project with a package.json seeds its setup
   // script with `<detected-pm> install`. Only fires at project-add
   // time; existing projects are untouched.
   autoPopulateInstall: z.boolean().optional(),
   // When true, a new worktree, and the primary checkout of a newly
-  // added project, start out with auto-pull on
-  // (host/lib/worktrees/autoPull.ts). Only fires at create and add
-  // time, in the CLI (cli/state.go markAutoPullIfNew). Existing
+  // added project, start out with auto-pull on (the mark `sm worktrees
+  // autopull` sets). Only fires at create and add time, in the CLI
+  // (cli/state.go markAutoPullIfNew). Existing
   // worktrees keep their footer toggle as they are.
   autoPullNew: z.boolean().optional(),
   // When true, autoPullNew covers only the primary checkout of a newly
@@ -195,16 +192,15 @@ export const GlobalConfigSchema = z.object({
   // When true, auto-picked worktree names are Animal Crossing villager
   // and character names (cli/embed/doubutsu-names.json, e.g. `raymond`)
   // instead of adjective + animal pairs (`snug-otter`). Picked by the
-  // CLI at create time (cli/names.go) and by the host for the New
-  // Worktree form's pre-pick (host/lib/worktrees/names.ts).
+  // CLI (cli/names.go), at create time and for the New Worktree form's
+  // pre-pick (`sm worktrees destination`).
   doubutsuNames: z.boolean().optional(),
   // When true, an external worktree whose folder is just the repo's
   // name (Codex and other tools lay worktrees out as
   // <worktree-name>/<repo-name>) is named after the folder above it.
   // Off by default: a worktree that merely shares the repo's folder
-  // name would take whatever folder it sits in. Applied wherever
-  // worktrees are listed, by the host (host/lib/git/worktrees.ts) and
-  // the CLI (cli/gitx.go).
+  // name would take whatever folder it sits in. Applied wherever the
+  // CLI lists worktrees (cli/gitx.go), the app's rows included.
   codexWorktreeNames: z.boolean().optional(),
   // When true, projects with a valid port-pool.config.json run
   // `port-pool provision` after setup at create and
@@ -216,96 +212,42 @@ export const GlobalConfigSchema = z.object({
   // path registered in both is an ordinary removable project, and
   // removing its registry entry demotes it back to terrier-sourced. Off by
   // default, and only active while `terrier` is on PATH at a version
-  // this build understands (host/lib/terrier.ts, cli/terrier.go).
+  // this build understands (cli/terrier.go).
   terrier: z.boolean().optional(),
   // When true, GitHub CLI features light up wherever they apply.
   // Activates only when `gh` is on PATH and authenticated. On by
   // default; matches the integration being opt-out rather than opt-in.
   githubCli: z.boolean().optional(),
-  // Remote hosting: when enabled with a nonempty
-  // token, the app serves the REMOTE-tagged host IPC to clients over a
-  // websocket (host/socket/server.ts). Off by default, and gated on the
-  // token so a bare `enabled: true` can never open an unauthenticated
-  // listener. Secure by default: enabling binds LOOPBACK only. Exposing
-  // the port to the network is a separate explicit opt-in (`lan`). The
-  // token is high-entropy generated at enable time, never echoed back
-  // over a read (the read contract redacts it, see RedactedSocketHost
-  // below). Step 4 replaces this shared-token auth wholesale with
-  // pairing, so nothing else should grow to depend on the token's
-  // shape. Direct data plane: when false, this
-  // device neither runs the direct listener nor is advertised to peers,
-  // so all its remote traffic stays on the device hub. ON by default
-  // (absent = enrolled, explicit `false` is the opt-out), matching the
-  // feature being an internal transport optimization rather than a
-  // capability. Config-only for now (no Settings UI, like socketHost
-  // below): toggle by editing config.json or `sm config edit`.
+  // Direct data plane: when false, this device neither runs the direct
+  // listener nor is advertised to peers, so it serves no peers at all
+  // (its own dials to peers are unaffected). ON by default (absent =
+  // enrolled, explicit `false` is the opt-out). Config-only (no
+  // Settings UI): toggle by editing config.json or `sm config edit`.
   directConnections: z.boolean().optional(),
   // Tunnel endpoints: absolute path to the
   // cloudflared binary, for installs not on PATH. Absent means PATH
   // discovery. A missing binary reads as tunnels off with a typed
   // status, never an error loop. Config-only, like directConnections.
   cloudflaredPath: z.string().optional(),
-  socketHost: z
-    .object({
-      enabled: z.boolean().optional(),
-      // Absent = DEFAULT_SOCKET_PORT (shared/ipc/socket/frames.ts).
-      port: z.number().int().min(1).max(65535).optional(),
-      // When true, bind 0.0.0.0 so other machines on the LAN can reach
-      // the listener. Absent or false binds 127.0.0.1: enabling hosting
-      // alone never exposes the port to the network.
-      lan: z.boolean().optional(),
-      token: z.string().optional(),
-    })
-    .optional(),
 });
 export type GlobalConfig = z.infer<typeof GlobalConfigSchema>;
 
-// Read-side counterpart, loose like StoredShigomoriConfigSchema.
+// Read-side counterpart, loose like StoredShigomoriConfigSchema. Also
+// the globalConfig:read output, so legacy and newer keys pass through.
 export const StoredGlobalConfigSchema = GlobalConfigSchema.loose();
 
-// The socketHost shape a globalConfig READ is allowed to return. The
-// token is a secret and must be structurally absent from any wire, so
-// this schema has no token field at all. A derived `tokenSet` boolean
-// lets a future Settings UI show that hosting is configured without
-// ever carrying the value. The redaction itself happens in the read
-// handler (host/lib/config/global.ts), since packaged builds skip
-// output re-parsing, so this schema documents and validates the shape
-// rather than being the thing that strips the secret.
-const RedactedSocketHostSchema = z.object({
-  enabled: z.boolean().optional(),
-  port: z.number().int().min(1).max(65535).optional(),
-  lan: z.boolean().optional(),
-  tokenSet: z.boolean().optional(),
-});
-
-// Output schema for globalConfig:read. Loose like the stored variant so
-// legacy and newer keys pass through, but with socketHost forced to the
-// redacted shape so a token can never ride out on a read. The read
-// handler also drops the legacy `remoteDevices` key wholesale
-// (host/lib/config/global.ts): the removed LAN feature stored per-host
-// tokens under it, and an old config may still carry them.
-export const ReadGlobalConfigSchema = GlobalConfigSchema.extend({
-  socketHost: RedactedSocketHostSchema.optional(),
-}).loose();
-export type ReadGlobalConfig = z.infer<typeof ReadGlobalConfigSchema>;
-
-export const WriteGlobalConfigPayloadSchema = z.object({
-  config: GlobalConfigSchema,
-});
-
-// The device-scoped settings subset a REMOTE peer may write: exactly
-// the keys the Settings form manages (managedDeviceConfig in
-// renderer/hooks/config/useSettingsSave.ts). STRICT on purpose, unlike
-// GlobalConfigSchema: an unknown key REJECTS rather than strips, so the
-// schema itself proves that `socketHost` (the hosting token), like any
-// other unmanaged or legacy key, can never ride a remote write. Patch
-// semantics: every key optional, only provided
-// keys change, and the host handler spreads them over the local unredacted
+// The device settings the Settings form writes, this machine's and a
+// peer's alike: exactly the keys the form manages. STRICT on purpose,
+// unlike GlobalConfigSchema: an unknown key REJECTS rather than
+// strips, so the schema itself proves that no unmanaged key
+// (directConnections, cloudflaredPath, anything legacy) can ride a
+// settings write. Patch semantics: every key optional, only provided
+// keys change, and the host handler applies them over the stored
 // document so everything the patch does not name rides through intact.
 // Derived by picking from GlobalConfigSchema rather than respelling the
-// field types, so a managed key's shape cannot drift between the local
-// write and the remote patch. A NEW managed device setting still has to
-// be named here, or the strict reject makes it un-writable remotely.
+// field types, so a managed key's shape cannot drift. A NEW managed
+// device setting has to be named here and in DEVICE_SETTINGS_DEFAULTS
+// below, or the strict reject makes it un-writable.
 export const DeviceSettingsPatchSchema = z.strictObject(
   GlobalConfigSchema.pick({
     launchers: true,
@@ -328,12 +270,35 @@ export const WriteDeviceSettingsPayloadSchema = z.object({
   patch: DeviceSettingsPatchSchema,
 });
 
+// The value each device setting takes while its key is absent from
+// config.json. One table for both ends of the settings write: the form
+// decodes a missing key with it (fromConfig in
+// renderer/hooks/config/useSettingsSave.ts), and the host's patch
+// handler stores a key equal to its default by deleting it, so the file
+// stays tidy whichever device saved it. The CLI's key registry
+// (cli/cmd_config.go globalConfigKeys) mirrors these defaults.
+export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
+  launchers: [],
+  hiddenLaunchers: [],
+  launchScripts: true,
+  deleteBranchOnRemove: true,
+  autoPopulateInstall: false,
+  autoPullNew: false,
+  autoPullPrimaryOnly: false,
+  doubutsuNames: false,
+  codexWorktreeNames: false,
+  portPool: false,
+  terrier: false,
+  githubCli: true,
+};
+
 // Client config: how this app instance looks, kept in clientConfig.json
 // under Electron's userData and owned by the main process alone. The
 // CLI never reads or writes it, unlike the device config above.
-// Doubles as the clientConfig:write IPC input, stripping unknown keys
-// at the boundary like GlobalConfigSchema (and with the same
-// must-not-become-.strict() constraint).
+// Doubles as the clientConfig:write IPC input. z.object STRIPS unknown
+// keys rather than rejecting them, which drops a key the renderer
+// invents at the boundary, and it must not become .strict(): a key
+// from a newer build has to keep passing through unrejected.
 export const ClientConfigSchema = z.object({
   theme: ThemeSchema.optional(),
   // "Animal Crossing" visual mode. Orthogonal to theme: when on, both
@@ -376,32 +341,64 @@ export const ClientConfigSchema = z.object({
   // of a host, so a hostless client keeps one too. Absent means the
   // tree.
   sidebarView: SidebarViewSchema.optional(),
-  // The sidebar's folded projects that have no checkout on this
-  // machine, by group key (repo identity, or `${deviceId}/${projectId}`
-  // for an identity-less one). A local project's fold is its host's
-  // (state.json, host/lib/projects/collapsed.ts). A peer-only project
-  // has no host here to keep one, and a hostless client has no host at
-  // all, so the window keeps theirs
-  // (renderer/hooks/projects/useCollapsedRemoteProjects.ts is the only
-  // reader and writer).
-  collapsedRemoteProjects: z.array(z.string()).optional(),
+  // How the sidebar orders its projects. A preference of the window,
+  // like the view above: the CLI never reads it, and a peer has no say
+  // in how this machine lists them. Absent means the manual order
+  // (renderer/hooks/projects/useProjectSort.ts is the only reader and
+  // writer, and stores the default as nothing).
+  projectsSort: ProjectSortModeSchema.optional(),
+  // The sidebar's folded projects, by group key (projectGroupKey in
+  // renderer/components/sidebar/buildSidebarRows.ts): the repo identity
+  // when the project has one, so a repo held here and on peers is one
+  // fold; peerProjectKey for a peer's project with no identity; the
+  // project id for such a local one. Absence == expanded
+  // (renderer/hooks/projects/useCollapsedProjects.ts is the only reader
+  // and writer).
+  collapsedProjects: z.array(z.string()).optional(),
 });
 export type ClientConfig = z.infer<typeof ClientConfigSchema>;
 
+// The group key of a peer's project with no repo identity: it can only
+// group with itself, so it is named by its device and its id. The
+// prefix sets it apart from a repo identity (`root:` or `remote:`,
+// shared/git/repoIdentity.mts) and from a local project id (a folder
+// name, never holding a `/`), which is what lets withoutPeerState find
+// it by shape alone.
+const PEER_PROJECT_KEY_PREFIX = "device:";
+export const peerProjectKey = (deviceId: string, projectId: string) =>
+  `${PEER_PROJECT_KEY_PREFIX}${deviceId}/${projectId}`;
+
 // The client config without what was keyed by the account's peers:
 // a device leaving the account (a sign-out, a sign-in under another)
-// leaves the local port picks, the folded peer projects and the
-// legacy create-device picks behind, since every one of them names a
-// device of the account that is gone, and a device of a later
-// account with the same id must not inherit them.
-export function withoutPeerState(config: ClientConfig): ClientConfig {
+// leaves the local port picks, the legacy create-device picks and the
+// folds of peers' identity-less projects behind, since every one of
+// them names a device of the account that is gone, and a device of a
+// later account with the same id must not inherit them. On a machine
+// with projects of its own (`hostsProjects`) the rest of the fold list
+// stays: a local project id is this machine's own, and a repo identity
+// names a repository, not a device, so it can't land on the wrong
+// machine. That holds for an identity only peers hold too, which is
+// kept rather than told apart from a local one: this runs where the
+// project list isn't at hand (the main process's sign-out), and a
+// leftover fold of a repo nobody lists costs nothing. A hostless
+// client (the browser) has no projects of its own, so every fold it
+// keeps is a peer's and all of them go, the repo names with them.
+export function withoutPeerState(
+  config: ClientConfig,
+  hostsProjects = true,
+): ClientConfig {
   const {
     forwardLocalPorts: _forwardLocalPorts,
-    collapsedRemoteProjects: _collapsedRemoteProjects,
     quickCreateDevices: _quickCreateDevices,
+    collapsedProjects,
     ...rest
   } = config;
-  return rest;
+  const kept = collapsedProjects?.filter(
+    (key) => hostsProjects && !key.startsWith(PEER_PROJECT_KEY_PREFIX),
+  );
+  return kept !== undefined && kept.length > 0
+    ? { ...rest, collapsedProjects: kept }
+    : rest;
 }
 
 // The one reading of keepReachable: on unless switched off. Every
@@ -429,8 +426,8 @@ export const WriteShigomoriPayloadSchema = ProjectScopedPayloadSchema.extend({
 // worktree list first). Constrain it to the exact 12-hex shape that
 // `worktreeIdFromPath` produces so a malformed id can't escape the
 // projects/<id>/worktrees/ directory.
-// The derived worktree id (host/lib/git/worktrees.ts worktreeIdFromPath):
-// the first 12 hex chars of the path's sha256. One schema for every
+// The derived worktree id (worktreeIDFromPath in cli/paths.go): the
+// first 12 hex chars of the path's sha256. One schema for every
 // payload that names one.
 export const WorktreeIdSchema = z.string().regex(/^[0-9a-f]{12}$/);
 

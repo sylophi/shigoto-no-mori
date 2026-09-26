@@ -1,8 +1,9 @@
 // The fixture the CLI-driving proofs (control.mjs, mirror.mjs,
-// sync-transfer.mjs) share: one sandbox holding the data dir, the
-// repos and the sm binary built from cli/, git wrappers over the
-// scrubbed environment, and the real CLI runner seam. Runs under
-// register-ts-alias so the host imports resolve.
+// sync-transfer.mjs) share: one sandbox holding the data dir and the
+// repos, the sm binary built from cli/ (shared across proofs, see
+// smBinary.mjs), git wrappers over the scrubbed environment, and the
+// real CLI runner seam. Runs under register-ts-alias so the host
+// imports resolve.
 import { execFile } from "node:child_process";
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -14,12 +15,11 @@ import { initDataDirAt } from "@host/lib/util/paths";
 import {
   cliFailureMessage,
   createCliRunner,
-  repoRoot,
   scrubProcessGitEnv,
 } from "./checkKit.mjs";
+import { builtSm, smBinaryPath } from "./smBinary.mjs";
 
 const execFileP = promisify(execFile);
-const cliDir = join(repoRoot, "cli");
 
 // `prefix` names the temp dir, `extraSmEnv` lands on top of the env
 // the sm binary runs under.
@@ -29,7 +29,7 @@ export function cliSandbox(prefix, extraSmEnv = {}) {
   // paths (/var/folders is a symlink on macOS).
   const sandbox = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
   const dataDir = join(sandbox, "data");
-  const smBinary = join(sandbox, "sm");
+  const smBinary = smBinaryPath();
 
   // The kit's scrub (no inherited GIT_*, config pinned) applied to
   // process.env itself rather than a copy: the host modules under test
@@ -120,9 +120,10 @@ export function cliSandbox(prefix, extraSmEnv = {}) {
     disableAutoGc,
     runCli,
     sm,
-    // Builds the sm binary from cli/ into the sandbox.
-    buildSm: (env = baseEnv) =>
-      execFileP("go", ["build", "-o", smBinary, "."], { cwd: cliDir, env }),
+    // Builds the sm binary from cli/, unless an earlier proof has.
+    buildSm: async () => {
+      builtSm();
+    },
     // Seeds the data dir and points the host's CLI delegate at the
     // built binary through the runner seam.
     useCli() {

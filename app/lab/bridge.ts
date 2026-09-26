@@ -200,7 +200,6 @@ function hostHandlersFor(
   forest: DeviceForest,
   emit: FixtureWire["emit"],
 ): FixtureHandlers {
-  const collapsed = new Set<string>();
   const disk = labDisks[forest.deviceId] ?? { home: "/home/rin", dirs: {} };
   mirrorWires.set(forest.deviceId, emit);
   // The worktree data files, seeded from the fixtures and mutated by
@@ -277,13 +276,6 @@ function hostHandlersFor(
           : [],
       );
     },
-    "projects:getSort": () => "manual",
-    "projects:getCollapsed": () => [...collapsed],
-    "projects:toggleCollapsed": ({ projectId }) => {
-      if (collapsed.has(projectId)) collapsed.delete(projectId);
-      else collapsed.add(projectId);
-      return [...collapsed];
-    },
     "projects:defaultBranch": () => "main",
     "projects:listBranches": () => ({
       local: branchesOf(),
@@ -331,7 +323,6 @@ function hostHandlersFor(
         Object.assign(entry, { listening: labListeningPorts.has(entry.port) }),
       ),
     }),
-    "remoteAccess:commandAccess": () => ({ granted: forest.grantsCaller }),
     // The stub's shape with a full create lifecycle on it (carry-over,
     // a setup script, and ports below), so the pull dialogs' setup
     // switch and their running steps have every phase to name.
@@ -405,16 +396,15 @@ function hostHandlersFor(
       total: LAB_IGNORED_PATHS.length,
       patterns: [...LAB_IGNORED_PATHS],
     }),
-    // The mirror picture is host-scoped: the local forest reports the
-    // sessions it runs, and a source forest reports the streams it
-    // serves. Both refresh off mirror:changed. Copies, since the posed
-    // cycle mutates the session in place.
+    // The mirror picture is host-scoped: the forest holding the
+    // original reports the session it runs, and the copy's forest the
+    // stream it serves. Both refresh off mirror:changed. Copies, since
+    // the posed cycle mutates the session in place.
     "mirror:list": () => ({
       daemon: labMirrors.sessions.length > 0 ? "running" : "stopped",
-      sessions:
-        forest.deviceId === LOCAL_DEVICE_ID
-          ? labMirrors.sessions.map((session) => ({ ...session }))
-          : [],
+      sessions: labMirrors.sessions
+        .filter((session) => labRunners.get(session) === forest.deviceId)
+        .map((session) => structuredClone(session)),
       serving: labMirrors.serving
         .filter((stream) => stream.deviceId === forest.deviceId)
         .map(({ deviceId: _device, ...stream }) => stream),
@@ -422,71 +412,82 @@ function hostHandlersFor(
     "mirror:history": ({ localWorktreeId }: { localWorktreeId: string }) => ({
       events: [...(labMirrors.history[localWorktreeId] ?? [])],
     }),
+    // The controls of a session this forest runs (the manage dialog
+    // re-scopes to the runner).
+    "mirror:stop": ({ session }: { session: string }) => {
+      const entry = findLabSession(session);
+      labMirrors.sessions = labMirrors.sessions.filter(
+        (s) => s.session !== session,
+      );
+      labMirrors.serving = labMirrors.serving.filter(
+        (stream) =>
+          !(
+            entry !== undefined &&
+            stream.deviceId === entry.deviceId &&
+            stream.worktreeId === entry.worktreeId
+          ),
+      );
+      const copyForest = entry && forests[entry.deviceId];
+      if (entry && copyForest) {
+        // The stop takes the copy on the runner's peer with it, as
+        // the host's forced delete does.
+        copyForest.worktrees[entry.projectId] = (
+          copyForest.worktrees[entry.projectId] ?? []
+        ).filter((w) => w.id !== entry.worktreeId);
+        mirrorWires.get(entry.deviceId)?.("git:externalChange", undefined);
+      }
+      mirrorChanged();
+    },
+    "mirror:pause": ({ session }: { session: string }) =>
+      setMirrorPaused(session, true),
+    "mirror:resume": ({ session }: { session: string }) =>
+      setMirrorPaused(session, false),
+    "mirror:setIgnores": ({
+      session,
+      ignoreMode,
+      ignores,
+    }: {
+      session: string;
+      ignoreMode: MirrorSession["ignoreMode"];
+      ignores: string[];
+    }) => {
+      const entry = findLabSession(session);
+      if (entry === undefined) throw new Error("[lab] no such mirror");
+      entry.session = `sync_${labSessionSerial++}`;
+      entry.ignoreMode = ignoreMode;
+      entry.ignores = ignores;
+      entry.createdAt = Date.now();
+      entry.successfulCycles = 0;
+      noteMirrorEvent(
+        entry.localWorktreeId,
+        "ignores-changed",
+        summarizeIgnores(ignoreMode, ignores),
+      );
+      mirrorChanged();
+      return { session: entry.session };
+    },
+    // "Mirror here" on a peer's worktree: the peer, which holds the
+    // original, runs the start and sends the copy to the local forest.
+    ...(forest.deviceId === LOCAL_DEVICE_ID
+      ? {}
+      : {
+          "mirror:startTo": (input: any) => labMirrorStartTo(forest, input),
+        }),
     // Local-orchestrator sync verbs, mutating the fixture world so the
     // outcome is visible: the worktree lands in the identity-matched
     // local project, and a teardown removes the source row.
     ...(forest.deviceId === LOCAL_DEVICE_ID
       ? {
           "sync:pullWorktree": (input: any) => labSyncPull(forest, emit, input),
-          "mirror:start": (input: any) => labMirrorStart(forest, emit, input),
-          "mirror:stop": ({ session }: { session: string }) => {
-            const entry = findLabSession(session);
-            labMirrors.sessions = labMirrors.sessions.filter(
-              (s) => s.session !== session,
-            );
-            labMirrors.serving = labMirrors.serving.filter(
-              (stream) =>
-                !(
-                  entry !== undefined &&
-                  stream.deviceId === entry.deviceId &&
-                  stream.worktreeId === entry.worktreeId
-                ),
-            );
-            if (entry) {
-              // The stop takes the local copy with it, as the host's
-              // forced delete does (and the copy's history thread
-              // goes with the worktree, so nothing is noted).
-              forest.worktrees[entry.localProjectId] = (
-                forest.worktrees[entry.localProjectId] ?? []
-              ).filter((w) => w.id !== entry.localWorktreeId);
-              emit("git:externalChange", undefined);
-            }
-            mirrorChanged();
-          },
-          "mirror:pause": ({ session }: { session: string }) =>
-            setMirrorPaused(session, true),
-          "mirror:resume": ({ session }: { session: string }) =>
-            setMirrorPaused(session, false),
-          "mirror:setIgnores": ({
-            session,
-            ignoreMode,
-            ignores,
-          }: {
-            session: string;
-            ignoreMode: MirrorSession["ignoreMode"];
-            ignores: string[];
-          }) => {
-            const entry = findLabSession(session);
-            if (entry === undefined) throw new Error("[lab] no such mirror");
-            entry.session = `sync_${labSessionSerial++}`;
-            entry.ignoreMode = ignoreMode;
-            entry.ignores = ignores;
-            entry.createdAt = Date.now();
-            entry.successfulCycles = 0;
-            noteMirrorEvent(
-              entry.localWorktreeId,
-              "ignores-changed",
-              summarizeIgnores(ignoreMode, ignores),
-            );
-            mirrorChanged();
-            return { session: entry.session };
-          },
           "sync:teardownSource": (input: any) => {
-            const source = forests[input.sourceDeviceId];
+            // The source is the peer's worktree after a pull, this
+            // device's own after a send.
+            const source =
+              input.direction === "pull" ? forests[input.deviceId] : forest;
             if (source !== undefined) {
-              source.worktrees[input.sourceProjectId] = (
-                source.worktrees[input.sourceProjectId] ?? []
-              ).filter((entry) => entry.id !== input.sourceWorktreeId);
+              source.worktrees[input.projectId] = (
+                source.worktrees[input.projectId] ?? []
+              ).filter((entry) => entry.id !== input.worktreeId);
             }
             return { sourceRemoved: true };
           },
@@ -592,6 +593,8 @@ const labMirrors: {
   serving: (MirrorServing & { deviceId: string })[];
   history: Record<string, MirrorEvent[]>;
 } = { sessions: [], serving: [], history: {} };
+// The forest running each session, the one holding the original.
+const labRunners = new WeakMap<MirrorSession, string>();
 const mirrorWires = new Map<string, FixtureWire["emit"]>();
 let pushFromPeer: (
   deviceId: string,
@@ -639,48 +642,56 @@ const endpointState = () => ({
   excludedProblems: 0,
 });
 
-// A posed mirror: the pull lands the worktree, then a session opens
-// on top and settles. Afterwards a cycle runs every few seconds so the
-// status is seen moving, and the thread gets a conflict once, for the
-// history to have more than its start.
-async function labMirrorStart(
-  local: DeviceForest,
-  emit: FixtureWire["emit"],
-  input: Parameters<typeof labSyncPull>[2] & {
+// A posed mirror, run by the forest holding the original: the send
+// lands the copy on the local forest, then a session opens on top and
+// settles. Afterwards a cycle runs every few seconds so the status is
+// seen moving, and the thread gets a conflict once, for the history
+// to have more than its start.
+async function labMirrorStartTo(
+  runner: DeviceForest,
+  input: {
+    targetDeviceId: string;
+    projectId: string;
+    worktreeId: string;
+    runSetup?: boolean;
     ignoreMode: MirrorSession["ignoreMode"];
     ignores: string[];
   },
 ) {
-  // The rule is the session's, not the pull's: a mirror start brings
-  // the files through its own session, so the pull poses no files step.
-  const source = forests[input.sourceDeviceId];
-  const sourceWorktree = (source?.worktrees[input.sourceProjectId] ?? []).find(
-    (entry) => entry.id === input.sourceWorktreeId,
+  const target = forests[input.targetDeviceId];
+  const emit = mirrorWires.get(input.targetDeviceId);
+  const project = runner.projects.find((entry) => entry.id === input.projectId);
+  const sourceWorktree = (runner.worktrees[input.projectId] ?? []).find(
+    (entry) => entry.id === input.worktreeId,
   );
-  // A primary's copy lands on its mirror branch and folder, as the
-  // real start decides off the peer's list.
-  const landed = await labSyncPull(local, emit, {
-    ...input,
-    ignoreMode: undefined,
-    ...(sourceWorktree?.isPrimary
-      ? {
-          landBranch: pullLandingBranch(sourceWorktree),
-          worktreeName: pullWorktreeName(sourceWorktree),
-        }
-      : {}),
+  if (!target || !emit || !project?.identity || !sourceWorktree) {
+    throw new Error("[lab] no such worktree to mirror");
+  }
+  // The rule is the session's, not the send's: a mirror start brings
+  // the files through its own session, so the landing poses no files
+  // step. A primary's copy lands on its mirror branch and folder.
+  const landed = await labSyncPull(target, emit, {
+    sourceDeviceId: runner.deviceId,
+    sourceProjectId: input.projectId,
+    sourceWorktreeId: input.worktreeId,
+    sourceIdentity: project.identity,
+    branch: sourceWorktree.branch,
+    landBranch: pullLandingBranch(sourceWorktree),
+    worktreeName: pullWorktreeName(sourceWorktree),
+    runSetup: input.runSetup,
   });
-  const tip = sourceWorktree?.recentCommits[0]?.hash.slice(0, 7) ?? "58c21fe";
+  const tip = sourceWorktree.recentCommits[0]?.hash.slice(0, 7) ?? "58c21fe";
   const session: MirrorSession = {
     session: `sync_${labSessionSerial++}`,
-    name: `sm-${landed.worktree.id}`,
-    labels: {},
-    localRoot: landed.worktree.path,
-    localProjectId: landed.worktree.projectId,
-    localWorktreeId: landed.worktree.id,
-    deviceId: input.sourceDeviceId,
-    projectId: input.sourceProjectId,
-    worktreeId: input.sourceWorktreeId,
-    remoteRoot: sourceWorktree?.path ?? "",
+    name: sourceWorktree.branch,
+    labels: { copySide: "remote" },
+    localRoot: sourceWorktree.path,
+    localProjectId: input.projectId,
+    localWorktreeId: input.worktreeId,
+    deviceId: input.targetDeviceId,
+    projectId: landed.worktree.projectId,
+    worktreeId: landed.worktree.id,
+    remoteRoot: landed.worktree.path,
     paused: false,
     ignores: input.ignores,
     ignoreMode: input.ignoreMode,
@@ -695,17 +706,18 @@ async function labMirrorStart(
     git: { status: "synced", detail: `both sides at ${tip}` },
   };
   labMirrors.sessions.push(session);
+  labRunners.set(session, runner.deviceId);
   labMirrors.serving.push({
-    deviceId: input.sourceDeviceId,
+    deviceId: input.targetDeviceId,
     channelId: "a1b2c3d4e5f60718293a4b5c6d7e8f90",
-    projectId: input.sourceProjectId,
-    worktreeId: input.sourceWorktreeId,
-    peerDeviceId: LOCAL_DEVICE_ID,
-    peerWorktreeId: landed.worktree.id,
+    projectId: landed.worktree.projectId,
+    worktreeId: landed.worktree.id,
+    peerDeviceId: runner.deviceId,
+    peerWorktreeId: input.worktreeId,
     since: Date.now(),
   });
   noteMirrorEvent(
-    landed.worktree.id,
+    input.worktreeId,
     "started",
     summarizeIgnores(input.ignoreMode, input.ignores),
   );
@@ -721,7 +733,7 @@ async function labMirrorStart(
     await step("scanning", 900);
     await step("watching", 0);
     session.successfulCycles = 1;
-    noteMirrorEvent(landed.worktree.id, "connected", "");
+    noteMirrorEvent(input.worktreeId, "connected", "");
     mirrorChanged();
     // oxlint-disable no-await-in-loop -- a posed mirror cycles in sequence
     for (;;) {
@@ -1158,11 +1170,16 @@ let socketPhase: HubStatus["socket"] = {
 
 function hubSnapshot(): HubStatus {
   const peerAppVersions: Record<string, string> = {};
-  for (const id of directSessions) peerAppVersions[id] = LAB_APP_VERSION;
+  const peerAcceptsCommands: Record<string, boolean> = {};
+  for (const id of directSessions) {
+    peerAppVersions[id] = LAB_APP_VERSION;
+    peerAcceptsCommands[id] = forests[id]?.grantsCaller ?? false;
+  }
   return {
     socket: socketPhase,
     onlineDeviceIds: [...roster],
     peerAppVersions,
+    peerAcceptsCommands,
     tunnel: "up",
   };
 }
@@ -1254,7 +1271,7 @@ export function installLabBridge(opts: { webShell?: boolean } = {}) {
     "account:acceptsCommands": () => acceptsCommands,
     "account:setAcceptsCommands": (enabled: boolean) => {
       acceptsCommands = enabled;
-      client.emit("account:commandAccessChanged", undefined);
+      client.emit("account:commandAccessChanged", enabled);
     },
     "account:revokeDevice": (deviceId: string) => {
       // Mirrors the real handler's registry effect: the device leaves

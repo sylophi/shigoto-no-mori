@@ -26,8 +26,7 @@ import { WorktreeMissing } from "@/components/shared/WorktreeMissing";
 export function WorktreeDiff() {
   const { projectId, worktreeId, nav, worktree, goBack, missing } =
     useRouteWorktree();
-  // Read non-strictly like the params: the page serves both the local
-  // route and its /devices twin, and both validate the same `amend`.
+  // Read non-strictly like the params, which the worktree pages share.
   const { amend } = useSearch({ strict: false }) as { amend?: true };
   // Amend mode lives in the route's search param, so the page and the
   // row menu that opens it agree on one source of truth.

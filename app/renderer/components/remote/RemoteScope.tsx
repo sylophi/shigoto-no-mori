@@ -1,19 +1,20 @@
-// Route-level device scoping for the /devices/$deviceId/... twin
-// routes: resolve the device from the registry, scope the subtree's
-// queries to its api (HostScopeProvider), and say honestly when the
-// device is not reachable. Push refresh is not a scope concern: the
-// boot-scoped remote host watch
-// (renderer/lib/remote/remoteHostWatch.ts) invalidates every device's
-// cache on its pings, so the sidebar rows and these pages refresh the
-// same way. The wrapped page component is the SAME one the
-// local route mounts: remoteness stays in the scope, never in the
-// page (v2's core bet).
+// Route-level device scoping for the /devices/$deviceId/... pages:
+// this machine's id renders the page under the default local scope
+// (window.api), a peer's resolves the device from the registry, scopes
+// the subtree's queries to its api (HostScopeProvider), and says
+// honestly when the device is not reachable. Push refresh is not a
+// scope concern: every device's boot-scoped push watch
+// (renderer/lib/hostWatch.ts) keeps its cache live, so the sidebar
+// rows and these pages refresh the same way. The wrapped page
+// component is the SAME for every device: remoteness stays in the
+// scope, never in the page (v2's core bet).
 import { useNavigate, useParams } from "@tanstack/react-router";
 import type { ComponentType, ReactElement } from "react";
 import { useAccountStatus } from "@/hooks/account/useAccount";
 import { Button } from "@/components/ui/button";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { HostScopeProvider } from "@/hooks/remote/useHostScope";
+import { localDeviceId } from "@/lib/queryKeys";
 import { useLastGoodApi } from "@/hooks/remote/useLastGoodApi";
 import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
@@ -114,19 +115,23 @@ function OpenDevicesButton() {
   );
 }
 
-// Wraps a page component for mounting under a /devices/$deviceId twin
+// Wraps a page component for mounting under a /devices/$deviceId
 // route. The page reads its own params non-strictly, so the same
-// component serves both the local route and this one. A lazy route
+// component serves whichever route it is mounted on. A lazy route
 // component's preload rides along, so the router fetches its chunk
 // ahead of the navigation instead of suspending the whole tree on it.
-export function withRemoteScope(
+export function withDeviceScope(
   Page: ComponentType & { preload?: () => Promise<unknown> },
 ): () => ReactElement {
-  // Keyed by device: not every twin route remounts on a params change,
-  // and the gate's kept api must not survive a switch to another device.
-  const RemoteScoped = () => {
+  // A peer's gate is keyed by device: not every device route remounts
+  // on a params change, and the gate's kept api must not survive a
+  // switch to another device. This machine's page is a different
+  // element from any peer's gate, so a switch between the two remounts
+  // it all the same.
+  const DeviceScoped = () => {
     const { deviceId } = useParams({ strict: false }) as { deviceId: string };
+    if (deviceId === localDeviceId) return <Page />;
     return <RemoteScopeGate key={deviceId} deviceId={deviceId} Page={Page} />;
   };
-  return Object.assign(RemoteScoped, { preload: Page.preload });
+  return Object.assign(DeviceScoped, { preload: Page.preload });
 }

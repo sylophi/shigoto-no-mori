@@ -1,13 +1,16 @@
-// Where a local worktree can go: the account's other devices holding a
-// checkout of the same repo (shared/deviceTargets.ts), for the two
-// flows that start on this device's own page (transplant to, mirror
-// to). The pick is made in the review's destination column
+// Where a local worktree can go: the account's other devices that host
+// projects (shared/deviceTargets.ts), for the two flows that start on
+// this device's own page (transplant to, mirror to). One holding a
+// checkout of the same repo takes the worktree into it, one with none
+// clones the repo first (flow/cloneDestination.tsx), as a pull here
+// does. The pick is made in the review's destination column
 // (PullReview.tsx), which lists them all: with one device ready the
 // dialog opens on it, with several it opens on none and Start waits
 // for the pick. The handlers re-verify the identity match on the peer,
 // so this gate is UX.
 import { useState } from "react";
 import type { Project } from "@shared/schemas";
+import { useDeviceTabs } from "@/components/shared/DeviceTabs";
 import {
   type DeviceTarget,
   isHolder,
@@ -18,9 +21,12 @@ import type { HostApi } from "@/hooks/remote/useHostScope";
 import type { DestinationPick } from "./PullReview";
 import { type Landing, landsOnPeer } from "./pullSteps";
 
-// A peer holding the repo. Its `block` says why it cannot take the
-// worktree right now (asleep, or not granting this device control).
-export type PeerTarget = DeviceTarget & { project: Project };
+// A peer that could take the worktree, with its checkout of the repo
+// when it has one. Its `block` says why it cannot take the worktree
+// right now (asleep, or not granting this device control).
+export type PeerTarget = DeviceTarget & {
+  block: "offline" | "no-grant" | undefined;
+};
 type ReadyPeerTarget = PeerTarget & { api: HostApi };
 
 export function isReadyTarget(target: PeerTarget): target is ReadyPeerTarget {
@@ -28,9 +34,19 @@ export function isReadyTarget(target: PeerTarget): target is ReadyPeerTarget {
 }
 
 export function usePeerTargets(project: Project): PeerTarget[] {
-  return useDeviceTargets(project).filter(
-    (target): target is PeerTarget => !target.isThisDevice && isHolder(target),
-  );
+  // A device without a checkout reads "no-project" among the targets,
+  // which is no block here: its tab's own block is the one that holds.
+  const tabs = useDeviceTabs();
+  return useDeviceTargets(project).flatMap((target): PeerTarget[] => {
+    if (target.isThisDevice || !target.hostsProjects) return [];
+    if (isHolder(target)) return [target];
+    return [
+      {
+        ...target,
+        block: tabs.find((tab) => tab.deviceId === target.deviceId)?.block,
+      },
+    ];
+  });
 }
 
 // What a dialog to a peer hands its flow: the pick, and the landing

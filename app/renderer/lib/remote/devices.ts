@@ -46,6 +46,11 @@ export type RemoteDevice = {
   // The remote host app's version, "" until the direct session's
   // welcome confirms it.
   appVersion: string;
+  // Whether the peer runs this device's commands (its command-access
+  // switch, HubStatus.peerAcceptsCommands), undefined until a direct
+  // session is established and its dial's answer says. What every
+  // read-only note and disabled control reads (useCommandAccess).
+  acceptsCommands?: boolean;
   // Present while the peer is online in the roster, whether or not a
   // direct session exists yet. Nothing here ever opens one: sessions
   // are supervised desired state owned by main's keeper
@@ -112,6 +117,7 @@ function sameDevice(a: RemoteDevice, b: RemoteDevice): boolean {
     a.label === b.label &&
     a.icon === b.icon &&
     a.appVersion === b.appVersion &&
+    a.acceptsCommands === b.acceptsCommands &&
     a.api === b.api &&
     sameStatus(a.status, b.status)
   );

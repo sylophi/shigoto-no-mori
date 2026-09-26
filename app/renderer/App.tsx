@@ -6,15 +6,12 @@ import { DevThemeHotkeys } from "@/components/DevThemeHotkeys";
 import { OverlaysProvider } from "@/hooks/ui/useOverlays";
 import { DoubutsuProvider } from "@/hooks/ui/useDoubutsu";
 import { ThemeProvider } from "@/hooks/ui/useTheme";
-import { useWatchGitRefs } from "@/hooks/git/useBranches";
-import { useWatchProjectUsage } from "@/hooks/projects/useProjects";
-import { useWatchPortForwards } from "@/hooks/remote/usePortForwards";
-import { useWatchProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
-import { useWatchWorktreePullRequests } from "@/hooks/worktrees/useWorktreePullRequest";
-import { hasLocalHost } from "@/lib/localHost";
 import type { AppRouter } from "./router";
 
-// The provider tree around the router, one for both shells.
+// The provider tree around the router, one for both shells. Host
+// broadcasts reach the query cache from boot, not from here: one
+// watchHost per device (lib/hostWatch.ts), called by renderer/boot.tsx
+// for this machine and by the remote device sync for each peer.
 export function App({ router }: { router: AppRouter }) {
   return (
     <ThemeProvider>
@@ -22,7 +19,6 @@ export function App({ router }: { router: AppRouter }) {
         <ErrorBoundary FallbackComponent={AppErrorFallback}>
           <OverlaysProvider>
             <TooltipProvider>
-              {hasLocalHost && <LocalHostWatchers />}
               <RouterProvider router={router} />
               <DevThemeHotkeys />
             </TooltipProvider>
@@ -31,20 +27,4 @@ export function App({ router }: { router: AppRouter }) {
       </DoubutsuProvider>
     </ThemeProvider>
   );
-}
-
-// Convention: IPC broadcasts that drive query invalidations live in
-// useWatch* hooks next to the queries they affect, and this is the
-// single place they get called. Adding a new watcher is one import +
-// one hook call here, with the actual subscribe/invalidate logic
-// co-located with the query it owns. They watch this machine's
-// broadcasts, which a hostless client's bridge never emits, so it
-// does not mount them.
-function LocalHostWatchers() {
-  useWatchGitRefs();
-  useWatchProjectUsage();
-  useWatchPortForwards();
-  useWatchWorktreePullRequests();
-  useWatchProjectPullRequests();
-  return null;
 }

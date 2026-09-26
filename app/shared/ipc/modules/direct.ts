@@ -1,25 +1,20 @@
 import { z } from "zod";
-import { defineContract, invoke } from "@shared/ipc/contract";
 
-// Brokering surface for the direct data plane: a
-// peer asks this host, over the device hub, how to dial it directly.
-// The answer is a list of fully dialable CANDIDATES, each carrying its
-// kind (a LAN interface address or the wss tunnel endpoint), the
-// complete dial URL, and ONE short-lived single-use
-// connect ticket of its own, each bound to the CALLING peer's
-// authenticated deviceId (HandlerContext.callerDeviceId, populated by
-// the hub link and the direct listener, absent on every other wire, so
-// the handler fails closed to available:false without a peer identity).
+// Brokering vocabulary for the direct data plane: a peer asks this
+// host, with the device hub's one ask (connectInfo, shared/hub/link.ts),
+// how to dial it directly. The answer is a list of fully dialable
+// CANDIDATES, each carrying its kind (a LAN interface address or the
+// wss tunnel endpoint), the complete dial URL, and ONE short-lived
+// single-use connect ticket of its own, each bound to the asking
+// peer's deviceId (the hub stamps it, see host/direct/connectInfo.ts).
 // Per-candidate tickets are what let the dialer race every candidate at
 // once: a candidate that reaches the host but loses the race burns only
-// its own ticket, never another candidate's.
-//
-// connectInfo is a read (remote:true, mutating:false): it must work
-// pre-grant because the direct wire it brokers enforces the exact same
-// read/mutate gate the device hub does, so knowing how to dial grants
-// nothing that the hub session did not already grant. `candidates`
-// is optional per the version-skew policy: absence means the direct
-// plane is unsupported and old peers keep working over the device hub.
+// its own ticket, never another candidate's. Knowing how to dial grants
+// nothing by itself: the direct wire gates every command on the host's
+// command-access switch. The answer also reports that switch
+// (acceptsCommands), so the dialer knows up front whether this host
+// will run its commands, and the host's account:commandAccessChanged
+// push keeps that reading live afterwards.
 
 // How long a minted connect ticket stays valid. Long enough for the
 // peer's dial to reach us over any candidate address, short enough
@@ -93,43 +88,34 @@ export type DirectCandidate = z.infer<typeof DirectCandidateSchema>;
 export type DirectCandidateKind = DirectCandidate["kind"];
 
 // Every candidate kind, derived from the schema so the vocabulary has
-// one owner: the dialer's race-everything default and the host's
-// absent-field skew tolerance both read this.
+// one owner: the dialer's race-everything default reads this.
 export const ALL_DIRECT_CANDIDATE_KINDS: readonly DirectCandidateKind[] =
   DirectCandidateSchema.shape.kind.options;
 
 // The caller's dial capability, carried in the connectInfo INPUT so
 // the host mints only tickets the caller can actually spend: a web
-// caller declaring ["tunnel"] no longer burns and abandons one lan
-// ticket per interface address on every broker call. Optional both
-// ways for version skew: an old caller sends nothing and an old host
-// ignores the field, and absence means all kinds.
-const DirectConnectInfoInputSchema = z
-  .object({
-    dialableKinds: z.array(DirectCandidateSchema.shape.kind).optional(),
-  })
-  .optional();
+// caller declaring ["tunnel"] does not burn and abandon one lan ticket
+// per interface address on every ask.
+export const DirectConnectInfoInputSchema = z.object({
+  dialableKinds: z.array(DirectCandidateSchema.shape.kind),
+});
 export type DirectConnectInfoInput = z.infer<
   typeof DirectConnectInfoInputSchema
 >;
 
-export const DirectConnectInfoSchema = z.object({
-  available: z.boolean(),
-  // Present exactly when available is true, and never empty then: a
-  // host with nothing dialable (for this caller's declared kinds)
-  // answers available:false instead.
-  candidates: z.array(DirectCandidateSchema).optional(),
-});
+// Candidates exactly when available, and never an empty list: a host
+// with nothing dialable (for this caller's declared kinds) answers
+// available:false instead. acceptsCommands is the host's
+// command-access switch: whether its direct listener runs the asker's
+// gated calls. Every asker is a device of the same account, so it is
+// the same bit for all of them. It informs the asker's UI and CLI
+// only; the listener's dispatch gate still decides every call.
+export const DirectConnectInfoSchema = z.discriminatedUnion("available", [
+  z.object({ available: z.literal(false) }),
+  z.object({
+    available: z.literal(true),
+    candidates: z.array(DirectCandidateSchema).min(1),
+    acceptsCommands: z.boolean(),
+  }),
+]);
 export type DirectConnectInfo = z.infer<typeof DirectConnectInfoSchema>;
-
-export const directContract = defineContract("host", {
-  connectInfo: invoke(
-    "direct:connectInfo",
-    DirectConnectInfoInputSchema,
-    DirectConnectInfoSchema,
-    {
-      remote: true,
-      mutating: false,
-    },
-  ),
-});

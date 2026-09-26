@@ -60,8 +60,9 @@ interface RunArgs {
   scriptName: string;
   worktree: ScriptWorktree;
   project: Pick<Project, "id" | "path" | "name">;
-  projectBranch: string;
-  defaultBranch: string;
+  // The branch values of the SHIGOMORI_* env contract, for a command
+  // that doesn't set that env itself. Absent for `sm run`, which does.
+  scriptEnv?: { projectBranch: string; defaultBranch: string };
   notify: NotifyScriptEvent;
 }
 
@@ -329,7 +330,8 @@ export function startScript(args: RunArgs): string {
 
   const runId = randomUUID();
 
-  // Inherits the app's environment plus the SHIGOMORI_* contract vars,
+  // Inherits the app's environment plus the SHIGOMORI_* contract vars
+  // (unless the command is `sm run`, which sets them itself),
   // and deliberately adds no data dir pin: a script's whole process
   // tree inherits this, so naming a data dir here would follow the user's
   // command into anything it starts (see initDataDir). TERM and
@@ -345,15 +347,17 @@ export function startScript(args: RunArgs): string {
     FORCE_COLOR: "1",
     PAGER: "cat",
     GIT_PAGER: "cat",
-    [SCRIPT_ENV_KEYS.SCRIPT_NAME]: args.scriptName,
-    [SCRIPT_ENV_KEYS.WORKTREE_PATH]: args.worktree.path,
-    [SCRIPT_ENV_KEYS.WORKTREE_NAME]: args.worktree.name,
-    [SCRIPT_ENV_KEYS.WORKTREE_BRANCH]: args.worktree.branch,
-    [SCRIPT_ENV_KEYS.WORKTREE_ID]: args.worktree.id,
-    [SCRIPT_ENV_KEYS.PROJECT_PATH]: args.project.path,
-    [SCRIPT_ENV_KEYS.PROJECT_NAME]: args.project.name,
-    [SCRIPT_ENV_KEYS.PROJECT_BRANCH]: args.projectBranch,
-    [SCRIPT_ENV_KEYS.DEFAULT_BRANCH]: args.defaultBranch,
+    ...(args.scriptEnv && {
+      [SCRIPT_ENV_KEYS.SCRIPT_NAME]: args.scriptName,
+      [SCRIPT_ENV_KEYS.WORKTREE_PATH]: args.worktree.path,
+      [SCRIPT_ENV_KEYS.WORKTREE_NAME]: args.worktree.name,
+      [SCRIPT_ENV_KEYS.WORKTREE_BRANCH]: args.worktree.branch,
+      [SCRIPT_ENV_KEYS.WORKTREE_ID]: args.worktree.id,
+      [SCRIPT_ENV_KEYS.PROJECT_PATH]: args.project.path,
+      [SCRIPT_ENV_KEYS.PROJECT_NAME]: args.project.name,
+      [SCRIPT_ENV_KEYS.PROJECT_BRANCH]: args.scriptEnv.projectBranch,
+      [SCRIPT_ENV_KEYS.DEFAULT_BRANCH]: args.scriptEnv.defaultBranch,
+    }),
   };
 
   // Throws when no process could be started. The caller's IPC rejection

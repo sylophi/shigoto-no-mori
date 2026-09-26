@@ -68,9 +68,9 @@ type LiveMember = GroupMember & { api: HostApi };
 
 // The group as the actions see it: this machine's checkout first when
 // there is one, then every peer's with the api its session provides,
-// where that peer lets this device command it (the same preflight the
-// new-worktree picker reads, and while it is still in flight the peer
-// is assumed granted rather than flashing actions in and out).
+// where that peer lets this device command it (the same reading the
+// new-worktree picker uses, and until its session reports the peer is
+// assumed granted rather than flashing actions in and out).
 export function useGroupMembers(
   peers: readonly RemoteProjectMember[],
   localProject: Project | undefined,

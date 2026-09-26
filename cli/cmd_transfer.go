@@ -5,15 +5,22 @@ package main
 //	send   [<name>] --to <device>       move a worktree to another device
 //	bring  <worktree> --from <device>   move one of theirs here
 //	mirror [<name>] --to <device>       keep a copy of it in step there
-//	mirror <worktree> --from <device>   keep a copy of theirs in step here
+//	mirror <worktree> --from <device>   keep a copy of theirs in step here,
+//	                                    the mirror running on their device
 //
 // plus unmirror, mirrors and devices. They run in the app (control.go
 // says why), which takes them through the same transplant and mirror
 // orchestrators its own dialogs use, so a run from a terminal and one
-// from the app's "Transplant to…" are the same run. Names resolve the
+// from the app's "Transplant to…" are the same run. A mirror always
+// runs on the device holding the original: --to runs it here, --from
+// asks the other device to run it and send the copy here, which takes
+// both devices accepting commands. Names resolve the
 // way a person says them: a device by its name, a peer's worktree by
 // its folder name or branch. With one device that qualifies, --to can
-// be left off.
+// be left off. A send (or mirror --to) onto a device with no checkout
+// of the repo clones it there first, as the app's dialogs do, into the
+// folder --clone-into names or the dialogs' default: the checkout's
+// own place with this device's home swapped for theirs.
 
 import (
 	"cmp"
@@ -42,7 +49,13 @@ type controlTransferResult struct {
 	Device       controlNamedDevice `json:"device"`
 	CopySide     string             `json:"copySide"`
 	Already      bool               `json:"alreadyMirrored,omitempty"`
-	Files        *struct {
+	// The project the other device cloned first, having no checkout of
+	// the repo.
+	Cloned *struct {
+		Name string `json:"name"`
+		Path string `json:"path"`
+	} `json:"cloned,omitempty"`
+	Files *struct {
 		Crossed bool   `json:"crossed"`
 		Error   string `json:"error,omitempty"`
 	} `json:"files,omitempty"`
@@ -81,6 +94,7 @@ type syncProgress struct {
 }
 
 var transferStepLabels = map[string]string{
+	"clone":    "cloning the repo",
 	"capture":  "capturing uncommitted changes",
 	"transfer": "transferring commits",
 	"create":   "creating the worktree",
@@ -127,6 +141,7 @@ func transferSpec() argSpec {
 	spec.strings["from"] = nil
 	spec.strings["leave-out"] = nil
 	spec.strings["source"] = nil
+	spec.strings["clone-into"] = nil
 	spec.bools["setup"] = nil
 	spec.bools["no-setup"] = nil
 	return spec
@@ -146,8 +161,10 @@ func checkDeviceFlags(parsed parsedArgs) error {
 
 // The options every transfer takes, as the control op takes them.
 // Nothing asked is nothing sent: the app then applies the project's
-// saved leave-out rule and the setup default that goes with it.
-func transferOptions(parsed parsedArgs, device string, mirror bool) (map[string]any, error) {
+// saved leave-out rule and the setup default that goes with it. `sent`
+// is the direction: --clone-into names a folder on the device a send
+// goes to, and a bring lands in this device's own checkout.
+func transferOptions(parsed parsedArgs, device string, mirror, sent bool) (map[string]any, error) {
 	input := map[string]any{}
 	if device != "" {
 		input["device"] = device
@@ -178,6 +195,15 @@ func transferOptions(parsed parsedArgs, device string, mirror bool) (map[string]
 			return nil, usageErrf("--source is keep, shelve, or teardown.")
 		}
 		input["source"] = fate
+	}
+	if dir, given := parsed.strings["clone-into"]; given {
+		if !sent {
+			return nil, usageErrf("--clone-into is for send and mirror --to. A bring lands in this device's own checkout.")
+		}
+		if strings.TrimSpace(dir) == "" {
+			return nil, usageErrf("--clone-into needs a folder on the other device, the one its checkout of the repo goes in.")
+		}
+		input["cloneInto"] = dir
 	}
 	return input, nil
 }
@@ -233,18 +259,23 @@ func reportTransfer(raw json.RawMessage, result controlTransferResult, headline 
 func transferHeadline(result controlTransferResult, mirror bool, sent bool) string {
 	name := result.Worktree.Name
 	device := `"` + result.Device.Name + `"`
+	var headline string
 	switch {
 	case result.Already:
 		return fmt.Sprintf("%s is already mirrored with %s", name, device)
 	case mirror && sent:
-		return fmt.Sprintf("mirroring %s to %s", name, device)
+		headline = fmt.Sprintf("mirroring %s to %s", name, device)
 	case mirror:
-		return fmt.Sprintf("mirroring %s from %s", name, device)
+		headline = fmt.Sprintf("mirroring %s from %s", name, device)
 	case sent:
-		return fmt.Sprintf("sent %s to %s", name, device)
+		headline = fmt.Sprintf("sent %s to %s", name, device)
 	default:
-		return fmt.Sprintf("brought %s from %s", name, device)
+		headline = fmt.Sprintf("brought %s from %s", name, device)
 	}
+	if result.Cloned != nil {
+		headline += fmt.Sprintf(", having cloned %s into %s on %s first", result.Cloned.Name, result.Cloned.Path, device)
+	}
+	return headline
 }
 
 // One of this device's worktrees to another device: moved, or with
@@ -256,7 +287,7 @@ func runSend(ctx cliContext, parsed parsedArgs, mirror bool) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	input, err := transferOptions(parsed, parsed.strings["to"], mirror)
+	input, err := transferOptions(parsed, parsed.strings["to"], mirror, true)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -280,7 +311,7 @@ func runBring(ctx cliContext, parsed parsedArgs, mirror bool) (int, error) {
 	if wanted == "" {
 		return 2, usageErrf("Which worktree? `%s worktrees list --remote` shows what your other devices hold.", binaryName)
 	}
-	input, err := transferOptions(parsed, parsed.strings["from"], mirror)
+	input, err := transferOptions(parsed, parsed.strings["from"], mirror, false)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -324,8 +355,8 @@ func cmdBring(ctx cliContext, args []string) (int, error) {
 
 // mirror is send or bring that stays: --to (or no direction) copies
 // one of this device's worktrees to another device, --from copies one
-// of theirs here, and either way the two follow each other until
-// unmirror.
+// of theirs here (the mirror then runs on their device), and either
+// way the two follow each other until unmirror.
 func cmdMirror(ctx cliContext, args []string) (int, error) {
 	parsed, err := parseCmdArgs(args, transferSpec())
 	if err != nil {
@@ -507,13 +538,14 @@ type controlDevice struct {
 
 var deviceBlockLabels = map[string]string{
 	"offline":    "not connected",
-	"no-project": "no checkout of this repo",
+	"no-project": "no checkout yet; a send clones the repo there",
 	"no-grant":   "doesn't accept commands",
 }
 
 // devices lists the account's other devices. Inside a project (or
 // with -p) each says whether it could take a send of it or serve a
-// bring.
+// bring: one with no checkout of the repo takes a send, cloning it
+// first, and serves no bring.
 func cmdDevices(ctx cliContext, args []string) (int, error) {
 	parsed, err := parseCmdArgs(args, argSpec{
 		strings: map[string][]string{"project": {"p"}, "project-id": {}},

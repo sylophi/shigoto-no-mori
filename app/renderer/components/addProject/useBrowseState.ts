@@ -1,4 +1,4 @@
-import { hasTrailingSlash, normalizeForSubmit } from "@/lib/projectPaths";
+import { hasTrailingSlash, normalizeForSubmit } from "@shared/projectPaths";
 import { useBrowseListing } from "@/hooks/fs/useBrowseListing";
 import { useFsIsGitRepo } from "@/hooks/fs/useFsIsGitRepo";
 import { useDebouncedValue } from "@/hooks/ui/useDebouncedValue";

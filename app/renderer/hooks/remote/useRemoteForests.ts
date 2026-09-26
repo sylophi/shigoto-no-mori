@@ -16,9 +16,9 @@
 // last session cached -- the same staleness contract every query in the
 // app has.
 //
-// This fan-out is always mounted, so it refetches calmly: the boot
-// scoped remote host watch (lib/remote/remoteHostWatch.ts) invalidates
-// a peer's rows the moment that peer pings, an open remote worktree
+// This fan-out is always mounted, so it refetches calmly: the peer's
+// push watch (lib/hostWatch.ts) invalidates its rows the moment that
+// peer pings, an open remote worktree
 // page keeps its own fresher observers on the same keys, and any
 // observer wanting a refetch refreshes this one's rows for free. Focus
 // refetch stays on as the belt the local forest has too (a dropped
@@ -164,7 +164,7 @@ export function useRemoteForests(
   // Both served from the peer's own caches (the PR sweep's map, the
   // project.json read), so neither costs it a git or gh call. Neither
   // refetches on its own: the PR map refreshes off the peer's
-  // projectPullRequestsRefreshed push (remoteHostWatch), the way the
+  // projectPullRequestsRefreshed push (lib/hostWatch.ts), the way the
   // local map does off the local wire, and the config only ever changes
   // through a Configure save, which invalidates it.
   const pullRequestQueries = useQueries({

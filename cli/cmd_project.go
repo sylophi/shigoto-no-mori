@@ -27,15 +27,19 @@ func cmdProject(ctx cliContext, args []string) (int, error) {
 	}
 	switch canonicalProjectsSub(args[0]) {
 	case "list":
-		return cmdProjectList(ctx)
+		return cmdProjectList(ctx, args[1:])
+	case "icon":
+		return cmdProjectIcon(ctx, args[1:])
 	case "add":
 		return cmdProjectAdd(ctx, args[1:])
 	case "remove":
 		return cmdProjectRemove(ctx, args[1:])
 	case "config":
 		return cmdConfig(ctx, args[1:])
+	case "reorder":
+		return cmdProjectReorder(args[1:])
 	default:
-		return 2, usageErrf("Unknown subcommand %q. Usage: %s projects <list|add|remove|config> [args]", args[0], binaryName)
+		return 2, usageErrf("Unknown subcommand %q. Usage: %s projects <list|add|remove|reorder|config|icon> [args]", args[0], binaryName)
 	}
 }
 
@@ -143,12 +147,11 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 	if err := removeProjectRegistration(proj.ID, false); err != nil {
 		return exitCodeOf(err), err
 	}
-	// Best-effort, like the app's icon-cache cleanup: the entry is
-	// already gone, so failing here would report a half-removal the
-	// user can do nothing about. A project that stays listed via
-	// terrier keeps its state under the deterministic id it
-	// resurfaces with, relocating when the registry id was an older
-	// random one.
+	// Best-effort: the entry is already gone, so failing here would
+	// report a half-removal the user can do nothing about. A project
+	// that stays listed via terrier keeps its state under the
+	// deterministic id it resurfaces with, relocating when the registry
+	// id was an older random one.
 	if stillListed {
 		if newID := terrierProjectID(proj.Path); newID != proj.ID {
 			// A leftover state dir from an earlier terrier era blocks the
@@ -164,9 +167,11 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 		}
 	} else {
 		_ = removeProjectState(proj.ID)
-		// The primary's marks are keyed by its path, not the project
-		// id, so they would outlive the state dir and greet a re-add.
+		// The primary's marks and the icon cache entry are keyed by its
+		// path, not the project id, so they would outlive the state dir
+		// and greet a re-add.
 		dropWorktreeMarks(worktreeIDFromPath(proj.Path))
+		forgetIconCacheEntry(proj.Path)
 	}
 
 	emitOrOut(map[string]any{"ok": true, "removed": proj.Name, "path": proj.Path},
@@ -174,28 +179,94 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 	return 0, nil
 }
 
-func cmdProjectList(ctx cliContext) (int, error) {
-	if jsonMode {
-		projects := ctx.projects
-		if projects == nil {
-			projects = []project{}
-		}
-		emit(projects)
-		return 0, nil
+// sm projects reorder --ids <id,...>: the sidebar's drag-to-reorder.
+// Under the registry lock, the listed ids move to the front in the given
+// order and every other entry follows in its current relative order, so
+// a project added concurrently lands last instead of being dropped. Ids
+// the registry doesn't hold (terrier-only projects, stale ids) are
+// ignored, and an unchanged order writes nothing. Entries are moved as
+// stored, fields this build doesn't know included.
+func cmdProjectReorder(args []string) (int, error) {
+	parsed, err := parseCmdArgs(args, argSpec{strings: map[string][]string{"ids": {}}})
+	if err != nil {
+		return exitCodeOf(err), err
 	}
-	if len(ctx.projects) == 0 {
+	rawIDs, ok := parsed.strings["ids"]
+	if !ok || len(parsed.positionals) > 0 {
+		return 2, usageErrf("Usage: %s projects reorder --ids <id1,id2,...>", binaryName)
+	}
+	var ids []string
+	for _, id := range strings.Split(rawIDs, ",") {
+		if id = strings.TrimSpace(id); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	if err := reorderRegistryProjects(ids); err != nil {
+		return exitCodeOf(err), err
+	}
+	emitOrOut(map[string]any{"ok": true}, "reordered projects")
+	return 0, nil
+}
+
+func reorderRegistryProjects(ids []string) error {
+	return updateRegistryKey(projectsKey, func(raw json.RawMessage) (any, error) {
+		var entries []json.RawMessage
+		if err := decodeKey(registryPath(), projectsKey, raw, &entries); err != nil {
+			return nil, err
+		}
+		idOf := make([]string, len(entries))
+		for i, entry := range entries {
+			var head struct {
+				ID string `json:"id"`
+			}
+			if err := json.Unmarshal(entry, &head); err != nil {
+				return nil, malformedKeyErr(registryPath(), projectsKey, err)
+			}
+			idOf[i] = head.ID
+		}
+		placed := make([]bool, len(entries))
+		var order []int
+		for _, id := range ids {
+			for i := range entries {
+				if !placed[i] && idOf[i] == id {
+					placed[i] = true
+					order = append(order, i)
+					break
+				}
+			}
+		}
+		for i := range entries {
+			if !placed[i] {
+				order = append(order, i)
+			}
+		}
+		changed := false
+		reordered := make([]json.RawMessage, len(order))
+		for pos, i := range order {
+			reordered[pos] = entries[i]
+			changed = changed || pos != i
+		}
+		if !changed {
+			return nil, nil
+		}
+		return reordered, nil
+	})
+}
+
+func printProjectTable(projects []project) (int, error) {
+	if len(projects) == 0 {
 		note("No projects registered.")
 		return 0, nil
 	}
 	// The VIA column only appears once there is something to put in it,
 	// so the table stays two columns for anyone not using terrier.
-	hasSource := slices.ContainsFunc(ctx.projects, func(p project) bool { return p.Source != "" })
+	hasSource := slices.ContainsFunc(projects, func(p project) bool { return p.Source != "" })
 	headers := []string{"NAME", "PATH"}
 	if hasSource {
 		headers = append(headers, "VIA")
 	}
-	rows := make([][]string, len(ctx.projects))
-	for i, p := range ctx.projects {
+	rows := make([][]string, len(projects))
+	for i, p := range projects {
 		rows[i] = []string{p.Name, p.Path}
 		if hasSource {
 			rows[i] = append(rows[i], p.Source)
@@ -205,7 +276,7 @@ func cmdProjectList(ctx cliContext) (int, error) {
 	return 0, nil
 }
 
-// newRunID's format, uppercased. (The TS engine mints lowercase
+// newRunID's format, uppercased. (Older app builds minted lowercase
 // randomUUID ids, so the case incidentally records which engine
 // registered a project.)
 func newProjectID() string {
@@ -457,8 +528,9 @@ func cmdProjectAddAll(ctx cliContext, root string, yes bool) (int, error) {
 	return 0, nil
 }
 
-// Lockfile priority matches detectPackageManager in
-// host/lib/scripts/packageScripts.ts; "" when there's no package.json.
+// The package manager a worktree's lockfile selects (bun, pnpm, yarn,
+// else npm), "" when there's no package.json. `sm run` runs scripts
+// with it, and the app reads it as the scripts panel's packageManager.
 func detectPackageManager(dir string) string {
 	if _, err := os.Lstat(filepath.Join(dir, "package.json")); err != nil {
 		return ""
@@ -602,14 +674,15 @@ func cmdConfigVerb(proj project, parsed parsedArgs) (int, error) {
 
 func projectConfigScope(proj project) configDocScope {
 	return configDocScope{
-		path:        projectConfigJSONPath(proj.ID),
-		keys:        projectConfigKeys,
-		usagePrefix: "projects config",
-		usageSuffix: " [-p <project>]",
-		suffix:      " for " + proj.Name,
-		project:     proj.Name,
-		beforeWrite: func(doc map[string]any) error { return ensureDefaultBranchField(doc, proj) },
-		afterWrite:  func(doc map[string]any) { maybeExcludeInProjectDir(proj, doc) },
+		path:           projectConfigJSONPath(proj.ID),
+		keys:           projectConfigKeys,
+		usagePrefix:    "projects config",
+		usageSuffix:    " [-p <project>]",
+		suffix:         " for " + proj.Name,
+		project:        proj.Name,
+		beforeWrite:    func(doc map[string]any) error { return ensureDefaultBranchField(doc, proj) },
+		afterWrite:     func(doc map[string]any) { maybeExcludeInProjectDir(proj, doc) },
+		nullWhenAbsent: true,
 	}
 }
 

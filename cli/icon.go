@@ -1,14 +1,13 @@
 package main
 
-// Project icon resolution, ported from host/lib/projects/icon.ts so
-// the CLI can color projects by logo without the app having run. The
-// shared cache in front of this scan lives in iconcache.go; what's
-// here is the resolution itself, and it must produce the same answer
-// as the app's: every package root (repo top level plus each
+// Project icon resolution, the one resolver: `sm projects list
+// --json` carries each project's icon and accent hue, and `sm projects
+// icon` its bytes, which is how the app gets them.
+// The cache in front of this scan lives in iconcache.go; what's here is
+// the resolution itself: every package root (repo top level plus each
 // package.json directory, shallowest first) is probed for the
 // conventional icon files, then for a <link rel="icon"> href in the
-// usual source files. The candidate lists must stay in sync with
-// icon.ts.
+// usual source files.
 
 import (
 	"cmp"
@@ -96,8 +95,8 @@ var iconSourceFiles = []string{
 	"src/index.html",
 }
 
-// icon.ts matches these with lookaheads; RE2 has none, so scan the
-// enclosing chunk (a <link> tag, or an object literal up to its `}`)
+// A lookahead regex would match these in one go; RE2 has none, so scan
+// the enclosing chunk (a <link> tag, or an object literal up to its `}`)
 // and test rel/href separately.
 var (
 	linkTagRe  = regexp.MustCompile(`(?i)<link\b[^>]*>`)

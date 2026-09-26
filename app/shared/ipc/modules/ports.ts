@@ -19,6 +19,6 @@ export const portsContract = defineContract("host", {
     "ports:list",
     WorktreeScopedPayloadSchema,
     WorktreePortsResultSchema,
-    { remote: true, mutating: false },
+    { remote: true, gated: false },
   ),
 });

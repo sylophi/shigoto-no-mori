@@ -1,14 +1,17 @@
 package main
 
-// Full worktree status objects in the same shape the app's IPC returns
-// (shared/schemas/worktree.ts WorktreeSchema) plus projectName, so
-// --json consumers and the future app-as-CLI-caller read one format.
+// Full worktree status objects: the row the app's WorktreeSchema
+// (shared/schemas/worktree.ts) parses, plus projectName. The CLI owns
+// this data model. The app reads rows through `sm worktrees list
+// --json` (all, -p/--project-id, or one --worktree-id) instead of
+// building its own, so a field added here is added for both surfaces.
 
 import (
 	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,6 +34,7 @@ type worktreeJSON struct {
 	BehindPrimary     int             `json:"behindPrimary"`
 	UnpushedCount     int             `json:"unpushedCount"`
 	PrimaryRef        string          `json:"primaryRef,omitempty"`
+	PrimaryBranch     string          `json:"primaryBranch,omitempty"`
 	MergedIntoPrimary bool            `json:"mergedIntoPrimary"`
 	ChangedCount      int             `json:"changedCount"`
 	LastChangeAt      int64           `json:"lastChangeAt,omitempty"`
@@ -39,6 +43,7 @@ type worktreeJSON struct {
 	IsExternal        bool            `json:"isExternal"`
 	Detached          bool            `json:"detached"`
 	Shelved           bool            `json:"shelved"`
+	AutoPull          bool            `json:"autoPull"`
 	ProjectName       string          `json:"projectName"`
 }
 
@@ -47,8 +52,15 @@ const recentCommitsCount = 4
 type buildContext struct {
 	hasRemote  bool
 	primaryRef string
-	shelved    map[string]bool
-	chain      *primaryChain
+	// The primary ref's local branch name ("main" for "origin/main"),
+	// the branch a stack of pull requests lands on.
+	primaryBranch string
+	shelved       map[string]bool
+	autoPull      map[string]bool
+	// The shelf snapshots (shelf.go), read with the marks and only when
+	// anything is shelved: nothing shelved, nothing to compare against.
+	shelfSnapshots map[string]shelfSnapshot
+	chain          *primaryChain
 	// The project config the primary ref was resolved from, kept so
 	// callers that need more of it don't read the file a second time.
 	config *projectConfig
@@ -69,19 +81,50 @@ func primaryRefFor(proj project, config *projectConfig) string {
 }
 
 func loadBuildContext(proj project) buildContext {
-	// listRemotes feeds both hasRemote and the default-branch
-	// resolution; one spawn covers both.
-	remotes := listRemotes(proj.Path)
-	config := readProjectConfig(proj.ID)
-	primaryRef := resolveDefaultBranchWithRemotes(proj.Path,
-		defaultBranchOverride(config), remotes)
-	return buildContext{
-		hasRemote:  len(remotes) > 0,
-		primaryRef: primaryRef,
-		shelved:    readShelvedSet(),
-		chain:      &primaryChain{path: proj.Path, ref: primaryRef},
-		config:     config,
+	remotes, primaryRef, config := loadPrimaryRef(proj)
+	return newBuildContext(proj, remotes, primaryRef, config)
+}
+
+// The project's primary ref, resolved once per project the way every
+// row's is: the project config's default-branch override honored, and
+// the remotes returned alongside (listRemotes feeds hasRemote, the
+// default-branch resolution and the primary branch split; one spawn
+// covers all three).
+func loadPrimaryRef(proj project) (remotes []string, primaryRef string, config *projectConfig) {
+	remotes = listRemotes(proj.Path)
+	config = readProjectConfig(proj.ID)
+	primaryRef = resolveDefaultBranchWithRemotes(proj.Path, defaultBranchOverride(config), remotes)
+	return remotes, primaryRef, config
+}
+
+// The build context from project facts a caller already resolved
+// (done and land hold the remotes and primary ref by then).
+func newBuildContext(proj project, remotes []string, primaryRef string, config *projectConfig) buildContext {
+	all := readRegistryHints()
+	marks := worktreeMarkSetsFrom(all)
+	ctx := buildContext{
+		hasRemote:     len(remotes) > 0,
+		primaryRef:    primaryRef,
+		primaryBranch: primaryBranchOf(primaryRef, remotes),
+		shelved:       marks[shelvedKey],
+		autoPull:      marks[autoPullKey],
+		chain:         &primaryChain{path: proj.Path, ref: primaryRef},
+		config:        config,
 	}
+	if len(ctx.shelved) > 0 {
+		ctx.shelfSnapshots = shelfSnapshotsFrom(all)
+	}
+	return ctx
+}
+
+// The local branch behind a primary ref: the ref minus its remote when
+// it is a remote-tracking ref, the ref itself when it is local, "" when
+// there is no primary ref.
+func primaryBranchOf(primaryRef string, remotes []string) string {
+	if remote, branch := splitRemoteRef(primaryRef, remotes); remote != "" {
+		return branch
+	}
+	return primaryRef
 }
 
 // Only worktrees the app manages carry a shelved mark: the primary
@@ -102,21 +145,31 @@ func identityOf(w worktreeJSON) worktreeIdentity {
 }
 
 func buildWorktree(proj project, id worktreeIdentity, ctx buildContext) worktreeJSON {
+	row, _ := probeWorktree(proj, id, ctx)
+	return row
+}
+
+// buildWorktree plus what the shelf needs of the probes (rowProbe).
+func probeWorktree(proj project, id worktreeIdentity, ctx buildContext) (worktreeJSON, rowProbe) {
 	var (
-		changes  workingTreeChanges
-		commits  []commitSummary
-		rs       remoteSync
-		primary  primaryRelation
-		unpushed int
-		wg       sync.WaitGroup
+		changes   workingTreeChanges
+		statusErr error
+		commits   []commitSummary
+		rs        remoteSync
+		primary   primaryRelation
+		unpushed  int
+		wg        sync.WaitGroup
 	)
-	// Display probe: an unreadable status just shows as 0 changes.
-	wg.Go(func() { changes, _ = getWorkingTreeChanges(id.Path) })
+	probe := rowProbe{at: time.Now().UnixMilli()}
+	// Display probe: an unreadable status just shows as 0 changes (and
+	// keeps the shelf from comparing the row).
+	wg.Go(func() { changes, statusErr = getWorkingTreeChanges(id.Path) })
 	wg.Go(func() { commits = listCommits(id.Path, 0, recentCommitsCount) })
 	wg.Go(func() { rs = getRemoteSync(id.Path) })
 	wg.Go(func() { primary = getPrimaryRelation(id, ctx) })
 	wg.Go(func() { unpushed = getUnpushedCount(id.Path) })
 	wg.Wait()
+	probe.statusOK = statusErr == nil
 	return worktreeJSON{
 		ID:                id.ID,
 		ProjectID:         id.ProjectID,
@@ -131,6 +184,7 @@ func buildWorktree(proj project, id worktreeIdentity, ctx buildContext) worktree
 		BehindPrimary:     primary.behindPrimary,
 		UnpushedCount:     unpushed,
 		PrimaryRef:        ctx.primaryRef,
+		PrimaryBranch:     ctx.primaryBranch,
 		MergedIntoPrimary: primary.mergedIntoPrimary,
 		ChangedCount:      changes.count,
 		LastChangeAt:      changes.lastChangeAt,
@@ -139,8 +193,11 @@ func buildWorktree(proj project, id worktreeIdentity, ctx buildContext) worktree
 		IsExternal:        id.IsExternal,
 		Detached:          id.Detached,
 		Shelved:           shelvedFlag(id, ctx),
-		ProjectName:       proj.Name,
-	}
+		// Unlike the shelf, any checkout can follow its upstream: the
+		// primary is the mark's main customer.
+		AutoPull:    ctx.autoPull[id.ID],
+		ProjectName: proj.Name,
+	}, probe
 }
 
 // A new slice holding the items first accepts, then the rest, each
@@ -161,7 +218,15 @@ func partitionStable[T any](items []T, first func(T) bool) []T {
 	return out
 }
 
-// Primary first, matching the app's sidebar ordering.
+// Each row starts five git processes, and the app lists every project
+// at once on a refresh, so the rows are built a few at a time: the cap
+// costs a 30-row project no time (the probes are the bottleneck, not
+// the fan-out) and keeps a refresh from forking hundreds of gits.
+const rowProbeSlots = 6
+
+// Primary first, matching the app's sidebar ordering. The full listing
+// is what settles the shelf (settleShelves): a shelved row comes back
+// unshelved once it has been worked in.
 func listWorktrees(proj project) ([]worktreeJSON, error) {
 	identities, err := listWorktreeIdentities(proj)
 	if err != nil {
@@ -170,18 +235,25 @@ func listWorktrees(proj project) ([]worktreeJSON, error) {
 	ctx := loadBuildContext(proj)
 	ordered := partitionStable(identities, func(id worktreeIdentity) bool { return id.IsPrimary })
 	results := make([]worktreeJSON, len(ordered))
+	probes := make([]rowProbe, len(ordered))
 	var wg sync.WaitGroup
+	slots := make(chan struct{}, rowProbeSlots)
 	for i, id := range ordered {
-		wg.Go(func() { results[i] = buildWorktree(proj, id, ctx) })
+		wg.Go(func() {
+			slots <- struct{}{}
+			defer func() { <-slots }()
+			results[i], probes[i] = probeWorktree(proj, id, ctx)
+		})
 	}
 	wg.Wait()
+	settleShelves(results, probes, ctx)
 	return results, nil
 }
 
-// createWorktree ports the createWorktree flow from
-// host/lib/git/worktrees.ts: pick/validate the dirname, resolve the
-// layout base, refresh the remote base ref, `git worktree add`, and
-// re-read the identity so the returned branch is what git settled on.
+// createWorktree is the one worktree-creation flow (the app creates
+// through `sm create`): pick/validate the dirname, resolve the layout
+// base, refresh the remote base ref, `git worktree add`, and re-read
+// the identity so the returned branch is what git settled on.
 // checkout=true reuses the existing branch `base` (no -b) for the adopt
 // path; otherwise a new branch is created (branchName, or the dirname).
 func createWorktree(proj project, requestedName, branchName, base string, checkout bool) (worktreeJSON, error) {
@@ -189,24 +261,14 @@ func createWorktree(proj project, requestedName, branchName, base string, checko
 	if err != nil {
 		return worktreeJSON{}, err
 	}
-	used := map[string]bool{}
-	for _, id := range existing {
-		used[strings.ToLower(id.Name)] = true
-	}
+	used := worktreeNamesUsed(existing)
 	if requestedName != "" && used[strings.ToLower(requestedName)] {
 		return worktreeJSON{}, errf(
 			`A worktree folder named "%s" already exists in this project.`, requestedName)
 	}
 	name := requestedName
 	if name == "" {
-		// The picked name doubles as the branch name, so skip names a
-		// kept branch already holds (a removed worktree's, say).
-		if scan, err := scanBranchRefs(proj.Path); err == nil {
-			for _, branch := range scan.locals {
-				used[strings.ToLower(branch)] = true
-			}
-		}
-		name = pickWorktreeName(used, doubutsuNamesEnabled(readGlobalConfigHints()))
+		name = pickNewWorktreeName(proj, used)
 	}
 	config := readProjectConfig(proj.ID)
 	worktreePath := filepath.Join(resolveWorktreeBase(proj.Path, config), name)
@@ -262,6 +324,31 @@ func createWorktree(proj project, requestedName, branchName, base string, checko
 		}
 	}
 	return worktreeJSON{}, errors.New("worktree disappeared after creation")
+}
+
+// The project's worktree folder names, lowercased: what a new folder
+// name must not collide with (case-insensitively, since the default
+// macOS volume is).
+func worktreeNamesUsed(identities []worktreeIdentity) map[string]bool {
+	used := make(map[string]bool, len(identities))
+	for _, id := range identities {
+		used[strings.ToLower(id.Name)] = true
+	}
+	return used
+}
+
+// A fresh folder name for a new worktree, the pick behind both `create`
+// without a name and `worktrees destination`. The picked name doubles
+// as the branch name, so names a kept local branch already holds (a
+// removed worktree's, say) are skipped too. used is not modified.
+func pickNewWorktreeName(proj project, used map[string]bool) string {
+	used = maps.Clone(used)
+	if scan, err := scanBranchRefs(proj.Path); err == nil {
+		for _, branch := range scan.locals {
+			used[strings.ToLower(branch)] = true
+		}
+	}
+	return pickWorktreeName(used, doubutsuNamesEnabled(readGlobalConfigHints()))
 }
 
 // Test seam: the sweep failure below is a race, so tests stub git's

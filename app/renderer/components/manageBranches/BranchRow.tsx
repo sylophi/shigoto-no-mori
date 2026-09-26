@@ -22,7 +22,7 @@ export function BranchRow({
   worktree: Worktree | undefined;
 }) {
   // Scope-aware: a peer's checked-out branch opens its worktree under
-  // the device twin.
+  // that device's route.
   const { toWorktree } = useWorktreeNav();
   const rename = useRenameAnyBranch();
   const del = useDeleteBranch();

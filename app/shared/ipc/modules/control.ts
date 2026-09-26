@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { defineContract, invoke } from "@shared/ipc/contract";
 import { DeviceIdSchema } from "@shared/hub/protocol";
-import { SyncPullWorktreeResultSchema } from "@shared/ipc/modules/sync";
+import {
+  SyncCloneIntoSchema,
+  SyncPullWorktreeResultSchema,
+} from "@shared/ipc/modules/sync";
 import { WorktreeIdSchema, WorktreeSchema } from "@shared/schemas";
 
 // What the CLI asks of the running app: the cross-device verbs (`sm
@@ -14,7 +17,7 @@ import { WorktreeIdSchema, WorktreeSchema } from "@shared/schemas";
 //
 // Served on the control wire ONLY (main/ipc/handlers.ts), so no call
 // carries a remote tag. Its caller is a local process of this user and
-// commands this machine without a grant. `mutating` is what pings the
+// commands this machine without a grant. `gated` is what pings the
 // app's windows and the remote viewers once an op moved state.
 //
 // Each op takes what a person would say (a device by name, a worktree
@@ -30,7 +33,8 @@ const ControlDeviceSchema = z.strictObject({
   platform: z.string(),
   // Absent when no project was asked about: then only `offline` can be
   // told. With one, absent means the device can take a send or serve a
-  // bring.
+  // bring. `no-project` still takes a send (which clones the repo there
+  // first) but cannot serve a bring.
   block: ControlDeviceBlockSchema.optional(),
   // The repo's checkout on that device, when it holds one.
   projectId: z.string().optional(),
@@ -64,6 +68,11 @@ const TransferOptionsSchema = z.strictObject({
 const ControlSendPayloadSchema = TransferOptionsSchema.extend({
   projectId: z.string().min(1),
   worktreeId: WorktreeIdSchema,
+  // Where the target clones the repo when it has no checkout of it: the
+  // folder the checkout goes in, on the target (a leading `~` is its
+  // home). Absent is the dialogs' default. Unread when the target holds
+  // the repo.
+  cloneInto: SyncCloneIntoSchema.shape.parentDir.max(4096).optional(),
 });
 
 const ControlBringPayloadSchema = TransferOptionsSchema.extend({
@@ -158,13 +167,14 @@ export const controlContract = defineContract("host", {
     }),
   ),
   // One of this device's worktrees to a peer: a transplant, or with
-  // `mirror` a mirror whose copy is there. Progress streams to the
-  // caller as sync:pullProgress frames, keyed by the local worktree.
+  // `mirror` a mirror whose copy is there. A peer with no checkout of
+  // the repo clones it first. Progress streams to the caller as
+  // sync:pullProgress frames, keyed by the local worktree.
   send: invoke(
     "control:send",
     ControlSendPayloadSchema,
     ControlTransferResultSchema,
-    { mutating: true },
+    { gated: true },
   ),
   // A peer's worktree to this device, the same two ways. Progress is
   // keyed by the peer's worktree id.
@@ -172,7 +182,7 @@ export const controlContract = defineContract("host", {
     "control:bring",
     ControlBringPayloadSchema,
     ControlTransferResultSchema,
-    { mutating: true },
+    { gated: true },
   ),
   mirrors: invoke(
     "control:mirrors",
@@ -194,7 +204,7 @@ export const controlContract = defineContract("host", {
       // reason. Absent when the copy went too.
       copyStayed: z.string().optional(),
     }),
-    { mutating: true },
+    { gated: true },
   ),
 });
 

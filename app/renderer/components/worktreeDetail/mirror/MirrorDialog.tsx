@@ -1,15 +1,19 @@
 // The mirror flow, the transplant dialog's sibling on the same frame:
 // three steps on one rail. Review shows the source, both devices, and
-// what stays out (the one choice a mirror has). Mirror is the pull
-// with its progress frames, plus the session open on top. Live is
+// what stays out (the one choice a mirror has). Mirror is the move (a
+// send from the original's device) with its progress frames, plus the
+// session open on top. Live is
 // proof: the session's first verdict, and the way to the copy's page.
 // The flow runs both ways: MirrorDialog copies a peer's worktree here,
 // MirrorToDialog copies one of this device's to a peer (under that
-// peer's DestinationProvider). The session runs on this device either
-// way, and its Mirror button sits on this device's worktree page. A
+// peer's DestinationProvider). Either way the session runs on the
+// device holding the original: the peer this dialog is scoped to for
+// MirrorDialog, which sends the copy here, this device for
+// MirrorToDialog. Its Mirror button sits on both worktrees' pages. A
 // primary checkout takes the same flow, its copy on a branch of its
 // own (shared/git/branches.ts), which the words below say when the
 // two names differ.
+import type { ReactNode } from "react";
 import { ArrowRight, RefreshCw } from "lucide-react";
 import { pullLandingBranch } from "@shared/git/branches";
 import type { UseMutationResult } from "@tanstack/react-query";
@@ -24,12 +28,8 @@ import {
   DestinationProvider,
   LocalHostScope,
 } from "@/hooks/remote/useHostScope";
-import {
-  useMirrors,
-  useStartMirror,
-  useStartMirrorTo,
-} from "@/hooks/remote/useMirrors";
-import type { LandingChoice } from "@/hooks/remote/usePullWorktree";
+import { useMirrors, useStartMirror } from "@/hooks/remote/useMirrors";
+import type { LandingChoice } from "@/hooks/remote/useMoveWorktree";
 import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
 import { FlowBody, FlowFooter, LandedPath } from "../flow/FlowChrome";
 import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
@@ -68,9 +68,8 @@ export function MirrorDialog({
 }) {
   const thisDeviceLabel = useLocalDeviceName();
   const mirror = useStartMirror({
-    worktree,
-    sourceProjectId: project.id,
-    sourceIdentity,
+    direction: "pull",
+    source: { worktree, sourceProjectId: project.id, sourceIdentity },
   });
   return (
     <MirrorFlow
@@ -87,7 +86,8 @@ export function MirrorDialog({
 }
 
 // The same flow the other way: a live copy of one of THIS device's
-// worktrees on a peer that holds the same repo.
+// worktrees on a peer (which clones the repo first when it has no
+// checkout).
 export function MirrorToDialog({
   worktree,
   project,
@@ -99,12 +99,16 @@ export function MirrorToDialog({
   worktree: Worktree;
   project: Project;
   sourceIdentity: string;
-  // The peers holding the same repo (flow/peerTargets.ts).
+  // The peers it could go to (flow/peerTargets.ts).
   targets: PeerTarget[];
   onClose: () => void;
 }) {
   const { picked, flow } = usePeerDestination(targets);
-  const mirror = useStartMirrorTo(worktree, picked?.deviceId);
+  const mirror = useStartMirror({
+    direction: "send",
+    worktree,
+    targetDeviceId: picked?.deviceId,
+  });
   return (
     <DestinationProvider peer={picked}>
       <MirrorFlow
@@ -263,7 +267,7 @@ function MirrorFlow({
         />
       )}
       {stage === "done" && mirror.data && (
-        <LocalHostScope>
+        <RunnerScope runsHere={toPeer !== undefined}>
           <MirrorLive
             session={mirror.data.session}
             landed={mirror.data.worktree}
@@ -275,15 +279,27 @@ function MirrorFlow({
             onClose={onClose}
             onOpen={open}
           />
-        </LocalHostScope>
+        </RunnerScope>
       )}
     </PullFlowFrame>
   );
 }
 
+// The scope of the device running the session, the original's: this
+// machine for a flow to a peer, and for a flow here the source peer
+// the dialog is already scoped to.
+function RunnerScope({
+  runsHere,
+  children,
+}: {
+  runsHere: boolean;
+  children: ReactNode;
+}) {
+  return runsHere ? <LocalHostScope>{children}</LocalHostScope> : children;
+}
+
 // Step 3: the copy has landed and the session is up. Read under the
-// local scope: the session is this machine's fact, whichever device
-// holds the copy.
+// runner's scope (RunnerScope): the session is that device's fact.
 function MirrorLive({
   session,
   landed,

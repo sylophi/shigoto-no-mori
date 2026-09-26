@@ -1,5 +1,5 @@
 // Constant-time comparison of two bearer secrets, for the node-side
-// listeners (the LAN socket's token, the mirror gateway's). Hashing
+// listeners (the CLI control server's token, the mirror gateway's). Hashing
 // first makes the compare fixed width, so neither the length nor a
 // shared prefix is measurable. An empty secret on either side never
 // matches, so a listener whose secret was never set fails closed.

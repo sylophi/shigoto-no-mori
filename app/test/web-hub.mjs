@@ -5,48 +5,51 @@
 // SAME stub Durable Object as hub-link.mjs
 // (test/lib/hubStub.mjs) and drives the web connection as device A
 // against a real node HOST peer (device B, host/hub/connection.ts,
-// booted through the shared hubBoot fixture) answering the broker
-// slot.
+// booted through the shared hubBoot fixture) answering connectInfo.
 //
-// Asserts: connect plus a connectBroker hello/welcome that learns the
-// peer's appVersion, a broker invoke round trip (direct:connectInfo,
-// the ONLY channel the orchestration-only hub wire serves, and the
-// broker leg is what connectBroker exists for), presence
-// propagation, the revoked (4102) and superseded (4103) blocked
-// verdicts with no redial, a fresh-ticket redial after a drop, and the
-// per-dial ticket mint.
-//
-// Every sm frame the device hub carries is wrapped as { epoch, sm }
-// (see the SESSION EPOCH note in shared/hub/link.ts), which the stub
-// forwards verbatim as the opaque `frame`.
+// Asserts: connect, the connectInfo ask round trip (the ONE question
+// the orchestration-only hub wire carries) with id correlation, the
+// web client refusing a peer's ask as serving no listener, presence propagation, the revoked
+// (4102) and superseded (4103) blocked verdicts with no redial, a
+// fresh-ticket redial after a drop, and the per-dial ticket mint.
 //
 // Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
 // imports resolve. Run: pnpm test web-hub.
 import assert from "node:assert/strict";
 import { CLOSE_DEVICE_REVOKED, CLOSE_SUPERSEDED } from "@shared/hub/protocol";
+import { HubAskRefusedError, NO_LISTENER_CODE } from "@shared/hub/link";
 import { createHubConnection as createWebConnection } from "../web/hub/connection.ts";
 import { makeProof } from "./lib/checkKit.mjs";
 import { bootDevice as bootHost } from "./lib/hubBoot.mjs";
 import { delay, waitFor } from "./lib/checkKit.mjs";
 import { startStubHub } from "./lib/hubStub.mjs";
 
-// The broker slot is the only thing the hub wire serves, so the host
-// peer's handler is a plain echo for the round-trip scenarios
-// (registered raw into the slot, no schema: the link's dispatch keys
-// on the channel name alone, which the client side pins for us).
-const echoBroker = async (_ctx, raw) => raw;
+// connectInfo is the only thing the hub wire answers, and the link is
+// contract-free, so the host peer's server is a plain echo for the
+// round-trip scenarios.
+const echoServer = (_caller, input) => input;
+const ASK_MS = 5_000;
 
 // Boots the BROWSER connection (the one under test) on the global
 // WebSocket, through the shared boot with the web binding swapped in.
-// The shared boot supplies the broker channel the composition supplies
-// in production (createWebBridge), so the client role can frame its
-// broker reqs.
-const bootWeb = (stub, deviceId, track) =>
+const bootWeb = (stub, deviceId, track, opts = {}) =>
   bootHost(
     stub,
     deviceId,
-    { createConnection: createWebConnection, label: `web ${deviceId}` },
+    {
+      ...opts,
+      createConnection: createWebConnection,
+      label: `web ${deviceId}`,
+    },
     track,
+  );
+
+// Waits until `a` sees `peer` in its roster, so an ask cannot race the
+// presence envelope naming it.
+const seeing = (a, peer) =>
+  waitFor(
+    () => a.connection.status().onlineDeviceIds.includes(peer),
+    `${peer} to be online`,
   );
 
 const { check, done, fail } = makeProof("web hub proof");
@@ -69,38 +72,36 @@ async function main() {
   );
 
   await check(
-    "connectBroker: the web client completes the sm hello/welcome with a host peer and learns its appVersion",
+    "ask: the web client asks a host peer for its connect info, with ids correlating concurrent asks",
     async (track) => {
       const stub = await startStubHub(track);
       const a = await bootWeb(stub, "A", track);
-      await bootHost(
-        stub,
-        "B",
-        { appVersion: "2.2.2", brokerHandler: echoBroker },
-        track,
-      );
-      const peer = await a.connection.connectBroker("B");
-      assert.equal(peer.remoteDeviceId, "B");
-      assert.equal(peer.remoteAppVersion, "2.2.2");
+      await bootHost(stub, "B", { serveConnectInfo: echoServer }, track);
+      await seeing(a, "B");
+      const result = await a.connection.askConnectInfo("B", { hi: 1 }, ASK_MS);
+      assert.deepEqual(result, { hi: 1 });
+      const [first, second] = await Promise.all([
+        a.connection.askConnectInfo("B", "one", ASK_MS),
+        a.connection.askConnectInfo("B", "two", ASK_MS),
+      ]);
+      assert.equal(first, "one");
+      assert.equal(second, "two");
     },
   );
 
   await check(
-    "invoke: the broker channel round-trips through the device hub",
+    "serves nobody: a peer asking the web client is refused as serving no direct listener",
     async (track) => {
       const stub = await startStubHub(track);
-      const a = await bootWeb(stub, "A", track);
-      await bootHost(stub, "B", { brokerHandler: echoBroker }, track);
-      const peer = await a.connection.connectBroker("B");
-      const result = await peer.brokerInvoke({ hi: 1 });
-      assert.deepEqual(result, { hi: 1 });
-      // Two concurrent invokes prove the id correlation is per call.
-      const [first, second] = await Promise.all([
-        peer.brokerInvoke("one"),
-        peer.brokerInvoke("two"),
-      ]);
-      assert.equal(first, "one");
-      assert.equal(second, "two");
+      await bootWeb(stub, "A", track);
+      const b = await bootHost(stub, "B", {}, track);
+      await seeing(b, "A");
+      await assert.rejects(
+        () => b.connection.askConnectInfo("A", undefined, ASK_MS),
+        (error) =>
+          error instanceof HubAskRefusedError &&
+          error.code === NO_LISTENER_CODE,
+      );
     },
   );
 
@@ -109,7 +110,12 @@ async function main() {
     async (track) => {
       const stub = await startStubHub(track);
       const a = await bootWeb(stub, "A", track);
-      const b = await bootHost(stub, "B", { brokerHandler: echoBroker }, track);
+      const b = await bootHost(
+        stub,
+        "B",
+        { serveConnectInfo: echoServer },
+        track,
+      );
       await waitFor(
         () => a.connection.status().onlineDeviceIds.includes("B"),
         "web A to see B online",
@@ -160,11 +166,11 @@ async function main() {
   );
 
   await check(
-    "reconnect: a dropped socket redials with a fresh minted ticket and serves a peer again",
+    "reconnect: a dropped socket redials with a fresh minted ticket and asks a peer again",
     async (track) => {
       const stub = await startStubHub(track);
       const a = await bootWeb(stub, "A", track);
-      await bootHost(stub, "B", { brokerHandler: echoBroker }, track);
+      await bootHost(stub, "B", { serveConnectInfo: echoServer }, track);
       assert.equal(a.mints(), 1);
       stub.dropSocket("A", 1001, "going away");
       await waitFor(
@@ -178,9 +184,11 @@ async function main() {
       // The per-dial mint injection ran again for the redial, proving the
       // web connection mints a fresh ticket per attempt.
       assert.equal(a.mints(), 2, "the redial did not mint a fresh ticket");
-      const peer = await a.connection.connectBroker("B");
-      const result = await peer.brokerInvoke("back");
-      assert.equal(result, "back");
+      await seeing(a, "B");
+      assert.equal(
+        await a.connection.askConnectInfo("B", "back", ASK_MS),
+        "back",
+      );
     },
   );
 

@@ -14,7 +14,8 @@
 //     and a signed-out window shows no peers, whatever the cached
 //     device list still says.
 //   - a direct session established (a peerAppVersions key): phase
-//     "connected" with the appVersion the session's welcome confirmed,
+//     "connected" with the appVersion the session's welcome confirmed
+//     and the command access the peer reports (peerAcceptsCommands),
 //     WHATEVER the hub socket is doing. Data is direct or nothing (v2
 //     step 10, slice C), so an established direct session is the only
 //     thing "connected" may mean, and it is also sufficient: the
@@ -43,7 +44,11 @@ import type { DeviceInfo } from "@shared/hub/protocol";
 import { accountDevicesQueryOptions } from "@/hooks/account/useAccount";
 import { directPresenceRule } from "@shared/hub/directPresence";
 import { publishHubStatus, seedHubStatus } from "@/hooks/remote/useHubStatus";
-import { hostKeyDeviceId, invalidateDeviceSession } from "@/lib/queryKeys";
+import {
+  hostKeyDeviceId,
+  invalidateDeviceSession,
+  queryKeysFor,
+} from "@/lib/queryKeys";
 import {
   rejectingClientTransport,
   type RemoteDevice,
@@ -83,7 +88,15 @@ const deviceListHash = hashKey(accountDevicesQueryOptions.queryKey);
 // kept: the transport forwards through the bridge, whose session for
 // that peer is supervised desired state (main's keeper redials it
 // forever), so the api never goes stale the way a dead socket does.
-const apis = new Map<string, RemoteDeviceApi>();
+// Its pushes reach the cache from the same moment (watchPeer), until
+// the account is left (`unwatch`).
+const apis = new Map<string, { api: RemoteDeviceApi; unwatch: () => void }>();
+
+// The boot's per-device push wiring (lib/hostWatch.ts), handed in by
+// startRemoteDeviceSync rather than imported, so this module stays
+// below the hooks that wiring writes through.
+type WatchPeer = (deviceId: string, api: RemoteDeviceApi) => () => void;
+let watchPeer: WatchPeer | null = null;
 
 // The query client of the boot that started the sync: the cache the
 // device list is read from, and the target of the convergence
@@ -107,6 +120,10 @@ function boundClient(): QueryClient {
 // go unswept.
 let liveSessions: ReadonlySet<string> = new Set();
 
+// Each live session's command access in the last snapshot seen, so a
+// peer's switch flipping mid-session can be spotted (noteSessions).
+let lastAccess: Readonly<Record<string, boolean>> = {};
+
 // Coalesce reconciles to latest-wins: presence events can arrive faster
 // than a reconcile drains, and an unbounded promise chain would grow one
 // pending link per event. A single in-flight run plus a dirty latch
@@ -119,12 +136,15 @@ let queuedStatus: HubStatus | undefined;
 // script run stores), which need a device's api without a scope.
 export function apiFor(deviceId: string): RemoteDeviceApi {
   const existing = apis.get(deviceId);
-  if (existing !== undefined) return existing;
+  if (existing !== undefined) return existing.api;
+  if (watchPeer === null) {
+    throw new Error("remote device sync used before startRemoteDeviceSync");
+  }
   const api = buildApi({
     host: createHubClientTransport(deviceId),
     client: rejectingClientTransport,
   });
-  apis.set(deviceId, api);
+  apis.set(deviceId, { api, unwatch: watchPeer(deviceId, api) });
   return api;
 }
 
@@ -231,16 +251,36 @@ async function reconcileNow(status?: HubStatus): Promise<void> {
 // the two worktree cost domains) name exactly the queries that
 // hard-failed during the dial window, so sweeping through them would
 // refetch everything except what is broken.
+//
+// A peer's command access flipping on a session that stays up is the
+// other thing only the snapshot says. Runtime info is gated on it (a
+// peer refuses it to a device it will not take commands from), caches
+// forever and sits outside the state-moved sweep, so it is re-asked
+// here or the peer's paths stay raw until a focus. Either direction
+// re-asks: the read is silent, so an off flip costs one refused round
+// trip and no toast. The full session sweep is deliberately not used:
+// it would refetch every gated read, and on an off flip each of those
+// would toast a refusal.
 function noteSessions(status: HubStatus): void {
   const now = new Set(Object.keys(status.peerAppVersions));
   for (const deviceId of now) {
-    if (liveSessions.has(deviceId)) continue;
+    if (liveSessions.has(deviceId)) {
+      const before = lastAccess[deviceId];
+      const after = status.peerAcceptsCommands[deviceId];
+      if (before !== undefined && before !== after && boundQueryClient) {
+        void boundQueryClient.invalidateQueries({
+          queryKey: queryKeysFor(deviceId).runtimeInfo(),
+        });
+      }
+      continue;
+    }
     if (boundQueryClient !== null) {
       invalidateDeviceSession(boundQueryClient, deviceId);
     }
     for (const listener of sessionLandedListeners) listener(deviceId);
   }
   liveSessions = now;
+  lastAccess = status.peerAcceptsCommands;
 }
 
 // Followers of a session landing that have more to do than refetch:
@@ -270,8 +310,10 @@ export function onAccountLeft(listener: () => void): void {
 // this machine's whatever the account.
 function leaveAccount(queryClient: QueryClient): void {
   setRemoteDevices([]);
+  for (const { unwatch } of apis.values()) unwatch();
   apis.clear();
   liveSessions = new Set();
+  lastAccess = {};
   queryClient.removeQueries({
     queryKey: accountDevicesQueryOptions.queryKey,
     exact: true,
@@ -285,11 +327,11 @@ function leaveAccount(queryClient: QueryClient): void {
   for (const listener of accountLeftListeners) listener();
 }
 
-// Pure and synchronous: the peer's appVersion now rides the status
-// snapshot (current.peerAppVersions), so an entry no longer fires a
-// peerInfo IPC per device (M3). One lookup answers both questions: a
-// peerAppVersions key IS the established-direct-session fact, and its
-// value is the session's welcome-confirmed version.
+// Pure and synchronous: the peer's appVersion and command access ride
+// the status snapshot (current.peerAppVersions, peerAcceptsCommands),
+// so an entry asks the peer nothing. A peerAppVersions key IS the
+// established-direct-session fact, and its value is the session's
+// welcome-confirmed version.
 function buildEntry(
   info: DeviceInfo,
   current: HubStatus,
@@ -333,6 +375,7 @@ function buildEntry(
     icon: info.icon,
     status,
     appVersion: version ?? "",
+    acceptsCommands: current.peerAcceptsCommands[info.deviceId],
     api,
   };
 }
@@ -363,14 +406,19 @@ async function drainReconciles(): Promise<void> {
 // Boot wiring: reconcile once now, then follow the account, the
 // shared device-list cache and the hub for the life of the window.
 // None of the three subscriptions is ever unsubscribed, on purpose,
-// exactly like the other boot-scope subscriptions in index.tsx. The
+// exactly like the other boot-scope subscriptions in boot.tsx. The
 // hub subscription is also the ONE writer of the useHubStatus store:
 // every snapshot it sees is published there, so no hook needs a
 // subscription or an initial fetch of its own. The boot's query client
 // comes in rather than being reached for, because both boots
-// (renderer/boot.tsx, one for both shells) build their own.
-export function startRemoteDeviceSync(queryClient: QueryClient): void {
+// (renderer/boot.tsx, one for both shells) build their own, and so
+// does the push wiring each peer's api gets.
+export function startRemoteDeviceSync(
+  queryClient: QueryClient,
+  watch: WatchPeer,
+): void {
   boundQueryClient = queryClient;
+  watchPeer = watch;
   // This process's own enroll, sign-out, rename or revoke. A change of
   // ACCOUNT (a sign-out, a sign-in under another account) also drops
   // everything built under the old one, before the refetch, so what

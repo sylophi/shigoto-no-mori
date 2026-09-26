@@ -21,7 +21,6 @@ import { existsSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
 import { errorCodeOf, errorMessageOf } from "@shared/errors";
-import { noHandlerMessage } from "@shared/hub/link";
 import { isControlErrorCode } from "@shared/ipc/modules/control";
 import { resolveBroadcast } from "@shared/ipc/registerContract";
 import {
@@ -29,12 +28,13 @@ import {
   HELLO_TIMEOUT_MS,
   MAX_IN_FLIGHT_PER_PEER,
   MAX_INBOUND_FRAME_BYTES,
+  noHandlerMessage,
   PUSH_BUFFER_LIMIT_BYTES,
   ReqFrameSchema,
   resError,
 } from "@shared/ipc/socket/frames";
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
-import { mintHexId } from "@host/lib/idleRegistry";
+import { mintHexId } from "@host/lib/hexId";
 import { atomicWriteJsonSync } from "@host/lib/util/jsonFile";
 import { lineSplitter } from "@host/lib/util/ndjson";
 import { secretsMatch } from "@host/lib/util/secretCompare";
@@ -151,9 +151,6 @@ export function createControlServer(deps: {
     };
     const ctx: HandlerContext = {
       signal: controller.signal,
-      // A local process of this user commands its own machine, like a
-      // local window.
-      isCallerCommandGranted: () => true,
       notifier,
     };
     const inFlight = { count: 0 };

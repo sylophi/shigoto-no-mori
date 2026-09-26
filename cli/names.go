@@ -2,9 +2,8 @@ package main
 
 // Names for worktree directories: adjective + animal pairs, or Animal
 // Crossing character names with doubutsuNames on. The pools are
-// embedded from embed/, which the app's host/lib/worktrees/names.ts
-// imports too. One pool each, two consumers, nothing to keep in sync
-// by hand.
+// embedded from embed/. The app picks no names itself: it asks
+// `sm worktrees destination` for one, and `sm create` picks the same way.
 
 import (
 	_ "embed"

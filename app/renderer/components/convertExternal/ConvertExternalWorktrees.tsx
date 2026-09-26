@@ -3,7 +3,7 @@ import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { tildify } from "@/lib/projectPaths";
+import { tildify } from "@shared/projectPaths";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
@@ -35,8 +35,8 @@ export function ConvertExternalWorktrees() {
 // The externals of whichever device the surrounding scope names.
 function ConvertExternalBody({ project }: { project: Project }) {
   const navigate = useNavigate();
-  // Scope-aware: a worktree converted on a peer opens under its device
-  // twin, like every other link out of a scoped page.
+  // Scope-aware: a worktree converted on a peer opens under that
+  // device's route, like every other link out of a scoped page.
   const { toWorktree } = useWorktreeNav();
   const { data: runtime } = useRuntimeInfo();
   const { data: worktrees = [], isLoading } = useWorktrees(project.id);

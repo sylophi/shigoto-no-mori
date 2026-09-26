@@ -1,20 +1,23 @@
 // "Nuke everything" implementation: removes every worktree shigomori created
-// (via `git worktree remove --force`) and wipes the shigomori data dir so state,
-// global config, and any orphan worktree directories all go away.
+// (through `sm rm --force`, so each one's port-pool lease is released and
+// its teardown runs like any other removal) and wipes the shigomori data
+// dir so state, global config, and any orphan worktree directories all go
+// away.
 //
 // The original project repos on disk are untouched. We only act on data
 // shigomori itself owns.
 import { rm } from "node:fs/promises";
-import type { NukeProgress } from "@shared/schemas";
+import type { NukeProgress, Project } from "@shared/schemas";
+import { errorMessageOf } from "@shared/errors";
+import { forceRemoveViaCli } from "@host/ipc/cliDelegate";
 import { ensureDataDir } from "./bootstrap";
-import { invalidateGlobalConfigCache, readGlobalConfig } from "./config/global";
-import { deleteBranchAfterWorktreeRemoval } from "./git/branches";
+import { invalidateGlobalConfigCache } from "./config/global";
+import { listWorktreeIdentities, pruneStaleWorktrees } from "./git/worktrees";
 import {
-  listWorktreeIdentities,
-  pruneStaleWorktrees,
-  removeWorktreeForce,
-} from "./git/worktrees";
-import { findProjectInsideDataDir, loadProjects } from "./projects";
+  findProjectInsideDataDir,
+  listProjects,
+  refreshProjects,
+} from "./projects";
 import {
   clearDeleteInflight,
   killAllScripts,
@@ -25,7 +28,7 @@ import { dataDir, dataDirSource, defaultDataDir } from "./util/paths";
 export async function nukeEverything(
   onProgress: (progress: NukeProgress) => void = () => {},
 ): Promise<void> {
-  const projects = loadProjects();
+  const projects = await listProjects();
   // The final step rm -rf's the shigomori data dir. A trapped project repo
   // would be wiped with it: .git, uncommitted work, everything.
   // Refuse up front, before any script kill or worktree removal.
@@ -44,24 +47,15 @@ export async function nukeEverything(
   // guards against via killScriptsForWorktree.
   onProgress({ phase: "scripts" });
   await killAllScripts();
-  // Kick off the config read in parallel with the identity listing
-  // below; awaited once before the removal fan-out needs it.
-  const deleteBranchesPromise = readGlobalConfig()
-    .then((c) => c.deleteBranchOnRemove ?? true)
-    .catch(() => true);
 
   // List every project's worktrees up front so all targets can be
   // marked delete-inflight for the whole wipe. Skip externals:
   // shigomori didn't create them, so we shouldn't delete them when
-  // wiping our own state. (Branches are filtered the same way inside
-  // deleteBranchAfterWorktreeRemoval.)
+  // wiping our own state. (sm rm filters their branches the same way.)
   const perProject = await Promise.all(
     projects.map(async (project) => {
       try {
-        const identities = await listWorktreeIdentities(
-          project.id,
-          project.path,
-        );
+        const identities = await listWorktreeIdentities(project.id);
         return {
           project,
           targets: identities.filter((i) => !i.isPrimary && !i.isExternal),
@@ -76,36 +70,29 @@ export async function nukeEverything(
   // Same inflight marking as the per-worktree delete: blocks a renderer
   // script run from landing in a directory mid-removal and keeps the
   // busy-quit prompt honest during the wipe. Held through the data dir rm
-  // below. Clearing each id right after its `git worktree remove`
+  // below. Clearing each id right after its removal
   // would leave a window where a script could spawn into a directory
   // the rm is about to take out.
   const marked = perProject.flatMap(({ targets }) => targets.map((t) => t.id));
   for (const id of marked) markDeleteInflight(id);
   try {
-    const deleteBranches = await deleteBranchesPromise;
     let removed = 0;
     onProgress({ phase: "worktrees", done: 0, total: marked.length });
     // react-doctor-disable-next-line react-doctor/async-parallel -- per-project fan-out → rm dataDir → prune is sequential by design
     await Promise.all(
       perProject.map(async ({ project, targets }) => {
-        await Promise.all(
-          targets.map(async (i) => {
-            await removeWorktreeForce(project.path, i.path).catch(
-              () => undefined,
-            );
-            await deleteBranchAfterWorktreeRemoval(
-              project.path,
-              i,
-              deleteBranches,
-            );
-            removed += 1;
-            onProgress({
-              phase: "worktrees",
-              done: removed,
-              total: marked.length,
-            });
-          }),
-        );
+        // One removal at a time within a project: each one rewrites the
+        // repo's worktree metadata and branch refs.
+        for (const target of targets) {
+          // oxlint-disable-next-line no-await-in-loop -- one repo, one writer at a time (see above)
+          await removeForNuke(project, target.id);
+          removed += 1;
+          onProgress({
+            phase: "worktrees",
+            done: removed,
+            total: marked.length,
+          });
+        }
       }),
     );
     onProgress({ phase: "wipe" });
@@ -126,10 +113,24 @@ export async function nukeEverything(
   await ensureDataDir(
     dataDirSource() === "legacy" ? defaultDataDir() : dataDir(),
   );
-  // The data dir rm wipes any managed-root worktree dirs whose
-  // `git worktree remove` failed silently above, leaving stale admin
-  // entries behind. Sweep them per project now that the dirs are gone.
+  // The data dir rm wipes any managed-root worktree dirs whose removal
+  // failed above, leaving stale admin entries behind. Sweep them per
+  // project now that the dirs are gone.
   await Promise.all(
     projects.map((p) => pruneStaleWorktrees(p.path).catch(() => undefined)),
   );
+  // The registry went with the data dir.
+  await refreshProjects().catch(() => undefined);
+}
+
+// Through forceRemoveViaCli: the branch goes per the
+// deleteBranchOnRemove setting, as with any removal. Best effort: the
+// data dir wipe that follows takes whatever is left under the managed
+// root.
+async function removeForNuke(project: Project, worktreeId: string) {
+  try {
+    await forceRemoveViaCli(project, worktreeId);
+  } catch (error) {
+    console.warn(`[nuke] ${project.name}: ${errorMessageOf(error)}`);
+  }
 }

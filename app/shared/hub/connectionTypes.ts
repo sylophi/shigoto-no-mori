@@ -19,22 +19,19 @@ export type HubConnectOpts = {
   // layer, and a fresh ticket is minted per connect attempt. The signal
   // aborts the mint on stop or on the mint timeout.
   mintTicket(signal: AbortSignal): Promise<string>;
-  // This device's id and app version, the identity peers see in the sm
-  // hello/welcome handshake.
+  // This device's id, the `from` every peer sees on its asks.
   deviceId: string;
-  appVersion: string;
 };
 
 export type HubConnectionStatus = {
   // The hub socket's supervisor phase. On the connected phase the
-  // remote identity fields are empty: the DO has no sm welcome, its
+  // remote identity fields are empty: the DO has no welcome, its
   // accept signal is the first presence envelope.
   socket: SupervisorStatus;
   // The account's online deviceIds from the latest presence broadcast,
   // the local device filtered out, empty whenever the socket is down.
-  // Peer app versions are NOT here: hub client peers are transient
-  // broker sessions now, so the welcome-confirmed versions the status
-  // surface reports come from the cached direct sessions
+  // Peer app versions are NOT here: the welcome-confirmed versions the
+  // status surface reports come from the cached direct sessions
   // (shared/hub/directPlane.ts).
   onlineDeviceIds: string[];
 };

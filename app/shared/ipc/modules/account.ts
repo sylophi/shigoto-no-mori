@@ -96,14 +96,14 @@ export const accountContract = defineContract("client", {
     AccountStatusSchema,
   ),
   // Whether THIS host accepts commands from the account's other
-  // devices: on, this machine serves their MUTATING calls over the
-  // direct data plane instead of refusing them (reads were always
-  // served). One switch for the whole account, made on the machine
-  // being driven, and enforced host-local, so it never rides the hub
-  // wire (client-scoped). False when signed out.
+  // devices: on, its direct listener serves their gated calls (every
+  // channel not registered gated:false) instead of refusing them.
+  // One switch for the whole account, made on the machine being
+  // driven and enforced there alone, by the listener's dispatch gate.
+  // False when signed out.
   acceptsCommands: invoke("account:acceptsCommands", z.void(), z.boolean()),
   // Flips the switch above. Idempotent. Throws if signed out, since
-  // there is no account to scope the answer to.
+  // the switch is kept on the signed-in account's record.
   setAcceptsCommands: invoke(
     "account:setAcceptsCommands",
     z.boolean(),
@@ -118,9 +118,15 @@ export const accountContract = defineContract("client", {
     "account:changed",
     z.object({ accountId: z.string().nullable() }),
   ),
-  // Fan-out after the command-access switch flips, kept separate from
+  // Fan-out after the command-access switch flips (or the account
+  // under it changes), carrying the switch. Kept separate from
   // `changed` so the toggle does not thrash the account status and
-  // device queries. The Devices page invalidates only the switch's
-  // query on this.
-  commandAccessChanged: broadcast("account:commandAccessChanged", z.void()),
+  // device queries: the Devices page refreshes only the switch's query
+  // on this. The one client-scoped broadcast tagged remote, because the
+  // switch is this host's answer to its peers: the direct listener
+  // pushes it to every connected peer too, whose bridge records it as
+  // HubStatus.peerAcceptsCommands (shared/hub/directPlane.ts).
+  commandAccessChanged: broadcast("account:commandAccessChanged", z.boolean(), {
+    remote: true,
+  }),
 });

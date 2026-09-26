@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import {
   type MutationMeta,
   useMutation,
@@ -7,7 +6,7 @@ import {
   skipToken,
 } from "@tanstack/react-query";
 import type { BranchList } from "@shared/schemas";
-import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
+import type { QueryKeyRegistry } from "@/lib/queryKeys";
 import { useHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 
 export function useBranches(projectId: string | null) {
@@ -25,8 +24,8 @@ export function useBranches(projectId: string | null) {
 // Anything derived from refs/heads or refs/remotes for a project: branches,
 // worktrees (each carries ahead/behind + recent commits), and the resolved
 // default branch (which depends on which refs exist). Branch and worktree
-// mutations call this; useWatchGitRefs calls it when main broadcasts a
-// background-fetch update.
+// mutations call this, and so does a host's refsRefreshed broadcast
+// (lib/hostWatch.ts) after a background fetch.
 export function invalidateBranchState(
   queryClient: ReturnType<typeof useQueryClient>,
   keys: QueryKeyRegistry,
@@ -41,21 +40,6 @@ export function invalidateBranchState(
   void queryClient.invalidateQueries({
     queryKey: keys.defaultBranch(projectId),
   });
-}
-
-// Re-run invalidateBranchState whenever main fetched refs for a project.
-// Call once at the App root so a single subscription drives the whole
-// renderer; the subscriber owns the lifecycle (unsubscribes on unmount).
-export function useWatchGitRefs(): void {
-  const queryClient = useQueryClient();
-  useEffect(
-    () =>
-      window.api.git.onRefsRefreshed(({ projectId }) => {
-        // Broadcasts describe this machine, so the local registry.
-        invalidateBranchState(queryClient, queryKeys, projectId);
-      }),
-    [queryClient],
-  );
 }
 
 // The Manage Branches mutations (and the worktree branch ops in

@@ -4,7 +4,6 @@ import { accountContract } from "@shared/ipc/modules/account";
 import { branchesContract } from "@shared/ipc/modules/branches";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
 import { dialogContract } from "@shared/ipc/modules/dialog";
-import { directContract } from "@shared/ipc/modules/direct";
 import { forwardContract } from "@shared/ipc/modules/forward";
 import { fsContract } from "@shared/ipc/modules/fs";
 import { gitContract } from "@shared/ipc/modules/git";
@@ -22,7 +21,6 @@ import { portsContract } from "@shared/ipc/modules/ports";
 import { projectLauncherContract } from "@shared/ipc/modules/projectLauncher";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { hubContract } from "@shared/ipc/modules/hub";
-import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
@@ -38,11 +36,9 @@ import type { ClientTransport } from "@shared/ipc/transport";
 import type {
   ClientConfig,
   DeviceSettingsPatch,
-  GlobalConfig,
   LaunchToolMenuEntry,
   PackageScriptSortMode,
   PickFolderPayload,
-  ProjectSortMode,
   SharedSettingsDoc,
   SharedSettingValue,
   ShigomoriConfig,
@@ -61,7 +57,6 @@ export const allContractModules: readonly ContractModule[] = [
   branchesContract,
   clientConfigContract,
   dialogContract,
-  directContract,
   forwardContract,
   fsContract,
   gitContract,
@@ -79,7 +74,6 @@ export const allContractModules: readonly ContractModule[] = [
   projectLauncherContract,
   projectsContract,
   hubContract,
-  remoteAccessContract,
   runtimeContract,
   scriptsContract,
   sharedSettingsContract,
@@ -96,8 +90,8 @@ export const allContractModules: readonly ContractModule[] = [
 // Ergonomic namespaces over the raw contract clients. Each module's
 // scope selects its transport, so the caller wires one transport per
 // scope and every contract lands on the right wire. The Electron
-// preload passes its IPC bridge for both scopes today. Step 3 swaps the
-// host entry for a socket transport and nothing else changes.
+// preload passes its IPC bridge for both scopes (host and client live
+// in one process there); the web client passes its loopback wires.
 export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const c = <M extends ContractModule>(m: M) =>
     buildClient(m, transports[m.scope]);
@@ -123,7 +117,6 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const projectLauncherClient = c(projectLauncherContract);
   const projectsClient = c(projectsContract);
   const hubClient = c(hubContract);
-  const remoteAccessClient = c(remoteAccessContract);
   const runtimeClient = c(runtimeContract);
   const scriptsClient = c(scriptsContract);
   const sharedSettingsClient = c(sharedSettingsContract);
@@ -214,15 +207,8 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
 
     globalConfig: {
       read: globalConfigClient.read,
-      // Local unredacted read. Carries remoteDevices and the hosting
-      // token, so it is remote false and callers must keep the result
-      // out of any broadly-cached query (the registry reconcile and the
-      // hosting/remote-device write base read it imperatively).
-      readLocal: globalConfigClient.readLocal,
-      write: (config: GlobalConfig) => globalConfigClient.write({ config }),
-      // The remote-writable device-settings subset: patch semantics,
-      // strict schema, structurally unable to carry socketHost or
-      // remoteDevices.
+      // The one settings write, local or remote: patch semantics,
+      // strict schema, structurally unable to carry an unmanaged key.
       writeDeviceSettings: (patch: DeviceSettingsPatch) =>
         globalConfigClient.writeDeviceSettings({ patch }),
     },
@@ -295,11 +281,6 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
         targetId: string;
         position: "before" | "after";
       }) => projectsClient.reorder(input),
-      getSort: projectsClient.getSort,
-      setSort: (mode: ProjectSortMode) => projectsClient.setSort({ mode }),
-      getCollapsed: projectsClient.getCollapsed,
-      toggleCollapsed: (projectId: string) =>
-        projectsClient.toggleCollapsed({ projectId }),
       onUsageBumped: projectsClient.usageBumped,
       defaultBranch: (projectId: string) =>
         projectsClient.defaultBranch({ projectId }),
@@ -320,12 +301,6 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       invokePeer: hubClient.invokePeer,
       onStatusChanged: hubClient.statusChanged,
       onPeerPush: hubClient.peerPush,
-    },
-
-    remoteAccess: {
-      // The preflight "am I granted command access on this host?" read,
-      // answered per calling peer by the serving transport.
-      commandAccess: remoteAccessClient.commandAccess,
     },
 
     runtime: {
@@ -364,7 +339,6 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
 
     mirror: {
       list: mirrorClient.list,
-      start: mirrorClient.start,
       startTo: mirrorClient.startTo,
       // `force` discards a copy the peer is not confirmed to hold.
       stop: (session: string, force?: boolean) =>
@@ -383,17 +357,11 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
     },
 
     sync: {
-      refTips: syncClient.refTips,
-      captureDirty: syncClient.captureDirty,
       ignoredPaths: syncClient.ignoredPaths,
       worktreeFolder: syncClient.worktreeFolder,
-      bundleStart: syncClient.bundleStart,
-      bundleChunk: syncClient.bundleChunk,
-      bundleAbort: syncClient.bundleAbort,
       pullWorktree: syncClient.pullWorktree,
-      teardownSource: syncClient.teardownSource,
       sendWorktree: syncClient.sendWorktree,
-      teardownSent: syncClient.teardownSent,
+      teardownSource: syncClient.teardownSource,
       onPullProgress: syncClient.pullProgress,
     },
 

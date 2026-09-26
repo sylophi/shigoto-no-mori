@@ -28,12 +28,12 @@ export type CarryOverCheckout = Pick<
 
 // Falls back to the primary alone when the worktree list can't be read.
 // A bare repo flags no identity as primary, so the first checkout stands
-// in, matching the CLI (cli/gitx.go crowns index 0).
+// in.
 export async function listCarryOverCheckouts(
   projectId: string,
   projectPath: string,
 ): Promise<CarryOverCheckout[]> {
-  const identities = await listWorktreeIdentities(projectId, projectPath).catch(
+  const identities = await listWorktreeIdentities(projectId).catch(
     (): WorktreeIdentity[] => [],
   );
   if (identities.length === 0) {

@@ -8,6 +8,7 @@
 import { randomUUID } from "node:crypto";
 import {
   isTransferSession,
+  MIRROR_LABEL_COPY_SIDE,
   MIRROR_LABEL_TRANSFER,
   type MirrorDaemonStatus,
   type MirrorEvent,
@@ -125,11 +126,56 @@ export function requireRunningEngine(): MirrorImpl {
 // The daemon's sessions that ARE mirrors: a transplant's one-shot
 // transfer (host/mirror/oneShot.ts) rides the same daemon under a
 // label, and nothing that lists, follows or narrates mirrors should
-// see it. The transfer finds its own session on the raw list.
+// see it. The transfer finds its own session on the raw list. Nor a
+// legacy mirror (below), which the follower would read the wrong way
+// round and which is ended on sight.
 export function mirrorSessions(
   daemon: Pick<MirrorImpl, "sessions">,
 ): MirrorSessionRaw[] {
-  return daemon.sessions().filter((raw) => !isTransferSession(raw));
+  return daemon
+    .sessions()
+    .filter((raw) => !isTransferSession(raw) && !isLegacyMirror(raw));
+}
+
+// A mirror an older build started from the copy's device: it ran
+// there, its local side the copy, and carries no copySide label (every
+// start now writes it, shared/ipc/modules/mirror.ts). A mirror runs on
+// the device holding the original now, so such a session is ended the
+// first time the engine reports it (main wires this to its snapshots):
+// the session only, never a worktree, and its thread (the copy's page)
+// says why and what to do. Each is asked once, like the orphaned
+// transfers: a terminate that fails is logged.
+export function isLegacyMirror(raw: MirrorSessionRaw): boolean {
+  return (
+    !isTransferSession(raw) && raw.labels[MIRROR_LABEL_COPY_SIDE] !== "remote"
+  );
+}
+
+export const LEGACY_MIRROR_DETAIL =
+  "This mirror was started from the copy's device, which this version no longer does. Start it again from the original's page.";
+
+const endedLegacy = new Set<string>();
+
+export async function endLegacyMirrors(): Promise<void> {
+  const daemon = engineOrNull();
+  if (daemon === null || daemon.status() !== "running") return;
+  const doomed = daemon
+    .sessions()
+    .filter((raw) => isLegacyMirror(raw) && !endedLegacy.has(raw.session));
+  await Promise.all(
+    doomed.map(async (raw) => {
+      endedLegacy.add(raw.session);
+      try {
+        await daemon.terminate(raw.session);
+      } catch (error) {
+        console.warn(
+          `[mirror] could not end a mirror started from the copy's device: ${errorMessageOf(error)}`,
+        );
+        return;
+      }
+      daemon.noteEvent(localWorktreeIdOf(raw), "halted", LEGACY_MIRROR_DETAIL);
+    }),
+  );
 }
 
 // Which transfer a session is, written as the transfer label's value:

@@ -22,34 +22,34 @@ export const githubCliHandlers: Handlers<typeof githubCliContract> = {
   readiness: () => getGithubCliReadiness(),
 
   projectPullRequests: async ({ projectId }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     const map = await listProjectPullRequests(project.path);
     // Maps don't survive structured clone across IPC, so ship a record.
     return Object.fromEntries(map);
   },
 
   worktreePullRequest: async ({ projectId, branch }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     return getWorktreePullRequest(project.path, branch);
   },
 
   pullRequestCandidates: async ({ projectId }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     return listPullRequestCandidates(project.path);
   },
 
   resolvePullRequestCheckout: async ({ projectId, number }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     return resolvePullRequestCheckout(project.path, number);
   },
 
   repoMergeConfig: async ({ projectId }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     return getRepoMergeConfig(project.path);
   },
 
   mergePullRequest: async ({ projectId, number, method, stack }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     // The CLI runs the gh merge and persists lastMergeMethod itself.
     await mergeViaCli(project, number, method, { stack });
     // The merge changes upstream refs (and the sidebar PR cache). Evict
@@ -58,12 +58,12 @@ export const githubCliHandlers: Handlers<typeof githubCliContract> = {
   },
 
   pullRequestDiff: async ({ projectId, number }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     return getPullRequestDiff({ cwd: project.path, number });
   },
 
   setPullRequestDraft: async ({ projectId, number, draft }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     await setPullRequestDraft({ cwd: project.path, number, draft });
   },
 };

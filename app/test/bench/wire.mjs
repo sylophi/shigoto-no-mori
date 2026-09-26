@@ -1,4 +1,4 @@
-// Wire benchmark: the real socket binding (host/socket/server.ts) and
+// Wire benchmark: the real direct listener (host/socket/server.ts) and
 // the real client transport (shared/ipc/socket/wsClientTransport.ts)
 // talking through a link shaped like an internet path
 // (lib/shapedLink.mjs), so a change to the wire shows up as time and
@@ -22,19 +22,18 @@ import { randomBytes } from "node:crypto";
 import { Resolver } from "node:dns";
 import { join } from "node:path";
 import { WebSocket } from "ws";
+import { createConnectTicketStore } from "@host/direct/tickets";
 import { createWsServerBinding } from "@host/socket/server";
-import { receiveBundleChunks } from "@host/lib/sync/fetchBundle";
-import { sendBundleChunks } from "@host/lib/sync/pushBundle";
-import { WIRE_CHUNK_BYTES } from "@shared/ipc/socket/frames";
+import { mintHexId } from "@host/lib/hexId";
+import { attachLink, attachLinkFarEnd } from "@host/lib/sync/sourceLink";
+import { CHANNEL_MAX_FRAME_BYTES } from "@shared/ipc/socket/channels";
 import {
   CLOUDFLARED_BINARY_NAME,
   CLOUDFLARED_DIST_DIR,
 } from "@shared/packaging/cloudflaredDist.mts";
-import { connectDevice } from "@shared/ipc/socket/wsClientTransport";
+import { openDevice } from "@shared/ipc/socket/wsClientTransport";
 import { delay, appRoot } from "../lib/checkKit.mjs";
 import { startShapedLink } from "./lib/shapedLink.mjs";
-
-const TOKEN = "bench-token-of-a-comfortably-long-length";
 
 function flag(name, fallback) {
   const hit = process.argv.find((arg) => arg.startsWith(`--${name}=`));
@@ -53,7 +52,7 @@ if (noDeflate) delete globalThis.DecompressionStream;
 
 // A quick tunnel onto the binding: no account, a throwaway
 // trycloudflare.com hostname that dies with the process. The binding
-// behind it still demands the token.
+// behind it still demands a ticket proof.
 function startQuickTunnel(targetPort) {
   const child = spawn(
     join(appRoot, CLOUDFLARED_DIST_DIR, CLOUDFLARED_BINARY_NAME),
@@ -144,17 +143,23 @@ function listPayload(count) {
   }));
 }
 
-// A stand-in for the sync module's bundleChunk handler: the same
-// offset-addressed, base64, eof-flagged answer, cut from incompressible
-// bytes like the packed objects a real bundle is made of.
-const BUNDLE_BYTES = 16 * WIRE_CHUNK_BYTES + 12_345;
+// A bundle's bytes, cut from incompressible bytes like the packed
+// objects a real one is made of, moved the way a source link moves one
+// (host/lib/sync/sourceLink.ts): a header line, then raw bytes on a
+// byte channel, the channel's credit the only flow control.
+const BUNDLE_BYTES = 10_000_000 + 12_345;
 const bundle = randomBytes(BUNDLE_BYTES);
-function bundleChunk({ offset }) {
-  const data = bundle.subarray(offset, offset + WIRE_CHUNK_BYTES);
-  return {
-    dataB64: data.toString("base64"),
-    eof: offset + data.length >= BUNDLE_BYTES,
-  };
+async function sendPieces(link) {
+  for (
+    let offset = 0;
+    offset < BUNDLE_BYTES;
+    offset += CHANNEL_MAX_FRAME_BYTES
+  ) {
+    // oxlint-disable-next-line no-await-in-loop -- the channel's credit
+    await link.writeBytes(
+      bundle.subarray(offset, offset + CHANNEL_MAX_FRAME_BYTES),
+    );
+  }
 }
 
 const payloads = {
@@ -164,28 +169,48 @@ const payloads = {
 };
 
 async function main() {
-  const binding = createWsServerBinding();
+  // A connect ticket per dial, as the broker mints them. Every dial
+  // arrives tunnel-borne (the shaped link carries the connector's
+  // header, see connect below), so every ticket is the tunnel kind.
+  const tickets = createConnectTicketStore();
+  const binding = createWsServerBinding({
+    matchTicket: (deviceId, arrivedAs, matches) =>
+      tickets.consumeProven(deviceId, arrivedAs, matches),
+    // Byte channels ride the command grant (a peer without it has its
+    // channel frames dropped), so the bench's client holds it.
+    isCommandGranted: () => true,
+  });
   for (const [name, value] of Object.entries(payloads)) {
-    binding.handle(`bench:${name}`, async () => value, { mutating: false });
+    binding.handle(`bench:${name}`, async () => value, { gated: false });
   }
+  // The source's end of a pull's link: the bundle down, then done.
   binding.handle(
-    "bench:bundleChunk",
-    async (_ctx, input) => bundleChunk(input),
-    {
-      mutating: false,
+    "bench:bundle",
+    async (ctx, { channelId }) => {
+      const link = attachLinkFarEnd(ctx, channelId);
+      void (async () => {
+        await link.write({ bundle: { bytes: BUNDLE_BYTES } });
+        await sendPieces(link);
+        await link.read();
+        link.end();
+      })().catch(() => link.reset());
     },
+    { gated: false },
   );
+  // The destination's end of a push: it asks, the bytes come up.
   binding.handle(
-    "bench:pushChunk",
-    async (_ctx, input) => {
-      Buffer.from(input.dataB64, "base64");
+    "bench:receive",
+    async (ctx, { channelId }) => {
+      const link = attachLinkFarEnd(ctx, channelId);
+      await link.write({ ask: "bundle" });
+      await link.readBytes(BUNDLE_BYTES, async () => {});
+      link.end();
     },
-    { mutating: false },
+    { gated: false },
   );
   const port = await binding.start({
     port: 0,
     bindAddress: "127.0.0.1",
-    token: TOKEN,
     deviceId: "bench-host",
     appVersion: "0.0.0",
   });
@@ -212,9 +237,9 @@ async function main() {
   }
 
   const connect = () =>
-    connectDevice({
+    openDevice({
       url: link.url,
-      token: TOKEN,
+      ticket: tickets.mint("bench-client", ["tunnel"])[0],
       appVersion: "0.0.0",
       localDeviceId: "bench-client",
       onClose: () => {},
@@ -228,7 +253,7 @@ async function main() {
             ? { lookup: publicLookup }
             : { headers: { "cf-connecting-ip": "203.0.113.7" } }),
         }),
-    });
+    }).authenticate();
   // A quick tunnel's hostname takes a few seconds to resolve
   // everywhere, so the first dials can miss. Warm it, then measure.
   if (viaTunnel) {
@@ -247,7 +272,7 @@ async function main() {
     }
   }
   let connection;
-  await measure("connect (open + hello + welcome)", async () => {
+  await measure("connect (open + challenge + hello + welcome)", async () => {
     connection = await connect();
   });
   const deflate = noDeflate ? "off" : "on";
@@ -284,52 +309,30 @@ async function main() {
     await big;
   });
 
-  // The bundle transfer, the way it was (one chunk per round trip) and
-  // the way host/lib/sync/fetchBundle.ts drives it now.
-  const peer = {
-    bundleChunk: (input) => transport.invoke("bench:bundleChunk", input),
-  };
-  const sink = { write: async () => {} };
-  const megabytes = (BUNDLE_BYTES / 1e6).toFixed(1);
-  await measure(
-    `${megabytes} MB bundle, one chunk per round trip`,
-    async () => {
-      for (let offset = 0, eof = false; !eof; offset += WIRE_CHUNK_BYTES) {
-        // oxlint-disable-next-line no-await-in-loop -- the old loop, as it was
-        ({ eof } = await peer.bundleChunk({ transferId: "bench", offset }));
-      }
-    },
-  );
-  await measure(`${megabytes} MB bundle, windowed`, () =>
-    receiveBundleChunks(
-      peer,
-      { transferId: "bench", bytes: BUNDLE_BYTES },
-      sink,
-      () => {},
-    ),
-  );
-
-  // The push direction (host/lib/sync/pushBundle.ts): the same bytes
-  // going up, against a host that takes chunks one at a time and one
-  // that takes them pipelined.
-  const pushPeer = {
-    pushChunk: (input) => transport.invoke("bench:pushChunk", input),
-  };
-  const source = {
-    read: async (buffer, _at, length, offset) => ({
-      bytesRead: bundle.copy(buffer, 0, offset, offset + length),
-    }),
-  };
-  for (const pipelined of [false, true]) {
-    // oxlint-disable-next-line no-await-in-loop -- one measurement at a time
-    await measure(
-      `${megabytes} MB push, ${pipelined ? "windowed" : "one chunk per round trip"}`,
-      () =>
-        sendBundleChunks(pushPeer, "bench", source, BUNDLE_BYTES, {
-          pipelined,
-        }),
+  // A bundle down a link (a pull), and up one (a push).
+  const openLink = () => {
+    const channelId = mintHexId();
+    const bundleLink = attachLink((endpoint) =>
+      connection.channels.attach(channelId, endpoint),
     );
-  }
+    return { channelId, bundleLink };
+  };
+  const megabytes = (BUNDLE_BYTES / 1e6).toFixed(1);
+  await measure(`${megabytes} MB bundle down a link`, async () => {
+    const { channelId, bundleLink } = openLink();
+    await transport.invoke("bench:bundle", { channelId });
+    const header = await bundleLink.read();
+    await bundleLink.readBytes(header.bundle.bytes, async () => {});
+    bundleLink.end();
+  });
+  await measure(`${megabytes} MB bundle up a link`, async () => {
+    const { channelId, bundleLink } = openLink();
+    const received = transport.invoke("bench:receive", { channelId });
+    await bundleLink.read();
+    await sendPieces(bundleLink);
+    bundleLink.end();
+    await received;
+  });
 
   connection.close();
   await link.close();

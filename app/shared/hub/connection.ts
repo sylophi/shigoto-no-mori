@@ -9,9 +9,8 @@
 //
 // This file must stay electron-free and node-builtin-free (pnpm test
 // host-boundary): everything platform specific lives in the injected
-// adapter, and everything account flavored (deviceId, appVersion,
-// accountId, the credential-backed ticket mint) arrives through
-// HubConnectOpts.
+// adapter, and everything account flavored (deviceId, accountId, the
+// credential-backed ticket mint) arrives through HubConnectOpts.
 import { errorMessageOf } from "@shared/errors";
 import { isDeviceRevoked, isHubRefusal } from "@shared/account/service";
 import {
@@ -25,10 +24,9 @@ import {
 import { RemoteConnectError } from "@shared/ipc/socket/wsClientTransport";
 import {
   createHubLink,
-  type HubBroker,
-  type HubBrokerSession,
   type HubLink,
   HubLinkDownError,
+  type ServeConnectInfo,
 } from "@shared/hub/link";
 import type {
   HubConnectOpts,
@@ -87,15 +85,11 @@ type HubConnectionCoreDeps = {
   // Fired on every supervisor or presence transition, so the owner can
   // fan a status snapshot out to its views.
   onChange?: () => void;
-  // The channel-plus-handler pair the hub wire serves (see
-  // HubBroker in link.ts), supplied by the composition so this core
-  // never imports a contract. The node binding passes a facade over
-  // its late-bound slot so registration at boot survives link
-  // recreation across reconnects. A client-only platform (the web)
-  // supplies the channel with no handler, leaving the host role empty
-  // by construction: the link then answers every req with the
-  // no-handler shape.
-  broker: HubBroker;
+  // The connectInfo server (see ServeConnectInfo in link.ts), handed
+  // to every link generation. Absent on a platform with no direct
+  // listener (the web), whose link then answers every ask with the
+  // no-listener refusal.
+  serveConnectInfo?: ServeConnectInfo;
   // Test seams for the liveness heartbeat (shared/ipc/socket/heartbeat.ts,
   // the rule the direct sockets follow too).
   heartbeat?: HeartbeatOptions;
@@ -103,7 +97,13 @@ type HubConnectionCoreDeps = {
 
 // The lifecycle surface both platform bindings re-expose unchanged.
 type HubConnectionCore = {
-  connectBroker(deviceId: string): Promise<HubBrokerSession>;
+  // Ask one peer for its connect info (HubLink.askConnectInfo).
+  // Rejects with HubLinkDownError while the socket is down.
+  askConnectInfo(
+    deviceId: string,
+    input: unknown,
+    timeoutMs: number,
+  ): Promise<unknown>;
   refresh(resolve: () => Promise<HubConnectOpts | null>): Promise<void>;
   stop(): Promise<void>;
   status(): HubConnectionStatus;
@@ -152,8 +152,7 @@ function sameOpts(a: HubConnectOpts, b: HubConnectOpts): boolean {
   return (
     a.hubUrl === b.hubUrl &&
     a.accountId === b.accountId &&
-    a.deviceId === b.deviceId &&
-    a.appVersion === b.appVersion
+    a.deviceId === b.deviceId
   );
 }
 
@@ -194,7 +193,7 @@ export function createHubConnectionCore(
   // shape, with empty remote identity because the DO speaks no sm
   // welcome. It has no byte channels and no sm transport of its own:
   // the device hub carries JSON frames only (byte channels exist only
-  // on direct sockets), and peer brokering goes through connectBroker.
+  // on direct sockets), and the one peer question rides askConnectInfo.
   function dial(
     opts: HubConnectOpts,
     onClose: (code: number | null) => void,
@@ -310,13 +309,8 @@ export function createHubConnectionCore(
 
         const nextLink = createHubLink({
           localDeviceId: opts.deviceId,
-          localAppVersion: opts.appVersion,
           send: (text) => socket.send(text),
-          // The one broker slot (handler wired at boot on the node
-          // binding, absent on the web). The link pins dispatch to the
-          // injected channel itself, so what rides in here can never
-          // widen the wire.
-          broker: deps.broker,
+          serveConnectInfo: deps.serveConnectInfo,
           onPresence: () => {
             // The teardown's empty roster on a dead socket is not a
             // live roster: it must not reach the direct plane while the
@@ -336,9 +330,8 @@ export function createHubConnectionCore(
                   ownerClosed = true;
                   dead = true;
                   heartbeat.stop();
-                  // Tear the link down SYNCHRONOUSLY so host sessions
-                  // abort at once and no in-flight handler answers into a
-                  // dead socket, rather than waiting on the close event
+                  // Tear the link down SYNCHRONOUSLY so pending asks
+                  // reject at once rather than waiting on the close event
                   // (S3).
                   tearDownLink();
                   socket.close();
@@ -441,11 +434,11 @@ export function createHubConnectionCore(
   }
 
   return {
-    connectBroker(deviceId) {
+    askConnectInfo(deviceId, input, timeoutMs) {
       if (link === null) {
         return Promise.reject(new HubLinkDownError());
       }
-      return link.connectBroker(deviceId);
+      return link.askConnectInfo(deviceId, input, timeoutMs);
     },
 
     refresh: (resolve) =>

@@ -4,7 +4,6 @@
 // Electron-backed capability they need arrives through a setter here.
 // Must run before registerIpcHandlers so the first renderer call never
 // lands on a throwing default.
-import { shell } from "electron";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
 import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
@@ -12,12 +11,10 @@ import { onGlobalConfigChange } from "@host/lib/config/global";
 import { onSharedSettingsChange } from "@host/lib/sharedSettings/store";
 import { setCliImpl } from "@host/ipc/modules/cli";
 import { setGitImpl } from "@host/ipc/modules/git";
-import { setLaunchersImpl } from "@host/ipc/modules/launchers";
 import { setRuntimeImpl } from "@host/ipc/modules/runtime";
 import {
   broadcastAll,
   refreshDirectHost,
-  refreshSocketHost,
   republishControlHost,
   stopControlHost,
 } from "../ipc/register";
@@ -49,20 +46,17 @@ export function installHostImpls(): void {
     uninstallShellIntegration,
   });
   setGitImpl({ refreshProject, sweepForPeer });
-  // Reconcile the socket listeners on every config change, whatever
+  // Reconcile the direct listener on every config change, whatever
   // the path: the IPC write handler, an external CLI write picked up
   // by the state watcher, and nuke wiping config.json all fan out
-  // through invalidateGlobalConfigCache to this one subscriber. The
-  // direct listener reconciles too so the directConnections opt-out
-  // applies without a relaunch. Registered once here, and neither
-  // refresh ever rejects, so fire and forget is safe. The boot-time
-  // pass is main/index.ts's own refresh calls, since this fires only
-  // on a subsequent change.
+  // through invalidateGlobalConfigCache to this one subscriber, so the
+  // directConnections opt-out applies without a relaunch. Registered
+  // once here, and the refresh never rejects, so fire and forget is
+  // safe. The boot-time pass rides main/index.ts's refreshHubConnection,
+  // since this fires only on a subsequent change.
   onGlobalConfigChange(() => {
-    void refreshSocketHost();
     void refreshDirectHost();
   });
-  setLaunchersImpl({ openExternal: (url) => shell.openExternal(url) });
   setRuntimeImpl({
     uninstallCliEverything,
     stopStateWatcher,

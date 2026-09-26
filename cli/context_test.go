@@ -2,8 +2,9 @@ package main
 
 // Tests for project ref resolution (resolveProject): names match
 // case-insensitively, a name shared by two projects refuses to guess
-// and names the paths instead, and a path ref addresses exactly one
-// entry, including one whose directory is no longer there.
+// and names the paths instead, a path ref addresses exactly one
+// entry, including one whose directory is no longer there, and an id
+// works where no name matches.
 
 import (
 	"os"
@@ -98,5 +99,21 @@ func TestResolveProjectByPathInsideCheckout(t *testing.T) {
 	proj, err := resolveProject(ctx, inner)
 	if err != nil || proj.ID != "A" {
 		t.Fatalf("resolve %s = %v, %v, want A", inner, proj, err)
+	}
+}
+
+// The id works as a -p ref (the app and --json rows name projects by
+// it), and a name still wins over an id that happens to equal it.
+func TestResolveProjectByID(t *testing.T) {
+	ctx := projectsCtx(
+		project{ID: "7F3A-UUID", Name: "fox", Path: "/repos/fox"},
+		project{ID: "B", Name: "7f3a-uuid", Path: "/repos/named-like-an-id"},
+	)
+	if proj, err := resolveProject(ctx, "7F3A-UUID"); err != nil || proj.ID != "B" {
+		t.Errorf("a name equal to an id: %v, %v, want the name's project", proj, err)
+	}
+	ctx = projectsCtx(project{ID: "7F3A-UUID", Name: "fox", Path: "/repos/fox"})
+	if proj, err := resolveProject(ctx, "7F3A-UUID"); err != nil || proj.ID != "7F3A-UUID" {
+		t.Errorf("by id: %v, %v", proj, err)
 	}
 }

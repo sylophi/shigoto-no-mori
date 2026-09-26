@@ -24,19 +24,18 @@
 // cleanly as long as the other side stayed put.
 //
 // Before the two sides have ever agreed (a session with no stored
-// agreement), ancestry decides: the peer is the reference when the
-// tips are equal or the local tip is an ancestor of the peer's, which
-// is exactly the state mirror:start leaves behind (a pull, then a
-// mirror). A session started the other way (mirror:startTo, the copy
-// on the peer) turns the tie around: on equal tips the original here
-// is the reference. This side is the reference when the peer's tip is an
-// ancestor of the local one. Anything else is diverged from the start.
+// agreement), ancestry decides. A session runs on the device holding
+// the original, so on equal tips the original here is the reference,
+// never the copy a dirty apply just rebuilt. This side is the
+// reference when the peer's tip is an ancestor of the local one, the
+// peer when it is the other way round. Anything else is diverged from
+// the start.
 //
 // A primary checkout's mirror (the session's mirrorBranch label) has
 // its copy on mirror/<branch> for whatever branch the original is on
-// (shared/git/branches.ts). The follower reads the peer's state with
-// the branch renamed into this side's name and sends this side's
-// renamed into the peer's, so everything else here (agreement,
+// (shared/git/branches.ts). The original is here, so the follower
+// reads the peer's state with the mirror/ prefix taken off and sends
+// this side's with it put on, and everything else here (agreement,
 // divergence, the apply) works on one name per side. The transfers
 // still name each side's own branch.
 //
@@ -51,15 +50,13 @@ import {
   GitStateSchema,
   type MirrorGitStatus,
   MirrorApplyGitStateResultSchema,
-  mirrorCopyIsRemote,
   mirrorOnMirrorBranch,
 } from "@shared/ipc/modules/mirror";
 import { mirrorBranchFor, originalBranchOf } from "@shared/git/branches";
 import { SyncHasCommitsResultSchema } from "@shared/ipc/modules/sync";
 import { hasCommit, isAncestor, localBranchTips } from "@host/lib/git/refs";
 import { findProjectOrThrow } from "@host/lib/projects";
-import { fetchBundleFromPeer } from "@host/lib/sync/fetchBundle";
-import { pushBundleToPeer } from "@host/lib/sync/pushBundle";
+import { offerSource, withPeerSource } from "@host/lib/sync/sourceLink";
 import type { PeerMirrorApi, PeerSyncApi } from "@host/ipc/peerSync";
 import {
   MIRROR_LABEL_LOCAL_PROJECT,
@@ -93,9 +90,10 @@ export type AgreedStore = {
 };
 
 // How a session's branch names translate between its two sides: the
-// original's branch is the copy's mirror branch, and back. Identity
-// for a session with no mirror branch. Null when the copy's branch has
-// no mirror/ prefix, which the follower reports rather than follows.
+// original's branch here is the copy's mirror branch there, and back.
+// Identity for a session with no mirror branch. Null when the copy's
+// branch has no mirror/ prefix, which the follower reports rather
+// than follows.
 type BranchNames = {
   toLocal: (head: GitHead) => GitHead | null;
   toPeer: (head: GitHead) => GitHead | null;
@@ -114,15 +112,12 @@ const rename =
 const OFF_MIRROR_BRANCH =
   "the copy is on a branch without the mirror/ prefix. Check out a mirror/ branch there to keep following";
 
-function branchNamesOf(session: FollowableSession): BranchNames {
-  if (!mirrorOnMirrorBranch(session)) return SAME_NAMES;
-  // The copy is on the peer (startTo): the original is here.
-  return mirrorCopyIsRemote(session)
-    ? { toLocal: rename(originalBranchOf), toPeer: rename(mirrorBranchFor) }
-    : { toLocal: rename(mirrorBranchFor), toPeer: rename(originalBranchOf) };
-}
+const MIRROR_NAMES: BranchNames = {
+  toLocal: rename(originalBranchOf),
+  toPeer: rename(mirrorBranchFor),
+};
 
-// The label keys mirror:start writes.
+// The label keys mirror:startTo writes.
 const LABEL_LOCAL_PROJECT = MIRROR_LABEL_LOCAL_PROJECT;
 const LABEL_LOCAL_WORKTREE = MIRROR_LABEL_LOCAL_WORKTREE;
 
@@ -286,7 +281,7 @@ export function createGitFollower(deps: {
     const localWorktreeId = session.labels[LABEL_LOCAL_WORKTREE] ?? "";
     let project: Project;
     try {
-      project = findProjectOrThrow(localProjectId);
+      project = await findProjectOrThrow(localProjectId);
     } catch (error) {
       setStatus(record, { status: "error", detail: errorMessageOf(error) });
       return;
@@ -294,7 +289,7 @@ export function createGitFollower(deps: {
     const localWorktree = { id: localWorktreeId, path: session.localRoot };
     const peerSync = deps.peerSyncApiFor(session.deviceId);
     const peerMirror = deps.peerMirrorApiFor(session.deviceId);
-    const names = branchNamesOf(session);
+    const names = mirrorOnMirrorBranch(session) ? MIRROR_NAMES : SAME_NAMES;
     try {
       // Independent reads, so the local git work hides under the peer
       // round trip. The apply's compare-and-set covers either side
@@ -324,13 +319,7 @@ export function createGitFollower(deps: {
         return;
       }
 
-      const direction = await decide(
-        project,
-        record,
-        local,
-        peer,
-        mirrorCopyIsRemote(session),
-      );
+      const direction = await decide(project, record, local, peer);
       if (direction === "diverged") {
         setStatus(record, {
           status: "diverged",
@@ -390,18 +379,15 @@ export function createGitFollower(deps: {
     record: FollowRecord,
     local: GitState,
     peer: GitState,
-    // The copy is the peer's (mirror:startTo), so the original is here.
-    copyIsRemote: boolean,
   ): Promise<"pull" | "push" | "diverged"> {
     const agreed = record.agreed;
     if (agreed === null) {
-      // Equal tips that still differ (the index): the original is the
-      // reference, never the copy a dirty apply just rebuilt, whose
+      // Equal tips that still differ (the index): the original here is
+      // the reference, never the copy a dirty apply just rebuilt, whose
       // index starts out unstaged.
-      if (local.tip === peer.tip) return copyIsRemote ? "push" : "pull";
-      // The peer's tip is here only if a pull ever landed it (a fresh
-      // session started by mirror:start always has it). An unknown or
-      // unrelated tip is two histories.
+      if (local.tip === peer.tip) return "push";
+      // The peer's tip is here only if it ever landed here. An unknown
+      // or unrelated tip is two histories.
       if (!(await hasCommit(project.path, peer.tip))) return "diverged";
       if (await isAncestor(project.path, local.tip, peer.tip)) return "pull";
       if (await isAncestor(project.path, peer.tip, local.tip)) return "push";
@@ -463,16 +449,17 @@ export function createGitFollower(deps: {
     if ("applied" in carry) return carry;
     const { wantRefs, sweep } = carry;
     if (wantRefs.length > 0) {
-      await fetchBundleFromPeer(peerSync, {
-        sourceProjectId: session.projectId,
-        targetProjectId: project.id,
-        refs: wantRefs,
-        // With the tip already here only the index carrier travels
-        // and the tip is the perfect have. Otherwise every local
-        // branch tip thins the bundle and none can cover a tip we
-        // lack.
-        haves: tipIsLocal ? [peer.tip] : await localBranchTips(project.path),
-      });
+      // With the tip already here only the index carrier travels and
+      // the tip is the perfect have. Otherwise every local branch tip
+      // thins the bundle and none can cover a tip we lack.
+      const haves = tipIsLocal
+        ? [peer.tip]
+        : await localBranchTips(project.path);
+      await withPeerSource(
+        peerSync,
+        { projectId: session.projectId, worktreeId: session.worktreeId },
+        (source) => source.fetch({ refs: wantRefs, haves, into: project }),
+      );
     }
     return applyGitState(project, localWorktree, {
       expect: { tip: local.tip, indexTree: local.indexTree },
@@ -517,12 +504,17 @@ export function createGitFollower(deps: {
     if ("applied" in carry) return carry;
     const { wantRefs, sweep } = carry;
     if (wantRefs.length > 0) {
-      await pushBundleToPeer(peerSync, {
-        localProject: project,
-        peerProjectId: session.projectId,
-        refs: wantRefs,
-        haves: peerHas.has(local.tip) ? [local.tip] : [peer.tip],
-      });
+      // The peer asks this side for the bundle over a link this side
+      // opens (sync:receiveBundle, the peer's grant, the one the whole
+      // session rides).
+      await offerSource(peerSync, project, localWorktreeId, (channelId) =>
+        peerSync.receiveBundle({
+          projectId: session.projectId,
+          refs: wantRefs,
+          haves: peerHas.has(local.tip) ? [local.tip] : [peer.tip],
+          channelId,
+        }),
+      );
     }
     const result = MirrorApplyGitStateResultSchema.parse(
       await peerMirror.applyGitState({

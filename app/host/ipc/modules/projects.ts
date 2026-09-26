@@ -1,28 +1,20 @@
 import { pickCloneUrl, repoNameFromUrl } from "@shared/cloneUrl";
 import { errorMessageOf } from "@shared/errors";
 import { reorderProjects } from "@shared/reorder";
-import type { Project } from "@shared/schemas";
 import type { Handlers } from "@shared/ipc/types";
 import { projectsContract } from "@shared/ipc/modules/projects";
-import { readShigomoriConfig } from "@host/lib/config/project";
-import { PROJECTS_KEY, registryStore } from "@host/lib/config/store";
 import { listBranches } from "@host/lib/git/branches";
 import { cloneRepo } from "@host/lib/git/clone";
 import { isGitRepo } from "@host/lib/git/core";
-import { listRemoteEntries, resolveDefaultBranch } from "@host/lib/git/remotes";
-import { pickAvailableWorktreeName } from "@host/lib/git/worktrees";
+import { listRemoteEntries } from "@host/lib/git/remotes";
 import {
   findProjectOrThrow,
+  listProjects,
   listProjectsWithStatus,
-  loadProjects,
+  primaryRefOf,
+  refreshProjects,
+  registerProject,
 } from "@host/lib/projects";
-import { forgetProjectIcon, readProjectIcon } from "@host/lib/projects/icon";
-import {
-  dropCollapsedProject,
-  readCollapsedProjects,
-  toggleCollapsedProject,
-} from "@host/lib/projects/collapsed";
-import { readProjectSort, writeProjectSort } from "@host/lib/projects/usage";
 import {
   listCarryOverCandidates,
   statCarryOverPaths,
@@ -33,13 +25,13 @@ import {
   killScriptsForProject,
   markProjectDeleteInflight,
 } from "@host/lib/scripts";
-import {
-  invalidateTerrierCaches,
-  refreshTerrierListings,
-  terrierRetainsProject,
-} from "@host/lib/terrier";
 import { expandHome } from "@host/lib/util/paths";
-import { projectsAddViaCli, projectsRemoveViaCli } from "../cliDelegate";
+import {
+  projectIconViaCli,
+  projectsRemoveViaCli,
+  reorderProjectsViaCli,
+  worktreeDestinationViaCli,
+} from "../cliDelegate";
 
 export const projectsHandlers: Handlers<typeof projectsContract> = {
   list: () => listProjectsWithStatus(),
@@ -53,7 +45,7 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
 
     // Same engine as `sm projects add`: registration and the config
     // seed run in the CLI.
-    return projectsAddViaCli(path);
+    return registerProject(path);
   },
 
   clone: async ({ url, parentDir, name }) => {
@@ -64,7 +56,7 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     const path = await cloneRepo(url, expandHome(parentDir), folder);
     // The checkout stays if registering fails, so the error says where
     // it is: a retry would only find the folder taken.
-    return projectsAddViaCli(path).catch((error: unknown) => {
+    return registerProject(path).catch((error: unknown) => {
       throw new Error(
         `Cloned into ${path}, but couldn't add it as a project: ${errorMessageOf(error)}`,
       );
@@ -72,7 +64,7 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
   },
 
   remove: async ({ id }) => {
-    const removed = loadProjects().find((p) => p.id === id);
+    const removed = (await listProjects()).find((p) => p.id === id);
     if (!removed) return;
     if (removed.source === "terrier") {
       // The UI disables removal for terrier-sourced projects, so this
@@ -81,104 +73,81 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
         `${removed.name} is registered via terrier. Unregister it with \`terrier rm\`, or turn the terrier integration off in Settings.`,
       );
     }
-    // A path terrier also registers doesn't leave the sidebar: dropping
-    // the registry entry just demotes it to a terrier-sourced project.
-    // When the id carries over (registration minted the deterministic
-    // terrier id), nothing is actually going away: skip the script
-    // reaping and the app-side cleanup, and let the CLI skip the state
-    // dir for the same reason. Decided from a just-expired, freshly
-    // refetched listing rather than the snapshot: the CLI re-derives
-    // the same rule from a live read, and a stale answer here would
-    // half-apply the removal (scripts killed for a project that stays,
-    // or cleanup skipped for one that goes).
-    invalidateTerrierCaches();
-    await refreshTerrierListings();
-    if (terrierRetainsProject(removed)) {
-      await projectsRemoveViaCli(id);
-      return;
-    }
-    // Reap scripts running in this project's worktrees before dropping
-    // the registry entry: once the id is gone the renderer has no UI
-    // left to stop them, and the per-worktree delete path (which would
-    // normally kill them) can't be reached for an unknown project.
     // The inflight mark blocks a renderer script run from spawning into
-    // the project during the kill window. The kill snapshots running
-    // scripts once, so a spawn slipping in after that would outlive the
-    // removal as an unstoppable orphan.
+    // the project for the whole removal, so the reap below snapshots a
+    // set nothing can add to.
     markProjectDeleteInflight(id);
     try {
-      await killScriptsForProject(id);
-      // Registry drop and per-project state deletion run in the CLI
-      // (same engine as `sm projects remove`).
+      // Registry drop and per-project state deletion (the icon cache
+      // entry included) run in the CLI, same engine as `sm projects
+      // remove`.
       await projectsRemoveViaCli(id);
+      // A path terrier also registers doesn't leave the sidebar:
+      // dropping the registry entry just demotes it to a terrier-sourced
+      // project, and when the id carries over (registration minted the
+      // deterministic terrier id) nothing is actually going away. Read
+      // from the list the removal left behind, so the answer is the
+      // CLI's own, not a guess at its rule.
+      const survived = (await refreshProjects()).some((p) => p.id === id);
+      // Reap scripts running in this project's worktrees: once the id
+      // is gone the renderer has no UI left to stop them, and the
+      // per-worktree delete path (which would normally kill them) can't
+      // be reached for an unknown project.
+      if (!survived) await killScriptsForProject(id);
     } finally {
       clearProjectDeleteInflight(id);
     }
-    // Drop the icon-cache entry and collapsed pref so neither leaks
-    // across re-adds of the same path. The CLI already deleted the
-    // per-project state dir.
-    await forgetProjectIcon(removed.path);
-    dropCollapsedProject(id);
   },
 
-  reorder: ({ draggedId, targetId, position }) => {
-    // updateKey so the current list is read under the cross-process lock:
-    // the CLI writes this key too (sm projects add), and deriving the new
-    // list from a read taken outside the lock would clobber a concurrent
-    // CLI write.
-    registryStore.updateKey<Project[]>(PROJECTS_KEY, [], (current) =>
-      reorderProjects(current, draggedId, targetId, position),
+  // Under the CLI's registry lock, which also keeps a project added
+  // meanwhile (it lands last). The terrier-only projects have no
+  // registry entry to move, as before.
+  reorder: async ({ draggedId, targetId, position }) => {
+    const registered = (await listProjects()).filter(
+      (p) => p.source !== "terrier",
     );
+    const next = reorderProjects(registered, draggedId, targetId, position);
+    if (next === registered) return;
+    await reorderProjectsViaCli(next.map((p) => p.id));
+    await refreshProjects();
   },
 
-  getSort: () => readProjectSort(),
-
-  setSort: ({ mode }) => writeProjectSort(mode),
-
-  getCollapsed: () => readCollapsedProjects(),
-
-  toggleCollapsed: ({ projectId }) => toggleCollapsedProject(projectId),
-
-  defaultBranch: async ({ projectId }) => {
-    const project = findProjectOrThrow(projectId);
-    const config = await readShigomoriConfig(project.id);
-    return resolveDefaultBranch(project.path, config?.defaultBranch);
-  },
+  // The primary ref every row is measured against, which the CLI
+  // resolves once per project (the configured override first).
+  defaultBranch: async ({ projectId }) =>
+    primaryRefOf(await findProjectOrThrow(projectId)),
 
   cloneUrl: async ({ projectId }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     return pickCloneUrl(await listRemoteEntries(project.path));
   },
 
   listBranches: async ({ projectId }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     return listBranches(project.path);
   },
 
-  pickWorktreeName: async ({ projectId }) => {
-    const project = findProjectOrThrow(projectId);
-    return pickAvailableWorktreeName(project.id, project.path);
-  },
+  // The name the CLI would pick for a new worktree right now.
+  pickWorktreeName: async ({ projectId }) =>
+    (await worktreeDestinationViaCli(projectId)).name,
 
   worktreeIncludeStatus: async ({ projectId }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     return readWorktreeIncludeStatus(project.id, project.path);
   },
 
   carryOverListing: async ({ projectId, relative, ruleIgnored }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     return listCarryOverCandidates(project.id, project.path, relative, {
       ruleIgnored,
     });
   },
 
   carryOverStats: async ({ projectId, paths }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     return statCarryOverPaths(project.id, project.path, paths);
   },
 
-  icon: async ({ projectId }) => {
-    const project = findProjectOrThrow(projectId);
-    return readProjectIcon(project.path);
-  },
+  // The CLI resolves icons through its shared cache (cli/icon.go).
+  icon: ({ projectId }) => projectIconViaCli(projectId),
 };

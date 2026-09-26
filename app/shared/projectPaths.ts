@@ -1,6 +1,8 @@
-// Path helpers for the add-project filesystem-browse flow. Ported
-// from T3 Code's projectPaths.ts. Only "/" separates, since a backslash
-// is a legal filename character on POSIX.
+// Path helpers for the add-project filesystem-browse flow, and every
+// surface that spells a folder the same way (the host's default clone
+// place among them, shared/cloneDestination.ts). Ported from T3 Code's
+// projectPaths.ts. Only "/" separates, since a backslash is a legal
+// filename character on POSIX.
 
 const TRAILING_SEPS = /\/+$/;
 

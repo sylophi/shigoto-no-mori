@@ -40,7 +40,7 @@ const SORT_OPTIONS: ReadonlyArray<{ value: ProjectSortMode; label: string }> = [
 // the view changes. The footer keeps what both views share.
 export function SidebarToolbar({ onArrange }: SidebarToolbarProps) {
   const { toggleLauncher } = useOverlays();
-  const { data: sortMode = "manual" } = useProjectSort();
+  const sortMode = useProjectSort();
   const setSortMode = useSetProjectSort();
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
 

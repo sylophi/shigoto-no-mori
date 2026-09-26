@@ -7,7 +7,7 @@
 // bridge). This module only exchanges the resulting session token for
 // the hub device credential. The handlers stay thin, delegating to
 // the pure orchestration.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { devProfileSuffix } from "../../electron/devProfile";
 import { platform } from "node:os";
 import { join } from "node:path";
@@ -30,10 +30,6 @@ import {
   type DefaultDeviceName,
 } from "../../core/account/defaultDeviceName";
 import { detectDesktopDeviceShape } from "../../core/account/defaultDeviceIcon";
-import {
-  createGrantStore,
-  type GrantStore,
-} from "../../core/account/grantStore";
 import {
   effectiveDeviceIcon,
   enrollDevice,
@@ -64,7 +60,6 @@ import {
 // the dev userData suffix are only reliable once the app is ready, which
 // is guaranteed by the time any renderer call lands.
 let cachedStore: AccountStore | null = null;
-let cachedGrantStore: GrantStore | null = null;
 let cachedConfig: AccountServiceConfig | null = null;
 let cipherWarned = false;
 let revokeWarned = false;
@@ -107,43 +102,63 @@ function store(): AccountStore {
   }));
 }
 
-// The command-access store, plaintext in userData (the switch is not a
-// bearer secret, see grantStore.ts). Built lazily for the same
-// app-ready reason as the credential store.
-function grantStore(): GrantStore {
-  return (cachedGrantStore ??= createGrantStore({
-    filePath: join(app.getPath("userData"), "grants.json"),
-  }));
-}
+// In-memory mirror of the command-access switch, which lives on the
+// signed-in account's record (StoredAccount.acceptsCommands), so the
+// direct listener's synchronous dispatch predicate (acceptsPeerCommands)
+// never hits the disk or the OS keychain on the hot path. Null means
+// not yet built (false is a real built answer). Dropped on every event
+// that can change the answer: any account change (sign-in, sign-out,
+// rename), while the switch flipping writes it through, so a flip
+// takes effect immediately without a reconnect.
+let acceptsCache: boolean | null = null;
 
-// In-memory mirror of the command-access switch for the CURRENT
-// account, so the direct listener's synchronous dispatch predicate
-// (acceptsPeerCommands) never hits the disk or the OS keychain on the
-// hot path. Null means not yet built (false is a real built answer,
-// not "unbuilt"). Invalidated on every event that can change the
-// answer: the switch flipping, and any account change (sign-in,
-// sign-out, rename), so a flip takes effect immediately without a
-// reconnect.
-let grantCache: boolean | null = null;
-
-function invalidateGrantCache(): void {
-  grantCache = null;
-}
-
-// The predicate the direct listener consults live at dispatch to decide
-// whether a peer may run a mutating call on this host. Every peer that
-// reaches the direct listener is a device of this account (the connect
-// ticket bound it to one), so the answer is the account-wide switch,
-// not a per-peer lookup. Reads the cached answer, rebuilding it from
-// disk on the first call after an invalidation.
+// The predicate the direct listener's dispatch gate consults live to
+// decide whether a peer may run a gated call on this host, and the
+// verdict every connectInfo answer reports. Every peer that reaches
+// the direct listener is a device of this account (the connect ticket
+// bound it to one), so the answer is the account-wide switch, not a
+// per-peer lookup. Signed out, there is no record and nothing is
+// accepted.
 export function acceptsPeerCommands(): boolean {
-  if (grantCache !== null) return grantCache;
-  const record = store().read();
-  // Signed out accepts nothing, even if a stale grants.json lingers
-  // under a previous account's id. Signed in, the store's per-account
-  // scoping reads as off whenever the stored account no longer matches.
-  grantCache = record !== null && grantStore().enabled(record.accountId);
-  return grantCache;
+  if (acceptsCache === null) {
+    adoptLegacyGrant();
+    acceptsCache = store().read()?.acceptsCommands === true;
+  }
+  return acceptsCache;
+}
+
+// One-time carry-over from the switch's previous home, grants.json (a
+// {v, accountId, enabled} document kept beside the record until the
+// switch moved onto it): a machine that had commands on for the
+// account it is still signed into keeps them on, and the file goes,
+// so this runs once. An unreadable file carries nothing over.
+function adoptLegacyGrant(): void {
+  const path = join(app.getPath("userData"), "grants.json");
+  if (!existsSync(path)) return;
+  try {
+    const legacy = JSON.parse(readFileSync(path, "utf8")) as {
+      accountId?: unknown;
+      enabled?: unknown;
+    };
+    const record = store().read();
+    if (
+      record !== null &&
+      record.accountId === legacy.accountId &&
+      legacy.enabled === true &&
+      record.acceptsCommands === undefined
+    ) {
+      store().write({ ...record, acceptsCommands: true });
+    }
+  } catch {
+    // Unreadable: nothing to carry over.
+  }
+  rmSync(path, { force: true });
+}
+
+// Writes the switch onto the record and the mirror in one step.
+function writeAcceptsCommands(record: StoredAccount, enabled: boolean): void {
+  store().write({ ...record, acceptsCommands: enabled });
+  acceptsCache = enabled;
 }
 
 // The resolved service config, resolved once and cached. Three layers,
@@ -392,12 +407,12 @@ export function makeAccountHandlers(
   // the account's membership (a mirror with a removed peer).
   onDeviceList: (devices: DeviceInfo[]) => void = () => {},
 ): Handlers<typeof accountContract> {
-  // Fires the account-changed fan-out and invalidates the grant cache
+  // Fires the account-changed fan-out and drops the switch's mirror
   // together, since any account transition (sign-in, sign-out, rename)
-  // may change the answer (a new account scopes to its own switch,
-  // sign-out turns it off).
+  // may change the answer (a new account's record has its own switch,
+  // a sign-out takes the record away).
   const accountChanged = (): Promise<void> => {
-    invalidateGrantCache();
+    acceptsCache = null;
     return Promise.resolve(emitChanged(store().read()?.accountId ?? null));
   };
   // A device enrolled before the default learned to drop the hostname's
@@ -509,13 +524,17 @@ export function makeAccountHandlers(
     signOut: () =>
       signOutOnce(async () => {
         // The command-access switch is off from the first moment of
-        // the sign-out, ahead of the revoke's round trip: the grant is
-        // this account's, and a peer's mutating invoke landing during
-        // the revoke must not find it. Dropped from disk too, so
-        // re-signing into the SAME account does not resurrect it from
-        // a lingering grants.json.
-        grantStore().clear();
-        invalidateGrantCache();
+        // the sign-out, ahead of the revoke's round trip: a peer's
+        // gated call landing during the revoke must not find it on.
+        // Written through, so nothing that re-reads the record
+        // meanwhile turns it back on. The sign-out's clear drops the
+        // record with it, so signing back into the same account starts
+        // with the switch off.
+        const record = store().read();
+        if (record?.acceptsCommands === true) {
+          writeAcceptsCommands(record, false);
+        }
+        acceptsCache = false;
         const config = serviceConfig();
         await signOutDevice({
           config,
@@ -556,11 +575,10 @@ export function makeAccountHandlers(
         // instead (which ends the Clerk session first). This arm exists
         // so the handler is still correct for any other caller.
         store().clear();
-        grantStore().clear();
       }
-      // accountChanged also drops the grant cache, so a self-revoke's
-      // cleared switch is what the direct listener's dispatch predicate
-      // reads next, without a reconnect.
+      // accountChanged also drops the switch's mirror, so a
+      // self-revoke's cleared record is what the direct listener's
+      // dispatch predicate reads next, without a reconnect.
       accountChanged();
     },
 
@@ -594,17 +612,12 @@ export function makeAccountHandlers(
 
     setAcceptsCommands: (enabled) => {
       const record = store().read();
-      // The switch is meaningless with no account to scope it to, and
-      // would silently write under the empty account. Fail loudly
-      // instead.
+      // The switch lives on the account's record, and with no record
+      // there is nothing to keep it on. Fail loudly instead.
       if (record === null) {
         throw new Error("cannot change command access while signed out");
       }
-      grantStore().set(record.accountId, enabled);
-      // The answer just written IS the cache, for the account the
-      // record names: the renderer's refetch off the fan-out must not
-      // cost another keychain decrypt to learn it.
-      grantCache = enabled;
+      writeAcceptsCommands(record, enabled);
       emitCommandAccessChanged();
     },
   };

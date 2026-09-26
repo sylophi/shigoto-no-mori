@@ -133,8 +133,8 @@ export interface SidebarViewModel {
   // the inbox), and null when the view can't place it at all. Neither
   // view unfolds anything on the way: the empty-state redirect runs on
   // every launch, and auto-expanding would undo the user's folding.
-  // A deviceId names a peer's worktree (the device-scoped twin route);
-  // absent, the worktree is this machine's.
+  // A deviceId names a peer's worktree; absent, the worktree is this
+  // machine's.
   revealKey: (
     projectId: string,
     worktreeId: string,

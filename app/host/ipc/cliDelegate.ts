@@ -1,12 +1,15 @@
-// Routes the app's state mutations through the bundled CLI so the app
-// and a terminal run the exact same engine (the user's core
-// requirement: deterministic behavior across surfaces): worktree
-// create/adopt/delete/done/merge, the shelved flag, and project
-// add/remove. Each function translates the CLI's NDJSON stream into
-// the notifier calls the renderer already understands. Every document
-// crossing the Go/TS boundary is validated against the shared zod
-// schemas, so drift fails loudly here instead of surfacing as
-// undefined-flavored breakage in the renderer.
+// The app's one door to the bundled CLI, which owns the data model:
+// every worktree and project mutation (create, adopt, delete, done,
+// merge, move, the shelf and auto-pull marks, project add, remove and
+// reorder) and every read of what the CLI owns (worktree rows and
+// identities, the project list and icons, the stored config, the
+// launcher row, package scripts) runs `sm --json ...` here, so the app
+// and a terminal run the exact same engine and nothing drifts. Each
+// function translates the CLI's NDJSON into the shapes the IPC
+// handlers already serve. Every document crossing the Go/TS boundary
+// is validated against the shared zod schemas, so drift fails loudly
+// here instead of surfacing as undefined-flavored breakage in the
+// renderer.
 import { z } from "zod";
 import {
   CarryOverReportSchema,
@@ -15,18 +18,36 @@ import {
   CreatePhaseSchema,
   type CreateWorktreeResult,
   type DeleteWorktreeResult,
+  type DetectedLauncher,
+  DetectedLauncherSchema,
   type GlobalConfig,
+  LauncherEntrySchema,
+  type LauncherEntry,
+  type PackageScriptsDoc,
+  PackageScriptsDocSchema,
   type Project,
+  type ProjectIcon,
+  ProjectIconSchema,
+  type ProjectRow,
+  ProjectRowSchema,
   ProjectSchema,
   type ScriptEvent,
   ScriptEventSchema,
   type ShigomoriConfig,
+  StoredGlobalConfigSchema,
+  StoredShigomoriConfigSchema,
   type Worktree,
   type WorktreeCarryOverComplete,
+  type WorktreeIdentity,
+  WorktreeIdentitySchema,
   type WorktreeLifecyclePhase,
   WorktreeSchema,
 } from "@shared/schemas";
-import { unknownProjectError, unknownWorktreeError } from "@shared/errors";
+import {
+  isEntityGoneError,
+  unknownProjectError,
+  unknownWorktreeError,
+} from "@shared/errors";
 import { forgetRepoIdentity } from "@host/lib/git/repoIdentity";
 import { shellQuote } from "@host/lib/scripts/process";
 import { implSlot } from "@host/lib/util/implSlot";
@@ -56,7 +77,7 @@ type CliRunnerImpl = {
     args: string[],
     onDoc?: (doc: CliDoc) => void,
     extraEnv?: Record<string, string>,
-    opts?: { background?: boolean; timeoutMs?: number },
+    opts?: { background?: boolean; readOnly?: boolean; timeoutMs?: number },
   ) => Promise<CliResult>;
   requireCliBinary: () => string;
   cliFailureMessage: (result: CliResult, fallback: string) => string;
@@ -105,7 +126,7 @@ function cliFailure(
   fallback: string,
   ids: { projectId?: string; worktreeId?: string } = {},
 ): Error {
-  const code = result.docs.find((doc) => doc["ok"] === false)?.["code"];
+  const code = result.docs.find(isErrorDoc)?.["code"];
   if (code === "unknown-project" && ids.projectId !== undefined) {
     return unknownProjectError(ids.projectId);
   }
@@ -113,6 +134,15 @@ function cliFailure(
     return unknownWorktreeError(ids.worktreeId);
   }
   return new Error(runner().cliFailureMessage(result, fallback));
+}
+
+// A read's document can be an array or null, not only an object.
+function isErrorDoc(doc: unknown): doc is CliDoc {
+  return (
+    typeof doc === "object" &&
+    doc !== null &&
+    (doc as Record<string, unknown>)["ok"] === false
+  );
 }
 
 // The final {ok: boolean} document of a run; throws the mapped failure
@@ -272,6 +302,29 @@ export async function deleteViaCli(
   throw cliFailure(result, "sm rm failed", { worktreeId: input.worktreeId });
 }
 
+// A removal that must happen (a nuke, the rollback of a failed mirror
+// start): `sm rm --force`, so the port-pool lease is released and the
+// teardown runs like any removal, and when that cleanup fails, again
+// without it, since leaving the worktree behind is not an option.
+export async function forceRemoveViaCli(
+  project: Project,
+  worktreeId: string,
+): Promise<void> {
+  const quiet = { notifyScript: () => {} };
+  const result = await deleteViaCli(
+    project,
+    { worktreeId, force: true },
+    quiet,
+  );
+  if (!result.ok) {
+    await deleteViaCli(
+      project,
+      { worktreeId, force: true, skipCleanup: true },
+      quiet,
+    );
+  }
+}
+
 export async function doneViaCli(
   project: Project,
   worktreeId: string,
@@ -343,18 +396,14 @@ export async function projectsAddViaCli(path: string): Promise<Project> {
 // engine. Unlike the functions above this doesn't spawn anything:
 // package-script runs go through startScript so the app's registry
 // keeps owning streaming, cancel, and quit-time reaping. The CLI
-// contributes manager detection and the SHIGOMORI_* env. The branches
-// ride along so the CLI reuses the resolution the IPC handler already
-// performed instead of re-spawning git for it, --skip-use-log keeps
-// the use-log bump in the app's own process (whose state watcher
-// suppresses it as a self-write), and `--` guards a script name that
-// looks like a flag.
+// contributes everything else: the manager the lockfile selects, the
+// SHIGOMORI_* env, and the use-log bump (an external state.json write
+// the caller covers with a self-write note, see packageScripts.run).
+// `--` guards a script name that looks like a flag.
 export function cliRunScriptSpawn(args: {
   projectId: string;
   worktreeId: string;
   scriptName: string;
-  projectBranch: string;
-  defaultBranch: string;
 }): string {
   const binary = runner().requireCliBinary();
   return [
@@ -364,11 +413,6 @@ export function cliRunScriptSpawn(args: {
     shellQuote(args.projectId),
     "--worktree-id",
     shellQuote(args.worktreeId),
-    "--project-branch",
-    shellQuote(args.projectBranch),
-    "--default-branch",
-    shellQuote(args.defaultBranch),
-    "--skip-use-log",
     "--",
     shellQuote(args.scriptName),
   ].join(" ");
@@ -382,9 +426,8 @@ export function cliRunScriptSpawn(args: {
 // REGISTERED key the payload omits it CLEARS that key on disk (that is
 // how a settings save serializes a default by omission), so only
 // UNREGISTERED keys the payload does not carry survive untouched. A
-// caller must therefore hand a COMPLETE, unredacted base or a registered
-// key it left out (socketHost.token, an enabled it meant to keep) is
-// written away. It re-checks the shape so engine drift fails loudly.
+// caller must therefore hand a COMPLETE base or a registered key it
+// left out is written away. It re-checks the shape so engine drift fails loudly.
 // Callers must invalidate the TTL caches themselves: runCli's self-write
 // note suppresses the state watcher for these writes.
 //
@@ -423,8 +466,8 @@ export async function shigomoriWriteViaCli(
 // The device-sync verbs. Each shells the CLI and
 // re-validates the crossing document with a zod schema, like every
 // other Go/TS boundary in this file. The paths handed to bundle
-// create/unpack are ALWAYS app-chosen temp paths (the sync host module
-// and fetchBundle own them); the CLI writes/reads exactly where told,
+// create/unpack are ALWAYS app-chosen temp paths (the source link,
+// host/lib/sync/sourceLink.ts, owns them); the CLI writes/reads exactly where told,
 // so path discipline lives on this side of the trust boundary.
 
 export async function dirtyCaptureViaCli(
@@ -523,8 +566,8 @@ export async function bundleUnpackViaCli(
 }
 
 // Registry removal and per-project state deletion only; the app-side
-// extras (script reaping, icon cache, collapsed prefs) stay with the
-// caller because those registries live in the app's process.
+// extras (script reaping, icon cache) stay with the caller because
+// those registries live in the app's process.
 export async function projectsRemoveViaCli(projectId: string): Promise<void> {
   const result = await runner().runCli([
     "projects",
@@ -534,4 +577,275 @@ export async function projectsRemoveViaCli(projectId: string): Promise<void> {
     "--yes",
   ]);
   finalOkDoc(result, "sm projects remove failed", { projectId });
+}
+
+// ---- Worktree marks and moves ----
+
+// The auto-pull mark (`sm worktrees autopull`), answered with the
+// worktree's refreshed row. The pull itself stays with the app's fetch
+// sweep (host/lib/worktrees/autoPullSweep.ts).
+export async function setAutoPullViaCli(
+  project: Project,
+  worktreeId: string,
+  autoPull: boolean,
+): Promise<Worktree> {
+  const result = await runner().runCli(
+    worktreeArgv(
+      ["worktrees", "autopull", autoPull ? "on" : "off"],
+      project,
+      worktreeId,
+    ),
+  );
+  const final = finalOkDoc(result, "sm worktrees autopull failed", {
+    worktreeId,
+  });
+  return WorktreeSchema.parse(final["worktree"]);
+}
+
+// `git worktree move` plus the re-key of everything stored under the
+// worktree's path-derived id (marks, notes, a pending dirty capture).
+// The caller keeps the app-side guards around it (the tombstone, script
+// reaping, mirror stop).
+export async function moveViaCli(
+  project: Project,
+  worktreeId: string,
+  destinationPath: string,
+): Promise<Worktree> {
+  const result = await runner().runCli([
+    ...worktreeArgv(["worktrees", "move"], project, worktreeId),
+    "--",
+    destinationPath,
+  ]);
+  const final = finalOkDoc(result, "sm worktrees move failed", {
+    worktreeId,
+  });
+  return WorktreeSchema.parse(final["worktree"]);
+}
+
+// The re-key half of a move, for the data folder move, which relocates
+// the checkouts itself (one rename of the whole data dir). Answers
+// with the id the worktree has at `toPath`.
+export async function rekeyViaCli(
+  projectId: string,
+  fromId: string,
+  toPath: string,
+): Promise<string> {
+  const result = await runner().runCli([
+    "worktrees",
+    "rekey",
+    "--project-id",
+    projectId,
+    "--from-id",
+    fromId,
+    "--to-path",
+    toPath,
+  ]);
+  const final = finalOkDoc(result, "sm worktrees rekey failed", { projectId });
+  return z.object({ id: z.string() }).parse(final).id;
+}
+
+export async function reorderProjectsViaCli(ids: string[]): Promise<void> {
+  const result = await runner().runCli([
+    "projects",
+    "reorder",
+    "--ids",
+    ids.join(","),
+  ]);
+  finalOkDoc(result, "sm projects reorder failed");
+}
+
+// Launches a launcher-row entry (`app:…`, `custom:…`, `web:github`) in
+// the worktree through `sm open`, which also counts the use.
+export async function openLauncherViaCli(
+  project: Project,
+  worktreeId: string,
+  launcherId: string,
+): Promise<void> {
+  const result = await runner().runCli([
+    ...worktreeArgv(["open"], project, worktreeId),
+    "--",
+    launcherId,
+  ]);
+  finalOkDoc(result, "sm open failed", { worktreeId });
+}
+
+// ---- Reads ----
+
+// One read: the CLI spawned as a reader (runCli's readOnly, so it
+// neither counts as work in flight nor mutes the state watcher) and
+// the one document it prints, or the mapped failure.
+async function readDoc(
+  args: string[],
+  fallback: string,
+  ids: { projectId?: string; worktreeId?: string } = {},
+): Promise<unknown> {
+  const result = await runner().runCli(args, undefined, undefined, {
+    readOnly: true,
+  });
+  const doc: unknown = result.docs.at(-1);
+  if (result.code !== 0 || doc === undefined || isErrorDoc(doc)) {
+    throw cliFailure(result, fallback, ids);
+  }
+  return doc;
+}
+
+// A project's rows, primary first: the sidebar's list, one spawn per
+// project per refresh.
+export async function listWorktreesViaCli(
+  projectId: string,
+): Promise<Worktree[]> {
+  const doc = await readDoc(
+    ["worktrees", "list", "--project-id", projectId],
+    "sm worktrees list failed",
+    { projectId },
+  );
+  return z.array(WorktreeSchema).parse(doc);
+}
+
+// One row, freshly probed: what a mutation hands back to the renderer.
+export async function describeWorktreeViaCli(
+  projectId: string,
+  worktreeId: string,
+): Promise<Worktree> {
+  const doc = await readDoc(
+    [
+      "worktrees",
+      "list",
+      "--project-id",
+      projectId,
+      "--worktree-id",
+      worktreeId,
+    ],
+    "sm worktrees list failed",
+    { projectId, worktreeId },
+  );
+  return z.array(WorktreeSchema).length(1).parse(doc)[0];
+}
+
+// Identities without git probes (see WorktreeIdentitySchema): a
+// project's (or, with no projectId, every project's), or the one
+// `worktreeId` names. `primaryRef` adds the project's primary ref.
+export async function listWorktreeIdentitiesViaCli(
+  scope: { projectId?: string; worktreeId?: string },
+  opts: { primaryRef?: boolean } = {},
+): Promise<WorktreeIdentity[]> {
+  const args = ["worktrees", "list", "--identities"];
+  if (scope.projectId === undefined) args.push("--all");
+  else args.push("--project-id", scope.projectId);
+  if (scope.worktreeId !== undefined) {
+    args.push("--worktree-id", scope.worktreeId);
+  }
+  if (opts.primaryRef) args.push("--primary-ref");
+  const doc = await readDoc(args, "sm worktrees list failed", scope);
+  return z.array(WorktreeIdentitySchema).parse(doc);
+}
+
+// Every registered project, terrier's merged in, decorated for the
+// sidebar. `refreshIcons` re-scans projects the icon cache remembers
+// as icon-less (the first list of a session).
+export async function listProjectsViaCli(
+  opts: { refreshIcons?: boolean } = {},
+): Promise<ProjectRow[]> {
+  const args = ["projects", "list"];
+  if (opts.refreshIcons) args.push("--refresh-icons");
+  const doc = await readDoc(args, "sm projects list failed");
+  return z.array(ProjectRowSchema).parse(doc);
+}
+
+// The icon's bytes, or null. --refresh-icons re-scans a remembered
+// miss: the renderer asks once per project per session, and an icon
+// added since the miss was cached must show.
+export async function projectIconViaCli(
+  projectId: string,
+): Promise<ProjectIcon | null> {
+  const doc = await readDoc(
+    ["projects", "icon", "--project-id", projectId, "--refresh-icons"],
+    "sm projects icon failed",
+    { projectId },
+  );
+  return ProjectIconSchema.nullable().parse(doc);
+}
+
+// Where a new worktree would land, and under what name: `name` when
+// given (then `taken` says whether a worktree already holds the name
+// or something the path), else a freshly picked free one.
+export async function worktreeDestinationViaCli(
+  projectId: string,
+  name?: string,
+): Promise<{ name: string; path: string; taken: boolean }> {
+  const args = ["worktrees", "destination", "--project-id", projectId];
+  if (name !== undefined) args.push("--name", name);
+  const doc = await readDoc(args, "sm worktrees destination failed", {
+    projectId,
+  });
+  return z
+    .object({ name: z.string(), path: z.string(), taken: z.boolean() })
+    .parse(doc);
+}
+
+// config.json as stored: unknown keys kept, no defaults filled in
+// (callers apply their own, as they always have).
+export async function globalConfigReadViaCli(): Promise<GlobalConfig> {
+  const doc = await readDoc(["config", "read"], "sm config read failed");
+  return z.object({ config: StoredGlobalConfigSchema }).parse(doc).config;
+}
+
+// project.json as stored, or null when the project has none.
+export async function shigomoriReadViaCli(
+  projectId: string,
+): Promise<ShigomoriConfig | null> {
+  const doc = await readDoc(
+    ["projects", "config", "read", "--project-id", projectId],
+    "sm projects config read failed",
+    { projectId },
+  );
+  if (doc === null) return null;
+  return z.object({ config: StoredShigomoriConfigSchema.nullable() }).parse(doc)
+    .config;
+}
+
+// The project's launcher row: installed tools, the GitHub entry and
+// custom commands, hidden ones left out, most used first.
+export async function launchersViaCli(
+  projectId: string,
+): Promise<{ entries: LauncherEntry[]; hiddenCount: number }> {
+  const doc = await readDoc(
+    ["launchers", "--project-id", projectId],
+    "sm launchers failed",
+    { projectId },
+  );
+  return z
+    .object({
+      entries: z.array(LauncherEntrySchema),
+      hiddenCount: z.number().int().nonnegative(),
+    })
+    .parse(doc);
+}
+
+// Every tool the catalog knows, installed or not, by label.
+export async function launcherCatalogViaCli(): Promise<DetectedLauncher[]> {
+  const doc = await readDoc(["launchers", "--catalog"], "sm launchers failed");
+  return z.object({ apps: z.array(DetectedLauncherSchema) }).parse(doc).apps;
+}
+
+// The worktree's package.json scripts (`sm run` with no script), or
+// null when it has no readable package.json. A worktree or project
+// that is gone still fails.
+export async function packageScriptsViaCli(
+  projectId: string,
+  worktreeId: string,
+): Promise<PackageScriptsDoc | null> {
+  let doc: unknown;
+  try {
+    doc = await readDoc(
+      ["run", "--project-id", projectId, "--worktree-id", worktreeId],
+      "sm run failed",
+      { projectId, worktreeId },
+    );
+  } catch (error) {
+    // Missing and unparseable read the same: no scripts to offer.
+    if (isEntityGoneError(error)) throw error;
+    return null;
+  }
+  return PackageScriptsDocSchema.parse(doc);
 }

@@ -1,22 +1,16 @@
-// Per-repo usage log and sort preference for the package.json scripts list.
-// Same rolling-window algorithm as the launcher row (see ./useLog) so the
-// "Most used" sort behaves identically across both features. Stored in the
-// global state.json keyed by projectId, since sort and usage are
-// app-managed UI state, not the user-editable per-project shigomori config.
-import type {
-  PackageScriptSortMode,
-  PackageScriptUsage,
-} from "@shared/schemas";
+// Per-repo sort preference, manual order and launch-row picks for the
+// package.json scripts list, app-managed UI state stored in the global
+// state.json keyed by projectId (not the user-editable per-project
+// config). The use log the "Most used" sort ranks by is the CLI's:
+// `sm run` counts every run and reports the stats with the list.
+import type { PackageScriptSortMode } from "@shared/schemas";
 import { withLaunchRowScript } from "@shared/launchRow";
 import { stateStore } from "../config/store";
-import { pruneAndPush, usageByName } from "../util/useLog";
 
-const USE_LOG_KEY = "packageScriptUseLog";
 const SORT_KEY = "packageScriptSort";
 const ORDER_KEY = "packageScriptOrder";
 const LAUNCH_ROW_KEY = "packageScriptLaunchRow";
 
-type UseLog = Record<string, Record<string, number[]>>;
 type SortMap = Record<string, PackageScriptSortMode>;
 type OrderMap = Record<string, string[]>;
 type LaunchRowMap = Record<string, string[]>;
@@ -122,28 +116,4 @@ export function writeLaunchRowScript(
     const { [projectId]: _dropped, ...rest } = map;
     return rest;
   });
-}
-
-export function usageFor(
-  projectId: string,
-  scriptNames: string[],
-): Record<string, PackageScriptUsage> {
-  return usageByName(
-    scriptNames,
-    stateStore.readHint<UseLog>(USE_LOG_KEY, {})[projectId] ?? {},
-  );
-}
-
-export function bumpScriptUseCount(
-  projectId: string,
-  scriptName: string,
-): void {
-  const log = stateStore.readKey<UseLog>(USE_LOG_KEY, {});
-  const projectLog = log[projectId] ?? {};
-  projectLog[scriptName] = pruneAndPush(
-    projectLog[scriptName] ?? [],
-    Date.now(),
-  );
-  log[projectId] = projectLog;
-  stateStore.writeKey<UseLog>(USE_LOG_KEY, log);
 }

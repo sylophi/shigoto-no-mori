@@ -1,7 +1,7 @@
 import { FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { tildify } from "@/lib/projectPaths";
+import { tildify } from "@shared/projectPaths";
 import type { WorktreeLayout } from "@shared/schemas";
 import { worktreeBaseFor } from "@shared/git/worktreeLayout";
 

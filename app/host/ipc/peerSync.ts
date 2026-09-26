@@ -1,4 +1,4 @@
-// The pull orchestration's reach into a peer device's sync surface,
+// The move orchestrations' reach into a peer device's sync surface,
 // injected at boot following the setCliRunnerImpl precedent: the
 // remote plumbing lives in main/, so this seam owns the api shape and
 // the sync handlers stay free of Electron imports. The injected
@@ -7,31 +7,26 @@
 // authed socket per deviceId, and a second dial silently supersedes
 // the session every remote-forest query is riding on.
 import type { mirrorContract } from "@shared/ipc/modules/mirror";
-import type { projectsContract } from "@shared/ipc/modules/projects";
+import type { ChannelMux } from "@shared/ipc/socket/channels";
 import type { syncContract } from "@shared/ipc/modules/sync";
 import type { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { implSlot } from "@host/lib/util/implSlot";
 import type { Client } from "@shared/ipc/types";
 import { type Worktree, WorktreeSchema } from "@shared/schemas";
 
-// The remote verbs the orchestrations drive. Superset of the transfer
-// slices fetchBundleFromPeer and pushBundleToPeer take, so one client
-// serves all of them.
+// The remote verbs the orchestrations drive, and the byte channels of
+// the same cached session that their source links ride
+// (host/lib/sync/sourceLink.ts): resolving once the direct session
+// exists, rejecting when there is none.
+export type PeerChannels = () => Promise<Pick<ChannelMux, "attach" | "has">>;
 export type PeerSyncApi = Pick<
   Client<typeof syncContract>,
-  | "refTips"
-  | "captureDirty"
   | "ignoredPaths"
-  | "bundleStart"
-  | "bundleChunk"
-  | "bundleAbort"
-  | "pushStart"
-  | "pushChunk"
-  | "pushFinish"
   | "hasCommits"
-  | "landCheck"
-  | "landWorktree"
->;
+  | "openSource"
+  | "receiveWorktree"
+  | "receiveBundle"
+> & { channels: PeerChannels };
 
 // The git follower's reach into a peer's mirror surface: read the git
 // state of a served worktree and apply one there.
@@ -49,20 +44,9 @@ export type PeerWorktreesApi = Pick<
   "delete" | "list" | "setShelved"
 >;
 
-// The clone's two questions of the peer's projects surface: which
-// branch its checkout of the repo is on by default (the branch the
-// clone here is made of) and where it was cloned from (the remote the
-// clone here gets), host/lib/sync/cloneFromPeer.ts. Reads, so they
-// need no grant, unlike the bundle that follows them.
-export type PeerProjectsApi = Pick<
-  Client<typeof projectsContract>,
-  "defaultBranch" | "cloneUrl"
->;
-
 type PeerSyncImpl = {
   syncApiFor: (deviceId: string) => PeerSyncApi;
   worktreesApiFor: (deviceId: string) => PeerWorktreesApi;
-  projectsApiFor: (deviceId: string) => PeerProjectsApi;
 };
 
 const { set: setPeerSyncApiImpl, get: requireImpl } = implSlot<PeerSyncImpl>(
@@ -76,10 +60,6 @@ export function peerSyncApiFor(deviceId: string): PeerSyncApi {
 
 export function peerWorktreesApiFor(deviceId: string): PeerWorktreesApi {
   return requireImpl().worktreesApiFor(deviceId);
-}
-
-export function peerProjectsApiFor(deviceId: string): PeerProjectsApi {
-  return requireImpl().projectsApiFor(deviceId);
 }
 
 // One of a peer's worktrees, read off its own list and re-parsed

@@ -18,19 +18,19 @@ import {
 export const githubCliContract = defineContract("host", {
   readiness: invoke("githubCli:readiness", z.void(), GithubCliReadinessSchema, {
     remote: true,
-    mutating: false,
+    gated: false,
   }),
   projectPullRequests: invoke(
     "githubCli:projectPullRequests",
     ProjectScopedPayloadSchema,
     z.record(z.string(), PullRequestSchema),
-    { remote: true, mutating: false },
+    { remote: true, gated: false },
   ),
   worktreePullRequest: invoke(
     "githubCli:worktreePullRequest",
     GithubCliWorktreePullRequestPayloadSchema,
     PullRequestDetailSchema.nullable(),
-    { remote: true, mutating: false },
+    { remote: true, gated: false },
   ),
   // Open PRs offered as a source in the new-worktree form. Uncached and
   // fired only when the user picks that mode, so opening the form stays
@@ -39,7 +39,7 @@ export const githubCliContract = defineContract("host", {
     "githubCli:pullRequestCandidates",
     ProjectScopedPayloadSchema,
     PullRequestCandidateListSchema,
-    { remote: true, mutating: false },
+    { remote: true, gated: false },
   ),
   // Fetches the PR head and lands it on a local branch. Separate from
   // worktrees.create so the create itself still runs through the bundled
@@ -48,31 +48,31 @@ export const githubCliContract = defineContract("host", {
     "githubCli:resolvePullRequestCheckout",
     ResolvePullRequestCheckoutPayloadSchema,
     PullRequestCheckoutRefSchema,
-    { remote: true, mutating: true },
+    { remote: true, gated: true },
   ),
   repoMergeConfig: invoke(
     "githubCli:repoMergeConfig",
     ProjectScopedPayloadSchema,
     RepoMergeConfigSchema.nullable(),
-    { remote: true, mutating: false },
+    { remote: true, gated: false },
   ),
   mergePullRequest: invoke(
     "githubCli:mergePullRequest",
     MergePullRequestPayloadSchema,
     z.void(),
-    { tracksProjectUsage: true, remote: true, mutating: true },
+    { tracksProjectUsage: true, remote: true, gated: true },
   ),
   pullRequestDiff: invoke(
     "githubCli:pullRequestDiff",
     GithubCliPullRequestDiffPayloadSchema,
     z.string(),
-    { remote: true, mutating: false },
+    { remote: true, gated: false },
   ),
   setPullRequestDraft: invoke(
     "githubCli:setPullRequestDraft",
     SetPullRequestDraftPayloadSchema,
     z.void(),
-    { tracksProjectUsage: true, remote: true, mutating: true },
+    { tracksProjectUsage: true, remote: true, gated: true },
   ),
   projectPullRequestsRefreshed: broadcast(
     "githubCli:projectPullRequestsRefreshed",

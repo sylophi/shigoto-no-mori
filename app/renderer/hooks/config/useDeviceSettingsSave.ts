@@ -8,8 +8,8 @@ import {
 } from "./useSettingsSave";
 
 // Save for the device-managed keys of whichever device the surrounding
-// HostScope names: one idempotent patch of all seven keys through the
-// scoped api, then the shared post-save fan-out (config, launcher
+// HostScope names: one idempotent patch of every key it edits through
+// the scoped api, then the shared post-save fan-out (config, launcher
 // catalogs, gh readiness/PRs, projects) against that device's registry.
 // No per-key diff and no second store: the patch write is cheap enough
 // that an unchanged key riding along costs nothing. A refused save (the
@@ -18,9 +18,9 @@ import {
 // re-enables for a retry.
 //
 // The local device's save does NOT come through here -- it writes two
-// stores (device config plus this window's appearance) through
-// useSettingsSave, and its device half must stay on the local-only
-// write path. This hook is for peers.
+// stores (device config plus this window's appearance) as one mutation
+// through useSettingsSave, whose device half is this same patch write
+// plus the launch catalog. This hook is for peers.
 export function useDeviceSettingsSave() {
   const { api, keys } = useHostScope();
   const queryClient = useQueryClient();

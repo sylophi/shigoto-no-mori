@@ -1,5 +1,5 @@
 import { branchNotMergedError, errorMessageOf } from "@shared/errors";
-import { type BranchList, isRealBranch } from "@shared/schemas";
+import type { BranchList } from "@shared/schemas";
 import { run, splitZ } from "./core";
 import {
   listRemotes,
@@ -7,7 +7,6 @@ import {
   remoteRefExists,
   splitRemoteRefSync,
 } from "./remotes";
-import type { WorktreeIdentity } from "./worktrees";
 
 // Rename the branch currently checked out in a worktree.
 // `git branch -m <new>` renames the current HEAD branch.
@@ -65,27 +64,6 @@ export async function checkoutBranch(
     split ? split.branch : branch,
     "--",
   ]);
-}
-
-// The "delete the local branch after the worktree is gone" policy for
-// the nuke-everything path (per-worktree deletes run the CLI's port):
-// honor the global toggle, never touch externals (we didn't create the
-// branch), skip placeholder branches, and swallow failures since the
-// branch may be shared with another worktree or be the primary's HEAD.
-// Leaving it behind is always the safe fallback.
-export async function deleteBranchAfterWorktreeRemoval(
-  projectPath: string,
-  identity: WorktreeIdentity,
-  enabled: boolean,
-): Promise<void> {
-  if (!enabled) return;
-  if (identity.isExternal) return;
-  if (!isRealBranch(identity.branch)) return;
-  try {
-    await deleteAnyLocalBranch(projectPath, identity.branch, true);
-  } catch {
-    // see comment above
-  }
 }
 
 // Create a local branch pointing at `base` (or HEAD if omitted). When

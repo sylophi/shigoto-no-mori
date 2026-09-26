@@ -64,8 +64,6 @@ function buildQueryKeys(deviceId: string) {
     globalConfig: () => host("globalConfig"),
 
     projects: () => host("projects"),
-    projectsSort: () => host("projectsSort"),
-    projectsCollapsed: () => host("projectsCollapsed"),
     projectIcon: (projectId: string) => host("projectIcon", projectId),
 
     shigomoriConfig: (projectId: string | null) => host("shigomori", projectId),
@@ -207,12 +205,6 @@ function buildQueryKeys(deviceId: string) {
     // a set of per-host facts served by the host-scoped runtime contract.
     runtimeInfo: () => host("runtime", "info"),
 
-    // Host-scoped: the CALLING device's command-access verdict on this
-    // host, served by the per-caller remoteAccess preflight. It caches
-    // under the peer's own id; the local device is always granted and
-    // never reaches this key.
-    commandAccess: () => host("commandAccess"),
-
     // Client-scoped: the store lives in this app instance's userData, so
     // no host sentinel and no device id.
     clientConfig: () => ["clientConfig"] as const,
@@ -238,7 +230,7 @@ function buildQueryKeys(deviceId: string) {
     accountDevices: () => ["account", "devices"] as const,
     // Whether this host accepts commands from the account's other
     // devices. Kept OUTSIDE the "account" prefix so the toggle (which
-    // fans out on commandAccessChanged) invalidates only this query and
+    // fans out on commandAccessChanged) writes only this query and
     // never thrashes status or the device list.
     accountCommandAccess: () => ["accountCommandAccess"] as const,
 
@@ -279,16 +271,15 @@ export function queryKeysFor(deviceId: string): QueryKeyRegistry {
   return built;
 }
 
-// The local device's registry: for module-scope, broadcast-driven and
-// deliberately local call sites, which always mean this machine's
-// cache. Anything rendered under a HostScopeProvider must use the
-// scoped registry from useHostScope instead.
+// The local device's registry: for module-scope and deliberately
+// local call sites, which always mean this machine's cache. Anything
+// rendered under a HostScopeProvider must use the scoped registry from
+// useHostScope instead.
 export const queryKeys = queryKeysFor(localDeviceId);
 
 // The "state on this device moved, refetch what you're showing" sweep,
-// shared by both externalChange consumers: the local watcher
-// subscription in renderer/index.tsx (with localDeviceId) and
-// lib/remote/remoteHostWatch.ts (with the pinging device's id). Deliberately broad
+// for every device's externalChange broadcast (lib/hostWatch.ts, with
+// the pinging device's id). Deliberately broad
 // within its scope (the host debounces the signal and only active
 // queries actually refetch), but some domains sit it out:
 //
@@ -313,7 +304,7 @@ export const queryKeys = queryKeysFor(localDeviceId);
 //   query's staleTime Infinity would be defeated on every ping.
 // - fs for loop-safety as well as relevance: a git-state ping says
 //   nothing about a directory listing, and because fs reads are tagged
-//   mutating (they ride the command grant), a ping-driven fs refetch on
+//   mutating (gated on the command-access switch), a ping-driven fs refetch on
 //   a remote scope would itself trigger the host's resolved-mutation
 //   ping, refetching forever.
 const externalChangeExempt = new Set([
@@ -323,9 +314,6 @@ const externalChangeExempt = new Set([
   "cli",
   "cliShell",
   "clientConfig",
-  // A permission verdict, not state: it moves only on a grant or
-  // revoke on the host, never because that host's git state did.
-  "commandAccess",
   "fs",
   "githubCli",
   // Driven by its own changed broadcast, like portForwards and updater.

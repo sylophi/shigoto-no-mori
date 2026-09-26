@@ -8,6 +8,7 @@ import {
   useLauncherForProject,
 } from "@/hooks/launchers/useLaunchers";
 import { LauncherIcon } from "@/components/shared/LauncherIcon";
+import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import type { LauncherEntry, Worktree } from "@shared/schemas";
 import {
   LAUNCH_TAB,
@@ -22,6 +23,7 @@ export function LauncherRow({ worktree }: LauncherRowProps) {
   const { data, isLoading } = useLauncherForProject(worktree.projectId);
   const launch = useLaunch();
   const navigate = useNavigate();
+  const { toProjectPage } = useProjectNav();
   const entries = data?.entries ?? [];
 
   // The visible row is the single source of truth for ⌘1..⌘9 ordering:
@@ -97,12 +99,7 @@ export function LauncherRow({ worktree }: LauncherRowProps) {
         <Button
           variant="outline"
           size="sm"
-          onClick={() =>
-            void navigate({
-              to: "/projects/$projectId/configure",
-              params: { projectId: worktree.projectId },
-            })
-          }
+          onClick={() => toProjectPage("configure", worktree.projectId)}
         >
           Configure tools
         </Button>

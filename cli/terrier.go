@@ -4,16 +4,16 @@ package main
 // registry of repo paths, merged into the project list when the global
 // `terrier` toggle is on. Terrier's stable surface is `terrier ls
 // --json` plus the rule that a minor version bump is the compatibility
-// signal, so that is all this file consumes. Ported alongside
-// host/lib/terrier.ts. The two engines must produce the same merged
-// list or the app and the CLI would disagree about which projects
-// exist.
+// signal, so that is all this file consumes. The CLI owns the merge:
+// every command sees the merged list (main.go), and the app reads it
+// through `sm projects list --json`. The app does no merge of its own;
+// host/lib/terrier.ts only checks terrier's readiness for Settings.
 //
 // Merge semantics: registry.json wins by path. A repo registered in
 // both is an ordinary project (removable), while one only terrier
 // knows becomes a read-only entry with Source "terrier" and a
-// deterministic id, so nothing has to be persisted for the two
-// engines to agree.
+// deterministic id, so nothing has to be persisted for every process
+// (and every build) to agree on it.
 
 import (
 	"cmp"
@@ -33,8 +33,7 @@ import (
 const terrierBinary = "terrier"
 
 // A wedged terrier must not hang every CLI invocation, since the merge
-// runs pre-dispatch. Mirror of TERRIER_SPAWN_TIMEOUT_MS in
-// host/lib/terrier.ts.
+// runs pre-dispatch.
 const terrierSpawnTimeout = 10 * time.Second
 
 func terrierOutput(args ...string) ([]byte, error) {
@@ -46,8 +45,9 @@ func terrierOutput(args ...string) ([]byte, error) {
 // The registry-read contract this build understands. Terrier's README:
 // "a tool checks the minor version and nothing else". A minor bump
 // means something a tool could be relying on has changed, so an
-// unknown minor deactivates the merge rather than guessing. Mirror of
-// TERRIER_SUPPORTED_* in host/lib/terrier.ts.
+// unknown minor deactivates the merge rather than guessing. The app's
+// readiness check (host/lib/terrier.ts) applies the same contract, so
+// Settings calls the integration ready exactly when this merges.
 const (
 	terrierSupportedMajor = 0
 	terrierSupportedMinor = 1
@@ -97,9 +97,8 @@ var terrierListings = sync.OnceValues(func() ([]terrierListing, error) {
 		return nil, err
 	}
 	// Home-expanded and required to be absolute, never resolved
-	// against cwd: that differs between the app and a shell, so the
-	// two engines could mint different ids for the same relative row.
-	// Mirrors the filter in host/lib/terrier.ts's listing read.
+	// against cwd: that differs between the app's spawn and a shell, so
+	// the same relative row could mint different ids.
 	var listings []terrierListing
 	for _, t := range doc.Projects {
 		path := expandHome(t.Path)
@@ -112,10 +111,11 @@ var terrierListings = sync.OnceValues(func() ([]terrierListing, error) {
 })
 
 // Deterministic id for a terrier-sourced project: UUID-shaped from
-// sha256(path) so the TS engine and this one mint the same id for the
-// same path without ever writing it down. Uppercased like every
-// CLI-minted id. Mirror of terrierProjectId in host/lib/terrier.ts.
-// Keep the two byte-for-byte in sync (terrier_test.go pins a vector).
+// sha256(path), so every process mints the same id for the same path
+// without ever writing it down. Uppercased like every CLI-minted id.
+// Fixed for good: per-project state and the app's id-keyed caches live
+// under it, and earlier builds minted it the same way (terrier_test.go
+// pins a vector).
 func terrierProjectID(path string) string {
 	sum := sha256.Sum256([]byte(path))
 	h := strings.ToUpper(hex.EncodeToString(sum[:16]))
@@ -174,8 +174,7 @@ func activeTerrierListings() ([]terrierListing, *terrierTrouble) {
 
 // Whether the active terrier registry lists path. False whenever the
 // integration is off or unreadable. Callers use this to decide id
-// continuity, and "don't know" must act like "no". Mirror of
-// terrierHasPath in host/lib/terrier.ts.
+// continuity, and "don't know" must act like "no".
 func terrierHasPath(path string) bool {
 	listings, _ := activeTerrierListings()
 	return slices.ContainsFunc(listings, func(t terrierListing) bool { return t.Path == path })
@@ -193,10 +192,9 @@ func mergeTerrierProjects(projects []project) []project {
 	return appendTerrierProjects(projects, listings)
 }
 
-// The pure half of the merge, split out for tests. Ordering must match
-// mergeTerrierProjects in host/lib/projects/index.ts: registry order
-// first, terrier extras after, sorted by name then path (plain byte
-// compare in both engines).
+// The pure half of the merge, split out for tests. Registry order
+// first (the sidebar's, see `projects reorder`), terrier extras after,
+// sorted by name then path (plain byte compare).
 func appendTerrierProjects(projects []project, listings []terrierListing) []project {
 	known := make(map[string]bool, len(projects))
 	for _, p := range projects {

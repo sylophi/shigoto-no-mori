@@ -129,9 +129,9 @@ export type DeviceForest = {
   deviceId: string;
   projects: Project[];
   worktrees: Record<string, Worktree[]>;
-  // What remoteAccess:commandAccess answers CALLERS (i.e. whether this
-  // device accepts commands from the account's other devices, so the
-  // local lab client may mutate it).
+  // Whether this device accepts commands from the account's other
+  // devices (its HubStatus.peerAcceptsCommands entry), so the local lab
+  // client may mutate it.
   grantsCaller: boolean;
 };
 

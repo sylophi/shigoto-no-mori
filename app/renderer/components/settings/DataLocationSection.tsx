@@ -8,7 +8,7 @@ import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { getBrowseParentPath } from "@/lib/projectPaths";
+import { getBrowseParentPath } from "@shared/projectPaths";
 import { notifyError, toast } from "@/lib/toast";
 
 // Where the shigomori data dir lives, and the flow that moves it. The

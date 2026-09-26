@@ -24,7 +24,7 @@ import { Chip } from "@/components/ui/chip-button";
 import { RowTag } from "@/components/ui/row-tag";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { InlineError } from "@/components/ui/inline-error";
-import { keptSourceReason } from "@/hooks/remote/usePullWorktree";
+import { keptSourceReason } from "@/hooks/remote/useMoveWorktree";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 import {
   CONFIRM_DESTRUCTIVE_MS,
@@ -113,8 +113,8 @@ export function TransplantFinish({
   // The device it landed on, and the words for that (pullSteps.ts).
   thisDeviceLabel: string;
   landing?: Landing;
-  // The source's guarded teardown, the direction's own
-  // (sync:teardownSource, or sync:teardownSent for a peer landing).
+  // The source's guarded teardown (sync:teardownSource), on the peer
+  // after a pull, on this device after a send.
   teardown: UseMutationResult<SyncTeardownSourceResult, Error, void>;
   onClose: () => void;
   // Leave for the landed worktree's own page.

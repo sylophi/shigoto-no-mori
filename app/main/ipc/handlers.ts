@@ -11,7 +11,6 @@ import { accountContract } from "@shared/ipc/modules/account";
 import { branchesContract } from "@shared/ipc/modules/branches";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
 import { dialogContract } from "@shared/ipc/modules/dialog";
-import { directContract } from "@shared/ipc/modules/direct";
 import { forwardContract } from "@shared/ipc/modules/forward";
 import { fsContract } from "@shared/ipc/modules/fs";
 import { gitContract } from "@shared/ipc/modules/git";
@@ -36,7 +35,6 @@ import { portPoolContract } from "@shared/ipc/modules/portPool";
 import { portsContract } from "@shared/ipc/modules/ports";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { hubContract } from "@shared/ipc/modules/hub";
-import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
@@ -68,6 +66,7 @@ import {
   setMirrorServingListener,
 } from "@host/ipc/modules/mirror";
 import {
+  endLegacyMirrors,
   endMirrorsWithPeers,
   isOrphanedTransfer,
   mirrorSessions,
@@ -81,7 +80,6 @@ import {
 import { portPoolHandlers } from "@host/ipc/modules/portPool";
 import { portsHandlers } from "@host/ipc/modules/ports";
 import { projectsHandlers } from "@host/ipc/modules/projects";
-import { remoteAccessHandlers } from "@host/ipc/modules/remoteAccess";
 import { runtimeHandlers } from "@host/ipc/modules/runtime";
 import { scriptsHandlers } from "@host/ipc/modules/scripts";
 import { sharedSettingsHandlers } from "@host/ipc/modules/sharedSettings";
@@ -114,7 +112,11 @@ import { ProjectScopedPayloadSchema } from "@shared/schemas/payloads";
 import { spawnFileSync } from "@host/fileSync/spawn";
 import { dataDir } from "@host/lib/util/paths";
 import { getDeviceId } from "@host/lib/config/deviceId";
-import { accountSignedIn, makeAccountHandlers } from "./modules/account";
+import {
+  acceptsPeerCommands,
+  accountSignedIn,
+  makeAccountHandlers,
+} from "./modules/account";
 import { hubConnectInputs } from "./modules/account";
 import { reconcileLaunchAtLogin } from "../electron/liveness";
 import { withoutPeerState } from "@shared/schemas/config";
@@ -125,7 +127,6 @@ import {
 import {
   broadcastAll,
   clearDirectTickets,
-  directHandlers,
   refreshHubConnection,
   registerContract,
   registerControlContract,
@@ -144,9 +145,15 @@ const peerTransportFor = (deviceId: string) => ({
     Promise.resolve(
       hubHandlers.invokePeer({ deviceId, channel, input }, undefined),
     ),
-  subscribe: (): (() => void) => {
-    throw new Error("the peer api is invoke-only");
-  },
+  // One channel of the peer's pushes, off the same session's fan-out
+  // (onPeerPush): what a start the peer runs for this device streams
+  // back, which the control ops relay to the CLI.
+  subscribe: (channel: string, handler: (payload: unknown) => void) =>
+    onPeerPush((push) => {
+      if (push.deviceId === deviceId && push.channel === channel) {
+        handler(push.payload);
+      }
+    }),
 });
 
 // Continuous worktree mirroring, this device's half: the loopback
@@ -162,6 +169,13 @@ const peerClient =
   <M extends ContractModule>(contract: M) =>
   (deviceId: string) =>
     buildClient(contract, peerTransportFor(deviceId));
+// A peer's sync surface plus the byte channels of the same session,
+// which the source links of a move or a mirror's git follower ride
+// (host/lib/sync/sourceLink.ts).
+const peerSyncClient = (deviceId: string) => ({
+  ...buildClient(syncContract, peerTransportFor(deviceId)),
+  channels: () => hubHandlers.peerChannels(deviceId),
+});
 
 const mirrorGateway = createMirrorGateway({
   peerApiFor: peerClient(mirrorContract),
@@ -250,6 +264,9 @@ const mirrorDaemon = createMirrorDaemon({
     gitFollower.sessionsChanged();
     observeMirrorHistory();
     reapOrphanedTransfers();
+    // A mirror an older build started from the copy's device
+    // (registry.ts isLegacyMirror), ended once, the worktree kept.
+    void endLegacyMirrors();
     endMirrorsOfNoAccount();
   },
 });
@@ -288,11 +305,11 @@ function endAllMirrorsBounded(): Promise<unknown> {
   ]);
 }
 
-// The command-access switch flipping, on both channels it fans out on
-// (the account's and the remote-access surface's).
+// The command-access switch as it now stands, to this device's windows
+// (the Devices page toggle) and, the broadcast being tagged remote, to
+// every connected peer, whose bridge records it for its UI and CLI.
 function broadcastCommandAccessChanged(): void {
-  broadcastAll(accountContract, "commandAccessChanged", undefined);
-  broadcastAll(remoteAccessContract, "commandAccessChanged", undefined);
+  broadcastAll(accountContract, "commandAccessChanged", acceptsPeerCommands());
 }
 
 // A step of the account fan-out that must not take the rest with it.
@@ -307,7 +324,7 @@ function teardownStep(what: string, run: () => unknown): Promise<void> {
 // (onPeerPush) and the daemon's snapshots (above).
 const gitFollower = createGitFollower({
   sessions: liveMirrorSessions,
-  peerSyncApiFor: peerClient(syncContract),
+  peerSyncApiFor: peerSyncClient,
   peerMirrorApiFor: peerClient(mirrorContract),
   // The states both sides last agreed on, beside the engine's own
   // data so a restart resumes the follow rule rather than falling
@@ -413,11 +430,12 @@ export function registerIpcHandlers(): void {
       broadcastAll(accountContract, "changed", { accountId });
       // A direct account switch that stays signed in changes the
       // command-access answer, so refresh the renderer's switch query
-      // too. Main's grant cache is already invalidated in
+      // too. Main's mirror of the switch is already dropped in
       // makeAccountHandlers, so enforcement is correct without this.
-      // This only keeps the renderer display fresh, since `changed`
-      // invalidates the ["account"] prefix but not
-      // ["accountCommandAccess"].
+      // This only keeps the display fresh, since `changed` invalidates
+      // the ["account"] prefix but not ["accountCommandAccess"]. (An
+      // account switch also restarts the direct listener, so peers
+      // learn the new answer from their next dial either way.)
       broadcastCommandAccessChanged();
       // Also reconciles the direct listener from its tail, which
       // follows the same enrollment condition.
@@ -434,9 +452,9 @@ export function registerIpcHandlers(): void {
       }
     },
     // The switch flipping fans out on its own channel so the toggle
-    // does not thrash the account status and device queries. No hub
-    // reconnect: the listener reads the predicate live. The peers
-    // hear it too (remote:true), so their verdict refreshes at once.
+    // does not thrash the account status and device queries. No
+    // reconnect: the listener reads the predicate live. The peers hear
+    // it too (remote:true), so their reading follows at once.
     broadcastCommandAccessChanged,
     // The registry as the hub last reported it is the one place this
     // device learns a peer was removed from the account (the hub
@@ -471,20 +489,11 @@ export function registerIpcHandlers(): void {
   // every dep and folds directPeerVersions back into the status
   // snapshot.
   registerContract(hubContract, hubHandlers);
-  // The direct data plane's brokering surface: host-scoped and
-  // remote:true, so a peer asks over the device hub (or an existing
-  // direct session) how to dial this host directly. The handlers are
-  // constructed in register.ts, which owns every dep (the listener, the
-  // ticket store, the hub roster). The handler fails closed without an
-  // authenticated callerDeviceId, so the Electron wire always reads
-  // available:false.
-  registerContract(directContract, directHandlers);
   // The sync orchestrations' peer reach (host/ipc/peerSync.ts), riding
   // peerTransportFor above.
   setPeerSyncApiImpl({
-    syncApiFor: peerClient(syncContract),
+    syncApiFor: peerSyncClient,
     worktreesApiFor: peerClient(worktreesContract),
-    projectsApiFor: peerClient(projectsContract),
   });
   // The port-forward engine's peer reach, riding the same
   // peerTransportFor as the sync wiring above and for the same reason:
@@ -594,9 +603,6 @@ export function registerIpcHandlers(): void {
   });
   registerContract(mirrorContract, mirrorHandlers);
   registerContract(windowContract, windowHandlers);
-  // Host-scoped preflight for the remote execution surface: each wire's
-  // binding supplies the calling peer's grant verdict on the context.
-  registerContract(remoteAccessContract, remoteAccessHandlers);
   registerContract(projectsContract, projectsHandlers);
   registerContract(dialogContract, dialogHandlers);
   registerContract(runtimeContract, runtimeHandlers);
@@ -624,18 +630,17 @@ export function registerIpcHandlers(): void {
   setControlImpl({
     listDevices: async () => accountHandlers.listDevices(undefined, undefined),
     thisDeviceId: getDeviceId,
-    connectedDeviceIds: async () =>
-      Object.keys(
-        (await hubHandlers.status(undefined, undefined)).peerAppVersions,
-      ),
+    acceptsCommands: acceptsPeerCommands,
+    directPeers: async () =>
+      (await hubHandlers.status(undefined, undefined)).peerAcceptsCommands,
     peerTransportFor,
   });
   registerControlContract(controlContract, controlHandlers);
   registerContract(shigomoriContract, shigomoriHandlers);
   registerContract(syncContract, syncHandlers);
   // Host side of the port-forward wire: host-scoped, so it mounts on
-  // the Electron wire and both remote wires, where the grant model
-  // gates every verb (all mutating:true).
+  // the Electron wire and the direct listener, whose command-access
+  // gate covers every verb (all mutating:true).
   registerContract(forwardContract, forwardHandlers);
   // Host-scoped: a peer's Settings page reads this device's update
   // state and, when granted, checks or restarts into an update here.

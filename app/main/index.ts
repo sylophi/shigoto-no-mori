@@ -10,7 +10,7 @@ import { gitContract } from "@shared/ipc/modules/git";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
 import { windowContract } from "@shared/ipc/modules/window";
 import { ensureDataDir } from "@host/lib/bootstrap";
-import { dropLegacyRemoteDevices } from "@host/lib/config/global";
+import { dropRemovedLanKeys } from "@host/lib/config/global";
 import { getDeviceId } from "@host/lib/config/deviceId";
 import {
   createDesktopClerkBridge,
@@ -32,7 +32,10 @@ import {
   applyThemeSource,
   readClientConfigSync,
 } from "./electron/clientConfig";
-import { seedClientConfigFromLegacy } from "./electron/clientConfigMigration";
+import {
+  seedClientConfigFromLegacy,
+  seedProjectsSortFromState,
+} from "./electron/clientConfigMigration";
 import {
   announceProjectChanged,
   registerIpcHandlers,
@@ -47,7 +50,6 @@ import {
   broadcast,
   broadcastAll,
   refreshHubConnection,
-  refreshSocketHost,
   startControlHost,
   stopControlHost,
   stopDirectHost,
@@ -63,7 +65,7 @@ import {
   signalAllScriptsBestEffort,
 } from "@host/lib/scripts";
 import { startOrphanScriptSweep } from "@host/lib/scripts/persistence";
-import { refreshTerrierListings } from "@host/lib/terrier";
+import { refreshProjects } from "@host/lib/projects";
 import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktrees";
 import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
@@ -425,15 +427,17 @@ app.on("ready", async () => {
   // the killing in the background.
   startOrphanScriptSweep();
   // Before the first createWindow, whose theme read must already see
-  // values migrated out of the pre-split device config.
+  // values migrated out of the pre-split device config, and whose
+  // sidebar must already see the sort moved out of state.json.
   await seedClientConfigFromLegacy();
-  // Scrub the removed LAN feature's plaintext tokens off disk. An
+  await seedProjectsSortFromState();
+  // Scrub the removed LAN listener's plaintext tokens off disk. An
   // unreadable config must never block boot, and the drain retries
   // next boot.
   try {
-    dropLegacyRemoteDevices();
+    dropRemovedLanKeys();
   } catch (error) {
-    console.warn("[config] legacy remoteDevices drain failed:", error);
+    console.warn("[config] LAN key drain failed:", error);
   }
   buildAppMenu();
   // Host liveness. Install the crash guards before
@@ -446,20 +450,15 @@ app.on("ready", async () => {
   installFatalRecovery({ isShuttingDown });
   createWindow();
   reconcileLaunchAtLogin();
-  // The sweeps below read the merged project list synchronously, so
-  // wait for the terrier listings (bounded by the spawn timeout).
-  // Otherwise the first fetch pass and the state watcher's reaper run
-  // against a registry-only list. The window is already up, so this
-  // delays only the background machinery.
-  await refreshTerrierListings();
+  // The sweeps below read the project list synchronously, from the
+  // snapshot host/lib/projects keeps of the CLI's list, so read it once
+  // before they start. The window is already up, so this delays only
+  // the background machinery.
+  await refreshProjects().catch((error: unknown) => {
+    console.warn(`[projects] first list failed: ${errorMessageOf(error)}`);
+  });
   startBackgroundFetch();
   startUpdater();
-  // Remote hosting: serve host-scoped calls over
-  // the LAN when the device config enables it. After getDeviceId so
-  // the welcome frame's identity is final. The same reconcile reruns
-  // after every globalConfig write (hostImpls wiring), making this the
-  // boot-time pass only.
-  void refreshSocketHost();
   // The control wire the CLI's cross-device verbs ride (`sm worktrees
   // send|bring|mirror`). Here, past the single-instance lock and the
   // data dir, so only the instance that owns the data dir publishes
@@ -490,8 +489,11 @@ app.on("ready", async () => {
   startStateWatcher(() => {
     broadcastAll(gitContract, "externalChange", undefined);
     // The registry may have changed (a project added or removed by
-    // the CLI): follow it with the git-directory watches.
-    reconcileGitWatchers();
+    // the CLI): re-read the project list, then follow it with the
+    // git-directory watches.
+    void refreshProjects()
+      .catch(() => undefined)
+      .then(reconcileGitWatchers);
     // The same refresh is the app's only chance to notice an `sm rm`
     // run in a terminal: the CLI removes the worktree without knowing
     // the app exists, leaving any script the app started in it running

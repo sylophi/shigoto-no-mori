@@ -19,7 +19,7 @@ export const launchersContract = defineContract("host", {
     z.array(DetectedLauncherSchema),
     {
       remote: true,
-      mutating: false,
+      gated: false,
     },
   ),
   forProject: invoke(
@@ -32,7 +32,7 @@ export const launchersContract = defineContract("host", {
       // without re-deriving the filter in the renderer.
       hiddenCount: z.number().int().nonnegative(),
     }),
-    { remote: true, mutating: false },
+    { remote: true, gated: false },
   ),
   // launch is remote false: it spawns an arbitrary shell command from
   // config, the one clear remote code execution vector. Detection is safe to serve, launching is not.

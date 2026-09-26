@@ -53,8 +53,8 @@ interface InboxRowProps {
 // Right-click opens the project's menu, the same list the tree hangs
 // off a project header's `…`. The inbox has no project headers, so this
 // is the only place its project-level actions can live. A peer's row
-// wears its device badge beside the project name, opens under the
-// device twin, and scopes that menu to the peer. Asleep, it keeps the
+// wears its device badge beside the project name, opens under that
+// device's route, and scopes that menu to the peer. Asleep, it keeps the
 // row (last known state) and drops the menu, since there is no session
 // to act over.
 export function InboxRow({

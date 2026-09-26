@@ -10,17 +10,14 @@
 //   hub, clientConfig, projectLauncher, portForward): they
 //   belong to the machine the window runs on, so their call sites keep
 //   window.api and HostApi excludes them.
-// - Local broadcast subscriptions (the fs watcher's externalChange in
-//   renderer/boot.tsx, the worktree lifecycle events): main emits
-//   this machine's events, so those watchers subscribe via window.api
-//   and invalidate the local `queryKeys` registry explicitly. A
-//   remote:true host broadcast mirrored for every device
-//   (updater:state) follows the same split at boot scope: boot.tsx
-//   for the local machine, lib/remote/remoteHostWatch.ts for the peers.
+// - Host broadcast subscriptions: they are boot-scoped, one watchHost
+//   per device (lib/hostWatch.ts) over that device's api, writing into
+//   that device's registry, so no scope is involved.
 // - Host-scoped hooks whose write path is deliberately local-only
-//   (the updateLocalGlobalConfig caller in useSettingsSave): the write
-//   lands on this machine's disk, so their reads and invalidations
-//   must stay pinned to the local `queryKeys` registry.
+//   (the local settings save in useSettingsSave, which writes through
+//   window.api): the write lands on this machine's disk, so their
+//   reads and invalidations must stay pinned to the local `queryKeys`
+//   registry.
 import { hasLocalHost } from "@/lib/localHost";
 import { createContext, use, type ReactNode } from "react";
 import type { RemoteDeviceApi } from "@/lib/remote/devices";
@@ -54,7 +51,6 @@ export type HostApi = Pick<
   | "portPool"
   | "ports"
   | "projects"
-  | "remoteAccess"
   | "runtime"
   | "scripts"
   | "sharedSettings"

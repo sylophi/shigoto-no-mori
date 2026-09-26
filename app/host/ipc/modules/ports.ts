@@ -36,7 +36,7 @@ const pathCache = ttlMapCache<string, string>(
 export const portsHandlers: Handlers<typeof portsContract> = {
   list: async ({ projectId, worktreeId }) => {
     // Validated first so a bogus project id never builds a path.
-    findProjectOrThrow(projectId);
+    await findProjectOrThrow(projectId);
     // The pool chain hangs off the path alone, so it runs beside the
     // data-file read rather than behind it.
     const [pool, data] = await Promise.all([

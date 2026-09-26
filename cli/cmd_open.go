@@ -7,6 +7,13 @@ package main
 // cwd (the primary counts, since opening the primary in Finder is a
 // normal thing to want), a second positional names one explicitly, and
 // from outside any repo the menus ask project then worktree.
+//
+// The app launches through here too, by exact address: `sm --json open
+// --project-id P --worktree-id W -- <launcher id>` (app:<id>,
+// custom:<id>, web:github). The CLI launches and bumps the launcher use
+// log; the answer is {ok, launcher, worktree}, and any failure
+// (unknown worktree or tool, a launch that failed) is the usual
+// {ok: false, error, code?} document.
 
 import (
 	"fmt"
@@ -15,9 +22,7 @@ import (
 )
 
 func cmdOpen(ctx cliContext, args []string) (int, error) {
-	parsed, err := parseCmdArgs(args, argSpec{
-		strings: map[string][]string{"project": {"p"}},
-	})
+	parsed, err := parseCmdArgs(args, worktreeTargetSpec())
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -25,6 +30,13 @@ func cmdOpen(ctx cliContext, args []string) (int, error) {
 
 	var target located
 	switch {
+	case parsed.strings["worktree-id"] != "":
+		if len(parsed.positionals) > 1 {
+			return 2, usageErrf("Pass either a worktree name or --worktree-id, not both.")
+		}
+		target, err = resolveWorktreeByID(ctx, parsed.strings["project-id"], parsed.strings["worktree-id"])
+	case parsed.strings["project-id"] != "":
+		return 2, usageErrf("--project-id scopes --worktree-id; pass both (or -p <project> with a name).")
 	case len(parsed.positionals) > 1:
 		target, err = resolveWorktree(ctx, parsed.positionals[1], parsed.strings["project"], true)
 	case ctx.current != nil && parsed.strings["project"] == "":
@@ -60,11 +72,11 @@ func cmdOpen(ctx cliContext, args []string) (int, error) {
 		chosen = matchLauncher(entries, tool)
 		if chosen == nil {
 			labels := joinMapped(entries, func(e launcherEntry) string { return e.label })
-			return 1, errf("Unknown tool %q. Available: %s.", tool, labels)
+			return 1, codedErrf("unknown-launcher", "Unknown tool %q. Available: %s.", tool, labels)
 		}
 	}
 
-	if err := launchEntry(*chosen, target.worktree.Path); err != nil {
+	if err := launchEntryFn(*chosen, target.worktree.Path); err != nil {
 		return 1, errf("Couldn't open %s: %v", chosen.label, err)
 	}
 	bumpLauncherUse(chosen.id)
@@ -73,10 +85,21 @@ func cmdOpen(ctx cliContext, args []string) (int, error) {
 	return 0, nil
 }
 
-// Label, full id, or bare catalog id ("finder" for app:finder), all
-// case-insensitive. Hidden launchers still match by name. Hiding is
-// presentational, same as the app.
+// Test seam: tests check which entry an address resolves to without
+// launching anything.
+var launchEntryFn = launchEntry
+
+// Full id (the app's exact address), then label or bare catalog id
+// ("finder" for app:finder), all case-insensitive. The full-id pass
+// comes first so a custom launcher labeled like another's id can't
+// shadow it. Hidden launchers still match: hiding is presentational,
+// same as the app.
 func matchLauncher(entries []launcherEntry, tool string) *launcherEntry {
+	for i := range entries {
+		if strings.EqualFold(entries[i].id, tool) {
+			return &entries[i]
+		}
+	}
 	for i := range entries {
 		e := &entries[i]
 		if strings.EqualFold(e.label, tool) || strings.EqualFold(e.id, tool) {

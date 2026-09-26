@@ -12,7 +12,6 @@ import { BrowserWindow } from "electron";
 import { errorMessageOf } from "@shared/errors";
 import { gitContract } from "@shared/ipc/modules/git";
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
-import type { Project } from "@shared/schemas";
 import { fetchAllRemotes, snapshotRemoteRefs } from "@host/lib/git/remotes";
 import {
   pullRequestMapsEqual,
@@ -136,7 +135,6 @@ async function autoPullProject(
   try {
     const { pulled, failed } = await sweepAutoPull(
       projectId,
-      projectPath,
       runningScriptWorktreeIds(),
     );
     for (const { worktree, commits } of pulled) {
@@ -176,25 +174,14 @@ async function sweepProjectPullRequests(
   }
 }
 
-// The sweeps run from callbacks with nobody to catch for them (a
-// timer, the window-focus handler), and loadProjects throws when
-// registry.json is unreadable. Skip the round rather than throw out of a
-// callback: refs going stale is the mild half of that problem, and the
-// UI's own reads of the same file report it.
-function projectsToSweep(): Project[] {
-  try {
-    return loadProjects();
-  } catch (error) {
-    console.warn("[fetch] skipping sweep, projects unreadable:", error);
-    return [];
-  }
-}
-
 // One pass over every project. The timer and the window-focus handler
 // take the fetch freshness default. A peer's request passes the sweep
 // interval: what it wants is the timer's guarantee, not a fresh fetch.
 export function sweepProjects(refsMaxAgeMs = FRESHNESS_MS): void {
-  for (const project of projectsToSweep()) {
+  // The last-read project list (host/lib/projects): the sweeps run from
+  // callbacks (a timer, the window-focus handler) that want no CLI round
+  // trip of their own, and every list the UI reads refreshes it.
+  for (const project of loadProjects()) {
     void maybeFetchProject(project.id, project.path, refsMaxAgeMs);
     void sweepProjectPullRequests(project.id, project.path);
   }

@@ -258,14 +258,17 @@ function DestinationRow({
 }
 
 // A device that could be the destination and is not (or not yet), as
-// the row to pick it by. One that cannot take the worktree right now
-// stays listed, off, with the reason: a row that vanished would not
-// say why.
+// the row to pick it by: one with a checkout of the repo, or one that
+// would clone it first (named as the destination row names a clone).
+// One that cannot take the worktree right now stays listed, off, with
+// the reason: a row that vanished would not say why.
 function PeerTargetRow({
   target,
+  projectName,
   onPick,
 }: {
   target: PeerTarget;
+  projectName: string;
   onPick: (deviceId: string) => void;
 }) {
   const ready = isReadyTarget(target);
@@ -278,7 +281,9 @@ function PeerTargetRow({
       mark={EMPTY_MARK}
       icon={target.icon}
       title={target.label}
-      note={`has ${target.project.name}`}
+      note={
+        target.project ? `has ${target.project.name}` : `gets ${projectName}`
+      }
       trailing={
         target.block !== undefined && (
           <span className="text-xs">
@@ -306,6 +311,7 @@ export function ReviewDevicesColumn({
   sourceKeeps = false,
   toPeer,
   worktree,
+  projectName,
   target,
   sourceDeviceLabel,
   thisDeviceLabel,
@@ -316,6 +322,8 @@ export function ReviewDevicesColumn({
   sourceKeeps?: boolean;
   toPeer?: DestinationPick;
   worktree: Worktree;
+  // The source's project, for the rows of devices that would clone it.
+  projectName: string;
   // Where the flow lands (flow/cloneDestination.tsx). Null while a
   // flow to a peer has no destination picked.
   target: LandingTarget | null;
@@ -352,6 +360,7 @@ export function ReviewDevicesColumn({
                     <PeerTargetRow
                       key={candidate.deviceId}
                       target={candidate}
+                      projectName={projectName}
                       onPick={toPeer.onPick}
                     />
                   ),
@@ -555,6 +564,7 @@ export function PullReviewStep({
             sourceKeeps={sourceKeeps}
             toPeer={toPeer}
             worktree={worktree}
+            projectName={project.name}
             target={target}
             sourceDeviceLabel={sourceDeviceLabel}
             thisDeviceLabel={thisDeviceLabel}

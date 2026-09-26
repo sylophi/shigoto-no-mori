@@ -147,7 +147,7 @@ export function tempPathFor(filePath: string): string {
 // and self-write rules exist once.
 // `mode` sets the permission bits on the created file (masked by umask
 // like any create), for callers that keep a file out of a shared dir's
-// world-readable set, e.g. the 0o600 grant store. Omitted leaves the
+// world-readable set, e.g. the control server's token file. Omitted leaves the
 // platform default, so existing callers are unchanged.
 export function atomicWriteJsonSync(
   filePath: string,

@@ -2,10 +2,13 @@
 // (shared/ipc/modules/control.ts says why they live in the app). Each
 // op resolves what the caller named the way the dialogs do, then hands
 // the run to the SAME orchestrator a dialog calls (sync:sendWorktree,
-// sync:pullWorktree, mirror:start, mirror:startTo, mirror:stop) with
-// the caller's context, so progress streams back down the control wire
-// and a closed socket aborts like a closed window. Nothing here moves
-// a byte or touches git itself.
+// sync:pullWorktree, mirror:startTo, mirror:stop) with the caller's
+// context, so progress streams back down the control wire and a closed
+// socket aborts like a closed window. A mirror runs on the device
+// holding the original, so `mirror --from` asks the peer to run its
+// mirror:startTo into this device, and relays the peer's progress.
+// Nothing here moves a byte or touches git itself.
+import { homedir } from "node:os";
 import { buildClient } from "@shared/ipc/buildClient";
 import {
   type ControlDevice,
@@ -16,15 +19,22 @@ import {
   controlContract,
 } from "@shared/ipc/modules/control";
 import {
-  mirrorCopyIsRemote,
-  mirrorCopyOf,
   type MirrorSession,
   isMirrorCopyStayed,
   isMirrorStopUnconfirmed,
   mirrorContract,
+  type MirrorStartToPayload,
+  MirrorStartToResultSchema,
 } from "@shared/ipc/modules/mirror";
 import { projectsContract } from "@shared/ipc/modules/projects";
-import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
+import { runtimeContract } from "@shared/ipc/modules/runtime";
+import {
+  type SyncCloneInto,
+  SyncPullProgressSchema,
+  syncContract,
+} from "@shared/ipc/modules/sync";
+import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
+import { tildify } from "@shared/projectPaths";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { hostsProjects } from "@shared/account/platform";
@@ -44,6 +54,8 @@ import { PROBE_TIMEOUT_MS } from "@shared/ipc/socket/frames";
 import {
   isRealBranch,
   type Project,
+  ProjectSchema,
+  RuntimeInfoSchema,
   type Worktree,
   WorktreeSchema,
 } from "@shared/schemas";
@@ -76,11 +88,16 @@ type ControlImpl = {
   // The account's device registry. Empty when signed out.
   listDevices: () => Promise<DeviceInfo[]>;
   thisDeviceId: () => string;
-  // The devices a direct session is established to, the only ones a
-  // call can reach.
-  connectedDeviceIds: () => Promise<readonly string[]>;
-  // For the two asks outside the peer sync seam (peerSync.ts): what a
-  // peer hosts and whether it accepts commands.
+  // This device's own command-access switch: whether the account's
+  // other devices may run commands here.
+  acceptsCommands: () => boolean;
+  // The devices a direct session is established to (the only ones a
+  // call can reach), each with whether it runs this device's commands:
+  // the hub status snapshot's peerAcceptsCommands, the same reading
+  // the app's windows show.
+  directPeers: () => Promise<Readonly<Record<string, boolean>>>;
+  // For the asks outside the peer sync seam (peerSync.ts): what a peer
+  // hosts, and its mirrors.
   peerTransportFor: (deviceId: string) => ClientTransport;
 };
 
@@ -150,27 +167,32 @@ function peersOf(devices: DeviceInfo[], hereId: string): DeviceInfo[] {
   );
 }
 
-const GRANTED = { granted: true };
-
 // Where each peer stands for one repo: the dialogs' three blocks in
 // the dialogs' order (renderer/components/shared/deviceTargets.ts),
-// read fresh off the peers themselves. A read skips the grant ask,
-// since reads are ungated.
+// the checkout read fresh off the peer and the command access off the
+// status snapshot. A read leaves the access out, since reads are
+// ungated.
 async function standingsOf(
   devices: DeviceInfo[],
   identity: string | null,
   { grant }: { grant: boolean },
 ): Promise<ControlDevice[]> {
-  const connected = new Set(await requireImpl().connectedDeviceIds());
+  const direct = await requireImpl().directPeers();
   return Promise.all(
-    devices.map((device) => standingOf(device, identity, connected, grant)),
+    devices.map((device) =>
+      standingOf(device, identity, direct[device.deviceId], grant),
+    ),
   );
 }
 
+// Command access comes first: a send needs it whether or not the device
+// holds the repo (without it, it clones the repo first), and a bring
+// needs both.
 async function standingOf(
   device: DeviceInfo,
   identity: string | null,
-  connected: ReadonlySet<string>,
+  // Undefined when no direct session is established.
+  acceptsCommands: boolean | undefined,
   grant: boolean,
 ): Promise<ControlDevice> {
   const base = {
@@ -179,20 +201,14 @@ async function standingOf(
     platform: device.platform,
   };
   const offline = { ...base, block: "offline" as const };
-  if (!connected.has(device.deviceId)) return offline;
+  if (acceptsCommands === undefined) return offline;
   const transport = requireImpl().peerTransportFor(device.deviceId);
   try {
-    const asked = await within(
-      Promise.all([
-        buildClient(projectsContract, transport).list(),
-        grant
-          ? buildClient(remoteAccessContract, transport).commandAccess()
-          : GRANTED,
-      ]),
+    const projects = await within(
+      buildClient(projectsContract, transport).list(),
       () => null,
     );
-    if (asked === null) return offline;
-    const [projects, access] = asked;
+    if (projects === null) return offline;
     // A null identity never matches: it means this device couldn't
     // tell what repo this is, not "the same unknown repo".
     const held =
@@ -202,12 +218,13 @@ async function standingOf(
             (project) =>
               project.identity === identity && project.pathExists !== false,
           );
-    if (held === undefined) return { ...base, block: "no-project" };
-    return {
-      ...base,
-      projectId: held.id,
-      ...(access.granted ? {} : { block: "no-grant" as const }),
-    };
+    const holding = held === undefined ? {} : { projectId: held.id };
+    if (grant && !acceptsCommands) {
+      return { ...base, ...holding, block: "no-grant" };
+    }
+    return held === undefined
+      ? { ...base, block: "no-project" }
+      : { ...base, ...holding };
   } catch {
     // The session dropped between the roster read and the ask.
     return offline;
@@ -276,7 +293,10 @@ async function candidates(
   return { identity, standings: await standingsOf(asked, identity, { grant }) };
 }
 
-// The one device a transfer goes to or comes from.
+// The one device a send goes to. A device with no checkout of the repo
+// takes it too (it clones the repo first, as the dialogs offer), but
+// only when no device holding the repo could: left unnamed, a send
+// lands where the repo already is.
 async function pickDevice(
   project: Project,
   query: string | undefined,
@@ -284,7 +304,11 @@ async function pickDevice(
   const { identity, standings } = await candidates(project, query, {
     grant: true,
   });
-  const ready = standings.filter((device) => device.block === undefined);
+  const holding = standings.filter((device) => device.block === undefined);
+  const ready =
+    holding.length > 0
+      ? holding
+      : standings.filter((device) => device.block === "no-project");
   if (ready.length === 1) return { identity, target: ready[0] };
   if (ready.length > 1) {
     throw new ControlError(
@@ -362,7 +386,9 @@ function mirrorView(session: MirrorSession, devices: Named[]): ControlMirror {
     localWorktreeId: session.localWorktreeId,
     localRoot: session.localRoot,
     remoteRoot: session.remoteRoot,
-    copySide: mirrorCopyIsRemote(session) ? "remote" : "local",
+    // The session runs on the original's device, so the copy is the
+    // runner's peer.
+    copySide: "remote",
     paused: session.paused,
     status: session.status,
     statusText: session.statusText,
@@ -390,13 +416,12 @@ async function registryOrEmpty(): Promise<DeviceInfo[]> {
   }
 }
 
+// A session and the device running it.
+type Running = { deviceId: string; session: MirrorSession };
+
 // A session a peer runs against one of this device's worktrees, with
 // the peer and the client to drive it through.
-type PeerMirror = {
-  deviceId: string;
-  session: MirrorSession;
-  api: ReturnType<typeof peerMirrorApi>;
-};
+type PeerMirror = Running & { api: ReturnType<typeof peerMirrorApi> };
 
 function peerMirrorApi(deviceId: string) {
   return buildClient(mirrorContract, requireImpl().peerTransportFor(deviceId));
@@ -411,9 +436,9 @@ function peerMirrorApi(deviceId: string) {
 // looked at.
 async function peerMirrors(registry: DeviceInfo[]): Promise<PeerMirror[]> {
   const hereId = requireImpl().thisDeviceId();
-  const connected = new Set(await requireImpl().connectedDeviceIds());
-  const peers = peersOf(registry, hereId).filter((device) =>
-    connected.has(device.deviceId),
+  const direct = await requireImpl().directPeers();
+  const peers = peersOf(registry, hereId).filter(
+    (device) => direct[device.deviceId] !== undefined,
   );
   const found = await Promise.all(
     peers.map(async (device): Promise<PeerMirror[]> => {
@@ -445,9 +470,9 @@ async function peerMirrorOf(
 
 // A peer's session as this device sees it: the runner's view with the
 // two sides swapped, the peer being the other device, and the copy a
-// stop removes local when it is here.
+// stop removes the one here.
 function peerMirrorView(
-  { deviceId, session }: PeerMirror,
+  { deviceId, session }: Running,
   devices: Named[],
 ): ControlMirror {
   return {
@@ -457,15 +482,12 @@ function peerMirrorView(
     localWorktreeId: session.worktreeId,
     localRoot: session.remoteRoot,
     remoteRoot: session.localRoot,
-    copySide:
-      mirrorCopyOf(session, deviceId).deviceId === deviceId
-        ? "remote"
-        : "local",
+    copySide: "local",
   };
 }
 
-// The mirror one of this device's worktrees is part of, original or
-// copy, among the sessions this device runs.
+// The mirror one of this device's worktrees is the original of, among
+// the sessions this device runs (a copy here is a peer's session).
 async function mirrorOf(
   ctx: HandlerContext,
   target: { projectId: string; worktreeId: string },
@@ -512,20 +534,22 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
     devices: async ({ projectId }) => {
       const { here, peers } = await roster();
       if (projectId === undefined) {
-        const connected = await requireImpl().connectedDeviceIds();
+        const direct = await requireImpl().directPeers();
         return {
           thisDevice: here,
           devices: peers.map((device) => ({
             deviceId: device.deviceId,
             name: nameOf(device),
             platform: device.platform,
-            ...(connected.includes(device.deviceId)
+            ...(direct[device.deviceId] !== undefined
               ? {}
               : { block: "offline" as const }),
           })),
         };
       }
-      const identity = await repoIdentityOf(findProjectOrThrow(projectId));
+      const identity = await repoIdentityOf(
+        await findProjectOrThrow(projectId),
+      );
       return {
         thisDevice: here,
         devices: await standingsOf(peers, identity, { grant: true }),
@@ -534,7 +558,7 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
 
     peerWorktrees: async ({ projectId, device }) => {
       const { standings } = await candidates(
-        findProjectOrThrow(projectId),
+        await findProjectOrThrow(projectId),
         device,
         { grant: false },
       );
@@ -565,7 +589,13 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
       );
       const mirror = input.mirror === true;
       if (mirror) {
-        const running = await mirrorOf(ctx, input);
+        // Part of a mirror already: its original (a session run here)
+        // or its copy (a session a peer runs).
+        const own = await mirrorOf(ctx, input);
+        const running =
+          own === undefined
+            ? await peerMirrorOf(input, registryOrEmpty())
+            : { deviceId: requireImpl().thisDeviceId(), session: own };
         if (running !== undefined) {
           return alreadyMirrored(ctx, running, input.device);
         }
@@ -583,6 +613,15 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
         projectId: project.id,
         worktreeId: worktree.id,
         ...choice,
+        ...(target.projectId === undefined
+          ? {
+              cloneInto: await cloneIntoOn(
+                target.deviceId,
+                project,
+                input.cloneInto,
+              ),
+            }
+          : {}),
       };
       if (mirror) {
         const { session, ...sent } = await mirrorHandlers.startTo(payload, ctx);
@@ -596,9 +635,10 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
             ctx,
           ),
         teardown: async () =>
-          syncHandlers.teardownSent(
+          syncHandlers.teardownSource(
             {
-              targetDeviceId: target.deviceId,
+              direction: "send",
+              deviceId: target.deviceId,
               projectId: project.id,
               worktreeId: worktree.id,
             },
@@ -609,10 +649,18 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
     },
 
     bring: async (input, ctx): Promise<ControlTransferResult> => {
-      const project = findProjectOrThrow(input.projectId);
+      const project = await findProjectOrThrow(input.projectId);
       const { identity, standings } = await candidates(project, input.device, {
         grant: true,
       });
+      // A device named that holds no checkout has no worktree to bring
+      // (a send to it would clone the repo there, a bring cannot).
+      if (input.device !== undefined && standings[0]?.block === "no-project") {
+        throw new ControlError(
+          "device-blocked",
+          `"${standings[0].name}" ${BLOCK_REASON["no-project"]}, so it has nothing to bring.`,
+        );
+      }
       const { worktrees, unanswered } = await worktreesOn(standings);
       const found = pickWorktree(worktrees, input.worktree, [
         ...standings.filter((device) => device.block === "offline"),
@@ -650,34 +698,56 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
           worktreeId: found.worktree.id,
         }),
       );
-      const payload = {
-        sourceDeviceId: found.device.deviceId,
-        sourceProjectId: found.projectId,
-        sourceWorktreeId: found.worktree.id,
-        sourceIdentity: identity,
-        branch: found.worktree.branch,
-        worktreeName: pullWorktreeName(found.worktree),
-        ...choice,
-      };
       if (input.mirror === true) {
+        // Mirrored already: the peer's worktree is the copy of a
+        // session run here, or the original of one the peer runs.
         const { sessions } = await mirrorHandlers.list(undefined, ctx);
-        const running = sessions.find(
+        const own = sessions.find(
           (candidate) =>
             candidate.deviceId === found.device.deviceId &&
             candidate.projectId === found.projectId &&
             candidate.worktreeId === found.worktree.id,
         );
+        const running =
+          own === undefined
+            ? (await peerMirrors(await registryOrEmpty())).find(
+                ({ deviceId, session }) =>
+                  deviceId === found.device.deviceId &&
+                  session.localProjectId === found.projectId &&
+                  session.localWorktreeId === found.worktree.id,
+              )
+            : { deviceId: requireImpl().thisDeviceId(), session: own };
         if (running !== undefined) {
           return alreadyMirrored(ctx, running, undefined);
         }
-        const { session, ...pulled } = await mirrorHandlers.start(payload, ctx);
+        const { session, ...pulled } = await mirrorFromPeer(
+          found.device,
+          {
+            projectId: found.projectId,
+            worktreeId: found.worktree.id,
+            ...choice,
+          },
+          ctx,
+        );
         return { ...pulled, device: found.device, copySide: "local", session };
       }
-      const pulled = await syncHandlers.pullWorktree(payload, ctx);
+      const pulled = await syncHandlers.pullWorktree(
+        {
+          sourceDeviceId: found.device.deviceId,
+          sourceProjectId: found.projectId,
+          sourceWorktreeId: found.worktree.id,
+          sourceIdentity: identity,
+          branch: found.worktree.branch,
+          worktreeName: pullWorktreeName(found.worktree),
+          ...choice,
+        },
+        ctx,
+      );
       const sourceRef = {
-        sourceDeviceId: found.device.deviceId,
-        sourceProjectId: found.projectId,
-        sourceWorktreeId: found.worktree.id,
+        direction: "pull" as const,
+        deviceId: found.device.deviceId,
+        projectId: found.projectId,
+        worktreeId: found.worktree.id,
       };
       const source = await settleSource(input.source ?? "keep", {
         shelve: () =>
@@ -713,7 +783,7 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
     // Stops the mirror the worktree is part of, whichever device runs
     // it: a session this device runs is stopped here, one a peer runs
     // against the worktree is stopped through that peer (mirror:stop
-    // is served to peers on the runner's grant). The names are only
+    // is gated on the runner's command-access switch). The names are only
     // for the answer, so the registry is read beside the stop and not
     // after it, once for the peer scan too.
     mirrorStop: async ({ force, ...target }, ctx) => {
@@ -739,16 +809,12 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
       let copyStayed = await stopMirror(() =>
         afar.api.stop({ session: afar.session.session, force }),
       );
-      // A copy the peer could not remove may be the one HERE: the peer
-      // removes it through this device's grant, which need not be on
-      // for a peer this device only asked something of. The session is
-      // gone either way, so this device's own forced delete finishes
-      // what the runner's stop would have.
-      const copy = mirrorCopyOf(afar.session, afar.deviceId);
-      if (
-        copyStayed !== undefined &&
-        copy.deviceId === requireImpl().thisDeviceId()
-      ) {
+      // The copy the peer could not remove is the one HERE: the peer
+      // removes it through this device's command-access switch, which
+      // need not be on for a peer this device only asked something of.
+      // The session is gone either way, so this device's own forced
+      // delete finishes what the runner's stop would have.
+      if (copyStayed !== undefined) {
         const removed = await worktreesHandlers.delete(
           {
             projectId: target.projectId,
@@ -783,39 +849,39 @@ async function stopMirror(run: () => unknown): Promise<string | undefined> {
 // A second "mirror it" for a worktree already mirrored is a question
 // about the first, not a new copy: the transfer would only be refused
 // over the branch or the folder the copy holds. Answered with the
-// running session and its copy, whichever side that is on.
+// running session and its copy, the session's remote side: the peer's
+// worktree for a session run here, this device's for one a peer runs.
 async function alreadyMirrored(
   ctx: HandlerContext,
-  session: MirrorSession,
+  running: Running,
   device: string | undefined,
 ): Promise<ControlTransferResult> {
   const registry = await registryOrEmpty();
-  const view = mirrorView(
-    session,
-    registry.map((entry) => ({
-      deviceId: entry.deviceId,
-      name: nameOf(entry),
-    })),
-  );
+  const names = namesOf(registry);
+  const { session } = running;
+  const ranHere = running.deviceId === requireImpl().thisDeviceId();
+  const view = ranHere
+    ? mirrorView(session, names)
+    : peerMirrorView(running, names);
   if (device !== undefined) {
     // The same reading of a name a fresh start would make.
     const named = matchDevices(registry, device);
-    if (named.length !== 1 || named[0].deviceId !== session.deviceId) {
+    if (named.length !== 1 || named[0].deviceId !== view.device.deviceId) {
       throw new ControlError(
         "device-blocked",
         `This worktree is already mirrored with "${view.device.name}", and a worktree holds one mirror. Stop that one first (sm worktrees unmirror).`,
       );
     }
   }
-  const copy = mirrorCopyIsRemote(session)
+  const copy = ranHere
     ? await peerWorktreeOrUndefined(
         session.deviceId,
         session.projectId,
         session.worktreeId,
       )
     : (
-        await worktreesHandlers.list({ projectId: session.localProjectId }, ctx)
-      ).find((worktree) => worktree.id === session.localWorktreeId);
+        await worktreesHandlers.list({ projectId: session.projectId }, ctx)
+      ).find((worktree) => worktree.id === session.worktreeId);
   if (copy === undefined) {
     // Not a reason to start a second session beside the first.
     throw new ControlError(
@@ -832,6 +898,79 @@ async function alreadyMirrored(
     session: session.session,
     alreadyMirrored: true,
   };
+}
+
+// A mirror of a peer's worktree into this device. The session runs on
+// the device holding the original, so it is the peer's mirror:startTo,
+// asked over its command access, that sends the copy here, and that
+// send lands through THIS device's command access: a device that
+// refuses commands is told so up front, before the peer is asked. The
+// peer's progress comes back as its pushes, keyed by its worktree, and
+// is relayed to the caller.
+async function mirrorFromPeer(
+  device: Named,
+  input: Omit<MirrorStartToPayload, "targetDeviceId">,
+  ctx: HandlerContext,
+) {
+  const { acceptsCommands, peerTransportFor, thisDeviceId } = requireImpl();
+  if (!acceptsCommands()) {
+    throw new ControlError(
+      "device-blocked",
+      `A mirror runs on the device holding the original, so "${device.name}" sends the copy here, and this device doesn't accept commands. Turn command access on for this device (its Devices page in the app), then try again.`,
+    );
+  }
+  const transport = peerTransportFor(device.deviceId);
+  const notify = ctx.notifier(syncContract, "pullProgress");
+  const stopRelay = buildClient(syncContract, transport).pullProgress(
+    (frame) => {
+      const parsed = SyncPullProgressSchema.safeParse(frame);
+      if (parsed.success && parsed.data.sourceWorktreeId === input.worktreeId) {
+        notify(parsed.data);
+      }
+    },
+  );
+  try {
+    return MirrorStartToResultSchema.parse(
+      await buildClient(mirrorContract, transport).startTo({
+        ...input,
+        targetDeviceId: thisDeviceId(),
+      }),
+    );
+  } finally {
+    stopRelay();
+  }
+}
+
+// Where a send clones the repo on a device with no checkout of it, as
+// the dialogs' review defaults it (shared/cloneDestination.ts): the
+// source's own layout with this device's home swapped for the
+// target's, or where the target keeps its repos. `parent` is the
+// caller's pick, a path under this device's home read as the same path
+// under the target's, the way the default is. The target's home and
+// projects are its own answers, over the grant the send needs anyway.
+async function cloneIntoOn(
+  deviceId: string,
+  project: Project,
+  parent: string | undefined,
+): Promise<SyncCloneInto> {
+  const here = homedir();
+  if (parent !== undefined) {
+    return cloneIntoOf(tildify(parent, here), project.path);
+  }
+  const transport = requireImpl().peerTransportFor(deviceId);
+  const [info, projects] = await Promise.all([
+    buildClient(runtimeContract, transport).info(),
+    buildClient(projectsContract, transport).list(),
+  ]);
+  return cloneIntoOf(
+    moveCloneParent({
+      sourcePath: project.path,
+      sourceHome: here,
+      destinationHome: RuntimeInfoSchema.parse(info).homedir,
+      destinationProjects: ProjectSchema.array().parse(projects),
+    }),
+    project.path,
+  );
 }
 
 // Every worktree of the repo that could move, on the peers that hold

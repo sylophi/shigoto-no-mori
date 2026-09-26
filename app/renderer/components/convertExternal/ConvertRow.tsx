@@ -3,7 +3,7 @@ import { WorktreeMoveDetails } from "@/components/shared/WorktreeMoveDetails";
 import { Checkbox } from "@/components/ui/checkbox";
 import { type RowStatus } from "@/components/ui/row-status";
 import { cn } from "@/lib/utils";
-import { tildify } from "@/lib/projectPaths";
+import { tildify } from "@shared/projectPaths";
 import type { Worktree } from "@shared/schemas";
 
 interface ConvertRowProps {

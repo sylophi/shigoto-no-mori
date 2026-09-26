@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import {
   queryOptions,
   useMutation,
@@ -8,12 +7,7 @@ import {
 import { useRouter } from "@tanstack/react-router";
 import type { CloneProjectPayload, Project } from "@shared/schemas";
 import { reorderProjects } from "@shared/reorder";
-import {
-  hostKeyDeviceId,
-  localDeviceId,
-  queryKeys,
-  queryKeysFor,
-} from "@/lib/queryKeys";
+import { hostKeyDeviceId, queryKeysFor } from "@/lib/queryKeys";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import {
   resolveForestScope,
@@ -42,20 +36,6 @@ export function projectsQueryOptions(
 export function useProjects() {
   const scope = useHostScope();
   return useQuery(projectsQueryOptions(scope));
-}
-
-// Refetch the projects list whenever main records a project action, so the
-// usage-sorted sidebar ("most used" / "most recently used") reorders live.
-// Call once at the App root; the subscriber owns its lifecycle.
-export function useWatchProjectUsage(): void {
-  const queryClient = useQueryClient();
-  useEffect(
-    () =>
-      window.api.projects.onUsageBumped(() => {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
-      }),
-    [queryClient],
-  );
 }
 
 export function useAddProject() {
@@ -110,14 +90,9 @@ export function useRemoveProject() {
       // cache: its mounted queries (config, branches, diff, worktree
       // state, ...) would otherwise refetch against the unregistered id
       // on the next focus and each toast an "Unknown project" error.
-      // Either tree: the local one, or the device twin when the
-      // removal ran on a peer.
+      // The pages of the device the removal ran on.
       const { pathname } = router.state.location;
-      const prefix =
-        deviceId === localDeviceId
-          ? `/projects/${id}`
-          : `/devices/${deviceId}/projects/${id}`;
-      if (pathname.startsWith(prefix)) {
+      if (pathname.startsWith(`/devices/${deviceId}/projects/${id}`)) {
         await router.navigate({ to: "/" });
       }
       await queryClient.invalidateQueries({

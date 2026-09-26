@@ -1,8 +1,6 @@
 // The footer's mirror button on a worktree that is part of a mirror,
-// on either side of it: the worktree a session runs on (the copy a
-// "Mirror here" landed, or the original a "Mirror to" was started
-// from), and the worktree at the far end, served to the device running
-// it. One button per mirror, opening the dialog with the running
+// on either side of it: the original a session runs on (on the device
+// holding it), and the copy at the far end, served to that device. One button per mirror, opening the dialog with the running
 // mirror's status, history and controls. The dialog mounts under the
 // RUNNER's scope, so its reads and controls go to the device running
 // the session whichever page this is: the local page, a peer's page
@@ -12,7 +10,7 @@
 // to drive it through.
 import { type ReactNode, useState } from "react";
 import { RefreshCw } from "lucide-react";
-import { mirrorCopyOf, type MirrorSession } from "@shared/ipc/modules/mirror";
+import type { MirrorSession } from "@shared/ipc/modules/mirror";
 import type { Worktree } from "@shared/schemas";
 import {
   type HostApi,
@@ -63,11 +61,10 @@ function MirrorLinkAction({
   // worktree starts closed.
   const [openFor, setOpenFor] = useState<string | null>(null);
   const other = useDeviceName(link.otherDeviceId);
-  // A stop that removed the copy this page is on leaves it the way a
-  // delete does. A page on the other worktree stays.
-  const copy = mirrorCopyOf(session, link.runnerDeviceId);
+  // A stop that removed the copy this page is on (the session's remote
+  // side) leaves it the way a delete does. The original's page stays.
   const pageIsCopy =
-    copy.deviceId === pageDeviceId && copy.worktreeId === worktree.id;
+    session.deviceId === pageDeviceId && session.worktreeId === worktree.id;
   return (
     <>
       <FooterActionButton

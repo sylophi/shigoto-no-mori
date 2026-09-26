@@ -73,11 +73,7 @@ func describeAfterDone(proj project, pt primaryTarget, id worktreeIdentity) (wor
 	if err != nil {
 		return worktreeJSON{}, err
 	}
-	ctx := buildContext{
-		hasRemote:  len(pt.remotes) > 0,
-		primaryRef: pt.primaryRef,
-		shelved:    readShelvedSet(),
-	}
+	ctx := newBuildContext(proj, pt.remotes, pt.primaryRef, nil)
 	for _, freshID := range fresh {
 		if freshID.ID != id.ID {
 			continue

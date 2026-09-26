@@ -4,9 +4,9 @@ import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { paramToSlot } from "@/store/scriptRuns";
 import { ScriptConsoleInner } from "./ScriptConsoleInner";
 
-// A script's console. Serves both the local route and its
-// /devices/$deviceId twin: the worktree list, the run store behind the
-// terminal and the run's PTY all come from the surrounding host scope.
+// A script's console, on any device: the worktree list, the run store
+// behind the terminal and the run's PTY all come from the surrounding
+// host scope.
 export function ScriptConsole() {
   const { scriptKey, worktree, goBack, missing } = useRouteWorktree();
   const slot = paramToSlot(scriptKey);

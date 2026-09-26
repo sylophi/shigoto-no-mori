@@ -49,7 +49,7 @@ async function findRemovedWorktrees(
 ): Promise<RunningScriptWorktree[]> {
   let liveIds: Set<string>;
   try {
-    const identities = await listWorktreeIdentities(project.id, project.path);
+    const identities = await listWorktreeIdentities(project.id);
     liveIds = new Set(identities.map((identity) => identity.id));
   } catch {
     // Unreachable repo, mid-rebase index lock, a transient read error.

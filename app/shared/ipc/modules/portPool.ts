@@ -7,10 +7,10 @@ export const portPoolContract = defineContract("host", {
     "portPool:isActive",
     WorktreeScopedPayloadSchema,
     z.boolean(),
-    { remote: true, mutating: false },
+    { remote: true, gated: false },
   ),
   isInstalled: invoke("portPool:isInstalled", z.void(), z.boolean(), {
     remote: true,
-    mutating: false,
+    gated: false,
   }),
 });

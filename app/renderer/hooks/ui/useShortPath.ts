@@ -4,7 +4,7 @@
 // intrinsic content width) and `truncate` (as a final-floor fallback when
 // even the fully-abbreviated form doesn't fit).
 import { useEffect, useState } from "react";
-import { tildify, tildifyAndShorten } from "@/lib/projectPaths";
+import { tildify, tildifyAndShorten } from "@shared/projectPaths";
 
 const charWidthByFont = new Map<string, number>();
 

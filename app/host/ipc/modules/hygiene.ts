@@ -9,17 +9,13 @@ import {
 
 export const hygieneHandlers: Handlers<typeof hygieneContract> = {
   list: async ({ projectId }) => {
-    const project = findProjectOrThrow(projectId);
+    const project = await findProjectOrThrow(projectId);
     return collectProjectHygiene(project.id, project.path);
   },
 
   diskUsage: async ({ projectId, worktreeId }) => {
-    const project = findProjectOrThrow(projectId);
-    const worktree = await findWorktreeForDisk(
-      project.id,
-      project.path,
-      worktreeId,
-    );
-    return measureWorktreeDisk(project.id, project.path, worktree);
+    const project = await findProjectOrThrow(projectId);
+    const worktree = await findWorktreeForDisk(project.id, worktreeId);
+    return measureWorktreeDisk(project.id, worktree);
   },
 };

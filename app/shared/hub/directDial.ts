@@ -1,24 +1,24 @@
 // Client half of the direct data plane: dial a
 // peer's direct listener, brokered over the device hub. The dialer asks
-// the peer for connect info (direct:connectInfo, a read served
-// pre-grant) over a short-lived hub peer session, then dials the
-// returned candidates, each a complete URL (ws:// interface candidates,
-// the wss:// tunnel endpoint) with its own
+// the peer for its connect info (the hub link's one ask, a single round
+// trip), then dials the returned candidates, each a complete URL
+// (ws:// interface candidates, the wss:// tunnel endpoint) with its own
 // single-use ticket. The result is the SAME DeviceConnection shape the
 // LAN client resolves, so everything downstream (the bridge cache,
 // sync, port-forward) stays transport agnostic.
 //
-// DIAL STRATEGY: one overall deadline around the WHOLE attempt (broker
-// leg included: a wedged peer that never answers connectInfo must not
-// hang the bridge's cached promise forever). All candidate SOCKETS
-// open concurrently, but the HELLOS are serialized: at most one hello
-// is in flight, the next candidate's hello goes out only after the
-// previous handshake failed, and losers whose hello was never sent are
-// closed pre-auth. Serialization is what makes a multi-candidate dial
-// safe against the host's one-authed-socket-per-device supersede rule:
-// with concurrent hellos the SLOWER candidate's hello would land after
-// the winner was cached and supersede-kill the fresh session, so the
-// first invoke on it would reject. An abandoned pre-auth socket is
+// DIAL STRATEGY: one overall deadline around the WHOLE attempt (the ask
+// included: it gets the deadline as its timeout, so a wedged peer that
+// never answers cannot hang the bridge's cached promise forever). All
+// candidate SOCKETS open concurrently, but the HELLOS are serialized:
+// at most one hello is in flight, the next candidate's hello goes out
+// only after the previous handshake failed, and losers whose hello
+// was never sent are closed pre-auth. Serialization is what makes a
+// multi-candidate dial safe against the host's
+// one-authed-socket-per-device supersede rule: with concurrent hellos
+// the SLOWER candidate's hello would land after the winner was cached
+// and supersede-kill the fresh session, so the first invoke on it
+// would reject. An abandoned pre-auth socket is
 // harmless to the host (no ticket spent, nothing superseded), so a
 // junk candidate opening first (Docker bridges, VPN interfaces) costs
 // only its own open, never the race.
@@ -31,63 +31,40 @@
 // hello is read, keys on client IP, and benches whoever dials next
 // even with a perfect ticket.
 //
-// This file used to make that call itself, gating terminality on
-// whether the candidate's hello "was actually sent". That predicate
-// cannot carry the weight. helloSent records that WE WROTE a hello,
-// never that the host READ one -- and against a connection-time
-// lockout close the write almost always wins the race, since the pump
-// hellos on a microtask off the open event while the close arrives an
-// event later. So the single-candidate lockout (a tunnel-only peer:
-// the common case) looked hello-sent, read as a refused ticket, and
-// parked the peer with no timer, while the lockout expired 30s later
-// with no roster transition to unpark on. The close code fixes that at
-// the source.
+// A blocked verdict is terminal, but it does NOT end the race: a
+// refusing far end has proved nothing, and a plaintext LAN address may
+// be held by a squatter, which must not deny a dial the tunnel can
+// still win. The refusal is remembered and decides the attempt only if
+// no candidate wins (at exhaustion or at the deadline).
 //
-// A blocked verdict on a candidate we helloed is terminal, but it does
-// NOT end the race: a refusing far end has proved nothing, and a
-// plaintext LAN address may be held by a squatter, which must not deny
-// a dial the tunnel can still win. The refusal is remembered and
-// decides the attempt only if no candidate wins (at exhaustion or at
-// the deadline). The helloSent gate is also the conservative belt
-// against a peer whose close code cannot be
-// trusted (an old build predating CLOSE_AUTH_LOCKED_OUT): such a
-// blocked-but-never-helloed error retires just that candidate, and if
-// it is the LAST one the exhaustion reject carries it in its transient
-// form (its close code kept, no blocked verdict, its message folded
-// into the per-candidate summary every exhaustion reject names)
-// rather than letting a stale-shaped lockout park the peer. Both
-// halves err toward retrying, which is the safe direction: a redial
-// costs one refused connection, a wrong park costs the peer until the
-// roster round trips.
+// STRUCTURAL VERDICTS: two answers to the ask are facts about the peer
+// rather than failed calls, so they reject typed and terminal
+// (isTerminalDialError) instead of as the plain refusal they arrive
+// as, or eager supervision would redial them on the ladder's cap
+// forever:
 //
-// NO LISTENER AT ALL: a peer whose hub binding serves no broker
-// handler (a web client, "a refuse-all host" by construction) answers
-// every connectInfo req with the no-handler shape. That is a
-// STRUCTURAL fact about the platform on the other end, not a failed
-// call, so it is mapped onto NoDialableCandidateError rather than left
-// as the generic invoke rejection it arrives as: eager supervision
-// would otherwise redial every browser tab in the roster on the
-// ladder's cap forever. Genuine broker failures (hub blip, peer
-// mid-boot, invoke timeout) stay transient, which is why the typed
-// HubNoHandlerError from the link -- not a message match here -- is
-// the discriminator.
+//   - the peer serves no direct listener (a web client, by
+//     construction), answered with NO_LISTENER_CODE.
+//
+// Every other failure of the ask (hub blip, peer mid-boot, timeout, a
+// refusal carrying a plain message, a peer speaking another shape of
+// the wire and so never answering) stays transient.
 //
 // ONE ATTEMPT, NO POLICY: connectDirect is a single dial under a
 // single deadline, and a failure rejects typed with no retry and no
 // memo. Retry lives in exactly one place, the presence-driven keeper
 // (shared/hub/directKeeper.ts), which paces redials on the shared
 // backoff ladder and parks on the terminal verdicts
-// (isTerminalDialError below). Data is direct or nothing: there is no hub fallback behind these failures, the
-// typed rejection IS the outcome the caller surfaces. A second retry
-// owner here (the old per-peer failure memo) would fight the keeper's
-// ladder, so this file deliberately carries none.
+// (isTerminalDialError below). Data is direct or nothing: there is no
+// hub fallback behind these failures, the typed rejection IS the
+// outcome the caller surfaces. A second retry owner here would fight
+// the keeper's ladder, so this file deliberately carries none.
 //
 // Pure browser-global-plus-shared code: no node builtins, no electron,
 // so the direct-plane check drives it headlessly under node (whose
-// global WebSocket serves connectDevice, as in the LAN client checks).
+// global WebSocket serves openDevice).
 import {
   ALL_DIRECT_CANDIDATE_KINDS,
-  candidateUrlMatchesKind,
   MAX_DIRECT_CANDIDATES,
   type DirectCandidate,
   type DirectCandidateKind,
@@ -103,12 +80,14 @@ import {
   type PendingDeviceConnection,
 } from "@shared/ipc/socket/wsClientTransport";
 import { HELLO_TIMEOUT_MS } from "@shared/ipc/socket/frames";
-import { HubNoHandlerError, type HubBrokerSession } from "./link";
+import { HubAskRefusedError, NO_LISTENER_CODE } from "./link";
 
-// The LAN DeviceConnection shape verbatim, so everything downstream of
-// a direct dial (the bridge cache, sync, port-forward) is transport
-// agnostic.
-export type PeerConnection = DeviceConnection;
+// The DeviceConnection shape, so everything downstream of a direct
+// dial (the bridge cache, sync, port-forward) is transport agnostic,
+// plus the one fact the connectInfo answer carried beside the
+// candidates: whether the peer runs this device's commands. The
+// bridge keeps it current from the peer's commandAccessChanged push.
+export type PeerConnection = DeviceConnection & { acceptsCommands: boolean };
 
 export type ConnectPeerOpts = {
   // Called once when an ESTABLISHED direct connection dies on its own
@@ -123,45 +102,27 @@ export type ConnectPeerOpts = {
 // burst.
 const MAX_DIAL_CANDIDATES = MAX_DIRECT_CANDIDATES + 1;
 
-// Thrown when nothing about this pairing is dialable AS A MATTER OF
-// STRUCTURE, so only the peer's own state changing can change the
-// answer. Two shapes reach it:
-//
-//   - the peer advertises candidates but none is a kind THIS platform
-//     can dial (an old host ignoring the caller's declared
-//     dialableKinds and answering lan-only to a browser page). A
-//     kind-aware host filters to the caller's kinds itself and answers
-//     available:false when nothing survives, so this arises only
-//     across version skew.
-//   - the peer serves no broker handler at all (a web client), so it
-//     has no direct listener to advertise and never will while it is
-//     that platform.
-//
-// Typed so a caller can tell "there is nothing here to dial" apart
-// from an ordinary dial failure. The detail says which shape it was,
-// since the keeper surfaces this message as the peer's unavailable
-// reason.
+// The peer serves no direct listener (a web client), so there is
+// nothing to dial and never will be while it is that platform. Typed so
+// a caller can tell "there is nothing here to dial" apart from an
+// ordinary dial failure, and worded for the keeper, which surfaces the
+// message as the peer's unavailable reason.
 export class NoDialableCandidateError extends Error {
-  constructor(
-    deviceId: string,
-    detail = "offers no candidate this platform can dial",
-  ) {
-    super(`peer ${deviceId} ${detail}`);
+  constructor(deviceId: string) {
+    super(`peer ${deviceId} serves no direct listener`);
     this.name = "NoDialableCandidateError";
   }
 }
 
 // True when redialing cannot change the outcome until the peer's own
-// state changes: a blocked verdict whose ticket was provably presented
-// and refused (or the wrong machine answered), or a structural
-// nothing-this-platform-can-dial answer (no dialable kind, or no
-// direct listener served at all). The keeper PARKS on these
-// instead of retrying on the ladder, which is what keeps eager
-// supervision from feeding the host's per-identity failed-auth lockout
-// a steady diet of refused tickets: a parked peer redials only when
-// presence says its state changed (offline to online), never on a
-// timer. Every other failure (unreachable, deadline, no listener yet)
-// is transient and retries forever.
+// state changes: a blocked verdict (a ticket the host read and refused,
+// or the wrong machine answered) or a peer with no direct listener.
+// The keeper PARKS on these instead of retrying on the ladder, which
+// is what keeps eager supervision from feeding the host's per-identity
+// failed-auth lockout a steady diet of refused tickets: a parked peer
+// redials only when presence says its state changed (offline to
+// online), never on a timer. Every other failure (unreachable,
+// deadline, no listener yet) is transient and retries forever.
 export function isTerminalDialError(error: unknown): boolean {
   return (
     (error instanceof RemoteConnectError && error.blocked) ||
@@ -170,14 +131,15 @@ export function isTerminalDialError(error: unknown): boolean {
 }
 
 type DirectDialerDeps = {
-  // Opens the hub broker session for the connectInfo exchange. The
-  // NARROWED session type is the point: it
-  // exposes one typed broker invoke plus close, so this dep cannot be
-  // used to move contract traffic over the device hub even by accident.
-  // The dialer runs only on a bridge cache miss, so no cached session
-  // for this device exists to be superseded, and the temporary session
-  // is closed before the dial result settles either way.
-  connectBroker(deviceId: string): Promise<HubBrokerSession>;
+  // Asks the peer for its connect info over the device hub (the hub
+  // link's one ask), rejecting within timeoutMs. The whole reach this
+  // dialer has into the device hub, so it cannot move contract traffic
+  // there even by accident.
+  askConnectInfo(
+    deviceId: string,
+    input: DirectConnectInfoInput,
+    timeoutMs: number,
+  ): Promise<unknown>;
   // This device's identity, carried in the direct hello alongside the
   // ticket.
   localDeviceId: string;
@@ -186,12 +148,9 @@ type DirectDialerDeps = {
   // deviceId, so the owner can feed the same peerPush path the device
   // hub feeds.
   onAnyPush?: (deviceId: string, channel: string, payload: unknown) => void;
-  // The candidate kinds THIS platform can dial,
-  // declared to the host in the connectInfo input so it only mints
-  // tickets this caller can spend, and applied again at candidate
-  // selection for hosts that predate the input field: a candidate of
-  // any other kind is dropped before the race, its ticket simply
-  // unspent. The web bridge declares ["tunnel"] (a browser page cannot
+  // The candidate kinds THIS platform can dial, declared to the host
+  // in the connectInfo input so it only mints tickets this caller can
+  // spend. The web bridge declares ["tunnel"] (a browser page cannot
   // dial ws:// under https, mixed content), the app takes the default
   // and races everything.
   dialableKinds?: ReadonlyArray<DirectCandidateKind>;
@@ -214,8 +173,8 @@ export type DirectDialer = {
 
 type CandidateFailure = { candidate: DirectCandidate; error: unknown };
 
-// The exhaustion reject: every candidate retired and none refused a
-// hello it had read. Its message names EVERY candidate and how it
+// The exhaustion reject: every candidate retired and none refused its
+// ticket. Its message names EVERY candidate and how it
 // died, because the last candidate's error alone ("closed before
 // welcome (code 1006)") says nothing about which address was even
 // tried, and on a platform whose WebSocket reports no cause a refused
@@ -228,16 +187,8 @@ type CandidateFailure = { candidate: DirectCandidate; error: unknown };
 // Local Network access far more often than a routing problem.
 //
 // Still a RemoteConnectError carrying the last candidate's close code,
-// and NEVER blocked (see BLOCKED VERDICTS in the header). A current
-// host names its lockout on the wire (CLOSE_AUTH_LOCKED_OUT), so
-// nothing blocked should reach here at all: the hello-sent case
-// rejects the attempt early, and a lockout is not blocked in the first
-// place. This is the SKEW belt. An old peer still refuses a locked-out
-// connection with CLOSE_AUTH_FAILED, and if that candidate is the last
-// to retire, its verdict is a temporary bench wearing a permanent
-// verdict's clothes, which the keeper would answer by parking with no
-// timer while the lockout quietly expires. So only the code and the
-// message survive, never the blocked semantics.
+// and never blocked: a blocked failure is the attempt's refusal and
+// rejects in its place (see BLOCKED VERDICTS in the header).
 function exhaustionError(
   deviceId: string,
   failures: readonly CandidateFailure[],
@@ -281,44 +232,52 @@ function exhaustionError(
   );
 }
 
-// A leg abandoned by the deadline may still resolve later. Its
-// session must not linger half-owned, so close it on arrival.
-function closeWhenSettled(promise: Promise<{ close(): void }>): void {
-  promise
-    .then((session) => {
-      session.close();
-    })
-    .catch(() => {
-      // Already failed on its own.
-    });
-}
-
 export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
   // The overall attempt deadline. HELLO_TIMEOUT_MS is the wire's one
   // honest "a handshake should have happened by now" value, and each
-  // leg below (the hub hello, the connectInfo invoke, every
-  // candidate handshake) individually stays under it.
+  // leg below (the ask, every candidate handshake) individually stays
+  // under it.
   const deadlineMs = deps.deadlineMs ?? HELLO_TIMEOUT_MS;
   const now = deps.now ?? Date.now;
-  const dialableKinds = new Set<DirectCandidateKind>(
-    deps.dialableKinds ?? ALL_DIRECT_CANDIDATE_KINDS,
-  );
+  const dialableKinds = [...(deps.dialableKinds ?? ALL_DIRECT_CANDIDATE_KINDS)];
 
   // Open every candidate's socket at once, then hello them one at a
   // time in socket-open order (see the file header for why hellos are
   // serialized). The first successful handshake wins and every other
-  // socket is abandoned pre-auth. `deadline` rejects the race when the
-  // overall budget runs out, and a handshake that resolves after
-  // settlement is closed rather than leaked.
+  // socket is abandoned pre-auth. The race rejects when what is left
+  // of the attempt's budget (remainingMs) runs out, and a handshake that
+  // resolves after settlement is closed rather than leaked.
   function raceCandidates(
     deviceId: string,
     opts: ConnectPeerOpts | undefined,
     candidates: DirectCandidate[],
     remainingMs: number,
-    deadline: Promise<never>,
-  ): Promise<PeerConnection> {
-    return new Promise<PeerConnection>((resolve, reject) => {
+  ): Promise<DeviceConnection> {
+    return new Promise<DeviceConnection>((resolvePromise, rejectPromise) => {
       let done = false;
+      // Out of budget: the remembered refusal if there is one, else the
+      // deadline itself.
+      const deadlineTimer = setTimeout(() => {
+        if (done) return;
+        done = true;
+        settleAll();
+        reject(
+          refusal ??
+            new Error(
+              `direct dial to ${deviceId} exceeded its ${deadlineMs}ms deadline`,
+            ),
+        );
+      }, remainingMs);
+      // Every settlement clears the deadline timer, so a settled race
+      // leaves nothing armed.
+      const resolve = (connection: DeviceConnection): void => {
+        clearTimeout(deadlineTimer);
+        resolvePromise(connection);
+      };
+      const reject = (error: unknown): void => {
+        clearTimeout(deadlineTimer);
+        rejectPromise(error);
+      };
       let winnerIndex = -1;
       let outstanding = candidates.length;
       // Every retired candidate with its error, in retirement order,
@@ -329,8 +288,8 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       // next hello.
       const ready: number[] = [];
       let helloIndex: number | null = null;
-      // The first hello-sent refusal, which decides the attempt only if
-      // no candidate wins.
+      // The first refusal, which decides the attempt only if no
+      // candidate wins.
       let refusal: RemoteConnectError | null = null;
 
       const handles: PendingDeviceConnection[] = candidates.map(
@@ -342,8 +301,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
             // the wire: a candidate address is answered by whoever
             // holds it on the network we happen to be on, so both ends
             // prove possession instead (shared/ipc/socket/proof.ts).
-            token: candidate.ticket,
-            auth: "proof",
+            ticket: candidate.ticket,
             appVersion: deps.localAppVersion,
             localDeviceId: deps.localDeviceId,
             // Identity pin: a welcome from any other deviceId fails
@@ -374,33 +332,21 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       // One settlement per candidate: either its whenOpen rejected
       // (never queued) or its authenticate rejected (its hello turn
       // failed, or its socket died while queued).
-      const failCandidate = (
-        index: number,
-        error: unknown,
-        helloWasSent: boolean,
-      ): void => {
+      const failCandidate = (index: number, error: unknown): void => {
         if (done) return;
-        if (
-          helloWasSent &&
-          error instanceof RemoteConnectError &&
-          error.blocked
-        ) {
+        if (error instanceof RemoteConnectError && error.blocked) {
           // The ticket was refused, or the wrong machine answered.
           // Terminal, but only once the race is over: the far end
           // proved nothing, and on a LAN address it may be a squatter,
           // which must not deny a dial another candidate can win.
           // `blocked` is the host's close code, which tells a refused
-          // credential from its temporary lockout. helloWasSent is the
-          // belt against a peer whose code cannot be trusted.
+          // credential from its temporary lockout.
           refusal ??= error;
         }
         failures.push({ candidate: candidates[index], error });
         outstanding -= 1;
         if (outstanding === 0) {
           done = true;
-          // Without a hello-sent refusal, a blocked verdict among the
-          // failures came from a peer whose close code cannot be
-          // trusted, and is surfaced as transient.
           reject(refusal ?? exhaustionError(deviceId, failures));
         }
       };
@@ -427,7 +373,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
           },
           (error: unknown) => {
             helloIndex = null;
-            failCandidate(index, error, handles[index].helloSent());
+            failCandidate(index, error);
             pump();
           },
         );
@@ -441,144 +387,62 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
             pump();
           },
           (error: unknown) => {
-            failCandidate(index, error, false);
+            failCandidate(index, error);
           },
         );
-      });
-
-      deadline.catch((error: unknown) => {
-        if (done) return;
-        done = true;
-        settleAll();
-        reject(refusal ?? error);
       });
     });
   }
 
-  // One whole attempt under the deadline: broker leg, then the
-  // candidate race.
-  async function runDial(
-    deviceId: string,
-    opts: ConnectPeerOpts | undefined,
-    deadline: Promise<never>,
-    deadlineAt: number,
-  ): Promise<PeerConnection> {
-    // Ask the peer how to dial it. The hub session is the BROKER
-    // SESSION only (one typed invoke, see HubBrokerSession),
-    // temporary by design and closed below (which also tells the host
-    // to drop its session, the bye frame): on success the direct
-    // socket replaces it, on failure the whole attempt rejects and
-    // nothing keeps riding the device hub. When the deadline abandons a
-    // still-pending hello, the late session is closed on arrival
-    // instead of leaking.
-    const brokerPromise = deps.connectBroker(deviceId);
-    let broker: HubBrokerSession;
-    try {
-      broker = await Promise.race([brokerPromise, deadline]);
-    } catch (error) {
-      closeWhenSettled(brokerPromise);
-      throw error;
-    }
-    let info;
-    try {
-      // The invoke itself is raced too: a wedged peer that never
-      // answers is exactly what the deadline exists for, and the
-      // close in the finally rejects the abandoned invoke so nothing
-      // stays pending. The input declares this platform's dialable
-      // kinds so the host mints no ticket we cannot spend. An old host
-      // parses void and ignores it, hence the belt below.
-      const input: DirectConnectInfoInput = {
-        dialableKinds: [...dialableKinds],
-      };
-      info = DirectConnectInfoSchema.parse(
-        await Promise.race([broker.brokerInvoke(input), deadline]),
-      );
-    } catch (error) {
-      // The peer serves no broker handler: it is a refuse-all host (a
-      // web client) with no direct listener to advertise, not a call
-      // that failed. Terminal, so the keeper parks it and waits for
-      // the roster round trip that would follow the peer becoming a
-      // different kind of thing. Every other rejection here (hub
-      // blip, peer mid-boot, the deadline) stays exactly as thrown and
-      // therefore transient.
-      if (error instanceof HubNoHandlerError) {
-        throw new NoDialableCandidateError(
-          deviceId,
-          "serves no direct listener",
-        );
-      }
-      throw error;
-    } finally {
-      broker.close();
-    }
-    const candidates = info.available ? (info.candidates ?? []) : [];
-    if (candidates.length === 0) {
-      // A peer whose listener is down answers available:false, and so
-      // does a kind-aware peer with nothing THIS caller can dial. The
-      // peer is unreachable for data RIGHT NOW, which is not the same
-      // as structurally undialable: its listener may be mid-boot, or
-      // the directConnections opt-out may be flipped back on without
-      // any roster transition to unpark on. So this stays a plain,
-      // transient error and the keeper keeps it on the ladder. (A peer
-      // that serves no handler at all rejects the invoke above and
-      // never reaches here.)
-      throw new Error(`peer ${deviceId} offers no direct listener`);
-    }
-    // Platform capability re-applied at candidate selection (the belt
-    // for hosts that predate the dialableKinds input), plus the
-    // kind-to-scheme invariant, so a candidate that somehow bypassed
-    // the schema is skipped rather than dialed. The fan-out cap keeps
-    // a hostile or buggy answer from dialing an unbounded burst.
-    const dialable = candidates
-      .filter(
-        (candidate) =>
-          dialableKinds.has(candidate.kind) &&
-          candidateUrlMatchesKind(candidate.kind, candidate.url),
-      )
-      .slice(0, MAX_DIAL_CANDIDATES);
-    if (dialable.length === 0) {
-      // The peer is direct-capable, just not from THIS platform (an
-      // old host answering lan-only to a browser page). The typed
-      // error is what lets the keeper treat this DIFFERENTLY from an
-      // ordinary dial failure: it is terminal (isTerminalDialError
-      // below), so the keeper schedules nothing and waits for the
-      // peer's roster round trip, while a plain unreachable retries on
-      // the ladder.
-      throw new NoDialableCandidateError(deviceId);
-    }
-    return raceCandidates(
-      deviceId,
-      opts,
-      dialable,
-      Math.max(1, deadlineAt - now()),
-      deadline,
-    );
-  }
-
+  // One whole attempt under ONE deadline, so the bridge's cached
+  // promise always settles: the ask gets the whole budget as its
+  // timeout, and the candidate race whatever is left of it.
   async function connectDirect(
     deviceId: string,
     opts?: ConnectPeerOpts,
   ): Promise<PeerConnection> {
-    const at = now();
-    // One deadline over the ENTIRE attempt, so the bridge's cached
-    // promise always settles: without it a wedged connectInfo would
-    // park every consumer of this peer behind a promise nothing ever
-    // rejects.
-    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
-    const deadline = new Promise<never>((_resolve, reject) => {
-      deadlineTimer = setTimeout(() => {
-        reject(
-          new Error(
-            `direct dial to ${deviceId} exceeded its ${deadlineMs}ms deadline`,
-          ),
-        );
-      }, deadlineMs);
-    });
+    const deadlineAt = now() + deadlineMs;
+    let answer: unknown;
     try {
-      return await runDial(deviceId, opts, deadline, at + deadlineMs);
-    } finally {
-      clearTimeout(deadlineTimer);
+      // The input declares this platform's dialable kinds so the host
+      // mints no ticket we cannot spend.
+      answer = await deps.askConnectInfo(
+        deviceId,
+        { dialableKinds },
+        deadlineMs,
+      );
+    } catch (error) {
+      // No direct listener to advertise (a web client), not a call
+      // that failed. Terminal, so the keeper parks it until the peer's
+      // roster round trip. Every other rejection stays as thrown:
+      // transient.
+      if (
+        error instanceof HubAskRefusedError &&
+        error.code === NO_LISTENER_CODE
+      ) {
+        throw new NoDialableCandidateError(deviceId);
+      }
+      throw error;
     }
+    const info = DirectConnectInfoSchema.parse(answer);
+    if (!info.available) {
+      // The peer's listener is down, or it has nothing THIS caller can
+      // dial. Unreachable for data RIGHT NOW, which is not the same as
+      // structurally undialable: its listener may be mid-boot, or the
+      // directConnections opt-out may be flipped back on without any
+      // roster transition to unpark on. So this stays a plain,
+      // transient error and the keeper keeps it on the ladder.
+      throw new Error(`peer ${deviceId} offers no direct listener`);
+    }
+    // The fan-out cap keeps a hostile or buggy answer from dialing an
+    // unbounded burst.
+    const connection = await raceCandidates(
+      deviceId,
+      opts,
+      info.candidates.slice(0, MAX_DIAL_CANDIDATES),
+      Math.max(1, deadlineAt - now()),
+    );
+    return { ...connection, acceptsCommands: info.acceptsCommands };
   }
 
   return { connectDirect };
