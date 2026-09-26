@@ -7,7 +7,9 @@ description: Create a Shigoto no Mori worktree for new work. Use when starting a
 sm worktrees create
 ```
 
-Use --base <ref-name> to create a branch from a non-primary ref.
+Use --base <ref-name> to create a branch from a non-primary ref. A new
+layer on top of a stacked worktree is one based on that worktree's branch;
+its PR then targets that branch, and `/sm-land` lands the stack.
 
 **Rename the branch once the purpose of the worktree has been defined.** It starts out named
 after the worktree's random animal name; use `/sm-rename-branch`.

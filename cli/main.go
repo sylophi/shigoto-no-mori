@@ -80,8 +80,9 @@ var worktreeItems = []helpItem{
 		"The PR for the worktree's branch, any state. Errors when the branch has none."},
 	{"worktrees merge [<name>] [-m <method>] [--stack]", "Merge the worktree's PR via gh",
 		"Method follows the repo's settings unless -m overrides. --stack lands the PR and every open PR under it in its stack, bottom first."},
-	{"worktrees land [<name>] [-m <method>] [-f] [--keep-branch]", "Merge the PR, then clean up",
-		"merge + rm in one step (done when landing the primary checkout), fast-forwarding the checkout that has the PR's base branch out in between. An already-merged PR skips straight to cleanup."},
+	{"worktrees land [<name>] [-m <method>] [--stack] [-f] [--keep-branch]", "Merge the PR, then clean up",
+		"merge + rm in one step (done when landing the primary checkout), fast-forwarding the checkout that has the PR's base branch out in between. An already-merged PR skips straight to cleanup. " +
+			"--stack lands the PR with every open PR under it in its stack (merge --stack), then removes every worktree whose branch landed, the lower layers' included; a PR that sits on another open PR is refused without it. The removal guards cover all of them before anything merges."},
 	{"worktrees destination [--name <name>]", "Preview where a new worktree would go",
 		"App plumbing for the create dialog. Nothing is created. The name is --name, or a fresh pick (the one create makes without a name, skipping worktree and local branch names). The path is that folder under the project's worktree layout. --json prints {ok, name, path, taken}, taken meaning the name matches one of the project's worktrees (case-insensitively) or something already exists at the path."},
 	{"worktrees adopt [<name-or-path>] [-f]", "Convert an external worktree to managed",

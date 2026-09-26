@@ -161,3 +161,38 @@ func TestCatchUpBasePullsTheBaseBranchCheckout(t *testing.T) {
 		t.Errorf("v2 worktree moved to %s during the main catch-up", got)
 	}
 }
+
+// A stack land removes the worktrees of the layers that landed and no
+// other: the layer that was merged before, the layers the merge lands
+// now, never the top itself (the plain cleanup takes it), the primary
+// checkout, or a detached checkout parked on a landed branch.
+func TestLandingLayersAndWorktrees(t *testing.T) {
+	chain := []prSummary{
+		{Number: 2, State: "MERGED", HeadRefName: "layer-a", BaseRefName: "main"},
+		{Number: 3, State: "OPEN", HeadRefName: "layer-b", BaseRefName: "layer-a"},
+		{Number: 4, State: "OPEN", HeadRefName: "layer-c", BaseRefName: "layer-b"},
+	}
+	landing := landingLayers(chain, chain[1:])
+	if !landing["layer-a"] || !landing["layer-b"] || landing["layer-c"] {
+		t.Errorf("landingLayers = %v, want layer-a and layer-b only", landing)
+	}
+
+	// A resume: the top is merged, layer-b was left open somehow.
+	resumed := []prSummary{chain[0], chain[1], {Number: 4, State: "MERGED", HeadRefName: "layer-c", BaseRefName: "layer-b"}}
+	if got := landingLayers(resumed, nil); !got["layer-a"] || got["layer-b"] {
+		t.Errorf("landingLayers on resume = %v, want layer-a only", got)
+	}
+
+	self := worktreeIdentity{ID: "c", Name: "c", Branch: "layer-c", Path: "/wt/c"}
+	identities := []worktreeIdentity{
+		{ID: "p", Name: "repo", Branch: "layer-a", Path: "/repo", IsPrimary: true},
+		{ID: "b", Name: "b", Branch: "layer-b", Path: "/wt/b"},
+		{ID: "parked", Name: "parked", Branch: "layer-b", Path: "/wt/parked", Detached: true},
+		self,
+		{ID: "x", Name: "x", Branch: "other", Path: "/wt/x"},
+	}
+	others := landedWorktrees(identities, landing, self)
+	if len(others) != 1 || others[0].ID != "b" {
+		t.Errorf("landedWorktrees = %+v, want just the layer-b worktree", others)
+	}
+}

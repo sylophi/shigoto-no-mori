@@ -287,13 +287,7 @@ func lookupStack(proj project, number int, allowed []string) (stackLookups, erro
 // when it knows the stack, land one PR at a time otherwise. Reports
 // each landed PR through onMerged either way.
 func execMergeStack(proj project, number int, method string, lk stackLookups, onMerged func(prSummary)) error {
-	chain := stackBelow(lk.prs, number, lk.trunk)
-	if chain == nil {
-		return errf("No pull request #%d", number)
-	}
-	chain, err := extendBelow(chain, lk.trunk, func(branch string) (*prSummary, error) {
-		return findPullRequest(proj.Path, branch)
-	})
+	chain, err := stackChain(proj, number, lk)
 	if err != nil {
 		return err
 	}
@@ -301,6 +295,26 @@ func execMergeStack(proj project, number int, method string, lk stackLookups, on
 	if err != nil {
 		return err
 	}
+	return mergeStackSet(proj, number, method, lk, chain, set, onMerged)
+}
+
+// The full chain under `number`, bottom first, ending in that PR: the
+// listing's rows, then the layers that fell off the page. Shared by
+// merge and land, which reads the worktrees to clean up off it.
+func stackChain(proj project, number int, lk stackLookups) ([]prSummary, error) {
+	chain := stackBelow(lk.prs, number, lk.trunk)
+	if chain == nil {
+		return nil, errf("No pull request #%d", number)
+	}
+	return extendBelow(chain, lk.trunk, func(branch string) (*prSummary, error) {
+		return findPullRequest(proj.Path, branch)
+	})
+}
+
+// Lands a resolved set (stackMergeSet of chain) the way the stack
+// allows: GitHub's own merge when it knows the stack, one PR at a time
+// otherwise.
+func mergeStackSet(proj project, number int, method string, lk stackLookups, chain, set []prSummary, onMerged func(prSummary)) error {
 	if lk.ghStack != nil {
 		if err := mergeStackAsync(proj.Path, number, method); err != nil {
 			return err

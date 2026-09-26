@@ -7,17 +7,26 @@ package main
 // when landing the primary checkout itself. A PR that's already merged
 // skips straight to cleanup, so re-running after a partial failure
 // (say a teardown script) resumes where it left off.
+//
+// --stack lands a layer of a stack: the PR with every open PR under it
+// (the sm merge --stack flow), then the cleanup for every worktree
+// whose branch landed, the layers under this one included. Without
+// it, a PR that sits on another open PR is refused: merging it alone
+// would fold it into the layer below, not the trunk, and land would
+// then remove the worktree as if the work had landed.
 
 import (
 	"cmp"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 )
 
 func cmdLand(ctx cliContext, args []string) (int, error) {
 	spec := worktreeTargetSpec()
 	spec.strings["method"] = []string{"m"}
+	spec.bools["stack"] = []string{}
 	addRemoveFlags(spec)
 	parsed, err := parseCmdArgs(args, spec)
 	if err != nil {
@@ -54,30 +63,187 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 	if pr == nil {
 		return 1, errf("No pull request found for branch %s. Push the branch and open a PR first", id.Branch)
 	}
+	if pr.State != "OPEN" && pr.State != "MERGED" {
+		return 1, errf("PR #%d for %s is %s, not open. Reopen it, or clean up with `%s rm %s`",
+			pr.Number, id.Branch, strings.ToLower(pr.State), binaryName, id.Name)
+	}
+	if parsed.bools["stack"] {
+		return landStack(proj, id, pr, methodFlag, allowed, opts)
+	}
+
 	alreadyMerged := pr.State == "MERGED"
 	method := ""
-	switch {
-	case pr.State == "OPEN":
+	if !alreadyMerged {
+		if below, err := stackedUnder(proj, pr); err != nil {
+			return 1, err
+		} else if below != nil {
+			return 1, errf("PR #%d (%s) is stacked on open PR #%d (%s). `%s land --stack` lands both; "+
+				"to merge it into %s alone, `%s merge` then `%s rm %s`",
+				pr.Number, id.Branch, below.Number, below.HeadRefName, binaryName,
+				below.HeadRefName, binaryName, binaryName, id.Name)
+		}
 		method, err = execMerge(proj, pr.Number, methodFlag, allowed)
 		if err != nil {
 			return exitCodeOf(err), err
 		}
-	case alreadyMerged:
-		// Merged on a previous run (or by hand): resume with cleanup.
-	default:
-		return 1, errf("PR #%d for %s is %s, not open. Reopen it, or clean up with `%s rm %s`",
-			pr.Number, id.Branch, strings.ToLower(pr.State), binaryName, id.Name)
 	}
+	reportMerged(pr, method)
+	extra := map[string]any{"merged": mergeResultFields(pr, id.Branch, method)}
+	return landCleanup(proj, id, pr.BaseRefName, opts, extra)
+}
 
-	mergedDoc := mergeResultFields(pr, id.Branch, method)
-	if !jsonMode {
-		if alreadyMerged {
-			note(dimErr(fmt.Sprintf("PR #%d already merged: %s", pr.Number, pr.Title)))
-		} else {
-			out(greenOut(fmt.Sprintf("merged PR #%d (%s): %s", pr.Number, method, pr.Title)))
+// The open PR this PR is based on, or nil when it sits on the trunk
+// (or on a branch with no open PR). One `gh pr list --head` lookup,
+// and only when the base isn't the trunk, so the common land pays
+// nothing. A trunk that can't be resolved skips the check: it's a
+// guard, not the merge.
+func stackedUnder(proj project, pr *prSummary) (*prSummary, error) {
+	pt, err := resolvePrimaryTarget(proj)
+	if err != nil || pr.BaseRefName == "" || pr.BaseRefName == pt.localPrimary {
+		return nil, nil
+	}
+	below, err := findPullRequest(proj.Path, pr.BaseRefName)
+	if err != nil {
+		return nil, err
+	}
+	if below == nil || below.State != "OPEN" {
+		return nil, nil
+	}
+	return below, nil
+}
+
+func reportMerged(pr *prSummary, method string) {
+	if jsonMode {
+		return
+	}
+	if method == "" {
+		note(dimErr(fmt.Sprintf("PR #%d already merged: %s", pr.Number, pr.Title)))
+	} else {
+		out(greenOut(fmt.Sprintf("merged PR #%d (%s): %s", pr.Number, method, pr.Title)))
+	}
+}
+
+// The --stack arm. The removal guards run for every worktree the land
+// will remove before anything merges, like the plain land's own guard:
+// uncommitted work in a lower layer's worktree isn't in the PRs about
+// to land either. An already-merged PR resumes with cleanup, which
+// then covers the layers under it that are merged too.
+func landStack(proj project, id worktreeIdentity, pr *prSummary, methodFlag string, allowed []string, opts removeOptions) (int, error) {
+	lk, err := lookupStack(proj, pr.Number, allowed)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	chain, err := stackChain(proj, pr.Number, lk)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	var set []prSummary
+	method := ""
+	if pr.State == "OPEN" {
+		if set, err = stackMergeSet(chain); err != nil {
+			return exitCodeOf(err), err
+		}
+		if method, err = resolveMergeMethod(proj, methodFlag, lk.allowed); err != nil {
+			return exitCodeOf(err), err
 		}
 	}
 
+	landing := landingLayers(chain, set)
+	identities, err := listWorktreeIdentities(proj)
+	if err != nil {
+		return 1, err
+	}
+	others := landedWorktrees(identities, landing, id)
+	for _, other := range others {
+		if err := removePreflight(other, opts.force); err != nil {
+			return exitCodeOf(err), errf("worktree %s (%s): %s", other.Name, other.Branch, err)
+		}
+	}
+
+	if pr.State == "OPEN" {
+		onMerged := func(p prSummary) {
+			emitOrOut(map[string]any{"event": "merged", "number": p.Number, "branch": p.HeadRefName, "method": method},
+				greenOut(fmt.Sprintf("merged PR #%d (%s): %s", p.Number, method, p.Title)))
+		}
+		if err := mergeStackSet(proj, pr.Number, method, lk, chain, set, onMerged); err != nil {
+			return exitCodeOf(err), err
+		}
+		persistMergeMethod(proj, method)
+	} else {
+		reportMerged(pr, "")
+	}
+
+	// The landed layers, bottom first, and the worktrees removed for
+	// them. The catch-up targets the bottom's base: that is the branch
+	// the stack landed on, not this PR's own base (the layer below).
+	landed := make([]map[string]any, 0, len(chain))
+	for _, layer := range chain {
+		if landing[layer.HeadRefName] || layer.Number == pr.Number {
+			landed = append(landed, map[string]any{
+				"number": layer.Number, "title": layer.Title, "branch": layer.HeadRefName, "url": layer.URL,
+			})
+		}
+	}
+	removed := make([]map[string]any, 0, len(others))
+	stackDoc := map[string]any{"landed": landed, "removed": removed}
+	extra := map[string]any{"merged": mergeResultFields(pr, id.Branch, method), "stack": stackDoc}
+	// The primary checkout is never removed; it stays where the sm done
+	// flow can land it back on the trunk.
+	if !id.IsPrimary && !jsonMode {
+		for _, other := range identities {
+			if other.IsPrimary && landing[other.Branch] {
+				note(dimErr(fmt.Sprintf("the primary checkout is on landed branch %s; `%s done` lands it back on %s",
+					other.Branch, binaryName, chain[0].BaseRefName)))
+			}
+		}
+	}
+	for _, other := range others {
+		if _, err := execRemove(proj, other, opts); err != nil {
+			return landCleanupFailed(err, extra)
+		}
+		removed = append(removed, removedFields(proj, other))
+		stackDoc["removed"] = removed
+		if !jsonMode {
+			out(greenOut("removed " + other.Name))
+		}
+	}
+	return landCleanup(proj, id, chain[0].BaseRefName, opts, extra)
+}
+
+// The head branches of the layers under the landing PR (the chain
+// ends in it) that are landed once the merge is through: the ones
+// merged before, and the ones the merge set lands now. Every other
+// layer refused the merge (a closed one) or wasn't merged (a resume
+// whose lower layer is still open landed nothing there).
+func landingLayers(chain, set []prSummary) map[string]bool {
+	landing := map[string]bool{}
+	for _, layer := range chain[:len(chain)-1] {
+		if layer.State == "MERGED" || slices.ContainsFunc(set, func(p prSummary) bool { return p.Number == layer.Number }) {
+			landing[layer.HeadRefName] = true
+		}
+	}
+	return landing
+}
+
+// The worktrees a stack land removes besides its own: each one on a
+// landed layer's branch, in the order they are listed. The primary
+// checkout stays (the sm done flow is its way back to the trunk), and
+// so does a detached checkout, which is on no branch at all.
+func landedWorktrees(identities []worktreeIdentity, landing map[string]bool, self worktreeIdentity) []worktreeIdentity {
+	var others []worktreeIdentity
+	for _, other := range identities {
+		if landing[other.Branch] && other.ID != self.ID && !other.Detached && !other.IsPrimary {
+			others = append(others, other)
+		}
+	}
+	return others
+}
+
+// The cleanup half of land, after the merge: catch the base branch's
+// checkout up, then remove the worktree, or land the primary checkout
+// back on the primary branch. extra holds the merge fields the final
+// document carries either way.
+func landCleanup(proj project, id worktreeIdentity, base string, opts removeOptions, extra map[string]any) (int, error) {
 	// Landing the primary checkout itself is the sm done flow, minus
 	// its is-it-merged guard, since the merge just happened above.
 	if id.IsPrimary {
@@ -93,11 +259,10 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 		if err != nil {
 			return 1, err
 		}
-		extra := map[string]any{"merged": mergedDoc}
 		// execDone already pulled the primary branch. A PR into another
 		// line still leaves that line's checkout behind.
-		if pr.BaseRefName != "" && pr.BaseRefName != pt.localPrimary {
-			cu := catchUpBase(proj, pt, pr.BaseRefName)
+		if base != "" && base != pt.localPrimary {
+			cu := catchUpBase(proj, pt, base)
 			cu.report()
 			cu.addTo(extra)
 		}
@@ -109,36 +274,38 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 	if pt, err := resolvePrimaryTarget(proj); err != nil {
 		cu.skip = err.Error()
 	} else {
-		cu = catchUpBase(proj, pt, pr.BaseRefName)
+		cu = catchUpBase(proj, pt, base)
 	}
 	cu.report()
+	cu.addTo(extra)
 
 	hint, err := execRemove(proj, id, opts)
 	if err != nil {
-		// The merge already happened; a JSON error document that omitted
-		// it would read as "nothing changed" to the app or an agent.
-		if jsonMode {
-			doc := map[string]any{"ok": false, "merged": mergedDoc}
-			cu.addTo(doc)
-			var ce *cleanupError
-			if errors.As(err, &ce) {
-				doc["cleanupError"] = cleanupErrorDoc(ce)
-			} else {
-				doc["error"] = jsonErrorMessage(err)
-				if kind := errorKindOf(err); kind != "" {
-					doc["code"] = kind
-				}
-			}
-			emit(doc)
-			return 1, nil
-		}
-		return exitCodeOf(err), err
+		return landCleanupFailed(err, extra)
 	}
-
-	extra := map[string]any{"merged": mergedDoc}
-	cu.addTo(extra)
 	reportRemoved(proj, id, hint, extra)
 	return 0, nil
+}
+
+// A cleanup failure after the merge. The JSON document keeps the merge
+// fields: one that omitted them would read as "nothing changed" to the
+// app or an agent.
+func landCleanupFailed(err error, doc map[string]any) (int, error) {
+	if !jsonMode {
+		return exitCodeOf(err), err
+	}
+	doc["ok"] = false
+	var ce *cleanupError
+	if errors.As(err, &ce) {
+		doc["cleanupError"] = cleanupErrorDoc(ce)
+	} else {
+		doc["error"] = jsonErrorMessage(err)
+		if kind := errorKindOf(err); kind != "" {
+			doc["code"] = kind
+		}
+	}
+	emit(doc)
+	return 1, nil
 }
 
 // Outcome of the post-merge catch-up: the checkout pulled and the

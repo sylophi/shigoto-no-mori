@@ -21,6 +21,24 @@ To land a worktree other than the one you are in, pass its name
 If there is no PR, `sm worktrees land` stops. Do not merge by other means: tell
 the user the branch needs a PR first.
 
+**Stacks.** A PR based on another open PR's branch is a layer of a stack
+(`gh stack`, or plain PRs chained by base branch). `sm worktrees land`
+refuses such a PR on its own, since merging it alone would fold it into
+the layer below rather than land it. Land the stack instead:
+
+```sh
+sm worktrees land --stack
+```
+
+That merges the PR with every open PR under it, bottom first (a stack
+GitHub knows about goes through its atomic stack merge), then removes
+every worktree whose branch landed, the lower layers' worktrees included.
+All of them must be clean, or the command stops before anything merges.
+Landing a layer with open layers above it leaves those based on a branch
+that just merged: tell the user, and if the stack is a `gh stack` one,
+run `gh stack sync` in the worktree above. To merge a layer into the
+layer below on purpose, use `sm worktrees merge` and then `sm worktrees rm`.
+
 If the command reports a skipped catch-up, pass the reason on to the
 user.
 
