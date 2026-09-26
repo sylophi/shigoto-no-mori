@@ -5,7 +5,7 @@
 // `sm rm --stack`, so the cleanup is one call per device. The devices
 // are the repo's holders (deviceTargets), their rows the sidebar's own
 // listings under the sidebar's calm refetch, so this costs no extra
-// fetch; and a device is asked only while it can be commanded from
+// fetch. A device is asked only while it can be commanded from
 // here, which its holder entry already says.
 import { useQueries } from "@tanstack/react-query";
 import {

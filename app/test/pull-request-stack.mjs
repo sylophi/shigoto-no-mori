@@ -228,7 +228,7 @@ try {
         "only the merged bottom",
       );
       // By worktree id, off a device's own map and rows, any layer's
-      // worktree names the same cleanup; an unknown id names none.
+      // worktree names the same cleanup. An unknown id names none.
       const byId = stackCleanupForWorktree(merged, rows, "a");
       assert.deepEqual(
         byId.worktrees.map((w) => w.id),

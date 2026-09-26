@@ -150,7 +150,7 @@ interface DeleteWorktreeInput {
 const deleteWorktreeMutationKey = (deviceId: string) =>
   ["delete-worktree", deviceId] as const;
 
-// A single delete names its worktree; a stack removal names the
+// A single delete names its worktree. A stack removal names the
 // worktrees it takes on the device the key is for.
 type DeleteVariables = { worktreeId?: string; worktreeIds?: readonly string[] };
 
@@ -263,7 +263,7 @@ export function useDeleteWorktree() {
 // `sm rm --stack`), and its rows here are forgotten the way a single
 // delete's are. The devices are asked together and the outcome is
 // per device, so a refusal on one (a dirty worktree there) never
-// hides what the others did; the caller decides what to show, since
+// hides what the others did. The caller decides what to show, since
 // the page may have moved on by the time everything answers. Keyed
 // and named like a single delete of the page's device's worktrees,
 // so the host's removal broadcast for them is left to this mutation

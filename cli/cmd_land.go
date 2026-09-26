@@ -80,7 +80,7 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 		if below, err := stackedUnder(proj, pr, pt, ptErr); err != nil {
 			return 1, err
 		} else if below != nil {
-			return 1, errf("PR #%d (%s) is stacked on open PR #%d (%s). `%s land --stack` lands both; "+
+			return 1, errf("PR #%d (%s) is stacked on open PR #%d (%s). `%s land --stack` lands both. "+
 				"to merge it into %s alone, `%s merge` then `%s rm %s`",
 				pr.Number, id.Branch, below.Number, below.HeadRefName, binaryName,
 				below.HeadRefName, binaryName, binaryName, id.Name)
@@ -110,7 +110,7 @@ func reportQueued(pr *prSummary, id worktreeIdentity, method string) (int, error
 		emit(doc)
 	} else {
 		out(greenOut(fmt.Sprintf("queued PR #%d (%s): %s", pr.Number, method, pr.Title)))
-		note(dimErr(fmt.Sprintf("nothing removed yet; run `%s land` again once the queue has merged it", binaryName)))
+		note(dimErr(fmt.Sprintf("nothing removed yet. Run `%s land` again once the queue has merged it", binaryName)))
 	}
 	return 0, nil
 }
@@ -210,7 +210,7 @@ func rmStack(proj project, id worktreeIdentity, opts removeOptions) (int, error)
 	case pr == nil:
 		return 1, errf("No pull request found for branch %s, so no stack to clean up", id.Branch)
 	case pr.State == "OPEN":
-		return 1, errf("PR #%d for %s is still open; `%s land --stack` lands it", pr.Number, id.Branch, binaryName)
+		return 1, errf("PR #%d for %s is still open. `%s land --stack` lands it", pr.Number, id.Branch, binaryName)
 	}
 	// Neither the allowed merge methods nor GitHub's stack object are
 	// needed: nothing merges.
@@ -257,7 +257,7 @@ func planStackCleanup(proj project, id worktreeIdentity, chain, set []prSummary,
 
 // The removals: the other landed worktrees first, then this one
 // through the plain cleanup, whose document carries the landed layers
-// (bottom first; the command's own PR among them only when it merged,
+// (bottom first, the command's own PR among them only when it merged,
 // ownLanded, since rm --stack removes a closed one's worktree too) and
 // the worktrees removed for them. The catch-up targets the bottom's
 // base, the branch the stack landed on, not this PR's own base (the
@@ -278,12 +278,12 @@ func execStackCleanup(proj project, id worktreeIdentity, pr *prSummary, ownLande
 	}
 	extra["stack"] = stackDoc
 	base := plan.chain[0].BaseRefName
-	// The primary checkout is never removed; it stays where the sm done
+	// The primary checkout is never removed. It stays where the sm done
 	// flow can land it back on the trunk.
 	if !id.IsPrimary && !jsonMode {
 		for _, other := range plan.identities {
 			if other.IsPrimary && plan.landing[other.Branch] {
-				note(dimErr(fmt.Sprintf("the primary checkout is on landed branch %s; `%s done` lands it back on %s",
+				note(dimErr(fmt.Sprintf("the primary checkout is on landed branch %s. `%s done` lands it back on %s",
 					other.Branch, binaryName, base)))
 			}
 		}

@@ -317,7 +317,7 @@ func mergeStackedAlone(projectPath string, number int, method string, mergeErr e
 		return false, mergeErr
 	}
 	if lowest, ok := ghStack.lowestOpen(); !ok || lowest != number {
-		return false, errf("PR #%d sits above open pull requests in its GitHub stack; merge the stack instead (`%s merge --stack` or `%s land --stack`)", number, binaryName, binaryName)
+		return false, errf("PR #%d sits above open pull requests in its GitHub stack. Merge the stack instead (`%s merge --stack` or `%s land --stack`)", number, binaryName, binaryName)
 	}
 	return mergeStackAsync(projectPath, number, method)
 }

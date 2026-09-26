@@ -38,10 +38,11 @@ import {
 import {
   getInflightDeleteIds,
   getRunningScriptWorktrees,
+  killScriptsForWorktree,
   withDeleteInflight,
   withDeletesInflight,
 } from "@host/lib/scripts";
-import { listProjectPullRequests } from "@host/lib/githubCli/pullRequests";
+import { refreshProjectPullRequests } from "@host/lib/githubCli/pullRequests";
 import {
   pullRequestStackFor,
   stackCleanupFor,
@@ -192,17 +193,18 @@ export const worktreesHandlers: Handlers<
   },
 
   // The merged layers' worktrees of the stack `worktreeId` is in, as
-  // one removal. The set is read the way the page reads it (the
-  // sidebar's PR map and the listing), so the button's count and the
-  // removal agree; the CLI then resolves the stack against GitHub
-  // itself and removes what it finds landed. Every worktree of the set
-  // is announced and guarded like a single delete, since the one CLI
-  // run takes them all.
-  deleteStack: async ({ projectId, worktreeId, force }, ctx) => {
+  // one removal. The set is read the way the page reads it (the PR map
+  // and the listing), off a fresh sweep of the PRs so it is what the
+  // CLI, which resolves the stack against GitHub itself, finds landed
+  // too. Every worktree of the set is announced and guarded like a
+  // single delete, since the one CLI run takes them all. One the CLI
+  // took past the set (a layer that landed in the moment between) gets
+  // its scripts reaped and its removal announced once it is gone.
+  deleteStack: async ({ projectId, worktreeId, force, skipCleanup }, ctx) => {
     const project = await findProjectOrThrow(projectId);
     const [identities, prs] = await Promise.all([
       listWorktreeIdentities(projectId, { primaryRef: true }),
-      listProjectPullRequests(project.path),
+      refreshProjectPullRequests(project.path),
     ]);
     const own = identities.find((identity) => identity.id === worktreeId);
     if (!own) throw unknownWorktreeError(worktreeId);
@@ -232,12 +234,17 @@ export const worktreesHandlers: Handlers<
         () =>
           deleteStackViaCli(
             project,
-            { worktreeId: cleanup.target.id, force },
+            { worktreeId: cleanup.target.id, force, skipCleanup },
             notifierFor(ctx),
           ),
         (outcome) => outcome.removed,
       );
       removed = result.removed;
+      await Promise.all(
+        removed
+          .filter((id) => !ids.includes(id))
+          .map((id) => killScriptsForWorktree(id)),
+      );
       return result;
     } finally {
       for (const id of ids) {

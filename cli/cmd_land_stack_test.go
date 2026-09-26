@@ -8,7 +8,7 @@ import (
 )
 
 // A gh on PATH that answers from a script: the PR list of a three-layer
-// chain (#2 layer-a, merged; #3 layer-b and #4 layer-c, open, layer-b
+// chain (#2 layer-a merged, #3 layer-b and #4 layer-c open, layer-b
 // posable as merged through GH_LAYER_B_STATE), no
 // GitHub stack for any of them, every merge method allowed, and a
 // mergeable verdict after a retarget. Every invocation is appended to
