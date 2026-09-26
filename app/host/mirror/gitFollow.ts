@@ -158,6 +158,33 @@ function core(state: GitState): GitStateCore {
 
 type Outcome = { applied: true } | { applied: false; reason: string };
 
+// The refs a bundle carries so the receiving side can land a state, and
+// the landing refs to sweep after the apply: the branch when the tip is
+// missing there (a detached tip has no ref to travel under, so that
+// refuses with `detachedReason`), and the index carrier `indexRef` when
+// its commit is missing there too (null otherwise).
+function refsToCarry(
+  head: GitHead,
+  tipMissing: boolean,
+  indexRef: string | null,
+  detachedReason: string,
+): Outcome | { wantRefs: string[]; sweep: string[] } {
+  const wantRefs: string[] = [];
+  const sweep: string[] = [];
+  if (tipMissing) {
+    if (head.kind !== "branch") {
+      return { applied: false, reason: detachedReason };
+    }
+    wantRefs.push(`refs/heads/${head.branch}`);
+    sweep.push(`refs/shigomori/incoming/${head.branch}`);
+  }
+  if (indexRef !== null) {
+    wantRefs.push(indexRef);
+    sweep.push(indexRef);
+  }
+  return { wantRefs, sweep };
+}
+
 export function createGitFollower(deps: {
   sessions: () => FollowableSession[];
   peerSyncApiFor: (deviceId: string) => PeerSyncApi;
@@ -421,29 +448,20 @@ export function createGitFollower(deps: {
     peer: GitState,
     peerHead: GitHead,
   ): Promise<Outcome> {
-    const wantRefs: string[] = [];
-    const sweep: string[] = [];
     const [tipIsLocal, indexCommitIsLocal] = await Promise.all([
       hasCommit(project.path, peer.tip),
       peer.indexCommit === null
         ? true
         : hasCommit(project.path, peer.indexCommit),
     ]);
-    if (!tipIsLocal) {
-      if (peerHead.kind !== "branch") {
-        return {
-          applied: false,
-          reason:
-            "the other device is on a detached HEAD at a commit not present here",
-        };
-      }
-      wantRefs.push(`refs/heads/${peerHead.branch}`);
-      sweep.push(`refs/shigomori/incoming/${peerHead.branch}`);
-    }
-    if (!indexCommitIsLocal) {
-      wantRefs.push(indexRefFor(session.worktreeId));
-      sweep.push(indexRefFor(session.worktreeId));
-    }
+    const carry = refsToCarry(
+      peerHead,
+      !tipIsLocal,
+      indexCommitIsLocal ? null : indexRefFor(session.worktreeId),
+      "the other device is on a detached HEAD at a commit not present here",
+    );
+    if ("applied" in carry) return carry;
+    const { wantRefs, sweep } = carry;
     if (wantRefs.length > 0) {
       await fetchBundleFromPeer(peerSync, {
         sourceProjectId: session.projectId,
@@ -488,23 +506,16 @@ export function createGitFollower(deps: {
     );
     const peerHas = new Set(present);
     const localWorktreeId = session.labels[LABEL_LOCAL_WORKTREE] ?? "";
-    const wantRefs: string[] = [];
-    const sweep: string[] = [];
-    if (!peerHas.has(local.tip)) {
-      if (local.head.kind !== "branch") {
-        return {
-          applied: false,
-          reason:
-            "this worktree is on a detached HEAD at a commit the other device does not have",
-        };
-      }
-      wantRefs.push(`refs/heads/${local.head.branch}`);
-      sweep.push(`refs/shigomori/incoming/${local.head.branch}`);
-    }
-    if (local.indexCommit !== null && !peerHas.has(local.indexCommit)) {
-      wantRefs.push(indexRefFor(localWorktreeId));
-      sweep.push(indexRefFor(localWorktreeId));
-    }
+    const carry = refsToCarry(
+      local.head,
+      !peerHas.has(local.tip),
+      local.indexCommit !== null && !peerHas.has(local.indexCommit)
+        ? indexRefFor(localWorktreeId)
+        : null,
+      "this worktree is on a detached HEAD at a commit the other device does not have",
+    );
+    if ("applied" in carry) return carry;
+    const { wantRefs, sweep } = carry;
     if (wantRefs.length > 0) {
       await pushBundleToPeer(peerSync, {
         localProject: project,

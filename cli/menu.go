@@ -103,10 +103,7 @@ func (m *menuModel) setHeight(height int) {
 	if m.header != "" {
 		overhead++
 	}
-	m.maxRows = height - overhead
-	if m.maxRows < 3 {
-		m.maxRows = 3
-	}
+	m.maxRows = max(height-overhead, 3)
 }
 
 func (m *menuModel) visibleRows() int {

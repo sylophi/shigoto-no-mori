@@ -152,3 +152,19 @@ export async function findProjectAndWorktreeOrThrow(
   );
   return { project, worktree };
 }
+
+// The same preamble for the handlers that only need where the worktree
+// is: the read-only git surface (a diff, a status, a log).
+export async function findWorktreePathOrThrow({
+  projectId,
+  worktreeId,
+}: {
+  projectId: string;
+  worktreeId: string;
+}): Promise<string> {
+  const { worktree } = await findProjectAndWorktreeOrThrow(
+    projectId,
+    worktreeId,
+  );
+  return worktree.path;
+}

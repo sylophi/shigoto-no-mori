@@ -1,6 +1,6 @@
 import { ArrowLeft, FolderSearch, Loader2 } from "lucide-react";
 import { PathSpan } from "@/components/ui/path-span";
-import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { KbdHint } from "@/components/ui/kbd";
 import { IconButton } from "@/components/ui/icon-button";
 
 interface ScanningPanelProps {
@@ -32,10 +32,7 @@ export function ScanningPanel({
         <span>Looking for git repos…</span>
       </div>
       <div className="flex items-center justify-end border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
-        <KbdGroup>
-          <Kbd>Esc</Kbd>
-          <span className="text-muted-foreground/80">Cancel</span>
-        </KbdGroup>
+        <KbdHint keys={["Esc"]} label="Cancel" />
       </div>
     </div>
   );

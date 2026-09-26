@@ -103,7 +103,6 @@ function repositoryOf(modulePath) {
   if (modulePath.startsWith("k8s.io/")) {
     return `https://github.com/kubernetes/${modulePath.slice("k8s.io/".length).split("/")[0]}`;
   }
-  if (modulePath.startsWith("gopkg.in/")) return `https://${modulePath}`;
   return `https://${modulePath}`;
 }
 

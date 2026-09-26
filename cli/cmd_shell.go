@@ -26,6 +26,7 @@ package main
 // and dev flavors can be installed side by side without collisions.
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -47,14 +48,9 @@ func cdDirectiveFile() string { return os.Getenv(cdFileEnv) }
 // or a nested `sm cd` inside a setup script could retarget the outer
 // wrapper and move the user's shell somewhere they never asked for.
 func envWithoutCdFile() []string {
-	env := os.Environ()
-	kept := env[:0]
-	for _, kv := range env {
-		if !strings.HasPrefix(kv, cdFileEnv+"=") {
-			kept = append(kept, kv)
-		}
-	}
-	return kept
+	return slices.DeleteFunc(os.Environ(), func(kv string) bool {
+		return strings.HasPrefix(kv, cdFileEnv+"=")
+	})
 }
 
 var shellKinds = []string{"zsh", "bash", "fish"}
@@ -218,11 +214,7 @@ func hookPath(kind string) string {
 	home, _ := os.UserHomeDir()
 	switch kind {
 	case "zsh":
-		dir := os.Getenv("ZDOTDIR")
-		if dir == "" {
-			dir = home
-		}
-		return filepath.Join(dir, ".zshrc")
+		return filepath.Join(cmp.Or(os.Getenv("ZDOTDIR"), home), ".zshrc")
 	case "bash":
 		// macOS terminals start bash as a *login* shell, which reads
 		// .bash_profile/.bash_login/.profile and never .bashrc, so
@@ -271,25 +263,17 @@ type hookSpan struct {
 }
 
 func findHookSpan(lines []string) (span hookSpan, found, broken bool) {
-	begin := -1
-	for i, line := range lines {
-		if strings.TrimSpace(line) == hookBeginMarker() {
-			begin = i
-			break
-		}
-	}
+	begin := slices.IndexFunc(lines, func(line string) bool {
+		return strings.TrimSpace(line) == hookBeginMarker()
+	})
 	if begin < 0 {
 		return hookSpan{}, false, false
 	}
 	for i := begin + 1; i < len(lines); i++ {
 		if strings.TrimSpace(lines[i]) == hookEndMarker() {
-			ours := true
-			for _, inner := range lines[begin+1 : i] {
-				if !hookLineOurs(inner) {
-					ours = false
-					break
-				}
-			}
+			ours := !slices.ContainsFunc(lines[begin+1:i], func(inner string) bool {
+				return !hookLineOurs(inner)
+			})
 			return hookSpan{begin: begin, end: i, ours: ours}, true, false
 		}
 	}

@@ -43,20 +43,15 @@
 // test/sync-transfer.mjs: what separates them is the direct wire.
 // Runs under test/lib/register-ts-alias.mjs. Run: pnpm test control.
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
 import {
   existsSync,
-  mkdtempSync,
   readFileSync,
-  realpathSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { createConnection } from "node:net";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { buildClient } from "@shared/ipc/buildClient";
 import { controlContract } from "@shared/ipc/modules/control";
 import {
@@ -69,7 +64,6 @@ import { remoteAccessContract } from "@shared/ipc/modules/remoteAccess";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
-import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { controlHandlers, setControlImpl } from "@host/ipc/modules/control";
 import { setMirrorImpl } from "@host/ipc/modules/mirror";
 import { projectsHandlers } from "@host/ipc/modules/projects";
@@ -81,47 +75,19 @@ import {
 } from "@host/ipc/modules/worktrees";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
-import { initDataDirAt } from "@host/lib/util/paths";
 import {
   CONTROL_FILE_NAME,
   createControlServer,
 } from "../main/core/control/server.ts";
-import {
-  cliFailureMessage,
-  createCliRunner,
-  makeProof,
-  makeTracker,
-  repoRoot,
-  scrubbedGitEnv,
-} from "./lib/checkKit.mjs";
+import { makeProof, makeTracker } from "./lib/checkKit.mjs";
+import { cliSandbox } from "./lib/cliSandbox.mjs";
 import { bootDirectWire } from "./lib/directBoot.mjs";
 
-const execFileP = promisify(execFile);
-const cliDir = join(repoRoot, "cli");
-
-const sandbox = realpathSync(mkdtempSync(join(tmpdir(), "sm-control-check-")));
-const dataDir = join(sandbox, "data");
-const smBinary = join(sandbox, "sm");
+const fixture = cliSandbox("sm-control-check-");
+const { sandbox, dataDir, git, gitOut, runCli, sm } = fixture;
+const { addWorktree, projectIdOf } = fixture;
 const controlFile = join(dataDir, CONTROL_FILE_NAME);
 
-for (const key of Object.keys(process.env)) {
-  if (key.startsWith("GIT_")) delete process.env[key];
-}
-Object.assign(process.env, scrubbedGitEnv(), {
-  GIT_AUTHOR_NAME: "t",
-  GIT_AUTHOR_EMAIL: "t@t",
-  GIT_COMMITTER_NAME: "t",
-  GIT_COMMITTER_EMAIL: "t@t",
-});
-const baseEnv = { ...process.env };
-const smEnv = { ...baseEnv, SHIGOMORI_DATA_DIR: dataDir };
-
-async function git(cwd, args) {
-  return execFileP("git", args, { cwd, env: baseEnv });
-}
-const gitOut = async (cwd, ...args) => (await git(cwd, args)).stdout.trim();
-
-const { runCli, sm } = createCliRunner(smBinary, smEnv);
 const { ok, done, fail } = makeProof("control proof");
 
 // The final {ok} document of a run, and its progress events.
@@ -247,33 +213,17 @@ function fakeMirrorEngine() {
 async function main() {
   console.log("control proof\n");
 
-  await execFileP("go", ["build", "-o", smBinary, "."], {
-    cwd: cliDir,
-    env: baseEnv,
-  });
+  await fixture.buildSm();
 
   // Source repo (this device, B) and its clone (the peer, A), one repo
   // identity between them.
   const sourceRepo = join(sandbox, "source");
   await git(sandbox, ["init", "-q", "-b", "main", "source"]);
-  await git(sourceRepo, ["config", "gc.auto", "0"]);
-  await git(sourceRepo, ["config", "maintenance.auto", "false"]);
-  writeFileSync(join(sourceRepo, "readme.txt"), "base\n");
-  await git(sourceRepo, ["add", "-A"]);
-  await git(sourceRepo, ["commit", "-qm", "base"]);
+  await fixture.disableAutoGc(sourceRepo);
+  await fixture.commitFile(sourceRepo, "readme.txt", "base\n", "base");
   const targetRepo = join(sandbox, "target");
   await git(sandbox, ["clone", "-q", "--", sourceRepo, "target"]);
-  await git(targetRepo, ["config", "gc.auto", "0"]);
-  await git(targetRepo, ["config", "maintenance.auto", "false"]);
-
-  const addWorktree = async (repo, name, branch, file) => {
-    const path = join(sandbox, name);
-    await git(repo, ["worktree", "add", "-q", "-b", branch, path]);
-    writeFileSync(join(path, file), `${branch}\n`);
-    await git(path, ["add", "-A"]);
-    await git(path, ["commit", "-qm", branch]);
-    return path;
-  };
+  await fixture.disableAutoGc(targetRepo);
   const sendPath = await addWorktree(
     sourceRepo,
     "wt-send",
@@ -306,16 +256,7 @@ async function main() {
   // What `mirror --from` copies here.
   const inPath = await addWorktree(sourceRepo, "wt-in", "feat-in", "i.txt");
 
-  initDataDirAt(dataDir);
-  setCliRunnerImpl({
-    runCli,
-    requireCliBinary: () => smBinary,
-    cliFailureMessage,
-  });
-  const projectIdOf = async (path) => {
-    const result = await sm("projects", "add", "--", path);
-    return result.docs.findLast((doc) => typeof doc.id === "string").id;
-  };
+  fixture.useCli();
   // Target first: the peer's identity scan takes the first registry
   // match, which must be the peer's own checkout.
   const targetProjectId = await projectIdOf(targetRepo);
@@ -339,18 +280,12 @@ async function main() {
   const { track, teardown } = makeTracker();
   try {
     const { listener, peerA } = await bootDirectWire(track, {
-      registerHandlers: (binding) => {
-        const opts = { validateOutputs: true, onUsageTracked: () => {} };
-        registerContract(syncContract, syncHandlers, binding, opts);
-        registerContract(worktreesContract, worktreesHandlers, binding, opts);
-        registerContract(projectsContract, projectsHandlers, binding, opts);
-        registerContract(
-          remoteAccessContract,
-          remoteAccessHandlers,
-          binding,
-          opts,
-        );
-      },
+      contracts: [
+        [syncContract, syncHandlers],
+        [worktreesContract, worktreesHandlers],
+        [projectsContract, projectsHandlers],
+        [remoteAccessContract, remoteAccessHandlers],
+      ],
     });
     setPeerSyncApiImpl({
       syncApiFor: () => buildClient(syncContract, peerA.transport),
@@ -918,8 +853,4 @@ async function main() {
   done();
 }
 
-main()
-  .catch(fail)
-  .finally(() => {
-    rmSync(sandbox, { recursive: true, force: true });
-  });
+main().catch(fail).finally(fixture.remove);

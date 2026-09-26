@@ -1,6 +1,5 @@
-import { useNavigate } from "@tanstack/react-router";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useHostScope } from "@/hooks/remote/useHostScope";
+import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
 import { usePortPoolActive } from "@/hooks/ports/usePortPoolActive";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
@@ -15,10 +14,9 @@ interface ScriptsSectionProps {
 }
 
 export function ScriptsSection({ worktree }: ScriptsSectionProps) {
-  const navigate = useNavigate();
   // The rows run on whichever device the scope names (see
   // useScriptRunner). Only the local-page CTA below gates on the scope.
-  const { remote } = useHostScope();
+  const { remote, toProjectPage } = useProjectNav();
   const { data: config, isLoading: configLoading } = useShigomoriConfig(
     worktree.projectId,
   );
@@ -30,12 +28,6 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
     worktree.projectId,
     worktree.id,
   );
-
-  const goConfigure = () =>
-    void navigate({
-      to: "/projects/$projectId/configure",
-      params: { projectId: worktree.projectId },
-    });
 
   if (configLoading || pkgLoading) {
     return (
@@ -113,7 +105,7 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
           // Configure is a local page, so the CTA only exists locally.
           <button
             type="button"
-            onClick={goConfigure}
+            onClick={() => toProjectPage("configure", worktree.projectId)}
             className="text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
             Configure setup or teardown scripts →

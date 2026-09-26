@@ -15,16 +15,13 @@ import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { makeProof, sandboxGit, scrubbedGitEnv } from "./lib/checkKit.mjs";
+import { scrubProcessGitEnv, tempDir } from "./lib/checkKit.mjs";
 
 // The pull runs git under this process's environment. The pre-commit
 // hook's GIT_* variables would point that git at the commit in
 // progress, so they go before anything is imported.
 const gitEnv = scrubbedGitEnv();
-for (const key of Object.keys(process.env)) {
-  if (key.startsWith("GIT_")) delete process.env[key];
-}
-process.env.GIT_CONFIG_GLOBAL = "/dev/null";
-process.env.GIT_CONFIG_SYSTEM = "/dev/null";
+scrubProcessGitEnv();
 
 const { initDataDirAt } = await import("../host/lib/util/paths.ts");
 const { isAutoPull, readAutoPullSet, setAutoPull, dropAutoPull } =
@@ -43,8 +40,7 @@ initDataDirAt(dataDir);
 // A bare origin, a "project" clone whose main follows origin/main, and
 // a second clone that plays the colleague pushing new commits.
 function makeSandbox(track) {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "sm-auto-pull-")));
-  track(() => rmSync(root, { recursive: true, force: true }));
+  const root = tempDir("sm-auto-pull-", track);
   const origin = join(root, "origin.git");
   git(root, "init", "--bare", "-b", "main", origin);
   // init + remote rather than a clone of the empty origin, which git

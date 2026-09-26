@@ -5,6 +5,7 @@ package main
 // --json consumers and the future app-as-CLI-caller read one format.
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -109,13 +110,12 @@ func buildWorktree(proj project, id worktreeIdentity, ctx buildContext) worktree
 		unpushed int
 		wg       sync.WaitGroup
 	)
-	wg.Add(5)
 	// Display probe: an unreadable status just shows as 0 changes.
-	go func() { defer wg.Done(); changes, _ = getWorkingTreeChanges(id.Path) }()
-	go func() { defer wg.Done(); commits = listCommits(id.Path, 0, recentCommitsCount) }()
-	go func() { defer wg.Done(); rs = getRemoteSync(id.Path) }()
-	go func() { defer wg.Done(); primary = getPrimaryRelation(id, ctx) }()
-	go func() { defer wg.Done(); unpushed = getUnpushedCount(id.Path) }()
+	wg.Go(func() { changes, _ = getWorkingTreeChanges(id.Path) })
+	wg.Go(func() { commits = listCommits(id.Path, 0, recentCommitsCount) })
+	wg.Go(func() { rs = getRemoteSync(id.Path) })
+	wg.Go(func() { primary = getPrimaryRelation(id, ctx) })
+	wg.Go(func() { unpushed = getUnpushedCount(id.Path) })
 	wg.Wait()
 	return worktreeJSON{
 		ID:                id.ID,
@@ -139,7 +139,26 @@ func buildWorktree(proj project, id worktreeIdentity, ctx buildContext) worktree
 		IsExternal:        id.IsExternal,
 		Detached:          id.Detached,
 		Shelved:           shelvedFlag(id, ctx),
+		ProjectName:       proj.Name,
 	}
+}
+
+// A new slice holding the items first accepts, then the rest, each
+// group in its original order. items itself is never reordered (the
+// identity list is memoized).
+func partitionStable[T any](items []T, first func(T) bool) []T {
+	out := make([]T, 0, len(items))
+	for _, item := range items {
+		if first(item) {
+			out = append(out, item)
+		}
+	}
+	for _, item := range items {
+		if !first(item) {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 // Primary first, matching the app's sidebar ordering.
@@ -149,26 +168,11 @@ func listWorktrees(proj project) ([]worktreeJSON, error) {
 		return nil, err
 	}
 	ctx := loadBuildContext(proj)
-	ordered := make([]worktreeIdentity, 0, len(identities))
-	for _, id := range identities {
-		if id.IsPrimary {
-			ordered = append(ordered, id)
-		}
-	}
-	for _, id := range identities {
-		if !id.IsPrimary {
-			ordered = append(ordered, id)
-		}
-	}
+	ordered := partitionStable(identities, func(id worktreeIdentity) bool { return id.IsPrimary })
 	results := make([]worktreeJSON, len(ordered))
 	var wg sync.WaitGroup
 	for i, id := range ordered {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			results[i] = buildWorktree(proj, id, ctx)
-			results[i].ProjectName = proj.Name
-		}()
+		wg.Go(func() { results[i] = buildWorktree(proj, id, ctx) })
 	}
 	wg.Wait()
 	return results, nil
@@ -241,10 +245,7 @@ func createWorktree(proj project, requestedName, branchName, base string, checko
 			return worktreeJSON{}, err
 		}
 	} else {
-		branch := strings.TrimSpace(branchName)
-		if branch == "" {
-			branch = name
-		}
+		branch := cmp.Or(strings.TrimSpace(branchName), name)
 		if err := gitWorktreeAdd(proj.Path, worktreePath, branch, base); err != nil {
 			return worktreeJSON{}, err
 		}
@@ -257,9 +258,7 @@ func createWorktree(proj project, requestedName, branchName, base string, checko
 	}
 	for _, id := range fresh {
 		if id.Path == worktreePath {
-			w := buildWorktree(proj, id, loadBuildContext(proj))
-			w.ProjectName = proj.Name
-			return w, nil
+			return buildWorktree(proj, id, loadBuildContext(proj)), nil
 		}
 	}
 	return worktreeJSON{}, errors.New("worktree disappeared after creation")

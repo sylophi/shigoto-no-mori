@@ -13,11 +13,7 @@ import (
 )
 
 func cmdPr(ctx cliContext, args []string) (int, error) {
-	parsed, err := parseCmdArgs(args, worktreeTargetSpec())
-	if err != nil {
-		return exitCodeOf(err), err
-	}
-	target, err := resolveWorktreeArgs(ctx, parsed, true)
+	_, target, err := parseWorktreeArgs(ctx, args, worktreeTargetSpec(), true)
 	if err != nil {
 		return exitCodeOf(err), err
 	}

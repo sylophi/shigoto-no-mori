@@ -54,7 +54,7 @@ type Row = ExtraRow & {
 // A row the run only sometimes has.
 const rowIf = (listed: boolean, row: Row): Row[] => (listed ? [row] : []);
 
-type Props = {
+export type PullProgressProps = {
   frame: SyncPullProgress | null;
   // The create phases the run has reported (usePullProgress).
   phasesSeen: ReadonlySet<CreatePhase>;
@@ -95,7 +95,7 @@ type Props = {
 
 // The create's rows read the destination's project while the dialog
 // sits under the source's scope, so the view re-pins itself.
-export function PullProgress(props: Props) {
+export function PullProgress(props: PullProgressProps) {
   return (
     <DestinationScope>
       <ProgressView {...props} />
@@ -122,7 +122,7 @@ function ProgressView({
   progressLabel = "Transplant progress",
   landing = LANDS_HERE,
   phasesReported = true,
-}: Props) {
+}: PullProgressProps) {
   // The two ends as the devices they are: the dialog sits under the
   // source's scope and the destination provider names where it lands
   // (this machine unless a peer was picked).

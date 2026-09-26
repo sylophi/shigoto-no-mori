@@ -22,40 +22,31 @@ export function UpdateAllButton({
   const confirm = useConfirmTwice(CONFIRM_QUICK_MS);
   const count = Object.keys(updates).length;
   if (count < 2) return null;
-  const title = `Restart ${count} devices into their updates`;
-  const onClick = () => confirm.trigger(() => install.mutate());
-  const content = (
-    <>
-      {install.isPending ? (
-        <Loader2 aria-hidden className="size-3 animate-spin" />
-      ) : (
-        <RefreshCw aria-hidden className="size-3" />
-      )}
-      {confirm.armed ? "Click again to confirm" : "Update all"}
-    </>
-  );
+  const common = {
+    disabled: install.isPending,
+    "aria-pressed": confirm.armed,
+    title: `Restart ${count} devices into their updates`,
+    onClick: () => confirm.trigger(() => install.mutate()),
+    children: (
+      <>
+        {install.isPending ? (
+          <Loader2 aria-hidden className="size-3 animate-spin" />
+        ) : (
+          <RefreshCw aria-hidden className="size-3" />
+        )}
+        {confirm.armed ? "Click again to confirm" : "Update all"}
+      </>
+    ),
+  };
   return chip ? (
-    <ChipButton
-      disabled={install.isPending}
-      aria-pressed={confirm.armed}
-      title={title}
-      onClick={onClick}
-      className="shrink-0 py-1.5"
-    >
-      {content}
-    </ChipButton>
+    <ChipButton {...common} className="shrink-0 py-1.5" />
   ) : (
     <Button
-      disabled={install.isPending}
-      aria-pressed={confirm.armed}
-      title={title}
-      onClick={onClick}
+      {...common}
       variant="ghost"
       size="xs"
       // The group label's own type size, so the pair reads as one line.
       className="-my-0.5 h-5 gap-1 px-1.5 text-3xs text-muted-foreground/80 [&_svg]:size-2.5"
-    >
-      {content}
-    </Button>
+    />
   );
 }

@@ -12,7 +12,6 @@
 // adapter, and everything account flavored (deviceId, appVersion,
 // accountId, the credential-backed ticket mint) arrives through
 // HubConnectOpts.
-import type { ChannelMux } from "@shared/ipc/socket/channels";
 import { errorMessageOf } from "@shared/errors";
 import { isDeviceRevoked, isHubRefusal } from "@shared/account/service";
 import {
@@ -23,10 +22,7 @@ import {
   createHeartbeat,
   type HeartbeatOptions,
 } from "@shared/ipc/socket/heartbeat";
-import {
-  type DeviceConnection,
-  RemoteConnectError,
-} from "@shared/ipc/socket/wsClientTransport";
+import { RemoteConnectError } from "@shared/ipc/socket/wsClientTransport";
 import {
   createHubLink,
   type HubBroker,
@@ -50,6 +46,7 @@ import {
   type CloseClassifier,
   type ConnectFn,
   createSupervisor,
+  type SupervisedConnection,
   type Supervisor,
   type SupervisorStatus,
 } from "@shared/remote/supervisor";
@@ -64,20 +61,6 @@ const ACCEPT_TIMEOUT_MS = HELLO_TIMEOUT_MS;
 // One dialed hub socket as the platform adapter exposes it to the
 // core. The adapter owns the platform WebSocket and its event wiring,
 // the core owns everything above it.
-// The device hub carries JSON frames only, so the DeviceConnection
-// shape's byte channels (shared/ipc/socket/channels.ts) are a refusal
-// here: attaching one is a caller bug, not a wire condition.
-const hubNoChannels: ChannelMux = {
-  attach: () => {
-    throw new Error("the device hub carries no byte channels");
-  },
-  handleFrame: () => false,
-  has: () => false,
-  size: () => 0,
-  closeAll: () => {},
-  dropAll: () => {},
-};
-
 export type HubSocketAdapter = {
   // Writes one text message. Throws when the socket is unusable (the
   // adapters throw HubLinkDownError before the socket is open), and
@@ -189,7 +172,7 @@ export function createHubConnectionCore(
   // The established connection as the supervisor reports it (null the
   // moment it is lost or torn down), so probe() reaches exactly the
   // live socket.
-  let live: DeviceConnection | null = null;
+  let live: SupervisedConnection | null = null;
   let current: { supervisor: Supervisor; opts: HubConnectOpts } | null = null;
   let socketStatus: SupervisorStatus = { phase: "idle" };
   // The in-flight dial's cancel handle, so stop() can abort a dial that
@@ -207,13 +190,15 @@ export function createHubConnectionCore(
   // One connect attempt: mint a fresh ticket, dial the DO, and treat
   // the FIRST PRESENCE envelope as the accept signal (the DO sends it
   // right after accepting, and a rejected ticket never gets one, only
-  // a close). The resolved DeviceConnection satisfies the supervisor's
+  // a close). The resolved connection satisfies the supervisor's
   // shape, with empty remote identity because the DO speaks no sm
-  // welcome.
+  // welcome. It has no byte channels and no sm transport of its own:
+  // the device hub carries JSON frames only (byte channels exist only
+  // on direct sockets), and peer brokering goes through connectBroker.
   function dial(
     opts: HubConnectOpts,
     onClose: (code: number | null) => void,
-  ): Promise<DeviceConnection> {
+  ): Promise<SupervisedConnection> {
     return new Promise((resolve, reject) => {
       const dialAbort = new AbortController();
       pendingDialAbort = dialAbort;
@@ -347,23 +332,6 @@ export function createHubConnectionCore(
               link = nextLink;
               heartbeat.start();
               resolve({
-                // No binary lane on the device hub either: byte
-                // channels exist only on direct sockets.
-                channels: hubNoChannels,
-                transport: {
-                  // The hub socket carries no direct sm transport
-                  // of its own. Peer brokering goes through
-                  // connectBroker, so this seam only satisfies the
-                  // shared DeviceConnection shape the supervisor
-                  // expects.
-                  invoke: () =>
-                    Promise.reject(
-                      new Error(
-                        "the hub socket has no direct transport, use connectBroker",
-                      ),
-                    ),
-                  subscribe: () => () => {},
-                },
                 close: () => {
                   ownerClosed = true;
                   dead = true;
@@ -456,16 +424,8 @@ export function createHubConnectionCore(
   }
 
   function startNow(opts: HubConnectOpts): void {
-    const connect: ConnectFn = (connectOpts) => dial(opts, connectOpts.onClose);
+    const connect: ConnectFn = (onClose) => dial(opts, onClose);
     const supervisor = createSupervisor({
-      // The params satisfy the supervisor's LAN-oriented shape. Only
-      // url is meaningful here, and the token is empty by design.
-      params: {
-        url: opts.hubUrl,
-        token: "",
-        appVersion: opts.appVersion,
-        localDeviceId: opts.deviceId,
-      },
       connect,
       classifyClose: hubCloseClassifier,
       onStatus: (next) => {

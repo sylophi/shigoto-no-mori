@@ -6,10 +6,12 @@ import { portsContract } from "@shared/ipc/modules/ports";
 import type { Handlers } from "@shared/ipc/types";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import { readWorktreeData } from "@host/lib/config/project";
-import { findWorktreeIdentityOrThrow } from "@host/lib/git/worktrees";
 import { isLoopbackPortListening } from "@host/lib/net";
 import { isPortPoolActive, poolPortsFor } from "@host/lib/portPool";
-import { findProjectOrThrow } from "@host/lib/projects";
+import {
+  findProjectOrThrow,
+  findWorktreePathOrThrow,
+} from "@host/lib/projects";
 import { ttlMapCache } from "@host/lib/util/ttlCache";
 
 // A loopback dial answers in microseconds when something listens and
@@ -27,13 +29,7 @@ const pathCache = ttlMapCache<string, string>(
   PATH_CACHE_TTL_MS,
   async (key) => {
     const [projectId, worktreeId] = key.split(":") as [string, string];
-    const project = findProjectOrThrow(projectId);
-    const worktree = await findWorktreeIdentityOrThrow(
-      project.id,
-      project.path,
-      worktreeId,
-    );
-    return worktree.path;
+    return findWorktreePathOrThrow({ projectId, worktreeId });
   },
 );
 

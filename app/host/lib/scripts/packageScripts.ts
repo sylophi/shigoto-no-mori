@@ -36,15 +36,9 @@ async function detectPackageManager(cwd: string): Promise<PackageManager> {
 export async function readPackageScriptNames(
   cwd: string,
 ): Promise<Record<string, string> | null> {
-  let raw: string;
-  try {
-    raw = await readFile(join(cwd, "package.json"), "utf8");
-  } catch {
-    return null;
-  }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(await readFile(join(cwd, "package.json"), "utf8"));
   } catch {
     return null;
   }

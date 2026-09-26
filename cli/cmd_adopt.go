@@ -15,11 +15,7 @@ import "strings"
 func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	spec := worktreeTargetSpec()
 	spec.bools["force"] = []string{"f"}
-	parsed, err := parseCmdArgs(args, spec)
-	if err != nil {
-		return exitCodeOf(err), err
-	}
-	target, err := resolveWorktreeArgs(ctx, parsed, false)
+	parsed, target, err := parseWorktreeArgs(ctx, args, spec, false)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -68,7 +64,7 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 		return 1, err
 	}
 	invalidateWorktreeIdentities(proj.ID)
-	if err := dropShelved(id.ID); err != nil {
+	if err := setShelved(id.ID, false); err != nil {
 		vlog("[state] drop shelved: %v", err)
 	}
 
@@ -82,11 +78,8 @@ func cmdAdopt(ctx cliContext, args []string) (int, error) {
 	if err := moveRegistryMark(autoPullKey, id.ID, worktree.ID); err != nil {
 		vlog("[state] move auto-pull: %v", err)
 	}
-	if jsonMode {
-		emit(map[string]any{"event": "created", "worktree": worktree})
-	} else {
-		note("adopted " + id.Path + " as " + cyanErr(worktree.Name) + " (branch " + cyanErr(worktree.Branch) + ")")
-	}
+	emitScriptEvent(map[string]any{"event": "created", "worktree": worktree},
+		"adopted "+id.Path+" as "+cyanErr(worktree.Name)+" (branch "+cyanErr(worktree.Branch)+")")
 	code := finishCreateLifecycle(proj, worktree, "", false)
 	if wasInside && !jsonMode {
 		note(dimErr("note: your shell is inside the old location. Run `cd " + worktree.Path + "`"))

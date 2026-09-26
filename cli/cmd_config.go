@@ -23,8 +23,10 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -391,18 +393,11 @@ func updateConfigDoc(path string, fn func(doc map[string]any) error) error {
 	})
 }
 
+// A wrong-typed intermediate reads as absent here (configDocLookup's
+// error is dropped).
 func configDocGet(doc map[string]any, name string) (any, bool) {
-	var cur any = doc
-	for _, part := range strings.Split(name, ".") {
-		m, ok := cur.(map[string]any)
-		if !ok {
-			return nil, false
-		}
-		if cur, ok = m[part]; !ok {
-			return nil, false
-		}
-	}
-	return cur, true
+	value, ok, _ := configDocLookup(doc, name)
+	return value, ok
 }
 
 func configDocSet(doc map[string]any, name string, value any) {
@@ -587,10 +582,18 @@ func (s configDocScope) emitOK(fields map[string]any) {
 	if s.project != "" {
 		result["project"] = s.project
 	}
-	for k, v := range fields {
-		result[k] = v
-	}
+	maps.Copy(result, fields)
 	emit(result)
+}
+
+// report prints a scope verb's result: emitOK's document in --json
+// mode, the human line otherwise.
+func (s configDocScope) report(fields map[string]any, line string) {
+	if jsonMode {
+		s.emitOK(fields)
+	} else {
+		out(line)
+	}
 }
 
 func (s configDocScope) usageErr(usage string) error {
@@ -720,11 +723,8 @@ func runConfigSet(scope configDocScope, name, raw string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	if jsonMode {
-		scope.emitOK(map[string]any{"key": key.name, "value": value})
-	} else {
-		out(greenOut("set " + key.name + " = " + renderConfigValue(value) + scope.suffix))
-	}
+	scope.report(map[string]any{"key": key.name, "value": value},
+		greenOut("set "+key.name+" = "+renderConfigValue(value)+scope.suffix))
 	return 0, nil
 }
 
@@ -979,11 +979,7 @@ func runLauncherVerb(scope configDocScope, rest []string) (int, error) {
 		if err != nil {
 			return exitCodeOf(err), err
 		}
-		if jsonMode {
-			scope.emitOK(map[string]any{"launcher": launcher})
-		} else {
-			out(greenOut("added launcher " + label + scope.suffix))
-		}
+		scope.report(map[string]any{"launcher": launcher}, greenOut("added launcher "+label+scope.suffix))
 		return 0, nil
 	case "rm", "remove":
 		if len(rest) != 2 {
@@ -1004,16 +1000,11 @@ func runLauncherVerb(scope configDocScope, rest []string) (int, error) {
 			case 1:
 				// Deliberate index removal below.
 			default:
-				refs := make([]string, len(matches))
-				for i, idx := range matches {
-					if id, _ := launchers[idx].(map[string]any)["id"].(string); id != "" {
-						refs[i] = id
-					} else {
-						refs[i] = "(no id, use `edit`)"
-					}
-				}
-				return errf("%d launchers are labeled %q. Remove by id: %s.",
-					len(matches), ref, strings.Join(refs, ", "))
+				refs := joinMapped(matches, func(idx int) string {
+					id, _ := launchers[idx].(map[string]any)["id"].(string)
+					return cmp.Or(id, "(no id, use `edit`)")
+				})
+				return errf("%d launchers are labeled %q. Remove by id: %s.", len(matches), ref, refs)
 			}
 			idx := matches[0]
 			removed = launchers[idx].(map[string]any)
@@ -1024,11 +1015,7 @@ func runLauncherVerb(scope configDocScope, rest []string) (int, error) {
 			return exitCodeOf(err), err
 		}
 		label, _ := removed["label"].(string)
-		if jsonMode {
-			scope.emitOK(map[string]any{"removed": removed})
-		} else {
-			out(greenOut("removed launcher " + label + scope.suffix))
-		}
+		scope.report(map[string]any{"removed": removed}, greenOut("removed launcher "+label+scope.suffix))
 		return 0, nil
 	default:
 		return 2, scope.usageErr("launcher [add <label> <command> | rm <label-or-id>]")
@@ -1072,10 +1059,7 @@ func openConfigFileInEditor(path string) (int, error) {
 		emit(map[string]any{"path": path})
 		return 0, nil
 	}
-	editor := os.Getenv("VISUAL")
-	if editor == "" {
-		editor = os.Getenv("EDITOR")
-	}
+	editor := cmp.Or(os.Getenv("VISUAL"), os.Getenv("EDITOR"))
 	if editor != "" && interactiveStdio() {
 		cmd := exec.Command("/bin/sh", "-c", editor+" "+shellQuote(path))
 		cmd.Stdin = os.Stdin

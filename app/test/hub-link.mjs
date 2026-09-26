@@ -105,6 +105,20 @@ function bootDevice(stub, deviceId, opts = {}, track) {
   );
 }
 
+// The pair most checks boot, in this order: the stub, A as a plain
+// client, and B serving the broker test handler (plus `bOpts`).
+async function bootLinked(track, bOpts = {}) {
+  const stub = await startStubHub(track);
+  const a = await bootDevice(stub, "A", {}, track);
+  const b = await bootDevice(
+    stub,
+    "B",
+    { ...bOpts, registerHandlers: true },
+    track,
+  );
+  return { stub, a, b };
+}
+
 // A raw stub-side device socket, for driving hand-built envelopes.
 function rawDevice(stub, deviceId) {
   const ws = new WebSocket(
@@ -149,16 +163,7 @@ async function main() {
   await check(
     "hello/welcome: connectBroker completes the sm handshake and learns the peer's appVersion",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const a = await bootDevice(stub, "A", {}, track);
-      const b = await bootDevice(
-        stub,
-        "B",
-        { appVersion: "2.2.2", registerHandlers: true },
-        track,
-      );
-      void b;
+      const { a } = await bootLinked(track, { appVersion: "2.2.2" });
       const peer = await a.connection.connectBroker("B");
       assert.equal(peer.remoteDeviceId, "B");
       assert.equal(peer.remoteAppVersion, "2.2.2");
@@ -168,11 +173,7 @@ async function main() {
   await check(
     "dispatch: an invoke on the broker channel round-trips with id correlation",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const a = await bootDevice(stub, "A", {}, track);
-      const b = await bootDevice(stub, "B", { registerHandlers: true }, track);
-      void b;
+      const { a } = await bootLinked(track);
       const peer = await a.connection.connectBroker("B");
       const result = await peer.brokerInvoke({ hi: 1 });
       assert.deepEqual(result, { hi: 1 });
@@ -196,10 +197,8 @@ async function main() {
       // session has no channel argument, so the probe is a raw
       // hand-built req: exactly what a hostile or skewed peer could
       // still aim at the wire.
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const b = await bootDevice(stub, "B", { registerHandlers: true }, track);
-      void b;
+      const stub = await startStubHub(track);
+      await bootDevice(stub, "B", { registerHandlers: true }, track);
       const raw = rawDevice(stub, "C");
       track(() => raw.close());
       await raw.opened;
@@ -246,11 +245,7 @@ async function main() {
   await check(
     "framing: void input and void result round-trip as absent fields",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const a = await bootDevice(stub, "A", {}, track);
-      const b = await bootDevice(stub, "B", { registerHandlers: true }, track);
-      void b;
+      const { stub, a } = await bootLinked(track);
       const peer = await a.connection.connectBroker("B");
       const result = await peer.brokerInvoke(undefined);
       assert.equal(result, undefined);
@@ -274,11 +269,7 @@ async function main() {
   await check(
     "error path: a throwing handler answers ok:false with the message only",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const a = await bootDevice(stub, "A", {}, track);
-      const b = await bootDevice(stub, "B", { registerHandlers: true }, track);
-      void b;
+      const { stub, a } = await bootLinked(track);
       const peer = await a.connection.connectBroker("B");
       await assert.rejects(
         () => peer.brokerInvoke({ mode: "fail" }),
@@ -305,11 +296,7 @@ async function main() {
   await check(
     "size guard: an oversize outbound invoke fails typed WITHOUT hitting the wire, at the control-frame budget",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const a = await bootDevice(stub, "A", {}, track);
-      const b = await bootDevice(stub, "B", { registerHandlers: true }, track);
-      void b;
+      const { stub, a } = await bootLinked(track);
       const peer = await a.connection.connectBroker("B");
       const before = stub.receivedCount();
       await assert.rejects(
@@ -327,8 +314,7 @@ async function main() {
   await check(
     "offline nack: connecting to a deviceId with no socket rejects with the offline error",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
+      const stub = await startStubHub(track);
       const a = await bootDevice(stub, "A", {}, track);
       await assert.rejects(
         () => a.connection.connectBroker("ghost"),
@@ -340,10 +326,7 @@ async function main() {
   await check(
     "presence: a departing peer rejects its in-flight calls typed and leaves the session dead for later invokes",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const a = await bootDevice(stub, "A", {}, track);
-      const b = await bootDevice(stub, "B", { registerHandlers: true }, track);
+      const { a, b } = await bootLinked(track);
       hangResolvers = [];
       const peer = await a.connection.connectBroker("B");
       const inFlight = peer.brokerInvoke({ mode: "hang" });
@@ -367,11 +350,7 @@ async function main() {
   await check(
     "reconnect: a dropped socket redials with a fresh ticket and serves again",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const a = await bootDevice(stub, "A", {}, track);
-      const b = await bootDevice(stub, "B", { registerHandlers: true }, track);
-      void b;
+      const { stub, a } = await bootLinked(track);
       assert.equal(a.mints(), 1);
       stub.dropSocket("A", 1001, "going away");
       await waitFor(
@@ -394,8 +373,7 @@ async function main() {
   await check(
     "blocked: 4102 revoked blocks with no redial, 4103 superseded blocks with its own message",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
+      const stub = await startStubHub(track);
       const a = await bootDevice(stub, "A", {}, track);
       stub.dropSocket("A", CLOSE_DEVICE_REVOKED, "device revoked");
       await waitFor(
@@ -427,8 +405,7 @@ async function main() {
   await check(
     "liveness: a device heartbeats the device hub, and a hub that stops answering (or never answered) is declared dead and redialed with a fresh ticket",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
+      const stub = await startStubHub(track);
       const heartbeat = { intervalMs: 30, timeoutMs: 120 };
       const a = await bootDevice(stub, "A", { heartbeat }, track);
       await waitFor(() => stub.pingsFrom("A") >= 2, "A to heartbeat");
@@ -475,15 +452,13 @@ async function main() {
   await check(
     "token ignored: a hello carrying a garbage token still gets a welcome",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const b = await bootDevice(
+      const stub = await startStubHub(track);
+      await bootDevice(
         stub,
         "B",
         { appVersion: "3.3.3", registerHandlers: true },
         track,
       );
-      void b;
       const raw = rawDevice(stub, "C");
       track(() => raw.close());
       await raw.opened;
@@ -518,10 +493,8 @@ async function main() {
   await check(
     "bye: a byed session answers no-live-session to its own epoch, while a stale-epoch bye cannot kill the session a fresh hello just built",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const b = await bootDevice(stub, "B", { registerHandlers: true }, track);
-      void b;
+      const stub = await startStubHub(track);
+      await bootDevice(stub, "B", { registerHandlers: true }, track);
       const raw = rawDevice(stub, "C");
       track(() => raw.close());
       await raw.opened;
@@ -576,11 +549,7 @@ async function main() {
   await check(
     "in-flight cap: one request past the hub-local per-peer cap is refused",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const a = await bootDevice(stub, "A", {}, track);
-      const b = await bootDevice(stub, "B", { registerHandlers: true }, track);
-      void b;
+      const { a } = await bootLinked(track);
       hangResolvers = [];
       const peer = await a.connection.connectBroker("B");
       const held = [];
@@ -604,11 +573,7 @@ async function main() {
   await check(
     "in-flight cap survives a re-hello after a presence flap: neither a hostile presence drop-then-readd nor a re-connectBroker resets the per-peer cap",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const a = await bootDevice(stub, "A", {}, track);
-      const b = await bootDevice(stub, "B", { registerHandlers: true }, track);
-      void b;
+      const { stub, a } = await bootLinked(track);
       hangResolvers = [];
       const peer1 = await a.connection.connectBroker("B");
       const held = [];
@@ -649,10 +614,8 @@ async function main() {
   await check(
     "off-roster hello: a hello whose from is not in the presence roster is refused",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const b = await bootDevice(stub, "B", { registerHandlers: true }, track);
-      void b;
+      const stub = await startStubHub(track);
+      await bootDevice(stub, "B", { registerHandlers: true }, track);
       // Forge a deliver to B from a device that is not in B's roster (a
       // hostile hub can set any `from`). B must not allocate a session
       // or answer a welcome for it.
@@ -676,11 +639,7 @@ async function main() {
   await check(
     "oversize response: an oversize handler result yields ok:false, not a hang",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const a = await bootDevice(stub, "A", {}, track);
-      const b = await bootDevice(stub, "B", { registerHandlers: true }, track);
-      void b;
+      const { a } = await bootLinked(track);
       const peer = await a.connection.connectBroker("B");
       // The handler returns a result too large for one envelope. Without
       // the downgrade the caller would hang forever (no per-call
@@ -695,8 +654,7 @@ async function main() {
   await check(
     "stale epoch: a res from a prior pairing is dropped after a re-hello, not mis-resolved",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
+      const stub = await startStubHub(track);
       const a = await bootDevice(stub, "A", {}, track);
       // B is a hand-driven host so the test controls exactly which epoch
       // each res carries.
@@ -771,10 +729,7 @@ async function main() {
   await check(
     "stop during in-flight: a handler that finishes after stop runs no answer into a dead socket",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const a = await bootDevice(stub, "A", {}, track);
-      const b = await bootDevice(stub, "B", { registerHandlers: true }, track);
+      const { stub, a, b } = await bootLinked(track);
       hangResolvers = [];
       const peer = await a.connection.connectBroker("B");
       const inflight = peer
@@ -800,11 +755,7 @@ async function main() {
   await check(
     "malformed inbound: garbage frames are dropped without killing the process",
     async (track) => {
-      const stub = await startStubHub();
-      track(() => stub.close());
-      const a = await bootDevice(stub, "A", {}, track);
-      const b = await bootDevice(stub, "B", { registerHandlers: true }, track);
-      void b;
+      const { stub, a } = await bootLinked(track);
       // Non-JSON text, an unparseable envelope, and a valid envelope with
       // an unparseable inner frame. All must be dropped, not fatal.
       stub.injectTo("A", "this is not json at all");

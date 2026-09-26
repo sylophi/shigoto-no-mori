@@ -258,14 +258,10 @@ func cmdBundle(ctx cliContext, args []string) (int, error) {
 		for _, have := range res.skippedHaves {
 			note(fmt.Sprintf("skipping unknown have %s", have))
 		}
-		if jsonMode {
-			emit(map[string]any{
-				"ok": true, "path": res.path, "bytes": res.bytes,
-				"refs": res.refs, "skippedHaves": res.skippedHaves,
-			})
-		} else {
-			out(greenOut(fmt.Sprintf("bundled %d ref(s) (%d bytes) to %s", len(res.refs), res.bytes, res.path)))
-		}
+		emitOrOut(map[string]any{
+			"ok": true, "path": res.path, "bytes": res.bytes,
+			"refs": res.refs, "skippedHaves": res.skippedHaves,
+		}, greenOut(fmt.Sprintf("bundled %d ref(s) (%d bytes) to %s", len(res.refs), res.bytes, res.path)))
 		return 0, nil
 	}
 
@@ -278,10 +274,7 @@ func cmdBundle(ctx cliContext, args []string) (int, error) {
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	if jsonMode {
-		emit(map[string]any{"ok": true, "fetched": res.fetched})
-	} else {
-		out(greenOut(fmt.Sprintf("fetched %d ref(s) from %s", len(res.fetched), in)))
-	}
+	emitOrOut(map[string]any{"ok": true, "fetched": res.fetched},
+		greenOut(fmt.Sprintf("fetched %d ref(s) from %s", len(res.fetched), in)))
 	return 0, nil
 }

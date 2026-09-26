@@ -168,12 +168,16 @@ export function buildSidebarRows({
       (shelf !== null && listed.shelf === shelf && listed.groupId === groupId)
     );
   };
-  const localRows = (trees: Worktree[]): LocalRow[] =>
+  const localRows = (
+    trees: Worktree[],
+    pullRequests: Record<string, PullRequest> | undefined,
+  ): LocalRow[] =>
     trees.map((worktree) => ({
       kind: "worktree",
       key: worktreeRowKey(undefined, worktree.id),
       worktree,
       mirror: mirrorBadgeFor(worktree),
+      pr: pullRequests?.[worktree.branch],
       stack: null,
     }));
 
@@ -308,7 +312,7 @@ export function buildSidebarRows({
       trunkOf(group.remote[0]?.worktrees);
     const placed = (local: Worktree[], peers: RemoteRow[]): SidebarRow[] =>
       placeByStack(
-        [...localRows(local), ...peers],
+        [...localRows(local, group.pullRequests), ...peers],
         (row) => row.worktree.branch,
         group.pullRequests,
         trunk,
@@ -579,11 +583,7 @@ function remoteWorktreeRows(
       kind: "remote-worktree",
       key,
       worktree,
-      deviceId: item.deviceId,
-      deviceLabel: item.deviceLabel,
-      deviceIcon: item.deviceIcon,
-      reachable: item.reachable,
-      tone: item.tone,
+      device: deviceBadgeOf(item),
       pr: item.pullRequests[worktree.branch],
       stack: null,
       groupId,

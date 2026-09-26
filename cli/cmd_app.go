@@ -28,10 +28,6 @@ func cmdApp(_ cliContext, args []string) (int, error) {
 	if err := openAppBundle(); err != nil {
 		return 1, err
 	}
-	if jsonMode {
-		emit(map[string]any{"ok": true})
-	} else {
-		out("opened Shigoto no Mori")
-	}
+	emitOrOut(map[string]any{"ok": true}, "opened Shigoto no Mori")
 	return 0, nil
 }

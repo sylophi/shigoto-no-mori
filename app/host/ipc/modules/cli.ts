@@ -4,6 +4,7 @@ import type {
 } from "@shared/ipc/modules/cli";
 import { cliContract } from "@shared/ipc/modules/cli";
 import type { Handlers } from "@shared/ipc/types";
+import { implSlot } from "@host/lib/util/implSlot";
 
 // The electron layer injects the CLI link and shell-integration
 // operations at boot. Keeping them behind a setter keeps this handler
@@ -18,18 +19,10 @@ type CliImpl = {
   uninstallShellIntegration: () => Promise<ShellIntegrationStatus>;
 };
 
-let impl: CliImpl | null = null;
-
-export function setCliImpl(next: CliImpl): void {
-  impl = next;
-}
-
-function cliImpl(): CliImpl {
-  if (impl === null) {
-    throw new Error("cli handler invoked before setCliImpl registered one");
-  }
-  return impl;
-}
+const { set: setCliImpl, get: cliImpl } = implSlot<CliImpl>(
+  "cli handler invoked before setCliImpl registered one",
+);
+export { setCliImpl };
 
 export const cliHandlers: Handlers<typeof cliContract> = {
   status: () => cliImpl().cliLinkStatus(),

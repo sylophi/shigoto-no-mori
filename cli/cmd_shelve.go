@@ -5,11 +5,7 @@ package main
 // external worktrees can't be shelved.
 
 func cmdShelve(ctx cliContext, args []string, shelved bool) (int, error) {
-	parsed, err := parseCmdArgs(args, worktreeTargetSpec())
-	if err != nil {
-		return exitCodeOf(err), err
-	}
-	target, err := resolveWorktreeArgs(ctx, parsed, false)
+	_, target, err := parseWorktreeArgs(ctx, args, worktreeTargetSpec(), false)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -27,10 +23,7 @@ func cmdShelve(ctx cliContext, args []string, shelved bool) (int, error) {
 	if !shelved {
 		verb = "unshelved"
 	}
-	if jsonMode {
-		emit(map[string]any{"ok": true, "name": id.Name, "id": id.ID, "shelved": shelved})
-	} else {
-		out(greenOut(verb + " " + id.Name))
-	}
+	emitOrOut(map[string]any{"ok": true, "name": id.Name, "id": id.ID, "shelved": shelved},
+		greenOut(verb+" "+id.Name))
 	return 0, nil
 }

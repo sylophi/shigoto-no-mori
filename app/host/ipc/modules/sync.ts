@@ -85,6 +85,7 @@ import {
   findProjectByIdentity,
   findProjectByIdentityOrThrow,
   findProjectOrThrow,
+  findWorktreePathOrThrow,
 } from "@host/lib/projects";
 import { cloneProjectFromPeer } from "@host/lib/sync/cloneFromPeer";
 import {
@@ -298,25 +299,17 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
     return dirtyCaptureViaCli(project, worktreeId);
   },
 
-  worktreeFolder: async ({ projectId, worktreeId, relative }) => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
-    return listWorktreeFolder(worktree.path, relative);
-  },
+  worktreeFolder: async ({ relative, ...input }) =>
+    listWorktreeFolder(await findWorktreePathOrThrow(input), relative),
 
   // The ignored files a capture leaves behind (see the contract note):
   // listed against the worktree, not the project, so a peer's
   // transplant dialog can name what a teardown would take with it.
-  ignoredPaths: async ({ projectId, worktreeId }) => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
+  ignoredPaths: async (input) => {
+    const path = await findWorktreePathOrThrow(input);
     const [paths, patterns] = await Promise.all([
-      cachedIgnoredPaths(worktree.path),
-      listIgnoreRules(worktree.path),
+      cachedIgnoredPaths(path),
+      listIgnoreRules(path),
     ]);
     return {
       paths: paths.slice(0, SYNC_IGNORED_PATHS_LIMIT),

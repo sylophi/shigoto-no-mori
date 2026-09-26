@@ -1,6 +1,7 @@
 import { gitContract } from "@shared/ipc/modules/git";
 import type { Handlers } from "@shared/ipc/types";
 import { findProjectOrThrow } from "@host/lib/projects";
+import { implSlot } from "@host/lib/util/implSlot";
 
 // The electron layer injects the background-fetch entry point at boot.
 // The fetch scheduler itself stays in main/electron because it
@@ -10,18 +11,10 @@ type GitImpl = {
   sweepForPeer: () => { leaseMs: number };
 };
 
-let impl: GitImpl | null = null;
-
-export function setGitImpl(next: GitImpl): void {
-  impl = next;
-}
-
-function gitImpl(): GitImpl {
-  if (impl === null) {
-    throw new Error("git handler invoked before setGitImpl registered one");
-  }
-  return impl;
-}
+const { set: setGitImpl, get: gitImpl } = implSlot<GitImpl>(
+  "git handler invoked before setGitImpl registered one",
+);
+export { setGitImpl };
 
 export const gitHandlers: Handlers<typeof gitContract> = {
   refreshProject: async ({ projectId }) => {

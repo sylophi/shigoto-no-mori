@@ -77,12 +77,10 @@ function TooltipContent({
 // string tips are preserved like multiline titles were.
 function SimpleTooltip({
   tip,
-  side,
   disabled,
   children,
 }: {
   tip: ReactNode;
-  side?: TooltipPrimitive.Positioner.Props["side"];
   disabled?: boolean;
   children: ReactElement;
 }) {
@@ -90,7 +88,7 @@ function SimpleTooltip({
   return (
     <Tooltip disabled={disabled}>
       <TooltipTrigger render={children} />
-      <TooltipContent side={side}>
+      <TooltipContent>
         {/* One wrapper span keeps a mixed text/element tip a single
             flex item: TooltipContent is inline-flex with a gap, which
             would otherwise space out every text run. pre-line preserves

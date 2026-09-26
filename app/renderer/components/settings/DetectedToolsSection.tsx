@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { LauncherIcon } from "@/components/shared/LauncherIcon";
-import { SectionHeading } from "@/components/ui/section-heading";
+import { SectionIntro } from "@/components/ui/section-heading";
 import { cn } from "@/lib/utils";
 import type { DetectedLauncher } from "@shared/schemas";
 
@@ -25,13 +25,10 @@ export function DetectedToolsSection({
 
   return (
     <section className="space-y-4">
-      <div>
-        <SectionHeading className="mb-1">Detected tools</SectionHeading>
-        <p className="text-xs text-muted-foreground">
-          Editors and tools found on this machine. Click to toggle visibility in
-          the Launch section.
-        </p>
-      </div>
+      <SectionIntro title="Detected tools">
+        Editors and tools found on this machine. Click to toggle visibility in
+        the Launch section.
+      </SectionIntro>
       {tools.length === 0 ? (
         <p className="text-xs text-muted-foreground/70">
           Nothing detected yet. Install a supported tool below and Shigomori

@@ -34,6 +34,7 @@ import {
 import {
   findProjectAndWorktreeOrThrow,
   findProjectOrThrow,
+  findWorktreePathOrThrow,
 } from "@host/lib/projects";
 import {
   getInflightDeleteIds,
@@ -183,37 +184,21 @@ export const worktreesHandlers: Handlers<
   checkoutBranch: (input) =>
     mutateAndDescribe(input, (wt) => checkoutBranch(wt.path, input.branch)),
 
-  fileDiff: async ({ projectId, worktreeId, paths, untracked }) => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
-    return getFileDiff(worktree.path, paths, untracked);
-  },
+  fileDiff: async (input) =>
+    getFileDiff(
+      await findWorktreePathOrThrow(input),
+      input.paths,
+      input.untracked,
+    ),
 
-  readFile: async ({ projectId, worktreeId, path }) => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
-    return readWorktreeFile(worktree.path, path);
-  },
+  readFile: async ({ path, ...input }) =>
+    readWorktreeFile(await findWorktreePathOrThrow(input), path),
 
-  changeStatus: async ({ projectId, worktreeId }) => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
-    return listChangesForPage(worktree.path);
-  },
+  changeStatus: async (input) =>
+    listChangesForPage(await findWorktreePathOrThrow(input)),
 
-  setStaged: async ({ projectId, worktreeId, paths, staged }) => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
-    return setStaged(worktree.path, paths, staged);
-  },
+  setStaged: async (input) =>
+    setStaged(await findWorktreePathOrThrow(input), input.paths, input.staged),
 
   commit: async (input) => {
     const { result: hash, worktree } = await mutateAndDescribeWith(
@@ -234,13 +219,8 @@ export const worktreesHandlers: Handlers<
   restoreDiscard: (input) =>
     mutateAndDescribe(input, (wt) => restoreDiscard(wt.path, input.snapshot)),
 
-  commitMessage: async ({ projectId, worktreeId, hash }) => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
-    return readCommitMessage(worktree.path, hash);
-  },
+  commitMessage: async (input) =>
+    readCommitMessage(await findWorktreePathOrThrow(input), input.hash),
 
   resetSoft: async (input) => {
     const { result: previousHead, worktree } = await mutateAndDescribeWith(
@@ -250,21 +230,11 @@ export const worktreesHandlers: Handlers<
     return { previousHead, worktree };
   },
 
-  commitDiff: async ({ projectId, worktreeId, hash }) => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
-    return getCommitDiff(worktree.path, hash);
-  },
+  commitDiff: async (input) =>
+    getCommitDiff(await findWorktreePathOrThrow(input), input.hash),
 
-  listCommits: async ({ projectId, worktreeId, skip, count }) => {
-    const { worktree } = await findProjectAndWorktreeOrThrow(
-      projectId,
-      worktreeId,
-    );
-    return listCommits(worktree.path, { skip, count });
-  },
+  listCommits: async ({ skip, count, ...input }) =>
+    listCommits(await findWorktreePathOrThrow(input), { skip, count }),
 
   push: (input) => mutateAndDescribe(input, (wt) => pushFastForward(wt.path)),
   pull: (input) => mutateAndDescribe(input, (wt) => pullFastForward(wt.path)),

@@ -90,7 +90,15 @@ function ReachablePeerSettings({
       {offline ? (
         <OfflineNote device={device} />
       ) : (
-        <PeerVersionSection device={device} />
+        <VersionSection
+          version={
+            device.appVersion === "" ? (
+              <span className="text-muted-foreground">Not reported yet</span>
+            ) : (
+              `v${device.appVersion}`
+            )
+          }
+        />
       )}
       {config === undefined ? (
         offline ? null : isError ? (
@@ -109,20 +117,6 @@ function ReachablePeerSettings({
         />
       )}
     </>
-  );
-}
-
-function PeerVersionSection({ device }: { device: RemoteDevice }) {
-  return (
-    <VersionSection
-      version={
-        device.appVersion === "" ? (
-          <span className="text-muted-foreground">Not reported yet</span>
-        ) : (
-          `v${device.appVersion}`
-        )
-      }
-    />
   );
 }
 

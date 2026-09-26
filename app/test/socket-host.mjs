@@ -31,8 +31,7 @@
 import assert from "node:assert/strict";
 import { deflateRawSync } from "node:zlib";
 import { readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { WebSocket, WebSocketServer } from "ws";
 import {
   CLOSE_AUTH_FAILED,
@@ -128,7 +127,9 @@ function registerTestHandlers(binding) {
   });
 }
 
-async function startBinding(overrides = {}) {
+// `track`, when passed, registers the binding's stop on the check's
+// tracker, so it runs even when the assertions throw.
+async function startBinding(overrides = {}, track) {
   const binding = createWsServerBinding();
   registerTestHandlers(binding);
   const port = await binding.start({
@@ -140,6 +141,7 @@ async function startBinding(overrides = {}) {
     helloTimeoutMs: 300,
     ...overrides,
   });
+  track?.(() => binding.stop());
   return { binding, url: `ws://127.0.0.1:${port}` };
 }
 
@@ -233,167 +235,135 @@ async function main() {
 
   await check(
     "auth handshake: a valid token gets a welcome carrying host identity",
-    async () => {
-      const { binding, url } = await startBinding();
-      try {
-        const { client, welcome } = await authenticate(url);
-        assert.equal(welcome.deviceId, "host-device");
-        assert.equal(welcome.appVersion, "9.9.9");
-        client.close();
-      } finally {
-        await binding.stop();
-      }
+    async (track) => {
+      const { url } = await startBinding({}, track);
+      const { client, welcome } = await authenticate(url);
+      assert.equal(welcome.deviceId, "host-device");
+      assert.equal(welcome.appVersion, "9.9.9");
+      client.close();
     },
   );
 
   await check(
     "dispatch: a req gets a matching res echoing the handler result",
-    async () => {
-      const { binding, url } = await startBinding();
-      try {
-        const { client } = await authenticate(url);
-        client.send({
-          t: "req",
-          id: 7,
-          channel: "test:echo",
-          input: { hi: 1 },
-        });
-        const res = await client.nextFrame();
-        assert.equal(res.t, "res");
-        assert.equal(res.id, 7);
-        assert.equal(res.ok, true);
-        assert.deepEqual(res.result, { hi: 1 });
-        client.close();
-      } finally {
-        await binding.stop();
-      }
+    async (track) => {
+      const { url } = await startBinding({}, track);
+      const { client } = await authenticate(url);
+      client.send({
+        t: "req",
+        id: 7,
+        channel: "test:echo",
+        input: { hi: 1 },
+      });
+      const res = await client.nextFrame();
+      assert.equal(res.t, "res");
+      assert.equal(res.id, 7);
+      assert.equal(res.ok, true);
+      assert.deepEqual(res.result, { hi: 1 });
+      client.close();
     },
   );
 
   await check(
     "framing: a void input round-trips as an absent field",
-    async () => {
-      const { binding, url } = await startBinding();
-      try {
-        const { client } = await authenticate(url);
-        client.send({ t: "req", id: 1, channel: "test:echo" });
-        const res = await client.nextFrame();
-        assert.equal(res.ok, true);
-        assert.equal(res.result, undefined);
-        assert.equal("result" in res, false);
-        client.close();
-      } finally {
-        await binding.stop();
-      }
+    async (track) => {
+      const { url } = await startBinding({}, track);
+      const { client } = await authenticate(url);
+      client.send({ t: "req", id: 1, channel: "test:echo" });
+      const res = await client.nextFrame();
+      assert.equal(res.ok, true);
+      assert.equal(res.result, undefined);
+      assert.equal("result" in res, false);
+      client.close();
     },
   );
 
   await check(
     "broadcast: broadcastAll pushes a frame to an authed socket",
-    async () => {
-      const { binding, url } = await startBinding();
-      try {
-        const { client } = await authenticate(url);
-        binding.broadcastAll("test:ping", { n: 5 });
-        const push = await client.nextFrame();
-        assert.equal(push.t, "push");
-        assert.equal(push.channel, "test:ping");
-        assert.deepEqual(push.payload, { n: 5 });
-        client.close();
-      } finally {
-        await binding.stop();
-      }
+    async (track) => {
+      const { binding, url } = await startBinding({}, track);
+      const { client } = await authenticate(url);
+      binding.broadcastAll("test:ping", { n: 5 });
+      const push = await client.nextFrame();
+      assert.equal(push.t, "push");
+      assert.equal(push.channel, "test:ping");
+      assert.deepEqual(push.payload, { n: 5 });
+      client.close();
     },
   );
 
   await check(
     "terminate on bad token: a wrong token closes CLOSE_AUTH_FAILED and no later frame is processed",
-    async () => {
-      const { binding, url } = await startBinding();
-      try {
-        const client = connect(url);
-        await client.opened;
-        client.send({
-          t: "hello",
-          token: "wrong",
-          deviceId: "c",
-          appVersion: "1",
-        });
-        // A req riding right behind the bad hello must never be answered.
-        client.send({ t: "req", id: 42, channel: "test:echo", input: 1 });
-        const close = await client.waitClose();
-        assert.equal(close.code, CLOSE_AUTH_FAILED);
-        assert.equal(
-          client.pending(),
-          0,
-          "a frame after the rejected hello was processed",
-        );
-      } finally {
-        await binding.stop();
-      }
+    async (track) => {
+      const { url } = await startBinding({}, track);
+      const client = connect(url);
+      await client.opened;
+      client.send({
+        t: "hello",
+        token: "wrong",
+        deviceId: "c",
+        appVersion: "1",
+      });
+      // A req riding right behind the bad hello must never be answered.
+      client.send({ t: "req", id: 42, channel: "test:echo", input: 1 });
+      const close = await client.waitClose();
+      assert.equal(close.code, CLOSE_AUTH_FAILED);
+      assert.equal(
+        client.pending(),
+        0,
+        "a frame after the rejected hello was processed",
+      );
     },
   );
 
   await check(
     "post-timeout hello: a hello after the hello timeout cannot authenticate",
-    async () => {
-      const { binding, url } = await startBinding({ helloTimeoutMs: 100 });
-      try {
-        const client = connect(url);
-        await client.opened;
-        await delay(250);
-        // The timeout already fired. A late (correct) hello must not auth.
-        client.send({
-          t: "hello",
-          token: TOKEN,
-          deviceId: "c",
-          appVersion: "1",
-        });
-        const close = await client.waitClose();
-        assert.equal(close.code, CLOSE_HELLO_FAILED);
-        assert.equal(
-          client.pending(),
-          0,
-          "a welcome was sent after the hello timeout",
-        );
-      } finally {
-        await binding.stop();
-      }
+    async (track) => {
+      const { url } = await startBinding({ helloTimeoutMs: 100 }, track);
+      const client = connect(url);
+      await client.opened;
+      await delay(250);
+      // The timeout already fired. A late (correct) hello must not auth.
+      client.send({
+        t: "hello",
+        token: TOKEN,
+        deviceId: "c",
+        appVersion: "1",
+      });
+      const close = await client.waitClose();
+      assert.equal(close.code, CLOSE_HELLO_FAILED);
+      assert.equal(
+        client.pending(),
+        0,
+        "a welcome was sent after the hello timeout",
+      );
     },
   );
 
   await check(
     "non-remote channel: a host channel the ws binding never registered gets a no-handler res",
-    async () => {
-      const { binding, url } = await startBinding();
-      try {
-        const { client } = await authenticate(url);
-        // runtime:nuke is a real host channel tagged remote:false, so it
-        // is never registered on this binding and can never execute.
-        client.send({ t: "req", id: 3, channel: "runtime:nuke", input: {} });
-        const res = await client.nextFrame();
-        assert.equal(res.ok, false);
-        assert.match(res.message, /No handler registered/);
-        client.close();
-      } finally {
-        await binding.stop();
-      }
+    async (track) => {
+      const { url } = await startBinding({}, track);
+      const { client } = await authenticate(url);
+      // runtime:nuke is a real host channel tagged remote:false, so it
+      // is never registered on this binding and can never execute.
+      client.send({ t: "req", id: 3, channel: "runtime:nuke", input: {} });
+      const res = await client.nextFrame();
+      assert.equal(res.ok, false);
+      assert.match(res.message, /No handler registered/);
+      client.close();
     },
   );
 
   await check(
     "oversized frame: an inbound frame over the 1 MiB cap closes the socket",
-    async () => {
-      const { binding, url } = await startBinding();
-      try {
-        const { client } = await authenticate(url);
-        const huge = "x".repeat((1 << 20) + 1024);
-        client.send({ t: "req", id: 9, channel: "test:echo", input: huge });
-        const close = await client.waitClose();
-        assert.equal(close.code, WS_CLOSE_TOO_BIG);
-      } finally {
-        await binding.stop();
-      }
+    async (track) => {
+      const { url } = await startBinding({}, track);
+      const { client } = await authenticate(url);
+      const huge = "x".repeat((1 << 20) + 1024);
+      client.send({ t: "req", id: 9, channel: "test:echo", input: huge });
+      const close = await client.waitClose();
+      assert.equal(close.code, WS_CLOSE_TOO_BIG);
     },
   );
 
@@ -417,14 +387,14 @@ async function main() {
 
   await check(
     "Origin gate: the app's own renderer origins complete hello/welcome",
-    async () => {
+    async (track) => {
       // Browser-global WebSocket clients (the web client's hub path,
       // and any future in-app consumer of this listener) ALWAYS send
       // an Origin: the renderer-scheme origin from the app's own
       // window (both flavors), or a loopback http origin from a
       // locally served web client. All must be able to authenticate,
       // or an in-app client could never connect at all.
-      const { binding, url } = await startBinding();
+      const { url } = await startBinding({}, track);
       const helloFrom = async (origin) => {
         const client = connect(url, { origin });
         await client.opened;
@@ -442,59 +412,47 @@ async function main() {
         );
         client.close();
       };
-      try {
-        for (const origin of rendererSchemeOrigins()) {
-          // oxlint-disable-next-line no-await-in-loop -- one shared binding, sequential hellos
-          await helloFrom(origin);
-        }
-        await helloFrom("http://localhost:5173");
-      } finally {
-        await binding.stop();
+      for (const origin of rendererSchemeOrigins()) {
+        // oxlint-disable-next-line no-await-in-loop -- one shared binding, sequential hellos
+        await helloFrom(origin);
       }
+      await helloFrom("http://localhost:5173");
     },
   );
 
   await check(
     "Origin gate: a handshake from a foreign web origin is rejected",
-    async () => {
-      const { binding, url } = await startBinding();
-      try {
-        const client = connect(url, { origin: "https://evil.example" });
-        await assert.rejects(client.opened);
-      } finally {
-        await binding.stop();
-      }
+    async (track) => {
+      const { url } = await startBinding({}, track);
+      const client = connect(url, { origin: "https://evil.example" });
+      await assert.rejects(client.opened);
     },
   );
 
   await check(
     "in-flight cap: one request past the shared per-peer cap is refused rather than dispatched",
-    async () => {
+    async (track) => {
       hangResolvers = [];
-      const { binding, url } = await startBinding();
-      try {
-        const { client } = await authenticate(url);
-        // Fill the shared per-socket cap with requests that never
-        // resolve, then send one more.
-        for (let id = 1; id <= MAX_IN_FLIGHT_PER_PEER; id += 1) {
-          client.send({ t: "req", id, channel: "test:hang", input: undefined });
-        }
-        client.send({
-          t: "req",
-          id: MAX_IN_FLIGHT_PER_PEER + 1,
-          channel: "test:hang",
-          input: undefined,
-        });
-        const res = await client.nextFrame();
-        assert.equal(res.id, MAX_IN_FLIGHT_PER_PEER + 1);
-        assert.equal(res.ok, false);
-        assert.match(res.message, /too many in-flight/);
-        // Release the held requests so shutdown is quick.
-        for (const resolve of hangResolvers) resolve("done");
-        client.close();
-      } finally {
-        await binding.stop();
+      const { url } = await startBinding({}, track);
+      const { client } = await authenticate(url);
+      // Fill the shared per-socket cap with requests that never
+      // resolve, then send one more.
+      for (let id = 1; id <= MAX_IN_FLIGHT_PER_PEER; id += 1) {
+        client.send({ t: "req", id, channel: "test:hang", input: undefined });
       }
+      client.send({
+        t: "req",
+        id: MAX_IN_FLIGHT_PER_PEER + 1,
+        channel: "test:hang",
+        input: undefined,
+      });
+      const res = await client.nextFrame();
+      assert.equal(res.id, MAX_IN_FLIGHT_PER_PEER + 1);
+      assert.equal(res.ok, false);
+      assert.match(res.message, /too many in-flight/);
+      // Release the held requests so shutdown is quick.
+      for (const resolve of hangResolvers) resolve("done");
+      client.close();
     },
   );
 
@@ -523,84 +481,76 @@ async function main() {
 
   await check(
     "LAN read-only gate: a mutating channel is refused with the typed code and its handler never runs, an untagged channel is refused fail-closed, and a read-only channel is still served",
-    async () => {
+    async (track) => {
       mutateExecutions = 0;
       untaggedExecutions = 0;
-      const { binding, url } = await startBinding();
-      try {
-        const { client } = await authenticate(url);
-        // (a) mutating:true is refused with the machine-readable code
-        // and the handler body never runs.
-        client.send({ t: "req", id: 1, channel: "test:mutate" });
-        const mutateRes = await client.nextFrame();
-        assert.equal(mutateRes.ok, false);
-        assert.equal(mutateRes.code, COMMAND_REFUSED_CODE);
-        assert.match(mutateRes.message, /not permitted to run commands/);
-        assert.equal(
-          mutateExecutions,
-          0,
-          "a mutating handler ran over the LAN wire",
-        );
-        // (b) an UNTAGGED channel is refused too: the gate serves only
-        // channels proven read-only, so unclassified defaults closed.
-        client.send({ t: "req", id: 2, channel: "test:untagged" });
-        const untaggedRes = await client.nextFrame();
-        assert.equal(untaggedRes.ok, false);
-        assert.equal(untaggedRes.code, COMMAND_REFUSED_CODE);
-        assert.equal(
-          untaggedExecutions,
-          0,
-          "an untagged handler ran over the LAN wire",
-        );
-        // (c) an explicit read on the same socket is served as before.
-        client.send({ t: "req", id: 3, channel: "test:echo", input: "read" });
-        const echoRes = await client.nextFrame();
-        assert.equal(echoRes.ok, true);
-        assert.equal(echoRes.result, "read");
-        client.close();
-      } finally {
-        await binding.stop();
-      }
+      const { url } = await startBinding({}, track);
+      const { client } = await authenticate(url);
+      // (a) mutating:true is refused with the machine-readable code
+      // and the handler body never runs.
+      client.send({ t: "req", id: 1, channel: "test:mutate" });
+      const mutateRes = await client.nextFrame();
+      assert.equal(mutateRes.ok, false);
+      assert.equal(mutateRes.code, COMMAND_REFUSED_CODE);
+      assert.match(mutateRes.message, /not permitted to run commands/);
+      assert.equal(
+        mutateExecutions,
+        0,
+        "a mutating handler ran over the LAN wire",
+      );
+      // (b) an UNTAGGED channel is refused too: the gate serves only
+      // channels proven read-only, so unclassified defaults closed.
+      client.send({ t: "req", id: 2, channel: "test:untagged" });
+      const untaggedRes = await client.nextFrame();
+      assert.equal(untaggedRes.ok, false);
+      assert.equal(untaggedRes.code, COMMAND_REFUSED_CODE);
+      assert.equal(
+        untaggedExecutions,
+        0,
+        "an untagged handler ran over the LAN wire",
+      );
+      // (c) an explicit read on the same socket is served as before.
+      client.send({ t: "req", id: 3, channel: "test:echo", input: "read" });
+      const echoRes = await client.nextFrame();
+      assert.equal(echoRes.ok, true);
+      assert.equal(echoRes.result, "read");
+      client.close();
     },
   );
 
   await check(
     "LAN typed refusal client-side: the socket client transport maps the code to CommandRefusedError while a real handler failure stays a plain Error",
-    async () => {
-      const { binding, url } = await startBinding();
-      try {
-        const connection = await connectDevice({
-          url,
-          token: TOKEN,
-          appVersion: "1",
-          localDeviceId: "client",
-          onClose: () => {},
-        });
-        await assert.rejects(
-          () => connection.transport.invoke("test:mutate", undefined),
-          (error) =>
-            error instanceof CommandRefusedError &&
-            /not permitted to run commands/.test(error.message),
-        );
-        // A throwing read-only handler is a REAL failure: same wire,
-        // plain Error, so the typed refusal stays distinguishable.
-        await assert.rejects(
-          () => connection.transport.invoke("test:fail", undefined),
-          (error) =>
-            error instanceof Error &&
-            !(error instanceof CommandRefusedError) &&
-            error.message === "boom",
-        );
-        connection.close();
-      } finally {
-        await binding.stop();
-      }
+    async (track) => {
+      const { url } = await startBinding({}, track);
+      const connection = await connectDevice({
+        url,
+        token: TOKEN,
+        appVersion: "1",
+        localDeviceId: "client",
+        onClose: () => {},
+      });
+      await assert.rejects(
+        () => connection.transport.invoke("test:mutate", undefined),
+        (error) =>
+          error instanceof CommandRefusedError &&
+          /not permitted to run commands/.test(error.message),
+      );
+      // A throwing read-only handler is a REAL failure: same wire,
+      // plain Error, so the typed refusal stays distinguishable.
+      await assert.rejects(
+        () => connection.transport.invoke("test:fail", undefined),
+        (error) =>
+          error instanceof Error &&
+          !(error instanceof CommandRefusedError) &&
+          error.message === "boom",
+      );
+      connection.close();
     },
   );
 
   await check(
     "LAN preflight: remoteAccess:commandAccess answers granted:false over the read-only wire",
-    async () => {
+    async (track) => {
       const binding = createWsServerBinding();
       registerTestHandlers(binding);
       // The REAL contract and handler through the shared registrar, so
@@ -617,64 +567,57 @@ async function main() {
         appVersion: "9.9.9",
         helloTimeoutMs: 300,
       });
-      try {
-        const { client } = await authenticate(`ws://127.0.0.1:${port}`);
-        client.send({ t: "req", id: 1, channel: "remoteAccess:commandAccess" });
-        const res = await client.nextFrame();
-        assert.equal(res.ok, true, "the preflight read was not served");
-        assert.deepEqual(res.result, { granted: false });
-        client.close();
-      } finally {
-        await binding.stop();
-      }
+      track(() => binding.stop());
+      const { client } = await authenticate(`ws://127.0.0.1:${port}`);
+      client.send({ t: "req", id: 1, channel: "remoteAccess:commandAccess" });
+      const res = await client.nextFrame();
+      assert.equal(res.ok, true, "the preflight read was not served");
+      assert.deepEqual(res.result, { granted: false });
+      client.close();
     },
   );
 
   await check(
     "liveness: the host answers pings and kills a heartbeating peer that falls silent, but never judges a peer that never pinged",
-    async () => {
-      const { binding, url } = await startBinding({ livenessTimeoutMs: 200 });
-      try {
-        // A peer that pings once proves it heartbeats: it gets a pong,
-        // and going silent past the timeout then ends its socket.
-        const { client } = await authenticate(url);
-        client.send({ t: "ping" });
-        const pong = await client.nextFrame();
-        assert.equal(pong.t, "pong", "a ping must be answered with a pong");
-        const closed = await client.waitClose();
-        assert.equal(
-          closed.code,
-          CLOSE_GOING_AWAY,
-          "a silent heartbeating peer must be killed on the going-away code",
-        );
-        // A peer that never pinged (an older build) is left alone,
-        // however long it stays silent: the sweep judges only peers
-        // that proved they heartbeat.
-        const quiet = await authenticate(url);
-        await delay(600);
-        assert.equal(
-          quiet.client.ws.readyState,
-          WebSocket.OPEN,
-          "a peer that never pinged must not be killed by the sweep",
-        );
-        quiet.client.send({
-          t: "req",
-          id: 1,
-          channel: "test:echo",
-          input: "still served",
-        });
-        const res = await quiet.client.nextFrame();
-        assert.equal(res.result, "still served");
-        quiet.client.close();
-      } finally {
-        await binding.stop();
-      }
+    async (track) => {
+      const { url } = await startBinding({ livenessTimeoutMs: 200 }, track);
+      // A peer that pings once proves it heartbeats: it gets a pong,
+      // and going silent past the timeout then ends its socket.
+      const { client } = await authenticate(url);
+      client.send({ t: "ping" });
+      const pong = await client.nextFrame();
+      assert.equal(pong.t, "pong", "a ping must be answered with a pong");
+      const closed = await client.waitClose();
+      assert.equal(
+        closed.code,
+        CLOSE_GOING_AWAY,
+        "a silent heartbeating peer must be killed on the going-away code",
+      );
+      // A peer that never pinged (an older build) is left alone,
+      // however long it stays silent: the sweep judges only peers
+      // that proved they heartbeat.
+      const quiet = await authenticate(url);
+      await delay(600);
+      assert.equal(
+        quiet.client.ws.readyState,
+        WebSocket.OPEN,
+        "a peer that never pinged must not be killed by the sweep",
+      );
+      quiet.client.send({
+        t: "req",
+        id: 1,
+        channel: "test:echo",
+        input: "still served",
+      });
+      const res = await quiet.client.nextFrame();
+      assert.equal(res.result, "still served");
+      quiet.client.close();
     },
   );
 
   await check(
     "liveness: the client transport heartbeats, declares a silent host dead within its timeout, and a probe reaches the verdict in its own shorter window",
-    async () => {
+    async (track) => {
       // A raw host that welcomes and then answers nothing: pings arrive,
       // pongs never leave. The real binding always answers, so the
       // dead-host path needs a host of its own.
@@ -767,30 +710,26 @@ async function main() {
 
       // Against the REAL binding the same cadence stays connected: pongs
       // keep answering, so a live host is never misjudged.
-      const { binding, url } = await startBinding();
-      try {
-        let liveClose = "unset";
-        const live = await connectDevice({
-          url,
-          token: TOKEN,
-          appVersion: "1",
-          localDeviceId: "client",
-          onClose: (code) => {
-            liveClose = code;
-          },
-          heartbeat: { intervalMs: 20, timeoutMs: 60 },
-        });
-        await delay(300);
-        assert.equal(
-          liveClose,
-          "unset",
-          "a host that answers pings must never be declared dead",
-        );
-        assert.equal(await live.transport.invoke("test:echo", "ok"), "ok");
-        live.close();
-      } finally {
-        await binding.stop();
-      }
+      const { url } = await startBinding({}, track);
+      let liveClose = "unset";
+      const live = await connectDevice({
+        url,
+        token: TOKEN,
+        appVersion: "1",
+        localDeviceId: "client",
+        onClose: (code) => {
+          liveClose = code;
+        },
+        heartbeat: { intervalMs: 20, timeoutMs: 60 },
+      });
+      await delay(300);
+      assert.equal(
+        liveClose,
+        "unset",
+        "a host that answers pings must never be declared dead",
+      );
+      assert.equal(await live.transport.invoke("test:echo", "ok"), "ok");
+      live.close();
     },
   );
 
@@ -1142,10 +1081,7 @@ async function main() {
       // would serve that channel ungated to any account peer with the
       // battery still green. Pinning the full ungated surface in a
       // committed golden file turns any such flip into a reviewed diff.
-      const goldenPath = join(
-        dirname(fileURLToPath(import.meta.url)),
-        "read-surface.golden.json",
-      );
+      const goldenPath = join(import.meta.dirname, "read-surface.golden.json");
       const derived = allContractModules
         .filter((module) => module.scope === "host")
         .flatMap((module) => Object.values(module.calls))
@@ -1190,127 +1126,111 @@ async function main() {
 
   await check(
     "deflate: a tunnel-borne client that asks gets a large res deflated, and reads it",
-    async () => {
-      const { binding, url } = await startBinding();
-      try {
-        let socket;
-        const connection = await connectDevice({
-          url,
-          token: TOKEN,
-          appVersion: "1",
-          localDeviceId: "client",
-          onClose: () => {},
-          openSocket: (target) => {
-            socket = new WebSocket(target, { headers: TUNNEL_HEADERS });
-            return socket;
-          },
-        });
-        const seen = rawMessages(socket);
-        const result = await connection.transport.invoke("test:echo", bigValue);
-        assert.deepEqual(result, bigValue, "the inflated result is intact");
-        assert.equal(seen.length, 1);
-        assert.equal(
-          seen[0].isBinary,
-          true,
-          "the res crossed as a binary frame",
-        );
-        assert.equal(seen[0].data[0], DEFLATED_FRAME_KIND);
-        assert.ok(
-          seen[0].data.length < JSON.stringify(bigValue).length / 10,
-          "and as a fraction of its text",
-        );
-        // A small answer is not worth deflating and stays text.
-        await connection.transport.invoke("test:echo", { hi: 1 });
-        assert.equal(seen[1].isBinary, false);
-        connection.close();
-      } finally {
-        await binding.stop();
-      }
+    async (track) => {
+      const { url } = await startBinding({}, track);
+      let socket;
+      const connection = await connectDevice({
+        url,
+        token: TOKEN,
+        appVersion: "1",
+        localDeviceId: "client",
+        onClose: () => {},
+        openSocket: (target) => {
+          socket = new WebSocket(target, { headers: TUNNEL_HEADERS });
+          return socket;
+        },
+      });
+      const seen = rawMessages(socket);
+      const result = await connection.transport.invoke("test:echo", bigValue);
+      assert.deepEqual(result, bigValue, "the inflated result is intact");
+      assert.equal(seen.length, 1);
+      assert.equal(seen[0].isBinary, true, "the res crossed as a binary frame");
+      assert.equal(seen[0].data[0], DEFLATED_FRAME_KIND);
+      assert.ok(
+        seen[0].data.length < JSON.stringify(bigValue).length / 10,
+        "and as a fraction of its text",
+      );
+      // A small answer is not worth deflating and stays text.
+      await connection.transport.invoke("test:echo", { hi: 1 });
+      assert.equal(seen[1].isBinary, false);
+      connection.close();
     },
   );
 
   await check(
     "deflate: frames behind a deflating one keep their order",
-    async () => {
-      const { binding, url } = await startBinding();
-      try {
-        const connection = await connectDevice({
-          url,
-          token: TOKEN,
-          appVersion: "1",
-          localDeviceId: "client",
-          onClose: () => {},
-          openSocket: (target) =>
-            new WebSocket(target, { headers: TUNNEL_HEADERS }),
-        });
-        const order = [];
-        connection.transport.subscribe("test:ping", (payload) =>
-          order.push(payload.n),
-        );
-        // A big push (deflated, async on both ends) chased by small
-        // ones (text, sync on both ends).
-        binding.broadcastAll("test:ping", { n: 1, pad: bigValue });
-        binding.broadcastAll("test:ping", { n: 2 });
-        binding.broadcastAll("test:ping", { n: 3, pad: bigValue });
-        binding.broadcastAll("test:ping", { n: 4 });
-        await waitFor(() => order.length === 4, "four pushes");
-        assert.deepEqual(order, [1, 2, 3, 4]);
-        connection.close();
-      } finally {
-        await binding.stop();
-      }
+    async (track) => {
+      const { binding, url } = await startBinding({}, track);
+      const connection = await connectDevice({
+        url,
+        token: TOKEN,
+        appVersion: "1",
+        localDeviceId: "client",
+        onClose: () => {},
+        openSocket: (target) =>
+          new WebSocket(target, { headers: TUNNEL_HEADERS }),
+      });
+      const order = [];
+      connection.transport.subscribe("test:ping", (payload) =>
+        order.push(payload.n),
+      );
+      // A big push (deflated, async on both ends) chased by small
+      // ones (text, sync on both ends).
+      binding.broadcastAll("test:ping", { n: 1, pad: bigValue });
+      binding.broadcastAll("test:ping", { n: 2 });
+      binding.broadcastAll("test:ping", { n: 3, pad: bigValue });
+      binding.broadcastAll("test:ping", { n: 4 });
+      await waitFor(() => order.length === 4, "four pushes");
+      assert.deepEqual(order, [1, 2, 3, 4]);
+      connection.close();
     },
   );
 
   await check(
     "deflate: a LAN-borne client, and one that never asked, get plain text",
-    async () => {
-      const { binding, url } = await startBinding();
-      try {
-        // Asks (connectDevice always does where it can inflate), but
-        // arrives without the connector's header: a LAN peer.
-        let lanSocket;
-        const lan = await connectDevice({
-          url,
-          token: TOKEN,
-          appVersion: "1",
-          localDeviceId: "client",
-          onClose: () => {},
-          openSocket: (target) => {
-            lanSocket = new WebSocket(target);
-            return lanSocket;
-          },
-        });
-        const lanSeen = rawMessages(lanSocket);
-        assert.deepEqual(
-          await lan.transport.invoke("test:echo", bigValue),
-          bigValue,
-        );
-        assert.equal(
-          lanSeen[0].isBinary,
-          false,
-          "a LAN peer is never deflated for",
-        );
-        lan.close();
+    async (track) => {
+      const { url } = await startBinding({}, track);
+      // Asks (connectDevice always does where it can inflate), but
+      // arrives without the connector's header: a LAN peer.
+      let lanSocket;
+      const lan = await connectDevice({
+        url,
+        token: TOKEN,
+        appVersion: "1",
+        localDeviceId: "client",
+        onClose: () => {},
+        openSocket: (target) => {
+          lanSocket = new WebSocket(target);
+          return lanSocket;
+        },
+      });
+      const lanSeen = rawMessages(lanSocket);
+      assert.deepEqual(
+        await lan.transport.invoke("test:echo", bigValue),
+        bigValue,
+      );
+      assert.equal(
+        lanSeen[0].isBinary,
+        false,
+        "a LAN peer is never deflated for",
+      );
+      lan.close();
 
-        // Tunnel-borne, but an old client whose hello carries no ask.
-        const old = connect(url, TUNNEL_HEADERS);
-        await old.opened;
-        old.send({
-          t: "hello",
-          token: TOKEN,
-          deviceId: "old",
-          appVersion: "1",
-        });
-        assert.equal((await old.nextFrame()).t, "welcome");
-        old.send({ t: "req", id: 1, channel: "test:echo", input: bigValue });
-        // The helper JSON-parses every message, so a binary frame
-        // would have thrown there.
-        assert.deepEqual((await old.nextFrame()).result, bigValue);
-        old.close();
-      } finally {
-        await binding.stop();
-      }
+      // Tunnel-borne, but an old client whose hello carries no ask.
+      const old = connect(url, TUNNEL_HEADERS);
+      await old.opened;
+      old.send({
+        t: "hello",
+        token: TOKEN,
+        deviceId: "old",
+        appVersion: "1",
+      });
+      assert.equal((await old.nextFrame()).t, "welcome");
+      old.send({ t: "req", id: 1, channel: "test:echo", input: bigValue });
+      // The helper JSON-parses every message, so a binary frame
+      // would have thrown there.
+      assert.deepEqual((await old.nextFrame()).result, bigValue);
+      old.close();
     },
   );
 

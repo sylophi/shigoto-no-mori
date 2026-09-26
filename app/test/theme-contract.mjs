@@ -16,11 +16,10 @@
 //      the two rules it renders against. It ships as a committed png,
 //      so a stripped hook there is invisible until a release.
 import { readFileSync, existsSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { report, walk } from "./lib/checkKit.mjs";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const root = join(import.meta.dirname, "..");
 // Strip comments: only selectors are contract, prose may name anything.
 const readCss = (path) =>
   readFileSync(join(root, path), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");

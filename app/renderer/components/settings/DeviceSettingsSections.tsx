@@ -4,9 +4,19 @@ import type { SettingsFormState } from "@/hooks/config/useSettingsSave";
 import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
 import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
-import { PortPoolLink } from "./PortPoolLink";
-import { TerrierLink } from "./TerrierLink";
 import { ToggleRow } from "@/components/shared/ToggleRow";
+import { ExternalLink } from "@/components/ui/external-link";
+import { fieldSetter } from "@/hooks/ui/useDirtyForm";
+
+const PORT_POOL = {
+  href: "https://github.com/dittofleet/port-pool",
+  errorTitle: "Couldn't open port-pool",
+};
+
+const TERRIER = {
+  href: "https://github.com/sylophi/terrier",
+  errorTitle: "Couldn't open terrier",
+};
 
 // The device-managed toggle sections, shared verbatim between this
 // device's tab and every peer's tab on the Settings page. Everything
@@ -32,6 +42,7 @@ export function DeviceToggleSections({
   const ghInstalled = githubCliReadiness?.installed ?? true;
   const ghAuthed = githubCliReadiness?.authed ?? true;
   const ghReady = ghInstalled && ghAuthed;
+  const setField = fieldSetter(setForm);
 
   return (
     <>
@@ -39,17 +50,13 @@ export function DeviceToggleSections({
         <SectionHeading className="mb-1">Worktrees</SectionHeading>
         <ToggleRow
           checked={form.deleteBranchOnRemove}
-          onCheckedChange={(v) =>
-            setForm((prev) => ({ ...prev, deleteBranchOnRemove: v }))
-          }
+          onCheckedChange={setField("deleteBranchOnRemove")}
           label="Delete branch when removing worktree"
           description="Force-deletes the local branch the worktree had checked out. Remote branches aren't touched. Skipped when the branch is still in use elsewhere or is the repo's primary HEAD."
         />
         <ToggleRow
           checked={form.autoPullNew}
-          onCheckedChange={(v) =>
-            setForm((prev) => ({ ...prev, autoPullNew: v }))
-          }
+          onCheckedChange={setField("autoPullNew")}
           label="Start new worktrees with auto-pull on"
           description="Applies to worktrees you create from now on, and to the primary checkout of projects you add. Existing worktrees aren't changed, and each worktree's own auto-pull toggle still wins."
         />
@@ -59,9 +66,7 @@ export function DeviceToggleSections({
         <div className="pl-11">
           <ToggleRow
             checked={form.autoPullNew && form.autoPullPrimaryOnly}
-            onCheckedChange={(v) =>
-              setForm((prev) => ({ ...prev, autoPullPrimaryOnly: v }))
-            }
+            onCheckedChange={setField("autoPullPrimaryOnly")}
             disabled={!form.autoPullNew}
             label="Primary checkouts only"
             description="Only the primary checkout of a newly added project starts with auto-pull on. Other new worktrees start with it off."
@@ -69,17 +74,13 @@ export function DeviceToggleSections({
         </div>
         <ToggleRow
           checked={form.doubutsuNames}
-          onCheckedChange={(v) =>
-            setForm((prev) => ({ ...prev, doubutsuNames: v }))
-          }
+          onCheckedChange={setField("doubutsuNames")}
           label="Doubutsu names"
           description="Name new worktrees after Animal Crossing villagers and characters, like raymond, instead of adjective-animal pairs like snug-otter."
         />
         <ToggleRow
           checked={form.codexWorktreeNames}
-          onCheckedChange={(v) =>
-            setForm((prev) => ({ ...prev, codexWorktreeNames: v }))
-          }
+          onCheckedChange={setField("codexWorktreeNames")}
           label="Name Codex-style worktrees by their parent folder"
           description="Codex and some other tools create worktrees as worktree-name/repo-name. When an external worktree's folder is just the repo's name, show the folder above it instead."
         />
@@ -89,24 +90,20 @@ export function DeviceToggleSections({
         <SectionHeading className="mb-1">Integrations</SectionHeading>
         <ToggleRow
           checked={form.githubCli && ghReady}
-          onCheckedChange={(v) =>
-            setForm((prev) => ({ ...prev, githubCli: v }))
-          }
+          onCheckedChange={setField("githubCli")}
           disabled={!ghReady}
           label="Use GitHub CLI"
           description={ghDescription(ghInstalled, ghAuthed)}
         />
         <ToggleRow
           checked={form.autoPopulateInstall}
-          onCheckedChange={(v) =>
-            setForm((prev) => ({ ...prev, autoPopulateInstall: v }))
-          }
+          onCheckedChange={setField("autoPopulateInstall")}
           label="Auto-populate install command"
           description="When adding a project with a package.json, seed the setup script with the detected package manager's install command (e.g. pnpm install). Only runs at project-add time, so existing projects are untouched."
         />
         <ToggleRow
           checked={form.portPool && portPoolInstalled}
-          onCheckedChange={(v) => setForm((prev) => ({ ...prev, portPool: v }))}
+          onCheckedChange={setField("portPool")}
           disabled={!portPoolInstalled}
           label="Automatically use port-pool"
           description={
@@ -114,11 +111,11 @@ export function DeviceToggleSections({
               Allocates ports for new worktrees and releases them on delete.
               Activates when a project has a{" "}
               <span className="font-mono">port-pool.config.json</span>.{" "}
-              <PortPoolLink>
+              <ExternalLink {...PORT_POOL}>
                 {portPoolInstalled
                   ? "Learn more"
                   : "Install port-pool to enable this integration."}
-              </PortPoolLink>
+              </ExternalLink>
             </>
           }
         />
@@ -129,7 +126,7 @@ export function DeviceToggleSections({
           // app's Settings", so the off switch must keep working.
           // Only turning it ON requires a ready binary.
           checked={form.terrier}
-          onCheckedChange={(v) => setForm((prev) => ({ ...prev, terrier: v }))}
+          onCheckedChange={setField("terrier")}
           disabled={!terrierReady && !form.terrier}
           label="Automatically use terrier"
           description={terrierDescription(
@@ -151,7 +148,8 @@ function terrierDescription(
   if (!installed) {
     return (
       <>
-        <TerrierLink>Install terrier</TerrierLink> to enable this integration.
+        <ExternalLink {...TERRIER}>Install terrier</ExternalLink> to enable this
+        integration.
       </>
     );
   }
@@ -160,7 +158,7 @@ function terrierDescription(
       <>
         {version ?? "The installed terrier"} isn't a version this build
         understands. Update both and try again.{" "}
-        <TerrierLink>Learn more</TerrierLink>
+        <ExternalLink {...TERRIER}>Learn more</ExternalLink>
       </>
     );
   }
@@ -168,7 +166,7 @@ function terrierDescription(
     <>
       Shows every repo registered in terrier as a project. Removing one requires{" "}
       <span className="font-mono">terrier rm</span>.{" "}
-      <TerrierLink>Learn more</TerrierLink>
+      <ExternalLink {...TERRIER}>Learn more</ExternalLink>
     </>
   );
 }

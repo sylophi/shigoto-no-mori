@@ -100,11 +100,9 @@ export async function pruneEmptyManagedParents(
   }
 }
 
-async function tryRmdir(path: string): Promise<boolean> {
-  try {
-    await rmdir(path);
-    return true;
-  } catch {
-    return false;
-  }
+function tryRmdir(path: string): Promise<boolean> {
+  return rmdir(path).then(
+    () => true,
+    () => false,
+  );
 }

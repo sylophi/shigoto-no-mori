@@ -16,11 +16,10 @@ import { join } from "node:path";
 import { invalidateGlobalConfigCache } from "@host/lib/config/global";
 import { invalidateAllProjectConfigCaches } from "@host/lib/config/project";
 import { dataDir } from "@host/lib/util/paths";
-import { selfWroteWithin } from "@host/lib/util/selfWrite";
+import { SELF_ECHO_MS, selfWroteWithin } from "@host/lib/util/selfWrite";
 import { cliChildCount } from "./cliRunner";
 
 const DEBOUNCE_MS = 300;
-const SELF_ECHO_MS = 1000;
 
 const activeWatchers: FSWatcher[] = [];
 

@@ -9,7 +9,7 @@ import type {
 } from "@shared/schemas";
 import { withLaunchRowScript } from "@shared/launchRow";
 import { stateStore } from "../config/store";
-import { countWithin, maxTimestamp, pruneAndPush } from "../util/useLog";
+import { pruneAndPush, usageByName } from "../util/useLog";
 
 const USE_LOG_KEY = "packageScriptUseLog";
 const SORT_KEY = "packageScriptSort";
@@ -128,18 +128,10 @@ export function usageFor(
   projectId: string,
   scriptNames: string[],
 ): Record<string, PackageScriptUsage> {
-  const projectLog =
-    stateStore.readHint<UseLog>(USE_LOG_KEY, {})[projectId] ?? {};
-  const now = Date.now();
-  const out: Record<string, PackageScriptUsage> = {};
-  for (const name of scriptNames) {
-    const timestamps = projectLog[name] ?? [];
-    out[name] = {
-      lastUsed: maxTimestamp(timestamps),
-      recentCount: countWithin(timestamps, now),
-    };
-  }
-  return out;
+  return usageByName(
+    scriptNames,
+    stateStore.readHint<UseLog>(USE_LOG_KEY, {})[projectId] ?? {},
+  );
 }
 
 export function bumpScriptUseCount(

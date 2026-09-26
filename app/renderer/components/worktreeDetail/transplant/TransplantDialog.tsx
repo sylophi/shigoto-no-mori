@@ -25,13 +25,11 @@ import {
   useTeardownSource,
 } from "@/hooks/remote/usePullWorktree";
 import { DestinationProvider } from "@/hooks/remote/useHostScope";
-import { useLandingTarget } from "../flow/cloneDestination";
-import { modeOf, selectionSummary, usePullChoice } from "../flow/ignoreChoice";
+import { modeOf, selectionSummary } from "../flow/ignoreChoice";
 import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
 import type { DestinationPick } from "../flow/PullReview";
 import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
 import { TransplantFinish } from "./TransplantFinish";
-import { PullProgress } from "../flow/PullProgress";
 import { TransplantReview } from "./TransplantReview";
 import { type Landing, LANDS_HERE, stepHeadline } from "../flow/pullSteps";
 
@@ -157,39 +155,39 @@ function TransplantFlow({
   teardown: UseMutationResult<SyncTeardownSourceResult, Error, void>;
   onClose: () => void;
 }) {
-  // The leave-out rule and the setup switch, the mirror's pair. Under
-  // the source scope: its ignored list walks the checkout over the
-  // device link.
-  const choice = usePullChoice(project.id, worktree.id, sourceIdentity);
-  const mode = modeOf(choice.selection);
-  const bringsFiles = pullBringsIgnoredFiles(mode);
-  const target = useLandingTarget({
-    localProject,
-    sourceProject: project,
-    toPeer: toPeer !== undefined,
-    submitted: pull.variables,
-  });
-  const { stage, elapsed, progress, start, open } = usePullFlow({
+  const flow = usePullFlow({
     mutation: pull,
-    sourceWorktreeId: worktree.id,
-    // The key only when there is a clone: the flows to a peer take the
-    // plain choice, and their payloads are strict.
-    choice: target?.clone
-      ? { ...choice.choice, cloneInto: target.clone.cloneInto }
-      : choice.choice,
-    destinationDeviceId: toPeer?.pickedId ?? undefined,
+    worktree,
+    project,
+    sourceIdentity,
+    localProject,
+    toPeer,
     onClose,
   });
+  // The leave-out rule and the setup switch, the mirror's pair.
+  const { stage, progress, start, open, pull: choice, target } = flow;
+  const mode = modeOf(choice.selection);
+  const bringsFiles = pullBringsIgnoredFiles(mode);
 
   return (
     <PullFlowFrame
-      stage={stage}
-      elapsed={elapsed}
+      flow={flow}
+      worktree={worktree}
       reviewIcon={ArrowRight}
       titles={TITLES}
+      sourceDeviceLabel={sourceDeviceLabel}
       thisDeviceLabel={thisDeviceLabel}
+      landing={landing}
       steps={STEPS}
       stepsLabel="Transplant steps"
+      progressExtras={{
+        failedNote: landing.onPeer
+          ? `The copy here is untouched. If the worktree already landed ${landing.on}, open it from the sidebar instead of retrying.`
+          : undefined,
+        filesDetail: bringsFiles
+          ? (selectionSummary(choice.selection) ?? "everything ignored, too")
+          : undefined,
+      }}
       onClose={onClose}
       headline={
         <>
@@ -224,33 +222,6 @@ function TransplantFlow({
           pull={choice}
           onCancel={onClose}
           onStart={start}
-        />
-      )}
-      {(stage === "running" || stage === "failed") && target && (
-        <PullProgress
-          frame={progress.frame}
-          phasesSeen={progress.phasesSeen}
-          sourceDeviceLabel={sourceDeviceLabel}
-          thisDeviceLabel={thisDeviceLabel}
-          worktree={worktree}
-          target={target}
-          runSetup={choice.runSetup}
-          landing={landing}
-          phasesReported={!landing.onPeer}
-          failedNote={
-            landing.onPeer
-              ? `The copy here is untouched. If the worktree already landed ${landing.on}, open it from the sidebar instead of retrying.`
-              : undefined
-          }
-          error={stage === "failed" ? pull.error : undefined}
-          onClose={onClose}
-          onRetry={start}
-          filesDetail={
-            bringsFiles
-              ? (selectionSummary(choice.selection) ??
-                "everything ignored, too")
-              : undefined
-          }
         />
       )}
       {stage === "done" && pull.data && (

@@ -347,13 +347,11 @@ func prefetchProjectColors(projects []project) {
 	semaphore := make(chan struct{}, 8)
 	var wg sync.WaitGroup
 	for _, proj := range projects {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 			projectColorCode(proj)
-		}()
+		})
 	}
 	wg.Wait()
 	flushIconCache()

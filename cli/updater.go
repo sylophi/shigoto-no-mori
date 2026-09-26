@@ -234,12 +234,8 @@ func releaseListCachePath() string {
 }
 
 func readReleaseListCache(url string) *releaseListCache {
-	raw, err := os.ReadFile(releaseListCachePath())
-	if err != nil {
-		return nil
-	}
-	var cache releaseListCache
-	if json.Unmarshal(raw, &cache) != nil || cache.URL != url || len(cache.Body) == 0 {
+	cache, ok := readJSONFile[releaseListCache](releaseListCachePath())
+	if !ok || cache.URL != url || len(cache.Body) == 0 {
 		return nil
 	}
 	return &cache
@@ -548,12 +544,8 @@ func acquireStagingLock() (func(), error) {
 }
 
 func readStagedManifest() *stagedManifest {
-	raw, err := os.ReadFile(stagedManifestPath())
-	if err != nil {
-		return nil
-	}
-	var man stagedManifest
-	if json.Unmarshal(raw, &man) != nil || man.Version == "" || man.BundleName == "" {
+	man, ok := readJSONFile[stagedManifest](stagedManifestPath())
+	if !ok || man.Version == "" || man.BundleName == "" {
 		return nil
 	}
 	if info, err := os.Stat(stagedBundlePath(&man)); err != nil || !info.IsDir() {

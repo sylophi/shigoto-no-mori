@@ -45,14 +45,11 @@ import { execFile } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
-  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { connect as netConnect } from "node:net";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { buildClient } from "@shared/ipc/buildClient";
@@ -64,8 +61,6 @@ import {
 } from "@shared/ipc/modules/mirror";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
-import { registerContract } from "@shared/ipc/registerContract";
-import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { setFileSyncSpawnImpl, spawnStreamChild } from "@host/fileSync/spawn";
 import { forwardHandlers } from "@host/ipc/modules/forward";
 import {
@@ -82,78 +77,34 @@ import {
 } from "@host/mirror/registry";
 import { transferFilesOnce } from "@host/mirror/oneShot";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
-import { initDataDirAt } from "@host/lib/util/paths";
 import { createMirrorDaemon } from "../main/core/mirror/daemon.ts";
 import { createMirrorGateway } from "../main/core/mirror/gateway.ts";
 import {
-  cliFailureMessage,
-  createCliRunner,
   fileEquals,
   makeProof,
   makeTracker,
   repoRoot,
-  scrubbedGitEnv,
 } from "./lib/checkKit.mjs";
+import { cliSandbox } from "./lib/cliSandbox.mjs";
 import { bootDirectWire } from "./lib/directBoot.mjs";
 import { delay, waitFor } from "./lib/checkKit.mjs";
 
 const execFileP = promisify(execFile);
-const cliDir = join(repoRoot, "cli");
 const fileSyncDir = join(repoRoot, "file-sync");
 
 // Sandbox: everything (data dir, repos, the built binary, the
-// daemon's data) under one temp tree. realpath because worktree ids
-// derive from git's resolved paths (/var/folders is a symlink on
-// macOS).
-const sandbox = realpathSync(mkdtempSync(join(tmpdir(), "sm-mirror-check-")));
-const dataDir = join(sandbox, "data");
-const smBinary = join(sandbox, "sm");
-const fileSyncBinary = join(sandbox, "file-sync");
-const fileSyncDataDir = join(sandbox, "file-sync-data");
-
-// The kit's scrub (no inherited GIT_*, config pinned) applied to
-// process.env itself rather than a copy: the host modules under test
-// run git in THIS process (host/lib/git/core.ts reads process.env), so
-// a lefthook-exported GIT_DIR would otherwise point them at the real
-// repository. Plus the fixture identity for the commits below.
-for (const key of Object.keys(process.env)) {
-  if (key.startsWith("GIT_")) delete process.env[key];
-}
-Object.assign(process.env, scrubbedGitEnv(), {
-  GIT_AUTHOR_NAME: "t",
-  GIT_AUTHOR_EMAIL: "t@t",
-  GIT_COMMITTER_NAME: "t",
-  GIT_COMMITTER_EMAIL: "t@t",
-});
-const baseEnv = { ...process.env };
-const smEnv = {
-  ...baseEnv,
-  SHIGOMORI_DATA_DIR: dataDir,
+// daemon's data) under one temp tree, with process.env scrubbed and
+// the fixture identity set for the commits below (cliSandbox). The
+// document-run seam there is what the registered projects need (sm
+// projects add).
+const fixture = cliSandbox("sm-mirror-check-", {
   // The fsevents binding's deprecation warning would otherwise land in
   // the build output on macOS 13+ (see scripts/build-cli.mjs).
   CGO_CFLAGS: "-Wno-deprecated-declarations",
-};
-
-async function git(cwd, args) {
-  try {
-    return await execFileP("git", args, { cwd, env: baseEnv });
-  } catch (error) {
-    // execFile's message is just "Command failed". The reason is on
-    // stderr.
-    throw new Error(
-      `git ${args.join(" ")} in ${cwd} failed: ${error.stderr || error.stdout || error.message}`,
-      { cause: error },
-    );
-  }
-}
-
-async function gitOut(cwd, ...args) {
-  const { stdout } = await git(cwd, args);
-  return stdout.trim();
-}
-
-// The document-run seam the registered projects need (sm projects add).
-const { runCli, sm } = createCliRunner(smBinary, smEnv);
+});
+const { sandbox, smEnv, git, gitOut, addWorktree } = fixture;
+const fileSyncBinary = join(sandbox, "file-sync");
+const fileSyncDataDir = join(sandbox, "file-sync-data");
 
 const read = (path) => readFileSync(path, "utf8");
 
@@ -177,10 +128,7 @@ async function main() {
 
   // ---- Fixtures: build the CLI, seed A's repo and worktree, B's dir ----
   await Promise.all([
-    execFileP("go", ["build", "-o", smBinary, "."], {
-      cwd: cliDir,
-      env: smEnv,
-    }),
+    fixture.buildSm(smEnv),
     execFileP("go", ["build", "-o", fileSyncBinary, "."], {
       cwd: fileSyncDir,
       env: smEnv,
@@ -189,11 +137,8 @@ async function main() {
 
   const repoA = join(sandbox, "repo-a");
   await git(sandbox, ["init", "-q", "-b", "main", "repo-a"]);
-  writeFileSync(join(repoA, "readme.txt"), "base\n");
-  await git(repoA, ["add", "-A"]);
-  await git(repoA, ["commit", "-qm", "base"]);
-  const worktreeA = join(sandbox, "wt-a");
-  await git(repoA, ["worktree", "add", "-q", "-b", "feature", worktreeA]);
+  await fixture.commitFile(repoA, "readme.txt", "base\n", "base");
+  const worktreeA = await addWorktree(repoA, "wt-a", "feature");
   // The content that must cross on the first cycle: a tracked file, a
   // nested one, a gitignored-looking one. And the .git POINTER FILE of
   // a linked worktree, which must never cross.
@@ -226,12 +171,7 @@ async function main() {
   writeFileSync(join(rootB, "from-b.txt"), "from B\n");
   const worktreeIdB = worktreeIdFromPath(rootB);
 
-  initDataDirAt(dataDir);
-  setCliRunnerImpl({
-    runCli,
-    requireCliBinary: () => smBinary,
-    cliFailureMessage,
-  });
+  fixture.useCli();
   // A's serve children, exactly as the app spawns them, plus the
   // observation seam.
   setFileSyncSpawnImpl((args) =>
@@ -240,36 +180,21 @@ async function main() {
       onSpawned: (child) => serveChildren.add(child),
     }),
   );
-  const projectIdOf = async (path) => {
-    const result = await sm("projects", "add", "--", path);
-    const doc = result.docs.findLast((d) => typeof d.id === "string");
-    assert.ok(doc, `projects add emitted no project doc for ${path}`);
-    return doc.id;
-  };
-  const projectIdA = await projectIdOf(repoA);
-  const projectIdB = await projectIdOf(repoB);
+  const projectIdA = await fixture.projectIdOf(repoA);
+  const projectIdB = await fixture.projectIdOf(repoB);
 
   // ---- The direct wire: A serves the byte wire and its worktree list,
   // B dials through the real bridge cache. ----
   const { track, teardown } = makeTracker();
   const { stub, listener, peerA } = await bootDirectWire(track, {
-    registerHandlers: (binding) => {
-      registerContract(forwardContract, forwardHandlers, binding, {
-        validateOutputs: true,
-      });
-      registerContract(worktreesContract, worktreesHandlers, binding, {
-        validateOutputs: true,
-        onUsageTracked: () => {},
-      });
+    contracts: [
+      [forwardContract, forwardHandlers],
+      [worktreesContract, worktreesHandlers],
       // The git follower's peer half: the transfer verbs (both
       // directions) and the mirror's git state pair.
-      registerContract(syncContract, syncHandlers, binding, {
-        validateOutputs: true,
-      });
-      registerContract(mirrorContract, mirrorHandlers, binding, {
-        validateOutputs: true,
-      });
-    },
+      [syncContract, syncHandlers],
+      [mirrorContract, mirrorHandlers],
+    ],
   });
   const mirrorOverWire = buildClient(mirrorContract, peerA.transport);
 
@@ -635,8 +560,7 @@ async function main() {
     // (G6) A branch collision: A checks out a branch that another
     // worktree on B already holds. Refused with the path, nothing
     // moves. Checking back on A restores sync.
-    const wtB2 = join(sandbox, "wt-b2");
-    await git(repoB, ["worktree", "add", "-q", "-b", "other", wtB2]);
+    await addWorktree(repoB, "wt-b2", "other");
     await git(worktreeA, ["checkout", "-q", "-b", "other"]);
     follower.onPeerProjectChanged("A", projectIdA);
     await waitGit("blocked", "the follower to report blocked");
@@ -934,7 +858,7 @@ async function main() {
       }
     }
     await teardown();
-    rmSync(sandbox, { recursive: true, force: true });
+    fixture.remove();
   }
 }
 

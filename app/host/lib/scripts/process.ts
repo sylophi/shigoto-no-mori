@@ -190,3 +190,18 @@ export function signalTreeBestEffort(
 ): void {
   safeKill(-pid, signal);
 }
+
+// The same for a child spawned detached (its own process group), or
+// the child alone when it never got a pid. Never throws: the tree is
+// usually already down by the time anyone signals it.
+export function signalChildTree(
+  child: ChildProcess,
+  signal: NodeJS.Signals,
+): void {
+  try {
+    if (child.pid !== undefined) signalTreeBestEffort(child.pid, signal);
+    else child.kill(signal);
+  } catch {
+    // Already gone.
+  }
+}

@@ -16,7 +16,8 @@
 // browser global read at module scope, so the headless bridge check
 // drives the whole factory under node with in-memory storage and a
 // recording fetch.
-import { errorMessageOf } from "@shared/errors";
+import { logFailure } from "@shared/errors";
+import { singleFlight } from "@shared/util/singleFlight";
 import { createAccountService } from "@shared/account/service";
 import { buildApi } from "@shared/ipc/client";
 import {
@@ -32,7 +33,6 @@ import { shellContract } from "@shared/ipc/modules/shell";
 import { broadcastAll, registerContract } from "@shared/ipc/registerContract";
 import type { Handlers } from "@shared/ipc/types";
 import { createDirectPlane } from "@shared/hub/directPlane";
-import { isConfigured } from "@shared/account/serviceConfig";
 import {
   SharedSettingsDocSchema,
   StoredClientConfigSchema,
@@ -52,7 +52,10 @@ import {
   type DeviceFields,
 } from "@shared/account/enroll";
 import { createHubConnection } from "../hub/connection";
-import { webServiceConfig } from "../account/config";
+import {
+  isConfigured,
+  resolveServiceConfig,
+} from "@shared/account/serviceConfig";
 import { getWebDeviceId } from "../account/deviceId";
 import { defaultWebDeviceName, type BrowserHints } from "../account/deviceName";
 import { defaultWebDeviceShape } from "../account/deviceIcon";
@@ -110,7 +113,7 @@ export type WebBridge = {
 const CLIENT_CONFIG_KEY = "sm.web.clientConfig";
 const SHARED_SETTINGS_KEY = "sm.web.sharedSettings";
 export function createWebBridge(deps: WebBridgeDeps): WebBridge {
-  const config = webServiceConfig(deps.env);
+  const config = resolveServiceConfig(deps.env);
   const store = createWebAccountStore(deps.localStorage);
   const deviceId = getWebDeviceId(deps.localStorage);
   const service = createAccountService({
@@ -163,9 +166,9 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // mint blocks the supervisor like it would the desktop's (a
   // deterministic refusal must not loop), which the device pages show
   // as the socket's blocked phase.
-  async function refreshHub(): Promise<void> {
-    try {
-      await connection.refresh(async () => {
+  function refreshHub(): Promise<void> {
+    return logFailure("[hub] connection refresh failed", () =>
+      connection.refresh(async () => {
         if (!isConfigured(config)) return null;
         const record = store.read();
         if (record === null) return null;
@@ -182,10 +185,8 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
             return (await service.mintTicket(fresh.credential, signal)).ticket;
           },
         };
-      });
-    } catch (error) {
-      console.warn(`[hub] connection refresh failed: ${errorMessageOf(error)}`);
-    }
+      }),
+    );
   }
 
   // ---- account module ----
@@ -270,8 +271,8 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   // stored one) or two revokes. Same-tab only: the storage key is
   // still shared across tabs, but a cross-tab race is closed by the
   // reconciler's re-read after the storage event.
-  let enrollInFlight: Promise<AccountStatus> | null = null;
-  let signOutInFlight: Promise<void> | null = null;
+  const enrollOnce = singleFlight<AccountStatus>();
+  const signOutOnce = singleFlight<void>();
 
   // Removing a device from the account, served over the
   // account:revokeDevice client channel (what the devices page calls).
@@ -298,9 +299,8 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
     // hub device credential, enrolling this browser under platform
     // "web" (a legal opaque label beside the desktop's os.platform()
     // values in EnrollRequestSchema's 1..64 bound).
-    enroll: async (token) => {
-      if (enrollInFlight) return enrollInFlight;
-      enrollInFlight = (async (): Promise<AccountStatus> => {
+    enroll: (token) =>
+      enrollOnce(async () => {
         await enrollDevice(
           {
             config,
@@ -315,28 +315,15 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
         );
         accountChanged();
         return readStatus();
-      })();
-      try {
-        return await enrollInFlight;
-      } finally {
-        enrollInFlight = null;
-      }
-    },
+      }),
 
     // The shared best-effort revoke-then-clear (the desktop handler
     // adds a warn-once and its grant clear on top of the same core).
-    signOut: async () => {
-      if (signOutInFlight) return signOutInFlight;
-      signOutInFlight = (async (): Promise<void> => {
+    signOut: () =>
+      signOutOnce(async () => {
         await signOutDevice({ config, service, store, deviceId });
         accountChanged();
-      })();
-      try {
-        return await signOutInFlight;
-      } finally {
-        signOutInFlight = null;
-      }
-    },
+      }),
 
     revokeDevice: (targetDeviceId) => revokeDeviceOnAccount(targetDeviceId),
 

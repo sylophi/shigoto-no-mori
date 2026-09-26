@@ -3,17 +3,20 @@
 // shape every check prints.
 import { execFileSync, spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 // The app root (app/ in the repo), resolved from this file's location
 // under test/lib/.
-export const appRoot = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "..",
-  "..",
-);
+export const appRoot = join(import.meta.dirname, "..", "..");
 
 // The repo root, one level up: where cli/ and file-sync/ live.
 export const repoRoot = dirname(appRoot);
@@ -42,12 +45,6 @@ export function* walk(dir, extensions) {
   }
 }
 
-// The failure-collecting harness every check script hand-rolls: a
-// `failures` list and a `check(label, fn)` that runs one assertion group
-// and records its message instead of throwing, so one failing group does
-// not hide the rest. Returns both so the script can hand `failures` to
-// `report` below. Synchronous, matching the assertion callbacks that use
-// it.
 // A loopback port number nothing holds right now: bind an ephemeral
 // listener and release it. Free the instant the close lands, and
 // nothing else grabs an ephemeral port in the same tick.
@@ -61,6 +58,60 @@ export function freeLoopbackPort() {
   });
 }
 
+// A loopback test server, on an ephemeral port unless one is named,
+// bound to `host` (127.0.0.1 unless named). `onConnection` is the
+// per-socket behavior (echo, greet, close, proxy), handed the socket and
+// `hold`, which puts a socket the check opened itself (a proxy's
+// upstream) under the same teardown. `connections` counts accepted
+// sockets so a grant proof can assert the handler never dialed.
+export function startLoopbackServer(
+  onConnection,
+  { host = "127.0.0.1", port = 0 } = {},
+) {
+  return new Promise((resolve, reject) => {
+    const state = { connections: 0 };
+    const sockets = new Set();
+    const hold = (socket) => {
+      sockets.add(socket);
+      socket.on("close", () => sockets.delete(socket));
+      return socket;
+    };
+    const server = createServer((socket) => {
+      state.connections += 1;
+      hold(socket);
+      // A host-side destroy can surface as ECONNRESET here, and an
+      // unlistened socket error would take down the whole check.
+      socket.on("error", () => {});
+      onConnection(socket, hold);
+    });
+    // A named port can be taken: fail the check, not the process.
+    server.once("error", reject);
+    server.listen(port, host, () => {
+      server.off("error", reject);
+      resolve({
+        server,
+        port: server.address().port,
+        connections: () => state.connections,
+        close: () =>
+          new Promise((done) => {
+            // server.close waits out live connections, and an assertion
+            // failure reaches this finally with host-side conns still
+            // open, so destroy accepted sockets or the process hangs
+            // with no diagnostic instead of reporting the failure.
+            for (const socket of sockets) socket.destroy();
+            server.close(done);
+          }),
+      });
+    });
+  });
+}
+
+// The failure-collecting harness every check script hand-rolls: a
+// `failures` list and a `check(label, fn)` that runs one assertion group
+// and records its message instead of throwing, so one failing group does
+// not hide the rest. Returns both so the script can hand `failures` to
+// `report` below. Synchronous, matching the assertion callbacks that use
+// it.
 export function makeChecker() {
   const failures = [];
   function check(label, fn) {
@@ -100,21 +151,6 @@ export function makeTracker() {
   };
 }
 
-// The async sibling of makeChecker, for the e2e proof scripts: named
-// scenario groups that drive real transports sequentially, where the
-// first failure aborts the run. `name` is the proof phrase the summary
-// lines print, like "sync-transfer proof".
-//
-//   - check(label, fn) awaits fn(track) and prints the "  ok" line.
-//     track(cleanup) registers teardown on a per-check makeTracker, so
-//     cleanups run in reverse order even when the assertions throw and
-//     a failed check cannot leak the event loop.
-//   - ok(label) records an assertion group the script ran inline, for
-//     proofs whose scenarios share long-lived fixtures instead of
-//     per-check setup.
-//   - done() prints the "<name> OK (N assertions)" summary.
-//   - fail(error) prints the FAILED epilogue and sets a nonzero exit
-//     code, shaped for main().catch(fail).
 // The polling pair every e2e check carries: a sleep, and a bounded
 // wait on a predicate whose timeout names what it waited for.
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -131,6 +167,12 @@ export async function waitFor(predicate, what, timeoutMs = 5_000) {
   }
 }
 
+// The global and system git config, cut off.
+const GIT_CONFIG_CUT = {
+  GIT_CONFIG_GLOBAL: "/dev/null",
+  GIT_CONFIG_SYSTEM: "/dev/null",
+};
+
 // process.env with every GIT_* variable removed, for a check that runs
 // git against a sandbox repository. The pre-commit hook exports
 // GIT_DIR, GIT_INDEX_FILE and GIT_PREFIX for the REAL repository.
@@ -144,10 +186,21 @@ export function scrubbedGitEnv() {
     ...Object.fromEntries(
       Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
     ),
-    GIT_CONFIG_GLOBAL: "/dev/null",
-    GIT_CONFIG_SYSTEM: "/dev/null",
+    ...GIT_CONFIG_CUT,
     LC_ALL: "C",
   };
+}
+
+// The same scrub applied to process.env itself, for a check whose code
+// under test runs git in THIS process with process.env: every GIT_*
+// deleted and the global and system config cut off, then `extra` on
+// top (a locale pin, a fixture identity). Unlike scrubbedGitEnv it
+// leaves the locale alone unless `extra` pins it.
+export function scrubProcessGitEnv(extra = {}) {
+  for (const key of Object.keys(process.env)) {
+    if (key.startsWith("GIT_")) delete process.env[key];
+  }
+  Object.assign(process.env, GIT_CONFIG_CUT, extra);
 }
 
 // git in a sandbox repository, under the scrubbed environment and a
@@ -162,6 +215,21 @@ export function sandboxGit(gitEnv = scrubbedGitEnv()) {
     );
 }
 
+// The async sibling of makeChecker, for the e2e proof scripts: named
+// scenario groups that drive real transports sequentially, where the
+// first failure aborts the run. `name` is the proof phrase the summary
+// lines print, like "sync-transfer proof".
+//
+//   - check(label, fn) awaits fn(track) and prints the "  ok" line.
+//     track(cleanup) registers teardown on a per-check makeTracker, so
+//     cleanups run in reverse order even when the assertions throw and
+//     a failed check cannot leak the event loop.
+//   - ok(label) records an assertion group the script ran inline, for
+//     proofs whose scenarios share long-lived fixtures instead of
+//     per-check setup.
+//   - done() prints the "<name> OK (N assertions)" summary.
+//   - fail(error) prints the FAILED epilogue and sets a nonzero exit
+//     code, shaped for main().catch(fail).
 export function makeProof(name) {
   const passed = [];
   function ok(label) {
@@ -247,6 +315,15 @@ const jwtSegment = (obj) =>
 
 export function fakeSessionJwt(sub) {
   return `${jwtSegment({ alg: "none", typ: "JWT" })}.${jwtSegment({ sub })}.sig`;
+}
+
+// A fresh temp dir named after `prefix`, resolved through realpath
+// (macOS puts tmpdir behind a symlink, and git records the real path),
+// that the check's tracker removes.
+export function tempDir(prefix, track) {
+  const dir = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
+  track(() => rmSync(dir, { recursive: true, force: true }));
+  return dir;
 }
 
 // A file's text, or null when it is not there, so an assert on it

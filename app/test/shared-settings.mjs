@@ -22,8 +22,7 @@
 // Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
 // imports resolve. Run: pnpm test shared-settings.
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   createSharedSettingsCopy,
@@ -51,7 +50,7 @@ import {
   sharedSettingsCopy,
 } from "@host/lib/sharedSettings/store";
 import { createWebBridge } from "../web/ipc/register.ts";
-import { makeProof, memoryStorage } from "./lib/checkKit.mjs";
+import { makeProof, memoryStorage, tempDir } from "./lib/checkKit.mjs";
 
 const { check, done, fail } = makeProof("shared settings proof");
 
@@ -319,69 +318,65 @@ async function main() {
 
   await check(
     "host copy: lives in registry.json beside the CLI's keys, stamps with this device, announces only real changes",
-    () => {
-      const dir = mkdtempSync(join(tmpdir(), "sm-shared-settings-"));
-      try {
-        writeFileSync(
-          join(dir, "registry.json"),
-          JSON.stringify({ projects: [{ id: "p1" }], deviceId: KIWI }),
-        );
-        initDataDirAt(dir);
-        const announced = [];
-        onSharedSettingsChange((doc) => announced.push(doc));
+    (track) => {
+      const dir = tempDir("sm-shared-settings-", track);
+      writeFileSync(
+        join(dir, "registry.json"),
+        JSON.stringify({ projects: [{ id: "p1" }], deviceId: KIWI }),
+      );
+      initDataDirAt(dir);
+      const announced = [];
+      onSharedSettingsChange((doc) => announced.push(doc));
 
-        assert.deepEqual(sharedSettingsCopy.read(), EMPTY_SHARED_SETTINGS);
-        const first = sharedSettingsCopy.set(KEY, LYCHEE);
-        assert.equal(first.entries[KEY].by, KIWI);
-        assert.equal(announced.length, 1);
-        // The same pick again is not a write: no new stamp to outrank
-        // a different pick made elsewhere meanwhile.
-        assert.deepEqual(sharedSettingsCopy.set(KEY, LYCHEE), first);
-        assert.equal(announced.length, 1);
-        // A merge that learns nothing is silent, one that learns is not.
-        sharedSettingsCopy.merge(first);
-        assert.equal(announced.length, 1);
-        const newer = {
-          entries: {
-            [KEY]: { value: KIWI, at: first.entries[KEY].at + 1, by: LYCHEE },
-          },
-        };
-        assert.equal(
-          sharedStringSetting(sharedSettingsCopy.merge(newer), KEY),
-          KIWI,
-        );
-        assert.equal(announced.length, 2);
+      assert.deepEqual(sharedSettingsCopy.read(), EMPTY_SHARED_SETTINGS);
+      const first = sharedSettingsCopy.set(KEY, LYCHEE);
+      assert.equal(first.entries[KEY].by, KIWI);
+      assert.equal(announced.length, 1);
+      // The same pick again is not a write: no new stamp to outrank
+      // a different pick made elsewhere meanwhile.
+      assert.deepEqual(sharedSettingsCopy.set(KEY, LYCHEE), first);
+      assert.equal(announced.length, 1);
+      // A merge that learns nothing is silent, one that learns is not.
+      sharedSettingsCopy.merge(first);
+      assert.equal(announced.length, 1);
+      const newer = {
+        entries: {
+          [KEY]: { value: KIWI, at: first.entries[KEY].at + 1, by: LYCHEE },
+        },
+      };
+      assert.equal(
+        sharedStringSetting(sharedSettingsCopy.merge(newer), KEY),
+        KIWI,
+      );
+      assert.equal(announced.length, 2);
 
-        const onDisk = JSON.parse(
-          readFileSync(join(dir, "registry.json"), "utf8"),
-        );
-        assert.deepEqual(onDisk.projects, [{ id: "p1" }]);
-        assert.equal(onDisk.deviceId, KIWI);
-        assert.deepEqual(onDisk.sharedSettings, newer);
+      const onDisk = JSON.parse(
+        readFileSync(join(dir, "registry.json"), "utf8"),
+      );
+      assert.deepEqual(onDisk.projects, [{ id: "p1" }]);
+      assert.equal(onDisk.deviceId, KIWI);
+      assert.deepEqual(onDisk.sharedSettings, newer);
 
-        // A device leaving the account drops its copy, announced like
-        // a change, and an already empty copy clears silently.
-        assert.deepEqual(sharedSettingsCopy.clear(), EMPTY_SHARED_SETTINGS);
-        assert.equal(announced.length, 3);
-        assert.deepEqual(sharedSettingsCopy.read(), EMPTY_SHARED_SETTINGS);
-        sharedSettingsCopy.clear();
-        assert.equal(announced.length, 3);
-        // What comes back from a peer is taken whole again: the clear
-        // wrote no tombstones to outrank it.
-        assert.deepEqual(sharedSettingsCopy.merge(newer), newer);
-        assert.equal(announced.length, 4);
+      // A device leaving the account drops its copy, announced like
+      // a change, and an already empty copy clears silently.
+      assert.deepEqual(sharedSettingsCopy.clear(), EMPTY_SHARED_SETTINGS);
+      assert.equal(announced.length, 3);
+      assert.deepEqual(sharedSettingsCopy.read(), EMPTY_SHARED_SETTINGS);
+      sharedSettingsCopy.clear();
+      assert.equal(announced.length, 3);
+      // What comes back from a peer is taken whole again: the clear
+      // wrote no tombstones to outrank it.
+      assert.deepEqual(sharedSettingsCopy.merge(newer), newer);
+      assert.equal(announced.length, 4);
 
-        // Hand-mangled storage reads as empty instead of throwing, and
-        // the next merge fills it back in.
-        writeFileSync(
-          join(dir, "registry.json"),
-          JSON.stringify({ ...onDisk, sharedSettings: { entries: 5 } }),
-        );
-        assert.deepEqual(sharedSettingsCopy.read(), EMPTY_SHARED_SETTINGS);
-        assert.deepEqual(sharedSettingsCopy.merge(newer), newer);
-      } finally {
-        rmSync(dir, { recursive: true, force: true });
-      }
+      // Hand-mangled storage reads as empty instead of throwing, and
+      // the next merge fills it back in.
+      writeFileSync(
+        join(dir, "registry.json"),
+        JSON.stringify({ ...onDisk, sharedSettings: { entries: 5 } }),
+      );
+      assert.deepEqual(sharedSettingsCopy.read(), EMPTY_SHARED_SETTINGS);
+      assert.deepEqual(sharedSettingsCopy.merge(newer), newer);
     },
   );
 

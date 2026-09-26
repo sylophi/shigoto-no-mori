@@ -22,7 +22,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"os"
 	"path/filepath"
 	"time"
 )
@@ -61,12 +60,8 @@ func appNotRunningErr() error {
 }
 
 func readControlFile() *controlFile {
-	raw, err := os.ReadFile(filepath.Join(dataDir(), controlFileName))
-	if err != nil {
-		return nil
-	}
-	var file controlFile
-	if json.Unmarshal(raw, &file) != nil || file.Pid <= 0 || file.Port <= 0 || file.Token == "" {
+	file, ok := readJSONFile[controlFile](filepath.Join(dataDir(), controlFileName))
+	if !ok || file.Pid <= 0 || file.Port <= 0 || file.Token == "" {
 		return nil
 	}
 	return &file
@@ -143,10 +138,7 @@ func controlCall(channel string, input any, onPush func(channel string, payload 
 				continue
 			}
 			if !frame.OK {
-				if frame.Code != "" {
-					return nil, codedErrf(frame.Code, "%s", frame.Message)
-				}
-				return nil, errf("%s", frame.Message)
+				return nil, codedErrf(frame.Code, "%s", frame.Message)
 			}
 			return frame.Result, nil
 		}

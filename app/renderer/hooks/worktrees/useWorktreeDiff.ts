@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, skipToken } from "@tanstack/react-query";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
 // One file's working-tree diff, read when the changes page picks it.
@@ -15,16 +15,16 @@ export function useFileDiff(
   const { api, keys } = useHostScope();
   return useQuery<string>({
     queryKey: keys.worktreeFileDiff(projectId, worktreeId, paths, untracked),
-    queryFn: () => {
-      if (!worktreeId || paths.length === 0) return "";
-      return api.worktrees.fileDiff({
-        projectId,
-        worktreeId,
-        paths: [...paths],
-        untracked,
-      });
-    },
-    enabled: !!worktreeId && paths.length > 0,
+    queryFn:
+      worktreeId && paths.length > 0
+        ? () =>
+            api.worktrees.fileDiff({
+              projectId,
+              worktreeId,
+              paths: [...paths],
+              untracked,
+            })
+        : skipToken,
     staleTime: 0,
     // Every file looked at leaves a patch behind, and a long review
     // looks at a lot of them. The data is stale on arrival anyway, so
@@ -44,11 +44,10 @@ export function useCommitDiff(
   const { api, keys } = useHostScope();
   return useQuery<string>({
     queryKey: keys.commitDiff(projectId, worktreeId, hash),
-    queryFn: () => {
-      if (!worktreeId) return "";
-      return api.worktrees.commitDiff({ projectId, worktreeId, hash });
-    },
-    enabled: !!worktreeId && hash.length > 0,
+    queryFn:
+      worktreeId && hash.length > 0
+        ? () => api.worktrees.commitDiff({ projectId, worktreeId, hash })
+        : skipToken,
     staleTime: Infinity,
     meta: { errorTitle: "Couldn't compute diff" },
   });

@@ -3,7 +3,7 @@ import { Plus } from "lucide-react";
 import type { DetectedLauncher } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
 import { LauncherIcon } from "@/components/shared/LauncherIcon";
-import { SectionHeading } from "@/components/ui/section-heading";
+import { SectionHeading, SectionIntro } from "@/components/ui/section-heading";
 import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
 import type { SettingsFormState } from "@/hooks/config/useSettingsSave";
 import { useDetectedLaunchers } from "@/hooks/launchers/useLaunchers";
@@ -51,13 +51,10 @@ export function LaunchToolsPanel({
 
       {missingTools.length > 0 && (
         <section className="space-y-4">
-          <div>
-            <SectionHeading className="mb-1">Supported tools</SectionHeading>
-            <p className="text-xs text-muted-foreground">
-              Shigomori knows how to open worktrees in these too. Install any of
-              them and they&apos;ll show up under detected.
-            </p>
-          </div>
+          <SectionIntro title="Supported tools">
+            Shigomori knows how to open worktrees in these too. Install any of
+            them and they&apos;ll show up under detected.
+          </SectionIntro>
           <div className="flex flex-wrap items-center gap-1.5">
             {missingTools.map((d) => (
               <ToolPill key={d.id} entry={d} />
@@ -67,16 +64,13 @@ export function LaunchToolsPanel({
       )}
 
       <section className="space-y-3">
-        <div>
-          <SectionHeading className="mb-1">Custom tools</SectionHeading>
-          <p className="text-xs text-muted-foreground">
-            Custom commands available in every worktree (e.g.{" "}
-            <span className="font-mono">claude</span>,{" "}
-            <span className="font-mono">tmux new-session</span>,{" "}
-            <span className="font-mono">open .</span>
-            ).
-          </p>
-        </div>
+        <SectionIntro title="Custom tools">
+          Custom commands available in every worktree (e.g.{" "}
+          <span className="font-mono">claude</span>,{" "}
+          <span className="font-mono">tmux new-session</span>,{" "}
+          <span className="font-mono">open .</span>
+          ).
+        </SectionIntro>
         {form.launchers.length === 0 ? (
           <p className="text-xs text-muted-foreground/70">
             None yet. Add one to surface a command in every project&apos;s

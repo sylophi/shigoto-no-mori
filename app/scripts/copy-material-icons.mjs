@@ -8,11 +8,10 @@
 // source by mtime + size. Runs as a postinstall hook so the icons are in
 // place before the first `pnpm dev` / `pnpm package` of a fresh checkout.
 
-import { copyFile, mkdir, readdir, stat } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { copyFile, mkdir, readdir, rm, stat } from "node:fs/promises";
+import { join, resolve } from "node:path";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const ROOT = resolve(import.meta.dirname, "..");
 const SRC = join(ROOT, "node_modules", "material-icon-theme", "icons");
 const DEST = join(ROOT, "public", "material-icons");
 
@@ -41,7 +40,6 @@ async function main() {
   ]);
 
   const svgs = srcFiles.filter((f) => f.endsWith(".svg"));
-  const destSet = new Set(destFiles);
 
   // The manifest references some icons by their bare name even though only
   // a `<name>.clone.svg` exists on disk (the icon-theme's convention for
@@ -82,10 +80,9 @@ async function main() {
   // material-icon-theme to a version that removed an icon).
   const valid = new Set(planned.keys());
   await Promise.all(
-    [...destSet].map(async (name) => {
+    destFiles.map(async (name) => {
       if (valid.has(name)) return;
       if (!name.endsWith(".svg")) return;
-      const { rm } = await import("node:fs/promises");
       await rm(join(DEST, name));
       removed++;
     }),

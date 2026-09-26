@@ -11,11 +11,13 @@ package main
 // icon.ts.
 
 import (
+	"cmp"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -136,13 +138,7 @@ func listProjectFiles(cwd string) []string {
 	if err != nil {
 		return nil
 	}
-	var files []string
-	for _, f := range strings.Split(stdout, "\x00") {
-		if f != "" {
-			files = append(files, f)
-		}
-	}
-	return files
+	return nulFields(stdout)
 }
 
 // Repo root ("") plus every directory holding a package.json,
@@ -155,17 +151,10 @@ func packageRoots(files []string) []string {
 		}
 	}
 	delete(rootSet, ".")
-	roots := make([]string, 0, len(rootSet))
-	for root := range rootSet {
-		roots = append(roots, root)
-	}
+	roots := slices.Collect(maps.Keys(rootSet))
 	// Depth then lex; "" naturally sorts first (depth 0, lex minimum).
-	sort.Slice(roots, func(i, j int) bool {
-		di, dj := strings.Count(roots[i], "/"), strings.Count(roots[j], "/")
-		if di != dj {
-			return di < dj
-		}
-		return roots[i] < roots[j]
+	slices.SortFunc(roots, func(a, b string) int {
+		return cmp.Or(cmp.Compare(strings.Count(a, "/"), strings.Count(b, "/")), strings.Compare(a, b))
 	})
 	return roots
 }

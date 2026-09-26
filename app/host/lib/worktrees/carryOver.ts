@@ -7,6 +7,7 @@
 // worktree, then the primary, then the rest). Checkouts are listed
 // primary first: when checkouts disagree on whether a name is a file
 // or a folder, the first one holding it decides.
+import type { Dirent } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { makeIgnoreMatcher, normalizeRelPath } from "@shared/git/gitPaths";
@@ -32,12 +33,9 @@ export async function listCarryOverCheckouts(
   projectId: string,
   projectPath: string,
 ): Promise<CarryOverCheckout[]> {
-  let identities: WorktreeIdentity[];
-  try {
-    identities = await listWorktreeIdentities(projectId, projectPath);
-  } catch {
-    identities = [];
-  }
+  const identities = await listWorktreeIdentities(projectId, projectPath).catch(
+    (): WorktreeIdentity[] => [],
+  );
   if (identities.length === 0) {
     return [{ name: "primary", path: projectPath, isPrimary: true }];
   }
@@ -63,6 +61,39 @@ const ignoredPathsCache = ttlMapCache<string, string[]>(
 export const cachedIgnoredPaths = (worktreePath: string) =>
   ignoredPathsCache.get(worktreePath);
 
+// An entry of `relative` as a root-relative path.
+function pathOf(relative: string, name: string): string {
+  return relative ? `${relative}/${name}` : name;
+}
+
+// One checkout's entries in `relative`, with git's ignore verdict per
+// root-relative path: the ignored walk, plus (with `ruleIgnored`) the
+// folders a rule names that the walk passes over (ruleIgnoredFolders
+// below). Throws when the folder can't be read.
+async function readFolderVerdicts(
+  checkoutPath: string,
+  relative: string,
+  ruleIgnored: boolean,
+): Promise<{ entries: Dirent[]; isIgnored: (path: string) => boolean }> {
+  const [entries, ignored] = await Promise.all([
+    readdir(join(checkoutPath, relative), { withFileTypes: true }),
+    ignoredPathsCache.get(checkoutPath),
+  ]);
+  const byWalk = makeIgnoreMatcher(ignored);
+  if (!ruleIgnored) return { entries, isIgnored: byWalk };
+  const byRule = await ruleIgnoredFolders(
+    checkoutPath,
+    entries
+      .filter((entry) => entry.isDirectory() && entry.name !== ".git")
+      .map((entry) => pathOf(relative, entry.name))
+      .filter((path) => !byWalk(path)),
+  );
+  return {
+    entries,
+    isIgnored: (path: string) => byWalk(path) || byRule.has(path),
+  };
+}
+
 // Folders before files, then alphabetical within each group.
 function foldersFirst(
   a: { name: string; isDirectory: boolean },
@@ -87,28 +118,15 @@ export async function listCarryOverCandidates(
   { ruleIgnored = false }: { ruleIgnored?: boolean } = {},
 ): Promise<CarryOverCandidate[]> {
   const checkouts = await listCarryOverCheckouts(projectId, projectPath);
-  const pathOf = (name: string) => (relative ? `${relative}/${name}` : name);
   const listed = await Promise.all(
     checkouts.map(async (checkout) => {
       try {
-        const [entries, ignored] = await Promise.all([
-          readdir(join(checkout.path, relative), { withFileTypes: true }),
-          ignoredPathsCache.get(checkout.path),
-        ]);
-        const byWalk = makeIgnoreMatcher(ignored);
-        if (!ruleIgnored) return { checkout, entries, isIgnored: byWalk };
-        const byRule = await ruleIgnoredFolders(
+        const { entries, isIgnored } = await readFolderVerdicts(
           checkout.path,
-          entries
-            .filter((entry) => entry.isDirectory() && entry.name !== ".git")
-            .map((entry) => pathOf(entry.name))
-            .filter((path) => !byWalk(path)),
+          relative,
+          ruleIgnored,
         );
-        return {
-          checkout,
-          entries,
-          isIgnored: (path: string) => byWalk(path) || byRule.has(path),
-        };
+        return { checkout, entries, isIgnored };
       } catch {
         return null;
       }
@@ -123,7 +141,7 @@ export async function listCarryOverCandidates(
     for (const entry of result.entries) {
       // .git is worktree metadata, never useful as carry-over.
       if (entry.name === ".git") continue;
-      const path = pathOf(entry.name);
+      const path = pathOf(relative, entry.name);
       let candidate = byName.get(entry.name);
       if (!candidate) {
         candidate = {
@@ -184,14 +202,16 @@ export async function listWorktreeFolder(
   worktreePath: string,
   relative: string,
 ): Promise<SyncWorktreeFolderEntry[]> {
-  const [entries, ignored] = await Promise.all([
-    readdir(join(worktreePath, relative), { withFileTypes: true }),
-    ignoredPathsCache.get(worktreePath),
-  ]);
-  const isIgnored = makeIgnoreMatcher(ignored);
-  const pathOf = (name: string) => (relative ? `${relative}/${name}` : name);
+  const { entries, isIgnored } = await readFolderVerdicts(
+    worktreePath,
+    relative,
+    true,
+  );
   // A link to a folder is a folder to browse: pnpm's node_modules is
-  // nothing else. A dangling link stays a (dead) file.
+  // nothing else. A dangling link stays a (dead) file. The rule
+  // verdicts above are asked of real folders only: git refuses a
+  // pathspec at or past a symlink, and a link's own verdict is in the
+  // ignored walk already, which names it like a file.
   const listed = await Promise.all(
     entries
       .filter((entry) => entry.name !== ".git")
@@ -200,28 +220,17 @@ export async function listWorktreeFolder(
         isDirectory:
           entry.isDirectory() ||
           (entry.isSymbolicLink() &&
-            (await stat(join(worktreePath, pathOf(entry.name))).then(
+            (await stat(join(worktreePath, pathOf(relative, entry.name))).then(
               (target) => target.isDirectory(),
               () => false,
             ))),
       })),
   );
-  // Real folders only: git refuses a pathspec at or past a symlink
-  // ("beyond a symbolic link") and fails the whole call, which would
-  // cost every other folder in it its verdict. A link's own verdict is
-  // in the ignored list already, which names it like a file.
-  const byRule = await ruleIgnoredFolders(
-    worktreePath,
-    entries
-      .filter((entry) => entry.isDirectory() && entry.name !== ".git")
-      .map((entry) => pathOf(entry.name))
-      .filter((path) => !isIgnored(path)),
-  );
   return listed
     .map(({ name, isDirectory }) => ({
       name,
       isDirectory,
-      ignored: isIgnored(pathOf(name)) || byRule.has(pathOf(name)),
+      ignored: isIgnored(pathOf(relative, name)),
     }))
     .toSorted(foldersFirst);
 }

@@ -1,15 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, skipToken } from "@tanstack/react-query";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
 export function useDefaultBranch(projectId: string | null) {
   const { api, keys } = useHostScope();
   return useQuery<string>({
     queryKey: keys.defaultBranch(projectId),
-    queryFn: () => {
-      if (!projectId) throw new Error("projectId required");
-      return api.projects.defaultBranch(projectId);
-    },
-    enabled: projectId !== null,
+    queryFn:
+      projectId !== null
+        ? () => api.projects.defaultBranch(projectId)
+        : skipToken,
     meta: { errorTitle: "Couldn't resolve default branch" },
   });
 }

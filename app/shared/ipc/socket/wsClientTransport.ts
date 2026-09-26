@@ -217,8 +217,8 @@ function isBlockingCloseCode(code: number | null): boolean {
   return code === CLOSE_AUTH_FAILED;
 }
 
-// The single-phase connect every non-racing caller uses (the LAN
-// supervisor, the hub peer dial helpers): open and hello in one
+// The single-phase connect every non-racing caller uses (the socket
+// and direct-plane proofs, the wire bench): open and hello in one
 // motion, the behavior this function always had.
 export function connectDevice(
   options: ConnectDeviceOptions,
@@ -356,16 +356,30 @@ export function openDevice(
     if (welcome !== null || closed) return;
     // The welcome never arrived in time. A retryable failure: the host
     // may just be slow or mid-restart.
-    closed = true;
+    failAttempt(new RemoteConnectError("welcome timeout", null, false));
+  }, helloTimeoutMs);
+
+  // Advisory close of the socket, swallowing one already closing.
+  const closeSocket = (): void => {
     try {
       socket.close();
     } catch {
       // Already closing.
     }
-    const timeout = new RemoteConnectError("welcome timeout", null, false);
-    rejectOpen(timeout);
-    reject(timeout);
-  }, helloTimeoutMs);
+  };
+
+  // Ends a connect attempt that has not been welcomed: marks the socket
+  // unusable, closes it, and rejects the attempt. Rejecting whenOpen is
+  // a no-op on the paths that fail after the socket opened (the
+  // identity pin and the proof checks), which only the hello timeout
+  // can precede.
+  const failAttempt = (error: RemoteConnectError): void => {
+    closed = true;
+    clearTimeout(helloTimer);
+    closeSocket();
+    rejectOpen(error);
+    reject(error);
+  };
 
   // Reject every in-flight invoke with a disconnect error. Called once
   // on a post-welcome close, so a caller awaiting a res is never left
@@ -414,14 +428,7 @@ export function openDevice(
       // surprise). Blocked, not retryable: redialing the same
       // address cannot change who lives there, so the caller
       // surfaces the failure instead of caching the wrong host.
-      closed = true;
-      clearTimeout(helloTimer);
-      try {
-        socket.close();
-      } catch {
-        // Already closing.
-      }
-      reject(
+      failAttempt(
         new RemoteConnectError("welcome from an unexpected device", null, true),
       );
       return;
@@ -470,17 +477,10 @@ export function openDevice(
   // that candidate only, and the peer stays reachable on the others.
   const failHandshake = (reason: string, deviceId: string): void => {
     if (closed) return;
-    closed = true;
-    clearTimeout(helloTimer);
     console.warn(
       `[socket] ${reason} (peer claimed ${deviceId} at ${options.url})`,
     );
-    try {
-      socket.close();
-    } catch {
-      // Already closing.
-    }
-    reject(new RemoteConnectError(reason, null, false));
+    failAttempt(new RemoteConnectError(reason, null, false));
   };
 
   // Frames are handled where they land, in arrival order. Two steps
@@ -784,11 +784,7 @@ export function openDevice(
     clearTimeout(helloTimer);
     heartbeat.stop();
     rejectAllPending(null);
-    try {
-      socket.close();
-    } catch {
-      // Already closing.
-    }
+    closeSocket();
   }
 
   return {

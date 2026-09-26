@@ -36,6 +36,13 @@ export function SettingsSidebarNav() {
   const solo = isSolo(devices);
   const updates = useStagedUpdates();
   const sections = settingsSections(devices, local, updates);
+  const row = (section: SettingsSection) => (
+    <NavRow
+      key={section.id}
+      section={section}
+      active={activeTab === section.id}
+    />
+  );
 
   return (
     <nav aria-label="Settings sections" className="flex flex-col px-2 pb-2">
@@ -57,15 +64,7 @@ export function SettingsSidebarNav() {
         }
       />
 
-      <NavGroup label="Visual">
-        {sections.visual.map((section) => (
-          <NavRow
-            key={section.id}
-            section={section}
-            active={activeTab === section.id}
-          />
-        ))}
-      </NavGroup>
+      <NavGroup label="Visual">{sections.visual.map(row)}</NavGroup>
 
       <NavGroup
         label={solo ? "Device" : "Devices"}
@@ -76,13 +75,7 @@ export function SettingsSidebarNav() {
             No devices on this account yet.
           </p>
         )}
-        {sections.devices.map((section) => (
-          <NavRow
-            key={section.id}
-            section={section}
-            active={activeTab === section.id}
-          />
-        ))}
+        {sections.devices.map(row)}
       </NavGroup>
     </nav>
   );

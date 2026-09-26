@@ -300,6 +300,22 @@ export const ServerFrameSchema = z.discriminatedUnion("t", [
 ]);
 export type ServerFrame = z.infer<typeof ServerFrameSchema>;
 
+// The failure answer to a req, on every wire alike: the message alone,
+// plus the code when the refusal has one.
+export function resError(
+  id: number,
+  message: string,
+  code?: string,
+): ServerFrame {
+  return {
+    t: "res",
+    id,
+    ok: false,
+    message,
+    ...(code === undefined ? {} : { code }),
+  };
+}
+
 // The one sanctioned serializer for both directions, so the
 // omit-undefined invariant above has a single owner.
 export function encodeFrame(frame: ClientFrame | ServerFrame): string {

@@ -3,7 +3,7 @@ import { errorMessageOf } from "@shared/errors";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { SectionHeading } from "@/components/ui/section-heading";
+import { SectionHeading, SectionIntro } from "@/components/ui/section-heading";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { tildify } from "@/lib/projectPaths";
@@ -66,16 +66,13 @@ export function CliSection() {
 
   return (
     <section className="space-y-3">
-      <div>
-        <SectionHeading className="mb-1">Command line tool</SectionHeading>
-        <p className="text-xs text-muted-foreground">
-          The Shigoto no Mori CLI lets you (or a coding agent) create, list,
-          merge, and remove this app's worktrees from any shell. Installing
-          links the <span className="font-mono">{name}</span> and{" "}
-          <span className="font-mono">{status.aliasName}</span> commands into{" "}
-          <span className="font-mono">{tildify(status.binDir, home)}</span>.
-        </p>
-      </div>
+      <SectionIntro title="Command line tool">
+        The Shigoto no Mori CLI lets you (or a coding agent) create, list,
+        merge, and remove this app's worktrees from any shell. Installing links
+        the <span className="font-mono">{name}</span> and{" "}
+        <span className="font-mono">{status.aliasName}</span> commands into{" "}
+        <span className="font-mono">{tildify(status.binDir, home)}</span>.
+      </SectionIntro>
 
       {state === "installed" && (
         <div className="flex flex-wrap items-center gap-3">

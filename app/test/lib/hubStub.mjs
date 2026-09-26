@@ -24,7 +24,9 @@ function deviceIdOfTicket(ticket) {
   return parts[0] === "t" && parts[1] ? parts[1] : null;
 }
 
-export function startStubHub() {
+// `track`, when passed, registers the stub's close on the caller's
+// tracker as soon as it listens, the way startDirectListener does.
+export function startStubHub(track) {
   return new Promise((resolve) => {
     const wss = new WebSocketServer({ host: "127.0.0.1", port: 0 });
     const sockets = new Map();
@@ -106,6 +108,12 @@ export function startStubHub() {
 
     wss.on("listening", () => {
       const { port } = wss.address();
+      const close = () =>
+        new Promise((done) => {
+          for (const ws of sockets.values()) ws.terminate();
+          wss.close(() => done());
+        });
+      track?.(close);
       resolve({
         port,
         hubUrl: `http://127.0.0.1:${port}`,
@@ -143,11 +151,7 @@ export function startStubHub() {
           const ws = sockets.get(deviceId);
           if (ws) ws.close(code, reason);
         },
-        close: () =>
-          new Promise((done) => {
-            for (const ws of sockets.values()) ws.terminate();
-            wss.close(() => done());
-          }),
+        close,
       });
     });
   });

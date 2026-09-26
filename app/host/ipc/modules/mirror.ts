@@ -50,11 +50,14 @@ import {
 } from "@host/ipc/peerSync";
 import { deleteAnyLocalBranch } from "@host/lib/git/branches";
 import {
-  findWorktreeIdentityOrThrow,
   removeWorktreeForce,
   worktreeIdFromPath,
 } from "@host/lib/git/worktrees";
-import { findProjectOrThrow } from "@host/lib/projects";
+import {
+  findProjectAndWorktreeOrThrow,
+  findProjectOrThrow,
+  findWorktreePathOrThrow,
+} from "@host/lib/projects";
 import { dropWorktreeMarks } from "@host/lib/worktrees/marks";
 import {
   applyGitState,
@@ -91,6 +94,7 @@ export {
   type MirrorImpl,
   type MirrorSessionRaw,
 } from "@host/mirror/registry";
+import type { MirrorCreateInput, MirrorImpl } from "@host/mirror/registry";
 
 // The mirror streams this host currently serves, keyed by the calling
 // device and the channel id it minted (unique per connection, so the
@@ -164,6 +168,41 @@ async function rollBackPull(worktree: {
   // mark (autoPullNew). This removal does not, so retire it here.
   dropWorktreeMarks(worktreeIdFromPath(worktree.path));
   await deleteAnyLocalBranch(project.path, worktree.branch, true);
+}
+
+// A session created for a start, noted on the worktree's thread. A
+// create that fails undoes what the start landed first (the rollback
+// is best effort: its own failure is logged, not thrown over the real
+// error).
+async function openSession(
+  daemon: MirrorImpl,
+  input: MirrorCreateInput,
+  ignoresSummary: string,
+  rollBack: { what: string; run: () => Promise<unknown> },
+): Promise<string> {
+  let session: string;
+  try {
+    session = await daemon.create(input);
+  } catch (error) {
+    await rollBack.run().catch((rollbackError: unknown) => {
+      console.warn(
+        `[mirror] could not remove ${rollBack.what} of a failed start: ${errorMessageOf(rollbackError)}`,
+      );
+    });
+    throw error;
+  }
+  daemon.noteEvent(input.localWorktreeId, "started", ignoresSummary);
+  return session;
+}
+
+async function pauseOrResume(
+  session: string,
+  verb: "pause" | "resume",
+  noted: "paused" | "resumed",
+): Promise<void> {
+  const daemon = engine();
+  await daemon[verb](session);
+  daemon.noteEvent(localWorktreeIdOf(findSession(daemon, session)), noted, "");
 }
 
 // The sessions a stop has ended whose copy is still being removed,
@@ -302,9 +341,13 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
         }),
       },
     );
-    let session: string;
-    try {
-      session = await daemon.create({
+    // No session, so no worktree either: the pull is undone (the
+    // branch and its uncommitted changes are still on the peer), or
+    // a retry would refuse on the branch the failed attempt left
+    // behind.
+    const session = await openSession(
+      daemon,
+      {
         localRoot: pulled.worktree.path,
         deviceId: input.sourceDeviceId,
         projectId: input.sourceProjectId,
@@ -319,24 +362,9 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
           ...(source.isPrimary ? { [MIRROR_LABEL_MIRROR_BRANCH]: "1" } : {}),
         },
         ignores,
-      });
-    } catch (error) {
-      // No session, so no worktree either: the pull is undone (the
-      // branch and its uncommitted changes are still on the peer), or
-      // a retry would refuse on the branch the failed attempt left
-      // behind. Best effort. A rollback failure is logged, not thrown
-      // over the real error.
-      await rollBackPull(pulled.worktree).catch((rollbackError: unknown) => {
-        console.warn(
-          `[mirror] could not remove the worktree of a failed start: ${errorMessageOf(rollbackError)}`,
-        );
-      });
-      throw error;
-    }
-    daemon.noteEvent(
-      pulled.worktree.id,
-      "started",
+      },
       summarizeIgnores(ignoreMode, ignores),
+      { what: "the worktree", run: () => rollBackPull(pulled.worktree) },
     );
     return { ...pulled, session };
   },
@@ -360,9 +388,11 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
       projectId: sent.worktree.projectId,
       worktreeId: sent.worktree.id,
     };
-    let session: string;
-    try {
-      session = await daemon.create({
+    // No session, so no copy either, for start's reason: a retry
+    // would refuse on the branch the failed attempt left on the peer.
+    const session = await openSession(
+      daemon,
+      {
         localRoot: worktree.path,
         deviceId: input.targetDeviceId,
         ...copy,
@@ -379,24 +409,16 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
           ...(worktree.isPrimary ? { [MIRROR_LABEL_MIRROR_BRANCH]: "1" } : {}),
         },
         ignores,
-      });
-    } catch (error) {
-      // No session, so no copy either, for start's reason: a retry
-      // would refuse on the branch the failed attempt left on the
-      // peer. Best effort, and logged, not thrown over the real error.
-      await peerWorktreesApiFor(input.targetDeviceId)
-        .delete({ ...copy, force: true })
-        .catch((rollbackError: unknown) => {
-          console.warn(
-            `[mirror] could not remove the peer's copy of a failed start: ${errorMessageOf(rollbackError)}`,
-          );
-        });
-      throw error;
-    }
-    daemon.noteEvent(
-      worktree.id,
-      "started",
+      },
       summarizeIgnores(ignoreMode, ignores),
+      {
+        what: "the peer's copy",
+        run: () =>
+          peerWorktreesApiFor(input.targetDeviceId).delete({
+            ...copy,
+            force: true,
+          }),
+      },
     );
     return { ...sent, session };
   },
@@ -437,24 +459,8 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
       onServingChange?.();
     }
   },
-  pause: async ({ session }) => {
-    const daemon = engine();
-    await daemon.pause(session);
-    daemon.noteEvent(
-      localWorktreeIdOf(findSession(daemon, session)),
-      "paused",
-      "",
-    );
-  },
-  resume: async ({ session }) => {
-    const daemon = engine();
-    await daemon.resume(session);
-    daemon.noteEvent(
-      localWorktreeIdOf(findSession(daemon, session)),
-      "resumed",
-      "",
-    );
-  },
+  pause: ({ session }) => pauseOrResume(session, "pause", "paused"),
+  resume: ({ session }) => pauseOrResume(session, "resume", "resumed"),
 
   // The engine cannot re-configure a live session, so a change of
   // ignores re-opens it on the same pair (MirrorImpl.recreate, which
@@ -506,12 +512,10 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     ctx,
   ) => {
     requireChannels(ctx, channelId);
-    const project = findProjectOrThrow(projectId);
-    const identity = await findWorktreeIdentityOrThrow(
+    const worktreePath = await findWorktreePathOrThrow({
       projectId,
-      project.path,
       worktreeId,
-    );
+    });
     const child = spawnFileSync(["serve"]);
     if (child === null) {
       throw new Error(
@@ -553,7 +557,7 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
       stopIndexWatch: null,
     };
     serving.set(key, served);
-    void watchIndexFile(identity.path, () =>
+    void watchIndexFile(worktreePath, () =>
       onServingGitChange?.({ projectId, worktreeId }),
     ).then(
       (stop) => {
@@ -569,20 +573,16 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
   // host/mirror/gitState.ts): the worktree must be one this host
   // lists, and the state is read or applied in place.
   gitState: async ({ projectId, worktreeId }) => {
-    const project = findProjectOrThrow(projectId);
-    const identity = await findWorktreeIdentityOrThrow(
+    const { project, worktree: identity } = await findProjectAndWorktreeOrThrow(
       projectId,
-      project.path,
       worktreeId,
     );
     return readGitState(project.path, identity.path, worktreeId);
   },
 
   applyGitState: async ({ projectId, worktreeId, expect, state, sweep }) => {
-    const project = findProjectOrThrow(projectId);
-    const identity = await findWorktreeIdentityOrThrow(
+    const { project, worktree: identity } = await findProjectAndWorktreeOrThrow(
       projectId,
-      project.path,
       worktreeId,
     );
     const result = await applyGitState(

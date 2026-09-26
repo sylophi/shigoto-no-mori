@@ -32,7 +32,6 @@ package main
 // and have no update channel.
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -64,12 +63,8 @@ func updateRequestPath() string { return filepath.Join(dataDir(), "updater-reque
 // nil when the file is absent or malformed. Every caller treats
 // those the same way ("no reachable app").
 func readUpdaterStatus() *updaterStatus {
-	raw, err := os.ReadFile(updaterStatusPath())
-	if err != nil {
-		return nil
-	}
-	var status updaterStatus
-	if json.Unmarshal(raw, &status) != nil || status.Pid <= 0 {
+	status, ok := readJSONFile[updaterStatus](updaterStatusPath())
+	if !ok || status.Pid <= 0 {
 		return nil
 	}
 	return &status
@@ -224,11 +219,8 @@ func stageForCommand(spin *spinner) (*stagedManifest, string, error) {
 }
 
 func reportUpToDate() {
-	if jsonMode {
-		emit(map[string]any{"ok": true, "status": "up-to-date", "version": version})
-	} else {
-		out("already up to date " + dimOut("("+version+")"))
-	}
+	emitOrOut(map[string]any{"ok": true, "status": "up-to-date", "version": version},
+		"already up to date "+dimOut("("+version+")"))
 }
 
 // --stage: check + download + verify, stop short of installing. The
@@ -330,11 +322,8 @@ func cmdUpdateInstall() (int, error) {
 }
 
 func reportUpdated(from, to string) {
-	if jsonMode {
-		emit(map[string]any{"ok": true, "status": "updated", "from": from, "to": to})
-	} else {
-		out("updated " + cyanOut(from) + dimOut(" -> ") + boldOut(greenOut(to)))
-	}
+	emitOrOut(map[string]any{"ok": true, "status": "updated", "from": from, "to": to},
+		"updated "+cyanOut(from)+dimOut(" -> ")+boldOut(greenOut(to)))
 }
 
 // --finish-install: the detached installer the app spawns just before
@@ -447,13 +436,11 @@ func newSpinner() *spinner {
 	}
 	s.animated = true
 	s.stopCh = make(chan struct{})
-	s.wg.Add(1)
-	go s.loop()
+	s.wg.Go(s.loop)
 	return s
 }
 
 func (s *spinner) loop() {
-	defer s.wg.Done()
 	ticker := time.NewTicker(80 * time.Millisecond)
 	defer ticker.Stop()
 	frame := 0

@@ -60,6 +60,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -125,12 +126,8 @@ type stdioStream struct {
 func (s stdioStream) Read(p []byte) (int, error)  { return s.in.Read(p) }
 func (s stdioStream) Write(p []byte) (int, error) { return s.out.Write(p) }
 func (s stdioStream) Close() error {
-	inErr := s.in.Close()
-	outErr := s.out.Close()
-	if inErr != nil {
-		return inErr
-	}
-	return outErr
+	inErr, outErr := s.in.Close(), s.out.Close()
+	return cmp.Or(inErr, outErr)
 }
 
 // ---------------------------------------------------------------------
@@ -418,11 +415,9 @@ func runMirrorDaemon(ctx context.Context, in io.Reader, out io.Writer, gateway, 
 			if ctx.Err() != nil {
 				break
 			}
-			pending.Add(1)
-			go func() {
-				defer pending.Done()
+			pending.Go(func() {
 				emitter.emit(handleMirrorRequest(ctx, manager, req))
-			}()
+			})
 		}
 		readerDone <- scanner.Err()
 	}()
@@ -584,17 +579,13 @@ func mirrorSessionName(name string) string {
 	if !unicode.IsLetter(out[0]) {
 		out = append([]rune("m-"), out...)
 	}
-	if len(out) > 64 {
-		out = out[:64]
-	}
+	out = out[:min(len(out), 64)]
 	// Folding covers the alphabet. Mutagen also refuses a UUID-shaped
 	// name and its reserved words, which a branch can legitimately be.
 	// A prefix takes the name out of both sets.
 	if selection.EnsureNameValid(string(out)) != nil {
 		out = append([]rune("m-"), out...)
-		if len(out) > 64 {
-			out = out[:64]
-		}
+		out = out[:min(len(out), 64)]
 	}
 	return string(out)
 }
@@ -760,39 +751,26 @@ func mirrorChangesOf(changes []*core.Change) []mirrorChange {
 
 // Mutagen's status enum as stable kebab-case codes, with alpha/beta
 // translated to the local/remote vocabulary the app speaks.
+var mirrorStatusCodes = map[synchronization.Status]string{
+	synchronization.Status_Disconnected:           "disconnected",
+	synchronization.Status_HaltedOnRootEmptied:    "halted-on-root-emptied",
+	synchronization.Status_HaltedOnRootDeletion:   "halted-on-root-deletion",
+	synchronization.Status_HaltedOnRootTypeChange: "halted-on-root-type-change",
+	synchronization.Status_ConnectingAlpha:        "connecting-local",
+	synchronization.Status_ConnectingBeta:         "connecting-remote",
+	synchronization.Status_Watching:               "watching",
+	synchronization.Status_Scanning:               "scanning",
+	synchronization.Status_WaitingForRescan:       "waiting-for-rescan",
+	synchronization.Status_Reconciling:            "reconciling",
+	synchronization.Status_StagingAlpha:           "staging-local",
+	synchronization.Status_StagingBeta:            "staging-remote",
+	synchronization.Status_Transitioning:          "transitioning",
+	synchronization.Status_Saving:                 "saving",
+}
+
+// The code for status, "unknown" for anything the table doesn't name.
 func mirrorStatusCode(status synchronization.Status) string {
-	switch status {
-	case synchronization.Status_Disconnected:
-		return "disconnected"
-	case synchronization.Status_HaltedOnRootEmptied:
-		return "halted-on-root-emptied"
-	case synchronization.Status_HaltedOnRootDeletion:
-		return "halted-on-root-deletion"
-	case synchronization.Status_HaltedOnRootTypeChange:
-		return "halted-on-root-type-change"
-	case synchronization.Status_ConnectingAlpha:
-		return "connecting-local"
-	case synchronization.Status_ConnectingBeta:
-		return "connecting-remote"
-	case synchronization.Status_Watching:
-		return "watching"
-	case synchronization.Status_Scanning:
-		return "scanning"
-	case synchronization.Status_WaitingForRescan:
-		return "waiting-for-rescan"
-	case synchronization.Status_Reconciling:
-		return "reconciling"
-	case synchronization.Status_StagingAlpha:
-		return "staging-local"
-	case synchronization.Status_StagingBeta:
-		return "staging-remote"
-	case synchronization.Status_Transitioning:
-		return "transitioning"
-	case synchronization.Status_Saving:
-		return "saving"
-	default:
-		return "unknown"
-	}
+	return cmp.Or(mirrorStatusCodes[status], "unknown")
 }
 
 // One JSON document per line, writes serialized: responses and state

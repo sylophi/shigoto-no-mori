@@ -1,7 +1,5 @@
-import { Loader2, Trash2, type LucideIcon } from "lucide-react";
-import { type ReactNode } from "react";
+import { Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 interface ConfirmDestructiveButtonProps {
   armed: boolean;
@@ -30,31 +28,19 @@ export function ConfirmDestructiveButton({
       aria-pressed={armed}
       onClick={onClick}
     >
-      {renderContent({ armed, pending, pendingLabel, idleLabel })}
+      {pending ? (
+        <>
+          <Loader2 aria-hidden className="size-3.5 animate-spin" />
+          {pendingLabel}
+        </>
+      ) : armed ? (
+        "Click again to confirm"
+      ) : (
+        <>
+          <Trash2 aria-hidden className="size-3.5" />
+          {idleLabel}
+        </>
+      )}
     </Button>
-  );
-}
-
-function renderContent({
-  armed,
-  pending,
-  pendingLabel,
-  idleLabel,
-}: Omit<ConfirmDestructiveButtonProps, "onClick">): ReactNode {
-  if (pending) return withIcon(Loader2, pendingLabel, "animate-spin");
-  if (armed) return "Click again to confirm";
-  return withIcon(Trash2, idleLabel);
-}
-
-function withIcon(
-  Icon: LucideIcon,
-  label: string,
-  iconClassName?: string,
-): ReactNode {
-  return (
-    <>
-      <Icon aria-hidden className={cn("size-3.5", iconClassName)} />
-      {label}
-    </>
   );
 }

@@ -11,11 +11,7 @@ export function CommitDiff() {
   // not in the cache (e.g. user deep-linked) we still render the diff. The
   // hash alone is enough for git show.
   const commit = worktree?.recentCommits.find((c) => c.hash === hash);
-  const {
-    data: patch,
-    isLoading,
-    error,
-  } = useCommitDiff(projectId, worktree?.id, hash);
+  const diff = useCommitDiff(projectId, worktree?.id, hash);
 
   if (!worktree) {
     return <WorktreeMissing {...missing} />;
@@ -23,9 +19,7 @@ export function CommitDiff() {
 
   return (
     <DiffView
-      patch={patch}
-      isLoading={isLoading}
-      error={error}
+      diff={diff}
       onBack={goBack}
       backLabel={worktree.branch}
       title={commit?.subject ?? "Commit"}

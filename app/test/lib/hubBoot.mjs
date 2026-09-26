@@ -16,9 +16,13 @@ import { waitFor } from "./checkKit.mjs";
 // wraps a bare handler with the real broker channel. `track`, when
 // passed, registers the teardown immediately, so a boot that fails its
 // wait still gets cleaned up and cannot leak the event loop.
+// `opts.createConnection` swaps in another binding with the same
+// surface (the browser one, web/hub/connection.ts), and `opts.label`
+// names the device in the connect wait's timeout message.
 export async function bootDevice(stub, deviceId, opts = {}, track) {
   let mints = 0;
-  const connection = createHubConnection({
+  const createConnection = opts.createConnection ?? createHubConnection;
+  const connection = createConnection({
     // The channel is creation-time config (the client role dials it
     // even on devices that never register a handler), matching how
     // main composes the binding.
@@ -50,7 +54,7 @@ export async function bootDevice(stub, deviceId, opts = {}, track) {
   }));
   await waitFor(
     () => connection.status().socket.phase === "connected",
-    `${deviceId} to connect`,
+    `${opts.label ?? deviceId} to connect`,
   );
   return { connection, mints: () => mints };
 }

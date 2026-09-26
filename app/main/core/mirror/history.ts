@@ -40,6 +40,14 @@ type Seen = {
   git: MirrorGitStatus["status"] | null;
 };
 
+// The git states worth a note: each on arrival, and the agreement
+// that ends one.
+function gitTroubled(
+  status: MirrorGitStatus["status"] | null,
+): status is "diverged" | "blocked" | "error" {
+  return status === "diverged" || status === "blocked" || status === "error";
+}
+
 export type MirrorHistoryStore = {
   load: () => Record<string, MirrorEvent[]>;
   save: (events: Record<string, MirrorEvent[]>) => void;
@@ -190,29 +198,12 @@ export function createMirrorHistory(deps: {
         );
       }
       if (next.git !== previous.git && git !== undefined) {
-        switch (next.git) {
-          case "diverged":
-            note(localWorktreeId, "git-diverged", git.detail);
-            break;
-          case "blocked":
-            note(localWorktreeId, "git-blocked", git.detail);
-            break;
-          case "error":
-            note(localWorktreeId, "git-error", git.detail);
-            break;
-          case "synced":
-            // Agreement after trouble is news. The first agreement
-            // after a start is the expected course and stays quiet.
-            if (
-              previous.git === "diverged" ||
-              previous.git === "blocked" ||
-              previous.git === "error"
-            ) {
-              note(localWorktreeId, "git-synced", "");
-            }
-            break;
-          default:
-            break;
+        if (gitTroubled(next.git)) {
+          note(localWorktreeId, `git-${next.git}`, git.detail);
+        } else if (next.git === "synced" && gitTroubled(previous.git)) {
+          // Agreement after trouble is news. The first agreement
+          // after a start is the expected course and stays quiet.
+          note(localWorktreeId, "git-synced", "");
         }
       }
     }

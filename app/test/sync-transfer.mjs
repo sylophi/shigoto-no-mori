@@ -34,20 +34,15 @@
 // surface this proof pins. Runs under
 // test/lib/register-ts-alias.mjs. Run: pnpm test sync-transfer.
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
-  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { promisify } from "node:util";
 import {
   CommandRefusedError,
   WIRE_CHUNK_BYTES,
@@ -56,8 +51,6 @@ import { buildClient } from "@shared/ipc/buildClient";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
-import { registerContract } from "@shared/ipc/registerContract";
-import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import { projectsHandlers } from "@host/ipc/modules/projects";
 import {
@@ -77,60 +70,15 @@ import { pushBundleToPeer } from "@host/lib/sync/pushBundle";
 import { findProjectOrThrow, loadProjects } from "@host/lib/projects";
 import { getRepoIdentity } from "@host/lib/git/repoIdentity";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
-import { initDataDirAt } from "@host/lib/util/paths";
-import {
-  cliFailureMessage,
-  createCliRunner,
-  makeProof,
-  makeTracker,
-  repoRoot,
-} from "./lib/checkKit.mjs";
+import { makeProof, makeTracker } from "./lib/checkKit.mjs";
+import { cliSandbox } from "./lib/cliSandbox.mjs";
 import { bootDirectWire } from "./lib/directBoot.mjs";
 
-const execFileP = promisify(execFile);
-const cliDir = join(repoRoot, "cli");
-
-// Sandbox: everything (data dir, repos, the built binary) under one
-// temp tree. realpath because worktree ids derive from git's resolved
-// paths (/var/folders is a symlink on macOS).
-const sandbox = realpathSync(mkdtempSync(join(tmpdir(), "sm-sync-check-")));
-const dataDir = join(sandbox, "data");
-const smBinary = join(sandbox, "sm");
-
-// Scrub inherited GIT_* (a lefthook run exports GIT_DIR and would point
-// fixture git at THIS repo) and pin idents so commit-tree in `sm dirty
-// capture` never depends on the machine's git config. Mutated on
-// process.env itself (not just a filtered copy): the slice-C pull
-// orchestration drives the app's OWN git layer (host/lib/git/core),
-// which spawns git with process.env.
-for (const key of Object.keys(process.env)) {
-  if (key.startsWith("GIT_")) delete process.env[key];
-}
-Object.assign(process.env, {
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_CONFIG_SYSTEM: "/dev/null",
-  LC_ALL: "C",
-  GIT_AUTHOR_NAME: "t",
-  GIT_AUTHOR_EMAIL: "t@t",
-  GIT_COMMITTER_NAME: "t",
-  GIT_COMMITTER_EMAIL: "t@t",
-});
-const baseEnv = { ...process.env };
-const smEnv = { ...baseEnv, SHIGOMORI_DATA_DIR: dataDir };
-
-async function git(cwd, args, opts = {}) {
-  return execFileP("git", args, {
-    cwd,
-    env: baseEnv,
-    maxBuffer: 16 * 1024 * 1024,
-    ...opts,
-  });
-}
-
-async function gitOut(cwd, ...args) {
-  const { stdout } = await git(cwd, args);
-  return stdout.trim();
-}
+// The sandbox, the scrubbed process.env with pinned idents, the git
+// wrappers and the real CLI runner seam (test/lib/cliSandbox.mjs).
+const fixture = cliSandbox("sm-sync-check-");
+const { sandbox, dataDir, git, gitOut, runCli, sm } = fixture;
+const { commitFile, addWorktree } = fixture;
 
 async function refExists(repo, ref) {
   try {
@@ -153,11 +101,6 @@ async function refSnapshot(repo) {
   );
   return new Set(out ? out.split("\n") : []);
 }
-
-// The real CLI runner seam (test/lib/checkKit.mjs): the same
-// NDJSON-per-line protocol as the Electron implementation, minus the
-// child bookkeeping the app needs.
-const { runCli, sm } = createCliRunner(smBinary, smEnv);
 
 const { ok, done, fail } = makeProof("sync-transfer proof");
 
@@ -192,67 +135,46 @@ async function main() {
   console.log("sync-transfer proof\n");
 
   // ---- Fixtures: build the CLI, seed repos, register projects ----
-  await execFileP("go", ["build", "-o", smBinary, "."], {
-    cwd: cliDir,
-    env: baseEnv,
-  });
+  await fixture.buildSm();
 
   // Source repo: base commit on main, a "feature" branch carrying
   // ~2.7 MB of incompressible bytes (so the thin bundle still crosses
   // in >= 4 chunks), a linked worktree for the dirty capture.
   const sourceRepo = join(sandbox, "source");
   await git(sandbox, ["init", "-q", "-b", "main", "source"]);
-  for (const args of [
-    ["config", "gc.auto", "0"],
-    ["config", "maintenance.auto", "false"],
-    ["commit", "-q", "--allow-empty", "-m", "init"],
-  ]) {
-    // oxlint-disable-next-line no-await-in-loop -- repo setup is ordered
-    await git(sourceRepo, args);
-  }
-  writeFileSync(join(sourceRepo, "readme.txt"), "base\n");
-  await git(sourceRepo, ["add", "-A"]);
-  await git(sourceRepo, ["commit", "-qm", "base"]);
+  await fixture.disableAutoGc(sourceRepo);
+  await git(sourceRepo, ["commit", "-q", "--allow-empty", "-m", "init"]);
+  await commitFile(sourceRepo, "readme.txt", "base\n", "base");
   const baseSha = await gitOut(sourceRepo, "rev-parse", "HEAD");
 
   // Target repo: a clone holding only the base history -- the
   // receiving device's copy of the same project.
   const targetRepo = join(sandbox, "target");
   await git(sandbox, ["clone", "-q", "--", sourceRepo, "target"]);
-  await git(targetRepo, ["config", "gc.auto", "0"]);
-  await git(targetRepo, ["config", "maintenance.auto", "false"]);
+  await fixture.disableAutoGc(targetRepo);
 
   await git(sourceRepo, ["checkout", "-q", "-b", "feature"]);
-  writeFileSync(join(sourceRepo, "big.bin"), randomBytes(2_700_000));
-  await git(sourceRepo, ["add", "-A"]);
-  await git(sourceRepo, ["commit", "-qm", "big feature"]);
+  await commitFile(
+    sourceRepo,
+    "big.bin",
+    randomBytes(2_700_000),
+    "big feature",
+  );
   const featureTip = await gitOut(sourceRepo, "rev-parse", "HEAD");
   await git(sourceRepo, ["checkout", "-q", "main"]);
 
-  const worktreePath = join(sandbox, "wt");
-  await git(sourceRepo, [
-    "worktree",
-    "add",
-    "-q",
-    "-b",
-    "scratch",
-    worktreePath,
-  ]);
+  const worktreePath = await addWorktree(sourceRepo, "wt", "scratch");
   // A second worktree whose branch carries a commit the target has
   // never seen, for the pull proof's branch-transfer path (scratch sits
   // at the shared base commit, exercising the tip-already-local path).
-  const worktree2Path = join(sandbox, "wt2");
-  await git(sourceRepo, [
-    "worktree",
-    "add",
-    "-q",
-    "-b",
+  const worktree2Path = await addWorktree(
+    sourceRepo,
+    "wt2",
     "feature2",
-    worktree2Path,
-  ]);
-  writeFileSync(join(worktree2Path, "second.txt"), "second feature\n");
-  await git(worktree2Path, ["add", "-A"]);
-  await git(worktree2Path, ["commit", "-qm", "second feature"]);
+    "second.txt",
+    "second feature\n",
+    "second feature",
+  );
   const feature2Tip = await gitOut(worktree2Path, "rev-parse", "HEAD");
   // The real app derivation (host/lib/git/worktrees.ts, Go twin in
   // cli/worktree.go), imported straight from its home now that
@@ -260,18 +182,8 @@ async function main() {
   // must land at refs/shigomori/dirty/<this id>, asserted below.
   const worktreeId = worktreeIdFromPath(worktreePath);
 
-  initDataDirAt(dataDir);
-  setCliRunnerImpl({
-    runCli,
-    requireCliBinary: () => smBinary,
-    cliFailureMessage,
-  });
-  const projectIdOf = async (path) => {
-    const result = await sm("projects", "add", "--", path);
-    const doc = result.docs.findLast((d) => typeof d.id === "string");
-    assert.ok(doc, `projects add emitted no project doc for ${path}`);
-    return doc.id;
-  };
+  fixture.useCli();
+  const { projectIdOf } = fixture;
   // Target first: both fixture projects share one registry AND one repo
   // identity (target is a clone), and the pull handler's identity scan
   // takes the first registry match -- which must be the pull's local
@@ -286,25 +198,17 @@ async function main() {
   // on the shared tracker for the finally below.
   const { track, teardown } = makeTracker();
   const { stub, listener, peerA } = await bootDirectWire(track, {
-    registerHandlers: (binding) => {
-      registerContract(syncContract, syncHandlers, binding, {
-        validateOutputs: true,
-      });
+    contracts: [
+      [syncContract, syncHandlers],
       // The teardown half of the transplant proof: the REAL worktrees
       // surface on A's wire, beside the sync surface. The usage hook is
       // the Electron binding's concern, so a no-op satisfies the
       // registrar.
-      registerContract(worktreesContract, worktreesHandlers, binding, {
-        validateOutputs: true,
-        onUsageTracked: () => {},
-      });
+      [worktreesContract, worktreesHandlers],
       // The clone's one read of the peer (its default branch), beside
       // the grant-gated bundle it then asks for.
-      registerContract(projectsContract, projectsHandlers, binding, {
-        validateOutputs: true,
-        onUsageTracked: () => {},
-      });
-    },
+      [projectsContract, projectsHandlers],
+    ],
   });
   try {
     const sync = buildClient(syncContract, peerA.transport);
@@ -527,9 +431,12 @@ async function main() {
     // older host that never said so they go one at a time, and either
     // way the ref lands under refs/shigomori/ with the exact tip.
     await git(targetRepo, ["checkout", "-q", "-b", "pushed"]);
-    writeFileSync(join(targetRepo, "pushed.bin"), randomBytes(2_700_000));
-    await git(targetRepo, ["add", "-A"]);
-    await git(targetRepo, ["commit", "-qm", "pushed from the target"]);
+    await commitFile(
+      targetRepo,
+      "pushed.bin",
+      randomBytes(2_700_000),
+      "pushed from the target",
+    );
     const pushedTip = await gitOut(targetRepo, "rev-parse", "HEAD");
     await git(targetRepo, ["checkout", "-q", "main"]);
     const pushInput = {
@@ -783,9 +690,7 @@ async function main() {
     assert.ok(wt3Doc, "sm create emitted no created doc");
     const wt3Path = wt3Doc.worktree.path;
     const wt3Id = wt3Doc.worktree.id;
-    writeFileSync(join(wt3Path, "third.txt"), "third feature\n");
-    await git(wt3Path, ["add", "-A"]);
-    await git(wt3Path, ["commit", "-qm", "third feature"]);
+    await commitFile(wt3Path, "third.txt", "third feature\n", "third feature");
     const feature3Tip = await gitOut(wt3Path, "rev-parse", "HEAD");
     // Seed the app-written per-worktree data file (the CLI only ever
     // deletes it), so the teardown's state sweep is observable.
@@ -841,11 +746,14 @@ async function main() {
     // source. The capture lands here applied, and the teardown's
     // captured-driven force removes the (legitimately still dirty)
     // source anyway.
-    const wt4Path = join(sandbox, "wt4");
-    await git(sourceRepo, ["worktree", "add", "-q", "-b", "feature4", wt4Path]);
-    writeFileSync(join(wt4Path, "committed.txt"), "committed\n");
-    await git(wt4Path, ["add", "-A"]);
-    await git(wt4Path, ["commit", "-qm", "fourth feature"]);
+    const wt4Path = await addWorktree(
+      sourceRepo,
+      "wt4",
+      "feature4",
+      "committed.txt",
+      "committed\n",
+      "fourth feature",
+    );
     writeFileSync(join(wt4Path, "staged.txt"), "staged\n");
     await git(wt4Path, ["add", "staged.txt"]);
     writeFileSync(join(wt4Path, "committed.txt"), "committed, then edited\n");
@@ -882,8 +790,7 @@ async function main() {
     // (11) Scripts-running refusal: a live script in the source worktree
     // makes the teardown refuse (never kill), so the pull half succeeds
     // and the source survives with the worktree on both sides.
-    const wt5Path = join(sandbox, "wt5");
-    await git(sourceRepo, ["worktree", "add", "-q", "-b", "feature5", wt5Path]);
+    const wt5Path = await addWorktree(sourceRepo, "wt5", "feature5");
     const wt5Id = worktreeIdFromPath(wt5Path);
     // A REAL long-lived script through the app's registry (the registry
     // is what the refusal flag consults), reaped in the finally below.
@@ -956,11 +863,14 @@ async function main() {
       ),
       /No pull recorded/,
     );
-    const wt6Path = join(sandbox, "wt6");
-    await git(sourceRepo, ["worktree", "add", "-q", "-b", "feature6", wt6Path]);
-    writeFileSync(join(wt6Path, "sixth.txt"), "sixth\n");
-    await git(wt6Path, ["add", "-A"]);
-    await git(wt6Path, ["commit", "-qm", "sixth feature"]);
+    const wt6Path = await addWorktree(
+      sourceRepo,
+      "wt6",
+      "feature6",
+      "sixth.txt",
+      "sixth\n",
+      "sixth feature",
+    );
     writeFileSync(join(wt6Path, "draft.txt"), "draft\n");
     const wt6Id = worktreeIdFromPath(wt6Path);
     const wt6Source = {
@@ -994,11 +904,14 @@ async function main() {
     // same wire (its identity scan takes the target repo, registered
     // first). The push, the peer's landing and the local teardown are
     // production code against real git.
-    const wt7Path = join(sandbox, "wt7");
-    await git(sourceRepo, ["worktree", "add", "-q", "-b", "feature7", wt7Path]);
-    writeFileSync(join(wt7Path, "seventh.txt"), "seventh\n");
-    await git(wt7Path, ["add", "-A"]);
-    await git(wt7Path, ["commit", "-qm", "seventh feature"]);
+    const wt7Path = await addWorktree(
+      sourceRepo,
+      "wt7",
+      "feature7",
+      "seventh.txt",
+      "seventh\n",
+      "seventh feature",
+    );
     writeFileSync(join(wt7Path, "draft.txt"), "sent draft\n");
     const wt7 = {
       targetDeviceId: "A",
@@ -1059,9 +972,7 @@ async function main() {
     // carrying main's commits and uncommitted work, and the target's
     // own primary (on main) is untouched. The source's primary is on
     // main, one commit ahead of the target's after this.
-    writeFileSync(join(sourceRepo, "ff.txt"), "from main\n");
-    await git(sourceRepo, ["add", "-A"]);
-    await git(sourceRepo, ["commit", "-qm", "main moves on"]);
+    await commitFile(sourceRepo, "ff.txt", "from main\n", "main moves on");
     const mainTip = await gitOut(sourceRepo, "rev-parse", "HEAD");
     writeFileSync(join(sourceRepo, "primary-draft.txt"), "primary draft\n");
     const targetMainBefore = await gitOut(targetRepo, "rev-parse", "HEAD");
@@ -1264,15 +1175,7 @@ async function main() {
     assert.equal(loadProjects().length, before);
     // A pull told where to clone beside a checkout it already has
     // takes the checkout: nothing is cloned and the result says so.
-    const wtBesidePath = join(sandbox, "wt-beside");
-    await git(sourceRepo, [
-      "worktree",
-      "add",
-      "-q",
-      "-b",
-      "beside",
-      wtBesidePath,
-    ]);
+    const wtBesidePath = await addWorktree(sourceRepo, "wt-beside", "beside");
     const beside = await syncHandlers.pullWorktree(
       {
         sourceDeviceId: "A",
@@ -1301,8 +1204,4 @@ async function main() {
   done();
 }
 
-main()
-  .catch(fail)
-  .finally(() => {
-    rmSync(sandbox, { recursive: true, force: true });
-  });
+main().catch(fail).finally(fixture.remove);

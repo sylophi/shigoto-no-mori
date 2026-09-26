@@ -12,7 +12,8 @@
 // freshly built binary.
 import { type ChildProcess, spawn } from "node:child_process";
 import { Duplex, type Readable, type Writable } from "node:stream";
-import { signalTreeBestEffort } from "@host/lib/scripts/process";
+import { signalChildTree } from "@host/lib/scripts/process";
+import { implSlot } from "@host/lib/util/implSlot";
 
 // A child whose stdin/stdout are one duplex stream. stderr stays
 // separate for diagnostics.
@@ -54,14 +55,7 @@ export function spawnStreamChild(
     stream,
     stderr: child.stderr,
     pid: child.pid,
-    kill: () => {
-      try {
-        if (child.pid !== undefined) signalTreeBestEffort(child.pid, "SIGTERM");
-        else child.kill("SIGTERM");
-      } catch {
-        // Already gone.
-      }
-    },
+    kill: () => signalChildTree(child, "SIGTERM"),
     onExit: (listener) => {
       child.once("close", (code) => listener(code));
     },
@@ -76,18 +70,15 @@ type FileSyncSpawnImpl = (
   env?: NodeJS.ProcessEnv,
 ) => StreamChild | null;
 
-let impl: FileSyncSpawnImpl | null = null;
-
-export function setFileSyncSpawnImpl(next: FileSyncSpawnImpl): void {
-  impl = next;
-}
+const { set: setFileSyncSpawnImpl, get: spawnImpl } =
+  implSlot<FileSyncSpawnImpl>(
+    "file-sync spawned before setFileSyncSpawnImpl ran",
+  );
+export { setFileSyncSpawnImpl };
 
 export function spawnFileSync(
   args: string[],
   env?: NodeJS.ProcessEnv,
 ): StreamChild | null {
-  if (impl === null) {
-    throw new Error("file-sync spawned before setFileSyncSpawnImpl ran");
-  }
-  return impl(args, env);
+  return spawnImpl()(args, env);
 }

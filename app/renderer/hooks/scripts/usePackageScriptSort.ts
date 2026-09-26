@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  skipToken,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type {
   PackageScriptSortMode,
   PackageScriptsResult,
@@ -17,11 +22,10 @@ export function usePackageScriptSort(projectId: string | null) {
   const { api, keys } = useHostScope();
   return useQuery<PackageScriptSortMode>({
     queryKey: keys.packageScriptSort(projectId),
-    queryFn: () => {
-      if (!projectId) return DEFAULT_MODE;
-      return api.packageScripts.getSort(projectId);
-    },
-    enabled: projectId !== null,
+    queryFn:
+      projectId !== null
+        ? () => api.packageScripts.getSort(projectId)
+        : skipToken,
     staleTime: Number.POSITIVE_INFINITY,
     meta: { errorTitle: "Couldn't read script sort preference" },
   });
@@ -51,11 +55,10 @@ export function usePackageScriptOrder(
   const { api, keys } = useHostScope();
   return useQuery<string[]>({
     queryKey: keys.packageScriptOrder(projectId),
-    queryFn: () => {
-      if (!projectId) return [];
-      return api.packageScripts.getOrder(projectId);
-    },
-    enabled: projectId !== null && sortMode === "manual",
+    queryFn:
+      projectId !== null && sortMode === "manual"
+        ? () => api.packageScripts.getOrder(projectId)
+        : skipToken,
     staleTime: Number.POSITIVE_INFINITY,
     meta: { errorTitle: "Couldn't read script order" },
   });

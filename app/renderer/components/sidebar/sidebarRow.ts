@@ -1,7 +1,6 @@
 import type { StackChild, StackPosition } from "@shared/pullRequestStack";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import type { Project, PullRequest, Worktree } from "@shared/schemas";
-import type { StatusTone } from "@/components/ui/status-dot";
 import type { SidebarDeviceBadge } from "./DeviceBadge";
 
 // The shelves the inbox view folds shut by default. The live box has
@@ -50,6 +49,9 @@ export type SidebarRow =
       key: string;
       worktree: Worktree;
       mirror?: SidebarDeviceBadge;
+      // Its PR off the project's map, which the builder already holds
+      // (as the inbox row's, see below).
+      pr: PullRequest | undefined;
       // The PR's place in its stack, off the project's map, and its
       // place under the stack's lowest row when the two sit together
       // (shared/pullRequestStack.ts).
@@ -87,14 +89,10 @@ export type SidebarRow =
       kind: "remote-worktree";
       key: string;
       worktree: Worktree;
-      deviceId: string;
-      deviceLabel: string;
-      deviceIcon: DeviceIcon;
-      // False renders the row faded: the device is off and this is its
-      // last known state.
-      reachable: boolean;
-      // The device's connection tone, for its badge on the row.
-      tone: StatusTone;
+      // The device's badge on the row, in its connection tone. Not
+      // `reachable` renders the row faded: the device is off and this
+      // is its last known state.
+      device: SidebarDeviceBadge;
       // Its PR on that device, off the peer's own map like a local
       // row's off this machine's.
       pr: PullRequest | undefined;

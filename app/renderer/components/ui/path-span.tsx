@@ -1,4 +1,4 @@
-import type { ClipboardEvent, CSSProperties } from "react";
+import type { ClipboardEvent } from "react";
 import { CopyButton } from "@/components/ui/copy-button";
 import { cn } from "@/lib/utils";
 import { useShortPath } from "@/hooks/ui/useShortPath";
@@ -7,8 +7,6 @@ interface PathSpanProps {
   path: string;
   home: string | null | undefined;
   className?: string;
-  style?: CSSProperties;
-  title?: string;
   copyable?: boolean;
 }
 
@@ -26,8 +24,6 @@ export function PathSpan({
   path,
   home,
   className,
-  style,
-  title,
   copyable = false,
 }: PathSpanProps) {
   const [ref, display] = useShortPath(path, home);
@@ -39,8 +35,7 @@ export function PathSpan({
           "group/copy flex min-w-0 items-center gap-1 select-text",
           className,
         )}
-        style={style}
-        title={title ?? path}
+        title={path}
       >
         <span className="min-w-0 truncate">{display}</span>
         <CopyButton value={path} label="Copy path" />
@@ -55,8 +50,7 @@ export function PathSpan({
     <span
       ref={ref}
       className={cn("select-text", className)}
-      style={style}
-      title={title ?? path}
+      title={path}
       onCopy={handleCopy}
     >
       {display}

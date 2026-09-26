@@ -226,11 +226,8 @@ func stackStepError(landed []prSummary, failed prSummary, err error) error {
 	if len(landed) == 0 {
 		return errf("PR #%d: %s", failed.Number, err)
 	}
-	numbers := make([]string, len(landed))
-	for i, pr := range landed {
-		numbers[i] = fmt.Sprintf("#%d", pr.Number)
-	}
-	return errf("merged %s, then PR #%d failed: %s", strings.Join(numbers, ", "), failed.Number, err)
+	numbers := joinMapped(landed, func(pr prSummary) string { return fmt.Sprintf("#%d", pr.Number) })
+	return errf("merged %s, then PR #%d failed: %s", numbers, failed.Number, err)
 }
 
 // GitHub recomputes a PR's mergeability after a retarget. Merging in
@@ -272,18 +269,15 @@ func lookupStack(proj project, number int, allowed []string) (stackLookups, erro
 		stErr error
 	)
 	lk.allowed = allowed
-	wg.Add(3)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		var pt primaryTarget
 		pt, ptErr = resolvePrimaryTarget(proj)
 		lk.trunk = pt.localPrimary
-	}()
-	go func() { defer wg.Done(); lk.prs, lsErr = listPullRequests(proj.Path) }()
-	go func() { defer wg.Done(); lk.ghStack, stErr = githubStackFor(proj.Path, number) }()
+	})
+	wg.Go(func() { lk.prs, lsErr = listPullRequests(proj.Path) })
+	wg.Go(func() { lk.ghStack, stErr = githubStackFor(proj.Path, number) })
 	if allowed == nil {
-		wg.Add(1)
-		go func() { defer wg.Done(); lk.allowed = allowedMergeMethods(proj.Path) }()
+		wg.Go(func() { lk.allowed = allowedMergeMethods(proj.Path) })
 	}
 	wg.Wait()
 	return lk, errors.Join(ptErr, lsErr, stErr)

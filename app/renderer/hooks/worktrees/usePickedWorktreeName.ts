@@ -1,15 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, skipToken } from "@tanstack/react-query";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
 export function usePickedWorktreeName(projectId: string | null) {
   const { api, keys } = useHostScope();
   return useQuery<string>({
     queryKey: keys.pickedWorktreeName(projectId),
-    queryFn: () => {
-      if (!projectId) return "";
-      return api.projects.pickWorktreeName(projectId);
-    },
-    enabled: projectId !== null,
+    queryFn:
+      projectId !== null
+        ? () => api.projects.pickWorktreeName(projectId)
+        : skipToken,
     // Re-roll on every visit (gcTime drops the pick as soon as the form
     // unmounts), but never while the form is open: a random pick has no
     // freshness to refetch for, and a window-focus refetch would swap

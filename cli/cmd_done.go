@@ -15,6 +15,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 )
 
@@ -81,9 +82,7 @@ func describeAfterDone(proj project, pt primaryTarget, id worktreeIdentity) (wor
 		if freshID.ID != id.ID {
 			continue
 		}
-		w := buildWorktree(proj, freshID, ctx)
-		w.ProjectName = proj.Name
-		return w, nil
+		return buildWorktree(proj, freshID, ctx), nil
 	}
 	return worktreeJSON{}, errf("worktree disappeared after switching branches")
 }
@@ -96,9 +95,7 @@ func reportDone(w worktreeJSON, mergedBranch string, deleted bool, extra map[str
 			"ok": true, "worktree": w,
 			"deletedBranch": deletedBranchField(mergedBranch, deleted),
 		}
-		for key, value := range extra {
-			doc[key] = value
-		}
+		maps.Copy(doc, extra)
 		emit(doc)
 	} else {
 		line := greenOut(fmt.Sprintf("%s is now on %s", w.Name, w.Branch))
@@ -112,11 +109,7 @@ func reportDone(w worktreeJSON, mergedBranch string, deleted bool, extra map[str
 func cmdDone(ctx cliContext, args []string) (int, error) {
 	spec := worktreeTargetSpec()
 	spec.bools["force"] = []string{"f"}
-	parsed, err := parseCmdArgs(args, spec)
-	if err != nil {
-		return exitCodeOf(err), err
-	}
-	target, err := resolveWorktreeArgs(ctx, parsed, true)
+	parsed, target, err := parseWorktreeArgs(ctx, args, spec, true)
 	if err != nil {
 		return exitCodeOf(err), err
 	}

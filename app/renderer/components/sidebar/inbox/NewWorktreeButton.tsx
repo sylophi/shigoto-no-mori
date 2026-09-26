@@ -10,11 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MaybeHostScope, type HostApi } from "@/hooks/remote/useHostScope";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
-import {
-  commandAccessOf,
-  usePeerCommandAccess,
-} from "@/hooks/remote/useCommandAccess";
-import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
+import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
 import type { Project } from "@shared/schemas";
 import { deviceBadgeOf } from "../buildSidebarRows";
@@ -50,22 +46,14 @@ export function NewWorktreeButton({
   projects,
   remote,
 }: NewWorktreeButtonProps) {
-  const registry = useRemoteDevices();
-  const access = usePeerCommandAccess(registry);
+  const commandableApi = useCommandableApi();
   const targets: CreateTarget[] = [
     ...projects
       .filter((project) => project.pathExists !== false)
       .map((project) => ({ key: project.id, project, peer: undefined })),
     ...remote.flatMap((item) => {
-      const api = registry.find(
-        (device) => device.deviceId === item.deviceId,
-      )?.api;
-      if (
-        api === undefined ||
-        !commandAccessOf(access, item.deviceId).canCommand
-      ) {
-        return [];
-      }
+      const api = commandableApi(item.deviceId);
+      if (api === undefined) return [];
       return [
         {
           key: `${item.deviceId}/${item.project.id}`,

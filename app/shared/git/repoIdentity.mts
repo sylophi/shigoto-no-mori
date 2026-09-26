@@ -12,7 +12,7 @@
 // Pure module: the git runner and the default-ref resolver are
 // injected so the renderer and the fixture harness can both load it.
 
-import type { GitRunner } from "./defaultBranch.mts";
+import { type GitRunner, orderRemotesByPrecedence } from "./defaultBranch.mts";
 
 interface RepoIdentityDeps {
   run: GitRunner;
@@ -66,8 +66,9 @@ async function rootCommitKey(
 }
 
 // `remote:<host/owner/repo>` from the primary fetch remote: `upstream`
-// beats `origin` beats the alphabetically-first remote, considering only
-// remotes whose URL normalizes (path-style and file:// remotes are
+// beats `origin` beats the alphabetically-first remote (the one
+// precedence, orderRemotesByPrecedence in defaultBranch.mts), considering
+// only remotes whose URL normalizes (path-style and file:// remotes are
 // machine-local, never identity keys).
 async function remoteKey(
   projectPath: string,
@@ -83,11 +84,7 @@ async function remoteKey(
     const normalized = normalizeRemoteUrl(url);
     if (normalized !== null) usable.set(name, normalized);
   }
-  for (const name of ["upstream", "origin"]) {
-    const hit = usable.get(name);
-    if (hit) return `remote:${hit}`;
-  }
-  const first = [...usable.keys()].toSorted()[0];
+  const first = orderRemotesByPrecedence([...usable.keys()])[0];
   return first ? `remote:${usable.get(first)}` : null;
 }
 

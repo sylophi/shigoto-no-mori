@@ -26,12 +26,15 @@ import {
   CREATE_PHASE_LABEL,
   useWorktreeCreatePhase,
 } from "@/store/worktreeLifecycle";
-import type { CleanupError, Project, Worktree } from "@shared/schemas";
+import type { Project, Worktree } from "@shared/schemas";
 import { LaunchSection } from "./LaunchSection";
 import { LifecycleBanner } from "./LifecycleBanner";
 import { MirrorPill } from "./MirrorPill";
-import { LocalWorktreeActions } from "./LocalWorktreeActions";
-import { RemoteWorktreeActions } from "./RemoteWorktreeActions";
+import { MirrorAction } from "./mirror/MirrorAction";
+import { PeerTransferActions } from "./PeerTransferActions";
+import { FilesButton } from "./FilesButton";
+import { PortsButton } from "./ports/PortsButton";
+import { RemoteTransferActions } from "./RemoteWorktreeActions";
 import { PullRequestSection } from "./pullRequests/PullRequestSection";
 import { ScriptsSection } from "./scripts/ScriptsSection";
 import {
@@ -39,9 +42,14 @@ import {
   type WorktreeFooterActions,
   type WorktreeFooterState,
 } from "./WorktreeDetailFooter";
-import { BranchHeaderRow } from "./branch/BranchHeader";
+import { BranchTitle } from "./branch/BranchTitle";
+import { WorktreeActivityIndicator } from "./WorktreeActivityIndicator";
 import { CommitsSection } from "./commits/CommitsSection";
 import { NotesSection } from "./NotesSection";
+
+// A cleanup script still in flight.
+const live = (state: ScriptRunState) =>
+  state.status === "running" || state.status === "starting";
 
 interface InnerProps {
   worktree: Worktree;
@@ -102,11 +110,7 @@ export function WorktreeDetailInner({
   const releaseState = useScriptRunState(releaseKey);
   const home = runtime?.homedir ?? null;
 
-  const cleanupRunning =
-    teardownState.status === "running" ||
-    teardownState.status === "starting" ||
-    releaseState.status === "running" ||
-    releaseState.status === "starting";
+  const cleanupRunning = live(teardownState) || live(releaseState);
   // This page's own delete, or a removal the host announced (a mirror
   // stop takes the copy with it, a peer's transplant tears its source
   // down here): the page goes into limbo either way, instead of
@@ -157,17 +161,24 @@ export function WorktreeDetailInner({
   };
 
   const limboLabel = computeLimboLabel(teardownState, releaseState);
+  const bannerLabel = inLimbo ? limboLabel : createLabel;
   const cleanupCancelling = teardownState.cancelling || releaseState.cancelling;
 
-  const footerState = computeFooterState({
-    cleanupError,
-    needsForce,
-    cleanupRunning,
-    cleanupCancelling,
-    busy,
-    confirmDelete,
-    deleteErrorMessage: deleteMutation.error?.message,
-  });
+  // Collapse the loose deletion flags into the footer's discriminated
+  // state. Order is priority: a cleanup failure and a pending force-delete
+  // each override the running/normal views, matching how a delete attempt
+  // walks through these phases.
+  const footerState: WorktreeFooterState = cleanupError
+    ? { kind: "cleanupError", error: cleanupError }
+    : needsForce
+      ? {
+          kind: "needsForce",
+          errorMessage: deleteMutation.error?.message,
+          busy,
+        }
+      : cleanupRunning
+        ? { kind: "cleanupRunning", cancelling: cleanupCancelling }
+        : { kind: "normal", confirmDelete, busy };
   const footerActions: WorktreeFooterActions = {
     onCancelCleanupError: clearCleanupError,
     onOpenCleanupConsole: openCleanupConsole,
@@ -214,15 +225,16 @@ export function WorktreeDetailInner({
             <DeviceChip />
           </span>
         </div>
-        <BranchHeaderRow worktree={worktree} />
+        <div className="flex min-w-0 items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <BranchTitle worktree={worktree} />
+          </div>
+          <WorktreeActivityIndicator worktree={worktree} />
+        </div>
         <MirrorPill worktree={worktree} />
       </header>
 
-      {inLimbo ? (
-        <LifecycleBanner label={limboLabel} />
-      ) : createLabel ? (
-        <LifecycleBanner label={createLabel} />
-      ) : null}
+      {bannerLabel && <LifecycleBanner label={bannerLabel} />}
 
       <div
         className={cn(
@@ -254,48 +266,25 @@ export function WorktreeDetailInner({
         actions={footerActions}
         canMutate={granted}
         leading={
-          remote ? (
-            <RemoteWorktreeActions worktree={worktree} project={project} />
-          ) : (
-            <LocalWorktreeActions worktree={worktree} project={project} />
-          )
+          <>
+            {/* The same leading verbs on either page: Ports and the
+                running mirror's button, then the transfers. This
+                device's own worktree footer verbs (PeerTransferActions)
+                sit in the spots the remote footer gives its Ports,
+                Mirror and Transplant buttons. */}
+            <FilesButton worktree={worktree} />
+            <PortsButton worktree={worktree} />
+            <MirrorAction worktree={worktree} />
+            {remote ? (
+              <RemoteTransferActions worktree={worktree} project={project} />
+            ) : (
+              <PeerTransferActions worktree={worktree} project={project} />
+            )}
+          </>
         }
       />
     </div>
   );
-}
-
-// Collapse the loose deletion flags into the footer's discriminated
-// state. Order is priority: a cleanup failure and a pending force-delete
-// each override the running/normal views, matching how a delete attempt
-// walks through these phases.
-function computeFooterState(input: {
-  cleanupError: CleanupError | null;
-  needsForce: boolean;
-  cleanupRunning: boolean;
-  cleanupCancelling: boolean;
-  busy: boolean;
-  confirmDelete: boolean;
-  deleteErrorMessage: string | undefined;
-}): WorktreeFooterState {
-  if (input.cleanupError) {
-    return { kind: "cleanupError", error: input.cleanupError };
-  }
-  if (input.needsForce) {
-    return {
-      kind: "needsForce",
-      errorMessage: input.deleteErrorMessage,
-      busy: input.busy,
-    };
-  }
-  if (input.cleanupRunning) {
-    return { kind: "cleanupRunning", cancelling: input.cleanupCancelling };
-  }
-  return {
-    kind: "normal",
-    confirmDelete: input.confirmDelete,
-    busy: input.busy,
-  };
 }
 
 // Decide which limbo phase label to show. Release runs before
@@ -304,15 +293,12 @@ function computeLimboLabel(
   teardownState: ScriptRunState,
   releaseState: ScriptRunState,
 ): string {
-  if (releaseState.status === "running" || releaseState.status === "starting") {
+  if (live(releaseState)) {
     return releaseState.cancelling
       ? "Stopping port-pool release..."
       : "Releasing ports...";
   }
-  if (
-    teardownState.status === "running" ||
-    teardownState.status === "starting"
-  ) {
+  if (live(teardownState)) {
     return teardownState.cancelling
       ? "Stopping teardown..."
       : "Tearing down...";

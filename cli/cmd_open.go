@@ -10,6 +10,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -58,11 +59,8 @@ func cmdOpen(ctx cliContext, args []string) (int, error) {
 	} else {
 		chosen = matchLauncher(entries, tool)
 		if chosen == nil {
-			labels := make([]string, len(entries))
-			for i, e := range entries {
-				labels[i] = e.label
-			}
-			return 1, errf("Unknown tool %q. Available: %s.", tool, strings.Join(labels, ", "))
+			labels := joinMapped(entries, func(e launcherEntry) string { return e.label })
+			return 1, errf("Unknown tool %q. Available: %s.", tool, labels)
 		}
 	}
 
@@ -70,11 +68,8 @@ func cmdOpen(ctx cliContext, args []string) (int, error) {
 		return 1, errf("Couldn't open %s: %v", chosen.label, err)
 	}
 	bumpLauncherUse(chosen.id)
-	if jsonMode {
-		emit(map[string]any{"ok": true, "launcher": chosen.id, "worktree": target.worktree.Name})
-	} else {
-		out(fmt.Sprintf("opened %s in %s", chosen.label, target.worktree.Name))
-	}
+	emitOrOut(map[string]any{"ok": true, "launcher": chosen.id, "worktree": target.worktree.Name},
+		fmt.Sprintf("opened %s in %s", chosen.label, target.worktree.Name))
 	return 0, nil
 }
 
@@ -99,12 +94,7 @@ func pickLauncher(entries []launcherEntry, worktreeName string) (*launcherEntry,
 	for _, id := range readGlobalConfigHints().HiddenLaunchers {
 		hidden[id] = true
 	}
-	var visible []launcherEntry
-	for _, e := range entries {
-		if !hidden[e.id] {
-			visible = append(visible, e)
-		}
-	}
+	visible := slices.DeleteFunc(slices.Clone(entries), func(e launcherEntry) bool { return hidden[e.id] })
 	if len(visible) == 0 {
 		return nil, errf("No launchers available.")
 	}

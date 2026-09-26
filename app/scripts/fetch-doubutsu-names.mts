@@ -19,6 +19,7 @@
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { isValidWorktreeDirName } from "../shared/git/branches.ts";
 import { appRoot, repoRoot } from "./lib/appRoot.mts";
 
@@ -87,10 +88,6 @@ async function api(params: Record<string, string>): Promise<any> {
     }
     await sleep(1000 * attempt);
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // Follows MediaWiki's `continue` tokens until the query is exhausted.

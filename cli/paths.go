@@ -149,21 +149,17 @@ func resolveWorktreeBase(projectPath string, config *projectConfig) string {
 func pruneEmptyManagedParents(oldWorktreePath, projectPath string) {
 	parent := filepath.Dir(oldWorktreePath)
 	managedRootBase := filepath.Join(dataDir(), "worktrees", filepath.Base(projectPath))
+	// os.Remove on a directory fails unless empty, exactly like rmdir.
 	if parent == managedRootBase {
-		_ = removeIfEmptyDir(parent)
+		_ = os.Remove(parent)
 		return
 	}
 	inProjectBase := filepath.Join(projectPath, ".shigomori", "worktrees")
 	if parent == inProjectBase {
-		if removeIfEmptyDir(parent) == nil {
-			_ = removeIfEmptyDir(filepath.Dir(parent))
+		if os.Remove(parent) == nil {
+			_ = os.Remove(filepath.Dir(parent))
 		}
 	}
-}
-
-func removeIfEmptyDir(path string) error {
-	// os.Remove on a directory fails unless empty, exactly like rmdir.
-	return os.Remove(path)
 }
 
 // --- worktree dir name validation (shared/git/branches.ts port) ---

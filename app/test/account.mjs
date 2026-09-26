@@ -88,11 +88,14 @@ function recordingFetch(responder) {
   return { fetchImpl, calls };
 }
 
-const json = (body, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { "content-type": "application/json" },
-  });
+// An account service over a recording fetch stub, answering via the
+// responder, plus the calls it recorded.
+function stubService(responder, baseUrl = "https://hub.test") {
+  const { fetchImpl, calls } = recordingFetch(responder);
+  return { service: createAccountService({ baseUrl, fetchImpl }), calls };
+}
+
+const json = (body, status = 200) => Response.json(body, { status });
 
 // The plaintext cipher stub: a keychain-less machine's fallback, where
 // the store writes enc:false and the round trip is the identity.
@@ -147,13 +150,9 @@ async function main() {
   await check(
     "service: enroll hits the enroll route with the session-token bearer and an EnrollRequest body",
     async () => {
-      const { fetchImpl, calls } = recordingFetch(() =>
+      const { service, calls } = stubService(() =>
         json({ credential: "device-credential", device: DEVICE }),
       );
-      const service = createAccountService({
-        baseUrl: "https://hub.test",
-        fetchImpl,
-      });
       const result = await service.enroll("session-token", {
         deviceId: "device-uuid",
         name: "Test Mac",
@@ -178,13 +177,7 @@ async function main() {
   await check(
     "service: listDevices GETs the devices route under the credential bearer",
     async () => {
-      const { fetchImpl, calls } = recordingFetch(() =>
-        json({ devices: [DEVICE] }),
-      );
-      const service = createAccountService({
-        baseUrl: "https://hub.test",
-        fetchImpl,
-      });
+      const { service, calls } = stubService(() => json({ devices: [DEVICE] }));
       const devices = await service.listDevices("device-credential");
       assert.deepEqual(devices, [DEVICE]);
       assert.equal(
@@ -202,13 +195,9 @@ async function main() {
   await check(
     "service: update PATCHes the per-device route with the name and/or icon and tolerates a 204",
     async () => {
-      const { fetchImpl, calls } = recordingFetch(
+      const { service, calls } = stubService(
         () => new Response(null, { status: 204 }),
       );
-      const service = createAccountService({
-        baseUrl: "https://hub.test",
-        fetchImpl,
-      });
       await service.update("device-credential", "this device/id", {
         name: "Studio",
       });
@@ -242,13 +231,9 @@ async function main() {
   await check(
     "service: revoke DELETEs the per-device route and tolerates a 204",
     async () => {
-      const { fetchImpl, calls } = recordingFetch(
+      const { service, calls } = stubService(
         () => new Response(null, { status: 204 }),
       );
-      const service = createAccountService({
-        baseUrl: "https://hub.test",
-        fetchImpl,
-      });
       await service.revoke("device-credential", "other device/id");
       assert.equal(
         calls[0].url,
@@ -270,13 +255,9 @@ async function main() {
   await check(
     "service: mintTicket POSTs the tickets route under the credential bearer",
     async () => {
-      const { fetchImpl, calls } = recordingFetch(() =>
+      const { service, calls } = stubService(() =>
         json({ ticket: "the-ticket", expiresInMs: 30_000 }),
       );
-      const service = createAccountService({
-        baseUrl: "https://hub.test",
-        fetchImpl,
-      });
       const ticket = await service.mintTicket("device-credential");
       assert.equal(ticket.ticket, "the-ticket");
       assert.equal(
@@ -300,11 +281,7 @@ async function main() {
         }
         return json({ devices: [DEVICE] });
       };
-      const { fetchImpl, calls } = recordingFetch(responder);
-      const service = createAccountService({
-        baseUrl: "https://hub.test",
-        fetchImpl,
-      });
+      const { service, calls } = stubService(responder);
       await service.enroll("session-token", {
         deviceId: "device-uuid",
         name: "Test Mac",
@@ -323,13 +300,9 @@ async function main() {
   await check(
     "service: a non-2xx with an ErrorBody throws the device hub's error message",
     async () => {
-      const { fetchImpl } = recordingFetch(() =>
+      const { service } = stubService(() =>
         json({ error: "device revoked" }, 403),
       );
-      const service = createAccountService({
-        baseUrl: "https://hub.test",
-        fetchImpl,
-      });
       await assert.rejects(
         () => service.listDevices("device-credential"),
         /device revoked/,
@@ -341,13 +314,10 @@ async function main() {
     "service: a rate-limited tunnel provision stays retryable, any other 4xx is a denial",
     async () => {
       const provisionWith = (status) => {
-        const { fetchImpl } = recordingFetch(() =>
+        const { service } = stubService(() =>
           json({ error: "refused" }, status),
         );
-        return createAccountService({
-          baseUrl: "https://hub.test",
-          fetchImpl,
-        }).provisionTunnel("device-credential", 4000);
+        return service.provisionTunnel("device-credential", 4000);
       };
       await assert.rejects(
         () => provisionWith(401),
@@ -389,13 +359,10 @@ async function main() {
   await check(
     "enroll flow: enrollDevice stores the credential with the derived accountId under the stored-or-fallback device name, and an unconfigured build rejects before any fetch",
     async () => {
-      const { fetchImpl, calls } = recordingFetch(() =>
-        json({ credential: "cred-1", device: DEVICE }),
+      const { service, calls } = stubService(
+        () => json({ credential: "cred-1", device: DEVICE }),
+        CONFIG.hubUrl,
       );
-      const service = createAccountService({
-        baseUrl: CONFIG.hubUrl,
-        fetchImpl,
-      });
       const store = memoryStore();
       await enrollDevice(
         {
@@ -686,13 +653,10 @@ async function main() {
     "device update: updateDevice writes the hub first and keeps the change for this device only, the detected icon drops the pick, and a change the hub refused keeps nothing",
     async () => {
       let status = 204;
-      const { fetchImpl, calls } = recordingFetch(
+      const { service, calls } = stubService(
         () => new Response(null, { status }),
+        CONFIG.hubUrl,
       );
-      const service = createAccountService({
-        baseUrl: CONFIG.hubUrl,
-        fetchImpl,
-      });
       const store = memoryStore();
       const deps = {
         service,
@@ -824,13 +788,10 @@ async function main() {
   await check(
     "sign-out flow: signOutDevice revokes THIS device then clears, and still clears (reporting the failure) when the revoke fails",
     async () => {
-      const { fetchImpl, calls } = recordingFetch(
+      const { service, calls } = stubService(
         () => new Response(null, { status: 204 }),
+        CONFIG.hubUrl,
       );
-      const service = createAccountService({
-        baseUrl: CONFIG.hubUrl,
-        fetchImpl,
-      });
       const store = memoryStore();
       store.write({ credential: "cred-1", accountId: "a", deviceName: "d" });
       await signOutDevice({

@@ -126,8 +126,6 @@ type ScriptsApi = Pick<
   "cancel" | "write" | "resize" | "onEvent" | "onStoppedForRemovedWorktree"
 >;
 
-type WarnFn = (title: string, options?: { description?: string }) => unknown;
-
 export class ScriptRunsStore {
   private states = new Map<ScriptKey, ScriptRunState>();
   // Per-run output log, keyed like states, mutated in place. Consoles
@@ -146,7 +144,6 @@ export class ScriptRunsStore {
   private worktreeSubs = new KeyedSubscribers<string>();
   private unsubscribers: Array<() => void> = [];
   private api: ScriptsApi;
-  private warn: WarnFn;
   // Whether a removed-worktree notice is worth a toast even for a
   // worktree this store never saw a run in. True for this machine's
   // store (a renderer reload forgets runs the host still reaps), false
@@ -154,9 +151,8 @@ export class ScriptRunsStore {
   // ones that ran something there have anything to hear.
   private warnOnUnseenRemoval: boolean;
 
-  constructor(api: ScriptsApi, warn: WarnFn, warnOnUnseenRemoval: boolean) {
+  constructor(api: ScriptsApi, warnOnUnseenRemoval: boolean) {
     this.api = api;
-    this.warn = warn;
     this.warnOnUnseenRemoval = warnOnUnseenRemoval;
   }
 
@@ -178,19 +174,11 @@ export class ScriptRunsStore {
   }
 
   async run(input: StartInput): Promise<void> {
-    this.setMeta(input.key, input.worktreeId, input.slot);
-    this.buffers.delete(input.key);
-
-    this.setStateWithActivity(input.key, () => ({
+    this.begin(input.key, input.worktreeId, input.slot, {
       runId: null,
       status: "starting",
-      hasOutput: false,
       interactive: true,
-      exitCode: null,
-      startedAt: Date.now(),
-      endedAt: null,
-      cancelling: false,
-    }));
+    });
 
     let runId: string;
     try {
@@ -261,11 +249,7 @@ export class ScriptRunsStore {
     const state = this.states.get(key);
     if (!state) return;
     if (state.status === "running" || state.status === "starting") return;
-    if (state.runId) this.runIdToKey.delete(state.runId);
-    this.states.delete(key);
-    this.buffers.delete(key);
-    this.meta.delete(key);
-    this.notify(key);
+    this.forget(key);
   }
 
   // The run's output so far (capped, see MAX_OUTPUT_BYTES), for a
@@ -288,16 +272,21 @@ export class ScriptRunsStore {
     let touched = false;
     for (const [key, m] of this.meta) {
       if (m.worktreeId !== worktreeId) continue;
-      const s = this.states.get(key);
-      if (s?.runId) this.runIdToKey.delete(s.runId);
-      this.states.delete(key);
-      this.buffers.delete(key);
-      this.meta.delete(key);
-      this.notify(key);
+      this.forget(key);
       touched = true;
     }
-    if (touched) this.notifyWorktree(worktreeId);
+    if (touched) this.worktreeSubs.notify(worktreeId);
     return touched;
+  }
+
+  // Drops everything held for the slot, its run's id binding included.
+  private forget(key: ScriptKey): void {
+    const state = this.states.get(key);
+    if (state?.runId) this.runIdToKey.delete(state.runId);
+    this.states.delete(key);
+    this.buffers.delete(key);
+    this.meta.delete(key);
+    this.perKeySubs.notify(key);
   }
 
   // Main reaped this worktree's scripts because it was removed outside
@@ -309,7 +298,7 @@ export class ScriptRunsStore {
   private handleRemovedWorktree(info: RemovedWorktreeScripts): void {
     const seen = this.clearForWorktree(info.worktreeId);
     if (!seen && !this.warnOnUnseenRemoval) return;
-    this.warn(`${info.worktreeName} was removed outside the app`, {
+    toast.warning(`${info.worktreeName} was removed outside the app`, {
       description:
         info.scriptCount === 1
           ? "Its running script was stopped."
@@ -357,14 +346,6 @@ export class ScriptRunsStore {
     return null;
   }
 
-  private notify(key: ScriptKey): void {
-    this.perKeySubs.notify(key);
-  }
-
-  private notifyWorktree(worktreeId: string): void {
-    this.worktreeSubs.notify(worktreeId);
-  }
-
   private setStateWithActivity(
     key: ScriptKey,
     update: (prev: ScriptRunState) => ScriptRunState,
@@ -373,11 +354,11 @@ export class ScriptRunsStore {
     const next = update(prev);
     if (next === prev) return;
     this.states.set(key, next);
-    this.notify(key);
+    this.perKeySubs.notify(key);
     // Sidebar activity only depends on status; log appends don't change it.
     if (prev.status !== next.status) {
       const m = this.meta.get(key);
-      if (m) this.notifyWorktree(m.worktreeId);
+      if (m) this.worktreeSubs.notify(m.worktreeId);
     }
   }
 
@@ -451,7 +432,7 @@ export class ScriptRunsStore {
           ? "Port-pool provision"
           : null;
     if (!label) return;
-    this.warn(`${label} didn't complete cleanly`, {
+    toast.warning(`${label} didn't complete cleanly`, {
       description:
         exitCode === null
           ? "See the script console for details."
@@ -459,10 +440,23 @@ export class ScriptRunsStore {
     });
   }
 
-  private setMeta(key: ScriptKey, worktreeId: string, slot: ScriptSlot): void {
+  // A new run takes the slot: unbind the previous run's id, drop its
+  // output, and start the snapshot over from EMPTY_STATE.
+  private begin(
+    key: ScriptKey,
+    worktreeId: string,
+    slot: ScriptSlot,
+    init: Pick<ScriptRunState, "runId" | "status" | "interactive">,
+  ): void {
     const prev = this.states.get(key);
     if (prev?.runId) this.runIdToKey.delete(prev.runId);
     this.meta.set(key, { worktreeId, slotKind: deriveSlotKind(slot) });
+    this.buffers.delete(key);
+    this.setStateWithActivity(key, () => ({
+      ...EMPTY_STATE,
+      ...init,
+      startedAt: Date.now(),
+    }));
   }
 
   private bindRunIdAndDrain(key: ScriptKey, runId: string): void {
@@ -476,19 +470,11 @@ export class ScriptRunsStore {
 
   private bindStarted(event: Extract<ScriptEvent, { kind: "started" }>): void {
     const key = scriptKey(event.projectId, event.worktreeId, event.slot);
-    this.setMeta(key, event.worktreeId, event.slot);
-    this.buffers.delete(key);
-
-    this.setStateWithActivity(key, () => ({
+    this.begin(key, event.worktreeId, event.slot, {
       runId: event.runId,
       status: "running",
-      hasOutput: false,
       interactive: false,
-      exitCode: null,
-      startedAt: Date.now(),
-      endedAt: null,
-      cancelling: false,
-    }));
+    });
 
     this.bindRunIdAndDrain(key, event.runId);
   }
@@ -518,17 +504,11 @@ function exitSentinel(code: number | null): string {
   return `\r\n\x1b[31m── exit ${code} ──\x1b[0m\r\n`;
 }
 
-const warnToast: WarnFn = (title, options) => toast.warning(title, options);
-
 // This machine's store. `start()` is called by the renderer entry point
 // so subscription lifecycle has a single owner. Importing this module
 // just constructs the singleton and attaches no IPC listener as a side
 // effect.
-export const scriptRuns = new ScriptRunsStore(
-  window.api.scripts,
-  warnToast,
-  true,
-);
+export const scriptRuns = new ScriptRunsStore(window.api.scripts, true);
 
 // The store for any device: this machine's, or a peer's built on first
 // use over that device's api (the same per-device api the remote
@@ -554,7 +534,7 @@ export function scriptRunsFor(deviceId: string): ScriptRunsStore {
   if (deviceId === localDeviceId) return scriptRuns;
   let store = peerStores.get(deviceId);
   if (store === undefined) {
-    store = new ScriptRunsStore(apiFor(deviceId).scripts, warnToast, false);
+    store = new ScriptRunsStore(apiFor(deviceId).scripts, false);
     store.start();
     peerStores.set(deviceId, store);
   }

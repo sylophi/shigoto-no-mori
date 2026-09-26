@@ -19,6 +19,7 @@ import {
   mirrorEngineBlocker,
 } from "@shared/ipc/modules/mirror";
 import { errorMessageOf } from "@shared/errors";
+import { implSlot } from "@host/lib/util/implSlot";
 
 // The label keys the start orchestration writes on a session, lifted
 // back out for the renderer by annotate below. Labels are the one
@@ -103,11 +104,14 @@ export function ignoreModeOf(labels: Record<string, string>): MirrorIgnoreMode {
   return mode.success ? mode.data : "everything";
 }
 
-let impl: MirrorImpl | null = null;
-
-export function setMirrorImpl(next: MirrorImpl): void {
-  impl = next;
-}
+// The daemon (engine), or null before it is wired (engineOrNull), for
+// a caller that has a sensible answer without one.
+const {
+  set: setMirrorImpl,
+  get: engine,
+  orNull: engineOrNull,
+} = implSlot<MirrorImpl>("mirror handler invoked before the daemon was wired");
+export { setMirrorImpl, engine, engineOrNull };
 
 // The engine when it can take a session, or the reason it cannot:
 // the mirror start and the transplant's file transfer both begin here.
@@ -166,19 +170,6 @@ export function findSession(
   return daemon.sessions().find((raw) => raw.session === session);
 }
 
-// The daemon, or null before it is wired, for a caller that has a
-// sensible answer without one.
-export function engineOrNull(): MirrorImpl | null {
-  return impl;
-}
-
-export function engine(): MirrorImpl {
-  if (impl === null) {
-    throw new Error("mirror handler invoked before the daemon was wired");
-  }
-  return impl;
-}
-
 // Every session whose local side is the named worktree, stopped. The
 // tombstone protocol calls this once a delete or a relocate has gone
 // through (withDeleteInflight says why after and not before): left
@@ -194,7 +185,7 @@ export function engine(): MirrorImpl {
 export async function stopMirrorsForWorktree(
   localWorktreeId: string,
 ): Promise<void> {
-  const daemon = impl;
+  const daemon = engineOrNull();
   // Unwired (a check, a surface that never mounts the daemon) there is
   // nothing mirroring anything.
   if (daemon === null) return;
@@ -230,7 +221,7 @@ export async function endMirrorsWithPeers(
   detail: string,
   opts: { transfers?: boolean } = {},
 ): Promise<void> {
-  const daemon = impl;
+  const daemon = engineOrNull();
   if (daemon === null) return;
   const candidates = opts.transfers
     ? daemon.sessions()

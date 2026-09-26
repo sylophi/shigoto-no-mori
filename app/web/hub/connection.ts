@@ -100,17 +100,10 @@ export function createHubConnection(
   // Channel only, no handler: a web client serves nobody, so the core
   // keeps the host role empty by construction and only the client role
   // (connectBroker) does any work.
-  const core = createHubConnectionCore({
+  return createHubConnectionCore({
     openSocket: openBrowserSocket,
     onChange: opts.onChange,
     heartbeat: opts.heartbeat,
     broker: { channel: opts.brokerChannel },
   });
-  return {
-    connectBroker: core.connectBroker,
-    refresh: core.refresh,
-    stop: core.stop,
-    status: core.status,
-    probe: core.probe,
-  };
 }

@@ -25,23 +25,27 @@ export function ScriptStatusBadge({
     // Genuinely waiting (SIGTERM grace before SIGKILL), so spinner is
     // honest here. Active runs use a pulsing dot below.
     return (
-      <Spinner gap={gap} icon={iconSize} tone="muted">
+      <Indicator
+        gap={gap}
+        tone="muted"
+        mark={<Loader2 aria-hidden className={cn(iconSize, "animate-spin")} />}
+      >
         Stopping…
-      </Spinner>
+      </Indicator>
     );
   }
   if (state.status === "starting") {
     return (
-      <LiveDot gap={gap} tone="muted">
+      <Indicator gap={gap} tone="muted" mark={LIVE_DOT}>
         Starting…
-      </LiveDot>
+      </Indicator>
     );
   }
   if (state.status === "running") {
     return (
-      <LiveDot gap={gap} tone="foreground">
+      <Indicator gap={gap} tone="foreground" mark={LIVE_DOT}>
         Running
-      </LiveDot>
+      </Indicator>
     );
   }
   if (state.status === "exited") {
@@ -52,23 +56,14 @@ export function ScriptStatusBadge({
     // (the user clicked Stop, the app quit, or the worktree was
     // removed). That's intentional cancellation, not a failure, so
     // colour and copy match the muted "done" treatment.
-    if (state.exitCode === null) {
+    if (state.exitCode === null || state.exitCode === 0) {
       return (
         <span
           className="tabular shrink-0 text-xs text-muted-foreground select-text"
           title={timeTitle}
         >
-          stopped{suffix}
-        </span>
-      );
-    }
-    if (state.exitCode === 0) {
-      return (
-        <span
-          className="tabular shrink-0 text-xs text-muted-foreground select-text"
-          title={timeTitle}
-        >
-          done{suffix}
+          {state.exitCode === null ? "stopped" : "done"}
+          {suffix}
         </span>
       );
     }
@@ -92,38 +87,25 @@ export function ScriptStatusBadge({
   return null;
 }
 
-function Spinner({
-  gap,
-  icon,
-  tone,
-  children,
-}: {
-  gap: string;
-  icon: string;
-  tone: "muted" | "foreground";
-  children: React.ReactNode;
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex shrink-0 items-center text-xs",
-        gap,
-        tone === "muted" ? "text-muted-foreground" : "text-foreground",
-      )}
-    >
-      <Loader2 aria-hidden className={cn(icon, "animate-spin")} />
-      {children}
-    </span>
-  );
-}
+// The mark an active run leads with.
+const LIVE_DOT = (
+  <span
+    aria-hidden
+    className="inline-block size-1.5 animate-pulse rounded-full bg-emerald-500"
+  />
+);
 
-function LiveDot({
+// An in-flight state: its mark (the stop spinner or the live dot) and
+// its word.
+function Indicator({
   gap,
   tone,
+  mark,
   children,
 }: {
   gap: string;
   tone: "muted" | "foreground";
+  mark: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -134,10 +116,7 @@ function LiveDot({
         tone === "muted" ? "text-muted-foreground" : "text-foreground",
       )}
     >
-      <span
-        aria-hidden
-        className="inline-block size-1.5 animate-pulse rounded-full bg-emerald-500"
-      />
+      {mark}
       {children}
     </span>
   );

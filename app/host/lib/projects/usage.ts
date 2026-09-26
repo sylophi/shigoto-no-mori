@@ -5,7 +5,7 @@
 // app-managed UI state, not the user-editable per-project shigomori config.
 import type { ProjectSortMode } from "@shared/schemas";
 import { stateStore } from "../config/store";
-import { countWithin, maxTimestamp, pruneAndPush } from "../util/useLog";
+import { pruneAndPush, usageByName } from "../util/useLog";
 
 const USE_LOG_KEY = "projectUseLog";
 const SORT_KEY = "projectsSort";
@@ -36,17 +36,7 @@ export function writeProjectSort(mode: ProjectSortMode): void {
 }
 
 export function usageFor(projectIds: string[]): Record<string, ProjectUsage> {
-  const log = stateStore.readHint<UseLog>(USE_LOG_KEY, {});
-  const now = Date.now();
-  const out: Record<string, ProjectUsage> = {};
-  for (const id of projectIds) {
-    const timestamps = log[id] ?? [];
-    out[id] = {
-      lastUsed: maxTimestamp(timestamps),
-      recentCount: countWithin(timestamps, now),
-    };
-  }
-  return out;
+  return usageByName(projectIds, stateStore.readHint<UseLog>(USE_LOG_KEY, {}));
 }
 
 export function bumpProjectUseCount(projectId: string): void {

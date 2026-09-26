@@ -16,6 +16,7 @@ package main
 // engines to agree.
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -23,7 +24,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -177,12 +178,7 @@ func activeTerrierListings() ([]terrierListing, *terrierTrouble) {
 // terrierHasPath in host/lib/terrier.ts.
 func terrierHasPath(path string) bool {
 	listings, _ := activeTerrierListings()
-	for _, t := range listings {
-		if t.Path == path {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(listings, func(t terrierListing) bool { return t.Path == path })
 }
 
 // The pre-dispatch merge (main.go): registry entries as-is, then a
@@ -219,18 +215,12 @@ func appendTerrierProjects(projects []project, listings []terrierListing) []proj
 			Source: "terrier",
 		})
 	}
-	sort.Slice(extras, func(i, j int) bool {
-		if extras[i].Name != extras[j].Name {
-			return extras[i].Name < extras[j].Name
-		}
-		return extras[i].Path < extras[j].Path
+	slices.SortFunc(extras, func(a, b project) int {
+		return cmp.Or(strings.Compare(a.Name, b.Name), strings.Compare(a.Path, b.Path))
 	})
 	return append(projects, extras...)
 }
 
 func describeTerrierVersion(version string) string {
-	if version == "" {
-		return "(version unreadable)"
-	}
-	return version
+	return cmp.Or(version, "(version unreadable)")
 }

@@ -111,6 +111,19 @@ export type HygieneWorktreeFacts = Pick<
   | "recentCommits"
 >;
 
+// The verdict for a kind and its evidence. `safe` and `needsForce`
+// follow from the kind alone: only `merged` and `absorbed` are ticked
+// on the user's behalf, and only `dirty` makes `git worktree remove`
+// refuse without --force.
+function verdict(kind: HygieneVerdictKind, reason: string): HygieneVerdict {
+  return {
+    kind,
+    safe: kind === "merged" || kind === "absorbed",
+    needsForce: kind === "dirty",
+    reason,
+  };
+}
+
 export function deriveHygieneVerdict(
   worktree: HygieneWorktreeFacts,
   hygiene: WorktreeHygiene | undefined,
@@ -119,56 +132,43 @@ export function deriveHygieneVerdict(
   // can destroy with no copy anywhere, so it is reported first even when
   // the branch is also merged.
   if (worktree.changedCount > 0) {
-    return {
-      kind: "dirty",
-      safe: false,
-      needsForce: true,
-      reason: `${worktree.changedCount} uncommitted ${
+    return verdict(
+      "dirty",
+      `${worktree.changedCount} uncommitted ${
         worktree.changedCount === 1 ? "change" : "changes"
       } would be lost.`,
-    };
+    );
   }
   // Untracked files the status scan didn't count. Same consequence as
   // dirty (files that exist nowhere else), so it is reported the same
   // way, just after it, since the count above is the more precise one
   // whenever it was taken.
   if (hygiene?.untracked) {
-    return {
-      kind: "dirty",
-      safe: false,
-      needsForce: true,
-      reason: "Untracked files here would be lost.",
-    };
+    return verdict("dirty", "Untracked files here would be lost.");
   }
   if (worktree.detached || !isRealBranch(worktree.branch)) {
-    return {
-      kind: "unknown",
-      safe: false,
-      needsForce: false,
-      reason: "Detached HEAD, so there is nothing to compare against.",
-    };
+    return verdict(
+      "unknown",
+      "Detached HEAD, so there is nothing to compare against.",
+    );
   }
   // Merged or not, removing this deletes the local branch the whole
   // project is built on. Never ticked, and never presented as tidy-able.
   if (hygiene?.holdsPrimaryBranch) {
-    return {
-      kind: "defaultBranch",
-      safe: false,
-      needsForce: false,
-      reason: `Removing this deletes ${worktree.branch}, the project's default branch.`,
-    };
+    return verdict(
+      "defaultBranch",
+      `Removing this deletes ${worktree.branch}, the project's default branch.`,
+    );
   }
   // Facts still loading, or the primary ref wouldn't resolve. Either way
   // we can't judge, so we don't.
   if (!hygiene || !hygiene.primaryRef) {
-    return {
-      kind: "unknown",
-      safe: false,
-      needsForce: false,
-      reason: hygiene
+    return verdict(
+      "unknown",
+      hygiene
         ? "Couldn't resolve a primary branch to compare against."
         : "Still checking…",
-    };
+    );
   }
   // The facts and the worktree list are separate queries. If HEAD has
   // moved since these were taken, they describe a commit that is no
@@ -176,39 +176,31 @@ export function deriveHygieneVerdict(
   // the wrong thing to say about work committed since. Reported as not
   // knowing, which resolves itself on the next fetch.
   if (hygiene.headHash !== (worktree.recentCommits[0]?.hash ?? null)) {
-    return {
-      kind: "unknown",
-      safe: false,
-      needsForce: false,
-      reason: "This worktree has moved on since it was last checked.",
-    };
+    return verdict(
+      "unknown",
+      "This worktree has moved on since it was last checked.",
+    );
   }
   // A probe that couldn't run at all reports null, not 0. Treating the
   // two alike is how a worktree whose directory has gone missing would
   // read as "every commit is already in main" and get ticked.
   if (hygiene.uniqueCommits === null) {
-    return {
-      kind: "unknown",
-      safe: false,
-      needsForce: false,
-      reason: `Couldn't compare this worktree against ${hygiene.primaryRef}.`,
-    };
+    return verdict(
+      "unknown",
+      `Couldn't compare this worktree against ${hygiene.primaryRef}.`,
+    );
   }
   if (hygiene.uniqueCommits === 0) {
-    return {
-      kind: "merged",
-      safe: true,
-      needsForce: false,
-      reason: `Every commit is already in ${hygiene.primaryRef}.`,
-    };
+    return verdict(
+      "merged",
+      `Every commit is already in ${hygiene.primaryRef}.`,
+    );
   }
   if (hygiene.contentAlreadyInPrimary) {
-    return {
-      kind: "absorbed",
-      safe: true,
-      needsForce: false,
-      reason: `Squash- or rebase-merged: these changes are already in ${hygiene.primaryRef}.`,
-    };
+    return verdict(
+      "absorbed",
+      `Squash- or rebase-merged: these changes are already in ${hygiene.primaryRef}.`,
+    );
   }
   // Commits that exist only here: either never pushed, or pushed to an
   // upstream that is itself behind. Called out separately because
@@ -218,19 +210,12 @@ export function deriveHygieneVerdict(
     hygiene.uniqueCommits === 1 ? "commit" : "commits"
   }`;
   if (unpushed) {
-    return {
-      kind: "unpushed",
-      safe: false,
-      needsForce: false,
-      reason: `${commitCount} not in ${hygiene.primaryRef}, and not pushed anywhere.`,
-    };
+    return verdict(
+      "unpushed",
+      `${commitCount} not in ${hygiene.primaryRef}, and not pushed anywhere.`,
+    );
   }
-  return {
-    kind: "active",
-    safe: false,
-    needsForce: false,
-    reason: `${commitCount} not in ${hygiene.primaryRef}.`,
-  };
+  return verdict("active", `${commitCount} not in ${hygiene.primaryRef}.`);
 }
 
 // Short label for the verdict badge, kept beside the verdict so the

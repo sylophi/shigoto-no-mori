@@ -8,12 +8,21 @@ import { run } from "./core";
 // The ref must not exist, in update-ref's compare-and-set vocabulary.
 export const ZERO_SHA = "0".repeat(40);
 
+// With `expected`, a compare-and-set: the ref moves only while it still
+// points there (ZERO_SHA: only while it does not exist).
 export async function updateRef(
   projectPath: string,
   ref: string,
   commit: string,
+  expected?: string,
 ): Promise<void> {
-  await run(projectPath, ["update-ref", "--end-of-options", ref, commit]);
+  await run(projectPath, [
+    "update-ref",
+    "--end-of-options",
+    ref,
+    commit,
+    ...(expected === undefined ? [] : [expected]),
+  ]);
 }
 
 // Absence is fine: update-ref -d on a missing ref exits 0, so every
@@ -43,27 +52,26 @@ export async function refTip(cwd: string, ref: string): Promise<string | null> {
 
 // Whether an object (any type, or a peeled form like `<sha>^{tree}`)
 // exists in the repository.
-export async function hasObject(cwd: string, object: string): Promise<boolean> {
-  try {
-    await run(cwd, ["cat-file", "-e", "--end-of-options", object]);
-    return true;
-  } catch {
-    return false;
-  }
+export function hasObject(cwd: string, object: string): Promise<boolean> {
+  return run(cwd, ["cat-file", "-e", "--end-of-options", object]).then(
+    () => true,
+    () => false,
+  );
 }
 
 export function hasCommit(cwd: string, commit: string): Promise<boolean> {
   return hasObject(cwd, `${commit}^{commit}`);
 }
 
-export async function treeOf(cwd: string, commit: string): Promise<string> {
-  const out = await run(cwd, [
-    "rev-parse",
-    "--verify",
-    "--end-of-options",
-    `${commit}^{tree}`,
-  ]);
-  return out.trim();
+// The object name a revision resolves to. Throws when it doesn't.
+export async function verifyRev(cwd: string, rev: string): Promise<string> {
+  return (
+    await run(cwd, ["rev-parse", "--verify", "--end-of-options", rev])
+  ).trim();
+}
+
+export function treeOf(cwd: string, commit: string): Promise<string> {
+  return verifyRev(cwd, `${commit}^{tree}`);
 }
 
 // merge-base --is-ancestor answers with the exit code: 0 yes, 1 no,

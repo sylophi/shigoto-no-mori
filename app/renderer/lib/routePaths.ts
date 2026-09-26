@@ -5,38 +5,24 @@
 // byte: the route tree (renderer/router.tsx) and the scope-aware
 // navigation helpers (hooks/worktrees/useWorktreeNav.ts).
 //
-// `as const` is load-bearing: createRoute and navigate both infer a
-// route's params from the path's literal type, so these must never
-// widen to string.
+// The literal types are load-bearing: createRoute and navigate both
+// infer a route's params from the path's literal type, so these must
+// never widen to string. `twin` keeps each pair literal, the remote
+// path spelled as the local one under /devices/$deviceId.
+function twin<const P extends string>(local: P) {
+  return {
+    local,
+    remote: `/devices/$deviceId${local}` as `/devices/$deviceId${P}`,
+  };
+}
+
 export const WORKTREE_ROUTE_PATHS = {
-  detail: {
-    local: "/projects/$projectId/worktrees/$worktreeId",
-    remote: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId",
-  },
-  diff: {
-    local: "/projects/$projectId/worktrees/$worktreeId/diff",
-    remote: "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/diff",
-  },
-  prDiff: {
-    local: "/projects/$projectId/worktrees/$worktreeId/pr-diff",
-    remote:
-      "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/pr-diff",
-  },
-  commit: {
-    local: "/projects/$projectId/worktrees/$worktreeId/commits/$hash",
-    remote:
-      "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/commits/$hash",
-  },
-  files: {
-    local: "/projects/$projectId/worktrees/$worktreeId/files",
-    remote:
-      "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/files",
-  },
-  script: {
-    local: "/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
-    remote:
-      "/devices/$deviceId/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey",
-  },
+  detail: twin("/projects/$projectId/worktrees/$worktreeId"),
+  diff: twin("/projects/$projectId/worktrees/$worktreeId/diff"),
+  prDiff: twin("/projects/$projectId/worktrees/$worktreeId/pr-diff"),
+  commit: twin("/projects/$projectId/worktrees/$worktreeId/commits/$hash"),
+  files: twin("/projects/$projectId/worktrees/$worktreeId/files"),
+  script: twin("/projects/$projectId/worktrees/$worktreeId/scripts/$scriptKey"),
 } as const;
 
 // The project pages' route paths, the same twin shape: each exists
@@ -45,26 +31,11 @@ export const WORKTREE_ROUTE_PATHS = {
 // same actions a local one does (v2: remote feels local), and every one
 // of them lands on one of these.
 export const PROJECT_ROUTE_PATHS = {
-  new: {
-    local: "/projects/$projectId/new",
-    remote: "/devices/$deviceId/projects/$projectId/new",
-  },
-  configure: {
-    local: "/projects/$projectId/configure",
-    remote: "/devices/$deviceId/projects/$projectId/configure",
-  },
-  branches: {
-    local: "/projects/$projectId/branches",
-    remote: "/devices/$deviceId/projects/$projectId/branches",
-  },
-  convertExternal: {
-    local: "/projects/$projectId/convert-external",
-    remote: "/devices/$deviceId/projects/$projectId/convert-external",
-  },
-  worktreeLocation: {
-    local: "/projects/$projectId/worktree-location",
-    remote: "/devices/$deviceId/projects/$projectId/worktree-location",
-  },
+  new: twin("/projects/$projectId/new"),
+  configure: twin("/projects/$projectId/configure"),
+  branches: twin("/projects/$projectId/branches"),
+  convertExternal: twin("/projects/$projectId/convert-external"),
+  worktreeLocation: twin("/projects/$projectId/worktree-location"),
 } as const;
 
 type RouteParams = Record<string, string>;

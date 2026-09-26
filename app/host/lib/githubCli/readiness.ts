@@ -21,13 +21,11 @@ export function getGithubCliReadiness(): Promise<GithubCliReadiness> {
   return readinessCache.get();
 }
 
-async function isAuthed(): Promise<boolean> {
-  try {
-    await execGh(["auth", "status"]);
-    return true;
-  } catch {
-    return false;
-  }
+function isAuthed(): Promise<boolean> {
+  return execGh(["auth", "status"]).then(
+    () => true,
+    () => false,
+  );
 }
 
 // Toggle + readiness gate any path that's about to spawn `gh`. Returns

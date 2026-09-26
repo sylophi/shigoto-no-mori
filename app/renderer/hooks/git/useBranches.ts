@@ -4,6 +4,7 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
+  skipToken,
 } from "@tanstack/react-query";
 import type { BranchList } from "@shared/schemas";
 import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
@@ -13,11 +14,10 @@ export function useBranches(projectId: string | null) {
   const { api, keys } = useHostScope();
   return useQuery<BranchList>({
     queryKey: keys.branches(projectId),
-    queryFn: () => {
-      if (!projectId) return { local: [], remote: [] };
-      return api.projects.listBranches(projectId);
-    },
-    enabled: projectId !== null,
+    queryFn:
+      projectId !== null
+        ? () => api.projects.listBranches(projectId)
+        : skipToken,
     meta: { errorTitle: "Couldn't list branches" },
   });
 }
@@ -58,16 +58,20 @@ export function useWatchGitRefs(): void {
   );
 }
 
-// The Manage Branches mutations all share one shape: call the API, then
+// The Manage Branches mutations (and the worktree branch ops in
+// useWorktreeBranchOps) all share one shape: call the API, then
 // refresh everything derived from refs via invalidateBranchState.
-function useBranchMutation<Input extends { projectId: string }>(
-  mutationFn: (api: HostApi, input: Input) => Promise<void>,
+export function useBranchMutation<
+  Input extends { projectId: string },
+  Result = void,
+>(
+  mutationFn: (api: HostApi, input: Input) => Promise<Result>,
   meta: MutationMeta,
 ) {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- onSuccess delegates to invalidateBranchState which fans out to three invalidateQueries calls
-  return useMutation<void, Error, Input>({
+  return useMutation<Result, Error, Input>({
     mutationFn: (input) => mutationFn(api, input),
     onSuccess: (_data, vars) =>
       invalidateBranchState(queryClient, keys, vars.projectId),

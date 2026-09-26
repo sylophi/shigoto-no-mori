@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, skipToken } from "@tanstack/react-query";
 import type { DetectedLauncher, LauncherEntry } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 
@@ -25,11 +25,10 @@ export function useLauncherForProject(projectId: string | null) {
   const { api, keys } = useHostScope();
   return useQuery<LauncherForProjectResult>({
     queryKey: keys.projectLaunchers(projectId),
-    queryFn: () => {
-      if (!projectId) return { entries: [], hiddenCount: 0 };
-      return api.launchers.forProject(projectId);
-    },
-    enabled: projectId !== null,
+    queryFn:
+      projectId !== null
+        ? () => api.launchers.forProject(projectId)
+        : skipToken,
     // Lock the order for the lifetime of the route mount. The page picks
     // up a fresh list when the user navigates in (refetchOnMount: "always"
     // from the global default), but never reshuffles under them on window

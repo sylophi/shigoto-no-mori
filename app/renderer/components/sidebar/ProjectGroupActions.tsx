@@ -31,13 +31,9 @@ import {
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { useLocalDevice } from "@/hooks/account/useAccount";
 import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
-import {
-  commandAccessOf,
-  usePeerCommandAccess,
-} from "@/hooks/remote/useCommandAccess";
+import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
 import { useQuickCreateDeviceId } from "@/hooks/sharedSettings/useQuickCreateDevice";
 import { MaybeHostScope, type HostApi } from "@/hooks/remote/useHostScope";
-import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { localDeviceId } from "@/lib/queryKeys";
 import { cn } from "@/lib/utils";
 import type { Project } from "@shared/schemas";
@@ -80,13 +76,8 @@ export function useGroupMembers(
   localProject: Project | undefined,
 ): GroupMember[] {
   const local = useLocalDevice();
-  const registry = useRemoteDevices();
-  const access = usePeerCommandAccess(registry);
-  const apis = peers.map((member) =>
-    commandAccessOf(access, member.deviceId).canCommand
-      ? registry.find((device) => device.deviceId === member.deviceId)?.api
-      : undefined,
-  );
+  const commandableApi = useCommandableApi();
+  const apis = peers.map((member) => commandableApi(member.deviceId));
   return [
     ...(localProject === undefined
       ? []

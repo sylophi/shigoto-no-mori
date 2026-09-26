@@ -42,7 +42,7 @@ import {
   queryKeys,
   queryKeysFor,
 } from "@/lib/queryKeys";
-import { useForgetDeletedWorktreeOn } from "@/hooks/worktrees/useWorktreeMutations";
+import { forgetDeletedWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { notifyError } from "@/lib/toast";
 
 const EMPTY: MirrorListResult = {
@@ -383,7 +383,6 @@ export function useSetMirrorIgnores() {
 // list refreshes off that daemon's own state snapshot.
 export function useMirrorControls() {
   const { api, deviceId: runnerDeviceId } = useHostScope();
-  const forgetOn = useForgetDeletedWorktreeOn();
   const queryClient = useQueryClient();
   // Stop removes the copy with the session. The copy is on the runner,
   // or on its peer for a mirror started to it, and either may be this
@@ -400,7 +399,12 @@ export function useMirrorControls() {
     onSuccess: (_data, { session }) => {
       const copy = mirrorCopyOf(session, runnerDeviceId);
       if (copy.deviceId === localDeviceId) {
-        forgetOn(localDeviceId, copy.projectId, copy.worktreeId);
+        forgetDeletedWorktree(
+          queryClient,
+          localDeviceId,
+          copy.projectId,
+          copy.worktreeId,
+        );
       } else {
         invalidateHostDevice(queryClient, copy.deviceId);
       }

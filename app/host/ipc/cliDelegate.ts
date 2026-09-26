@@ -29,6 +29,7 @@ import {
 import { unknownProjectError, unknownWorktreeError } from "@shared/errors";
 import { forgetRepoIdentity } from "@host/lib/git/repoIdentity";
 import { shellQuote } from "@host/lib/scripts/process";
+import { implSlot } from "@host/lib/util/implSlot";
 
 // One NDJSON document from the CLI's --json stream. `event` is set on
 // streamed progress documents (created/phase/carryOver/script/done);
@@ -61,20 +62,10 @@ type CliRunnerImpl = {
   cliFailureMessage: (result: CliResult, fallback: string) => string;
 };
 
-let impl: CliRunnerImpl | null = null;
-
-export function setCliRunnerImpl(next: CliRunnerImpl): void {
-  impl = next;
-}
-
-function runner(): CliRunnerImpl {
-  if (impl === null) {
-    throw new Error(
-      "cli delegate invoked before setCliRunnerImpl registered one",
-    );
-  }
-  return impl;
-}
+const { set: setCliRunnerImpl, get: runner } = implSlot<CliRunnerImpl>(
+  "cli delegate invoked before setCliRunnerImpl registered one",
+);
+export { setCliRunnerImpl };
 
 // Renderer-bound emit callbacks supplied by the IPC handler, fed from
 // the CLI's streamed lifecycle documents.
@@ -82,6 +73,25 @@ interface WorktreeOperationNotifiers {
   notifyPhase: (payload: WorktreeLifecyclePhase) => void;
   notifyCarryOverComplete: (payload: WorktreeCarryOverComplete) => void;
   notifyScript: (payload: ScriptEvent) => void;
+}
+
+// A streamed "script" document, forwarded as the script event it
+// carries (the event tag itself is the stream's, not the payload's).
+function notifyScriptDoc(
+  notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
+  doc: CliDoc,
+): void {
+  const { event: _event, ...scriptEvent } = doc;
+  notify.notifyScript(ScriptEventSchema.parse(scriptEvent));
+}
+
+// The argv of a verb that acts on one worktree of one project.
+function worktreeArgv(
+  verb: string[],
+  project: Project,
+  worktreeId: string,
+): string[] {
+  return [...verb, "--project-id", project.id, "--worktree-id", worktreeId];
 }
 
 const PhaseSchema = z.union([CreatePhaseSchema, z.literal("idle")]);
@@ -160,11 +170,9 @@ function runStreamingCreate(
           });
           break;
         }
-        case "script": {
-          const { event: _event, ...scriptEvent } = doc;
-          notify.notifyScript(ScriptEventSchema.parse(scriptEvent));
+        case "script":
+          notifyScriptDoc(notify, doc);
           break;
-        }
       }
     };
     runner()
@@ -233,16 +241,8 @@ export function adoptViaCli(
 ): Promise<CreateWorktreeResult> {
   // --force: the app's convert flow already confirmed the wipe in its
   // dialog.
-  const args = [
-    "adopt",
-    "--project-id",
-    project.id,
-    "--worktree-id",
-    worktreeId,
-    "--force",
-  ];
   return runStreamingCreate(
-    args,
+    [...worktreeArgv(["adopt"], project, worktreeId), "--force"],
     project,
     worktreeId,
     notify,
@@ -255,20 +255,11 @@ export async function deleteViaCli(
   input: { worktreeId: string; force?: boolean; skipCleanup?: boolean },
   notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
 ): Promise<DeleteWorktreeResult> {
-  const args = [
-    "rm",
-    "--project-id",
-    project.id,
-    "--worktree-id",
-    input.worktreeId,
-  ];
+  const args = worktreeArgv(["rm"], project, input.worktreeId);
   if (input.force) args.push("--force");
   if (input.skipCleanup) args.push("--skip-cleanup");
   const result = await runner().runCli(args, (doc) => {
-    if (doc.event === "script") {
-      const { event: _event, ...scriptEvent } = doc;
-      notify.notifyScript(ScriptEventSchema.parse(scriptEvent));
-    }
+    if (doc.event === "script") notifyScriptDoc(notify, doc);
   });
   const final = result.docs.findLast((doc) => typeof doc["ok"] === "boolean");
   if (final?.["ok"] === true) return { ok: true };
@@ -288,11 +279,7 @@ export async function doneViaCli(
   // --force: the app's cleanup box appears in merged-PR context, so the
   // UI has already gated mergedness.
   const result = await runner().runCli([
-    "done",
-    "--project-id",
-    project.id,
-    "--worktree-id",
-    worktreeId,
+    ...worktreeArgv(["done"], project, worktreeId),
     "--force",
   ]);
   const final = finalOkDoc(result, "sm done failed", { worktreeId });
@@ -326,13 +313,9 @@ export async function setShelvedViaCli(
   worktreeId: string,
   shelved: boolean,
 ): Promise<void> {
-  const result = await runner().runCli([
-    shelved ? "shelve" : "unshelve",
-    "--project-id",
-    project.id,
-    "--worktree-id",
-    worktreeId,
-  ]);
+  const result = await runner().runCli(
+    worktreeArgv([shelved ? "shelve" : "unshelve"], project, worktreeId),
+  );
   finalOkDoc(result, "sm shelve failed", { worktreeId });
 }
 
@@ -448,14 +431,9 @@ export async function dirtyCaptureViaCli(
   project: Project,
   worktreeId: string,
 ): Promise<{ captured: boolean; commit?: string }> {
-  const result = await runner().runCli([
-    "dirty",
-    "capture",
-    "--project-id",
-    project.id,
-    "--worktree-id",
-    worktreeId,
-  ]);
+  const result = await runner().runCli(
+    worktreeArgv(["dirty", "capture"], project, worktreeId),
+  );
   const final = finalOkDoc(result, "sm dirty capture failed", { worktreeId });
   // A capture doc carries its commit; a clean worktree omits it. The
   // refine makes a captured:true document WITHOUT a commit an engine
@@ -479,14 +457,9 @@ export async function dirtyApplyViaCli(
   project: Project,
   worktreeId: string,
 ): Promise<{ applied: boolean; commit: string; changedFiles: number }> {
-  const result = await runner().runCli([
-    "dirty",
-    "apply",
-    "--project-id",
-    project.id,
-    "--worktree-id",
-    worktreeId,
-  ]);
+  const result = await runner().runCli(
+    worktreeArgv(["dirty", "apply"], project, worktreeId),
+  );
   const final = finalOkDoc(result, "sm dirty apply failed", { worktreeId });
   return z
     .object({

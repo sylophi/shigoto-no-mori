@@ -103,11 +103,7 @@ func projectHint(ctx cliContext) string {
 	if len(ctx.projects) == 0 {
 		return "No projects are registered yet. Add the repo in the Shigoto no Mori app first."
 	}
-	names := make([]string, len(ctx.projects))
-	for i, p := range ctx.projects {
-		names[i] = p.Name
-	}
-	return "Registered projects: " + strings.Join(names, ", ") + "."
+	return "Registered projects: " + joinMapped(ctx.projects, func(p project) string { return p.Name }) + "."
 }
 
 // Resolves `<name>` or a path, or (with no ref) the project
@@ -148,14 +144,10 @@ func resolveProject(ctx cliContext, ref string) (project, error) {
 	case 0:
 		return project{}, usageErrf("Unknown project %q. %s", ref, projectHint(ctx))
 	default:
-		paths := make([]string, len(matches))
-		for i, p := range matches {
-			paths[i] = p.Path
-		}
 		// Never guess which one: the path is how to say which, and it
 		// keeps working for an entry whose directory is gone.
 		return project{}, usageErrf("%d projects are named %q. Name the one you mean by its path: %s.",
-			len(matches), ref, strings.Join(paths, ", "))
+			len(matches), ref, joinMapped(matches, func(p project) string { return p.Path }))
 	}
 }
 
@@ -275,6 +267,17 @@ func resolveWorktreeByID(ctx cliContext, projectID, worktreeID string) (located,
 		}
 	}
 	return located{}, unknownWorktreeErr(worktreeID)
+}
+
+// parseCmdArgs then resolveWorktreeArgs, for the commands that do
+// nothing in between. A parse error is reported before resolving.
+func parseWorktreeArgs(ctx cliContext, args []string, spec argSpec, primaryOK bool) (parsedArgs, located, error) {
+	parsed, err := parseCmdArgs(args, spec)
+	if err != nil {
+		return parsed, located{}, err
+	}
+	target, err := resolveWorktreeArgs(ctx, parsed, primaryOK)
+	return parsed, target, err
 }
 
 // Shared front door for commands that target a worktree: --worktree-id
@@ -406,9 +409,7 @@ func resolveWorktree(ctx cliContext, ref, projectFlag string, primaryOK bool) (l
 		wg      sync.WaitGroup
 	)
 	for _, proj := range scope {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			identities, err := listWorktreeIdentities(proj)
 			if err != nil {
 				return // missing/broken repo; other projects can still match
@@ -420,7 +421,7 @@ func resolveWorktree(ctx cliContext, ref, projectFlag string, primaryOK bool) (l
 					mu.Unlock()
 				}
 			}
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -434,11 +435,7 @@ func resolveWorktree(ctx cliContext, ref, projectFlag string, primaryOK bool) (l
 		}
 		return located{}, errf("No worktree named %q%s.", name, where)
 	default:
-		candidates := make([]string, len(matches))
-		for i, m := range matches {
-			candidates[i] = m.proj.Name + "/" + m.worktree.Name
-		}
-		return located{}, usageErrf("%q is ambiguous (%s). Qualify it as <project>/<name>.",
-			name, strings.Join(candidates, ", "))
+		candidates := joinMapped(matches, func(m located) string { return m.proj.Name + "/" + m.worktree.Name })
+		return located{}, usageErrf("%q is ambiguous (%s). Qualify it as <project>/<name>.", name, candidates)
 	}
 }

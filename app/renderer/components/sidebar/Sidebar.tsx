@@ -171,10 +171,15 @@ function Forest({
     if (claimsPeers(project))
       localIdByIdentity.set(project.identity, project.id);
   }
-  const collapsed = new Set(collapsedIds);
-  for (const [identity, id] of localIdByIdentity) {
-    if (collapsed.has(id)) collapsed.add(remoteGroupId(identity));
-  }
+  // A set of local ids plus the peer group of every repo among them.
+  const withRemoteGroups = (ids: Set<string>) => {
+    const expanded = new Set(ids);
+    for (const [identity, id] of localIdByIdentity) {
+      if (ids.has(id)) expanded.add(remoteGroupId(identity));
+    }
+    return expanded;
+  };
+  const collapsed = withRemoteGroups(new Set(collapsedIds));
   for (const key of collapsedRemoteKeys) {
     if (!localIdByIdentity.has(key)) collapsed.add(remoteGroupId(key));
   }
@@ -185,13 +190,6 @@ function Forest({
   const [shelfOpenIds, setShelfOpenIds] = useState<
     Record<GroupShelf, Set<string>>
   >(() => ({ shelved: new Set(), hidden: new Set() }));
-  const withRemoteGroups = (ids: Set<string>) => {
-    const expanded = new Set(ids);
-    for (const [identity, id] of localIdByIdentity) {
-      if (ids.has(id)) expanded.add(remoteGroupId(identity));
-    }
-    return expanded;
-  };
   const groupShelvesOpen: Record<GroupShelf, Set<string>> = {
     shelved: withRemoteGroups(shelfOpenIds.shelved),
     hidden: withRemoteGroups(shelfOpenIds.hidden),
@@ -296,9 +294,7 @@ function Forest({
         hiddenPrefixes,
       })
     : buildSidebarRows({
-        projects: local.projects,
-        worktreeQueries: local.worktreeQueries,
-        pullRequestQueries: local.pullRequestQueries,
+        ...local,
         collapsed,
         // Over every device's projects, not the filtered ones, so a
         // pick narrows the tree without reordering it.

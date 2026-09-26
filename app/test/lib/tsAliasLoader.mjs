@@ -11,7 +11,7 @@ import { existsSync, statSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-const appRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const appRoot = join(import.meta.dirname, "..", "..");
 
 // Alias prefix to app-relative directory. Order does not matter: the
 // prefixes are distinct.

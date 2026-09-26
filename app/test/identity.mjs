@@ -6,8 +6,7 @@
 import { execFile } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { resolveDefaultRef } from "../shared/git/defaultBranch.mts";
 import {
@@ -17,7 +16,7 @@ import {
 import { report, scrubbedGitEnv } from "./lib/checkKit.mjs";
 
 const execFileP = promisify(execFile);
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const root = join(import.meta.dirname, "..");
 const fixtures = (name) =>
   JSON.parse(readFileSync(join(root, "shared/fixtures", name), "utf8"));
 

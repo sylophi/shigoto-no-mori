@@ -249,18 +249,12 @@ export function sortChecksWorstFirst(
   );
 }
 
+// Also the merge button's label: each one already reads naturally as
+// the button, so there is no separate short form.
 export const MERGE_METHOD_LABEL: Record<MergeMethod, string> = {
   merge: "Merge",
   squash: "Squash and merge",
   rebase: "Rebase and merge",
-};
-
-// Short label is only different from the long one when it actually
-// shortens; squash and rebase already read naturally as the button.
-export const MERGE_METHOD_SHORT_LABEL: Record<MergeMethod, string> = {
-  merge: "Merge",
-  squash: MERGE_METHOD_LABEL.squash,
-  rebase: MERGE_METHOD_LABEL.rebase,
 };
 
 // Picks the user's saved method when it's still allowed by the repo;

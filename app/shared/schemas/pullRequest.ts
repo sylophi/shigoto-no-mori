@@ -17,32 +17,25 @@ export const PullRequestSchema = z.object({
 });
 export type PullRequest = z.infer<typeof PullRequestSchema>;
 
+// The slim fields, in PullRequestSchema's declaration order, read off
+// the schema so the strip and the equality below stay in lockstep with
+// it: a field added there is carried and compared here too.
+const PULL_REQUEST_KEYS = Object.keys(
+  PullRequestSchema.shape,
+) as (keyof PullRequest)[];
+
 // Strip a PullRequestDetail to the slim PullRequest fields used by the
-// sidebar's project-wide map. Keep this in lockstep with
-// PullRequestSchema. Adding a field there means adding it here too.
+// sidebar's project-wide map.
 export function toSlimPullRequest(pr: PullRequest): PullRequest {
-  return {
-    number: pr.number,
-    url: pr.url,
-    title: pr.title,
-    state: pr.state,
-    isDraft: pr.isDraft,
-    baseRefName: pr.baseRefName,
-  };
+  return Object.fromEntries(
+    PULL_REQUEST_KEYS.map((key) => [key, pr[key]]),
+  ) as PullRequest;
 }
 
 // Field-by-field equality. Used to gate cache write-throughs and sweep
-// broadcasts so unchanged PRs don't notify observers. Update if
-// PullRequestSchema gains a field that affects the UI.
+// broadcasts so unchanged PRs don't notify observers.
 export function pullRequestsEqual(a: PullRequest, b: PullRequest): boolean {
-  return (
-    a.number === b.number &&
-    a.state === b.state &&
-    a.isDraft === b.isDraft &&
-    a.title === b.title &&
-    a.url === b.url &&
-    a.baseRefName === b.baseRefName
-  );
+  return PULL_REQUEST_KEYS.every((key) => a[key] === b[key]);
 }
 
 // Whether a branch's PR (null: the branch has none) is what the

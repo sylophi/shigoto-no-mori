@@ -246,13 +246,11 @@ export function toAbsolute(path: string): string {
   return isAbsolute(expanded) ? expanded : resolve(expanded);
 }
 
-export async function pathExists(target: string): Promise<boolean> {
-  try {
-    await lstat(target);
-    return true;
-  } catch {
-    return false;
-  }
+export function pathExists(target: string): Promise<boolean> {
+  return lstat(target).then(
+    () => true,
+    () => false,
+  );
 }
 
 export function isENOENT(error: unknown): boolean {

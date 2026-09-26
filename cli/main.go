@@ -14,6 +14,7 @@ package main
 // the app's process, so stop those from the app (or quit it) first.
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"strings"
@@ -202,11 +203,7 @@ var helpGroups = []helpGroup{
 // drift. Field 1 of each usage is the subcommand; combined lines like
 // "worktrees shelve / unshelve" collapse to their first name.
 func subcommandList(items []helpItem) string {
-	names := make([]string, len(items))
-	for i, item := range items {
-		names[i] = strings.Fields(item.usage)[1]
-	}
-	return strings.Join(names, ", ")
+	return joinMapped(items, func(item helpItem) string { return strings.Fields(item.usage)[1] })
 }
 
 func inlineCol(groups []helpGroup) int {
@@ -310,17 +307,8 @@ const (
 // The terminal's real width, clamped: hard wrapping below 60 helps
 // nobody, and lines past ~110 columns get hard to scan.
 func helpWidth() int {
-	width := terminalWidth()
-	if width == 0 {
-		width = 80
-	}
-	if width < 60 {
-		width = 60
-	}
-	if width > 110 {
-		width = 110
-	}
-	return width
+	width, _ := terminalSize()
+	return min(max(cmp.Or(width, 80), 60), 110)
 }
 
 // One aligned description column shared by all sections: the concise

@@ -158,45 +158,29 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
         <p className="text-xs text-muted-foreground/70">No devices yet.</p>
       ) : (
         <ul className="divide-y divide-border">
-          {rows.map(
-            ({
-              device,
-              isThisDevice,
-              name,
-              icon,
-              status,
-              access,
-              appVersion,
-            }) => (
-              <DeviceRegistryRow
-                key={device.deviceId}
-                device={device}
-                isThisDevice={isThisDevice}
-                name={name}
-                icon={icon}
-                showId={(nameCount.get(name) ?? 0) > 1}
-                status={status}
-                appVersion={appVersion}
-                chips={hosts.byDevice.get(device.deviceId) ?? []}
-                // An unreachable peer's queries are disabled, so it is
-                // never the one still fetching: without this gate one
-                // slow peer would suppress every other row's empty
-                // state.
-                chipsLoading={
-                  isThisDevice
-                    ? hosts.localLoading
-                    : hosts.remoteLoading && status.reachable
-                }
-                onRevokeDevice={() => revokeDevice.mutate(device.deviceId)}
-                revokePending={
-                  revokeDevice.isPending &&
-                  revokeDevice.variables === device.deviceId
-                }
-                tunnel={isThisDevice ? tunnel : undefined}
-                access={access}
-              />
-            ),
-          )}
+          {rows.map((row) => (
+            <DeviceRegistryRow
+              key={row.device.deviceId}
+              {...row}
+              showId={(nameCount.get(row.name) ?? 0) > 1}
+              chips={hosts.byDevice.get(row.device.deviceId) ?? []}
+              // An unreachable peer's queries are disabled, so it is
+              // never the one still fetching: without this gate one
+              // slow peer would suppress every other row's empty
+              // state.
+              chipsLoading={
+                row.isThisDevice
+                  ? hosts.localLoading
+                  : hosts.remoteLoading && row.status.reachable
+              }
+              onRevokeDevice={() => revokeDevice.mutate(row.device.deviceId)}
+              revokePending={
+                revokeDevice.isPending &&
+                revokeDevice.variables === row.device.deviceId
+              }
+              tunnel={row.isThisDevice ? tunnel : undefined}
+            />
+          ))}
         </ul>
       )}
     </section>

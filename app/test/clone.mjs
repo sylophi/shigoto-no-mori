@@ -8,28 +8,16 @@
 // Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
 // imports resolve. Run: pnpm test clone.
 import assert from "node:assert/strict";
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  realpathSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { makeProof, sandboxGit, scrubbedGitEnv } from "./lib/checkKit.mjs";
+import { scrubProcessGitEnv, tempDir } from "./lib/checkKit.mjs";
 
 // cloneRepo runs git under this process's environment. The pre-commit
 // hook's GIT_* variables would point that git at the commit in
 // progress, so they go before anything is imported.
 const gitEnv = scrubbedGitEnv();
-for (const key of Object.keys(process.env)) {
-  if (key.startsWith("GIT_")) delete process.env[key];
-}
-process.env.GIT_CONFIG_GLOBAL = "/dev/null";
-process.env.GIT_CONFIG_SYSTEM = "/dev/null";
+scrubProcessGitEnv();
 
 const { cloneRepo } = await import("../host/lib/git/clone.ts");
 const { pickCloneUrl, repoNameFromUrl, stripUrlCredentials } =
@@ -140,8 +128,7 @@ async function main() {
   );
 
   await check("cloneRepo lands a real checkout where asked", async (track) => {
-    const sandbox = realpathSync(mkdtempSync(join(tmpdir(), "sm-clone-")));
-    track(() => rmSync(sandbox, { recursive: true, force: true }));
+    const sandbox = tempDir("sm-clone-", track);
     const source = join(sandbox, "source");
     mkdirSync(source);
     git(source, "init", "-q", "-b", "main");
@@ -176,8 +163,7 @@ async function main() {
   await check(
     "a failed clone's message never carries the URL's credentials",
     async (track) => {
-      const sandbox = realpathSync(mkdtempSync(join(tmpdir(), "sm-clone-")));
-      track(() => rmSync(sandbox, { recursive: true, force: true }));
+      const sandbox = tempDir("sm-clone-", track);
       // Nothing listens on port 1, so this fails at once and offline,
       // with git naming the URL it could not reach.
       const failure = await cloneRepo(

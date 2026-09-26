@@ -31,6 +31,7 @@ import {
   MAX_INBOUND_FRAME_BYTES,
   PUSH_BUFFER_LIMIT_BYTES,
   ReqFrameSchema,
+  resError,
 } from "@shared/ipc/socket/frames";
 import type { HandlerContext, ServerTransport } from "@shared/ipc/transport";
 import { mintHexId } from "@host/lib/idleRegistry";
@@ -106,21 +107,11 @@ export function createControlServer(deps: {
     }
     const fn = handlers.get(parsed.channel);
     if (fn === undefined) {
-      send(socket, {
-        t: "res",
-        id: parsed.id,
-        ok: false,
-        message: noHandlerMessage(parsed.channel),
-      });
+      send(socket, resError(parsed.id, noHandlerMessage(parsed.channel)));
       return;
     }
     if (inFlight.count >= MAX_IN_FLIGHT_PER_PEER) {
-      send(socket, {
-        t: "res",
-        id: parsed.id,
-        ok: false,
-        message: "too many in-flight requests",
-      });
+      send(socket, resError(parsed.id, "too many in-flight requests"));
       return;
     }
     inFlight.count += 1;
@@ -131,13 +122,14 @@ export function createControlServer(deps: {
       // Only the codes this wire owns: a Node errno riding an error
       // would otherwise become a CLI error kind.
       const code = errorCodeOf(error);
-      send(socket, {
-        t: "res",
-        id: parsed.id,
-        ok: false,
-        message: errorMessageOf(error),
-        ...(isControlErrorCode(code) ? { code } : {}),
-      });
+      send(
+        socket,
+        resError(
+          parsed.id,
+          errorMessageOf(error),
+          isControlErrorCode(code) ? code : undefined,
+        ),
+      );
     } finally {
       inFlight.count -= 1;
     }

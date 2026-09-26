@@ -677,13 +677,11 @@ func checkProjects(report *doctorReport, projects []project) {
 	perProject := make([]*doctorReport, len(projects))
 	var wg sync.WaitGroup
 	for i, proj := range projects {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			sub := &doctorReport{}
 			checkOneProject(sub, proj)
 			perProject[i] = sub
-		}()
+		})
 	}
 	wg.Wait()
 	for i, sub := range perProject {

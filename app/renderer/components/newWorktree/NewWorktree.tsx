@@ -10,10 +10,9 @@ import {
   SegmentedControl,
   type SegmentedOption,
 } from "@/components/ui/segmented-control";
-import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
+import { useWorktreeBaseLabel } from "@/hooks/config/useWorktreeBaseLabel";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { usePickedWorktreeName } from "@/hooks/worktrees/usePickedWorktreeName";
-import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useBranches } from "@/hooks/git/useBranches";
 import { usePullRequestCandidates } from "@/hooks/githubCli/usePullRequestCandidates";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
@@ -22,7 +21,6 @@ import {
   useCreateWorktree,
   useCreateWorktreeFromPullRequest,
 } from "@/hooks/worktrees/useWorktreeMutations";
-import { tildify } from "@/lib/projectPaths";
 import {
   PULL_REQUEST_SOURCE_UNAVAILABLE_TEXT,
   pullRequestBlockedBy,
@@ -41,10 +39,10 @@ import {
   type PullRequestCandidate,
   type Worktree,
 } from "@shared/schemas";
-import { worktreeBaseFor } from "@shared/git/worktreeLayout";
-import { ModeToggle, type Mode } from "./ModeToggle";
 import { PullRequestSource } from "./PullRequestPicker";
 import { PAGE_BODY } from "@/components/shared/PageShell";
+
+type Mode = "branch-from" | "checkout" | "pull-request";
 
 // What the destination line leads with, per mode. The device, when there
 // is a choice of one, is spliced in after this: "... checked out on
@@ -81,7 +79,7 @@ const TEXT_INPUT_CLASS = "w-full px-3 py-2 font-mono text-sm";
 // project page shares picks the device (a tab per device holding the
 // repo), and the form beneath is the same whichever device wins,
 // mounted under that device's host scope and handed THAT device's
-// project id -- every hook in it keys off projectId plus scope, so the
+// project id -- every hook in it keys off project.id plus scope, so the
 // branch list, the folder collision check and the create all follow
 // the pick with no remote-awareness of their own.
 export function NewWorktree() {
@@ -91,7 +89,6 @@ export function NewWorktree() {
         <div className={PAGE_BODY}>
           <div className="flex flex-col gap-7">
             <NewWorktreeForm
-              projectId={scoped.id}
               project={scoped}
               // Undefined with no choice of device: the form keeps the
               // copy it has always had rather than naming a machine
@@ -107,13 +104,11 @@ export function NewWorktree() {
 
 // react-doctor-disable-next-line react-doctor/prefer-useReducer -- each field is set independently with no inter-field business logic
 function NewWorktreeForm({
-  projectId,
   project,
   deviceLabel,
 }: {
-  // The project id ON THE SCOPED DEVICE: the local one locally, the
+  // The project ON THE SCOPED DEVICE: the local one locally, the
   // identity-matched peer project when the form is pointed elsewhere.
-  projectId: string;
   project: Project;
   // The device to name in the destination line and on the create
   // button. Undefined when the page offers no choice.
@@ -124,12 +119,12 @@ function NewWorktreeForm({
   // device-scoped detail route rather than a local one that wouldn't
   // exist for that worktree.
   const { toWorktree } = useWorktreeNav();
-  const { data: runtime } = useRuntimeInfo();
-  const { data: layoutConfig } = useShigomoriConfig(projectId);
-  const { data: defaultBranch } = useDefaultBranch(projectId);
-  const { data: pickedName } = usePickedWorktreeName(projectId);
-  const { data: worktrees = [] } = useWorktrees(projectId);
-  const { data: branches } = useBranches(projectId);
+  // Where the worktree lands on the scoped device.
+  const destRoot = useWorktreeBaseLabel(project);
+  const { data: defaultBranch } = useDefaultBranch(project.id);
+  const { data: pickedName } = usePickedWorktreeName(project.id);
+  const { data: worktrees = [] } = useWorktrees(project.id);
+  const { data: branches } = useBranches(project.id);
   // git refuses to check out a branch that's already a HEAD elsewhere.
   // Keyed by branch so the PR picker can name the worktree holding it,
   // not just grey the row out.
@@ -193,7 +188,7 @@ function NewWorktreeForm({
     null,
   );
   const [prFolderFrom, setPrFolderFrom] = useState<"pr" | "branch">("branch");
-  const candidates = usePullRequestCandidates(projectId, prMode);
+  const candidates = usePullRequestCandidates(project.id, prMode);
   const verdict = candidates.data;
   useEffect(() => {
     if (defaultMode !== null || !verdict) return;
@@ -212,6 +207,10 @@ function NewWorktreeForm({
     candidates.data?.status === "unavailable"
       ? PULL_REQUEST_SOURCE_UNAVAILABLE_TEXT[candidates.data.reason]
       : undefined;
+  // Set when the pull request source can't be offered (no gh, no GitHub
+  // remote). Greys that option out and doubles as its tooltip. The form
+  // prints the same line under the control.
+  const prOptionOff = prMode ? undefined : prUnavailable;
 
   // The picker hides occupied branches, but free-text "Use as ref" can
   // still smuggle one in, so block submit and surface why.
@@ -243,9 +242,8 @@ function NewWorktreeForm({
         ? selectedPr.headRefName
         : pullRequestFolderName(selectedPr),
   }[mode];
-  const folderName = sanitizeBranchForPath(
-    useBranchAsFolder ? folderSource : worktreeName,
-  );
+  const folderSourceRaw = useBranchAsFolder ? folderSource : worktreeName;
+  const folderName = sanitizeBranchForPath(folderSourceRaw);
   // Case-insensitive: NTFS and default APFS treat "Feature" and
   // "feature" as the same directory (matches the main-side check).
   const folderTaken =
@@ -256,7 +254,6 @@ function NewWorktreeForm({
   // root/primary, dot names, DOS device names) would otherwise leave
   // the form silently unsubmittable: blank folder field, disabled
   // Create, and no branch to blame.
-  const folderSourceRaw = useBranchAsFolder ? folderSource : worktreeName;
   const folderUnusable = folderSourceRaw.length > 0 && folderName.length === 0;
 
   // Checkout mode waits for the branch list: the occupancy gate reads
@@ -276,32 +273,19 @@ function NewWorktreeForm({
   };
 
   const handleCreate = () => {
+    const target = { projectId: project.id, worktreeName: folderName };
     if (prMode) {
       if (!selectedPr) return;
       createFromPr.mutate(
-        {
-          projectId: project.id,
-          worktreeName: folderName,
-          number: selectedPr.number,
-        },
+        { ...target, number: selectedPr.number },
         { onSuccess: onCreated },
       );
       return;
     }
     create.mutate(
       mode === "checkout"
-        ? {
-            projectId: project.id,
-            worktreeName: folderName,
-            base,
-            checkout: true,
-          }
-        : {
-            projectId: project.id,
-            worktreeName: folderName,
-            branchName,
-            base: base || undefined,
-          },
+        ? { ...target, base, checkout: true }
+        : { ...target, branchName, base: base || undefined },
       { onSuccess: onCreated },
     );
   };
@@ -319,21 +303,6 @@ function NewWorktreeForm({
   // other mode's stale failure would otherwise sit on top of this one.
   const errorMessage =
     (prMode ? createFromPr.error : create.error)?.message ?? null;
-  const home = runtime?.homedir ?? null;
-  // Where the worktree lands on the scoped device: the project's own
-  // layout (managed root, in-project, or a custom folder), spelled by
-  // the same rule the location page and the create itself use.
-  const destRoot = runtime
-    ? tildify(
-        worktreeBaseFor({
-          layout: layoutConfig?.worktreeLayout ?? "managed-root",
-          projectPath: project.path,
-          dataDir: runtime.dataDir,
-          customPath: layoutConfig?.customWorktreePath ?? null,
-        }),
-        home,
-      )
-    : null;
   const destName = folderName || "…";
   const destPath = destRoot ? `${destRoot}/${destName}` : destName;
   const destLead = MODE_DEST_LEAD[mode];
@@ -350,11 +319,26 @@ function NewWorktreeForm({
         wrapper keeps the track hugging its options, since a bare flex
         child would stretch to the form's width. */}
       <div className="space-y-2">
-        <ModeToggle
-          mode={mode}
+        <SegmentedControl
+          aria-label="Worktree source mode"
+          value={mode}
           onChange={setModeInput}
+          // Pull request leads: it's the source the form opens on, and the
+          // selected segment should be the one your eye lands on first.
+          // It stays in place when unavailable rather than dropping out,
+          // since segments that reshuffle once the availability check
+          // lands would move out from under the cursor.
+          options={[
+            {
+              value: "pull-request",
+              label: "From pull request",
+              disabled: prOptionOff !== undefined,
+              title: prOptionOff,
+            },
+            { value: "branch-from", label: "Branch from source" },
+            { value: "checkout", label: "Check out source" },
+          ]}
           disabled={busy}
-          pullRequestUnavailable={prMode ? undefined : prUnavailable}
         />
       </div>
 
@@ -365,7 +349,7 @@ function NewWorktreeForm({
           </label>
           <BranchCombobox
             id="branch-base"
-            projectId={projectId}
+            projectId={project.id}
             value={base}
             onChange={setBaseInput}
             placeholder={
