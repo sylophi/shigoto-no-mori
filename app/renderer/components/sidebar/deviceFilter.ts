@@ -33,7 +33,7 @@ export interface DeviceFilter {
 // assemble them.
 export function useDeviceFilter(): DeviceFilter {
   const picked = useExternalStore(store);
-  const choices = useDeviceRoster().filter((entry) => entry.hostsProjects);
+  const choices = useDeviceRoster();
   return {
     choices,
     selected: choices.find((entry) => entry.deviceId === picked) ?? null,

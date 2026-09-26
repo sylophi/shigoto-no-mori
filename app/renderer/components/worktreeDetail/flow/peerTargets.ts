@@ -38,7 +38,7 @@ export function usePeerTargets(project: Project): PeerTarget[] {
   // which is no block here: its tab's own block is the one that holds.
   const tabs = useDeviceTabs();
   return useDeviceTargets(project).flatMap((target): PeerTarget[] => {
-    if (target.isThisDevice || !target.hostsProjects) return [];
+    if (target.isThisDevice) return [];
     if (isHolder(target)) return [target];
     return [
       {

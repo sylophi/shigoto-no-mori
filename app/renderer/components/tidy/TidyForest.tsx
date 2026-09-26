@@ -54,7 +54,7 @@ const IDLE: RowStatus = { kind: "idle" };
 // landed. Scoped to a machine rather than to one project because that
 // is the question being asked. Disk fills up per machine, and the
 // worktree worth removing first is rarely in the repo you happen to
-// have open. One tab per device on the account (this one first), each
+// have open. One tab per machine on the account (this one first), each
 // with its own forest under it: every read and every removal below
 // rides the host scope the tab mounts.
 export function TidyForest() {
@@ -71,7 +71,6 @@ export function TidyForest() {
     label: "",
     icon: "desktop",
     isThisDevice: true,
-    hostsProjects: true,
     status: null,
     api: window.api,
     block: undefined,
