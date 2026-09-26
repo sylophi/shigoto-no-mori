@@ -165,41 +165,42 @@ const (
 // GitHub's own stack merge: every PR of the stack up to and including
 // `number` lands on the base branch, or none does. Blocks until GitHub
 // reports the outcome. A base branch with a merge queue queues the
-// stack instead, which is reported as a note, not a failure.
-func mergeStackAsync(projectPath string, number int, method string) error {
+// stack instead: not a failure, but not landed either, which the
+// queued flag says so a caller that cleans up after the merge waits.
+func mergeStackAsync(projectPath string, number int, method string) (queued bool, err error) {
 	stdout, err := runGh(projectPath, "api", "-X", "PUT",
 		fmt.Sprintf("repos/{owner}/{repo}/pulls/%d/merge-async", number),
 		"-f", "merge_method="+method)
 	if err != nil {
-		return err
+		return false, err
 	}
 	var ticket asyncMerge
 	if err := json.Unmarshal([]byte(stdout), &ticket); err != nil {
-		return errf("unexpected merge-async output: %s", err)
+		return false, errf("unexpected merge-async output: %s", err)
 	}
 	deadline := time.Now().Add(asyncMergeTimeout)
 	for ticket.Status == "pending" {
 		if time.Now().After(deadline) {
-			return errf("GitHub is still merging the stack; check PR #%d", number)
+			return false, errf("GitHub is still merging the stack; check PR #%d", number)
 		}
 		time.Sleep(asyncMergePoll)
 		stdout, err = runGh(projectPath, "api",
 			fmt.Sprintf("repos/{owner}/{repo}/pulls/%d/merge-async/%s", number, ticket.Details.UUID))
 		if err != nil {
-			return err
+			return false, err
 		}
 		if err := json.Unmarshal([]byte(stdout), &ticket); err != nil {
-			return errf("unexpected merge-async output: %s", err)
+			return false, errf("unexpected merge-async output: %s", err)
 		}
 	}
 	switch ticket.Status {
 	case "merged":
-		return nil
+		return false, nil
 	case "enqueued":
 		note(dimErr("the stack is in the merge queue; it lands when the queue processes it"))
-		return nil
+		return true, nil
 	}
-	return errf("GitHub didn't merge the stack: %s", ticket.Details.Message)
+	return false, errf("GitHub didn't merge the stack: %s", ticket.Details.Message)
 }
 
 // One PR at a time from the bottom, for a chain GitHub doesn't know as
@@ -261,7 +262,9 @@ type stackLookups struct {
 	ghStack *githubStack
 }
 
-func lookupStack(proj project, number int, allowed []string) (stackLookups, error) {
+// withGhStack asks GitHub for its stack object too, which only a merge
+// needs (a cleanup never reads it, and shouldn't fail on that call).
+func lookupStack(proj project, number int, allowed []string, withGhStack bool) (stackLookups, error) {
 	var (
 		lk    stackLookups
 		wg    sync.WaitGroup
@@ -275,7 +278,9 @@ func lookupStack(proj project, number int, allowed []string) (stackLookups, erro
 		lk.trunk = lk.pt.localPrimary
 	})
 	wg.Go(func() { lk.prs, lsErr = listPullRequests(proj.Path) })
-	wg.Go(func() { lk.ghStack, stErr = githubStackFor(proj.Path, number) })
+	if withGhStack {
+		wg.Go(func() { lk.ghStack, stErr = githubStackFor(proj.Path, number) })
+	}
 	if allowed == nil {
 		wg.Go(func() { lk.allowed = allowedMergeMethods(proj.Path) })
 	}
@@ -304,16 +309,27 @@ func execMergeStack(proj project, number int, method string, lk stackLookups, on
 	if err != nil {
 		return err
 	}
-	return mergeStackSet(proj, number, method, lk, chain, set, onMerged)
+	_, err = mergeStackSet(proj, number, method, lk, chain, set, onMerged)
+	return err
 }
 
 // The full chain under `number`, bottom first, ending in that PR: the
-// listing's rows, then the layers that fell off the page. Shared by
-// merge and land, which reads the worktrees to clean up off it.
+// listing's rows, then the layers that fell off the page. A PR older
+// than the page itself (a stack that landed long ago, being cleaned
+// up) is fetched on its own and the walk starts from it. Shared by
+// merge, land and rm --stack, which reads the worktrees to clean up
+// off it.
 func stackChain(proj project, number int, lk stackLookups) ([]prSummary, error) {
 	chain := stackBelow(lk.prs, number, lk.trunk)
 	if chain == nil {
-		return nil, errf("No pull request #%d", number)
+		own, err := findPullRequestByNumber(proj.Path, number)
+		if err != nil {
+			return nil, err
+		}
+		if own == nil {
+			return nil, errf("No pull request #%d", number)
+		}
+		chain = []prSummary{*own}
 	}
 	return extendBelow(chain, lk.trunk, func(branch string) (*prSummary, error) {
 		return findPullRequest(proj.Path, branch)
@@ -322,18 +338,20 @@ func stackChain(proj project, number int, lk stackLookups) ([]prSummary, error) 
 
 // Lands a resolved set (stackMergeSet of chain) the way the stack
 // allows: GitHub's own merge when it knows the stack, one PR at a time
-// otherwise.
-func mergeStackSet(proj project, number int, method string, lk stackLookups, chain, set []prSummary, onMerged func(prSummary)) error {
+// otherwise. queued means a merge queue took the stack instead of
+// landing it, and onMerged was not called for anything.
+func mergeStackSet(proj project, number int, method string, lk stackLookups, chain, set []prSummary, onMerged func(prSummary)) (queued bool, err error) {
 	if lk.ghStack != nil {
-		if err := mergeStackAsync(proj.Path, number, method); err != nil {
-			return err
+		queued, err := mergeStackAsync(proj.Path, number, method)
+		if err != nil || queued {
+			return queued, err
 		}
 		for _, pr := range set {
 			onMerged(pr)
 		}
-		return nil
+		return false, nil
 	}
-	return mergeStackSequentially(proj.Path, set, chain[0].BaseRefName, method, onMerged)
+	return false, mergeStackSequentially(proj.Path, set, chain[0].BaseRefName, method, onMerged)
 }
 
 // The listing is one page of the newest PRs, so an old, merged bottom

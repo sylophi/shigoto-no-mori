@@ -85,14 +85,34 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 				pr.Number, id.Branch, below.Number, below.HeadRefName, binaryName,
 				below.HeadRefName, binaryName, binaryName, id.Name)
 		}
-		method, err = execMerge(proj, pr.Number, methodFlag, allowed)
+		var queued bool
+		method, queued, err = execMerge(proj, pr.Number, methodFlag, allowed)
 		if err != nil {
 			return exitCodeOf(err), err
+		}
+		if queued {
+			return reportQueued(pr, id, method)
 		}
 	}
 	reportMerged(pr, method)
 	extra := map[string]any{"merged": mergeResultFields(pr, id.Branch, method)}
 	return landCleanup(proj, id, pr.BaseRefName, pt, ptErr, opts, extra)
+}
+
+// A merge queue took the PR: nothing has landed, so nothing is cleaned
+// up. Running land again once the queue is through does the rest (the
+// merged PR resumes with cleanup).
+func reportQueued(pr *prSummary, id worktreeIdentity, method string) (int, error) {
+	if jsonMode {
+		doc := mergeResultFields(pr, id.Branch, method)
+		doc["ok"] = true
+		doc["queued"] = true
+		emit(doc)
+	} else {
+		out(greenOut(fmt.Sprintf("queued PR #%d (%s): %s", pr.Number, method, pr.Title)))
+		note(dimErr(fmt.Sprintf("nothing removed yet; run `%s land` again once the queue has merged it", binaryName)))
+	}
+	return 0, nil
 }
 
 // The open PR this PR is based on, or nil when it sits on the trunk
@@ -131,7 +151,7 @@ func reportMerged(pr *prSummary, method string) {
 // to land either. An already-merged PR resumes with cleanup, which
 // then covers the layers under it that are merged too.
 func landStack(proj project, id worktreeIdentity, pr *prSummary, methodFlag string, allowed []string, opts removeOptions) (int, error) {
-	lk, err := lookupStack(proj, pr.Number, allowed)
+	lk, err := lookupStack(proj, pr.Number, allowed, pr.State == "OPEN")
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -155,15 +175,19 @@ func landStack(proj project, id worktreeIdentity, pr *prSummary, methodFlag stri
 	}
 
 	if pr.State == "OPEN" {
-		if err := mergeStackSet(proj, pr.Number, method, lk, chain, set, stackMergedReporter(method)); err != nil {
+		queued, err := mergeStackSet(proj, pr.Number, method, lk, chain, set, stackMergedReporter(method))
+		if err != nil {
 			return exitCodeOf(err), err
 		}
 		persistMergeMethod(proj, method)
+		if queued {
+			return reportQueued(pr, id, method)
+		}
 	} else {
 		reportMerged(pr, "")
 	}
 	extra := map[string]any{"merged": mergeResultFields(pr, id.Branch, method)}
-	return execStackCleanup(proj, id, pr, plan, lk.pt, opts, extra)
+	return execStackCleanup(proj, id, pr, true, plan, lk.pt, opts, extra)
 }
 
 // `rm --stack`: the cleanup half of a stack land on its own, for a
@@ -188,8 +212,9 @@ func rmStack(proj project, id worktreeIdentity, opts removeOptions) (int, error)
 	case pr.State == "OPEN":
 		return 1, errf("PR #%d for %s is still open; `%s land --stack` lands it", pr.Number, id.Branch, binaryName)
 	}
-	// The allowed merge methods aren't needed: nothing merges.
-	lk, err := lookupStack(proj, pr.Number, mergeMethodOrder)
+	// Neither the allowed merge methods nor GitHub's stack object are
+	// needed: nothing merges.
+	lk, err := lookupStack(proj, pr.Number, mergeMethodOrder, false)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -201,7 +226,7 @@ func rmStack(proj project, id worktreeIdentity, opts removeOptions) (int, error)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	return execStackCleanup(proj, id, pr, plan, lk.pt, opts, nil)
+	return execStackCleanup(proj, id, pr, pr.State == "MERGED", plan, lk.pt, opts, nil)
 }
 
 // What a stack cleanup removes: the layers landed once the merge is
@@ -232,13 +257,15 @@ func planStackCleanup(proj project, id worktreeIdentity, chain, set []prSummary,
 
 // The removals: the other landed worktrees first, then this one
 // through the plain cleanup, whose document carries the landed layers
-// (bottom first) and the worktrees removed for them. The catch-up
-// targets the bottom's base, the branch the stack landed on, not this
-// PR's own base (the layer below).
-func execStackCleanup(proj project, id worktreeIdentity, pr *prSummary, plan stackCleanupPlan, pt primaryTarget, opts removeOptions, extra map[string]any) (int, error) {
+// (bottom first; the command's own PR among them only when it merged,
+// ownLanded, since rm --stack removes a closed one's worktree too) and
+// the worktrees removed for them. The catch-up targets the bottom's
+// base, the branch the stack landed on, not this PR's own base (the
+// layer below).
+func execStackCleanup(proj project, id worktreeIdentity, pr *prSummary, ownLanded bool, plan stackCleanupPlan, pt primaryTarget, opts removeOptions, extra map[string]any) (int, error) {
 	landed := make([]map[string]any, 0, len(plan.chain))
 	for _, layer := range plan.chain {
-		if plan.landing[layer.HeadRefName] || layer.Number == pr.Number {
+		if plan.landing[layer.HeadRefName] || (ownLanded && layer.Number == pr.Number) {
 			landed = append(landed, map[string]any{
 				"number": layer.Number, "title": layer.Title, "branch": layer.HeadRefName, "url": layer.URL,
 			})

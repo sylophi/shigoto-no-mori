@@ -398,6 +398,7 @@ export type DeleteWorktreeResult = z.infer<typeof DeleteWorktreeResultSchema>;
 // stackCleanupFor picks it). `worktreeId` is any worktree of the stack.
 export const DeleteStackPayloadSchema = WorktreeScopedPayloadSchema.extend({
   force: z.boolean().optional(),
+  skipCleanup: z.boolean().optional(),
 });
 export type DeleteStackPayload = z.infer<typeof DeleteStackPayloadSchema>;
 

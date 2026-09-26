@@ -302,11 +302,12 @@ export async function deleteViaCli(
 // went before it.
 export async function deleteStackViaCli(
   project: Project,
-  input: { worktreeId: string; force?: boolean },
+  input: { worktreeId: string; force?: boolean; skipCleanup?: boolean },
   notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
 ): Promise<DeleteStackResult> {
   const args = [...worktreeArgv(["rm"], project, input.worktreeId), "--stack"];
   if (input.force) args.push("--force");
+  if (input.skipCleanup) args.push("--skip-cleanup");
   const { ok, cleanupError, final } = await runRemoval(
     args,
     input.worktreeId,
