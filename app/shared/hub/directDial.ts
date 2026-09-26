@@ -45,11 +45,10 @@
 //
 //   - the peer serves no direct listener (a web client, by
 //     construction), answered with NO_LISTENER_CODE.
-//   - one side's version is below the other's floor (PeerVersionError
-//     from the link, which also catches a peer from before the ask).
 //
 // Every other failure of the ask (hub blip, peer mid-boot, timeout, a
-// refusal carrying a plain message) stays transient.
+// refusal carrying a plain message, a peer speaking another shape of
+// the wire and so never answering) stays transient.
 //
 // ONE ATTEMPT, NO POLICY: connectDirect is a single dial under a
 // single deadline, and a failure rejects typed with no retry and no
@@ -81,7 +80,7 @@ import {
   type PendingDeviceConnection,
 } from "@shared/ipc/socket/wsClientTransport";
 import { HELLO_TIMEOUT_MS } from "@shared/ipc/socket/frames";
-import { HubAskRefusedError, NO_LISTENER_CODE, PeerVersionError } from "./link";
+import { HubAskRefusedError, NO_LISTENER_CODE } from "./link";
 
 // The DeviceConnection shape, so everything downstream of a direct
 // dial (the bridge cache, sync, port-forward) is transport agnostic,
@@ -117,20 +116,17 @@ export class NoDialableCandidateError extends Error {
 
 // True when redialing cannot change the outcome until the peer's own
 // state changes: a blocked verdict (a ticket the host read and refused,
-// or the wrong machine answered), a peer with no direct listener, or a
-// version one side no longer speaks to. The keeper PARKS on these
-// instead of retrying on the ladder, which is what keeps eager
-// supervision from feeding the host's per-identity failed-auth lockout
-// a steady diet of refused tickets: a parked peer redials only when
-// presence says its state changed (offline to online, which an update
-// and relaunch is), never on a timer. Every other failure
-// (unreachable, deadline, no listener yet) is transient and retries
-// forever.
+// or the wrong machine answered) or a peer with no direct listener.
+// The keeper PARKS on these instead of retrying on the ladder, which
+// is what keeps eager supervision from feeding the host's per-identity
+// failed-auth lockout a steady diet of refused tickets: a parked peer
+// redials only when presence says its state changed (offline to
+// online), never on a timer. Every other failure (unreachable,
+// deadline, no listener yet) is transient and retries forever.
 export function isTerminalDialError(error: unknown): boolean {
   return (
     (error instanceof RemoteConnectError && error.blocked) ||
-    error instanceof NoDialableCandidateError ||
-    error instanceof PeerVersionError
+    error instanceof NoDialableCandidateError
   );
 }
 
@@ -419,7 +415,7 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
       // No direct listener to advertise (a web client), not a call
       // that failed. Terminal, so the keeper parks it until the peer's
       // roster round trip. Every other rejection stays as thrown:
-      // transient, or already typed terminal (PeerVersionError).
+      // transient.
       if (
         error instanceof HubAskRefusedError &&
         error.code === NO_LISTENER_CODE

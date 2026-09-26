@@ -11,8 +11,8 @@
 //
 // This file must stay electron-free and node-builtin-free (pnpm test
 // host-boundary): everything platform specific arrives through browser
-// globals or the injected HubConnectOpts (deviceId, appVersion,
-// accountId, the credential-backed ticket mint).
+// globals or the injected HubConnectOpts (deviceId, accountId, the
+// credential-backed ticket mint).
 import { HubLinkDownError } from "@shared/hub/link";
 import {
   createHubConnectionCore,

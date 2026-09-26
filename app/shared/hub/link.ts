@@ -7,17 +7,17 @@
 // The question is a single ask/answer pair keyed by an id, riding the
 // hub's relay envelope as its opaque `frame`:
 //
-//   ask:    { ask, id, v, input? }
-//   answer: { answer, id, v, ok: true, result? }
-//         | { answer, id, v, ok: false, message, code? }
+//   ask:    { ask, id, input? }
+//   answer: { answer, id, ok: true, result? }
+//         | { answer, id, ok: false, message, code? }
 //
-// `v` is the sender's app version on both, which is how the version
-// floor holds on both ends: the answering side refuses an ask from a
-// build below MIN_PEER_APP_VERSION, and the asking side refuses an
-// answer from one. There is no session: no handshake before the ask,
-// nothing to close after the answer, so a dial costs one round trip.
-// An undefined input or result rides as an absent field, the same
-// framing invariant as the direct wire (frames.ts).
+// There is no session: no handshake before the ask, nothing to close
+// after the answer, so a dial costs one round trip. An undefined input
+// or result rides as an absent field, the same framing invariant as
+// the direct wire (frames.ts). There is no version negotiation either:
+// a peer speaking another shape of this wire parses as nothing, its
+// asks are dropped and ours to it time out, which the keeper retries
+// on its ladder like any other unreachable peer.
 //
 // TRUST MODEL (see also protocol.ts): the device hub is our own managed
 // service. Enrollment is Clerk-verified and every deliverable peer is
@@ -33,11 +33,6 @@
 import { z } from "zod";
 import { errorMessageOf } from "@shared/errors";
 import {
-  noHandlerMessage,
-  resError,
-  type ServerFrame,
-} from "@shared/ipc/socket/frames";
-import {
   decodeEnvelope,
   encodeEnvelope,
   MAX_HUB_MESSAGE_BYTES,
@@ -49,49 +44,17 @@ import {
 // The one ask this wire serves.
 export const CONNECT_INFO_ASK = "connectInfo";
 
-// The oldest app version this build asks or answers: the first release
-// that speaks the ask (v2.9.0 and older speak the session protocol
-// this replaced). Raising it is how a future release drops a wire it
-// can no longer speak: both ends read it (see the header), so an older
-// peer gets a PeerVersionError telling its user to update instead of a
-// hang.
-export const MIN_PEER_APP_VERSION = "2.10.0";
-
-// The code on an answer refusing the asker's version. The asker turns
-// it into a PeerVersionError carrying the answer's message.
-export const VERSION_REFUSED_CODE = "version-refused";
-
 // The code on an answer from a device that serves no direct listener
 // (the web client, by construction). A structural fact about that
 // device, not a failed call, so the dialer parks instead of retrying.
 export const NO_LISTENER_CODE = "no-listener";
 
-// Whether a peer's reported app version is at or above the floor.
-// Only a release number is judged: a from-source build reports "dev",
-// "0.0.0" (the desktop's placeholder), or "unknown" (a web build
-// without its tag), and is current by construction.
-function releaseParts(version: string): number[] | null {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)/.exec(version);
-  return match === null ? null : match.slice(1).map(Number);
-}
-const FLOOR_PARTS = releaseParts(MIN_PEER_APP_VERSION) ?? [0, 0, 0];
-export function meetsVersionFloor(version: string): boolean {
-  const parts = releaseParts(version);
-  if (parts === null || parts[0] === 0) return true;
-  for (let i = 0; i < 3; i += 1) {
-    if (parts[i] !== FLOOR_PARTS[i]) return parts[i] > FLOOR_PARTS[i];
-  }
-  return true;
-}
-
 // Bounded like every string a hostile hub could inflate.
-const VersionSchema = z.string().max(64);
 const AskNameSchema = z.string().max(64);
 
 const AskFrameSchema = z.object({
   ask: AskNameSchema,
   id: z.number().int(),
-  v: VersionSchema,
   input: z.unknown().optional(),
 });
 type AskFrame = z.infer<typeof AskFrameSchema>;
@@ -100,42 +63,18 @@ const AnswerFrameSchema = z.discriminatedUnion("ok", [
   z.object({
     answer: AskNameSchema,
     id: z.number().int(),
-    v: VersionSchema,
     ok: z.literal(true),
     result: z.unknown().optional(),
   }),
   z.object({
     answer: AskNameSchema,
     id: z.number().int(),
-    v: VersionSchema,
     ok: z.literal(false),
     message: z.string(),
     code: z.string().max(64).optional(),
   }),
 ]);
 type AnswerFrame = z.infer<typeof AnswerFrameSchema>;
-
-// What every build before the ask spoke on this wire: sm frames wrapped
-// with a session epoch, opened by a hello. Parsed only so such a peer
-// is told to update rather than left to hang, in both directions:
-//
-//   - every ask carries a pre-ask hello in the same fields (`epoch`,
-//     `sm`, see askConnectInfo), so a pre-ask peer answers our ask with
-//     a welcome at once, and any frame of this shape from a peer we are
-//     asking fails that ask with a PeerVersionError.
-//   - a pre-ask dialer's hello gets a welcome, and its connectInfo req
-//     an error telling its user to update (or, from a device serving
-//     no listener, the no-handler answer that dialer already parks on).
-const LegacyFrameSchema = z.object({
-  epoch: z.number().int(),
-  sm: z.object({
-    t: z.string().max(32),
-    appVersion: VersionSchema.optional(),
-    id: z.number().int().optional(),
-    channel: z.string().max(256).optional(),
-  }),
-});
-type LegacyFrame = z.infer<typeof LegacyFrameSchema>;
 
 // The addressed peer has no socket on the device hub (an offline nack,
 // or a presence list it vanished from). A pending ask to it rejects
@@ -189,16 +128,6 @@ export class HubAskRefusedError extends Error {
   }
 }
 
-// One side of the pair runs a version the other no longer speaks to.
-// Terminal until that device updates (the keeper parks on it), and the
-// message names which device needs the update.
-export class PeerVersionError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "PeerVersionError";
-  }
-}
-
 // The connectInfo server: answers one ask synchronously from the
 // authenticated caller (the DO stamps `from`, and the roster gate has
 // already bounded it to a present device) and the raw input, which it
@@ -212,7 +141,6 @@ export type ServeConnectInfo = (
 
 type HubLinkDeps = {
   localDeviceId: string;
-  localAppVersion: string;
   // Writes one text message to the raw hub socket. May throw when the
   // socket is unusable, and the caller of the failed operation sees it.
   send(text: string): void;
@@ -251,8 +179,17 @@ function truncateId(id: string): string {
   return id.length > 64 ? `${id.slice(0, 64)}...` : id;
 }
 
+function refusal(frame: AskFrame, message: string, code?: string): AnswerFrame {
+  return {
+    answer: frame.ask,
+    id: frame.id,
+    ok: false,
+    message,
+    ...(code === undefined ? {} : { code }),
+  };
+}
+
 export function createHubLink(deps: HubLinkDeps): HubLink {
-  const local = deps.localAppVersion;
   const pending = new Map<number, PendingAsk>();
   // Unique per link across every peer, so an answer is matched by id
   // alone and then checked against the device it was asked of.
@@ -271,14 +208,6 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
         `[hub] ${message()} (dropped ${droppedInbound} inbound so far)`,
       );
     }
-  }
-
-  function tooOldMessage(
-    deviceId: string,
-    version: string | undefined,
-  ): string {
-    const runs = version === undefined ? "an older version" : version;
-    return `peer ${deviceId} runs Shigoto no Mori ${runs}, which this version (${local}) no longer connects to: update that device`;
   }
 
   // Deliver carries `"from":"<localId>"`, send carries `"to":"<to>"`.
@@ -330,29 +259,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
 
   // ---- Answering ----
 
-  function refusal(
-    frame: AskFrame,
-    message: string,
-    code?: string,
-  ): AnswerFrame {
-    return {
-      answer: frame.ask,
-      id: frame.id,
-      v: local,
-      ok: false,
-      message,
-      ...(code === undefined ? {} : { code }),
-    };
-  }
-
   function answerFor(from: string, frame: AskFrame): AnswerFrame {
-    if (!meetsVersionFloor(frame.v)) {
-      return refusal(
-        frame,
-        `this device runs Shigoto no Mori ${frame.v}, and peer ${deps.localDeviceId} (${local}) accepts ${MIN_PEER_APP_VERSION} or newer: update this device`,
-        VERSION_REFUSED_CODE,
-      );
-    }
     if (frame.ask !== CONNECT_INFO_ASK) {
       return refusal(frame, `unknown ask "${frame.ask}"`);
     }
@@ -365,7 +272,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     }
     try {
       const result = deps.serveConnectInfo(from, frame.input);
-      return { answer: frame.ask, id: frame.id, v: local, ok: true, result };
+      return { answer: frame.ask, id: frame.id, ok: true, result };
     } catch (error) {
       // Message text only, what survives Electron's IPC error
       // serialization too, so shared/errors.ts matchers behave the
@@ -419,13 +326,7 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
       const { text, fits } = encodeFor(deviceId, {
         ask: CONNECT_INFO_ASK,
         id,
-        v: local,
         input,
-        // The pre-ask hello (see LegacyFrameSchema): a build before
-        // the ask ignores the fields above and welcomes this at once,
-        // which fails the ask fast instead of waiting out the timeout.
-        epoch: 0,
-        sm: { t: "hello", deviceId: deps.localDeviceId, appVersion: local },
       });
       try {
         if (!fits) throw new HubMessageTooLargeError();
@@ -442,47 +343,10 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     // other than the one asked: nothing to route it to.
     if (entry === undefined || entry.deviceId !== from) return;
     takePending(frame.id);
-    if (!meetsVersionFloor(frame.v)) {
-      entry.reject(new PeerVersionError(tooOldMessage(from, frame.v)));
-    } else if (frame.ok) {
+    if (frame.ok) {
       entry.resolve(frame.result);
-    } else if (frame.code === VERSION_REFUSED_CODE) {
-      entry.reject(new PeerVersionError(frame.message));
     } else {
       entry.reject(new HubAskRefusedError(frame.message, frame.code));
-    }
-  }
-
-  // ---- Pre-ask peers ----
-
-  function sendLegacy(to: string, epoch: number, sm: ServerFrame): void {
-    const { text, fits } = encodeFor(to, { epoch, sm });
-    if (fits) sendAnswerText(to, text);
-  }
-
-  function handleLegacy(from: string, { epoch, sm }: LegacyFrame): void {
-    rejectAsksTo(
-      from,
-      () => new PeerVersionError(tooOldMessage(from, sm.appVersion)),
-    );
-    if (!online.has(from)) return;
-    if (sm.t === "hello") {
-      sendLegacy(from, epoch, {
-        t: "welcome",
-        deviceId: deps.localDeviceId,
-        appVersion: local,
-      });
-    } else if (sm.t === "req" && sm.id !== undefined) {
-      sendLegacy(
-        from,
-        epoch,
-        resError(
-          sm.id,
-          deps.serveConnectInfo === undefined
-            ? noHandlerMessage(sm.channel ?? "")
-            : `peer ${deps.localDeviceId} runs Shigoto no Mori ${local}, which no longer connects to this version: update this device`,
-        ),
-      );
     }
   }
 
@@ -518,11 +382,6 @@ export function createHubLink(deps: HubLinkDeps): HubLink {
     const answer = AnswerFrameSchema.safeParse(frame);
     if (answer.success) {
       handleAnswer(from, answer.data);
-      return;
-    }
-    const legacy = LegacyFrameSchema.safeParse(frame);
-    if (legacy.success) {
-      handleLegacy(from, legacy.data);
       return;
     }
     warnDrop(() => `dropping unparseable frame from ${truncateId(from)}`);

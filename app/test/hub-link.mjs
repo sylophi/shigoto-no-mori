@@ -17,9 +17,9 @@
 // teardown rejection of pending asks, misrouted answers dropped, an
 // off-roster ask left unanswered, supervisor redial with a fresh ticket
 // per attempt, the blocked verdicts for the revoked and superseded
-// close codes, liveness, the version floor on both ends, the fail-fast
-// against a peer from before the ask in both directions, and malformed
-// inbound frames dropped without killing the process.
+// close codes, liveness, a frame of another wire shape dropped so the
+// ask to its sender times out, and malformed inbound frames dropped
+// without killing the process.
 //
 // Runs under test/lib/register-ts-alias.mjs so the app's TypeScript
 // imports resolve. Run: pnpm test hub-link.
@@ -37,10 +37,7 @@ import {
   HubLinkDownError,
   HubMessageTooLargeError,
   HubPeerOfflineError,
-  MIN_PEER_APP_VERSION,
   NO_LISTENER_CODE,
-  PeerVersionError,
-  VERSION_REFUSED_CODE,
 } from "@shared/hub/link";
 import { makeProof } from "./lib/checkKit.mjs";
 import { bootDevice } from "./lib/hubBoot.mjs";
@@ -51,9 +48,8 @@ import { startStubHub } from "./lib/hubStub.mjs";
 // oversize-answer scenarios.
 const OVERSIZE = "x".repeat(70_000);
 
-// A version from before the floor, and the ask timeout the scenarios
-// use when nothing is supposed to time out.
-const OLD_VERSION = "2.8.0";
+// The ask timeout the scenarios use when nothing is supposed to time
+// out.
 const ASK_MS = 5_000;
 
 // The connectInfo server B answers with. The link is contract-free, so
@@ -137,15 +133,11 @@ async function bootWithRawPeer(track) {
 }
 
 // An ask frame as a peer on this build sends it.
-const askFrame = (id, v = MIN_PEER_APP_VERSION, input) => ({
+const askFrame = (id, input) => ({
   ask: CONNECT_INFO_ASK,
   id,
-  v,
   ...(input === undefined ? {} : { input }),
 });
-
-// A pre-ask build's frame, the epoch-wrapped sm frame it spoke.
-const legacy = (epoch, sm) => ({ epoch, sm });
 
 const { check, done, fail } = makeProof("hub-link proof");
 
@@ -166,7 +158,6 @@ async function main() {
         ["A>B", "B>A"],
       );
       assert.equal(exchange[0].frame.ask, CONNECT_INFO_ASK);
-      assert.equal(exchange[0].frame.v, MIN_PEER_APP_VERSION);
       assert.equal(exchange[1].frame.answer, CONNECT_INFO_ASK);
       assert.equal(exchange[1].frame.id, exchange[0].frame.id);
       // Two concurrent asks prove the correlation is per id, not
@@ -218,7 +209,6 @@ async function main() {
         "id",
         "message",
         "ok",
-        "v",
       ]);
     },
   );
@@ -236,7 +226,7 @@ async function main() {
       const refused = await raw.nextHub();
       assert.equal(refused.frame.ok, false);
       assert.match(refused.frame.message, /unknown ask/);
-      raw.send("B", askFrame(2, MIN_PEER_APP_VERSION, "served"));
+      raw.send("B", askFrame(2, "served"));
       const served = await raw.nextHub();
       assert.equal(served.frame.ok, true);
       assert.equal(served.frame.result, "served");
@@ -318,7 +308,6 @@ async function main() {
       rawB.send("A", {
         answer: CONNECT_INFO_ASK,
         id: ask.frame.id,
-        v: MIN_PEER_APP_VERSION,
         ok: true,
         result: "late",
       });
@@ -328,7 +317,6 @@ async function main() {
       rawB.send("A", {
         answer: CONNECT_INFO_ASK,
         id: second.frame.id,
-        v: MIN_PEER_APP_VERSION,
         ok: true,
         result: "fresh",
       });
@@ -380,7 +368,6 @@ async function main() {
       const answer = (result) => ({
         answer: CONNECT_INFO_ASK,
         id: ask.frame.id,
-        v: MIN_PEER_APP_VERSION,
         ok: true,
         result,
       });
@@ -399,15 +386,6 @@ async function main() {
       // Forge a deliver to B from a device that is not in B's roster (a
       // hostile hub can set any `from`). B must answer nothing.
       stub.injectTo("B", { t: "relay", from: "ghost", frame: askFrame(1) });
-      stub.injectTo("B", {
-        t: "relay",
-        from: "ghost",
-        frame: legacy(1, {
-          t: "hello",
-          deviceId: "ghost",
-          appVersion: "2.0.0",
-        }),
-      });
       await delay(200);
       assert.equal(
         stub.sentTo("B", "ghost"),
@@ -418,148 +396,28 @@ async function main() {
   );
 
   await check(
-    "version floor, answering: an ask from a release below the floor is refused with the version code and an update message, while from-source builds are answered",
-    async (track) => {
-      const stub = await startStubHub(track);
-      await bootDevice(stub, "B", { serveConnectInfo: testServer }, track);
-      const raw = rawDevice(stub, "C");
-      track(() => raw.close());
-      await raw.opened;
-      await delay(50);
-      raw.send("B", askFrame(1, OLD_VERSION, "x"));
-      const refused = await raw.nextHub();
-      assert.equal(refused.frame.ok, false);
-      assert.equal(refused.frame.code, VERSION_REFUSED_CODE);
-      assert.match(refused.frame.message, /update this device/);
-      assert.match(refused.frame.message, new RegExp(OLD_VERSION));
-      // A dev build ("dev", the desktop's "0.0.0") and a tagged web
-      // build ("v" prefix) are not below the floor.
-      for (const [id, v] of [
-        [2, "dev"],
-        [3, "0.0.0"],
-        [4, `v${MIN_PEER_APP_VERSION}`],
-        [5, "unknown"],
-      ]) {
-        raw.send("B", askFrame(id, v, v));
-        // oxlint-disable-next-line no-await-in-loop -- one ask in flight at a time, so each answer pairs with its version
-        const served = await raw.nextHub();
-        assert.equal(served.frame.ok, true, `${v} was refused`);
-      }
-    },
-  );
-
-  await check(
-    "version floor, asking: an answer from a release below the floor, or a refusal of our version, fails the ask with PeerVersionError",
+    "unknown wire shape: a frame this link does not speak is dropped, so an ask to such a peer times out like any unreachable one and the link keeps serving",
     async (track) => {
       const { a, rawB } = await bootWithRawPeer(track);
-      const tooOld = a.connection.askConnectInfo("B", "x", ASK_MS);
-      const ask1 = await rawB.nextHub();
-      rawB.send("A", {
-        answer: CONNECT_INFO_ASK,
-        id: ask1.frame.id,
-        v: OLD_VERSION,
-        ok: true,
-        result: "ignored",
-      });
-      await assert.rejects(
-        () => tooOld,
-        (error) =>
-          error instanceof PeerVersionError &&
-          error.message.includes(OLD_VERSION) &&
-          /update that device/.test(error.message),
-      );
-      const refusedUs = a.connection.askConnectInfo("B", "x", ASK_MS);
-      const ask2 = await rawB.nextHub();
-      rawB.send("A", {
-        answer: CONNECT_INFO_ASK,
-        id: ask2.frame.id,
-        v: "9.0.0",
-        ok: false,
-        message: "update this device",
-        code: VERSION_REFUSED_CODE,
-      });
-      await assert.rejects(
-        () => refusedUs,
-        (error) =>
-          error instanceof PeerVersionError &&
-          error.message === "update this device",
-      );
-    },
-  );
-
-  await check(
-    "pre-ask peer, dialed: every ask carries the old hello, so a build from before the ask welcomes it and the ask fails fast with PeerVersionError",
-    async (track) => {
-      const { a, rawB } = await bootWithRawPeer(track);
-      const startedAt = Date.now();
-      const pending = a.connection.askConnectInfo("B", "x", ASK_MS);
+      const pending = a.connection.askConnectInfo("B", "x", 200);
       const ask = await rawB.nextHub();
-      // What a pre-ask build parses: the epoch wrapper around a hello.
-      assert.equal(typeof ask.frame.epoch, "number");
-      assert.equal(ask.frame.sm.t, "hello");
-      assert.equal(ask.frame.sm.deviceId, "A");
-      rawB.send(
-        "A",
-        legacy(ask.frame.epoch, {
-          t: "welcome",
-          deviceId: "B",
-          appVersion: OLD_VERSION,
-        }),
-      );
+      // What a build speaking another wire would say: neither an ask
+      // nor an answer, so nothing routes it to the pending ask.
+      rawB.send("A", { epoch: 0, sm: { t: "welcome", deviceId: "B" } });
       await assert.rejects(
         () => pending,
-        (error) =>
-          error instanceof PeerVersionError &&
-          error.message.includes(OLD_VERSION) &&
-          /update that device/.test(error.message),
+        (error) => error instanceof HubAskTimeoutError,
       );
-      assert.ok(
-        Date.now() - startedAt < 1_000,
-        "the ask waited instead of failing fast",
-      );
-    },
-  );
-
-  await check(
-    "pre-ask peer, dialing: its hello is welcomed and its connectInfo req refused with an update message, or no-handler from a device serving no listener",
-    async (track) => {
-      const stub = await startStubHub(track);
-      await bootDevice(stub, "B", { serveConnectInfo: testServer }, track);
-      await bootDevice(stub, "D", {}, track);
-      const raw = rawDevice(stub, "C");
-      track(() => raw.close());
-      await raw.opened;
-      await delay(50);
-      raw.send(
-        "B",
-        legacy(7, { t: "hello", deviceId: "C", appVersion: OLD_VERSION }),
-      );
-      const welcome = await raw.nextHub();
-      assert.equal(
-        welcome.frame.epoch,
-        7,
-        "the welcome did not echo the epoch",
-      );
-      assert.equal(welcome.frame.sm.t, "welcome");
-      assert.equal(welcome.frame.sm.deviceId, "B");
-      raw.send(
-        "B",
-        legacy(7, { t: "req", id: 1, channel: "direct:connectInfo" }),
-      );
-      const refused = await raw.nextHub();
-      assert.equal(refused.frame.epoch, 7);
-      assert.equal(refused.frame.sm.t, "res");
-      assert.equal(refused.frame.sm.id, 1);
-      assert.equal(refused.frame.sm.ok, false);
-      assert.match(refused.frame.sm.message, /update this device/);
-      // The web client's shape: the no-handler answer, which a pre-ask
-      // dialer parks on as "serves no direct listener".
-      raw.send(
-        "D",
-        legacy(8, { t: "req", id: 2, channel: "direct:connectInfo" }),
-      );
-      const noHandler = await raw.nextHub();
-      assert.match(noHandler.frame.sm.message, /No handler registered/);
+      const again = a.connection.askConnectInfo("B", "again", ASK_MS);
+      const second = await rawB.nextHub();
+      assert.notEqual(second.frame.id, ask.frame.id);
+      rawB.send("A", {
+        answer: CONNECT_INFO_ASK,
+        id: second.frame.id,
+        ok: true,
+        result: "fresh",
+      });
+      assert.equal(await again, "fresh");
     },
   );
 
@@ -675,7 +533,7 @@ async function main() {
     async (track) => {
       const { stub, a } = await bootLinked(track);
       // Non-JSON text, an unparseable envelope, and a valid envelope
-      // whose frame is none of the ask, the answer or a pre-ask frame.
+      // whose frame is neither the ask nor the answer.
       // All must be dropped, not fatal.
       stub.injectTo("A", "this is not json at all");
       stub.injectTo("A", { t: "totally-unknown" });

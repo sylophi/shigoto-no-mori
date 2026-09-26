@@ -451,9 +451,6 @@ export async function refreshHubConnection(): Promise<void> {
         accountId: inputs.accountId,
         mintTicket: inputs.mintTicket,
         deviceId: getDeviceId(),
-        // appVersion is an Electron fact, injected here so host/hub
-        // never imports electron.
-        appVersion: app.getVersion(),
       };
     }),
   );

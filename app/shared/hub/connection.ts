@@ -9,9 +9,8 @@
 //
 // This file must stay electron-free and node-builtin-free (pnpm test
 // host-boundary): everything platform specific lives in the injected
-// adapter, and everything account flavored (deviceId, appVersion,
-// accountId, the credential-backed ticket mint) arrives through
-// HubConnectOpts.
+// adapter, and everything account flavored (deviceId, accountId, the
+// credential-backed ticket mint) arrives through HubConnectOpts.
 import { errorMessageOf } from "@shared/errors";
 import { isDeviceRevoked, isHubRefusal } from "@shared/account/service";
 import {
@@ -153,8 +152,7 @@ function sameOpts(a: HubConnectOpts, b: HubConnectOpts): boolean {
   return (
     a.hubUrl === b.hubUrl &&
     a.accountId === b.accountId &&
-    a.deviceId === b.deviceId &&
-    a.appVersion === b.appVersion
+    a.deviceId === b.deviceId
   );
 }
 
@@ -311,7 +309,6 @@ export function createHubConnectionCore(
 
         const nextLink = createHubLink({
           localDeviceId: opts.deviceId,
-          localAppVersion: opts.appVersion,
           send: (text) => socket.send(text),
           serveConnectInfo: deps.serveConnectInfo,
           onPresence: () => {

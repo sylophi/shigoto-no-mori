@@ -7,9 +7,9 @@
 // type error rather than a discouraged one-liner.
 //
 // This file must stay Electron free (pnpm test host-boundary).
-// Everything Electron or account flavored (deviceId, appVersion,
-// accountId, the credential-backed ticket mint) arrives through
-// HubConnectOpts, which main composes.
+// Everything Electron or account flavored (deviceId, accountId, the
+// credential-backed ticket mint) arrives through HubConnectOpts, which
+// main composes.
 import { WebSocket } from "ws";
 import { HubLinkDownError, type ServeConnectInfo } from "@shared/hub/link";
 import {

@@ -80,10 +80,8 @@
 //     available:false and the attempt rejects as unreachable. A peer
 //     that serves no direct listener (the REAL browser binding) yields
 //     the typed NoDialableCandidateError off the link's no-listener
-//     answer, and a peer on a version below the floor a
-//     PeerVersionError, both terminal verdicts the keeper parks on
-//     (see SUPERVISION below), while a peer whose server merely threw
-//     stays transient.
+//     answer, a terminal verdict the keeper parks on (see SUPERVISION
+//     below), while a peer whose server merely threw stays transient.
 //   - the roster sweeps cover mid-dial entries (a session completing
 //     after its peer left the roster is closed and never reported,
 //     quit closes an in-flight dial's socket), and the peer's command
@@ -175,12 +173,7 @@ import {
   DIRECT_TICKET_PREFIX,
 } from "@host/direct/tickets";
 import { makeConnectInfo } from "@host/direct/connectInfo";
-import {
-  CONNECT_INFO_ASK,
-  HubAskRefusedError,
-  MIN_PEER_APP_VERSION,
-  PeerVersionError,
-} from "@shared/hub/link";
+import { CONNECT_INFO_ASK, HubAskRefusedError } from "@shared/hub/link";
 import { handshakeProof, newHandshakeNonce } from "@shared/ipc/socket/proof";
 import {
   TunnelProvisionDeniedError,
@@ -485,7 +478,6 @@ async function main() {
         frame: {
           ask: CONNECT_INFO_ASK,
           id: 1,
-          v: MIN_PEER_APP_VERSION,
           input: { dialableKinds: ["lan"] },
         },
       });
@@ -1939,60 +1931,11 @@ async function main() {
   );
 
   await check(
-    "the version floor is a terminal verdict: a peer reporting a release below the floor fails the dial with PeerVersionError telling the user to update it, and the terminal classification covers exactly the verdicts a redial cannot change",
-    async (track) => {
-      // B runs this code but reports a release below the floor, so its
-      // answer is refused by A's link. One attempt, one ask, one typed
-      // rejection -- retry policy lives in the keeper alone.
-      const stub = await startStubHub(track);
-      const listener = await startDirectListener(track);
-      const [host, client] = await Promise.all([
-        bootDevice(
-          stub,
-          "B",
-          {
-            appVersion: "2.8.0",
-            serveConnectInfo: makeConnectInfo({
-              listenerPort: listener.listenerPort,
-              mintTickets: (peer, kinds) => listener.tickets.mint(peer, kinds),
-              candidateAddresses: () => ["127.0.0.1"],
-              tunnelUrl: () => null,
-              acceptsCommands: () => false,
-            }),
-          },
-          track,
-        ),
-        bootDevice(stub, "A", {}, track),
-      ]);
-      await waitFor(
-        () => client.connection.status().onlineDeviceIds.includes("B"),
-        "A to see B",
-      );
-      const { bridge } = makeDirectBridge(client, { deadlineMs: 2000 });
-      let verdict;
-      await assert.rejects(
-        () => bridge.dialPeer("B"),
-        (error) => {
-          verdict = error;
-          return error instanceof PeerVersionError;
-        },
-      );
-      assert.match(verdict.message, /2\.8\.0/);
-      assert.match(verdict.message, /update that device/);
-      assert.equal(isTerminalDialError(verdict), true);
-      assert.deepEqual(bridge.directPeerVersions(), {});
-      // And the other direction: B asking A is refused by A, which B
-      // reads as PeerVersionError naming itself as the one to update.
-      await assert.rejects(
-        () =>
-          host.connection.askConnectInfo("A", { dialableKinds: ["lan"] }, 2000),
-        (error) =>
-          error instanceof PeerVersionError &&
-          /update this device/.test(error.message),
-      );
+    "the terminal classification covers exactly the verdicts a redial cannot change",
+    async () => {
       // The park-vs-retry line the keeper consumes: a blocked verdict
-      // (ticket presented and refused, wrong identity), no listener
-      // and a version mismatch park. Everything transient
+      // (ticket presented and refused, wrong identity) and no listener
+      // park. Everything transient
       // (unreachable, deadline, no listener yet) retries on the
       // ladder. Misclassifying a transient as terminal would strand a
       // peer whose tunnel was merely still starting, and the reverse
@@ -2001,7 +1944,6 @@ async function main() {
         isTerminalDialError(new NoDialableCandidateError("B")),
         true,
       );
-      assert.equal(isTerminalDialError(new PeerVersionError("old")), true);
       assert.equal(
         isTerminalDialError(
           new RemoteConnectError("ticket refused", CLOSE_AUTH_FAILED, true),

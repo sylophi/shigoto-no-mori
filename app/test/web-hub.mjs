@@ -9,8 +9,7 @@
 //
 // Asserts: connect, the connectInfo ask round trip (the ONE question
 // the orchestration-only hub wire carries) with id correlation, the
-// version floor on the web client's asks, the web client refusing a
-// peer's ask as serving no listener, presence propagation, the revoked
+// web client refusing a peer's ask as serving no listener, presence propagation, the revoked
 // (4102) and superseded (4103) blocked verdicts with no redial, a
 // fresh-ticket redial after a drop, and the per-dial ticket mint.
 //
@@ -18,11 +17,7 @@
 // imports resolve. Run: pnpm test web-hub.
 import assert from "node:assert/strict";
 import { CLOSE_DEVICE_REVOKED, CLOSE_SUPERSEDED } from "@shared/hub/protocol";
-import {
-  HubAskRefusedError,
-  NO_LISTENER_CODE,
-  PeerVersionError,
-} from "@shared/hub/link";
+import { HubAskRefusedError, NO_LISTENER_CODE } from "@shared/hub/link";
 import { createHubConnection as createWebConnection } from "../web/hub/connection.ts";
 import { makeProof } from "./lib/checkKit.mjs";
 import { bootDevice as bootHost } from "./lib/hubBoot.mjs";
@@ -91,22 +86,6 @@ async function main() {
       ]);
       assert.equal(first, "one");
       assert.equal(second, "two");
-    },
-  );
-
-  await check(
-    "version floor: a host refuses the web client's ask from a release below the floor, which the web side reads as PeerVersionError",
-    async (track) => {
-      const stub = await startStubHub(track);
-      const a = await bootWeb(stub, "A", track, { appVersion: "v2.1.0" });
-      await bootHost(stub, "B", { serveConnectInfo: echoServer }, track);
-      await seeing(a, "B");
-      await assert.rejects(
-        () => a.connection.askConnectInfo("B", "x", ASK_MS),
-        (error) =>
-          error instanceof PeerVersionError &&
-          /update this device/.test(error.message),
-      );
     },
   );
 

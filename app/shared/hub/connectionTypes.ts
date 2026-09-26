@@ -19,10 +19,8 @@ export type HubConnectOpts = {
   // layer, and a fresh ticket is minted per connect attempt. The signal
   // aborts the mint on stop or on the mint timeout.
   mintTicket(signal: AbortSignal): Promise<string>;
-  // This device's id and app version. The version rides every ask and
-  // answer on the hub link, where the version floor reads it.
+  // This device's id, the `from` every peer sees on its asks.
   deviceId: string;
-  appVersion: string;
 };
 
 export type HubConnectionStatus = {

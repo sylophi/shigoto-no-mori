@@ -3,7 +3,6 @@
 // port-forward.mjs): a REAL hub connection against the stub
 // Durable Object (hubStub.mjs, extracted for the same reason). Runs under
 // register-ts-alias so the shared TypeScript imports resolve.
-import { MIN_PEER_APP_VERSION } from "@shared/hub/link";
 import { createHubConnection } from "@host/hub/connection";
 
 import { waitFor } from "./checkKit.mjs";
@@ -12,9 +11,7 @@ import { waitFor } from "./checkKit.mjs";
 // Returns the connection plus the ticket-mint counter the redial
 // assertions read. `opts.serveConnectInfo` is the one thing the hub
 // wire can answer (absent: a dial-only device that refuses every ask
-// as serving no listener). The device reports `opts.appVersion`,
-// defaulting to the version floor itself. `track`, when
-// passed, registers the teardown immediately, so a boot that fails its
+// as serving no listener). `track`, when passed, registers the teardown immediately, so a boot that fails its
 // wait still gets cleaned up and cannot leak the event loop.
 // `opts.createConnection` swaps in another binding with the same
 // surface (the browser one, web/hub/connection.ts), and `opts.label`
@@ -38,7 +35,6 @@ export async function bootDevice(stub, deviceId, opts = {}, track) {
       return `t:${deviceId}:${mints}`;
     },
     deviceId,
-    appVersion: opts.appVersion ?? MIN_PEER_APP_VERSION,
   }));
   await waitFor(
     () => connection.status().socket.phase === "connected",

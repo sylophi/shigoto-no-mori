@@ -171,7 +171,6 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
           hubUrl: config.hubUrl,
           accountId: record.accountId,
           deviceId,
-          appVersion: deps.appVersion,
           mintTicket: async (signal) => {
             const fresh = store.read();
             if (fresh === null) {
