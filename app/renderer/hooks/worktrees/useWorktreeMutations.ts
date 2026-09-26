@@ -10,7 +10,11 @@ import type {
   DeleteWorktreeResult,
   Worktree,
 } from "@shared/schemas";
-import { worktreeQueriesOn, queryKeysFor } from "@/lib/queryKeys";
+import {
+  invalidateHostDevice,
+  worktreeQueriesOn,
+  queryKeysFor,
+} from "@/lib/queryKeys";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { scriptRunsFor } from "@/store/scriptRuns";
@@ -258,6 +262,66 @@ export function useDeleteStackWorktrees() {
     // The closed-PR box surfaces the failure inline.
     meta: { silentError: true },
   });
+}
+
+// The same cleanup on other devices: each device's host removes its
+// own landed layers, and its cache here follows. Every device is asked
+// at once, and a refusal on one (a dirty worktree there) fails the
+// mutation with the devices named, once the rest have answered. The
+// page's own device goes through useDeleteAndNavigate instead, so the
+// page can move on when its worktree went.
+export interface StackCleanupOnDevice {
+  deviceId: string;
+  label: string;
+  projectId: string;
+  targetId: string;
+  api: HostApi;
+}
+
+export function useDeleteStackOnDevices() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    void,
+    Error,
+    { devices: readonly StackCleanupOnDevice[]; force?: boolean }
+  >({
+    mutationFn: async ({ devices, force }) => {
+      const outcomes = await Promise.allSettled(
+        devices.map(async (device) => {
+          const result = await device.api.worktrees.deleteStack({
+            projectId: device.projectId,
+            worktreeId: device.targetId,
+            force,
+          });
+          for (const worktreeId of result.removed) {
+            forgetDeletedWorktree(
+              queryClient,
+              device.deviceId,
+              device.projectId,
+              worktreeId,
+            );
+          }
+          invalidateHostDevice(queryClient, device.deviceId);
+          if (!result.ok) {
+            throw new Error("a cleanup script failed; its worktree stayed");
+          }
+        }),
+      );
+      const failures = outcomes.flatMap((outcome, index) =>
+        outcome.status === "rejected"
+          ? [`${devices[index]!.label}: ${errorMessage(outcome.reason)}`]
+          : [],
+      );
+      if (failures.length > 0) throw new Error(failures.join("\n"));
+    },
+    // The page may have moved on by the time a peer answers, so the
+    // failure goes to a toast rather than the box.
+    meta: { errorTitle: "Couldn't delete the stack's worktrees elsewhere" },
+  });
+}
+
+function errorMessage(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason);
 }
 
 // Whether the worktree is on its way out: this window's own delete of
