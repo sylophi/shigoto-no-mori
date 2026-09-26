@@ -34,9 +34,6 @@ export interface SettingsFormState {
   autoPullNew: boolean;
   autoPullPrimaryOnly: boolean;
   doubutsuNames: boolean;
-  // The stored value, kept as is while doubutsuNames is off (the row
-  // is disabled then).
-  prioritizeBirthdays: boolean;
   codexWorktreeNames: boolean;
   portPool: boolean;
   terrier: boolean;
@@ -71,8 +68,6 @@ export function fromConfig(
     autoPullPrimaryOnly:
       config.autoPullPrimaryOnly ?? DEFAULTS.autoPullPrimaryOnly,
     doubutsuNames: config.doubutsuNames ?? DEFAULTS.doubutsuNames,
-    prioritizeBirthdays:
-      config.prioritizeBirthdays ?? DEFAULTS.prioritizeBirthdays,
     codexWorktreeNames:
       config.codexWorktreeNames ?? DEFAULTS.codexWorktreeNames,
     portPool: config.portPool ?? DEFAULTS.portPool,
@@ -108,7 +103,6 @@ export function toDeviceSettingsPatch(
     autoPullNew: state.autoPullNew,
     autoPullPrimaryOnly: state.autoPullPrimaryOnly,
     doubutsuNames: state.doubutsuNames,
-    prioritizeBirthdays: state.prioritizeBirthdays,
     codexWorktreeNames: state.codexWorktreeNames,
     portPool: state.portPool,
     terrier: state.terrier,

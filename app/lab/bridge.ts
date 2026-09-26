@@ -68,9 +68,7 @@ import {
   projectIconFor,
   worktree as worktreeFixture,
 } from "./fixtures";
-import { birthdaySlugsOn } from "@shared/villagers/birthdays";
-import { posedToday } from "./pose";
-import { labProfiles, villagerHandlersFor } from "./villagerData";
+import { villagerHandlersFor } from "./villagerData";
 
 type FixtureHandler = (input: any) => unknown;
 type FixtureHandlers = Record<string, FixtureHandler>;
@@ -289,20 +287,7 @@ function hostHandlersFor(
       local: branchesOf(),
       remote: ["origin/main"],
     }),
-    // The real pick's birthday invite (cli/birthdays.go): with
-    // Prioritize birthdays on, whoever's birthday it is on the posed day
-    // (?today=) and not taken yet.
-    "projects:pickWorktreeName": async ({ projectId }) => {
-      const profiles = villageLife ? await labProfiles() : null;
-      const used = new Set(
-        (forest.worktrees[projectId] ?? []).map((w) => w.name),
-      );
-      const guests =
-        profiles === null
-          ? []
-          : birthdaySlugsOn(profiles, posedToday() ?? new Date());
-      return guests.find((slug) => !used.has(slug)) ?? "tender-tanuki";
-    },
+    "projects:pickWorktreeName": () => "tender-tanuki",
     "projects:icon": ({ projectId }) =>
       projectIconFor(
         forest.projects.find((project) => project.id === projectId)?.name ?? "",
@@ -407,10 +392,7 @@ function hostHandlersFor(
       launchers: [],
     }),
     "portPool:isActive": () => true,
-    "globalConfig:read": () => ({
-      ...labGlobalConfig,
-      prioritizeBirthdays: villageLife,
-    }),
+    "globalConfig:read": () => labGlobalConfig,
     "globalConfig:writeDeviceSettings": () => undefined,
     // The devices ?updates poses (Thinkpad alone by default) have an
     // update staged, so their Settings sections' restart-to-update
@@ -1252,10 +1234,9 @@ const peerEntry = (deviceId: string) =>
 // before any entry-file code runs.
 let WEB_SHELL = false;
 const WEB_DEVICE_ID = "dev_beefcafe01";
-// Village life on in this window's client config, and Prioritize
-// birthdays on every device's fixture config: ?villageLife=1, or the
-// villager contact sheet's say. Off otherwise, as a fresh install has
-// them. The villager data itself is lab/villagerData.ts.
+// Village life on in this window's client config: ?villageLife=1, or
+// the villager contact sheet's say. Off otherwise, as a fresh install
+// has it. The villager data itself is lab/villagerData.ts.
 let villageLife = false;
 
 // Presence the lab can pose: which peers are in the roster, and which

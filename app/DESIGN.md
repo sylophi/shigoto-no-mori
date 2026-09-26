@@ -198,31 +198,8 @@ Rules that keep it consistent as features arrive:
 - **Anything that shows follows `useVillageLife`**, this window's
   switch, whichever device the worktree lives on, including toasts
   fired outside render (`lib/villagers/speakers.ts`). Nothing on a
-  device reads it: a device setting that behaves differently for
-  villagers (the name pick's birthday invite) is a setting of its own.
+  device reads it.
 - **A moment happens whoever caused it.** Moving in and out is read off
   the worktree lists (`lib/villagers/moves.ts`), so the app, `sm` and
   another device all count. No emojis, and a name that isn't a
   character's shows nothing.
-
-### Birthdays
-
-A villager's birthday (their profile's, on the local calendar) is a
-moment too, on every device's worktrees alike.
-
-- **The name pick invites them.** With the device's
-  `prioritizeBirthdays` on (apart from Village life, and needing only
-  Doubutsu names), a new worktree (the app's pre-pick and
-  `sm worktrees create` alike) is named after someone celebrating today
-  while their name is free. The birthdays ship with the names
-  (`cli/embed/doubutsu-names.json`), so this needs no villager data.
-- **No announcement.** A birthday is found where the villager lives,
-  not pushed as a toast: a daily one for every villager would repeat
-  itself.
-- **The sidebar row** wears a cake, their face in a party hat in its
-  tooltip.
-- **The worktree page** throws the party (`BirthdayBanner`): a line
-  under bunting for a regular villager, a dialogue box under bunting in
-  their own color for a rare one, and for a legend balloons (one
-  carrying a present), a burst of confetti and their stationery.
-

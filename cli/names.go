@@ -6,16 +6,13 @@ package main
 // The app picks no names itself: it asks `sm worktrees destination`
 // for one, and `sm create` picks the same way. The doubutsu pool holds
 // only the characters with a face on Nookipedia
-// (app/shared/villagers/manifest.json), each with its birthday when
-// the wiki gives one (birthdays.go).
+// (app/shared/villagers/manifest.json).
 
 import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"maps"
 	"math/rand/v2"
-	"slices"
 	"sync"
 )
 
@@ -36,27 +33,15 @@ func init() {
 	}
 }
 
-// The embedded doubutsu pool, keyed by slug. A character the wiki
-// gives no birthday has none ("").
-type doubutsuName struct {
-	Birthday string `json:"birthday"`
-}
-
 // Parsed on first use: only a create without a name needs it.
-var doubutsuPool = sync.OnceValue(func() map[string]doubutsuName {
+var doubutsuNames = sync.OnceValue(func() []string {
 	var doc struct {
-		Names map[string]doubutsuName `json:"names"`
+		Names []string `json:"names"`
 	}
 	if err := json.Unmarshal(doubutsuNamesJSON, &doc); err != nil {
 		panic("embedded doubutsu-names.json is invalid: " + err.Error())
 	}
 	return doc.Names
-})
-
-// The pool's names, sorted, so the order never depends on map
-// iteration.
-var doubutsuNames = sync.OnceValue(func() []string {
-	return slices.Sorted(maps.Keys(doubutsuPool()))
 })
 
 // Off unless set: an install from before fresh installs were seeded
@@ -79,22 +64,7 @@ func namePool(doubutsu bool) []string {
 	return pairs
 }
 
-// `invited` are the names to pick first while one is free: the
-// villagers whose birthday it is (birthdayGuests).
-func pickWorktreeName(used map[string]bool, doubutsu bool, invited []string) string {
-	if doubutsu {
-		// Only a name the pool has, so a guest is as safe a folder and
-		// branch name as any pick.
-		var guests []string
-		for _, name := range invited {
-			if _, inPool := doubutsuPool()[name]; inPool && !used[name] {
-				guests = append(guests, name)
-			}
-		}
-		if len(guests) > 0 {
-			return guests[rand.IntN(len(guests))]
-		}
-	}
+func pickWorktreeName(used map[string]bool, doubutsu bool) string {
 	pool := namePool(doubutsu)
 	var candidates []string
 	for _, name := range pool {

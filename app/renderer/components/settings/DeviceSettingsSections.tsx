@@ -4,7 +4,6 @@ import type { SettingsFormState } from "@/hooks/config/useSettingsSave";
 import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
 import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
-import { prioritizeBirthdaysEnabled } from "@shared/villageLife";
 import { ToggleRow } from "@/components/shared/ToggleRow";
 import { ExternalLink } from "@/components/ui/external-link";
 import { fieldSetter } from "@/hooks/ui/useDirtyForm";
@@ -79,18 +78,6 @@ export function DeviceToggleSections({
           label="Doubutsu names"
           description="Name new worktrees after Animal Crossing villagers and characters, like raymond, instead of adjective-animal pairs like snug-otter."
         />
-        {/* A sub-option of Doubutsu names, nested like Primary
-            checkouts only. The villager extras are Village life, a
-            setting of each window (Appearance). */}
-        <div className="pl-11">
-          <ToggleRow
-            checked={prioritizeBirthdaysEnabled(form)}
-            onCheckedChange={setField("prioritizeBirthdays")}
-            disabled={!form.doubutsuNames}
-            label="Prioritize birthdays"
-            description="Name new worktrees after a villager whose birthday it is today, while their name is free."
-          />
-        </div>
         <ToggleRow
           checked={form.codexWorktreeNames}
           onCheckedChange={setField("codexWorktreeNames")}
