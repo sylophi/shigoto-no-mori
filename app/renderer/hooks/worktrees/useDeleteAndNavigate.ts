@@ -1,6 +1,9 @@
 import { useRef, useState } from "react";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
-import { useDeleteWorktree } from "@/hooks/worktrees/useWorktreeMutations";
+import {
+  useDeleteStackWorktrees,
+  useDeleteWorktree,
+} from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { CleanupError, Worktree } from "@shared/schemas";
 
@@ -17,7 +20,9 @@ interface DeleteOpts {
 export function useDeleteAndNavigate(worktree: Worktree, siblings: Worktree[]) {
   const nav = useWorktreeNav();
   const deleteMutation = useDeleteWorktree();
+  const deleteStackMutation = useDeleteStackWorktrees();
   const [needsForce, setNeedsForce] = useState(false);
+  const [stackNeedsForce, setStackNeedsForce] = useState(false);
   const [cleanupError, setCleanupError] = useState<CleanupError | null>(null);
 
   // Tracks the flags from the most recent delete attempt so that the
@@ -26,14 +31,25 @@ export function useDeleteAndNavigate(worktree: Worktree, siblings: Worktree[]) {
   // should stay force on retry/skip, since the worktree is still dirty).
   const lastDeleteOptsRef = useRef<{ force?: boolean }>({});
 
-  const navigateToSibling = () => {
+  // `gone` widens the removal past this worktree: a stack removal
+  // takes its neighbours too, and the page must not land on one of
+  // those.
+  const navigateToSibling = (gone: readonly string[] = [worktree.id]) => {
     // Prefer the sibling above so the user's eye stays in place. The
     // nav helper keeps this on whichever device the page is scoped to
     // (a remote delete lands on the remote sibling, or the root when it
     // was the last one).
     const index = siblings.findIndex((w) => w.id === worktree.id);
+    const stays = (w: Worktree | undefined) =>
+      w && !gone.includes(w.id) ? w : undefined;
     const next =
-      index >= 0 ? (siblings[index - 1] ?? siblings[index + 1]) : undefined;
+      index >= 0
+        ? (siblings
+            .slice(0, index)
+            .toReversed()
+            .find((w) => stays(w)) ??
+          siblings.slice(index + 1).find((w) => stays(w)))
+        : undefined;
     if (next) {
       nav.toWorktree(worktree.projectId, next.id, true);
     } else {
@@ -70,12 +86,44 @@ export function useDeleteAndNavigate(worktree: Worktree, siblings: Worktree[]) {
     deleteMutation.reset();
   };
 
+  // The stack's merged layers, this worktree among them. The page
+  // moves on if this worktree went, whatever else did; a cleanup
+  // failure that kept it shows on the page like a single delete's.
+  const runDeleteStack = (opts: { force?: boolean } = {}) => {
+    setCleanupError(null);
+    deleteStackMutation.mutate(
+      { projectId: worktree.projectId, worktreeId: worktree.id, ...opts },
+      {
+        onSuccess: (data) => {
+          setStackNeedsForce(false);
+          if (data.removed.includes(worktree.id)) {
+            navigateToSibling(data.removed);
+          } else if (!data.ok) {
+            setCleanupError(data.cleanupError);
+          }
+        },
+        onError: (error) => {
+          if (!isCommandRefusedError(error)) setStackNeedsForce(true);
+        },
+      },
+    );
+  };
+
+  const cancelStackForce = () => {
+    setStackNeedsForce(false);
+    deleteStackMutation.reset();
+  };
+
   return {
     deleteMutation,
+    deleteStackMutation,
     needsForce,
+    stackNeedsForce,
     cleanupError,
     runDelete,
+    runDeleteStack,
     cancelForce,
+    cancelStackForce,
     retryCleanup: () => runDelete(lastDeleteOptsRef.current),
     skipCleanup: () =>
       runDelete({ ...lastDeleteOptsRef.current, skipCleanup: true }),

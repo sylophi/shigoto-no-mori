@@ -39,7 +39,7 @@ export function PullRequestBody({
         />
       )}
       {!isOpen && !worktree.isPrimary && (
-        <ClosedPullRequestBox worktree={worktree} />
+        <ClosedPullRequestBox worktree={worktree} stack={stack} />
       )}
       {pr.state === "MERGED" && worktree.isPrimary && (
         <MergedPrimaryBranchBox worktree={worktree} />

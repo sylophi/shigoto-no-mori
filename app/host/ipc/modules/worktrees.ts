@@ -26,6 +26,7 @@ import {
   describeWorktree,
   findWorktreeIdentityOrThrow,
   listCommits,
+  listWorktreeIdentities,
   listWorktrees,
   type WorktreeIdentity,
 } from "@host/lib/git/worktrees";
@@ -38,12 +39,21 @@ import {
   getInflightDeleteIds,
   getRunningScriptWorktrees,
   withDeleteInflight,
+  withDeletesInflight,
 } from "@host/lib/scripts";
+import { listProjectPullRequests } from "@host/lib/githubCli/pullRequests";
+import {
+  pullRequestStackFor,
+  stackCleanupFor,
+  trunkOf,
+} from "@shared/pullRequestStack";
+import { unknownWorktreeError } from "@shared/errors";
 import { readWorktreeFile } from "@host/lib/worktrees/files";
 import { scriptEventNotifier } from "../scriptRun";
 import {
   adoptViaCli,
   createViaCli,
+  deleteStackViaCli,
   deleteViaCli,
   doneViaCli,
   moveViaCli,
@@ -178,6 +188,65 @@ export const worktreesHandlers: Handlers<
         worktreeId,
         state: removed ? "removed" : "kept",
       });
+    }
+  },
+
+  // The merged layers' worktrees of the stack `worktreeId` is in, as
+  // one removal. The set is read the way the page reads it (the
+  // sidebar's PR map and the listing), so the button's count and the
+  // removal agree; the CLI then resolves the stack against GitHub
+  // itself and removes what it finds landed. Every worktree of the set
+  // is announced and guarded like a single delete, since the one CLI
+  // run takes them all.
+  deleteStack: async ({ projectId, worktreeId, force }, ctx) => {
+    const project = await findProjectOrThrow(projectId);
+    const [identities, prs] = await Promise.all([
+      listWorktreeIdentities(projectId, { primaryRef: true }),
+      listProjectPullRequests(project.path),
+    ]);
+    const own = identities.find((identity) => identity.id === worktreeId);
+    if (!own) throw unknownWorktreeError(worktreeId);
+    const stack = pullRequestStackFor(
+      Object.fromEntries(prs),
+      own.branch,
+      trunkOf(identities),
+    );
+    const cleanup = stack && stackCleanupFor(stack, identities);
+    if (!cleanup) {
+      throw new Error(
+        "No merged layer of this stack has a worktree to remove.",
+      );
+    }
+    const ids = cleanup.worktrees.map((identity) => identity.id);
+    if (ids.some((id) => getInflightDeleteIds().has(id))) {
+      throw new Error("A worktree of this stack is already being removed.");
+    }
+    for (const id of ids) {
+      broadcastRemoval?.({ projectId, worktreeId: id, state: "removing" });
+    }
+    let removed: readonly string[] = [];
+    try {
+      const result = await withDeletesInflight(
+        ids,
+        "A worktree of this stack is already being removed.",
+        () =>
+          deleteStackViaCli(
+            project,
+            { worktreeId: cleanup.target.id, force },
+            notifierFor(ctx),
+          ),
+        (outcome) => outcome.removed,
+      );
+      removed = result.removed;
+      return result;
+    } finally {
+      for (const id of ids) {
+        broadcastRemoval?.({
+          projectId,
+          worktreeId: id,
+          state: removed.includes(id) ? "removed" : "kept",
+        });
+      }
     }
   },
 

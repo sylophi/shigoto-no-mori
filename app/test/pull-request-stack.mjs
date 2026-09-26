@@ -12,6 +12,7 @@ import {
   pullRequestStackFor,
   placeByStack,
   pullRequestStackPosition,
+  stackCleanupFor,
   stackMergeSet,
   trunkOf,
 } from "@shared/pullRequestStack";
@@ -190,6 +191,40 @@ try {
           (p) => p.child ?? null,
         ),
         [null, null],
+      );
+    },
+  );
+
+  await proof.check(
+    "a stack cleanup takes the merged layers' worktrees, run from the highest",
+    () => {
+      const merged = {
+        ...prs,
+        "layer-b": pr("layer-a", "MERGED"),
+      };
+      const rows = [
+        wt("main", { id: "p", isPrimary: true }),
+        wt("layer-a", { id: "a", isPrimary: false }),
+        wt("layer-b", { id: "b", isPrimary: false }),
+        wt("layer-c", { id: "c", isPrimary: false }),
+      ];
+      const stack = pullRequestStackFor(merged, "layer-c", "main");
+      const cleanup = stackCleanupFor(stack, rows);
+      assert.deepEqual(
+        cleanup.worktrees.map((w) => w.id),
+        ["a", "b"],
+        "the open top stays",
+      );
+      assert.equal(cleanup.target.id, "b");
+      // The primary checkout on a landed layer is never among them,
+      // and a stack with no landed worktree offers nothing.
+      const onPrimary = [wt("layer-a", { id: "p", isPrimary: true })];
+      assert.equal(stackCleanupFor(stack, onPrimary), null);
+      assert.equal(
+        stackCleanupFor(pullRequestStackFor(prs, "layer-c", "main"), rows)
+          .worktrees.length,
+        1,
+        "only the merged bottom",
       );
     },
   );

@@ -392,3 +392,23 @@ export const DeleteWorktreeResultSchema = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(false), cleanupError: CleanupErrorSchema }),
 ]);
 export type DeleteWorktreeResult = z.infer<typeof DeleteWorktreeResultSchema>;
+
+// A stack cleanup: the merged layers' worktrees go together, through
+// `sm land --stack` on the highest of them (shared/pullRequestStack.ts
+// stackCleanupFor picks it). `worktreeId` is any worktree of the stack.
+export const DeleteStackPayloadSchema = WorktreeScopedPayloadSchema.extend({
+  force: z.boolean().optional(),
+});
+export type DeleteStackPayload = z.infer<typeof DeleteStackPayloadSchema>;
+
+// `removed` lists the worktree ids that went, on a cleanup failure the
+// ones removed before it.
+export const DeleteStackResultSchema = z.discriminatedUnion("ok", [
+  z.object({ ok: z.literal(true), removed: z.array(z.string()) }),
+  z.object({
+    ok: z.literal(false),
+    removed: z.array(z.string()),
+    cleanupError: CleanupErrorSchema,
+  }),
+]);
+export type DeleteStackResult = z.infer<typeof DeleteStackResultSchema>;

@@ -5,6 +5,8 @@ import {
 } from "@tanstack/react-query";
 import type {
   CreateWorktreeResult,
+  DeleteStackPayload,
+  DeleteStackResult,
   DeleteWorktreeResult,
   Worktree,
 } from "@shared/schemas";
@@ -229,6 +231,31 @@ export function useDeleteWorktree() {
     },
     // The detail page swaps into a force-delete prompt on failure, so a
     // toast on top would be noise.
+    meta: { silentError: true },
+  });
+}
+
+// The merged layers' worktrees of a stack, removed as one (the host
+// runs `sm land --stack` on the highest of them). Every removed id is
+// forgotten the way a single delete's is; the ones a cleanup failure
+// kept stay for a retry.
+export function useDeleteStackWorktrees() {
+  const queryClient = useQueryClient();
+  const { api, deviceId } = useHostScope();
+  return useMutation<DeleteStackResult, Error, DeleteStackPayload>({
+    mutationKey: deleteWorktreeMutationKey(deviceId),
+    mutationFn: (input) => api.worktrees.deleteStack(input),
+    onSuccess: (data, vars) => {
+      for (const worktreeId of data.removed) {
+        forgetDeletedWorktree(
+          queryClient,
+          deviceId,
+          vars.projectId,
+          worktreeId,
+        );
+      }
+    },
+    // The closed-PR box surfaces the failure inline.
     meta: { silentError: true },
   });
 }

@@ -409,6 +409,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       convertExternal: worktreesClient.convertExternal,
       relocate: worktreesClient.relocate,
       delete: worktreesClient.delete,
+      deleteStack: worktreesClient.deleteStack,
       onLifecyclePhase: worktreesClient.lifecyclePhase,
       onCarryOverComplete: worktreesClient.carryOverComplete,
       onRemoval: worktreesClient.removal,

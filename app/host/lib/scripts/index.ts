@@ -172,6 +172,32 @@ export async function withDeleteInflight<T>(
   }
 }
 
+// The same protocol over several worktrees removed by one mutation (a
+// stack cleanup): every id is refused-if-busy and marked up front, the
+// scripts of all of them are reaped before, and the mirrors of the
+// ones `removedOf` names after. A mutation that removes only some of
+// them (a cleanup script failed partway) stops only those mirrors.
+export async function withDeletesInflight<T>(
+  worktreeIds: readonly string[],
+  busyMessage: string,
+  run: () => Promise<T>,
+  removedOf: (result: T) => readonly string[],
+): Promise<T> {
+  const inflight = getInflightDeleteIds();
+  if (worktreeIds.some((id) => inflight.has(id))) {
+    throw new Error(busyMessage);
+  }
+  worktreeIds.forEach(markDeleteInflight);
+  try {
+    await Promise.all(worktreeIds.map(killScriptsForWorktree));
+    const result = await run();
+    await Promise.all(removedOf(result).map(stopMirrorsForWorktree));
+    return result;
+  } finally {
+    worktreeIds.forEach(clearDeleteInflight);
+  }
+}
+
 // Project-level counterpart for projects.remove, which doesn't know its
 // worktree ids without a git call: blocks new renderer script runs
 // anywhere in the project while its scripts are being reaped and the
