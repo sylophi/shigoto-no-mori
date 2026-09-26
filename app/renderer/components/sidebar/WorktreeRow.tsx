@@ -16,8 +16,8 @@ import { useWorktreeRowState } from "./useWorktreeRowState";
 
 interface WorktreeRowProps {
   worktree: Worktree;
-  // The peer device a peer's worktree lives on, for its badge at the
-  // trailing edge. Absent, the worktree is this machine's.
+  // The peer device a peer's worktree lives on, for its badge beside
+  // the worktree's name. Absent, the worktree is this machine's.
   device?: SidebarDeviceBadge;
   // The peer this worktree is mirrored with, when it is: the row then
   // stands for both copies and wears the peer's badge.
@@ -36,16 +36,21 @@ export const WORKTREE_ROW_BUTTON =
   "group relative flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-accent/60";
 
 // The two-line branch-over-name block both row flavors lead with, faded
-// back for a shelved worktree. `deviceId` names the peer a remote row's
-// worktree lives on.
+// back for a shelved worktree. `device` names the peer a remote row's
+// worktree lives on and `mirror` the peer a local one is mirrored
+// with. Both "where is this" marks (the kind glyph, then the device)
+// trail the name as one cluster, so the branch keeps its line's full
+// width and the trailing cluster stays status and PR alone.
 function WorktreeRowLabel({
   worktree,
   emphasized = false,
-  deviceId,
+  device,
+  mirror,
 }: {
   worktree: Worktree;
   emphasized?: boolean;
-  deviceId?: string;
+  device?: SidebarDeviceBadge;
+  mirror?: SidebarDeviceBadge;
 }) {
   return (
     <div
@@ -62,7 +67,19 @@ function WorktreeRowLabel({
       </span>
       <span className="flex min-w-0 items-center gap-1 text-3xs text-muted-foreground">
         <span className="truncate">{worktree.name}</span>
-        <BirthdayBadge worktree={worktree} deviceId={deviceId} />
+        <BirthdayBadge worktree={worktree} deviceId={device?.deviceId} />
+        {/* Pulled in vertically: the device tile stands taller than
+            the name line, and letting it set the line's height would
+            make a peer's row taller than a local one. */}
+        <span className="-my-1 inline-flex shrink-0 items-center gap-1">
+          {/* Shelved is left out, as in the inbox: the row already
+              sits under its project's shelved fold. */}
+          {!worktree.shelved && (
+            <WorktreeKindIcon worktree={worktree} showTooltip={false} />
+          )}
+          {mirror && <MirrorBadge mirror={mirror} />}
+          {device && <DeviceBadge badge={device} />}
+        </span>
       </span>
     </div>
   );
@@ -103,8 +120,8 @@ function StackConnector({ child }: { child: StackChild | undefined }) {
 
 // A worktree in the sidebar tree, this machine's or a peer device's. A
 // peer's row keeps the local layout (branch over name, trailing status
-// cluster) plus a device badge at the trailing edge. Everything else
-// reads as local: the PR pill off the peer's own map, a delete
+// cluster) plus a device badge beside the worktree's name. Everything
+// else reads as local: the PR pill off the peer's own map, a delete
 // dispatched to the peer from here off that device's mutation, script
 // activity off its run store. It opens the worktree's own detail page
 // under its device's route, exactly like clicking a local row. An
@@ -143,7 +160,8 @@ export function WorktreeRow({
       <WorktreeRowLabel
         worktree={worktree}
         emphasized={isSelected}
-        deviceId={device?.deviceId}
+        device={device}
+        mirror={mirror}
       />
       <RowTrailing
         worktree={worktree}
@@ -152,10 +170,6 @@ export function WorktreeRow({
         pr={pr}
         stack={stack}
       />
-      {mirror && <MirrorBadge mirror={mirror} />}
-      {/* Rightmost, where the local row keeps its own trailing cluster:
-          the owning device, name in the tooltip. */}
-      {device && <DeviceBadge badge={device} />}
     </button>
   );
 }
@@ -191,7 +205,7 @@ interface RowTrailingProps {
 // same marks through the next restyle. Deletion takes the
 // whole row (the worktree is going away, so the trash standing alone
 // reads as "destroying"); a running script just adds a leading activity
-// icon to the normal cluster so status / PR / kind stay visible.
+// icon to the normal cluster so status / PR stay visible.
 function RowTrailing({
   worktree,
   activity,
@@ -210,7 +224,6 @@ function RowTrailing({
       {activity && <ActivityIcon kind={activity} />}
       <StatusIndicator worktree={worktree} />
       <PullRequestPill pr={pr} stack={stack} />
-      <WorktreeKindIcon worktree={worktree} showTooltip={false} />
     </>
   );
 }
