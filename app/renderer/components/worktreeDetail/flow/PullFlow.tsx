@@ -3,14 +3,16 @@
 // steps. Both are a
 // pull-shaped mutation walked through the same three-step frame:
 // review, the pull with its progress frames, and a last step that
-// reports. The mutation's own status is the stage.
+// reports. The mutation's own status is the stage, with one reading
+// on top: a mutation that failed because the user cancelled it is the
+// cancelled stage, not a failure.
 import { useState, type ReactNode } from "react";
-import { Check, Loader2, X, type LucideIcon } from "lucide-react";
-import type { UseMutationResult } from "@tanstack/react-query";
+import { Ban, Check, Loader2, X, type LucideIcon } from "lucide-react";
+import { isMoveCancelledError } from "@shared/ipc/modules/sync";
 import type { Project, Worktree } from "@shared/schemas";
 import { ModalShell } from "@/components/ui/modal-shell";
 import { TONE_PILL } from "@/components/ui/status-dot";
-import type { LandingChoice } from "@/hooks/remote/useMoveWorktree";
+import type { MoveMutation } from "@/hooks/remote/useMoveWorktree";
 import { usePullProgress } from "@/hooks/remote/usePullProgress";
 import { localDeviceId } from "@/lib/queryKeys";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
@@ -21,27 +23,38 @@ import { PullProgress, type PullProgressProps } from "./PullProgress";
 import type { DestinationPick } from "./PullReview";
 import { type Landing, useClock } from "./pullSteps";
 
-export type FlowStage = "review" | "running" | "failed" | "done";
+export type FlowStage = "review" | "running" | "failed" | "cancelled" | "done";
 
 const STAGE_STEP: Record<FlowStage, number> = {
   review: 0,
   running: 1,
   failed: 1,
+  cancelled: 1,
   done: 2,
 };
 
 // The tints are the flow's, so the two dialogs read as one family. A
-// dialog brings its own review icon and its four titles.
+// dialog brings its own review icon and its five titles.
 const STAGE_LOOK: Record<
   Exclude<FlowStage, "review">,
   { tint: string; icon: LucideIcon; spin: boolean }
 > = {
   running: { tint: TONE_PILL.sky, icon: Loader2, spin: true },
   failed: { tint: TONE_PILL.rose, icon: X, spin: false },
+  cancelled: { tint: TONE_PILL.amber, icon: Ban, spin: false },
   done: { tint: TONE_PILL.emerald, icon: Check, spin: false },
 };
 
 type Landed = { worktree: { projectId: string; id: string } };
+
+// The mutation's own status as the stage, a failure the user asked for
+// told apart from one they did not.
+function stageOf(mutation: MoveMutation<unknown>): FlowStage {
+  if (mutation.isPending) return "running";
+  if (mutation.isSuccess) return "done";
+  if (!mutation.isError) return "review";
+  return isMoveCancelledError(mutation.error) ? "cancelled" : "failed";
+}
 
 export function usePullFlow<Data extends Landed>({
   mutation,
@@ -52,7 +65,7 @@ export function usePullFlow<Data extends Landed>({
   toPeer,
   onClose,
 }: {
-  mutation: UseMutationResult<Data, Error, LandingChoice>;
+  mutation: MoveMutation<Data>;
   // The source pair, on the device the dialog is scoped to.
   worktree: Worktree;
   project: Project;
@@ -82,22 +95,40 @@ export function usePullFlow<Data extends Landed>({
   // transplant to a peer.
   const destinationDeviceId = toPeer?.pickedId ?? localDeviceId;
   const nav = useWorktreeNav();
-  const stage: FlowStage = mutation.isPending
-    ? "running"
-    : mutation.isError
-      ? "failed"
-      : mutation.isSuccess
-        ? "done"
-        : "review";
+  const stage = stageOf(mutation);
   // The attempt's clock: the mutation's own submit time, frozen at the
   // moment it settles.
   const [endedAt, setEndedAt] = useState(0);
+  // The cancel asked for and not yet answered by the mutation settling:
+  // the running view says so and takes no second cancel.
+  const [cancelling, setCancelling] = useState(false);
   const now = useClock(stage === "running");
   const progress = usePullProgress(worktree.id);
 
   const start = () => {
     progress.reset();
-    mutation.mutate(choice, { onSettled: () => setEndedAt(Date.now()) });
+    setCancelling(false);
+    mutation.mutate(choice, {
+      onSettled: () => {
+        setEndedAt(Date.now());
+        setCancelling(false);
+      },
+    });
+  };
+
+  // The cancel is asked of the device running the move and the
+  // mutation settles on its own account, cancelled or (a cancel that
+  // came too late) done. A cancel that finds nothing to cancel is one
+  // the settle beat, so the mark comes off again: the settle may have
+  // cleared it already, or be a moment away.
+  const cancel = () => {
+    setCancelling(true);
+    mutation.cancel().then(
+      (found) => {
+        if (!found) setCancelling(false);
+      },
+      () => setCancelling(false),
+    );
   };
 
   const open = () => {
@@ -115,6 +146,8 @@ export function usePullFlow<Data extends Landed>({
     elapsed: (stage === "running" ? now : endedAt) - mutation.submittedAt,
     progress,
     start,
+    cancel,
+    cancelling,
     open,
     pull,
     target,
@@ -133,6 +166,7 @@ type ProgressExtras = Pick<
   | "sourcePart"
   | "runningNote"
   | "failedNote"
+  | "cancelledNote"
   | "progressLabel"
 >;
 
@@ -181,7 +215,8 @@ export function PullFlowFrame({
     <ModalShell
       // While the pull runs neither Escape nor the backdrop may close
       // the dialog: the mutation is quiet, so dismissing it would end
-      // the flow with no report and no way back to the last step.
+      // the flow with no report and no way back to the last step. The
+      // way out is the running view's Cancel, which ends the move.
       onClose={running ? () => {} : onClose}
       closeOnEscape={!running}
       popoverClassName="flex max-h-[85vh] max-w-4xl flex-col"
@@ -202,7 +237,7 @@ export function PullFlowFrame({
       </FlowHeader>
       <StepRail current={STAGE_STEP[stage]} steps={steps} label={stepsLabel} />
       {children}
-      {(stage === "running" || stage === "failed") && target && (
+      {STAGE_STEP[stage] === 1 && target && (
         <PullProgress
           frame={progress.frame}
           phasesSeen={progress.phasesSeen}
@@ -213,6 +248,9 @@ export function PullFlowFrame({
           runSetup={flow.pull.runSetup}
           landing={landing}
           error={stage === "failed" ? flow.error : undefined}
+          cancelled={stage === "cancelled"}
+          cancelling={flow.cancelling}
+          onCancel={flow.cancel}
           onClose={onClose}
           onRetry={flow.start}
           {...progressExtras}

@@ -58,6 +58,7 @@ import {
   markCreateInflight,
 } from "@host/lib/scripts";
 import { shellQuote } from "@host/lib/scripts/process";
+import { onAbort } from "@host/lib/util/abort";
 import { implSlot } from "@host/lib/util/implSlot";
 
 // One NDJSON document from the CLI's --json stream. `event` is set on
@@ -80,12 +81,22 @@ export interface CliResult {
 // Electron's packaging paths and registers children with quit-time
 // reaping), so this seam owns the document shapes and the delegate
 // stays free of Electron imports.
+// opts.signal cancels the run: the child (and the lifecycle script it
+// may be running) is killed, and the run closes non-zero like any
+// failure. Only the verbs a cancellable move drives pass one.
+export type CliRunOpts = {
+  background?: boolean;
+  readOnly?: boolean;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+};
+
 type CliRunnerImpl = {
   runCli: (
     args: string[],
     onDoc?: (doc: CliDoc) => void,
     extraEnv?: Record<string, string>,
-    opts?: { background?: boolean; readOnly?: boolean; timeoutMs?: number },
+    opts?: CliRunOpts,
   ) => Promise<CliResult>;
   requireCliBinary: () => string;
   cliFailureMessage: (result: CliResult, fallback: string) => string;
@@ -170,6 +181,15 @@ function finalOkDoc(
 // create, like the pull orchestration's dirty apply; a post-created
 // setup failure still resolves, matching the early-resolve semantics
 // where such failures only surface as lifecycle events.
+//
+// A cancel (`signal`, a move's) kills the run, but only once the
+// "created" document is in: the worktree exists from that point and
+// the caller can remove it, where a kill during `git worktree add`
+// would leave a half-made checkout nobody can name. What precedes
+// "created" is that one git command, so the wait is short. A run
+// cancelled after "created" resolves with the worktree like any run
+// whose lifecycle step failed, and the caller reads its own signal to
+// know it must roll back.
 function runStreamingCreate(
   args: string[],
   project: Project,
@@ -177,6 +197,7 @@ function runStreamingCreate(
   notify: WorktreeOperationNotifiers,
   failureLabel: string,
   resolveOn: "created" | "exit" = "created",
+  signal?: AbortSignal,
 ): Promise<CreateWorktreeResult> {
   return new Promise((resolve, reject) => {
     let created: Worktree | null = null;
@@ -197,11 +218,16 @@ function runStreamingCreate(
       }
       notify.notifyPhase({ projectId: project.id, worktreeId: id, phase });
     };
+    const kill = new AbortController();
+    const offCancel = onAbort(signal, () => {
+      if (created !== null) kill.abort();
+    });
     const onDoc = (doc: CliDoc) => {
       switch (doc.event) {
         case "created": {
           created = WorktreeSchema.parse(doc["worktree"]);
           if (resolveOn === "created") resolve({ worktree: created });
+          if (signal?.aborted) kill.abort();
           break;
         }
         case "phase": {
@@ -224,18 +250,26 @@ function runStreamingCreate(
       }
     };
     runner()
-      .runCli(args, (doc) => {
-        // A schema mismatch before "created" fails the whole call; after
-        // it the promise is already resolved, so surface it as a log
-        // instead of losing it inside the stream reader.
-        try {
-          onDoc(doc);
-        } catch (error) {
-          if (created === null) reject(error as Error);
-          else
-            console.warn("[cli] mid-stream document failed validation", error);
-        }
-      })
+      .runCli(
+        args,
+        (doc) => {
+          // A schema mismatch before "created" fails the whole call; after
+          // it the promise is already resolved, so surface it as a log
+          // instead of losing it inside the stream reader.
+          try {
+            onDoc(doc);
+          } catch (error) {
+            if (created === null) reject(error as Error);
+            else
+              console.warn(
+                "[cli] mid-stream document failed validation",
+                error,
+              );
+          }
+        },
+        undefined,
+        { signal: kill.signal },
+      )
       .then(
         (result) => {
           scripts.end();
@@ -253,7 +287,8 @@ function runStreamingCreate(
           if (created !== null) setPhase(created.id, "idle");
           reject(error);
         },
-      );
+      )
+      .finally(offCancel);
   });
 }
 
@@ -270,7 +305,7 @@ export function createViaCli(
     skipSetup?: boolean;
   },
   notify: WorktreeOperationNotifiers,
-  opts: { resolveOn?: "created" | "exit" } = {},
+  opts: { resolveOn?: "created" | "exit"; signal?: AbortSignal } = {},
 ): Promise<CreateWorktreeResult> {
   const args = ["create", "--project-id", project.id];
   if (input.branchName) args.push("--branch", input.branchName);
@@ -290,6 +325,7 @@ export function createViaCli(
     notify,
     "sm create failed",
     opts.resolveOn,
+    opts.signal,
   );
 }
 
@@ -313,11 +349,17 @@ export async function deleteViaCli(
   project: Project,
   input: { worktreeId: string; force?: boolean; skipCleanup?: boolean },
   notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
+  opts: Pick<CliRunOpts, "timeoutMs"> = {},
 ): Promise<DeleteWorktreeResult> {
   const args = worktreeArgv(["rm"], project, input.worktreeId);
   if (input.force) args.push("--force");
   if (input.skipCleanup) args.push("--skip-cleanup");
-  const { ok, cleanupError } = await runRemoval(args, input.worktreeId, notify);
+  const { ok, cleanupError } = await runRemoval(
+    args,
+    input.worktreeId,
+    notify,
+    opts,
+  );
   return ok ? { ok } : { ok, cleanupError };
 }
 
@@ -346,20 +388,27 @@ export async function deleteStackViaCli(
 
 // One removal run: the script events forwarded, the final document
 // read for its verdict. A run that ends without one, or without the
-// cleanup error a failed one carries, is the CLI's failure.
+// cleanup error a failed one carries, is the CLI's failure. A
+// cancelled move's rollback puts the run on a clock (opts.timeoutMs).
 async function runRemoval(
   args: string[],
   worktreeId: string,
   notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
+  opts: Pick<CliRunOpts, "timeoutMs"> = {},
 ): Promise<
   | { ok: true; cleanupError?: undefined; final: CliDoc }
   | { ok: false; cleanupError: CleanupError; final: CliDoc }
 > {
   const scripts = cliScriptStream(notify.notifyScript);
   const result = await runner()
-    .runCli(args, (doc) => {
-      if (doc.event === "script") scripts.forward(scriptEventOf(doc));
-    })
+    .runCli(
+      args,
+      (doc) => {
+        if (doc.event === "script") scripts.forward(scriptEventOf(doc));
+      },
+      undefined,
+      opts,
+    )
     .finally(scripts.end);
   const final = result.docs.findLast((doc) => typeof doc["ok"] === "boolean");
   if (final?.["ok"] === true) return { ok: true, final };
@@ -389,20 +438,30 @@ function removedIdsOf(doc: CliDoc): string[] {
   return ids;
 }
 
-// A removal that must happen (a nuke, the rollback of a failed mirror
-// start): `sm rm --force`, so the port-pool lease is released and the
-// teardown runs like any removal, and when that cleanup fails, again
-// without it, since leaving the worktree behind is not an option.
+// A removal that must happen (a nuke, the rollback of a failed or
+// cancelled move): `sm rm --force`, so the port-pool lease is released
+// and the teardown runs like any removal, and when that cleanup fails,
+// again without it, since leaving the worktree behind is not an
+// option. A cancelled move's rollback puts the cleanup on a clock too
+// (opts.timeoutMs): the user is cancelling something that hung, and a
+// teardown script that hangs the same way must not hold the cancel.
 export async function forceRemoveViaCli(
   project: Project,
   worktreeId: string,
+  opts: Pick<CliRunOpts, "timeoutMs"> = {},
 ): Promise<void> {
   const quiet = { notifyScript: () => {} };
+  // A run the clock killed has no document to read, so it reads as a
+  // cleanup failure. A worktree that is not there is not retried.
   const result = await deleteViaCli(
     project,
     { worktreeId, force: true },
     quiet,
-  );
+    opts,
+  ).catch((error: unknown) => {
+    if (isEntityGoneError(error)) throw error;
+    return { ok: false as const };
+  });
   if (!result.ok) {
     await deleteViaCli(
       project,

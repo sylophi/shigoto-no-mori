@@ -936,6 +936,7 @@ async function main() {
         "openSource",
         "receiveWorktree",
         "receiveBundle",
+        "cancelMove",
       ]) {
         assert.equal(
           syncContract.calls[key].remote,
@@ -948,15 +949,17 @@ async function main() {
           `sync.${key} must require the command grant`,
         );
       }
-      // The reads and the link open opt out of the viewer cache ping:
-      // they move no state a remote viewer caches (a capture taken over
-      // a link writes a ref the git watcher announces). The two
-      // receives land refs and a worktree, and keep it.
+      // The reads, the link open and the cancel opt out of the viewer
+      // cache ping: they move no state a remote viewer caches (a
+      // capture taken over a link writes a ref the git watcher
+      // announces, and a cancel's rollback resolves under the cancelled
+      // call). The two receives land refs and a worktree, and keep it.
       for (const key of [
         "ignoredPaths",
         "worktreeFolder",
         "hasCommits",
         "openSource",
+        "cancelMove",
       ]) {
         assert.equal(
           syncContract.calls[key].movesHostState,

@@ -156,6 +156,16 @@ export function makeTracker() {
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Polls a predicate, sync or async, until it holds.
+// Whether a process is still there (signal 0 delivers nothing).
+export function processAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function waitFor(predicate, what, timeoutMs = 5_000) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -366,10 +376,27 @@ function lineSplitter(onLine) {
   };
 }
 
+// The runner as the app's runs it (main/electron/cliRunner.ts): its
+// own process group, and a cancel (opts.signal) that kills the group,
+// so a proof can cut an `sm create` short mid-script the way a
+// cancelled move does.
 export function createCliRunner(binary, env) {
-  function runCli(args, onDoc) {
+  function runCli(args, onDoc, _extraEnv, opts) {
     return new Promise((resolve, reject) => {
-      const child = spawn(binary, ["--json", ...args], { env });
+      const child = spawn(binary, ["--json", ...args], {
+        env,
+        detached: true,
+      });
+      const signal = opts?.signal;
+      const onCancel = () => {
+        try {
+          process.kill(-child.pid, "SIGTERM");
+        } catch {
+          // Already gone.
+        }
+      };
+      if (signal?.aborted) onCancel();
+      else signal?.addEventListener("abort", onCancel, { once: true });
       const docs = [];
       child.stdout.on(
         "data",
@@ -388,9 +415,10 @@ export function createCliRunner(binary, env) {
         stderrTail = (stderrTail + chunk.toString("utf8")).slice(-4000);
       });
       child.on("error", reject);
-      child.on("close", (code) =>
-        resolve({ code: code ?? -1, docs, stderrTail }),
-      );
+      child.on("close", (code) => {
+        signal?.removeEventListener("abort", onCancel);
+        resolve({ code: code ?? -1, docs, stderrTail });
+      });
     });
   }
   async function sm(...args) {

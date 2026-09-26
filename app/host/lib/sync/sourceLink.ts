@@ -65,6 +65,8 @@ import { listRemoteEntries } from "@host/lib/git/remotes";
 import { mintHexId } from "@host/lib/hexId";
 import { primaryRefOf } from "@host/lib/projects";
 import { requireChannels } from "@host/socket/channelStreams";
+import { onAbort } from "@host/lib/util/abort";
+import { abortable, throwIfCancelled } from "./moves";
 
 // ---- The link: JSON lines and raw bytes over one channel.
 
@@ -89,6 +91,14 @@ export type Link = {
   end(): void;
   // Tears the channel down now, failing whatever waits on it.
   reset(): void;
+  // Aborted once the OTHER end reset the link (a sender that gave up,
+  // its cancel or its caller gone), or it was gone before this end
+  // attached. A landing run over a link a peer opened runs under it,
+  // so the sender's cancel reaches it without a word of its own. A
+  // clean end leaves it alone, and so does this end's own reset: a
+  // landing that fails and tears the link down is reporting its own
+  // failure, not a cancel.
+  closed: AbortSignal;
 };
 
 export function attachLink(
@@ -110,6 +120,7 @@ export function attachLink(
     arrived = null;
     waiting?.();
   };
+  const closed = new AbortController();
   const fail = (error: Error): void => {
     failure ??= error;
     wake();
@@ -129,6 +140,7 @@ export function attachLink(
       wake();
     },
     onReset() {
+      closed.abort();
       fail(new Error(LINK_GONE));
     },
     onWritable() {
@@ -136,7 +148,10 @@ export function attachLink(
       writable.clear();
     },
   });
-  if (!handle.open) fail(new Error(LINK_GONE));
+  if (!handle.open) {
+    closed.abort();
+    fail(new Error(LINK_GONE));
+  }
   // Resolves once something arrives, the other end ends, or the link
   // fails. One reader at a time: each side of a link is one loop.
   const arrival = (): Promise<void> =>
@@ -225,6 +240,7 @@ export function attachLink(
       handle.reset();
       fail(new Error(LINK_GONE));
     },
+    closed: closed.signal,
   };
 }
 
@@ -239,16 +255,20 @@ export function attachLinkFarEnd(ctx: HandlerContext, channelId: string): Link {
 
 // This device's end of a link to a peer, attached BEFORE the call that
 // opens the peer's end is sent, so the peer's first bytes always find
-// it. The call's rejection resets it.
+// it. The call's rejection resets it, and so does a cancel (`signal`)
+// while it waits, which a peer already asked then meets on the link.
 async function openLink(
   peer: Pick<PeerSyncApi, "channels">,
   open: (channelId: string) => Promise<unknown>,
+  signal?: AbortSignal,
 ): Promise<Link> {
+  throwIfCancelled(signal);
   const channelId = mintHexId();
-  const mux = await peer.channels();
+  const mux = await abortable(signal, peer.channels());
+  throwIfCancelled(signal);
   const link = attachLink((endpoint) => mux.attach(channelId, endpoint));
   try {
-    await open(channelId);
+    await abortable(signal, open(channelId));
   } catch (error) {
     link.reset();
     throw error;
@@ -491,17 +511,25 @@ async function cloneFactsOf(project: Project): Promise<CloneFacts> {
 // peer through `openOnPeer` (the call that makes the peer ask over it) and
 // answers the peer's questions until the call resolves. A run that
 // failed on this side's own answer throws that, not the peer's echo
-// of it.
+// of it. A cancel (`signal`, the move's) tears the link down and
+// fails the wait at once, without the peer's answer: the peer's
+// landing runs under the link (Link.closed) and stops with it. An
+// answer already on its way when the cancel came is a landing that
+// finished, which `onLate` gets to undo.
 export async function offerSource<T>(
   peer: Pick<PeerSyncApi, "channels">,
   project: Project,
   worktreeId: string,
   openOnPeer: (channelId: string) => Promise<T>,
   onProgress?: (frame: ProgressFrame) => void,
+  signal?: AbortSignal,
+  onLate?: (answer: T) => unknown,
 ): Promise<T> {
+  throwIfCancelled(signal);
   const channelId = mintHexId();
-  const mux = await peer.channels();
+  const mux = await abortable(signal, peer.channels());
   const link = attachLink((endpoint) => mux.attach(channelId, endpoint));
+  const offCancel = onAbort(signal, () => link.reset());
   // Only this side's own answers count as its failure: a link the peer
   // tore down as its run failed is that run's news, which the call
   // brings.
@@ -510,12 +538,13 @@ export async function offerSource<T>(
     () => {},
   );
   try {
-    return await openOnPeer(channelId);
+    return await abortable(signal, openOnPeer(channelId), onLate);
   } catch (error) {
     const own = failure.error;
     link.reset();
     throw own ?? error;
   } finally {
+    offCancel();
     // The peer ends its side as its call resolves. Once this side's
     // queue drains the channel is complete.
     link.end();
@@ -615,39 +644,50 @@ export function askSource(
 // A peer's source, for the length of `run`: the link opens on the first
 // question (sync:openSource on the peer), ends once `run` is done, and
 // is torn down when `run` throws, so a source still sending a bundle
-// stops.
+// stops. A cancel (`signal`) tears it down the same way, failing the
+// question `run` is waiting on.
 export async function withPeerSource<T>(
   peer: Pick<PeerSyncApi, "channels" | "openSource">,
   worktree: { projectId: string; worktreeId: string },
   run: (source: WorktreeSource) => Promise<T>,
+  signal?: AbortSignal,
 ): Promise<T> {
   let opened: Promise<Link> | undefined;
+  const resetLink = () =>
+    void opened?.then(
+      (link) => link.reset(),
+      () => {},
+    );
   const source = askSource(
     () =>
-      (opened ??= openLink(peer, (channelId) =>
-        peer.openSource({ ...worktree, channelId }),
+      (opened ??= openLink(
+        peer,
+        (channelId) => peer.openSource({ ...worktree, channelId }),
+        signal,
       )),
   );
+  const offCancel = onAbort(signal, resetLink);
   try {
     const result = await run(source);
     (await opened)?.end();
     return result;
   } catch (error) {
-    void opened?.then(
-      (link) => link.reset(),
-      () => {},
-    );
+    resetLink();
     throw error;
+  } finally {
+    offCancel();
   }
 }
 
 // A host handler's run over a link a peer opened: the link is the
 // source's, `run` asks over it, and it ends with the run or is torn
-// down when the run throws.
+// down when the run throws, or when `signal` fires.
 export async function withLinkSource<T>(
   link: Link,
   run: (source: WorktreeSource) => Promise<T>,
+  signal?: AbortSignal,
 ): Promise<T> {
+  const offCancel = onAbort(signal, () => link.reset());
   try {
     const result = await run(askSource(link));
     link.end();
@@ -655,5 +695,7 @@ export async function withLinkSource<T>(
   } catch (error) {
     link.reset();
     throw error;
+  } finally {
+    offCancel();
   }
 }

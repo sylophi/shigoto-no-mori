@@ -78,6 +78,7 @@ import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
 import { mirrorHandlers } from "./mirror";
 import { syncHandlers } from "./sync";
 import { worktreesHandlers } from "./worktrees";
+import { onAbort } from "@host/lib/util/abort";
 import { implSlot } from "@host/lib/util/implSlot";
 
 // The Electron layer injects the account and the peer reach at boot
@@ -920,15 +921,22 @@ async function mirrorFromPeer(
     );
   }
   const transport = peerTransportFor(device.deviceId);
+  const peerSync = buildClient(syncContract, transport);
   const notify = ctx.notifier(syncContract, "pullProgress");
-  const stopRelay = buildClient(syncContract, transport).pullProgress(
-    (frame) => {
-      const parsed = SyncPullProgressSchema.safeParse(frame);
-      if (parsed.success && parsed.data.sourceWorktreeId === input.worktreeId) {
-        notify(parsed.data);
-      }
-    },
-  );
+  const stopRelay = peerSync.pullProgress((frame) => {
+    const parsed = SyncPullProgressSchema.safeParse(frame);
+    if (parsed.success && parsed.data.sourceWorktreeId === input.worktreeId) {
+      notify(parsed.data);
+    }
+  });
+  // The CLI going away (Ctrl-C closes its socket, which aborts the
+  // context) cancels the start on the peer, the way the dialog's
+  // cancel does: the peer's send stops and the copy it made here goes.
+  const offCancel = onAbort(ctx.signal, () => {
+    void peerSync
+      .cancelMove({ sourceWorktreeId: input.worktreeId })
+      .catch(() => {});
+  });
   try {
     return MirrorStartToResultSchema.parse(
       await buildClient(mirrorContract, transport).startTo({
@@ -937,6 +945,7 @@ async function mirrorFromPeer(
       }),
     );
   } finally {
+    offCancel();
     stopRelay();
   }
 }

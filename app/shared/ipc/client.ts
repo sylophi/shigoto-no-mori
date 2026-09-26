@@ -364,6 +364,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       worktreeFolder: syncClient.worktreeFolder,
       pullWorktree: syncClient.pullWorktree,
       sendWorktree: syncClient.sendWorktree,
+      cancelMove: syncClient.cancelMove,
       teardownSource: syncClient.teardownSource,
       onPullProgress: syncClient.pullProgress,
     },

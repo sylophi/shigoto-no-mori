@@ -19,8 +19,8 @@ import {
 import type { Project, Worktree } from "@shared/schemas";
 import { useLocalDeviceName } from "@/hooks/account/useAccount";
 import {
-  type LandingChoice,
   type Move,
+  type MoveMutation,
   useMoveWorktree,
   useTeardownSource,
 } from "@/hooks/remote/useMoveWorktree";
@@ -43,6 +43,7 @@ const TITLES: Record<FlowStage, string> = {
   review: "Transplant worktree",
   running: "Transplanting",
   failed: "Transplant stopped",
+  cancelled: "Transplant cancelled",
   done: "Transplant complete",
 };
 
@@ -157,7 +158,7 @@ function TransplantFlow({
   // which peer (flow/peerTargets.ts makes both).
   landing?: Landing;
   toPeer?: DestinationPick;
-  pull: UseMutationResult<SyncPullWorktreeResult, Error, LandingChoice>;
+  pull: MoveMutation<SyncPullWorktreeResult>;
   teardown: UseMutationResult<SyncTeardownSourceResult, Error, void>;
   onClose: () => void;
 }) {
@@ -190,6 +191,9 @@ function TransplantFlow({
         failedNote: landing.onPeer
           ? `The copy here is untouched. If the worktree already landed ${landing.on}, open it from the sidebar instead of retrying.`
           : undefined,
+        cancelledNote: landing.onPeer
+          ? `Nothing landed ${landing.on}, and the copy here is untouched.`
+          : undefined,
         filesDetail: bringsFiles
           ? (selectionSummary(choice.selection) ?? "everything ignored, too")
           : undefined,
@@ -207,6 +211,8 @@ function TransplantFlow({
           {stage === "running" &&
             `${stepHeadline(progress.frame, sourceDeviceLabel, landing)}.`}
           {stage === "failed" && `Nothing on ${sourceDeviceLabel} changed.`}
+          {stage === "cancelled" &&
+            `Stopped where you asked. Nothing on ${sourceDeviceLabel} changed.`}
           {stage === "done" && (
             <>
               <span className="font-mono">{worktree.branch}</span> now lives on{" "}

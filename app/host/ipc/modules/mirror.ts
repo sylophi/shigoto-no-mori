@@ -71,7 +71,8 @@ import {
   requireRunningEngine,
 } from "@host/mirror/registry";
 import { attachFarEnd, requireChannels } from "@host/socket/channelStreams";
-import { sendWorktree } from "./sync";
+import { abortable, runMove, throwIfCancelled } from "@host/lib/sync/moves";
+import { rollBackSent, sendWorktree } from "./sync";
 
 // The daemon slot, the session labels and the raw session shapes live
 // in host/mirror/registry.ts, where the worktree delete can reach them
@@ -99,8 +100,7 @@ type Served = { entry: MirrorServing; stopIndexWatch: (() => void) | null };
 const serving = new Map<string, Served>();
 let onServingChange: (() => void) | null = null;
 let onServingGitChange:
-  | ((change: { projectId: string; worktreeId: string }) => void)
-  | null = null;
+  ((change: { projectId: string; worktreeId: string }) => void) | null = null;
 
 // main installs the two broadcast hooks at boot. Before that (and in
 // checks that never mount them) changes are simply unannounced.
@@ -110,8 +110,7 @@ export function setMirrorServingListener(listener: (() => void) | null): void {
 
 export function setMirrorGitChangedListener(
   listener:
-    | ((change: { projectId: string; worktreeId: string }) => void)
-    | null,
+    ((change: { projectId: string; worktreeId: string }) => void) | null,
 ): void {
   onServingGitChange = listener;
 }
@@ -244,51 +243,60 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
   // removed (the original still holds the branch and its uncommitted
   // changes), or a retry would refuse on the branch the failed attempt
   // left behind. That removal is best effort: its own failure is
-  // logged, not thrown over the real error.
+  // logged, not thrown over the real error. A cancel (sync:cancelMove,
+  // by the worktree, from the caller: the copy's device when it asked
+  // for the mirror) is the send's cancel while the send runs, and
+  // past it the same rollback as a failed session open, the session
+  // ended if the open outran the cancel.
   startTo: async (input: z.infer<typeof MirrorStartToPayloadSchema>, ctx) => {
     const daemon = requireRunningEngine();
     const { ignoreMode, ignores, ...sendInput } = input;
-    const { source, result: sent } = await sendWorktree(sendInput, ctx, {
-      mirror: true,
-    });
-    // The copy's root as the peer's landing answered it, re-parsed by
-    // the send.
-    const copy = sent.worktree;
-    let session: string;
-    try {
-      session = await daemon.create({
-        localRoot: source.path,
-        deviceId: input.targetDeviceId,
-        projectId: copy.projectId,
-        worktreeId: copy.id,
-        remoteRoot: copy.path,
-        name: source.branch,
-        localWorktreeId: source.id,
-        labels: {
-          [MIRROR_LABEL_LOCAL_PROJECT]: source.projectId,
-          [MIRROR_LABEL_LOCAL_WORKTREE]: source.id,
-          [MIRROR_LABEL_IGNORE_MODE]: ignoreMode,
-          [MIRROR_LABEL_COPY_SIDE]: "remote",
-          ...(source.isPrimary ? { [MIRROR_LABEL_MIRROR_BRANCH]: "1" } : {}),
-        },
-        ignores,
+    return runMove(ctx, input.worktreeId, async (signal) => {
+      const { source, result: sent } = await sendWorktree(sendInput, ctx, {
+        mirror: true,
+        signal,
       });
-    } catch (error) {
-      await peerWorktreesApiFor(input.targetDeviceId)
-        .delete({ projectId: copy.projectId, worktreeId: copy.id, force: true })
-        .catch((rollbackError: unknown) => {
-          console.warn(
-            `[mirror] could not remove the peer's copy of a failed start: ${errorMessageOf(rollbackError)}`,
-          );
-        });
-      throw error;
-    }
-    daemon.noteEvent(
-      source.id,
-      "started",
-      summarizeIgnores(ignoreMode, ignores),
-    );
-    return { ...sent, session };
+      // The copy's root as the peer's landing answered it, re-parsed by
+      // the send.
+      const copy = sent.worktree;
+      let session: string;
+      try {
+        throwIfCancelled(signal);
+        // A session the open made after the cancel is ended again.
+        session = await abortable(
+          signal,
+          daemon.create({
+            localRoot: source.path,
+            deviceId: input.targetDeviceId,
+            projectId: copy.projectId,
+            worktreeId: copy.id,
+            remoteRoot: copy.path,
+            name: source.branch,
+            localWorktreeId: source.id,
+            labels: {
+              [MIRROR_LABEL_LOCAL_PROJECT]: source.projectId,
+              [MIRROR_LABEL_LOCAL_WORKTREE]: source.id,
+              [MIRROR_LABEL_IGNORE_MODE]: ignoreMode,
+              [MIRROR_LABEL_COPY_SIDE]: "remote",
+              ...(source.isPrimary
+                ? { [MIRROR_LABEL_MIRROR_BRANCH]: "1" }
+                : {}),
+            },
+            ignores,
+          }),
+          (made) => daemon.terminate(made),
+        );
+      } catch (error) {
+        await rollBackSent(input.targetDeviceId, copy);
+        throw error;
+      }
+      daemon.noteEvent(
+        source.id,
+        "started",
+        summarizeIgnores(ignoreMode, ignores),
+      );
+      return { ...sent, session };
+    });
   },
 
   // Stop ends the session and removes the copy the mirror made: the
