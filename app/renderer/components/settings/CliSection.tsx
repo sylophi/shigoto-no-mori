@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { SectionHeading, SectionIntro } from "@/components/ui/section-heading";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { tildify } from "@/lib/projectPaths";
+import { tildify } from "@shared/projectPaths";
 import { gatedHostReadMeta } from "@/lib/queryClientOptions";
 import type {
   CliStatus,

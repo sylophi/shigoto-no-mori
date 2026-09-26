@@ -4,9 +4,9 @@
 // The default mirrors the source's own layout, the source's path with
 // its home swapped for the destination's, so the two machines end up
 // alike without a pick. A path outside the source's home falls back to
-// where the destination keeps its repos (addProject/
-// cloneDestination.ts). The mutation gets the pair as the move's
-// `cloneInto`. The source is the device the dialog sits under, the
+// where the destination keeps its repos (shared/cloneDestination.ts,
+// which the CLI's send reads too). The mutation gets the pair as the
+// move's `cloneInto`. The source is the device the dialog sits under, the
 // destination the one DestinationScope names (this machine unless the
 // flow goes to a peer).
 //
@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { PathSpan } from "@/components/ui/path-span";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
-import { defaultCloneParent } from "@/components/addProject/cloneDestination";
+import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { projectsQueryOptions } from "@/hooks/projects/useProjects";
 import {
   DestinationScope,
@@ -31,13 +31,7 @@ import {
   useHostScope,
 } from "@/hooks/remote/useHostScope";
 import { runtimeInfoQueryOptions } from "@/hooks/system/useRuntimeInfo";
-import {
-  ensureTrailingSep,
-  getBrowseLeafSegment,
-  getBrowseParentPath,
-  normalizeForSubmit,
-  tildify,
-} from "@/lib/projectPaths";
+import { ensureTrailingSep, tildify } from "@shared/projectPaths";
 import { CARD } from "./FlowChrome";
 
 export type CloneDestination = {
@@ -82,20 +76,21 @@ function useCloneDestination(
   } | null>(null);
 
   const destinationHome = destinationRuntime?.homedir ?? null;
-  const name = getBrowseLeafSegment(sourceProject.path);
-  const sourceParent = getBrowseParentPath(sourceProject.path);
-  const alike =
-    sourceParent === null
-      ? null
-      : tildify(sourceParent, sourceRuntime?.homedir);
   const parent =
     (picked?.deviceId === destination.deviceId ? picked.parent : null) ??
-    (alike?.startsWith("~") ? alike : null) ??
-    (enabled ? defaultCloneParent(destinationProjects, destinationHome) : "~/");
+    (enabled
+      ? moveCloneParent({
+          sourcePath: sourceProject.path,
+          sourceHome: sourceRuntime?.homedir,
+          destinationHome,
+          destinationProjects,
+        })
+      : "~/");
+  const cloneInto = cloneIntoOf(parent, sourceProject.path);
   return {
     projectName: sourceProject.name,
-    cloneInto: { parentDir: normalizeForSubmit(parent), name },
-    dest: `${parent}${name}`,
+    cloneInto,
+    dest: `${parent}${cloneInto.name}`,
     setParent: (chosen) =>
       setPicked({
         deviceId: destination.deviceId,

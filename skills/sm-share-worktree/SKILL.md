@@ -14,7 +14,9 @@ sm worktrees mirror [<name>] [--to <device>]
 ```
 
 The worktree lands on their machine with its uncommitted changes, and the two
-follow each other from then on. Tell them the path it reports.
+follow each other from then on. Tell them the path it reports. A machine with
+no checkout of the repo clones it first, beside its other repos or where
+`--clone-into <dir>` says (a folder on their machine).
 
 **"Take over what I did locally": mirror their worktree to you.**
 

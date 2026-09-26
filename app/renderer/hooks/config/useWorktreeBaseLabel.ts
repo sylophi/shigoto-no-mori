@@ -7,7 +7,7 @@ import type { Project } from "@shared/schemas";
 import { layoutInputsFor, worktreeBaseFor } from "@shared/git/worktreeLayout";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { tildify } from "@/lib/projectPaths";
+import { tildify } from "@shared/projectPaths";
 
 export function useWorktreeBaseLabel(
   project: Pick<Project, "id" | "path">,

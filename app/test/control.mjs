@@ -31,6 +31,11 @@
 //     the copy on the peer, a second `mirror` answers with the running
 //     one, and `unmirror` is refused until the follower reports synced
 //     (stop-unconfirmed), then removes the peer's copy.
+//   - `send` to a peer with no checkout of the repo (the sending side
+//     on a registry of its own) clones the repo there first, in the
+//     dialogs' default place, and lands the copy in the clone, where
+//     `devices` said it would take a send and `bring` from it was
+//     refused as holding no checkout.
 //   - `mirror --from` is refused while this device refuses commands,
 //     then asks the peer to run the mirror (its mirror:startTo, on its
 //     own engine) and send the copy here, relaying its progress. The
@@ -46,14 +51,17 @@
 // test/sync-transfer.mjs: what separates them is the direct wire.
 // Runs under test/lib/register-ts-alias.mjs. Run: pnpm test control.
 import assert from "node:assert/strict";
+import { AsyncLocalStorage } from "node:async_hooks";
 import {
   existsSync,
+  mkdirSync,
   readFileSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { createConnection } from "node:net";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { buildClient } from "@shared/ipc/buildClient";
 import { controlContract } from "@shared/ipc/modules/control";
@@ -64,12 +72,15 @@ import {
   mirrorContract,
 } from "@shared/ipc/modules/mirror";
 import { projectsContract } from "@shared/ipc/modules/projects";
+import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import { registerContract } from "@shared/ipc/registerContract";
 import { controlHandlers, setControlImpl } from "@host/ipc/modules/control";
 import { mirrorHandlers, setMirrorImpl } from "@host/ipc/modules/mirror";
+import { setCliRunnerImpl } from "@host/ipc/cliDelegate";
 import { projectsHandlers } from "@host/ipc/modules/projects";
+import { runtimeHandlers } from "@host/ipc/modules/runtime";
 import { syncHandlers } from "@host/ipc/modules/sync";
 import {
   setWorktreeRemovalBroadcaster,
@@ -81,7 +92,12 @@ import {
   CONTROL_FILE_NAME,
   createControlServer,
 } from "../main/core/control/server.ts";
-import { makeProof, makeTracker } from "./lib/checkKit.mjs";
+import {
+  cliFailureMessage,
+  createCliRunner,
+  makeProof,
+  makeTracker,
+} from "./lib/checkKit.mjs";
 import { cliSandbox } from "./lib/cliSandbox.mjs";
 import { bootDirectWire } from "./lib/directBoot.mjs";
 
@@ -308,12 +324,31 @@ async function main() {
     const mirrorOnA = Object.fromEntries(
       Object.entries(mirrorHandlers).map(([key, run]) => [key, asA(run)]),
     );
+    const runtimeFacts = {
+      dataDir,
+      dataDirSource: "env",
+      atDefaultDataDir: false,
+      canonicalDataDirName: ".smd",
+    };
     const { listener, peerA } = await bootDirectWire(track, {
       contracts: [
         [syncContract, syncHandlers],
         [worktreesContract, worktreesHandlers],
         [projectsContract, projectsHandlers],
         [mirrorContract, mirrorOnA],
+        // The peer's home, which a send's default clone place reads.
+        // The data-dir facts beside it need a booted data dir, which
+        // the sandbox's seeded one is not, and are not read here.
+        [
+          runtimeContract,
+          {
+            ...runtimeHandlers,
+            info: () => ({
+              ...runtimeFacts,
+              homedir: homedir(),
+            }),
+          },
+        ],
       ],
     });
     setPeerSyncApiImpl({
@@ -898,6 +933,120 @@ async function main() {
     peerOwns = targetProjectId;
     ok(
       "mirror --from of the peer's primary: lands as a worktree on mirror/main in mirror-<name>, labelled for the follower, and unmirror removes the copy with the peer's primary untouched",
+    );
+
+    // ---- (7d) A peer with no checkout of the repo takes a send: it
+    // clones the repo first, where the dialogs would, and the copy
+    // lands in the clone, while a bring from it is refused. The sending
+    // side needs a registry of its own, where the lone repo is
+    // registered and the peer's (the shared one) has never seen it: a
+    // second data dir behind a second control server, whose ops each
+    // run in an async context the CLI runner seam (process-wide)
+    // switches on.
+    // The peer answers on the direct wire, outside that context.
+    const otherDataDir = join(sandbox, "data-other");
+    mkdirSync(otherDataDir);
+    const otherCli = createCliRunner(fixture.smBinary, {
+      ...fixture.smEnv,
+      SHIGOMORI_DATA_DIR: otherDataDir,
+    });
+    const asOtherDevice = new AsyncLocalStorage();
+    setCliRunnerImpl({
+      runCli: (args, onDoc) =>
+        (asOtherDevice.getStore() === true ? otherCli : fixture).runCli(
+          args,
+          onDoc,
+        ),
+      requireCliBinary: () => fixture.smBinary,
+      cliFailureMessage,
+    });
+    const otherControl = createControlServer({
+      appVersion: () => "9.9.9",
+      filePath: () => join(otherDataDir, CONTROL_FILE_NAME),
+      log: () => {},
+    });
+    registerContract(
+      controlContract,
+      Object.fromEntries(
+        Object.entries(controlHandlers).map(([key, run]) => [
+          key,
+          (input, ctx) => asOtherDevice.run(true, () => run(input, ctx)),
+        ]),
+      ),
+      otherControl.transport,
+      { validateOutputs: true },
+    );
+    await otherControl.start();
+    track(() => otherControl.stop());
+    // Deep in the sandbox, outside the home folder: the default place
+    // is then where the peer keeps its repos (the sandbox, beside its
+    // two), under the repo's own folder name.
+    const loneRepo = join(sandbox, "lone", "src", "lone-repo");
+    mkdirSync(join(sandbox, "lone", "src"), { recursive: true });
+    await git(join(sandbox, "lone", "src"), [
+      "init",
+      "-q",
+      "-b",
+      "main",
+      "lone-repo",
+    ]);
+    await fixture.disableAutoGc(loneRepo);
+    await fixture.commitFile(loneRepo, "root.txt", "root\n", "root");
+    const loneWtPath = await addWorktree(
+      loneRepo,
+      "lone-wt",
+      "lone-feature",
+      "lone.txt",
+    );
+    writeFileSync(join(loneWtPath, "lone-draft.txt"), "lone draft\n");
+    await otherCli.sm("projects", "add", "--", loneRepo);
+    const otherDoc = async (args) => finalDoc(await otherCli.runCli(args));
+    const loneDevices = await otherDoc(["devices", "-p", "lone-repo"]);
+    assert.equal(
+      loneDevices.devices.find((device) => device.name === "Studio Mac")?.block,
+      "no-project",
+    );
+    const noBring = await otherDoc([
+      "worktrees",
+      "bring",
+      "lone-feature",
+      "-p",
+      "lone-repo",
+      "--from",
+      "Studio Mac",
+    ]);
+    assert.equal(noBring.code, "device-blocked", noBring.error);
+    assert.match(noBring.error, /has no checkout of this repo/);
+    const cloneRun = await otherCli.runCli([
+      "worktrees",
+      "send",
+      "lone-wt",
+      "-p",
+      "lone-repo",
+      "--to",
+      "Studio Mac",
+    ]);
+    const cloneSent = finalDoc(cloneRun);
+    assert.equal(cloneRun.code, 0, cloneSent?.error);
+    assert.equal(cloneSent.cloned?.path, join(sandbox, "lone-repo"));
+    assert.equal(cloneSent.worktree.projectId, cloneSent.cloned.id);
+    assert.equal(cloneSent.worktree.branch, "lone-feature");
+    assert.equal(
+      readFileSync(join(cloneSent.worktree.path, "lone-draft.txt"), "utf8"),
+      "lone draft\n",
+      "the uncommitted work landed in the clone's worktree",
+    );
+    assert.ok(
+      progressOf(cloneRun).some((doc) => doc.step === "clone"),
+      "the clone step was never reported",
+    );
+    setCliRunnerImpl({
+      runCli: fixture.runCli,
+      requireCliBinary: () => fixture.smBinary,
+      cliFailureMessage,
+    });
+    ok(
+      "send to a peer with no checkout: devices says it takes a send, a bring from it is refused, and the send clones the repo in the default place first and lands the copy there",
     );
 
     // ---- (8) The peer going away mid-life reads as offline, not as a hang.

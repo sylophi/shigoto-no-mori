@@ -15,7 +15,7 @@ import {
   ensureTrailingSep,
   isAnchoredPath,
   normalizeForSubmit,
-} from "@/lib/projectPaths";
+} from "@shared/projectPaths";
 import { BrowseKeyHints, BrowseUpItem } from "./BrowseListParts";
 
 // Prefix used as the cmdk `value` for browse-list items. `hasHighlighted`

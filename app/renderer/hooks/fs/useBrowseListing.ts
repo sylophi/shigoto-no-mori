@@ -8,7 +8,7 @@ import {
   getBrowseLeafSegment,
   getBrowseParentPath,
   hasTrailingSlash,
-} from "@/lib/projectPaths";
+} from "@shared/projectPaths";
 import { useFsListDirectory } from "@/hooks/fs/useFsListDirectory";
 
 interface UseBrowseListingOptions {

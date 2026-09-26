@@ -3,7 +3,7 @@ import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
-import { tildify } from "@/lib/projectPaths";
+import { tildify } from "@shared/projectPaths";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";

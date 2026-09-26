@@ -8,6 +8,7 @@
 // holding the original, so `mirror --from` asks the peer to run its
 // mirror:startTo into this device, and relays the peer's progress.
 // Nothing here moves a byte or touches git itself.
+import { homedir } from "node:os";
 import { buildClient } from "@shared/ipc/buildClient";
 import {
   type ControlDevice,
@@ -26,7 +27,14 @@ import {
   MirrorStartToResultSchema,
 } from "@shared/ipc/modules/mirror";
 import { projectsContract } from "@shared/ipc/modules/projects";
-import { SyncPullProgressSchema, syncContract } from "@shared/ipc/modules/sync";
+import { runtimeContract } from "@shared/ipc/modules/runtime";
+import {
+  type SyncCloneInto,
+  SyncPullProgressSchema,
+  syncContract,
+} from "@shared/ipc/modules/sync";
+import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
+import { tildify } from "@shared/projectPaths";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { hostsProjects } from "@shared/account/platform";
@@ -46,6 +54,8 @@ import { PROBE_TIMEOUT_MS } from "@shared/ipc/socket/frames";
 import {
   isRealBranch,
   type Project,
+  ProjectSchema,
+  RuntimeInfoSchema,
   type Worktree,
   WorktreeSchema,
 } from "@shared/schemas";
@@ -175,6 +185,9 @@ async function standingsOf(
   );
 }
 
+// Command access comes first: a send needs it whether or not the device
+// holds the repo (without it, it clones the repo first), and a bring
+// needs both.
 async function standingOf(
   device: DeviceInfo,
   identity: string | null,
@@ -205,12 +218,13 @@ async function standingOf(
             (project) =>
               project.identity === identity && project.pathExists !== false,
           );
-    if (held === undefined) return { ...base, block: "no-project" };
-    return {
-      ...base,
-      projectId: held.id,
-      ...(grant && !acceptsCommands ? { block: "no-grant" as const } : {}),
-    };
+    const holding = held === undefined ? {} : { projectId: held.id };
+    if (grant && !acceptsCommands) {
+      return { ...base, ...holding, block: "no-grant" };
+    }
+    return held === undefined
+      ? { ...base, block: "no-project" }
+      : { ...base, ...holding };
   } catch {
     // The session dropped between the roster read and the ask.
     return offline;
@@ -279,7 +293,10 @@ async function candidates(
   return { identity, standings: await standingsOf(asked, identity, { grant }) };
 }
 
-// The one device a transfer goes to or comes from.
+// The one device a send goes to. A device with no checkout of the repo
+// takes it too (it clones the repo first, as the dialogs offer), but
+// only when no device holding the repo could: left unnamed, a send
+// lands where the repo already is.
 async function pickDevice(
   project: Project,
   query: string | undefined,
@@ -287,7 +304,11 @@ async function pickDevice(
   const { identity, standings } = await candidates(project, query, {
     grant: true,
   });
-  const ready = standings.filter((device) => device.block === undefined);
+  const holding = standings.filter((device) => device.block === undefined);
+  const ready =
+    holding.length > 0
+      ? holding
+      : standings.filter((device) => device.block === "no-project");
   if (ready.length === 1) return { identity, target: ready[0] };
   if (ready.length > 1) {
     throw new ControlError(
@@ -592,6 +613,15 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
         projectId: project.id,
         worktreeId: worktree.id,
         ...choice,
+        ...(target.projectId === undefined
+          ? {
+              cloneInto: await cloneIntoOn(
+                target.deviceId,
+                project,
+                input.cloneInto,
+              ),
+            }
+          : {}),
       };
       if (mirror) {
         const { session, ...sent } = await mirrorHandlers.startTo(payload, ctx);
@@ -623,6 +653,14 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
       const { identity, standings } = await candidates(project, input.device, {
         grant: true,
       });
+      // A device named that holds no checkout has no worktree to bring
+      // (a send to it would clone the repo there, a bring cannot).
+      if (input.device !== undefined && standings[0]?.block === "no-project") {
+        throw new ControlError(
+          "device-blocked",
+          `"${standings[0].name}" ${BLOCK_REASON["no-project"]}, so it has nothing to bring.`,
+        );
+      }
       const { worktrees, unanswered } = await worktreesOn(standings);
       const found = pickWorktree(worktrees, input.worktree, [
         ...standings.filter((device) => device.block === "offline"),
@@ -901,6 +939,38 @@ async function mirrorFromPeer(
   } finally {
     stopRelay();
   }
+}
+
+// Where a send clones the repo on a device with no checkout of it, as
+// the dialogs' review defaults it (shared/cloneDestination.ts): the
+// source's own layout with this device's home swapped for the
+// target's, or where the target keeps its repos. `parent` is the
+// caller's pick, a path under this device's home read as the same path
+// under the target's, the way the default is. The target's home and
+// projects are its own answers, over the grant the send needs anyway.
+async function cloneIntoOn(
+  deviceId: string,
+  project: Project,
+  parent: string | undefined,
+): Promise<SyncCloneInto> {
+  const here = homedir();
+  if (parent !== undefined) {
+    return cloneIntoOf(tildify(parent, here), project.path);
+  }
+  const transport = requireImpl().peerTransportFor(deviceId);
+  const [info, projects] = await Promise.all([
+    buildClient(runtimeContract, transport).info(),
+    buildClient(projectsContract, transport).list(),
+  ]);
+  return cloneIntoOf(
+    moveCloneParent({
+      sourcePath: project.path,
+      sourceHome: here,
+      destinationHome: RuntimeInfoSchema.parse(info).homedir,
+      destinationProjects: ProjectSchema.array().parse(projects),
+    }),
+    project.path,
+  );
 }
 
 // Every worktree of the repo that could move, on the peers that hold

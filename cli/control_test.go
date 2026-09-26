@@ -235,20 +235,20 @@ func TestTransferOptionsValidation(t *testing.T) {
 		{"--source", "burn"},
 		{"--setup", "--no-setup"},
 	} {
-		if _, err := transferOptions(parse(bad...), "", false); exitCodeOf(err) != 2 {
+		if _, err := transferOptions(parse(bad...), "", false, true); exitCodeOf(err) != 2 {
 			t.Errorf("%v: err = %v, want a usage error", bad, err)
 		}
 	}
 	// The saved rule is the absent default, not a value to spell.
-	if _, err := transferOptions(parse("--leave-out", "preset"), "", false); exitCodeOf(err) != 2 {
+	if _, err := transferOptions(parse("--leave-out", "preset"), "", false, true); exitCodeOf(err) != 2 {
 		t.Errorf("--leave-out preset: err = %v, want a usage error", err)
 	}
 	// A mirror keeps its source, so a fate for it is a contradiction.
-	if _, err := transferOptions(parse("--source", "teardown"), "", true); exitCodeOf(err) != 2 {
+	if _, err := transferOptions(parse("--source", "teardown"), "", true, true); exitCodeOf(err) != 2 {
 		t.Errorf("--source on a mirror: err = %v, want a usage error", err)
 	}
 
-	input, err := transferOptions(parse("--leave-out", "gitignored", "--no-setup", "--source", "shelve"), "Studio Mac", false)
+	input, err := transferOptions(parse("--leave-out", "gitignored", "--no-setup", "--source", "shelve"), "Studio Mac", false, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,8 +263,40 @@ func TestTransferOptionsValidation(t *testing.T) {
 	}
 	// Nothing asked, nothing sent: the app applies the project's preset
 	// and the rule's own setup default.
-	if bare, _ := transferOptions(parse(), "", false); len(bare) != 0 {
+	if bare, _ := transferOptions(parse(), "", false, true); len(bare) != 0 {
 		t.Errorf("bare options = %v, want none", bare)
+	}
+
+	// --clone-into names a folder on the device a send (or a mirror
+	// --to) goes to, passed through as given: the app reads a leading ~
+	// as that device's home.
+	for _, mirror := range []bool{false, true} {
+		sent, err := transferOptions(parse("--clone-into", "~/code"), "", mirror, true)
+		if err != nil || sent["cloneInto"] != "~/code" {
+			t.Errorf("--clone-into on a send (mirror %v): input = %v, err = %v", mirror, sent, err)
+		}
+	}
+	// A bring lands in this device's own checkout, and a blank folder
+	// (an unset shell variable) is no folder.
+	if _, err := transferOptions(parse("--clone-into", "~/code"), "", true, false); exitCodeOf(err) != 2 {
+		t.Errorf("--clone-into on a bring: err = %v, want a usage error", err)
+	}
+	if _, err := transferOptions(parse("--clone-into", " "), "", false, true); exitCodeOf(err) != 2 {
+		t.Errorf("a blank --clone-into: err = %v, want a usage error", err)
+	}
+}
+
+func TestTransferHeadlineNamesTheClone(t *testing.T) {
+	var result controlTransferResult
+	_ = json.Unmarshal([]byte(`{"worktree":{"name":"feat"},"device":{"name":"Studio Mac"},"cloned":{"name":"repo","path":"/Users/rin/code/repo"}}`), &result)
+	got := transferHeadline(result, true, true)
+	want := `mirroring feat to "Studio Mac", having cloned repo into /Users/rin/code/repo on "Studio Mac" first`
+	if got != want {
+		t.Errorf("headline = %q, want %q", got, want)
+	}
+	result.Cloned = nil
+	if got := transferHeadline(result, false, true); got != `sent feat to "Studio Mac"` {
+		t.Errorf("headline without a clone = %q", got)
 	}
 }
 

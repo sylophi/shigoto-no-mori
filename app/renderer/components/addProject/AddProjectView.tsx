@@ -17,7 +17,7 @@ import {
   isAnchoredPath,
   normalizeForSubmit,
   tildify,
-} from "@/lib/projectPaths";
+} from "@shared/projectPaths";
 import { Button } from "@/components/ui/button";
 import { ChipButton } from "@/components/ui/chip-button";
 import { FileManagerIcon } from "@/components/ui/file-manager";
@@ -43,7 +43,7 @@ import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { Kbd, KbdGroup, KbdHint } from "@/components/ui/kbd";
 import { ITEM_CLASS, keepFocusInInput } from "@/components/ui/cmdk-classes";
 import { CloneDestination, CloningPanel } from "./ClonePanel";
-import { defaultCloneParent } from "./cloneDestination";
+import { defaultCloneParent } from "@shared/cloneDestination";
 import { ScanningPanel } from "./ScanningPanel";
 import { ResultsPanel } from "./ResultsPanel";
 import { useBrowseState } from "./useBrowseState";

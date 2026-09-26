@@ -11,7 +11,7 @@ import {
   useConfirmTwice,
 } from "@/hooks/ui/useConfirmTwice";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
-import { tildify } from "@/lib/projectPaths";
+import { tildify } from "@shared/projectPaths";
 import { notifyError } from "@/lib/toast";
 
 export function DangerZone() {
