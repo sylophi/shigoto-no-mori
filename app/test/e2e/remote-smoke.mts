@@ -80,8 +80,24 @@ const gitEnv = {
   GIT_COMMITTER_NAME: "E2E",
   GIT_COMMITTER_EMAIL: "e2e@example.com",
 };
-const git = (cwd: string, ...args: string[]) =>
-  execFileSync("git", args, { cwd, env: gitEnv, stdio: "pipe" });
+// A mirror's git follower writes the copy's index between the test's
+// own git calls, so a call can meet its lock. Git's own advice holds:
+// the lock is momentary, so the call is retried a few times before it
+// counts as a failure.
+const INDEX_LOCK_RETRIES = 10;
+const git = (cwd: string, ...args: string[]): Buffer => {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return execFileSync("git", args, { cwd, env: gitEnv, stdio: "pipe" });
+    } catch (error) {
+      const stderr = String((error as { stderr?: Buffer }).stderr ?? "");
+      if (!stderr.includes("index.lock") || attempt >= INDEX_LOCK_RETRIES) {
+        throw error;
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 300);
+    }
+  }
+};
 const gitOut = (cwd: string, ...args: string[]) =>
   git(cwd, ...args)
     .toString()
@@ -2060,6 +2076,14 @@ async function main(): Promise<string[]> {
         30_000,
       );
     const clickText = (text: string) => click(text, byText(text));
+    // A sidebar row can sit below the fold, and the list is
+    // virtualized, so a row out of view is not in the DOM at all. Each
+    // try that finds nothing pages the sidebar down, wrapping to the
+    // top at the end, until the row is there to click.
+    const SIDEBAR_VIEWPORT = `[...document.querySelectorAll('[data-slot="scroll-area-viewport"]')].find((v) => v.getBoundingClientRect().left < 300 && v.scrollHeight > v.clientHeight)`;
+    const seekRow = (text: string) =>
+      `(() => { const el = ${byText(text)}; if (el) return el; const v = ${SIDEBAR_VIEWPORT}; if (v) v.scrollTop = v.scrollTop + v.clientHeight >= v.scrollHeight ? 0 : v.scrollTop + v.clientHeight * 0.8; return null; })()`;
+    const clickRow = (what: string, text: string) => click(what, seekRow(text));
     const waitSwitch = (checked: boolean, why: string) =>
       a.waitFor(
         `the setup switch to read ${checked ? "on" : "off"} (${why})`,
@@ -2067,7 +2091,7 @@ async function main(): Promise<string[]> {
         30_000,
       );
     const openDialogFor = async (source: Worktree, button: string) => {
-      await click(`the sidebar row of ${source.branch}`, byText(source.branch));
+      await clickRow(`the sidebar row of ${source.branch}`, source.branch);
       await click(`the ${button} button`, byText(button));
       await a.waitFor(
         "the review to show the setup switch",
@@ -2167,7 +2191,7 @@ async function main(): Promise<string[]> {
           "a already holds lone",
         );
         // b's lone is the one row of that name in a's sidebar.
-        await click("the sidebar row of b's lone primary", byText("lone"));
+        await clickRow("the sidebar row of b's lone primary", "lone");
         await click("the Mirror here button", byText("Mirror here"));
         await a.waitFor(
           "the review to offer the clone",
@@ -2407,7 +2431,7 @@ async function main(): Promise<string[]> {
       // row is there, since a list still fresh is not re-read.
       await a.waitFor(
         "a's sidebar to list the new worktree",
-        `(window.dispatchEvent(new Event("blur")), window.dispatchEvent(new Event("focus")), Boolean(${byText("edge/ui-sent")}))`,
+        `(window.dispatchEvent(new Event("blur")), window.dispatchEvent(new Event("focus")), Boolean(${seekRow("edge/ui-sent")}))`,
         120_000,
       );
       await openDialogFor(source, "Transplant to…");
