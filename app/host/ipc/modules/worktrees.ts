@@ -35,7 +35,7 @@ import {
   findWorktreePathOrThrow,
 } from "@host/lib/projects";
 import {
-  getInflightDeleteIds,
+  assertWorktreeMutable,
   getRunningScriptWorktrees,
   withDeleteInflight,
 } from "@host/lib/scripts";
@@ -154,9 +154,10 @@ export const worktreesHandlers: Handlers<
     // same way), so its "kept" cannot close the first one's removal
     // under every viewer. The close carries the outcome, so a viewer
     // drops the row exactly when the delete did.
-    if (getInflightDeleteIds().has(worktreeId)) {
-      throw new Error("This worktree is already being removed.");
-    }
+    assertWorktreeMutable(
+      worktreeId,
+      "This worktree is already being removed.",
+    );
     broadcastRemoval?.({ projectId, worktreeId, state: "removing" });
     let removed = false;
     try {

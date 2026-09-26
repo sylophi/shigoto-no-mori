@@ -7,10 +7,8 @@ import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-bu
 
 export function ClosedPullRequestBox({ worktree }: { worktree: Worktree }) {
   const { data: siblings = [] } = useWorktrees(worktree.projectId);
-  const { deleteMutation, runDelete } = useDeleteAndNavigate(
-    worktree,
-    siblings,
-  );
+  const { deleteMutation, runDelete, deleteBlockedReason } =
+    useDeleteAndNavigate(worktree, siblings);
   const { armed, trigger } = useConfirmTwice(CONFIRM_QUICK_MS);
 
   return (
@@ -22,6 +20,7 @@ export function ClosedPullRequestBox({ worktree }: { worktree: Worktree }) {
           pendingLabel="Deleting…"
           idleLabel="Delete worktree"
           onClick={() => trigger(() => runDelete())}
+          disabledReason={deleteBlockedReason}
         />
       </div>
       {deleteMutation.error && (

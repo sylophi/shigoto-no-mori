@@ -5,6 +5,9 @@ package main
 // from one to the other changes nothing a script can see.
 
 import (
+	"encoding/json"
+	"io"
+	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -83,5 +86,56 @@ func TestLifecycleEnv(t *testing.T) {
 	jsonMode = true
 	if got := lookup(lifecycleEnv(in), "COLORTERM"); got != "truecolor" {
 		t.Errorf("--json COLORTERM = %q, want truecolor (the app's console)", got)
+	}
+}
+
+// The app stops a CLI-run script by the pid on its "started" event, so
+// the event must carry one and land before any of the run's output.
+func TestLifecycleScriptStartedCarriesPidAheadOfOutput(t *testing.T) {
+	saved := jsonMode
+	t.Cleanup(func() { jsonMode = saved })
+	jsonMode = true
+
+	stdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = stdout })
+	read := make(chan string, 1)
+	go func() {
+		data, _ := io.ReadAll(r)
+		read <- string(data)
+	}()
+
+	in := scriptEnvInputs{scriptName: "setup", worktree: worktreeIdentity{ID: "abc", Name: "fox", Path: t.TempDir()}}
+	code, runID := runLifecycleScript("echo hi", in, scriptSlot{Kind: "setup"})
+	w.Close()
+	os.Stdout = stdout
+	if code != 0 {
+		t.Fatalf("exit code = %d", code)
+	}
+
+	var kinds []string
+	var pid float64
+	for _, line := range strings.Split(strings.TrimSpace(<-read), "\n") {
+		var doc map[string]any
+		if err := json.Unmarshal([]byte(line), &doc); err != nil {
+			t.Fatalf("%q: %v", line, err)
+		}
+		if doc["runId"] != runID {
+			t.Errorf("runId = %v, want %s", doc["runId"], runID)
+		}
+		kinds = append(kinds, doc["kind"].(string))
+		if doc["kind"] == "started" {
+			pid, _ = doc["pid"].(float64)
+		}
+	}
+	if !reflect.DeepEqual(kinds, []string{"started", "data", "exit"}) {
+		t.Errorf("event kinds = %v, want started, data, exit", kinds)
+	}
+	if pid <= 0 {
+		t.Errorf("started event pid = %v, want the script's pid", pid)
 	}
 }

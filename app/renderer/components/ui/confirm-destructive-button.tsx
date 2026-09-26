@@ -7,8 +7,10 @@ interface ConfirmDestructiveButtonProps {
   pendingLabel: string;
   idleLabel: string;
   onClick: () => void;
-  // Off for a reason other than the removal under way.
+  // Off for a reason other than the removal under way. `disabledReason`
+  // names one and doubles as the tooltip.
   disabled?: boolean;
+  disabledReason?: string;
 }
 
 // Two-step "arm then confirm" destructive button: outline styling
@@ -22,13 +24,15 @@ export function ConfirmDestructiveButton({
   idleLabel,
   onClick,
   disabled = false,
+  disabledReason,
 }: ConfirmDestructiveButtonProps) {
   return (
     <Button
       type="button"
       size="sm"
       variant="outline-destructive"
-      disabled={pending || disabled}
+      disabled={pending || disabled || disabledReason !== undefined}
+      title={disabledReason}
       aria-pressed={armed}
       onClick={onClick}
     >

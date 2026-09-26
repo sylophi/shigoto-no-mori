@@ -213,9 +213,16 @@ export class ScriptRunsStore {
     this.setStateWithActivity(key, (s) =>
       s.cancelling ? s : { ...s, cancelling: true },
     );
+    // A run the host no longer has (already exited, or one it never
+    // could reach) reports `cancelled: false` instead of throwing, and
+    // the exit that follows a real stop is what clears the flag, so a
+    // refused stop must clear it here or the button reads "Stopping…"
+    // for good.
+    let cancelled = false;
     try {
-      await this.api.cancel(state.runId);
-    } catch {
+      ({ cancelled } = await this.api.cancel(state.runId));
+    } catch {}
+    if (!cancelled) {
       this.setStateWithActivity(key, (s) =>
         s.status === "running" || s.status === "starting"
           ? { ...s, cancelling: false }
@@ -397,6 +404,9 @@ export class ScriptRunsStore {
         return;
       case "exit": {
         const m = this.meta.get(key);
+        // A run the user stopped exits unclean by definition, and the
+        // console they stopped it from already says so.
+        const stopped = this.states.get(key)?.cancelling === true;
         this.runIdToKey.delete(event.runId);
         this.appendChunk(key, exitSentinel(event.code));
         this.setStateWithActivity(key, (s) => ({
@@ -406,7 +416,7 @@ export class ScriptRunsStore {
           endedAt: Date.now(),
           cancelling: false,
         }));
-        if (event.code !== 0 && m) {
+        if (event.code !== 0 && m && !stopped) {
           this.toastLifecycleFailure(m.slotKind, event.code);
         }
         return;

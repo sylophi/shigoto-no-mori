@@ -89,6 +89,7 @@ export function WorktreeDetailInner({
     needsForce,
     cleanupError,
     runDelete,
+    deleteBlockedReason,
     cancelForce,
     retryCleanup,
     skipCleanup,
@@ -179,7 +180,12 @@ export function WorktreeDetailInner({
         }
       : cleanupRunning
         ? { kind: "cleanupRunning", cancelling: cleanupCancelling }
-        : { kind: "normal", confirmDelete, busy };
+        : {
+            kind: "normal",
+            confirmDelete,
+            busy,
+            deleteBlockedReason,
+          };
   const footerActions: WorktreeFooterActions = {
     onCancelCleanupError: clearCleanupError,
     onOpenCleanupConsole: openCleanupConsole,
