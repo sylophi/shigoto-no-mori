@@ -303,12 +303,21 @@ const (
 	autoPullKey = "autoPullWorktrees"
 )
 
-// Every `{ worktreeId: true }` map in the registry. A worktree's id is
+// What each shelved worktree looked like when it went on the shelf,
+// which the app compares against to unshelve a worktree that gets
+// worked in (host/lib/worktrees/shelved.ts). The app writes the
+// entries. The CLI only clears them: on every shelve and unshelve, so a
+// fresh shelf starts from a fresh snapshot, and with the worktree's
+// other marks.
+const shelfSnapshotsKey = "shelfSnapshots"
+
+// Every map in the registry keyed by worktree id: the `{ worktreeId:
+// true }` marks and the shelf snapshots. A worktree's id is
 // derived from its path, so the flows that retire an id (rm, project
 // remove) clear it from each of these through dropWorktreeMarks, and a
 // new mark only has to be added to this list. The app keeps the same
 // list in host/lib/worktrees/marks.ts.
-var worktreeMarkKeys = []string{shelvedKey, autoPullKey}
+var worktreeMarkKeys = []string{shelvedKey, autoPullKey, shelfSnapshotsKey}
 
 // deviceId (app-written, host/lib/config/deviceId.ts) is deliberately
 // absent: this list drives only the state.json→registry.json split,
@@ -687,9 +696,46 @@ func splitLocked() error {
 	return writeJSONObject(statePath(), current)
 }
 
-// Flips the id in the shelved map (store.ts writeKey semantics).
+// Flips the id in the shelved map (store.ts writeKey semantics) and
+// retires its snapshot either way, in one pass under the registry lock.
+// The snapshot values are the app's to shape, so they pass through as
+// raw JSON.
 func setShelved(worktreeID string, shelved bool) error {
-	return setRegistryMark(shelvedKey, worktreeID, shelved)
+	if err := ensureRegistrySplit(); err != nil {
+		return err
+	}
+	return withFileLock(registryPath(), func() error {
+		all, err := readJSONObject(registryPath())
+		if err != nil {
+			return err
+		}
+		marks := map[string]bool{}
+		if err := decodeKey(registryPath(), shelvedKey, all[shelvedKey], &marks); err != nil {
+			return err
+		}
+		snapshots := map[string]json.RawMessage{}
+		if err := decodeKey(registryPath(), shelfSnapshotsKey, all[shelfSnapshotsKey], &snapshots); err != nil {
+			return err
+		}
+		_, hadSnapshot := snapshots[worktreeID]
+		if marks[worktreeID] == shelved && !hadSnapshot {
+			return nil
+		}
+		if shelved {
+			marks[worktreeID] = true
+		} else {
+			delete(marks, worktreeID)
+		}
+		delete(snapshots, worktreeID)
+		for key, value := range map[string]any{shelvedKey: marks, shelfSnapshotsKey: snapshots} {
+			encoded, err := json.Marshal(value)
+			if err != nil {
+				return err
+			}
+			all[key] = encoded
+		}
+		return writeJSONObject(registryPath(), all)
+	})
 }
 
 func dropShelved(worktreeID string) error {
@@ -731,7 +777,7 @@ func dropWorktreeMarks(worktreeID string) {
 			}
 			changed := false
 			for _, key := range worktreeMarkKeys {
-				m := map[string]bool{}
+				m := map[string]json.RawMessage{}
 				if err := decodeKey(registryPath(), key, all[key], &m); err != nil {
 					return err
 				}
