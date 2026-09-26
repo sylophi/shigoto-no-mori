@@ -104,6 +104,22 @@ export function useWorktreeNav() {
       go("prDiff", { projectId, worktreeId });
     },
 
+    // The files page, opened on `path` when given (a file to show). A
+    // pick on the page replaces its entry, so Back leaves the page
+    // rather than stepping through every file looked at.
+    toFiles(
+      projectId: string,
+      worktreeId: string,
+      opts: { path?: string; replace?: boolean } = {},
+    ) {
+      go(
+        "files",
+        { projectId, worktreeId },
+        opts.replace ?? false,
+        opts.path === undefined ? {} : { path: opts.path },
+      );
+    },
+
     // The script's console, in whichever tree this page lives in: a
     // run on a peer streams back over its direct session, so its
     // console is a page under the device twin like the diffs are.

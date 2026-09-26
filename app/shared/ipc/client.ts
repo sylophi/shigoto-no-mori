@@ -453,6 +453,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       setAutoPull: worktreesClient.setAutoPull,
       checkoutBranch: worktreesClient.checkoutBranch,
       fileDiff: worktreesClient.fileDiff,
+      readFile: worktreesClient.readFile,
       changeStatus: worktreesClient.changeStatus,
       setStaged: worktreesClient.setStaged,
       commit: worktreesClient.commit,

@@ -130,8 +130,9 @@
    real: an expanded hit area there would reach into the neighbouring
    row (where the later row wins the overlap) or add scroll range to
    the strip. Menu and picker rows by role, which reaches Base UI's
-   menus and cmdk's lists alike, and tabs the same way. The forest's
-   rows and the diff's file list go by slot. */
+   menus and cmdk's lists alike, and tabs and the files page's tree
+   rows the same way. The forest's rows and the diff's file list go by
+   slot. */
 [data-layout="phone"]
   :is(
     [role="menuitem"],
@@ -139,6 +140,7 @@
     [role="menuitemradio"],
     [role="option"],
     [role="tab"],
+    [role="treeitem"],
     [data-slot="diff-index-row"],
     [data-slot="sidebar-row"]
   ) {

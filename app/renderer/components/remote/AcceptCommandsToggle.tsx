@@ -54,7 +54,7 @@ const GRANTS: readonly { icon: LucideIcon; title: string; detail: string }[] = [
     icon: FolderSearch,
     title: "Browse your files",
     detail:
-      "List folders anywhere on this machine, and add or clone projects into it.",
+      "List folders anywhere on this machine, read any file in its worktrees, and add or clone projects into it.",
   },
   {
     icon: Cable,

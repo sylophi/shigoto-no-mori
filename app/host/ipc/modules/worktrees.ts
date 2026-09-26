@@ -41,6 +41,7 @@ import {
   withDeleteInflight,
 } from "@host/lib/scripts";
 import { setAutoPull } from "@host/lib/worktrees/autoPull";
+import { readWorktreeFile } from "@host/lib/worktrees/files";
 import { relocateWorktreeToManagedPath } from "@host/lib/worktrees/relocate";
 import { scriptEventNotifier } from "../scriptRun";
 import {
@@ -188,6 +189,14 @@ export const worktreesHandlers: Handlers<
       worktreeId,
     );
     return getFileDiff(worktree.path, paths, untracked);
+  },
+
+  readFile: async ({ projectId, worktreeId, path }) => {
+    const { worktree } = await findProjectAndWorktreeOrThrow(
+      projectId,
+      worktreeId,
+    );
+    return readWorktreeFile(worktree.path, path);
   },
 
   changeStatus: async ({ projectId, worktreeId }) => {

@@ -21,11 +21,13 @@ import {
   RenameBranchPayloadSchema,
   ResetSoftPayloadSchema,
   ResetSoftResultSchema,
+  ReadWorktreeFilePayloadSchema,
   RestoreDiscardPayloadSchema,
   SetAutoPullPayloadSchema,
   SetShelvedPayloadSchema,
   SetStagedPayloadSchema,
   WorktreeCarryOverCompleteSchema,
+  WorktreeFileSchema,
   WorktreeLifecyclePhaseSchema,
   WorktreeRemovalSchema,
   WorktreeSchema,
@@ -105,6 +107,16 @@ export const worktreesContract = defineContract("host", {
     remote: true,
     mutating: false,
   }),
+  // One file of the worktree, whole, for the files page. A read, but
+  // it discloses any file in the checkout (an ignored .env included),
+  // so it rides the command grant like the folder listing the page
+  // browses with (sync:worktreeFolder).
+  readFile: invoke(
+    "worktrees:readFile",
+    ReadWorktreeFilePayloadSchema,
+    WorktreeFileSchema,
+    { remote: true, mutating: true, movesHostState: false },
+  ),
   // The changes page's list: every changed file, its index state and
   // its counts. The one read the page needs to draw the rail, and the
   // one a tick refetches.

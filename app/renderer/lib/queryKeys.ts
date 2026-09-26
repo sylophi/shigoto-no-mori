@@ -97,6 +97,16 @@ function buildQueryKeys(deviceId: string) {
     // dialog's picker of what stays behind.
     worktreeFolder: (projectId: string, worktreeId: string, relative: string) =>
       host("worktreeFolder", projectId, worktreeId, relative),
+    // Every folder listing of one worktree, the prefix the files page's
+    // refresh drops.
+    worktreeFolders: (projectId: string, worktreeId: string) =>
+      host("worktreeFolder", projectId, worktreeId),
+    // One file of a worktree (worktrees:readFile), the files page's
+    // viewer, and the prefix over all of a worktree's.
+    worktreeFile: (projectId: string, worktreeId: string, path: string) =>
+      host("worktreeFile", projectId, worktreeId, path),
+    worktreeFiles: (projectId: string, worktreeId: string) =>
+      host("worktreeFile", projectId, worktreeId),
     commitDiff: (
       projectId: string,
       worktreeId: string | undefined,
@@ -206,6 +216,10 @@ function buildQueryKeys(deviceId: string) {
     // Client-scoped: the store lives in this app instance's userData, so
     // no host sentinel and no device id.
     clientConfig: () => ["clientConfig"] as const,
+
+    // Client-scoped: the code highlighter holding a language, loaded in
+    // this window whichever device the code came from.
+    codeHighlighter: (lang: string) => ["codeHighlighter", lang] as const,
 
     // Client-scoped: THIS device's copy of the shared settings. Every
     // device's copy converges on the same entries, so there is one

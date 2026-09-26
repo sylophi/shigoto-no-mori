@@ -7,3 +7,18 @@ export function withToggled<T>(value: T) {
     return next;
   };
 }
+
+// Set-state updater that puts `value` in or out of a set, as asked
+// rather than flipped. Hands back the same set when nothing moves, so
+// a no-op doesn't re-render what reads it.
+export function withMember<T>(
+  prev: ReadonlySet<T>,
+  value: T,
+  present: boolean,
+): ReadonlySet<T> {
+  if (prev.has(value) === present) return prev;
+  const next = new Set(prev);
+  if (present) next.add(value);
+  else next.delete(value);
+  return next;
+}

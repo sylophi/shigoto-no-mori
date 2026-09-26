@@ -1,6 +1,7 @@
 // The worktree footer's leading verbs share one shape: a ghost text
-// button that opens a dialog. Ports, Mirror here and Transplant here on
-// a peer's worktree, Ports and the running mirror on this device's own.
+// button that opens a dialog or a page. Files leads on every worktree,
+// then Ports, Mirror here and Transplant here on a peer's worktree,
+// Ports and the running mirror on this device's own.
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 

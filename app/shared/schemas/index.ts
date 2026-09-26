@@ -11,6 +11,7 @@ export * from "./payloads";
 export * from "./project";
 export * from "./worktree";
 export * from "./changes";
+export * from "./files";
 export * from "./hygiene";
 export * from "./pullRequest";
 export * from "./config";
