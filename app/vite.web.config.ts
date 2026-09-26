@@ -42,7 +42,11 @@ function buildInfo(mode: string): { version: string; commit: string } {
 // build's web/ root never sees, and without them every icon request
 // falls through to index.html. So that directory is copied into the
 // output, and served from where it is in dev. A build that finds it
-// missing fails, where skipping would ship every icon broken.
+// missing fails, where skipping would ship every icon broken. The
+// `web:build` script stages the icons itself first rather than trusting
+// the postinstall to have run: a deploy that restores its install from
+// a build cache (Vercel's) skips lifecycle scripts, which is how v2.10.0's
+// web client first failed to deploy.
 function materialIcons(): Plugin {
   const source = resolve(__dirname, "public", "material-icons");
   let outDir = "";
