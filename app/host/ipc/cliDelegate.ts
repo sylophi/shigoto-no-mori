@@ -43,6 +43,7 @@ import {
   type WorktreeLifecyclePhase,
   WorktreeSchema,
 } from "@shared/schemas";
+import { type DoctorReport, DoctorReportSchema } from "@shared/ipc/modules/cli";
 import {
   isEntityGoneError,
   unknownProjectError,
@@ -848,4 +849,30 @@ export async function packageScriptsViaCli(
     return null;
   }
   return PackageScriptsDocSchema.parse(doc);
+}
+
+// A wedged git or gh probe must not leave Settings' health check
+// spinning forever. --fix runs the checklist twice (before and after
+// the repairs), so it gets twice the budget.
+const DOCTOR_TIMEOUT_MS = 60_000;
+
+// `sm doctor`'s checklist. Not readDoc: a report with a failed check
+// carries ok:false and exits 1, which readDoc would take for an error
+// document, so a run answers whenever its last document is a report.
+// fix runs `--fix --yes`: the Repair button's confirm is the consent
+// the CLI's per-repair prompt asks for, and a spawned child has no
+// terminal to prompt on. env overlays the login shell's rc locations
+// so the shell-hook check reads the files a terminal would.
+export async function doctorViaCli(
+  fix: boolean,
+  env: Record<string, string>,
+): Promise<DoctorReport> {
+  const args = fix ? ["doctor", "--fix", "--yes"] : ["doctor"];
+  const result = await runner().runCli(args, undefined, env, {
+    readOnly: !fix,
+    timeoutMs: fix ? 2 * DOCTOR_TIMEOUT_MS : DOCTOR_TIMEOUT_MS,
+  });
+  const report = DoctorReportSchema.safeParse(result.docs.at(-1));
+  if (report.success) return report.data;
+  throw cliFailure(result, "sm doctor failed");
 }

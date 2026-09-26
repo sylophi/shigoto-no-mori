@@ -22,13 +22,14 @@ pre-commit:
       glob: "{cli/**,app/shared/git/repoIdentity.mts,app/shared/git/defaultBranch.mts,app/shared/fixtures/**,app/test/identity.mjs,app/test/lib/smBinary.mjs}"
       run: pnpm -C app test identity
     # The host reads the data model through the CLI: projects, rows,
-    # identities, the marks, relocate, reorder, config, launchers and
-    # package scripts answered by the real sm binary through the real
-    # handlers, plus the two rules the app still mirrors (the worktree
-    # id and the renderer's layout math) pinned against the CLI's own
-    # answers, and a forced removal running the teardown through sm rm.
+    # identities, the marks, relocate, reorder, config, launchers,
+    # package scripts and the doctor report answered by the real sm
+    # binary through the real handlers, plus the two rules the app
+    # still mirrors (the worktree id and the renderer's layout math)
+    # pinned against the CLI's own answers, and a forced removal
+    # running the teardown through sm rm.
     cli-reads:
-      glob: "{cli/**,app/host/ipc/cliDelegate.ts,app/host/ipc/modules/projects.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/modules/launchers.ts,app/host/ipc/modules/packageScripts.ts,app/host/ipc/modules/globalConfig.ts,app/host/ipc/modules/shigomori.ts,app/host/lib/projects/**,app/host/lib/git/worktrees.ts,app/host/lib/config/**,app/shared/schemas/**,app/shared/git/worktreeLayout.ts,app/test/cli-reads.mjs,app/test/lib/checkKit.mjs,app/test/lib/smBinary.mjs}"
+      glob: "{cli/**,app/host/ipc/cliDelegate.ts,app/host/ipc/modules/cli.ts,app/shared/ipc/modules/cli.ts,app/host/ipc/modules/projects.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/modules/launchers.ts,app/host/ipc/modules/packageScripts.ts,app/host/ipc/modules/globalConfig.ts,app/host/ipc/modules/shigomori.ts,app/host/lib/projects/**,app/host/lib/git/worktrees.ts,app/host/lib/config/**,app/shared/schemas/**,app/shared/git/worktreeLayout.ts,app/test/cli-reads.mjs,app/test/lib/checkKit.mjs,app/test/lib/smBinary.mjs}"
       run: pnpm -C app test cli-reads
     go-test:
       glob: "cli/**"

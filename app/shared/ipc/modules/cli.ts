@@ -45,6 +45,31 @@ export type ShellIntegrationStatus = z.infer<
   typeof ShellIntegrationStatusSchema
 >;
 
+// `sm doctor --json`: the CLI's installation and data-dir checklist,
+// one finding per line. `repairable` marks what `--fix` would repair.
+// The CLI owns every word of title, detail and fix. Only the fields
+// the app reads are declared.
+const DoctorFindingSchema = z.object({
+  group: z.string(),
+  id: z.string(),
+  title: z.string(),
+  status: z.enum(["ok", "warn", "fail"]),
+  detail: z.string(),
+  fix: z.string().optional(),
+  repairable: z.boolean().optional(),
+});
+export type DoctorFinding = z.infer<typeof DoctorFindingSchema>;
+
+export const DoctorReportSchema = z.object({
+  summary: z.object({ ok: z.number(), warn: z.number(), fail: z.number() }),
+  // Past-tense labels of the repairs a --fix run applied, and the
+  // "couldn't <label>: <error>" line of each one that failed.
+  repaired: z.array(z.string()),
+  repairFailed: z.array(z.string()),
+  checks: z.array(DoctorFindingSchema),
+});
+export type DoctorReport = z.infer<typeof DoctorReportSchema>;
+
 // Served to a peer as well as the local window: Settings shows every
 // device of the account, and a peer holding the command grant may
 // manage that device's CLI links and shell hooks from there, the same
@@ -83,4 +108,12 @@ export const cliContract = defineContract("host", {
     ShellIntegrationStatusSchema,
     gated,
   ),
+  // The checklist names the host's paths, so it rides the grant like
+  // the status reads. The repair run can unregister a project, which
+  // is forest state, so unlike the rest it pings viewers.
+  doctor: invoke("cli:doctor", z.void(), DoctorReportSchema, gated),
+  doctorFix: invoke("cli:doctorFix", z.void(), DoctorReportSchema, {
+    remote: true,
+    gated: true,
+  }),
 });

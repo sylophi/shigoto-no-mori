@@ -72,6 +72,7 @@ const { packageScriptsHandlers } =
   await import("@host/ipc/modules/packageScripts");
 const { globalConfigHandlers } = await import("@host/ipc/modules/globalConfig");
 const { shigomoriHandlers } = await import("@host/ipc/modules/shigomori");
+const { cliHandlers, setCliImpl } = await import("@host/ipc/modules/cli");
 const { invalidateGlobalConfigCache } = await import("@host/lib/config/global");
 const { invalidateProjectConfigCache } =
   await import("@host/lib/config/project");
@@ -100,6 +101,10 @@ async function addBehindTheHost(path) {
 }
 
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
+
+// A doctor report's findings for one check id.
+const findingsOf = (report, id) =>
+  report.checks.filter((finding) => finding.id === id);
 
 async function main() {
   console.log("cli-reads proof\n");
@@ -436,6 +441,44 @@ async function main() {
         ),
         false,
       );
+    },
+  );
+
+  await check(
+    "doctor: a failed check still answers the report, and repair applies only what it marks repairable",
+    async () => {
+      // The Electron side overlays the login shell's rc locations, and the
+      // sandbox has no shell hook to find either way.
+      setCliImpl({ hookPathEnv: async () => ({}) });
+      const goneRepo = makeRepo("gone");
+      const gone = await addBehindTheHost(goneRepo);
+      rmSync(goneRepo, { recursive: true, force: true });
+      const dormantId = "0123ABCD-0000-0000-0000-000000000000";
+      mkdirSync(join(dataDir, "projects", dormantId), { recursive: true });
+
+      const report = await cliHandlers.doctor();
+      assert.ok(report.summary.fail > 0, "a project whose path is gone fails");
+      const [pathGone] = findingsOf(report, "project-path");
+      assert.equal(pathGone?.title, "gone");
+      assert.equal(pathGone.status, "fail");
+      assert.equal(pathGone.repairable, true);
+      const [dormant] = findingsOf(report, "dormant-state");
+      assert.equal(dormant?.status, "warn");
+      assert.ok(dormant.detail.includes(dormantId), dormant.detail);
+      assert.equal(dormant.repairable, undefined);
+
+      const fixed = await cliHandlers.doctorFix();
+      assert.deepEqual(fixed.repaired, ["unregistered gone"]);
+      assert.deepEqual(fixed.repairFailed, []);
+      assert.equal(findingsOf(fixed, "project-path").length, 0);
+      assert.equal(findingsOf(fixed, "dormant-state").length, 1);
+      assert.ok(existsSync(join(dataDir, "projects", dormantId)));
+      assert.equal(
+        loadProjects().some((project) => project.id === gone.id),
+        false,
+        "the host's snapshot still lists the unregistered project",
+      );
+      assert.ok(loadProjects().some((project) => project.id === projectId));
     },
   );
 

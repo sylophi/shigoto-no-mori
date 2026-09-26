@@ -155,6 +155,7 @@ function buildQueryKeys(deviceId: string) {
     terrierReadiness: () => host("terrierReadiness"),
     cli: () => host("cli"),
     cliShell: () => host("cliShell"),
+    doctor: () => host("doctor"),
     portPoolActive: (projectId: string, worktreeId: string) =>
       host("portPoolActive", projectId, worktreeId),
 
@@ -314,6 +315,9 @@ const externalChangeExempt = new Set([
   "cli",
   "cliShell",
   "clientConfig",
+  // A full doctor run spawns git and gh on the host: it re-runs on
+  // demand, never on a ping.
+  "doctor",
   "fs",
   "githubCli",
   // Driven by its own changed broadcast, like portForwards and updater.

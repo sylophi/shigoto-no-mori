@@ -342,8 +342,10 @@ func registryPath() string { return filepath.Join(dataDir(), registryFile) }
 
 func configJSONPath() string { return filepath.Join(dataDir(), configFile) }
 
+func projectsDataDir() string { return filepath.Join(dataDir(), "projects") }
+
 func projectDataDir(projectID string) string {
-	return filepath.Join(dataDir(), "projects", projectID)
+	return filepath.Join(projectsDataDir(), projectID)
 }
 
 func projectConfigJSONPath(projectID string) string {

@@ -41,16 +41,18 @@ const (
 
 // One line of the checklist. detail is the one-line explanation, fix
 // the concrete suggestion (omitted when there's nothing to suggest).
-// repair, when set, is what --fix would run; it never travels in the
-// JSON document, only its effect does.
+// repair, when set, is what --fix would run. The closure never travels
+// in the JSON document, only the fact that there is one (repairable,
+// so the app can offer --fix exactly when it would do something).
 type finding struct {
-	Group  string `json:"group"`
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Status string `json:"status"`
-	Detail string `json:"detail"`
-	Fix    string `json:"fix,omitempty"`
-	repair *repair
+	Group      string `json:"group"`
+	ID         string `json:"id"`
+	Title      string `json:"title"`
+	Status     string `json:"status"`
+	Detail     string `json:"detail"`
+	Fix        string `json:"fix,omitempty"`
+	Repairable bool   `json:"repairable,omitempty"`
+	repair     *repair
 }
 
 // An unambiguously safe repair. prompt is the yes/no question asked
@@ -92,7 +94,7 @@ func (r *doctorReport) fail(group, id, title, detail, fix string) {
 func (r *doctorReport) repairable(group, id, title, status, detail, fix string, fixup *repair) {
 	r.add(finding{
 		Group: group, ID: id, Title: title, Status: status,
-		Detail: detail, Fix: fix, repair: fixup,
+		Detail: detail, Fix: fix, Repairable: true, repair: fixup,
 	})
 }
 
@@ -135,15 +137,17 @@ func cmdDoctor(ctx cliContext, args []string) (int, error) {
 	// Terrier projects join silently (checkTerrier reports any trouble
 	// as a finding) so state checks like the shelved-marks scan see the
 	// same world the commands do. The per-project group filters them
-	// back out (checkProjects).
-	projects, _ := loadProjects()
-	terrierListed, _ := activeTerrierListings()
+	// back out (checkProjects). A registry or terrier listing that can't
+	// be read leaves the list short, so the checks that read "nothing
+	// claims this" as a leftover are told to stand down (complete).
+	projects, loadErr := loadProjects()
+	terrierListed, trouble := activeTerrierListings()
 	projects = appendTerrierProjects(projects, terrierListed)
 
-	report := runDoctorChecks(projects)
-	var repaired []string
+	report := runDoctorChecks(projects, loadErr == nil && trouble == nil)
+	var repaired, repairFailed []string
 	if fix {
-		repaired = applyRepairs(report, yes)
+		repaired, repairFailed = applyRepairs(report, yes)
 		if len(repaired) > 0 {
 			// State changed underneath us: re-read the registry and drop
 			// the per-project identity memo, then re-run so the printed
@@ -152,15 +156,15 @@ func cmdDoctor(ctx cliContext, args []string) (int, error) {
 			// Doctor is the command you reach for *because* the registry
 			// is broken, and checkRegistryFile already says so; carry on
 			// with none rather than refusing to report.
-			projects, _ := loadProjects()
+			projects, loadErr := loadProjects()
 			projects = appendTerrierProjects(projects, terrierListed)
-			report = runDoctorChecks(projects)
+			report = runDoctorChecks(projects, loadErr == nil && trouble == nil)
 		}
 	}
 
 	_, _, failed := report.counts()
 	if jsonMode {
-		emitDoctorJSON(report, repaired)
+		emitDoctorJSON(report, repaired, repairFailed)
 	} else {
 		renderDoctorReport(report, repaired, fix)
 	}
@@ -170,24 +174,30 @@ func cmdDoctor(ctx cliContext, args []string) (int, error) {
 	return 0, nil
 }
 
-func emitDoctorJSON(report *doctorReport, repaired []string) {
+// repairFailed carries the "couldn't <label>: <error>" lines a human
+// run prints to stderr, so a --json reader can say them too.
+func emitDoctorJSON(report *doctorReport, repaired, repairFailed []string) {
 	okCount, warnCount, failCount := report.counts()
 	if repaired == nil {
 		repaired = []string{}
+	}
+	if repairFailed == nil {
+		repairFailed = []string{}
 	}
 	findings := report.findings
 	if findings == nil {
 		findings = []finding{}
 	}
 	emit(map[string]any{
-		"ok":       failCount == 0,
-		"dataDir":  dataDir(),
-		"flavor":   flavor,
-		"version":  version,
-		"binary":   binaryName,
-		"summary":  map[string]int{"ok": okCount, "warn": warnCount, "fail": failCount},
-		"repaired": repaired,
-		"checks":   findings,
+		"ok":           failCount == 0,
+		"dataDir":      dataDir(),
+		"flavor":       flavor,
+		"version":      version,
+		"binary":       binaryName,
+		"summary":      map[string]int{"ok": okCount, "warn": warnCount, "fail": failCount},
+		"repaired":     repaired,
+		"repairFailed": repairFailed,
+		"checks":       findings,
 	})
 }
 
@@ -287,8 +297,7 @@ func repairableCount(report *doctorReport) int {
 // destructive one is confirmed first, unless --yes; without a terminal
 // to ask on, they're skipped with a note rather than assumed. Failures
 // are reported and don't stop the rest.
-func applyRepairs(report *doctorReport, yes bool) []string {
-	var applied []string
+func applyRepairs(report *doctorReport, yes bool) (applied, failed []string) {
 	for _, f := range report.findings {
 		if f.repair == nil {
 			continue
@@ -304,10 +313,12 @@ func applyRepairs(report *doctorReport, yes bool) []string {
 			}
 		}
 		if err := f.repair.apply(); err != nil {
-			note(yellowErr("couldn't " + f.repair.label + ": " + err.Error()))
+			line := "couldn't " + f.repair.label + ": " + err.Error()
+			note(yellowErr(line))
+			failed = append(failed, line)
 			continue
 		}
 		applied = append(applied, f.repair.label)
 	}
-	return applied
+	return applied, failed
 }

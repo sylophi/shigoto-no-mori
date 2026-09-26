@@ -65,7 +65,7 @@ const GRANTS: readonly { icon: LucideIcon; title: string; detail: string }[] = [
     icon: Settings2,
     title: "Change the app",
     detail:
-      "Edit settings, install the CLI and shell hooks, install updates and move the data folder.",
+      "Edit settings, install the CLI and shell hooks, run health check repairs, install updates and move the data folder.",
   },
 ];
 

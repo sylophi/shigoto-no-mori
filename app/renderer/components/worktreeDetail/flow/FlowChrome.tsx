@@ -1,8 +1,8 @@
 // The frame a multi-step worktree dialog wears: the header, the step
 // rail, the scroll body, the footer band and the card styles. The
 // transplant and the mirror (../transplant/, ../mirror/) walk all of it
-// through PullFlow.tsx, and the ports dialog borrows the body and
-// cards.
+// through PullFlow.tsx, and the ports dialog and Settings' health check
+// borrow the header, body and footer.
 import { Check, X, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
