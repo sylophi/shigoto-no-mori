@@ -7,6 +7,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
+import { BirthdayBadge } from "@/components/villagers/BirthdayBadge";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
 import { useNow } from "@/hooks/ui/useNow";
@@ -137,6 +138,7 @@ export function InboxRow({
           <WorktreeKindIcon worktree={worktree} showTooltip={false} />
         )}
         <span className="min-w-0 truncate">{worktree.name}</span>
+        <BirthdayBadge worktree={worktree} deviceId={device?.deviceId} />
       </span>
     </button>
   );

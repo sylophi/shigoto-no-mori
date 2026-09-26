@@ -1,5 +1,5 @@
 import { type CSSProperties, useState } from "react";
-import { stationeryFor } from "@/lib/villagers/stationery";
+import { printStyle, stationeryFor } from "@/lib/villagers/stationery";
 import { cn } from "@/lib/utils";
 import type { MoveNews, Speaker } from "@/lib/villagerVoice";
 import { CloseButton } from "./CloseButton";
@@ -35,17 +35,6 @@ export function VillagerLetter({
 }) {
   const paper = stationeryFor(speaker.slug);
   const [signed, setSigned] = useState(false);
-  const [width, height] = paper.size;
-  const print = {
-    maskImage: paper.tile,
-    maskSize: `${width}px ${height}px`,
-    // A tile further out on the top and left, so the drift never
-    // uncovers an edge.
-    top: -height,
-    left: -width,
-    "--tile-x": `${width}px`,
-    "--tile-y": `${height}px`,
-  } as CSSProperties;
   const farewell = news.kind === "out";
   return (
     <div
@@ -60,7 +49,7 @@ export function VillagerLetter({
             written on. */}
         <div
           aria-hidden
-          style={print}
+          style={printStyle(paper)}
           className={cn(
             "villager-paper-drift absolute right-0 bottom-0 opacity-55",
             paper.color,

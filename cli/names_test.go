@@ -5,10 +5,13 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Lowercase kebab-case is also a valid git branch name: no dots,
@@ -48,10 +51,10 @@ func TestNamePoolsAreValidWorktreeNames(t *testing.T) {
 func TestPickWorktreeNameDrawsFromTheChosenPool(t *testing.T) {
 	inPool := doubutsuSet()
 	for range 50 {
-		if name := pickWorktreeName(map[string]bool{}, true); !inPool[name] {
+		if name := pickWorktreeName(map[string]bool{}, true, nil); !inPool[name] {
 			t.Fatalf("doubutsu pick %q is not in the pool", name)
 		}
-		if name := pickWorktreeName(map[string]bool{}, false); inPool[name] || strings.Count(name, "-") != 1 {
+		if name := pickWorktreeName(map[string]bool{}, false, nil); inPool[name] || strings.Count(name, "-") != 1 {
 			t.Fatalf("default pick %q is not an adjective-animal pair", name)
 		}
 	}
@@ -63,12 +66,12 @@ func TestPickWorktreeNameSkipsUsedAndFallsBackToSuffixes(t *testing.T) {
 	for _, name := range names[1:] {
 		used[name] = true
 	}
-	if got, want := pickWorktreeName(used, true), names[0]; got != want {
+	if got, want := pickWorktreeName(used, true, nil), names[0]; got != want {
 		t.Fatalf("picked %q, want the one unused name %q", got, want)
 	}
 
 	used[names[0]] = true
-	got := pickWorktreeName(used, true)
+	got := pickWorktreeName(used, true, nil)
 	if base := strings.TrimSuffix(got, "-2"); base == got || !used[base] {
 		t.Fatalf("with every name used, picked %q, want <name>-2", got)
 	}
@@ -150,5 +153,56 @@ func TestCreateSkipsNamesHeldByBranches(t *testing.T) {
 	}
 	if wt.Name != names[0] {
 		t.Fatalf("created %q, want %q, the one name no branch holds", wt.Name, names[0])
+	}
+}
+
+// With Village life on and the villager data downloaded, the pick
+// invites whoever's birthday it is while they're free, and only with
+// Doubutsu names on. A leap-day birthday is kept on Feb 28 in common
+// years.
+func TestBirthdayGuests(t *testing.T) {
+	sandboxDataDir(t)
+	ready := filepath.Join(dataDir(), "villagers", "ready")
+	if err := os.MkdirAll(ready, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	profiles := `{"mitzi":{"name":"Mitzi","birthday":"09-25"},"chester":{"name":"Chester","birthday":"08-06"},"leap":{"name":"Leap","birthday":"02-29"}}`
+	if err := os.WriteFile(filepath.Join(ready, "profiles.json"), []byte(profiles), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	on := true
+	off := false
+	day := time.Date(2026, time.September, 25, 12, 0, 0, 0, time.Local)
+
+	if got := birthdayGuests(globalConfig{DoubutsuNames: &on, VillageLife: &on}, day); len(got) != 1 || got[0] != "mitzi" {
+		t.Errorf("guests on 09-25 = %v, want [mitzi]", got)
+	}
+	if got := birthdayGuests(globalConfig{DoubutsuNames: &on, VillageLife: &off}, day); got != nil {
+		t.Errorf("guests with Village life off = %v, want none", got)
+	}
+	if got := birthdayGuests(globalConfig{DoubutsuNames: &off, VillageLife: &on}, day); got != nil {
+		t.Errorf("guests with names off = %v, want none", got)
+	}
+	common := time.Date(2027, time.February, 28, 12, 0, 0, 0, time.Local)
+	if !isBirthdayOn("02-29", common) {
+		t.Error("a leap-day birthday isn't kept on Feb 28 in a common year")
+	}
+	leapYear := time.Date(2028, time.February, 28, 12, 0, 0, 0, time.Local)
+	if isBirthdayOn("02-29", leapYear) {
+		t.Error("a leap-day birthday lands on Feb 28 in a leap year")
+	}
+
+	if got := pickWorktreeName(map[string]bool{}, true, []string{"mitzi"}); got != "mitzi" {
+		t.Errorf("pick with mitzi invited = %q", got)
+	}
+	if got := pickWorktreeName(map[string]bool{"mitzi": true}, true, []string{"mitzi"}); got == "mitzi" {
+		t.Error("the pick invited mitzi though her name is taken")
+	}
+	if got := pickWorktreeName(map[string]bool{}, false, []string{"mitzi"}); got == "mitzi" {
+		t.Error("the pick invited mitzi with Doubutsu names off")
+	}
+	// A key the pool doesn't have is no name to give a folder.
+	if got := pickWorktreeName(map[string]bool{}, true, []string{"../x"}); got == "../x" {
+		t.Error("the pick invited a name outside the pool")
 	}
 }

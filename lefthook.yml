@@ -200,6 +200,10 @@ pre-commit:
     villager-manifest:
       glob: "{app/shared/villagers/manifest.json,app/shared/villagers/rarity.ts,cli/embed/doubutsu-names.json,app/test/villager-manifest.mjs,app/test/lib/checkKit.mjs}"
       run: pnpm -C app test villager-manifest
+    # Birthdays on the local calendar, and the name pick's invite.
+    villager-birthdays:
+      glob: "{app/shared/villagers/birthdays.ts,app/test/villager-birthdays.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test villager-birthdays
     # What a villager says in a toast, and the news when they move in or
     # out, by rarity.
     villager-voice:

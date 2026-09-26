@@ -198,3 +198,23 @@ Rules that keep it consistent as features arrive:
   the worktree lists (`lib/villagers/moves.ts`), so the app, `sm` and
   another device all count. No emojis, and a name that isn't a
   character's shows nothing.
+
+### Birthdays
+
+A villager's birthday (their profile's, on the local calendar) is a
+moment too, told the same way whoever looks: every device's worktrees
+celebrate under that device's Village life.
+
+- **The name pick invites them.** With Village life on, a new worktree
+  (the app's pre-pick and `sm worktrees create` alike) is named after
+  someone celebrating today while their name is free.
+- **No announcement.** A birthday is found where the villager lives,
+  not pushed as a toast: a daily one for every villager would repeat
+  itself.
+- **The sidebar row** wears a cake, their face in a party hat in its
+  tooltip.
+- **The worktree page** throws the party (`BirthdayBanner`): a line
+  under bunting for a regular villager, a dialogue box under bunting in
+  their own color for a rare one, and for a legend balloons (one
+  carrying a present), a burst of confetti and their stationery.
+

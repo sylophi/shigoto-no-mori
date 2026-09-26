@@ -41,6 +41,9 @@ Poses ride the URL:
   the path itself is the route (`/devices/...`).
 - `?villageLife=1`: Village life on in every device's settings (off
   by default, as a fresh install has it).
+- `?today=MM-DD` (or `YYYY-MM-DD`): the calendar day, for a villager's
+  birthday (the sidebar cake, the worktree page's party and the name
+  pick's invite).
 - `?villagers=absent|downloading|ready|failed`: every device's villager
   data status, for the control under Village life in Settings. The
   default is ready when the lab holds a download (below), absent

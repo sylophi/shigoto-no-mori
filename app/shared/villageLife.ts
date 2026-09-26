@@ -8,9 +8,10 @@
 // Animal Crossing pool, in the CLI (cli/names.go doubutsuNamesEnabled,
 // the same default), at create time and for the New Worktree form's
 // pre-pick (`sm worktrees destination`). villageLife reads as off when
-// unset, and a
-// fresh install does not seed it. It is the app's alone: it gates the
-// purely visual villager extras on those worktrees, and it counts only
+// unset, and a fresh install does not seed it. It gates the purely
+// visual villager extras on those worktrees, and the one thing the CLI
+// reads it for is the name pick inviting a birthday villager
+// (cli/birthdays.go villageLifeEnabled, the same rule). It counts only
 // while doubutsuNames is on, since without villager names there are no
 // villagers to bring along.
 import type { GlobalConfig } from "./schemas/config";

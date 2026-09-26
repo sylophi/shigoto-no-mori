@@ -29,6 +29,11 @@ const [loadProfiles] = Object.values(
 
 const villagers = Object.keys(villagerManifest.villagers).length;
 
+// The downloaded profiles, or null without a download.
+export function labProfiles(): Promise<VillagerProfiles | null> {
+  return loadProfiles === undefined ? Promise.resolve(null) : loadProfiles();
+}
+
 // Whether this checkout holds a lab download.
 export const labHasVillagerData = meta !== undefined;
 
