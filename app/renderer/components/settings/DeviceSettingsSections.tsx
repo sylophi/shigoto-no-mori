@@ -5,7 +5,6 @@ import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
 import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
 import { prioritizeBirthdaysEnabled } from "@shared/villageLife";
-import { AcNoticeLabel } from "./AcNotice";
 import { ToggleRow } from "@/components/shared/ToggleRow";
 import { ExternalLink } from "@/components/ui/external-link";
 import { fieldSetter } from "@/hooks/ui/useDirtyForm";
@@ -77,7 +76,7 @@ export function DeviceToggleSections({
         <ToggleRow
           checked={form.doubutsuNames}
           onCheckedChange={setField("doubutsuNames")}
-          label={<AcNoticeLabel>Doubutsu names</AcNoticeLabel>}
+          label="Doubutsu names"
           description="Name new worktrees after Animal Crossing villagers and characters, like raymond, instead of adjective-animal pairs like snug-otter."
         />
         {/* A sub-option of Doubutsu names, nested like Primary

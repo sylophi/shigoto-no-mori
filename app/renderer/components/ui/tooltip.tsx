@@ -74,20 +74,23 @@ function TooltipContent({
 // the child via the render prop, so the child needs to accept ref and
 // event props on its root; plain DOM elements always do). A falsy tip
 // renders the child bare, mirroring `title={undefined}`. Newlines in
-// string tips are preserved like multiline titles were.
+// string tips are preserved like multiline titles were. `delay`
+// overrides the provider's opening delay for this trigger.
 function SimpleTooltip({
   tip,
   disabled,
+  delay,
   children,
 }: {
   tip: ReactNode;
   disabled?: boolean;
+  delay?: number;
   children: ReactElement;
 }) {
   if (!tip) return children;
   return (
     <Tooltip disabled={disabled}>
-      <TooltipTrigger render={children} />
+      <TooltipTrigger render={children} delay={delay} />
       <TooltipContent>
         {/* One wrapper span keeps a mixed text/element tip a single
             flex item: TooltipContent is inline-flex with a gap, which
