@@ -120,6 +120,7 @@ export function SettingsForm({
           pauseAnimationsOnBattery: prev.pauseAnimationsOnBattery,
           villageLife: prev.villageLife,
           markTerrierProjects: prev.markTerrierProjects,
+          showDeviceBadges: prev.showDeviceBadges,
         }));
       }
     }
@@ -205,10 +206,7 @@ export function SettingsForm({
               villageLife={form.villageLife}
               onVillageLifeChange={setField("villageLife")}
             />
-            <SidebarSection
-              markTerrierProjects={form.markTerrierProjects}
-              onMarkTerrierProjectsChange={setField("markTerrierProjects")}
-            />
+            <SidebarSection form={form} setForm={setForm} />
             <HiddenWorktreesSection />
             {/* The desktop states its build in this device's section.
                 A hostless client has no such section, and its build is

@@ -8,6 +8,7 @@ import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { DeviceMark } from "@/components/shared/DeviceGlyph";
 import type { StatusTone } from "@/components/ui/status-dot";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { useShowDeviceBadges } from "@/hooks/config/useSidebarMarks";
 import { useRemoteDevices } from "@/hooks/remote/useRemoteDevices";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 
@@ -53,14 +54,24 @@ export function DeviceBadge({ badge }: { badge: SidebarDeviceBadge }) {
   );
 }
 
+// A sidebar row's badge: the same badge, while this window has Show
+// device icons on (Settings, Appearance). The palette and the inbox's
+// create target draw DeviceBadge bare, since there the device is the
+// choice being made rather than a decoration.
+export function RowDeviceBadge({ badge }: { badge: SidebarDeviceBadge }) {
+  const show = useShowDeviceBadges();
+  return show ? <DeviceBadge badge={badge} /> : null;
+}
+
 // The project-header cluster: one badge per contributing peer device,
-// order preserved from the merge.
+// order preserved from the merge. Gated like RowDeviceBadge.
 export function DeviceBadgeCluster({
   devices,
 }: {
   devices: readonly SidebarDeviceBadge[];
 }) {
-  if (devices.length === 0) return null;
+  const show = useShowDeviceBadges();
+  if (!show || devices.length === 0) return null;
   return (
     <span className="inline-flex shrink-0 items-center gap-1">
       {devices.map((badge) => (

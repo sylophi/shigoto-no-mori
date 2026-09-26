@@ -323,6 +323,11 @@ export const ClientConfigSchema = z.object({
   // terrier's paw, on every device this window shows. Off by default
   // (absent = off), explicit `true` is the opt-in.
   markTerrierProjects: z.boolean().optional(),
+  // The device badges on the sidebar's rows: the mark of each device a
+  // project spans on its header, and of the device a worktree lives on
+  // (or is mirrored with) on its row. On by default (absent = on),
+  // explicit `false` hides them, on every device this window shows.
+  showDeviceBadges: z.boolean().optional(),
   // Pause the doubutsu wallpaper drift while this machine runs on
   // battery, the same pause an unfocused window gets. On by default
   // (absent = on), explicit `false` keeps it drifting on battery.

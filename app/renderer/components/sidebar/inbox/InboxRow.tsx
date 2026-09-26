@@ -19,7 +19,7 @@ import {
   type Worktree,
 } from "@shared/schemas";
 import { ActivityIcon } from "../ActivityIcon";
-import { DeviceBadge, type SidebarDeviceBadge } from "../DeviceBadge";
+import { RowDeviceBadge, type SidebarDeviceBadge } from "../DeviceBadge";
 import { MirrorBadge } from "../WorktreeRow";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { TerrierMark } from "../TerrierMark";
@@ -99,7 +99,7 @@ export function InboxRow({
         />
         <span className="min-w-0 truncate font-medium">{project.name}</span>
         <TerrierMark terrier={project.source === "terrier"} />
-        {device && <DeviceBadge badge={device} />}
+        {device && <RowDeviceBadge badge={device} />}
         {mirror && <MirrorBadge mirror={mirror} />}
         <TrailingSlot
           worktree={worktree}

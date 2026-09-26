@@ -1,5 +1,8 @@
 import { TerrierPaw } from "@/components/shared/TerrierPaw";
-import { useMarkTerrierProjects } from "@/hooks/config/useMarkTerrierProjects";
+import {
+  useMarkTerrierProjects,
+  useTerrierMarksHere,
+} from "@/hooks/config/useSidebarMarks";
 
 // The paw after a project's name in the sidebar, while this window has
 // Mark terrier projects on (Settings, Appearance). Whether the row
@@ -8,5 +11,11 @@ import { useMarkTerrierProjects } from "@/hooks/config/useMarkTerrierProjects";
 export function TerrierMark({ terrier }: { terrier: boolean }) {
   const mark = useMarkTerrierProjects();
   if (!mark || !terrier) return null;
-  return <TerrierPaw className="size-3" />;
+  return <ShownTerrierMark />;
+}
+
+// Split out so only a row that would wear the paw reads the device
+// config behind useTerrierMarksHere.
+function ShownTerrierMark() {
+  return useTerrierMarksHere() ? <TerrierPaw className="size-3" /> : null;
 }

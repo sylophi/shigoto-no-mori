@@ -42,6 +42,9 @@ Poses ride the URL:
 - `?villageLife=1`: Village life on in this window's settings (the
   desktop's: the web shell has none). Off by default, as a fresh
   install has it.
+- `?signedOut=1`: the desktop signed out of its account (the account
+  status alone: the fixture peers stay), for the settings that need
+  one.
 - `?villagers=absent|downloading|ready|failed`: the villager data
   status, for the control beside Village life in Settings. The
   default is ready when the lab holds a download (below), absent

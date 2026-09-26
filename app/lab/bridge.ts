@@ -1356,10 +1356,14 @@ export function installLabBridge(
       : accountDevices
     ).filter((device) => !revoked.has(device.deviceId));
 
+  // ?signedOut=1 poses the desktop signed out (the web shell has no
+  // signed-out window to show), for the settings that need an account.
+  const signedOut =
+    !WEB_SHELL && new URLSearchParams(location.search).get("signedOut") === "1";
   const accountStatus = () => ({
     configured: true,
-    signedIn: true,
-    accountId: LAB_ACCOUNT_ID,
+    signedIn: !signedOut,
+    accountId: signedOut ? "" : LAB_ACCOUNT_ID,
     deviceName: WEB_SHELL ? "Chrome on MacBook" : deviceName,
     deviceIcon: deviceIcon ?? detectedIcon(),
     detectedDeviceIcon: detectedIcon(),
