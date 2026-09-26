@@ -56,7 +56,8 @@ async function captureHookPathEnv(): Promise<Record<string, string>> {
   }
 }
 
-function hookPathEnv(): Promise<Record<string, string>> {
+// Exported for doctor, whose shell-hook check reads the same rc files.
+export function hookPathEnv(): Promise<Record<string, string>> {
   return (hookEnvPromise ??= captureHookPathEnv());
 }
 

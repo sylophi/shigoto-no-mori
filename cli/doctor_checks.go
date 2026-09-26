@@ -23,10 +23,12 @@ import (
 
 // --- checks ---
 
-func runDoctorChecks(projects []project) *doctorReport {
+// complete is false when the registry or the terrier listing couldn't
+// be read, so projects is short of what is really registered.
+func runDoctorChecks(projects []project, complete bool) *doctorReport {
 	report := &doctorReport{}
 	checkEnvironment(report)
-	checkDataDirGroup(report, projects)
+	checkDataDirGroup(report, projects, complete)
 	checkProjects(report, projects)
 	return report
 }
@@ -236,7 +238,9 @@ func checkShellHook(report *doctorReport) {
 			"Run `"+binaryName+" shell install`.")
 	default:
 		detail := "installed for " + strings.Join(installed, ", ")
-		if cdDirectiveFile() == "" {
+		// "This session" is a terminal's. Without one (the app's --json
+		// read) it would always read as a problem.
+		if cdDirectiveFile() == "" && interactiveStdio() {
 			detail += dimOut(" (not active in this session)")
 		}
 		report.ok(groupEnv, "shell-hook", "shell hook", detail)
@@ -259,7 +263,7 @@ func hookBlockCurrent(kind string, hook hookFile) bool {
 
 // --- data dir ---
 
-func checkDataDirGroup(report *doctorReport, projects []project) {
+func checkDataDirGroup(report *doctorReport, projects []project, complete bool) {
 	if !checkDataDir(report) {
 		return // nothing below can mean anything without a data dir
 	}
@@ -267,9 +271,10 @@ func checkDataDirGroup(report *doctorReport, projects []project) {
 	checkRegistryFile(report)
 	checkStaleLocks(report)
 	checkStagingLock(report)
-	checkShelvedEntries(report, projects)
+	checkShelvedEntries(report, projects, complete)
 	checkPortAllocations(report)
 	checkTerrier(report)
+	checkDormantProjectState(report, projects, complete)
 }
 
 // access(2)'s W_OK. Go's syscall package doesn't name the mode bits,
@@ -525,10 +530,11 @@ func checkStagingLock(report *doctorReport) {
 
 // shelvedWorktrees keys are path-derived worktree ids. Ids that match
 // nothing are harmless but accumulate forever, and they're the cheapest
-// signal that worktrees were removed outside sm.
-func checkShelvedEntries(report *doctorReport, projects []project) {
+// signal that worktrees were removed outside sm. With the project list
+// short, a missing project's marks would all read as orphaned.
+func checkShelvedEntries(report *doctorReport, projects []project, complete bool) {
 	shelved := readShelvedSet()
-	if len(shelved) == 0 {
+	if len(shelved) == 0 || !complete {
 		return
 	}
 	known := map[string]bool{}
@@ -630,6 +636,56 @@ func checkTerrier(report *doctorReport) {
 	}
 	report.ok(groupState, "terrier", "terrier",
 		fmt.Sprintf("%d registered repo%s merged into the project list", len(listings), plural(len(listings))))
+}
+
+// A projects/<id>/ dir that no registered or terrier project claims is
+// dormant: terrier rm/prune of a repo sm held config for leaves one
+// behind, since the id is all that ties the dir to a path. Reported,
+// never fixed. Re-registering the path under terrier resurrects the
+// same deterministic id and picks the state back up, and sm can't tell
+// a dir that will come back from one that won't.
+func checkDormantProjectState(report *doctorReport, projects []project, complete bool) {
+	if !complete {
+		return // every dir the short list leaves out would read as dormant
+	}
+	dir := projectsDataDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return // absent until a project is configured, so nothing to say
+	}
+	claimed := make(map[string]bool, len(projects))
+	for _, p := range projects {
+		claimed[p.ID] = true
+	}
+	total := 0
+	var dormant []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		total++
+		if !claimed[entry.Name()] {
+			dormant = append(dormant, entry.Name())
+		}
+	}
+	if total == 0 {
+		return
+	}
+	if len(dormant) == 0 {
+		report.ok(groupState, "dormant-state", "project state",
+			fmt.Sprintf("%d state dir%s, each belonging to a project", total, plural(total)))
+		return
+	}
+	sort.Strings(dormant)
+	names := dormant[0]
+	if extra := len(dormant) - 1; extra > 0 {
+		names += fmt.Sprintf(" and %d more", extra)
+	}
+	report.warn(groupState, "dormant-state", "project state",
+		fmt.Sprintf("%d state %s to no project (%s)", len(dormant),
+			pluralize(len(dormant), "dir belongs", "dirs belong"), names),
+		"Harmless: it reconnects if terrier lists the repo again (re-added, or the terrier toggle back on). "+
+			"Otherwise delete it from "+collapseHome(dir)+" by hand.")
 }
 
 // `port-pool list` prints "  <port> -> <dir> (<date>)" per allocation.
