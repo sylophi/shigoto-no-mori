@@ -48,6 +48,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
@@ -80,6 +81,7 @@ import {
   createCliRunner,
   makeProof,
   makeTracker,
+  processAlive,
   waitFor,
 } from "./lib/checkKit.mjs";
 import { cliSandbox } from "./lib/cliSandbox.mjs";
@@ -1247,6 +1249,224 @@ async function main() {
       "cloneProjectFromPeer: the peer's default branch lands as a registered checkout of the same identity with its remote and progress reported, a taken folder, a parent that is a file and a landing on the default branch are refused clean, and a pull with cloneInto beside a checkout it has clones nothing",
     );
 
+    // ---- The cancel (sync:cancelMove, host/lib/sync/moves.ts): a move
+    // cut short mid-create, with the target's setup script hung, ends
+    // within moments with the script dead, the worktree it made
+    // removed, the branch (kept by `sm rm` under the setting) and
+    // incoming ref gone and the source untouched. Once over, there is nothing left to cancel. The same
+    // for a send, where the landing runs on the peer and meets the
+    // cancel as the link torn down under it, and for a caller that
+    // goes away (the context's signal), which cancels like a click.
+    const targetConfigPath = join(
+      dataDir,
+      "projects",
+      targetProjectId,
+      "project.json",
+    );
+    const targetConfigBefore = existsSync(targetConfigPath)
+      ? readFileSync(targetConfigPath, "utf8")
+      : null;
+    const setupPidPath = join(sandbox, "setup.pid");
+    writeFileSync(
+      targetConfigPath,
+      `${JSON.stringify({
+        defaultBranch: "main",
+        scripts: {
+          setup: `echo $$ > '${setupPidPath}'; exec sleep 600`,
+        },
+      })}\n`,
+    );
+    // The setup script has started: its pid file is there, and it is
+    // the sleep (exec'd, so the pid is the one process to watch).
+    const setupStarted = async () => {
+      if (existsSync(setupPidPath)) rmSync(setupPidPath);
+      await waitFor(
+        () => existsSync(setupPidPath),
+        "the target's setup script to start",
+        60_000,
+      );
+      const pid = Number(readFileSync(setupPidPath, "utf8").trim());
+      assert.ok(Number.isInteger(pid) && pid > 1, "no setup pid");
+      return pid;
+    };
+    const landedNothing = async (branch, sourcePath) => {
+      assert.equal(
+        await refExists(targetRepo, `refs/heads/${branch}`),
+        false,
+        `the cancelled move left ${branch} on the target`,
+      );
+      assert.equal(
+        await refExists(targetRepo, `refs/shigomori/incoming/${branch}`),
+        false,
+        "the cancelled move left its incoming ref",
+      );
+      assert.ok(
+        !(await gitOut(targetRepo, "worktree", "list", "--porcelain")).includes(
+          `branch refs/heads/${branch}`,
+        ),
+        `the cancelled move left a worktree on ${branch}`,
+      );
+      assert.equal(existsSync(sourcePath), true, "the source must survive");
+    };
+    try {
+      // Branches kept on removal, so the rollback has to take the one
+      // the move made itself, or a retry would meet it.
+      await sm("config", "write", "--data", '{"deleteBranchOnRemove":false}');
+      // (a) The pull, cancelled by the caller.
+      const wtCancelPath = await addWorktree(
+        sourceRepo,
+        "wt-cancel",
+        "cancel1",
+      );
+      const wtCancelId = worktreeIdFromPath(wtCancelPath);
+      const cancelledPull = syncHandlers.pullWorktree(
+        {
+          sourceDeviceId: "A",
+          sourceProjectId,
+          sourceWorktreeId: wtCancelId,
+          sourceIdentity: identity,
+          branch: "cancel1",
+        },
+        pullCtx,
+      );
+      cancelledPull.catch(() => {});
+      const pullSetupPid = await setupStarted();
+      assert.equal(processAlive(pullSetupPid), true);
+      const cancelledAt = Date.now();
+      assert.deepEqual(
+        await syncHandlers.cancelMove(
+          { sourceWorktreeId: wtCancelId },
+          pullCtx,
+        ),
+        { cancelled: true },
+      );
+      await assert.rejects(cancelledPull, /The move was cancelled/);
+      assert.ok(
+        Date.now() - cancelledAt < 20_000,
+        "the cancel took longer than the rollback should",
+      );
+      await waitFor(
+        () => !processAlive(pullSetupPid),
+        "the setup script to die",
+      );
+      await landedNothing("cancel1", wtCancelPath);
+      assert.deepEqual(
+        await syncHandlers.cancelMove(
+          { sourceWorktreeId: wtCancelId },
+          pullCtx,
+        ),
+        { cancelled: false },
+        "a move that is over is not cancellable",
+      );
+      // And the source is exactly as it was: the same pull lands.
+      const retried = await syncHandlers.pullWorktree(
+        {
+          sourceDeviceId: "A",
+          sourceProjectId,
+          sourceWorktreeId: wtCancelId,
+          sourceIdentity: identity,
+          branch: "cancel1",
+          runSetup: false,
+        },
+        pullCtx,
+      );
+      assert.equal(retried.worktree.branch, "cancel1");
+      ok(
+        "cancelMove (pull): the hung setup script dies, the worktree, branch and incoming ref are gone, the source survives, a second cancel finds nothing, and a retry lands",
+      );
+
+      // (b) The send: the landing runs on the peer, under the link this
+      // side tears down as it cancels.
+      const wtCancel2Path = await addWorktree(
+        sourceRepo,
+        "wt-cancel2",
+        "cancel2",
+      );
+      const wtCancel2Id = worktreeIdFromPath(wtCancel2Path);
+      const cancelledSend = syncHandlers.sendWorktree(
+        {
+          targetDeviceId: "A",
+          projectId: sourceProjectId,
+          worktreeId: wtCancel2Id,
+        },
+        pullCtx,
+      );
+      cancelledSend.catch(() => {});
+      const sendSetupPid = await setupStarted();
+      assert.deepEqual(
+        await syncHandlers.cancelMove(
+          { sourceWorktreeId: wtCancel2Id },
+          pullCtx,
+        ),
+        { cancelled: true },
+      );
+      await assert.rejects(cancelledSend, /The move was cancelled/);
+      await waitFor(
+        () => !processAlive(sendSetupPid),
+        "the peer's setup script to die",
+      );
+      await waitFor(
+        async () => !(await refExists(targetRepo, "refs/heads/cancel2")),
+        "the peer to remove the cancelled copy",
+        20_000,
+      );
+      await landedNothing("cancel2", wtCancel2Path);
+      await assert.rejects(
+        () =>
+          syncHandlers.teardownSource(
+            {
+              direction: "send",
+              deviceId: "A",
+              projectId: sourceProjectId,
+              worktreeId: wtCancel2Id,
+            },
+            pullCtx,
+          ),
+        /No send recorded/,
+        "a cancelled send must leave no receipt to tear the source down on",
+      );
+      ok(
+        "cancelMove (send): the peer's landing is cancelled by the link torn down under it, its setup script dies, the copy goes, and no receipt is kept",
+      );
+
+      // (c) The caller gone: a pull whose context aborts (the window
+      // reloaded, the socket died) is cancelled the same way.
+      const wtCancel3Path = await addWorktree(
+        sourceRepo,
+        "wt-cancel3",
+        "cancel3",
+      );
+      const wtCancel3Id = worktreeIdFromPath(wtCancel3Path);
+      const gone = new AbortController();
+      const abandonedPull = syncHandlers.pullWorktree(
+        {
+          sourceDeviceId: "A",
+          sourceProjectId,
+          sourceWorktreeId: wtCancel3Id,
+          sourceIdentity: identity,
+          branch: "cancel3",
+        },
+        { ...pullCtx, signal: gone.signal },
+      );
+      abandonedPull.catch(() => {});
+      const abandonedSetupPid = await setupStarted();
+      gone.abort();
+      await assert.rejects(abandonedPull, /The move was cancelled/);
+      await waitFor(
+        () => !processAlive(abandonedSetupPid),
+        "the setup script to die",
+      );
+      await landedNothing("cancel3", wtCancel3Path);
+      ok(
+        "cancelMove (caller gone): a context that aborts mid-create cancels the move like a click, and leaves nothing behind",
+      );
+    } finally {
+      if (targetConfigBefore === null)
+        rmSync(targetConfigPath, { force: true });
+      else writeFileSync(targetConfigPath, targetConfigBefore);
+      await sm("config", "write", "--data", '{"deleteBranchOnRemove":true}');
+    }
+
     // ---- A send into a device with no checkout of the repo: the peer
     // clones it from here first, over the same link the branch then
     // crosses, and lands the copy in the clone. The two ends need
@@ -1265,10 +1485,12 @@ async function main() {
     });
     const asOtherDevice = (run) => sendsAsOtherDevice.run(true, run);
     setCliRunnerImpl({
-      runCli: (args, onDoc) =>
+      runCli: (args, onDoc, extraEnv, opts) =>
         (sendsAsOtherDevice.getStore() === true ? otherCli : fixture).runCli(
           args,
           onDoc,
+          extraEnv,
+          opts,
         ),
       requireCliBinary: () => fixture.smBinary,
       cliFailureMessage,

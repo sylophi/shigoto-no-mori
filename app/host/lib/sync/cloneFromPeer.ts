@@ -24,8 +24,13 @@ import { run } from "@host/lib/git/core";
 import { deleteRef, updateRef } from "@host/lib/git/refs";
 import { registerProject } from "@host/lib/projects";
 import { expandHome } from "@host/lib/util/paths";
+import { throwIfCancelled } from "./moves";
 import { incomingRefFor, type WorktreeSource } from "./sourceLink";
 
+// A cancel (`signal`, the move's) between steps undoes the folder like
+// any failure. During the fetch the link's reset does the failing. A
+// clone that got as far as its register stays: it is a checkout of
+// the repo at the place the user named, and a retry lands in it.
 export async function cloneProjectFromPeer(
   source: WorktreeSource,
   { parentDir, name }: SyncCloneInto,
@@ -33,6 +38,7 @@ export async function cloneProjectFromPeer(
   // branch cannot be it, and that is known before a byte moves.
   landing: string,
   onProgress?: (bytes: number, totalBytes: number) => void,
+  signal?: AbortSignal,
 ): Promise<Project> {
   // The source's default branch is what the checkout is made of, so the
   // clone reads as the repo (its identity is the root of that branch,
@@ -63,6 +69,7 @@ export async function cloneProjectFromPeer(
   const branchRef = SyncBundleRefSchema.parse(`refs/heads/${branch}`);
   const incomingRef = incomingRefFor(branch);
 
+  throwIfCancelled(signal);
   await mkdir(dest);
   try {
     await run(dest, ["init", "--quiet"]);
@@ -80,6 +87,7 @@ export async function cloneProjectFromPeer(
     if (tip === undefined) {
       throw new Error(`${branch} did not arrive whole from the other device.`);
     }
+    throwIfCancelled(signal);
     await updateRef(dest, branchRef, tip);
     await deleteRef(dest, incomingRef);
     await run(dest, ["reset", "--quiet", "--hard"]);
@@ -103,6 +111,8 @@ export async function cloneProjectFromPeer(
         branch,
       ]);
     }
+    // Once past here the clone is registered and stays.
+    throwIfCancelled(signal);
   } catch (error) {
     await rm(dest, { recursive: true, force: true }).catch(() => {});
     throw error;

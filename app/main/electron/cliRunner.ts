@@ -11,10 +11,11 @@ import { CLI_DIST_DIR, cliBinaryName } from "@shared/packaging/cliDist.mts";
 import { app } from "electron";
 import { registerInflightContributor } from "@host/lib/scripts";
 import { noteSelfWrite } from "@host/lib/util/selfWrite";
-import { signalChildTree } from "@host/lib/scripts/process";
+import { killWithGrace, signalChildTree } from "@host/lib/scripts/process";
+import { onAbort } from "@host/lib/util/abort";
 // The injection seam in the CLI delegate owns the document shapes;
 // this runner is the Electron-side implementation wired in at boot.
-import type { CliDoc, CliResult } from "@host/ipc/cliDelegate";
+import type { CliDoc, CliResult, CliRunOpts } from "@host/ipc/cliDelegate";
 import { lineSplitter } from "@host/lib/util/ndjson";
 import { bundledBinaryResolver } from "./bundledBinary";
 
@@ -128,12 +129,18 @@ export async function spawnCliDetached(args: string[]): Promise<void> {
 // after it must still refresh the UI. opts.timeoutMs SIGKILLs the child's process
 // group when it runs that long, so a wedged child (a stuck subprocess
 // on the Go side) can't hold the returned promise open forever. The
-// kill surfaces as a normal non-zero close.
+// kill surfaces as a normal non-zero close. opts.signal is a caller's
+// cancel (a move's, host/lib/sync/moves.ts): SIGTERM to the group at
+// once, so a lifecycle script the CLI is running dies with it, then
+// SIGKILL after a grace period for whatever ignored that. The same
+// non-zero close, which the caller reads as its own cancel.
+const CANCEL_GRACE_MS = 3_000;
+
 export async function runCli(
   args: string[],
   onDoc?: (doc: CliDoc) => void,
   extraEnv?: Record<string, string>,
-  opts?: { background?: boolean; readOnly?: boolean; timeoutMs?: number },
+  opts?: CliRunOpts,
 ): Promise<CliResult> {
   const binary = requireCliBinary();
   const uncounted = opts?.background === true || opts?.readOnly === true;
@@ -150,9 +157,13 @@ export async function runCli(
       opts?.timeoutMs !== undefined
         ? setTimeout(() => signalChildTree(child, "SIGKILL"), opts.timeoutMs)
         : null;
+    const offCancel = onAbort(opts?.signal, () =>
+      killWithGrace(child, CANCEL_GRACE_MS, { tree: true }),
+    );
     // error and close can both fire for one child, so release runs once.
     const release = () => {
       if (killTimer !== null) clearTimeout(killTimer);
+      offCancel();
       if (children.delete(child) && uncounted) backgroundChildren--;
     };
 

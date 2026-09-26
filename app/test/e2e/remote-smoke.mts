@@ -2472,6 +2472,158 @@ async function main(): Promise<string[]> {
       );
     });
 
+    // The running view's Cancel, with the create hung on a's setup
+    // script (a sleep that would outlast the smoke): the dialog reads
+    // cancelled within moments, the script is dead, the copy is gone
+    // from a's disk, list and refs, and b's source is untouched. Once
+    // for the transplant, once for the mirror, which b runs and whose
+    // cancel goes to b and comes back to a's landing.
+    const cancelledMidSetup = async (
+      label: string,
+      button: string,
+      start: string,
+      cancelledTitle: string,
+    ) => {
+      const source = await sourceOnB(label, (path) => {
+        writeFileSync(join(path, "README.md"), "edited before the cancel\n");
+      });
+      const aProject = await ownProjectOnA();
+      const id = JSON.stringify(aProject.id);
+      const original = await a.evaluate<{ scripts?: Record<string, string> }>(
+        `window.api.shigomori.read(${id})`,
+      );
+      const writeSetup = (setup: string) =>
+        a.evaluate(
+          `window.api.shigomori.write(${id}, ${JSON.stringify({
+            ...original,
+            scripts: { ...original.scripts, setup },
+          })})`,
+        );
+      // An odd duration, so the process is findable by its argv alone.
+      const sleepFor = `sleep 6${String(Date.now()).slice(-3)}`;
+      const sleeping = () => {
+        try {
+          execFileSync("pgrep", ["-f", `^${sleepFor}$`], { stdio: "pipe" });
+          return true;
+        } catch {
+          return false;
+        }
+      };
+      await writeSetup(`pwd >> ${JSON.stringify(setupLog)} && ${sleepFor}`);
+      try {
+        await openDialogFor(source, button);
+        await waitSwitch(false, "nothing is left out");
+        await click("the setup switch", SETUP_SWITCH);
+        await waitSwitch(true, "the user turned it on");
+        const runsBefore = setupRuns().length;
+        const startedAt = Date.now();
+        await startAndReadSetupRow(start);
+        await waitFor(
+          () => setupRuns().length > runsBefore && sleeping(),
+          "a's setup script to start and hang",
+          120_000,
+        );
+        const copyPath = setupRuns().at(-1) ?? "";
+        assert.ok(
+          existsSync(copyPath),
+          "the create left no worktree to hang in",
+        );
+        await clickText("Cancel");
+        // The cancelling state is brief (a kill and an `sm rm`), so a
+        // poll may only ever see the cancelled step after it.
+        await a.waitFor(
+          "the running view to say it is cancelling, or the cancelled step",
+          `Boolean(${byText("Cancelling…")}) || Boolean(${byText(cancelledTitle)})`,
+          10_000,
+        );
+        await a.waitFor(
+          `the dialog to read "${cancelledTitle}"`,
+          `Boolean(${byText(cancelledTitle)})`,
+          60_000,
+        );
+        // The header's clock froze at the settle: a figure within the
+        // attempt's wall time (which, on one machine with this repo,
+        // is often under a second), not a clock still running.
+        const total = await a.evaluate<string>(
+          `document.querySelector("header p.font-mono")?.textContent ?? ""`,
+        );
+        const match = /^(\d+):(\d\d)$/.exec(total);
+        assert.ok(match, `the clock reads "${total}"`);
+        const totalSeconds = Number(match[1]) * 60 + Number(match[2]);
+        assert.ok(
+          totalSeconds <= Math.ceil((Date.now() - startedAt) / 1000),
+          `the clock reads ${total}, past the attempt's own wall time`,
+        );
+        // Both windows at the cancelled step, for a look afterwards.
+        await shoot(`cancelled-${label}`);
+        await waitFor(
+          () => !sleeping(),
+          "the hung setup script to die",
+          15_000,
+        );
+        await waitFor(
+          () => !existsSync(copyPath),
+          "the cancelled copy to leave a's disk",
+          30_000,
+        );
+        const listed = await a.evaluate<Worktree[]>(
+          `window.api.worktrees.list(${id})`,
+        );
+        assert.ok(
+          !listed.some((w) => w.branch === source.branch),
+          "a still lists the cancelled copy",
+        );
+        assert.equal(
+          incomingRefs(),
+          "",
+          "the cancel left an incoming ref on a",
+        );
+        assert.ok(existsSync(source.path), "b's source went with the cancel");
+        assert.equal(
+          readOrNull(join(source.path, "README.md")),
+          "edited before the cancel\n",
+          "b's uncommitted edit did not survive the cancel",
+        );
+        assert.ok(
+          !(await mirrorsOn(b)).sessions.some(
+            (s) => s.localWorktreeId === source.id,
+          ),
+          "b runs a session for the cancelled move",
+        );
+        assert.equal(
+          await a.evaluate<boolean>(
+            `window.api.sync.cancelMove(${JSON.stringify({ sourceWorktreeId: source.id })}).then((r) => r.cancelled)`,
+          ),
+          false,
+          "a move that is over must have nothing left to cancel",
+        );
+        await clickText("Close");
+        await a.waitFor(
+          "the dialog to close",
+          `!${byText(cancelledTitle)}`,
+          10_000,
+        );
+      } finally {
+        await writeSetup(SETUP_SCRIPT);
+      }
+    };
+    await scenario("dialog: transplant cancelled mid-setup", () =>
+      cancelledMidSetup(
+        "ui-cancel-tp",
+        "Transplant here",
+        "Start transplant",
+        "Transplant cancelled",
+      ),
+    );
+    await scenario("dialog: mirror cancelled mid-setup", () =>
+      cancelledMidSetup(
+        "ui-cancel-mi",
+        "Mirror here",
+        "Start mirroring",
+        "Mirror cancelled",
+      ),
+    );
+
     await scenario("port forward", async () => {
       // server.close waits out live connections, so the accepted ones
       // are tracked and destroyed first or a failed run would hang.
