@@ -16,12 +16,15 @@ import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
 
 // The settings form's staged state. One flat shape across both stores:
-// the first three fields are client config (appearance), the rest are
+// the first four fields are client config (appearance), the rest are
 // device config.
 export interface SettingsFormState {
   theme: Theme;
   doubutsu: boolean;
   pauseAnimationsOnBattery: boolean;
+  // Whether villager extras show is villageLifeShows' call (the
+  // villager data downloaded too), never this field alone.
+  villageLife: boolean;
   launchers: LauncherCommand[];
   hiddenLaunchers: string[];
   launchScripts: boolean;
@@ -30,10 +33,9 @@ export interface SettingsFormState {
   autoPullNew: boolean;
   autoPullPrimaryOnly: boolean;
   doubutsuNames: boolean;
-  // The stored value, shown as is while doubutsuNames is off (the row
-  // is disabled then). Whether villager extras show is
-  // villageLifeEnabled's call, never this field alone.
-  villageLife: boolean;
+  // The stored value, kept as is while doubutsuNames is off (the row
+  // is disabled then).
+  prioritizeBirthdays: boolean;
   codexWorktreeNames: boolean;
   portPool: boolean;
   terrier: boolean;
@@ -51,6 +53,7 @@ export function fromConfig(
     theme: clientConfig.theme ?? "system",
     doubutsu: clientConfig.doubutsu ?? true,
     pauseAnimationsOnBattery: clientConfig.pauseAnimationsOnBattery ?? true,
+    villageLife: clientConfig.villageLife ?? false,
     launchers: config.launchers ?? [],
     // Sorted here and on every toggle so the id list has one canonical
     // order. useDirtyForm compares FormState by JSON.stringify, and
@@ -66,7 +69,8 @@ export function fromConfig(
     autoPullPrimaryOnly:
       config.autoPullPrimaryOnly ?? DEFAULTS.autoPullPrimaryOnly,
     doubutsuNames: config.doubutsuNames ?? DEFAULTS.doubutsuNames,
-    villageLife: config.villageLife ?? DEFAULTS.villageLife,
+    prioritizeBirthdays:
+      config.prioritizeBirthdays ?? DEFAULTS.prioritizeBirthdays,
     codexWorktreeNames:
       config.codexWorktreeNames ?? DEFAULTS.codexWorktreeNames,
     portPool: config.portPool ?? DEFAULTS.portPool,
@@ -102,7 +106,7 @@ export function toDeviceSettingsPatch(
     autoPullNew: state.autoPullNew,
     autoPullPrimaryOnly: state.autoPullPrimaryOnly,
     doubutsuNames: state.doubutsuNames,
-    villageLife: state.villageLife,
+    prioritizeBirthdays: state.prioritizeBirthdays,
     codexWorktreeNames: state.codexWorktreeNames,
     portPool: state.portPool,
     terrier: state.terrier,
@@ -137,6 +141,8 @@ function toClientConfig(state: SettingsFormState): ClientConfig {
     pauseAnimationsOnBattery: state.pauseAnimationsOnBattery
       ? undefined
       : false,
+    // Default is off, so off is omitted and the opt-in stored as `true`.
+    villageLife: state.villageLife ? true : undefined,
   };
 }
 

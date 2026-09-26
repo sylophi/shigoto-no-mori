@@ -141,7 +141,6 @@ async function tell(queryClient: QueryClient): Promise<void> {
       if (scope === undefined) return;
       const speakers = await speakersFor(
         queryClient,
-        scope,
         [...movedIn, ...movedOut],
         { withColor: true },
       );

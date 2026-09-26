@@ -298,7 +298,7 @@ type globalConfig struct {
 	AutoPullNew          *bool             `json:"autoPullNew"`
 	AutoPullPrimaryOnly  *bool             `json:"autoPullPrimaryOnly"`
 	DoubutsuNames        *bool             `json:"doubutsuNames"`
-	VillageLife          *bool             `json:"villageLife"`
+	PrioritizeBirthdays  *bool             `json:"prioritizeBirthdays"`
 	CodexWorktreeNames   *bool             `json:"codexWorktreeNames"`
 	Launchers            []launcherCommand `json:"launchers"`
 	HiddenLaunchers      []string          `json:"hiddenLaunchers"`

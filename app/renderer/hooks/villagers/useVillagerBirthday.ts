@@ -7,9 +7,10 @@ import { useVillagerFace, useVillagerProfiles } from "./useVillagers";
 
 // The character a worktree is named after, on their birthday (local
 // date), with their face, or null. Never for the primary checkout: it
-// is the project, not a villager's home (worktreeMoves). With `withColor`, a rare one carries
-// their color, for their dialogue box, as speakersFor gives it. Under Village life of the
-// device the surrounding HostScope names, like every villager extra.
+// is the project, not a villager's home (worktreeMoves). With
+// `withColor`, a rare one carries their color, for their dialogue box,
+// as speakersFor gives it. Under this window's Village life, like every
+// villager extra.
 // Re-renders at midnight, so a window left open all night brings the
 // cake out, and puts it away, on the right day.
 export function useVillagerBirthday(

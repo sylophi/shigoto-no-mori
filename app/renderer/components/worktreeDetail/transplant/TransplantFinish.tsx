@@ -24,7 +24,6 @@ import { Chip } from "@/components/ui/chip-button";
 import { RowTag } from "@/components/ui/row-tag";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { InlineError } from "@/components/ui/inline-error";
-import { useDestinationScope } from "@/hooks/remote/useHostScope";
 import { keptSourceReason } from "@/hooks/remote/useMoveWorktree";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 import {
@@ -164,9 +163,8 @@ export function TransplantFinish({
         "its teardown was refused.")
       : null;
   const branch = result.worktree.branch;
-  // The landed worktree's villager, when it has one, says the news, from
-  // the device it landed on.
-  const say = useWorktreeSuccessToast(useDestinationScope());
+  // The landed worktree's villager, when it has one, says the news.
+  const say = useWorktreeSuccessToast();
 
   // Each fate ends on the landed worktree's page, except a teardown
   // the source refused.

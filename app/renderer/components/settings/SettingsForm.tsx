@@ -15,7 +15,7 @@ import { THIS_DEVICE_VIEW } from "@/lib/remote/deviceStatus";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
 import { useStagedUpdates } from "@/hooks/system/useUpdater";
-import { useDirtyForm } from "@/hooks/ui/useDirtyForm";
+import { fieldSetter, useDirtyForm } from "@/hooks/ui/useDirtyForm";
 import { useDoubutsu } from "@/hooks/ui/useDoubutsu";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { hasLocalHost } from "@/lib/localHost";
@@ -88,6 +88,7 @@ export function SettingsForm({
     useDirtyForm<SettingsFormState>(
       fromConfig(initialConfig, initialClientConfig),
     );
+  const setField = fieldSetter(setForm);
 
   // Drop any staged previews when leaving the settings page so the rest
   // of the app falls back to the saved values.
@@ -116,6 +117,7 @@ export function SettingsForm({
           theme: prev.theme,
           doubutsu: prev.doubutsu,
           pauseAnimationsOnBattery: prev.pauseAnimationsOnBattery,
+          villageLife: prev.villageLife,
         }));
       }
     }
@@ -195,9 +197,11 @@ export function SettingsForm({
               doubutsu={form.doubutsu}
               onDoubutsuChange={setDoubutsu}
               pauseAnimationsOnBattery={form.pauseAnimationsOnBattery}
-              onPauseAnimationsOnBatteryChange={(next) =>
-                setForm((prev) => ({ ...prev, pauseAnimationsOnBattery: next }))
-              }
+              onPauseAnimationsOnBatteryChange={setField(
+                "pauseAnimationsOnBattery",
+              )}
+              villageLife={form.villageLife}
+              onVillageLifeChange={setField("villageLife")}
             />
             <HiddenWorktreesSection />
             {/* The desktop states its build in this device's section.

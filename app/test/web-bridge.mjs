@@ -255,18 +255,20 @@ async function main() {
       );
       await assert.rejects(bridge.api.updater.check(), refused);
       await assert.rejects(bridge.api.updater.install(), refused);
-      // The villager data the same way: a tab holds none, so its status
-      // (a union) has no empty answer, its commands refuse, and the
-      // face and profile reads answer the structural nothing.
-      await assert.rejects(
-        bridge.api.villagers.status(),
-        /has no safe empty answer in the browser/,
+      // The villager data is local only (the desktop's own device), so
+      // a tab refuses every call: it has no device to hold it.
+      await Promise.all(
+        [
+          bridge.api.villagers.status(),
+          bridge.api.villagers.download(),
+          bridge.api.villagers.cancel(),
+          bridge.api.villagers.remove(),
+          bridge.api.villagers.face("ace"),
+          bridge.api.villagers.profiles(),
+        ].map((call) =>
+          assert.rejects(call, /is not available in the browser/),
+        ),
       );
-      await assert.rejects(bridge.api.villagers.download(), refused);
-      await assert.rejects(bridge.api.villagers.cancel(), refused);
-      await assert.rejects(bridge.api.villagers.remove(), refused);
-      assert.equal(await bridge.api.villagers.face("ace"), null);
-      assert.equal(await bridge.api.villagers.profiles(), null);
       // The port-forward engine binds real TCP listeners, so its whole
       // client-scoped surface must refuse on the web (the UI never
       // mounts there, gated on isElectron, but the wire is the wall).

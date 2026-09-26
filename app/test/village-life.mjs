@@ -1,20 +1,24 @@
-// Durable proof for the Village life setting, and that the app and the
-// CLI read it the same way. It is a device setting in config.json
-// beside Doubutsu names: the renderer gates villager extras on
-// villageLifeEnabled (shared/villageLife.ts, read through
-// useVillageLife), and the CLI registers the key so a whole-document
+// Durable proof for Village life and Prioritize birthdays, the two
+// halves of what was one device setting. Village life is a client
+// setting (ClientConfig): the renderer gates villager extras on
+// villageLifeShows (shared/villageLife.ts, read through useVillageLife),
+// and no device reads it. prioritizeBirthdays lives in config.json
+// beside Doubutsu names: the CLI registers the key so a whole-document
 // save can clear it, and reads it to invite a birthday villager
 // (cli/birthdays.go).
 //
 // Asserts:
-// - unset Village life reads as off, and a fresh install does not seed it
-// - Village life counts only while Doubutsu names is on
-// - the Settings form shows Village life's stored value even with names
-//   off
-// - the remote patch carries it
-// - against the REAL sm binary, the form's save lands through the CLI's
-//   whole-document write (as the host's writeDeviceSettings applies a
-//   patch) and both engines read identical values
+// - unset, both read as off, a fresh install seeds neither, and
+//   Prioritize birthdays counts only while Doubutsu names is on
+// - Village life shows only with the villager data downloaded
+// - the Settings form shows each one's stored value, and Prioritize
+//   birthdays' even with names off
+// - the device patch carries Prioritize birthdays and never Village life
+// - against the REAL sm binary, prioritizeBirthdays is off when unset
+//   and not seeded, a device-settings save of it lands through the
+//   CLI's whole-document write (as the host's writeDeviceSettings
+//   applies a patch), turning names off leaves it stored, and both
+//   engines read identical values
 //
 // Runs under test/lib/register-ts-alias.mjs. Run: pnpm test village-life.
 import assert from "node:assert/strict";
@@ -31,10 +35,16 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { FRESH_CONFIG_SEED } from "@host/lib/bootstrap";
 import {
+  ClientConfigSchema,
   DEVICE_SETTINGS_DEFAULTS,
   DeviceSettingsPatchSchema,
 } from "@shared/schemas";
-import { doubutsuNamesEnabled, villageLifeEnabled } from "@shared/villageLife";
+import {
+  doubutsuNamesEnabled,
+  prioritizeBirthdaysEnabled,
+  villageLifeEnabled,
+  villageLifeShows,
+} from "@shared/villageLife";
 import { createCliRunner, makeProof, repoRoot } from "./lib/checkKit.mjs";
 
 // The settings encoders sit beside their React hook, whose imports read
@@ -52,51 +62,85 @@ const sandbox = realpathSync(mkdtempSync(join(tmpdir(), "sm-village-check-")));
 const smBinary = join(sandbox, "sm");
 
 try {
-  await proof.check("unset names and unset Village life read off", () => {
+  await proof.check("unset, each setting reads off", () => {
     const cases = [
       [{}, false, false],
-      [{ villageLife: true }, false, false],
+      [{ prioritizeBirthdays: true }, false, false],
       [{ doubutsuNames: true }, true, false],
-      [{ doubutsuNames: true, villageLife: true }, true, true],
-      [{ doubutsuNames: true, villageLife: false }, true, false],
+      [{ doubutsuNames: true, prioritizeBirthdays: true }, true, true],
+      [{ doubutsuNames: true, prioritizeBirthdays: false }, true, false],
       [{ doubutsuNames: false }, false, false],
       [FRESH_CONFIG_SEED, true, false],
     ];
-    for (const [config, names, village] of cases) {
+    for (const [config, names, birthdays] of cases) {
       const label = JSON.stringify(config);
       assert.equal(doubutsuNamesEnabled(config), names, label);
-      assert.equal(villageLifeEnabled(config), village, label);
+      assert.equal(prioritizeBirthdaysEnabled(config), birthdays, label);
     }
+    assert.equal(villageLifeEnabled({}), false);
+    assert.equal(villageLifeEnabled({ villageLife: false }), false);
+    assert.equal(villageLifeEnabled({ villageLife: true }), true);
   });
 
-  await proof.check("the form shows Village life's stored value", () => {
+  await proof.check("Village life shows only with the villager data", () => {
+    const on = { villageLife: true };
+    assert.equal(villageLifeShows(on, { kind: "ready" }), true);
+    for (const status of [
+      undefined,
+      { kind: "absent" },
+      { kind: "downloading" },
+      { kind: "failed" },
+    ]) {
+      assert.equal(villageLifeShows(on, status), false, status?.kind);
+    }
+    assert.equal(villageLifeShows({}, { kind: "ready" }), false);
+  });
+
+  await proof.check("the form shows each stored value", () => {
     const unset = fromConfig({}, {});
     assert.equal(unset.doubutsuNames, false);
+    assert.equal(unset.prioritizeBirthdays, false);
     assert.equal(unset.villageLife, false);
     const seeded = fromConfig(FRESH_CONFIG_SEED, {});
     assert.equal(seeded.doubutsuNames, true);
-    assert.equal(seeded.villageLife, false);
+    assert.equal(seeded.prioritizeBirthdays, false);
+    assert.equal(fromConfig({}, { villageLife: true }).villageLife, true);
     // Names off disables the row but keeps what it holds.
-    assert.equal(fromConfig({ villageLife: true }, {}).villageLife, true);
+    assert.equal(
+      fromConfig({ prioritizeBirthdays: true }, {}).prioritizeBirthdays,
+      true,
+    );
   });
 
-  await proof.check("the remote patch carries Village life", () => {
-    const patch = toDeviceSettingsPatch({
-      ...fromConfig({}, {}),
-      villageLife: true,
-    });
-    assert.equal(patch.villageLife, true);
-    assert.ok(DeviceSettingsPatchSchema.safeParse(patch).success);
-  });
+  await proof.check(
+    "the device patch carries Prioritize birthdays, never Village life",
+    () => {
+      const patch = toDeviceSettingsPatch({
+        ...fromConfig({}, {}),
+        villageLife: true,
+        prioritizeBirthdays: true,
+      });
+      assert.equal(patch.prioritizeBirthdays, true);
+      assert.ok(!("villageLife" in patch));
+      assert.ok(DeviceSettingsPatchSchema.safeParse(patch).success);
+      assert.ok(
+        !DeviceSettingsPatchSchema.safeParse({ villageLife: true }).success,
+      );
+      assert.equal(
+        ClientConfigSchema.parse({ villageLife: true }).villageLife,
+        true,
+      );
+    },
+  );
 
   await execFileP("go", ["build", "-o", smBinary, "."], {
     cwd: join(repoRoot, "cli"),
   });
 
   await proof.check(
-    "saves through the CLI read the same in both engines",
+    "prioritizeBirthdays saves through the CLI and reads the same in both engines",
     async () => {
-      // A fresh install, seeded by the CLI: names on, Village life off.
+      // A fresh install, seeded by the CLI: names on, the invite off.
       const dir = join(sandbox, "data");
       mkdirSync(dir);
       const { sm } = createCliRunner(smBinary, {
@@ -114,22 +158,20 @@ try {
           const doc = docs.findLast((d) => d.ok === true);
           return { value: doc.value, set: doc.set };
         };
-        const [names, village] = await Promise.all([
+        const [names, birthdays] = await Promise.all([
           read("doubutsuNames"),
-          read("villageLife"),
+          read("prioritizeBirthdays"),
         ]);
-        return { doubutsuNames: names, villageLife: village };
+        return { doubutsuNames: names, prioritizeBirthdays: birthdays };
       };
-      // The Settings save: the form's patch applied over the stored
+      // A device-settings save: the patch applied over the stored
       // document the way the host's writeDeviceSettings does (a value
       // equal to its default deletes the key), then the CLI's
       // whole-document write.
       const save = async (patch) => {
-        const state = { ...fromConfig(config(), {}), ...patch };
+        assert.ok(DeviceSettingsPatchSchema.safeParse(patch).success);
         const doc = { ...config() };
-        for (const [key, value] of Object.entries(
-          toDeviceSettingsPatch(state),
-        )) {
+        for (const [key, value] of Object.entries(patch)) {
           if (
             JSON.stringify(value) ===
             JSON.stringify(DEVICE_SETTINGS_DEFAULTS[key])
@@ -142,42 +184,41 @@ try {
         await sm("config", "write", "--data", JSON.stringify(doc));
       };
       const namesOn = { value: true, set: true };
-      const villageDefault = { value: false, set: false };
+      const birthdaysDefault = { value: false, set: false };
 
+      assert.equal(DEVICE_SETTINGS_DEFAULTS.prioritizeBirthdays, false);
       assert.deepEqual(await get(), {
         doubutsuNames: namesOn,
-        villageLife: villageDefault,
+        prioritizeBirthdays: birthdaysDefault,
       });
-      assert.equal(villageLifeEnabled(config()), false);
 
       // Turning it on stores true.
-      await save({ villageLife: true });
-      assert.equal(config().villageLife, true);
+      await save({ prioritizeBirthdays: true });
+      assert.equal(config().prioritizeBirthdays, true);
       assert.deepEqual(await get(), {
         doubutsuNames: namesOn,
-        villageLife: { value: true, set: true },
+        prioritizeBirthdays: { value: true, set: true },
       });
-      assert.equal(villageLifeEnabled(config()), true);
 
       // Names off gates it without touching what it holds.
       await save({ doubutsuNames: false });
       assert.ok(!("doubutsuNames" in config()), "names off is stored");
-      assert.equal(config().villageLife, true);
-      assert.equal(fromConfig(config(), {}).villageLife, true);
-      assert.equal(villageLifeEnabled(config()), false);
+      assert.equal(config().prioritizeBirthdays, true);
 
-      // Back on, then Village life off returns it to the default.
-      await save({ doubutsuNames: true, villageLife: false });
+      // Back on, then the invite off returns it to the default.
+      await save({ doubutsuNames: true, prioritizeBirthdays: false });
       assert.equal(config().doubutsuNames, true);
-      assert.ok(!("villageLife" in config()), "villageLife still stored");
+      assert.ok(
+        !("prioritizeBirthdays" in config()),
+        "prioritizeBirthdays still stored",
+      );
       assert.deepEqual(await get(), {
         doubutsuNames: namesOn,
-        villageLife: villageDefault,
+        prioritizeBirthdays: birthdaysDefault,
       });
 
-      await sm("config", "set", "villageLife", "on");
-      assert.equal(fromConfig(config(), {}).villageLife, true);
-      assert.equal(villageLifeEnabled(config()), true);
+      await sm("config", "set", "prioritizeBirthdays", "on");
+      assert.equal(config().prioritizeBirthdays, true);
     },
   );
 

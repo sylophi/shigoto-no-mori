@@ -647,7 +647,7 @@ export function registerIpcHandlers(): void {
   // Host-scoped: a peer's Settings page reads this device's update
   // state and, when granted, checks or restarts into an update here.
   registerContract(updaterContract, updaterHandlers);
-  // Host-scoped: a peer's Settings manages this device's villager
-  // data, and every device showing its worktrees reads the faces here.
+  // Local only: the villager data in this device's data dir, for its
+  // own window's Village life.
   registerContract(villagersContract, villagersHandlers);
 }

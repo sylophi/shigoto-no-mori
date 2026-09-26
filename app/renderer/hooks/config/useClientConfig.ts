@@ -2,7 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import type { ClientConfig } from "@shared/schemas";
 import { queryKeys } from "@/lib/queryKeys";
 
-// The app instance's client store (theme, doubutsu, keepReachable),
+// The app instance's client store (theme, doubutsu, villageLife,
+// keepReachable),
 // served by the client-scoped clientConfig module. Device-wide settings
 // stay in useGlobalConfig. Three writers exist (useSettingsSave,
 // useKeepReachableUpdate, and the web AppearancePage save) and every one

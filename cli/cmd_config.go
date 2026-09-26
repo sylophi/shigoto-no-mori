@@ -76,10 +76,10 @@ type configKey struct {
 
 // Mirrors GlobalConfigSchema (shared/schemas/config.ts); defaults from
 // DEVICE_SETTINGS_DEFAULTS beside it, the serialization authority.
-// Device fields only. Client config (theme, doubutsu) lives in the
-// app's own clientConfig.json, which this CLI never touches, and
-// legacy client keys still sitting in config.json pass through writes
-// as unknown keys.
+// Device fields only. Client config (theme, doubutsu, villageLife)
+// lives in the app's own clientConfig.json, which this CLI never
+// touches, and legacy client keys still sitting in config.json pass
+// through writes as unknown keys.
 var globalConfigKeys = []configKey{
 	{name: "launchScripts", kind: boolKind, def: true,
 		desc: "Show package scripts in the Launch section"},
@@ -95,13 +95,13 @@ var globalConfigKeys = []configKey{
 	// has. Fresh installs are seeded with it on (seedFreshInstall).
 	{name: "doubutsuNames", kind: boolKind, def: false,
 		desc: "Name new worktrees after Animal Crossing characters (on for new installs)"},
-	// The app's villager extras on doubutsu-named worktrees, and the
-	// name pick's birthday invite here (birthdays.go). It lives in
-	// config.json beside doubutsuNames and is registered: the write
-	// merge deletes an omitted registry key, which is how a save puts it
-	// back to its default.
-	{name: "villageLife", kind: boolKind, def: false,
-		desc: "Villager flair in the app, and birthday villagers first in the name pick (needs doubutsuNames)"},
+	// The name pick's birthday invite (birthdays.go), which counts only
+	// while doubutsuNames is on. Off when unset, and a fresh install does
+	// not seed it. Registered like every device setting: the write merge
+	// deletes an omitted registry key, which is how a save puts it back
+	// to its default.
+	{name: "prioritizeBirthdays", kind: boolKind, def: false,
+		desc: "Birthday villagers first in the name pick (needs doubutsuNames)"},
 	{name: "codexWorktreeNames", kind: boolKind, def: false,
 		desc: "Name Codex-style <name>/<repo> worktrees by their parent folder"},
 	{name: "portPool", kind: boolKind, def: false,

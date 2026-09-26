@@ -6,13 +6,16 @@ package main
 // The app picks no names itself: it asks `sm worktrees destination`
 // for one, and `sm create` picks the same way. The doubutsu pool holds
 // only the characters with a face on Nookipedia
-// (app/shared/villagers/manifest.json).
+// (app/shared/villagers/manifest.json), each with its birthday when
+// the wiki gives one (birthdays.go).
 
 import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math/rand/v2"
+	"slices"
 	"sync"
 )
 
@@ -33,10 +36,16 @@ func init() {
 	}
 }
 
+// The embedded doubutsu pool, keyed by slug. A character the wiki
+// gives no birthday has none ("").
+type doubutsuName struct {
+	Birthday string `json:"birthday"`
+}
+
 // Parsed on first use: only a create without a name needs it.
-var doubutsuNames = sync.OnceValue(func() []string {
+var doubutsuPool = sync.OnceValue(func() map[string]doubutsuName {
 	var doc struct {
-		Names []string `json:"names"`
+		Names map[string]doubutsuName `json:"names"`
 	}
 	if err := json.Unmarshal(doubutsuNamesJSON, &doc); err != nil {
 		panic("embedded doubutsu-names.json is invalid: " + err.Error())
@@ -44,10 +53,15 @@ var doubutsuNames = sync.OnceValue(func() []string {
 	return doc.Names
 })
 
+// The pool's names, sorted, so the order never depends on map
+// iteration.
+var doubutsuNames = sync.OnceValue(func() []string {
+	return slices.Sorted(maps.Keys(doubutsuPool()))
+})
+
 // Off unless set: an install from before fresh installs were seeded
 // with it on keeps the names it had. Matches doubutsuNamesEnabled in
-// the app's shared/villageLife.ts, which the New Worktree form's
-// pre-pick reads.
+// the app's shared/villageLife.ts.
 func doubutsuNamesEnabled(global globalConfig) bool {
 	return global.DoubutsuNames != nil && *global.DoubutsuNames
 }
@@ -66,19 +80,14 @@ func namePool(doubutsu bool) []string {
 }
 
 // `invited` are the names to pick first while one is free: the
-// villagers whose birthday it is (birthdayGuests). The app's
-// host/lib/worktrees/names.ts picks the same way.
+// villagers whose birthday it is (birthdayGuests).
 func pickWorktreeName(used map[string]bool, doubutsu bool, invited []string) string {
 	if doubutsu {
 		// Only a name the pool has, so a guest is as safe a folder and
 		// branch name as any pick.
-		pool := map[string]bool{}
-		for _, name := range namePool(true) {
-			pool[name] = true
-		}
 		var guests []string
 		for _, name := range invited {
-			if pool[name] && !used[name] {
+			if _, inPool := doubutsuPool()[name]; inPool && !used[name] {
 				guests = append(guests, name)
 			}
 		}

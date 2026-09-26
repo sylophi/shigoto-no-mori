@@ -2,12 +2,12 @@
 // (host/lib/villagers.ts), served from lab/villager-data, a real
 // download made with the app's own downloader by `pnpm villagers:fetch`
 // (scripts/fetch-villager-data.mts). That folder is gitignored and
-// never committed. Without it every device reads as not downloaded, and
-// a posed download ends with no faces to show.
+// never committed. Without it the data reads as not downloaded, and a
+// posed download ends with no faces to show.
 //
-// ?villagers=absent|downloading|ready|failed poses every device's
-// status (default: ready with the folder, absent without). Download,
-// cancel and remove play out on the posed device.
+// ?villagers=absent|downloading|ready|failed poses the status (default:
+// ready with the folder, absent without). Download, cancel and remove
+// play out on it.
 import type { VillagerDataStatus, VillagerProfiles } from "@shared/schemas";
 import { villagerManifest } from "@shared/villagers/manifest";
 
