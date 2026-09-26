@@ -27,7 +27,6 @@ import {
   useWorktreeCreatePhase,
 } from "@/store/worktreeLifecycle";
 import type { Project, Worktree } from "@shared/schemas";
-import { BirthdayBanner } from "@/components/villagers/BirthdayBanner";
 import { LaunchSection } from "./LaunchSection";
 import { LifecycleBanner } from "./LifecycleBanner";
 import { MirrorPill } from "./MirrorPill";
@@ -243,11 +242,7 @@ export function WorktreeDetailInner({
         <MirrorPill worktree={worktree} />
       </header>
 
-      {bannerLabel ? (
-        <LifecycleBanner label={bannerLabel} />
-      ) : (
-        <BirthdayBanner worktree={worktree} />
-      )}
+      {bannerLabel && <LifecycleBanner label={bannerLabel} />}
 
       <div
         className={cn(

@@ -311,7 +311,7 @@ async function main() {
       // A fresh data dir is seeded with Doubutsu names on (cli/state.go
       // seedFreshInstall), so the pick is a villager's name.
       const picked = await projectsHandlers.pickWorktreeName({ projectId });
-      assert.ok(Object.hasOwn(doubutsuNames.names, picked), `picked ${picked}`);
+      assert.ok(doubutsuNames.names.includes(picked), `picked ${picked}`);
     },
   );
 

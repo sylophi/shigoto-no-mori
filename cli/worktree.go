@@ -348,8 +348,7 @@ func pickNewWorktreeName(proj project, used map[string]bool) string {
 			used[strings.ToLower(branch)] = true
 		}
 	}
-	global := readGlobalConfigHints()
-	return pickWorktreeName(used, doubutsuNamesEnabled(global), birthdayGuests(global, time.Now()))
+	return pickWorktreeName(used, doubutsuNamesEnabled(readGlobalConfigHints()))
 }
 
 // Test seam: the sweep failure below is a race, so tests stub git's

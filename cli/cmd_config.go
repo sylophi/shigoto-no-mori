@@ -95,13 +95,6 @@ var globalConfigKeys = []configKey{
 	// has. Fresh installs are seeded with it on (seedFreshInstall).
 	{name: "doubutsuNames", kind: boolKind, def: false,
 		desc: "Name new worktrees after Animal Crossing characters (on for new installs)"},
-	// The name pick's birthday invite (birthdays.go), which counts only
-	// while doubutsuNames is on. Off when unset, and a fresh install does
-	// not seed it. Registered like every device setting: the write merge
-	// deletes an omitted registry key, which is how a save puts it back
-	// to its default.
-	{name: "prioritizeBirthdays", kind: boolKind, def: false,
-		desc: "Birthday villagers first in the name pick (needs doubutsuNames)"},
 	{name: "codexWorktreeNames", kind: boolKind, def: false,
 		desc: "Name Codex-style <name>/<repo> worktrees by their parent folder"},
 	{name: "portPool", kind: boolKind, def: false,

@@ -54,9 +54,6 @@ import {
 } from "@shared/villagers/manifest";
 import {
   CHARACTER_CATEGORIES,
-  collectLeadSections,
-  LEAD_SECTION_QUERY,
-  type LeadSection,
   villagerProfile,
   WIKI_API,
   WIKI_USER_AGENT,
@@ -215,17 +212,25 @@ export function createVillagerData({
     const titles = [
       ...new Set(batch.map((slug) => manifest.villagers[slug].page)),
     ];
-    const pages = new Map<string, LeadSection>();
+    const pages = new Map<string, { wikitext: string; categories: string[] }>();
     const pageOf = (title: string) =>
       pages.get(title) ?? { wikitext: "", categories: [] };
+    // The asked title of each page the API answered under another name.
     const asked = new Map<string, string>();
     let cont: Record<string, string> = {};
     for (;;) {
       const params = new URLSearchParams({
-        ...LEAD_SECTION_QUERY,
+        action: "query",
+        format: "json",
+        formatversion: "2",
         prop: "revisions|categories",
+        rvprop: "content",
+        rvslots: "main",
+        // The lead section, which holds the infobox.
+        rvsection: "0",
         clcategories: CHARACTER_CATEGORIES.join("|"),
         cllimit: "max",
+        redirects: "1",
         titles: titles.join("|"),
         ...cont,
       });
@@ -237,11 +242,25 @@ export function createVillagerData({
           `Nookipedia answered with an error (${data.error.code}).`,
         );
       }
-      // A page moved since the manifest was made: stop rather than
-      // store an empty profile no resume would fetch again.
-      const gone = collectLeadSections(data, pages, asked);
-      if (gone !== undefined) {
-        throw new VillagerDataError(`Nookipedia has no page ${gone}.`);
+      for (const { from, to } of [
+        ...(data.query?.normalized ?? []),
+        ...(data.query?.redirects ?? []),
+      ]) {
+        asked.set(to, asked.get(from) ?? from);
+      }
+      for (const page of data.query?.pages ?? []) {
+        const title = asked.get(page.title) ?? page.title;
+        // A page moved since the manifest was made: stop rather than
+        // store an empty profile no resume would fetch again.
+        if (page.missing === true) {
+          throw new VillagerDataError(`Nookipedia has no page ${title}.`);
+        }
+        const entry = pageOf(title);
+        entry.wikitext ||= page.revisions?.[0]?.slots?.main?.content ?? "";
+        for (const category of page.categories ?? []) {
+          entry.categories.push(category.title);
+        }
+        pages.set(title, entry);
       }
       if (data.continue === undefined) break;
       cont = data.continue;

@@ -190,22 +190,17 @@ pre-commit:
     fresh-install:
       glob: "{cli/names.go,cli/cmd_config.go,cli/state.go,cli/main.go,app/shared/schemas/config.ts,app/host/lib/bootstrap.ts,app/host/lib/util/paths.ts,app/renderer/hooks/config/useSettingsSave.ts,app/test/fresh-install.mjs,app/test/lib/checkKit.mjs}"
       run: pnpm -C app test fresh-install
-    # Village life (client config) and prioritizeBirthdays (device
-    # config) each read off when unset, prioritizeBirthdays only while
-    # Doubutsu names is on, and it reads the same in both engines, a
-    # save of it landing through the real sm binary.
+    # Village life (client config) and Doubutsu names (device config)
+    # each read off when unset, and the device patch never carries
+    # Village life.
     village-life:
-      glob: "{cli/cmd_config.go,cli/state.go,app/shared/villageLife.ts,app/shared/schemas/config.ts,app/host/lib/bootstrap.ts,app/renderer/hooks/config/useSettingsSave.ts,app/test/village-life.mjs,app/test/lib/checkKit.mjs}"
+      glob: "{app/shared/villageLife.ts,app/shared/schemas/config.ts,app/host/lib/bootstrap.ts,app/renderer/hooks/config/useSettingsSave.ts,app/test/village-life.mjs,app/test/lib/checkKit.mjs}"
       run: pnpm -C app test village-life
     # The villager manifest names a face for every doubutsu name, so the
     # pool and the manifest agree one to one.
     villager-manifest:
       glob: "{app/shared/villagers/manifest.json,app/shared/villagers/rarity.ts,cli/embed/doubutsu-names.json,app/test/villager-manifest.mjs,app/test/lib/checkKit.mjs}"
       run: pnpm -C app test villager-manifest
-    # Birthdays on the local calendar, and the name pick's invite.
-    villager-birthdays:
-      glob: "{app/shared/villagers/birthdays.ts,app/test/villager-birthdays.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test villager-birthdays
     # What a villager says in a toast, and the news when they move in or
     # out, by rarity.
     villager-voice:

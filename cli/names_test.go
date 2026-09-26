@@ -7,10 +7,8 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
-	"slices"
 	"strings"
 	"testing"
-	"time"
 )
 
 // Lowercase kebab-case is also a valid git branch name: no dots,
@@ -50,10 +48,10 @@ func TestNamePoolsAreValidWorktreeNames(t *testing.T) {
 func TestPickWorktreeNameDrawsFromTheChosenPool(t *testing.T) {
 	inPool := doubutsuSet()
 	for range 50 {
-		if name := pickWorktreeName(map[string]bool{}, true, nil); !inPool[name] {
+		if name := pickWorktreeName(map[string]bool{}, true); !inPool[name] {
 			t.Fatalf("doubutsu pick %q is not in the pool", name)
 		}
-		if name := pickWorktreeName(map[string]bool{}, false, nil); inPool[name] || strings.Count(name, "-") != 1 {
+		if name := pickWorktreeName(map[string]bool{}, false); inPool[name] || strings.Count(name, "-") != 1 {
 			t.Fatalf("default pick %q is not an adjective-animal pair", name)
 		}
 	}
@@ -65,12 +63,12 @@ func TestPickWorktreeNameSkipsUsedAndFallsBackToSuffixes(t *testing.T) {
 	for _, name := range names[1:] {
 		used[name] = true
 	}
-	if got, want := pickWorktreeName(used, true, nil), names[0]; got != want {
+	if got, want := pickWorktreeName(used, true), names[0]; got != want {
 		t.Fatalf("picked %q, want the one unused name %q", got, want)
 	}
 
 	used[names[0]] = true
-	got := pickWorktreeName(used, true, nil)
+	got := pickWorktreeName(used, true)
 	if base := strings.TrimSuffix(got, "-2"); base == got || !used[base] {
 		t.Fatalf("with every name used, picked %q, want <name>-2", got)
 	}
@@ -152,86 +150,5 @@ func TestCreateSkipsNamesHeldByBranches(t *testing.T) {
 	}
 	if wt.Name != names[0] {
 		t.Fatalf("created %q, want %q, the one name no branch holds", wt.Name, names[0])
-	}
-}
-
-// The birthdays ship with the names: each one a real "MM-DD" date,
-// and most characters have one.
-func TestEmbeddedBirthdays(t *testing.T) {
-	pool := doubutsuPool()
-	if names := doubutsuNames(); !slices.IsSorted(names) || len(names) != len(pool) {
-		t.Error("the doubutsu names aren't the pool's keys, sorted")
-	}
-	withBirthday := 0
-	for slug, entry := range pool {
-		if entry.Birthday == "" {
-			continue
-		}
-		withBirthday++
-		if _, err := time.Parse("01-02", entry.Birthday); err != nil {
-			t.Errorf("%s: birthday %q is not MM-DD", slug, entry.Birthday)
-		}
-	}
-	if withBirthday < len(pool)*9/10 {
-		t.Errorf("%d of %d names have a birthday, want nearly all", withBirthday, len(pool))
-	}
-	if got := pool["mitzi"].Birthday; got != "09-25" {
-		t.Errorf("mitzi's birthday = %q, want 09-25", got)
-	}
-}
-
-// With prioritizeBirthdays on, the pick invites whoever's birthday it
-// is while they're free, and only with Doubutsu names on. A leap-day
-// birthday is kept on Feb 28 in common years.
-func TestBirthdayGuests(t *testing.T) {
-	on := true
-	off := false
-	day := time.Date(2026, time.September, 25, 12, 0, 0, 0, time.Local)
-
-	birthdays := map[string]doubutsuName{
-		"mitzi":   {Birthday: "09-25"},
-		"chester": {Birthday: "08-06"},
-		"leap":    {Birthday: "02-29"},
-		"snowboy": {},
-	}
-	if got := celebrating(birthdays, day); !slices.Equal(got, []string{"mitzi"}) {
-		t.Errorf("guests on 09-25 = %v, want [mitzi]", got)
-	}
-	if got := birthdayGuests(globalConfig{DoubutsuNames: &on, PrioritizeBirthdays: &on}, day); !slices.Contains(got, "mitzi") {
-		t.Errorf("embedded guests on 09-25 = %v, want mitzi among them", got)
-	}
-	if got := birthdayGuests(globalConfig{DoubutsuNames: &on}, day); got != nil {
-		t.Errorf("guests with prioritizeBirthdays unset = %v, want none", got)
-	}
-	if got := birthdayGuests(globalConfig{DoubutsuNames: &on, PrioritizeBirthdays: &off}, day); got != nil {
-		t.Errorf("guests with prioritizeBirthdays off = %v, want none", got)
-	}
-	if got := birthdayGuests(globalConfig{DoubutsuNames: &off, PrioritizeBirthdays: &on}, day); got != nil {
-		t.Errorf("guests with names off = %v, want none", got)
-	}
-	if got := celebrating(birthdays, time.Date(2027, time.February, 28, 12, 0, 0, 0, time.Local)); !slices.Equal(got, []string{"leap"}) {
-		t.Errorf("guests on Feb 28 of a common year = %v, want [leap]", got)
-	}
-	common := time.Date(2027, time.February, 28, 12, 0, 0, 0, time.Local)
-	if !isBirthdayOn("02-29", common) {
-		t.Error("a leap-day birthday isn't kept on Feb 28 in a common year")
-	}
-	leapYear := time.Date(2028, time.February, 28, 12, 0, 0, 0, time.Local)
-	if isBirthdayOn("02-29", leapYear) {
-		t.Error("a leap-day birthday lands on Feb 28 in a leap year")
-	}
-
-	if got := pickWorktreeName(map[string]bool{}, true, []string{"mitzi"}); got != "mitzi" {
-		t.Errorf("pick with mitzi invited = %q", got)
-	}
-	if got := pickWorktreeName(map[string]bool{"mitzi": true}, true, []string{"mitzi"}); got == "mitzi" {
-		t.Error("the pick invited mitzi though her name is taken")
-	}
-	if got := pickWorktreeName(map[string]bool{}, false, []string{"mitzi"}); got == "mitzi" {
-		t.Error("the pick invited mitzi with Doubutsu names off")
-	}
-	// A key the pool doesn't have is no name to give a folder.
-	if got := pickWorktreeName(map[string]bool{}, true, []string{"../x"}); got == "../x" {
-		t.Error("the pick invited a name outside the pool")
 	}
 }

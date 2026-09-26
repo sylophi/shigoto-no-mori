@@ -206,9 +206,8 @@ const BUNDLED_BINARIES = [
   ]),
 ];
 
-// Data the CLI and the app embed: the doubutsu worktree names and their
-// birthdays, taken from Nookipedia's character lists and pages
-// (scripts/fetch-doubutsu-names.mts).
+// Data the CLI and the app embed: the doubutsu worktree names, taken
+// from Nookipedia's character lists (scripts/fetch-doubutsu-names.mts).
 // The entry opens with the Animal Crossing notice the Settings page
 // shows beside Village life (shared/acNotice.json), so the two never
 // drift, then gives the CC BY-SA attribution.
@@ -223,11 +222,9 @@ const BUNDLED_DATA = [
       publisher: doubutsuSource.name,
       licenseText:
         `${acNotice} Character names from Nookipedia's Villagers and ` +
-        "Special characters categories, and their birthdays from the " +
-        "characters' pages, by Nookipedia contributors, licensed under " +
-        "Creative Commons Attribution-ShareAlike 4.0 International. " +
-        "Changed: names turned into kebab-case worktree names, birthdays " +
-        "into MM-DD dates. " +
+        "Special characters categories, by Nookipedia contributors, " +
+        "licensed under Creative Commons Attribution-ShareAlike 4.0 " +
+        "International. Changed: turned into kebab-case worktree names. " +
         "Full text: https://creativecommons.org/licenses/by-sa/4.0/legalcode",
     },
   ]),

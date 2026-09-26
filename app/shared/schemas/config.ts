@@ -199,14 +199,6 @@ export const GlobalConfigSchema = z.object({
   // install is seeded with `true` instead (host/lib/bootstrap.ts,
   // cli/state.go seedFreshInstall).
   doubutsuNames: z.boolean().optional(),
-  // When true (and doubutsuNames is on), the name pick invites a
-  // villager whose birthday it is (local date) first, while their name
-  // is free. The birthdays ship with the names
-  // (cli/embed/doubutsu-names.json), so it needs no villager data. Read
-  // by the CLI only (cli/birthdays.go), at create time and for the New
-  // Worktree form's pre-pick. Off by default (absent = off). The visual
-  // villager extras are Village life, a client setting (ClientConfig).
-  prioritizeBirthdays: z.boolean().optional(),
   // When true, an external worktree whose folder is just the repo's
   // name (Codex and other tools lay worktrees out as
   // <worktree-name>/<repo-name>) is named after the folder above it.
@@ -270,7 +262,6 @@ export const DeviceSettingsPatchSchema = z.strictObject(
     autoPullNew: true,
     autoPullPrimaryOnly: true,
     doubutsuNames: true,
-    prioritizeBirthdays: true,
     codexWorktreeNames: true,
     portPool: true,
     terrier: true,
@@ -299,7 +290,6 @@ export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
   autoPullNew: false,
   autoPullPrimaryOnly: false,
   doubutsuNames: false,
-  prioritizeBirthdays: false,
   codexWorktreeNames: false,
   portPool: false,
   terrier: false,
@@ -326,9 +316,7 @@ export const ClientConfigSchema = z.object({
   // villager data, downloaded into this device's data dir
   // (host/lib/villagers.ts), so only the desktop offers it: a web
   // client has no device of its own. Off by default (absent = off),
-  // explicit `true` is the opt-in. Nothing on a device reads it: the
-  // name pick's birthday invite is prioritizeBirthdays, a device
-  // setting (GlobalConfig).
+  // explicit `true` is the opt-in. Nothing on a device reads it.
   villageLife: z.boolean().optional(),
   // Mark the sidebar's terrier-sourced projects (Project.source), the
   // ones the terrier registry lists rather than this app's own, with
