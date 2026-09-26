@@ -24,7 +24,7 @@ import {
 } from "@shared/ipc/modules/sync";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf, logFailure } from "@shared/errors";
 import {
   pullBranchCollision,
   pullFolderCollision,
@@ -43,6 +43,7 @@ import {
 import {
   createViaCli,
   dirtyApplyViaCli,
+  forceRemoveViaCli,
   worktreeDestinationViaCli,
 } from "@host/ipc/cliDelegate";
 import {
@@ -51,7 +52,7 @@ import {
   peerWorktreesApiFor,
 } from "@host/ipc/peerSync";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
-import { listBranches } from "@host/lib/git/branches";
+import { deleteAnyLocalBranch, listBranches } from "@host/lib/git/branches";
 import { listIgnoreRules } from "@host/lib/git/ignoreRules";
 import {
   cachedIgnoredPaths,
@@ -74,6 +75,13 @@ import {
   findWorktreePathOrThrow,
 } from "@host/lib/projects";
 import { cloneProjectFromPeer } from "@host/lib/sync/cloneFromPeer";
+import {
+  cancelMove,
+  MoveCancelledError,
+  runMove,
+  throwIfCancelled,
+  underSignal,
+} from "@host/lib/sync/moves";
 import {
   attachLinkFarEnd,
   incomingRefFor,
@@ -181,19 +189,40 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
   // and the landing runs here exactly as a pull's does, its progress
   // relayed back over the link. The identity is re-resolved from disk,
   // the same wall the pull stands behind, so a send structurally
-  // cannot land in a repo that is not the sender's.
+  // cannot land in a repo that is not the sender's. Its cancel is the
+  // link: a sender that gives up (its own cancel, or its caller gone)
+  // tears the link down, and the landing runs under that as well as
+  // under this connection, so the create here dies with its setup
+  // script and the copy goes.
   receiveWorktree: async ({ channelId, landBranch, ...landing }, ctx) => {
     const link = attachLinkFarEnd(ctx, channelId);
-    return withLinkSource(link, async (source) => {
-      const { receipt, ...landed } = await landWorktree(
-        source,
-        { ...landing, landBranch: landBranch ?? landing.branch },
-        ctx,
-        (frame) => source.report(frame),
-      );
-      return { ...landed, receipt };
-    });
+    return underSignal(AbortSignal.any([ctx.signal, link.closed]), (signal) =>
+      withLinkSource(
+        link,
+        async (source) => {
+          const { receipt, ...landed } = await landWorktree(
+            source,
+            { ...landing, landBranch: landBranch ?? landing.branch },
+            ctx,
+            (frame) => source.report(frame),
+            signal,
+          );
+          // A cancel the landing's last step outran: the sender has
+          // already given up on this answer, so the copy goes here.
+          await rollBackIfCancelled(signal, landed.worktree);
+          return { ...landed, receipt };
+        },
+        signal,
+      ),
+    );
   },
+
+  // The cancel, of a move this device runs (a pull, a send, a mirror
+  // start) or lands for the calling peer. Keyed like the progress the
+  // caller is watching. False once there is nothing left to cancel.
+  cancelMove: async ({ sourceWorktreeId }, ctx) => ({
+    cancelled: cancelMove(ctx, sourceWorktreeId),
+  }),
 
   // The git follower's push: the peer opened the link, and this host
   // asks it for the one bundle and unpacks it under refs/shigomori/.
@@ -433,11 +462,19 @@ type Landing = {
 // After the create, an apply failure resolves with dirtyApplied:false
 // rather than throwing: the worktree and branch are real and useful,
 // and the dirty state is still safe on the source device.
+//
+// A cancel (`signal`, the move's) fails whichever step is waiting (the
+// link's question, the create's CLI child) and undoes what the landing
+// made: a worktree the create had already made is removed, so the
+// destination is as it was, bar a clone that got registered (which
+// stays, a checkout at the place the user named) and a capture ref a
+// retry overwrites.
 async function landWorktree(
   source: WorktreeSource,
   landing: Landing,
   ctx: HandlerContext,
   progress: (frame: ProgressFrame) => void,
+  signal: AbortSignal,
 ): Promise<{
   worktree: Worktree;
   captured: boolean;
@@ -453,6 +490,7 @@ async function landWorktree(
   // checkout this device has wins over the place named: the dialog
   // that named it was reading a stale list, and a second clone of a
   // repo already here is not what anyone asked for.
+  throwIfCancelled(signal);
   let cloned: Project | undefined;
   let project: Project;
   if (landing.cloneInto === undefined) {
@@ -467,6 +505,7 @@ async function landWorktree(
         landing.cloneInto,
         landBranch,
         (bytes, totalBytes) => progress({ step: "clone", bytes, totalBytes }),
+        signal,
       ));
   }
 
@@ -516,6 +555,10 @@ async function landWorktree(
     } else {
       progress({ step: "transfer" });
     }
+    // The first write here. Before it, a cancel fails the link's
+    // questions. A landing with nothing to ask (the tip local, a clean
+    // source) has only this to stop at.
+    throwIfCancelled(signal);
     if (tipIsLocal) await updateRef(project.path, incomingRef, branchTip);
 
     // 5 and 6. The create on the incoming ref, then the capture
@@ -534,6 +577,7 @@ async function landWorktree(
       },
       ctx,
       progress,
+      signal,
     );
     return {
       worktree,
@@ -561,7 +605,9 @@ async function landWorktree(
 // The landing proper: the worktree created on the incoming ref, then
 // the capture re-applied in it. The caller owns the incoming ref and
 // its sweep. `branch` is the one the copy is created on, which the
-// incoming ref need not be named after.
+// incoming ref need not be named after. A cancel kills the create
+// (the setup script with it) and removes the worktree it made, so a
+// cancelled landing leaves none.
 async function landIncoming(
   project: Project,
   input: {
@@ -574,6 +620,7 @@ async function landIncoming(
   },
   ctx: HandlerContext,
   progress: (frame: Pick<SyncPullProgress, "step" | "createPhase">) => void,
+  signal: AbortSignal,
 ): Promise<{ worktree: Worktree; dirtyApplied: boolean }> {
   // The ordinary create, on a new branch at the incoming ref.
   // checkout stays UNSET: checkout:true would leave the worktree ON
@@ -602,8 +649,13 @@ async function landIncoming(
         }
       },
     },
-    { resolveOn: "exit" },
+    { resolveOn: "exit", signal },
   );
+  // A create the cancel cut short still resolved with its worktree
+  // (cliDelegate.ts, runStreamingCreate), which goes again now. Also
+  // a cancel that landed between the create and here: the worktree is
+  // whole, and the user still asked for none.
+  await rollBackIfCancelled(signal, worktree);
 
   // Capture refs are keyed by worktree id, and ids are derived
   // from paths (sha256(path)[:12]), so the source's id names the
@@ -639,11 +691,47 @@ async function landIncoming(
   return { worktree, dirtyApplied };
 }
 
+// The rollback of a landed worktree a cancel came too late for (the
+// create's own, the landing's last step, or the files step after it):
+// the forced removal, its cleanup on a clock since the cancel is of
+// something that hung, then the branch, which the move made and `sm
+// rm` keeps when the project is set to keep branches (a retry would
+// meet it). Best effort past that: what could not be removed is
+// logged, and the cancel is still the answer.
+const ROLLBACK_CLEANUP_MS = 60_000;
+async function rollBackIfCancelled(
+  signal: AbortSignal,
+  worktree: Pick<Worktree, "projectId" | "id" | "branch">,
+): Promise<void> {
+  if (!signal.aborted) return;
+  await rollBackLanded(worktree);
+  throw new MoveCancelledError();
+}
+
+function rollBackLanded(
+  worktree: Pick<Worktree, "projectId" | "id" | "branch">,
+): Promise<void> {
+  return logFailure(
+    "[sync] could not remove the worktree of a cancelled move",
+    async () => {
+      const project = await findProjectOrThrow(worktree.projectId);
+      await forceRemoveViaCli(project, worktree.id, {
+        timeoutMs: ROLLBACK_CLEANUP_MS,
+      });
+      await deleteAnyLocalBranch(project.path, worktree.branch, true).catch(
+        () => {},
+      );
+    },
+  );
+}
+
 // The pull: a peer's worktree lands here. Local-only by contract
 // (remote:false). The landing runs here against a link to the peer's
 // source (sync:openSource, the PEER's grant), opened on its first
 // question, so this device's own refusals come before any of them.
-// Then the ignored files, pulled by the mirror engine run once.
+// Then the ignored files, pulled by the mirror engine run once. A
+// cancel during the files step removes the landed worktree: the move
+// is one thing to the user, and half its files is not it.
 async function runPullWorktree(
   {
     sourceDeviceId,
@@ -660,71 +748,77 @@ async function runPullWorktree(
   ctx: HandlerContext,
 ) {
   const progress = progressTo(ctx, sourceWorktreeId);
-  const { receipt, ...landed } = await withPeerSource(
-    peerSyncApiFor(sourceDeviceId),
-    { projectId: sourceProjectId, worktreeId: sourceWorktreeId },
-    (source) =>
-      landWorktree(
-        source,
-        {
-          identity: sourceIdentity,
-          branch,
-          landBranch: branch,
-          worktreeName,
-          runSetup,
-          cloneInto,
-          sourceWorktreeId,
-        },
-        ctx,
-        progress,
-      ),
-  );
-
-  // The ignored files, once the tree has settled: the leave-out rule
-  // admits them and git never carried them, so the mirror engine runs
-  // once between the two worktrees (host/mirror/oneShot.ts).
-  // Gitignored leaves nothing to carry. Never fatal: the worktree is
-  // real, and the outcome rides the result.
-  let files: TransferFilesResult | undefined;
-  if (pullBringsIgnoredFiles(ignoreMode)) {
-    progress({ step: "files" });
-    const source = await peerWorktreeOrUndefined(
-      sourceDeviceId,
-      sourceProjectId,
-      sourceWorktreeId,
+  return runMove(ctx, sourceWorktreeId, async (signal) => {
+    const { receipt, ...landed } = await withPeerSource(
+      peerSyncApiFor(sourceDeviceId),
+      { projectId: sourceProjectId, worktreeId: sourceWorktreeId },
+      (source) =>
+        landWorktree(
+          source,
+          {
+            identity: sourceIdentity,
+            branch,
+            landBranch: branch,
+            worktreeName,
+            runSetup,
+            cloneInto,
+            sourceWorktreeId,
+          },
+          ctx,
+          progress,
+          signal,
+        ),
+      signal,
     );
-    files =
-      source === undefined
-        ? {
-            crossed: false,
-            conflicts: 0,
-            error: "the source worktree is no longer listed there",
-          }
-        : await transferFilesOnce(
-            {
-              localRoot: landed.worktree.path,
-              localWorktreeId: landed.worktree.id,
-              sourceDeviceId,
-              sourceProjectId,
-              sourceWorktreeId,
-              remoteRoot: source.path,
-              name: branch,
-              ignores: ignores ?? [],
-            },
-            (bytes, totalBytes) =>
-              progress({ step: "files", bytes, totalBytes }),
-          );
-  }
-  remember(
-    {
-      direction: "pull",
-      deviceId: sourceDeviceId,
-      projectId: sourceProjectId,
-      worktreeId: sourceWorktreeId,
-    },
-    receipt,
-  );
-  return { ...landed, ...(files === undefined ? {} : { files }) };
+
+    // The ignored files, once the tree has settled: the leave-out rule
+    // admits them and git never carried them, so the mirror engine runs
+    // once between the two worktrees (host/mirror/oneShot.ts).
+    // Gitignored leaves nothing to carry. Never fatal: the worktree is
+    // real, and the outcome rides the result.
+    let files: TransferFilesResult | undefined;
+    if (pullBringsIgnoredFiles(ignoreMode) && !signal.aborted) {
+      progress({ step: "files" });
+      const source = await peerWorktreeOrUndefined(
+        sourceDeviceId,
+        sourceProjectId,
+        sourceWorktreeId,
+      );
+      files =
+        source === undefined
+          ? {
+              crossed: false,
+              conflicts: 0,
+              error: "the source worktree is no longer listed there",
+            }
+          : await transferFilesOnce(
+              {
+                localRoot: landed.worktree.path,
+                localWorktreeId: landed.worktree.id,
+                sourceDeviceId,
+                sourceProjectId,
+                sourceWorktreeId,
+                remoteRoot: source.path,
+                name: branch,
+                ignores: ignores ?? [],
+              },
+              (bytes, totalBytes) =>
+                progress({ step: "files", bytes, totalBytes }),
+              signal,
+            );
+    }
+    await rollBackIfCancelled(signal, landed.worktree);
+    remember(
+      {
+        direction: "pull",
+        deviceId: sourceDeviceId,
+        projectId: sourceProjectId,
+        worktreeId: sourceWorktreeId,
+      },
+      receipt,
+    );
+    return { ...landed, ...(files === undefined ? {} : { files }) };
+  });
 }
 
 // A landing refusal is worded on the peer, where "this device" means
@@ -750,7 +844,50 @@ function fromPeer<T>(answer: Promise<T>): Promise<T> {
 // identity are read off it here. The source it resolved rides back
 // beside the result, for the mirror start built on this
 // (mirror:startTo), which opens its session on that worktree.
+//
+// A cancel tears the link down, which the peer's landing runs under
+// (receiveWorktree), so the create there dies with its setup script
+// and the copy goes. A copy the cancel came too late for (the files
+// step) is removed over the peer's grant, the same removal a failed
+// mirror start makes. The mirror start runs this under a signal of
+// its own (`signal`), since its session open comes after. A plain
+// send registers itself.
 export async function sendWorktree(
+  input: z.infer<typeof SyncSendWorktreePayloadSchema>,
+  ctx: HandlerContext,
+  // The mirror start's send: the one that may take a primary checkout
+  // (it lands on the peer as mirror/<branch>, and the session then
+  // keeps the pair in step). A plain send moves a worktree, and the
+  // primary is the project itself.
+  { mirror = false, signal }: { mirror?: boolean; signal?: AbortSignal } = {},
+) {
+  return signal === undefined
+    ? runMove(ctx, input.worktreeId, (own) =>
+        sendWorktreeUnder(input, ctx, mirror, own),
+      )
+    : sendWorktreeUnder(input, ctx, mirror, signal);
+}
+
+// Removes the copy a cancelled send left on the peer, best effort,
+// like a failed mirror start's rollback. The peer's ordinary delete,
+// so a peer set to keep branches keeps this one too, where the local
+// rollback (rollBackLanded) takes it: the wire has no verb for that.
+export function rollBackSent(
+  targetDeviceId: string,
+  copy: { projectId: string; id: string },
+): Promise<void> {
+  return logFailure(
+    "[sync] could not remove the peer's copy of a cancelled move",
+    () =>
+      peerWorktreesApiFor(targetDeviceId).delete({
+        projectId: copy.projectId,
+        worktreeId: copy.id,
+        force: true,
+      }),
+  );
+}
+
+async function sendWorktreeUnder(
   {
     targetDeviceId,
     projectId,
@@ -761,11 +898,8 @@ export async function sendWorktree(
     cloneInto,
   }: z.infer<typeof SyncSendWorktreePayloadSchema>,
   ctx: HandlerContext,
-  // The mirror start's send: the one that may take a primary checkout
-  // (it lands on the peer as mirror/<branch>, and the session then
-  // keeps the pair in step). A plain send moves a worktree, and the
-  // primary is the project itself.
-  { mirror = false }: { mirror?: boolean } = {},
+  mirror: boolean,
+  signal: AbortSignal,
 ) {
   const progress = progressTo(ctx, worktreeId);
 
@@ -791,7 +925,8 @@ export async function sendWorktree(
   const branch = worktree.branch;
   const landBranch = pullLandingBranch(worktree);
 
-  // The landing, on the peer, asking back over the link.
+  // The landing, on the peer, asking back over the link. A cancel
+  // resets the link (offerSource), which the peer's landing runs under.
   const peer = peerSyncApiFor(targetDeviceId);
   const { receipt, ...landed } = SyncReceiveWorktreeResultSchema.parse(
     await offerSource(
@@ -812,6 +947,14 @@ export async function sendWorktree(
           }),
         ),
       progress,
+      signal,
+      // A landing that answered as the cancel came: the copy is real
+      // and goes the way a copy the files step outran does.
+      (answer) =>
+        rollBackSent(
+          targetDeviceId,
+          SyncReceiveWorktreeResultSchema.parse(answer).worktree,
+        ),
     ),
   );
 
@@ -833,7 +976,12 @@ export async function sendWorktree(
         direction: "push",
       },
       (bytes, totalBytes) => progress({ step: "files", bytes, totalBytes }),
+      signal,
     );
+  }
+  if (signal.aborted) {
+    await rollBackSent(targetDeviceId, landed.worktree);
+    throw new MoveCancelledError();
   }
   remember(
     { direction: "send", deviceId: targetDeviceId, projectId, worktreeId },

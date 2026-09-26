@@ -33,7 +33,10 @@ import {
   MIRROR_HISTORY_LIMIT,
   summarizeIgnores,
 } from "@shared/ipc/modules/mirror";
-import { pullBringsIgnoredFiles } from "@shared/ipc/modules/sync";
+import {
+  MOVE_CANCELLED,
+  pullBringsIgnoredFiles,
+} from "@shared/ipc/modules/sync";
 import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
 import type {
   MirrorEvent,
@@ -473,6 +476,14 @@ function hostHandlersFor(
       : {
           "mirror:startTo": (input: any) => labMirrorStartTo(forest, input),
         }),
+    // The cancel, on every forest: the local one for a pull or a send,
+    // a peer for the mirror it runs towards here. The posed pull reads
+    // the mark between its steps.
+    "sync:cancelMove": (input: any) => {
+      const move = posedMoves.get(input.sourceWorktreeId);
+      if (move !== undefined) move.cancelled = true;
+      return { cancelled: move !== undefined };
+    },
     // Local-orchestrator sync verbs, mutating the fixture world so the
     // outcome is visible: the worktree lands in the identity-matched
     // local project, and a teardown removes the source row.
@@ -497,6 +508,10 @@ function hostHandlersFor(
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// The posed moves under way, by source worktree, and whether each was
+// asked to stop, so the dialogs' Cancel has something to cancel here.
+const posedMoves = new Map<string, { cancelled: boolean }>();
 
 // What git ignores on the posed worktree (LAB_TREE's ignored entries,
 // folders collapsed), serving as its gitignore rules too.
@@ -770,12 +785,18 @@ async function labSyncPull(
   },
 ) {
   // A posed pull: each step lingers long enough to be seen, and the
-  // transfer counts up in chunks like the real one.
+  // transfer counts up in chunks like the real one. A cancel lands
+  // between two of its waits, and the pull fails as the real one does.
   const progress = (frame: Record<string, unknown>) =>
     emit("sync:pullProgress", {
       sourceWorktreeId: input.sourceWorktreeId,
       ...frame,
     });
+  const move = { cancelled: false };
+  const wait = async (ms: number) => {
+    await sleep(ms);
+    if (move.cancelled) throw new Error(MOVE_CANCELLED);
+  };
   // A byte-counted step, counted up in chunks like the real one.
   const countUp = async (
     step: "transfer" | "files",
@@ -786,30 +807,35 @@ async function labSyncPull(
     for (let bytes = 0; bytes < totalBytes; bytes += chunk) {
       progress({ step, bytes, totalBytes });
       // oxlint-disable-next-line no-await-in-loop -- a posed transfer
-      await sleep(ms);
+      await wait(ms);
     }
     progress({ step, bytes: totalBytes, totalBytes });
   };
-  progress({ step: "capture" });
-  await sleep(900);
-  await countUp("transfer", 4_820_000, 640_000, 220);
-  progress({ step: "create" });
-  await sleep(600);
-  const phases = [
-    "carryOver",
-    ...(input.runSetup === false ? [] : ["setup"]),
-    "portPoolProvision",
-  ];
-  for (const createPhase of phases) {
-    progress({ step: "create", createPhase });
-    // oxlint-disable-next-line no-await-in-loop -- a posed create
-    await sleep(700);
-  }
-  progress({ step: "apply" });
-  await sleep(700);
-  // The files step, a leave-out rule that admits something.
   const files = pullBringsIgnoredFiles(input.ignoreMode);
-  if (files) await countUp("files", 92_400_000, 11_550_000, 200);
+  posedMoves.set(input.sourceWorktreeId, move);
+  try {
+    progress({ step: "capture" });
+    await wait(900);
+    await countUp("transfer", 4_820_000, 640_000, 220);
+    progress({ step: "create" });
+    await wait(600);
+    const phases = [
+      "carryOver",
+      ...(input.runSetup === false ? [] : ["setup"]),
+      "portPoolProvision",
+    ];
+    for (const createPhase of phases) {
+      progress({ step: "create", createPhase });
+      // oxlint-disable-next-line no-await-in-loop -- a posed create
+      await wait(700);
+    }
+    progress({ step: "apply" });
+    await wait(700);
+    // The files step, a leave-out rule that admits something.
+    if (files) await countUp("files", 92_400_000, 11_550_000, 200);
+  } finally {
+    posedMoves.delete(input.sourceWorktreeId);
+  }
   const project = local.projects.find(
     (entry) => entry.identity === input.sourceIdentity,
   );

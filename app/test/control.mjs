@@ -952,10 +952,12 @@ async function main() {
     });
     const asOtherDevice = new AsyncLocalStorage();
     setCliRunnerImpl({
-      runCli: (args, onDoc) =>
+      runCli: (args, onDoc, extraEnv, opts) =>
         (asOtherDevice.getStore() === true ? otherCli : fixture).runCli(
           args,
           onDoc,
+          extraEnv,
+          opts,
         ),
       requireCliBinary: () => fixture.smBinary,
       cliFailureMessage,

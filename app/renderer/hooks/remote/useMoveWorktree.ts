@@ -13,6 +13,7 @@ import { pullWorktreeName } from "@shared/git/branches";
 import {
   type QueryClient,
   useMutation,
+  type UseMutationResult,
   useQueryClient,
 } from "@tanstack/react-query";
 import type { z } from "zod";
@@ -96,23 +97,42 @@ type Landed = Pick<SyncPullWorktreeResult, "worktree" | "cloned">;
 export type PullPayload = z.infer<typeof SyncPullWorktreePayloadSchema> &
   LandingChoice;
 
+// The move's mutation, with its cancel beside it: asked of the device
+// running the move, by the source worktree (the key its progress is
+// under). The mutation then fails with the cancelled marker
+// (isMoveCancelledError), which the flow reads as its own stage. False
+// when nothing was left to cancel: the move is settling on its own.
+export type MoveMutation<Result> = UseMutationResult<
+  Result,
+  Error,
+  LandingChoice
+> & {
+  cancel: () => Promise<boolean>;
+};
+
 // The mutation every move shares, handed the verbs it lands through
 // (the transplant's or the mirror start's): the payload built from the
 // scope and the move, the dialog's choice riding along. Success only
 // invalidates, the destination's view: this machine's forest for a
 // pull (a mirror's too, which the source device runs but lands here),
 // the peer's for a send. The caller shows the outcome, so the
-// conclusion is told once.
+// conclusion is told once. The cancel goes where the move runs, which
+// `land.cancel` knows: this device for a pull or a send, the peer for
+// a mirror it runs towards here.
 export function useMoveMutation<Result extends Landed>(
   move: Move,
   land: {
     pull: (payload: PullPayload) => Promise<Result>;
     send: (payload: MirrorStartToPayload) => Promise<Result>;
+    cancel: (sourceWorktreeId: string) => Promise<{ cancelled: boolean }>;
   },
-) {
+): MoveMutation<Result> {
   const { deviceId } = useHostScope();
   const queryClient = useQueryClient();
-  return useMutation({
+  const sourceWorktreeId =
+    move.direction === "pull" ? move.source.worktree.id : move.worktree.id;
+  const cancel = async () => (await land.cancel(sourceWorktreeId)).cancelled;
+  const mutation = useMutation({
     mutationFn: async (choice: LandingChoice) => {
       if (move.direction === "pull") {
         const { worktree, sourceProjectId, sourceIdentity } = move.source;
@@ -141,15 +161,18 @@ export function useMoveMutation<Result extends Landed>(
     },
     meta: { silentError: true },
   });
+  return { ...mutation, cancel };
 }
 
-// The transplant's move.
+// The transplant's move, run by this device either way round.
 export function useMoveWorktree(move: Move) {
   return useMoveMutation(move, {
     pull: (payload): Promise<SyncPullWorktreeResult> =>
       window.api.sync.pullWorktree(payload),
     send: (payload): Promise<SyncPullWorktreeResult> =>
       window.api.sync.sendWorktree(payload),
+    cancel: (sourceWorktreeId) =>
+      window.api.sync.cancelMove({ sourceWorktreeId }),
   });
 }
 

@@ -95,7 +95,7 @@ import {
 } from "./lib/checkKit.mjs";
 import { cliSandbox } from "./lib/cliSandbox.mjs";
 import { bootDirectWire } from "./lib/directBoot.mjs";
-import { delay, waitFor } from "./lib/checkKit.mjs";
+import { delay, processAlive, waitFor } from "./lib/checkKit.mjs";
 
 const execFileP = promisify(execFile);
 const fileSyncDir = join(repoRoot, "file-sync");
@@ -120,14 +120,6 @@ const read = (path) => readFileSync(path, "utf8");
 // production uses, so "no child spawned" and "child gone" are facts
 // about real processes.
 const serveChildren = new Set();
-const processAlive = (pid) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
 
 const { ok, done, fail } = makeProof("mirror proof");
 

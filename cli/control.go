@@ -126,7 +126,7 @@ func controlCall(channel string, input any, onPush func(channel string, payload 
 	for {
 		frame, err := readFrame()
 		if err != nil {
-			return nil, errf("Lost the connection to the app before it answered. Whatever it had started keeps running there: check the app, or `sm worktrees mirrors`.")
+			return nil, errf("Lost the connection to the app before it answered. A transfer it had started is cancelled and rolled back. Anything else keeps running there: check the app, or `sm worktrees mirrors`.")
 		}
 		switch frame.T {
 		case "push":

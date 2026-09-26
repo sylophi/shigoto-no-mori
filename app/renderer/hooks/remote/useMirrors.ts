@@ -346,10 +346,15 @@ export function useWorktreeMirrorLinks(
 // is scoped to, which holds the original, to send it here, the clone
 // place (when this device has no checkout) in this device's terms.
 // The dialog's last step is the report, so no toast here. Refusals
-// surface centrally.
+// surface centrally. The cancel goes to the device running the start:
+// the peer for "Mirror here", this device for "Mirror to…".
 export function useStartMirror(move: Move) {
   const { api } = useHostScope();
   return useMoveMutation(move, {
+    cancel: (sourceWorktreeId) =>
+      move.direction === "pull"
+        ? api.sync.cancelMove({ sourceWorktreeId })
+        : window.api.sync.cancelMove({ sourceWorktreeId }),
     pull: ({
       sourceProjectId,
       sourceWorktreeId,

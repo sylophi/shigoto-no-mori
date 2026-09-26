@@ -26,6 +26,7 @@ export type PeerSyncApi = Pick<
   | "openSource"
   | "receiveWorktree"
   | "receiveBundle"
+  | "cancelMove"
 > & { channels: PeerChannels };
 
 // The git follower's reach into a peer's mirror surface: read the git

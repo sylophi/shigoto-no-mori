@@ -5,8 +5,10 @@
 // (carry-over, the setup script by its command, ports), and a step
 // the run leaves out (setup switched off, a clean tree) is listed as
 // skipped rather than dropped. Also the failed view: the same list,
-// frozen where it stopped, with the error and a retry.
-import { AlertCircle, Check, Minus } from "lucide-react";
+// frozen where it stopped, with the error and a retry. And the
+// cancelled view, the same list frozen the same way, with what the
+// cancel left (nothing landed) in place of an error.
+import { AlertCircle, Ban, Check, type LucideIcon, Minus } from "lucide-react";
 import type { ReactNode } from "react";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
@@ -70,6 +72,13 @@ export type PullProgressProps = {
   // Set on the failed view. Refusals toast centrally, so they get a
   // one-line stand-in here instead of the raw marker.
   error?: unknown;
+  // The cancelled view: the run stopped where the list shows because
+  // the user asked, and the destination is as it was.
+  cancelled?: boolean;
+  // The running view's cancel, and the wait for the run to settle once
+  // it was asked (the mutation ends the view, cancelled or done).
+  cancelling?: boolean;
+  onCancel: () => void;
   onClose: () => void;
   onRetry: () => void;
   // Steps after the pull itself (the mirror's session open), running
@@ -83,6 +92,7 @@ export type PullProgressProps = {
   sourcePart?: string;
   runningNote?: string;
   failedNote?: string;
+  cancelledNote?: string;
   progressLabel?: string;
   // Where it lands (pullSteps.ts). On a peer, `thisDeviceLabel` names
   // that peer, and a refused command is its refusal, not the source's.
@@ -108,6 +118,9 @@ function ProgressView({
   thisDeviceLabel,
   runSetup,
   error,
+  cancelled = false,
+  cancelling = false,
+  onCancel,
   onClose,
   onRetry,
   extraRows = NO_EXTRA_ROWS,
@@ -115,9 +128,13 @@ function ProgressView({
   sourcePart = "source, untouched",
   runningNote = `Keep this window open. Nothing on ${sourceDeviceLabel} changes until you decide at the finish step.`,
   failedNote = `The copy on ${sourceDeviceLabel} is untouched. If the worktree already landed here, open it from the sidebar instead of retrying.`,
+  cancelledNote,
   progressLabel = "Transplant progress",
   landing = LANDS_HERE,
 }: PullProgressProps) {
+  const cancelledWords =
+    cancelledNote ??
+    `Nothing landed ${landing.on}, and the copy on ${sourceDeviceLabel} is untouched.`;
   // The two ends as the devices they are: the dialog sits under the
   // source's scope and the destination provider names where it lands
   // (this machine unless a peer was picked).
@@ -127,7 +144,11 @@ function ProgressView({
   const projectName = target.project
     ? target.project.name
     : target.clone.projectName;
-  const failed = error !== undefined;
+  // Both stop the list where it stands. Only a failure has an error to
+  // show, and only a cancel is the user's own doing.
+  const ended: Ended =
+    error !== undefined ? "failed" : cancelled ? "cancelled" : null;
+  const failed = ended === "failed";
   const dirty = worktree.changedCount > 0;
   const folder = pullWorktreeName(worktree);
   const landingBranch = pullLandingBranch(worktree);
@@ -249,9 +270,11 @@ function ProgressView({
             />
             <div className="min-w-0 flex-1 space-y-1.5">
               <p className="h-4 truncate text-center text-xs text-sky-700 dark:text-sky-300">
-                {failed
-                  ? "stopped"
-                  : (cloneCaption ?? transferCaption ?? filesCaption ?? " ")}
+                {ended !== null
+                  ? ENDED_LOOK[ended].word
+                  : cancelling
+                    ? "cancelling"
+                    : (cloneCaption ?? transferCaption ?? filesCaption ?? " ")}
               </p>
               <div
                 role="progressbar"
@@ -264,7 +287,7 @@ function ProgressView({
                 <div
                   className={cn(
                     "h-full rounded-full transition-[width] duration-500 ease-out",
-                    failed ? "bg-rose-500" : "bg-sky-500",
+                    ended === null ? "bg-sky-500" : ENDED_LOOK[ended].solid,
                   )}
                   style={{ width: `${Math.round(ratio * 100)}%` }}
                 />
@@ -283,7 +306,7 @@ function ProgressView({
               <StepRow
                 key={row.title}
                 state={states[index]}
-                failed={failed}
+                ended={ended}
                 title={row.title}
                 detail={row.detail}
               />
@@ -306,8 +329,8 @@ function ProgressView({
         </div>
       </FlowBody>
 
-      {failed ? (
-        <FlowFooter note={failedNote}>
+      {ended !== null ? (
+        <FlowFooter note={cancelled ? cancelledWords : failedNote}>
           <Button variant="ghost" size="sm" onClick={onClose}>
             Close
           </Button>
@@ -316,7 +339,22 @@ function ProgressView({
           </Button>
         </FlowFooter>
       ) : (
-        <FlowFooter note={runningNote} />
+        <FlowFooter
+          note={
+            cancelling
+              ? `Cancelling. Whatever landed ${landing.on} is being removed.`
+              : runningNote
+          }
+        >
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onCancel}
+            disabled={cancelling}
+          >
+            {cancelling ? "Cancelling…" : "Cancel"}
+          </Button>
+        </FlowFooter>
       )}
     </>
   );
@@ -349,54 +387,74 @@ function DeviceEnd({
   );
 }
 
+// How a run ended, null while it runs, and how each ending looks: the
+// bar and the mark it stopped on, the row's wash, its word.
+type Ended = "failed" | "cancelled" | null;
+const ENDED_LOOK: Record<
+  Exclude<Ended, null>,
+  { word: string; solid: string; soft: string; icon: LucideIcon }
+> = {
+  failed: {
+    word: "stopped",
+    solid: "bg-rose-500",
+    soft: "bg-rose-500/10",
+    icon: AlertCircle,
+  },
+  cancelled: {
+    word: "cancelled",
+    solid: "bg-amber-500",
+    soft: "bg-amber-500/10",
+    icon: Ban,
+  },
+};
+
 function StepRow({
   state,
-  failed,
+  ended,
   title,
   detail,
 }: {
   state: StepState;
-  failed: boolean;
+  ended: Ended;
   title: string;
   detail: ReactNode;
 }) {
-  const stopped = failed && state === "running";
+  // The run ended on this row, or it is still going here.
+  const endedHere = state === "running" ? ended : null;
   return (
     <li
       className={cn(
         "flex items-center gap-3 rounded-lg px-3 py-2 text-sm",
-        state === "running" && !failed && "bg-sky-500/10",
-        stopped && "bg-rose-500/10",
+        state === "running" && ended === null && "bg-sky-500/10",
+        endedHere !== null && ENDED_LOOK[endedHere].soft,
         (state === "queued" || state === "skipped") && "text-muted-foreground",
       )}
     >
-      <StepMark state={state} stopped={stopped} />
+      <StepMark state={state} ended={endedHere} />
       <span className="min-w-0 flex-1 truncate">
         <span className="font-medium">{title}</span>
         <span className="ml-2 text-xs text-muted-foreground">{detail}</span>
       </span>
       <span className="shrink-0 text-xs text-muted-foreground">
-        {stopped ? "stopped" : state}
+        {endedHere === null ? state : ENDED_LOOK[endedHere].word}
       </span>
     </li>
   );
 }
 
-function StepMark({ state, stopped }: { state: StepState; stopped: boolean }) {
-  if (stopped || state === "done") {
+function StepMark({ state, ended }: { state: StepState; ended: Ended }) {
+  if (ended !== null || state === "done") {
+    const look = ended === null ? null : ENDED_LOOK[ended];
+    const Icon = look?.icon ?? Check;
     return (
       <span
         aria-hidden
         className={cn(
           "flex size-4 shrink-0 items-center justify-center rounded-full text-background",
-          stopped ? "bg-rose-500" : "bg-emerald-500",
+          look?.solid ?? "bg-emerald-500",
         )}
       >
-        {stopped ? (
-          <AlertCircle className="size-2.5" />
-        ) : (
-          <Check className="size-2.5" />
-        )}
+        <Icon className="size-2.5" />
       </span>
     );
   }

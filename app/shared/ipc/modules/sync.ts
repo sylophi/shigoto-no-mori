@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { errorMessageOf } from "@shared/errors";
 import { MIRROR_IGNORES_LIMIT } from "@shared/mirrorIgnores";
 import { isValidWorktreeDirName } from "@shared/git/branches";
 import { isSafeRelPath } from "@shared/git/gitPaths";
@@ -418,6 +419,35 @@ export const SyncTeardownSourcePayloadSchema = z.strictObject({
 });
 export type SyncMoveRef = z.infer<typeof SyncTeardownSourcePayloadSchema>;
 
+// A move's cancel, keyed the way the caller keys its progress: by the
+// SOURCE worktree id, since the copy has no id of its own until the
+// create lands. Served to peers on the command grant: the device that
+// asked for a move it does not run (a mirror from the copy's side,
+// which the original's device runs) cancels it there. A host only ever
+// finds the moves of the device asking (host/lib/sync/moves.ts keys on
+// the caller), so nothing else's move can be cancelled, and the
+// landing a send asks of a peer needs no cancel of its own: the sender
+// tears the link down, which the landing runs under. `cancelled` is
+// false when nothing by that key is in flight here, which a caller
+// reads as "already over".
+const SyncCancelMovePayloadSchema = z.strictObject({
+  sourceWorktreeId: WorktreeIdSchema,
+});
+const SyncCancelMoveResultSchema = z.strictObject({
+  cancelled: z.boolean(),
+});
+
+// How a cancelled move fails, as text: Electron's IPC flattens an
+// error to its message, and a peer's answer arrives re-worded ("The
+// other device answered: ..."), so the marker is matched anywhere in
+// it (see isMoveCancelledError). The destination is left as it was,
+// the source untouched: the dialog's cancelled step says so.
+export const MOVE_CANCELLED = "The move was cancelled";
+
+export function isMoveCancelledError(error: unknown): boolean {
+  return errorMessageOf(error).includes(MOVE_CANCELLED);
+}
+
 // Which of the named commits the host already holds, so a sender can
 // thin a bundle (and skip a ref whose tip the receiver has, which
 // `git bundle create` would otherwise drop silently).
@@ -488,6 +518,16 @@ export const syncContract = defineContract("host", {
     SyncSendWorktreePayloadSchema,
     SyncPullWorktreeResultSchema,
     { remote: false, gated: true },
+  ),
+  // The cancel reaches the device running the move or its landing (the
+  // payload's note), so it rides the grant like the moves themselves.
+  // Whether it moved host state is the cancelled call's own news (its
+  // rollback resolves under that call), so this one skips the ping.
+  cancelMove: invoke(
+    "sync:cancelMove",
+    SyncCancelMovePayloadSchema,
+    SyncCancelMoveResultSchema,
+    { remote: true, gated: true, movesHostState: false },
   ),
   // A move's second half, local-only like the moves: its remote half,
   // after a pull, is the peer's ordinary grant-gated worktrees:delete.

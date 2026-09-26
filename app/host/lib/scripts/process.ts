@@ -161,23 +161,32 @@ export async function signalTree(
 // SIGTERM one direct child, escalating to SIGKILL after graceMs unless
 // it exits first. For plain (non-detached) children whose whole work is
 // the one process (the cloudflared connector), where the process-group
-// walk above would be overkill. The grace timer is unref'd so a pending
-// escalation never holds the app open at quit.
-export function killWithGrace(child: ChildProcess, graceMs: number): void {
-  try {
-    child.kill("SIGTERM");
-  } catch {
-    // Already gone.
-  }
-  const killTimer = setTimeout(() => {
+// walk above would be overkill. `tree` signals the child's process
+// group instead (signalChildTree): a detached CLI child whose
+// lifecycle script must die with it. The group outlives the child, so
+// the escalation then stays armed past the child's own exit, for a
+// script that shrugged off the SIGTERM. The grace timer is unref'd so
+// a pending escalation never holds the app open at quit.
+export function killWithGrace(
+  child: ChildProcess,
+  graceMs: number,
+  { tree = false }: { tree?: boolean } = {},
+): void {
+  const signal = (name: NodeJS.Signals) => {
+    if (tree) {
+      signalChildTree(child, name);
+      return;
+    }
     try {
-      child.kill("SIGKILL");
+      child.kill(name);
     } catch {
       // Already gone.
     }
-  }, graceMs);
+  };
+  signal("SIGTERM");
+  const killTimer = setTimeout(() => signal("SIGKILL"), graceMs);
   killTimer.unref?.();
-  child.once("exit", () => clearTimeout(killTimer));
+  if (!tree) child.once("exit", () => clearTimeout(killTimer));
 }
 
 // Synchronous fire-and-forget variant for the update-install quit path,

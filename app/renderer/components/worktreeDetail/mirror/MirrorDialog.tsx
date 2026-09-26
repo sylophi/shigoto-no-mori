@@ -16,7 +16,6 @@
 import type { ReactNode } from "react";
 import { ArrowRight, RefreshCw } from "lucide-react";
 import { pullLandingBranch } from "@shared/git/branches";
-import type { UseMutationResult } from "@tanstack/react-query";
 import type { MirrorSession } from "@shared/ipc/modules/mirror";
 import type { Project, Worktree } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
@@ -29,7 +28,7 @@ import {
   LocalHostScope,
 } from "@/hooks/remote/useHostScope";
 import { useMirrors, useStartMirror } from "@/hooks/remote/useMirrors";
-import type { LandingChoice } from "@/hooks/remote/useMoveWorktree";
+import type { MoveMutation } from "@/hooks/remote/useMoveWorktree";
 import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
 import { FlowBody, FlowFooter, LandedPath } from "../flow/FlowChrome";
 import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
@@ -44,6 +43,7 @@ const TITLES: Record<FlowStage, string> = {
   review: "Mirror worktree",
   running: "Mirroring",
   failed: "Mirror stopped",
+  cancelled: "Mirror cancelled",
   done: "Mirror live",
 };
 
@@ -150,16 +150,12 @@ function MirrorFlow({
   // which peer (flow/peerTargets.ts makes both).
   landing?: Landing;
   toPeer?: DestinationPick;
-  mirror: UseMutationResult<
-    {
-      worktree: Worktree;
-      captured: boolean;
-      dirtyApplied: boolean;
-      session: string;
-    },
-    Error,
-    LandingChoice
-  >;
+  mirror: MoveMutation<{
+    worktree: Worktree;
+    captured: boolean;
+    dirtyApplied: boolean;
+    session: string;
+  }>;
   onClose: () => void;
 }) {
   const flow = usePullFlow({
@@ -198,6 +194,7 @@ function MirrorFlow({
         progressLabel: "Mirror progress",
         runningNote: "Keep this window open.",
         failedNote: `If the worktree already landed ${landing.on}, open it from the sidebar rather than retrying.`,
+        cancelledNote: `No mirror runs, and nothing landed ${landing.on}. ${sourceDeviceLabel} keeps its copy.`,
       }}
       onClose={onClose}
       headline={
@@ -226,6 +223,8 @@ function MirrorFlow({
                 ? "Opening the mirror."
                 : `${stepHeadline(progress.frame, sourceDeviceLabel, landing)}.`)}
           {stage === "failed" && `Nothing on ${sourceDeviceLabel} changed.`}
+          {stage === "cancelled" &&
+            `Stopped before the mirror opened. Nothing on ${sourceDeviceLabel} changed.`}
           {stage === "done" &&
             (renamed ? (
               <>

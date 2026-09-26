@@ -18,6 +18,8 @@ import {
   isHaltedStatus,
   MIRROR_LABEL_TRANSFER,
 } from "@shared/ipc/modules/mirror";
+import { MOVE_CANCELLED } from "@shared/ipc/modules/sync";
+import { abortable, throwIfCancelled } from "@host/lib/sync/moves";
 import {
   beginTransfer,
   endTransfer,
@@ -69,12 +71,17 @@ export async function transferFilesOnce(
     direction?: "pull" | "push";
   },
   onProgress: (bytes: number, totalBytes: number) => void,
+  // The move's cancel: the session is ended where it stands, and the
+  // result says the files did not cross. The caller decides what
+  // becomes of the worktree.
+  signal?: AbortSignal,
 ): Promise<TransferFilesResult> {
   const token = beginTransfer();
   let ended: Promise<unknown> = Promise.resolve();
   try {
     const daemon = requireRunningEngine();
-    const session = await daemon.create({
+    throwIfCancelled(signal);
+    const creating = daemon.create({
       localRoot: input.localRoot,
       deviceId: input.sourceDeviceId,
       projectId: input.sourceProjectId,
@@ -89,8 +96,13 @@ export async function transferFilesOnce(
       ignores: input.ignores,
       ...(input.direction === "push" ? { push: true } : { pull: true }),
     });
+    // A create the cancel outran still makes its session: ended once
+    // it is there (main's sweep is the backstop, by the token).
+    const session = await abortable(signal, creating, (made) =>
+      daemon.terminate(made),
+    );
     try {
-      return await waitSettled(daemon, session, onProgress);
+      return await waitSettled(daemon, session, onProgress, signal);
     } finally {
       ended = daemon.terminate(session).catch((error: unknown) => {
         console.warn(
@@ -126,6 +138,7 @@ async function waitSettled(
   daemon: MirrorImpl,
   session: string,
   onProgress: (bytes: number, totalBytes: number) => void,
+  signal: AbortSignal | undefined,
 ): Promise<TransferFilesResult> {
   const startedAt = Date.now();
   let missingSince: number | null = null;
@@ -137,6 +150,7 @@ async function waitSettled(
   let disconnectedSince: number | null = null;
   let everConnected = false;
   while (Date.now() - startedAt < SETTLE_CEILING_MS) {
+    if (signal?.aborted) return failed(MOVE_CANCELLED);
     const raw = findSession(daemon, session);
     if (raw === undefined) {
       missingSince ??= Date.now();
