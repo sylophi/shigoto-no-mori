@@ -9,11 +9,14 @@
 // - each entry names a wiki page and a face file of a known game's
 //   kind, with its page, image URL, byte size and sha1
 // - a slug two characters share takes the one on the bare-name page
+// - every legendary character (shared/villagers/rarity.ts) is in the
+//   pool, once
 //
 // Run: pnpm test villager-manifest.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { LEGENDARY_VILLAGERS } from "@shared/villagers/rarity";
 import { appRoot, makeProof, repoRoot } from "./lib/checkKit.mjs";
 
 const proof = makeProof("villager-manifest proof");
@@ -89,6 +92,13 @@ try {
     );
     // Lulu the hippo has no face, and Lulu the anteater's is not hers.
     assert.ok(manifest.missing.includes("lulu"));
+  });
+
+  await proof.check("every legendary character is in the pool, once", () => {
+    for (const slug of LEGENDARY_VILLAGERS) {
+      assert.ok(names.includes(slug), `${slug} is in the pool`);
+    }
+    assert.equal(new Set(LEGENDARY_VILLAGERS).size, LEGENDARY_VILLAGERS.length);
   });
 
   proof.done();

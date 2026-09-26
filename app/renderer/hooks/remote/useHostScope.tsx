@@ -20,7 +20,7 @@
 //   registry.
 import { hasLocalHost } from "@/lib/localHost";
 import { createContext, use, type ReactNode } from "react";
-import type { RemoteDeviceApi } from "@/lib/remote/devices";
+import { remoteDeviceById, type RemoteDeviceApi } from "@/lib/remote/devices";
 import {
   localDeviceId,
   queryKeys,
@@ -62,6 +62,10 @@ export type HostApi = Pick<
   | "worktreeData"
   | "worktrees"
 >;
+
+// The two halves of a scope a read needs, for the query option
+// factories a caller outside React shares with the hooks.
+export type HostReadScope = Pick<HostScope, "api" | "keys">;
 
 export interface HostScope {
   // The device whose data the subtree reads and mutates.
@@ -108,6 +112,15 @@ function hostScopeFor(deviceId: string, api: HostApi): HostScope {
     api,
     keys: queryKeysFor(deviceId),
   };
+}
+
+// Any device's scope by id, for a caller outside React (the villager
+// toasts, lib/villagers/moves.ts): this machine's, or a peer's while
+// it has an api. Undefined for a peer without one.
+export function hostScopeOf(deviceId: string): HostScope | undefined {
+  if (deviceId === localDeviceId) return localHostScope;
+  const api = remoteDeviceById(deviceId)?.api;
+  return api === undefined ? undefined : hostScopeFor(deviceId, api);
 }
 
 export function HostScopeProvider({

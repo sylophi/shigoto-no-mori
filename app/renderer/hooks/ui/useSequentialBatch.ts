@@ -1,9 +1,10 @@
 import { useState, type Dispatch, type SetStateAction } from "react";
 import { type RowStatus } from "@/components/ui/row-status";
 import { errorMessageOf } from "@shared/errors";
+import { holdVillagerMoves } from "@/lib/villagers/moves";
 
 // Drives the "run a mutation over a set of worktrees one at a time"
-// flows (convert-external, relocate). Both seed a per-row running status,
+// flows (convert-external, relocate, Tidy). Both seed a per-row running status,
 // process each item sequentially, and record done/error per row.
 //
 // runBatch owns `batchRunning` (raised before `prepare`, cleared in a
@@ -27,6 +28,9 @@ async function runBatchImpl<T>(
   ...[items, keyOf, process, opts]: BatchArgs<T>
 ): Promise<void> {
   setBatchRunning(true);
+  // Villagers the batch moves say so together once it is done
+  // (lib/villagers/moves.ts), not one toast per step.
+  const releaseMoves = holdVillagerMoves();
   try {
     if (opts?.prepare && !(await opts.prepare())) return;
     setStatus(
@@ -44,6 +48,7 @@ async function runBatchImpl<T>(
       }
     }
   } finally {
+    releaseMoves();
     setBatchRunning(false);
   }
 }

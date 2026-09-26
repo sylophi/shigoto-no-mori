@@ -6,6 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
 import { Input } from "@/components/ui/input";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { VillagerMovingIn } from "./VillagerMovingIn";
 import {
   SegmentedControl,
   type SegmentedOption,
@@ -494,6 +495,7 @@ function NewWorktreeForm({
             {destPath}
           </span>
           {destTrail}
+          {!folderTaken && <VillagerMovingIn folderName={folderName} />}
         </p>
       </div>
 

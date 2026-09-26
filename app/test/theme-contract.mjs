@@ -56,6 +56,8 @@ const RUNTIME_ATTRS = new Set([
   "data-layout",
   // sonner's list element, which phone.css keeps its hit areas out of.
   "data-sonner-toaster",
+  // sonner's mark on the toasts it draws, as against a custom one.
+  "data-styled",
 ]);
 // A prefix/suffix match ([data-size$="sm"]) names part of a value the
 // component computes, so it is held to the attribute being set at all.
@@ -130,6 +132,11 @@ const upstream = [
     file: "node_modules/sonner/dist/index.mjs",
     // Quoted: bare, it would be satisfied by data-sonner-toast alone.
     needle: '"data-sonner-toaster"',
+  },
+  {
+    pkg: "sonner",
+    file: "node_modules/sonner/dist/index.mjs",
+    needle: '"data-styled"',
   },
 ];
 for (const { pkg, file, needle } of upstream) {

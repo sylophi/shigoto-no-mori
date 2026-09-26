@@ -1,6 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import type { GlobalConfig } from "@shared/schemas";
-import { useHostScope } from "@/hooks/remote/useHostScope";
+import { type HostReadScope, useHostScope } from "@/hooks/remote/useHostScope";
 import { hasLocalHost } from "@/lib/localHost";
 import { queryKeys } from "@/lib/queryKeys";
 
@@ -13,14 +13,25 @@ import { queryKeys } from "@/lib/queryKeys";
 // local device config at all, so the local scope's read never runs
 // there (a peer's does).
 export function useGlobalConfig({ silentError = false } = {}) {
-  const { api, keys, hasHost } = useHostScope();
-  return useQuery<GlobalConfig>({
-    queryKey: keys.globalConfig(),
-    queryFn: () => api.globalConfig.read(),
-    enabled: hasHost,
+  const scope = useHostScope();
+  return useQuery({
+    ...globalConfigQueryOptions(scope),
+    enabled: scope.hasHost,
     meta: silentError
       ? { silentError: true }
       : { errorTitle: "Couldn't load settings" },
+  });
+}
+
+// The read itself, for a caller outside React (the villager toasts,
+// lib/villagers/speakers.ts) sharing the hook's cache entry.
+// Silent on its own: a caller that wants a failed read said out loud
+// (the hooks above) sets its own meta.
+export function globalConfigQueryOptions(scope: HostReadScope) {
+  return queryOptions<GlobalConfig>({
+    queryKey: scope.keys.globalConfig(),
+    queryFn: () => scope.api.globalConfig.read(),
+    meta: { silentError: true },
   });
 }
 
@@ -29,9 +40,8 @@ export function useGlobalConfig({ silentError = false } = {}) {
 // (launchScripts on a peer's worktree page). Shares the local scope's
 // cache entry, so it is warm from boot. Never runs on a hostless client.
 export function useLocalGlobalConfig() {
-  return useQuery<GlobalConfig>({
-    queryKey: queryKeys.globalConfig(),
-    queryFn: () => window.api.globalConfig.read(),
+  return useQuery({
+    ...globalConfigQueryOptions({ api: window.api, keys: queryKeys }),
     enabled: hasLocalHost,
     meta: { errorTitle: "Couldn't load settings" },
   });

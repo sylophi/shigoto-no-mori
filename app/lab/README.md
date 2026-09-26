@@ -50,8 +50,10 @@ Runtime controls on `window.smLab`: `setPeer(deviceId, "connected" |
 "online" | "offline")`, `setSocket(phase)`, `navigate(to)` (desktop),
 `setMirrorConflicts(roots)` (holds those paths still on every mirror
 started in this session, for the conflict chip. Start one first,
-since the fixtures seed none), plus `emitClient`/`emitHost` for raw
-broadcasts. Console/warns/errors
+since the fixtures seed none), `worktree(deviceId, "add" | "remove",
+name, { projectId?, changedCount? })` (a worktree made or removed
+behind the app's back, the way `sm` or another device would, for the
+villagers moving in and out, and with changes to commit), plus `emitClient`/`emitHost` for raw broadcasts. Console/warns/errors
 collect in `window.smLabLog`.
 
 The villager faces and profiles are never committed: the app downloads

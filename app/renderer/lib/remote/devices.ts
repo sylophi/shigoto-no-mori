@@ -145,6 +145,11 @@ export function setRemoteDevices(devices: readonly RemoteDevice[]): void {
   if (changed) store.publish(next);
 }
 
+// A device by id as the store has it now, for a caller outside React.
+export function remoteDeviceById(deviceId: string): RemoteDevice | undefined {
+  return store.get().find((device) => device.deviceId === deviceId);
+}
+
 // External store surface for useSyncExternalStore.
 export const remoteDeviceStore = {
   subscribe: store.subscribe,

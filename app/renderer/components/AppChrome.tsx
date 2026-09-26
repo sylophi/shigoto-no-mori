@@ -36,8 +36,10 @@ export function AppToaster() {
       closeButton
       toastOptions={{
         classNames: {
+          // Only the toasts sonner draws. A custom one (a villager's
+          // dialogue box or letter) draws its own card.
           toast:
-            "!bg-popover !text-popover-foreground !border !border-border !shadow-md",
+            "data-[styled=true]:!bg-popover data-[styled=true]:!text-popover-foreground data-[styled=true]:!border data-[styled=true]:!border-border data-[styled=true]:!shadow-md",
           title: "!select-text",
           description: "!text-muted-foreground !select-text",
           error: "!text-destructive",

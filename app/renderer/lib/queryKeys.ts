@@ -345,6 +345,15 @@ function hostKeyProjectId(queryKey: readonly unknown[]): unknown {
   return queryKey[0] === HOST_SCOPE ? queryKey[projectIdIndex] : undefined;
 }
 
+// One project's worktree list, on any device (worktrees(projectId)),
+// for a watcher over the whole cache (lib/villagers/moves.ts).
+export function isWorktreeListKey(queryKey: readonly unknown[]): boolean {
+  return (
+    queryKeyDomain(queryKey) === "worktrees" &&
+    typeof hostKeyProjectId(queryKey) === "string"
+  );
+}
+
 // The EXTERNAL-CHANGE sweep, scoped to one device. Host-scoped keys
 // invalidate only when bound to THIS device id: a remote device's
 // queries cache under its own id in the same host families, so a

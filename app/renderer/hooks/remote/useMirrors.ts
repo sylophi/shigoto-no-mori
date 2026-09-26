@@ -32,6 +32,7 @@ import {
   type Move,
   useMoveMutation,
 } from "@/hooks/remote/useMoveWorktree";
+import { quietVillagerMoves } from "@/lib/villagers/moves";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
 import { useAcceptsCommands } from "@/hooks/account/useAccount";
 import { hasLocalHost } from "@/lib/localHost";
@@ -415,7 +416,11 @@ export function useMirrorControls() {
     }: {
       session: MirrorSession;
       force?: boolean;
-    }) => api.mirror.stop(session.session, force),
+    }) => {
+      // Its copy going is the mirror stopping, not its villager leaving.
+      quietVillagerMoves([session.worktreeId]);
+      return api.mirror.stop(session.session, force);
+    },
     onSuccess: (_data, { session }) => {
       if (session.deviceId === localDeviceId) {
         forgetDeletedWorktree(
