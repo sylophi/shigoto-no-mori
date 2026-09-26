@@ -198,8 +198,13 @@ pre-commit:
     # The villager manifest names a face for every doubutsu name, so the
     # pool and the manifest agree one to one.
     villager-manifest:
-      glob: "{app/shared/villagers/manifest.json,cli/embed/doubutsu-names.json,app/test/villager-manifest.mjs,app/test/lib/checkKit.mjs}"
+      glob: "{app/shared/villagers/manifest.json,app/shared/villagers/rarity.ts,cli/embed/doubutsu-names.json,app/test/villager-manifest.mjs,app/test/lib/checkKit.mjs}"
       run: pnpm -C app test villager-manifest
+    # What a villager says in a toast, and the news when they move in or
+    # out, by rarity.
+    villager-voice:
+      glob: "{app/renderer/lib/villagerVoice.ts,app/shared/villagers/rarity.ts,app/shared/schemas/villagers.ts,app/test/villager-voice.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test villager-voice
     # The villager data download against a fake wiki: progress, the
     # manifest's size and sha1 checks, cancel, resume, the finished
     # download appearing whole, remove, and the Settings line for each

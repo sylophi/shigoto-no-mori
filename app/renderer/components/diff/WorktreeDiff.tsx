@@ -10,6 +10,7 @@ import {
   useSetStaged,
   useWorktreeChanges,
 } from "@/hooks/worktrees/useWorktreeChanges";
+import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
 import { useAmendDraft } from "@/hooks/worktrees/useAmendDraft";
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { EMPTY_DRAFT, useCommitDraft } from "@/lib/commitDraft";
@@ -103,6 +104,8 @@ function ChangesView({
     setDraft,
   });
 
+  const say = useWorktreeSuccessToast();
+
   const onCommit = () => {
     const list = files ?? [];
     const included = includedFiles(list).length;
@@ -123,7 +126,8 @@ function ChangesView({
           resetAmendDraft();
           setDraft(EMPTY_DRAFT);
           if (wasAmend) setAmending(false);
-          toast.success(
+          say(
+            worktree,
             wasAmend ? `Amended into ${hash}` : `Committed ${hash}`,
             {
               description: `${pluralize(count, "file")} to ${worktree.branch}`,
@@ -152,7 +156,7 @@ function ChangesView({
               onClick: () =>
                 restore(
                   { projectId, worktreeId, snapshot },
-                  { onSuccess: () => toast.success("Changes restored") },
+                  { onSuccess: () => say(worktree, "Changes restored") },
                 ),
             },
           });

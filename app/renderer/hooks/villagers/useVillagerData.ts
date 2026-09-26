@@ -1,6 +1,11 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { VillagerDataStatus } from "@shared/schemas";
-import { useHostScope } from "@/hooks/remote/useHostScope";
+import { type HostReadScope, useHostScope } from "@/hooks/remote/useHostScope";
 
 // How often the status is read again while a download runs, for its
 // progress. Nothing else moves it on its own.
@@ -11,13 +16,20 @@ const DOWNLOADING_POLL_MS = 500;
 // Silent on error, so a peer build without the channel just shows no
 // control.
 export function useVillagerDataStatus({ enabled = true } = {}) {
-  const { api, keys, hasHost } = useHostScope();
-  return useQuery<VillagerDataStatus>({
-    queryKey: keys.villagerData(),
-    queryFn: () => api.villagers.status(),
-    enabled: enabled && hasHost,
+  const scope = useHostScope();
+  return useQuery({
+    ...villagerDataStatusQueryOptions(scope),
+    enabled: enabled && scope.hasHost,
     refetchInterval: (query) =>
       query.state.data?.kind === "downloading" ? DOWNLOADING_POLL_MS : false,
+  });
+}
+
+// The read itself, shared with callers outside React.
+export function villagerDataStatusQueryOptions(scope: HostReadScope) {
+  return queryOptions<VillagerDataStatus>({
+    queryKey: scope.keys.villagerData(),
+    queryFn: () => scope.api.villagers.status(),
     meta: { silentError: true },
   });
 }

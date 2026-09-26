@@ -14,6 +14,7 @@
 // while doubutsuNames is on, since without villager names there are no
 // villagers to bring along.
 import type { GlobalConfig } from "./schemas/config";
+import type { VillagerDataStatus } from "./schemas/villagers";
 
 type VillageConfig = Pick<GlobalConfig, "doubutsuNames" | "villageLife">;
 
@@ -25,4 +26,14 @@ export function doubutsuNamesEnabled(config: VillageConfig): boolean {
 // useVillageLife (renderer/hooks/config/useVillageLife.ts).
 export function villageLifeEnabled(config: VillageConfig): boolean {
   return doubutsuNamesEnabled(config) && (config.villageLife ?? false);
+}
+
+// Whether the extras show: the gate open and the villager data all
+// downloaded. The hook and the toasts fired outside render
+// (renderer/lib/villagers/speakers.ts) both ask this.
+export function villageLifeShows(
+  config: VillageConfig,
+  status: Pick<VillagerDataStatus, "kind"> | undefined,
+): boolean {
+  return villageLifeEnabled(config) && status?.kind === "ready";
 }

@@ -49,6 +49,10 @@
  *      sidebar-device-filter     sidebar/DeviceFilterBar.tsx
  *      device-chip               shared/DeviceChip.tsx, shared/DeviceTabs.tsx
  *      phone-tab-bar/-tab/-tab-pill   PhoneTabBar.tsx
+ *      villager-dialogue-box, villager-nameplate,
+ *        villager-letter-paper, villager-photo
+ *                                villagers/VillagerDialogue.tsx,
+ *                                villagers/VillagerLetter.tsx
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
  *    sidebar/Sidebar.tsx), data-doubutsu-page="settings|tidy|devices|
@@ -61,11 +65,11 @@
  * 4. Upstream library attributes (re-verify on upgrades; theme-contract
  *    greps the packages): Base UI's data-highlighted / data-disabled /
  *    data-popup-open / data-unchecked, cmdk's [cmdk-item] +
- *    aria-selected, sonner's [data-sonner-toast]. Clerk's .cl-rootBox /
- *    .cl-modalBackdrop (the ambient-strip carve-outs below) are part of
- *    Clerk's documented appearance API but live in its runtime-loaded
- *    UI bundle, so theme-contract cannot grep them -- re-verify by eye
- *    when the Clerk packages move.
+ *    aria-selected, sonner's [data-sonner-toast] (+ data-styled).
+ *    Clerk's .cl-rootBox / .cl-modalBackdrop (the ambient-strip
+ *    carve-outs below) are part of Clerk's documented appearance API
+ *    but live in its runtime-loaded UI bundle, so theme-contract cannot
+ *    grep them -- re-verify by eye when the Clerk packages move.
  *
  * 5. One consumer outside renderer/: scripts/dmg-background.html, the
  *    dmg installer artwork, which links this file and renders against
@@ -360,7 +364,8 @@
    hairline ring to the ambient-depth strip above, and the popover white
    alone can't define an edge against the card cream. Every floating
    surface gets the AC sticker treatment instead: a faint solid outline
-   plus a hard, blur-less drop. !important outranks sonner's !shadow-md. */
+   plus a hard, blur-less drop. Only the toasts sonner draws: a custom
+   one (a villager's dialogue box or letter) draws its own card. */
 .doubutsu
   :is(
     [data-slot="dropdown-menu-content"],
@@ -368,9 +373,24 @@
     [data-slot="combobox-popup"],
     [data-slot="modal-shell"],
     [data-slot="sheet-content"],
-    [data-sonner-toast]
+    [data-sonner-toast][data-styled="true"]
   ) {
   box-shadow: var(--doubutsu-sticker-shadow) !important;
+}
+
+/* A rare villager's dialogue box and a legendary one's letter
+   (components/villagers) are floating surfaces of their own. They take
+   the hard drop, not the outline, and the name plate stands on a small
+   one. */
+.doubutsu
+  :is(
+    [data-slot="villager-dialogue-box"],
+    [data-slot="villager-letter-paper"]
+  ) {
+  box-shadow: 0 5px 0 0 var(--doubutsu-edge);
+}
+.doubutsu :is([data-slot="villager-nameplate"], [data-slot="villager-photo"]) {
+  box-shadow: 0 2px 0 0 var(--doubutsu-edge);
 }
 
 /* Hairline separators inside those surfaces (the combobox search row,

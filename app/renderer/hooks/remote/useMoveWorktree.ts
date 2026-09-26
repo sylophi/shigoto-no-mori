@@ -26,6 +26,7 @@ import type { MirrorIgnoreChoice } from "@shared/leaveOutRule";
 import type { Worktree } from "@shared/schemas";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { invalidateHostDevice, queryKeys } from "@/lib/queryKeys";
+import { quietVillagerMoves } from "@/lib/villagers/moves";
 
 // The teardown reports a kept source with its raw reason. scripts-running
 // is the one code worth spelling out, and every surface that reports a
@@ -77,6 +78,17 @@ export type Move =
     };
 const UNPICKED = "Pick the device it goes to first.";
 
+// A move tells of the worktree arriving itself, so its villager's moves
+// (in on the landing side, out on a teardown) stay untold.
+function quietMove(move: Move): void {
+  const worktree =
+    move.direction === "pull" ? move.source.worktree : move.worktree;
+  const landed = pullWorktreeName(worktree);
+  quietVillagerMoves(
+    landed === undefined ? [worktree.name] : [worktree.name, landed],
+  );
+}
+
 // What a mirror leaves out, as the dialog and the section hand it to
 // the host: the rule plus the engine patterns it resolved to.
 export type { MirrorIgnoreChoice };
@@ -113,6 +125,7 @@ export function useMoveMutation<Result extends Landed>(
   const { deviceId } = useHostScope();
   const queryClient = useQueryClient();
   return useMutation({
+    onMutate: () => quietMove(move),
     mutationFn: async (choice: LandingChoice) => {
       if (move.direction === "pull") {
         const { worktree, sourceProjectId, sourceIdentity } = move.source;

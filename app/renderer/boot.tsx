@@ -34,6 +34,7 @@ import { createAppQueryClient } from "./lib/queryClientOptions";
 import { hasLocalHost } from "./lib/localHost";
 import { watchHost } from "./lib/hostWatch";
 import { startRemoteDeviceSync } from "./lib/remote/remoteDeviceSync";
+import { startVillagerMoves } from "./lib/villagers/moves";
 import { startRemoteSweepRequests } from "./lib/remote/remoteSweep";
 import { documentFocused } from "./lib/focus";
 import { startSharedSettingsSync } from "./lib/remote/sharedSettingsSync";
@@ -119,6 +120,10 @@ export function bootApp({
   // The other direction: a host sweeps while someone is looking, and
   // this window says so to the hosts it is looking at.
   startRemoteSweepRequests();
+
+  // Villagers moving in and out of any device's worktrees, told in
+  // their voice whoever moved them (Village life).
+  startVillagerMoves(queryClient);
 
   const rootElement = document.getElementById("root");
   if (!rootElement) {

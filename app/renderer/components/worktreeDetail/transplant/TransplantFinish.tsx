@@ -24,16 +24,17 @@ import { Chip } from "@/components/ui/chip-button";
 import { RowTag } from "@/components/ui/row-tag";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { InlineError } from "@/components/ui/inline-error";
+import { useDestinationScope } from "@/hooks/remote/useHostScope";
 import { keptSourceReason } from "@/hooks/remote/useMoveWorktree";
 import { useWorktreeIgnoredPaths } from "@/hooks/remote/useWorktreeIgnoredPaths";
 import {
   CONFIRM_DESTRUCTIVE_MS,
   useConfirmTwice,
 } from "@/hooks/ui/useConfirmTwice";
+import { useWorktreeSuccessToast } from "@/hooks/villagers/useWorktreeSuccessToast";
 import { useSetShelved } from "@/hooks/worktrees/useWorktreeMutations";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { pluralize } from "@/lib/pluralize";
-import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { FlowBody, FlowFooter, LandedPath } from "../flow/FlowChrome";
 import { type Landing, LANDS_HERE } from "../flow/pullSteps";
@@ -163,6 +164,9 @@ export function TransplantFinish({
         "its teardown was refused.")
       : null;
   const branch = result.worktree.branch;
+  // The landed worktree's villager, when it has one, says the news, from
+  // the device it landed on.
+  const say = useWorktreeSuccessToast(useDestinationScope());
 
   // Each fate ends on the landed worktree's page, except a teardown
   // the source refused.
@@ -174,17 +178,18 @@ export function TransplantFinish({
           worktreeId: worktree.id,
           shelved: true,
         });
-        toast.success(`Transplanted ${branch} ${landing.to}`, {
+        say(result.worktree, `Transplanted ${branch} ${landing.to}`, {
           description: `The copy on ${sourceDeviceLabel} is shelved.`,
         });
       } else if (choice === "teardown") {
         const outcome = await teardown.mutateAsync();
         if (!outcome.sourceRemoved) return;
-        toast.success(`Transplanted ${branch} ${landing.to}`, {
+        say(result.worktree, `Transplanted ${branch} ${landing.to}`, {
           description: `The copy on ${sourceDeviceLabel} was torn down.`,
         });
       } else {
-        toast.success(
+        say(
+          result.worktree,
           landing.onPeer
             ? `Sent ${branch} ${landing.to}`
             : `Brought ${branch} here`,

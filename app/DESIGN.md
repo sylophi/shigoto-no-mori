@@ -130,9 +130,10 @@ Rules that keep a machine looking like itself everywhere:
 
 ## Village life: rarity
 
-Village life is the cosmetic villager flair. Nothing uses it yet, so
-this is the rule its features follow when they arrive. Every doubutsu
-character has a rarity, like a card's:
+Village life is the cosmetic villager flair: villagers speaking in
+toasts about their worktrees, and moving in and out as those come and
+go. Every doubutsu character has a rarity, like a card's
+(`shared/villagers/rarity.ts`):
 
 - **Common**: regular villagers.
 - **Rare**: special characters that aren't regular villagers (Katrina,
@@ -144,6 +145,56 @@ character has a rarity, like a card's:
 A rare character gets a little more flair than a villager, and a
 legendary one clearly the most. Common stays calm: most worktrees are
 villagers, and the app is still a work tool. Rarity follows the
-character, never the worktree (`raymond-2` is Raymond). How each tier
-looks is designed with the first feature that shows it, in the app's
-own look, and drawn in one shared place rather than at each call site.
+character, never the worktree (`raymond-2` is Raymond).
+
+A villager's face is the same whatever their rarity. The rarer the
+character, the more of Animal Crossing comes with their news when they
+move in or out (`components/villagers`):
+
+- **Common**: a toast with their face and catchphrase.
+- **Rare**: an Animal Crossing dialogue box. A soft cream bubble, their
+  name on a leaning plate in their own color (read off their face,
+  `lib/villagers/faceColor.ts`), their words typed out a letter at a
+  time, and the arrow bobbing once the line is out.
+- **Legendary**: a letter on their own stationery
+  (`lib/villagers/stationery.ts`, a pattern per character: music notes
+  for K.K. Slider, stars for Celeste), and the biggest moment the app
+  has. It arrives as a scene: the envelope's flap swings open and the
+  letter rises out, their face drops onto a perforated stamp, a
+  postmark presses the day's date over it as sparkles pop, the words
+  write themselves onto lined paper, and the name signs itself with a
+  swash, over the stationery drifting slowly.
+
+Moving out is a goodbye, not an arrival in reverse: a regular
+villager's face wears a moving box instead of the check, a rare one sits
+packed in their box in the dialogue, and a legendary one's letter is a
+farewell, with their photo taped in the corner in place of the stamp and
+signed "Your friend". In a crowd (a Tidy run) the rare and legendary keep
+their own moments, rarest on top, and the regulars share one toast.
+
+Everyday toasts (a commit) stay small for everyone: the face, and a
+common villager's catchphrase. No outlines in doubutsu: the dialogue
+box and the letter take its hard drop only. Under reduced motion every
+moment is simply there, finished, and the drift holds while nobody is
+looking or the machine is on battery.
+
+And what they say scales the same way (`lib/villagerVoice.ts`):
+regular villagers end a success with their catchphrase, and special
+characters, who have none, speak through their quote (or, with none,
+the move in their own words). News with a rarer character in it stays
+on screen longer.
+
+Rules that keep it consistent as features arrive:
+
+- **A villager shows through `VillagerFace`**, never a bare
+  `VillagerIcon` on a product surface, and a tier's moment is never
+  re-inlined at a call site: it comes from `components/villagers`.
+- **Only success speaks.** Warnings, errors and neutral notices stay
+  plain.
+- **Anything that shows follows `useVillageLife` of the device the
+  worktree lives on**, including toasts fired outside render
+  (`lib/villagers/speakers.ts`).
+- **A moment happens whoever caused it.** Moving in and out is read off
+  the worktree lists (`lib/villagers/moves.ts`), so the app, `sm` and
+  another device all count. No emojis, and a name that isn't a
+  character's shows nothing.

@@ -305,11 +305,43 @@ function hostHandlersFor(
       (forest.worktrees[projectId] ??= []).push(created);
       return { worktree: created };
     },
+    // Removing really removes, so the row goes and its villager, if it
+    // has one, moves out.
+    "worktrees:delete": ({ projectId, worktreeId }) => {
+      forest.worktrees[projectId] = (forest.worktrees[projectId] ?? []).filter(
+        (w) => w.id !== worktreeId,
+      );
+      return { ok: true };
+    },
     "worktrees:listCommits": ({ worktreeId, skip }) =>
       skip > 0 ? [] : (findWorktree(worktreeId)?.recentCommits ?? []),
     "worktrees:fileDiff": () => LAB_DIFF,
     "worktrees:readFile": ({ path }: { path: string }) => labFile(path),
-    "worktrees:changeStatus": () => [],
+    // A worktree with changes lists two of them, and committing takes
+    // them all, so the commit flow runs end to end.
+    "worktrees:changeStatus": ({ worktreeId }) =>
+      (findWorktree(worktreeId)?.changedCount ?? 0) > 0
+        ? [
+            {
+              path: "renderer/lib/villagerVoice.ts",
+              kind: "modified",
+              counts: { added: 12, deleted: 3 },
+              staged: "none",
+            },
+            {
+              path: "renderer/lib/toast.tsx",
+              kind: "modified",
+              counts: { added: 4, deleted: 1 },
+              staged: "none",
+            },
+          ]
+        : [],
+    "worktrees:commit": ({ worktreeId }) => {
+      const committed = findWorktree(worktreeId);
+      if (committed === undefined) throw new Error("Unknown worktree");
+      committed.changedCount = 0;
+      return { hash: "3f2a1b9", worktree: committed };
+    },
     "worktrees:commitDiff": () => LAB_DIFF,
     "worktreeData:read": ({ worktreeId }) =>
       worktreeData.get(worktreeId) ?? null,
@@ -1440,6 +1472,51 @@ export function installLabBridge(
         }));
       }
       mirrorChanged();
+    },
+    // A worktree created or removed behind the app's back, the way
+    // `sm` in a terminal (this device) or another device's user does
+    // it: the fixture world moves, then the host says so the way its fs
+    // watcher would. `projectId` defaults to the device's first
+    // project, and `changedCount` gives an added one changes to commit.
+    worktree(
+      deviceId: string,
+      action: "add" | "remove",
+      name: string,
+      {
+        projectId,
+        changedCount = 0,
+      }: {
+        projectId?: string;
+        changedCount?: number;
+      } = {},
+    ) {
+      const forest = forests[deviceId];
+      const project =
+        forest?.projects.find((p) => p.id === projectId) ?? forest?.projects[0];
+      if (project === undefined) {
+        throw new Error(`[lab] no project on ${deviceId} to put ${name} in`);
+      }
+      const list = (forest.worktrees[project.id] ??= []);
+      if (action === "add") {
+        list.push(
+          worktreeFixture({
+            id: `lab${Date.now().toString(36)}${name}`,
+            projectId: project.id,
+            name,
+            branch: name,
+            path: `${project.path}/../worktrees/${name}`,
+            hasUpstream: false,
+            changedCount,
+          }),
+        );
+      } else {
+        forest.worktrees[project.id] = list.filter((w) => w.name !== name);
+      }
+      if (deviceId === selfDeviceId) {
+        localHost.emit("git:externalChange", undefined);
+      } else {
+        pushFromPeer(deviceId, "git:externalChange", undefined);
+      }
     },
     emitClient: client.emit,
     emitHost: localHost.emit,

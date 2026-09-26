@@ -229,3 +229,170 @@
   --ansi-bright-cyan: oklch(0.8 0.15 200);
   --ansi-bright-white: oklch(0.97 0.005 270);
 }
+
+/*
+ * The villager moments' motion (components/villagers). A rare one's
+ * dialogue box bobs its arrow once the line is out. A legendary one's
+ * letter arrives as a scene, once the toast has slid in: the flap opens
+ * (.4s), the stamp drops (.6s), the letter rises (.7s), the postmark
+ * presses and the sparkles pop (1.05s), then the words write and the name signs itself,
+ * over stationery drifting a tile at a time. Every part rests in its
+ * final state, so reduced motion just skips to it.
+ */
+@keyframes villager-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(2px);
+  }
+}
+.villager-bob {
+  animation: villager-bob 0.9s ease-in-out infinite;
+}
+
+/* Moving out: the box slides up around the villager, and the tape
+   presses onto the farewell letter's photo once it has landed. */
+@keyframes villager-pack {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+}
+.villager-pack {
+  animation: villager-pack 0.35s cubic-bezier(0.3, 1.3, 0.5, 1) 0.3s both;
+}
+.villager-tape {
+  animation: villager-wipe 0.3s ease-out 1.05s both;
+}
+
+@keyframes villager-flap-open {
+  0% {
+    transform: rotateX(0);
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    transform: rotateX(-165deg);
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+.villager-flap {
+  transform-origin: top;
+  animation: villager-flap-open 0.55s cubic-bezier(0.5, 0, 0.3, 1) 0.4s both;
+}
+
+@keyframes villager-rise {
+  from {
+    transform: translateY(18px);
+    opacity: 0;
+  }
+}
+.villager-rise {
+  animation: villager-rise 0.45s cubic-bezier(0.2, 0.8, 0.3, 1) 0.7s both;
+}
+
+@keyframes villager-stamp-drop {
+  0% {
+    transform: translateY(-14px) rotate(-10deg) scale(1.5);
+    opacity: 0;
+  }
+  60% {
+    transform: rotate(9deg) scale(0.92);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(6deg) scale(1);
+  }
+}
+.villager-stamp-drop {
+  animation: villager-stamp-drop 0.5s cubic-bezier(0.3, 1.4, 0.5, 1) 0.6s both;
+}
+
+@keyframes villager-postmark {
+  from {
+    transform: rotate(-12deg) scale(1.4);
+    opacity: 0;
+  }
+}
+.villager-postmark {
+  animation: villager-postmark 0.25s ease-out 1.05s both;
+}
+
+@keyframes villager-sparkle {
+  0% {
+    transform: scale(0) rotate(0);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1.15) rotate(25deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(0) rotate(50deg);
+    opacity: 0;
+  }
+}
+.villager-sparkle {
+  animation: villager-sparkle 0.8s ease-out both;
+}
+
+/* Written on from the left: a signature, a strip of tape. */
+@keyframes villager-wipe {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+}
+.villager-unsigned {
+  clip-path: inset(0 100% 0 0);
+}
+.villager-sign {
+  animation: villager-wipe 0.6s ease-out both;
+}
+
+@keyframes villager-swash {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+.villager-swash {
+  stroke-dasharray: 1;
+  animation: villager-swash 0.5s ease-out 0.45s both;
+}
+
+@keyframes villager-paper-drift {
+  to {
+    transform: translate(var(--tile-x), var(--tile-y));
+  }
+}
+.villager-paper-drift {
+  animation: villager-paper-drift 20s linear infinite;
+}
+/* Nobody is looking, or the machine is on battery: hold what loops. */
+:is(.unfocused, .battery-pause) :is(.villager-paper-drift, .villager-bob) {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(
+    .villager-bob,
+    .villager-pack,
+    .villager-tape,
+    .villager-rise,
+    .villager-stamp-drop,
+    .villager-postmark,
+    .villager-sign,
+    .villager-swash,
+    .villager-paper-drift
+  ) {
+    animation: none;
+  }
+  .villager-sparkle,
+  .villager-flap {
+    display: none;
+  }
+}

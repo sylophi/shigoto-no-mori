@@ -1,4 +1,4 @@
-import { villageLifeEnabled } from "@shared/villageLife";
+import { villageLifeEnabled, villageLifeShows } from "@shared/villageLife";
 import { useVillagerDataStatus } from "@/hooks/villagers/useVillagerData";
 import { useGlobalConfig } from "./useGlobalConfig";
 
@@ -20,5 +20,5 @@ export function useVillageLife(): boolean {
   const { data: config } = useGlobalConfig();
   const on = config !== undefined && villageLifeEnabled(config);
   const { data: status } = useVillagerDataStatus({ enabled: on });
-  return on && status?.kind === "ready";
+  return config !== undefined && villageLifeShows(config, status);
 }
