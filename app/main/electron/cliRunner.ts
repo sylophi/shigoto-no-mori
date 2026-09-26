@@ -52,7 +52,9 @@ let backgroundChildren = 0;
 // under its data directory, which neither watcher reads). Neither are
 // reads (opts.readOnly): the app reads rows, projects and config
 // through the CLI on every refresh, and counting those would mute the
-// watchers for most of the session while writing nothing they watch.
+// watchers for most of the session while writing nothing they react
+// to (the listing's shelf bookkeeping is the one exception, and the
+// state watcher tells it apart itself).
 export function cliChildCount(): number {
   return children.size - backgroundChildren;
 }
@@ -121,8 +123,9 @@ export async function spawnCliDetached(args: string[]): Promise<void> {
 // opts.background exempts the child from the busy aggregate (see
 // backgroundChildren). opts.readOnly does the same for a read (a list,
 // a config read), and also skips the self-write note on close: a read
-// writes nothing the state watcher watches, so a genuinely external
-// write landing just after it must still refresh the UI. opts.timeoutMs SIGKILLs the child's process
+// writes nothing the state watcher reacts to (see its header for the
+// listing's shelf writes), so a genuinely external write landing just
+// after it must still refresh the UI. opts.timeoutMs SIGKILLs the child's process
 // group when it runs that long, so a wedged child (a stuck subprocess
 // on the Go side) can't hold the returned promise open forever. The
 // kill surfaces as a normal non-zero close.

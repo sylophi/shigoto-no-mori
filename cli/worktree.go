@@ -57,7 +57,10 @@ type buildContext struct {
 	primaryBranch string
 	shelved       map[string]bool
 	autoPull      map[string]bool
-	chain         *primaryChain
+	// The shelf snapshots (shelf.go), read with the marks and only when
+	// anything is shelved: nothing shelved, nothing to compare against.
+	shelfSnapshots map[string]shelfSnapshot
+	chain          *primaryChain
 	// The project config the primary ref was resolved from, kept so
 	// callers that need more of it don't read the file a second time.
 	config *projectConfig
@@ -97,8 +100,9 @@ func loadPrimaryRef(proj project) (remotes []string, primaryRef string, config *
 // The build context from project facts a caller already resolved
 // (done and land hold the remotes and primary ref by then).
 func newBuildContext(proj project, remotes []string, primaryRef string, config *projectConfig) buildContext {
-	marks := readWorktreeMarkSets()
-	return buildContext{
+	all := readRegistryHints()
+	marks := worktreeMarkSetsFrom(all)
+	ctx := buildContext{
 		hasRemote:     len(remotes) > 0,
 		primaryRef:    primaryRef,
 		primaryBranch: primaryBranchOf(primaryRef, remotes),
@@ -107,6 +111,10 @@ func newBuildContext(proj project, remotes []string, primaryRef string, config *
 		chain:         &primaryChain{path: proj.Path, ref: primaryRef},
 		config:        config,
 	}
+	if len(ctx.shelved) > 0 {
+		ctx.shelfSnapshots = shelfSnapshotsFrom(all)
+	}
+	return ctx
 }
 
 // The local branch behind a primary ref: the ref minus its remote when
@@ -137,21 +145,31 @@ func identityOf(w worktreeJSON) worktreeIdentity {
 }
 
 func buildWorktree(proj project, id worktreeIdentity, ctx buildContext) worktreeJSON {
+	row, _ := probeWorktree(proj, id, ctx)
+	return row
+}
+
+// buildWorktree plus what the shelf needs of the probes (rowProbe).
+func probeWorktree(proj project, id worktreeIdentity, ctx buildContext) (worktreeJSON, rowProbe) {
 	var (
-		changes  workingTreeChanges
-		commits  []commitSummary
-		rs       remoteSync
-		primary  primaryRelation
-		unpushed int
-		wg       sync.WaitGroup
+		changes   workingTreeChanges
+		statusErr error
+		commits   []commitSummary
+		rs        remoteSync
+		primary   primaryRelation
+		unpushed  int
+		wg        sync.WaitGroup
 	)
-	// Display probe: an unreadable status just shows as 0 changes.
-	wg.Go(func() { changes, _ = getWorkingTreeChanges(id.Path) })
+	probe := rowProbe{at: time.Now().UnixMilli()}
+	// Display probe: an unreadable status just shows as 0 changes (and
+	// keeps the shelf from comparing the row).
+	wg.Go(func() { changes, statusErr = getWorkingTreeChanges(id.Path) })
 	wg.Go(func() { commits = listCommits(id.Path, 0, recentCommitsCount) })
 	wg.Go(func() { rs = getRemoteSync(id.Path) })
 	wg.Go(func() { primary = getPrimaryRelation(id, ctx) })
 	wg.Go(func() { unpushed = getUnpushedCount(id.Path) })
 	wg.Wait()
+	probe.statusOK = statusErr == nil
 	return worktreeJSON{
 		ID:                id.ID,
 		ProjectID:         id.ProjectID,
@@ -179,7 +197,7 @@ func buildWorktree(proj project, id worktreeIdentity, ctx buildContext) worktree
 		// primary is the mark's main customer.
 		AutoPull:    ctx.autoPull[id.ID],
 		ProjectName: proj.Name,
-	}
+	}, probe
 }
 
 // A new slice holding the items first accepts, then the rest, each
@@ -206,7 +224,9 @@ func partitionStable[T any](items []T, first func(T) bool) []T {
 // the fan-out) and keeps a refresh from forking hundreds of gits.
 const rowProbeSlots = 6
 
-// Primary first, matching the app's sidebar ordering.
+// Primary first, matching the app's sidebar ordering. The full listing
+// is what settles the shelf (settleShelves): a shelved row comes back
+// unshelved once it has been worked in.
 func listWorktrees(proj project) ([]worktreeJSON, error) {
 	identities, err := listWorktreeIdentities(proj)
 	if err != nil {
@@ -215,16 +235,18 @@ func listWorktrees(proj project) ([]worktreeJSON, error) {
 	ctx := loadBuildContext(proj)
 	ordered := partitionStable(identities, func(id worktreeIdentity) bool { return id.IsPrimary })
 	results := make([]worktreeJSON, len(ordered))
+	probes := make([]rowProbe, len(ordered))
 	var wg sync.WaitGroup
 	slots := make(chan struct{}, rowProbeSlots)
 	for i, id := range ordered {
 		wg.Go(func() {
 			slots <- struct{}{}
 			defer func() { <-slots }()
-			results[i] = buildWorktree(proj, id, ctx)
+			results[i], probes[i] = probeWorktree(proj, id, ctx)
 		})
 	}
 	wg.Wait()
+	settleShelves(results, probes, ctx)
 	return results, nil
 }
 

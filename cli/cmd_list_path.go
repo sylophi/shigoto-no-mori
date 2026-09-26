@@ -103,9 +103,14 @@ func cmdList(ctx cliContext, args []string) (int, error) {
 				identityGroupFor(target.proj, []worktreeIdentity{target.worktree}, withPrimaryRef),
 			})
 		}
-		row := buildWorktree(target.proj, target.worktree, loadBuildContext(target.proj))
+		// A full row like the listing's, so it settles the shelf too.
+		build := loadBuildContext(target.proj)
+		row, probe := probeWorktree(target.proj, target.worktree, build)
+		rows := []worktreeJSON{row}
+		settleShelves(rows, []rowProbe{probe}, build)
+		row = rows[0]
 		if jsonMode {
-			emit([]worktreeJSON{row})
+			emit(rows)
 			return 0, nil
 		}
 		out(renderTable([]string{"NAME", "BRANCH", "SYNC", "CHANGES", ""}, [][]string{{

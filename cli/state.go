@@ -304,12 +304,12 @@ const (
 	autoPullKey = "autoPullWorktrees"
 )
 
-// What each shelved worktree looked like when it went on the shelf,
-// which the app compares against to unshelve a worktree that gets
-// worked in (host/lib/worktrees/shelved.ts). The app writes the
-// entries. The CLI only clears them: on every shelve and unshelve, so a
-// fresh shelf starts from a fresh snapshot, and with the worktree's
-// other marks.
+// What each shelved worktree looked like when it went on the shelf
+// ({at, head, changed}, shelf.go), which the listing compares against
+// to unshelve a worktree that gets worked in. The full listing writes
+// the entries (settleShelves). Every shelve and unshelve clears the
+// worktree's entry, so a fresh shelf starts from a fresh snapshot, and
+// it goes with the worktree's other marks.
 const shelfSnapshotsKey = "shelfSnapshots"
 
 // Every map in the registry keyed by worktree id: the `{ worktreeId:
@@ -551,15 +551,18 @@ func readRegistryMarkSet(key string) map[string]bool {
 	return markSetFrom(readRegistryHints(), key)
 }
 
-// Every worktreeMarkKeys set from one registry read, keyed by mark key,
-// for the row builder, which needs them all per project.
+// The `{ worktreeId: true }` marks every row and identity carries, from
+// one registry read, keyed by mark key. The shelf snapshots are not an
+// id set (shelfSnapshotsFrom reads them).
 func readWorktreeMarkSets() map[string]map[string]bool {
-	all := readRegistryHints()
-	sets := make(map[string]map[string]bool, len(worktreeMarkKeys))
-	for _, key := range worktreeMarkKeys {
-		sets[key] = markSetFrom(all, key)
+	return worktreeMarkSetsFrom(readRegistryHints())
+}
+
+func worktreeMarkSetsFrom(all map[string]json.RawMessage) map[string]map[string]bool {
+	return map[string]map[string]bool{
+		shelvedKey:  markSetFrom(all, shelvedKey),
+		autoPullKey: markSetFrom(all, autoPullKey),
 	}
-	return sets
 }
 
 func markSetFrom(all map[string]json.RawMessage, key string) map[string]bool {
@@ -725,10 +728,30 @@ func splitLocked() error {
 }
 
 // Flips the id in the shelved map (store.ts writeKey semantics) and
-// retires its snapshot either way, in one pass under the registry lock.
-// The snapshot values are the app's to shape, so they pass through as
-// raw JSON.
+// retires its snapshot either way, so the next listing judges the new
+// shelf against a fresh one.
 func setShelved(worktreeID string, shelved bool) error {
+	return updateShelf(func(marks map[string]bool, snapshots map[string]json.RawMessage) (bool, error) {
+		_, hadSnapshot := snapshots[worktreeID]
+		if marks[worktreeID] == shelved && !hadSnapshot {
+			return false, nil
+		}
+		if shelved {
+			marks[worktreeID] = true
+		} else {
+			delete(marks, worktreeID)
+		}
+		delete(snapshots, worktreeID)
+		return true, nil
+	})
+}
+
+// Read-modify-write of the shelved marks and the shelf snapshots
+// together, in one pass under the registry lock. fn edits both maps in
+// place and reports whether it changed anything; false skips the
+// write. Snapshot values pass through as raw JSON, so an entry fn
+// doesn't touch is written back byte for byte.
+func updateShelf(fn func(marks map[string]bool, snapshots map[string]json.RawMessage) (bool, error)) error {
 	if err := ensureRegistrySplit(); err != nil {
 		return err
 	}
@@ -745,16 +768,10 @@ func setShelved(worktreeID string, shelved bool) error {
 		if err := decodeKey(registryPath(), shelfSnapshotsKey, all[shelfSnapshotsKey], &snapshots); err != nil {
 			return err
 		}
-		_, hadSnapshot := snapshots[worktreeID]
-		if marks[worktreeID] == shelved && !hadSnapshot {
-			return nil
+		changed, err := fn(marks, snapshots)
+		if err != nil || !changed {
+			return err
 		}
-		if shelved {
-			marks[worktreeID] = true
-		} else {
-			delete(marks, worktreeID)
-		}
-		delete(snapshots, worktreeID)
 		for key, value := range map[string]any{shelvedKey: marks, shelfSnapshotsKey: snapshots} {
 			encoded, err := json.Marshal(value)
 			if err != nil {
@@ -848,7 +865,7 @@ func moveWorktreeMarks(from, to string) {
 				}
 				// A shelf snapshot stays behind: a move can copy the
 				// files and give every one a fresh mtime, so the next
-				// listing takes a new one (the app's rule too).
+				// listing takes a new one (shelf.go).
 				if key != shelfSnapshotsKey {
 					m[to] = m[from]
 				}

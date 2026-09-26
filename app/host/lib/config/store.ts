@@ -34,6 +34,12 @@ export const DEVICE_ID_KEY = "deviceId";
 // (host/lib/sharedSettings/store.ts). App-written like deviceId: the
 // CLI never reads it and only preserves it.
 export const SHARED_SETTINGS_KEY = "sharedSettings";
+// What each shelved worktree looked like when it went on the shelf. The
+// CLI's listing records these and compares against them to unshelve a
+// worktree that gets worked in (cli/shelf.go). The app never reads the
+// entries: only the state watcher knows the key, to tell a write that
+// touched nothing else apart (main/electron/stateWatcher.ts).
+export const SHELF_SNAPSHOTS_KEY = "shelfSnapshots";
 
 // Drives only the state.json→registry.json split below. deviceId is
 // deliberately absent because it postdates the split, so no old-format

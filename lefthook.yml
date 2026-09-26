@@ -248,6 +248,16 @@ pre-commit:
     auto-pull:
       glob: "{cli/**,app/host/lib/worktrees/autoPullSweep.ts,app/host/lib/git/sync.ts,app/host/lib/git/core.ts,app/host/lib/git/worktrees.ts,app/host/ipc/cliDelegate.ts,app/test/auto-pull.mjs,app/test/lib/checkKit.mjs,app/test/lib/smBinary.mjs}"
       run: pnpm -C app test auto-pull
+    # Drives the shelf's auto-unshelve (cli/shelf.go, run by `sm
+    # worktrees list`) against a REAL repository through the host's
+    # listing: the first listing of a shelved worktree snapshots it,
+    # changes it was shelved with keep it shelved, and an edit, a
+    # commit or a deletion made since unshelves it. An auto-pull
+    # fast-forward doesn't, and a listing racing a reshelve can't undo
+    # it.
+    shelf:
+      glob: "{cli/**,app/host/lib/worktrees/autoPullSweep.ts,app/host/lib/git/sync.ts,app/host/lib/git/core.ts,app/host/ipc/cliDelegate.ts,app/test/shelf.mjs,app/test/lib/checkKit.mjs,app/test/lib/cliSandbox.mjs,app/test/lib/smBinary.mjs}"
+      run: pnpm -C app test shelf
     # Drives the electron-free account layer (main/core/account/*,
     # shared/account/*) end to end with stubs: the hub client's
     # route/method/auth-tier discipline against the shared schemas

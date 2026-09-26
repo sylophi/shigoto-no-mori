@@ -759,9 +759,9 @@ func TestRegisterProjectRefusesMalformedProjectsValue(t *testing.T) {
 	}
 }
 
-// The app writes a snapshot per shelved worktree and compares against
-// it to unshelve one that gets worked in. Any shelf change the CLI
-// makes retires the worktree's snapshot, so a later shelve can't be
+// The listing writes a snapshot per shelved worktree and compares
+// against it to unshelve one that gets worked in (shelf.go). Any shelf
+// change retires the worktree's snapshot, so a later shelve can't be
 // judged against an earlier one, and leaves every other entry alone.
 func TestShelfChangesRetireTheSnapshot(t *testing.T) {
 	sandboxDataDir(t)

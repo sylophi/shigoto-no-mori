@@ -62,6 +62,7 @@ var worktreeItems = []helpItem{
 	{"worktrees list [--all] [--remote] [--from <device>] [--identities]", "List worktrees",
 		"All projects when outside one, or with --all; -p <project> picks one from anywhere. --remote lists this project's worktrees on your other devices (--from narrows it to one), and needs the app open. " +
 			"--json prints one array of rows, primary first within each project. A row is the app's Worktree document plus projectName: id, projectId, name, branch, path, ahead, behind, hasUpstream, hasRemote, divergedClean, behindPrimary, unpushedCount, primaryRef, primaryBranch, mergedIntoPrimary, changedCount, lastChangeAt, recentCommits, isPrimary, isExternal, detached, shelved, autoPull. --worktree-id <id> narrows the array to that one row. " +
+			"Listing full rows also takes a shelved worktree back off the shelf once it has been worked in since it was shelved (an edit, a new or deleted file, a commit; not the changes it was shelved with, nor an auto-pull fast-forward), and the row says shelved: false. " +
 			"--identities is the cheap form, with no git probe per worktree (only git's worktree list and the registry marks): the same scope, order and array, each entry {id, projectId, name, branch, path, isPrimary, isExternal, detached, shelved, autoPull}. Add --primary-ref for each project's primaryRef and primaryBranch (left out when it has none), resolved once per project. " +
 			"A bare repository has no primary checkout; otherwise the checkout at the project path is the primary (the first one listed when none sits there)."},
 	{"worktrees status [<name>] [--no-pr]", "Status card for one worktree",
@@ -104,7 +105,8 @@ var worktreeItems = []helpItem{
 	{"worktrees unmirror [<name>] [-f]", "Stop mirroring and remove the copy",
 		"Removes the copy, wherever it is, and never the original. Refuses until both sides hold the same commits. -f stops anyway."},
 	{"worktrees mirrors", "List the mirrors this device is part of", ""},
-	{"worktrees shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`, ""},
+	{"worktrees shelve / unshelve [<name>]", `Toggle the app's "out of focus" flag`,
+		"A shelved worktree comes back off the shelf on its own once it is worked in: the next full listing (the app's sidebar, `worktrees list`) that finds an edit, a new or deleted file or a commit made since the shelve unshelves it."},
 	{"worktrees autopull [on|off] [<name>]", "Set or show the app's auto-pull mark",
 		"While on, the running app fast-forwards the worktree onto its upstream after each background fetch, as long as it has no local commits, changes or running scripts. Any checkout can carry it, the primary included. With no on/off it reports the state. --json prints {ok, worktree: <row>} (a `list` row)."},
 	{"worktrees move [<name>] <new-path>", "Move a worktree's checkout",
