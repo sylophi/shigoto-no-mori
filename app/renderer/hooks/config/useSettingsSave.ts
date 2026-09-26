@@ -16,7 +16,7 @@ import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
 
 // The settings form's staged state. One flat shape across both stores:
-// the first four fields are client config (appearance), the rest are
+// the first five fields are client config (appearance), the rest are
 // device config.
 export interface SettingsFormState {
   theme: Theme;
@@ -25,6 +25,7 @@ export interface SettingsFormState {
   // Whether villager extras show is villageLifeShows' call (the
   // villager data downloaded too), never this field alone.
   villageLife: boolean;
+  markTerrierProjects: boolean;
   launchers: LauncherCommand[];
   hiddenLaunchers: string[];
   launchScripts: boolean;
@@ -54,6 +55,7 @@ export function fromConfig(
     doubutsu: clientConfig.doubutsu ?? true,
     pauseAnimationsOnBattery: clientConfig.pauseAnimationsOnBattery ?? true,
     villageLife: clientConfig.villageLife ?? false,
+    markTerrierProjects: clientConfig.markTerrierProjects ?? false,
     launchers: config.launchers ?? [],
     // Sorted here and on every toggle so the id list has one canonical
     // order. useDirtyForm compares FormState by JSON.stringify, and
@@ -143,6 +145,8 @@ function toClientConfig(state: SettingsFormState): ClientConfig {
       : false,
     // Default is off, so off is omitted and the opt-in stored as `true`.
     villageLife: state.villageLife ? true : undefined,
+    // Default is off, the same opt-in serialization as villageLife.
+    markTerrierProjects: state.markTerrierProjects ? true : undefined,
   };
 }
 

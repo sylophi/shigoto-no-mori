@@ -29,6 +29,7 @@ import { LaunchToolsPanel } from "./LaunchToolsPanel";
 import { LocalDevicePanel } from "./LocalDevicePanel";
 import { PeerDeviceSettings } from "./PeerDeviceSettings";
 import { SettingsSectionChips } from "./SettingsSectionChips";
+import { SidebarSection } from "./SidebarSection";
 import {
   APPEARANCE_TAB,
   deviceTab,
@@ -118,6 +119,7 @@ export function SettingsForm({
           doubutsu: prev.doubutsu,
           pauseAnimationsOnBattery: prev.pauseAnimationsOnBattery,
           villageLife: prev.villageLife,
+          markTerrierProjects: prev.markTerrierProjects,
         }));
       }
     }
@@ -202,6 +204,10 @@ export function SettingsForm({
               )}
               villageLife={form.villageLife}
               onVillageLifeChange={setField("villageLife")}
+            />
+            <SidebarSection
+              markTerrierProjects={form.markTerrierProjects}
+              onMarkTerrierProjectsChange={setField("markTerrierProjects")}
             />
             <HiddenWorktreesSection />
             {/* The desktop states its build in this device's section.

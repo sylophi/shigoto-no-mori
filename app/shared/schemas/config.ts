@@ -330,6 +330,11 @@ export const ClientConfigSchema = z.object({
   // name pick's birthday invite is prioritizeBirthdays, a device
   // setting (GlobalConfig).
   villageLife: z.boolean().optional(),
+  // Mark the sidebar's terrier-sourced projects (Project.source), the
+  // ones the terrier registry lists rather than this app's own, with
+  // terrier's paw, on every device this window shows. Off by default
+  // (absent = off), explicit `true` is the opt-in.
+  markTerrierProjects: z.boolean().optional(),
   // Pause the doubutsu wallpaper drift while this machine runs on
   // battery, the same pause an unfocused window gets. On by default
   // (absent = on), explicit `false` keeps it drifting on battery.

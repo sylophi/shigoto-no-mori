@@ -166,6 +166,9 @@ const localProjects: Project[] = [
     path: "/Users/rin/dev/t3code",
     pathExists: true,
     identity: null,
+    // Listed by terrier, not this app's registry, like dotfiles on the
+    // Thinkpad: the rows Mark terrier projects tags.
+    source: "terrier",
     lastUsed: now - 5 * DAY,
     recentCount: 2,
   },
@@ -331,6 +334,7 @@ const thinkpadProjects: Project[] = [
     path: "/home/rin/dotfiles",
     pathExists: true,
     identity: DF_IDENTITY,
+    source: "terrier",
     lastUsed: now - 3 * DAY,
     recentCount: 3,
   },
@@ -552,7 +556,7 @@ export const labGlobalConfig = {
   doubutsuNames: true,
   codexWorktreeNames: false,
   portPool: true,
-  terrier: false,
+  terrier: true,
   githubCli: true,
   directConnections: true,
 };

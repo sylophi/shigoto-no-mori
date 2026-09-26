@@ -71,6 +71,11 @@ export function ProjectRow({
   // This machine first, then every peer holding the same repo.
   const group = useGroupMembers(members, local ? project : undefined);
   const iconMember = useIconMember(group, local);
+  // The header stands for the repo on every device, and terrier lists
+  // it per device, so any checkout of it being terrier's marks it.
+  const terrierInGroup = group.some(
+    (member) => member.project.source === "terrier",
+  );
   // Right-clicking the header pops the same dropdown anchored to the
   // `…` button. Synthesizing a click on the trigger reuses base-ui's
   // normal open flow, which avoids the stray-pointer behavior we'd get
@@ -102,6 +107,7 @@ export function ProjectRow({
             }
           }
           badges={<DeviceBadgeCluster devices={devices} />}
+          terrier={terrierInGroup}
           missing={missing}
           expanded={expanded}
           onToggle={onToggle}

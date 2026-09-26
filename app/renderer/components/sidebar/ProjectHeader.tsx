@@ -9,6 +9,7 @@ import {
 import { useIsTruncated } from "@/hooks/ui/useIsTruncated";
 import type { Project } from "@shared/schemas";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
+import { TerrierMark } from "./TerrierMark";
 
 interface ProjectHeaderProps {
   project: Project;
@@ -18,6 +19,10 @@ interface ProjectHeaderProps {
   // The merged tree's device badge cluster, rendered after the name on
   // the healthy branch only (arrange and missing rows stay quiet).
   badges?: React.ReactNode;
+  // Some checkout in the header's group is terrier-sourced, which puts
+  // the paw after the name while Mark terrier projects is on, in every
+  // branch, the missing one included.
+  terrier?: boolean;
   expanded?: boolean;
   onToggle?: () => void;
   missing?: boolean;
@@ -40,6 +45,7 @@ export function ProjectHeader({
   project,
   iconFrom,
   badges,
+  terrier = false,
   expanded,
   onToggle,
   missing,
@@ -71,6 +77,7 @@ export function ProjectHeader({
       {project.name}
     </span>
   );
+  const mark = <TerrierMark terrier={terrier} />;
   const trigger = arrangeMode ? (
     <div
       {...listeners}
@@ -86,6 +93,7 @@ export function ProjectHeader({
     >
       {lead}
       {name}
+      {mark}
     </div>
   ) : missing ? (
     <div
@@ -94,6 +102,7 @@ export function ProjectHeader({
     >
       {lead}
       {name}
+      {mark}
       <span className="shrink-0 text-3xs font-medium tracking-normal text-muted-foreground/60 normal-case">
         missing
       </span>
@@ -116,6 +125,7 @@ export function ProjectHeader({
       />
       {lead}
       {name}
+      {mark}
       {badges}
     </button>
   );
