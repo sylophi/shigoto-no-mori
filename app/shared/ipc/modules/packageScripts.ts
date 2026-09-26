@@ -7,6 +7,7 @@ import {
   PackageScriptsResultSchema,
   ProjectScopedPayloadSchema,
   RunPackageScriptPayloadSchema,
+  SetPackageScriptLaunchRowPayloadSchema,
   SetPackageScriptOrderPayloadSchema,
   SetPackageScriptSortPayloadSchema,
   WorktreeScopedPayloadSchema,
@@ -46,6 +47,12 @@ export const packageScriptsContract = defineContract("host", {
   setOrder: invoke(
     "packageScripts:setOrder",
     SetPackageScriptOrderPayloadSchema,
+    z.void(),
+    { remote: true, mutating: true },
+  ),
+  setLaunchRow: invoke(
+    "packageScripts:setLaunchRow",
+    SetPackageScriptLaunchRowPayloadSchema,
     z.void(),
     { remote: true, mutating: true },
   ),

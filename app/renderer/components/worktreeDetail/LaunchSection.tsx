@@ -13,7 +13,7 @@ interface LaunchSectionProps {
 export function LaunchSection({ worktree }: LaunchSectionProps) {
   const { remote } = useHostScope();
   const { canCommand } = useCommandAccess();
-  const { candidates, loading } = useScriptLaunchCandidates(worktree);
+  const { candidates, loading, pinned } = useScriptLaunchCandidates(worktree);
 
   // Launching opens editors and shells on the machine showing this window.
   // On another device's worktree there is nothing honest to launch, so the
@@ -40,7 +40,11 @@ export function LaunchSection({ worktree }: LaunchSectionProps) {
             <Skeleton className="h-8 w-20" />
           </div>
         ) : (
-          <ScriptLaunchRow worktree={worktree} candidates={candidates} />
+          <ScriptLaunchRow
+            worktree={worktree}
+            candidates={candidates}
+            pinned={pinned}
+          />
         )}
       </div>
     </section>

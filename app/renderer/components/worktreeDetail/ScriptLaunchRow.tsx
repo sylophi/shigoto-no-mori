@@ -8,7 +8,10 @@ import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { hasLocalHost } from "@/lib/localHost";
 import type { Worktree } from "@shared/schemas";
-import type { SortableEntry } from "./scripts/sortPackageScripts";
+import {
+  pinnedEntries,
+  type SortableEntry,
+} from "./scripts/sortPackageScripts";
 
 // Matches the `gap-2` on both the visible row and the measurer.
 const GAP_PX = 8;
@@ -17,27 +20,32 @@ const GAP_PX = 8;
 // scripts would otherwise render 60 hidden pills to measure the ~8 that can
 // fit. The row runs the full pane width, so this is the shortcut budget
 // rather than a fit bound. Off-row scripts stay in the Scripts section.
+// Pinned scripts skip it: someone chose every one of them.
 const MAX_CANDIDATES = 16;
 
 interface ScriptLaunchRowProps {
   worktree: Worktree;
   candidates: SortableEntry[];
+  pinned: boolean;
 }
 
 // The scripts the row offers, empty while it has nothing to show (still
 // loading, switched off in Settings, or no package.json scripts). Read by
 // LaunchSection, which hands them down and decides whether to exist on them.
 // `loading` is the scripts read still in flight with the row switched on.
+// `pinned`: the candidates are the scripts pinned to the row, so the row
+// shows every one of them.
 export function useScriptLaunchCandidates(worktree: Worktree): {
   candidates: SortableEntry[];
   loading: boolean;
+  pinned: boolean;
 } {
   const { data: config } = useLocalGlobalConfig();
   const { data: pkg, isPending } = usePackageScripts(
     worktree.projectId,
     worktree.id,
   );
-  const { sorted } = useSortedPackageScripts(worktree.projectId, pkg);
+  const { sortMode, sorted } = useSortedPackageScripts(worktree.projectId, pkg);
 
   // The switch is this window's preference, so it reads this machine's
   // config even on a peer's page. A hostless client has no config to switch
@@ -48,11 +56,14 @@ export function useScriptLaunchCandidates(worktree: Worktree): {
   const enabled = hasLocalHost
     ? config !== undefined && (config.launchScripts ?? true)
     : true;
-  if (!enabled || !pkg)
-    return { candidates: [], loading: enabled && isPending };
+  if (!enabled || !pkg) {
+    return { candidates: [], loading: enabled && isPending, pinned: false };
+  }
+  const pinned = pinnedEntries(sorted, sortMode, pkg.launchRow ?? []);
   return {
-    candidates: sorted.slice(0, MAX_CANDIDATES),
+    candidates: pinned ?? sorted.slice(0, MAX_CANDIDATES),
     loading: false,
+    pinned: pinned !== null,
   };
 }
 
@@ -60,18 +71,44 @@ export function useScriptLaunchCandidates(worktree: Worktree): {
 // same order the Scripts section shows them (the project's sort mode,
 // most-used by default), trimmed to whatever fits on one line. Off-row
 // scripts stay reachable in the Scripts section; this row is a shortcut,
-// not a replacement, so it never wraps and never scrolls.
+// not a replacement, so it never wraps and never scrolls. Scripts pinned
+// under the manual order are the exception: the row is exactly those, so
+// it wraps rather than drop any.
 export function ScriptLaunchRow({
   worktree,
   candidates,
+  pinned,
 }: ScriptLaunchRowProps) {
+  if (candidates.length === 0) return null;
+  if (pinned) {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        {candidates.map((entry) => (
+          <ScriptLaunchButton
+            key={entry.name}
+            worktree={worktree}
+            name={entry.name}
+            command={entry.command}
+          />
+        ))}
+      </div>
+    );
+  }
+  return <FittedScriptRow worktree={worktree} candidates={candidates} />;
+}
+
+function FittedScriptRow({
+  worktree,
+  candidates,
+}: {
+  worktree: Worktree;
+  candidates: SortableEntry[];
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const measurerRef = useRef<HTMLDivElement>(null);
   const [fitCount, setFitCount] = useState(0);
   // Re-measure when the scripts change, which can invalidate a count without
-  // resizing anything the observer watches. That includes the row appearing
-  // at all: it has no candidates while it's off, and the refs are null then,
-  // so the effect can't measure.
+  // resizing anything the observer watches.
   const namesKey = candidates.map((entry) => entry.name).join("\n");
 
   // The hidden measurer holds every candidate at its natural width; the
@@ -97,8 +134,6 @@ export function ScriptLaunchRow({
     observer.observe(measurer);
     return () => observer.disconnect();
   }, [namesKey]);
-
-  if (candidates.length === 0) return null;
 
   // No overflow-hidden on the row: the fit is measured, so there's nothing to
   // clip, and clipping would eat the pills' focus ring, which paints outside

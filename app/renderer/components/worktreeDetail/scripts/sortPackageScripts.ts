@@ -50,3 +50,17 @@ export function sortEntries(
       return assertNever(mode);
   }
 }
+
+// The scripts pinned to the launch row, in list order. Pins only count
+// under the "manual" sort, and null means there are none here (or only
+// another branch's), which leaves the row to show as many as fit.
+export function pinnedEntries(
+  sorted: SortableEntry[],
+  mode: PackageScriptSortMode,
+  launchRow: readonly string[],
+): SortableEntry[] | null {
+  if (mode !== "manual") return null;
+  const pinned = new Set(launchRow);
+  const onRow = sorted.filter((entry) => pinned.has(entry.name));
+  return onRow.length > 0 ? onRow : null;
+}
