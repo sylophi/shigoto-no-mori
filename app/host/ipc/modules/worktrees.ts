@@ -26,6 +26,7 @@ import {
   describeWorktree,
   findWorktreeIdentityOrThrow,
   listCommits,
+  listWorktreeIdentities,
   listWorktrees,
   type WorktreeIdentity,
 } from "@host/lib/git/worktrees";
@@ -37,13 +38,23 @@ import {
 import {
   assertWorktreeMutable,
   getRunningScriptWorktrees,
+  killScriptsForWorktree,
   withDeleteInflight,
+  withDeletesInflight,
 } from "@host/lib/scripts";
+import { refreshProjectPullRequests } from "@host/lib/githubCli/pullRequests";
+import {
+  pullRequestStackFor,
+  stackCleanupFor,
+  trunkOf,
+} from "@shared/pullRequestStack";
+import { unknownWorktreeError } from "@shared/errors";
 import { readWorktreeFile } from "@host/lib/worktrees/files";
 import { scriptEventNotifier } from "../scriptRun";
 import {
   adoptViaCli,
   createViaCli,
+  deleteStackViaCli,
   deleteViaCli,
   doneViaCli,
   moveViaCli,
@@ -179,6 +190,70 @@ export const worktreesHandlers: Handlers<
         worktreeId,
         state: removed ? "removed" : "kept",
       });
+    }
+  },
+
+  // The merged layers' worktrees of the stack `worktreeId` is in, as
+  // one removal. The set is read the way the page reads it (the PR map
+  // and the listing), off a fresh sweep of the PRs so it is what the
+  // CLI, which resolves the stack against GitHub itself, finds landed
+  // too. Every worktree of the set is announced and guarded like a
+  // single delete, since the one CLI run takes them all. One the CLI
+  // took past the set (a layer that landed in the moment between) gets
+  // its scripts reaped and its removal announced once it is gone.
+  deleteStack: async ({ projectId, worktreeId, force, skipCleanup }, ctx) => {
+    const project = await findProjectOrThrow(projectId);
+    const [identities, prs] = await Promise.all([
+      listWorktreeIdentities(projectId, { primaryRef: true }),
+      refreshProjectPullRequests(project.path),
+    ]);
+    const own = identities.find((identity) => identity.id === worktreeId);
+    if (!own) throw unknownWorktreeError(worktreeId);
+    const stack = pullRequestStackFor(
+      Object.fromEntries(prs),
+      own.branch,
+      trunkOf(identities),
+    );
+    const cleanup = stack && stackCleanupFor(stack, identities);
+    if (!cleanup) {
+      throw new Error(
+        "No merged layer of this stack has a worktree to remove.",
+      );
+    }
+    const ids = cleanup.worktrees.map((identity) => identity.id);
+    const busy = "A worktree of this stack is already being removed.";
+    for (const id of ids) assertWorktreeMutable(id, busy);
+    for (const id of ids) {
+      broadcastRemoval?.({ projectId, worktreeId: id, state: "removing" });
+    }
+    let removed: readonly string[] = [];
+    try {
+      const result = await withDeletesInflight(
+        ids,
+        busy,
+        () =>
+          deleteStackViaCli(
+            project,
+            { worktreeId: cleanup.target.id, force, skipCleanup },
+            notifierFor(ctx),
+          ),
+        (outcome) => outcome.removed,
+      );
+      removed = result.removed;
+      await Promise.all(
+        removed
+          .filter((id) => !ids.includes(id))
+          .map((id) => killScriptsForWorktree(id)),
+      );
+      return result;
+    } finally {
+      for (const id of ids) {
+        broadcastRemoval?.({
+          projectId,
+          worktreeId: id,
+          state: removed.includes(id) ? "removed" : "kept",
+        });
+      }
     }
   },
 

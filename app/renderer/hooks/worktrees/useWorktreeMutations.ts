@@ -8,6 +8,9 @@ import type {
   DeleteWorktreeResult,
   Worktree,
 } from "@shared/schemas";
+import { errorMessageOf } from "@shared/errors";
+import { isCommandRefusedError } from "@shared/ipc/socket/frames";
+import type { ReadyStackCleanupDevice } from "@/hooks/pullRequests/useStackCleanup";
 import {
   type QueryKeyRegistry,
   worktreeQueriesOn,
@@ -175,11 +178,19 @@ interface DeleteWorktreeInput {
 const deleteWorktreeMutationKey = (deviceId: string) =>
   ["delete-worktree", deviceId] as const;
 
+// A single delete names its worktree. A stack removal names the
+// worktrees it takes on the device the key is for.
+type DeleteVariables = { worktreeId?: string; worktreeIds?: readonly string[] };
+
 const deleteFilters = (deviceId: string, worktreeId: string) => ({
   mutationKey: deleteWorktreeMutationKey(deviceId),
-  predicate: (m: { state: { variables: unknown } }) =>
-    (m.state.variables as DeleteWorktreeInput | undefined)?.worktreeId ===
-    worktreeId,
+  predicate: (m: { state: { variables: unknown } }) => {
+    const variables = m.state.variables as DeleteVariables | undefined;
+    return (
+      variables?.worktreeId === worktreeId ||
+      (variables?.worktreeIds?.includes(worktreeId) ?? false)
+    );
+  },
 });
 
 // Whether this window's own delete of the worktree is in flight. The
@@ -209,21 +220,35 @@ export function forgetDeletedWorktree(
   projectId: string,
   worktreeId: string,
 ): void {
+  forgetDeletedWorktrees(queryClient, deviceId, projectId, [worktreeId]);
+}
+
+// Several at once (a stack's layers): one list write and one
+// invalidation for all of them, not a refetch per row.
+export function forgetDeletedWorktrees(
+  queryClient: QueryClient,
+  deviceId: string,
+  projectId: string,
+  worktreeIds: readonly string[],
+): void {
+  if (worktreeIds.length === 0) return;
   const keys = queryKeysFor(deviceId);
   queryClient.setQueryData<Worktree[]>(keys.worktrees(projectId), (current) =>
-    current ? current.filter((w) => w.id !== worktreeId) : current,
+    current ? current.filter((w) => !worktreeIds.includes(w.id)) : current,
   );
   void queryClient.invalidateQueries({
     queryKey: keys.worktrees(projectId),
   });
-  scriptRunsFor(deviceId).clearForWorktree(worktreeId);
-  // Same treatment as project removal. Active queries (the detail
-  // route unmounts only after the post-delete navigation) are left
-  // to go inactive and gc naturally.
-  queryClient.removeQueries({
-    type: "inactive",
-    predicate: worktreeQueriesOn(deviceId, worktreeId),
-  });
+  for (const worktreeId of worktreeIds) {
+    scriptRunsFor(deviceId).clearForWorktree(worktreeId);
+    // Same treatment as project removal. Active queries (the detail
+    // route unmounts only after the post-delete navigation) are left
+    // to go inactive and gc naturally.
+    queryClient.removeQueries({
+      type: "inactive",
+      predicate: worktreeQueriesOn(deviceId, worktreeId),
+    });
+  }
 }
 
 export function useDeleteWorktree() {
@@ -257,6 +282,87 @@ export function useDeleteWorktree() {
     },
     // The detail page swaps into a force-delete prompt on failure, so a
     // toast on top would be noise.
+    meta: { silentError: true },
+  });
+}
+
+// The merged layers' worktrees of a stack, removed on every device
+// holding one at once: each device's host removes its own (it runs
+// `sm rm --stack`), and its rows here are forgotten the way a single
+// delete's are. The devices are asked together and the outcome is
+// per device, so a refusal on one (a dirty worktree there) never
+// hides what the others did. The caller decides what to show, since
+// the page may have moved on by the time everything answers. Keyed
+// and named like a single delete of the page's device's worktrees,
+// so the host's removal broadcast for them is left to this mutation
+// (isOwnDeletePending), which forgets the rows and routes off the
+// page in one go.
+export interface StackCleanupFailure {
+  label: string;
+  message: string;
+  // cleanup: a cleanup script failed there and kept a worktree, which
+  // a retry or --skip-cleanup answers. refused: the device would not
+  // run the command from here. error: anything else, a dirty worktree
+  // above all, which force answers.
+  kind: "cleanup" | "refused" | "error";
+}
+
+export interface StackCleanupOutcome {
+  // By device id: the worktree ids that went.
+  removed: Map<string, string[]>;
+  failures: StackCleanupFailure[];
+}
+
+export interface StackCleanupInput {
+  devices: readonly ReadyStackCleanupDevice[];
+  // The page's device's worktrees among them, for the delete filters.
+  worktreeIds: readonly string[];
+  force?: boolean;
+  skipCleanup?: boolean;
+}
+
+export function useDeleteStackWorktrees() {
+  const queryClient = useQueryClient();
+  const { deviceId } = useHostScope();
+  return useMutation<StackCleanupOutcome, Error, StackCleanupInput>({
+    mutationKey: deleteWorktreeMutationKey(deviceId),
+    mutationFn: async ({ devices, force, skipCleanup }) => {
+      const outcome: StackCleanupOutcome = { removed: new Map(), failures: [] };
+      await Promise.all(
+        devices.map(async (device) => {
+          try {
+            const result = await device.api.worktrees.deleteStack({
+              projectId: device.projectId,
+              // Any worktree of the stack: the host picks where to run.
+              worktreeId: device.worktrees[0]!.id,
+              force,
+              skipCleanup,
+            });
+            outcome.removed.set(device.deviceId, result.removed);
+            forgetDeletedWorktrees(
+              queryClient,
+              device.deviceId,
+              device.projectId,
+              result.removed,
+            );
+            if (!result.ok) {
+              outcome.failures.push({
+                label: device.label,
+                message: "a cleanup script failed, so a worktree stayed",
+                kind: "cleanup",
+              });
+            }
+          } catch (error) {
+            outcome.failures.push({
+              label: device.label,
+              message: errorMessageOf(error),
+              kind: isCommandRefusedError(error) ? "refused" : "error",
+            });
+          }
+        }),
+      );
+      return outcome;
+    },
     meta: { silentError: true },
   });
 }

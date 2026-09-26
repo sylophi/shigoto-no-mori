@@ -174,19 +174,21 @@ func execRemove(proj project, id worktreeIdentity, opts removeOptions) (string, 
 	return "", nil
 }
 
+// The removed worktree as rm's and land's documents describe it.
+func removedFields(proj project, id worktreeIdentity) map[string]any {
+	return map[string]any{
+		"id": id.ID, "name": id.Name, "branch": id.Branch,
+		"path": id.Path, "projectName": proj.Name,
+	}
+}
+
 // Shared result report for rm and land: the removed document (an
 // app-consumed shape) and the human line, plus the cd hint when the
 // shell sat inside the removed directory. extra adds top-level keys
 // to the JSON document (land's merge fields).
 func reportRemoved(proj project, id worktreeIdentity, hint string, extra map[string]any) {
 	if jsonMode {
-		result := map[string]any{
-			"ok": true,
-			"removed": map[string]any{
-				"id": id.ID, "name": id.Name, "branch": id.Branch,
-				"path": id.Path, "projectName": proj.Name,
-			},
-		}
+		result := map[string]any{"ok": true, "removed": removedFields(proj, id)}
 		maps.Copy(result, extra)
 		if hint != "" {
 			result["cdHint"] = hint
@@ -202,12 +204,16 @@ func reportRemoved(proj project, id worktreeIdentity, hint string, extra map[str
 
 func cmdRm(ctx cliContext, args []string) (int, error) {
 	spec := worktreeTargetSpec()
+	spec.bools["stack"] = []string{}
 	addRemoveFlags(spec)
 	parsed, target, err := parseWorktreeArgs(ctx, args, spec, false)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
 	proj, id := target.proj, target.worktree
+	if parsed.bools["stack"] {
+		return rmStack(proj, id, removeOptionsFrom(parsed))
+	}
 
 	hint, err := execRemove(proj, id, removeOptionsFrom(parsed))
 	if err != nil {

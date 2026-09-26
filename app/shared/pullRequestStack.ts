@@ -94,6 +94,53 @@ export function stackMergeSet(
   return range.filter((entry) => entry.pr.state === "OPEN");
 }
 
+// What a stack cleanup removes once layers have landed: every worktree
+// on a merged layer's branch, and the one to run it from. The CLI's
+// `sm land --stack` on an already-merged PR removes the worktree it is
+// run in and those of the merged layers under it, so the target is the
+// highest of them, and the worktrees are what the button counts. The
+// primary checkout is never among them (the merged-primary box lands
+// it back on the trunk). Null when no merged layer has a worktree.
+export interface StackCleanup<T> {
+  target: T;
+  // Bottom first.
+  worktrees: T[];
+}
+
+export function stackCleanupFor<
+  T extends { id: string; branch: string; isPrimary: boolean },
+>(stack: PullRequestStack, worktrees: readonly T[]): StackCleanup<T> | null {
+  const landed: T[] = [];
+  for (const entry of stack.entries) {
+    if (entry.pr.state !== "MERGED") continue;
+    for (const worktree of worktrees) {
+      if (worktree.branch === entry.branch && !worktree.isPrimary)
+        landed.push(worktree);
+    }
+  }
+  const target = landed.at(-1);
+  return target ? { target, worktrees: landed } : null;
+}
+
+// The same for a worktree by id, from a device's own PR map and rows:
+// what the host's stack removal (and the lab's stand-in) resolve.
+export function stackCleanupForWorktree<
+  T extends {
+    id: string;
+    branch: string;
+    isPrimary: boolean;
+    primaryBranch?: string;
+  },
+>(
+  prs: Record<string, PullRequest>,
+  rows: readonly T[],
+  worktreeId: string,
+): StackCleanup<T> | null {
+  const own = rows.find((row) => row.id === worktreeId);
+  const stack = own && pullRequestStackFor(prs, own.branch, trunkOf(rows));
+  return stack ? stackCleanupFor(stack, rows) : null;
+}
+
 // Where a branch's PR sits in its stack: `index` from the bottom, of
 // `size` layers.
 export type StackPosition = { index: number; size: number };
@@ -179,7 +226,9 @@ export function pullRequestStackPosition(
 // checkout's branch, which is right whenever that checkout is on the
 // primary branch.
 export function trunkOf(
-  worktrees: readonly Worktree[] | undefined,
+  worktrees:
+    | readonly Pick<Worktree, "branch" | "isPrimary" | "primaryBranch">[]
+    | undefined,
 ): string | undefined {
   if (!worktrees) return undefined;
   return (

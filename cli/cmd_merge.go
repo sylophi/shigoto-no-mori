@@ -107,6 +107,22 @@ func ghPrList(projectPath string, args ...string) ([]prSummary, error) {
 	return prs, nil
 }
 
+// One PR by number, any state, or nil when the repo has none.
+func findPullRequestByNumber(projectPath string, number int) (*prSummary, error) {
+	stdout, err := runGh(projectPath, "pr", "view", fmt.Sprint(number), "--json", prSummaryFields)
+	if err != nil {
+		if strings.Contains(err.Error(), "Could not resolve") || strings.Contains(err.Error(), "no pull requests found") {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var pr prSummary
+	if err := json.Unmarshal([]byte(stdout), &pr); err != nil {
+		return nil, errf("unexpected gh pr view output: %s", err)
+	}
+	return &pr, nil
+}
+
 func findPullRequest(projectPath, branch string) (*prSummary, error) {
 	prs, err := ghPrList(projectPath, prLookupArgs(branch)...)
 	if err != nil || len(prs) == 0 {
@@ -212,11 +228,11 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 			// nil: the stack lookups fetch the allowed methods alongside.
 			return cmdMergeStack(proj, number, methodFlag, nil)
 		}
-		method, err := execMerge(proj, number, methodFlag, allowedMergeMethods(proj.Path))
+		method, queued, err := execMerge(proj, number, methodFlag, allowedMergeMethods(proj.Path))
 		if err != nil {
 			return exitCodeOf(err), err
 		}
-		emitOrOut(map[string]any{"ok": true, "number": number, "method": method},
+		emitOrOut(map[string]any{"ok": true, "number": number, "method": method, "queued": queued},
 			greenOut(fmt.Sprintf("merged PR #%d (%s)", number, method)))
 		return 0, nil
 	}
@@ -244,7 +260,7 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 		return cmdMergeStack(proj, pr.Number, methodFlag, allowed)
 	}
 
-	method, err := execMerge(proj, pr.Number, methodFlag, allowed)
+	method, queued, err := execMerge(proj, pr.Number, methodFlag, allowed)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -252,6 +268,7 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 	if jsonMode {
 		doc := mergeResultFields(pr, id.Branch, method)
 		doc["ok"] = true
+		doc["queued"] = queued
 		emit(doc)
 	} else {
 		out(greenOut(fmt.Sprintf("merged PR #%d (%s): %s", pr.Number, method, pr.Title)))
@@ -265,18 +282,21 @@ func cmdMerge(ctx cliContext, args []string) (int, error) {
 // allowed), run `gh pr merge`, and persist the pick. Shared by the
 // branch-lookup path and the app's --number path. Callers pass the
 // repo's allowed methods so the settings read can overlap other work.
-func execMerge(proj project, number int, methodFlag string, allowed []string) (string, error) {
-	method, err := resolveMergeMethod(proj, methodFlag, allowed)
+// queued: a merge queue took the PR (a GitHub stack's), so it hasn't
+// landed yet.
+func execMerge(proj project, number int, methodFlag string, allowed []string) (method string, queued bool, err error) {
+	method, err = resolveMergeMethod(proj, methodFlag, allowed)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if _, err := runGh(proj.Path, "pr", "merge", fmt.Sprint(number), "--"+method); err != nil {
-		if err := mergeStackedAlone(proj.Path, number, method, err); err != nil {
-			return "", err
+		queued, err = mergeStackedAlone(proj.Path, number, method, err)
+		if err != nil {
+			return "", false, err
 		}
 	}
 	persistMergeMethod(proj, method)
-	return method, nil
+	return method, queued, nil
 }
 
 // A PR in a stack GitHub knows refuses the plain merge: only its
@@ -288,16 +308,16 @@ func execMerge(proj project, number int, methodFlag string, allowed []string) (s
 // as it came: the refusal's wording is the cheap gate, the stacks API
 // the answer, so a merge that failed for any other reason pays no
 // extra round trip.
-func mergeStackedAlone(projectPath string, number int, method string, mergeErr error) error {
+func mergeStackedAlone(projectPath string, number int, method string, mergeErr error) (queued bool, err error) {
 	if !strings.Contains(mergeErr.Error(), "part of a stack") {
-		return mergeErr
+		return false, mergeErr
 	}
 	ghStack, err := githubStackFor(projectPath, number)
 	if err != nil || ghStack == nil {
-		return mergeErr
+		return false, mergeErr
 	}
 	if lowest, ok := ghStack.lowestOpen(); !ok || lowest != number {
-		return errf("PR #%d sits above open pull requests in its GitHub stack; merge the stack instead (`%s merge --stack`)", number, binaryName)
+		return false, errf("PR #%d sits above open pull requests in its GitHub stack. Merge the stack instead (`%s merge --stack` or `%s land --stack`)", number, binaryName, binaryName)
 	}
 	return mergeStackAsync(projectPath, number, method)
 }
@@ -339,7 +359,7 @@ func persistMergeMethod(proj project, method string) {
 // merge methods when the caller already fetched them, else nil and
 // the stack lookups fetch them alongside their own round trips.
 func cmdMergeStack(proj project, number int, methodFlag string, allowed []string) (int, error) {
-	lk, err := lookupStack(proj, number, allowed)
+	lk, err := lookupStack(proj, number, allowed, true)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
@@ -347,11 +367,7 @@ func cmdMergeStack(proj project, number int, methodFlag string, allowed []string
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	onMerged := func(pr prSummary) {
-		emitOrOut(map[string]any{"event": "merged", "number": pr.Number, "branch": pr.HeadRefName, "method": method},
-			greenOut(fmt.Sprintf("merged PR #%d (%s): %s", pr.Number, method, pr.Title)))
-	}
-	if err := execMergeStack(proj, number, method, lk, onMerged); err != nil {
+	if err := execMergeStack(proj, number, method, lk, stackMergedReporter(method)); err != nil {
 		return exitCodeOf(err), err
 	}
 	persistMergeMethod(proj, method)

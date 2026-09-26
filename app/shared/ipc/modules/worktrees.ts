@@ -10,6 +10,8 @@ import {
   CommitSummarySchema,
   CreateWorktreePayloadSchema,
   CreateWorktreeResultSchema,
+  DeleteStackPayloadSchema,
+  DeleteStackResultSchema,
   DeleteWorktreePayloadSchema,
   DeleteWorktreeResultSchema,
   DiscardChangesPayloadSchema,
@@ -72,6 +74,13 @@ export const worktreesContract = defineContract("host", {
     "worktrees:delete",
     DeleteWorktreePayloadSchema,
     DeleteWorktreeResultSchema,
+    { tracksProjectUsage: true, remote: true, gated: true },
+  ),
+  // The merged layers of a stack, removed together (sm land --stack).
+  deleteStack: invoke(
+    "worktrees:deleteStack",
+    DeleteStackPayloadSchema,
+    DeleteStackResultSchema,
     { tracksProjectUsage: true, remote: true, gated: true },
   ),
   renameBranch: invoke(

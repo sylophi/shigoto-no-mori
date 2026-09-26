@@ -10,6 +10,7 @@
 // change the socket phase, navigate the memory router.
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { buildApi } from "@shared/ipc/client";
+import { stackCleanupForWorktree } from "@shared/pullRequestStack";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import {
   summarizeChecks,
@@ -328,6 +329,24 @@ function hostHandlersFor(
       );
       return { ok: true };
     },
+    // The stack cleanup takes the merged layers' worktrees the way the
+    // host does: those of the stack's merged PRs, this device's rows.
+    "worktrees:deleteStack": ({ projectId, worktreeId }) => {
+      const rows = forest.worktrees[projectId] ?? [];
+      const cleanup = stackCleanupForWorktree(
+        labPullRequests(projectId),
+        rows,
+        worktreeId,
+      );
+      if (!cleanup) {
+        throw new Error(
+          "No merged layer of this stack has a worktree to remove.",
+        );
+      }
+      const removed = cleanup.worktrees.map((w) => w.id);
+      forest.worktrees[projectId] = rows.filter((w) => !removed.includes(w.id));
+      return { ok: true, removed };
+    },
     "worktrees:listCommits": ({ worktreeId, skip }) =>
       skip > 0 ? [] : (findWorktree(worktreeId)?.recentCommits ?? []),
     "worktrees:fileDiff": () => LAB_DIFF,
@@ -428,7 +447,7 @@ function hostHandlersFor(
     // answers with the same map, as the real sweep would on each
     // device, so a stack reads the same from every device's rows.
     "githubCli:projectPullRequests": ({ projectId }) =>
-      LAB_SM_PROJECT_IDS.has(projectId) ? LAB_PRS : {},
+      labPullRequests(projectId),
     "githubCli:worktreePullRequest": ({ branch }) =>
       labPullRequestDetail(branch),
     // Every method allowed, so the merge button poses its dropdown.
@@ -955,10 +974,33 @@ const LAB_PRS = {
 
 const LAB_PR_SLIM = LAB_PRS["v2-exp/remote-ui-flows"];
 
+// ?stack=merged poses the whole stack as landed, so the closed-PR box
+// offers the stack cleanup (the merged layers' worktrees together).
+const LAB_STACK_BRANCHES = new Set([
+  "fix-stale-locks",
+  "exp/terrier-sync",
+  "port-pool-retry",
+]);
+const LAB_PRS_MERGED = Object.fromEntries(
+  Object.entries(LAB_PRS).map(([branch, pr]) => [
+    branch,
+    LAB_STACK_BRANCHES.has(branch) ? { ...pr, state: "MERGED" as const } : pr,
+  ]),
+);
+
+function labPosedPullRequests(): Record<string, typeof LAB_PR_SLIM> {
+  const merged = new URLSearchParams(location.search).get("stack") === "merged";
+  return merged ? LAB_PRS_MERGED : LAB_PRS;
+}
+
+function labPullRequests(projectId: string) {
+  return LAB_SM_PROJECT_IDS.has(projectId) ? labPosedPullRequests() : {};
+}
+
 // The stacked PRs carry no checks, so the stack poses with and without
 // the checks chip. #148 carries whatever ?checks= poses.
 function labPullRequestDetail(branch: string) {
-  const slim = (LAB_PRS as Record<string, typeof LAB_PR_SLIM>)[branch];
+  const slim = labPosedPullRequests()[branch];
   if (!slim) return null;
   if (slim === LAB_PR_SLIM) return labPosedChecksDetail();
   return { ...LAB_PR_DETAIL, ...slim, ...labChecks([]) };

@@ -37,14 +37,21 @@ export function useDeleteAndNavigate(worktree: Worktree, siblings: Worktree[]) {
   // should stay force on retry/skip, since the worktree is still dirty).
   const lastDeleteOptsRef = useRef<{ force?: boolean }>({});
 
-  const navigateToSibling = () => {
+  // `gone` widens the removal past this worktree: a stack removal
+  // takes its neighbours too, and the page must not land on one of
+  // those.
+  const navigateToSibling = (gone: readonly string[] = [worktree.id]) => {
     // Prefer the sibling above so the user's eye stays in place. The
     // nav helper keeps this on whichever device the page is scoped to
     // (a remote delete lands on the remote sibling, or the root when it
     // was the last one).
     const index = siblings.findIndex((w) => w.id === worktree.id);
+    const kept = (w: Worktree) => !gone.includes(w.id);
     const next =
-      index >= 0 ? (siblings[index - 1] ?? siblings[index + 1]) : undefined;
+      index >= 0
+        ? (siblings.slice(0, index).findLast(kept) ??
+          siblings.slice(index + 1).find(kept))
+        : undefined;
     if (next) {
       nav.toWorktree(worktree.projectId, next.id, true);
     } else {
@@ -96,6 +103,9 @@ export function useDeleteAndNavigate(worktree: Worktree, siblings: Worktree[]) {
       ? "Can't delete while the worktree is being set up"
       : undefined,
     cancelForce,
+    // For a removal made another way (a stack cleanup) that took this
+    // worktree with it: the same move off the page.
+    navigateAway: navigateToSibling,
     retryCleanup: () => runDelete(lastDeleteOptsRef.current),
     skipCleanup: () =>
       runDelete({ ...lastDeleteOptsRef.current, skipCleanup: true }),

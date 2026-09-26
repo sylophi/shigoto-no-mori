@@ -253,20 +253,36 @@ export function assertWorktreeMutable(
 // between the root vanishing and the stop propagates nothing. Callers
 // supply the busy message because the operations differ (removed vs
 // moved).
-export async function withDeleteInflight<T>(
+export function withDeleteInflight<T>(
   worktreeId: string,
   busyMessage: string,
   run: () => Promise<T>,
 ): Promise<T> {
-  assertWorktreeMutable(worktreeId, busyMessage);
-  markDeleteInflight(worktreeId);
+  return withDeletesInflight([worktreeId], busyMessage, run, () => [
+    worktreeId,
+  ]);
+}
+
+// The protocol over several worktrees removed by one mutation (a stack
+// cleanup): every id is refused-if-busy and marked up front, the
+// scripts of all of them are reaped before, and the mirrors of the
+// ones `removedOf` names after. A mutation that removes only some of
+// them (a cleanup script failed partway) stops only those mirrors.
+export async function withDeletesInflight<T>(
+  worktreeIds: readonly string[],
+  busyMessage: string,
+  run: () => Promise<T>,
+  removedOf: (result: T) => readonly string[],
+): Promise<T> {
+  for (const id of worktreeIds) assertWorktreeMutable(id, busyMessage);
+  worktreeIds.forEach(markDeleteInflight);
   try {
-    await killScriptsForWorktree(worktreeId);
+    await Promise.all(worktreeIds.map(killScriptsForWorktree));
     const result = await run();
-    await stopMirrorsForWorktree(worktreeId);
+    await Promise.all(removedOf(result).map(stopMirrorsForWorktree));
     return result;
   } finally {
-    clearDeleteInflight(worktreeId);
+    worktreeIds.forEach(clearDeleteInflight);
   }
 }
 

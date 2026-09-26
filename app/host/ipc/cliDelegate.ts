@@ -16,7 +16,9 @@ import {
   CleanupErrorSchema,
   CommitHashSchema,
   CreatePhaseSchema,
+  type CleanupError,
   type CreateWorktreeResult,
+  type DeleteStackResult,
   type DeleteWorktreeResult,
   type DetectedLauncher,
   DetectedLauncherSchema,
@@ -315,6 +317,44 @@ export async function deleteViaCli(
   const args = worktreeArgv(["rm"], project, input.worktreeId);
   if (input.force) args.push("--force");
   if (input.skipCleanup) args.push("--skip-cleanup");
+  const { ok, cleanupError } = await runRemoval(args, input.worktreeId, notify);
+  return ok ? { ok } : { ok, cleanupError };
+}
+
+// The merged layers of a stack, removed together: `sm rm --stack` on
+// the highest merged layer's worktree, which takes the worktrees of
+// the merged layers under it too (cli/cmd_land.go rmStack). The final
+// document lists them: the worktree itself under `removed`, the
+// others under `stack.removed`, and on a cleanup failure whatever
+// went before it.
+export async function deleteStackViaCli(
+  project: Project,
+  input: { worktreeId: string; force?: boolean; skipCleanup?: boolean },
+  notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
+): Promise<DeleteStackResult> {
+  const args = [...worktreeArgv(["rm"], project, input.worktreeId), "--stack"];
+  if (input.force) args.push("--force");
+  if (input.skipCleanup) args.push("--skip-cleanup");
+  const { ok, cleanupError, final } = await runRemoval(
+    args,
+    input.worktreeId,
+    notify,
+  );
+  const removed = removedIdsOf(final);
+  return ok ? { ok, removed } : { ok, removed, cleanupError };
+}
+
+// One removal run: the script events forwarded, the final document
+// read for its verdict. A run that ends without one, or without the
+// cleanup error a failed one carries, is the CLI's failure.
+async function runRemoval(
+  args: string[],
+  worktreeId: string,
+  notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
+): Promise<
+  | { ok: true; cleanupError?: undefined; final: CliDoc }
+  | { ok: false; cleanupError: CleanupError; final: CliDoc }
+> {
   const scripts = cliScriptStream(notify.notifyScript);
   const result = await runner()
     .runCli(args, (doc) => {
@@ -322,14 +362,31 @@ export async function deleteViaCli(
     })
     .finally(scripts.end);
   const final = result.docs.findLast((doc) => typeof doc["ok"] === "boolean");
-  if (final?.["ok"] === true) return { ok: true };
+  if (final?.["ok"] === true) return { ok: true, final };
   if (final?.["ok"] === false && final["cleanupError"] !== undefined) {
     return {
       ok: false,
       cleanupError: CleanupErrorSchema.parse(final["cleanupError"]),
+      final,
     };
   }
-  throw cliFailure(result, "sm rm failed", { worktreeId: input.worktreeId });
+  throw cliFailure(result, `sm ${args[0]} failed`, { worktreeId });
+}
+
+const RemovedIdSchema = z.object({ id: z.string() });
+const LandDocRemovalsSchema = z.object({
+  removed: RemovedIdSchema.optional(),
+  stack: z.object({ removed: z.array(RemovedIdSchema) }).optional(),
+});
+
+// The worktree ids a stack removal's document says went, the lower
+// layers first and the worktree the command ran in last, the order the
+// CLI removed them.
+function removedIdsOf(doc: CliDoc): string[] {
+  const parsed = LandDocRemovalsSchema.parse(doc);
+  const ids = (parsed.stack?.removed ?? []).map((entry) => entry.id);
+  if (parsed.removed) ids.push(parsed.removed.id);
+  return ids;
 }
 
 // A removal that must happen (a nuke, the rollback of a failed mirror
