@@ -8,6 +8,7 @@ import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { Worktree } from "@shared/schemas";
 import { FooterActionButton } from "./FooterActionButton";
+import { LABEL_RANK } from "./footerFit";
 
 export function FilesButton({ worktree }: { worktree: Worktree }) {
   const { toFiles } = useWorktreeNav();
@@ -15,6 +16,7 @@ export function FilesButton({ worktree }: { worktree: Worktree }) {
   if (!canCommand) return null;
   return (
     <FooterActionButton
+      rank={LABEL_RANK.files}
       icon={<FolderSearch />}
       label="Files"
       title="Browse this worktree's files"

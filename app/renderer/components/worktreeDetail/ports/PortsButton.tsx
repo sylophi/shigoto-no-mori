@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Cable } from "lucide-react";
 import type { Worktree } from "@shared/schemas";
 import { FooterActionButton } from "../FooterActionButton";
+import { LABEL_RANK } from "../footerFit";
 import { PortsDialog } from "./PortsDialog";
 
 export function PortsButton({ worktree }: { worktree: Worktree }) {
@@ -13,6 +14,7 @@ export function PortsButton({ worktree }: { worktree: Worktree }) {
   return (
     <>
       <FooterActionButton
+        rank={LABEL_RANK.ports}
         icon={<Cable />}
         label="Ports"
         title="See this worktree's ports"
