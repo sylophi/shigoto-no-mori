@@ -29,7 +29,9 @@ export function CommitsSection({ worktree }: { worktree: Worktree }) {
   const undo = useUndoCommits(worktree);
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
+      {/* Held at the heading's height: the sync and changes buttons
+          overhang it, so the commits don't shift when one appears. */}
+      <div className="flex h-4 items-center justify-between gap-2">
         <SectionHeading>Branch</SectionHeading>
         {worktree.changedCount > 0 ? (
           <button
