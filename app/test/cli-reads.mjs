@@ -42,6 +42,7 @@ import {
   waitFor,
 } from "./lib/checkKit.mjs";
 import { wireHostCli } from "./lib/smBinary.mjs";
+import doubutsuNames from "../../cli/embed/doubutsu-names.json" with { type: "json" };
 
 // The host runs git in this process's environment, so a hook's GIT_*
 // variables go before any host module loads.
@@ -302,8 +303,10 @@ async function main() {
         [before[1], before[0]],
       );
       assert.equal(await projectsHandlers.defaultBranch({ projectId }), "main");
+      // A fresh data dir is seeded with Doubutsu names on (cli/state.go
+      // seedFreshInstall), so the pick is a villager's name.
       const picked = await projectsHandlers.pickWorktreeName({ projectId });
-      assert.match(picked, /^[a-z]+(-[a-z]+)+$/);
+      assert.ok(doubutsuNames.names.includes(picked), `picked ${picked}`);
     },
   );
 

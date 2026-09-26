@@ -1,0 +1,5067 @@
+{
+  "source": {
+    "name": "Nookipedia",
+    "url": "https://nookipedia.com/",
+    "retrieved": "2026-09-25"
+  },
+  "villagers": {
+    "ace": {
+      "page": "Ace",
+      "icon": {
+        "file": "File:Ace NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Ace_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/4f/Ace_NH_Villager_Icon.png",
+        "bytes": 5449,
+        "sha1": "fdb67999c5ae34e745fa7e4bb601a567b8f5a0af"
+      }
+    },
+    "admiral": {
+      "page": "Admiral",
+      "icon": {
+        "file": "File:Admiral NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Admiral_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/8/82/Admiral_NH_Villager_Icon.png",
+        "bytes": 5740,
+        "sha1": "39092bb5a666d838f73848a14204cb7f2ecd7093"
+      }
+    },
+    "agent-s": {
+      "page": "Agent S",
+      "icon": {
+        "file": "File:Agent S NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Agent_S_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/51/Agent_S_NH_Villager_Icon.png",
+        "bytes": 8750,
+        "sha1": "0a710d233870011b7e693cb2e63b3268b39c8767"
+      }
+    },
+    "agnes": {
+      "page": "Agnes",
+      "icon": {
+        "file": "File:Agnes NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Agnes_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/27/Agnes_NH_Villager_Icon.png",
+        "bytes": 7144,
+        "sha1": "b090e4934b44e21bd3e20e11cf11242fc3ed5ca7"
+      }
+    },
+    "al": {
+      "page": "Al",
+      "icon": {
+        "file": "File:Al NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Al_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/6/62/Al_NH_Villager_Icon.png",
+        "bytes": 8567,
+        "sha1": "9fe1c9c2a42857952510fa74f5a06443bd6278d5"
+      }
+    },
+    "alfonso": {
+      "page": "Alfonso",
+      "icon": {
+        "file": "File:Alfonso NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Alfonso_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/0a/Alfonso_NH_Villager_Icon.png",
+        "bytes": 8601,
+        "sha1": "6cf2144d0464d51d8ea07895fc6861a466547d71"
+      }
+    },
+    "alice": {
+      "page": "Alice",
+      "icon": {
+        "file": "File:Alice NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Alice_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/1f/Alice_NH_Villager_Icon.png",
+        "bytes": 9588,
+        "sha1": "4dc9a37cf52bebde1e04a6e849ad910b18de069c"
+      }
+    },
+    "alli": {
+      "page": "Alli",
+      "icon": {
+        "file": "File:Alli NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Alli_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/54/Alli_NH_Villager_Icon.png",
+        "bytes": 8366,
+        "sha1": "f5d42cc918cd109f350c97870c7ecc22c426596e"
+      }
+    },
+    "amelia": {
+      "page": "Amelia",
+      "icon": {
+        "file": "File:Amelia NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Amelia_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d9/Amelia_NH_Villager_Icon.png",
+        "bytes": 6756,
+        "sha1": "731864602d8dd5fa45891a59967c670dc00c1463"
+      }
+    },
+    "anabelle": {
+      "page": "Anabelle",
+      "icon": {
+        "file": "File:Anabelle NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Anabelle_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/ba/Anabelle_NH_Villager_Icon.png",
+        "bytes": 6310,
+        "sha1": "4d143cfab3e4f835a1d9d5d35321fa0fd30724f3"
+      }
+    },
+    "anchovy": {
+      "page": "Anchovy",
+      "icon": {
+        "file": "File:Anchovy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Anchovy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/8/81/Anchovy_NH_Villager_Icon.png",
+        "bytes": 5510,
+        "sha1": "07554c4dedc2bafa3202e746dffd25f59c1968c7"
+      }
+    },
+    "angus": {
+      "page": "Angus",
+      "icon": {
+        "file": "File:Angus NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Angus_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/e4/Angus_NH_Villager_Icon.png",
+        "bytes": 10383,
+        "sha1": "67b747c6274b234421d89531d65d8da9f98dcb69"
+      }
+    },
+    "anicotti": {
+      "page": "Anicotti",
+      "icon": {
+        "file": "File:Anicotti NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Anicotti_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/07/Anicotti_NH_Villager_Icon.png",
+        "bytes": 9976,
+        "sha1": "3d7a1df1f1e162612a9277d8510a1b4c040cc9f7"
+      }
+    },
+    "ankha": {
+      "page": "Ankha",
+      "icon": {
+        "file": "File:Ankha NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Ankha_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/1c/Ankha_NH_Villager_Icon.png",
+        "bytes": 8848,
+        "sha1": "133eb149a3a06cf4206c41439d6a134ba5bf65a8"
+      }
+    },
+    "annalisa": {
+      "page": "Annalisa",
+      "icon": {
+        "file": "File:Annalisa NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Annalisa_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/3/3d/Annalisa_NH_Villager_Icon.png",
+        "bytes": 4674,
+        "sha1": "9d34a235f01e237b113852a23dd503f5182bf972"
+      }
+    },
+    "annalise": {
+      "page": "Annalise",
+      "icon": {
+        "file": "File:Annalise NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Annalise_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/54/Annalise_NH_Villager_Icon.png",
+        "bytes": 6459,
+        "sha1": "354915729c420078c178a1b8c03784175d1d4bed"
+      }
+    },
+    "antonio": {
+      "page": "Antonio",
+      "icon": {
+        "file": "File:Antonio NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Antonio_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/3/34/Antonio_NH_Villager_Icon.png",
+        "bytes": 5226,
+        "sha1": "4dc4397d971f879a2da1e17edc9896347589118c"
+      }
+    },
+    "apollo": {
+      "page": "Apollo",
+      "icon": {
+        "file": "File:Apollo NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Apollo_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/0b/Apollo_NH_Villager_Icon.png",
+        "bytes": 6938,
+        "sha1": "391d587f71436cf47e625de8feb9983b29130fcf"
+      }
+    },
+    "apple": {
+      "page": "Apple",
+      "icon": {
+        "file": "File:Apple NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Apple_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/91/Apple_NH_Villager_Icon.png",
+        "bytes": 8730,
+        "sha1": "1809629ed30dd9c0ef452bab70cc9b2e12c9b223"
+      }
+    },
+    "astrid": {
+      "page": "Astrid",
+      "icon": {
+        "file": "File:Astrid NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Astrid_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/2a/Astrid_NH_Villager_Icon.png",
+        "bytes": 7555,
+        "sha1": "75be3d5039486e7315997cacaf441768a51f9764"
+      }
+    },
+    "audie": {
+      "page": "Audie",
+      "icon": {
+        "file": "File:Audie NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Audie_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/9e/Audie_NH_Villager_Icon.png",
+        "bytes": 9000,
+        "sha1": "baa5d37c46140d016e503fb6f5fc9fbf3fd516f0"
+      }
+    },
+    "aurora": {
+      "page": "Aurora",
+      "icon": {
+        "file": "File:Aurora NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Aurora_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/25/Aurora_NH_Villager_Icon.png",
+        "bytes": 4796,
+        "sha1": "69c84c845db678c68dab35c72d59b83cfbbae852"
+      }
+    },
+    "ava": {
+      "page": "Ava",
+      "icon": {
+        "file": "File:Ava NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Ava_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/73/Ava_NH_Villager_Icon.png",
+        "bytes": 8002,
+        "sha1": "ffa9f5000e70be615af8fc225f70fd175f81f3bc"
+      }
+    },
+    "avery": {
+      "page": "Avery",
+      "icon": {
+        "file": "File:Avery NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Avery_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/e2/Avery_NH_Villager_Icon.png",
+        "bytes": 7280,
+        "sha1": "9d0a98bf837b8ef73b879baa81109860fac72dac"
+      }
+    },
+    "axel": {
+      "page": "Axel",
+      "icon": {
+        "file": "File:Axel NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Axel_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/93/Axel_NH_Villager_Icon.png",
+        "bytes": 4140,
+        "sha1": "bbcdf098dadbd67ce7c470e658c58564791bb982"
+      }
+    },
+    "azalea": {
+      "page": "Azalea",
+      "icon": {
+        "file": "File:Azalea NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Azalea_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d4/Azalea_NH_Villager_Icon.png",
+        "bytes": 7294,
+        "sha1": "b22d8e7aa4dc8c659fc73585e57f35802fc4b5ed"
+      }
+    },
+    "baabara": {
+      "page": "Baabara",
+      "icon": {
+        "file": "File:Baabara NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Baabara_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/4c/Baabara_NH_Villager_Icon.png",
+        "bytes": 8958,
+        "sha1": "e5020a92f6df858aed2ac7ca5c4a948fcbb7c720"
+      }
+    },
+    "bam": {
+      "page": "Bam",
+      "icon": {
+        "file": "File:Bam NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Bam_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/fd/Bam_NH_Villager_Icon.png",
+        "bytes": 11039,
+        "sha1": "337d342853dbd97d7d3bd6e08943ae70c8a6f56b"
+      }
+    },
+    "bangle": {
+      "page": "Bangle",
+      "icon": {
+        "file": "File:Bangle NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Bangle_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/ec/Bangle_NH_Villager_Icon.png",
+        "bytes": 10178,
+        "sha1": "ffaa6a60a6c45f6be81b44081aa1e15ac7a5d42d"
+      }
+    },
+    "barold": {
+      "page": "Barold",
+      "icon": {
+        "file": "File:Barold NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Barold_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/b5/Barold_NH_Villager_Icon.png",
+        "bytes": 8277,
+        "sha1": "f0ae652d00b91db74be69edc91c33ccc2ec39fe1"
+      }
+    },
+    "bea": {
+      "page": "Bea",
+      "icon": {
+        "file": "File:Bea NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Bea_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f6/Bea_NH_Villager_Icon.png",
+        "bytes": 8367,
+        "sha1": "c2c2ed1e821136af956315ac8ad506c18bb0a051"
+      }
+    },
+    "beardo": {
+      "page": "Beardo",
+      "icon": {
+        "file": "File:Beardo NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Beardo_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/8/89/Beardo_NH_Villager_Icon.png",
+        "bytes": 8633,
+        "sha1": "a25fc4d4c2e14cdbc1ea92d1dca09df841f56639"
+      }
+    },
+    "beau": {
+      "page": "Beau",
+      "icon": {
+        "file": "File:Beau NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Beau_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d3/Beau_NH_Villager_Icon.png",
+        "bytes": 9992,
+        "sha1": "8e5cbc45fec03e9d14497f9552c8b9caf9e5fd4d"
+      }
+    },
+    "becky": {
+      "page": "Becky",
+      "icon": {
+        "file": "File:Becky NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Becky_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/0c/Becky_NH_Villager_Icon.png",
+        "bytes": 7146,
+        "sha1": "c126647b7c337b3205574676e24b5ede290000c3"
+      }
+    },
+    "bella": {
+      "page": "Bella",
+      "icon": {
+        "file": "File:Bella NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Bella_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/53/Bella_NH_Villager_Icon.png",
+        "bytes": 9291,
+        "sha1": "44ae0f12f0bc0a2d4f17762208845f4f28bd5394"
+      }
+    },
+    "benedict": {
+      "page": "Benedict",
+      "icon": {
+        "file": "File:Benedict NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Benedict_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/40/Benedict_NH_Villager_Icon.png",
+        "bytes": 7047,
+        "sha1": "b0f9b8b7e1ead0036cf9f3ebba996551f24e637c"
+      }
+    },
+    "benjamin": {
+      "page": "Benjamin",
+      "icon": {
+        "file": "File:Benjamin NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Benjamin_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/57/Benjamin_NH_Villager_Icon.png",
+        "bytes": 6324,
+        "sha1": "87fc450424e272e6d180082bddc7da21b8baf025"
+      }
+    },
+    "beppe": {
+      "page": "Beppe",
+      "icon": {
+        "file": "File:Beppe PC Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Beppe_PC_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/3/30/Beppe_PC_Character_Icon.png",
+        "bytes": 5123,
+        "sha1": "ab630aadd4a353b1bc49547fb6e68919f1a3fc25"
+      }
+    },
+    "bertha": {
+      "page": "Bertha",
+      "icon": {
+        "file": "File:Bertha NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Bertha_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/78/Bertha_NH_Villager_Icon.png",
+        "bytes": 4935,
+        "sha1": "56eb821a49632d945d2014ec3d6159f94e20ad46"
+      }
+    },
+    "bettina": {
+      "page": "Bettina",
+      "icon": {
+        "file": "File:Bettina NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Bettina_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a5/Bettina_NH_Villager_Icon.png",
+        "bytes": 9174,
+        "sha1": "7ab81ad88669cd93ead5c8c7991559e71d55ef95"
+      }
+    },
+    "bianca": {
+      "page": "Bianca",
+      "icon": {
+        "file": "File:Bianca NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Bianca_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/ab/Bianca_NH_Villager_Icon.png",
+        "bytes": 9193,
+        "sha1": "ff8f896379b1f5f1173588cedde153359482c23b"
+      }
+    },
+    "biff": {
+      "page": "Biff",
+      "icon": {
+        "file": "File:Biff NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Biff_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/07/Biff_NH_Villager_Icon.png",
+        "bytes": 5238,
+        "sha1": "16f050d9f526fb93996d7c8310a8b238c271ccd9"
+      }
+    },
+    "big-top": {
+      "page": "Big Top",
+      "icon": {
+        "file": "File:Big Top NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Big_Top_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/4a/Big_Top_NH_Villager_Icon.png",
+        "bytes": 6853,
+        "sha1": "a761c849791e4d7a1094764133ae26cb211c631d"
+      }
+    },
+    "bill": {
+      "page": "Bill",
+      "icon": {
+        "file": "File:Bill NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Bill_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/0e/Bill_NH_Villager_Icon.png",
+        "bytes": 6151,
+        "sha1": "f41db388bd5083dda291ceb2781b13c8d52aa929"
+      }
+    },
+    "billy": {
+      "page": "Billy",
+      "icon": {
+        "file": "File:Billy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Billy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d1/Billy_NH_Villager_Icon.png",
+        "bytes": 6823,
+        "sha1": "c1e4768e23969b381874fe47bf7094f3bf2f57fd"
+      }
+    },
+    "biskit": {
+      "page": "Biskit",
+      "icon": {
+        "file": "File:Biskit NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Biskit_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/25/Biskit_NH_Villager_Icon.png",
+        "bytes": 6779,
+        "sha1": "6450658289e78e20e9a8f12ed5d386689190d74e"
+      }
+    },
+    "bitty": {
+      "page": "Bitty",
+      "icon": {
+        "file": "File:Bitty NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Bitty_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/43/Bitty_NH_Villager_Icon.png",
+        "bytes": 5721,
+        "sha1": "1230e2903c23d249dc9e8acbe4a7ac7f0998b71a"
+      }
+    },
+    "blaire": {
+      "page": "Blaire",
+      "icon": {
+        "file": "File:Blaire NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Blaire_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/ac/Blaire_NH_Villager_Icon.png",
+        "bytes": 7640,
+        "sha1": "c7571501822fcfd9ce44579b193ec724058a2cf5"
+      }
+    },
+    "blanca": {
+      "page": "Blanca",
+      "icon": {
+        "file": "File:Blanca NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Blanca_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/7/73/Blanca_NH_Character_Icon.png",
+        "bytes": 6006,
+        "sha1": "6887819dc08fbbba1890057e6f9a01e448b7a05b"
+      }
+    },
+    "blanche": {
+      "page": "Blanche",
+      "icon": {
+        "file": "File:Blanche NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Blanche_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/28/Blanche_NH_Villager_Icon.png",
+        "bytes": 5576,
+        "sha1": "ae23a584f167fc7cb68fed564e7cec8fa45c3ab4"
+      }
+    },
+    "blathers": {
+      "page": "Blathers",
+      "icon": {
+        "file": "File:Blathers NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Blathers_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/0/0b/Blathers_NH_Character_Icon.png",
+        "bytes": 7691,
+        "sha1": "c8ecc03b907461655496fdc0f6e23a0246331cf4"
+      }
+    },
+    "bluebear": {
+      "page": "Bluebear",
+      "icon": {
+        "file": "File:Bluebear NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Bluebear_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/52/Bluebear_NH_Villager_Icon.png",
+        "bytes": 8164,
+        "sha1": "98dc40b7b8444ba8d065cc2509c6d5546a7a05ab"
+      }
+    },
+    "bob": {
+      "page": "Bob",
+      "icon": {
+        "file": "File:Bob NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Bob_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f4/Bob_NH_Villager_Icon.png",
+        "bytes": 7310,
+        "sha1": "e8b727d69f269c41371356e8983540e79814653b"
+      }
+    },
+    "bonbon": {
+      "page": "Bonbon",
+      "icon": {
+        "file": "File:Bonbon NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Bonbon_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/3/3a/Bonbon_NH_Villager_Icon.png",
+        "bytes": 6734,
+        "sha1": "4b365f8a3c451ee938949c9eb3c2becd0dd3fda9"
+      }
+    },
+    "bones": {
+      "page": "Bones",
+      "icon": {
+        "file": "File:Bones NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Bones_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/41/Bones_NH_Villager_Icon.png",
+        "bytes": 7586,
+        "sha1": "19bd613056a2b5941be36e5383192ce2267e343a"
+      }
+    },
+    "booker": {
+      "page": "Booker",
+      "icon": {
+        "file": "File:Booker NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Booker_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/4/45/Booker_NH_Character_Icon.png",
+        "bytes": 8198,
+        "sha1": "af215e2792a2caa936c038cb3e52261e405f8216"
+      }
+    },
+    "boomer": {
+      "page": "Boomer",
+      "icon": {
+        "file": "File:Boomer NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Boomer_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/5e/Boomer_NH_Villager_Icon.png",
+        "bytes": 8333,
+        "sha1": "bf1e6b0b5ae493abe6fa7356f7322017ff133b72"
+      }
+    },
+    "boone": {
+      "page": "Boone",
+      "icon": {
+        "file": "File:Boone NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Boone_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/7e/Boone_NH_Villager_Icon.png",
+        "bytes": 9776,
+        "sha1": "4b11186259258841304e359606501956b5d63f97"
+      }
+    },
+    "boots": {
+      "page": "Boots",
+      "icon": {
+        "file": "File:Boots NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Boots_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/56/Boots_NH_Villager_Icon.png",
+        "bytes": 7979,
+        "sha1": "e2f87083c2b66270e07e683ca720fea7afe42f11"
+      }
+    },
+    "boris": {
+      "page": "Boris",
+      "icon": {
+        "file": "File:Boris NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Boris_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/cc/Boris_NH_Villager_Icon.png",
+        "bytes": 7349,
+        "sha1": "30c48c32f2eb53f6c58cbfda09977dbdd65325dd"
+      }
+    },
+    "boyd": {
+      "page": "Boyd",
+      "icon": {
+        "file": "File:Boyd NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Boyd_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/5b/Boyd_NH_Villager_Icon.png",
+        "bytes": 8138,
+        "sha1": "63e0a0545009fa0e88fb0991130d1bbd25a4c94c"
+      }
+    },
+    "bree": {
+      "page": "Bree",
+      "icon": {
+        "file": "File:Bree NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Bree_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/2d/Bree_NH_Villager_Icon.png",
+        "bytes": 9635,
+        "sha1": "a5db99901f02263d2cd8e53dcec31ff929f8cb71"
+      }
+    },
+    "brewster": {
+      "page": "Brewster",
+      "icon": {
+        "file": "File:Brewster NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Brewster_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/3/3b/Brewster_NH_Character_Icon.png",
+        "bytes": 4336,
+        "sha1": "94c342b2e8ce68216c9b13339788258c61474969"
+      }
+    },
+    "broccolo": {
+      "page": "Broccolo",
+      "icon": {
+        "file": "File:Broccolo NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Broccolo_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/b9/Broccolo_NH_Villager_Icon.png",
+        "bytes": 8544,
+        "sha1": "e818b797fc1cfcb1420a0fe7f7ae3636e47b5d45"
+      }
+    },
+    "broffina": {
+      "page": "Broffina",
+      "icon": {
+        "file": "File:Broffina NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Broffina_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/eb/Broffina_NH_Villager_Icon.png",
+        "bytes": 7709,
+        "sha1": "409f9455c34626df2a9e92a4dfeb0cfcbb0899df"
+      }
+    },
+    "bruce": {
+      "page": "Bruce",
+      "icon": {
+        "file": "File:Bruce NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Bruce_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/9b/Bruce_NH_Villager_Icon.png",
+        "bytes": 9513,
+        "sha1": "7d09de8fc5a15eb7b20bd68238f04fcb92e61e3d"
+      }
+    },
+    "bubbles": {
+      "page": "Bubbles",
+      "icon": {
+        "file": "File:Bubbles NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Bubbles_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/1d/Bubbles_NH_Villager_Icon.png",
+        "bytes": 5086,
+        "sha1": "eb3e83e9a9a5f7651e13f25e23fe477693067c5e"
+      }
+    },
+    "buck": {
+      "page": "Buck",
+      "icon": {
+        "file": "File:Buck NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Buck_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/1f/Buck_NH_Villager_Icon.png",
+        "bytes": 6848,
+        "sha1": "820f5f8a67894ebe58cff428624dc6ac1790cfc7"
+      }
+    },
+    "bud": {
+      "page": "Bud",
+      "icon": {
+        "file": "File:Bud NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Bud_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/3/34/Bud_NH_Villager_Icon.png",
+        "bytes": 9440,
+        "sha1": "63376eeda8fe6992b1628e4a88c170c22e7720f8"
+      }
+    },
+    "bunnie": {
+      "page": "Bunnie",
+      "icon": {
+        "file": "File:Bunnie NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Bunnie_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f5/Bunnie_NH_Villager_Icon.png",
+        "bytes": 7532,
+        "sha1": "84f331cf05dd5cfe1c1f59ea12e8102692db4885"
+      }
+    },
+    "butch": {
+      "page": "Butch",
+      "icon": {
+        "file": "File:Butch NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Butch_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/52/Butch_NH_Villager_Icon.png",
+        "bytes": 7683,
+        "sha1": "dedc1a780c1926827f3bbdd3245c292cde783161"
+      }
+    },
+    "buzz": {
+      "page": "Buzz",
+      "icon": {
+        "file": "File:Buzz NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Buzz_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/e5/Buzz_NH_Villager_Icon.png",
+        "bytes": 6892,
+        "sha1": "4debbea918a262978a2e5084d3813f48e46a5105"
+      }
+    },
+    "cally": {
+      "page": "Cally",
+      "icon": {
+        "file": "File:Cally NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Cally_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c0/Cally_NH_Villager_Icon.png",
+        "bytes": 7294,
+        "sha1": "f9d6f8da6168f837fc441f600116ab9984158361"
+      }
+    },
+    "camofrog": {
+      "page": "Camofrog",
+      "icon": {
+        "file": "File:Camofrog NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Camofrog_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/ff/Camofrog_NH_Villager_Icon.png",
+        "bytes": 7335,
+        "sha1": "622446def555310a98b1d8028bbd629f19fac90b"
+      }
+    },
+    "canberra": {
+      "page": "Canberra",
+      "icon": {
+        "file": "File:Canberra NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Canberra_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/6/62/Canberra_NH_Villager_Icon.png",
+        "bytes": 7939,
+        "sha1": "98b559c60333488e6218a55e0438f94ade100057"
+      }
+    },
+    "candi": {
+      "page": "Candi",
+      "icon": {
+        "file": "File:Candi NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Candi_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/6/6e/Candi_NH_Villager_Icon.png",
+        "bytes": 9015,
+        "sha1": "0b560036cb056866701d3871c666627f96685340"
+      }
+    },
+    "carlo": {
+      "page": "Carlo",
+      "icon": {
+        "file": "File:Carlo PC Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Carlo_PC_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/5/52/Carlo_PC_Character_Icon.png",
+        "bytes": 6245,
+        "sha1": "b89fb3984e0cf5c9edf2a024994d1217d329c734"
+      }
+    },
+    "carmen": {
+      "page": "Carmen",
+      "icon": {
+        "file": "File:Carmen NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Carmen_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/08/Carmen_NH_Villager_Icon.png",
+        "bytes": 7525,
+        "sha1": "01ca5aee62f61b4af4b6a0e8c18110df093ee62f"
+      }
+    },
+    "caroline": {
+      "page": "Caroline",
+      "icon": {
+        "file": "File:Caroline NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Caroline_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d8/Caroline_NH_Villager_Icon.png",
+        "bytes": 7374,
+        "sha1": "ede276ba6b5b845ebb65754f8b61c2e9a406798c"
+      }
+    },
+    "carrie": {
+      "page": "Carrie",
+      "icon": {
+        "file": "File:Carrie NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Carrie_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/8/88/Carrie_NH_Villager_Icon.png",
+        "bytes": 7458,
+        "sha1": "9f197cfa3440d0dd45ace799dff2241c293302c4"
+      }
+    },
+    "cashmere": {
+      "page": "Cashmere",
+      "icon": {
+        "file": "File:Cashmere NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Cashmere_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/5f/Cashmere_NH_Villager_Icon.png",
+        "bytes": 8264,
+        "sha1": "e4f463663122228465ec17bdb7403285467ef1ff"
+      }
+    },
+    "cece": {
+      "page": "Cece",
+      "icon": {
+        "file": "File:Cece NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Cece_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/af/Cece_NH_Villager_Icon.png",
+        "bytes": 8062,
+        "sha1": "85d48b378eafcfab39a6470f1139de16a44ecfe0"
+      }
+    },
+    "celeste": {
+      "page": "Celeste",
+      "icon": {
+        "file": "File:Celeste NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Celeste_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/4/4c/Celeste_NH_Character_Icon.png",
+        "bytes": 7035,
+        "sha1": "455546f0f15be5b170f70808aabf48624eb01fe3"
+      }
+    },
+    "celia": {
+      "page": "Celia",
+      "icon": {
+        "file": "File:Celia NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Celia_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/b2/Celia_NH_Villager_Icon.png",
+        "bytes": 5975,
+        "sha1": "ce24717045e78e8ebf42f4d317c31204845c290f"
+      }
+    },
+    "cephalobot": {
+      "page": "Cephalobot",
+      "icon": {
+        "file": "File:Cephalobot NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Cephalobot_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c3/Cephalobot_NH_Villager_Icon.png",
+        "bytes": 6225,
+        "sha1": "f8632b6dbc2603d0096b016bf0759dfdd0ef63c5"
+      }
+    },
+    "cesar": {
+      "page": "Cesar",
+      "icon": {
+        "file": "File:Cesar NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Cesar_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/20/Cesar_NH_Villager_Icon.png",
+        "bytes": 8269,
+        "sha1": "a9dfb041222e9abfd2ff8e87bc5376e5e7f1e634"
+      }
+    },
+    "chabwick": {
+      "page": "Chabwick",
+      "icon": {
+        "file": "File:Chabwick NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Chabwick_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/0d/Chabwick_NH_Villager_Icon.png",
+        "bytes": 5218,
+        "sha1": "471480c83badf8aa53527150dfecc599669194ed"
+      }
+    },
+    "chadder": {
+      "page": "Chadder",
+      "icon": {
+        "file": "File:Chadder NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Chadder_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/ef/Chadder_NH_Villager_Icon.png",
+        "bytes": 7524,
+        "sha1": "d55ef12b7230905992bb32fe142b05372e961713"
+      }
+    },
+    "chai": {
+      "page": "Chai",
+      "icon": {
+        "file": "File:Chai NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Chai_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/ac/Chai_NH_Villager_Icon.png",
+        "bytes": 6835,
+        "sha1": "ca3553211dd4d83498a37daba9e5c868da7cc1f4"
+      }
+    },
+    "charlise": {
+      "page": "Charlise",
+      "icon": {
+        "file": "File:Charlise NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Charlise_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/aa/Charlise_NH_Villager_Icon.png",
+        "bytes": 8671,
+        "sha1": "fa459c2f148c015dc6446c90c29b8603011c3879"
+      }
+    },
+    "chelsea": {
+      "page": "Chelsea",
+      "icon": {
+        "file": "File:Chelsea NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Chelsea_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/40/Chelsea_NH_Villager_Icon.png",
+        "bytes": 8209,
+        "sha1": "b14684537a77bd467a0eed81beb144a6d62021b4"
+      }
+    },
+    "cheri": {
+      "page": "Cheri",
+      "icon": {
+        "file": "File:Cheri NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Cheri_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/96/Cheri_NH_Villager_Icon.png",
+        "bytes": 7815,
+        "sha1": "cb6276cf64a1d29499df97b1d11f13eea79c2adc"
+      }
+    },
+    "cherry": {
+      "page": "Cherry",
+      "icon": {
+        "file": "File:Cherry NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Cherry_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/73/Cherry_NH_Villager_Icon.png",
+        "bytes": 7857,
+        "sha1": "d93a1c410303853833b51686d9a879b6ceac745a"
+      }
+    },
+    "chester": {
+      "page": "Chester",
+      "icon": {
+        "file": "File:Chester NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Chester_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/cd/Chester_NH_Villager_Icon.png",
+        "bytes": 7542,
+        "sha1": "556712f3e0ae9a9941d685efbc9589754171462a"
+      }
+    },
+    "chevre": {
+      "page": "Chevre",
+      "icon": {
+        "file": "File:Chevre NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Chevre_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/db/Chevre_NH_Villager_Icon.png",
+        "bytes": 6746,
+        "sha1": "14447448e90f0a4e47e5f7d9875288a163bd481c"
+      }
+    },
+    "chief": {
+      "page": "Chief",
+      "icon": {
+        "file": "File:Chief NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Chief_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/e6/Chief_NH_Villager_Icon.png",
+        "bytes": 7834,
+        "sha1": "a1f04abd08fd6ca408ad13355385e9e7a13b2b39"
+      }
+    },
+    "chip": {
+      "page": "Chip",
+      "icon": {
+        "file": "File:Chip NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Chip_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/1/11/Chip_NH_Character_Icon.png",
+        "bytes": 7735,
+        "sha1": "69a711f214739ec2d439c03b6e98c612675c051b"
+      }
+    },
+    "chops": {
+      "page": "Chops",
+      "icon": {
+        "file": "File:Chops NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Chops_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/fd/Chops_NH_Villager_Icon.png",
+        "bytes": 7729,
+        "sha1": "8a9dc8a71cf9a13b96cd93fc4a8c1902e078ddbe"
+      }
+    },
+    "chow": {
+      "page": "Chow",
+      "icon": {
+        "file": "File:Chow NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Chow_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/b5/Chow_NH_Villager_Icon.png",
+        "bytes": 7897,
+        "sha1": "dc64d21e17d97ec2f5460518bfc9f8680418be2f"
+      }
+    },
+    "chrissy": {
+      "page": "Chrissy",
+      "icon": {
+        "file": "File:Chrissy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Chrissy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/43/Chrissy_NH_Villager_Icon.png",
+        "bytes": 7553,
+        "sha1": "b14049862def5ea9b658e09af9763c1c81db5596"
+      }
+    },
+    "cj": {
+      "page": "C.J.",
+      "icon": {
+        "file": "File:C.J. NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:C.J._NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c1/C.J._NH_Character_Icon.png",
+        "bytes": 8079,
+        "sha1": "ff3d91bdd8d94bb065aca8e885bc6cb1170aeb09"
+      }
+    },
+    "claude": {
+      "page": "Claude",
+      "icon": {
+        "file": "File:Claude NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Claude_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d3/Claude_NH_Villager_Icon.png",
+        "bytes": 7890,
+        "sha1": "ff3ba3b3845b1b0d90bbd1736ad968db4adbbe08"
+      }
+    },
+    "claudia": {
+      "page": "Claudia",
+      "icon": {
+        "file": "File:Claudia NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Claudia_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/0d/Claudia_NH_Villager_Icon.png",
+        "bytes": 9560,
+        "sha1": "30064cfc7ad171f03e027bfad967b33b178cd7ad"
+      }
+    },
+    "clay": {
+      "page": "Clay",
+      "icon": {
+        "file": "File:Clay NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Clay_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/20/Clay_NH_Villager_Icon.png",
+        "bytes": 8874,
+        "sha1": "dac8bad882f676a9d075237febb6629f77506f5a"
+      }
+    },
+    "cleo": {
+      "page": "Cleo",
+      "icon": {
+        "file": "File:Cleo NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Cleo_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/4a/Cleo_NH_Villager_Icon.png",
+        "bytes": 6523,
+        "sha1": "f7c19e1c1cbc447e7a283ab7696c9fbc0c46a311"
+      }
+    },
+    "clyde": {
+      "page": "Clyde",
+      "icon": {
+        "file": "File:Clyde NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Clyde_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/5a/Clyde_NH_Villager_Icon.png",
+        "bytes": 6788,
+        "sha1": "c371bbaf56d1f8d3f2e9a1ab22e007914c2aa5ca"
+      }
+    },
+    "coach": {
+      "page": "Coach",
+      "icon": {
+        "file": "File:Coach NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Coach_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/76/Coach_NH_Villager_Icon.png",
+        "bytes": 9427,
+        "sha1": "a23863a958e023d55775c8ac19d66324c44b38b7"
+      }
+    },
+    "cobb": {
+      "page": "Cobb",
+      "icon": {
+        "file": "File:Cobb NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Cobb_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/ce/Cobb_NH_Villager_Icon.png",
+        "bytes": 7788,
+        "sha1": "17bef09f793e2523eab36d8335aa8e4ecedd045c"
+      }
+    },
+    "coco": {
+      "page": "Coco",
+      "icon": {
+        "file": "File:Coco NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Coco_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c2/Coco_NH_Villager_Icon.png",
+        "bytes": 6160,
+        "sha1": "e7cc1746f12a8af8aa352ab68f581c2fdbd4caae"
+      }
+    },
+    "cole": {
+      "page": "Cole",
+      "icon": {
+        "file": "File:Cole NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Cole_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/79/Cole_NH_Villager_Icon.png",
+        "bytes": 6638,
+        "sha1": "10b6511f319a4c874f5c3c78af067c64c575ae98"
+      }
+    },
+    "colton": {
+      "page": "Colton",
+      "icon": {
+        "file": "File:Colton NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Colton_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c5/Colton_NH_Villager_Icon.png",
+        "bytes": 7148,
+        "sha1": "0055a403fe54afd7a1be900dd0dd80b5af1cfb22"
+      }
+    },
+    "cookie": {
+      "page": "Cookie",
+      "icon": {
+        "file": "File:Cookie NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Cookie_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d9/Cookie_NH_Villager_Icon.png",
+        "bytes": 7878,
+        "sha1": "9205d26a24bace597a1cce9f01535a77fc7c4fb3"
+      }
+    },
+    "copper": {
+      "page": "Copper",
+      "icon": {
+        "file": "File:Copper NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Copper_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/4/44/Copper_NH_Character_Icon.png",
+        "bytes": 6453,
+        "sha1": "57e95ed7187ef777bcc7a18ea42d14a46c74dc9c"
+      }
+    },
+    "cornimer": {
+      "page": "Cornimer",
+      "icon": {
+        "file": "File:Cornimer NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Cornimer_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f7/Cornimer_NH_Character_Icon.png",
+        "bytes": 7483,
+        "sha1": "f9f224acf8c982ca69445b23d604b3a7da6e3391"
+      }
+    },
+    "cousteau": {
+      "page": "Cousteau",
+      "icon": {
+        "file": "File:Cousteau NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Cousteau_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/3/3a/Cousteau_NH_Villager_Icon.png",
+        "bytes": 6311,
+        "sha1": "772622c94e60afdaaec477423edb37c8f9e94160"
+      }
+    },
+    "cranston": {
+      "page": "Cranston",
+      "icon": {
+        "file": "File:Cranston NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Cranston_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/8/8a/Cranston_NH_Villager_Icon.png",
+        "bytes": 5872,
+        "sha1": "b2f1ab17ab6af5ffd7cf7fc6aac4ae2adddc21cc"
+      }
+    },
+    "croque": {
+      "page": "Croque",
+      "icon": {
+        "file": "File:Croque NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Croque_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/75/Croque_NH_Villager_Icon.png",
+        "bytes": 7331,
+        "sha1": "a462aab99898caba0b250989d757a5689ee85fb7"
+      }
+    },
+    "cube": {
+      "page": "Cube",
+      "icon": {
+        "file": "File:Cube NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Cube_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/be/Cube_NH_Villager_Icon.png",
+        "bytes": 5175,
+        "sha1": "070f59f244b81bb650ba8584e8de5f67740de44b"
+      }
+    },
+    "curlos": {
+      "page": "Curlos",
+      "icon": {
+        "file": "File:Curlos NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Curlos_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d0/Curlos_NH_Villager_Icon.png",
+        "bytes": 7611,
+        "sha1": "2f92a78c7c41530b8df9badaf7cb41659497d86d"
+      }
+    },
+    "curly": {
+      "page": "Curly",
+      "icon": {
+        "file": "File:Curly NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Curly_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a3/Curly_NH_Villager_Icon.png",
+        "bytes": 7211,
+        "sha1": "c8d7e8b6e3e6bbb962d764ebb32fcd7f984617e5"
+      }
+    },
+    "curt": {
+      "page": "Curt",
+      "icon": {
+        "file": "File:Curt NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Curt_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f5/Curt_NH_Villager_Icon.png",
+        "bytes": 9073,
+        "sha1": "237f8f55ce24e37508c253832ad3f48658251a56"
+      }
+    },
+    "cyd": {
+      "page": "Cyd",
+      "icon": {
+        "file": "File:Cyd NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Cyd_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/42/Cyd_NH_Villager_Icon.png",
+        "bytes": 4894,
+        "sha1": "cebf24d5414f0b9107f783d877dc4a8c731cf96d"
+      }
+    },
+    "cyrano": {
+      "page": "Cyrano",
+      "icon": {
+        "file": "File:Cyrano NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Cyrano_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/b4/Cyrano_NH_Villager_Icon.png",
+        "bytes": 5489,
+        "sha1": "8062f1fd120cf192e58101b33155f9c98819ddc8"
+      }
+    },
+    "cyrus": {
+      "page": "Cyrus",
+      "icon": {
+        "file": "File:Cyrus NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Cyrus_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/7/75/Cyrus_NH_Character_Icon.png",
+        "bytes": 8756,
+        "sha1": "dc4d08bbc7140090e6660686dac1a8d71a7d4b6c"
+      }
+    },
+    "daisy": {
+      "page": "Daisy",
+      "icon": {
+        "file": "File:Daisy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Daisy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/4a/Daisy_NH_Villager_Icon.png",
+        "bytes": 6580,
+        "sha1": "dd2b4ad0c0a2dde8f1a3c0a6a305501da1dc32c5"
+      }
+    },
+    "daisy-mae": {
+      "page": "Daisy Mae",
+      "icon": {
+        "file": "File:Daisy Mae NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Daisy_Mae_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f8/Daisy_Mae_NH_Character_Icon.png",
+        "bytes": 9419,
+        "sha1": "98deae30053d24a19a133ad8a4bddb7596d0ccbc"
+      }
+    },
+    "deena": {
+      "page": "Deena",
+      "icon": {
+        "file": "File:Deena NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Deena_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/b9/Deena_NH_Villager_Icon.png",
+        "bytes": 6363,
+        "sha1": "2d49548163f204706357edc5bddf970b118071b0"
+      }
+    },
+    "deirdre": {
+      "page": "Deirdre",
+      "icon": {
+        "file": "File:Deirdre NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Deirdre_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/3/3a/Deirdre_NH_Villager_Icon.png",
+        "bytes": 8107,
+        "sha1": "bc475ec1607382b8f1cfd479c011a581688948e8"
+      }
+    },
+    "del": {
+      "page": "Del",
+      "icon": {
+        "file": "File:Del NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Del_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/8/8b/Del_NH_Villager_Icon.png",
+        "bytes": 6483,
+        "sha1": "0e9fd4a8114a3893313c5ead42d1d11090eb11f8"
+      }
+    },
+    "deli": {
+      "page": "Deli",
+      "icon": {
+        "file": "File:Deli NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Deli_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/da/Deli_NH_Villager_Icon.png",
+        "bytes": 8666,
+        "sha1": "f4d44b9df11b209cf72d0fba2e79948b805cc685"
+      }
+    },
+    "derwin": {
+      "page": "Derwin",
+      "icon": {
+        "file": "File:Derwin NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Derwin_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/6/62/Derwin_NH_Villager_Icon.png",
+        "bytes": 7200,
+        "sha1": "570d8ce951dfd69643d01dd4921b6349c3d6caed"
+      }
+    },
+    "diana": {
+      "page": "Diana",
+      "icon": {
+        "file": "File:Diana NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Diana_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c3/Diana_NH_Villager_Icon.png",
+        "bytes": 7339,
+        "sha1": "69236c79f56e5590c94b9ab76f08342706462ca8"
+      }
+    },
+    "digby": {
+      "page": "Digby",
+      "icon": {
+        "file": "File:Digby NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Digby_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/6/6e/Digby_NH_Character_Icon.png",
+        "bytes": 6491,
+        "sha1": "cd594673919d7c4da6d4411ce6c16d94874880b3"
+      }
+    },
+    "diva": {
+      "page": "Diva",
+      "icon": {
+        "file": "File:Diva NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Diva_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/5b/Diva_NH_Villager_Icon.png",
+        "bytes": 6158,
+        "sha1": "0a7ca468c6b8757e7d2415ccd1b90bf0c01af099"
+      }
+    },
+    "dizzy": {
+      "page": "Dizzy",
+      "icon": {
+        "file": "File:Dizzy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Dizzy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/77/Dizzy_NH_Villager_Icon.png",
+        "bytes": 4256,
+        "sha1": "ba3c0714d0f2ffe0c3b0d062cdb359bb032219f2"
+      }
+    },
+    "dj-kk": {
+      "page": "DJ KK",
+      "icon": {
+        "file": "File:DJ KK NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:DJ_KK_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/3/3e/DJ_KK_NH_Character_Icon.png",
+        "bytes": 7954,
+        "sha1": "cd6877b07740245c3f5e83948b0a6bb0e142dede"
+      }
+    },
+    "dobie": {
+      "page": "Dobie",
+      "icon": {
+        "file": "File:Dobie NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Dobie_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/ab/Dobie_NH_Villager_Icon.png",
+        "bytes": 8452,
+        "sha1": "3608a866099f465f5de4849911a5d41b14e585e4"
+      }
+    },
+    "doc": {
+      "page": "Doc",
+      "icon": {
+        "file": "File:Doc NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Doc_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/6/6b/Doc_NH_Villager_Icon.png",
+        "bytes": 8301,
+        "sha1": "ff06018b5be1fe24d60bece85d57003fee63f8f5"
+      }
+    },
+    "dom": {
+      "page": "Dom",
+      "icon": {
+        "file": "File:Dom NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Dom_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/e1/Dom_NH_Villager_Icon.png",
+        "bytes": 8578,
+        "sha1": "6a05d928a880c681b19702b70d5aa188358eddd1"
+      }
+    },
+    "dora": {
+      "page": "Dora",
+      "icon": {
+        "file": "File:Dora NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Dora_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/7f/Dora_NH_Villager_Icon.png",
+        "bytes": 8376,
+        "sha1": "11a0440d30e902f1b9f353c22a218773880e5fdd"
+      }
+    },
+    "dotty": {
+      "page": "Dotty",
+      "icon": {
+        "file": "File:Dotty NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Dotty_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c7/Dotty_NH_Villager_Icon.png",
+        "bytes": 7343,
+        "sha1": "206cdc3e77d251b122792ea9262db0b43742feb7"
+      }
+    },
+    "dr-shrunk": {
+      "page": "Dr. Shrunk",
+      "icon": {
+        "file": "File:Shrunk NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Shrunk_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/c/ca/Shrunk_NH_Character_Icon.png",
+        "bytes": 7501,
+        "sha1": "4d59086089b0ff7d6e8e185cbd8bd3bffb412143"
+      }
+    },
+    "drago": {
+      "page": "Drago",
+      "icon": {
+        "file": "File:Drago NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Drago_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/bd/Drago_NH_Villager_Icon.png",
+        "bytes": 9853,
+        "sha1": "f803f4a4a3de76f11bdcc88875de3bb17da96c0e"
+      }
+    },
+    "drake": {
+      "page": "Drake",
+      "icon": {
+        "file": "File:Drake NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Drake_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/be/Drake_NH_Villager_Icon.png",
+        "bytes": 6143,
+        "sha1": "7fc0d89ba8ba595139c127b175b1e1900491a2b6"
+      }
+    },
+    "drift": {
+      "page": "Drift",
+      "icon": {
+        "file": "File:Drift NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Drift_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a7/Drift_NH_Villager_Icon.png",
+        "bytes": 6670,
+        "sha1": "fb655122d5ce710556d0e3e206fdb913770ad192"
+      }
+    },
+    "ed": {
+      "page": "Ed",
+      "icon": {
+        "file": "File:Ed NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Ed_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/4e/Ed_NH_Villager_Icon.png",
+        "bytes": 5886,
+        "sha1": "2245bc4e7fa9d0845f793eb9c8d674254a329d34"
+      }
+    },
+    "egbert": {
+      "page": "Egbert",
+      "icon": {
+        "file": "File:Egbert NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Egbert_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c3/Egbert_NH_Villager_Icon.png",
+        "bytes": 7959,
+        "sha1": "95dbdf806934fcb02d9b87034ff71f1c0d82cf89"
+      }
+    },
+    "elise": {
+      "page": "Elise",
+      "icon": {
+        "file": "File:Elise NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Elise_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/28/Elise_NH_Villager_Icon.png",
+        "bytes": 8080,
+        "sha1": "60a27e1f465194111f0cba58459ba7a34dbb8ca0"
+      }
+    },
+    "ellie": {
+      "page": "Ellie",
+      "icon": {
+        "file": "File:Ellie NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Ellie_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/b3/Ellie_NH_Villager_Icon.png",
+        "bytes": 5411,
+        "sha1": "96fe26b9d81737780b87a49b987ef7def0d160f9"
+      }
+    },
+    "elmer": {
+      "page": "Elmer",
+      "icon": {
+        "file": "File:Elmer NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Elmer_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/b1/Elmer_NH_Villager_Icon.png",
+        "bytes": 6716,
+        "sha1": "dc76d1cb818d22e555d84db8c3a4781c1801a000"
+      }
+    },
+    "eloise": {
+      "page": "Eloise",
+      "icon": {
+        "file": "File:Eloise NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Eloise_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/bb/Eloise_NH_Villager_Icon.png",
+        "bytes": 5289,
+        "sha1": "7072915acb2c6443c8cb10ddcf0bb7b8202f2a09"
+      }
+    },
+    "elvis": {
+      "page": "Elvis",
+      "icon": {
+        "file": "File:Elvis NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Elvis_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/2a/Elvis_NH_Villager_Icon.png",
+        "bytes": 8962,
+        "sha1": "b771938366c9911b0ffd5166e6d8a41a439e7c79"
+      }
+    },
+    "epona": {
+      "page": "Epona",
+      "icon": {
+        "file": "File:Epona NL Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Epona_NL_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/44/Epona_NL_Villager_Icon.png",
+        "bytes": 3508,
+        "sha1": "92bb2bb3e99fa000406875725cbb1cb7728b38ca"
+      }
+    },
+    "erik": {
+      "page": "Erik",
+      "icon": {
+        "file": "File:Erik NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Erik_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/b7/Erik_NH_Villager_Icon.png",
+        "bytes": 10598,
+        "sha1": "4d66e9b08572cc0ba2fca8dcf9c07d75bf93d796"
+      }
+    },
+    "etoile": {
+      "page": "Étoile",
+      "icon": {
+        "file": "File:Étoile NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:%C3%89toile_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/21/%C3%89toile_NH_Villager_Icon.png",
+        "bytes": 9270,
+        "sha1": "8cc356a35481532987f84851f6d926c14a27b8ef"
+      }
+    },
+    "eugene": {
+      "page": "Eugene",
+      "icon": {
+        "file": "File:Eugene NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Eugene_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/02/Eugene_NH_Villager_Icon.png",
+        "bytes": 8452,
+        "sha1": "df2b3d81daca7bf7fd28e0ba98204a3d14db9a41"
+      }
+    },
+    "eunice": {
+      "page": "Eunice",
+      "icon": {
+        "file": "File:Eunice NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Eunice_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/55/Eunice_NH_Villager_Icon.png",
+        "bytes": 7665,
+        "sha1": "4bd35de6ef1fb88357ed7185c067afef57d325b4"
+      }
+    },
+    "faith": {
+      "page": "Faith",
+      "icon": {
+        "file": "File:Faith NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Faith_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f9/Faith_NH_Villager_Icon.png",
+        "bytes": 8780,
+        "sha1": "0127b44db8db249d379cde4e59d6565078b99309"
+      }
+    },
+    "fang": {
+      "page": "Fang",
+      "icon": {
+        "file": "File:Fang NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Fang_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/75/Fang_NH_Villager_Icon.png",
+        "bytes": 7330,
+        "sha1": "aad6cb09a1bc6c1f538ccff3b861e451428dff11"
+      }
+    },
+    "fauna": {
+      "page": "Fauna",
+      "icon": {
+        "file": "File:Fauna NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Fauna_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/29/Fauna_NH_Villager_Icon.png",
+        "bytes": 7694,
+        "sha1": "f36c153cbd76c635caa31bdadc175538ae147a5a"
+      }
+    },
+    "felicity": {
+      "page": "Felicity",
+      "icon": {
+        "file": "File:Felicity NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Felicity_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f3/Felicity_NH_Villager_Icon.png",
+        "bytes": 8721,
+        "sha1": "9aa96f89d4711d3ae00bee4f7558f16cf5e46532"
+      }
+    },
+    "felyne": {
+      "page": "Felyne",
+      "icon": {
+        "file": "File:Felyne NL Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Felyne_NL_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a7/Felyne_NL_Villager_Icon.png",
+        "bytes": 3936,
+        "sha1": "fbb54b05b037156e44fb92c36b250d377069a2e7"
+      }
+    },
+    "filbert": {
+      "page": "Filbert",
+      "icon": {
+        "file": "File:Filbert NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Filbert_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/70/Filbert_NH_Villager_Icon.png",
+        "bytes": 6826,
+        "sha1": "a070d7f91be7608531343eae93470471d077c1c8"
+      }
+    },
+    "filly": {
+      "page": "Filly",
+      "icon": {
+        "file": "File:Filly NL Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Filly_NL_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/49/Filly_NL_Villager_Icon.png",
+        "bytes": 3594,
+        "sha1": "29b7199663255945c4ebf58b956f75ab63f31b39"
+      }
+    },
+    "flick": {
+      "page": "Flick",
+      "icon": {
+        "file": "File:Flick NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Flick_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/4/47/Flick_NH_Character_Icon.png",
+        "bytes": 6316,
+        "sha1": "b8f00f06dadb8619a192e9892265af39fcc08e12"
+      }
+    },
+    "flip": {
+      "page": "Flip",
+      "icon": {
+        "file": "File:Flip NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Flip_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f3/Flip_NH_Villager_Icon.png",
+        "bytes": 7873,
+        "sha1": "ad892240b978b62fc3614c2bdb5df400501b0ba3"
+      }
+    },
+    "flo": {
+      "page": "Flo",
+      "icon": {
+        "file": "File:Flo NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Flo_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/3/37/Flo_NH_Villager_Icon.png",
+        "bytes": 6442,
+        "sha1": "31969f4fc19446b085dc0ea6a35c3ebfc6d74f54"
+      }
+    },
+    "flora": {
+      "page": "Flora",
+      "icon": {
+        "file": "File:Flora NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Flora_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/04/Flora_NH_Villager_Icon.png",
+        "bytes": 4601,
+        "sha1": "25bb074513909511c151b48c2c80bd81f6315d8c"
+      }
+    },
+    "flurry": {
+      "page": "Flurry",
+      "icon": {
+        "file": "File:Flurry NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Flurry_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c7/Flurry_NH_Villager_Icon.png",
+        "bytes": 5687,
+        "sha1": "114c6c8de937775ba445b181603bdda9644ddde1"
+      }
+    },
+    "francine": {
+      "page": "Francine",
+      "icon": {
+        "file": "File:Francine NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Francine_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/1c/Francine_NH_Villager_Icon.png",
+        "bytes": 7684,
+        "sha1": "2586e58e04b138372d1b95941983628c9166ad05"
+      }
+    },
+    "frank": {
+      "page": "Frank",
+      "icon": {
+        "file": "File:Frank NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Frank_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/0e/Frank_NH_Villager_Icon.png",
+        "bytes": 9238,
+        "sha1": "1cb24b5e21eac77e49e1a217a5fd04c345b4a5ae"
+      }
+    },
+    "franklin": {
+      "page": "Franklin",
+      "icon": {
+        "file": "File:Franklin NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Franklin_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d5/Franklin_NH_Character_Icon.png",
+        "bytes": 6384,
+        "sha1": "a7d65a8997fcd36595a67cdd244d48ac89f9d95b"
+      }
+    },
+    "freckles": {
+      "page": "Freckles",
+      "icon": {
+        "file": "File:Freckles NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Freckles_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/75/Freckles_NH_Villager_Icon.png",
+        "bytes": 5489,
+        "sha1": "09486d9b39145510b39e266d465eb75ddf746c96"
+      }
+    },
+    "frett": {
+      "page": "Frett",
+      "icon": {
+        "file": "File:Frett NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Frett_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/43/Frett_NH_Villager_Icon.png",
+        "bytes": 5986,
+        "sha1": "24b99944f30d652a1c75890e3b6b42219e582616"
+      }
+    },
+    "freya": {
+      "page": "Freya",
+      "icon": {
+        "file": "File:Freya NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Freya_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/29/Freya_NH_Villager_Icon.png",
+        "bytes": 8928,
+        "sha1": "d456f6b9218ddda7bd641314a57472e5405fe409"
+      }
+    },
+    "friga": {
+      "page": "Friga",
+      "icon": {
+        "file": "File:Friga NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Friga_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/3/37/Friga_NH_Villager_Icon.png",
+        "bytes": 5329,
+        "sha1": "c1f5be003fd90703ed8c5dc8f92c4ab57b5b722b"
+      }
+    },
+    "frillard": {
+      "page": "Frillard",
+      "icon": {
+        "file": "File:Frillard CF Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Frillard_CF_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f0/Frillard_CF_Character_Icon.png",
+        "bytes": 20188,
+        "sha1": "753fe46bb0c60b518b88dc29e8bbda102ef62015"
+      }
+    },
+    "frita": {
+      "page": "Frita",
+      "icon": {
+        "file": "File:Frita NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Frita_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/0f/Frita_NH_Villager_Icon.png",
+        "bytes": 9276,
+        "sha1": "4b7bb8aa64ceb5ad00f7e1c8d48ffd543aab3c48"
+      }
+    },
+    "frobert": {
+      "page": "Frobert",
+      "icon": {
+        "file": "File:Frobert NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Frobert_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/19/Frobert_NH_Villager_Icon.png",
+        "bytes": 6216,
+        "sha1": "a0d5e80c9e1f9a44676f68d2dfc58ba6a25ae9c4"
+      }
+    },
+    "fuchsia": {
+      "page": "Fuchsia",
+      "icon": {
+        "file": "File:Fuchsia NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Fuchsia_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/08/Fuchsia_NH_Villager_Icon.png",
+        "bytes": 7283,
+        "sha1": "59cb82e30a89fbe1fde52914512f40de97067797"
+      }
+    },
+    "gabi": {
+      "page": "Gabi",
+      "icon": {
+        "file": "File:Gabi NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Gabi_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/e9/Gabi_NH_Villager_Icon.png",
+        "bytes": 7091,
+        "sha1": "b2b2fc9214f10a539c510ba593b8f07a5929ca3f"
+      }
+    },
+    "gala": {
+      "page": "Gala",
+      "icon": {
+        "file": "File:Gala NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Gala_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f9/Gala_NH_Villager_Icon.png",
+        "bytes": 7751,
+        "sha1": "3ae8f8175bf06827eb713b834fb8322b8cf602f3"
+      }
+    },
+    "ganon": {
+      "page": "Ganon",
+      "icon": {
+        "file": "File:Ganon NL Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Ganon_NL_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/70/Ganon_NL_Villager_Icon.png",
+        "bytes": 3616,
+        "sha1": "9b3feaf54df3a77d1ef1a432391f45be446e863c"
+      }
+    },
+    "gaston": {
+      "page": "Gaston",
+      "icon": {
+        "file": "File:Gaston NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Gaston_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/cd/Gaston_NH_Villager_Icon.png",
+        "bytes": 7603,
+        "sha1": "b207947ee7c95723d306d0484b9cb45276bbd302"
+      }
+    },
+    "gayle": {
+      "page": "Gayle",
+      "icon": {
+        "file": "File:Gayle NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Gayle_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/20/Gayle_NH_Villager_Icon.png",
+        "bytes": 6930,
+        "sha1": "bca571eefa4470871e6b0f06fbeb2a0764c56ea5"
+      }
+    },
+    "genji": {
+      "page": "Genji",
+      "icon": {
+        "file": "File:Genji NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Genji_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/5d/Genji_NH_Villager_Icon.png",
+        "bytes": 5266,
+        "sha1": "aa722f18974f31c1a82172d18cebe6ddea2e56c6"
+      }
+    },
+    "gigi": {
+      "page": "Gigi",
+      "icon": {
+        "file": "File:Gigi NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Gigi_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/10/Gigi_NH_Villager_Icon.png",
+        "bytes": 5224,
+        "sha1": "28f81b8df14d0a5ee542f603eca016916260fe2b"
+      }
+    },
+    "giovanni": {
+      "page": "Giovanni",
+      "icon": {
+        "file": "File:Giovanni PC Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Giovanni_PC_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/b/b3/Giovanni_PC_Character_Icon.png",
+        "bytes": 5164,
+        "sha1": "f4c989667e1f3b2136dd3f02404bcbae271a49f0"
+      }
+    },
+    "gladys": {
+      "page": "Gladys",
+      "icon": {
+        "file": "File:Gladys NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Gladys_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/b3/Gladys_NH_Villager_Icon.png",
+        "bytes": 5480,
+        "sha1": "93adb084f0dbccc8612c06788f724a4cc6ff996d"
+      }
+    },
+    "gloria": {
+      "page": "Gloria",
+      "icon": {
+        "file": "File:Gloria NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Gloria_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/4d/Gloria_NH_Villager_Icon.png",
+        "bytes": 8047,
+        "sha1": "87f8f4d1271cf442f07d262a6cd80bfee932a46a"
+      }
+    },
+    "goldie": {
+      "page": "Goldie",
+      "icon": {
+        "file": "File:Goldie NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Goldie_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/ce/Goldie_NH_Villager_Icon.png",
+        "bytes": 6514,
+        "sha1": "82bd07659ceb3ace7ac22d74f992a1a581b377ce"
+      }
+    },
+    "gonzo": {
+      "page": "Gonzo",
+      "icon": {
+        "file": "File:Gonzo NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Gonzo_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/40/Gonzo_NH_Villager_Icon.png",
+        "bytes": 7339,
+        "sha1": "ed4cc8f9f60e4a1bd2c2fd71e3e733e57329de98"
+      }
+    },
+    "goose": {
+      "page": "Goose",
+      "icon": {
+        "file": "File:Goose NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Goose_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d3/Goose_NH_Villager_Icon.png",
+        "bytes": 6408,
+        "sha1": "5708c98d48af78871c7477d70701bc25b3f2093a"
+      }
+    },
+    "gracie": {
+      "page": "Gracie",
+      "icon": {
+        "file": "File:Gracie NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Gracie_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/2/29/Gracie_NH_Character_Icon.png",
+        "bytes": 8138,
+        "sha1": "a70c09c8e169689060cbf502a881eea267a6dba4"
+      }
+    },
+    "graham": {
+      "page": "Graham",
+      "icon": {
+        "file": "File:Graham NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Graham_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/e2/Graham_NH_Villager_Icon.png",
+        "bytes": 6866,
+        "sha1": "d7252b06b8caebb47cb9120081c4cf279710d4da"
+      }
+    },
+    "grams": {
+      "page": "Grams",
+      "icon": {
+        "file": "File:Grams NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Grams_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a8/Grams_NH_Character_Icon.png",
+        "bytes": 7190,
+        "sha1": "220dbafab752764b67a7191b2b017c965c7be3b1"
+      }
+    },
+    "greta": {
+      "page": "Greta",
+      "icon": {
+        "file": "File:Greta NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Greta_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d7/Greta_NH_Villager_Icon.png",
+        "bytes": 10224,
+        "sha1": "f18d27144c8530856b0015f622d8feddd2c94a34"
+      }
+    },
+    "grizzly": {
+      "page": "Grizzly",
+      "icon": {
+        "file": "File:Grizzly NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Grizzly_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/9b/Grizzly_NH_Villager_Icon.png",
+        "bytes": 8450,
+        "sha1": "573edd8457dc27360c602fae50fc4b38226f6f75"
+      }
+    },
+    "groucho": {
+      "page": "Groucho",
+      "icon": {
+        "file": "File:Groucho NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Groucho_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/45/Groucho_NH_Villager_Icon.png",
+        "bytes": 8490,
+        "sha1": "7069245430e16575d564365658a72626a6d6ca29"
+      }
+    },
+    "gruff": {
+      "page": "Gruff",
+      "icon": {
+        "file": "File:Gruff NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Gruff_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/9c/Gruff_NH_Villager_Icon.png",
+        "bytes": 7967,
+        "sha1": "95ba2cf725277dfe8ae625104ed2476c05c899b2"
+      }
+    },
+    "gullivarrr": {
+      "page": "Gullivarrr",
+      "icon": {
+        "file": "File:Gullivarrr NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Gullivarrr_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/c/ca/Gullivarrr_NH_Character_Icon.png",
+        "bytes": 6067,
+        "sha1": "916ef74da452cbcb237bdbbbf581d9bd6969b113"
+      }
+    },
+    "gulliver": {
+      "page": "Gulliver",
+      "icon": {
+        "file": "File:Gulliver NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Gulliver_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/5/54/Gulliver_NH_Character_Icon.png",
+        "bytes": 4663,
+        "sha1": "e647ee940f85f2ffca421e823773993088183ba1"
+      }
+    },
+    "gwen": {
+      "page": "Gwen",
+      "icon": {
+        "file": "File:Gwen NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Gwen_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/ed/Gwen_NH_Villager_Icon.png",
+        "bytes": 5141,
+        "sha1": "4952f36b0106b00c855aacf992e77fb0884c9650"
+      }
+    },
+    "hamlet": {
+      "page": "Hamlet",
+      "icon": {
+        "file": "File:Hamlet NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Hamlet_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a0/Hamlet_NH_Villager_Icon.png",
+        "bytes": 7572,
+        "sha1": "44b3cc9176872dcff1ea326a1f2cdacf0ecc10ef"
+      }
+    },
+    "hamphrey": {
+      "page": "Hamphrey",
+      "icon": {
+        "file": "File:Hamphrey NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Hamphrey_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a1/Hamphrey_NH_Villager_Icon.png",
+        "bytes": 6248,
+        "sha1": "fc3da78b639ffb1788de3aef789d78e124d16da7"
+      }
+    },
+    "hans": {
+      "page": "Hans",
+      "icon": {
+        "file": "File:Hans NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Hans_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/ce/Hans_NH_Villager_Icon.png",
+        "bytes": 7249,
+        "sha1": "f8f149f5379ca4075a2650964dc2c932d84c5e5e"
+      }
+    },
+    "harriet": {
+      "page": "Harriet",
+      "icon": {
+        "file": "File:Harriet NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Harriet_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/5/57/Harriet_NH_Character_Icon.png",
+        "bytes": 5531,
+        "sha1": "db82d68836d0022f28c33531e855d34b9bd487f9"
+      }
+    },
+    "harry": {
+      "page": "Harry",
+      "icon": {
+        "file": "File:Harry NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Harry_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/b4/Harry_NH_Villager_Icon.png",
+        "bytes": 6624,
+        "sha1": "6106bcb294ec61ba5cf9ad82fc6afc24173a1bde"
+      }
+    },
+    "harvey": {
+      "page": "Harvey",
+      "icon": {
+        "file": "File:Harvey NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Harvey_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/0/0c/Harvey_NH_Character_Icon.png",
+        "bytes": 9827,
+        "sha1": "3a322c6c0929904db1b6bc5ebbc24c0d12e77575"
+      }
+    },
+    "hazel": {
+      "page": "Hazel",
+      "icon": {
+        "file": "File:Hazel NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Hazel_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/ac/Hazel_NH_Villager_Icon.png",
+        "bytes": 6846,
+        "sha1": "3ab9e47f9665716e042e6e05fee45751f23ac6e1"
+      }
+    },
+    "henry": {
+      "page": "Henry",
+      "icon": {
+        "file": "File:Henry NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Henry_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/2f/Henry_NH_Villager_Icon.png",
+        "bytes": 6028,
+        "sha1": "091de205f1d0b695295e1cee5e1d20b2764b7327"
+      }
+    },
+    "hippeux": {
+      "page": "Hippeux",
+      "icon": {
+        "file": "File:Hippeux NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Hippeux_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/ec/Hippeux_NH_Villager_Icon.png",
+        "bytes": 6274,
+        "sha1": "2a282a4d2f65bb7c24372fda6e905b965167b69f"
+      }
+    },
+    "holden": {
+      "page": "Holden",
+      "icon": {
+        "file": "File:Holden NL Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Holden_NL_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/be/Holden_NL_Villager_Icon.png",
+        "bytes": 3080,
+        "sha1": "e31bab9558c1c5d90f2e205117926cc26d74e34f"
+      }
+    },
+    "hopkins": {
+      "page": "Hopkins",
+      "icon": {
+        "file": "File:Hopkins NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Hopkins_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/4b/Hopkins_NH_Villager_Icon.png",
+        "bytes": 7571,
+        "sha1": "385d4f891153c1d6b188816eb3e79e0c0ae80127"
+      }
+    },
+    "hopper": {
+      "page": "Hopper",
+      "icon": {
+        "file": "File:Hopper NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Hopper_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/8/82/Hopper_NH_Villager_Icon.png",
+        "bytes": 6760,
+        "sha1": "3ab9f00d912e1bc32cd5fad135ac8e66c4ffa332"
+      }
+    },
+    "hornsby": {
+      "page": "Hornsby",
+      "icon": {
+        "file": "File:Hornsby NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Hornsby_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/77/Hornsby_NH_Villager_Icon.png",
+        "bytes": 6403,
+        "sha1": "3d607fb80075222c303d7bc4bf5277a50b449d07"
+      }
+    },
+    "huck": {
+      "page": "Huck",
+      "icon": {
+        "file": "File:Huck NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Huck_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c4/Huck_NH_Villager_Icon.png",
+        "bytes": 5267,
+        "sha1": "8353216cde2bfefd77a9a7543d2b14c971781c51"
+      }
+    },
+    "hugh": {
+      "page": "Hugh",
+      "icon": {
+        "file": "File:Hugh NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Hugh_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/b0/Hugh_NH_Villager_Icon.png",
+        "bytes": 7193,
+        "sha1": "92573e0047871b2d7852a00267b5b2685f55051a"
+      }
+    },
+    "iggly": {
+      "page": "Iggly",
+      "icon": {
+        "file": "File:Iggly NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Iggly_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/11/Iggly_NH_Villager_Icon.png",
+        "bytes": 5874,
+        "sha1": "9c07b6e8cd49cfb8519b86be7733677c24fd093b"
+      }
+    },
+    "ike": {
+      "page": "Ike",
+      "icon": {
+        "file": "File:Ike NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Ike_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c9/Ike_NH_Villager_Icon.png",
+        "bytes": 8065,
+        "sha1": "d29cbe1bea05c4a5b524a5e076b689e45a689736"
+      }
+    },
+    "inkwell": {
+      "page": "Inkwell",
+      "icon": {
+        "file": "File:Inkwell NL Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Inkwell_NL_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/1e/Inkwell_NL_Villager_Icon.png",
+        "bytes": 3016,
+        "sha1": "d81f3190fb99165064057be715f752fcf98d0154"
+      }
+    },
+    "ione": {
+      "page": "Ione",
+      "icon": {
+        "file": "File:Ione NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Ione_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/6/62/Ione_NH_Villager_Icon.png",
+        "bytes": 6577,
+        "sha1": "15c181ac67fbf44a9cc8058b011885fbcc55a80e"
+      }
+    },
+    "isabelle": {
+      "page": "Isabelle",
+      "icon": {
+        "file": "File:Isabelle NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Isabelle_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/9/91/Isabelle_NH_Character_Icon.png",
+        "bytes": 6057,
+        "sha1": "c464154d05319e37517c84b30e43978dcadfedc4"
+      }
+    },
+    "jack": {
+      "page": "Jack",
+      "icon": {
+        "file": "File:Jack NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Jack_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/b/b0/Jack_NH_Character_Icon.png",
+        "bytes": 7270,
+        "sha1": "90777fc1096316c41c8a116294d83127c3b3fd55"
+      }
+    },
+    "jacob": {
+      "page": "Jacob",
+      "icon": {
+        "file": "File:Jacob NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Jacob_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/fa/Jacob_NH_Villager_Icon.png",
+        "bytes": 5997,
+        "sha1": "aba528dcbae620def6a79570ab1d471656f736a7"
+      }
+    },
+    "jacques": {
+      "page": "Jacques",
+      "icon": {
+        "file": "File:Jacques NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Jacques_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/73/Jacques_NH_Villager_Icon.png",
+        "bytes": 6723,
+        "sha1": "d4ec780b9dd08f9c403b804aca88b51fd135eb53"
+      }
+    },
+    "jambette": {
+      "page": "Jambette",
+      "icon": {
+        "file": "File:Jambette NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Jambette_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/53/Jambette_NH_Villager_Icon.png",
+        "bytes": 7000,
+        "sha1": "7cb64cc6ab500db82de515c2d037a999d634d2c2"
+      }
+    },
+    "jay": {
+      "page": "Jay",
+      "icon": {
+        "file": "File:Jay NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Jay_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/ab/Jay_NH_Villager_Icon.png",
+        "bytes": 5843,
+        "sha1": "86336b3adda7fcc534b4dc5584aceada984292e9"
+      }
+    },
+    "jeremiah": {
+      "page": "Jeremiah",
+      "icon": {
+        "file": "File:Jeremiah NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Jeremiah_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/ce/Jeremiah_NH_Villager_Icon.png",
+        "bytes": 5376,
+        "sha1": "0d26d080b053d190edcad702ff50473acffa03cf"
+      }
+    },
+    "jingle": {
+      "page": "Jingle",
+      "icon": {
+        "file": "File:Jingle NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Jingle_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/b/b1/Jingle_NH_Character_Icon.png",
+        "bytes": 6230,
+        "sha1": "eff2d69546bff7056dbc7794310acca630dfa343"
+      }
+    },
+    "jitters": {
+      "page": "Jitters",
+      "icon": {
+        "file": "File:Jitters NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Jitters_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/51/Jitters_NH_Villager_Icon.png",
+        "bytes": 6020,
+        "sha1": "fd13e2c93d6a53e088c6250a604b7ab574216f02"
+      }
+    },
+    "joan": {
+      "page": "Joan",
+      "icon": {
+        "file": "File:Joan NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Joan_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/2/2d/Joan_NH_Character_Icon.png",
+        "bytes": 8108,
+        "sha1": "e56393e1a30aacaf0497e1b573108837a4d84814"
+      }
+    },
+    "joey": {
+      "page": "Joey",
+      "icon": {
+        "file": "File:Joey NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Joey_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a1/Joey_NH_Villager_Icon.png",
+        "bytes": 3516,
+        "sha1": "ebc3d07c005c0982f8461e002946c77cf5fcedeb"
+      }
+    },
+    "judy": {
+      "page": "Judy",
+      "icon": {
+        "file": "File:Judy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Judy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c1/Judy_NH_Villager_Icon.png",
+        "bytes": 9158,
+        "sha1": "f0fd4fde4936d71cd653558148effad5f1da0c70"
+      }
+    },
+    "julia": {
+      "page": "Julia",
+      "icon": {
+        "file": "File:Julia NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Julia_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f4/Julia_NH_Villager_Icon.png",
+        "bytes": 8028,
+        "sha1": "0f1830135a8bc294da864cafe95d93b2a58d2f41"
+      }
+    },
+    "julian": {
+      "page": "Julian",
+      "icon": {
+        "file": "File:Julian NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Julian_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/20/Julian_NH_Villager_Icon.png",
+        "bytes": 6037,
+        "sha1": "4691fcc675872e2c55d3f7c088782ab86d7051f7"
+      }
+    },
+    "june": {
+      "page": "June",
+      "icon": {
+        "file": "File:June NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:June_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/29/June_NH_Villager_Icon.png",
+        "bytes": 8769,
+        "sha1": "54f43617b36683d86c9c26145f583a5501162d90"
+      }
+    },
+    "kabuki": {
+      "page": "Kabuki",
+      "icon": {
+        "file": "File:Kabuki NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Kabuki_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/6/64/Kabuki_NH_Villager_Icon.png",
+        "bytes": 9321,
+        "sha1": "efda0d785088d260842cc9e51dde2cd39551c442"
+      }
+    },
+    "kappn": {
+      "page": "Kapp'n",
+      "icon": {
+        "file": "File:Kapp'n NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Kapp%27n_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/1/1d/Kapp%27n_NH_Character_Icon.png",
+        "bytes": 4973,
+        "sha1": "c364514e538a687e5042c447b48e3d08c3ba974d"
+      }
+    },
+    "katie": {
+      "page": "Katie",
+      "icon": {
+        "file": "File:Katie NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Katie_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/7/78/Katie_NH_Character_Icon.png",
+        "bytes": 6273,
+        "sha1": "6cce75ad0879431664fb271d8575f85e77d03800"
+      }
+    },
+    "katrina": {
+      "page": "Katrina",
+      "icon": {
+        "file": "File:Katrina NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Katrina_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/4/4e/Katrina_NH_Character_Icon.png",
+        "bytes": 9100,
+        "sha1": "8a467daf32067d4469677ff76a57ccac3b4b005f"
+      }
+    },
+    "katt": {
+      "page": "Katt",
+      "icon": {
+        "file": "File:Katt NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Katt_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/1b/Katt_NH_Villager_Icon.png",
+        "bytes": 8799,
+        "sha1": "3c5bf1d0f0b7e8dbcb863525a2f53dcbfa132902"
+      }
+    },
+    "keaton": {
+      "page": "Keaton",
+      "icon": {
+        "file": "File:Keaton NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Keaton_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/28/Keaton_NH_Villager_Icon.png",
+        "bytes": 7588,
+        "sha1": "cd29985f7eca1e6b44906c2e64790963b8cfa9e6"
+      }
+    },
+    "ken": {
+      "page": "Ken",
+      "icon": {
+        "file": "File:Ken NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Ken_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/26/Ken_NH_Villager_Icon.png",
+        "bytes": 8083,
+        "sha1": "1dfd96451541416a3a12beb0a2dcccc24a963dab"
+      }
+    },
+    "ketchup": {
+      "page": "Ketchup",
+      "icon": {
+        "file": "File:Ketchup NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Ketchup_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/e5/Ketchup_NH_Villager_Icon.png",
+        "bytes": 6492,
+        "sha1": "ec2a11d01f05e1a8cadea92ac2508a92641800e1"
+      }
+    },
+    "kevin": {
+      "page": "Kevin",
+      "icon": {
+        "file": "File:Kevin NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Kevin_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/8/89/Kevin_NH_Villager_Icon.png",
+        "bytes": 6611,
+        "sha1": "2f4533213792b3cf9a672ae5c88a82a25e6e0238"
+      }
+    },
+    "kicks": {
+      "page": "Kicks",
+      "icon": {
+        "file": "File:Kicks NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Kicks_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/6/67/Kicks_NH_Character_Icon.png",
+        "bytes": 7967,
+        "sha1": "8418da97315395829d31954c3f6091ea18cec991"
+      }
+    },
+    "kid-cat": {
+      "page": "Kid Cat",
+      "icon": {
+        "file": "File:Kid Cat NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Kid_Cat_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/18/Kid_Cat_NH_Villager_Icon.png",
+        "bytes": 9858,
+        "sha1": "31ed0dd45f6b7efe45fc83ffe4105e7231df3eb6"
+      }
+    },
+    "kidd": {
+      "page": "Kidd",
+      "icon": {
+        "file": "File:Kidd NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Kidd_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/6/64/Kidd_NH_Villager_Icon.png",
+        "bytes": 6494,
+        "sha1": "5707482d4043d2543f6f3a5d916a027235acd2b5"
+      }
+    },
+    "kiki": {
+      "page": "Kiki",
+      "icon": {
+        "file": "File:Kiki NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Kiki_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/cb/Kiki_NH_Villager_Icon.png",
+        "bytes": 7198,
+        "sha1": "a90c235bfac05300b6cac798d6f55e23f32494ac"
+      }
+    },
+    "kitt": {
+      "page": "Kitt",
+      "icon": {
+        "file": "File:Kitt NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Kitt_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/fe/Kitt_NH_Villager_Icon.png",
+        "bytes": 8819,
+        "sha1": "034c814c1593f07aef537025ee9afd939cb886f3"
+      }
+    },
+    "kitty": {
+      "page": "Kitty",
+      "icon": {
+        "file": "File:Kitty NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Kitty_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a4/Kitty_NH_Villager_Icon.png",
+        "bytes": 9027,
+        "sha1": "d799dfa1bdf11a42f35f07be080fce176e52f4ea"
+      }
+    },
+    "kk-slider": {
+      "page": "K.K. Slider",
+      "icon": {
+        "file": "File:K.K. Slider NH Question Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:K.K._Slider_NH_Question_Icon.png",
+        "image": "https://dodo.ac/np/images/b/bb/K.K._Slider_NH_Question_Icon.png",
+        "bytes": 14234,
+        "sha1": "e3e2ba877dfe0e6b3a77fc4387ef4d8442798955"
+      }
+    },
+    "klaus": {
+      "page": "Klaus",
+      "icon": {
+        "file": "File:Klaus NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Klaus_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/20/Klaus_NH_Villager_Icon.png",
+        "bytes": 8897,
+        "sha1": "355f0de4f5791e1c4c80da38a708311d1e2ef185"
+      }
+    },
+    "knox": {
+      "page": "Knox",
+      "icon": {
+        "file": "File:Knox NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Knox_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/40/Knox_NH_Villager_Icon.png",
+        "bytes": 8100,
+        "sha1": "fe8061f1471e37be1f1bf26e4e2755939f8ccf08"
+      }
+    },
+    "kody": {
+      "page": "Kody",
+      "icon": {
+        "file": "File:Kody NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Kody_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d3/Kody_NH_Villager_Icon.png",
+        "bytes": 8230,
+        "sha1": "4e7dbfa304769814ba3b09f09f9aebe35d898c6f"
+      }
+    },
+    "kyle": {
+      "page": "Kyle",
+      "icon": {
+        "file": "File:Kyle NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Kyle_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/44/Kyle_NH_Villager_Icon.png",
+        "bytes": 10547,
+        "sha1": "b5032be543bb3580caad0e87560c3306dfaf76e1"
+      }
+    },
+    "label": {
+      "page": "Label",
+      "icon": {
+        "file": "File:Label NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Label_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c6/Label_NH_Character_Icon.png",
+        "bytes": 11662,
+        "sha1": "19044d3bdd31276625ececcfeca842779b32f808"
+      }
+    },
+    "leif": {
+      "page": "Leif",
+      "icon": {
+        "file": "File:Leif NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Leif_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/2/25/Leif_NH_Character_Icon.png",
+        "bytes": 7354,
+        "sha1": "701a572fe740c01bc3f991f5e698d45ad17bc2ad"
+      }
+    },
+    "leila": {
+      "page": "Leila",
+      "icon": {
+        "file": "File:Leila NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Leila_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f1/Leila_NH_Character_Icon.png",
+        "bytes": 5336,
+        "sha1": "b6b63b65cc40c92fd4952840e24fa8667314276d"
+      }
+    },
+    "leilani": {
+      "page": "Leilani",
+      "icon": {
+        "file": "File:Leilani NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Leilani_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/4/45/Leilani_NH_Character_Icon.png",
+        "bytes": 5889,
+        "sha1": "1b2f8812448766b37cc81f50b4cd564a2ab0e4db"
+      }
+    },
+    "leonardo": {
+      "page": "Leonardo",
+      "icon": {
+        "file": "File:Leonardo NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Leonardo_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/ca/Leonardo_NH_Villager_Icon.png",
+        "bytes": 9966,
+        "sha1": "cedc5297c2911d121574c4b1cc17c66c63dff82f"
+      }
+    },
+    "leopold": {
+      "page": "Leopold",
+      "icon": {
+        "file": "File:Leopold NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Leopold_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/72/Leopold_NH_Villager_Icon.png",
+        "bytes": 9021,
+        "sha1": "4989f5f67ea5c88903b267e58eb053854df34d45"
+      }
+    },
+    "lily": {
+      "page": "Lily",
+      "icon": {
+        "file": "File:Lily NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Lily_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f4/Lily_NH_Villager_Icon.png",
+        "bytes": 5703,
+        "sha1": "b984982b3bdcd68eaaaa7d3e109768462d33996f"
+      }
+    },
+    "limberg": {
+      "page": "Limberg",
+      "icon": {
+        "file": "File:Limberg NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Limberg_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/21/Limberg_NH_Villager_Icon.png",
+        "bytes": 9424,
+        "sha1": "7f425659bd6cd34c81377258acf4689a04fd7df7"
+      }
+    },
+    "lionel": {
+      "page": "Lionel",
+      "icon": {
+        "file": "File:Lionel NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Lionel_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f4/Lionel_NH_Villager_Icon.png",
+        "bytes": 8927,
+        "sha1": "bc6ed4ba90dd02eab824b4aeaed03ee6a9a24621"
+      }
+    },
+    "lloid": {
+      "page": "Lloid",
+      "icon": {
+        "file": "File:Lloid PC Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Lloid_PC_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/2/23/Lloid_PC_Character_Icon.png",
+        "bytes": 9263,
+        "sha1": "06c2336412592a38e0f70fe9babdd95be6b2a945"
+      }
+    },
+    "lobo": {
+      "page": "Lobo",
+      "icon": {
+        "file": "File:Lobo NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Lobo_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/01/Lobo_NH_Villager_Icon.png",
+        "bytes": 10062,
+        "sha1": "ef44fde18f71faa99f9b6add6c1730ca3d747267"
+      }
+    },
+    "lolly": {
+      "page": "Lolly",
+      "icon": {
+        "file": "File:Lolly NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Lolly_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/6/6c/Lolly_NH_Villager_Icon.png",
+        "bytes": 7738,
+        "sha1": "982b9f1237456428f692718682326ecbfcbf44fd"
+      }
+    },
+    "lopez": {
+      "page": "Lopez",
+      "icon": {
+        "file": "File:Lopez NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Lopez_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/54/Lopez_NH_Villager_Icon.png",
+        "bytes": 10215,
+        "sha1": "bc05959c584432a5d498dc8f9a7c6e03c91b06ff"
+      }
+    },
+    "lottie": {
+      "page": "Lottie",
+      "icon": {
+        "file": "File:Lottie NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Lottie_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/7/78/Lottie_NH_Character_Icon.png",
+        "bytes": 7309,
+        "sha1": "ef172fb6a820996e7637c053db883ad3840b6020"
+      }
+    },
+    "louie": {
+      "page": "Louie",
+      "icon": {
+        "file": "File:Louie NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Louie_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/10/Louie_NH_Villager_Icon.png",
+        "bytes": 8824,
+        "sha1": "e877cd919c4f5de2bacf798357d85f10fed63aac"
+      }
+    },
+    "lucha": {
+      "page": "Lucha",
+      "icon": {
+        "file": "File:Lucha NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Lucha_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/5d/Lucha_NH_Villager_Icon.png",
+        "bytes": 7343,
+        "sha1": "4694b70864eb780eb86a916315db99222479f9b0"
+      }
+    },
+    "lucky": {
+      "page": "Lucky",
+      "icon": {
+        "file": "File:Lucky NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Lucky_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/13/Lucky_NH_Villager_Icon.png",
+        "bytes": 7609,
+        "sha1": "c725b71c0c5616febce8e6c329385f7b52d561be"
+      }
+    },
+    "lucy": {
+      "page": "Lucy",
+      "icon": {
+        "file": "File:Lucy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Lucy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/ba/Lucy_NH_Villager_Icon.png",
+        "bytes": 7495,
+        "sha1": "8324b5827b131bab56f4c40c8578e80e50f17d6a"
+      }
+    },
+    "luna": {
+      "page": "Luna",
+      "icon": {
+        "file": "File:Luna NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Luna_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/7/75/Luna_NH_Character_Icon.png",
+        "bytes": 7200,
+        "sha1": "bbd932da854ecce9ca49fadecfb33fbeb7bd6464"
+      }
+    },
+    "lyle": {
+      "page": "Lyle",
+      "icon": {
+        "file": "File:Lyle NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Lyle_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/8/81/Lyle_NH_Character_Icon.png",
+        "bytes": 7619,
+        "sha1": "5652049acd869d4cb7a6b481558de838541d8d9b"
+      }
+    },
+    "lyman": {
+      "page": "Lyman",
+      "icon": {
+        "file": "File:Lyman NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Lyman_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a4/Lyman_NH_Villager_Icon.png",
+        "bytes": 7296,
+        "sha1": "8cc28e36c706d73dc21a57e9ca51fb5238bcc838"
+      }
+    },
+    "mabel": {
+      "page": "Mabel",
+      "icon": {
+        "file": "File:Mabel NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Mabel_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/6/68/Mabel_NH_Character_Icon.png",
+        "bytes": 8974,
+        "sha1": "673d516f08461e313ec2036039828c748b7ad66d"
+      }
+    },
+    "mac": {
+      "page": "Mac",
+      "icon": {
+        "file": "File:Mac NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Mac_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/b3/Mac_NH_Villager_Icon.png",
+        "bytes": 8349,
+        "sha1": "52f3f41991fb95e6f5830c46bee9686d4d32fcca"
+      }
+    },
+    "maddie": {
+      "page": "Maddie",
+      "icon": {
+        "file": "File:Maddie NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Maddie_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/bb/Maddie_NH_Villager_Icon.png",
+        "bytes": 7678,
+        "sha1": "7e93c40c785175c00864399adce1061763eabb63"
+      }
+    },
+    "maelle": {
+      "page": "Maelle",
+      "icon": {
+        "file": "File:Maelle NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Maelle_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c2/Maelle_NH_Villager_Icon.png",
+        "bytes": 5890,
+        "sha1": "9b3957fe0bd9b1c606f6b2ce7f612bef25ef06eb"
+      }
+    },
+    "maggie": {
+      "page": "Maggie",
+      "icon": {
+        "file": "File:Maggie NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Maggie_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/8/8a/Maggie_NH_Villager_Icon.png",
+        "bytes": 7807,
+        "sha1": "b2b98983db2d5c3017e503eb3940335ad0f6ae0f"
+      }
+    },
+    "mallary": {
+      "page": "Mallary",
+      "icon": {
+        "file": "File:Mallary NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Mallary_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/02/Mallary_NH_Villager_Icon.png",
+        "bytes": 6354,
+        "sha1": "20a797c72a4402ebd396b200b50d05b65ce04f1a"
+      }
+    },
+    "maple": {
+      "page": "Maple",
+      "icon": {
+        "file": "File:Maple NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Maple_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/45/Maple_NH_Villager_Icon.png",
+        "bytes": 8355,
+        "sha1": "b992b9af0e2a99e00a9aa997e16013b3d09ae5f2"
+      }
+    },
+    "marcel": {
+      "page": "Marcel",
+      "icon": {
+        "file": "File:Marcel NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Marcel_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a7/Marcel_NH_Villager_Icon.png",
+        "bytes": 9890,
+        "sha1": "a7105e002ef5a9fd7823e7630353ce9a44b8bcfa"
+      }
+    },
+    "marcie": {
+      "page": "Marcie",
+      "icon": {
+        "file": "File:Marcie NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Marcie_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d5/Marcie_NH_Villager_Icon.png",
+        "bytes": 7266,
+        "sha1": "11e9ca04d3430ffeaa5f0a8ae7214de2782364fd"
+      }
+    },
+    "margie": {
+      "page": "Margie",
+      "icon": {
+        "file": "File:Margie NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Margie_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/8/8a/Margie_NH_Villager_Icon.png",
+        "bytes": 5520,
+        "sha1": "4d064c9553837daa9e0f8bfa07a4761054a2724c"
+      }
+    },
+    "marina": {
+      "page": "Marina",
+      "icon": {
+        "file": "File:Marina NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Marina_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/0f/Marina_NH_Villager_Icon.png",
+        "bytes": 6155,
+        "sha1": "903080cb18bff01becc6aeae73a8bc86cd7af9d9"
+      }
+    },
+    "marlo": {
+      "page": "Marlo",
+      "icon": {
+        "file": "File:Marlo NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Marlo_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/03/Marlo_NH_Villager_Icon.png",
+        "bytes": 7117,
+        "sha1": "016cbc4162ab22cef4a3d6f5db66cc13e0def121"
+      }
+    },
+    "marshal": {
+      "page": "Marshal",
+      "icon": {
+        "file": "File:Marshal NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Marshal_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/99/Marshal_NH_Villager_Icon.png",
+        "bytes": 6765,
+        "sha1": "36a7c2b7b8e4f19c5eb07fb6c6ad47243025b5e7"
+      }
+    },
+    "marty": {
+      "page": "Marty",
+      "icon": {
+        "file": "File:Marty NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Marty_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/08/Marty_NH_Villager_Icon.png",
+        "bytes": 7384,
+        "sha1": "ebebab1ec6c2a4df24222126d09188765c7b33d2"
+      }
+    },
+    "mathilda": {
+      "page": "Mathilda",
+      "icon": {
+        "file": "File:Mathilda NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Mathilda_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/7f/Mathilda_NH_Villager_Icon.png",
+        "bytes": 7790,
+        "sha1": "55d3052b5b91714dfa6af8d893ddbcbedf24a73b"
+      }
+    },
+    "medli": {
+      "page": "Medli",
+      "icon": {
+        "file": "File:Medli NL Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Medli_NL_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/af/Medli_NL_Villager_Icon.png",
+        "bytes": 3380,
+        "sha1": "fe71cc01e661ae3ddca40087a8025e029a2ee18a"
+      }
+    },
+    "megan": {
+      "page": "Megan",
+      "icon": {
+        "file": "File:Megan NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Megan_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/6/66/Megan_NH_Villager_Icon.png",
+        "bytes": 8344,
+        "sha1": "82d66b0f3391ba5a1a9b8cc0b0149be669fe2b84"
+      }
+    },
+    "melba": {
+      "page": "Melba",
+      "icon": {
+        "file": "File:Melba NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Melba_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/0a/Melba_NH_Villager_Icon.png",
+        "bytes": 8194,
+        "sha1": "37302cf7c6636fe5806c7b048a8768abe4fe4243"
+      }
+    },
+    "merengue": {
+      "page": "Merengue",
+      "icon": {
+        "file": "File:Merengue NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Merengue_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/e8/Merengue_NH_Villager_Icon.png",
+        "bytes": 7767,
+        "sha1": "dbbfce5db5bd873aa2f229f61cfc17c55e00c52f"
+      }
+    },
+    "merry": {
+      "page": "Merry",
+      "icon": {
+        "file": "File:Merry NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Merry_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/ed/Merry_NH_Villager_Icon.png",
+        "bytes": 8281,
+        "sha1": "292fb5eb25740edfa53ecef27e089c4b7196de1e"
+      }
+    },
+    "midge": {
+      "page": "Midge",
+      "icon": {
+        "file": "File:Midge NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Midge_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/0f/Midge_NH_Villager_Icon.png",
+        "bytes": 6277,
+        "sha1": "c9fc08624db51288b014d211809186cb427392d6"
+      }
+    },
+    "mineru": {
+      "page": "Mineru",
+      "icon": {
+        "file": "File:Mineru NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Mineru_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d5/Mineru_NH_Villager_Icon.png",
+        "bytes": 11505,
+        "sha1": "b60f60082d08d2a873d3dbd8425c1a2537d2f59a"
+      }
+    },
+    "mint": {
+      "page": "Mint",
+      "icon": {
+        "file": "File:Mint NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Mint_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/bf/Mint_NH_Villager_Icon.png",
+        "bytes": 8104,
+        "sha1": "d4cf03d8c355d923e54be7bb9571cb014829a398"
+      }
+    },
+    "mira": {
+      "page": "Mira",
+      "icon": {
+        "file": "File:Mira NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Mira_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/44/Mira_NH_Villager_Icon.png",
+        "bytes": 7336,
+        "sha1": "08936e93aa6264632b318aed3ad02f585b5ffceb"
+      }
+    },
+    "miranda": {
+      "page": "Miranda",
+      "icon": {
+        "file": "File:Miranda NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Miranda_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/8/83/Miranda_NH_Villager_Icon.png",
+        "bytes": 5558,
+        "sha1": "f254dceea4afc559b510d21db1ffcadcb1040544"
+      }
+    },
+    "mitzi": {
+      "page": "Mitzi",
+      "icon": {
+        "file": "File:Mitzi NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Mitzi_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/6/67/Mitzi_NH_Villager_Icon.png",
+        "bytes": 9546,
+        "sha1": "7933539ad3ee0c50840a2b7ff160ab6e13b23af2"
+      }
+    },
+    "moe": {
+      "page": "Moe",
+      "icon": {
+        "file": "File:Moe NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Moe_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/03/Moe_NH_Villager_Icon.png",
+        "bytes": 10072,
+        "sha1": "3a223493e78c8abd112f46a051d1504adcced5fa"
+      }
+    },
+    "molly": {
+      "page": "Molly",
+      "icon": {
+        "file": "File:Molly NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Molly_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d8/Molly_NH_Villager_Icon.png",
+        "bytes": 5837,
+        "sha1": "d9ce24603a8b8ac074d866d16d3a5dd8b5f6f09f"
+      }
+    },
+    "monique": {
+      "page": "Monique",
+      "icon": {
+        "file": "File:Monique NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Monique_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/22/Monique_NH_Villager_Icon.png",
+        "bytes": 9328,
+        "sha1": "4972311573f02b9f3e1efcac8ccd8e2a38a5b0e8"
+      }
+    },
+    "monty": {
+      "page": "Monty",
+      "icon": {
+        "file": "File:Monty NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Monty_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/15/Monty_NH_Villager_Icon.png",
+        "bytes": 7027,
+        "sha1": "99b91bed76b06ea06371651cc1744a30042d515e"
+      }
+    },
+    "moose": {
+      "page": "Moose",
+      "icon": {
+        "file": "File:Moose NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Moose_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/47/Moose_NH_Villager_Icon.png",
+        "bytes": 10786,
+        "sha1": "cbf1359489680d604ce5ddc871065b27458774d7"
+      }
+    },
+    "mott": {
+      "page": "Mott",
+      "icon": {
+        "file": "File:Mott NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Mott_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/40/Mott_NH_Villager_Icon.png",
+        "bytes": 9945,
+        "sha1": "0ab47c1547a8226a9b7cde3615021bf3318cdcd8"
+      }
+    },
+    "mr-resetti": {
+      "page": "Mr. Resetti",
+      "icon": {
+        "file": "File:Mr. Resetti PC Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Mr._Resetti_PC_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/e/ef/Mr._Resetti_PC_Character_Icon.png",
+        "bytes": 6140,
+        "sha1": "8234cd455ec7d1e8b6a01fb2512f08d86620cd8c"
+      }
+    },
+    "muffy": {
+      "page": "Muffy",
+      "icon": {
+        "file": "File:Muffy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Muffy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/73/Muffy_NH_Villager_Icon.png",
+        "bytes": 9218,
+        "sha1": "aa2fa88b8d922686a7be3bc10e6e2195182c3b93"
+      }
+    },
+    "murphy": {
+      "page": "Murphy",
+      "icon": {
+        "file": "File:Murphy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Murphy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/93/Murphy_NH_Villager_Icon.png",
+        "bytes": 7543,
+        "sha1": "fca84f80d3a3bf3eb55c16d1395f4d95e60b21e8"
+      }
+    },
+    "nan": {
+      "page": "Nan",
+      "icon": {
+        "file": "File:Nan NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Nan_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/df/Nan_NH_Villager_Icon.png",
+        "bytes": 5585,
+        "sha1": "2f4efe77193c991ec376233f78324e32e7600719"
+      }
+    },
+    "nana": {
+      "page": "Nana",
+      "icon": {
+        "file": "File:Nana NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Nana_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/26/Nana_NH_Villager_Icon.png",
+        "bytes": 6579,
+        "sha1": "1fd50631d283f8f3a6e0ad780254e9764525c999"
+      }
+    },
+    "naomi": {
+      "page": "Naomi",
+      "icon": {
+        "file": "File:Naomi NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Naomi_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a8/Naomi_NH_Villager_Icon.png",
+        "bytes": 6981,
+        "sha1": "2332008baeb657c84f548acf694903408fb6595a"
+      }
+    },
+    "nat": {
+      "page": "Nat",
+      "icon": {
+        "file": "File:Nat NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Nat_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/5/58/Nat_NH_Character_Icon.png",
+        "bytes": 7591,
+        "sha1": "a12071a11b5fc42b6a3697b75bcd5f944cb35252"
+      }
+    },
+    "nate": {
+      "page": "Nate",
+      "icon": {
+        "file": "File:Nate NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Nate_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/72/Nate_NH_Villager_Icon.png",
+        "bytes": 8684,
+        "sha1": "2b5ef92b887c01f5603764a3af6c39fd9c83c057"
+      }
+    },
+    "nibbles": {
+      "page": "Nibbles",
+      "icon": {
+        "file": "File:Nibbles NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Nibbles_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/26/Nibbles_NH_Villager_Icon.png",
+        "bytes": 7508,
+        "sha1": "7d66e777c4587cb94ca0953a27bb070a76df6f4f"
+      }
+    },
+    "niko": {
+      "page": "Niko",
+      "icon": {
+        "file": "File:Niko NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Niko_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/2/22/Niko_NH_Character_Icon.png",
+        "bytes": 7111,
+        "sha1": "2d5c9a3f243fa09b7592d018bfec4b51f6712375"
+      }
+    },
+    "norma": {
+      "page": "Norma",
+      "icon": {
+        "file": "File:Norma NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Norma_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/6/69/Norma_NH_Villager_Icon.png",
+        "bytes": 8064,
+        "sha1": "eef9d95035a193e89c47857457cd4bbdd21b33ff"
+      }
+    },
+    "octavian": {
+      "page": "Octavian",
+      "icon": {
+        "file": "File:Octavian NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Octavian_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a0/Octavian_NH_Villager_Icon.png",
+        "bytes": 6844,
+        "sha1": "e4f94ac2e5e3af6bb449393f34d7fd5ff4091757"
+      }
+    },
+    "ohare": {
+      "page": "O'Hare",
+      "icon": {
+        "file": "File:O'Hare NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:O%27Hare_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/b2/O%27Hare_NH_Villager_Icon.png",
+        "bytes": 8114,
+        "sha1": "4d97e1e940686e6a6621956a756dbd92f43a5906"
+      }
+    },
+    "olaf": {
+      "page": "Olaf",
+      "icon": {
+        "file": "File:Olaf NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Olaf_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/78/Olaf_NH_Villager_Icon.png",
+        "bytes": 5960,
+        "sha1": "66a24ad96802ad647e75fe6430566494b06d1fb2"
+      }
+    },
+    "olive": {
+      "page": "Olive",
+      "icon": {
+        "file": "File:Olive NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Olive_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/db/Olive_NH_Villager_Icon.png",
+        "bytes": 7575,
+        "sha1": "81da25371b9a54dceeb057ac644638f5c5ed1391"
+      }
+    },
+    "olivia": {
+      "page": "Olivia",
+      "icon": {
+        "file": "File:Olivia NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Olivia_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/1e/Olivia_NH_Villager_Icon.png",
+        "bytes": 8150,
+        "sha1": "e703035fcadfa91b48cb264d230bbd78dde88b62"
+      }
+    },
+    "opal": {
+      "page": "Opal",
+      "icon": {
+        "file": "File:Opal NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Opal_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/78/Opal_NH_Villager_Icon.png",
+        "bytes": 5342,
+        "sha1": "b1571c1ee4ddb77af95da486848dd89c503762cd"
+      }
+    },
+    "orville": {
+      "page": "Orville",
+      "icon": {
+        "file": "File:Orville NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Orville_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/3/30/Orville_NH_Character_Icon.png",
+        "bytes": 7121,
+        "sha1": "47883de024069611afea9600f0240d15dfb8d274"
+      }
+    },
+    "ozzie": {
+      "page": "Ozzie",
+      "icon": {
+        "file": "File:Ozzie NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Ozzie_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/cb/Ozzie_NH_Villager_Icon.png",
+        "bytes": 7433,
+        "sha1": "7a6a6d512e49543c1e031cf8dd9dadb71b243174"
+      }
+    },
+    "pancetti": {
+      "page": "Pancetti",
+      "icon": {
+        "file": "File:Pancetti NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Pancetti_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/40/Pancetti_NH_Villager_Icon.png",
+        "bytes": 8195,
+        "sha1": "81f1b40045db623a081cd92758377946f27b23b0"
+      }
+    },
+    "pango": {
+      "page": "Pango",
+      "icon": {
+        "file": "File:Pango NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Pango_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/7f/Pango_NH_Villager_Icon.png",
+        "bytes": 5448,
+        "sha1": "db324d5eafc4d7f6055b0790d7ff5e03d47a22f4"
+      }
+    },
+    "paolo": {
+      "page": "Paolo",
+      "icon": {
+        "file": "File:Paolo NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Paolo_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/df/Paolo_NH_Villager_Icon.png",
+        "bytes": 4092,
+        "sha1": "df8355c68c0228ea524bd63293c4025d64918a41"
+      }
+    },
+    "papi": {
+      "page": "Papi",
+      "icon": {
+        "file": "File:Papi NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Papi_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/09/Papi_NH_Villager_Icon.png",
+        "bytes": 5962,
+        "sha1": "eb9d5fe28df4b70553f374d63228a7b2f7bb0e58"
+      }
+    },
+    "pascal": {
+      "page": "Pascal",
+      "icon": {
+        "file": "File:Pascal NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Pascal_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/6/67/Pascal_NH_Character_Icon.png",
+        "bytes": 7187,
+        "sha1": "0565abe2f5ffcd9fef6e75993acca2522f3381dd"
+      }
+    },
+    "pashmina": {
+      "page": "Pashmina",
+      "icon": {
+        "file": "File:Pashmina NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Pashmina_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/6/6b/Pashmina_NH_Villager_Icon.png",
+        "bytes": 7240,
+        "sha1": "c3329bb5c8547b9c96f8c51e4935d79c906c1e41"
+      }
+    },
+    "pate": {
+      "page": "Pate",
+      "icon": {
+        "file": "File:Pate NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Pate_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/e5/Pate_NH_Villager_Icon.png",
+        "bytes": 5803,
+        "sha1": "9567c471ee5d6a67edfffab6021daae63213f800"
+      }
+    },
+    "patty": {
+      "page": "Patty",
+      "icon": {
+        "file": "File:Patty NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Patty_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/fe/Patty_NH_Villager_Icon.png",
+        "bytes": 8485,
+        "sha1": "761338e5894c51217b36cb8f08726edeb016a3cf"
+      }
+    },
+    "paula": {
+      "page": "Paula",
+      "icon": {
+        "file": "File:Paula NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Paula_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/e4/Paula_NH_Villager_Icon.png",
+        "bytes": 9156,
+        "sha1": "505e81f2aaed6dd8237767dc23c6c551aa81d33d"
+      }
+    },
+    "pave": {
+      "page": "Pavé",
+      "icon": {
+        "file": "File:Pavé NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Pav%C3%A9_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/3/39/Pav%C3%A9_NH_Character_Icon.png",
+        "bytes": 11287,
+        "sha1": "2c8d81157832e64919251e233a87f295c662ee3e"
+      }
+    },
+    "peaches": {
+      "page": "Peaches",
+      "icon": {
+        "file": "File:Peaches NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Peaches_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/e3/Peaches_NH_Villager_Icon.png",
+        "bytes": 6194,
+        "sha1": "9056b661ef42094be125354e063b8ae823de9707"
+      }
+    },
+    "peanut": {
+      "page": "Peanut",
+      "icon": {
+        "file": "File:Peanut NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Peanut_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/4b/Peanut_NH_Villager_Icon.png",
+        "bytes": 6518,
+        "sha1": "45e35183fece59e337e0fd5918ed830aca7386bb"
+      }
+    },
+    "pecan": {
+      "page": "Pecan",
+      "icon": {
+        "file": "File:Pecan NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Pecan_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/12/Pecan_NH_Villager_Icon.png",
+        "bytes": 7903,
+        "sha1": "90892551615280478cb265ab075229e749fe34d8"
+      }
+    },
+    "peck": {
+      "page": "Peck",
+      "icon": {
+        "file": "File:Peck NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Peck_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c8/Peck_NH_Villager_Icon.png",
+        "bytes": 5338,
+        "sha1": "2968f09e756a5118f1b9c424cf681bb5fe53828e"
+      }
+    },
+    "peewee": {
+      "page": "Peewee",
+      "icon": {
+        "file": "File:Peewee NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Peewee_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/24/Peewee_NH_Villager_Icon.png",
+        "bytes": 8571,
+        "sha1": "02c63d3a31eb32582c761ce94380294665d2fd92"
+      }
+    },
+    "peggy": {
+      "page": "Peggy",
+      "icon": {
+        "file": "File:Peggy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Peggy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d9/Peggy_NH_Villager_Icon.png",
+        "bytes": 7863,
+        "sha1": "83f3a75103dc374735ac5d5f828b3ae0701891ee"
+      }
+    },
+    "pekoe": {
+      "page": "Pekoe",
+      "icon": {
+        "file": "File:Pekoe NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Pekoe_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c4/Pekoe_NH_Villager_Icon.png",
+        "bytes": 8289,
+        "sha1": "eb456cf675545a550f51b9cf3fa762e914c032e0"
+      }
+    },
+    "pelly": {
+      "page": "Pelly",
+      "icon": {
+        "file": "File:Pelly NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Pelly_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/1/1f/Pelly_NH_Character_Icon.png",
+        "bytes": 4432,
+        "sha1": "627893a295d2c851394b8c369ba3001acaaaa24e"
+      }
+    },
+    "penelope": {
+      "page": "Penelope",
+      "icon": {
+        "file": "File:Penelope NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Penelope_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/3/32/Penelope_NH_Villager_Icon.png",
+        "bytes": 7845,
+        "sha1": "553ada9034b2f40d90ae53f044d0893cb2d74d5b"
+      }
+    },
+    "pete": {
+      "page": "Pete",
+      "icon": {
+        "file": "File:Pete NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Pete_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/0/09/Pete_NH_Character_Icon.png",
+        "bytes": 5097,
+        "sha1": "36ac4867093a11624c16606ff81dacd3749501a1"
+      }
+    },
+    "petri": {
+      "page": "Petri",
+      "icon": {
+        "file": "File:Petri NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Petri_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/59/Petri_NH_Villager_Icon.png",
+        "bytes": 10204,
+        "sha1": "3109d1c6485fdd8ae5b2d6e18bc10392a7718461"
+      }
+    },
+    "phil": {
+      "page": "Phil",
+      "icon": {
+        "file": "File:Phil NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Phil_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/15/Phil_NH_Villager_Icon.png",
+        "bytes": 6572,
+        "sha1": "63f04f53d10381f7917ee466de648d45a76dbfec"
+      }
+    },
+    "phineas": {
+      "page": "Phineas",
+      "icon": {
+        "file": "File:Phineas NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Phineas_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/1/13/Phineas_NH_Character_Icon.png",
+        "bytes": 8427,
+        "sha1": "52112a70a1554138bb3f9d15e59e409c0f9b4572"
+      }
+    },
+    "phoebe": {
+      "page": "Phoebe",
+      "icon": {
+        "file": "File:Phoebe NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Phoebe_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/71/Phoebe_NH_Villager_Icon.png",
+        "bytes": 6107,
+        "sha1": "8da036f1a2a2e37bb4ed1f95b55c00eefd73de11"
+      }
+    },
+    "phyllis": {
+      "page": "Phyllis",
+      "icon": {
+        "file": "File:Phyllis NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Phyllis_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/7/76/Phyllis_NH_Character_Icon.png",
+        "bytes": 6021,
+        "sha1": "e68a877a9762eb604ae41270a5b47a1290efbe3b"
+      }
+    },
+    "pierce": {
+      "page": "Pierce",
+      "icon": {
+        "file": "File:Pierce NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Pierce_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/8/8d/Pierce_NH_Villager_Icon.png",
+        "bytes": 7844,
+        "sha1": "ef439e24dd916c4ecbd0eebabb6392bcbc282827"
+      }
+    },
+    "pietro": {
+      "page": "Pietro",
+      "icon": {
+        "file": "File:Pietro NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Pietro_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/56/Pietro_NH_Villager_Icon.png",
+        "bytes": 8878,
+        "sha1": "1132c7482b698fbb211599840b13234e229ae4cd"
+      }
+    },
+    "pinky": {
+      "page": "Pinky",
+      "icon": {
+        "file": "File:Pinky NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Pinky_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/0f/Pinky_NH_Villager_Icon.png",
+        "bytes": 7951,
+        "sha1": "c1710e4ceea1ab1f5676fd3c0eb1354cf322bea2"
+      }
+    },
+    "piper": {
+      "page": "Piper",
+      "icon": {
+        "file": "File:Piper NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Piper_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/ec/Piper_NH_Villager_Icon.png",
+        "bytes": 4918,
+        "sha1": "7bb479c9a66e834fa38f99be684d8b9f77dd0612"
+      }
+    },
+    "pippy": {
+      "page": "Pippy",
+      "icon": {
+        "file": "File:Pippy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Pippy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/6/6b/Pippy_NH_Villager_Icon.png",
+        "bytes": 7034,
+        "sha1": "ba062a805063836ffe33896637fca73aa0672227"
+      }
+    },
+    "plucky": {
+      "page": "Plucky",
+      "icon": {
+        "file": "File:Plucky NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Plucky_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/5d/Plucky_NH_Villager_Icon.png",
+        "bytes": 6947,
+        "sha1": "d61f6564c3b7aeaec9992023277fd0aea23e73b8"
+      }
+    },
+    "pompom": {
+      "page": "Pompom",
+      "icon": {
+        "file": "File:Pompom NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Pompom_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/91/Pompom_NH_Villager_Icon.png",
+        "bytes": 6558,
+        "sha1": "587aabef04ead3aeaa180c310d27202a6b59c2c3"
+      }
+    },
+    "poncho": {
+      "page": "Poncho",
+      "icon": {
+        "file": "File:Poncho NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Poncho_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/44/Poncho_NH_Villager_Icon.png",
+        "bytes": 8789,
+        "sha1": "7ad279319ceda6539f6caab7bc16754214cd6534"
+      }
+    },
+    "poppy": {
+      "page": "Poppy",
+      "icon": {
+        "file": "File:Poppy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Poppy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/44/Poppy_NH_Villager_Icon.png",
+        "bytes": 6218,
+        "sha1": "312bff5c81b4317055446422ce4665e84059c180"
+      }
+    },
+    "porter": {
+      "page": "Porter",
+      "icon": {
+        "file": "File:Porter PC Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Porter_PC_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/2/26/Porter_PC_Character_Icon.png",
+        "bytes": 7358,
+        "sha1": "24935a8d92c82383b968d95ae67253485683cb6c"
+      }
+    },
+    "portia": {
+      "page": "Portia",
+      "icon": {
+        "file": "File:Portia NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Portia_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/de/Portia_NH_Villager_Icon.png",
+        "bytes": 7870,
+        "sha1": "f974583283e55dbe82b1916b42d0a784b62338c6"
+      }
+    },
+    "prince": {
+      "page": "Prince",
+      "icon": {
+        "file": "File:Prince NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Prince_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/99/Prince_NH_Villager_Icon.png",
+        "bytes": 6718,
+        "sha1": "184390858d48915c0f9ec05cfa5d4cffed165562"
+      }
+    },
+    "puck": {
+      "page": "Puck",
+      "icon": {
+        "file": "File:Puck NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Puck_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/6/6b/Puck_NH_Villager_Icon.png",
+        "bytes": 5890,
+        "sha1": "62e4542895b8beea024ba944cc0b5c7675af8dde"
+      }
+    },
+    "puddles": {
+      "page": "Puddles",
+      "icon": {
+        "file": "File:Puddles NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Puddles_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f8/Puddles_NH_Villager_Icon.png",
+        "bytes": 6255,
+        "sha1": "594bffe20b0c44fd9c336080f745a121631e5c80"
+      }
+    },
+    "pudge": {
+      "page": "Pudge",
+      "icon": {
+        "file": "File:Pudge NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Pudge_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/4a/Pudge_NH_Villager_Icon.png",
+        "bytes": 8426,
+        "sha1": "d59d9ab82f7d406a09dd985333d402151be30022"
+      }
+    },
+    "punchy": {
+      "page": "Punchy",
+      "icon": {
+        "file": "File:Punchy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Punchy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/50/Punchy_NH_Villager_Icon.png",
+        "bytes": 8684,
+        "sha1": "3a11722d6143b115a32c0d4054c0947e94867da0"
+      }
+    },
+    "purrl": {
+      "page": "Purrl",
+      "icon": {
+        "file": "File:Purrl NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Purrl_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a0/Purrl_NH_Villager_Icon.png",
+        "bytes": 8006,
+        "sha1": "b63e00489a0b487d9696719cc245ec0358fa14ac"
+      }
+    },
+    "queenie": {
+      "page": "Queenie",
+      "icon": {
+        "file": "File:Queenie NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Queenie_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/15/Queenie_NH_Villager_Icon.png",
+        "bytes": 6552,
+        "sha1": "16018ce99bf8fe145b8993831a54a679e7258935"
+      }
+    },
+    "quillson": {
+      "page": "Quillson",
+      "icon": {
+        "file": "File:Quillson NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Quillson_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/1c/Quillson_NH_Villager_Icon.png",
+        "bytes": 7072,
+        "sha1": "ec4584d5b6664287e8e376c68679178ddc0fb438"
+      }
+    },
+    "quinn": {
+      "page": "Quinn",
+      "icon": {
+        "file": "File:Quinn NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Quinn_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/3/38/Quinn_NH_Villager_Icon.png",
+        "bytes": 8554,
+        "sha1": "4cf7c15a126581f0b48e930944889e0f90793052"
+      }
+    },
+    "raddle": {
+      "page": "Raddle",
+      "icon": {
+        "file": "File:Raddle NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Raddle_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/04/Raddle_NH_Villager_Icon.png",
+        "bytes": 6529,
+        "sha1": "ac433c86692997c8146da3a6eee2b88c4f35c59c"
+      }
+    },
+    "rasher": {
+      "page": "Rasher",
+      "icon": {
+        "file": "File:Rasher NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Rasher_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/3/38/Rasher_NH_Villager_Icon.png",
+        "bytes": 8127,
+        "sha1": "df97d270f2ca4ad0b66ba04ed06b5a5e39147a7b"
+      }
+    },
+    "raymond": {
+      "page": "Raymond",
+      "icon": {
+        "file": "File:Raymond NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Raymond_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f2/Raymond_NH_Villager_Icon.png",
+        "bytes": 9858,
+        "sha1": "85e432e37e14911549254ff8ec697d6606a299fe"
+      }
+    },
+    "redd": {
+      "page": "Redd",
+      "icon": {
+        "file": "File:Redd NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Redd_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/4/40/Redd_NH_Character_Icon.png",
+        "bytes": 5736,
+        "sha1": "30b025a00c18cebeca7b7f02223c3b21344570e7"
+      }
+    },
+    "reese": {
+      "page": "Reese",
+      "icon": {
+        "file": "File:Reese NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Reese_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/0/01/Reese_NH_Character_Icon.png",
+        "bytes": 6656,
+        "sha1": "11afb809f17c64983b76b2988be88ddf148e91b0"
+      }
+    },
+    "renee": {
+      "page": "Renée",
+      "icon": {
+        "file": "File:Renée NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Ren%C3%A9e_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f6/Ren%C3%A9e_NH_Villager_Icon.png",
+        "bytes": 8230,
+        "sha1": "57b87891fab3cbc65181e6ad0b80077496c22300"
+      }
+    },
+    "reneigh": {
+      "page": "Reneigh",
+      "icon": {
+        "file": "File:Reneigh NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Reneigh_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f4/Reneigh_NH_Villager_Icon.png",
+        "bytes": 7398,
+        "sha1": "52b648a794c21744baa4f6a991312a81d6ad0fe1"
+      }
+    },
+    "rex": {
+      "page": "Rex",
+      "icon": {
+        "file": "File:Rex NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Rex_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/52/Rex_NH_Villager_Icon.png",
+        "bytes": 9604,
+        "sha1": "6d6f43590d9dc16487dd347d434fc4dd802095cd"
+      }
+    },
+    "rhonda": {
+      "page": "Rhonda",
+      "icon": {
+        "file": "File:Rhonda NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Rhonda_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/9c/Rhonda_NH_Villager_Icon.png",
+        "bytes": 6868,
+        "sha1": "20cf21bef548fa5efa60dd24cd2325f4a8ac5a03"
+      }
+    },
+    "ribbot": {
+      "page": "Ribbot",
+      "icon": {
+        "file": "File:Ribbot NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Ribbot_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/8/87/Ribbot_NH_Villager_Icon.png",
+        "bytes": 10874,
+        "sha1": "fefa4154d9708ecd33b33ae050beaa0ec5ed2990"
+      }
+    },
+    "ricky": {
+      "page": "Ricky",
+      "icon": {
+        "file": "File:Ricky NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Ricky_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/dd/Ricky_NH_Villager_Icon.png",
+        "bytes": 7535,
+        "sha1": "271190ea89ced10b2c8e5ef7f1998a7487bb211a"
+      }
+    },
+    "rilla": {
+      "page": "Rilla",
+      "icon": {
+        "file": "File:Rilla NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Rilla_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/bc/Rilla_NH_Villager_Icon.png",
+        "bytes": 8669,
+        "sha1": "c4a33c2ebf1e885912e9551873a9c0f48f3e08b8"
+      }
+    },
+    "rio": {
+      "page": "Rio",
+      "icon": {
+        "file": "File:Rio NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Rio_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/12/Rio_NH_Villager_Icon.png",
+        "bytes": 6234,
+        "sha1": "7b35ac50d3fa6309867deb8324841d248dda2b2d"
+      }
+    },
+    "rizzo": {
+      "page": "Rizzo",
+      "icon": {
+        "file": "File:Rizzo NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Rizzo_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/7c/Rizzo_NH_Villager_Icon.png",
+        "bytes": 9940,
+        "sha1": "0c784444d5dcdc5ee62a155720e2dbb5df93bdbe"
+      }
+    },
+    "roald": {
+      "page": "Roald",
+      "icon": {
+        "file": "File:Roald NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Roald_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c4/Roald_NH_Villager_Icon.png",
+        "bytes": 4926,
+        "sha1": "bed81dd642df2a9dd2adadba1bbae7ee12905617"
+      }
+    },
+    "robin": {
+      "page": "Robin",
+      "icon": {
+        "file": "File:Robin NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Robin_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/eb/Robin_NH_Villager_Icon.png",
+        "bytes": 6688,
+        "sha1": "35d54ec89396364920616d0454a06f827f38798f"
+      }
+    },
+    "rocco": {
+      "page": "Rocco",
+      "icon": {
+        "file": "File:Rocco NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Rocco_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/3/36/Rocco_NH_Villager_Icon.png",
+        "bytes": 5371,
+        "sha1": "d50f6f0c137299d6e6960fb1a78d52c12ac07bce"
+      }
+    },
+    "rocket": {
+      "page": "Rocket",
+      "icon": {
+        "file": "File:Rocket NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Rocket_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/eb/Rocket_NH_Villager_Icon.png",
+        "bytes": 9439,
+        "sha1": "00a5bf996d9d49f0e0c362a543c5fbdb6c11bf22"
+      }
+    },
+    "rod": {
+      "page": "Rod",
+      "icon": {
+        "file": "File:Rod NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Rod_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/16/Rod_NH_Villager_Icon.png",
+        "bytes": 10276,
+        "sha1": "bcef6a5f246d922efe1346360d8cdbeaea3953e1"
+      }
+    },
+    "rodeo": {
+      "page": "Rodeo",
+      "icon": {
+        "file": "File:Rodeo NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Rodeo_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/99/Rodeo_NH_Villager_Icon.png",
+        "bytes": 9072,
+        "sha1": "dd80404f5b44b64d1dc06baae441d3f50c36cd31"
+      }
+    },
+    "rodney": {
+      "page": "Rodney",
+      "icon": {
+        "file": "File:Rodney NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Rodney_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/14/Rodney_NH_Villager_Icon.png",
+        "bytes": 8963,
+        "sha1": "cb428ca4b7e0a7add485a28155e054eef18509fb"
+      }
+    },
+    "rolf": {
+      "page": "Rolf",
+      "icon": {
+        "file": "File:Rolf NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Rolf_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/08/Rolf_NH_Villager_Icon.png",
+        "bytes": 8636,
+        "sha1": "c608f3cc56e6f4e16f5102eaa2a9937d6146874a"
+      }
+    },
+    "rooney": {
+      "page": "Rooney",
+      "icon": {
+        "file": "File:Rooney NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Rooney_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/fc/Rooney_NH_Villager_Icon.png",
+        "bytes": 5889,
+        "sha1": "b6741eae1687189f9483de65bf72e59d389017f1"
+      }
+    },
+    "rory": {
+      "page": "Rory",
+      "icon": {
+        "file": "File:Rory NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Rory_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/fa/Rory_NH_Villager_Icon.png",
+        "bytes": 9424,
+        "sha1": "f43d5673556f8fa12125be1a980e43010ecbf26c"
+      }
+    },
+    "roscoe": {
+      "page": "Roscoe",
+      "icon": {
+        "file": "File:Roscoe NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Roscoe_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f9/Roscoe_NH_Villager_Icon.png",
+        "bytes": 5797,
+        "sha1": "61ee1454da96a37d6cc21bab9b1c6c01f7b04b41"
+      }
+    },
+    "rosie": {
+      "page": "Rosie",
+      "icon": {
+        "file": "File:Rosie NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Rosie_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/92/Rosie_NH_Villager_Icon.png",
+        "bytes": 8552,
+        "sha1": "53806b69578dc832a297aa8dc22839a66bb28570"
+      }
+    },
+    "roswell": {
+      "page": "Roswell",
+      "icon": {
+        "file": "File:Roswell NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Roswell_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/77/Roswell_NH_Villager_Icon.png",
+        "bytes": 8169,
+        "sha1": "b262703cc82cbc7ee1e6f87125114c410f009acb"
+      }
+    },
+    "rover": {
+      "page": "Rover",
+      "icon": {
+        "file": "File:Rover NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Rover_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/2/2e/Rover_NH_Character_Icon.png",
+        "bytes": 8925,
+        "sha1": "bb8fc7d71cc8e39491593db73af1bdbe8caf5d2e"
+      }
+    },
+    "rowan": {
+      "page": "Rowan",
+      "icon": {
+        "file": "File:Rowan NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Rowan_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/17/Rowan_NH_Villager_Icon.png",
+        "bytes": 8814,
+        "sha1": "d6481ba98cf0c9a7905cdeaf306c67cff5a619ef"
+      }
+    },
+    "ruby": {
+      "page": "Ruby",
+      "icon": {
+        "file": "File:Ruby NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Ruby_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/3/3a/Ruby_NH_Villager_Icon.png",
+        "bytes": 6448,
+        "sha1": "ef04eb0c4111ae82d357598769de12659ed277a6"
+      }
+    },
+    "rudy": {
+      "page": "Rudy",
+      "icon": {
+        "file": "File:Rudy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Rudy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d4/Rudy_NH_Villager_Icon.png",
+        "bytes": 8414,
+        "sha1": "999a57f61aef554721a1a986d7ccb259431a84cb"
+      }
+    },
+    "sable": {
+      "page": "Sable",
+      "icon": {
+        "file": "File:Sable NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Sable_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/2/2f/Sable_NH_Character_Icon.png",
+        "bytes": 13810,
+        "sha1": "fd594c9c63f3fc9f4fd4f1e55313b9b9d84547ec"
+      }
+    },
+    "saharah": {
+      "page": "Saharah",
+      "icon": {
+        "file": "File:Saharah NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Saharah_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/6/6f/Saharah_NH_Character_Icon.png",
+        "bytes": 6128,
+        "sha1": "a65001f305f1f2f3e4d93076d9185a4ad493ea4d"
+      }
+    },
+    "sally": {
+      "page": "Sally",
+      "icon": {
+        "file": "File:Sally NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Sally_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/8/8c/Sally_NH_Villager_Icon.png",
+        "bytes": 6535,
+        "sha1": "00fc251145a788c0f088ec6daf0168c0c5b7aab8"
+      }
+    },
+    "samson": {
+      "page": "Samson",
+      "icon": {
+        "file": "File:Samson NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Samson_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d3/Samson_NH_Villager_Icon.png",
+        "bytes": 8180,
+        "sha1": "aad4fe08a545b902e7855a0c789a2504873f0c7f"
+      }
+    },
+    "sandy": {
+      "page": "Sandy",
+      "icon": {
+        "file": "File:Sandy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Sandy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/97/Sandy_NH_Villager_Icon.png",
+        "bytes": 5231,
+        "sha1": "f2f7d66da91e4bc6ebeae75d0f0dd64a82601bc2"
+      }
+    },
+    "sasha": {
+      "page": "Sasha",
+      "icon": {
+        "file": "File:Sasha NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Sasha_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/8/86/Sasha_NH_Villager_Icon.png",
+        "bytes": 8853,
+        "sha1": "34493d8a70a37f7fe7f68c8b16fa3eb0802568d4"
+      }
+    },
+    "savannah": {
+      "page": "Savannah",
+      "icon": {
+        "file": "File:Savannah NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Savannah_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c6/Savannah_NH_Villager_Icon.png",
+        "bytes": 7468,
+        "sha1": "5166fb1aec6ccd8922ed56322d3e145c4677dfa8"
+      }
+    },
+    "scoot": {
+      "page": "Scoot",
+      "icon": {
+        "file": "File:Scoot NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Scoot_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/3/37/Scoot_NH_Villager_Icon.png",
+        "bytes": 6706,
+        "sha1": "6e6d631a4dbe557c0326c3b5d5a9a30060125694"
+      }
+    },
+    "serena": {
+      "page": "Serena",
+      "icon": {
+        "file": "File:Serena CF Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Serena_CF_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/3/31/Serena_CF_Character_Icon.png",
+        "bytes": 24953,
+        "sha1": "fc3c916ea64a2d314a21f70d0103991ab67f9356"
+      }
+    },
+    "shari": {
+      "page": "Shari",
+      "icon": {
+        "file": "File:Shari NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Shari_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a0/Shari_NH_Villager_Icon.png",
+        "bytes": 7442,
+        "sha1": "e666ff7fe8d0b0bb6c36bab54ca303dae77b7faf"
+      }
+    },
+    "sheldon": {
+      "page": "Sheldon",
+      "icon": {
+        "file": "File:Sheldon NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Sheldon_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/9a/Sheldon_NH_Villager_Icon.png",
+        "bytes": 6625,
+        "sha1": "fa16c04150758aa3ff281247281cb32a018d42a5"
+      }
+    },
+    "shep": {
+      "page": "Shep",
+      "icon": {
+        "file": "File:Shep NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Shep_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a8/Shep_NH_Villager_Icon.png",
+        "bytes": 7417,
+        "sha1": "27ba05db6b103178adf0fb3a2fc171c662570f4c"
+      }
+    },
+    "sherb": {
+      "page": "Sherb",
+      "icon": {
+        "file": "File:Sherb NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Sherb_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d9/Sherb_NH_Villager_Icon.png",
+        "bytes": 7394,
+        "sha1": "4d95fa658957534c23e99fb19cfe52736375ece8"
+      }
+    },
+    "shino": {
+      "page": "Shino",
+      "icon": {
+        "file": "File:Shino NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Shino_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/9a/Shino_NH_Villager_Icon.png",
+        "bytes": 8093,
+        "sha1": "9766c33a79441cde0a9b4d2905db5c71de7e2a66"
+      }
+    },
+    "simon": {
+      "page": "Simon",
+      "icon": {
+        "file": "File:Simon NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Simon_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/7a/Simon_NH_Villager_Icon.png",
+        "bytes": 7224,
+        "sha1": "e06ac830506bc0c2a9cf1e06889cfb0c8b4e4ea5"
+      }
+    },
+    "skye": {
+      "page": "Skye",
+      "icon": {
+        "file": "File:Skye NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Skye_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/92/Skye_NH_Villager_Icon.png",
+        "bytes": 8043,
+        "sha1": "f9036883b024d12db69b81f6148658764d0d4a35"
+      }
+    },
+    "sly": {
+      "page": "Sly",
+      "icon": {
+        "file": "File:Sly NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Sly_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/26/Sly_NH_Villager_Icon.png",
+        "bytes": 7989,
+        "sha1": "306f7d2dc02783c193fbfbf3571b33b1cbea5ec5"
+      }
+    },
+    "snake": {
+      "page": "Snake",
+      "icon": {
+        "file": "File:Snake NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Snake_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/09/Snake_NH_Villager_Icon.png",
+        "bytes": 7443,
+        "sha1": "a710a4031440f6aa60b1037ffa51bef7c9c460b8"
+      }
+    },
+    "snooty": {
+      "page": "Snooty (villager)",
+      "icon": {
+        "file": "File:Snooty NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Snooty_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/79/Snooty_NH_Villager_Icon.png",
+        "bytes": 5268,
+        "sha1": "dc9f25f38666de37f5665f76b7a4d5d20eef2a5e"
+      }
+    },
+    "snowboy": {
+      "page": "Snowboy",
+      "icon": {
+        "file": "File:Snowboy HHD Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Snowboy_HHD_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/9/95/Snowboy_HHD_Character_Icon.png",
+        "bytes": 4678,
+        "sha1": "0489cf30316309e75a90fd7aa8623bf9d8d4aeb3"
+      }
+    },
+    "snowmam": {
+      "page": "Snowmam",
+      "icon": {
+        "file": "File:Snowmam HHD Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Snowmam_HHD_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/3/36/Snowmam_HHD_Character_Icon.png",
+        "bytes": 4088,
+        "sha1": "d37adc0e3b7fb35680e27ffbe70d9371f599f7c8"
+      }
+    },
+    "snowman": {
+      "page": "Snowman (New Leaf)",
+      "icon": {
+        "file": "File:Snowman PC Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Snowman_PC_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/4/4d/Snowman_PC_Character_Icon.png",
+        "bytes": 3040,
+        "sha1": "ce8a70ca1179440b8887565b05199e6d78f717f5"
+      }
+    },
+    "snowtyke": {
+      "page": "Snowtyke",
+      "icon": {
+        "file": "File:Snowtyke HHD Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Snowtyke_HHD_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/4/4d/Snowtyke_HHD_Character_Icon.png",
+        "bytes": 4027,
+        "sha1": "e4b60a7a2c70a65f6329489d17d892abfd0a73a0"
+      }
+    },
+    "soleil": {
+      "page": "Soleil",
+      "icon": {
+        "file": "File:Soleil NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Soleil_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/5f/Soleil_NH_Villager_Icon.png",
+        "bytes": 6684,
+        "sha1": "4c220c82db514457adba99f9546c3d24f23e642d"
+      }
+    },
+    "sparro": {
+      "page": "Sparro",
+      "icon": {
+        "file": "File:Sparro NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Sparro_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/0c/Sparro_NH_Villager_Icon.png",
+        "bytes": 6139,
+        "sha1": "6a58d540baa535ee04ab787ea76ebb38f8da2a02"
+      }
+    },
+    "spike": {
+      "page": "Spike",
+      "icon": {
+        "file": "File:Spike NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Spike_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/ab/Spike_NH_Villager_Icon.png",
+        "bytes": 8006,
+        "sha1": "612618a1580ac8994f0507ef75c41040325f5d6f"
+      }
+    },
+    "spork": {
+      "page": "Spork",
+      "icon": {
+        "file": "File:Spork NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Spork_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c2/Spork_NH_Villager_Icon.png",
+        "bytes": 7535,
+        "sha1": "c9f1f16b33cb572d2c40efd3e77a782ba757da83"
+      }
+    },
+    "sprinkle": {
+      "page": "Sprinkle",
+      "icon": {
+        "file": "File:Sprinkle NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Sprinkle_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/7f/Sprinkle_NH_Villager_Icon.png",
+        "bytes": 6925,
+        "sha1": "ce3c42bad38e81f0d44415972e261869649d6a91"
+      }
+    },
+    "sprocket": {
+      "page": "Sprocket",
+      "icon": {
+        "file": "File:Sprocket NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Sprocket_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/4a/Sprocket_NH_Villager_Icon.png",
+        "bytes": 7707,
+        "sha1": "2f1241b06436169b7cd34d7dc27c3748cb656136"
+      }
+    },
+    "static": {
+      "page": "Static",
+      "icon": {
+        "file": "File:Static NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Static_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/70/Static_NH_Villager_Icon.png",
+        "bytes": 7157,
+        "sha1": "4a994bb7d019209000ceed5b62e1c1e1c82c1d70"
+      }
+    },
+    "stella": {
+      "page": "Stella",
+      "icon": {
+        "file": "File:Stella NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Stella_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/4e/Stella_NH_Villager_Icon.png",
+        "bytes": 7685,
+        "sha1": "f60296a8e581497e469744a0a89464e0e318273f"
+      }
+    },
+    "sterling": {
+      "page": "Sterling",
+      "icon": {
+        "file": "File:Sterling NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Sterling_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/da/Sterling_NH_Villager_Icon.png",
+        "bytes": 9271,
+        "sha1": "83d5b6506871bbad28307fb2611503420f9cd17e"
+      }
+    },
+    "stinky": {
+      "page": "Stinky",
+      "icon": {
+        "file": "File:Stinky NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Stinky_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/ca/Stinky_NH_Villager_Icon.png",
+        "bytes": 9412,
+        "sha1": "6c4a10968753d01aa99c16391f9af83755430499"
+      }
+    },
+    "stitches": {
+      "page": "Stitches",
+      "icon": {
+        "file": "File:Stitches NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Stitches_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/dd/Stitches_NH_Villager_Icon.png",
+        "bytes": 8056,
+        "sha1": "eda8d294907c643e4b083ee25bb3066d7ab9558c"
+      }
+    },
+    "stu": {
+      "page": "Stu",
+      "icon": {
+        "file": "File:Stu NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Stu_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/ea/Stu_NH_Villager_Icon.png",
+        "bytes": 8861,
+        "sha1": "6e4cde5429b51f65283d0d2cf9c73fba917c315c"
+      }
+    },
+    "sydney": {
+      "page": "Sydney",
+      "icon": {
+        "file": "File:Sydney NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Sydney_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/ac/Sydney_NH_Villager_Icon.png",
+        "bytes": 7888,
+        "sha1": "53ee7b04ed192252f1688e8cacd636e3ef521314"
+      }
+    },
+    "sylvana": {
+      "page": "Sylvana",
+      "icon": {
+        "file": "File:Sylvana NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Sylvana_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/b3/Sylvana_NH_Villager_Icon.png",
+        "bytes": 6739,
+        "sha1": "2bd77afbd1b63f1d97299382f84b9d7db8b112f0"
+      }
+    },
+    "sylvia": {
+      "page": "Sylvia",
+      "icon": {
+        "file": "File:Sylvia NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Sylvia_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/5/52/Sylvia_NH_Villager_Icon.png",
+        "bytes": 7325,
+        "sha1": "189ca00b6e71f12b718486928fc098658da2a775"
+      }
+    },
+    "t-bone": {
+      "page": "T-Bone",
+      "icon": {
+        "file": "File:T-Bone NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:T-Bone_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/16/T-Bone_NH_Villager_Icon.png",
+        "bytes": 7738,
+        "sha1": "d2dbea9a9f86814b6d92d5685fb625de89436d81"
+      }
+    },
+    "tabby": {
+      "page": "Tabby",
+      "icon": {
+        "file": "File:Tabby NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tabby_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f3/Tabby_NH_Villager_Icon.png",
+        "bytes": 9351,
+        "sha1": "7a11f233df8fdc23bdf11d67c8474d3d6e60b296"
+      }
+    },
+    "tad": {
+      "page": "Tad",
+      "icon": {
+        "file": "File:Tad NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tad_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/e6/Tad_NH_Villager_Icon.png",
+        "bytes": 5657,
+        "sha1": "9e9afe204c8cd677d469626b0dcbe8e32390c9ea"
+      }
+    },
+    "tammi": {
+      "page": "Tammi",
+      "icon": {
+        "file": "File:Tammi NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tammi_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d8/Tammi_NH_Villager_Icon.png",
+        "bytes": 6817,
+        "sha1": "c6ff03d92ea5fece227ea95d61e3be733ccf8e73"
+      }
+    },
+    "tammy": {
+      "page": "Tammy",
+      "icon": {
+        "file": "File:Tammy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tammy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/25/Tammy_NH_Villager_Icon.png",
+        "bytes": 8844,
+        "sha1": "dd9a0382b57d211d94e659f0415694eb4606aa04"
+      }
+    },
+    "tangy": {
+      "page": "Tangy",
+      "icon": {
+        "file": "File:Tangy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tangy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/e3/Tangy_NH_Villager_Icon.png",
+        "bytes": 9664,
+        "sha1": "0c79a2d0177c8f62f5562fb7125b89d5fa159e60"
+      }
+    },
+    "tank": {
+      "page": "Tank",
+      "icon": {
+        "file": "File:Tank NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tank_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a1/Tank_NH_Villager_Icon.png",
+        "bytes": 6912,
+        "sha1": "719d779d43c58ff2f12f4d41f05f0fab4cb567f8"
+      }
+    },
+    "tasha": {
+      "page": "Tasha",
+      "icon": {
+        "file": "File:Tasha NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tasha_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/6/61/Tasha_NH_Villager_Icon.png",
+        "bytes": 8095,
+        "sha1": "c3865b13ab091a5a85df021c1f018bb5f0de9997"
+      }
+    },
+    "teddy": {
+      "page": "Teddy",
+      "icon": {
+        "file": "File:Teddy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Teddy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/b/bd/Teddy_NH_Villager_Icon.png",
+        "bytes": 8521,
+        "sha1": "8a98df05ad227fbbc72e037b762806886b72b2d4"
+      }
+    },
+    "tex": {
+      "page": "Tex",
+      "icon": {
+        "file": "File:Tex NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tex_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a0/Tex_NH_Villager_Icon.png",
+        "bytes": 6275,
+        "sha1": "ad5027f9250e9a5bda6b6a47c6d1dcd7dec01abd"
+      }
+    },
+    "tia": {
+      "page": "Tia",
+      "icon": {
+        "file": "File:Tia NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tia_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/9/93/Tia_NH_Villager_Icon.png",
+        "bytes": 5519,
+        "sha1": "aca5ef1761ab86dacf04ef2f27c4c6fe6be74761"
+      }
+    },
+    "tiansheng": {
+      "page": "Tiansheng",
+      "icon": {
+        "file": "File:Tiansheng NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tiansheng_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d6/Tiansheng_NH_Villager_Icon.png",
+        "bytes": 7578,
+        "sha1": "f71751dfd7d27c45cfdabdb05b2a7a6de77c0b2a"
+      }
+    },
+    "tiffany": {
+      "page": "Tiffany",
+      "icon": {
+        "file": "File:Tiffany NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tiffany_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/47/Tiffany_NH_Villager_Icon.png",
+        "bytes": 7481,
+        "sha1": "95b29deae48be15ccb23ba95dee911001a6b054d"
+      }
+    },
+    "timbra": {
+      "page": "Timbra",
+      "icon": {
+        "file": "File:Timbra NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Timbra_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a9/Timbra_NH_Villager_Icon.png",
+        "bytes": 8416,
+        "sha1": "5642b41402fa43b5563be2e63de091b73bd7a3a5"
+      }
+    },
+    "timmy": {
+      "page": "Timmy and Tommy",
+      "icon": {
+        "file": "File:Timmy NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Nookling_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/3/36/Nookling_NH_Character_Icon.png",
+        "bytes": 6987,
+        "sha1": "ba487034e76d93cd5850a76203cb6f092aa53d0c"
+      }
+    },
+    "tipper": {
+      "page": "Tipper",
+      "icon": {
+        "file": "File:Tipper NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tipper_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/4b/Tipper_NH_Villager_Icon.png",
+        "bytes": 8607,
+        "sha1": "b05fc8e0fab0011c681f606e7acfe73196408965"
+      }
+    },
+    "toby": {
+      "page": "Toby",
+      "icon": {
+        "file": "File:Toby NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Toby_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/12/Toby_NH_Villager_Icon.png",
+        "bytes": 9388,
+        "sha1": "1b2d2e44a15eb875367387e97e307cc7b74aa7dc"
+      }
+    },
+    "tom": {
+      "page": "Tom",
+      "icon": {
+        "file": "File:Tom NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tom_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/6/6f/Tom_NH_Villager_Icon.png",
+        "bytes": 8302,
+        "sha1": "7ec3a00e9ec42b833c91f31d356167ff205497d6"
+      }
+    },
+    "tom-nook": {
+      "page": "Tom Nook",
+      "icon": {
+        "file": "File:Tom Nook NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tom_Nook_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/6/68/Tom_Nook_NH_Character_Icon.png",
+        "bytes": 6583,
+        "sha1": "2b26b31b761767039ed45bdcf7bb88d52f00c466"
+      }
+    },
+    "tommy": {
+      "page": "Timmy and Tommy",
+      "icon": {
+        "file": "File:Tommy NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Nookling_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/3/36/Nookling_NH_Character_Icon.png",
+        "bytes": 6987,
+        "sha1": "ba487034e76d93cd5850a76203cb6f092aa53d0c"
+      }
+    },
+    "tortimer": {
+      "page": "Tortimer",
+      "icon": {
+        "file": "File:Tortimer NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tortimer_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/4/48/Tortimer_NH_Character_Icon.png",
+        "bytes": 5544,
+        "sha1": "da01a95bdec7750855c6045ba7ec3a2410a65835"
+      }
+    },
+    "truffles": {
+      "page": "Truffles",
+      "icon": {
+        "file": "File:Truffles NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Truffles_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/da/Truffles_NH_Villager_Icon.png",
+        "bytes": 6828,
+        "sha1": "9dd1a35ae8ab9738734edb69634bf186908443b2"
+      }
+    },
+    "tucker": {
+      "page": "Tucker",
+      "icon": {
+        "file": "File:Tucker NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tucker_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/2/20/Tucker_NH_Villager_Icon.png",
+        "bytes": 6832,
+        "sha1": "8d93c742f51408c5a4d30a93863ee0287a250d35"
+      }
+    },
+    "tulin": {
+      "page": "Tulin",
+      "icon": {
+        "file": "File:Tulin NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tulin_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f9/Tulin_NH_Villager_Icon.png",
+        "bytes": 6760,
+        "sha1": "d4dbb0232bdaffe3cbd02d529a11cef1661969e9"
+      }
+    },
+    "tutu": {
+      "page": "Tutu",
+      "icon": {
+        "file": "File:Tutu NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tutu_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/d/d6/Tutu_NH_Villager_Icon.png",
+        "bytes": 7390,
+        "sha1": "699f6f9379625022f3e3f9271c2046d310cf3b14"
+      }
+    },
+    "twiggy": {
+      "page": "Twiggy",
+      "icon": {
+        "file": "File:Twiggy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Twiggy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/02/Twiggy_NH_Villager_Icon.png",
+        "bytes": 4797,
+        "sha1": "ad0062eb5606b19e5bc4f62cd2bab9b2bb3f555e"
+      }
+    },
+    "tybalt": {
+      "page": "Tybalt",
+      "icon": {
+        "file": "File:Tybalt NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Tybalt_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/3/30/Tybalt_NH_Villager_Icon.png",
+        "bytes": 10942,
+        "sha1": "af84d16e90d1a007cf89dba5a21926c130b22ebb"
+      }
+    },
+    "ursala": {
+      "page": "Ursala",
+      "icon": {
+        "file": "File:Ursala NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Ursala_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/76/Ursala_NH_Villager_Icon.png",
+        "bytes": 9215,
+        "sha1": "7ea80ead712af7b2cbb931dec6d8fd5c258f8172"
+      }
+    },
+    "velma": {
+      "page": "Velma",
+      "icon": {
+        "file": "File:Velma NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Velma_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/cf/Velma_NH_Villager_Icon.png",
+        "bytes": 8486,
+        "sha1": "a61733b7fe296ba84a15ce218a0c715a7fa89af0"
+      }
+    },
+    "vesta": {
+      "page": "Vesta",
+      "icon": {
+        "file": "File:Vesta NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Vesta_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/41/Vesta_NH_Villager_Icon.png",
+        "bytes": 6590,
+        "sha1": "07f1ef69244f58619b617d198d06c3709f885fc8"
+      }
+    },
+    "vic": {
+      "page": "Vic",
+      "icon": {
+        "file": "File:Vic NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Vic_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a1/Vic_NH_Villager_Icon.png",
+        "bytes": 9267,
+        "sha1": "9a38f7db36a3964eda5cfc5ff8fab03f965cd10b"
+      }
+    },
+    "viche": {
+      "page": "Viché",
+      "icon": {
+        "file": "File:Viché NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Vich%C3%A9_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/ca/Vich%C3%A9_NH_Villager_Icon.png",
+        "bytes": 8157,
+        "sha1": "14ce26316d3bf40c950dad268f08540e3d058094"
+      }
+    },
+    "victoria": {
+      "page": "Victoria",
+      "icon": {
+        "file": "File:Victoria NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Victoria_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/72/Victoria_NH_Villager_Icon.png",
+        "bytes": 8263,
+        "sha1": "4c38a22d1feb52b05a78afe42a41f7f0406594b8"
+      }
+    },
+    "violet": {
+      "page": "Violet",
+      "icon": {
+        "file": "File:Violet NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Violet_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a4/Violet_NH_Villager_Icon.png",
+        "bytes": 7905,
+        "sha1": "a554332a7517ca4db75d5c95a5fe0f3049ecda26"
+      }
+    },
+    "vivian": {
+      "page": "Vivian",
+      "icon": {
+        "file": "File:Vivian NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Vivian_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/0a/Vivian_NH_Villager_Icon.png",
+        "bytes": 8231,
+        "sha1": "f85eb67e761850d17e2680c511d17c33fda1d3f3"
+      }
+    },
+    "vladimir": {
+      "page": "Vladimir",
+      "icon": {
+        "file": "File:Vladimir NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Vladimir_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/1f/Vladimir_NH_Villager_Icon.png",
+        "bytes": 7586,
+        "sha1": "8d832222e0c6d7a7f5c5b95a63f85796b3a9b3bc"
+      }
+    },
+    "w-link": {
+      "page": "W. Link",
+      "icon": {
+        "file": "File:W. Link NL Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:W._Link_NL_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/e4/W._Link_NL_Villager_Icon.png",
+        "bytes": 4308,
+        "sha1": "4e6db5fe7e492b2b453f582de68d0a4e14fb28dd"
+      }
+    },
+    "wade": {
+      "page": "Wade",
+      "icon": {
+        "file": "File:Wade NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Wade_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/e7/Wade_NH_Villager_Icon.png",
+        "bytes": 5868,
+        "sha1": "f54a77ba6f7d2834f18f41030ca4f872e691932f"
+      }
+    },
+    "walker": {
+      "page": "Walker",
+      "icon": {
+        "file": "File:Walker NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Walker_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/02/Walker_NH_Villager_Icon.png",
+        "bytes": 6577,
+        "sha1": "fbafad7e2b4675db8917277731b32bf11b7acabc"
+      }
+    },
+    "walt": {
+      "page": "Walt",
+      "icon": {
+        "file": "File:Walt NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Walt_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/6/65/Walt_NH_Villager_Icon.png",
+        "bytes": 6528,
+        "sha1": "f9974475daa8b686ee154aac0cb96f1ab6fb59eb"
+      }
+    },
+    "wardell": {
+      "page": "Wardell",
+      "icon": {
+        "file": "File:Wardell NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Wardell_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/2/22/Wardell_NH_Character_Icon.png",
+        "bytes": 4486,
+        "sha1": "6175e6a084ae2111858b1c8702e09528f947d5fe"
+      }
+    },
+    "wart-jr": {
+      "page": "Wart Jr.",
+      "icon": {
+        "file": "File:Wart Jr. NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Wart_Jr._NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/f/fd/Wart_Jr._NH_Villager_Icon.png",
+        "bytes": 6274,
+        "sha1": "d6824485f183c2b288a6ef07821e1caac23a1ce9"
+      }
+    },
+    "weber": {
+      "page": "Weber",
+      "icon": {
+        "file": "File:Weber NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Weber_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/74/Weber_NH_Villager_Icon.png",
+        "bytes": 6461,
+        "sha1": "71867851bb38d0907dc4584af23011aae647c20a"
+      }
+    },
+    "wendell": {
+      "page": "Wendell",
+      "icon": {
+        "file": "File:Wendell NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Wendell_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/f/f2/Wendell_NH_Character_Icon.png",
+        "bytes": 6253,
+        "sha1": "f195642edc825185f238f2bccd18a17049fdd2e3"
+      }
+    },
+    "wendy": {
+      "page": "Wendy",
+      "icon": {
+        "file": "File:Wendy NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Wendy_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c0/Wendy_NH_Villager_Icon.png",
+        "bytes": 8855,
+        "sha1": "e74e5ce6f93d52e8f88a63be39906fe1b1cf7a4b"
+      }
+    },
+    "whitney": {
+      "page": "Whitney",
+      "icon": {
+        "file": "File:Whitney NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Whitney_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/a/a9/Whitney_NH_Villager_Icon.png",
+        "bytes": 7287,
+        "sha1": "4c7e580f895e7434cbdd316ffc1a151a8c771c6a"
+      }
+    },
+    "wilbur": {
+      "page": "Wilbur",
+      "icon": {
+        "file": "File:Wilbur NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Wilbur_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/0/05/Wilbur_NH_Character_Icon.png",
+        "bytes": 8947,
+        "sha1": "55aa4e2d2c0607769b25f944793fb4f63564b1a0"
+      }
+    },
+    "willow": {
+      "page": "Willow",
+      "icon": {
+        "file": "File:Willow NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Willow_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/c/c4/Willow_NH_Villager_Icon.png",
+        "bytes": 8134,
+        "sha1": "e6a6374b14f6602a61935c97bac52346399970aa"
+      }
+    },
+    "winnie": {
+      "page": "Winnie",
+      "icon": {
+        "file": "File:Winnie NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Winnie_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/4/44/Winnie_NH_Villager_Icon.png",
+        "bytes": 7059,
+        "sha1": "2a841e775b7ce20ce81c495137134aa3caea0d8d"
+      }
+    },
+    "wisp": {
+      "page": "Wisp",
+      "icon": {
+        "file": "File:Wisp NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Wisp_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/2/2d/Wisp_NH_Character_Icon.png",
+        "bytes": 4529,
+        "sha1": "732a3df96dc70b1f8efb2a07ea1f941b0362a533"
+      }
+    },
+    "wolfgang": {
+      "page": "Wolfgang",
+      "icon": {
+        "file": "File:Wolfgang NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Wolfgang_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/1/1a/Wolfgang_NH_Villager_Icon.png",
+        "bytes": 8831,
+        "sha1": "30b639b521ba4cb03fd2d778904409fececa63c3"
+      }
+    },
+    "yuka": {
+      "page": "Yuka",
+      "icon": {
+        "file": "File:Yuka NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Yuka_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/7c/Yuka_NH_Villager_Icon.png",
+        "bytes": 7460,
+        "sha1": "3a64490876b4ad7565341a5f2b8de78bc46196c8"
+      }
+    },
+    "zell": {
+      "page": "Zell",
+      "icon": {
+        "file": "File:Zell NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Zell_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/7/78/Zell_NH_Villager_Icon.png",
+        "bytes": 9772,
+        "sha1": "c4c7371ea0c04688292c4a4c16f8980b3277e5b8"
+      }
+    },
+    "zipper-t-bunny": {
+      "page": "Zipper T. Bunny",
+      "icon": {
+        "file": "File:Zipper NH Character Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Zipper_NH_Character_Icon.png",
+        "image": "https://dodo.ac/np/images/3/3a/Zipper_NH_Character_Icon.png",
+        "bytes": 8424,
+        "sha1": "b7b260b5fd2c4bdd234554673b6a0e6c7cb3f0bf"
+      }
+    },
+    "zoe": {
+      "page": "Zoe",
+      "icon": {
+        "file": "File:Zoe NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Zoe_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/0/08/Zoe_NH_Villager_Icon.png",
+        "bytes": 5742,
+        "sha1": "d9daa47b61f8f39c02809baa82f87ac7309ca481"
+      }
+    },
+    "zucker": {
+      "page": "Zucker",
+      "icon": {
+        "file": "File:Zucker NH Villager Icon.png",
+        "filePage": "https://nookipedia.com/wiki/File:Zucker_NH_Villager_Icon.png",
+        "image": "https://dodo.ac/np/images/e/e2/Zucker_NH_Villager_Icon.png",
+        "bytes": 6593,
+        "sha1": "f72703cc92a4e40e514ff5e295d8b86e822b8205"
+      }
+    }
+  },
+  "missing": [
+    "aisle",
+    "analog",
+    "aziz",
+    "belle",
+    "bessie",
+    "betty",
+    "bow",
+    "carrot",
+    "champ",
+    "chico",
+    "chuck",
+    "clara",
+    "cupcake",
+    "don-resetti",
+    "dozer",
+    "elina",
+    "emerald",
+    "farley",
+    "flash",
+    "flossie",
+    "fruity",
+    "gen",
+    "hambo",
+    "hank",
+    "hector",
+    "huggy",
+    "iggy",
+    "jane",
+    "joe",
+    "jubei",
+    "kaitlin",
+    "kit",
+    "koharu",
+    "leigh",
+    "liz",
+    "lulu",
+    "madam-rosa",
+    "marcy",
+    "masa",
+    "megumi",
+    "meow",
+    "nindori",
+    "nosegay",
+    "otis",
+    "oxford",
+    "patricia",
+    "penny",
+    "petunia",
+    "pierre",
+    "pigleg",
+    "poko",
+    "quetzal",
+    "rhoda",
+    "rollo",
+    "shinabiru",
+    "shoukichi",
+    "sue-e",
+    "sunny",
+    "sven",
+    "tarou",
+    "tiara",
+    "twirp",
+    "valise",
+    "weldon",
+    "woolio",
+    "yodel"
+  ]
+}

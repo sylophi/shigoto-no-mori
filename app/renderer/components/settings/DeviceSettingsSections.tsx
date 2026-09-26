@@ -1,12 +1,19 @@
-import type { Dispatch, SetStateAction } from "react";
+import { type Dispatch, type SetStateAction, useEffect } from "react";
+import { Info } from "lucide-react";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { SimpleTooltip } from "@/components/ui/tooltip";
+import { useGlobalConfig } from "@/hooks/config/useGlobalConfig";
 import type { SettingsFormState } from "@/hooks/config/useSettingsSave";
 import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
 import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
+import { useVillagerDataStatus } from "@/hooks/villagers/useVillagerData";
+import { VillagerDataControl } from "./VillagerDataControl";
+import { villageLifeRow } from "./villagerDataView";
 import { ToggleRow } from "@/components/shared/ToggleRow";
 import { ExternalLink } from "@/components/ui/external-link";
 import { fieldSetter } from "@/hooks/ui/useDirtyForm";
+import acNotice from "@shared/acNotice.json";
 
 const PORT_POOL = {
   href: "https://github.com/dittofleet/port-pool",
@@ -17,6 +24,10 @@ const TERRIER = {
   href: "https://github.com/sylophi/terrier",
   errorTitle: "Couldn't open terrier",
 };
+
+// Shown on hover beside Doubutsu names. The name pool's entry in the
+// bundled third-party licenses opens with the same text.
+const AC_NOTICE = acNotice.notice;
 
 // The device-managed toggle sections, shared verbatim between this
 // device's tab and every peer's tab on the Settings page. Everything
@@ -43,6 +54,26 @@ export function DeviceToggleSections({
   const ghAuthed = githubCliReadiness?.authed ?? true;
   const ghReady = ghInstalled && ghAuthed;
   const setField = fieldSetter(setForm);
+
+  // Village life opens once there are villagers to bring along: names
+  // on and the villager data downloaded, all of it. Locked, the row
+  // shows the stored value, and the form holds that value, so a save
+  // can't write Village life while its row is locked (an edit made
+  // before the lock, like turning it on and then removing the data,
+  // goes back to what the device has).
+  const { data: config } = useGlobalConfig({ silentError: true });
+  const { data: villagerData } = useVillagerDataStatus();
+  const villageLife = villageLifeRow(form.doubutsuNames, villagerData);
+  const villageLifeLocked = villageLife.locked;
+  const storedVillageLife = config?.villageLife ?? false;
+  useEffect(() => {
+    if (config === undefined || !villageLifeLocked) return;
+    setForm((prev) =>
+      prev.villageLife === storedVillageLife
+        ? prev
+        : { ...prev, villageLife: storedVillageLife },
+    );
+  }, [config, villageLifeLocked, storedVillageLife, setForm]);
 
   return (
     <>
@@ -75,9 +106,40 @@ export function DeviceToggleSections({
         <ToggleRow
           checked={form.doubutsuNames}
           onCheckedChange={setField("doubutsuNames")}
-          label="Doubutsu names"
+          label={
+            <span className="inline-flex items-center gap-1.5">
+              Doubutsu names
+              {/* A button, so the icon is focusable and a click on it
+                  (preventDefault) doesn't flip the row's switch. */}
+              <SimpleTooltip tip={AC_NOTICE}>
+                <button
+                  type="button"
+                  aria-label={AC_NOTICE}
+                  onClick={(e) => e.preventDefault()}
+                  className="inline-flex cursor-help rounded-sm text-muted-foreground hover:text-foreground"
+                >
+                  <Info aria-hidden className="size-3.5" />
+                </button>
+              </SimpleTooltip>
+            </span>
+          }
           description="Name new worktrees after Animal Crossing villagers and characters, like raymond, instead of adjective-animal pairs like snug-otter."
         />
+        {/* A sub-option of Doubutsu names, nested like Primary
+            checkouts only, with the villager data it needs beside it.
+            What it gates reads useVillageLife, never this field. */}
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 pl-11">
+          <div className="min-w-0 flex-1">
+            <ToggleRow
+              checked={form.villageLife}
+              onCheckedChange={setField("villageLife")}
+              disabled={villageLifeLocked}
+              label="Village life"
+              description={villageLife.description}
+            />
+          </div>
+          <VillagerDataControl doubutsuNames={form.doubutsuNames} />
+        </div>
         <ToggleRow
           checked={form.codexWorktreeNames}
           onCheckedChange={setField("codexWorktreeNames")}

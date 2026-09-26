@@ -39,6 +39,12 @@ Poses ride the URL:
   `many`. Absent, it keeps two passing checks.
 - Desktop: `?to=/devices` navigates the memory router after mount. Web:
   the path itself is the route (`/devices/...`).
+- `?villageLife=1`: Village life on in every device's settings (off
+  by default, as a fresh install has it).
+- `?villagers=absent|downloading|ready|failed`: every device's villager
+  data status, for the control under Village life in Settings. The
+  default is ready when the lab holds a download (below), absent
+  otherwise.
 
 Runtime controls on `window.smLab`: `setPeer(deviceId, "connected" |
 "online" | "offline")`, `setSocket(phase)`, `navigate(to)` (desktop),
@@ -47,6 +53,14 @@ started in this session, for the conflict chip. Start one first,
 since the fixtures seed none), plus `emitClient`/`emitHost` for raw
 broadcasts. Console/warns/errors
 collect in `window.smLabLog`.
+
+The villager faces and profiles are never committed: the app downloads
+them from Nookipedia when its user asks. The lab serves its own copy
+from `lab/villager-data` (gitignored), which `pnpm villagers:fetch`
+downloads with the app's own downloader (about 4 MB, once, served by
+`lab/villagerData.ts`). Without it the villager data reads as
+not downloaded and no face shows. `villager-icons.html` is a contact
+sheet of the faces over the same bridge, with Village life on.
 
 Fixtures live in `fixtures.ts`. Each device has a small disk there
 (`labDisks`) for the add-project dialog to browse, and adding or

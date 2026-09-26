@@ -30,6 +30,7 @@ import { terrierContract } from "@shared/ipc/modules/terrier";
 import { shigomoriContract } from "@shared/ipc/modules/shigomori";
 import { syncContract } from "@shared/ipc/modules/sync";
 import { updaterContract } from "@shared/ipc/modules/updater";
+import { villagersContract } from "@shared/ipc/modules/villagers";
 import { windowContract } from "@shared/ipc/modules/window";
 import { worktreesContract } from "@shared/ipc/modules/worktrees";
 import type { ClientTransport } from "@shared/ipc/transport";
@@ -83,6 +84,7 @@ export const allContractModules: readonly ContractModule[] = [
   shigomoriContract,
   syncContract,
   updaterContract,
+  villagersContract,
   windowContract,
   worktreesContract,
 ];
@@ -126,6 +128,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const shigomoriClient = c(shigomoriContract);
   const syncClient = c(syncContract);
   const updaterClient = c(updaterContract);
+  const villagersClient = c(villagersContract);
   const windowClient = c(windowContract);
   const worktreesClient = c(worktreesContract);
 
@@ -372,6 +375,15 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       check: updaterClient.check,
       install: updaterClient.install,
       onState: updaterClient.state,
+    },
+
+    villagers: {
+      status: villagersClient.status,
+      download: villagersClient.download,
+      cancel: villagersClient.cancel,
+      remove: villagersClient.remove,
+      face: (slug: string) => villagersClient.face({ slug }),
+      profiles: villagersClient.profiles,
     },
 
     window: {

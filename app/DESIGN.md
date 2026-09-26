@@ -128,3 +128,22 @@ Rules that keep a machine looking like itself everywhere:
   This device"), so a pill, a tab and a badge naming the same machine
   say the same thing on hover.
 
+## Village life: rarity
+
+Village life is the cosmetic villager flair. Nothing uses it yet, so
+this is the rule its features follow when they arrive. Every doubutsu
+character has a rarity, like a card's:
+
+- **Common**: regular villagers.
+- **Rare**: special characters that aren't regular villagers (Katrina,
+  Pelly, Leif): the villager data marks them special.
+- **Legendary**: the household names, picked by hand: Tom Nook,
+  Isabelle, K.K. Slider, Timmy, Tommy, Blathers, Celeste, Mr. Resetti,
+  Redd, Brewster, Kapp'n, Pascal.
+
+A rare character gets a little more flair than a villager, and a
+legendary one clearly the most. Common stays calm: most worktrees are
+villagers, and the app is still a work tool. Rarity follows the
+character, never the worktree (`raymond-2` is Raymond). How each tier
+looks is designed with the first feature that shows it, in the app's
+own look, and drawn in one shared place rather than at each call site.

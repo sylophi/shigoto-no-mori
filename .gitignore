@@ -34,6 +34,11 @@ app/public/material-icons/
 # Electron-Forge
 out/
 
+# The villager data the UI lab serves, downloaded from Nookipedia by
+# `pnpm villagers:fetch` (scripts/fetch-villager-data.mts). Never
+# committed: the app downloads it at runtime.
+app/lab/villager-data/
+
 # App icon intermediates (icon.icns and icon.png are the committed sources)
 app/assets/icon.iconset/
 

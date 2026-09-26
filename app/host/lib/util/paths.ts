@@ -198,7 +198,7 @@ function looksLikeDataDir(target: string): boolean {
 // the state files is there, false when none is (or the directory is
 // missing or not a directory), null when it exists but can't be read.
 // Stats the three files rather than listing the directory.
-function holdsState(dir: string): boolean | null {
+export function holdsState(dir: string): boolean | null {
   let unreadable = false;
   for (const file of STATE_FILES) {
     try {

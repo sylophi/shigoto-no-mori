@@ -183,6 +183,35 @@ pre-commit:
     shared-settings:
       glob: "{app/shared/sharedSettings.ts,app/shared/schemas/sharedSettings.ts,app/shared/ipc/modules/sharedSettings.ts,app/host/lib/sharedSettings/**,app/web/ipc/register.ts,app/test/shared-settings.mjs,app/test/lib/checkKit.mjs}"
       run: pnpm -C app test shared-settings
+    # A never-used data dir is seeded with Doubutsu names on by the app
+    # or the CLI, whichever runs first, and an existing install is left
+    # alone, with both engines reading the same values.
+    fresh-install:
+      glob: "{cli/names.go,cli/cmd_config.go,cli/state.go,cli/main.go,app/shared/schemas/config.ts,app/host/lib/bootstrap.ts,app/host/lib/util/paths.ts,app/renderer/hooks/config/useSettingsSave.ts,app/test/fresh-install.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test fresh-install
+    # Village life reads the same in both engines: off when unset,
+    # counted only while Doubutsu names is on, and the Settings form's
+    # save lands through the real sm binary.
+    village-life:
+      glob: "{cli/cmd_config.go,app/shared/villageLife.ts,app/shared/schemas/config.ts,app/host/lib/bootstrap.ts,app/renderer/hooks/config/useSettingsSave.ts,app/test/village-life.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test village-life
+    # The villager manifest names a face for every doubutsu name, so the
+    # pool and the manifest agree one to one.
+    villager-manifest:
+      glob: "{app/shared/villagers/manifest.json,cli/embed/doubutsu-names.json,app/test/villager-manifest.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test villager-manifest
+    # The villager data download against a fake wiki: progress, the
+    # manifest's size and sha1 checks, cancel, resume, the finished
+    # download appearing whole, remove, and the Settings line for each
+    # state.
+    villager-data:
+      glob: "{app/host/lib/villagers.ts,app/host/lib/util/jsonFile.ts,app/shared/villagers/**,app/shared/schemas/villagers.ts,app/renderer/components/settings/villagerDataView.ts,app/test/villager-data.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test villager-data
+    # The one Nookipedia reader the name script and the download share,
+    # against wikitext fixtures.
+    villager-wiki:
+      glob: "{app/shared/villagers/wiki.ts,app/shared/schemas/villagers.ts,app/test/villager-wiki.mjs,app/test/lib/checkKit.mjs}"
+      run: pnpm -C app test villager-wiki
     # The scripts' manual order is one per project across branches whose
     # package.json differ, so the merge must keep another branch's.
     # The launch row pins are per project too.

@@ -6,7 +6,8 @@
 //   2. Resolve an extensionless specifier to its .ts/.mts file (or an
 //      index file), the way the bundler does.
 // Registered via test/lib/register-ts-alias.mjs. Kept dependency
-// free and used only by checks, never by the app build.
+// free and used only by checks and dev scripts that run app modules
+// (scripts/fetch-villager-data.mts), never by the app build.
 import { existsSync, statSync } from "node:fs";
 import { dirname, join, resolve as resolvePath } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";

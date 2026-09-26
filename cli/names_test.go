@@ -26,8 +26,10 @@ func doubutsuSet() map[string]bool {
 // A picked name becomes the folder and, by default, the branch, so
 // every entry has to survive both unchanged.
 func TestNamePoolsAreValidWorktreeNames(t *testing.T) {
+	// The pool is the characters with a face (about 500), not a short
+	// fallback list.
 	if n := len(doubutsuNames()); n < 400 {
-		t.Fatalf("doubutsu pool has %d names, want the full villager list", n)
+		t.Fatalf("doubutsu pool has %d names, want every character with a face", n)
 	}
 	for _, doubutsu := range []bool{true, false} {
 		seen := map[string]bool{}
@@ -72,17 +74,33 @@ func TestPickWorktreeNameSkipsUsedAndFallsBackToSuffixes(t *testing.T) {
 	}
 }
 
+// Off when unset, so an install from before fresh installs were seeded
+// keeps its names. The app's pre-pick reads the same default
+// (shared/villageLife.ts, pinned by the app's fresh-install proof).
+func TestDoubutsuNamesUnsetIsOff(t *testing.T) {
+	yes, no := true, false
+	for _, tc := range []struct {
+		setting *bool
+		want    bool
+	}{{nil, false}, {&yes, true}, {&no, false}} {
+		if got := doubutsuNamesEnabled(globalConfig{DoubutsuNames: tc.setting}); got != tc.want {
+			t.Errorf("doubutsuNamesEnabled(%v) = %v, want %v", tc.setting, got, tc.want)
+		}
+	}
+}
+
 func TestCreateHonorsDoubutsuNames(t *testing.T) {
 	proj := autoPullSandbox(t)
 	inPool := doubutsuSet()
 
-	setGlobalBool(t, "doubutsuNames", true)
+	// The sandbox registered a project without the fresh-install seed,
+	// like an install from before it: unset reads as off.
 	wt, err := createWorktree(proj, "", "", "", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !inPool[wt.Name] {
-		t.Fatalf("created %q with doubutsuNames on, want a doubutsu name", wt.Name)
+	if inPool[wt.Name] {
+		t.Fatalf("created %q with doubutsuNames unset, want an adjective-animal pair", wt.Name)
 	}
 
 	setGlobalBool(t, "doubutsuNames", false)
@@ -92,6 +110,15 @@ func TestCreateHonorsDoubutsuNames(t *testing.T) {
 	}
 	if inPool[wt.Name] {
 		t.Fatalf("created %q with doubutsuNames off, want an adjective-animal pair", wt.Name)
+	}
+
+	setGlobalBool(t, "doubutsuNames", true)
+	wt, err = createWorktree(proj, "", "", "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !inPool[wt.Name] {
+		t.Fatalf("created %q with doubutsuNames on, want a doubutsu name", wt.Name)
 	}
 }
 

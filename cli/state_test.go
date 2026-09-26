@@ -794,3 +794,81 @@ func TestShelfChangesRetireTheSnapshot(t *testing.T) {
 		t.Error("shelved mark survived the drop")
 	}
 }
+
+// Fresh-install seed (seedFreshInstall): an empty data dir gets
+// config.json with doubutsuNames on, and a missing one is left missing.
+// A dir that holds any state file is an existing install and is left
+// alone, even without a config.json, and a seeded dir is never seeded
+// again.
+func TestSeedFreshInstall(t *testing.T) {
+	seeded := func(t *testing.T) map[string]any {
+		t.Helper()
+		seedFreshInstall()
+		raw, err := os.ReadFile(configJSONPath())
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		doc, err := decodeConfigDoc(raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return doc
+	}
+	sandboxAt := func(t *testing.T, dir string) {
+		t.Helper()
+		t.Setenv("SHIGOMORI_DATA_DIR", dir)
+		initDataDirT(t)
+	}
+
+	t.Run("missing dir", func(t *testing.T) {
+		dir := filepath.Join(t.TempDir(), "data")
+		sandboxAt(t, dir)
+		if doc := seeded(t); doc != nil {
+			t.Errorf("missing dir seeded: %v", doc)
+		}
+		if _, err := os.Stat(dir); !os.IsNotExist(err) {
+			t.Errorf("missing dir was created (%v)", err)
+		}
+	})
+
+	t.Run("empty dir", func(t *testing.T) {
+		sandboxAt(t, t.TempDir())
+		doc := seeded(t)
+		if doc["doubutsuNames"] != true {
+			t.Fatalf("fresh install config = %v, want doubutsuNames true", doc)
+		}
+		if !doubutsuNamesEnabled(readGlobalConfigHints()) {
+			t.Error("seeded install reads doubutsuNames off")
+		}
+		// Once: turning it off stores the default by omission, and
+		// the next command must not read that as a fresh install.
+		setGlobalBool(t, "doubutsuNames", false)
+		if doc := seeded(t); doc["doubutsuNames"] != nil {
+			t.Errorf("second run config = %v, want doubutsuNames left off", doc)
+		}
+	})
+
+	for _, file := range stateFiles {
+		t.Run("existing "+file, func(t *testing.T) {
+			dir := t.TempDir()
+			sandboxAt(t, dir)
+			seed := "{}\n"
+			if file == configFile {
+				seed = `{"launchScripts": false}` + "\n"
+			}
+			if err := os.WriteFile(filepath.Join(dir, file), []byte(seed), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			doc := seeded(t)
+			if _, ok := doc["doubutsuNames"]; ok {
+				t.Errorf("existing install (%s) was seeded: %v", file, doc)
+			}
+			if doubutsuNamesEnabled(readGlobalConfigHints()) {
+				t.Errorf("existing install (%s) reads doubutsuNames on", file)
+			}
+		})
+	}
+}

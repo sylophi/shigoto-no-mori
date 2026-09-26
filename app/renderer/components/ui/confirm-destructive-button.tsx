@@ -7,24 +7,28 @@ interface ConfirmDestructiveButtonProps {
   pendingLabel: string;
   idleLabel: string;
   onClick: () => void;
+  // Off for a reason other than the removal under way.
+  disabled?: boolean;
 }
 
 // Two-step "arm then confirm" destructive button: outline styling
 // with spinner-while-pending / "click again" / icon+label states. Used
-// by the closed-PR and merged-primary cleanup boxes.
+// by the closed-PR and merged-primary cleanup boxes and the villager
+// data's Remove.
 export function ConfirmDestructiveButton({
   armed,
   pending,
   pendingLabel,
   idleLabel,
   onClick,
+  disabled = false,
 }: ConfirmDestructiveButtonProps) {
   return (
     <Button
       type="button"
       size="sm"
       variant="outline-destructive"
-      disabled={pending}
+      disabled={pending || disabled}
       aria-pressed={armed}
       onClick={onClick}
     >

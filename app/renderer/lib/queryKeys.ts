@@ -153,6 +153,10 @@ function buildQueryKeys(deviceId: string) {
     worktreePorts: (projectId: string, worktreeId: string) =>
       host("worktreePorts", projectId, worktreeId),
     terrierReadiness: () => host("terrierReadiness"),
+    // The villager data (host/lib/villagers.ts).
+    villagerData: () => host("villagers", "status"),
+    villagerProfiles: () => host("villagers", "profiles"),
+    villagerFace: (slug: string) => host("villagers", "face", slug),
     cli: () => host("cli"),
     cliShell: () => host("cliShell"),
     portPoolActive: (projectId: string, worktreeId: string) =>
