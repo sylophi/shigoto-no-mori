@@ -10,11 +10,7 @@
 // change the socket phase, navigate the memory router.
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { buildApi } from "@shared/ipc/client";
-import {
-  pullRequestStackFor,
-  stackCleanupFor,
-  trunkOf,
-} from "@shared/pullRequestStack";
+import { stackCleanupForWorktree } from "@shared/pullRequestStack";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import {
   summarizeChecks,
@@ -337,19 +333,16 @@ function hostHandlersFor(
     // host does: those of the stack's merged PRs, this device's rows.
     "worktrees:deleteStack": ({ projectId, worktreeId }) => {
       const rows = forest.worktrees[projectId] ?? [];
-      const own = rows.find((w) => w.id === worktreeId);
-      const stack = own
-        ? pullRequestStackFor(
-            labPullRequests(projectId),
-            own.branch,
-            trunkOf(rows),
-          )
-        : null;
-      const cleanup = stack && stackCleanupFor(stack, rows);
-      if (!cleanup)
+      const cleanup = stackCleanupForWorktree(
+        labPullRequests(projectId),
+        rows,
+        worktreeId,
+      );
+      if (!cleanup) {
         throw new Error(
           "No merged layer of this stack has a worktree to remove.",
         );
+      }
       const removed = cleanup.worktrees.map((w) => w.id);
       forest.worktrees[projectId] = rows.filter((w) => !removed.includes(w.id));
       return { ok: true, removed };

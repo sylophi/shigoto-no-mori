@@ -39,6 +39,10 @@ that just merged: tell the user, and if the stack is a `gh stack` one,
 run `gh stack sync` in the worktree above. To merge a layer into the
 layer below on purpose, use `sm worktrees merge` and then `sm worktrees rm`.
 
+A stack that already landed (merged from the app, or on GitHub) only
+needs its worktrees removed: `sm worktrees rm --stack` takes the
+worktree and those of the merged layers under it, and never merges.
+
 If the command reports a skipped catch-up, pass the reason on to the
 user.
 

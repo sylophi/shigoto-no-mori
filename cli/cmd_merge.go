@@ -347,11 +347,7 @@ func cmdMergeStack(proj project, number int, methodFlag string, allowed []string
 	if err != nil {
 		return exitCodeOf(err), err
 	}
-	onMerged := func(pr prSummary) {
-		emitOrOut(map[string]any{"event": "merged", "number": pr.Number, "branch": pr.HeadRefName, "method": method},
-			greenOut(fmt.Sprintf("merged PR #%d (%s): %s", pr.Number, method, pr.Title)))
-	}
-	if err := execMergeStack(proj, number, method, lk, onMerged); err != nil {
+	if err := execMergeStack(proj, number, method, lk, stackMergedReporter(method)); err != nil {
 		return exitCodeOf(err), err
 	}
 	persistMergeMethod(proj, method)

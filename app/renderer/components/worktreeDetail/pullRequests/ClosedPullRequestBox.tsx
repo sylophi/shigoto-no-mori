@@ -1,17 +1,23 @@
+import { useState } from "react";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { Button } from "@/components/ui/button";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useStackCleanup } from "@/hooks/pullRequests/useStackCleanup";
 import { useDeleteAndNavigate } from "@/hooks/worktrees/useDeleteAndNavigate";
-import { useDeleteStackOnDevices } from "@/hooks/worktrees/useWorktreeMutations";
+import { useDeleteStackWorktrees } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { useHostScope } from "@/hooks/remote/useHostScope";
+import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { notifyError } from "@/lib/toast";
 import type { PullRequestStack } from "@shared/pullRequestStack";
 import type { Worktree } from "@shared/schemas";
 import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
 
+const STACK_ERROR_TITLE = "Couldn't delete the stack's worktrees";
+
 // The cleanup after a PR closed: this worktree goes, or, for a stack
 // with landed layers, all of their worktrees together, on every device
-// holding one (each device's host runs `sm land --stack`, which removes
+// holding one (each device's host runs `sm rm --stack`, which removes
 // its merged layers as one). The stack button shows only when it would
 // take more than this worktree, since otherwise the two would be the
 // same removal. A device that can't be asked (asleep, or not granting
@@ -23,61 +29,55 @@ export function ClosedPullRequestBox({
   worktree: Worktree;
   stack: PullRequestStack | null;
 }) {
+  const { deviceId } = useHostScope();
   const { data: siblings = [] } = useWorktrees(worktree.projectId);
-  const {
-    deleteMutation,
-    deleteStackMutation,
-    stackNeedsForce,
-    runDelete,
-    runDeleteStack,
-    cancelStackForce,
-  } = useDeleteAndNavigate(worktree, siblings);
-  const elsewhere = useDeleteStackOnDevices();
+  const { deleteMutation, runDelete, navigateAway } = useDeleteAndNavigate(
+    worktree,
+    siblings,
+  );
+  const stackMutation = useDeleteStackWorktrees();
+  const [stackError, setStackError] = useState<string | null>(null);
   const { armed, trigger } = useConfirmTwice(CONFIRM_QUICK_MS);
   const { armed: stackArmed, trigger: stackTrigger } =
     useConfirmTwice(CONFIRM_QUICK_MS);
   const cleanup = useStackCleanup(worktree, stack);
   const count = cleanup?.count ?? 0;
-  const pending =
-    deleteMutation.isPending ||
-    deleteStackMutation.isPending ||
-    elsewhere.isPending;
-  const error = deleteMutation.error ?? deleteStackMutation.error;
+  const stackPending = stackMutation.isPending;
+  const pending = stackPending || deleteMutation.isPending;
 
-  // The page's own device through the navigating path, every other
-  // device at the same time through its own host.
-  const runEverywhere = (force?: boolean) => {
+  // A failure shows here while the page is still this worktree's, and
+  // as a toast once the removal took the page's own worktree with it.
+  const runStack = (force?: boolean) => {
     if (!cleanup) return;
-    const others = cleanup.ready.filter((device) => !device.isScoped);
-    if (others.length > 0) {
-      elsewhere.mutate({
-        force,
-        devices: others.map((device) => ({
-          deviceId: device.deviceId,
-          label: device.label,
-          projectId: device.projectId,
-          targetId: device.targetId,
-          // ready: the api is there.
-          api: device.api!,
-        })),
-      });
-    }
-    if (cleanup.ready.some((device) => device.isScoped)) {
-      runDeleteStack({ force });
-    }
+    setStackError(null);
+    stackMutation.mutate(
+      { devices: cleanup.ready, force },
+      {
+        onSuccess: ({ removed, failures }) => {
+          const gone = removed.get(deviceId) ?? [];
+          const message = failures.join("\n");
+          if (gone.includes(worktree.id)) {
+            if (message) notifyError(STACK_ERROR_TITLE, message);
+            navigateAway([...removed.values()].flat());
+          } else {
+            setStackError(message || "Nothing was removed.");
+          }
+        },
+      },
+    );
   };
 
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap justify-end gap-2">
         {count > 1 &&
-          (stackNeedsForce ? (
+          (stackError ? (
             <>
               <Button
                 type="button"
                 size="sm"
                 variant="ghost"
-                onClick={cancelStackForce}
+                onClick={() => setStackError(null)}
               >
                 Cancel
               </Button>
@@ -86,7 +86,7 @@ export function ClosedPullRequestBox({
                 size="sm"
                 variant="destructive"
                 disabled={pending}
-                onClick={() => runEverywhere(true)}
+                onClick={() => runStack(true)}
               >
                 Delete {count} stack worktrees anyway
               </Button>
@@ -94,17 +94,17 @@ export function ClosedPullRequestBox({
           ) : (
             <ConfirmDestructiveButton
               armed={stackArmed}
-              pending={deleteStackMutation.isPending || elsewhere.isPending}
+              pending={stackPending}
               disabled={deleteMutation.isPending}
               pendingLabel="Deleting stack…"
               idleLabel={`Delete ${count} stack worktrees`}
-              onClick={() => stackTrigger(() => runEverywhere())}
+              onClick={() => stackTrigger(() => runStack())}
             />
           ))}
         <ConfirmDestructiveButton
           armed={armed}
           pending={deleteMutation.isPending}
-          disabled={deleteStackMutation.isPending || elsewhere.isPending}
+          disabled={stackPending}
           pendingLabel="Deleting…"
           idleLabel="Delete worktree"
           onClick={() => trigger(() => runDelete())}
@@ -113,23 +113,21 @@ export function ClosedPullRequestBox({
       {cleanup && cleanup.blocked.length > 0 && (
         <p className="text-right text-xs text-muted-foreground">
           {cleanup.blocked
-            .map(
-              (device) =>
-                `${device.worktrees.length} more on ${device.label} (${
-                  device.block === "offline" ? "offline" : "read-only from here"
-                })`,
+            .map((device) =>
+              device.block === "offline"
+                ? `${device.worktrees.length} more on ${device.label}, which is offline.`
+                : `${device.worktrees.length} more on ${device.label}. ${peerReadOnlyNote(device.label)}`,
             )
-            .join(", ")}
+            .join(" ")}
         </p>
       )}
-      {error && (
+      {stackError && (
+        <ErrorBanner message={stackError} title={STACK_ERROR_TITLE} />
+      )}
+      {deleteMutation.error && (
         <ErrorBanner
-          message={error.message}
-          title={
-            deleteStackMutation.error
-              ? "Couldn't delete the stack's worktrees"
-              : "Couldn't delete the worktree"
-          }
+          message={deleteMutation.error.message}
+          title="Couldn't delete the worktree"
         />
       )}
     </div>

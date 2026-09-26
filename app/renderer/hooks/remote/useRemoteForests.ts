@@ -95,7 +95,7 @@ export interface RemoteForests {
 
 // Calm by default: the always-mounted sidebar keeps the forests fresh,
 // so a page that mounts a second observer must not re-list every peer.
-const CALM_REFETCH = { staleTime: 30_000, refetchOnMount: false };
+export const CALM_REFETCH = { staleTime: 30_000, refetchOnMount: false };
 
 export interface RemoteForestsOptions {
   // True for the sidebar itself, the one observer that keeps the

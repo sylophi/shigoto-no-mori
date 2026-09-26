@@ -16,6 +16,7 @@ import {
   CleanupErrorSchema,
   CommitHashSchema,
   CreatePhaseSchema,
+  type CleanupError,
   type CreateWorktreeResult,
   type DeleteStackResult,
   type DeleteWorktreeResult,
@@ -289,53 +290,56 @@ export async function deleteViaCli(
   const args = worktreeArgv(["rm"], project, input.worktreeId);
   if (input.force) args.push("--force");
   if (input.skipCleanup) args.push("--skip-cleanup");
-  const result = await runner().runCli(args, (doc) => {
-    if (doc.event === "script") notifyScriptDoc(notify, doc);
-  });
-  const final = result.docs.findLast((doc) => typeof doc["ok"] === "boolean");
-  if (final?.["ok"] === true) return { ok: true };
-  if (final?.["ok"] === false && final["cleanupError"] !== undefined) {
-    return {
-      ok: false,
-      cleanupError: CleanupErrorSchema.parse(final["cleanupError"]),
-    };
-  }
-  throw cliFailure(result, "sm rm failed", { worktreeId: input.worktreeId });
+  const { ok, cleanupError } = await runRemoval(args, input.worktreeId, notify);
+  return ok ? { ok } : { ok, cleanupError };
 }
 
-// The merged layers of a stack, removed together: `sm land --stack`
-// on the highest merged layer's worktree. Its PR has merged, so the
-// land skips the merge and does the cleanup half, which covers the
-// worktree it runs in and those of the merged layers under it
-// (cli/cmd_land.go landStack). The final document lists them: the
-// worktree itself under `removed`, the others under `stack.removed`,
-// and on a cleanup failure whatever went before it.
+// The merged layers of a stack, removed together: `sm rm --stack` on
+// the highest merged layer's worktree, which takes the worktrees of
+// the merged layers under it too (cli/cmd_land.go rmStack). The final
+// document lists them: the worktree itself under `removed`, the
+// others under `stack.removed`, and on a cleanup failure whatever
+// went before it.
 export async function deleteStackViaCli(
   project: Project,
   input: { worktreeId: string; force?: boolean },
   notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
 ): Promise<DeleteStackResult> {
-  const args = [
-    ...worktreeArgv(["land"], project, input.worktreeId),
-    "--stack",
-  ];
+  const args = [...worktreeArgv(["rm"], project, input.worktreeId), "--stack"];
   if (input.force) args.push("--force");
+  const { ok, cleanupError, final } = await runRemoval(
+    args,
+    input.worktreeId,
+    notify,
+  );
+  const removed = removedIdsOf(final);
+  return ok ? { ok, removed } : { ok, removed, cleanupError };
+}
+
+// One removal run: the script events forwarded, the final document
+// read for its verdict. A run that ends without one, or without the
+// cleanup error a failed one carries, is the CLI's failure.
+async function runRemoval(
+  args: string[],
+  worktreeId: string,
+  notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
+): Promise<
+  | { ok: true; cleanupError?: undefined; final: CliDoc }
+  | { ok: false; cleanupError: CleanupError; final: CliDoc }
+> {
   const result = await runner().runCli(args, (doc) => {
     if (doc.event === "script") notifyScriptDoc(notify, doc);
   });
   const final = result.docs.findLast((doc) => typeof doc["ok"] === "boolean");
-  const removed = final ? removedIdsOf(final) : [];
-  if (final?.["ok"] === true) return { ok: true, removed };
+  if (final?.["ok"] === true) return { ok: true, final };
   if (final?.["ok"] === false && final["cleanupError"] !== undefined) {
     return {
       ok: false,
-      removed,
       cleanupError: CleanupErrorSchema.parse(final["cleanupError"]),
+      final,
     };
   }
-  throw cliFailure(result, "sm land --stack failed", {
-    worktreeId: input.worktreeId,
-  });
+  throw cliFailure(result, `sm ${args[0]} failed`, { worktreeId });
 }
 
 const RemovedIdSchema = z.object({ id: z.string() });
@@ -344,8 +348,8 @@ const LandDocRemovalsSchema = z.object({
   stack: z.object({ removed: z.array(RemovedIdSchema) }).optional(),
 });
 
-// The worktree ids a land document says went, the stack's lower
-// layers first and the worktree the land ran in last, the order the
+// The worktree ids a stack removal's document says went, the lower
+// layers first and the worktree the command ran in last, the order the
 // CLI removed them.
 function removedIdsOf(doc: CliDoc): string[] {
   const parsed = LandDocRemovalsSchema.parse(doc);

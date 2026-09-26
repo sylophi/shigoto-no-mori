@@ -13,6 +13,7 @@ import {
   placeByStack,
   pullRequestStackPosition,
   stackCleanupFor,
+  stackCleanupForWorktree,
   stackMergeSet,
   trunkOf,
 } from "@shared/pullRequestStack";
@@ -226,6 +227,15 @@ try {
         1,
         "only the merged bottom",
       );
+      // By worktree id, off a device's own map and rows, any layer's
+      // worktree names the same cleanup; an unknown id names none.
+      const byId = stackCleanupForWorktree(merged, rows, "a");
+      assert.deepEqual(
+        byId.worktrees.map((w) => w.id),
+        ["a", "b"],
+      );
+      assert.equal(byId.target.id, "b");
+      assert.equal(stackCleanupForWorktree(merged, rows, "nope"), null);
     },
   );
 

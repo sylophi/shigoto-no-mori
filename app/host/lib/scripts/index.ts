@@ -153,27 +153,18 @@ export function getInflightDeleteIds(): ReadonlySet<string> {
 // between the root vanishing and the stop propagates nothing. Callers
 // supply the busy message because the operations differ (removed vs
 // moved).
-export async function withDeleteInflight<T>(
+export function withDeleteInflight<T>(
   worktreeId: string,
   busyMessage: string,
   run: () => Promise<T>,
 ): Promise<T> {
-  if (getInflightDeleteIds().has(worktreeId)) {
-    throw new Error(busyMessage);
-  }
-  markDeleteInflight(worktreeId);
-  try {
-    await killScriptsForWorktree(worktreeId);
-    const result = await run();
-    await stopMirrorsForWorktree(worktreeId);
-    return result;
-  } finally {
-    clearDeleteInflight(worktreeId);
-  }
+  return withDeletesInflight([worktreeId], busyMessage, run, () => [
+    worktreeId,
+  ]);
 }
 
-// The same protocol over several worktrees removed by one mutation (a
-// stack cleanup): every id is refused-if-busy and marked up front, the
+// The protocol over several worktrees removed by one mutation (a stack
+// cleanup): every id is refused-if-busy and marked up front, the
 // scripts of all of them are reaped before, and the mirrors of the
 // ones `removedOf` names after. A mutation that removes only some of
 // them (a cleanup script failed partway) stops only those mirrors.

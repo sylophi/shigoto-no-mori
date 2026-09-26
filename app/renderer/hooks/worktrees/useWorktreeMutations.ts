@@ -5,16 +5,12 @@ import {
 } from "@tanstack/react-query";
 import type {
   CreateWorktreeResult,
-  DeleteStackPayload,
-  DeleteStackResult,
   DeleteWorktreeResult,
   Worktree,
 } from "@shared/schemas";
-import {
-  invalidateHostDevice,
-  worktreeQueriesOn,
-  queryKeysFor,
-} from "@/lib/queryKeys";
+import { errorMessageOf } from "@shared/errors";
+import type { ReadyStackCleanupDevice } from "@/hooks/pullRequests/useStackCleanup";
+import { worktreeQueriesOn, queryKeysFor } from "@/lib/queryKeys";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { scriptRunsFor } from "@/store/scriptRuns";
@@ -187,21 +183,35 @@ export function forgetDeletedWorktree(
   projectId: string,
   worktreeId: string,
 ): void {
+  forgetDeletedWorktrees(queryClient, deviceId, projectId, [worktreeId]);
+}
+
+// Several at once (a stack's layers): one list write and one
+// invalidation for all of them, not a refetch per row.
+export function forgetDeletedWorktrees(
+  queryClient: QueryClient,
+  deviceId: string,
+  projectId: string,
+  worktreeIds: readonly string[],
+): void {
+  if (worktreeIds.length === 0) return;
   const keys = queryKeysFor(deviceId);
   queryClient.setQueryData<Worktree[]>(keys.worktrees(projectId), (current) =>
-    current ? current.filter((w) => w.id !== worktreeId) : current,
+    current ? current.filter((w) => !worktreeIds.includes(w.id)) : current,
   );
   void queryClient.invalidateQueries({
     queryKey: keys.worktrees(projectId),
   });
-  scriptRunsFor(deviceId).clearForWorktree(worktreeId);
-  // Same treatment as project removal. Active queries (the detail
-  // route unmounts only after the post-delete navigation) are left
-  // to go inactive and gc naturally.
-  queryClient.removeQueries({
-    type: "inactive",
-    predicate: worktreeQueriesOn(deviceId, worktreeId),
-  });
+  for (const worktreeId of worktreeIds) {
+    scriptRunsFor(deviceId).clearForWorktree(worktreeId);
+    // Same treatment as project removal. Active queries (the detail
+    // route unmounts only after the post-delete navigation) are left
+    // to go inactive and gc naturally.
+    queryClient.removeQueries({
+      type: "inactive",
+      predicate: worktreeQueriesOn(deviceId, worktreeId),
+    });
+  }
 }
 
 export function useDeleteWorktree() {
@@ -239,89 +249,59 @@ export function useDeleteWorktree() {
   });
 }
 
-// The merged layers' worktrees of a stack, removed as one (the host
-// runs `sm land --stack` on the highest of them). Every removed id is
-// forgotten the way a single delete's is; the ones a cleanup failure
-// kept stay for a retry.
+// The merged layers' worktrees of a stack, removed on every device
+// holding one at once: each device's host removes its own (it runs
+// `sm rm --stack`), and its rows here are forgotten the way a single
+// delete's are. The devices are asked together and the outcome is
+// per device, so a refusal on one (a dirty worktree there) never
+// hides what the others did; the caller decides what to show, since
+// the page may have moved on by the time everything answers.
+export interface StackCleanupOutcome {
+  // By device id: the worktree ids that went.
+  removed: Map<string, string[]>;
+  // By device label: why it removed nothing, or not everything.
+  failures: string[];
+}
+
 export function useDeleteStackWorktrees() {
   const queryClient = useQueryClient();
-  const { api, deviceId } = useHostScope();
-  return useMutation<DeleteStackResult, Error, DeleteStackPayload>({
-    mutationKey: deleteWorktreeMutationKey(deviceId),
-    mutationFn: (input) => api.worktrees.deleteStack(input),
-    onSuccess: (data, vars) => {
-      for (const worktreeId of data.removed) {
-        forgetDeletedWorktree(
-          queryClient,
-          deviceId,
-          vars.projectId,
-          worktreeId,
-        );
-      }
-    },
-    // The closed-PR box surfaces the failure inline.
-    meta: { silentError: true },
-  });
-}
-
-// The same cleanup on other devices: each device's host removes its
-// own landed layers, and its cache here follows. Every device is asked
-// at once, and a refusal on one (a dirty worktree there) fails the
-// mutation with the devices named, once the rest have answered. The
-// page's own device goes through useDeleteAndNavigate instead, so the
-// page can move on when its worktree went.
-export interface StackCleanupOnDevice {
-  deviceId: string;
-  label: string;
-  projectId: string;
-  targetId: string;
-  api: HostApi;
-}
-
-export function useDeleteStackOnDevices() {
-  const queryClient = useQueryClient();
   return useMutation<
-    void,
+    StackCleanupOutcome,
     Error,
-    { devices: readonly StackCleanupOnDevice[]; force?: boolean }
+    { devices: readonly ReadyStackCleanupDevice[]; force?: boolean }
   >({
     mutationFn: async ({ devices, force }) => {
-      const outcomes = await Promise.allSettled(
+      const outcome: StackCleanupOutcome = { removed: new Map(), failures: [] };
+      await Promise.all(
         devices.map(async (device) => {
-          const result = await device.api.worktrees.deleteStack({
-            projectId: device.projectId,
-            worktreeId: device.targetId,
-            force,
-          });
-          for (const worktreeId of result.removed) {
-            forgetDeletedWorktree(
+          try {
+            const result = await device.api.worktrees.deleteStack({
+              projectId: device.projectId,
+              // Any worktree of the stack: the host picks where to run.
+              worktreeId: device.worktrees[0]!.id,
+              force,
+            });
+            outcome.removed.set(device.deviceId, result.removed);
+            forgetDeletedWorktrees(
               queryClient,
               device.deviceId,
               device.projectId,
-              worktreeId,
+              result.removed,
             );
-          }
-          invalidateHostDevice(queryClient, device.deviceId);
-          if (!result.ok) {
-            throw new Error("a cleanup script failed; its worktree stayed");
+            if (!result.ok) {
+              outcome.failures.push(
+                `${device.label}: a cleanup script failed, so a worktree stayed`,
+              );
+            }
+          } catch (error) {
+            outcome.failures.push(`${device.label}: ${errorMessageOf(error)}`);
           }
         }),
       );
-      const failures = outcomes.flatMap((outcome, index) =>
-        outcome.status === "rejected"
-          ? [`${devices[index]!.label}: ${errorMessage(outcome.reason)}`]
-          : [],
-      );
-      if (failures.length > 0) throw new Error(failures.join("\n"));
+      return outcome;
     },
-    // The page may have moved on by the time a peer answers, so the
-    // failure goes to a toast rather than the box.
-    meta: { errorTitle: "Couldn't delete the stack's worktrees elsewhere" },
+    meta: { silentError: true },
   });
-}
-
-function errorMessage(reason: unknown): string {
-  return reason instanceof Error ? reason.message : String(reason);
 }
 
 // Whether the worktree is on its way out: this window's own delete of

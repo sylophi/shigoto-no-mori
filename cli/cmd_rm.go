@@ -204,12 +204,16 @@ func reportRemoved(proj project, id worktreeIdentity, hint string, extra map[str
 
 func cmdRm(ctx cliContext, args []string) (int, error) {
 	spec := worktreeTargetSpec()
+	spec.bools["stack"] = []string{}
 	addRemoveFlags(spec)
 	parsed, target, err := parseWorktreeArgs(ctx, args, spec, false)
 	if err != nil {
 		return exitCodeOf(err), err
 	}
 	proj, id := target.proj, target.worktree
+	if parsed.bools["stack"] {
+		return rmStack(proj, id, removeOptionsFrom(parsed))
+	}
 
 	hint, err := execRemove(proj, id, removeOptionsFrom(parsed))
 	if err != nil {

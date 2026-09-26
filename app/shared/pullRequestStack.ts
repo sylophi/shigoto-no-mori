@@ -122,6 +122,25 @@ export function stackCleanupFor<
   return target ? { target, worktrees: landed } : null;
 }
 
+// The same for a worktree by id, from a device's own PR map and rows:
+// what the host's stack removal (and the lab's stand-in) resolve.
+export function stackCleanupForWorktree<
+  T extends {
+    id: string;
+    branch: string;
+    isPrimary: boolean;
+    primaryBranch?: string;
+  },
+>(
+  prs: Record<string, PullRequest>,
+  rows: readonly T[],
+  worktreeId: string,
+): StackCleanup<T> | null {
+  const own = rows.find((row) => row.id === worktreeId);
+  const stack = own && pullRequestStackFor(prs, own.branch, trunkOf(rows));
+  return stack ? stackCleanupFor(stack, rows) : null;
+}
+
 // Where a branch's PR sits in its stack: `index` from the bottom, of
 // `size` layers.
 export type StackPosition = { index: number; size: number };

@@ -254,6 +254,7 @@ func awaitMergeability(projectPath string, number int) {
 // independent round trips (git for the trunk, gh for the repo's merge
 // methods, the PR list and the stack object), so they overlap.
 type stackLookups struct {
+	pt      primaryTarget
 	trunk   string
 	allowed []string
 	prs     []prSummary
@@ -270,9 +271,8 @@ func lookupStack(proj project, number int, allowed []string) (stackLookups, erro
 	)
 	lk.allowed = allowed
 	wg.Go(func() {
-		var pt primaryTarget
-		pt, ptErr = resolvePrimaryTarget(proj)
-		lk.trunk = pt.localPrimary
+		lk.pt, ptErr = resolvePrimaryTarget(proj)
+		lk.trunk = lk.pt.localPrimary
 	})
 	wg.Go(func() { lk.prs, lsErr = listPullRequests(proj.Path) })
 	wg.Go(func() { lk.ghStack, stErr = githubStackFor(proj.Path, number) })
@@ -281,6 +281,15 @@ func lookupStack(proj project, number int, allowed []string) (stackLookups, erro
 	}
 	wg.Wait()
 	return lk, errors.Join(ptErr, lsErr, stErr)
+}
+
+// One JSON event per landed PR in --json mode, so a caller can follow
+// along, and the green line otherwise. Shared by merge and land.
+func stackMergedReporter(method string) func(prSummary) {
+	return func(pr prSummary) {
+		emitOrOut(map[string]any{"event": "merged", "number": pr.Number, "branch": pr.HeadRefName, "method": method},
+			greenOut(fmt.Sprintf("merged PR #%d (%s): %s", pr.Number, method, pr.Title)))
+	}
 }
 
 // The whole `--stack` merge: resolve the set, pick GitHub's own merge

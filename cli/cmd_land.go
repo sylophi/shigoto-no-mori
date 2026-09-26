@@ -71,10 +71,13 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 		return landStack(proj, id, pr, methodFlag, allowed, opts)
 	}
 
-	alreadyMerged := pr.State == "MERGED"
+	// Resolved once for the guard below and the cleanup after. A
+	// failure only skips the guard and the catch-up (landCleanup says
+	// so), since neither is the land.
+	pt, ptErr := resolvePrimaryTarget(proj)
 	method := ""
-	if !alreadyMerged {
-		if below, err := stackedUnder(proj, pr); err != nil {
+	if pr.State == "OPEN" {
+		if below, err := stackedUnder(proj, pr, pt, ptErr); err != nil {
 			return 1, err
 		} else if below != nil {
 			return 1, errf("PR #%d (%s) is stacked on open PR #%d (%s). `%s land --stack` lands both; "+
@@ -89,17 +92,16 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 	}
 	reportMerged(pr, method)
 	extra := map[string]any{"merged": mergeResultFields(pr, id.Branch, method)}
-	return landCleanup(proj, id, pr.BaseRefName, opts, extra)
+	return landCleanup(proj, id, pr.BaseRefName, pt, ptErr, opts, extra)
 }
 
 // The open PR this PR is based on, or nil when it sits on the trunk
 // (or on a branch with no open PR). One `gh pr list --head` lookup,
 // and only when the base isn't the trunk, so the common land pays
-// nothing. A trunk that can't be resolved skips the check: it's a
+// nothing. A trunk that couldn't be resolved skips the check: it's a
 // guard, not the merge.
-func stackedUnder(proj project, pr *prSummary) (*prSummary, error) {
-	pt, err := resolvePrimaryTarget(proj)
-	if err != nil || pr.BaseRefName == "" || pr.BaseRefName == pt.localPrimary {
+func stackedUnder(proj project, pr *prSummary, pt primaryTarget, ptErr error) (*prSummary, error) {
+	if ptErr != nil || pr.BaseRefName == "" || pr.BaseRefName == pt.localPrimary {
 		return nil, nil
 	}
 	below, err := findPullRequest(proj.Path, pr.BaseRefName)
@@ -147,57 +149,119 @@ func landStack(proj project, id worktreeIdentity, pr *prSummary, methodFlag stri
 			return exitCodeOf(err), err
 		}
 	}
-
-	landing := landingLayers(chain, set)
-	identities, err := listWorktreeIdentities(proj)
+	plan, err := planStackCleanup(proj, id, chain, set, opts)
 	if err != nil {
-		return 1, err
-	}
-	others := landedWorktrees(identities, landing, id)
-	for _, other := range others {
-		if err := removePreflight(other, opts.force); err != nil {
-			return exitCodeOf(err), errf("worktree %s (%s): %s", other.Name, other.Branch, err)
-		}
+		return exitCodeOf(err), err
 	}
 
 	if pr.State == "OPEN" {
-		onMerged := func(p prSummary) {
-			emitOrOut(map[string]any{"event": "merged", "number": p.Number, "branch": p.HeadRefName, "method": method},
-				greenOut(fmt.Sprintf("merged PR #%d (%s): %s", p.Number, method, p.Title)))
-		}
-		if err := mergeStackSet(proj, pr.Number, method, lk, chain, set, onMerged); err != nil {
+		if err := mergeStackSet(proj, pr.Number, method, lk, chain, set, stackMergedReporter(method)); err != nil {
 			return exitCodeOf(err), err
 		}
 		persistMergeMethod(proj, method)
 	} else {
 		reportMerged(pr, "")
 	}
+	extra := map[string]any{"merged": mergeResultFields(pr, id.Branch, method)}
+	return execStackCleanup(proj, id, pr, plan, lk.pt, opts, extra)
+}
 
-	// The landed layers, bottom first, and the worktrees removed for
-	// them. The catch-up targets the bottom's base: that is the branch
-	// the stack landed on, not this PR's own base (the layer below).
-	landed := make([]map[string]any, 0, len(chain))
-	for _, layer := range chain {
-		if landing[layer.HeadRefName] || layer.Number == pr.Number {
+// `rm --stack`: the cleanup half of a stack land on its own, for a
+// stack that has landed. Never merges: an open PR is refused with the
+// land to run. Any worktree of the stack will do, since the layers
+// under it that are merged go with it.
+func rmStack(proj project, id worktreeIdentity, opts removeOptions) (int, error) {
+	if id.Branch == unknownBranch || id.Detached {
+		return 1, errf("No branch checked out")
+	}
+	if err := removePreflight(id, opts.force); err != nil {
+		return exitCodeOf(err), err
+	}
+	opts.preflighted = true
+	pr, err := findPullRequest(proj.Path, id.Branch)
+	if err != nil {
+		return 1, err
+	}
+	switch {
+	case pr == nil:
+		return 1, errf("No pull request found for branch %s, so no stack to clean up", id.Branch)
+	case pr.State == "OPEN":
+		return 1, errf("PR #%d for %s is still open; `%s land --stack` lands it", pr.Number, id.Branch, binaryName)
+	}
+	// The allowed merge methods aren't needed: nothing merges.
+	lk, err := lookupStack(proj, pr.Number, mergeMethodOrder)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	chain, err := stackChain(proj, pr.Number, lk)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	plan, err := planStackCleanup(proj, id, chain, nil, opts)
+	if err != nil {
+		return exitCodeOf(err), err
+	}
+	return execStackCleanup(proj, id, pr, plan, lk.pt, opts, nil)
+}
+
+// What a stack cleanup removes: the layers landed once the merge is
+// through, and the worktrees on them besides this one, every one of
+// them past the removal guards.
+type stackCleanupPlan struct {
+	chain      []prSummary
+	landing    map[string]bool
+	identities []worktreeIdentity
+	others     []worktreeIdentity
+}
+
+func planStackCleanup(proj project, id worktreeIdentity, chain, set []prSummary, opts removeOptions) (stackCleanupPlan, error) {
+	plan := stackCleanupPlan{chain: chain, landing: landingLayers(chain, set)}
+	identities, err := listWorktreeIdentities(proj)
+	if err != nil {
+		return plan, err
+	}
+	plan.identities = identities
+	plan.others = landedWorktrees(identities, plan.landing, id)
+	for _, other := range plan.others {
+		if err := removePreflight(other, opts.force); err != nil {
+			return plan, errf("worktree %s (%s): %s", other.Name, other.Branch, err)
+		}
+	}
+	return plan, nil
+}
+
+// The removals: the other landed worktrees first, then this one
+// through the plain cleanup, whose document carries the landed layers
+// (bottom first) and the worktrees removed for them. The catch-up
+// targets the bottom's base, the branch the stack landed on, not this
+// PR's own base (the layer below).
+func execStackCleanup(proj project, id worktreeIdentity, pr *prSummary, plan stackCleanupPlan, pt primaryTarget, opts removeOptions, extra map[string]any) (int, error) {
+	landed := make([]map[string]any, 0, len(plan.chain))
+	for _, layer := range plan.chain {
+		if plan.landing[layer.HeadRefName] || layer.Number == pr.Number {
 			landed = append(landed, map[string]any{
 				"number": layer.Number, "title": layer.Title, "branch": layer.HeadRefName, "url": layer.URL,
 			})
 		}
 	}
-	removed := make([]map[string]any, 0, len(others))
+	removed := make([]map[string]any, 0, len(plan.others))
 	stackDoc := map[string]any{"landed": landed, "removed": removed}
-	extra := map[string]any{"merged": mergeResultFields(pr, id.Branch, method), "stack": stackDoc}
+	if extra == nil {
+		extra = map[string]any{}
+	}
+	extra["stack"] = stackDoc
+	base := plan.chain[0].BaseRefName
 	// The primary checkout is never removed; it stays where the sm done
 	// flow can land it back on the trunk.
 	if !id.IsPrimary && !jsonMode {
-		for _, other := range identities {
-			if other.IsPrimary && landing[other.Branch] {
+		for _, other := range plan.identities {
+			if other.IsPrimary && plan.landing[other.Branch] {
 				note(dimErr(fmt.Sprintf("the primary checkout is on landed branch %s; `%s done` lands it back on %s",
-					other.Branch, binaryName, chain[0].BaseRefName)))
+					other.Branch, binaryName, base)))
 			}
 		}
 	}
-	for _, other := range others {
+	for _, other := range plan.others {
 		if _, err := execRemove(proj, other, opts); err != nil {
 			return landCleanupFailed(err, extra)
 		}
@@ -207,7 +271,7 @@ func landStack(proj project, id worktreeIdentity, pr *prSummary, methodFlag stri
 			out(greenOut("removed " + other.Name))
 		}
 	}
-	return landCleanup(proj, id, chain[0].BaseRefName, opts, extra)
+	return landCleanup(proj, id, base, pt, nil, opts, extra)
 }
 
 // The head branches of the layers under the landing PR (the chain
@@ -241,15 +305,16 @@ func landedWorktrees(identities []worktreeIdentity, landing map[string]bool, sel
 
 // The cleanup half of land, after the merge: catch the base branch's
 // checkout up, then remove the worktree, or land the primary checkout
-// back on the primary branch. extra holds the merge fields the final
-// document carries either way.
-func landCleanup(proj project, id worktreeIdentity, base string, opts removeOptions, extra map[string]any) (int, error) {
+// back on the primary branch. extra holds the fields the final
+// document carries either way (the merge, a stack's removals). ptErr
+// is a primary target that couldn't be resolved, which the primary
+// checkout can't do without and a worktree only loses the catch-up to.
+func landCleanup(proj project, id worktreeIdentity, base string, pt primaryTarget, ptErr error, opts removeOptions, extra map[string]any) (int, error) {
 	// Landing the primary checkout itself is the sm done flow, minus
 	// its is-it-merged guard, since the merge just happened above.
 	if id.IsPrimary {
-		pt, err := resolvePrimaryTarget(proj)
-		if err != nil {
-			return 1, err
+		if ptErr != nil {
+			return 1, ptErr
 		}
 		deleted, err := execDone(proj, pt, id, !opts.keepBranch)
 		if err != nil {
@@ -271,8 +336,8 @@ func landCleanup(proj project, id worktreeIdentity, base string, opts removeOpti
 	}
 
 	var cu catchUpResult
-	if pt, err := resolvePrimaryTarget(proj); err != nil {
-		cu.skip = err.Error()
+	if ptErr != nil {
+		cu.skip = ptErr.Error()
 	} else {
 		cu = catchUpBase(proj, pt, base)
 	}
