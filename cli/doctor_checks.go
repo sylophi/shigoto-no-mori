@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,8 +29,21 @@ import (
 func runDoctorChecks(projects []project, complete bool) *doctorReport {
 	report := &doctorReport{}
 	checkEnvironment(report)
-	checkDataDirGroup(report, projects, complete)
+	haveDataDir := checkDataDirGroup(report, projects, complete)
+	checkOrphanTunnel(report)
+	checkOrphanScripts(report)
 	checkProjects(report, projects)
+	// After the parallel project pass has listed every project's
+	// worktrees (listWorktreeIdentities memoizes), so this spawns nothing.
+	// Its line is sorted back under the data dir below.
+	if haveDataDir {
+		checkWorktreeBookkeeping(report, projects, complete)
+	}
+	// Group order, stable within a group, so the JSON reads in the order
+	// the checklist prints whatever order the checks ran in.
+	slices.SortStableFunc(report.findings, func(a, b finding) int {
+		return slices.Index(groupOrder, a.Group) - slices.Index(groupOrder, b.Group)
+	})
 	return report
 }
 
@@ -111,6 +125,12 @@ func checkFlavorAndApp(report *doctorReport) {
 			report.warn(groupEnv, "app", "app",
 				"this binary isn't the one inside "+collapseHome(found)+", so `"+binaryName+" update` can't reach it",
 				"Re-link the CLI from the app's Settings, or run "+collapseHome(filepath.Join(found, "Contents", "Resources", binaryName))+".")
+			return
+		}
+		if aside := findAsideBundle(); aside != "" {
+			report.fail(groupEnv, "app", "app",
+				"the app is missing, but "+collapseHome(aside)+" is the copy an interrupted update set aside",
+				"Rename it back to "+appExecutableName+".app.")
 			return
 		}
 		report.warn(groupEnv, "app", "app",
@@ -263,18 +283,23 @@ func hookBlockCurrent(kind string, hook hookFile) bool {
 
 // --- data dir ---
 
-func checkDataDirGroup(report *doctorReport, projects []project, complete bool) {
+// False when there is no usable data dir, so nothing that reads it can
+// mean anything.
+func checkDataDirGroup(report *doctorReport, projects []project, complete bool) bool {
 	if !checkDataDir(report) {
-		return // nothing below can mean anything without a data dir
+		return false
 	}
 	checkGlobalConfig(report)
 	checkRegistryFile(report)
+	checkStateFile(report)
 	checkStaleLocks(report)
 	checkStagingLock(report)
-	checkShelvedEntries(report, projects, complete)
+	checkUpdateLeftovers(report)
 	checkPortAllocations(report)
+	checkGlobalLaunchers(report)
 	checkTerrier(report)
 	checkDormantProjectState(report, projects, complete)
+	return true
 }
 
 // access(2)'s W_OK. Go's syscall package doesn't name the mode bits,
@@ -294,12 +319,37 @@ func checkDataDir(report *doctorReport) bool {
 	default:
 		source = "default for the " + flavor + " flavor"
 	}
+	// A pointer that fails the guard is skipped without a word
+	// (readDataDirPointer), which reads as every project vanishing.
+	if cachedDataDirSource == dataDirDefault {
+		if pointer := readPointerFile(); pointer.target != "" && pointer.problem != "" {
+			report.warn(groupState, "data-dir", "data dir",
+				"the pointer file names "+pointer.target+", which was ignored because "+pointer.problem+
+					", so sm is using "+collapseHome(root)+" "+dimOut("("+source+")"),
+				"Fix "+collapseHome(pointer.path)+" to name a data dir, or delete it.")
+			// The rest of the data dir checks run on whatever sm is using.
+			info, err := os.Stat(root)
+			return err == nil && info.IsDir()
+		}
+	}
 	info, err := os.Stat(root)
 	switch {
 	case os.IsNotExist(err):
+		addProject := "`" + binaryName + " projects add`"
+		fix := "Add a project (" + addProject + ") and it will be created."
+		if cachedDataDirSource == dataDirFromPointer {
+			pointer := collapseHome(readPointerFile().path)
+			if volume := unmountedVolume(root); volume != "" {
+				report.fail(groupState, "data-dir", "data dir",
+					"the pointer file names "+root+", on "+volume+", which isn't connected",
+					"Connect the drive. To start over on this Mac instead, delete "+pointer+".")
+				return false
+			}
+			fix = "If the data was moved or deleted, fix or delete " + pointer +
+				". Otherwise add a project (" + addProject + ") and it will be created."
+		}
 		report.warn(groupState, "data-dir", "data dir",
-			collapseHome(root)+" doesn't exist yet ("+source+"), so nothing is registered",
-			"Add a project (`"+binaryName+" projects add`) and it will be created.")
+			collapseHome(root)+" doesn't exist yet ("+source+"), so nothing is registered", fix)
 		return false
 	case err != nil:
 		report.fail(groupState, "data-dir", "data dir",
@@ -324,22 +374,58 @@ func checkDataDir(report *doctorReport) bool {
 			collapseHome(root)+" "+dimOut("("+source+")"),
 			"Rename it to ~/"+dataDirName+" from the app's Settings > Data location.")
 		return true
+	case dataDirFromPointer:
+		// A data-folder move copies, repoints, then deletes the old copy.
+		// One that died after the repoint leaves the old tree behind,
+		// complete and ignored.
+		if reportIgnoredCopy(report, root, source, dataDirName,
+			"If a data-folder move left it behind, delete it once you've checked nothing in it is newer.") {
+			return true
+		}
 	case dataDirDefault:
 		// Both names holding state means an upgrade seeded the current
 		// one while the old one was unreachable: the old data is now
 		// ignored, silently, unless someone says so.
-		if home, err := os.UserHomeDir(); err == nil {
-			legacy := filepath.Join(home, legacyDataDirName)
-			if holdsState(legacy) == statePresent {
-				report.warn(groupState, "data-dir", "data dir",
-					collapseHome(root)+" "+dimOut("("+source+")")+"; "+collapseHome(legacy)+" also holds state and is ignored",
-					"Move "+collapseHome(legacy)+" aside, or merge what you need from it by hand.")
-				return true
-			}
+		if reportIgnoredCopy(report, root, source, legacyDataDirName,
+			"Move it aside, or merge what you need from it by hand.") {
+			return true
 		}
 	}
 	report.ok(groupState, "data-dir", "data dir", collapseHome(root)+" "+dimOut("("+source+")"))
 	return true
+}
+
+// Warns when ~/<name>, a data dir sm isn't using, still holds state
+// that is now silently ignored. Reports whether it did.
+func reportIgnoredCopy(report *doctorReport, root, source, name, fix string) bool {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	other := filepath.Join(home, name)
+	if other == root || sameDirectory(other, root) || holdsState(other) != statePresent {
+		return false
+	}
+	report.warn(groupState, "data-dir", "data dir",
+		collapseHome(root)+" "+dimOut("("+source+")")+"; "+collapseHome(other)+" also holds state and is ignored",
+		fix)
+	return true
+}
+
+// "/Volumes/<name>" when path lives on a volume that isn't mounted,
+// else "". A missing data dir there is a disconnected drive, not a
+// fresh install.
+func unmountedVolume(path string) string {
+	rest, ok := strings.CutPrefix(path, "/Volumes/")
+	if !ok {
+		return ""
+	}
+	name, _, _ := strings.Cut(rest, "/")
+	volume := "/Volumes/" + name
+	if _, err := os.Stat(volume); name == "" || err == nil {
+		return ""
+	}
+	return volume
 }
 
 func checkGlobalConfig(report *doctorReport) {
@@ -424,6 +510,23 @@ func checkRegistryFile(report *doctorReport) {
 		fmt.Sprintf("valid, %d project%s registered", len(projects), plural(len(projects))))
 }
 
+// state.json holds only UI history (use counts, view preferences), so
+// a broken one never stops a command. But every write to it is refused
+// until it is fixed (updateFileKey), and the only sign is a one-time
+// note on some unrelated command's stderr.
+func checkStateFile(report *doctorReport) {
+	if _, err := readStateFile(); err != nil {
+		report.warn(groupState, "state", stateFile,
+			"can't be used ("+err.Error()+"), so use counts and view preferences are lost and nothing new is recorded",
+			"Repair "+collapseHome(statePath())+", or delete it. It holds only that history.")
+		return
+	}
+	if _, err := os.Stat(statePath()); os.IsNotExist(err) {
+		return // absent until something is used; nothing to say
+	}
+	report.ok(groupState, "state", stateFile, "valid")
+}
+
 // Advisory locks (state.go's protocol) are created and unlinked around
 // a read-modify-write measured in milliseconds. One that has sat there
 // past lockStale belonged to a process that died holding it, and it
@@ -444,7 +547,7 @@ func checkStaleLocks(report *doctorReport) {
 		detail += fmt.Sprintf(" (and %d more)", extra)
 	}
 	report.repairable(groupState, "locks", "locks", statusWarn, detail,
-		"Delete it (`"+binaryName+" doctor --fix`); the process that took it is gone.",
+		"Delete it. The process that took it is gone.",
 		&repair{
 			prompt:      "Delete " + label + " (" + strings.Join(names, ", ") + ")?",
 			label:       "deleted " + label,
@@ -503,23 +606,22 @@ func findStaleLocks(root string) []string {
 // being dead.
 func checkStagingLock(report *doctorReport) {
 	path := stagingLockPath()
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return // absent is the normal case; no line for it
+	present, pid, alive := stagingLockHolder()
+	if !present {
+		return // the normal case; no line for it
 	}
-	pid, convErr := strconv.Atoi(strings.TrimSpace(string(raw)))
-	if convErr == nil && pidAlive(pid) {
+	if alive {
 		report.ok(groupState, "staging-lock", "update staging",
 			fmt.Sprintf("in progress (pid %d)", pid))
 		return
 	}
 	detail := "left behind by a crashed update"
-	if convErr == nil {
+	if pid != 0 {
 		detail += fmt.Sprintf(" (pid %d is gone)", pid)
 	}
 	report.repairable(groupState, "staging-lock", "update staging", statusWarn,
 		detail+", so `"+binaryName+" update` refuses to run",
-		"Delete "+collapseHome(path)+" (`"+binaryName+" doctor --fix`).",
+		"Delete "+collapseHome(path)+".",
 		&repair{
 			prompt:      "Delete the stale update staging lock at " + collapseHome(path) + "?",
 			label:       "deleted the stale update staging lock",
@@ -528,41 +630,74 @@ func checkStagingLock(report *doctorReport) {
 		})
 }
 
-// shelvedWorktrees keys are path-derived worktree ids. Ids that match
-// nothing are harmless but accumulate forever, and they're the cheapest
-// signal that worktrees were removed outside sm. With the project list
-// short, a missing project's marks would all read as orphaned.
-func checkShelvedEntries(report *doctorReport, projects []project, complete bool) {
-	shelved := readShelvedSet()
-	if len(shelved) == 0 || !complete {
+// Everything sm keys by worktree id: the registry's marks (shelved,
+// auto-pull, shelf snapshots) and each project's worktrees/<id>.json.
+// sm rm clears them, so ids that match nothing mean worktrees were
+// removed outside sm. Harmless, so reported and never cleared: a
+// dormant project's worktrees are unlisted but may come back, and a
+// mark doesn't say which project it is from. With the project list
+// short, every mark of a missing project would read as a leftover, so
+// the check stands down.
+func checkWorktreeBookkeeping(report *doctorReport, projects []project, complete bool) {
+	if !complete {
 		return
 	}
+	registry, err := readRegistryFile()
+	if err != nil {
+		return // checkRegistryFile says why
+	}
 	known := map[string]bool{}
+	dataFiles := 0 // leftover worktrees/<id>.json files
 	for _, proj := range projects {
 		identities, err := listWorktreeIdentities(proj)
 		if err != nil {
 			return // an unreadable repo would make every id look orphaned
 		}
+		ids := map[string]bool{}
 		for _, id := range identities {
 			known[id.ID] = true
+			ids[id.ID] = true
+		}
+		dir := filepath.Join(projectDataDir(proj.ID), "worktrees")
+		entries, _ := os.ReadDir(dir)
+		for _, entry := range entries {
+			id, isData := strings.CutSuffix(entry.Name(), ".json")
+			if isData && !entry.IsDir() && !ids[id] {
+				dataFiles++
+			}
 		}
 	}
-	orphans := 0
-	for id := range shelved {
-		if !known[id] {
-			orphans++
+	marked, leftover := map[string]bool{}, 0
+	for _, key := range worktreeMarkKeys {
+		ids := map[string]json.RawMessage{}
+		if decodeKey(registryPath(), key, registry[key], &ids) != nil {
+			continue // checkRegistryFile's territory
+		}
+		for id := range ids {
+			marked[id] = true
+			if !known[id] {
+				leftover++
+			}
 		}
 	}
-	if orphans == 0 {
-		report.ok(groupState, "shelved", "shelved marks",
-			fmt.Sprintf("%d worktree%s marked out of focus, all still present", len(shelved), plural(len(shelved))))
+	if leftover == 0 && dataFiles == 0 {
+		if len(marked) > 0 {
+			report.ok(groupState, "bookkeeping", "worktree marks",
+				fmt.Sprintf("%d worktree%s marked, all still present", len(marked), plural(len(marked))))
+		}
 		return
 	}
-	report.warn(groupState, "shelved", "shelved marks",
-		fmt.Sprintf("%d out-of-focus mark%s belong to worktrees that no longer exist",
-			orphans, plural(orphans)),
-		"Harmless leftovers; unshelving from the app clears them, or edit "+
-			collapseHome(registryPath())+".")
+	var parts []string
+	if leftover > 0 {
+		parts = append(parts, fmt.Sprintf("%d mark%s", leftover, plural(leftover)))
+	}
+	if dataFiles > 0 {
+		parts = append(parts, fmt.Sprintf("%d data file%s", dataFiles, plural(dataFiles)))
+	}
+	report.warn(groupState, "bookkeeping", "worktree marks",
+		strings.Join(parts, " and ")+" belong to worktrees that no longer exist",
+		"Harmless, and some may belong to a project that isn't listed right now. "+
+			"Removing worktrees with `"+binaryName+" rm` or from the app leaves none behind.")
 }
 
 // port-pool leases live in port-pool's own state, keyed by directory,
@@ -607,11 +742,9 @@ func checkPortAllocations(report *doctorReport) {
 
 // The terrier registry belongs to terrier, and sm only merges it into
 // the project list. So this check explains why merged projects might be
-// missing (the same terrierTroubleFor ladder the merge warns from) and
-// reports entries whose directory is gone. It never fixes anything,
-// since `terrier prune` owns that. This is also the only doctor
-// coverage terrier projects get: checkProjects filters them out so its
-// repairs can't touch entries sm doesn't own.
+// missing (the same terrierTroubleFor ladder the merge warns from). The
+// merged projects themselves, gone directories included, are checked
+// one by one in checkProjects.
 func checkTerrier(report *doctorReport) {
 	if !terrierEnabled(readGlobalConfigHints()) {
 		return
@@ -619,19 +752,6 @@ func checkTerrier(report *doctorReport) {
 	listings, trouble := activeTerrierListings()
 	if trouble != nil {
 		report.warn(groupState, "terrier", "terrier", trouble.summary, trouble.advice)
-		return
-	}
-	gone := 0
-	for _, t := range listings {
-		if _, err := os.Stat(t.Path); os.IsNotExist(err) {
-			gone++
-		}
-	}
-	if gone > 0 {
-		report.warn(groupState, "terrier", "terrier",
-			fmt.Sprintf("%d of %d registered repos point at directories that are gone",
-				gone, len(listings)),
-			"Run `terrier prune` (it owns that registry, so "+binaryName+" won't touch it).")
 		return
 	}
 	report.ok(groupState, "terrier", "terrier",
@@ -714,19 +834,11 @@ func parsePortPoolDirs(stdout string) []string {
 
 // One line per healthy project, and one line per problem otherwise:
 // a dozen registered projects would otherwise bury the findings that
-// matter under a hundred green ticks.
+// matter under a hundred green ticks. Terrier-sourced projects get the same checks. Only the unregister
+// repair is withheld (checkProjectRepo), since that entry belongs to
+// terrier. The others act on the repo's own git metadata and sm's
+// bookkeeping, which are the same whoever registered the path.
 func checkProjects(report *doctorReport, projects []project) {
-	// Registry entries only: the terrier-sourced merges get their
-	// aggregate coverage in checkTerrier, and the repairs here
-	// (unregister + state-dir delete) must never act on an entry sm
-	// doesn't own.
-	owned := make([]project, 0, len(projects))
-	for _, p := range projects {
-		if p.Source == "" {
-			owned = append(owned, p)
-		}
-	}
-	projects = owned
 	if len(projects) == 0 {
 		return
 	}
@@ -742,7 +854,11 @@ func checkProjects(report *doctorReport, projects []project) {
 	wg.Wait()
 	for i, sub := range perProject {
 		if len(sub.findings) == 0 {
-			report.ok(groupProjects, "project", projects[i].Name, "ok")
+			detail := "ok"
+			if projects[i].Source != "" {
+				detail += dimOut(" (via " + projects[i].Source + ")")
+			}
+			report.ok(groupProjects, "project", projects[i].Name, detail)
 			continue
 		}
 		for _, f := range sub.findings {
@@ -763,10 +879,20 @@ func checkOneProject(report *doctorReport, proj project) {
 	checkProjectWorktrees(report, proj, config)
 	checkProjectScripts(report, proj, config)
 	checkProjectWorktreeInclude(report, proj, config)
+	checkProjectCarryOver(report, proj, config)
+	checkProjectLaunchers(report, proj, config)
+	checkIncomingRefs(report, proj)
 }
 
 func checkProjectRepo(report *doctorReport, proj project) bool {
 	info, err := os.Stat(proj.Path)
+	if os.IsNotExist(err) && proj.Source != "" {
+		// Not sm's entry to drop, so no repair: terrier prune owns it.
+		report.warn(groupProjects, "project-path", proj.Name,
+			collapseHome(proj.Path)+" is gone, but "+proj.Source+" still lists it",
+			"Restore the directory, or run `terrier prune`.")
+		return false
+	}
 	if os.IsNotExist(err) {
 		report.repairable(groupProjects, "project-path", proj.Name, statusFail,
 			collapseHome(proj.Path)+" is gone, so every command for this project fails",
@@ -792,7 +918,7 @@ func checkProjectRepo(report *doctorReport, proj project) bool {
 	if err != nil || !info.IsDir() {
 		report.fail(groupProjects, "project-path", proj.Name,
 			collapseHome(proj.Path)+" isn't a readable directory",
-			"Check its permissions, or unregister the project.")
+			"Check its permissions, or unregister it ("+unregisterHint(proj)+").")
 		return false
 	}
 	_, primaryPath, err := locateRepo(proj.Path)
@@ -805,7 +931,7 @@ func checkProjectRepo(report *doctorReport, proj project) bool {
 	if err != nil {
 		report.fail(groupProjects, "project-repo", proj.Name,
 			collapseHome(proj.Path)+" is no longer a git repository",
-			"Restore the repo, or unregister it (`"+binaryName+" projects remove "+proj.Name+"`).")
+			"Restore the repo, or unregister it ("+unregisterHint(proj)+").")
 		return false
 	}
 	if primaryPath != proj.Path {
@@ -820,12 +946,23 @@ func checkProjectRepo(report *doctorReport, proj project) bool {
 			detail = "registered through a symlinked path; git calls the same directory " +
 				collapseHome(primaryPath) + ", so nothing run from inside the repo matches it"
 		}
+		readd := "`" + binaryName + " projects add " + collapseHome(primaryPath) + "`"
+		if proj.Source == "terrier" {
+			readd = "`terrier add " + collapseHome(primaryPath) + "`"
+		}
 		report.fail(groupProjects, "project-primary", proj.Name, detail,
-			"Unregister it and re-add the resolved path (`"+binaryName+
-				" projects add "+collapseHome(primaryPath)+"`).")
+			"Unregister it ("+unregisterHint(proj)+") and re-add the resolved path ("+readd+").")
 		return false
 	}
 	return true
+}
+
+// The command that unregisters proj, from whichever registry holds it.
+func unregisterHint(proj project) string {
+	if proj.Source == "terrier" {
+		return "`terrier rm " + proj.Name + "`"
+	}
+	return "`" + binaryName + " projects remove " + proj.Name + "`"
 }
 
 func isBareRepo(path string) bool {
@@ -875,38 +1012,110 @@ func checkProjectDefaultBranch(report *doctorReport, proj project, config *proje
 // Three ways git's worktree metadata and the disk can disagree, all of
 // them producing worktrees that list but don't work.
 func checkProjectWorktrees(report *doctorReport, proj project, config *projectConfig) {
-	identities, err := listWorktreeIdentities(proj)
+	drift, err := findWorktreeDrift(proj, config)
 	if err != nil {
 		report.fail(groupProjects, "project-worktrees", proj.Name,
 			"git can't list this project's worktrees: "+err.Error(),
 			"Run `git worktree list` in "+collapseHome(proj.Path)+" to see the failure.")
 		return
 	}
-	var missing []string
-	known := map[string]bool{}
-	for _, id := range identities {
-		known[id.Path] = true
-		if _, statErr := os.Stat(id.Path); os.IsNotExist(statErr) {
-			missing = append(missing, id.Name)
+	if n := len(drift.moved); n > 0 {
+		var names []string
+		for oldPath, newPath := range drift.moved {
+			names = append(names, filepath.Base(oldPath)+" → "+collapseHome(newPath))
 		}
-	}
-	if len(missing) > 0 {
-		projectPath := proj.Path
-		report.repairable(groupProjects, "project-worktrees", proj.Name, statusWarn,
-			fmt.Sprintf("git still lists %d worktree%s whose directory is gone (%s)",
-				len(missing), plural(len(missing)), strings.Join(missing, ", ")),
-			"Prune the metadata (`"+binaryName+" doctor --fix`, or `git worktree prune`).",
+		sort.Strings(names)
+		report.repairable(groupProjects, "project-moved", proj.Name, statusWarn,
+			fmt.Sprintf("%d worktree%s moved without telling git (%s), so git lists the old path as missing",
+				n, plural(n), strings.Join(names, ", ")),
+			"Re-link it (`git worktree repair <new path>`). Never prune it.",
 			&repair{
-				label: "pruned git's worktree metadata for " + proj.Name,
-				apply: func() error {
-					_, err := runGit(projectPath, "worktree", "prune")
-					return err
-				},
+				label: fmt.Sprintf("re-linked %d moved worktree%s for %s", n, plural(n), proj.Name),
+				apply: func() error { return relinkMovedWorktrees(proj, drift.moved) },
 			})
 	}
-	// The mirror image: a directory sitting in the managed layout that
-	// git has no record of. Adoptable, deletable, or a half-finished
-	// create. sm can't tell, so it only points.
+	if len(drift.missing) > 0 {
+		names := make([]string, len(drift.missing))
+		for i, id := range drift.missing {
+			names[i] = id.Name
+		}
+		report.repairable(groupProjects, "project-worktrees", proj.Name, statusWarn,
+			fmt.Sprintf("git still lists %d worktree%s whose directory is gone (%s)",
+				len(names), plural(len(names)), strings.Join(names, ", ")),
+			"Prune the metadata (`git worktree prune`). "+
+				"If one was moved, run `git worktree repair <new path>` instead.",
+			&repair{
+				// Destructive: a checkout moved somewhere doctor doesn't
+				// look loses its link to the repo once pruned.
+				prompt: "Prune git's record of " + strings.Join(names, ", ") + " in " + proj.Name +
+					"? Say no if any of them was moved rather than deleted.",
+				label:       "pruned git's worktree metadata for " + proj.Name,
+				destructive: true,
+				apply:       func() error { return pruneMissingWorktrees(proj, config) },
+			})
+	}
+	if len(drift.strays) > 0 {
+		shown := make([]string, len(drift.strays))
+		for i, path := range drift.strays {
+			shown[i] = collapseHome(path)
+		}
+		report.warn(groupProjects, "project-strays", proj.Name,
+			fmt.Sprintf("%d %s in the managed layout that git doesn't know about (%s)",
+				len(shown), pluralize(len(shown), "directory", "directories"),
+				strings.Join(shown, ", ")),
+			"Adopt it (`"+binaryName+" adopt <path>`) or delete it by hand. "+
+				binaryName+" won't guess.")
+	}
+}
+
+// How one project's git worktree metadata and the disk disagree.
+type worktreeDrift struct {
+	// Listed by git, directory gone. A locked entry is one git keeps on
+	// purpose while its directory is away (prune skips it too), and a
+	// moved one is in moved instead.
+	missing []worktreeIdentity
+	// A missing entry's old path -> the stray directory it moved to. Its
+	// .git still points at that entry's metadata: moved by hand, or by a
+	// data-folder move whose `git worktree repair` failed. Pruning would
+	// sever it.
+	moved map[string]string
+	// Directories in the managed layout git has no record of: adoptable,
+	// deletable, or a half-finished create. Moved ones excluded.
+	strays []string
+}
+
+func findWorktreeDrift(proj project, config *projectConfig) (worktreeDrift, error) {
+	identities, err := listWorktreeIdentities(proj)
+	if err != nil {
+		return worktreeDrift{}, err
+	}
+	var drift worktreeDrift
+	known := map[string]bool{}
+	gone := map[string]bool{}
+	for _, id := range identities {
+		known[id.Path] = true
+		if _, err := os.Stat(id.Path); os.IsNotExist(err) && !id.Locked {
+			drift.missing = append(drift.missing, id)
+			gone[id.Path] = true
+		}
+	}
+	drift.moved = map[string]string{}
+	for _, stray := range findStrayWorktreeDirs(proj, config, known) {
+		if old := recordedWorktreePath(stray); gone[old] && drift.moved[old] == "" {
+			drift.moved[old] = stray
+			continue
+		}
+		drift.strays = append(drift.strays, stray)
+	}
+	drift.missing = slices.DeleteFunc(drift.missing, func(id worktreeIdentity) bool {
+		return drift.moved[id.Path] != ""
+	})
+	return drift, nil
+}
+
+// A directory sitting in the managed layout that git has no record of.
+// Sorted.
+func findStrayWorktreeDirs(proj project, config *projectConfig, known map[string]bool) []string {
 	var strays []string
 	for _, base := range managedBasesFor(proj.Path, config) {
 		entries, err := os.ReadDir(base)
@@ -928,18 +1137,78 @@ func checkProjectWorktrees(report *doctorReport, proj project, config *projectCo
 				primaryPath != proj.Path {
 				continue
 			}
-			strays = append(strays, collapseHome(path))
+			strays = append(strays, path)
 		}
 	}
-	if len(strays) > 0 {
-		sort.Strings(strays)
-		report.warn(groupProjects, "project-strays", proj.Name,
-			fmt.Sprintf("%d %s in the managed layout that git doesn't know about (%s)",
-				len(strays), pluralize(len(strays), "directory", "directories"),
-				strings.Join(strays, ", ")),
-			"Adopt it (`"+binaryName+" adopt <path>`) or delete it by hand. "+
-				binaryName+" won't guess.")
+	sort.Strings(strays)
+	return strays
+}
+
+// Where git last saw the linked checkout now at dir: its .git names an
+// admin dir in the repo, whose gitdir file records "<checkout>/.git".
+// "" when dir isn't a linked checkout or the record can't be read.
+func recordedWorktreePath(dir string) string {
+	admin := worktreeAdminDir(dir)
+	if admin == "" {
+		return ""
 	}
+	raw, err := os.ReadFile(filepath.Join(admin, "gitdir"))
+	recorded := strings.TrimSpace(string(raw))
+	if err != nil || recorded == "" {
+		return ""
+	}
+	if !filepath.IsAbs(recorded) { // worktree.useRelativePaths
+		recorded = filepath.Join(admin, recorded)
+	}
+	return filepath.Dir(recorded)
+}
+
+// `git worktree repair` on the new paths, then everything sm keys by
+// worktree id carried from the old path's id to the new one, as
+// `worktrees move` does. A data-folder move has already re-keyed, which
+// leaves nothing at the old id and makes that half a no-op.
+func relinkMovedWorktrees(proj project, moved map[string]string) error {
+	args := []string{"worktree", "repair", "--"}
+	for _, newPath := range moved {
+		args = append(args, newPath)
+	}
+	// git repairs each path on its own and fails if any one failed, so
+	// the ones it did re-link are re-keyed whatever it answers.
+	_, repairErr := runGit(proj.Path, args...)
+	invalidateWorktreeIdentities(proj.ID)
+	for oldPath, newPath := range moved {
+		now, err := findMovedIdentity(proj, newPath)
+		if err != nil {
+			continue // not re-linked; the error below says why
+		}
+		if from := worktreeIDFromPath(oldPath); from != now.ID {
+			rekeyWorktree(proj, from, now.ID)
+		}
+	}
+	return repairErr
+}
+
+// `git worktree prune`, re-checked at the moment it runs: a moved
+// worktree still waiting to be re-linked (its repair failed, or was
+// never run) would be severed by it, so the prune stands down. What sm
+// keeps per worktree goes with each pruned entry, as with `sm rm`.
+func pruneMissingWorktrees(proj project, config *projectConfig) error {
+	invalidateWorktreeIdentities(proj.ID)
+	drift, err := findWorktreeDrift(proj, config)
+	if err != nil {
+		return err
+	}
+	if len(drift.moved) > 0 {
+		return errf("a moved worktree in %s needs re-linking first (`git worktree repair <new path>`)", proj.Name)
+	}
+	if _, err := runGit(proj.Path, "worktree", "prune"); err != nil {
+		return err
+	}
+	invalidateWorktreeIdentities(proj.ID)
+	for _, id := range drift.missing {
+		forgetWorktree(proj.ID, id.ID)
+	}
+	return nil
 }
 
 // Lifecycle scripts fail late and loudly (mid-create, after the
@@ -1017,6 +1286,192 @@ func checkProjectWorktreeInclude(report *doctorReport, proj project, config *pro
 			worktreeIncludeFile+" doesn't resolve: "+err.Error(),
 			"Check its patterns against `git ls-files --others`.")
 	}
+}
+
+// A carry-over entry no checkout has fails every create with "Source
+// missing in every checkout", after the worktree already exists. Only
+// `carryover add` warns about it today, and a file that has since been
+// deleted never gets that warning.
+func checkProjectCarryOver(report *doctorReport, proj project, config *projectConfig) {
+	if config == nil || len(config.CarryOver) == 0 {
+		return
+	}
+	var missing []string
+	for _, entry := range config.CarryOver {
+		if !carryOverPathExists(proj, entry.Path) {
+			missing = append(missing, entry.Path)
+		}
+	}
+	if len(missing) == 0 {
+		return
+	}
+	report.warn(groupProjects, "project-carryover", proj.Name,
+		fmt.Sprintf("carry-over %s %s in no checkout, so new worktrees start without %s",
+			pluralize(len(missing), "entry", "entries"), strings.Join(missing, ", ")+
+				pluralize(len(missing), " is", " are"),
+			pluralize(len(missing), "it", "them")),
+		"Restore it in the primary checkout, or drop the entry (`"+binaryName+
+			" projects config carryover rm "+shellWord(missing[0])+" -p "+proj.Name+"`).")
+}
+
+// Custom launchers fire and forget through /bin/sh, so one whose
+// program isn't installed fails with nothing on screen, from the app
+// and from `sm open` alike.
+func checkProjectLaunchers(report *doctorReport, proj project, config *projectConfig) {
+	if config != nil {
+		reportMissingLaunchers(report, groupProjects, "project-launchers", proj.Name,
+			config.Launchers, "projects config launcher rm", " -p "+proj.Name)
+	}
+}
+
+// The global launchers, the ones every project's row carries.
+func checkGlobalLaunchers(report *doctorReport) {
+	reportMissingLaunchers(report, groupState, "launchers", "launchers",
+		readGlobalConfigHints().Launchers, "config launcher rm", "")
+}
+
+func reportMissingLaunchers(report *doctorReport, group, id, title string, commands []launcherCommand, rm, scope string) {
+	for _, missing := range launchersMissingProgram(commands) {
+		report.warn(group, id, title,
+			"the "+missing.label+" launcher runs "+missing.program+", which isn't installed or on PATH",
+			"Install it, or fix the launcher (`"+binaryName+" "+rm+" "+shellWord(missing.label)+scope+
+				"`, then add it again).")
+	}
+}
+
+type missingLauncher struct{ label, program string }
+
+// A label as one shell word, for a fix line meant to be pasted.
+func shellWord(s string) string {
+	if strings.ContainsAny(s, " \t'\"$`\\") {
+		return shellQuote(s)
+	}
+	return s
+}
+
+func launchersMissingProgram(commands []launcherCommand) []missingLauncher {
+	var missing []missingLauncher
+	for _, c := range commands {
+		program := launcherProgram(c.Command)
+		if program == "" {
+			continue
+		}
+		if filepath.IsAbs(program) {
+			if _, err := os.Stat(program); err == nil {
+				continue
+			}
+		} else if _, err := exec.LookPath(program); err == nil {
+			continue
+		}
+		missing = append(missing, missingLauncher{label: c.Label, program: program})
+	}
+	return missing
+}
+
+// Shell words that aren't programs on PATH.
+var shellBuiltins = map[string]bool{
+	"cd": true, "exec": true, "command": true, "eval": true, "source": true, ".": true,
+	"export": true, "set": true, "if": true, "for": true, "while": true, "case": true,
+	"test": true, "[": true, "echo": true, "printf": true, "true": true, "false": true,
+	"exit": true, "time": true, "nohup": true, "!": true,
+}
+
+// The program a launcher command starts, when that can be told without
+// a shell: its first word. "" whenever the command opens with anything
+// a shell would interpret first (a variable, an assignment, a quoted
+// path with spaces, a builtin, a relative path), so a false alarm is
+// never raised.
+func launcherProgram(command string) string {
+	fields := strings.Fields(command)
+	if len(fields) == 0 {
+		return ""
+	}
+	first := fields[0]
+	if unquoted := strings.Trim(first, `"'`); unquoted != first {
+		// Quoted and whole (no space inside), or give up.
+		if len(first) < 2 || first[0] != first[len(first)-1] {
+			return ""
+		}
+		first = unquoted
+	}
+	first = expandHome(first)
+	switch {
+	case first == "", shellBuiltins[first]:
+		return ""
+	case strings.ContainsAny(first, "$`=(){}|&;<>*?\\"):
+		return ""
+	case strings.Contains(first, "/") && !filepath.IsAbs(first):
+		return "" // relative to the worktree it runs in
+	}
+	return first
+}
+
+// How long a transfer's landing ref may exist before it can only be a
+// leftover. A landing sweeps it in a finally within seconds, and a
+// mirror's apply the same way.
+const incomingRefStale = time.Hour
+
+// refs/shigomori/incoming/<branch> is where a transfer or mirror lands
+// a branch before creating the worktree, swept straight after. One that
+// outlives its landing (a crash mid-fetch) blocks every later branch
+// nested under its name (incoming/feat blocks incoming/feat/x) at git's
+// file/directory rule, so that transfer fails.
+func checkIncomingRefs(report *doctorReport, proj project) {
+	stale := staleIncomingRefs(proj.Path)
+	if len(stale) == 0 {
+		return
+	}
+	names := make([]string, len(stale))
+	for i, ref := range stale {
+		names[i] = strings.TrimPrefix(ref, "refs/shigomori/incoming/")
+	}
+	report.repairable(groupProjects, "project-incoming", proj.Name, statusWarn,
+		fmt.Sprintf("%d transfer landing ref%s left by an interrupted transfer (%s), which can block the next one",
+			len(stale), plural(len(stale)), strings.Join(names, ", ")),
+		"Delete "+pluralize(len(stale), "it", "them")+". "+
+			"The commits stay on the device they came from.",
+		&repair{
+			prompt:      "Delete " + strings.Join(stale, ", ") + " in " + proj.Name + "?",
+			label:       fmt.Sprintf("deleted %d leftover landing ref%s in %s", len(stale), plural(len(stale)), proj.Name),
+			destructive: true,
+			apply: func() error {
+				for _, ref := range stale {
+					if _, err := runGit(proj.Path, "update-ref", "-d", "--end-of-options", ref); err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+		})
+}
+
+// Landing refs older than incomingRefStale. Refs carry no timestamp, so
+// age is the loose ref file's mtime. A packed one has been through a gc
+// and is old by definition. A ref in neither (reftable) is left alone.
+func staleIncomingRefs(repoPath string) []string {
+	stdout, err := runGit(repoPath, "for-each-ref", "--format=%(refname)", "refs/shigomori/incoming/")
+	if err != nil || strings.TrimSpace(stdout) == "" {
+		return nil
+	}
+	commonDir, err := runGit(repoPath, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		return nil
+	}
+	commonDir = strings.TrimSpace(commonDir)
+	packed, _ := os.ReadFile(filepath.Join(commonDir, "packed-refs"))
+	var stale []string
+	for _, ref := range strings.Fields(stdout) {
+		info, err := os.Stat(filepath.Join(commonDir, filepath.FromSlash(ref)))
+		switch {
+		case err == nil && time.Since(info.ModTime()) >= incomingRefStale:
+			stale = append(stale, ref)
+		case err != nil && strings.Contains(string(packed), " "+ref+"\n"):
+			stale = append(stale, ref)
+		}
+		// Anything else is fresh, or has an age that can't be read (a
+		// reftable repo): a landing may be under way right now.
+	}
+	return stale
 }
 
 // --- version comparison ---

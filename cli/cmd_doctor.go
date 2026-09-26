@@ -1,20 +1,23 @@
 package main
 
-// sm doctor is the "why is sm behaving weirdly" command. It answers two
-// questions the other commands can only fail at: is this installation
-// intact (git, gh, the app bundle behind the binary, PATH, the shell
-// hook), and is the data dir internally consistent (config and state
-// parse, no lock a crashed process left behind, no registry entry
+// sm doctor is the "why is sm behaving weirdly" command. It answers
+// three questions the other commands can only fail at: is this
+// installation intact (git, gh, the app bundle behind the binary, PATH,
+// the shell hook), is the data dir internally consistent (config and
+// state parse, no lock a crashed process left behind, no registry entry
 // pointing at a directory that's gone, git's worktree metadata agreeing
-// with what's on disk).
+// with what's on disk, launchers and carry-over naming things that
+// exist), and did a crash leave anything behind (a tunnel or dev server
+// still running, update downloads, transfer refs).
 //
 // Everything here is read-only unless --fix is passed. --fix applies
 // only the repairs whose outcome is unambiguous (delete a stale lock,
-// drop a registry entry whose repo no longer exists, `git worktree
-// prune`) and prompts before each one that deletes something (--yes
-// skips the prompts). Anything with a judgment call in it (a directory
-// git doesn't know about, a setup script naming a missing file, a repo
-// that stopped being a repo) is reported with a suggested fix and never
+// drop a registry entry whose repo no longer exists, re-link a
+// worktree that was moved, `git worktree prune`) and prompts before
+// each one that deletes something (--yes skips the prompts). Anything
+// with a judgment call in it (a directory git doesn't know about, a
+// setup script naming a missing file, a repo that stopped being a repo,
+// a process to kill) is reported with a suggested fix and never
 // touched: a doctor that guesses is worse than no doctor.
 //
 // Exit codes: 0 when nothing failed (warnings included), 1 when any
@@ -34,10 +37,13 @@ const (
 // Group titles, also the JSON `group` values. Order here is the render
 // order: broadest blast radius first.
 const (
-	groupEnv      = "Environment"
-	groupState    = "Data dir"
-	groupProjects = "Projects"
+	groupEnv       = "Environment"
+	groupState     = "Data dir"
+	groupProcesses = "Processes"
+	groupProjects  = "Projects"
 )
+
+var groupOrder = []string{groupEnv, groupState, groupProcesses, groupProjects}
 
 // One line of the checklist. detail is the one-line explanation, fix
 // the concrete suggestion (omitted when there's nothing to suggest).
@@ -220,7 +226,7 @@ func renderDoctorReport(report *doctorReport, repaired []string, fix bool) {
 	out(header)
 	out("")
 
-	for _, group := range []string{groupEnv, groupState, groupProjects} {
+	for _, group := range groupOrder {
 		var shown []finding
 		for _, f := range report.findings {
 			if f.Group == group {
@@ -237,8 +243,13 @@ func renderDoctorReport(report *doctorReport, repaired []string, fix bool) {
 		out(boldOut(group))
 		for i, line := range alignRows(rows) {
 			out("  " + line)
-			if shown[i].Fix != "" {
-				out("    " + dimOut("fix: "+shown[i].Fix))
+			if hint := shown[i].Fix; hint != "" {
+				// The fix text says what to do. That --fix can do it is
+				// this renderer's to add, since the app offers a button.
+				if shown[i].repair != nil && !fix {
+					hint += " (`" + binaryName + " doctor --fix` does this)"
+				}
+				out("    " + dimOut("fix: "+hint))
 			}
 		}
 		out("")

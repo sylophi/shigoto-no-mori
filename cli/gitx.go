@@ -105,6 +105,9 @@ type worktreeIdentity struct {
 	IsPrimary  bool
 	IsExternal bool
 	Detached   bool
+	// `git worktree lock`ed: git keeps its metadata even while the
+	// directory is missing (a checkout on a drive that isn't mounted).
+	Locked bool
 }
 
 type porcelainEntry struct {
@@ -113,6 +116,7 @@ type porcelainEntry struct {
 	branch   string
 	bare     bool
 	detached bool
+	locked   bool
 }
 
 func parsePorcelain(stdout string) []porcelainEntry {
@@ -141,6 +145,8 @@ func parsePorcelain(stdout string) []porcelainEntry {
 			current.bare = true
 		case "detached":
 			current.detached = true
+		case "locked":
+			current.locked = true
 		}
 	}
 	flush()
@@ -236,6 +242,7 @@ func listWorktreeIdentitiesUncached(proj project) ([]worktreeIdentity, error) {
 			IsPrimary:  isPrimary,
 			IsExternal: isExternal,
 			Detached:   entry.detached,
+			Locked:     entry.locked,
 		})
 	}
 	return identities, nil
