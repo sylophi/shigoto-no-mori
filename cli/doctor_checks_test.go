@@ -452,17 +452,63 @@ func TestOrphanedShelvedMarks(t *testing.T) {
 	writeFileT(t, registryPath(),
 		`{"shelvedWorktrees":{"`+worktreeIDFromPath(repo)+`":true}}`)
 	report := &doctorReport{}
-	checkShelvedEntries(report, projects)
+	checkShelvedEntries(report, projects, true)
 	onlyFinding(t, report, "shelved", statusOK)
 
 	// An id nothing on disk hashes to is a leftover.
 	writeFileT(t, registryPath(),
 		`{"shelvedWorktrees":{"0123456789ab":true}}`)
 	report = &doctorReport{}
-	checkShelvedEntries(report, projects)
+	checkShelvedEntries(report, projects, true)
 	finding := onlyFinding(t, report, "shelved", statusWarn)
 	if finding.repair != nil {
 		t.Fatal("orphaned marks are harmless; they must not be auto-removed")
+	}
+}
+
+// --- dormant project state ---
+
+func TestDormantProjectStateIsReportedNotFixed(t *testing.T) {
+	sandboxDataDir(t)
+	writeFileT(t, registryPath(), `{"projects":[{"id":"A1","name":"alpha","path":"/tmp/alpha"}]}`)
+	writeFileT(t, projectConfigJSONPath("A1"), `{"defaultBranch":"main"}`)
+	// Terrier-sourced projects claim their dirs by the deterministic id.
+	terrierID := terrierProjectID("/tmp/beta")
+	writeFileT(t, projectConfigJSONPath(terrierID), `{"defaultBranch":"main"}`)
+	projects := []project{
+		{ID: "A1", Name: "alpha", Path: "/tmp/alpha"},
+		{ID: terrierID, Name: "beta", Path: "/tmp/beta", Source: "terrier"},
+	}
+
+	report := &doctorReport{}
+	checkDormantProjectState(report, projects, true)
+	onlyFinding(t, report, "dormant-state", statusOK)
+
+	// Left behind by a terrier rm of a repo sm held config for.
+	gone := terrierProjectID("/tmp/gone")
+	writeFileT(t, projectConfigJSONPath(gone), `{"defaultBranch":"main"}`)
+	report = &doctorReport{}
+	checkDormantProjectState(report, projects, true)
+	finding := onlyFinding(t, report, "dormant-state", statusWarn)
+	if !strings.Contains(finding.Detail, gone) {
+		t.Fatalf("the detail should name the dormant dir: %s", finding.Detail)
+	}
+	if finding.repair != nil {
+		t.Fatal("dormant state can reconnect on re-registration, so it must not be auto-removed")
+	}
+}
+
+// With the registry or terrier unreadable the project list is short,
+// so every state dir it leaves out would look dormant. Their own
+// findings say enough.
+func TestDormantProjectStateSkippedWhenTheListIsShort(t *testing.T) {
+	sandboxDataDir(t)
+	writeFileT(t, projectConfigJSONPath("A1"), `{"defaultBranch":"main"}`)
+
+	report := &doctorReport{}
+	checkDormantProjectState(report, nil, false)
+	if got := findingsFor(report, "dormant-state"); len(got) != 0 {
+		t.Fatalf("no finding expected over a broken registry, got %+v", got)
 	}
 }
 
@@ -602,10 +648,10 @@ func TestApplyRepairsSkipsDestructiveWithoutConsent(t *testing.T) {
 			label: "deleted x", destructive: true,
 			apply: func() error { ran = true; return nil },
 		}})
-	if applied := applyRepairs(report, false); len(applied) != 0 || ran {
+	if applied, _ := applyRepairs(report, false); len(applied) != 0 || ran {
 		t.Fatal("a destructive repair ran without --yes and without a terminal")
 	}
-	if applied := applyRepairs(report, true); len(applied) != 1 || !ran {
+	if applied, _ := applyRepairs(report, true); len(applied) != 1 || !ran {
 		t.Fatalf("--yes did not apply the repair (applied %v)", applied)
 	}
 }
@@ -618,12 +664,15 @@ func TestApplyRepairsReportsFailuresAndKeepsGoing(t *testing.T) {
 	report.add(finding{Group: groupState, ID: "y", Status: statusWarn,
 		repair: &repair{label: "second", apply: func() error { second = true; return nil }}})
 
-	applied := applyRepairs(report, true)
+	applied, failed := applyRepairs(report, true)
 	if !second {
 		t.Fatal("a failing repair stopped the ones after it")
 	}
 	if len(applied) != 1 || applied[0] != "second" {
 		t.Fatalf("applied %v, want just the one that worked", applied)
+	}
+	if len(failed) != 1 || !strings.HasPrefix(failed[0], "couldn't first: ") {
+		t.Fatalf("failed %v, want the first repair's error", failed)
 	}
 }
 
@@ -673,7 +722,7 @@ func TestDoctorWithoutFixWritesNothing(t *testing.T) {
 	invalidateAllWorktreeIdentities()
 
 	before := snapshotTree(t, root)
-	report := runDoctorChecks([]project{proj})
+	report := runDoctorChecks([]project{proj}, true)
 	if len(report.findings) == 0 {
 		t.Fatal("nothing was checked, so the assertion below proves nothing")
 	}
@@ -766,11 +815,11 @@ func TestFixOnAHealthyDataDirRepairsNothing(t *testing.T) {
 	writeFileT(t, projectConfigJSONPath(proj.ID), `{"defaultBranch":"main"}`)
 	invalidateAllWorktreeIdentities()
 
-	report := runDoctorChecks([]project{proj})
+	report := runDoctorChecks([]project{proj}, true)
 	if n := repairableCount(report); n != 0 {
 		t.Fatalf("%d repairs offered on a healthy root: %+v", n, report.findings)
 	}
-	if applied := applyRepairs(report, true); len(applied) != 0 {
+	if applied, _ := applyRepairs(report, true); len(applied) != 0 {
 		t.Fatalf("--fix did something on a healthy root: %v", applied)
 	}
 }

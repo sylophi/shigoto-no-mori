@@ -62,6 +62,22 @@ export function isNoDirectConnectionError(error: unknown): boolean {
   return errorMessageOf(error).startsWith(NO_DIRECT_CONNECTION_PREFIX);
 }
 
+// A delete or move refused because the worktree's create run
+// (carry-over, setup, port provision) is still working in it. Same
+// message-text contract: the detail page reports it instead of
+// offering a force delete, which the host would refuse the same way.
+const WORKTREE_SETTING_UP_MARKER = "is still being set up";
+
+export function worktreeSettingUpError(): Error {
+  return new Error(
+    `This worktree ${WORKTREE_SETTING_UP_MARKER}. Try again once setup finishes.`,
+  );
+}
+
+export function isWorktreeSettingUpError(error: unknown): boolean {
+  return errorMessageOf(error).includes(WORKTREE_SETTING_UP_MARKER);
+}
+
 // Safe branch delete (`git branch -d`) refused because the branch has
 // commits unreachable from other refs. Same message-text contract as
 // above: the renderer matches on the marker to swap its confirm dialog

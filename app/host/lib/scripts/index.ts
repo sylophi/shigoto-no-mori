@@ -12,13 +12,14 @@
 // before letting Electron exit, so a Cmd-Q never orphans `npm run dev`.
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { errorMessageOf } from "@shared/errors";
+import { errorMessageOf, worktreeSettingUpError } from "@shared/errors";
 import { stopMirrorsForWorktree } from "@host/mirror/registry";
 import type { Project, ScriptEvent } from "@shared/schemas";
 import { SCRIPT_ENV_KEYS } from "@shared/scriptEnv";
 import { type PersistedScript, persistRunningScripts } from "./persistence";
 import {
   type ScriptPty,
+  signalPidTree,
   signalTree,
   signalTreeBestEffort,
   spawnScript,
@@ -66,9 +67,25 @@ interface RunArgs {
   notify: NotifyScriptEvent;
 }
 
-interface RunRecord {
+// What the kill chain (killRecord) needs of a run. The app's own PTY
+// runs and the CLI-run lifecycle scripts (cliScriptStream) both keep
+// one. They differ in how a signal reaches the tree.
+interface Killable {
   runId: string;
   pid: number;
+  scriptName: string;
+  exited: boolean;
+  cancelling: boolean;
+  done: Promise<void>;
+  notify: NotifyScriptEvent;
+  signal: (signal: NodeJS.Signals) => Promise<void>;
+  // Sends whatever output is pooled for the next frame (see
+  // OUTPUT_FLUSH_MS). Anything else that emits into the run's stream
+  // must call it first so it lands after the output that preceded it.
+  flushOutput: () => void;
+}
+
+interface RunRecord extends Killable {
   pty: ScriptPty;
   projectId: string;
   worktreeId: string;
@@ -82,17 +99,76 @@ interface RunRecord {
   // is one of the facts that proves a surviving pid is still ours.
   command: string;
   startedAt: number;
-  exited: boolean;
-  cancelling: boolean;
-  done: Promise<void>;
-  notify: NotifyScriptEvent;
-  // Sends whatever PTY output is pooled for the next frame (see
-  // OUTPUT_FLUSH_MS). Anything else that emits into the run's stream
-  // must call it first so it lands after the output that preceded it.
-  flushOutput: () => void;
 }
 
 const runningScripts = new Map<string, RunRecord>();
+
+// Lifecycle scripts the CLI runs on the app's behalf (a create's
+// setup, an rm's teardown), which stream through the same events but
+// have no PTY here. Booked from their "started" document so the
+// console's Stop reaches them (cancelScript), and dropped on their
+// "exit". Not persisted: they die with the CLI at quit (killAllCli).
+interface CliScriptRun extends Killable {
+  settle: () => void;
+}
+
+const cliScripts = new Map<string, CliScriptRun>();
+
+// One CLI run's script events, on their way to the renderer. An exit
+// the app cancelled reports null the way a cancelled PTY run does, so
+// the UI says stopped, not failed (the shell turns SIGTERM into exit
+// 143). `end` is for the CLI going away without an exit for a script
+// it started (killed, crashed): the booking is dropped so a pending
+// kill chain returns and nothing can be signalled at a stale pid.
+export function cliScriptStream(notify: NotifyScriptEvent): {
+  forward: (event: ScriptEvent) => void;
+  end: () => void;
+} {
+  const own = new Set<string>();
+  const drop = (runId: string): CliScriptRun | undefined => {
+    const run = cliScripts.get(runId);
+    if (!run) return undefined;
+    run.exited = true;
+    run.settle();
+    cliScripts.delete(runId);
+    own.delete(runId);
+    return run;
+  };
+  return {
+    forward: (event) => {
+      if (event.kind === "started" && event.pid !== undefined) {
+        const pid = event.pid;
+        let settle!: () => void;
+        const done = new Promise<void>((resolve) => {
+          settle = resolve;
+        });
+        cliScripts.set(event.runId, {
+          runId: event.runId,
+          pid,
+          scriptName:
+            event.slot.kind === "portPool"
+              ? `port-pool ${event.slot.phase}`
+              : event.slot.kind,
+          exited: false,
+          cancelling: false,
+          done,
+          notify,
+          signal: (signal) => signalPidTree(pid, signal),
+          flushOutput: () => {},
+          settle,
+        });
+        own.add(event.runId);
+      } else if (event.kind === "exit") {
+        const run = drop(event.runId);
+        if (run?.cancelling) event = { ...event, code: null };
+      }
+      notify(event);
+    },
+    end: () => {
+      for (const runId of own) drop(runId);
+    },
+  };
+}
 
 // Mirror the live map to disk on every spawn and every settle, so a
 // crash that skips the kill chains leaves the next boot something to
@@ -138,10 +214,34 @@ export function getInflightDeleteIds(): ReadonlySet<string> {
   return new Set(inflightDeleteCounts.keys());
 }
 
+// Worktrees whose create run (carry-over, the setup script, port
+// provision) is still working in the checkout: past the CLI's
+// "created" document, not yet exited.
+const inflightCreateIds = new Set<string>();
+
+export function markCreateInflight(worktreeId: string): void {
+  inflightCreateIds.add(worktreeId);
+}
+
+export function clearCreateInflight(worktreeId: string): void {
+  inflightCreateIds.delete(worktreeId);
+}
+
+// Refuse a delete or move of a worktree something is already working
+// in: another delete or move (with the caller's busy message), or its
+// create run, which removing or moving the folder would pull the
+// checkout out from under.
+export function assertWorktreeMutable(
+  worktreeId: string,
+  busyMessage: string,
+): void {
+  if (inflightDeleteCounts.has(worktreeId)) throw new Error(busyMessage);
+  if (inflightCreateIds.has(worktreeId)) throw worktreeSettingUpError();
+}
+
 // The one place the tombstone protocol is spelled out: refuse a
-// concurrent mutation of the same worktree, mark the id so a still-
-// running create lifecycle can't spawn steps into a directory that is
-// vanishing or moving, reap app-spawned scripts before the mutation
+// concurrent mutation of the same worktree or one still being created
+// (assertWorktreeMutable), mark the id, reap app-spawned scripts before the mutation
 // (a dev server would otherwise outlive its worktree or keep running
 // in the old path), stop the mirrors rooted in it after the mutation
 // (a session would otherwise sit halted on a root that is gone or
@@ -174,10 +274,7 @@ export async function withDeletesInflight<T>(
   run: () => Promise<T>,
   removedOf: (result: T) => readonly string[],
 ): Promise<T> {
-  const inflight = getInflightDeleteIds();
-  if (worktreeIds.some((id) => inflight.has(id))) {
-    throw new Error(busyMessage);
-  }
+  for (const id of worktreeIds) assertWorktreeMutable(id, busyMessage);
   worktreeIds.forEach(markDeleteInflight);
   try {
     await Promise.all(worktreeIds.map(killScriptsForWorktree));
@@ -287,7 +384,7 @@ interface KillOptions {
   reason?: string;
 }
 
-async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {
+async function killRecord(record: Killable, opts: KillOptions): Promise<void> {
   if (record.exited) return;
   if (record.cancelling) {
     // Another caller is already escalating. Wait for it, but bounded
@@ -306,12 +403,12 @@ async function killRecord(record: RunRecord, opts: KillOptions): Promise<void> {
     });
   }
 
-  await signalTree(record.pid, "SIGTERM");
+  await record.signal("SIGTERM");
   const graceMs = opts.graceMs ?? DEFAULT_GRACE_MS;
   const exited = await waitWithTimeout(record.done, graceMs);
   if (exited) return;
 
-  await signalTree(record.pid, "SIGKILL");
+  await record.signal("SIGKILL");
   const died = await waitWithTimeout(record.done, UNKILLABLE_WAIT_MS);
   if (!died) {
     // Give up rather than hanging the caller forever. The record stays
@@ -424,6 +521,7 @@ export function startScript(args: RunArgs): string {
     cancelling: false,
     done,
     notify: args.notify,
+    signal: (signal) => signalTree(pty.pid, signal),
     flushOutput,
   };
   runningScripts.set(runId, record);
@@ -496,8 +594,10 @@ export function resizeScript(runId: string, cols: number, rows: number): void {
   } catch {}
 }
 
+// The console's Stop: a run the app spawned, or a lifecycle script the
+// CLI is running on its behalf.
 export async function cancelScript(runId: string): Promise<boolean> {
-  const record = runningScripts.get(runId);
+  const record = runningScripts.get(runId) ?? cliScripts.get(runId);
   if (!record) return false;
   await killRecord(record, { reason: "Cancelled by user" });
   return true;

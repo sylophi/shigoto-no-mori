@@ -41,7 +41,7 @@ import { startSharedSettingsSync } from "./lib/remote/sharedSettingsSync";
 import { localDeviceId, queryKeys, worktreeQueriesOn } from "./lib/queryKeys";
 import { toast } from "./lib/toast";
 import { createAppRouter, type AppRouter } from "./router";
-import { scriptRuns } from "./store/scriptRuns";
+import { scriptRuns, scriptRunsFor } from "./store/scriptRuns";
 import {
   onWorktreeRemoval,
   worktreeLifecycle,
@@ -93,6 +93,26 @@ export function bootApp({
   });
 
   if (hasLocalHost) startLocalHost(queryClient);
+
+  // Leaving a worktree's pages (the ones with a $worktreeId param) tells
+  // its run store, so a failure the sidebar marked while nobody was
+  // there stops being news once they have been.
+  const worktreeShown = () => {
+    const params = router.state.matches.at(-1)?.params as
+      | { deviceId?: string; worktreeId?: string }
+      | undefined;
+    return params?.worktreeId
+      ? { deviceId: params.deviceId!, worktreeId: params.worktreeId }
+      : null;
+  };
+  let shown = worktreeShown();
+  router.subscribe("onResolved", () => {
+    const next = worktreeShown();
+    if (shown && shown.worktreeId !== next?.worktreeId) {
+      scriptRunsFor(shown.deviceId).markSeen(shown.worktreeId);
+    }
+    shown = next;
+  });
 
   // Mirror focus onto <html> so CSS can pause the infinite animations
   // (the doubutsu wallpaper drift, the spinners) while nobody is

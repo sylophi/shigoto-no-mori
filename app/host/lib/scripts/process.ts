@@ -158,6 +158,20 @@ export async function signalTree(
   for (const d of descendants) safeKill(d, signal);
 }
 
+// The same for a process that leads no group of its own: a lifecycle
+// script the CLI ran shares the CLI's group (a terminal's Ctrl-C must
+// reach the whole tree, and killAllCli takes the group down at quit),
+// so stopping it means the pid and its descendants, never the group,
+// which would take the CLI down mid-lifecycle.
+export async function signalPidTree(
+  pid: number,
+  signal: NodeJS.Signals,
+): Promise<void> {
+  const descendants = await listDescendantPids(pid);
+  safeKill(pid, signal);
+  for (const d of descendants) safeKill(d, signal);
+}
+
 // SIGTERM one direct child, escalating to SIGKILL after graceMs unless
 // it exits first. For plain (non-detached) children whose whole work is
 // the one process (the cloudflared connector), where the process-group

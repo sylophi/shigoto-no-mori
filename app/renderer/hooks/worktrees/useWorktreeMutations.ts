@@ -11,7 +11,11 @@ import type {
 import { errorMessageOf } from "@shared/errors";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import type { ReadyStackCleanupDevice } from "@/hooks/pullRequests/useStackCleanup";
-import { worktreeQueriesOn, queryKeysFor } from "@/lib/queryKeys";
+import {
+  type QueryKeyRegistry,
+  worktreeQueriesOn,
+  queryKeysFor,
+} from "@/lib/queryKeys";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useScriptRuns } from "@/hooks/scripts/useScriptRuns";
 import { scriptRunsFor } from "@/store/scriptRuns";
@@ -26,15 +30,38 @@ interface CreateWorktreeInput {
   checkout?: boolean;
 }
 
+// Splice a new or re-keyed worktree into its cached list (in place of
+// `replacesId`, the id it had before a convert or move), then refetch.
+// The callers route onto the row's page as soon as the mutation
+// resolves, and a list refetch (one `sm worktrees list` run) lands well
+// after that, so without the splice the page reads the stale list and
+// says "Worktree not found." until it does. The counterpart of
+// forgetDeletedWorktree.
+function spliceWorktree(
+  queryClient: QueryClient,
+  keys: QueryKeyRegistry,
+  worktree: Worktree,
+  replacesId?: string,
+): void {
+  const key = keys.worktrees(worktree.projectId);
+  queryClient.setQueryData<Worktree[]>(key, (current) => {
+    if (!current) return current;
+    // In place, so the sidebar row and the sibling order don't shift.
+    const at = current.findIndex(
+      (w) => w.id === worktree.id || w.id === replacesId,
+    );
+    return at === -1 ? [...current, worktree] : current.with(at, worktree);
+  });
+  void queryClient.invalidateQueries({ queryKey: key });
+}
+
 export function useCreateWorktree() {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
   return useMutation<CreateWorktreeResult, Error, CreateWorktreeInput>({
     mutationFn: (input) => api.worktrees.create(input),
-    onSuccess: (_result, vars) => {
-      void queryClient.invalidateQueries({
-        queryKey: keys.worktrees(vars.projectId),
-      });
+    onSuccess: (result) => {
+      spliceWorktree(queryClient, keys, result.worktree);
     },
     meta: { errorTitle: "Couldn't create worktree" },
   });
@@ -72,10 +99,8 @@ export function useCreateWorktreeFromPullRequest() {
         checkout: true,
       });
     },
-    onSuccess: (_result, vars) => {
-      void queryClient.invalidateQueries({
-        queryKey: keys.worktrees(vars.projectId),
-      });
+    onSuccess: (result, vars) => {
+      spliceWorktree(queryClient, keys, result.worktree);
       // The resolve step created a local branch, so the branch list and
       // the "already checked out" bookkeeping behind it are both stale.
       void queryClient.invalidateQueries({
@@ -91,21 +116,22 @@ interface ConvertExternalWorktreeInput {
   worktreeId: string;
 }
 
-// Convert and relocate both leave the worktree under a new id: refresh
-// the list and drop the script runs cached under the old one.
+// Convert and relocate both leave the worktree under a new id: swap
+// the row in the list and drop the script runs cached under the old id.
 function useReplaceWorktree<
   Input extends { projectId: string; worktreeId: string },
   Result,
->(call: (api: HostApi, input: Input) => Promise<Result>) {
+>(
+  call: (api: HostApi, input: Input) => Promise<Result>,
+  rowOf: (result: Result) => Worktree,
+) {
   const queryClient = useQueryClient();
   const { api, keys } = useHostScope();
   const scriptRuns = useScriptRuns();
   return useMutation<Result, Error, Input>({
     mutationFn: (input) => call(api, input),
-    onSuccess: (_data, vars) => {
-      void queryClient.invalidateQueries({
-        queryKey: keys.worktrees(vars.projectId),
-      });
+    onSuccess: (result, vars) => {
+      spliceWorktree(queryClient, keys, rowOf(result), vars.worktreeId);
       scriptRuns.clearForWorktree(vars.worktreeId);
     },
     // The page surfaces per-row errors inline; a toast on top would be noise.
@@ -118,6 +144,7 @@ function useReplaceWorktree<
 export function useConvertExternalWorktree() {
   return useReplaceWorktree<ConvertExternalWorktreeInput, CreateWorktreeResult>(
     (api, input) => api.worktrees.convertExternal(input),
+    (result) => result.worktree,
   );
 }
 
@@ -130,8 +157,9 @@ interface RelocateWorktreeInput {
 // The relocated worktree's id changes (it's derived from path), so
 // any cached script runs keyed by the pre-move id are stranded.
 export function useRelocateWorktree() {
-  return useReplaceWorktree<RelocateWorktreeInput, Worktree>((api, input) =>
-    api.worktrees.relocate(input),
+  return useReplaceWorktree<RelocateWorktreeInput, Worktree>(
+    (api, input) => api.worktrees.relocate(input),
+    (worktree) => worktree,
   );
 }
 

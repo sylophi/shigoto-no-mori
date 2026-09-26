@@ -45,12 +45,18 @@ import {
   type WorktreeLifecyclePhase,
   WorktreeSchema,
 } from "@shared/schemas";
+import { type DoctorReport, DoctorReportSchema } from "@shared/ipc/modules/cli";
 import {
   isEntityGoneError,
   unknownProjectError,
   unknownWorktreeError,
 } from "@shared/errors";
 import { forgetRepoIdentity } from "@host/lib/git/repoIdentity";
+import {
+  clearCreateInflight,
+  cliScriptStream,
+  markCreateInflight,
+} from "@host/lib/scripts";
 import { shellQuote } from "@host/lib/scripts/process";
 import { implSlot } from "@host/lib/util/implSlot";
 
@@ -98,14 +104,11 @@ interface WorktreeOperationNotifiers {
   notifyScript: (payload: ScriptEvent) => void;
 }
 
-// A streamed "script" document, forwarded as the script event it
-// carries (the event tag itself is the stream's, not the payload's).
-function notifyScriptDoc(
-  notify: Pick<WorktreeOperationNotifiers, "notifyScript">,
-  doc: CliDoc,
-): void {
+// A streamed "script" document, as the script event it carries (the
+// event tag itself is the stream's, not the payload's).
+function scriptEventOf(doc: CliDoc): ScriptEvent {
   const { event: _event, ...scriptEvent } = doc;
-  notify.notifyScript(ScriptEventSchema.parse(scriptEvent));
+  return ScriptEventSchema.parse(scriptEvent);
 }
 
 // The argv of a verb that acts on one worktree of one project.
@@ -177,6 +180,23 @@ function runStreamingCreate(
 ): Promise<CreateWorktreeResult> {
   return new Promise((resolve, reject) => {
     let created: Worktree | null = null;
+    const scripts = cliScriptStream(notify.notifyScript);
+    // The host's create mark (which refuses a delete or move) opens and
+    // closes with the phases the page disables its delete button on,
+    // so the two agree. A run that dies mid-lifecycle never sends its
+    // "idle", so the exit closes an open phase itself.
+    let phaseOpen = false;
+    const setPhase = (id: string, phase: WorktreeLifecyclePhase["phase"]) => {
+      if (phase === "idle") {
+        if (!phaseOpen) return;
+        phaseOpen = false;
+        clearCreateInflight(id);
+      } else if (!phaseOpen) {
+        phaseOpen = true;
+        markCreateInflight(id);
+      }
+      notify.notifyPhase({ projectId: project.id, worktreeId: id, phase });
+    };
     const onDoc = (doc: CliDoc) => {
       switch (doc.event) {
         case "created": {
@@ -186,11 +206,7 @@ function runStreamingCreate(
         }
         case "phase": {
           if (!created) break;
-          notify.notifyPhase({
-            projectId: project.id,
-            worktreeId: created.id,
-            phase: PhaseSchema.parse(doc["phase"]),
-          });
+          setPhase(created.id, PhaseSchema.parse(doc["phase"]));
           break;
         }
         case "carryOver": {
@@ -203,7 +219,7 @@ function runStreamingCreate(
           break;
         }
         case "script":
-          notifyScriptDoc(notify, doc);
+          scripts.forward(scriptEventOf(doc));
           break;
       }
     };
@@ -220,13 +236,24 @@ function runStreamingCreate(
             console.warn("[cli] mid-stream document failed validation", error);
         }
       })
-      .then((result) => {
-        if (created === null) {
-          reject(cliFailure(result, failureLabel, { worktreeId }));
-        } else if (resolveOn === "exit") {
-          resolve({ worktree: created });
-        }
-      }, reject);
+      .then(
+        (result) => {
+          scripts.end();
+          if (created === null) {
+            reject(cliFailure(result, failureLabel, { worktreeId }));
+            return;
+          }
+          // Before resolving, so a caller sequencing work after the
+          // run (a rollback that deletes it) finds the mark cleared.
+          setPhase(created.id, "idle");
+          if (resolveOn === "exit") resolve({ worktree: created });
+        },
+        (error: Error) => {
+          scripts.end();
+          if (created !== null) setPhase(created.id, "idle");
+          reject(error);
+        },
+      );
   });
 }
 
@@ -328,9 +355,12 @@ async function runRemoval(
   | { ok: true; cleanupError?: undefined; final: CliDoc }
   | { ok: false; cleanupError: CleanupError; final: CliDoc }
 > {
-  const result = await runner().runCli(args, (doc) => {
-    if (doc.event === "script") notifyScriptDoc(notify, doc);
-  });
+  const scripts = cliScriptStream(notify.notifyScript);
+  const result = await runner()
+    .runCli(args, (doc) => {
+      if (doc.event === "script") scripts.forward(scriptEventOf(doc));
+    })
+    .finally(scripts.end);
   const final = result.docs.findLast((doc) => typeof doc["ok"] === "boolean");
   if (final?.["ok"] === true) return { ok: true, final };
   if (final?.["ok"] === false && final["cleanupError"] !== undefined) {
@@ -905,4 +935,30 @@ export async function packageScriptsViaCli(
     return null;
   }
   return PackageScriptsDocSchema.parse(doc);
+}
+
+// A wedged git or gh probe must not leave Settings' health check
+// spinning forever. --fix runs the checklist twice (before and after
+// the repairs), so it gets twice the budget.
+const DOCTOR_TIMEOUT_MS = 60_000;
+
+// `sm doctor`'s checklist. Not readDoc: a report with a failed check
+// carries ok:false and exits 1, which readDoc would take for an error
+// document, so a run answers whenever its last document is a report.
+// fix runs `--fix --yes`: the Repair button's confirm is the consent
+// the CLI's per-repair prompt asks for, and a spawned child has no
+// terminal to prompt on. env overlays the login shell's rc locations
+// so the shell-hook check reads the files a terminal would.
+export async function doctorViaCli(
+  fix: boolean,
+  env: Record<string, string>,
+): Promise<DoctorReport> {
+  const args = fix ? ["doctor", "--fix", "--yes"] : ["doctor"];
+  const result = await runner().runCli(args, undefined, env, {
+    readOnly: !fix,
+    timeoutMs: fix ? 2 * DOCTOR_TIMEOUT_MS : DOCTOR_TIMEOUT_MS,
+  });
+  const report = DoctorReportSchema.safeParse(result.docs.at(-1));
+  if (report.success) return report.data;
+  throw cliFailure(result, "sm doctor failed");
 }

@@ -18,6 +18,7 @@ import type { RemoteDevice } from "@/lib/remote/devices";
 import { cn } from "@/lib/utils";
 import { CliSection } from "./CliSection";
 import { DataLocationSection } from "./DataLocationSection";
+import { DoctorSection } from "./DoctorSection";
 import { DeviceToggleSections } from "./DeviceSettingsSections";
 import { useRegisterSettingsEditor } from "./useSettingsEditors";
 import { VersionSection } from "./VersionSection";
@@ -27,11 +28,11 @@ import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 // version routes through the HostScope this mounts (the scoped config
 // read, the host-scoped queries inside the shared section components,
 // the updater, and the writeDeviceSettings patch save), so no
-// client-scoped call reaches for a peer. The CLI and data location
-// sections are the local ones mounted under this scope, so they act on
-// the peer's shell and disk behind its command grant. The danger zone
-// is absent by construction: wiping a machine is for whoever sits at
-// it, and only the local section renders it.
+// client-scoped call reaches for a peer. The health check, CLI and
+// data location sections are the local ones mounted under this scope,
+// so they act on the peer's shell and disk behind its command grant.
+// The danger zone is absent by construction: wiping a machine is for
+// whoever sits at it, and only the local section renders it.
 export function PeerDeviceSettings({ device }: { device: RemoteDevice }) {
   const { reachable } = deviceStatusView(device.status);
   const api = useLastGoodApi(device);
@@ -181,6 +182,11 @@ function PeerSettingsForm({
 
   return (
     <>
+      {/* Right under the version, like the local section. The report
+          names the device's paths, so like the CLI and data location
+          sections below it waits for the landed grant. */}
+      {access.granted && <DoctorSection />}
+
       {readOnly && (
         // Same shape as the offline note, in the neutral family: this is
         // a normal permission state, not a warning.

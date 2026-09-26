@@ -89,6 +89,7 @@ export function WorktreeDetailInner({
     needsForce,
     cleanupError,
     runDelete,
+    deleteBlockedReason,
     cancelForce,
     retryCleanup,
     skipCleanup,
@@ -179,7 +180,12 @@ export function WorktreeDetailInner({
         }
       : cleanupRunning
         ? { kind: "cleanupRunning", cancelling: cleanupCancelling }
-        : { kind: "normal", confirmDelete, busy };
+        : {
+            kind: "normal",
+            confirmDelete,
+            busy,
+            deleteBlockedReason,
+          };
   const footerActions: WorktreeFooterActions = {
     onCancelCleanupError: clearCleanupError,
     onOpenCleanupConsole: openCleanupConsole,
@@ -221,7 +227,9 @@ export function WorktreeDetailInner({
             className="min-w-0 flex-1 font-mono phone:hidden"
             copyable
           />
-          <span className="flex shrink-0 items-center gap-1.5 phone:ml-auto">
+          {/* Held at the text line's height: the device chip overhangs
+              it, so a peer's header is as tall as a local one. */}
+          <span className="flex h-4 shrink-0 items-center gap-1.5 phone:ml-auto">
             <WorktreeKindIcon worktree={worktree} />
             <DeviceChip />
           </span>

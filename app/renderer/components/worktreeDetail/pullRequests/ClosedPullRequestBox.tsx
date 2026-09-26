@@ -34,10 +34,8 @@ export function ClosedPullRequestBox({
 }) {
   const { deviceId } = useHostScope();
   const { data: siblings = [] } = useWorktrees(worktree.projectId);
-  const { deleteMutation, runDelete, navigateAway } = useDeleteAndNavigate(
-    worktree,
-    siblings,
-  );
+  const { deleteMutation, runDelete, navigateAway, deleteBlockedReason } =
+    useDeleteAndNavigate(worktree, siblings);
   const stackMutation = useDeleteStackWorktrees();
   // What a failed stack removal is offered: force for a refusal (a
   // dirty worktree), a retry or skipping the scripts for a cleanup
@@ -156,6 +154,7 @@ export function ClosedPullRequestBox({
           pendingLabel="Deleting…"
           idleLabel="Delete worktree"
           onClick={() => trigger(() => runDelete())}
+          disabledReason={deleteBlockedReason}
         />
       </div>
       {cleanup && cleanup.blocked.length > 0 && (

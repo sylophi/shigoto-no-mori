@@ -34,9 +34,7 @@ export function AddToDeviceSubmenu({
   const { openAddProject } = useOverlays();
 
   const holders = new Set(members.map((member) => member.deviceId));
-  const candidates = tabs.filter(
-    (tab) => tab.hostsProjects && !holders.has(tab.deviceId),
-  );
+  const candidates = tabs.filter((tab) => !holders.has(tab.deviceId));
   // The tab's api rather than the member's: a member's is withheld
   // without the command grant, which a read doesn't need, and a tab's
   // is simply the device's session (window.api for this one). A peer

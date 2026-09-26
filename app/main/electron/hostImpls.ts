@@ -26,6 +26,7 @@ import {
 import { cliFailureMessage, requireCliBinary, runCli } from "./cliRunner";
 import { installFileSyncSpawner } from "./fileSyncRunner";
 import {
+  hookPathEnv,
   installShellIntegration,
   shellIntegrationStatus,
   uninstallShellIntegration,
@@ -44,6 +45,7 @@ export function installHostImpls(): void {
     shellIntegrationStatus,
     installShellIntegration,
     uninstallShellIntegration,
+    hookPathEnv,
   });
   setGitImpl({ refreshProject, sweepForPeer });
   // Reconcile the direct listener on every config change, whatever
