@@ -14,8 +14,8 @@ import { type CreatePhase, CreatePhaseSchema } from "@shared/schemas";
 // The run as one ordered line: the pull's steps, with the create's
 // lifecycle phases slotted in right after the create itself. Both
 // orders are the schemas' own. A row or a frame sits at its index
-// here, and whatever follows the pull (a mirror's session open) sits
-// past the end.
+// here, and whatever follows the landing (a mirror's session open)
+// sits past the end.
 type TimelineStop = SyncPullStep | CreatePhase;
 const createAt = SyncPullStepSchema.options.indexOf("create") + 1;
 const TIMELINE: TimelineStop[] = [

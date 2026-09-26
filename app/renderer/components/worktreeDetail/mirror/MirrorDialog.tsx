@@ -1,7 +1,8 @@
 // The mirror flow, the transplant dialog's sibling on the same frame:
 // three steps on one rail. Review shows the source, both devices, and
-// what stays out (the one choice a mirror has). Mirror is the pull
-// with its progress frames, plus the session open on top. Live is
+// what stays out (the one choice a mirror has). Mirror is the move (a
+// send from the original's device) with its progress frames, plus the
+// session open on top. Live is
 // proof: the session's first verdict, and the way to the copy's page.
 // The flow runs both ways: MirrorDialog copies a peer's worktree here,
 // MirrorToDialog copies one of this device's to a peer (under that

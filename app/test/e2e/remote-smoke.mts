@@ -370,6 +370,26 @@ const onPeer = (
     `window.api.hub.invokePeer(${JSON.stringify({ deviceId, channel, input })})`,
   );
 
+// A control on the session, on the device running it.
+const mirrorOp = (
+  runner: AppWindow,
+  op: "pause" | "resume" | "stop",
+  session: string,
+) => runner.evaluate(`window.api.mirror.${op}(${JSON.stringify(session)})`);
+
+// Waits for a session on the device running it to pass `test`.
+const waitMirror = (
+  runner: AppWindow,
+  session: string,
+  what: string,
+  test: string,
+) =>
+  runner.waitFor(
+    what,
+    `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${JSON.stringify(session)} && (${test})))`,
+    90_000,
+  );
+
 async function main(): Promise<string[]> {
   const failures: string[] = [];
   const windows: AppWindow[] = [];
@@ -442,6 +462,26 @@ async function main(): Promise<string[]> {
     await Promise.all([waitConnected(a, idB, "a"), waitConnected(b, idA, "b")]);
     log(`connected: a=${idA} b=${idB}`);
     await shoot("connected");
+    // A mirror runs on the device holding the original. One of b's
+    // worktrees mirrored onto a (what "Mirror here" on a does) is a
+    // session on b, which a asks for over b's command access and which
+    // lands the copy, and then reaches it, over a's. So both switches
+    // are on for the mirror scenarios. The ones about a refusal turn
+    // one off and back on.
+    await Promise.all(
+      [a, b].map((w) =>
+        w.evaluate("window.api.account.setAcceptsCommands(true)"),
+      ),
+    );
+    type Started = { worktree: Worktree; session: string; cloned?: Project };
+    const startMirrorOnB = (input: Record<string, unknown>) =>
+      onPeer(a, idB, "mirror:startTo", {
+        targetDeviceId: idA,
+        runSetup: false,
+        ignoreMode: "everything",
+        ignores: [],
+        ...input,
+      }) as Promise<Started & PullResult>;
 
     await scenario("presence", async () => {
       const [sa, sb] = await Promise.all([hubStatus(a), hubStatus(b)]);
@@ -562,12 +602,13 @@ async function main(): Promise<string[]> {
     });
 
     // Continuous mirroring, end to end through both apps' engines: a
-    // mirrors a fresh worktree of b's (its own worktree, so the
-    // transplant below keeps its source), files cross both ways as
-    // edits happen (a gitignored-style file included), a commit on b
-    // lands on a through the git follower, and stopping the session
-    // clears both sides. Both worktrees sit on this machine, so the
-    // disk is asserted directly.
+    // fresh worktree of b's (its own worktree, so the transplant below
+    // keeps its source) is mirrored onto a, b running the session since
+    // it holds the original. Files cross both ways as edits happen (a
+    // gitignored-style file included), a commit on b lands on a
+    // through the git follower, and stopping the session clears both
+    // sides. Both worktrees sit on this machine, so the disk is
+    // asserted directly.
     await scenario("mirror", async () => {
       const project = need(bProject, "the remote read");
       const source = (
@@ -576,21 +617,10 @@ async function main(): Promise<string[]> {
           branchName: "feat/mirror",
         })) as { worktree: Worktree }
       ).worktree;
-      const started = await a.evaluate<{
-        worktree: Worktree;
-        session: string;
-      }>(
-        `window.api.mirror.start(${JSON.stringify({
-          sourceDeviceId: idB,
-          sourceProjectId: project.id,
-          sourceWorktreeId: source.id,
-          sourceIdentity: project.identity,
-          branch: source.branch,
-          runSetup: false,
-          ignoreMode: "everything",
-          ignores: [],
-        })})`,
-      );
+      const started = await startMirrorOnB({
+        projectId: project.id,
+        worktreeId: source.id,
+      });
       const local = started.worktree;
       assert.ok(
         !setupRuns().includes(local.path),
@@ -601,42 +631,52 @@ async function main(): Promise<string[]> {
         `mirrored worktree not under a's root: ${local.path}`,
       );
       const session = JSON.stringify(started.session);
-      await a.waitFor(
-        "a's mirror session to be watching with git in sync",
-        `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${session} && s.status === "watching" && s.git?.status === "synced"))`,
+      await b.waitFor(
+        "b's mirror session to be watching with git in sync",
+        `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${session} && s.status === "watching" && s.git?.status === "synced" && s.labels.copySide === "remote"))`,
         90_000,
       );
-      await b.waitFor(
-        "b to list the stream it serves",
-        `window.api.mirror.list().then((m) => m.serving.some((s) => s.worktreeId === ${JSON.stringify(source.id)}))`,
+      await a.waitFor(
+        "a to list the stream it serves for its copy",
+        `window.api.mirror.list().then((m) => m.serving.some((s) => s.worktreeId === ${JSON.stringify(local.id)}))`,
         30_000,
       );
-      // The session says which rule it runs under and when it began,
-      // b's served stream names a's copy, and the thread has its start.
-      const listed = await a.evaluate<{
+      // The session runs on b (a runs none), says which rule it runs
+      // under and when it began, a's served stream names b's original,
+      // and b's thread has its start.
+      const listed = await b.evaluate<{
         sessions: {
           session: string;
+          localWorktreeId: string;
+          worktreeId: string;
           ignoreMode: string;
           ignores: string[];
           createdAt: number;
         }[];
       }>("window.api.mirror.list()");
       const own = listed.sessions.find((s) => s.session === started.session);
-      assert.ok(own, "a's session is not listed");
+      assert.ok(own, "b's session is not listed");
+      assert.equal(own.localWorktreeId, source.id, "b's side is the original");
+      assert.equal(own.worktreeId, local.id, "the far side is a's copy");
       assert.equal(own.ignoreMode, "everything");
       assert.deepEqual(own.ignores, []);
       assert.ok(own.createdAt > 0, "the session has no creation time");
-      const servedOnB = await b.evaluate<{
+      assert.deepEqual(
+        (await a.evaluate<MirrorList>("window.api.mirror.list()")).sessions,
+        [],
+        "a runs a session for a mirror whose original is b's",
+      );
+      const servedOnA = await a.evaluate<{
         serving: { worktreeId: string; peerWorktreeId?: string }[];
       }>("window.api.mirror.list()");
       assert.equal(
-        servedOnB.serving.find((s) => s.worktreeId === source.id)
+        servedOnA.serving.find((s) => s.worktreeId === local.id)
           ?.peerWorktreeId,
-        local.id,
-        "b's served stream does not name a's copy",
+        source.id,
+        "a's served stream does not name b's original",
       );
-      const history = await a.evaluate<{ events: { kind: string }[] }>(
-        `window.api.mirror.history(${JSON.stringify({ localWorktreeId: local.id })})`,
+      const history = await b.evaluate<{ events: { kind: string }[] }>(
+        `window.api.mirror.history(${JSON.stringify({ localWorktreeId: source.id })})`,
       );
       assert.equal(history.events[0]?.kind, "started");
       // Files, both ways, including one git ignores.
@@ -678,7 +718,7 @@ async function main(): Promise<string[]> {
       );
       // A change of ignores re-opens the session on the same pair: a
       // path under the new rule stays on a while its sibling crosses.
-      const reopened = await a.evaluate<{ session: string }>(
+      const reopened = await b.evaluate<{ session: string }>(
         `window.api.mirror.setIgnores(${JSON.stringify({
           session: started.session,
           ignoreMode: "custom",
@@ -687,7 +727,7 @@ async function main(): Promise<string[]> {
       );
       assert.notEqual(reopened.session, started.session);
       const session2 = JSON.stringify(reopened.session);
-      await a.waitFor(
+      await b.waitFor(
         "the re-opened session to be watching",
         `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${session2} && s.status === "watching" && s.ignoreMode === "custom"))`,
         90_000,
@@ -704,21 +744,22 @@ async function main(): Promise<string[]> {
         !existsSync(join(source.path, "private-notes", "todo.md")),
         "a path under the mirror's ignores crossed to b",
       );
-      // Stop: the session leaves a's list, the stream leaves b's, and
-      // a's copy goes with the session. The source stays. Forced,
-      // because the host refuses an unforced stop unless the git
-      // follower has reported "synced", and a session this young may
-      // not have reconciled yet: this check is about the teardown, not
-      // about the confirmation rule (host/ipc/modules/mirror.ts).
-      await a.evaluate(`window.api.mirror.stop(${session2}, true)`);
-      await a.waitFor(
-        "a's mirror session to be gone",
+      // Stop: the session leaves b's list, the stream leaves a's, and
+      // a's copy goes with the session, removed by b through a's
+      // command access. The original stays. Forced, because the host
+      // refuses an unforced stop unless the git follower has reported
+      // "synced", and a session this young may not have reconciled yet:
+      // this check is about the teardown, not about the confirmation
+      // rule (host/ipc/modules/mirror.ts).
+      await b.evaluate(`window.api.mirror.stop(${session2}, true)`);
+      await b.waitFor(
+        "b's mirror session to be gone",
         `window.api.mirror.list().then((m) => !m.sessions.some((s) => s.session === ${session2}))`,
         30_000,
       );
-      await b.waitFor(
-        "b's served stream to be gone",
-        `window.api.mirror.list().then((m) => !m.serving.some((s) => s.worktreeId === ${JSON.stringify(source.id)}))`,
+      await a.waitFor(
+        "a's served stream to be gone",
+        `window.api.mirror.list().then((m) => !m.serving.some((s) => s.worktreeId === ${JSON.stringify(local.id)}))`,
         30_000,
       );
       await a.waitFor(
@@ -738,8 +779,9 @@ async function main(): Promise<string[]> {
 
     // A primary checkout mirrored here: its copy is a worktree on
     // mirror/<branch> beside a's own primary, which never moves, and the
-    // pair follows b's primary onto another branch and back. Stop is
-    // unforced, the confirmation rule's own path.
+    // pair follows b's primary onto another branch and back. b holds
+    // the original, so b runs the session. Stop is unforced, the
+    // confirmation rule's own path.
     await scenario("mirror: primary checkout", async () => {
       const project = need(bProject, "the remote read");
       const onB = (await onPeer(a, idB, "worktrees:list", {
@@ -752,22 +794,10 @@ async function main(): Promise<string[]> {
       assert.equal(bPrimary.branch, "main");
       const aRepo = join(fixture.a.repos, "shared");
       const aMainBefore = gitOut(aRepo, "rev-parse", "HEAD");
-      const started = await a.evaluate<{
-        worktree: Worktree;
-        session: string;
-      }>(
-        `window.api.mirror.start(${JSON.stringify({
-          sourceDeviceId: idB,
-          sourceProjectId: project.id,
-          sourceWorktreeId: bPrimary.id,
-          sourceIdentity: project.identity,
-          branch: bPrimary.branch,
-          worktreeName: `mirror-${bPrimary.name}`,
-          runSetup: false,
-          ignoreMode: "everything",
-          ignores: [],
-        })})`,
-      );
+      const started = await startMirrorOnB({
+        projectId: project.id,
+        worktreeId: bPrimary.id,
+      });
       const local = started.worktree;
       assert.equal(local.branch, "mirror/main");
       assert.equal(local.isPrimary, false);
@@ -777,7 +807,7 @@ async function main(): Promise<string[]> {
       );
       const session = JSON.stringify(started.session);
       const synced = (what: string) =>
-        a.waitFor(
+        b.waitFor(
           what,
           `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${session} && s.status === "watching" && s.git?.status === "synced"))`,
           90_000,
@@ -846,8 +876,8 @@ async function main(): Promise<string[]> {
       );
       // Stop, unforced once synced: the copy goes, both primaries stay.
       await synced("synced after the switch back");
-      await a.evaluate(`window.api.mirror.stop(${session})`);
-      await a.waitFor(
+      await b.evaluate(`window.api.mirror.stop(${session})`);
+      await b.waitFor(
         "the primary's mirror session to be gone",
         `window.api.mirror.list().then((m) => !m.sessions.some((s) => s.session === ${session}))`,
         30_000,
@@ -863,10 +893,11 @@ async function main(): Promise<string[]> {
     });
 
     // b's `lone` repo has no remote and a has no checkout of it. The
-    // start refuses as it always did until told where to clone, then
-    // clones the repo over the device link, registers it on a, and
-    // lands the primary's copy beside it. The stop removes the copy
-    // alone: the clone stays as an ordinary project.
+    // start (b's, since b holds the original) refuses as it always did
+    // until told where to clone, in a's terms, then clones the repo
+    // over the device link, registers it on a, and lands the primary's
+    // copy beside it. The stop removes the copy alone: the clone stays
+    // as an ordinary project.
     await scenario("mirror: onto a device with no checkout", async () => {
       const lone = await loneOnB();
       const identity = need(lone.identity ?? undefined, "lone's identity");
@@ -877,31 +908,15 @@ async function main(): Promise<string[]> {
         onB.find((w) => w.isPrimary),
         "lone's primary on b",
       );
-      const payload = {
-        sourceDeviceId: idB,
-        sourceProjectId: lone.id,
-        sourceWorktreeId: bPrimary.id,
-        sourceIdentity: identity,
-        branch: bPrimary.branch,
-        worktreeName: `mirror-${bPrimary.name}`,
-        runSetup: false,
-        ignoreMode: "everything",
-        ignores: [],
-      };
+      const payload = { projectId: lone.id, worktreeId: bPrimary.id };
       await assert.rejects(
-        () => a.evaluate(`window.api.mirror.start(${JSON.stringify(payload)})`),
+        () => startMirrorOnB(payload),
         /No local project matches/,
       );
-      const started = await a.evaluate<{
-        worktree: Worktree;
-        session: string;
-        cloned?: Project;
-      }>(
-        `window.api.mirror.start(${JSON.stringify({
-          ...payload,
-          cloneInto: { parentDir: fixture.a.repos, name: "lone" },
-        })})`,
-      );
+      const started = await startMirrorOnB({
+        ...payload,
+        cloneInto: { parentDir: fixture.a.repos, name: "lone" },
+      });
       const cloned = need(started.cloned, "the start's clone");
       assert.equal(
         realpathSync(cloned.path),
@@ -929,7 +944,7 @@ async function main(): Promise<string[]> {
       assert.equal(local.projectId, cloned.id);
       assert.equal(local.branch, "mirror/main");
       const session = JSON.stringify(started.session);
-      await a.waitFor(
+      await b.waitFor(
         "the clone's mirror to be watching with git in sync",
         `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${session} && s.status === "watching" && s.git?.status === "synced"))`,
         90_000,
@@ -951,12 +966,12 @@ async function main(): Promise<string[]> {
       );
       // The stop, unforced once synced, takes the copy. The clone is
       // a's project now.
-      await a.waitFor(
+      await b.waitFor(
         "synced after b's commit",
         `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${session} && s.git?.status === "synced"))`,
         90_000,
       );
-      await a.evaluate(`window.api.mirror.stop(${session})`);
+      await b.evaluate(`window.api.mirror.stop(${session})`);
       await waitFor(
         () => !existsSync(local.path),
         "the copy to leave the disk",
@@ -1037,10 +1052,15 @@ async function main(): Promise<string[]> {
       a.evaluate<PullResult>(
         `window.api.sync.pullWorktree(${pullInput(source, extra)})`,
       );
+    // A mirror of one of b's worktrees onto a, the way "Mirror here"
+    // starts it: b holds the original, so a asks b to run it and send
+    // the copy here (mirror:startTo, a the target). The session is b's.
     const mirrorHere = (source: Worktree, extra: Record<string, unknown>) =>
-      a.evaluate<PullResult & { session: string }>(
-        `window.api.mirror.start(${pullInput(source, extra)})`,
-      );
+      startMirrorOnB({
+        projectId: need(bProject, "the remote read").id,
+        worktreeId: source.id,
+        ...extra,
+      });
     const teardown = (source: Worktree) =>
       a.evaluate<{ sourceRemoved: boolean; sourceError?: string }>(
         `window.api.sync.teardownSource(${JSON.stringify({
@@ -1050,16 +1070,8 @@ async function main(): Promise<string[]> {
           worktreeId: source.id,
         })})`,
       );
-    const mirrorOp = (op: "pause" | "resume" | "stop", session: string) =>
-      a.evaluate(`window.api.mirror.${op}(${JSON.stringify(session)})`);
     const mirrorsOn = (w: AppWindow) =>
       w.evaluate<MirrorList>("window.api.mirror.list()");
-    const waitMirror = (session: string, what: string, test: string) =>
-      a.waitFor(
-        what,
-        `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${JSON.stringify(session)} && (${test})))`,
-        90_000,
-      );
     // a's own copy of the shared project, the one every pull lands in.
     const ownProjectOnA = async (): Promise<Project> =>
       need(
@@ -1332,10 +1344,10 @@ async function main(): Promise<string[]> {
         "a refused pull left a worktree behind",
       );
       assert.ok(
-        !(await mirrorsOn(a)).sessions.some(
-          (s) => s.localWorktreeId === local.id,
+        !(await mirrorsOn(b)).sessions.some(
+          (s) => s.localWorktreeId === source.id,
         ),
-        "a refused mirror left a session behind",
+        "a refused mirror left a session behind on b",
       );
       assert.equal(incomingRefs(), "", "a refused pull left an incoming ref");
       // The source moved on after its transplant: it is kept, with why.
@@ -1348,80 +1360,94 @@ async function main(): Promise<string[]> {
 
     // The transplant the other way, as the local page's "Transplant
     // to" drives it: one of a's worktrees goes to b, which only has to
-    // accept a's commands (a gives no grant of its own). The branch,
+    // accept a's commands (a's own switch is off for this one). The branch,
     // the uncommitted work and the ignored files land there, a second
     // send is refused by b, and the finish step removes a's source
     // only while it is still what was sent.
     await scenario("transplant to a peer", async () => {
-      const own = await ownProjectOnA();
-      const { worktree: source } = await a.evaluate<{ worktree: Worktree }>(
-        `window.api.worktrees.create(${JSON.stringify({
-          projectId: own.id,
-          branchName: "edge/sent",
-          worktreeName: "src-sent",
-        })})`,
-      );
-      writeFileSync(join(source.path, "README.md"), "edited on a\n");
-      writeFileSync(join(source.path, "notes.txt"), "untracked on a\n");
-      writeFileSync(join(source.path, ".env"), "SECRET=a\n");
-      const sendInput = JSON.stringify({
-        targetDeviceId: idB,
-        projectId: own.id,
-        worktreeId: source.id,
-        runSetup: false,
-        ignoreMode: "everything",
-        ignores: [],
-      });
-      const result = await a.evaluate<PullResult>(
-        `window.api.sync.sendWorktree(${sendInput})`,
-      );
-      const landed = result.worktree;
-      assert.ok(
-        landed.path.startsWith(realpathSync(fixture.b.dataDir)),
-        `the copy landed outside b's data dir: ${landed.path}`,
-      );
-      assert.equal(landed.name, source.name, "the copy lost the folder name");
-      assert.equal(landed.branch, "edge/sent");
-      assert.ok(result.captured && result.dirtyApplied, "the edits were lost");
-      assert.equal(readOrNull(join(landed.path, "README.md")), "edited on a\n");
-      assert.equal(
-        readOrNull(join(landed.path, "notes.txt")),
-        "untracked on a\n",
-      );
-      assert.deepEqual(result.files, { crossed: true, conflicts: 0 });
-      assert.equal(readOrNull(join(landed.path, ".env")), "SECRET=a\n");
-      assert.equal(
-        gitOut(
-          join(fixture.b.repos, "shared"),
-          "for-each-ref",
-          "refs/shigomori/incoming",
-        ),
-        "",
-        "the send left an incoming ref on b",
-      );
-      await assert.rejects(
-        () => a.evaluate(`window.api.sync.sendWorktree(${sendInput})`),
-        /The other device answered: edge\/sent is already checked out/,
-      );
-      const sentRef = JSON.stringify({
-        direction: "send",
-        deviceId: idB,
-        projectId: own.id,
-        worktreeId: source.id,
-      });
-      const tearDownSent = () =>
-        a.evaluate<{ sourceRemoved: boolean; sourceError?: string }>(
-          `window.api.sync.teardownSource(${sentRef})`,
+      await a.evaluate("window.api.account.setAcceptsCommands(false)");
+      try {
+        const own = await ownProjectOnA();
+        const { worktree: source } = await a.evaluate<{ worktree: Worktree }>(
+          `window.api.worktrees.create(${JSON.stringify({
+            projectId: own.id,
+            branchName: "edge/sent",
+            worktreeName: "src-sent",
+          })})`,
         );
-      writeFileSync(join(source.path, "late.txt"), "written after the send\n");
-      const kept = await tearDownSent();
-      assert.equal(kept.sourceRemoved, false, "an edited source was removed");
-      assert.match(kept.sourceError ?? "", /changed/);
-      rmSync(join(source.path, "late.txt"));
-      const torn = await tearDownSent();
-      assert.ok(torn.sourceRemoved, `source kept: ${torn.sourceError}`);
-      assert.ok(!existsSync(source.path), "source worktree still on disk");
-      assert.ok(existsSync(landed.path), "the sent worktree vanished");
+        writeFileSync(join(source.path, "README.md"), "edited on a\n");
+        writeFileSync(join(source.path, "notes.txt"), "untracked on a\n");
+        writeFileSync(join(source.path, ".env"), "SECRET=a\n");
+        const sendInput = JSON.stringify({
+          targetDeviceId: idB,
+          projectId: own.id,
+          worktreeId: source.id,
+          runSetup: false,
+          ignoreMode: "everything",
+          ignores: [],
+        });
+        const result = await a.evaluate<PullResult>(
+          `window.api.sync.sendWorktree(${sendInput})`,
+        );
+        const landed = result.worktree;
+        assert.ok(
+          landed.path.startsWith(realpathSync(fixture.b.dataDir)),
+          `the copy landed outside b's data dir: ${landed.path}`,
+        );
+        assert.equal(landed.name, source.name, "the copy lost the folder name");
+        assert.equal(landed.branch, "edge/sent");
+        assert.ok(
+          result.captured && result.dirtyApplied,
+          "the edits were lost",
+        );
+        assert.equal(
+          readOrNull(join(landed.path, "README.md")),
+          "edited on a\n",
+        );
+        assert.equal(
+          readOrNull(join(landed.path, "notes.txt")),
+          "untracked on a\n",
+        );
+        assert.deepEqual(result.files, { crossed: true, conflicts: 0 });
+        assert.equal(readOrNull(join(landed.path, ".env")), "SECRET=a\n");
+        assert.equal(
+          gitOut(
+            join(fixture.b.repos, "shared"),
+            "for-each-ref",
+            "refs/shigomori/incoming",
+          ),
+          "",
+          "the send left an incoming ref on b",
+        );
+        await assert.rejects(
+          () => a.evaluate(`window.api.sync.sendWorktree(${sendInput})`),
+          /The other device answered: edge\/sent is already checked out/,
+        );
+        const sentRef = JSON.stringify({
+          direction: "send",
+          deviceId: idB,
+          projectId: own.id,
+          worktreeId: source.id,
+        });
+        const tearDownSent = () =>
+          a.evaluate<{ sourceRemoved: boolean; sourceError?: string }>(
+            `window.api.sync.teardownSource(${sentRef})`,
+          );
+        writeFileSync(
+          join(source.path, "late.txt"),
+          "written after the send\n",
+        );
+        const kept = await tearDownSent();
+        assert.equal(kept.sourceRemoved, false, "an edited source was removed");
+        assert.match(kept.sourceError ?? "", /changed/);
+        rmSync(join(source.path, "late.txt"));
+        const torn = await tearDownSent();
+        assert.ok(torn.sourceRemoved, `source kept: ${torn.sourceError}`);
+        assert.ok(!existsSync(source.path), "source worktree still on disk");
+        assert.ok(existsSync(landed.path), "the sent worktree vanished");
+      } finally {
+        await a.evaluate("window.api.account.setAcceptsCommands(true)");
+      }
     });
 
     // The same verbs from a terminal, the way an agent runs them: the
@@ -1458,7 +1484,8 @@ async function main(): Promise<string[]> {
           smdDocsOn(fixture.b, join(fixture.b.repos, "shared"), ...args),
         );
 
-      // b alone accepts commands, which is all either direction needs.
+      // b accepts commands, which is all a send, a bring and a mirror
+      // --to need. A mirror --from needs a's too (below).
       await b.evaluate("window.api.account.setAcceptsCommands(true)");
       const listed = smd("devices").doc as Doc & {
         devices: { deviceId: string; name: string; block?: string }[];
@@ -1538,6 +1565,7 @@ async function main(): Promise<string[]> {
       const copy = need(mirrored.doc.worktree, "the mirror's copy");
       const session = mirrored.doc.session as string;
       await waitMirror(
+        a,
         session,
         "the CLI's mirror to be watching and in sync",
         's.status === "watching" && s.git?.status === "synced" && s.labels.copySide === "remote"',
@@ -1561,6 +1589,7 @@ async function main(): Promise<string[]> {
         60_000,
       );
       await waitMirror(
+        a,
         session,
         "the pair to agree again",
         's.git?.status === "synced"',
@@ -1577,6 +1606,7 @@ async function main(): Promise<string[]> {
       // The far end sees the same mirror from its side (the copy is
       // local to b, a is the other device) and stops it through a:
       // refused while a accepts no commands, done once it does.
+      await a.evaluate("window.api.account.setAcceptsCommands(false)");
       const onB = smdOnB("worktrees", "mirrors").doc as Doc & {
         mirrors: {
           session: string;
@@ -1590,24 +1620,26 @@ async function main(): Promise<string[]> {
       );
       assert.equal(mirrorOnB.copySide, "local");
       assert.equal(mirrorOnB.device.deviceId, idA);
-      const refusedOnB = smdOnB("worktrees", "unmirror", copy.path);
-      assert.notEqual(
-        refusedOnB.code,
-        0,
-        "b stopped a's mirror while a accepted no commands",
-      );
-      assert.ok(existsSync(copy.path), "the refused unmirror removed the copy");
-      await a.evaluate("window.api.account.setAcceptsCommands(true)");
       try {
-        const stopped = smdOnB("worktrees", "unmirror", copy.path);
-        assert.equal(stopped.code, 0, JSON.stringify(stopped.doc));
-        assert.equal(
-          (stopped.doc.mirror as { copySide: string }).copySide,
-          "local",
+        const refusedOnB = smdOnB("worktrees", "unmirror", copy.path);
+        assert.notEqual(
+          refusedOnB.code,
+          0,
+          "b stopped a's mirror while a accepted no commands",
+        );
+        assert.ok(
+          existsSync(copy.path),
+          "the refused unmirror removed the copy",
         );
       } finally {
-        await a.evaluate("window.api.account.setAcceptsCommands(false)");
+        await a.evaluate("window.api.account.setAcceptsCommands(true)");
       }
+      const stopped = smdOnB("worktrees", "unmirror", copy.path);
+      assert.equal(stopped.code, 0, JSON.stringify(stopped.doc));
+      assert.equal(
+        (stopped.doc.mirror as { copySide: string }).copySide,
+        "local",
+      );
       await waitFor(
         () => !existsSync(copy.path),
         "b's copy to go with the unmirror from b",
@@ -1621,8 +1653,11 @@ async function main(): Promise<string[]> {
       );
 
       // mirror --from: one of b's worktrees is copied here and kept in
-      // step, b named as a person would. The unmirror removes a's copy
-      // and leaves b's original.
+      // step, b named as a person would. b holds the original, so b
+      // runs the mirror and sends the copy here, which lands through
+      // a's command access: with a's switch off the ask is refused up
+      // front. The unmirror, asked on a, stops it through b, removes
+      // a's copy and leaves b's original.
       const projectOnB = need(
         (await b.evaluate<Project[]>("window.api.projects.list()")).find(
           (p) => p.name === "shared",
@@ -1637,22 +1672,38 @@ async function main(): Promise<string[]> {
         })})`,
       );
       writeFileSync(join(theirs.path, "README.md"), "edited on b\n");
-      const inbound = smd(
-        "worktrees",
-        "mirror",
-        "cli/theirs",
-        "--from",
-        rowB.name,
-        "--no-setup",
-      );
+      const mirrorFrom = () =>
+        smd(
+          "worktrees",
+          "mirror",
+          "cli/theirs",
+          "--from",
+          rowB.name,
+          "--no-setup",
+        );
+      await a.evaluate("window.api.account.setAcceptsCommands(false)");
+      try {
+        const blocked = mirrorFrom();
+        assert.notEqual(
+          blocked.code,
+          0,
+          "mirror --from ran with a's switch off",
+        );
+        assert.equal(blocked.doc.code, "device-blocked");
+        assert.match(String(blocked.doc.error), /doesn't accept commands/);
+      } finally {
+        await a.evaluate("window.api.account.setAcceptsCommands(true)");
+      }
+      const inbound = mirrorFrom();
       assert.equal(inbound.code, 0, JSON.stringify(inbound.doc));
       const here = need(inbound.doc.worktree, "the inbound mirror's copy");
       assert.ok(here.path.startsWith(realpathSync(fixture.a.dataDir)));
       assert.equal(readOrNull(join(here.path, "README.md")), "edited on b\n");
       await waitMirror(
+        b,
         inbound.doc.session as string,
-        "the inbound mirror to be watching and in sync",
-        's.status === "watching" && s.git?.status === "synced" && s.labels.copySide !== "remote"',
+        "the inbound mirror to be watching and in sync, on b",
+        `s.status === "watching" && s.git?.status === "synced" && s.labels.copySide === "remote" && s.localWorktreeId === ${JSON.stringify(theirs.id)}`,
       );
       writeFileSync(join(here.path, "agent.txt"), "the agent took over\n");
       await waitFor(
@@ -1669,6 +1720,11 @@ async function main(): Promise<string[]> {
         30_000,
       );
       assert.ok(existsSync(theirs.path), "the unmirror removed b's original");
+      await b.waitFor(
+        "b's session to end with a's unmirror",
+        `window.api.mirror.list().then((m) => !m.sessions.some((s) => s.session === ${JSON.stringify(inbound.doc.session)}))`,
+        30_000,
+      );
     });
 
     // The mirror the other way, as the local page's "Mirror to"
@@ -1706,6 +1762,7 @@ async function main(): Promise<string[]> {
       );
       assert.equal(readOrNull(join(copy.path, "README.md")), "edited on a\n");
       await waitMirror(
+        a,
         started.session,
         "the mirror to a peer to be watching and in sync",
         's.status === "watching" && s.git?.status === "synced" && s.labels.copySide === "remote"',
@@ -1741,11 +1798,12 @@ async function main(): Promise<string[]> {
         60_000,
       );
       await waitMirror(
+        a,
         started.session,
         "the pair to agree again",
         's.git?.status === "synced"',
       );
-      await mirrorOp("stop", started.session);
+      await mirrorOp(a, "stop", started.session);
       await waitFor(
         () => !existsSync(copy.path),
         "b's copy to go with the stop",
@@ -1777,6 +1835,7 @@ async function main(): Promise<string[]> {
       const local = started.worktree;
       assert.ok(setupRuns().includes(local.path), "the setup script never ran");
       await waitMirror(
+        b,
         started.session,
         "the gitignored mirror to be watching",
         's.status === "watching" && s.ignoreMode === "gitignored"',
@@ -1803,21 +1862,21 @@ async function main(): Promise<string[]> {
       );
 
       // Paused, nothing moves. Resumed, what was held crosses.
-      await mirrorOp("pause", started.session);
-      await waitMirror(started.session, "the mirror to pause", "s.paused");
+      await mirrorOp(b, "pause", started.session);
+      await waitMirror(b, started.session, "the mirror to pause", "s.paused");
       writeFileSync(join(source.path, "while-paused.txt"), "held\n");
       await new Promise((resolve) => setTimeout(resolve, 4000));
       assert.ok(
         !existsSync(join(local.path, "while-paused.txt")),
         "a paused mirror still carried a file",
       );
-      await mirrorOp("resume", started.session);
+      await mirrorOp(b, "resume", started.session);
       await waitFor(
         () => fileEquals(join(local.path, "while-paused.txt"), "held\n"),
         "the held file to cross after the resume",
         60_000,
       );
-      await mirrorOp("stop", started.session);
+      await mirrorOp(b, "stop", started.session);
       await waitFor(
         () => !existsSync(local.path),
         "the copy to go with the stop",
@@ -1825,11 +1884,11 @@ async function main(): Promise<string[]> {
       );
     });
 
-    // The far end drives the session: b holds the original of a mirror
-    // a runs, and b's page controls it through a, whose controls
-    // (mirror:pause, resume, stop) are served to peers on a's grant.
-    // The boot leaves a's grant off, so the first ask is refused, and
-    // the grant is put back off after.
+    // The far end drives the session: a holds the copy of a mirror b
+    // runs (b holds the original), and a's page controls it through b,
+    // whose controls (mirror:pause, resume, stop) are served to peers
+    // on b's grant. b's switch goes off once the mirror is up, so the
+    // first ask is refused, and back on after.
     await scenario("mirror: controlled from the other device", async () => {
       const source = await sourceOnB("mirror-ctl");
       const started = await mirrorHere(source, {
@@ -1839,72 +1898,83 @@ async function main(): Promise<string[]> {
       });
       const local = started.worktree;
       await waitMirror(
+        b,
         started.session,
         "the mirror to be watching and in sync",
         's.status === "watching" && s.git?.status === "synced"',
       );
-      // b reads a's session off a's list, the way its page finds the
+      // a reads b's session off b's list, the way its page finds the
       // session behind the stream it serves.
-      const onA = (await onPeer(b, idA, "mirror:list")) as MirrorList;
-      const seen = onA.sessions.find((s) => s.session === started.session);
+      const onB = (await onPeer(a, idB, "mirror:list")) as MirrorList;
+      const seen = onB.sessions.find((s) => s.session === started.session);
       assert.ok(
         seen !== undefined &&
-          seen.deviceId === idB &&
-          seen.worktreeId === source.id,
-        "b did not see a's session against its own worktree",
+          seen.deviceId === idA &&
+          seen.worktreeId === local.id &&
+          seen.localWorktreeId === source.id,
+        "a did not see b's session against its copy",
       );
       const control = (op: "pause" | "resume" | "stop") =>
-        onPeer(b, idA, `mirror:${op}`, { session: started.session });
-      const refused = await refusalOf(control("pause"));
-      assert.ok(refused !== null, "a served b's pause with commands off");
+        onPeer(a, idB, `mirror:${op}`, { session: started.session });
+      await b.evaluate("window.api.account.setAcceptsCommands(false)");
+      let refused: unknown;
+      try {
+        refused = await refusalOf(control("pause"));
+      } finally {
+        await b.evaluate("window.api.account.setAcceptsCommands(true)");
+      }
+      assert.ok(refused !== null, "b served a's pause with commands off");
       assert.ok(
         isCommandRefusedError(refused),
         `unexpected refusal: ${errorMessageOf(refused)}`,
       );
-      await a.evaluate("window.api.account.setAcceptsCommands(true)");
-      try {
-        await control("pause");
-        await waitMirror(started.session, "b's pause to land on a", "s.paused");
-        writeFileSync(join(source.path, "while-paused.txt"), "held\n");
-        await new Promise((resolve) => setTimeout(resolve, 4000));
-        assert.ok(
-          !existsSync(join(local.path, "while-paused.txt")),
-          "a mirror paused from b still carried a file",
-        );
-        await control("resume");
-        await waitFor(
-          () => fileEquals(join(local.path, "while-paused.txt"), "held\n"),
-          "the held file to cross after b's resume",
-          60_000,
-        );
-        await waitMirror(
-          started.session,
-          "the pair to agree again",
-          's.git?.status === "synced"',
-        );
-        // Unforced: the pair agrees, so the stop passes the
-        // confirmation rule from b as it would from a.
-        await control("stop");
-        await waitFor(
-          () => !existsSync(local.path),
-          "a's copy to go with the stop from b",
-          30_000,
-        );
-        assert.ok(existsSync(source.path), "the stop removed b's original");
-        await b.waitFor(
-          "b's served stream to end with the stop",
-          `window.api.mirror.list().then((m) => !m.serving.some((s) => s.worktreeId === ${JSON.stringify(source.id)}))`,
-          30_000,
-        );
-      } finally {
-        await a.evaluate("window.api.account.setAcceptsCommands(false)");
-      }
+      await control("pause");
+      await waitMirror(
+        b,
+        started.session,
+        "a's pause to land on b",
+        "s.paused",
+      );
+      writeFileSync(join(source.path, "while-paused.txt"), "held\n");
+      await new Promise((resolve) => setTimeout(resolve, 4000));
+      assert.ok(
+        !existsSync(join(local.path, "while-paused.txt")),
+        "a mirror paused from a still carried a file",
+      );
+      await control("resume");
+      await waitFor(
+        () => fileEquals(join(local.path, "while-paused.txt"), "held\n"),
+        "the held file to cross after a's resume",
+        60_000,
+      );
+      await waitMirror(
+        b,
+        started.session,
+        "the pair to agree again",
+        's.git?.status === "synced"',
+      );
+      // Unforced: the pair agrees, so the stop passes the confirmation
+      // rule from a as it would from b.
+      await control("stop");
+      await waitFor(
+        () => !existsSync(local.path),
+        "a's copy to go with the stop from a",
+        30_000,
+      );
+      assert.ok(existsSync(source.path), "the stop removed b's original");
+      await a.waitFor(
+        "a's served stream to end with the stop",
+        `window.api.mirror.list().then((m) => !m.serving.some((s) => s.worktreeId === ${JSON.stringify(local.id)}))`,
+        30_000,
+      );
     });
 
     // Both sides commit while the mirror is paused: the pair is
     // diverged, neither history is touched, and Stop refuses because
-    // it would take the copy's commit with it. Deleting the copy from
-    // its page is the way out, and that ends the session on both ends.
+    // it would take the copy's commit with it, asked on b (which runs
+    // the session) or from a's page through b. The forced stop (the
+    // dialog's "Discard and stop") is the way out: the session ends,
+    // a's copy goes with its commit, and b's original keeps its own.
     await scenario("mirror: diverged stop is refused", async () => {
       const source = await sourceOnB("mirror-div");
       const started = await mirrorHere(source, {
@@ -1914,12 +1984,13 @@ async function main(): Promise<string[]> {
       });
       const local = started.worktree;
       await waitMirror(
+        b,
         started.session,
         "the mirror to be watching and in sync",
         's.status === "watching" && s.git?.status === "synced"',
       );
-      await mirrorOp("pause", started.session);
-      await waitMirror(started.session, "the mirror to pause", "s.paused");
+      await mirrorOp(b, "pause", started.session);
+      await waitMirror(b, started.session, "the mirror to pause", "s.paused");
       writeFileSync(join(local.path, "on-a.txt"), "a\n");
       git(local.path, "add", "on-a.txt");
       git(local.path, "commit", "-q", "-m", "on a");
@@ -1929,41 +2000,50 @@ async function main(): Promise<string[]> {
       const [tipA, tipB] = [local.path, source.path].map((path) =>
         gitOut(path, "rev-parse", "HEAD"),
       );
-      await mirrorOp("resume", started.session);
+      await mirrorOp(b, "resume", started.session);
       await waitMirror(
+        b,
         started.session,
         "the pair to read as diverged",
         's.git?.status === "diverged"',
       );
       assert.equal(gitOut(local.path, "rev-parse", "HEAD"), tipA);
       assert.equal(gitOut(source.path, "rev-parse", "HEAD"), tipB);
-      const refused = await refusalOf(mirrorOp("stop", started.session));
+      const refused = await refusalOf(mirrorOp(b, "stop", started.session));
       assert.match(
         errorMessageOf(refused),
         /not confirmed in step with the other device \(diverged\)/,
       );
+      const refusedFromA = await refusalOf(
+        onPeer(a, idB, "mirror:stop", { session: started.session }),
+      );
+      assert.match(
+        errorMessageOf(refusedFromA),
+        /not confirmed in step with the other device \(diverged\)/,
+      );
       assert.ok(existsSync(local.path), "a refused stop removed the copy");
       assert.ok(
-        (await mirrorsOn(a)).sessions.some(
+        (await mirrorsOn(b)).sessions.some(
           (s) => s.session === started.session,
         ),
         "a refused stop ended the session",
       );
-      await a.evaluate(
-        `window.api.worktrees.delete(${JSON.stringify({
-          projectId: local.projectId,
-          worktreeId: local.id,
-          force: true,
-        })})`,
-      );
-      await a.waitFor(
-        "the delete to end a's session",
-        `window.api.mirror.list().then((m) => !m.sessions.some((s) => s.localWorktreeId === ${JSON.stringify(local.id)}))`,
-        30_000,
+      await b.evaluate(
+        `window.api.mirror.stop(${JSON.stringify(started.session)}, true)`,
       );
       await b.waitFor(
-        "b to stop serving the deleted copy",
-        `window.api.mirror.list().then((m) => !m.serving.some((s) => s.worktreeId === ${JSON.stringify(source.id)}))`,
+        "the forced stop to end b's session",
+        `window.api.mirror.list().then((m) => !m.sessions.some((s) => s.session === ${JSON.stringify(started.session)}))`,
+        30_000,
+      );
+      await waitFor(
+        () => !existsSync(local.path),
+        "a's copy to go with the forced stop",
+        30_000,
+      );
+      await a.waitFor(
+        "a to stop serving the removed copy",
+        `window.api.mirror.list().then((m) => !m.serving.some((s) => s.worktreeId === ${JSON.stringify(local.id)}))`,
         30_000,
       );
       assert.equal(gitOut(source.path, "rev-parse", "HEAD"), tipB);
@@ -2052,15 +2132,17 @@ async function main(): Promise<string[]> {
         !setupRuns().includes(local.path),
         "the dialog's default-off switch still ran the setup script",
       );
+      // The session is b's, which holds the original, its far side the
+      // copy here.
       const session = need(
-        (await mirrorsOn(a)).sessions.find(
-          (s) => s.localWorktreeId === local.id,
+        (await mirrorsOn(b)).sessions.find(
+          (s) => s.deviceId === idA && s.worktreeId === local.id,
         ),
-        "the session the dialog started",
+        "the session the dialog started, on b",
       );
       assert.equal(session.ignoreMode, "everything");
       await clickText("Open here");
-      await mirrorOp("stop", session.session);
+      await mirrorOp(b, "stop", session.session);
       await waitFor(
         () => !existsSync(local.path),
         "the copy to go with the stop",
@@ -2144,12 +2226,12 @@ async function main(): Promise<string[]> {
         );
         await clickText("Open here");
         const session = need(
-          (await mirrorsOn(a)).sessions.find(
-            (s) => s.localWorktreeId === local.id,
+          (await mirrorsOn(b)).sessions.find(
+            (s) => s.deviceId === idA && s.worktreeId === local.id,
           ),
-          "the session the dialog started",
+          "the session the dialog started, on b",
         );
-        await mirrorOp("stop", session.session);
+        await mirrorOp(b, "stop", session.session);
         await waitFor(
           () => !existsSync(local.path),
           "the copy to go with the stop",
@@ -2567,17 +2649,18 @@ async function main(): Promise<string[]> {
       // from a, b keeps its dead credential and stays gone.
       // b runs a port forward onto a first: the remote setup a device
       // leaves behind, which its sign-out must tear down with it. The
-      // forward's open rides a's grant, which the boot leaves off, and
-      // the mirror onto b below rides b's.
+      // forward's open rides a's grant and the mirror onto b below
+      // rides b's, both on since the boot, and asserted so here.
       await a.evaluate("window.api.account.setAcceptsCommands(true)");
       await b.evaluate("window.api.account.setAcceptsCommands(true)");
       const forward = await b.evaluate<{ forwardId: string }>(
         `window.api.portForward.start(${JSON.stringify({ deviceId: idA, remotePort: 1 })})`,
       );
-      // And mirrors both ways: one a runs onto b (its copy on b), one
-      // b runs from a (its copy on b). A mirror pairs two devices of
-      // the account, so both end with b's membership, the copies kept
-      // as plain worktrees. A shared setting picked on b goes with the
+      // And mirrors both ways: one a runs onto b (a's original, its
+      // copy on b), one b runs onto a (b's original, its copy on a),
+      // each on the device holding the original. A mirror pairs two
+      // devices of the account, so both end with b's membership, the
+      // copies kept as plain worktrees. A shared setting picked on b goes with the
       // membership too, while a's copy keeps it.
       const own = await ownProjectOnA();
       const { worktree: source } = await a.evaluate<{ worktree: Worktree }>(
@@ -2597,33 +2680,23 @@ async function main(): Promise<string[]> {
           ignores: [],
         })})`,
       );
-      const { worktree: source2 } = await a.evaluate<{ worktree: Worktree }>(
-        `window.api.worktrees.create(${JSON.stringify({
-          projectId: own.id,
-          branchName: "edge/revoke-mirror-from",
-          worktreeName: "src-revoke-mirror-from",
-        })})`,
-      );
-      const fromA = await b.evaluate<{ worktree: Worktree; session: string }>(
-        `window.api.mirror.start(${JSON.stringify({
-          sourceDeviceId: idA,
-          sourceProjectId: own.id,
-          sourceWorktreeId: source2.id,
-          sourceIdentity: own.identity,
-          branch: source2.branch,
-          runSetup: false,
-          ignoreMode: "everything",
-          ignores: [],
-        })})`,
-      );
+      const project = need(bProject, "the remote read");
+      const { worktree: source2 } = (await onPeer(a, idB, "worktrees:create", {
+        projectId: project.id,
+        branchName: "edge/revoke-mirror-onto-a",
+      })) as { worktree: Worktree };
+      const ontoA = await startMirrorOnB({
+        projectId: project.id,
+        worktreeId: source2.id,
+      });
       await a.waitFor(
         "a's mirror onto b to be watching",
         `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${JSON.stringify(toB.session)} && s.status === "watching"))`,
         90_000,
       );
       await b.waitFor(
-        "b's mirror from a to be watching",
-        `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${JSON.stringify(fromA.session)} && s.status === "watching"))`,
+        "b's mirror onto a to be watching",
+        `window.api.mirror.list().then((m) => m.sessions.some((s) => s.session === ${JSON.stringify(ontoA.session)} && s.status === "watching"))`,
         90_000,
       );
       await setSharedSetting(b, "picked-on-b-before-revoke");
@@ -2669,9 +2742,9 @@ async function main(): Promise<string[]> {
         30_000,
       );
       // The mirrors end on both sides: b's with its sign-out, a's off
-      // the registry read above that no longer lists b. Both copies on
-      // b stay as worktrees, and b's shared settings are gone while
-      // a's copy still holds the pick.
+      // the registry read above that no longer lists b. Both copies
+      // (a's on b, b's on a) stay as worktrees, and b's shared settings
+      // are gone while a's copy still holds the pick.
       await b.waitFor(
         "b's mirror to end with its sign-out",
         "window.api.mirror.list().then((m) => m.sessions.length === 0)",
@@ -2683,7 +2756,7 @@ async function main(): Promise<string[]> {
         30_000,
       );
       assert.ok(existsSync(toB.worktree.path), "a's copy on b was removed");
-      assert.ok(existsSync(fromA.worktree.path), "b's copy was removed");
+      assert.ok(existsSync(ontoA.worktree.path), "b's copy on a was removed");
       const historyA = await a.evaluate<{
         events: { kind: string; detail: string }[];
       }>(

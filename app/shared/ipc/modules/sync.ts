@@ -161,7 +161,7 @@ export type SyncWorktreeFolderEntry = z.infer<
 // branch refine pins it to the bundle allowlist up front, so a name
 // the source link would reject fails here with a clear message instead
 // of deep inside the transfer.
-// What a pull (and the mirror built on it) leaves out. Everything:
+// What a move (and the mirror built on the send) leaves out. Everything:
 // only .git stays put, the default (ignored files cross too).
 // Gitignored: what git ignores on the source stays there, so a build
 // folder or a .env never crosses. Custom: the user picked which of the

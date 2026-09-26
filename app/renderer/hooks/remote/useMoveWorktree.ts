@@ -2,7 +2,8 @@
 // the mirror start's shared mutation. It runs both ways: a pull brings
 // a peer's worktree here, a send takes one of this device's to a peer,
 // and the host lands it the same way either way round (the landing
-// runs on the destination). Capture, transfer, create, and dirty apply
+// runs on the destination). A mirror's "pull" is the peer's send
+// towards this device, since the original's device runs every mirror. Capture, transfer, create, and dirty apply
 // ride a single pending state. The move's running commentary streams
 // separately (usePullProgress). The host re-verifies the identity
 // match, so the gate at the call sites is UX, not the wall. Refusals
