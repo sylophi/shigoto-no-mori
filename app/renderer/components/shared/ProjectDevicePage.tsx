@@ -12,10 +12,9 @@
 // locally): there is no pick to make. A page may add one more tab ahead
 // of the devices, for what belongs to all of them at once (`renderAllDevices`).
 import { useState, type ReactNode } from "react";
-import { PawPrint } from "lucide-react";
 import { DeviceChip } from "@/components/shared/DeviceChip";
+import { TerrierPaw } from "@/components/shared/TerrierPaw";
 import { CenteredMessage } from "@/components/ui/centered-message";
-import { SimpleTooltip } from "@/components/ui/tooltip";
 import { isHolder, useDeviceTargets } from "@/components/shared/deviceTargets";
 import { useScopedProjectParams } from "@/hooks/projects/useProjectNav";
 import { useProjects } from "@/hooks/projects/useProjects";
@@ -106,16 +105,7 @@ export function ProjectDevicePage({
             {/* A terrier-sourced project is otherwise indistinguishable
                 from a registered one, and the difference shows up in
                 what you can do to it (no remove, no reordering). */}
-            {project.source === "terrier" && (
-              <SimpleTooltip tip="Registered via terrier">
-                <span className="inline-flex shrink-0">
-                  <PawPrint
-                    aria-label="Registered via terrier"
-                    className="size-4 text-muted-foreground/70"
-                  />
-                </span>
-              </SimpleTooltip>
-            )}
+            {project.source === "terrier" && <TerrierPaw className="size-4" />}
             {/* With tabs they name the device. Without them the chip
                 does, for a peer's project (nothing locally). */}
             {!tabbed && <DeviceChip />}

@@ -100,7 +100,8 @@ type Served = { entry: MirrorServing; stopIndexWatch: (() => void) | null };
 const serving = new Map<string, Served>();
 let onServingChange: (() => void) | null = null;
 let onServingGitChange:
-  ((change: { projectId: string; worktreeId: string }) => void) | null = null;
+  | ((change: { projectId: string; worktreeId: string }) => void)
+  | null = null;
 
 // main installs the two broadcast hooks at boot. Before that (and in
 // checks that never mount them) changes are simply unannounced.
@@ -110,7 +111,8 @@ export function setMirrorServingListener(listener: (() => void) | null): void {
 
 export function setMirrorGitChangedListener(
   listener:
-    ((change: { projectId: string; worktreeId: string }) => void) | null,
+    | ((change: { projectId: string; worktreeId: string }) => void)
+    | null,
 ): void {
   onServingGitChange = listener;
 }

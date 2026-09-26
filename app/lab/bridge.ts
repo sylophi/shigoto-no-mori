@@ -449,6 +449,11 @@ function hostHandlersFor(
     "packageScripts:getSort": () => "manifest",
     "packageScripts:getOrder": () => [],
     "githubCli:readiness": () => ({ installed: true, authed: true }),
+    "terrier:readiness": () => ({
+      installed: true,
+      compatible: true,
+      version: "0.4.0",
+    }),
     // One repo, one set of PRs: every checkout of shigoto-no-mori
     // answers with the same map, as the real sweep would on each
     // device, so a stack reads the same from every device's rows.
