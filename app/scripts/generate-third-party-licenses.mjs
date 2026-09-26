@@ -210,7 +210,7 @@ const BUNDLED_BINARIES = [
 // birthdays, taken from Nookipedia's character lists and pages
 // (scripts/fetch-doubutsu-names.mts).
 // The entry opens with the Animal Crossing notice the Settings page
-// shows beside Doubutsu names (shared/acNotice.json), so the two never
+// shows beside Village life (shared/acNotice.json), so the two never
 // drift, then gives the CC BY-SA attribution.
 const doubutsuSource = require("../../cli/embed/doubutsu-names.json").source;
 const acNotice = require("../shared/acNotice.json").notice;
