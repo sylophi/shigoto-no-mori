@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { DeviceBadge, type SidebarDeviceBadge } from "./DeviceBadge";
+import { RowDeviceBadge, type SidebarDeviceBadge } from "./DeviceBadge";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import type { ScriptActivityKind } from "@/store/scriptRuns";
 import type { PullRequest, Worktree } from "@shared/schemas";
@@ -76,7 +76,7 @@ function WorktreeRowLabel({
             <WorktreeKindIcon worktree={worktree} showTooltip={false} />
           )}
           {mirror && <MirrorBadge mirror={mirror} />}
-          {device && <DeviceBadge badge={device} />}
+          {device && <RowDeviceBadge badge={device} />}
         </span>
       </span>
     </div>
@@ -183,7 +183,7 @@ export function MirrorBadge({ mirror }: { mirror: SidebarDeviceBadge }) {
           className="size-3 text-emerald-600 dark:text-emerald-400"
         />
       </SimpleTooltip>
-      <DeviceBadge badge={mirror} />
+      <RowDeviceBadge badge={mirror} />
     </span>
   );
 }
