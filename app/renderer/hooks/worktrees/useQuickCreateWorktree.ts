@@ -21,23 +21,33 @@ export function useQuickCreateWorktree() {
   // snapshot the closure captured, not the mutation's state now, so it
   // both double-toasted create failures and latched true forever after
   // the first one, swallowing genuine defaultBranch errors.
-  const quickCreate = async (projectId: string) => {
-    if (create.isPending) return;
+  // `branchName` names the new branch (the palette's typed name). Left
+  // out, the worktree's picked name names it. Resolves true once on the
+  // new worktree's page, false when it failed (and toasted) or was
+  // already under way.
+  const quickCreate = async (
+    projectId: string,
+    branchName?: string,
+  ): Promise<boolean> => {
+    if (create.isPending) return false;
     let defaultBranch: string;
     try {
       defaultBranch = await api.projects.defaultBranch(projectId);
     } catch (err) {
       notifyError("Couldn't resolve default branch", err);
-      return;
+      return false;
     }
     try {
       const { worktree } = await create.mutateAsync({
         projectId,
+        branchName,
         base: defaultBranch,
       });
       toWorktree(projectId, worktree.id);
+      return true;
     } catch {
       // The create mutation's meta already toasts this failure.
+      return false;
     }
   };
 
