@@ -21,7 +21,10 @@ const router = bootApp({
   history: createMemoryHistory({ initialEntries: ["/"] }),
 });
 
-(window as any).smLab.navigate = (to: string) => router.navigate({ to });
+if (window.smLab === undefined) {
+  throw new Error("[lab] boot.tsx ran before the bridge was installed");
+}
+window.smLab.navigate = (to: string) => router.navigate({ to });
 
 // URL-posed initial route (see lab/main.tsx). Deferred a tick so the
 // router mounts on "/" first, matching a real navigation.

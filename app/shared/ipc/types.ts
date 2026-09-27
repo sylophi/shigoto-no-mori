@@ -78,3 +78,17 @@ export type Handlers<M extends ContractModule, Ctx = unknown> = HandlersOf<
 >;
 
 export type Client<M extends ContractModule> = ClientOf<M["calls"]>;
+
+// Every invoke def of M, or of each module when M is a union of them.
+type InvokeDefsOf<M> = M extends ContractModule
+  ? Extract<M["calls"][keyof M["calls"]], InvokeDef>
+  : never;
+
+// The invokes of M keyed by channel instead of call name, as one table:
+// for something that answers channels straight off the wire. Same
+// shapes as Handlers, minus the context.
+export type ChannelHandlers<M extends ContractModule> = {
+  [D in InvokeDefsOf<M> as D["channel"]]: (
+    input: HandlerIn<D>,
+  ) => Promise<Out<D>> | Out<D>;
+};

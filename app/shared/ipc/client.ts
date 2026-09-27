@@ -1,5 +1,6 @@
 import { buildClient } from "@shared/ipc/buildClient";
 import type { ContractModule, ContractScope } from "@shared/ipc/contract";
+import type { ChannelHandlers } from "@shared/ipc/types";
 import { accountContract } from "@shared/ipc/modules/account";
 import { branchesContract } from "@shared/ipc/modules/branches";
 import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
@@ -53,7 +54,7 @@ import type {
 // with a typed default) reads the same set buildApi consumes instead of
 // keeping a second import list that could drift. Kept beside buildApi
 // on purpose: adding a module means touching both in this one file.
-export const allContractModules: readonly ContractModule[] = [
+export const allContractModules = [
   accountContract,
   branchesContract,
   clientConfigContract,
@@ -87,7 +88,13 @@ export const allContractModules: readonly ContractModule[] = [
   villagersContract,
   windowContract,
   worktreesContract,
-];
+] as const satisfies readonly ContractModule[];
+
+// A table answering any channel of any module above, typed by the
+// contracts: the lab's fixture handlers.
+export type AllChannelHandlers = Partial<
+  ChannelHandlers<(typeof allContractModules)[number]>
+>;
 
 // Ergonomic namespaces over the raw contract clients. Each module's
 // scope selects its transport, so the caller wires one transport per

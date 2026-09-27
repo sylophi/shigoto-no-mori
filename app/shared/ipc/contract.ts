@@ -3,9 +3,12 @@ import { z } from "zod";
 export type InvokeDef<
   I extends z.ZodTypeAny = z.ZodTypeAny,
   O extends z.ZodTypeAny = z.ZodTypeAny,
+  // The channel name as written, so a channel-keyed table can be typed
+  // from the contracts (ChannelHandlers in types.ts).
+  Ch extends string = string,
 > = {
   kind: "invoke";
-  channel: string;
+  channel: Ch;
   input: I;
   output: O;
   // When true, a successful call counts as the user "using" the project named
@@ -78,8 +81,12 @@ export type ContractModule<C extends Contract = Contract> = {
   calls: C;
 };
 
-export const invoke = <I extends z.ZodTypeAny, O extends z.ZodTypeAny>(
-  channel: string,
+export const invoke = <
+  Ch extends string,
+  I extends z.ZodTypeAny,
+  O extends z.ZodTypeAny,
+>(
+  channel: Ch,
   input: I,
   output: O,
   opts?: {
@@ -88,7 +95,7 @@ export const invoke = <I extends z.ZodTypeAny, O extends z.ZodTypeAny>(
     gated?: boolean;
     movesHostState?: boolean;
   },
-): InvokeDef<I, O> => ({
+): InvokeDef<I, O, Ch> => ({
   kind: "invoke",
   channel,
   input,
