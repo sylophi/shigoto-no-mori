@@ -31,7 +31,10 @@ export function ScanningPanel({
         <Loader2 className="size-5 animate-spin text-muted-foreground/60" />
         <span>Looking for git repos…</span>
       </div>
-      <div className="flex items-center justify-end border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+      <div
+        data-slot="footer-row"
+        className="flex items-center justify-end border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
+      >
         <KbdHint keys={["Esc"]} label="Cancel" />
       </div>
     </div>

@@ -111,7 +111,10 @@ export function DiffFileIndex({
       style={width === undefined ? undefined : { width }}
       className={cn("flex shrink-0 flex-col", className)}
     >
-      <div className="flex items-center gap-1.5 border-b border-border px-2.5 py-1.5">
+      <div
+        data-slot="search-row"
+        className="flex items-center gap-1.5 border-b border-border px-2.5 py-1.5"
+      >
         {changes ? (
           <SelectAllCheckbox changes={changes} />
         ) : (

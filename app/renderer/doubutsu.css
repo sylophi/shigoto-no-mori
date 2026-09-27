@@ -31,8 +31,12 @@
  *      checkbox (+ data-variant) ui/checkbox.tsx
  *      chip                      ui/chip-button.tsx
  *      segmented-control         ui/segmented-control.tsx
- *      combobox-trigger/-popup/-search   shared/BranchCombobox.tsx
+ *      combobox-trigger/-popup   shared/BranchCombobox.tsx
  *      modal-shell               ui/modal-shell.tsx
+ *      palette-verbs             palette/WorktreePalette.tsx
+ *      search-row, footer-row    popup search strips and footers: the
+ *                                palette, the pickers, addProject/,
+ *                                BranchCombobox, the diff rail's filter
  *      launcher                  launcher/ProjectLauncher.tsx
  *      launcher-tile             launcher/LauncherTile.tsx
  *      diff-view                 diff/DiffView.tsx
@@ -84,8 +88,7 @@
  *
  * 6. Tailwind utility names (stable public API, checked loosely):
  *    .uppercase, .tracking-wide/-wider/-widest, .font-normal/-medium/
- *    -semibold/-bold/-black/-mono, .border-b/.border-t (only inside
- *    slotted surfaces), [class*="backdrop-blur"].
+ *    -semibold/-bold/-black/-mono, [class*="backdrop-blur"].
  *
  * Token blocks below use `:root.doubutsu` (not `.doubutsu`) so they
  * outrank index.css's `:root` / `.dark` blocks by specificity. This
@@ -558,30 +561,6 @@
   box-shadow: var(--doubutsu-sticker-shadow-sm);
 }
 
-/* Hairline separators inside those surfaces (the combobox search row,
-   modal header/footer rows, the diff rail's filter and match-count
-   rows) went transparent with --border; replace them with the same
-   chunky muted band as the dropdown separator. */
-.doubutsu
-  :is(
-    [data-slot="modal-shell"],
-    [data-slot="combobox-popup"],
-    [data-slot="diff-index"]
-  )
-  .border-b,
-.doubutsu [data-slot="combobox-search"] {
-  box-shadow: inset 0 -2px 0 0 var(--muted);
-}
-.doubutsu
-  :is(
-    [data-slot="modal-shell"],
-    [data-slot="combobox-popup"],
-    [data-slot="diff-index"]
-  )
-  .border-t {
-  box-shadow: inset 0 2px 0 0 var(--muted);
-}
-
 /* --- Text fields read as inset trays ---
    v1 fields are border-input + bg-background: with borders gone they'd
    melt into the canvas. Filling the field slots (and the segmented-
@@ -596,6 +575,41 @@
   background-color: var(--input);
 }
 
+/* --- Search strips and popup footers, without rules ---
+   v1 rules a search strip off from the list under it, and a popup's
+   footer off from its body. Here the strip becomes the field tray
+   every text field is, inset as far as the list's rows. In a popup it
+   and the footer (a band) wear the palette's verbs pane's wash
+   (bg-muted/30), so a popup's chrome is one material: --input is set
+   to stand off the canvas, and on a popover it reads muddy. */
+.doubutsu [data-slot="search-row"] {
+  margin: calc(var(--spacing) * 2) calc(var(--spacing) * 2) 0;
+  border-radius: 9999px;
+  background-color: var(--input);
+}
+.doubutsu
+  :is(
+    [data-slot="footer-row"],
+    :is([data-slot="modal-shell"], [data-slot="combobox-popup"])
+      [data-slot="search-row"]
+  ) {
+  background-color: color-mix(in oklab, var(--muted) 30%, transparent);
+}
+/* These two pad their lists by one step, not two. */
+.doubutsu
+  :is([data-slot="combobox-popup"], [data-slot="diff-index"])
+  [data-slot="search-row"] {
+  margin: var(--spacing) var(--spacing) 0;
+}
+
+/* The palette's verbs pane, a column edge to edge between the search
+   strip and the footer in v1, would butt into the round tray and the
+   band as a seam. It floats as a panel of its own instead. */
+.doubutsu [data-slot="palette-verbs"] {
+  margin: calc(var(--spacing) * 2);
+  border-radius: var(--radius-lg);
+}
+
 /* Quiet action chips built on an inset ring alone in v1; the muted
    pill fill makes them read as controls with the rings gone. */
 .doubutsu [data-slot="chip"] {
@@ -607,11 +621,17 @@
    sidebar zone retints itself: every bg-card / bg-muted utility in
    the dialog (the cards the transplant and mirror dialogs are built
    on, the muted rows, stat tiles and bands on them) resolves to the
-   lifted pair at whatever alpha it wears. Chips and segmented tracks
-   climb to the outline-button graphite so they stand off either. Dark
-   only: light's cream steps already separate. */
+   lifted pair at whatever alpha it wears, the search tray and the
+   palette's verbs pane included. Chips and segmented tracks climb to
+   the outline-button graphite so they stand off either. Dark only:
+   light's cream steps already separate. */
 .doubutsu.dark [data-slot="modal-shell"] {
   --card: var(--doubutsu-modal-card);
+  --muted: var(--doubutsu-modal-muted);
+}
+/* The branch combobox's popup is a popover too, and its search tray
+   the one muted thing in it. */
+.doubutsu.dark [data-slot="combobox-popup"] {
   --muted: var(--doubutsu-modal-muted);
 }
 .doubutsu.dark

@@ -53,7 +53,10 @@ Rules that keep both themes cheap to maintain:
 - **No outlines in doubutsu.** No border, hairline or ring draws an
   edge: fills set surfaces apart, and a floating one stands on a hard,
   blur-less drop (`--doubutsu-sticker-shadow`). Keyboard focus rings
-  are the one exception.
+  are the one exception. So rows that v1 rules off say what they are
+  instead: a search strip carries `data-slot="search-row"` (it becomes
+  an inset tray) and a popup's footer `data-slot="footer-row"` (a
+  muted band).
 - The full dependency list lives in the CONTRACT header of
   `renderer/doubutsu.css`; `pnpm test theme-contract` (run by lefthook
   pre-commit) verifies every hook still exists. If it fails, either
