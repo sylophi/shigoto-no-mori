@@ -159,7 +159,10 @@ export function dropMirrorInvitesWithPeers(
 // hand, a repo re-cloned) never passed the delete that forgets its
 // invitation, and a worktree id is a path hash a later worktree can
 // take. So the landed invitations are checked against the worktrees
-// this device lists, once the store is loaded.
+// this device lists, once the store is loaded. `exists` answers false
+// only for a copy known to be gone: a lookup that failed for another
+// reason must answer true, or a bad moment at boot would drop every
+// mirror this device asked for.
 export async function reconcileMirrorInvites(
   exists: (copy: MirrorWorktreePayload) => Promise<boolean>,
 ): Promise<void> {

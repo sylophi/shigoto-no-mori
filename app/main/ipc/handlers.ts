@@ -27,7 +27,7 @@ import {
   MirrorWorktreePayloadSchema,
   mirrorContract,
 } from "@shared/ipc/modules/mirror";
-import { errorMessageOf, logFailure } from "@shared/errors";
+import { errorMessageOf, isEntityGoneError, logFailure } from "@shared/errors";
 import type { ContractModule } from "@shared/ipc/contract";
 import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
 import { portForwardContract } from "@shared/ipc/modules/portForward";
@@ -528,7 +528,9 @@ export function registerIpcHandlers(): void {
   void reconcileMirrorInvites(({ projectId, worktreeId }) =>
     findProjectAndWorktreeOrThrow(projectId, worktreeId).then(
       () => true,
-      () => false,
+      // Only a worktree known to be gone loses its invitation. A read
+      // that failed for any other reason keeps it.
+      (error: unknown) => !isEntityGoneError(error),
     ),
   );
   // The port-forward engine's peer reach, riding the same
