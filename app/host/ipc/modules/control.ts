@@ -168,11 +168,13 @@ function peersOf(devices: DeviceInfo[], hereId: string): DeviceInfo[] {
   );
 }
 
-// Where each peer stands for one repo: the dialogs' three blocks in
-// the dialogs' order (renderer/components/shared/deviceTargets.ts),
-// the checkout read fresh off the peer and the command access off the
-// status snapshot. A read leaves the access out, since reads are
-// ungated.
+// Where each peer stands for one repo, in the dialogs' three blocks
+// (renderer/components/shared/deviceTargets.ts) but not their order:
+// standingOf puts command access first, since a send without a
+// checkout clones one. The checkout is read fresh off the peer and the
+// command access off the status snapshot. A read leaves the access
+// out, since reads are ungated. The wording is the CLI's, pinned by
+// test/control.mjs. The dialogs word the same blocks for their verbs.
 async function standingsOf(
   devices: DeviceInfo[],
   identity: string | null,
