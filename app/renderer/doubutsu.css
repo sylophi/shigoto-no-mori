@@ -155,7 +155,16 @@
     sans-serif;
 
   --doubutsu-sidebar: oklch(0.93 0.045 160);
-  --doubutsu-stripe: oklch(1 0 0 / 0.3);
+  /* Light fills leave white little room to lighten, and a row with no
+     fill of its own (a settings toggle, a sort header) puts the stripes
+     straight on the near-white canvas, where white alone never shows.
+     So light stripes come in pairs: a white band and a band of the
+     text color at a faint tint, which reads on any fill or none. It
+     derives from --foreground, so each palette's text tints it without
+     declaring it. Dark's lighter bands already show, and it keeps
+     transparent gaps. */
+  --doubutsu-stripe: oklch(1 0 0 / 0.35);
+  --doubutsu-stripe-gap: color-mix(in oklab, var(--foreground) 4%, transparent);
   --doubutsu-watermark: oklch(0.66 0.15 155);
   --doubutsu-pattern: oklch(0.66 0.15 155);
   /* Milk-tea brown for outline buttons: on the foreground's warm-brown
@@ -179,11 +188,11 @@
   --doubutsu-sticker-shadow: 0 5px 0 0 var(--doubutsu-edge);
   --doubutsu-stripe-image: linear-gradient(
     45deg,
-    transparent 25%,
+    var(--doubutsu-stripe-gap) 25%,
     var(--doubutsu-stripe) 25%,
     var(--doubutsu-stripe) 50%,
-    transparent 50%,
-    transparent 75%,
+    var(--doubutsu-stripe-gap) 50%,
+    var(--doubutsu-stripe-gap) 75%,
     var(--doubutsu-stripe) 75%
   );
 
@@ -276,6 +285,7 @@
 
   --doubutsu-sidebar: oklch(0.258 0.03 172);
   --doubutsu-stripe: oklch(1 0 0 / 0.1);
+  --doubutsu-stripe-gap: transparent;
   --doubutsu-watermark: oklch(0.72 0.14 155);
   --doubutsu-pattern: oklch(0.72 0.14 155);
   /* Graphite for outline buttons. Dark inverts the light relationship

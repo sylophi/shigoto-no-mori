@@ -27,7 +27,8 @@
  * --doubutsu-sidebar, -stripe, -watermark, -pattern, -button-outline,
  * -edge, -accent, -accent-foreground and
  * -rail-muted-foreground, and for a dark palette -modal-card and
- * -modal-muted as well.
+ * -modal-muted as well. --doubutsu-stripe-gap is left out: it derives
+ * from the palette's --foreground.
  * The names are the catalog's (shared/themes.ts).
  */
 
@@ -52,7 +53,7 @@
   --input: oklch(0.93 0.008 250);
   --ring: oklch(0.62 0.15 155);
   --doubutsu-sidebar: oklch(0.95 0.03 165);
-  --doubutsu-stripe: oklch(1 0 0 / 0.3);
+  --doubutsu-stripe: oklch(1 0 0 / 0.35);
   --doubutsu-watermark: oklch(0.62 0.15 155);
   --doubutsu-pattern: oklch(0.62 0.15 155);
   --doubutsu-button-outline: oklch(0.9 0.012 250);
@@ -83,7 +84,7 @@
   --input: oklch(0.92 0.04 160);
   --ring: oklch(0.6 0.16 155);
   --doubutsu-sidebar: oklch(0.88 0.08 160);
-  --doubutsu-stripe: oklch(1 0 0 / 0.3);
+  --doubutsu-stripe: oklch(1 0 0 / 0.35);
   --doubutsu-watermark: oklch(0.6 0.16 155);
   --doubutsu-pattern: oklch(0.6 0.16 155);
   --doubutsu-button-outline: oklch(0.89 0.05 165);
@@ -117,7 +118,7 @@
   --color-emerald-500: oklch(0.6 0.16 350);
   --color-emerald-600: oklch(0.53 0.15 350);
   --doubutsu-sidebar: oklch(0.93 0.045 5);
-  --doubutsu-stripe: oklch(1 0 0 / 0.3);
+  --doubutsu-stripe: oklch(1 0 0 / 0.35);
   --doubutsu-watermark: oklch(0.7 0.14 5);
   --doubutsu-pattern: oklch(0.7 0.14 5);
   --doubutsu-button-outline: oklch(0.9 0.045 8);
@@ -156,7 +157,7 @@
   --color-sky-600: oklch(0.52 0.085 200);
   --color-sky-700: oklch(0.45 0.075 205);
   --doubutsu-sidebar: oklch(0.92 0.05 222);
-  --doubutsu-stripe: oklch(1 0 0 / 0.3);
+  --doubutsu-stripe: oklch(1 0 0 / 0.35);
   --doubutsu-watermark: oklch(0.62 0.12 235);
   --doubutsu-pattern: oklch(0.62 0.12 235);
   --doubutsu-button-outline: oklch(0.9 0.04 228);
