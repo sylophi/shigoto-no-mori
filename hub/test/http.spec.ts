@@ -305,7 +305,7 @@ describe("DELETE /devices/:deviceId", () => {
       // oxlint-disable-next-line no-await-in-loop -- one route at a time reads better than a Promise.all of five
       const response = await call(request);
       expect(response.status).toBe(403);
-      // oxlint-disable-next-line no-await-in-loop
+      // oxlint-disable-next-line no-await-in-loop -- the same one-route-at-a-time loop
       expect(await response.json()).toMatchObject({ code: "device_revoked" });
     }
     expect((await call(listRequest("smdc_garbage"))).status).toBe(401);

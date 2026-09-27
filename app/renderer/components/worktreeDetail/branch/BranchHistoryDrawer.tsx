@@ -179,8 +179,7 @@ function VirtualCommitList({
   // virtualizer instead of an IntersectionObserver keeps the trigger in
   // sync with the rows the user is actually seeing.
   const items = virtualizer.getVirtualItems();
-  const lastVisibleIndex =
-    items.length === 0 ? -1 : items[items.length - 1]!.index;
+  const lastVisibleIndex = items.at(-1)?.index ?? -1;
   useEffect(() => {
     if (!hasNextPage || isFetchingNextPage) return;
     if (lastVisibleIndex < 0) return;

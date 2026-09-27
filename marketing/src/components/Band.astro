@@ -13,7 +13,7 @@ const KANJI = Object.fromEntries(
       eager: true,
     }),
   ).map(([path, image]) => [
-    path.split("/").pop()!.replace(".webp", ""),
+    path.slice(path.lastIndexOf("/") + 1).replace(".webp", ""),
     image.default,
   ]),
 );

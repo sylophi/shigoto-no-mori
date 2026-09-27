@@ -1,4 +1,4 @@
-import { queryOptions, useQuery } from "@tanstack/react-query";
+import { queryOptions, skipToken, useQuery } from "@tanstack/react-query";
 import type { ProjectIcon } from "@shared/schemas";
 import { useHostScope, type HostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
@@ -19,9 +19,7 @@ export function projectIconQueryOptions(
   const { deviceId, api } = scope;
   return queryOptions<ProjectIcon | null>({
     queryKey: queryKeysFor(deviceId).projectIcon(projectId),
-    // Guarded by `enabled`.
-    queryFn: () => api!.projects.icon(projectId),
-    enabled: api !== undefined,
+    queryFn: api === undefined ? skipToken : () => api.projects.icon(projectId),
     retry: false,
     staleTime: Infinity,
     gcTime: Infinity,

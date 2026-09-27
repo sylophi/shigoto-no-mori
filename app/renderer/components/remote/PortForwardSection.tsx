@@ -124,9 +124,7 @@ export function PortForwardSection({
             }}
           >
             <Input
-              // The field only exists because the user just asked for
-              // it, so moving the caret here is the point of the click.
-              // oxlint-disable-next-line jsx-a11y/no-autofocus
+              // oxlint-disable-next-line jsx-a11y/no-autofocus -- the field only exists because the user just asked for it, so moving the caret here is the point of the click
               autoFocus
               type="number"
               disabled={start.isPending}

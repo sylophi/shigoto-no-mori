@@ -206,7 +206,9 @@ function launch(
   return child;
 }
 
-const isRunning = (child: ChildProcess) =>
+const isRunning = (
+  child: ChildProcess,
+): child is ChildProcess & { pid: number } =>
   child.pid !== undefined &&
   child.exitCode === null &&
   child.signalCode === null;
@@ -222,7 +224,7 @@ async function killTrees(
   signal: NodeJS.Signals,
 ): Promise<void> {
   await Promise.all(
-    children.filter(isRunning).map((child) => signalTree(child.pid!, signal)),
+    children.filter(isRunning).map((child) => signalTree(child.pid, signal)),
   );
 }
 

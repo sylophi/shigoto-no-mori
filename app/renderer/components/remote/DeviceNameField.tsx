@@ -106,9 +106,7 @@ export function DeviceNameField({
   return (
     <span className="flex min-w-0 flex-wrap items-center gap-1.5">
       <Input
-        // The editor only exists because the user just asked for it, so
-        // moving the caret here is the whole point of the click.
-        // oxlint-disable-next-line jsx-a11y/no-autofocus
+        // oxlint-disable-next-line jsx-a11y/no-autofocus -- the editor only exists because the user just asked for it, so moving the caret here is the whole point of the click
         autoFocus
         type="text"
         value={draft}

@@ -105,7 +105,7 @@ export function parseDevProfileArgs(argv: string[]): DevProfileArgs {
     rest: [],
   };
   for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i]!;
+    const arg = argv[i];
     if (arg === "--profile") {
       out.profile = argv[++i] ?? "";
     } else if (arg.startsWith("--profile=")) {

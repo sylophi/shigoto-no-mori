@@ -16,7 +16,7 @@
 // capture has no pointer of its own, and `waitFor` blocks on text so a
 // take can wait out the lab's posed progress. The final frame lingers
 // briefly so the outcome is readable before the file ends.
-/* oxlint-disable no-await-in-loop */
+/* oxlint-disable no-await-in-loop -- takes run one at a time on purpose */
 import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";

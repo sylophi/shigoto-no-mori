@@ -59,14 +59,14 @@ export function pullRequestStackFor(
   while (above.length < MAX_DEPTH) {
     const children = childrenOf(prs, top).filter((c) => !visited.has(c.branch));
     if (children.length !== 1) break;
-    const child = children[0]!;
+    const child = children[0];
     visited.add(child.branch);
     above.push(child);
     top = child.branch;
   }
   if (below.length === 0 && above.length === 0) return null;
   const entries = [...below.toReversed(), { branch, pr: own }, ...above];
-  return { entries, base: entries[0]!.pr.baseRefName, index: below.length };
+  return { entries, base: entries[0].pr.baseRefName, index: below.length };
 }
 
 function childrenOf(

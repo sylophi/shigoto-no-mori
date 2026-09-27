@@ -1,9 +1,10 @@
 import {
   queryOptions,
+  skipToken,
+  type QueryClient,
   useQueries,
   useQuery,
   useQueryClient,
-  type QueryClient,
 } from "@tanstack/react-query";
 import {
   matchesMapEntry,
@@ -106,9 +107,10 @@ export function projectPullRequestsQueryOptions(
   const { deviceId, api } = resolveForestScope(scope);
   return queryOptions<Record<string, PullRequest>>({
     queryKey: queryKeysFor(deviceId).projectPullRequests(projectId),
-    // Guarded by `enabled`.
-    queryFn: () => api!.githubCli.projectPullRequests(projectId),
-    enabled: api !== undefined && deviceId !== "",
+    queryFn:
+      api === undefined || deviceId === ""
+        ? skipToken
+        : () => api.githubCli.projectPullRequests(projectId),
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnMount: false,

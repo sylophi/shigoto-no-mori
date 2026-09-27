@@ -9,7 +9,7 @@
 //   actions: [{ click: "css or text selector" } | { press: "Key" } | { waitMs: n } | { evaluate: "js" }]
 // Shots are serial by design: one page at a time keeps captures
 // deterministic, so the sequential awaits are the point.
-/* oxlint-disable no-await-in-loop */
+/* oxlint-disable no-await-in-loop -- shots run one at a time on purpose */
 import { readFileSync } from "node:fs";
 import { chromium } from "playwright-core";
 

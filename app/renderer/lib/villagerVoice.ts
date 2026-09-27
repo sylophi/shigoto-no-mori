@@ -257,16 +257,14 @@ export function moveNews(
   speakers: ReadonlyMap<string, Speaker>,
   device?: string,
 ): MoveNews | null {
-  const moving = worktrees.filter((w) => speakers.has(w.id));
+  const moving = worktrees.flatMap((w) => {
+    const speaker = speakers.get(w.id);
+    return speaker === undefined ? [] : [{ ...w, speaker }];
+  });
   if (moving.length === 0) return null;
   // sheldon and sheldon-2 are one villager moving twice.
   const who = [
-    ...new Map(
-      moving.map((w) => {
-        const speaker = speakers.get(w.id)!;
-        return [speaker.slug, speaker];
-      }),
-    ).values(),
+    ...new Map(moving.map(({ speaker }) => [speaker.slug, speaker])).values(),
   ];
   const verb = kind === "in" ? "moved in" : "moved out";
   const where = device === undefined ? "" : ` on ${device}`;
