@@ -7,6 +7,7 @@ import {
   MirrorIgnoreModeSchema,
   MirrorIgnoresSchema,
   SyncLandingRefSchema,
+  SyncPullWorktreePayloadSchema,
   SyncPullWorktreeResultSchema,
   SyncSendWorktreePayloadSchema,
 } from "@shared/ipc/modules/sync";
@@ -33,7 +34,10 @@ import {
 // the first cycle has little to move and git agrees on both sides
 // from the first second. A mirror asked for from the copy's side (a
 // peer's page, "mirror it here") is the same start, invoked on the
-// device holding the original with this device as the target. The
+// device holding the original with this device as the target: the
+// local orchestrator startFrom asks it, and leaves an invitation
+// behind (host/mirror/invites.ts) so the peer's send, stream and git
+// half land here whatever this device's command-access switch says. The
 // start and the controls (stop, pause, resume, setIgnores) act on a
 // session this device runs, and are offered to peers too: a mirror
 // pairs two devices, and either side's page controls it, the far end
@@ -356,6 +360,31 @@ export const MirrorStartToPayloadSchema = SyncSendWorktreePayloadSchema.extend({
 });
 export type MirrorStartToPayload = z.infer<typeof MirrorStartToPayloadSchema>;
 
+// The mirror asked for from the copy's side: a peer's worktree, named
+// the way a pull names its source, kept in step with a copy landed
+// HERE. What the peer's startTo takes, in the pull's terms (the peer
+// resolves its own branch and folder), plus the session's rule, plus
+// the repo identity and the clone place the invitation holds the
+// landing to. Local-only (remote:false), like the pull: this device
+// invites the mirror, then asks the peer's startTo with itself as the
+// target, and the peer's send and session reach the copy through that
+// invitation (host/mirror/invites.ts), so this device's switch is not
+// in the way.
+export const MirrorStartFromPayloadSchema = SyncPullWorktreePayloadSchema.pick({
+  sourceDeviceId: true,
+  sourceProjectId: true,
+  sourceWorktreeId: true,
+  sourceIdentity: true,
+  runSetup: true,
+  cloneInto: true,
+}).extend({
+  ignoreMode: MirrorIgnoreModeSchema,
+  ignores: MirrorIgnoresSchema,
+});
+export type MirrorStartFromPayload = z.infer<
+  typeof MirrorStartFromPayloadSchema
+>;
+
 // The send's result (the copy as the peer landed it) and the session.
 export const MirrorStartToResultSchema = SyncPullWorktreeResultSchema.extend({
   session: MirrorSessionIdSchema,
@@ -470,6 +499,16 @@ export const mirrorContract = defineContract("host", {
     MirrorStartToResultSchema,
     { remote: true, gated: true },
   ),
+  // The ask from the copy's side, local-only like sync:pullWorktree:
+  // invites the mirror, then runs the peer's startTo towards here and
+  // relays its progress (sync:pullProgress, keyed by the peer's
+  // worktree).
+  startFrom: invoke(
+    "mirror:startFrom",
+    MirrorStartFromPayloadSchema,
+    MirrorStartToResultSchema,
+    { remote: false, gated: true },
+  ),
   // The controls, served to peers on the command grant: the device at
   // the far end of a mirror drives the session from its own page
   // through the device running it (renderer/hooks/remote/useMirrors.ts
@@ -508,16 +547,17 @@ export const mirrorContract = defineContract("host", {
     "mirror:openStream",
     MirrorOpenStreamPayloadSchema,
     z.void(),
-    { remote: true, gated: true, movesHostState: false },
+    { remote: true, gated: true, movesHostState: false, invitable: "copy" },
   ),
   // The git half, served to the device mirroring FROM here: read a
   // worktree's git state (minting the index carrier ref, hence
-  // gated) and apply one. Both ride the command grant.
+  // gated) and apply one. Both ride the command grant, or the
+  // invitation of a mirror asked for from here (invitable).
   gitState: invoke(
     "mirror:gitState",
     MirrorWorktreePayloadSchema,
     GitStateSchema,
-    { remote: true, gated: true, movesHostState: false },
+    { remote: true, gated: true, movesHostState: false, invitable: "copy" },
   ),
   // Moves refs and the index here, which every viewer of this host
   // caches, so it keeps the host-state ping.
@@ -525,7 +565,7 @@ export const mirrorContract = defineContract("host", {
     "mirror:applyGitState",
     MirrorApplyGitStatePayloadSchema,
     MirrorApplyGitStateResultSchema,
-    { remote: true, gated: true },
+    { remote: true, gated: true, invitable: "copy" },
   ),
   // Fired on every daemon snapshot and every serving-set change, so
   // the list query refreshes without polling, locally and on the

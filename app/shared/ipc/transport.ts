@@ -1,5 +1,5 @@
 import type { ContractModule } from "./contract";
-import type { ChannelEndpoint, ChannelHandle } from "./socket/channels";
+import type { ChannelMux } from "./socket/channels";
 import type { BroadcastKeys, BroadcastProducerPayload } from "./types";
 
 // The client's one seam onto the wire. A transport carries invokes and
@@ -42,11 +42,7 @@ export type HandlerContext = {
   // the far end here under the client-minted channel id. Absent on
   // wires without a binary lane (Electron, loopbacks), where such a
   // handler refuses.
-  channels?: {
-    attach(channelId: string, endpoint: ChannelEndpoint): ChannelHandle;
-    has(channelId: string): boolean;
-    size(): number;
-  };
+  channels?: Pick<ChannelMux, "attach" | "has" | "size">;
 };
 
 // Whether the calling peer is another device rather than this

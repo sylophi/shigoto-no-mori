@@ -602,6 +602,11 @@ async function main() {
         assert.equal(deviceId, "A", "the teardown dialed an unexpected device");
         return worktreesOverWire;
       },
+      // No mirror is asked for here (that is control.mts's).
+      mirrorApiFor: () => {
+        throw new Error("this proof asks for no mirror");
+      },
+      thisDeviceId: () => "B",
     });
     const pullCtx = handlerCtx();
     // The transplant as the dialog drives it: the pull, then the

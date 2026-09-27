@@ -27,13 +27,18 @@ export type PeerSyncApi = Pick<
   | "receiveWorktree"
   | "receiveBundle"
   | "cancelMove"
+  // The progress a start the peer runs for this device streams back
+  // (mirror:startFrom relays it to its caller).
+  | "pullProgress"
 > & { channels: PeerChannels };
 
-// The git follower's reach into a peer's mirror surface: read the git
-// state of a served worktree and apply one there.
+// The reach into a peer's mirror surface: the git follower's (read the
+// git state of a served worktree and apply one there) and the mirror
+// start asked from the copy's side (the peer's startTo, with this
+// device as the target, mirror:startFrom).
 export type PeerMirrorApi = Pick<
   Client<typeof mirrorContract>,
-  "gitState" | "applyGitState"
+  "gitState" | "applyGitState" | "startTo"
 >;
 
 // The transplant orchestration's teardown reach (the peer's ordinary
@@ -48,6 +53,10 @@ export type PeerWorktreesApi = Pick<
 type PeerSyncImpl = {
   syncApiFor: (deviceId: string) => PeerSyncApi;
   worktreesApiFor: (deviceId: string) => PeerWorktreesApi;
+  mirrorApiFor: (deviceId: string) => PeerMirrorApi;
+  // This device's own id, the target a mirror asked for from here
+  // names to the peer.
+  thisDeviceId: () => string;
 };
 
 const { set: setPeerSyncApiImpl, get: requireImpl } = implSlot<PeerSyncImpl>(
@@ -61,6 +70,14 @@ export function peerSyncApiFor(deviceId: string): PeerSyncApi {
 
 export function peerWorktreesApiFor(deviceId: string): PeerWorktreesApi {
   return requireImpl().worktreesApiFor(deviceId);
+}
+
+export function peerMirrorApiFor(deviceId: string): PeerMirrorApi {
+  return requireImpl().mirrorApiFor(deviceId);
+}
+
+export function thisDeviceId(): string {
+  return requireImpl().thisDeviceId();
 }
 
 // One of a peer's worktrees, read off its own list and re-parsed

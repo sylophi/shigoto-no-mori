@@ -70,11 +70,13 @@ export const worktreesContract = defineContract("host", {
     WorktreeSchema,
     { tracksProjectUsage: true, remote: true, gated: true },
   ),
+  // A mirror's stop removes the copy on the copy's device, so a mirror
+  // asked for there may delete that one worktree (invitable).
   delete: invoke(
     "worktrees:delete",
     DeleteWorktreePayloadSchema,
     DeleteWorktreeResultSchema,
-    { tracksProjectUsage: true, remote: true, gated: true },
+    { tracksProjectUsage: true, remote: true, gated: true, invitable: "copy" },
   ),
   // The merged layers of a stack, removed together (sm land --stack).
   deleteStack: invoke(

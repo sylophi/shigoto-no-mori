@@ -128,9 +128,9 @@ export type MoveMutation<Result> = UseMutationResult<
 // invalidates, the destination's view: this machine's forest for a
 // pull (a mirror's too, which the source device runs but lands here),
 // the peer's for a send. The caller shows the outcome, so the
-// conclusion is told once. The cancel goes where the move runs, which
-// `land.cancel` knows: this device for a pull or a send, the peer for
-// a mirror it runs towards here.
+// conclusion is told once. The cancel goes to this device, which runs
+// every move (a mirror asked for here included: its start forwards the
+// cancel to the peer running the send).
 export function useMoveMutation<Result extends Landed>(
   move: Move,
   land: {

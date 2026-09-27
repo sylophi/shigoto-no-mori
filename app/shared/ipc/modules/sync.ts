@@ -476,33 +476,40 @@ export const syncContract = defineContract("host", {
     SyncIgnoredPathsResultSchema,
     { remote: true, gated: true, movesHostState: false },
   ),
+  // The git follower's question about the copy's repo, so a mirror
+  // into this device asks it (invitable, by the copy's project).
   hasCommits: invoke(
     "sync:hasCommits",
     SyncHasCommitsPayloadSchema,
     SyncHasCommitsResultSchema,
-    { remote: true, gated: true, movesHostState: false },
+    { remote: true, gated: true, movesHostState: false, invitable: "project" },
   ),
   // The link opens and the call returns: what crosses after is bytes on
   // the channel, and a capture it takes is announced by the git
-  // watcher like any ref write, so the open itself pings no viewer.
+  // watcher like any ref write, so the open itself pings no viewer. The
+  // follower fetching the copy's commits opens one on the copy.
   openSource: invoke("sync:openSource", SyncOpenSourcePayloadSchema, z.void(), {
     remote: true,
     gated: true,
     movesHostState: false,
+    invitable: "copy",
   }),
   // Both land refs (and a worktree), so both keep the viewer ping,
-  // which fires once they are done.
+  // which fires once they are done. Both are a mirror's into the copy's
+  // device: the landing of the invited original, and the follower's
+  // push into the copy's project (under refs/shigomori/, never a
+  // branch, so the project is scope enough).
   receiveWorktree: invoke(
     "sync:receiveWorktree",
     SyncReceiveWorktreePayloadSchema,
     SyncReceiveWorktreeResultSchema,
-    { remote: true, gated: true },
+    { remote: true, gated: true, invitable: "landing" },
   ),
   receiveBundle: invoke(
     "sync:receiveBundle",
     SyncReceiveBundlePayloadSchema,
     SyncFetchedSchema,
-    { remote: true, gated: true },
+    { remote: true, gated: true, invitable: "project" },
   ),
   // The local orchestrators (see the header note): remote:false keeps
   // them off every remote wire, gated:true documents intent and keeps

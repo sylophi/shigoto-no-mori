@@ -42,6 +42,14 @@ export type DirectListenerOpts = {
   deviceId?: string;
   registerHandlers?: (binding: WsServerBinding) => void;
   start?: Partial<WsServerStartOpts>;
+  // The switch's one exception (WsServerTicketAuth.isInvited): the
+  // calls the host asked for itself. Absent, the switch is the whole
+  // verdict, as it is for every check but the gate's own.
+  isInvited?: (
+    peerDeviceId: string,
+    channel: string,
+    input: unknown,
+  ) => boolean;
 };
 
 export type DirectListener = {
@@ -72,6 +80,7 @@ export async function startDirectListener(
     matchTicket: (deviceId, arrivedAs, matches) =>
       tickets.consumeProven(deviceId, arrivedAs, matches),
     isCommandGranted: () => accepts,
+    ...(opts.isInvited === undefined ? {} : { isInvited: opts.isInvited }),
   });
   opts.registerHandlers?.(binding);
   const port = await binding.start({

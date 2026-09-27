@@ -53,7 +53,18 @@ export type InvokeDef<
   // every poll or send resolution. Orthogonal to `gated`, which is
   // the gate axis and stays true on such channels.
   movesHostState?: boolean;
+  // The switch's one exception: a gated call a mirror INTO this device
+  // makes, which the invitation the ask left (host/mirror/invites.ts)
+  // admits with the switch off, scoped to what the payload names.
+  // "landing" is the peer's landing of the invited original
+  // (sync:receiveWorktree), "copy" a call naming the copy's project
+  // and worktree, "project" one naming only the copy's project. Set
+  // on the contract, next to the call, so the invited surface cannot
+  // drift from the calls a mirror makes.
+  invitable?: InvitableScope;
 };
+
+export type InvitableScope = "landing" | "copy" | "project";
 
 export type BroadcastDef<P extends z.ZodTypeAny = z.ZodTypeAny> = {
   kind: "broadcast";
@@ -94,6 +105,7 @@ export const invoke = <
     remote?: boolean;
     gated?: boolean;
     movesHostState?: boolean;
+    invitable?: InvitableScope;
   },
 ): InvokeDef<I, O, Ch> => ({
   kind: "invoke",
@@ -114,6 +126,7 @@ export const invoke = <
   // Undefined means "moves host state" for a gated def. Only an
   // explicit false opts a channel out of the cache ping.
   movesHostState: opts?.movesHostState,
+  invitable: opts?.invitable,
 });
 
 export const broadcast = <P extends z.ZodTypeAny>(

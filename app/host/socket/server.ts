@@ -9,7 +9,8 @@
 // bound to the hello deviceId (WsServerTicketAuth). Dispatch serves a
 // channel registered gated:false to every authed peer, and anything
 // else (a mutation, or an untagged channel) only under the host's live
-// command-access switch, refused with the shared command-refused code
+// command-access switch, or as a call the host itself invited (the
+// auth's isInvited), refused with the shared command-refused code
 // before its handler runs otherwise. One authed socket per deviceId,
 // with supersede.
 //
@@ -90,6 +91,15 @@ export type WsServerTicketAuth = {
   // without a reconnect. This gate is the one place a peer's command
   // is allowed or refused.
   isCommandGranted(): boolean;
+  // The switch's one exception: a gated call this host itself asked
+  // the peer to make (a mirror it invited, host/mirror/invites.ts),
+  // admitted whatever the switch says. Consulted before the switch,
+  // with the authenticated caller, the channel and the raw input, so
+  // it can scope its answer to one peer and one worktree. A byte
+  // channel a call admitted this way attaches survives the switch-off
+  // drop for as long as it lives, whether the switch was on or off at
+  // the open. Absent, the switch is the whole verdict.
+  isInvited?(peerDeviceId: string, channel: string, input: unknown): boolean;
 };
 
 export type WsServerStartOpts = {
@@ -352,6 +362,22 @@ function send(socket: WebSocket, frame: ServerFrame): void {
   sendData(socket, encodeFrame(frame));
 }
 
+// The context an invited call runs under: the connection's, with
+// every byte channel it attaches marked invited, which the switch-off
+// drop spares (see the binary-frame path in attach).
+function invitedContext(ctx: HandlerContext): HandlerContext {
+  const channels = ctx.channels;
+  if (channels === undefined) return ctx;
+  return {
+    ...ctx,
+    channels: {
+      ...channels,
+      attach: (channelId, endpoint) =>
+        channels.attach(channelId, endpoint, { invited: true }),
+    },
+  };
+}
+
 export function createWsServerBinding(
   auth: WsServerTicketAuth,
 ): WsServerBinding {
@@ -503,6 +529,7 @@ export function createWsServerBinding(
       send(socket, resError(frame.id, noHandlerMessage(frame.channel)));
       return;
     }
+    let call = ctx;
     if (!readOnlyChannels.has(frame.channel)) {
       // Fail-closed gate on anything not proven a read (explicitly
       // registered gated:false): consult the injected
@@ -510,8 +537,18 @@ export function createWsServerBinding(
       // session, so flipping it takes effect without a reconnect. The
       // refusal carries the typed code so the client transport
       // surfaces "that machine will not run commands from here"
-      // distinctly from a real failure.
-      if (!auth.isCommandGranted()) {
+      // distinctly from a real failure. A call this host asked for
+      // (isInvited) runs whatever the switch says, under a context that
+      // marks the channels it attaches as spared from the switch-off
+      // drop: asked first, so a channel opened while the switch is on
+      // is spared too when it flips.
+      const peer = ctx.callerDeviceId;
+      if (
+        peer !== undefined &&
+        auth.isInvited?.(peer, frame.channel, frame.input) === true
+      ) {
+        call = invitedContext(ctx);
+      } else if (!auth.isCommandGranted()) {
         send(
           socket,
           resError(frame.id, COMMAND_REFUSED_MESSAGE, COMMAND_REFUSED_CODE),
@@ -520,7 +557,7 @@ export function createWsServerBinding(
       }
     }
     try {
-      const result = await fn(ctx, frame.input);
+      const result = await fn(call, frame.input);
       send(socket, { t: "res", id: frame.id, ok: true, result });
     } catch (error) {
       // Message text only, mirroring what survives Electron's IPC
@@ -690,10 +727,12 @@ export function createWsServerBinding(
           // turning peer commands off since drops every channel on
           // the connection the moment the peer sends anything on one.
           // Credit frames flow back during any transfer, so a live
-          // stream notices within a window.
+          // stream notices within a window. The channels an invited
+          // call attached were never the switch's to give, so they
+          // stay, and the frame is routed to whichever survive.
           if (!auth.isCommandGranted()) {
-            channels.dropAll();
-            return;
+            channels.dropUninvited();
+            if (channels.size() === 0) return;
           }
           if (!channels.handleFrame(toBytes(data))) warnUnknownChannelFrame();
           return;

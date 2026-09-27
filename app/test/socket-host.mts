@@ -18,6 +18,10 @@
 // or untagged channel) only while the host accepts commands, refusing
 // it with the shared command-refused code BEFORE its handler runs. The
 // client transport maps that code to the typed CommandRefusedError.
+// The switch's one exception, a call the host itself invited
+// (WsServerTicketAuth.isInvited), runs with the switch off, and the
+// byte channel it attaches outlives the drop the switch-off deals
+// every other channel.
 // The grant flipping live on one session, the ticket rules and the
 // brokering are direct-plane.mts's.
 //
@@ -86,7 +90,12 @@ import {
   type Track,
   waitFor,
 } from "./lib/checkKit.mts";
-import { mintTicket, startDirectListener } from "./lib/directBoot.mts";
+import {
+  type DirectListenerOpts,
+  mintTicket,
+  startDirectListener,
+} from "./lib/directBoot.mts";
+import type { ChannelHandle, ChannelMux } from "@shared/ipc/socket/channels";
 
 const WS_CLOSE_TOO_BIG = 1009;
 // The dialing peer every ticket below is minted for.
@@ -103,6 +112,30 @@ let hangResolvers: ((value: unknown) => void)[] = [];
 let countExecutions = 0;
 let mutateExecutions = 0;
 let untaggedExecutions = 0;
+// The byte channels test:open attached, by id: what arrived on each
+// and whether the peer (or the switch-off drop) reset it.
+const openedChannels = new Map<string, { data: string[]; reset: boolean }>();
+// Two client-minted channel ids (32 hex chars, channels.ts).
+const GRANTED_CHANNEL = "0123456789abcdef0123456789abcdef";
+const INVITED_CHANNEL = "fedcba9876543210fedcba9876543210";
+
+// The client's end of a byte channel, attached ahead of the open that
+// names it, as a real caller does. `reset` records the host's RESET.
+function openChannel(
+  connection: { channels: ChannelMux },
+  channelId: string,
+): { handle: ChannelHandle; reset: boolean } {
+  const state = { reset: false } as { handle: ChannelHandle; reset: boolean };
+  state.handle = connection.channels.attach(channelId, {
+    onData: (_data, consumed) => consumed(),
+    onEnd: () => {},
+    onReset: () => {
+      state.reset = true;
+    },
+    onWritable: () => {},
+  });
+  return state;
+}
 
 function registerTestHandlers(binding: WsServerBinding) {
   // The generic-path handlers are EXPLICIT reads (gated:false): the
@@ -147,6 +180,27 @@ function registerTestHandlers(binding: WsServerBinding) {
     untaggedExecutions += 1;
     return "ran";
   });
+  // A byte-channel open (gated, like every real one): attaches the far
+  // end under the caller's id and records what arrives on it, for the
+  // invitation test.
+  binding.handle("test:open", async (ctx, raw) => {
+    const { channelId } = raw as { channelId: string };
+    assert.ok(ctx.channels, "the direct listener supplies byte channels");
+    const record = { data: [] as string[], reset: false };
+    openedChannels.set(channelId, record);
+    ctx.channels.attach(channelId, {
+      onData: (bytes, consumed) => {
+        record.data.push(Buffer.from(bytes).toString("utf8"));
+        consumed();
+      },
+      onEnd: () => {},
+      onReset: () => {
+        record.reset = true;
+      },
+      onWritable: () => {},
+    });
+    return "opened";
+  });
 }
 
 // The shared listener fixture with this check's test handlers, a short
@@ -156,11 +210,13 @@ function registerTestHandlers(binding: WsServerBinding) {
 async function startListener(
   track: Track,
   start: Partial<WsServerStartOpts> = {},
+  isInvited?: DirectListenerOpts["isInvited"],
 ) {
   const listener = await startDirectListener(track, {
     deviceId: "host-device",
     registerHandlers: registerTestHandlers,
     start: { helloTimeoutMs: 300, ...start },
+    ...(isInvited === undefined ? {} : { isInvited }),
   });
   return {
     ...listener,
@@ -659,6 +715,95 @@ async function main() {
       client.send({ t: "req", id: 5, channel: "test:untagged" });
       assert.equal(resultOf(await client.nextFrame()), "ran");
       client.close();
+    },
+  );
+
+  await check(
+    "invited calls: with commands off a call the host asked for (isInvited, by the caller, the channel and the input) runs while the rest stay refused, and a byte channel it attached survives the switch-off drop that resets every other",
+    async (track) => {
+      mutateExecutions = 0;
+      openedChannels.clear();
+      const asked: [string, string, unknown][] = [];
+      const listener = await startListener(
+        track,
+        {},
+        (peer, channel, input) => {
+          asked.push([peer, channel, input]);
+          return (
+            channel === "test:open" &&
+            (input as { invited?: boolean }).invited === true
+          );
+        },
+      );
+      const connection = await dial(listener.url, listener.mint());
+      // (a) a gated call the invitation does not cover is refused as
+      // before, the predicate having been asked with the caller's id.
+      await assert.rejects(
+        connection.transport.invoke("test:mutate", undefined),
+        (error: unknown) => error instanceof CommandRefusedError,
+      );
+      assert.equal(mutateExecutions, 0, "a refused handler ran");
+      assert.deepEqual(asked, [[CLIENT, "test:mutate", undefined]]);
+      // (b) a channel opened under the switch: the invitation is asked
+      // first (a call it covers is spared whatever the switch says),
+      // declines this one, and the switch admits it.
+      listener.setAccepts(true);
+      const granted = openChannel(connection, GRANTED_CHANNEL);
+      assert.equal(
+        await connection.transport.invoke("test:open", {
+          channelId: GRANTED_CHANNEL,
+        }),
+        "opened",
+      );
+      assert.deepEqual(asked.at(-1), [
+        CLIENT,
+        "test:open",
+        { channelId: GRANTED_CHANNEL },
+      ]);
+      // (c) the switch off: an invited open attaches a second one.
+      listener.setAccepts(false);
+      const invited = openChannel(connection, INVITED_CHANNEL);
+      assert.equal(
+        await connection.transport.invoke("test:open", {
+          channelId: INVITED_CHANNEL,
+          invited: true,
+        }),
+        "opened",
+      );
+      assert.deepEqual(asked.at(-1), [
+        CLIENT,
+        "test:open",
+        { channelId: INVITED_CHANNEL, invited: true },
+      ]);
+      // (d) bytes on the invited channel land, and their arrival is
+      // what drops the granted one: the switch is re-read on every
+      // binary frame, and the drop spares only what an invitation
+      // attached.
+      invited.handle.write(Buffer.from("under the invitation"));
+      await waitFor(
+        () =>
+          openedChannels.get(INVITED_CHANNEL)?.data.join("") ===
+          "under the invitation",
+        "the invited channel's bytes to land",
+      );
+      await waitFor(
+        () => granted.reset,
+        "the granted channel to be reset by the switch-off drop",
+      );
+      assert.equal(openedChannels.get(GRANTED_CHANNEL)?.reset, true);
+      assert.equal(
+        openedChannels.get(INVITED_CHANNEL)?.reset,
+        false,
+        "the invited channel was dropped",
+      );
+      assert.equal(invited.reset, false);
+      // (e) and a gated call on the same socket is still refused.
+      await assert.rejects(
+        connection.transport.invoke("test:mutate", undefined),
+        (error: unknown) => error instanceof CommandRefusedError,
+      );
+      assert.equal(mutateExecutions, 0);
+      connection.close();
     },
   );
 

@@ -5,7 +5,8 @@
 // push watch (lib/hostWatch.ts), so nothing here subscribes. A mirror
 // runs on the device holding the original: the start is a send plus a
 // mirror on that device's daemon, this machine's for "Mirror to", the
-// peer's for "Mirror here". The controls (stop, pause, resume, the
+// peer's for "Mirror here" (asked through this device's startFrom,
+// which invites it past this device's own switch). The controls (stop, pause, resume, the
 // ignore rule) go to the device RUNNING the session through the scope
 // they are mounted under, which is that device's: its own page, or the
 // far end's page re-scoped to it (useWorktreeMirrorLinks).
@@ -34,7 +35,6 @@ import {
 } from "@/hooks/remote/useMoveWorktree";
 import { quietVillagerMoves } from "@/lib/villagers/moves";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
-import { useAcceptsCommands } from "@/hooks/account/useAccount";
 import { hasLocalHost } from "@/lib/localHost";
 import {
   invalidateHostDevice,
@@ -84,8 +84,9 @@ export function useLocalMirrorBlocker(): string | undefined {
 }
 
 // The same for "Mirror here" on a peer's page, whose session runs on
-// that peer (the scope): its daemon must be up, and this device must
-// accept commands, since the peer sends the copy here through them.
+// that peer (the scope): its daemon must be up. This device's own
+// switch is not in the way: the ask invites the mirror, and the peer's
+// send lands here through the invitation (host/mirror/invites.ts).
 export function useMirrorHereBlocker(peerLabel: string): string | undefined {
   const { api, keys } = useHostScope();
   const engine = useQuery({
@@ -95,10 +96,6 @@ export function useMirrorHereBlocker(peerLabel: string): string | undefined {
     staleTime: 30_000,
     meta: { silentError: true },
   });
-  const accepts = useAcceptsCommands();
-  if (accepts.data === false) {
-    return `A mirror runs on the device holding the original, so ${peerLabel} sends the copy here, and this device doesn't accept commands. Turn command access on from this device's Devices page.`;
-  }
   return engine.data;
 }
 
@@ -344,31 +341,33 @@ export function useWorktreeMirrorLinks(
 
 // Start a mirror, driven by the mirror dialog: a send and the session
 // opened on top, on the device holding the original. "Mirror to…"
-// sends one of this device's. "Mirror here" asks the peer the dialog
-// is scoped to, which holds the original, to send it here, the clone
-// place (when this device has no checkout) in this device's terms.
-// The dialog's last step is the report, so no toast here. Refusals
-// surface centrally. The cancel goes to the device running the start:
-// the peer for "Mirror here", this device for "Mirror to…".
+// sends one of this device's. "Mirror here" runs this device's
+// mirror:startFrom, which invites the mirror and asks the peer the
+// dialog is scoped to, which holds the original, to send it here, the
+// clone place (when this device has no checkout) in this device's
+// terms. The dialog's last step is the report, so no toast here.
+// Refusals surface centrally. Either start is a move this device runs,
+// so the cancel is the ordinary one, which startFrom forwards to the
+// peer running the send.
 export function useStartMirror(move: Move) {
-  const { api } = useHostScope();
   return useMoveMutation(move, {
     cancel: (sourceWorktreeId) =>
-      move.direction === "pull"
-        ? api.sync.cancelMove({ sourceWorktreeId })
-        : window.api.sync.cancelMove({ sourceWorktreeId }),
+      window.api.sync.cancelMove({ sourceWorktreeId }),
     pull: ({
+      sourceDeviceId,
       sourceProjectId,
       sourceWorktreeId,
+      sourceIdentity,
       runSetup,
       ignoreMode,
       ignores,
       cloneInto,
     }) =>
-      api.mirror.startTo({
-        targetDeviceId: localDeviceId,
-        projectId: sourceProjectId,
-        worktreeId: sourceWorktreeId,
+      window.api.mirror.startFrom({
+        sourceDeviceId,
+        sourceProjectId,
+        sourceWorktreeId,
+        sourceIdentity,
         runSetup,
         ignoreMode,
         ignores,

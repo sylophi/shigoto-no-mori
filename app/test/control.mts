@@ -36,9 +36,11 @@
 //     dialogs' default place, and lands the copy in the clone, where
 //     `devices` said it would take a send and `bring` from it was
 //     refused as holding no checkout.
-//   - `mirror --from` is refused while this device refuses commands,
-//     then asks the peer to run the mirror (its mirror:startTo, on its
-//     own engine) and send the copy here, relaying its progress. The
+//   - `mirror --from` asks the peer to run the mirror (its
+//     mirror:startTo, on its own engine) and send the copy here,
+//     relaying its progress, with no need of this device's own switch:
+//     the ask leaves an invitation (host/mirror/invites.ts, whose
+//     rules are mirror-invites.mts's) for the peer's original. The
 //     copy is local, a repeat from either end answers with it, and
 //     `unmirror` removes it through the peer, original kept.
 //
@@ -108,6 +110,7 @@ import {
 } from "@host/ipc/modules/worktrees";
 import { setPeerSyncApiImpl } from "@host/ipc/peerSync";
 import { worktreeIdFromPath } from "@host/lib/git/worktrees";
+import { listMirrorInvites } from "@host/mirror/invites";
 import {
   CONTROL_FILE_NAME,
   createControlServer,
@@ -396,6 +399,7 @@ async function main() {
     const mirrorOnA: Handlers<typeof mirrorContract, HandlerContext> = {
       list: asA(mirrorHandlers.list),
       startTo: asA(mirrorHandlers.startTo),
+      startFrom: asA(mirrorHandlers.startFrom),
       stop: asA(mirrorHandlers.stop),
       pause: asA(mirrorHandlers.pause),
       resume: asA(mirrorHandlers.resume),
@@ -440,6 +444,8 @@ async function main() {
         channels: peerA.channels,
       }),
       worktreesApiFor: () => buildClient(worktreesContract, peerA.transport),
+      mirrorApiFor: () => buildClient(mirrorContract, peerA.transport),
+      thisDeviceId: () => "B",
     });
     // The account as the hub would list it: this device, the peer, a
     // machine that is signed in but away, and a browser.
@@ -471,12 +477,8 @@ async function main() {
           : result;
       },
     };
-    // This device's own switch, which a mirror --from needs on.
-    let localAccepts = true;
     setControlImpl({
       listDevices: async () => registry,
-      thisDeviceId: () => "B",
-      acceptsCommands: () => localAccepts,
       directPeers: async () =>
         Object.fromEntries(
           connected.map((id) => [id, listener.acceptsCommands()]),
@@ -868,9 +870,9 @@ async function main() {
 
     // ---- (7b) mirror --from: the peer holds the original, so the peer
     // runs the mirror (its mirror:startTo, on its own engine) and sends
-    // the copy HERE, which lands through this device's command access.
-    // unmirror removes the local copy through the peer and leaves the
-    // peer's original.
+    // the copy HERE, which lands through the ask's invitation. unmirror
+    // removes the local copy through the peer and leaves the peer's
+    // original.
     peerOwns = sourceProjectId;
     const usageBoth = await runCli([
       "worktrees",
@@ -895,24 +897,30 @@ async function main() {
       "",
     ]);
     assert.equal(blankFrom.code, 2, "a blank --from is a usage error");
-    // The peer would send the copy through this device's switch, so
-    // with it off the ask is refused before the peer hears of it.
-    localAccepts = false;
-    await refused(
-      [
-        "worktrees",
-        "mirror",
-        "feat-in",
-        "-p",
-        "target",
-        "--from",
-        "Studio Mac",
-      ],
-      "device-blocked",
-      /this device doesn't accept commands/,
-    );
+    // This device's own switch is not in the way: the ask invites the
+    // mirror (host/mirror/invites.ts), and the invitation is what the
+    // peer's send lands through. Nothing is invited before the ask,
+    // and an ask the peer cannot land (the branch is taken here)
+    // leaves none behind either.
+    assert.deepEqual(listMirrorInvites(), [], "no invitation before the ask");
+    await git(targetRepo, ["branch", "feat-in"]);
+    const collided = await runCli([
+      "worktrees",
+      "mirror",
+      "feat-in",
+      "-p",
+      "target",
+      "--from",
+      "Studio Mac",
+    ]);
+    assert.notEqual(collided.code, 0, "a landing on a taken branch is refused");
     assert.equal(engineA.state.created.length, 0, "the peer started nothing");
-    localAccepts = true;
+    assert.deepEqual(
+      listMirrorInvites(),
+      [],
+      "a failed ask withdraws its invitation",
+    );
+    await git(targetRepo, ["branch", "-D", "feat-in"]);
     const createdHereBefore = mirrorsCreated().length;
     const inboundRun = await sm(
       "worktrees",
@@ -938,6 +946,18 @@ async function main() {
     assert.equal(inboundInput.deviceId, "B");
     assert.equal(inboundInput.remoteRoot, inbound.worktree.path);
     assert.equal(inboundInput.labels[MIRROR_LABEL_COPY_SIDE], "remote");
+    // The ask's invitation, for the peer and its original. It stays
+    // pending here: the landing runs on the one listener both devices
+    // share, stamped with the ASKING device as its caller, so it never
+    // matches. What the landing does with it is mirror-invites.mts's.
+    assert.deepEqual(
+      listMirrorInvites().map(({ peerDeviceId, sourceWorktreeId }) => ({
+        peerDeviceId,
+        sourceWorktreeId,
+      })),
+      [{ peerDeviceId: "A", sourceWorktreeId: inboundInput.localWorktreeId }],
+      "the ask left an invitation for the peer's original",
+    );
     const inboundSteps = new Set(progressOf(inboundRun).map((doc) => doc.step));
     for (const step of ["capture", "create", "apply"]) {
       assert.ok(
@@ -991,7 +1011,7 @@ async function main() {
       "announced after the session ended: the delete follows the terminate",
     );
     ok(
-      "mirror --from: refused while this device refuses commands, then run by the peer on the original with its progress relayed, the copy local, a repeat from either end answers with that copy, --to with --from and a blank --from are refused as usage, and unmirror removes the local copy only",
+      "mirror --from: run by the peer on the original with its progress relayed, the copy local and the mirror invited past this device's switch (an ask that fails to land withdraws its invitation), a repeat from either end answers with that copy, --to with --from and a blank --from are refused as usage, and unmirror removes the local copy only",
     );
 
     // ---- (7c) mirror --from of the peer's primary checkout: the copy

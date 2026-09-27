@@ -174,8 +174,15 @@ export type ChannelMux = {
   // RESET (its end died before this end attached) comes back as a
   // handle that is closed from the start, with the endpoint's onReset
   // delivered on the next tick, so the far end is torn down through
-  // the ordinary path instead of leaking.
-  attach(channelId: string, endpoint: ChannelEndpoint): ChannelHandle;
+  // the ordinary path instead of leaking. `invited` marks a channel
+  // the host attached for a call it asked for itself rather than one
+  // the peer's grant admitted (host/socket/server.ts): dropUninvited
+  // spares it.
+  attach(
+    channelId: string,
+    endpoint: ChannelEndpoint,
+    opts?: { invited?: boolean },
+  ): ChannelHandle;
   // Routes one inbound binary frame. Returns false for a frame that
   // is malformed or names no attached channel (the caller may log).
   handleFrame(bytes: Uint8Array): boolean;
@@ -188,6 +195,9 @@ export type ChannelMux = {
   // peer's right to hold channels was withdrawn (a revoked grant)
   // while the connection itself lives on.
   dropAll(): void;
+  // The same, sparing the channels attached `invited`: the grant's
+  // withdrawal never covered them.
+  dropUninvited(): void;
 };
 
 export function createChannelMux(deps: {
@@ -209,6 +219,8 @@ export function createChannelMux(deps: {
     inFlight: number;
     receivedEnd: boolean;
     gone: boolean;
+    // See ChannelMux.attach.
+    invited: boolean;
   };
   const channels = new Map<string, Channel>();
   // Ids the peer reset before anything attached here, kept for the
@@ -262,7 +274,7 @@ export function createChannelMux(deps: {
   }
 
   return {
-    attach(channelId, endpoint) {
+    attach(channelId, endpoint, opts) {
       if (dead) throw new Error("the socket is gone");
       if (channels.has(channelId)) {
         throw new Error(`channel ${channelId} is already attached`);
@@ -305,6 +317,7 @@ export function createChannelMux(deps: {
         inFlight: 0,
         receivedEnd: false,
         gone: false,
+        invited: opts?.invited === true,
       };
       if (resetBeforeAttach.delete(channelId)) {
         // Already reset by the peer: hand back a closed handle and let
@@ -395,23 +408,32 @@ export function createChannelMux(deps: {
     },
 
     dropAll: () => dropAll(true),
+    dropUninvited() {
+      // Deleting the visited entry is fine under Map iteration.
+      for (const [channelId, channel] of channels) {
+        if (!channel.invited) drop(channelId, channel, true);
+      }
+    },
   };
 
-  // `tellPeer`: the connection lives on, so each channel's far end is
+  // `tellPeer`: the connection lives on, so the channel's far end is
   // told with a RESET and closes at once, rather than sitting attached
   // to a channel this side no longer has and waiting out its own
   // timeout.
+  function drop(channelId: string, channel: Channel, tellPeer: boolean): void {
+    channels.delete(channelId);
+    channel.gone = true;
+    channel.queue = [];
+    channel.endpoint.onReset();
+    // send() swallows a socket that died under the drop, and closeAll
+    // follows.
+    if (tellPeer) send(CHANNEL_FRAME_RESET, channelId);
+  }
+
   function dropAll(tellPeer: boolean): void {
     resetBeforeAttach.clear();
-    const all = [...channels.entries()];
-    channels.clear();
-    for (const [channelId, channel] of all) {
-      channel.gone = true;
-      channel.queue = [];
-      channel.endpoint.onReset();
-      // send() swallows a socket that died under the drop, and
-      // closeAll follows.
-      if (tellPeer) send(CHANNEL_FRAME_RESET, channelId);
+    for (const [channelId, channel] of channels) {
+      drop(channelId, channel, tellPeer);
     }
   }
 }
