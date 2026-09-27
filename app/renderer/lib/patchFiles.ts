@@ -33,7 +33,8 @@ function fileStats(file: FileDiffMetadata): {
 
 // One-letter change marker in git's own vocabulary (A/D/R/M). A status
 // column reads faster than five icons and costs one character of rail
-// width. Colors stay inside the four families doubutsu remaps.
+// width. Colors stay inside the families doubutsu remaps, an addition
+// on green like the diff stats.
 export interface ChangeMark {
   mark: string;
   label: string;
@@ -43,7 +44,7 @@ export interface ChangeMark {
 const ADDED: ChangeMark = {
   mark: "A",
   label: "Added",
-  className: "text-emerald-500",
+  className: "text-green-500",
 };
 const DELETED: ChangeMark = {
   mark: "D",

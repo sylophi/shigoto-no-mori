@@ -37,11 +37,12 @@ function presentationOf(status: RemoteDeviceStatus): {
     // redials forever, and success flips this to "Connected" on its
     // own. A brand-new tunnel (or a browser waiting on one) can sit
     // here for a while, which is why the label says what is being
-    // waited for rather than claiming presence.
+    // waited for rather than claiming presence. Amber, like
+    // reconnecting: both are a dial still in flight.
     case "online":
     case "connecting":
     case "idle":
-      return { tone: "sky", label: "Connecting" };
+      return { tone: "amber", label: "Connecting" };
     case "backoff":
       return { tone: "amber", label: "Reconnecting" };
     case "blocked":

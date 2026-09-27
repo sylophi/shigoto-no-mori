@@ -17,8 +17,8 @@
  *
  * 1. Theme tokens (index.css / @theme): --background, --card, --popover,
  *    --primary, --secondary, --muted, --accent, --destructive, --input,
- *    --ring, --radius, and the --color-{emerald,rose,amber,sky,violet,
- *    indigo}-* vars
+ *    --ring, --radius, and the --color-{emerald,green,rose,amber,sky,
+ *    violet,indigo}-* vars
  *    Tailwind emits for raw palette utilities. This file also defines
  *    --doubutsu-* of its own, including the composed
  *    --doubutsu-sticker-shadow / --doubutsu-stripe-image recipes.
@@ -195,8 +195,22 @@
      every status accent into the doubutsu palette without touching any
      component. Greens sit on the leaf hue (155), reds on the destructive
      hue (30), ambers become warm honey, sky calms toward the palette.
-     If a NEW raw color family enters the app, add its remap here. */
+     If a NEW raw color family enters the app, add its remap here.
+
+     Emerald is the positive status (online, connected, passed), and it
+     wears the palette's accent: these are the cream steps, and each
+     other palette declares its own beside its --primary. -600 is the
+     status word's step in light (TONE_TEXT in ui/status-dot.tsx), -400
+     its step in dark. What is literally green (a diff's additions,
+     Nook's leaf) rides green instead, which no palette moves: -500 is
+     the leaf, matching the diff viewer's own addition hue, and the
+     decorative steps are stock emerald's. */
   --color-emerald-500: oklch(0.6 0.15 155);
+  --color-emerald-600: oklch(0.53 0.14 155);
+  --color-green-300: oklch(0.845 0.143 165);
+  --color-green-400: oklch(0.765 0.177 163);
+  --color-green-500: oklch(0.6 0.15 155);
+  --color-green-700: oklch(0.508 0.118 165.6);
   --color-rose-500: oklch(0.58 0.18 30);
   --color-amber-300: oklch(0.85 0.12 84);
   --color-amber-400: oklch(0.8 0.13 82);
@@ -291,7 +305,9 @@
   /* Status families, night variants (the amber pairs are theme-split
      in component code via dark: prefixes, so the light-block values
      already cover both). */
+  --color-emerald-400: oklch(0.78 0.15 155);
   --color-emerald-500: oklch(0.74 0.16 155);
+  --color-green-500: oklch(0.74 0.16 155);
   --color-rose-500: oklch(0.72 0.15 32);
   --color-amber-500: oklch(0.78 0.13 80);
   --color-sky-500: oklch(0.72 0.12 235);

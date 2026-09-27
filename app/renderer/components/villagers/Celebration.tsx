@@ -122,7 +122,7 @@ const BALLOONS = [
     sway: "1.3s",
     gift: true,
   },
-  { right: "31%", color: "fill-emerald-400", delay: "2.4s", sway: "0.3s" },
+  { right: "31%", color: "fill-green-400", delay: "2.4s", sway: "0.3s" },
   { right: "40%", color: "fill-violet-400", delay: "3.2s", sway: "1s" },
 ];
 
