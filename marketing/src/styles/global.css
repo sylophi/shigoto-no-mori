@@ -346,6 +346,7 @@ code {
   --dx: -80px;
   --dy: 80px;
   --wall-time: 24s;
+  --wall-opacity: 0.055;
 }
 [data-wall="apple"] {
   --wall: url("/img/apple.svg");
