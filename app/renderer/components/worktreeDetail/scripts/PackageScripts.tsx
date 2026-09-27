@@ -93,7 +93,7 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
             setArrangeRequested(false);
           }}
           aria-expanded={expanded}
-          className="group flex min-w-0 flex-1 items-center gap-1.5 text-left transition-colors"
+          className="group -mx-1 flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 text-left transition-colors hover:bg-muted dark:hover:bg-muted/50"
         >
           <ChevronRight
             aria-hidden

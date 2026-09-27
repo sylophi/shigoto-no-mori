@@ -42,6 +42,7 @@ import {
 } from "@shared/schemas";
 import { PullRequestSource } from "./PullRequestPicker";
 import { PAGE_BODY } from "@/components/shared/PageShell";
+import { cn } from "@/lib/utils";
 
 type Mode = "branch-from" | "checkout" | "pull-request";
 
@@ -446,7 +447,12 @@ function NewWorktreeForm({
               optionClassName="px-2 py-0.5 text-2xs"
             />
           ) : (
-            <label className="flex cursor-pointer items-center gap-2 rounded-md text-xs text-muted-foreground select-none">
+            <label
+              className={cn(
+                "-mx-1 flex cursor-pointer items-center gap-2 rounded-md px-1 text-xs text-muted-foreground select-none",
+                !busy && "hover:bg-muted dark:hover:bg-muted/50",
+              )}
+            >
               <Checkbox
                 checked={useBranchAsFolder}
                 onCheckedChange={(next) => {
