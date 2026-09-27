@@ -1,8 +1,9 @@
 import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 
-// The trimmings of a villager's birthday (BirthdayBanner.tsx): bunting,
-// confetti and balloons, drawn flat in the families doubutsu remaps.
+// The trimmings of a villager's birthday (BirthdayParty.tsx, and
+// PartyFace's confetti): bunting, confetti and balloons, drawn flat in
+// the families doubutsu remaps.
 // Every bit moves once or drifts slowly (keyframes in index.css), and
 // all of it holds still under reduced motion.
 
@@ -108,8 +109,9 @@ export function Confetti({ burst = 1 }: { burst?: number }) {
   );
 }
 
-// Balloons drifting up past the banner, one of them carrying a present
-// the way balloons float over an Animal Crossing island.
+// Balloons drifting up past the worktree page's header, one of them
+// carrying a present the way balloons float over an Animal Crossing
+// island.
 const BALLOONS = [
   { right: "6%", color: "fill-rose-400", delay: "0s", sway: "0s" },
   { right: "14%", color: "fill-sky-400", delay: "1.6s", sway: "0.7s" },

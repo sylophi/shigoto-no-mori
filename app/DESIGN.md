@@ -131,8 +131,9 @@ Rules that keep a machine looking like itself everywhere:
 ## Village life: rarity
 
 Village life is the cosmetic villager flair: villagers speaking in
-toasts about their worktrees, and moving in and out as those come and
-go. It is a setting of each desktop window (client config, Appearance in
+toasts about their worktrees, moving in and out as those come and go,
+and their face beside the branch title on their worktree's page. It
+is a setting of each desktop window (client config, Appearance in
 Settings), with the villager data downloaded into that device's data
 dir (`host/lib/villagers.ts`), so it covers every device's worktrees
 that window shows. A web client offers none: it has no device of its
@@ -217,8 +218,10 @@ moment too, on every device's worktrees alike.
   itself.
 - **The sidebar row** wears a cake, their face in a party hat in its
   tooltip.
-- **The worktree page** throws the party (`BirthdayBanner`): a line
-  under bunting for a regular villager, a dialogue box under bunting in
-  their own color for a rare one, and for a legend balloons (one
-  carrying a present), a burst of confetti and their stationery.
+- **The worktree page** throws the party in its header, around the
+  face beside the branch title (`BirthdayParty`), with no words: the
+  face in a party hat throwing confetti under bunting for a regular
+  villager, the bunting and a wash in their own color for a rare one,
+  and for a legend balloons (one carrying a present), a bigger burst
+  and their stationery.
 
