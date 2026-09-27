@@ -1,61 +1,64 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useParams } from "@tanstack/react-router";
-import { Command } from "cmdk";
-import { ArrowDown, ArrowUp, FileDiff, Folder, Play } from "lucide-react";
-import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import { Command, useCommandState } from "cmdk";
+import { ArrowDown, ArrowUp, Folder } from "lucide-react";
+import { KbdHint } from "@/components/ui/kbd";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { ITEM_CLASS, keepFocusInInput } from "@/components/ui/cmdk-classes";
+import { keepFocusInInput } from "@/components/ui/cmdk-classes";
 import { BranchLabel } from "@/components/ui/branch-label";
-import { LauncherIcon } from "@/components/shared/LauncherIcon";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
-import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { DeviceBadge, useDeviceBadges } from "@/components/sidebar/DeviceBadge";
-import { StatusIndicator } from "@/components/sidebar/StatusIndicator";
-import { MirrorBadge } from "@/components/sidebar/WorktreeRow";
 import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
 import { rowDeviceId } from "@/lib/routePaths";
-import {
-  useLaunch,
-  useLauncherForProject,
-} from "@/hooks/launchers/useLaunchers";
+import { useLauncherForProject } from "@/hooks/launchers/useLaunchers";
+import { useLaunchShortcuts } from "@/hooks/launchers/useLaunchShortcuts";
+import { useAllProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import { useProjects } from "@/hooks/projects/useProjects";
-import { MaybeHostScope } from "@/hooks/remote/useHostScope";
 import { useMirrorLinks } from "@/hooks/remote/useMirrors";
-import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
-import { usePackageScripts } from "@/hooks/scripts/usePackageScripts";
-import { useSortedPackageScripts } from "@/hooks/scripts/usePackageScriptSort";
-import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useHiddenWorktreePrefixes } from "@/hooks/sharedSettings/useHiddenWorktreePrefixes";
+import { useDebouncedValue } from "@/hooks/ui/useDebouncedValue";
+import { useNow } from "@/hooks/ui/useNow";
 import { useOverlays } from "@/hooks/ui/useOverlays";
+import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { isEditableTarget, isOverlayOpen } from "@/lib/dom";
-import { rankByScore } from "@/lib/fuzzyMatch";
 import { hasLocalHost } from "@/lib/localHost";
 import { readWorktreeVisits, recordWorktreeVisit } from "@/lib/recentWorktrees";
 import { cn } from "@/lib/utils";
-import { slotToParam, type ScriptSlot } from "@/store/scriptSlot";
 import {
   buildPaletteEntries,
+  createTargets,
   initialPaletteKey,
+  isProjectSource,
+  newBranchName,
   rankPaletteEntries,
-  type PaletteEntry,
+  rankPaletteProjects,
 } from "./buildPaletteEntries";
+import { PaletteGroup, PaletteItem, PaneKeysProvider } from "./PaletteItem";
+import { PaletteRowView, type PaletteRow } from "./PaletteRows";
+import { PaletteVerbs, type GoTo, type PaletteActions } from "./PaletteVerbs";
 
-// ⌘K: every worktree on every machine, one fuzzy list. ↩ jumps to the
-// highlighted one, ⌘↩ opens its changes, and ⇥ (or → at the end of the
-// query) steps into what else it offers: its launch tools and its
-// package scripts. The project launcher (`, ⌘⇧P) picks a project; this
-// picks the worktree itself, so a peer's is one keystroke away like a
-// local one and drawn the same, its device a badge on the row.
+// ⌘K: every worktree on every machine, one fuzzy list, and beside it
+// what the highlighted one offers. ↩ jumps to it, ⌘↩ opens its
+// changes, ⌘1..⌘9 open it in a launch tool, and ⇥ (or → at the end of
+// the query) hands the keys to the rest: its pages, tools, git move and
+// package scripts. A query also finds the projects it names, and
+// offers a worktree on a branch of that name. The project launcher (`,
+// ⌘⇧P) picks a project; this picks the worktree itself, so a peer's is
+// one keystroke away like a local one and drawn the same, its device a
+// badge on the row.
 export function WorktreePalette() {
   const { paletteOpen: open, setPaletteOpen: setOpen } = useOverlays();
   // The worktree page on screen, if any, on this machine or a peer's:
   // any of its pages (detail, changes, a commit, a console) counts as
   // a visit, and the palette opens past it.
-  const { deviceId, worktreeId } = useParams({ strict: false }) as {
+  const { deviceId, projectId, worktreeId } = useParams({
+    strict: false,
+  }) as {
     deviceId?: string;
+    projectId?: string;
     worktreeId?: string;
   };
   const pageKey =
@@ -99,29 +102,50 @@ export function WorktreePalette() {
   }, [open, setOpen]);
 
   if (!open) return null;
-  return <PaletteDialog pageKey={pageKey} onClose={() => setOpen(false)} />;
+  return (
+    <PaletteDialog
+      pageKey={pageKey}
+      // This device's project on screen, where a new worktree goes first.
+      pageProjectId={
+        deviceId !== undefined && rowDeviceId(deviceId) === undefined
+          ? projectId
+          : undefined
+      }
+      onClose={() => setOpen(false)}
+    />
+  );
 }
 
-type GoTo = (
-  entry: PaletteEntry,
-  page: "detail" | "diff" | "script",
-  extra?: { scriptKey?: string },
-) => void;
+const GROUP_HEADINGS: Record<PaletteRow["kind"], string> = {
+  worktree: "Worktrees",
+  project: "Projects",
+  create: "Create",
+};
 
 function PaletteDialog({
   pageKey,
+  pageProjectId,
   onClose,
 }: {
   pageKey: string | undefined;
+  pageProjectId: string | undefined;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
-  // The worktree whose actions are showing, or null on the list.
-  const [picked, setPicked] = useState<PaletteEntry | null>(null);
+  // The row whose verbs have the keys, and the list's query it was
+  // picked from, which the input goes back to. Null on the list.
+  const [picked, setPicked] = useState<{
+    row: PaletteRow;
+    query: string;
+  } | null>(null);
   // Read once per open: a visit recorded while the palette is up can't
   // happen, and re-reading storage every render would.
   const [visits] = useState(readWorktreeVisits);
   const { toPageOn } = useWorktreeNav();
+  const { quickCreate, openCreateForm } = useQuickCreateWorktree();
+  // The create under way, if any: one at a time, and its row says so.
+  const [creating, setCreating] = useState<{ branch?: string } | null>(null);
+  const now = useNow();
 
   // The sidebar's own reads, so they are warm. The sidebar's observers
   // and push invalidation keep the worktree lists fresh, so opening
@@ -130,6 +154,7 @@ function PaletteDialog({
   const worktreeQueries = useAllProjectWorktrees(projects, true, {
     refetchOnMount: false,
   });
+  const pullRequestQueries = useAllProjectPullRequests(projects);
   const { items: remote } = useRemoteForests();
   const mirrors = useMirrorLinks();
   const deviceBadges = useDeviceBadges();
@@ -137,20 +162,94 @@ function PaletteDialog({
   const { entries, entryKeyOf } = buildPaletteEntries({
     projects,
     worktreeQueries,
+    pullRequestQueries,
     remote,
     mirrors,
     deviceBadges,
     hiddenPrefixes,
     visits,
   });
-  const shown = rankPaletteEntries(query.trim(), entries);
+
+  // The list for a query: its worktrees, then the projects it names,
+  // then the worktree it could make. A branch a worktree here already
+  // has is found, not offered again, and a pasted path or URL is no
+  // branch at all.
+  const rowsFor = (listQuery: string): PaletteRow[] => {
+    const shown = rankPaletteEntries(listQuery, entries);
+    const rows: PaletteRow[] = shown.map((entry) => ({
+      kind: "worktree",
+      key: entry.key,
+      entry,
+    }));
+    if (!listQuery) return rows;
+    for (const item of rankPaletteProjects(listQuery, entries)) {
+      rows.push({ kind: "project", key: item.key, item });
+    }
+    if (isProjectSource(listQuery)) return rows;
+    const branch = newBranchName(listQuery);
+    const [target, ...others] = hasLocalHost
+      ? createTargets(projects, shown, entries, pageProjectId)
+      : [];
+    // A project's or device's own name is a lookup, not a branch.
+    const named = (name: string | undefined) =>
+      name?.toLowerCase() === listQuery.toLowerCase();
+    if (
+      branch &&
+      target &&
+      !entries.some(
+        (e) =>
+          (!e.device && e.worktree.branch === branch) ||
+          named(e.project.name) ||
+          named(e.device?.label),
+      )
+    ) {
+      rows.push({
+        kind: "create",
+        key: "create",
+        branch,
+        targets: [target, ...others],
+      });
+    }
+    return rows;
+  };
+
+  const listQuery = (picked?.query ?? query).trim();
+  const rows = rowsFor(listQuery);
   // Seeded once, from the order the palette opened on (the sidebar's
-  // reads are warm, so it is already filled). cmdk takes over from
-  // there, moving to the top match as the query changes.
+  // reads are warm, so it is already filled). A query moves it to the
+  // top match.
   const [highlighted, setHighlighted] = useState(() =>
-    initialPaletteKey(shown, pageKey && entryKeyOf(pageKey)),
+    initialPaletteKey(
+      rankPaletteEntries("", entries),
+      pageKey && entryKeyOf(pageKey),
+    ),
   );
-  const current = shown.find((entry) => entry.key === highlighted) ?? shown[0];
+  const current = rows.find((row) => row.key === highlighted) ?? rows[0];
+  // The picked row as the list has it now, so its verbs follow a
+  // refetch (a push landing, its pull request loading).
+  const paneRow = picked
+    ? (rows.find((row) => row.key === picked.row.key) ?? picked.row)
+    : current;
+  // What the pane loads for a row (its scripts, its git move, a peer's
+  // over the network) waits for the highlight to rest, so arrowing
+  // through the list doesn't read every row it passes.
+  const settledKey = useDebouncedValue(paneRow?.key, 150);
+  const paneSettled = picked !== null || settledKey === paneRow?.key;
+
+  // The pane's worktree's tools, when it lives here (launch tools open
+  // on the machine showing this window). The palette holds their
+  // ⌘1..⌘9 while it is up, LauncherRow letting go, and holds them here
+  // rather than in the pane, which remounts per row: arrowing between
+  // worktrees then leaves the menu alone unless their tools differ.
+  const launchTarget =
+    hasLocalHost && paneRow?.kind === "worktree" && !paneRow.entry.device
+      ? paneRow.entry.worktree
+      : undefined;
+  const { data: launcherData } = useLauncherForProject(
+    launchTarget?.projectId ?? null,
+  );
+  const launchers = launchTarget ? launcherData?.entries : undefined;
+  useLaunchShortcuts(launchTarget, launchers, onClose);
 
   // A worktree page on whichever machine the entry lives on.
   const go: GoTo = (entry, page, extra = {}) => {
@@ -162,27 +261,70 @@ function PaletteDialog({
     });
   };
 
-  const pick = (entry: PaletteEntry) => {
-    setPicked(entry);
+  const actions: PaletteActions = {
+    go,
+    close: onClose,
+    // Up until it lands, the row saying so, then on the new page.
+    // A failure toasts and leaves the palette up to try again.
+    create: (projectId, branch) => {
+      if (creating) return;
+      setCreating({ branch });
+      void quickCreate(projectId, branch).then((created) => {
+        if (created) onClose();
+        else setCreating(null);
+      });
+    },
+    openCreateForm: (projectId) => {
+      onClose();
+      openCreateForm(projectId);
+    },
+  };
+
+  // What ↩ does on the list: the first of the row's verbs.
+  const enter = (row: PaletteRow) => {
+    switch (row.kind) {
+      case "worktree":
+        return go(row.entry, "detail");
+      case "project":
+        return go(row.item.lead, "detail");
+      case "create":
+        return actions.create(row.targets[0].id, row.branch);
+    }
+  };
+
+  const pick = (row: PaletteRow) => {
+    setPicked({ row, query });
     setQuery("");
     setHighlighted("");
   };
 
-  // Back on the list, the worktree the actions were for is highlighted
-  // again (the Command remounts per stage, see below).
-  const back = () => {
+  // Back on the list with its query, the row the verbs were for (or
+  // the one clicked) highlighted again. The Command remounts per stage,
+  // see below.
+  const back = (key = picked?.row.key ?? "") => {
+    setQuery(picked?.query ?? "");
     setPicked(null);
-    setQuery("");
-    setHighlighted(picked?.key ?? "");
+    setHighlighted(key);
+  };
+
+  const onQueryChange = (next: string) => {
+    setQuery(next);
+    // On the list, the top match leads each new query. cmdk does that
+    // itself for the verbs' input, which it owns.
+    if (!picked) setHighlighted(rowsFor(next.trim())[0]?.key ?? "");
   };
 
   const onInputKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (picked) {
-      if (e.key === "Backspace" && query === "") {
+      const atStart = e.currentTarget.selectionEnd === 0;
+      if (
+        (e.key === "Backspace" && query === "") ||
+        (e.key === "ArrowLeft" && atStart)
+      ) {
         e.preventDefault();
         back();
       } else if (e.key === "Tab") {
-        // Already in the actions. The shell doesn't trap focus, so a
+        // Already in the verbs. The shell doesn't trap focus, so a
         // second Tab would leave for the page underneath.
         e.preventDefault();
       }
@@ -191,30 +333,61 @@ function PaletteDialog({
     if (!current) return;
     const atEnd = e.currentTarget.selectionStart === query.length;
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      // Changes, a worktree's alone: on any other row ⌘↩ would reach
+      // cmdk as a plain ↩ and run the row.
       e.preventDefault();
       e.stopPropagation();
-      go(current, "diff");
+      if (current.kind === "worktree") go(current.entry, "diff");
     } else if (e.key === "Tab" || (e.key === "ArrowRight" && atEnd)) {
       e.preventDefault();
       pick(current);
     }
   };
 
-  // Escape backs out one stage: the actions to the list, a query to
+  // Escape backs out one stage: the verbs to the list, a query to
   // empty, then the palette itself.
   const onEscape = () => {
     if (picked) back();
-    else if (query) setQuery("");
+    else if (query) onQueryChange("");
     else onClose();
   };
 
+  // Headed runs of one kind, the headings only once there is more
+  // than the worktrees.
+  const groups: { heading: string; rows: PaletteRow[] }[] = [];
+  for (const row of rows) {
+    const heading = GROUP_HEADINGS[row.kind];
+    const last = groups.at(-1);
+    if (last?.heading === heading) last.rows.push(row);
+    else groups.push({ heading, rows: [row] });
+  }
+  const listItems = (list: PaletteRow[]) =>
+    list.map((row) => (
+      <PaletteItem
+        key={row.key}
+        value={row.key}
+        selected={picked?.row.key === row.key}
+        onSelect={() => (picked ? back(row.key) : enter(row))}
+      >
+        <PaletteRowView
+          row={row}
+          query={listQuery}
+          now={now}
+          creating={row.kind === "create" && creating?.branch === row.branch}
+        />
+      </PaletteItem>
+    ));
+
   return (
-    <ModalShell onClose={onClose} onEscape={onEscape}>
-      {/* Keyed by stage: a query cleared in place makes cmdk jump to its
-          first row, which would undo the highlight back() restores. A
-          fresh mount keeps the highlight it is handed. */}
+    <ModalShell
+      onClose={onClose}
+      onEscape={onEscape}
+      popoverClassName="max-w-3xl"
+    >
+      {/* Keyed by stage: the pane holding the keys changes, and a fresh
+          mount keeps the highlight it is handed. */}
       <Command
-        key={picked ? "actions" : "worktrees"}
+        key={picked ? "verbs" : "list"}
         label="Worktrees"
         loop
         shouldFilter={false}
@@ -222,103 +395,97 @@ function PaletteDialog({
         onValueChange={setHighlighted}
       >
         <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-          {picked && (
-            <button
-              type="button"
-              onClick={back}
-              onMouseDown={keepFocusInInput}
-              title="Back to worktrees (⌫)"
-              className="flex max-w-[50%] shrink-0 items-center gap-1.5 rounded-md bg-muted px-2 py-0.5 text-xs"
-            >
-              <ProjectIcon
-                projectId={picked.worktree.projectId}
-                deviceId={picked.device?.deviceId}
-                className="size-3"
-                fallback={Folder}
-              />
-              <span className="truncate font-mono">
-                <BranchLabel
-                  branch={picked.worktree.branch}
-                  detached={picked.worktree.detached}
-                />
-              </span>
-              {picked.device && <DeviceBadge badge={picked.device} />}
-            </button>
-          )}
-          <Command.Input
-            // oxlint-disable-next-line jsx-a11y/no-autofocus -- the palette just opened
-            autoFocus
-            value={query}
-            onValueChange={setQuery}
-            onKeyDown={onInputKeyDown}
-            placeholder={picked ? "Search actions…" : "Search worktrees…"}
-            className="min-w-0 flex-1 bg-transparent py-1 text-sm outline-none placeholder:text-muted-foreground"
-          />
-        </div>
-
-        <Command.List
-          onMouseDown={keepFocusInInput}
-          className="max-h-96 overflow-y-auto p-2"
-        >
+          {picked && <PickedChip row={picked.row} onBack={() => back()} />}
           {picked ? (
-            <ActionList
-              entry={picked}
-              query={query.trim()}
-              go={go}
-              onClose={onClose}
+            <Command.Input
+              // oxlint-disable-next-line jsx-a11y/no-autofocus -- the verbs just took the keys
+              autoFocus
+              value={query}
+              onValueChange={onQueryChange}
+              onKeyDown={onInputKeyDown}
+              placeholder="Search actions…"
+              className={INPUT_CLASS}
             />
           ) : (
-            shown.map((entry) => (
-              <Command.Item
-                key={entry.key}
-                value={entry.key}
-                onSelect={() => go(entry, "detail")}
-                className={ITEM_CLASS}
-              >
-                <EntryRow entry={entry} />
-              </Command.Item>
-            ))
+            <ListInput
+              value={query}
+              onValueChange={onQueryChange}
+              onKeyDown={onInputKeyDown}
+            />
           )}
-          <Command.Empty className="p-3 text-center text-xs text-muted-foreground">
-            {picked
-              ? "No actions match."
-              : entries.length === 0
-                ? "No worktrees yet."
-                : "No worktrees match."}
-          </Command.Empty>
+        </div>
+
+        <Command.List onMouseDown={keepFocusInInput}>
+          <div className="flex h-96">
+            <div
+              className={cn(
+                "min-w-0 flex-1 overflow-y-auto p-2",
+                picked && "opacity-60 phone:hidden",
+              )}
+            >
+              <PaneKeysProvider value={!picked}>
+                {groups.length > 1
+                  ? groups.map((group) => (
+                      <PaletteGroup key={group.heading} heading={group.heading}>
+                        {listItems(group.rows)}
+                      </PaletteGroup>
+                    ))
+                  : listItems(rows)}
+              </PaneKeysProvider>
+              {!picked && (
+                <Command.Empty className={EMPTY_CLASS}>
+                  {entries.length === 0
+                    ? "No worktrees yet."
+                    : "No worktrees match."}
+                </Command.Empty>
+              )}
+            </div>
+            <div
+              className={cn(
+                "w-64 shrink-0 overflow-y-auto border-l border-border bg-muted/30 p-2 phone:w-auto phone:flex-1 phone:border-l-0",
+                !picked && "phone:hidden",
+              )}
+            >
+              <PaneKeysProvider value={picked !== null}>
+                {paneRow && (
+                  <PaletteVerbs
+                    key={paneRow.key}
+                    row={paneRow}
+                    query={picked ? query.trim() : ""}
+                    actions={actions}
+                    launchers={launchers}
+                    settled={paneSettled}
+                  />
+                )}
+              </PaneKeysProvider>
+              {picked && (
+                <Command.Empty className={EMPTY_CLASS}>
+                  No actions match.
+                </Command.Empty>
+              )}
+            </div>
+          </div>
         </Command.List>
 
         <div className="flex items-center gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
-          <KbdGroup>
-            <Kbd>
-              <ArrowUp />
-            </Kbd>
-            <Kbd>
-              <ArrowDown />
-            </Kbd>
-            <span className="text-muted-foreground/80">Navigate</span>
-          </KbdGroup>
-          <KbdGroup>
-            <Kbd>↩</Kbd>
-            <span className="text-muted-foreground/80">
-              {picked ? "Run" : "Open"}
-            </span>
-          </KbdGroup>
+          <KbdHint
+            keys={[<ArrowUp key="up" />, <ArrowDown key="down" />]}
+            label="Navigate"
+          />
+          <KbdHint
+            keys={["↩"]}
+            label={
+              picked ? "Run" : current?.kind === "create" ? "Create" : "Open"
+            }
+          />
           {picked ? (
-            <KbdGroup>
-              <Kbd>⌫</Kbd>
-              <span className="text-muted-foreground/80">Back</span>
-            </KbdGroup>
+            <KbdHint keys={["⌫"]} label="Back" />
           ) : (
             <>
-              <KbdGroup>
-                <Kbd>⌘↩</Kbd>
-                <span className="text-muted-foreground/80">Changes</span>
-              </KbdGroup>
-              <KbdGroup>
-                <Kbd>⇥</Kbd>
-                <span className="text-muted-foreground/80">Actions</span>
-              </KbdGroup>
+              {current?.kind === "worktree" && (
+                <KbdHint keys={["⌘↩"]} label="Changes" />
+              )}
+              <KbdHint keys={["⇥"]} label="Actions" />
             </>
           )}
         </div>
@@ -327,202 +494,85 @@ function PaletteDialog({
   );
 }
 
-// The sidebar's reading of a worktree on one line: project and folder
-// beside the branch, the tree row's trailing marks, and the device
-// badge a peer's row wears (or the mirror badge a local pair wears).
-function EntryRow({ entry }: { entry: PaletteEntry }) {
-  const { worktree, project, device, mirror } = entry;
+const EMPTY_CLASS = "p-3 text-center text-xs text-muted-foreground";
+
+const INPUT_CLASS =
+  "min-w-0 flex-1 bg-transparent py-1 text-sm outline-none placeholder:text-muted-foreground";
+
+// The list's input. Not cmdk's own: cmdk moves the highlight to the
+// first row on every change of its query, including the one that puts
+// the list's query back after the verbs, which would lose the row they
+// were for. The dialog picks the top match itself as the query changes.
+function ListInput({
+  value,
+  onValueChange,
+  onKeyDown,
+}: {
+  value: string;
+  onValueChange: (value: string) => void;
+  onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
+}) {
+  const activeId = useCommandState((state) => state.selectedItemId);
   return (
-    <div
-      className={cn(
-        "flex min-w-0 flex-1 items-center gap-2",
-        device && !device.reachable && "opacity-60",
-      )}
+    <input
+      // oxlint-disable-next-line jsx-a11y/no-autofocus -- the palette just opened
+      autoFocus
+      type="text"
+      aria-activedescendant={activeId}
+      aria-label="Search worktrees"
+      autoComplete="off"
+      autoCorrect="off"
+      spellCheck={false}
+      value={value}
+      onChange={(e) => onValueChange(e.target.value)}
+      onKeyDown={onKeyDown}
+      placeholder="Search worktrees, projects, devices, PRs…"
+      className={INPUT_CLASS}
+    />
+  );
+}
+
+// The row whose verbs have the keys, ahead of their query. A click (or
+// ⌫) goes back to the list.
+function PickedChip({ row, onBack }: { row: PaletteRow; onBack: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onBack}
+      onMouseDown={keepFocusInInput}
+      title="Back (⌫)"
+      className="flex max-w-[50%] shrink-0 items-center gap-1.5 rounded-md bg-muted px-2 py-0.5 text-xs"
     >
-      <ProjectIcon
-        projectId={worktree.projectId}
-        deviceId={device?.deviceId}
-        fallback={Folder}
-      />
-      <div className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate font-mono text-xs">
-          <BranchLabel branch={worktree.branch} detached={worktree.detached} />
-        </span>
-        <span className="truncate text-3xs text-muted-foreground">
-          {project.name} · {worktree.name}
-        </span>
-      </div>
-      <StatusIndicator worktree={worktree} />
-      <WorktreeKindIcon worktree={worktree} showTooltip={false} />
-      {device && <DeviceBadge badge={device} />}
-      {mirror && <MirrorBadge mirror={mirror} />}
-    </div>
+      <PickedLabel row={row} />
+    </button>
   );
 }
 
-// The picked worktree's second step. Its scripts run on the machine it
-// lives on, so the list mounts in that device's scope: a peer asleep
-// has no session to run anything over, and offers the pages alone.
-function ActionList({
-  entry,
-  query,
-  go,
-  onClose,
-}: {
-  entry: PaletteEntry;
-  query: string;
-  go: GoTo;
-  onClose: () => void;
-}) {
-  const deviceId = entry.device?.deviceId;
-  const api = useRemoteDeviceApi(deviceId);
-  const reachable = deviceId === undefined || api !== undefined;
-  // The worktree list's fuzzy match, each group ranked on its own so
-  // the groups keep their places.
-  const pages = rankByScore(query, PAGE_ACTIONS, (action) => action.label);
-  return (
-    <>
-      {pages.length > 0 && (
-        <Command.Group heading="Go to" className={GROUP_CLASS}>
-          {pages.map(({ page, label, Icon }) => (
-            <Command.Item
-              key={page}
-              value={page}
-              onSelect={() => go(entry, page)}
-              className={ITEM_CLASS}
-            >
-              <Icon className="size-4 text-muted-foreground/80" />
-              {label}
-            </Command.Item>
-          ))}
-        </Command.Group>
-      )}
-      {/* Launch tools open on the machine showing this window, so only a
-          worktree here has any (LaunchSection's rule). */}
-      {deviceId === undefined && hasLocalHost && (
-        <LauncherItems entry={entry} query={query} onClose={onClose} />
-      )}
-      {reachable && (
-        <MaybeHostScope deviceId={deviceId ?? ""} api={api}>
-          <ScriptItems entry={entry} query={query} go={go} />
-        </MaybeHostScope>
-      )}
-    </>
-  );
-}
-
-const PAGE_ACTIONS = [
-  { page: "detail", label: "Open worktree", Icon: Folder },
-  { page: "diff", label: "Open changes", Icon: FileDiff },
-] as const;
-
-const GROUP_CLASS =
-  "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-2xs [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground";
-
-function LauncherItems({
-  entry,
-  query,
-  onClose,
-}: {
-  entry: PaletteEntry;
-  query: string;
-  onClose: () => void;
-}) {
-  const { data } = useLauncherForProject(entry.worktree.projectId);
-  const launch = useLaunch();
-  const launchers = rankByScore(
-    query,
-    data?.entries ?? [],
-    (launcher) => `Open in ${launcher.label}`,
-  );
-  if (launchers.length === 0) return null;
-  return (
-    <Command.Group heading="Launch" className={GROUP_CLASS}>
-      {launchers.map((launcher) => (
-        <Command.Item
-          key={launcher.id}
-          value={`launch:${launcher.id}`}
-          onSelect={() => {
-            onClose();
-            launch.mutate({
-              projectId: entry.worktree.projectId,
-              worktreeId: entry.worktree.id,
-              launcherId: launcher.id,
-            });
-          }}
-          className={ITEM_CLASS}
-        >
-          <LauncherIcon entry={launcher} />
-          Open in {launcher.label}
-        </Command.Item>
-      ))}
-    </Command.Group>
-  );
-}
-
-function ScriptItems({
-  entry,
-  query,
-  go,
-}: {
-  entry: PaletteEntry;
-  query: string;
-  go: GoTo;
-}) {
-  const { worktree } = entry;
-  const { data: pkg } = usePackageScripts(worktree.projectId, worktree.id);
-  const { sorted } = useSortedPackageScripts(worktree.projectId, pkg);
-  const scripts = rankByScore(query, sorted, (script) => script.name);
-  if (scripts.length === 0) return null;
-  return (
-    <Command.Group heading="Scripts" className={GROUP_CLASS}>
-      {scripts.map((script) => (
-        <ScriptItem
-          key={script.name}
-          entry={entry}
-          name={script.name}
-          command={script.command}
-          go={go}
-        />
-      ))}
-    </Command.Group>
-  );
-}
-
-// Runs the script and lands on its console, so the output is what you
-// see next. One already running just opens the console.
-function ScriptItem({
-  entry,
-  name,
-  command,
-  go,
-}: {
-  entry: PaletteEntry;
-  name: string;
-  command: string;
-  go: GoTo;
-}) {
-  const slot: ScriptSlot = { kind: "package", name };
-  const { busy, canRun, disabledReason, start } = useScriptRunner(
-    entry.worktree,
-    slot,
-  );
-  return (
-    <Command.Item
-      value={`script:${name}`}
-      disabled={!busy && !canRun}
-      onSelect={() => {
-        if (!busy) start();
-        go(entry, "script", { scriptKey: slotToParam(slot) });
-      }}
-      title={disabledReason ?? command}
-      className={cn(ITEM_CLASS, "aria-disabled:opacity-50")}
-    >
-      <Play className="size-4 text-muted-foreground/80" />
-      <span className="font-mono">{name}</span>
-      <span className="min-w-0 flex-1 truncate text-right font-mono text-2xs text-muted-foreground">
-        {busy ? "running" : command}
-      </span>
-    </Command.Item>
-  );
+function PickedLabel({ row }: { row: PaletteRow }) {
+  switch (row.kind) {
+    case "worktree": {
+      const { worktree, device } = row.entry;
+      return (
+        <>
+          <ProjectIcon
+            projectId={worktree.projectId}
+            deviceId={device?.deviceId}
+            className="size-3"
+            fallback={Folder}
+          />
+          <span className="truncate font-mono">
+            <BranchLabel
+              branch={worktree.branch}
+              detached={worktree.detached}
+            />
+          </span>
+          {device && <DeviceBadge badge={device} />}
+        </>
+      );
+    }
+    case "project":
+      return <span className="truncate">{row.item.lead.project.name}</span>;
+    case "create":
+      return <span className="truncate font-mono">{row.branch}</span>;
+  }
 }

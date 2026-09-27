@@ -4,24 +4,35 @@
 // Asserts: every worktree on every device lands in one list, a mirrored
 // pair once (as its local row, wearing the peer's badge). Visits lead
 // the order, keyed per device so the same worktree id on two machines
-// is two entries, and last activity orders the rest. A query matches
-// the branch, the folder, "project branch", or a peer's device label,
-// and a hidden-prefix worktree shows only for one. The palette opens
-// highlighting the worktree before the one on screen, a mirrored peer's
-// page counting as its local row.
+// is two entries, and last activity orders the rest, merged and
+// shelved ones last. A query matches the branch, the folder, "project
+// branch", a peer's device label, or the pull request by number or
+// title (a space in it standing for any gap), sinking merged work under
+// live work that matches as well, and a hidden-prefix worktree shows
+// only for one. The palette opens highlighting the worktree before the
+// one on screen, a mirrored peer's page counting as its local row. A
+// query names projects once across devices, turns into a branch name
+// git takes (a pasted path or URL never does), and a new worktree goes to
+// the project on screen first. The matched letters are the ones the
+// ranking matched.
 //
 // Runs under test/lib/register-ts-alias.mts. Run: pnpm test worktree-palette.
 import assert from "node:assert/strict";
 import {
   buildPaletteEntries,
+  createTargets,
   initialPaletteKey,
+  isProjectSource,
+  newBranchName,
   rankPaletteEntries,
+  rankPaletteProjects,
   type PaletteEntry,
 } from "@/components/palette/buildPaletteEntries";
+import { matchPositions } from "@/lib/fuzzyMatch";
 import { worktreeRowKey } from "@/components/sidebar/buildSidebarRows";
 import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
-import type { Project, Worktree } from "@shared/schemas";
+import type { Project, PullRequest, Worktree } from "@shared/schemas";
 import { worktree as labWorktree } from "../lab/fixtures.ts";
 import { makeProof } from "./lib/checkKit.mts";
 
@@ -43,6 +54,7 @@ const worktree = (
   id: string,
   branch: string,
   lastChangeAt: number,
+  marks: Partial<Worktree> = {},
 ): Worktree =>
   labWorktree({
     id,
@@ -51,6 +63,7 @@ const worktree = (
     branch,
     path: `/src/${id}`,
     lastChangeAt,
+    ...marks,
   });
 
 const forest = project("forest");
@@ -93,18 +106,37 @@ const mirrors: MirrorLink[] = [
   },
 ];
 
+const loaded = <T,>(data: T) => ({
+  data,
+  isLoading: false,
+  isPending: false,
+  error: null,
+});
+
+// Lantern's fix/wick has pull request #148 open.
+const localPullRequests: Record<string, PullRequest>[] = [
+  {},
+  {
+    "fix/wick": {
+      number: 148,
+      url: "https://example.com/pull/148",
+      title: "Trim the wick",
+      state: "OPEN",
+      isDraft: false,
+      baseRefName: "main",
+    },
+  },
+];
+
 function palette(
   visits: Record<string, number> = {},
   hiddenPrefixes: string[] = [],
+  trees: Worktree[][] = localTrees,
 ) {
   return buildPaletteEntries({
     projects: [forest, lantern],
-    worktreeQueries: localTrees.map((data) => ({
-      data,
-      isLoading: false,
-      isPending: false,
-      error: null,
-    })),
+    worktreeQueries: trees.map(loaded),
+    pullRequestQueries: localPullRequests.map(loaded),
     remote: [peerForest],
     mirrors,
     deviceBadges: new Map(),
@@ -116,6 +148,7 @@ function palette(
 const entries = (visits?: Record<string, number>) => palette(visits).entries;
 
 const keys = (list: readonly PaletteEntry[]) => list.map((entry) => entry.key);
+const ids = (projects: readonly Project[]) => projects.map((p) => p.id);
 const local = (id: string) => worktreeRowKey(undefined, id);
 const onPeer = (id: string) => worktreeRowKey(PEER, id);
 
@@ -172,6 +205,7 @@ try {
       [onPeer("pine"), onPeer("shared-id")],
       "a peer's device label",
     );
+    assert.deepEqual(ranked("fix wi"), [local("wick")], "a space as a gap");
     assert.deepEqual(ranked("zzz"), []);
     assert.deepEqual(ranked(""), keys(list), "no query keeps the order");
   });
@@ -220,6 +254,106 @@ try {
     const ranked = (query: string) => keys(rankPaletteEntries(query, list));
     assert.ok(!ranked("").includes(local("wick")), "not listed unasked");
     assert.deepEqual(ranked("wick"), [local("wick")], "found by name");
+  });
+
+  await proof.check("merged and shelved sink, and still come up", () => {
+    const trees = [
+      [
+        worktree(forest.id, "oak", "feat/oak", 300, {
+          mergedIntoPrimary: true,
+        }),
+        worktree(forest.id, "shared-id", "feat/moss", 100, { shelved: true }),
+      ],
+      [worktree(lantern.id, "wick", "fix/wick", 200)],
+    ];
+    const list = palette({ [local("oak")]: 99 }, [], trees).entries;
+    assert.deepEqual(keys(list).slice(-2), [local("oak"), local("shared-id")]);
+    const ranked = (q: string) => keys(rankPaletteEntries(q, list));
+    assert.deepEqual(ranked("oak"), [local("oak")], "a query still finds it");
+    // "feat" names both merged oak and the peer's live pine as well.
+    assert.equal(ranked("feat")[0], onPeer("pine"), "live work leads");
+  });
+
+  await proof.check("a pull request by number or title", () => {
+    const list = entries();
+    const ranked = (q: string) => keys(rankPaletteEntries(q, list));
+    assert.deepEqual(ranked("#148"), [local("wick")]);
+    assert.equal(ranked("trim the")[0], local("wick"));
+    const wick = list.find((entry) => entry.key === local("wick"));
+    assert.ok(wick);
+    assert.equal(wick.pr?.number, 148);
+  });
+
+  await proof.check("a project is one row across its devices", () => {
+    const [row, ...rest] = rankPaletteProjects("forest", entries());
+    assert.ok(row);
+    assert.equal(rest.length, 0);
+    assert.equal(row.worktreeCount, 4, "oak, moss here; fern, pine there");
+    assert.equal(row.deviceCount, 2);
+    assert.equal(row.lead.key, onPeer("pine"), "↩ goes where the list leads");
+    assert.equal(row.localProject?.id, forest.id);
+    assert.deepEqual(rankPaletteProjects("", entries()), [], "only asked");
+  });
+
+  await proof.check("a query as a new branch", () => {
+    assert.equal(newBranchName("fix st"), "fix-st");
+    assert.equal(newBranchName("  feat/oak  "), "feat/oak");
+    assert.equal(
+      newBranchName("a..b~c^d:e?f*g[h\\i"),
+      "a.b-c-d-e-f-g-h-i",
+      "the branch inputs' own filter",
+    );
+    assert.equal(newBranchName("café fix"), "caf--fix", "as the form has it");
+    assert.equal(newBranchName("-/x//y/."), "x/y");
+    assert.equal(newBranchName("wip.lock"), "wip");
+    assert.equal(newBranchName("x/.lock"), "x/lock", "no dot-led component");
+    assert.equal(newBranchName("feat/.hidden"), "feat/hidden");
+    assert.equal(newBranchName("a.lock/b"), "a/b", "no .lock component");
+    assert.equal(newBranchName("x.lock.lock"), "x");
+    assert.equal(newBranchName(" ~^ "), null);
+    assert.ok(isProjectSource("~/src/thing"));
+    assert.ok(isProjectSource("git@github.com:me/thing.git"));
+    assert.ok(isProjectSource("https://github.com/me/thing"));
+    assert.ok(isProjectSource("gitlab.example.com:group/repo"), "scp-style");
+    assert.ok(!isProjectSource("fix st"));
+  });
+
+  await proof.check("a new worktree goes to the project on screen", () => {
+    const list = entries();
+    assert.deepEqual(
+      ids(createTargets([forest, lantern], [], list, lantern.id)),
+      [lantern.id, forest.id],
+    );
+    assert.deepEqual(
+      ids(
+        createTargets(
+          [forest, lantern],
+          rankPaletteEntries("wick", list),
+          list,
+          undefined,
+        ),
+      ),
+      [lantern.id, forest.id],
+      "off a project page, the top match's",
+    );
+    assert.deepEqual(
+      ids(createTargets([forest, lantern], [], list, "gone")),
+      [forest.id, lantern.id],
+      "else the latest work's, never a peer-only one",
+    );
+  });
+
+  await proof.check("the marked letters are the matched ones", () => {
+    assert.deepEqual(matchPositions("st", "fix-stale"), [4, 5]);
+    assert.deepEqual(matchPositions("fsl", "fix-stale"), [0, 4, 7]);
+    assert.deepEqual(matchPositions("fix st", "fix-stale"), [0, 1, 2, 4, 5]);
+    assert.deepEqual(
+      matchPositions("lantern fix", "fix/wick"),
+      [0, 1, 2],
+      "a word of a two-field query",
+    );
+    assert.equal(matchPositions("zzz", "fix"), null);
+    assert.equal(matchPositions("", "fix"), null);
   });
 
   proof.done();

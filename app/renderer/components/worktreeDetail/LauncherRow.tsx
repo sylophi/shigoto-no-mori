@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
@@ -8,6 +7,8 @@ import {
   useLauncherForProject,
 } from "@/hooks/launchers/useLaunchers";
 import { LauncherIcon } from "@/components/shared/LauncherIcon";
+import { useLaunchShortcuts } from "@/hooks/launchers/useLaunchShortcuts";
+import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import type { LauncherEntry, Worktree } from "@shared/schemas";
 import {
@@ -26,34 +27,10 @@ export function LauncherRow({ worktree }: LauncherRowProps) {
   const { toProjectPage } = useProjectNav();
   const entries = data?.entries ?? [];
 
-  // The visible row is the single source of truth for ⌘1..⌘9 ordering:
-  // we ship exactly what we're rendering up to main, so the menu can never
-  // shuffle out from under the buttons. Splitting the unmount disable into
-  // its own effect avoids a disabled flash on data refetches.
-  useEffect(() => {
-    if (!data) return;
-    const menuEntries = data.entries.map((e) => ({
-      id: e.id,
-      label: e.label,
-    }));
-    void window.api.menu.setLaunchToolsEnabled(true, menuEntries);
-  }, [data]);
-
-  useEffect(() => {
-    return () => {
-      void window.api.menu.setLaunchToolsEnabled(false);
-    };
-  }, []);
-
-  useEffect(() => {
-    return window.api.nav.onLaunchById((launcherId) => {
-      launch.mutate({
-        projectId: worktree.projectId,
-        worktreeId: worktree.id,
-        launcherId,
-      });
-    });
-  }, [launch, worktree.projectId, worktree.id]);
+  // The visible row is the single source of truth for ⌘1..⌘9 ordering.
+  // The palette takes them for its highlighted worktree while it is up.
+  const { paletteOpen } = useOverlays();
+  useLaunchShortcuts(paletteOpen ? undefined : worktree, data?.entries);
 
   if (isLoading) {
     return (
