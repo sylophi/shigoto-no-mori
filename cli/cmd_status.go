@@ -181,7 +181,9 @@ func probePullRequest(projectPath, branch string) prProbe {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), prProbeTimeout)
 	defer cancel()
-	stdout, err := runGhContext(ctx, projectPath, prLookupArgs(branch, "statusCheckRollup")...)
+	// autoMergeRequest for the card's auto-merge mark. The verdict
+	// itself (mergeFields) is the merge's to pay for.
+	stdout, err := runGhContext(ctx, projectPath, prLookupArgs(branch, "autoMergeRequest", "statusCheckRollup")...)
 	if err != nil {
 		if ctx.Err() != nil {
 			return prProbe{reason: "gh timed out"}
@@ -358,6 +360,9 @@ func prLine(card *prCard, width int) string {
 		label = greenOut(state)
 		if card.IsDraft {
 			label = dimOut("draft")
+		}
+		if card.AutoMergeRequest != nil {
+			label += " " + dimOut("auto-merge")
 		}
 	case "merged":
 		label = cyanOut(state)

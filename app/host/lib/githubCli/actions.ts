@@ -137,3 +137,16 @@ export async function setPullRequestDraft(opts: {
   await runGh(args, { cwd, fallback: "gh pr ready failed" });
   evictProjectPullRequests(cwd);
 }
+
+// Turns an armed auto-merge off again, so the PR waits for a person.
+// The slim PullRequest doesn't carry the flag, so the sidebar cache
+// stays.
+export async function disablePullRequestAutoMerge(opts: {
+  cwd: string;
+  number: number;
+}): Promise<void> {
+  await runGh(["pr", "merge", String(opts.number), "--disable-auto"], {
+    cwd: opts.cwd,
+    fallback: "gh pr merge --disable-auto failed",
+  });
+}

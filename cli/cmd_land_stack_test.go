@@ -26,7 +26,7 @@ case "$*" in
   "pr list --state all --head layer-c --limit 1 --json "*) echo '[{"number":4,"title":"C","state":"OPEN","isDraft":false,"url":"u4","baseRefName":"layer-b","headRefName":"layer-c"}]';;
   "pr list --state all --head "*) echo '[]';;
   "pr list --state all --limit 200 --json "*) echo '[{"number":4,"title":"C","state":"OPEN","isDraft":false,"url":"u4","baseRefName":"layer-b","headRefName":"layer-c"},{"number":3,"title":"B","state":"'"${GH_LAYER_B_STATE:-OPEN}"'","isDraft":false,"url":"u3","baseRefName":"layer-a","headRefName":"layer-b"},{"number":2,"title":"A","state":"MERGED","isDraft":false,"url":"u2","baseRefName":"main","headRefName":"layer-a"}]';;
-  "repo view --json "*) echo '{"mergeCommitAllowed":true,"squashMergeAllowed":true,"rebaseMergeAllowed":true}';;
+  "api graphql "*) echo '{"data":{"repository":{"mergeCommitAllowed":true,"squashMergeAllowed":true,"rebaseMergeAllowed":true,"autoMergeAllowed":false}}}';;
   "api repos/{owner}/{repo}/stacks?pull_request="*) echo "gh: Not Found (HTTP 404)" >&2; exit 1;;
   "pr view "*) echo '{"mergeStateStatus":"CLEAN"}';;
   "pr edit "*) ;;

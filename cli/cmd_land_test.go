@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -28,40 +29,218 @@ func TestCheckoutOn(t *testing.T) {
 	}
 }
 
-// The base ref has to survive the gh lookup, or land falls back to the
-// unknown-base path and the guard above never fires in practice.
-func TestPrLookupArgsRequestsBaseRefName(t *testing.T) {
-	args := prLookupArgs("some-branch")
-	var fields string
+func jsonFieldsOf(t *testing.T, args []string) []string {
+	t.Helper()
 	for i, a := range args {
 		if a == "--json" && i+1 < len(args) {
-			fields = args[i+1]
+			return strings.Split(args[i+1], ",")
 		}
 	}
-	if fields == "" {
-		t.Fatalf("prLookupArgs produced no --json field list: %v", args)
+	t.Fatalf("no --json field list in %v", args)
+	return nil
+}
+
+// The base ref has to survive the gh lookup, or land falls back to the
+// unknown-base path and the guard above never fires in practice. The
+// merge's lookup adds the verdict and the armed auto-merge, without
+// which it could never tell a waiting PR from one it can land now.
+// The plain lookup (sm pr, the stack walks) doesn't pay for the verdict.
+func TestPrLookupArgsRequestTheRightFields(t *testing.T) {
+	plain := jsonFieldsOf(t, prLookupArgs("some-branch"))
+	if !slices.Contains(plain, "baseRefName") {
+		t.Errorf("prLookupArgs --json fields = %q, want baseRefName among them", plain)
 	}
-	if !slices.Contains(strings.Split(fields, ","), "baseRefName") {
-		t.Errorf("prLookupArgs --json fields = %q, want baseRefName among them", fields)
+	if slices.Contains(plain, "mergeStateStatus") {
+		t.Errorf("prLookupArgs --json fields = %q, want no merge verdict on the plain lookup", plain)
+	}
+	merge := jsonFieldsOf(t, mergeLookupArgs("some-branch"))
+	for _, want := range []string{"baseRefName", "mergeStateStatus", "autoMergeRequest"} {
+		if !slices.Contains(merge, want) {
+			t.Errorf("mergeLookupArgs --json fields = %q, want %s among them", merge, want)
+		}
 	}
 }
 
 // Verbatim `gh pr list` output for the field list above, so a struct
 // tag that stops matching gh's spelling fails here instead of silently
-// leaving every base empty and re-enabling the false catch-up.
-func TestPrSummaryDecodesBaseRefName(t *testing.T) {
-	const ghOutput = `[{"baseRefName":"v2","isDraft":false,"number":249,` +
+// leaving every base empty and re-enabling the false catch-up, or
+// every verdict empty and never arming auto-merge.
+func TestPrSummaryDecodesTheMergeFields(t *testing.T) {
+	const ghOutput = `[{"autoMergeRequest":null,"baseRefName":"v2","isDraft":false,` +
+		`"mergeStateStatus":"BLOCKED","number":249,` +
 		`"state":"MERGED","title":"Reword device revoke",` +
-		`"url":"https://github.com/o/r/pull/249"}]`
+		`"url":"https://github.com/o/r/pull/249"},` +
+		`{"autoMergeRequest":{"enabledAt":"2026-09-27T10:00:00Z","mergeMethod":"SQUASH"},` +
+		`"baseRefName":"main","isDraft":false,"mergeStateStatus":"BLOCKED","number":250,` +
+		`"state":"OPEN","title":"Armed","url":"https://github.com/o/r/pull/250"}]`
 	var prs []prSummary
 	if err := json.Unmarshal([]byte(ghOutput), &prs); err != nil {
 		t.Fatalf("decoding gh output: %v", err)
 	}
-	if len(prs) != 1 {
-		t.Fatalf("decoded %d pull requests, want 1", len(prs))
+	if len(prs) != 2 {
+		t.Fatalf("decoded %d pull requests, want 2", len(prs))
 	}
 	if prs[0].BaseRefName != "v2" {
 		t.Errorf("BaseRefName = %q, want %q", prs[0].BaseRefName, "v2")
+	}
+	if prs[0].MergeStateStatus != "BLOCKED" || prs[0].AutoMergeRequest != nil {
+		t.Errorf("PR #249 = verdict %q, armed %v; want BLOCKED and nothing armed", prs[0].MergeStateStatus, prs[0].AutoMergeRequest)
+	}
+	if armed := prs[1].AutoMergeRequest; armed == nil || armed.method() != "squash" {
+		t.Errorf("PR #250 armed auto-merge = %+v, want squash", armed)
+	}
+}
+
+// Auto-merge is for a PR waiting on its base branch's rules, or on a
+// catch-up with the base. A verdict that allows the merge merges now,
+// and a conflict or a verdict GitHub hasn't computed keeps the plain
+// merge's refusal.
+func TestAutoMergeArms(t *testing.T) {
+	for status, want := range map[string]bool{
+		"BLOCKED": true, "BEHIND": true,
+		"CLEAN": false, "HAS_HOOKS": false, "UNSTABLE": false,
+		"DIRTY": false, "DRAFT": false, "UNKNOWN": false, "": false,
+	} {
+		if got := autoMergeArms(status); got != want {
+			t.Errorf("autoMergeArms(%q) = %v, want %v", status, got, want)
+		}
+	}
+}
+
+// A gh on PATH for a one-PR land on a repo that allows auto-merge: the
+// fox branch's PR #5 is waiting on its checks (BLOCKED), posable as
+// merged through GH_FOX_STATE and as already armed through
+// GH_FOX_AUTO. GH_FOX_AFTER poses the state the read-back after the
+// --auto merge sees. Every invocation is appended to a log.
+func fakeGhAutoMerge(t *testing.T) (log string) {
+	t.Helper()
+	bin := t.TempDir()
+	log = filepath.Join(bin, "gh.log")
+	script := `#!/bin/sh
+echo "$*" >> "$GH_LOG"
+case "$*" in
+  "pr list --state all --head fox --limit 1 --json "*) echo '[{"number":5,"title":"Fox","state":"'"${GH_FOX_STATE:-OPEN}"'","isDraft":false,"url":"u5","baseRefName":"main","headRefName":"fox","mergeStateStatus":"BLOCKED","autoMergeRequest":'"${GH_FOX_AUTO:-null}"'}]';;
+  "api graphql -F number=5 "*) echo '{"data":{"repository":{"pullRequest":{"state":"'"${GH_FOX_AFTER:-OPEN}"'","isInMergeQueue":false,"autoMergeRequest":{"mergeMethod":"SQUASH"}}}}}';;
+  "api graphql "*) echo '{"data":{"repository":{"mergeCommitAllowed":false,"squashMergeAllowed":true,"rebaseMergeAllowed":true,"autoMergeAllowed":true}}}';;
+  "pr merge 5 --auto --squash") ;;
+  *) echo "unexpected gh $*" >&2; exit 1;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("GH_LOG", log)
+	return log
+}
+
+// End to end with a real worktree: landing a PR that is waiting on its
+// checks, on a repo that allows auto-merge, arms auto-merge with the
+// first allowed method and removes nothing. Landing again while it is
+// armed calls no merge at all and still removes nothing. Once GitHub
+// has merged it, land resumes with the cleanup.
+func TestLandArmsAutoMergeAndKeepsTheWorktree(t *testing.T) {
+	root := sandboxDataDir(t)
+	upstream := seedRepo(t, root, "upstream")
+	repo := filepath.Join(root, "repo")
+	mustGit(t, root, "clone", "-q", upstream, repo)
+	proj, err := registerProject(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := createWorktree(proj, "fox", "fox", "main", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitEmpty(t, w.Path, "fox")
+	log := fakeGhAutoMerge(t)
+	ctx := resolveContext(proj.Path, []project{proj})
+
+	land := func() {
+		t.Helper()
+		if code, err := cmdLand(ctx, []string{"fox"}); err != nil || code != 0 {
+			t.Fatalf("land = %d, %v", code, err)
+		}
+	}
+	mergeCalls := func() []string {
+		var calls []string
+		for _, call := range ghCalls(t, log) {
+			if strings.HasPrefix(call, "pr merge ") {
+				calls = append(calls, call)
+			}
+		}
+		return calls
+	}
+	foxSurvives := func() bool {
+		identities, err := listWorktreeIdentitiesUncached(proj)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, ok := checkoutOn(identities, "fox")
+		return ok
+	}
+
+	land()
+	if got := mergeCalls(); strings.Join(got, ";") != "pr merge 5 --auto --squash" {
+		t.Errorf("gh merge calls = %q, want the one --auto merge", got)
+	}
+	if !foxSurvives() {
+		t.Fatal("the worktree was removed while its PR is still open")
+	}
+
+	t.Setenv("GH_FOX_AUTO", `{"mergeMethod":"SQUASH"}`)
+	land()
+	if got := mergeCalls(); len(got) != 1 {
+		t.Errorf("landing an armed PR merged again: %q", got)
+	}
+	if !foxSurvives() {
+		t.Fatal("the worktree was removed while auto-merge is still pending")
+	}
+
+	t.Setenv("GH_FOX_STATE", "MERGED")
+	land()
+	if foxSurvives() {
+		t.Error("the worktree survived the land of its merged PR")
+	}
+	if got := mergeCalls(); len(got) != 1 {
+		t.Errorf("landing a merged PR merged again: %q", got)
+	}
+}
+
+// The verdict can flip between the lookup and the merge, and gh's
+// --auto then merges at once. The read-back after it is what tells
+// land so, and land goes on to the cleanup instead of reporting an
+// armed auto-merge on a PR that has landed.
+func TestLandReadsBackAnAutoMergeThatMergedAtOnce(t *testing.T) {
+	root := sandboxDataDir(t)
+	upstream := seedRepo(t, root, "upstream")
+	repo := filepath.Join(root, "repo")
+	mustGit(t, root, "clone", "-q", upstream, repo)
+	proj, err := registerProject(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, err := createWorktree(proj, "fox", "fox", "main", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commitEmpty(t, w.Path, "fox")
+	log := fakeGhAutoMerge(t)
+	t.Setenv("GH_FOX_AFTER", "MERGED")
+	ctx := resolveContext(proj.Path, []project{proj})
+
+	if code, err := cmdLand(ctx, []string{"fox"}); err != nil || code != 0 {
+		t.Fatalf("land = %d, %v", code, err)
+	}
+	if !slices.Contains(ghCalls(t, log), "pr merge 5 --auto --squash") {
+		t.Errorf("gh calls = %q, want the --auto merge among them", ghCalls(t, log))
+	}
+	identities, err := listWorktreeIdentitiesUncached(proj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := checkoutOn(identities, "fox"); ok {
+		t.Error("the worktree survived a land whose --auto merge landed at once")
 	}
 }
 

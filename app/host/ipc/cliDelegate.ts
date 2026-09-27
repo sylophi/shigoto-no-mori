@@ -25,6 +25,9 @@ import {
   type GlobalConfig,
   LauncherEntrySchema,
   type LauncherEntry,
+  type MergeOutcome,
+  MergeOutcomeSchema,
+  type MergePullRequestResult,
   type PackageScriptsDoc,
   PackageScriptsDocSchema,
   type Project,
@@ -492,7 +495,7 @@ export async function mergeViaCli(
   number: number,
   method: string,
   options: { stack?: boolean } = {},
-): Promise<void> {
+): Promise<MergePullRequestResult> {
   const args = [
     "merge",
     "--project-id",
@@ -504,7 +507,18 @@ export async function mergeViaCli(
   ];
   if (options.stack) args.push("--stack");
   const result = await runner().runCli(args);
-  finalOkDoc(result, "sm merge failed", { projectId: project.id });
+  const final = finalOkDoc(result, "sm merge failed", {
+    projectId: project.id,
+  });
+  return { outcome: mergeOutcomeOf(final) };
+}
+
+// The CLI spells the outcome the way MergeOutcomeSchema does
+// (cli/cmd_merge.go mergeOutcome.addTo). A document without one (a
+// stack merge's) landed.
+function mergeOutcomeOf(doc: CliDoc): MergeOutcome {
+  const parsed = MergeOutcomeSchema.safeParse(doc["outcome"]);
+  return parsed.success ? parsed.data : "merged";
 }
 
 export async function setShelvedViaCli(

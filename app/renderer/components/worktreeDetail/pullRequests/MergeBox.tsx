@@ -39,11 +39,13 @@ export function MergeBox({
   const {
     merge,
     setDraft,
+    disableAutoMerge,
     armed,
     trigger,
     primary,
     activeMethod,
-    mergeState,
+    mode,
+    status,
     disabled,
     others,
     blocked,
@@ -56,6 +58,7 @@ export function MergeBox({
     pickMethod,
     pickReach,
     toggleDraft,
+    runDisableAutoMerge,
   } = useMergeBox({ worktree, pr, repoConfig, lastMergeMethod, stack });
 
   // The merge verdict (or why there's no merge button) with the checks
@@ -64,8 +67,8 @@ export function MergeBox({
     <div className="inline-flex flex-wrap items-center gap-x-3 gap-y-2">
       {primary && activeMethod ? (
         <span className="inline-flex items-center gap-2 text-sm">
-          <MergeStateIcon tone={mergeState.tone} />
-          <span className={TONE_TEXT[mergeState.tone]}>{mergeState.label}</span>
+          <MergeStateIcon tone={status.tone} />
+          <span className={TONE_TEXT[status.tone]}>{status.label}</span>
         </span>
       ) : (
         <p className="inline-flex items-center gap-2 text-sm text-muted-foreground">
@@ -78,6 +81,28 @@ export function MergeBox({
   );
 
   if (!primary || !activeMethod) return statusLine;
+
+  // Auto-merge is armed: GitHub merges the PR the moment its
+  // requirements are met, so the one thing left to offer is calling
+  // that off. Reversible, so no two-step confirm.
+  const disableButton = (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      disabled={disableAutoMerge.isPending}
+      onClick={runDisableAutoMerge}
+    >
+      {disableAutoMerge.isPending ? (
+        <>
+          <Loader2 aria-hidden className="size-3.5 animate-spin" />
+          Disabling…
+        </>
+      ) : (
+        "Disable auto-merge"
+      )}
+    </Button>
+  );
 
   const mergeButton = (
     <Button
@@ -141,7 +166,9 @@ export function MergeBox({
             />
           )}
           <div className="inline-flex items-stretch">
-            {blocked ? (
+            {mode === "armed" ? (
+              disableButton
+            ) : blocked ? (
               <SimpleTooltip tip={blocked}>{mergeButton}</SimpleTooltip>
             ) : (
               mergeButton
@@ -180,7 +207,17 @@ export function MergeBox({
       {merge.error && (
         <ErrorBanner
           message={merge.error.message}
-          title="Couldn't merge the pull request"
+          title={
+            mode === "arm"
+              ? "Couldn't enable auto-merge"
+              : "Couldn't merge the pull request"
+          }
+        />
+      )}
+      {disableAutoMerge.error && (
+        <ErrorBanner
+          message={disableAutoMerge.error.message}
+          title="Couldn't disable auto-merge"
         />
       )}
       {setDraft.error && (

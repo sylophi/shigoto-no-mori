@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { broadcast, defineContract, invoke } from "@shared/ipc/contract";
 import {
+  DisablePullRequestAutoMergePayloadSchema,
   GithubCliPullRequestDiffPayloadSchema,
   GithubCliReadinessSchema,
   GithubCliWorktreePullRequestPayloadSchema,
   MergePullRequestPayloadSchema,
+  MergePullRequestResultSchema,
   ProjectScopedPayloadSchema,
   PullRequestCandidateListSchema,
   PullRequestCheckoutRefSchema,
@@ -59,7 +61,7 @@ export const githubCliContract = defineContract("host", {
   mergePullRequest: invoke(
     "githubCli:mergePullRequest",
     MergePullRequestPayloadSchema,
-    z.void(),
+    MergePullRequestResultSchema,
     { tracksProjectUsage: true, remote: true, gated: true },
   ),
   pullRequestDiff: invoke(
@@ -71,6 +73,13 @@ export const githubCliContract = defineContract("host", {
   setPullRequestDraft: invoke(
     "githubCli:setPullRequestDraft",
     SetPullRequestDraftPayloadSchema,
+    z.void(),
+    { tracksProjectUsage: true, remote: true, gated: true },
+  ),
+  // Turns an armed auto-merge off, so the PR waits for a person again.
+  disablePullRequestAutoMerge: invoke(
+    "githubCli:disablePullRequestAutoMerge",
+    DisablePullRequestAutoMergePayloadSchema,
     z.void(),
     { tracksProjectUsage: true, remote: true, gated: true },
   ),

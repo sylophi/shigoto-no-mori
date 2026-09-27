@@ -38,7 +38,7 @@ Poses ride the URL:
   `?to=/devices/dev_8f3ac2e1/projects/p_sm/worktrees/wt_sm_hum`), with
   the merge state GitHub would pair with it. Variants are the keys of
   `LAB_CHECK_POSES` in `pullRequestFixtures.ts`: `none`, `single-passed`,
-  `single-failing`, `passed`, `passed-some-skipped`, `all-skipped`,
+  `single-failing`, `passed`, `passed-some-skipped`, `all-skipped`, `auto-merge`,
   `pending`, `failing`, `failing-blocked`, `failing-and-pending`,
   `many`. Absent, it keeps two passing checks.
 - Desktop: `?to=/devices` navigates the memory router after mount. Web:
