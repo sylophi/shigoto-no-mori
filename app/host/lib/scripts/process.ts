@@ -134,8 +134,7 @@ async function listDescendantPids(rootPid: number): Promise<number[]> {
   const out: number[] = [];
   const stack: number[] = [rootPid];
   const seen = new Set<number>([rootPid]);
-  while (stack.length > 0) {
-    const cur = stack.pop()!;
+  for (let cur = stack.pop(); cur !== undefined; cur = stack.pop()) {
     const kids = byParent.get(cur);
     if (!kids) continue;
     for (const k of kids) {

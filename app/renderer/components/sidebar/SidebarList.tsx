@@ -35,9 +35,9 @@ function matchWorktreeDetail(pathname: string): {
   const match = matchRoutePath(WORKTREE_ROUTE_PATHS.detail, pathname);
   if (!match) return null;
   return {
-    deviceId: rowDeviceId(match.deviceId!),
-    projectId: match.projectId!,
-    worktreeId: match.worktreeId!,
+    deviceId: rowDeviceId(match.deviceId),
+    projectId: match.projectId,
+    worktreeId: match.worktreeId,
   };
 }
 

@@ -101,8 +101,8 @@ export function bootApp({
     const params = router.state.matches.at(-1)?.params as
       | { deviceId?: string; worktreeId?: string }
       | undefined;
-    return params?.worktreeId
-      ? { deviceId: params.deviceId!, worktreeId: params.worktreeId }
+    return params?.worktreeId && params.deviceId
+      ? { deviceId: params.deviceId, worktreeId: params.worktreeId }
       : null;
   };
   let shown = worktreeShown();

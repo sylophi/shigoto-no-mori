@@ -76,7 +76,7 @@ function planFor(
   }
   const draft = set.find((entry) => entry.pr.isDraft);
   return {
-    number: stack.entries[target]!.pr.number,
+    number: stack.entries[target].pr.number,
     count: set.length,
     blocked: draft
       ? draft.pr.number === pr.number

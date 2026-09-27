@@ -40,7 +40,7 @@ function toHex(color: string): string {
   scratch.fillRect(0, 0, 1, 1);
   const [r, g, b, a] = scratch.getImageData(0, 0, 1, 1).data;
   const parts = a === 255 ? [r, g, b] : [r, g, b, a];
-  return `#${parts.map((v) => v!.toString(16).padStart(2, "0")).join("")}`;
+  return `#${parts.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 }
 
 export function readTerminalTheme(host: HTMLElement): ITheme {
@@ -56,7 +56,7 @@ export function readTerminalTheme(host: HTMLElement): ITheme {
   ];
   for (const base of ANSI_BASES) {
     const bright =
-      `bright${base[0]!.toUpperCase()}${base.slice(1)}` as `bright${Capitalize<AnsiBase>}`;
+      `bright${base[0].toUpperCase()}${base.slice(1)}` as `bright${Capitalize<AnsiBase>}`;
     entries.push([base, `var(--ansi-${base})`]);
     entries.push([bright, `var(--ansi-bright-${base})`]);
   }
@@ -73,7 +73,7 @@ export function readTerminalTheme(host: HTMLElement): ITheme {
   host.append(fragment);
   const theme: ITheme = {};
   entries.forEach(([key], i) => {
-    theme[key] = toHex(getComputedStyle(probes[i]!).color);
+    theme[key] = toHex(getComputedStyle(probes[i]).color);
   });
   for (const probe of probes) probe.remove();
   return theme;

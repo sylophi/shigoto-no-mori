@@ -63,7 +63,7 @@ const TABS: readonly Tab[] = [
 // The forest tab a view lives on: where a page stacked over the forest
 // returns to, and what lights while it is open.
 export function forestTabFor(view: SidebarView): Tab {
-  return TABS.find((tab) => tab.pathname === `/forest/${view}`) ?? TABS[0]!;
+  return TABS.find((tab) => tab.pathname === `/forest/${view}`) ?? TABS[0];
 }
 
 // Whether a path is one of the tab pages themselves (or the dispatcher

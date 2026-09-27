@@ -402,7 +402,7 @@ export class ScriptRunsStore {
     if (log.bytes > MAX_OUTPUT_BYTES) {
       let drop = 0;
       while (log.bytes > MAX_OUTPUT_BYTES && drop < log.chunks.length - 1) {
-        log.bytes -= log.chunks[drop]!.length;
+        log.bytes -= log.chunks[drop].length;
         drop++;
       }
       log.chunks.splice(0, drop);

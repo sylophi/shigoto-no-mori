@@ -93,7 +93,9 @@ function Panel({ dark }: { dark: boolean }) {
   );
 }
 
-createRoot(document.getElementById("root")!).render(
+const root = document.getElementById("root");
+if (root === null) throw new Error("[lab] the sheet has no #root");
+createRoot(root).render(
   <QueryClientProvider client={new QueryClient()}>
     <main className="flex flex-col gap-4 bg-muted p-4">
       {!labHasVillagerData && (

@@ -307,21 +307,28 @@ for (const slug of Object.keys(OVERRIDES)) {
 }
 process.stderr.write(`Resolving faces for ${bySlug.size} characters\n`);
 const tries = new Map(
-  [...bySlug].map(([slug, character]) => [slug, faceCandidates(character)]),
+  [...bySlug].map(([slug, character]) => [
+    slug,
+    { page: character.page, titles: faceCandidates(character) },
+  ]),
 );
-const found = await resolveFaces([...new Set([...tries.values()].flat())]);
+const found = await resolveFaces([
+  ...new Set([...tries.values()].flatMap((t) => t.titles)),
+]);
 const withFace: Record<string, { page: string; icon: Icon }> = {};
 const missing: string[] = [];
-for (const [slug, titles] of tries) {
-  const file = titles.find((title) => found.has(title));
-  if (file === undefined) {
+for (const [slug, { page, titles }] of tries) {
+  const icon = titles
+    .map((title) => found.get(title))
+    .find((entry): entry is Icon => entry !== undefined);
+  if (icon === undefined) {
     if (slug in OVERRIDES) {
       throw new Error(`${slug}: ${OVERRIDES[slug]} is gone or resized`);
     }
     missing.push(slug);
     continue;
   }
-  withFace[slug] = { page: bySlug.get(slug)!.page, icon: found.get(file)! };
+  withFace[slug] = { page, icon };
 }
 const names = Object.keys(withFace);
 

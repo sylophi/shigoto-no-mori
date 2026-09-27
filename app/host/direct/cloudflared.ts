@@ -580,19 +580,22 @@ export function createCloudflaredRunner(
     }
     await reapStaleOnce();
     if (stopped || wantedPort !== port) return;
-    const reusable =
-      lastProvision !== null && lastProvision.port === port && lastChildReady;
-    if (!reusable) {
+    let provision: typeof lastProvision =
+      lastProvision !== null && lastProvision.port === port && lastChildReady
+        ? lastProvision
+        : null;
+    if (provision === null) {
       const provisioned = await deps.provision(port);
       if (stopped || wantedPort !== port) return;
-      lastProvision = {
+      provision = {
         port,
         hostname: provisioned.hostname,
         connectorToken: provisioned.connectorToken,
         dnsCreated: provisioned.dnsCreated === true,
       };
+      lastProvision = provision;
     }
-    const { hostname, connectorToken, dnsCreated } = lastProvision!;
+    const { hostname, connectorToken, dnsCreated } = provision;
     const next = spawnTunnel(binaryPath, connectorToken);
     child = next;
     spawnedAt = clock.now();
