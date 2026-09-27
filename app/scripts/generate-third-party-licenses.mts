@@ -179,8 +179,7 @@ async function goModuleEntries(moduleDir: string): Promise<LicenseEntry[]> {
               ? "UNKNOWN"
               : identifyLicense(licenseText) || "UNKNOWN",
           repository: repositoryOf(path),
-          // Relative to the module cache root, like license-checker's
-          // relative paths for npm packages, never a machine path.
+          // Relative to the module cache root, never a machine path.
           licenseFile:
             licenseFile === null
               ? ""
@@ -214,7 +213,12 @@ function normalizeEntry([key, value]: [string, LicenseInfo]): LicenseEntry {
     repository: value.repository || "",
     publisher: value.publisher || "",
     url: value.url || "",
-    licenseFile: value.licenseFile || "",
+    // Kept relative to the package itself. When one name@version is
+    // installed under several parents (node_modules/connect/node_modules/
+    // debug and node_modules/lighthouse-logger/node_modules/debug),
+    // license-checker reports whichever copy it reached last, and that
+    // differs between checkouts of the same lockfile.
+    licenseFile: (value.licenseFile || "").replace(/^.*node_modules\//, ""),
     licenseText: (value.licenseText || "").trim(),
     copyright: value.copyright || "",
   };
@@ -354,11 +358,37 @@ async function main() {
     if (CHECK) return;
   }
 
+  const outputs: [string, string][] = [
+    [JSON_OUT, JSON.stringify(entries, null, 2) + "\n"],
+    [TEXT_OUT, renderText(entries)],
+  ];
+
+  // Check compares instead of writing: the packaging hook regenerates
+  // these, so a stale committed copy would ship as a "-dirty" build.
+  if (CHECK) {
+    const stale = (
+      await Promise.all(
+        outputs.map(async ([file, content]) =>
+          (await readFile(file, "utf8").catch(() => null)) === content
+            ? null
+            : relative(appRoot, file),
+        ),
+      )
+    ).filter((file) => file !== null);
+    if (stale.length > 0) {
+      console.error(
+        `[licenses] out of date: ${stale.join(", ")}. ` +
+          "Run `pnpm run licenses` and commit the result.",
+      );
+      process.exitCode = 1;
+    } else {
+      console.log(`[licenses] ${entries.length} notices are up to date`);
+    }
+    return;
+  }
+
   await mkdir(OUT_DIR, { recursive: true });
-  await Promise.all([
-    writeFile(JSON_OUT, JSON.stringify(entries, null, 2) + "\n"),
-    writeFile(TEXT_OUT, renderText(entries)),
-  ]);
+  await Promise.all(outputs.map(([file, content]) => writeFile(file, content)));
 
   console.log(
     `[licenses] wrote ${entries.length} production dependency notices to ` +
