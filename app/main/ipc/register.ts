@@ -46,6 +46,7 @@ import {
 import { createConnectTicketStore } from "@host/direct/tickets";
 import { createHubConnection } from "@host/hub/connection";
 import { createWsServerBinding } from "@host/socket/server";
+import { mirrorInviteAdmits } from "@host/mirror/invites";
 import { dataDir } from "@host/lib/util/paths";
 import { CONTROL_FILE_NAME, createControlServer } from "../core/control/server";
 import { makeConnectInfo } from "@host/direct/connectInfo";
@@ -138,6 +139,8 @@ const directWsServer = createWsServerBinding({
   matchTicket: (deviceId, arrivedAs, matches) =>
     directTickets.consumeProven(deviceId, arrivedAs, matches),
   isCommandGranted: acceptsPeerCommands,
+  // The switch's one exception: the mirrors this device asked for.
+  isInvited: mirrorInviteAdmits,
 });
 
 // The tunnel endpoint: a supervised cloudflared

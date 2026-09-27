@@ -27,7 +27,7 @@ import {
   MirrorWorktreePayloadSchema,
   mirrorContract,
 } from "@shared/ipc/modules/mirror";
-import { errorMessageOf, logFailure } from "@shared/errors";
+import { errorMessageOf, isEntityGoneError, logFailure } from "@shared/errors";
 import type { ContractModule } from "@shared/ipc/contract";
 import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
 import { portForwardContract } from "@shared/ipc/modules/portForward";
@@ -72,6 +72,12 @@ import {
   isOrphanedTransfer,
   mirrorSessions,
 } from "@host/mirror/registry";
+import {
+  MirrorInviteSchema,
+  reconcileMirrorInvites,
+  setMirrorInviteStore,
+} from "@host/mirror/invites";
+import { findProjectAndWorktreeOrThrow } from "@host/lib/projects";
 import { packageScriptsHandlers } from "@host/ipc/modules/packageScripts";
 import {
   portForwardHandlers,
@@ -178,9 +184,12 @@ const peerSyncClient = (deviceId: string) => ({
   ...buildClient(syncContract, peerTransportFor(deviceId)),
   channels: () => hubHandlers.peerChannels(deviceId),
 });
+// A peer's mirror surface: the gateway's stream open, the follower's
+// git half and the start asked from the copy's side all ride it.
+const peerMirrorClient = peerClient(mirrorContract);
 
 const mirrorGateway = createMirrorGateway({
-  peerApiFor: peerClient(mirrorContract),
+  peerApiFor: peerMirrorClient,
   peerChannelsFor: (deviceId) => () => hubHandlers.peerChannels(deviceId),
 });
 // The daemon snapshots on every cycle of every session and the
@@ -212,6 +221,11 @@ const GitFollowStoreSchema = z.object({
 const mirrorHistoryPath = () => join(fileSyncDir(), "mirror-history.json");
 const MirrorHistoryStoreSchema = z.object({
   events: z.record(z.string(), z.array(MirrorEventSchema)).default({}),
+});
+// The mirrors this device invited (host/mirror/invites.ts), beside them.
+const mirrorInvitesPath = () => join(fileSyncDir(), "mirror-invites.json");
+const MirrorInviteStoreSchema = z.object({
+  invites: z.array(MirrorInviteSchema).default([]),
 });
 const mirrorHistory = createMirrorHistory({
   store: {
@@ -327,7 +341,7 @@ function teardownStep(what: string, run: () => unknown): Promise<void> {
 const gitFollower = createGitFollower({
   sessions: liveMirrorSessions,
   peerSyncApiFor: peerSyncClient,
-  peerMirrorApiFor: peerClient(mirrorContract),
+  peerMirrorApiFor: peerMirrorClient,
   // The states both sides last agreed on, beside the engine's own
   // data so a restart resumes the follow rule rather than falling
   // back to ancestry.
@@ -496,7 +510,29 @@ export function registerIpcHandlers(): void {
   setPeerSyncApiImpl({
     syncApiFor: peerSyncClient,
     worktreesApiFor: peerClient(worktreesContract),
+    mirrorApiFor: peerMirrorClient,
+    thisDeviceId: getDeviceId,
   });
+  // The mirrors this device asked peers for (host/mirror/invites.ts),
+  // which its switch does not gate: one file beside the follower's.
+  setMirrorInviteStore({
+    load: () =>
+      readJsonOrNullSync(mirrorInvitesPath(), MirrorInviteStoreSchema)
+        ?.invites ?? [],
+    save: (invites) =>
+      atomicWriteJsonSync(mirrorInvitesPath(), withSchemaVersion({ invites })),
+  });
+  // A copy removed while the app was closed took no invitation with
+  // it, so the boot checks the landed ones against the worktrees
+  // listed.
+  void reconcileMirrorInvites(({ projectId, worktreeId }) =>
+    findProjectAndWorktreeOrThrow(projectId, worktreeId).then(
+      () => true,
+      // Only a worktree known to be gone loses its invitation. A read
+      // that failed for any other reason keeps it.
+      (error: unknown) => !isEntityGoneError(error),
+    ),
+  );
   // The port-forward engine's peer reach, riding the same
   // peerTransportFor as the sync wiring above and for the same reason:
   // a second session would supersede the one the renderer's
@@ -631,8 +667,6 @@ export function registerIpcHandlers(): void {
   // the one cached session per peer everything else rides.
   setControlImpl({
     listDevices: async () => accountHandlers.listDevices(undefined, undefined),
-    thisDeviceId: getDeviceId,
-    acceptsCommands: acceptsPeerCommands,
     directPeers: async () =>
       (await hubHandlers.status(undefined, undefined)).peerAcceptsCommands,
     peerTransportFor,

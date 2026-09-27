@@ -25,6 +25,7 @@ import {
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { errorMessageOf, logFailure } from "@shared/errors";
+import { landInvitedMirror } from "@host/mirror/invites";
 import {
   pullBranchCollision,
   pullFolderCollision,
@@ -210,6 +211,13 @@ export const syncHandlers: Handlers<typeof syncContract, HandlerContext> = {
           // A cancel the landing's last step outran: the sender has
           // already given up on this answer, so the copy goes here.
           await rollBackIfCancelled(signal, landed.worktree);
+          // A landing this device asked for (a mirror invited from
+          // here, host/mirror/invites.ts): the invitation moves onto
+          // the copy before the peer's next call names it.
+          landInvitedMirror(ctx.callerDeviceId, landing.sourceWorktreeId, {
+            projectId: landed.worktree.projectId,
+            worktreeId: landed.worktree.id,
+          });
           return { ...landed, receipt };
         },
         signal,

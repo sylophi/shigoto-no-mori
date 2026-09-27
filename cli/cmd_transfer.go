@@ -14,7 +14,8 @@ package main
 // from the app's "Transplant to…" are the same run. A mirror always
 // runs on the device holding the original: --to runs it here, --from
 // asks the other device to run it and send the copy here, which takes
-// both devices accepting commands. Names resolve the
+// that device accepting commands (this one asked, so its own switch
+// is not in the way). Names resolve the
 // way a person says them: a device by its name, a peer's worktree by
 // its folder name or branch. With one device that qualifies, --to can
 // be left off. A send (or mirror --to) onto a device with no checkout

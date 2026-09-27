@@ -15,12 +15,14 @@
 // opens between the two worktrees, with almost nothing left to move.
 // The session always runs HERE, on the device holding the original,
 // whichever device asked for it (the copy's device asks over the
-// grant): it reaches the copy's `file-sync serve` and git state
-// through the peer's grant (openStream, gitState, applyGitState),
-// which is the grant the send already needed. So a stop always
-// removes the peer's worktree. The copy's root path is read off the
-// peer's own landing answer over the grant-gated wire, never taken
-// from the caller.
+// grant, startFrom below): it reaches the copy's `file-sync serve`
+// and git state through the peer's grant (openStream, gitState,
+// applyGitState), which is the grant the send already needed, or
+// through the invitation the copy's device left when it asked
+// (host/mirror/invites.ts), which admits exactly those calls. So a
+// stop always removes the peer's worktree. The copy's root path is
+// read off the peer's own landing answer over the grant-gated wire,
+// never taken from the caller.
 //
 // A primary checkout is mirrored the same way, its copy on
 // mirror/<branch> in a mirror-<name> folder (shared/git/branches.ts),
@@ -37,17 +39,27 @@ import {
   type MirrorServing,
   type MirrorSession,
   MirrorSessionSchema,
+  type MirrorStartFromPayload,
   type MirrorStartToPayloadSchema,
+  MirrorStartToResultSchema,
   mirrorContract,
   mirrorStopIsSafe,
   summarizeIgnores,
 } from "@shared/ipc/modules/mirror";
+import { SyncPullProgressSchema, syncContract } from "@shared/ipc/modules/sync";
 import { DeleteWorktreeResultSchema } from "@shared/schemas";
 import type { HandlerContext } from "@shared/ipc/transport";
 import type { Handlers } from "@shared/ipc/types";
 import { errorMessageOf } from "@shared/errors";
 import { spawnFileSync } from "@host/fileSync/spawn";
-import { peerWorktreesApiFor } from "@host/ipc/peerSync";
+import {
+  peerMirrorApiFor,
+  peerSyncApiFor,
+  peerWorktreesApiFor,
+  thisDeviceId,
+} from "@host/ipc/peerSync";
+import { inviteMirror } from "@host/mirror/invites";
+import { onAbort } from "@host/lib/util/abort";
 import {
   findProjectAndWorktreeOrThrow,
   findWorktreePathOrThrow,
@@ -299,6 +311,73 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
       );
       return { ...sent, session };
     });
+  },
+
+  // The ask from the copy's side. The session runs on the peer, which
+  // holds the original: this device invites the mirror (invites.ts),
+  // then asks the peer's startTo towards here, and the peer's send,
+  // stream and git half land through that invitation whatever this
+  // device's switch says. The peer's progress comes back as its
+  // pushes, keyed by its worktree, and is relayed to the caller. The
+  // caller going away (a closed window or CLI socket aborts the
+  // context) cancels the start on the peer, the way the dialog's
+  // cancel does: the peer's send stops and the copy it made here goes.
+  // A start that fails withdraws the invitation: the peer's rollback
+  // already removed whatever landed under it.
+  startFrom: async (input: MirrorStartFromPayload, ctx) => {
+    const {
+      sourceDeviceId,
+      sourceProjectId: projectId,
+      sourceWorktreeId: worktreeId,
+      sourceIdentity: identity,
+      ...rule
+    } = input;
+    const peerSync = peerSyncApiFor(sourceDeviceId);
+    const notify = ctx.notifier(syncContract, "pullProgress");
+    const stopRelay = peerSync.pullProgress((frame) => {
+      const parsed = SyncPullProgressSchema.safeParse(frame);
+      if (parsed.success && parsed.data.sourceWorktreeId === worktreeId) {
+        notify(parsed.data);
+      }
+    });
+    try {
+      // A move like the others (runMove), so the dialog's and the
+      // CLI's cancel (sync:cancelMove, by the source worktree) and a
+      // caller going away both reach it, and are forwarded to the peer
+      // running the send. The invitation is made inside, once the move
+      // holds its key: a second ask for the same worktree is refused
+      // without touching the first's.
+      return await runMove(ctx, worktreeId, async (signal) => {
+        const invite = inviteMirror({
+          peerDeviceId: sourceDeviceId,
+          sourceWorktreeId: worktreeId,
+          identity,
+          cloneInto: rule.cloneInto,
+        });
+        const offCancel = onAbort(signal, () => {
+          void peerSync
+            .cancelMove({ sourceWorktreeId: worktreeId })
+            .catch(() => {});
+        });
+        try {
+          return MirrorStartToResultSchema.parse(
+            await peerMirrorApiFor(sourceDeviceId).startTo({
+              targetDeviceId: thisDeviceId(),
+              projectId,
+              worktreeId,
+              ...rule,
+            }),
+          );
+        } catch (error) {
+          invite.withdraw();
+          throw error;
+        } finally {
+          offCancel();
+        }
+      });
+    } finally {
+      stopRelay();
+    }
   },
 
   // Stop ends the session and removes the copy the mirror made: the

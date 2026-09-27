@@ -123,7 +123,7 @@ pre-commit:
           # transfer cleanup, and the coded corrupted-bundle error. Gated to
           # the sync surface plus the CLI engine it shells.
           - name: sync-transfer
-            glob: "{cli/**,app/shared/ipc/modules/sync.ts,app/shared/ipc/modules/worktrees.ts,app/shared/ipc/hexId.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/shared/ipc/socket/frames.ts,app/shared/hub/protocol.ts,app/host/ipc/modules/sync.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/peerSync.ts,app/host/ipc/cliDelegate.ts,app/host/hub/**,app/host/lib/sync/**,app/host/lib/hexId.ts,app/shared/ipc/socket/channels.ts,app/host/socket/channelStreams.ts,app/host/lib/git/**,app/host/lib/scripts/**,app/host/lib/util/paths.ts,app/shared/schemas/worktree.ts,app/shared/schemas/project.ts,app/test/sync-transfer.mts,app/host/socket/rawData.ts,app/test/lib/hubStub.mts,app/test/lib/hubBoot.mts,app/test/lib/checkKit.mts,app/test/lib/directBoot.mts,app/host/lib/projects/**,app/test/lib/cliSandbox.mts,app/test/lib/smBinary.mts}"
+            glob: "{cli/**,app/shared/ipc/modules/sync.ts,app/shared/ipc/modules/worktrees.ts,app/shared/ipc/hexId.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/shared/ipc/socket/frames.ts,app/shared/hub/protocol.ts,app/host/ipc/modules/sync.ts,app/host/mirror/invites.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/peerSync.ts,app/host/ipc/cliDelegate.ts,app/host/hub/**,app/host/lib/sync/**,app/host/lib/hexId.ts,app/shared/ipc/socket/channels.ts,app/host/socket/channelStreams.ts,app/host/lib/git/**,app/host/lib/scripts/**,app/host/lib/util/paths.ts,app/shared/schemas/worktree.ts,app/shared/schemas/project.ts,app/test/sync-transfer.mts,app/host/socket/rawData.ts,app/test/lib/hubStub.mts,app/test/lib/hubBoot.mts,app/test/lib/checkKit.mts,app/test/lib/directBoot.mts,app/host/lib/projects/**,app/test/lib/cliSandbox.mts,app/test/lib/smBinary.mts}"
             run: pnpm -C app test sync-transfer
           # End-to-end proof for the CLI's cross-device verbs: the real sm
           # binary finds the real control server through control.json in a
@@ -313,6 +313,12 @@ pre-commit:
           - name: mirror-ignores
             glob: "{app/shared/mirrorIgnores.ts,app/test/mirror-ignores.mts,app/test/lib/checkKit.mts}"
             run: pnpm -C app test mirror-ignores
+          # The mirror invitations (host/mirror/invites.ts): what an ask
+          # admits past the command-access switch, pending and landed, and
+          # what ends it.
+          - name: mirror-invites
+            glob: "{app/host/mirror/invites.ts,app/shared/ipc/modules/mirror.ts,app/shared/ipc/modules/sync.ts,app/shared/ipc/modules/worktrees.ts,app/test/mirror-invites.mts,app/test/lib/checkKit.mts}"
+            run: pnpm -C app test mirror-invites
           # Drives auto-pull against a REAL repository with a remote: a clean,
           # strictly-behind worktree fast-forwards, and every state that would
           # make the pull anything else (a local commit, a modified or

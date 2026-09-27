@@ -21,6 +21,10 @@ import {
 } from "@shared/ipc/modules/mirror";
 import { errorMessageOf } from "@shared/errors";
 import { implSlot } from "@host/lib/util/implSlot";
+import {
+  dropMirrorInvitesWithPeers,
+  forgetMirrorInvitesOf,
+} from "@host/mirror/invites";
 
 // The label keys the start orchestration writes on a session, lifted
 // back out for the renderer by annotate below. Labels are the one
@@ -228,9 +232,12 @@ export function findSession(
 //
 // A session that refuses to stop is logged, not thrown: the delete is
 // what was asked for, and a stuck mirror must not be what blocks it.
+// A copy a peer mirrored into here takes its invitation with it
+// (invites.ts), daemon or no daemon.
 export async function stopMirrorsForWorktree(
   localWorktreeId: string,
 ): Promise<void> {
+  forgetMirrorInvitesOf(localWorktreeId);
   const daemon = engineOrNull();
   // Unwired (a check, a surface that never mounts the daemon) there is
   // nothing mirroring anything.
@@ -262,11 +269,14 @@ export async function stopMirrorsForWorktree(
 // stopMirrorsForWorktree. With `transfers`, the one-shot transfer
 // sessions with such a peer go too: their tokens stay live, so the
 // orphan reaper never would, and their wait then fails the transfer.
+// The invitations such peers held go too (invites.ts), daemon or no
+// daemon.
 export async function endMirrorsWithPeers(
   stillOnAccount: (deviceId: string) => boolean,
   detail: string,
   opts: { transfers?: boolean } = {},
 ): Promise<void> {
+  dropMirrorInvitesWithPeers(stillOnAccount);
   const daemon = engineOrNull();
   if (daemon === null) return;
   const candidates = opts.transfers

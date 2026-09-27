@@ -2,12 +2,14 @@
 // (shared/ipc/modules/control.ts says why they live in the app). Each
 // op resolves what the caller named the way the dialogs do, then hands
 // the run to the SAME orchestrator a dialog calls (sync:sendWorktree,
-// sync:pullWorktree, mirror:startTo, mirror:stop) with the caller's
-// context, so progress streams back down the control wire and a closed
-// socket aborts like a closed window. A mirror runs on the device
-// holding the original, so `mirror --from` asks the peer to run its
-// mirror:startTo into this device, and relays the peer's progress.
-// Nothing here moves a byte or touches git itself.
+// sync:pullWorktree, mirror:startTo, mirror:startFrom, mirror:stop)
+// with the caller's context, so progress streams back down the control
+// wire and a closed socket aborts like a closed window. A mirror runs
+// on the device holding the original, so `mirror --from` is the
+// mirror:startFrom the "Mirror here" dialog runs: it invites the
+// mirror, asks the peer to run its mirror:startTo into this device,
+// and relays the peer's progress. Nothing here moves a byte or touches
+// git itself.
 import { only } from "@shared/util/only";
 import { homedir } from "node:os";
 import { buildClient } from "@shared/ipc/buildClient";
@@ -24,16 +26,10 @@ import {
   isMirrorCopyStayed,
   isMirrorStopUnconfirmed,
   mirrorContract,
-  type MirrorStartToPayload,
-  MirrorStartToResultSchema,
 } from "@shared/ipc/modules/mirror";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
-import {
-  type SyncCloneInto,
-  SyncPullProgressSchema,
-  syncContract,
-} from "@shared/ipc/modules/sync";
+import type { SyncCloneInto } from "@shared/ipc/modules/sync";
 import { cloneIntoOf, moveCloneParent } from "@shared/cloneDestination";
 import { tildify } from "@shared/projectPaths";
 import type { ClientTransport, HandlerContext } from "@shared/ipc/transport";
@@ -69,6 +65,7 @@ import {
   peerSyncApiFor,
   peerWorktreeOrUndefined,
   peerWorktreesApiFor,
+  thisDeviceId,
 } from "@host/ipc/peerSync";
 import { getRepoIdentity } from "@host/lib/git/repoIdentity";
 import {
@@ -79,7 +76,6 @@ import { sharedSettingsCopy } from "@host/lib/sharedSettings/store";
 import { mirrorHandlers } from "./mirror";
 import { syncHandlers } from "./sync";
 import { worktreesHandlers } from "./worktrees";
-import { onAbort } from "@host/lib/util/abort";
 import { implSlot } from "@host/lib/util/implSlot";
 
 // The Electron layer injects the account and the peer reach at boot
@@ -89,10 +85,6 @@ import { implSlot } from "@host/lib/util/implSlot";
 type ControlImpl = {
   // The account's device registry. Empty when signed out.
   listDevices: () => Promise<DeviceInfo[]>;
-  thisDeviceId: () => string;
-  // This device's own command-access switch: whether the account's
-  // other devices may run commands here.
-  acceptsCommands: () => boolean;
   // The devices a direct session is established to (the only ones a
   // call can reach), each with whether it runs this device's commands:
   // the hub status snapshot's peerAcceptsCommands, the same reading
@@ -133,7 +125,7 @@ const nameOf = (device: DeviceInfo): string =>
   device.name.trim() === "" ? device.deviceId : device.name;
 
 async function roster(): Promise<{ here: Named; peers: DeviceInfo[] }> {
-  const { listDevices, thisDeviceId } = requireImpl();
+  const { listDevices } = requireImpl();
   let devices: DeviceInfo[];
   try {
     devices = await listDevices();
@@ -439,7 +431,7 @@ function peerMirrorApi(deviceId: string) {
 // Signed out, the registry is empty, so the answer is empty rather
 // than a refusal: the device's own sessions were already looked at.
 async function peerMirrors(registry: DeviceInfo[]): Promise<PeerMirror[]> {
-  const hereId = requireImpl().thisDeviceId();
+  const hereId = thisDeviceId();
   const direct = await requireImpl().directPeers();
   const peers = peersOf(registry, hereId).filter(
     (device) => direct[device.deviceId] !== undefined,
@@ -600,7 +592,7 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
         const running =
           own === undefined
             ? await peerMirrorOf(input, registryOrEmpty())
-            : { deviceId: requireImpl().thisDeviceId(), session: own };
+            : { deviceId: thisDeviceId(), session: own };
         if (running !== undefined) {
           return alreadyMirrored(ctx, running, input.device);
         }
@@ -721,15 +713,16 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
                   session.localProjectId === found.projectId &&
                   session.localWorktreeId === found.worktree.id,
               )
-            : { deviceId: requireImpl().thisDeviceId(), session: own };
+            : { deviceId: thisDeviceId(), session: own };
         if (running !== undefined) {
           return alreadyMirrored(ctx, running, undefined);
         }
-        const { session, ...pulled } = await mirrorFromPeer(
-          found.device,
+        const { session, ...pulled } = await mirrorHandlers.startFrom(
           {
-            projectId: found.projectId,
-            worktreeId: found.worktree.id,
+            sourceDeviceId: found.device.deviceId,
+            sourceProjectId: found.projectId,
+            sourceWorktreeId: found.worktree.id,
+            sourceIdentity: identity,
             ...choice,
           },
           ctx,
@@ -864,7 +857,7 @@ async function alreadyMirrored(
   const registry = await registryOrEmpty();
   const names = namesOf(registry);
   const { session } = running;
-  const ranHere = running.deviceId === requireImpl().thisDeviceId();
+  const ranHere = running.deviceId === thisDeviceId();
   const view = ranHere
     ? mirrorView(session, names)
     : peerMirrorView(running, names);
@@ -903,55 +896,6 @@ async function alreadyMirrored(
     session: session.session,
     alreadyMirrored: true,
   };
-}
-
-// A mirror of a peer's worktree into this device. The session runs on
-// the device holding the original, so it is the peer's mirror:startTo,
-// asked over its command access, that sends the copy here, and that
-// send lands through THIS device's command access: a device that
-// refuses commands is told so up front, before the peer is asked. The
-// peer's progress comes back as its pushes, keyed by its worktree, and
-// is relayed to the caller.
-async function mirrorFromPeer(
-  device: Named,
-  input: Omit<MirrorStartToPayload, "targetDeviceId">,
-  ctx: HandlerContext,
-) {
-  const { acceptsCommands, peerTransportFor, thisDeviceId } = requireImpl();
-  if (!acceptsCommands()) {
-    throw new ControlError(
-      "device-blocked",
-      `A mirror runs on the device holding the original, so "${device.name}" sends the copy here, and this device doesn't accept commands. Turn command access on for this device (its Devices page in the app), then try again.`,
-    );
-  }
-  const transport = peerTransportFor(device.deviceId);
-  const peerSync = buildClient(syncContract, transport);
-  const notify = ctx.notifier(syncContract, "pullProgress");
-  const stopRelay = peerSync.pullProgress((frame) => {
-    const parsed = SyncPullProgressSchema.safeParse(frame);
-    if (parsed.success && parsed.data.sourceWorktreeId === input.worktreeId) {
-      notify(parsed.data);
-    }
-  });
-  // The CLI going away (Ctrl-C closes its socket, which aborts the
-  // context) cancels the start on the peer, the way the dialog's
-  // cancel does: the peer's send stops and the copy it made here goes.
-  const offCancel = onAbort(ctx.signal, () => {
-    void peerSync
-      .cancelMove({ sourceWorktreeId: input.worktreeId })
-      .catch(() => {});
-  });
-  try {
-    return MirrorStartToResultSchema.parse(
-      await buildClient(mirrorContract, transport).startTo({
-        ...input,
-        targetDeviceId: thisDeviceId(),
-      }),
-    );
-  } finally {
-    offCancel();
-    stopRelay();
-  }
 }
 
 // Where a send clones the repo on a device with no checkout of it, as

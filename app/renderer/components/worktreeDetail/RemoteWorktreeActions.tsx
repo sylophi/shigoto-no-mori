@@ -125,8 +125,9 @@ function TransferButtons({
     <>
       {/* Mirror is the peer's send followed by a live two-way mirror
           between its worktree and the new copy here, both run on the
-          peer, which holds the original, and driven by the mirror
-          dialog. It only exists in the app: the copy lands on this
+          peer, which holds the original, asked for through this
+          device's own start (which invites them past its switch) and
+          driven by the mirror dialog. It only exists in the app: the copy lands on this
           machine, which a browser is not. A
           mirror withdraws the button, not an OPEN dialog: the mirror it
           starts is what withdraws it, and the dialog's last steps (the

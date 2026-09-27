@@ -584,6 +584,22 @@ function hostHandlersFor(
     ...(forest.deviceId === LOCAL_DEVICE_ID
       ? {
           "sync:pullWorktree": (input) => labSyncPull(forest, emit, input),
+          // "Mirror here" as the app runs it: the local start asks the
+          // forest holding the original to run the mirror towards here.
+          "mirror:startFrom": (input) => {
+            const runner = forests[input.sourceDeviceId];
+            if (runner === undefined) {
+              throw new Error("[lab] no such device to mirror from");
+            }
+            return labMirrorStartTo(runner, {
+              targetDeviceId: LOCAL_DEVICE_ID,
+              projectId: input.sourceProjectId,
+              worktreeId: input.sourceWorktreeId,
+              runSetup: input.runSetup,
+              ignoreMode: input.ignoreMode,
+              ignores: input.ignores,
+            });
+          },
           "sync:teardownSource": (input) => {
             // The source is the peer's worktree after a pull, this
             // device's own after a send.
