@@ -26,7 +26,10 @@ trustPolicyExclude:
   - semver@6.3.1
   - undici-types@6.21.0
   - "@octokit/endpoint@9.0.6"
-  - "@pierre/theme@1.1.0"
+  # The exception to the note above: the project's 1.0.x releases were
+  # attested and its later ones (1.1.0, then this) are not, all from the
+  # project's own maintainers. @pierre/diffs pins it from 1.3.0 on.
+  - "@pierre/theme@2.0.0"
   - material-icon-theme@5.36.1
 # Per-package build-script trust. pnpm 11 uses this map (not the older
 # `onlyBuiltDependencies` / `ignoredBuiltDependencies` arrays) to gate
