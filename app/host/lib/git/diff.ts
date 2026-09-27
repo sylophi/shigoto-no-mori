@@ -1,4 +1,4 @@
-import { PATCH_MAX_BUFFER, runLenient } from "./core";
+import { PATCH_MAX_BUFFER, run, runLenient } from "./core";
 
 // The diff of one file in the working tree, read as the changes page
 // picks files. Nothing here can go stale against a list built somewhere
@@ -68,6 +68,22 @@ export async function getCommitDiff(
   return runLenient(
     worktreePath,
     ["show", "--format=", "--no-color", "--end-of-options", hash, "--"],
+    { maxBuffer: PATCH_MAX_BUFFER },
+  );
+}
+
+// What a pull request changes, the way GitHub computes it: `head`
+// against its merge base with `base`, so whatever landed on the base
+// since the branch forked stays out of it. Both have to be commits this
+// repository already holds.
+export async function getMergeBaseDiff(
+  repoPath: string,
+  base: string,
+  head: string,
+): Promise<string> {
+  return run(
+    repoPath,
+    ["diff", "--no-color", "--end-of-options", `${base}...${head}`],
     { maxBuffer: PATCH_MAX_BUFFER },
   );
 }

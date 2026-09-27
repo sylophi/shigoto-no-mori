@@ -3,8 +3,14 @@ import type { UseQueryResult } from "@tanstack/react-query";
 // parsePatchFiles lives in the root entry, not /react (the docs example
 // is slightly off: `@pierre/diffs/react` only re-exports the React
 // components and shared types). The two imports are friendly together.
-import { parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs";
-import { FileDiff } from "@pierre/diffs/react";
+import {
+  DEFAULT_VIRTUAL_FILE_METRICS,
+  parsePatchFiles,
+  Virtualizer,
+  type FileDiffMetadata,
+  type VirtualFileMetrics,
+} from "@pierre/diffs";
+import { FileDiff, VirtualizerContext } from "@pierre/diffs/react";
 import { flushSync } from "react-dom";
 import { ChevronDown, Files, Loader2, PanelLeft } from "lucide-react";
 import { useElementWidth } from "@/hooks/ui/useElementWidth";
@@ -17,7 +23,12 @@ import { ChipButton } from "@/components/ui/chip-button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { DiffChangesControls } from "./changesControls";
-import { CODE_STYLE, CODE_THEME } from "./codeTheme";
+import {
+  CODE_GAP_BLOCK,
+  CODE_LINE_HEIGHT,
+  CODE_STYLE,
+  CODE_THEME,
+} from "./codeTheme";
 import { DiffFileIndex } from "./DiffFileIndex";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { changeEntries, fileKey, patchEntries } from "@/lib/patchFiles";
@@ -38,6 +49,22 @@ const DIFF_THEME = {
   // 'simple' is the shortest built-in separator (vs 'line-info' default
   // which renders rounded corners and an expansion-control row).
   hunkSeparators: "simple" as const,
+};
+
+// The row sizes CODE_STYLE and DIFF_THEME lay out, for the virtualizer
+// to place what it hasn't drawn. It never measures a row, so these have
+// to be exact: a wrong one shows as a gap or an overlap at the edge of
+// the drawn window. Whole pixels because a fractional line height is
+// rounded by layout, and the error adds up over a long file.
+const DIFF_METRICS: VirtualFileMetrics = {
+  ...DEFAULT_VIRTUAL_FILE_METRICS,
+  lineHeight: CODE_LINE_HEIGHT,
+  // What pierre's header comes to at CODE_STYLE's sizes. Measured, since
+  // nothing in CODE_STYLE sets it directly. It holds in both designs and
+  // with or without the fold button: the header keeps its own font.
+  diffHeaderHeight: 30,
+  // The padding under a file's last row.
+  spacing: CODE_GAP_BLOCK,
 };
 
 // Below this a patch is its own table of contents: two files scroll past
@@ -96,6 +123,21 @@ function jumpToFile(
   setActiveKey(key);
 }
 
+// The patch's files, in path order, which is how git emits a commit or
+// a PR anyway, so the sort only ever settles a tie. Opted into the
+// compiler by hand: inline in DiffView it left this parse uncached (its
+// range crosses the scroll spy's hook call), and a hook that calls no
+// hooks isn't compiled unless asked. Uncached, every render, each scroll
+// spy step included, handed every row a new fileDiff that pierre redraws
+// and re-highlights.
+function usePatchFiles(patch: string | undefined): FileDiffMetadata[] {
+  "use memo";
+  const parsed = patch ? parsePatchFiles(patch) : [];
+  return parsed
+    .flatMap((p) => p.files)
+    .toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+}
+
 // Three states, not two: null means the user has never said, and the
 // pane width decides. Storing a default up-front would freeze whichever
 // width the diff happened to be opened at first.
@@ -136,6 +178,23 @@ export function DiffView({
     () => new Set(),
   );
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Draws only the rows near the view, in every file of the patch: a
+  // commit that touches hundreds of files, or a lockfile on its own,
+  // otherwise puts every row in the DOM up front and holds the window
+  // for seconds. The file wrappers keep their full height, so the
+  // scrollbar, the index's jumps and the scroll spy work as before.
+  const [virtualizer] = useState(() => new Virtualizer());
+  // Armed on the list rather than the scroll area: the list is what
+  // grows, and it only exists once there is a patch to show. The rows'
+  // own refs run first and queue up until this connects them. The
+  // scroll area is read off the DOM, not scrollRef: when both mount in
+  // one commit (a cached diff reopened), this ref runs before the
+  // parent's is set.
+  const listRef = (list: HTMLDivElement | null) => {
+    const scroller = list?.parentElement;
+    if (list && scroller) virtualizer.setup(scroller, list);
+    else virtualizer.cleanUp();
+  };
   const [paneRef, paneWidth] = useElementWidth<HTMLDivElement>();
   // A phone has no width to spare beside the diff, so the rail is
   // never offered there (indexAvailable). The same list opens as a
@@ -173,12 +232,7 @@ export function DiffView({
   const singleFile = changes !== undefined;
   const filesLabel = singleFile ? "Changed files" : "Files in this patch";
 
-  const parsedPatches = patch ? parsePatchFiles(patch) : [];
-  // Path order, which is how git emits a commit or a PR anyway, so this
-  // only ever settles a tie.
-  const allFiles = parsedPatches
-    .flatMap((p) => p.files)
-    .toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const allFiles = usePatchFiles(patch);
   const filesKey = allFiles.map(fileKey).join("\n");
   const [activeKey, setActiveKey] = useFileScrollSpy(
     scrollRef,
@@ -236,9 +290,6 @@ export function DiffView({
   const toggleIndex = () => {
     const next = !showIndex;
     setIndexPref(next);
-    // The stored value is computed before the try: a conditional inside
-    // one makes React Compiler bail on this whole component, and without
-    // its memo cache the patch is re-parsed on every render.
     writeStored(INDEX_KEY, next ? "1" : "0");
   };
 
@@ -375,27 +426,30 @@ export function DiffView({
             </CenteredMessage>
           ) : (
             <div
+              ref={listRef}
               data-slot="diff-view"
               className="flex flex-col gap-2 p-2 select-text"
               style={CODE_STYLE}
             >
-              {allFiles.map((fileDiff) => {
-                const key = fileKey(fileDiff);
-                return (
-                  <DiffFileRow
-                    key={key}
-                    fileDiff={fileDiff}
-                    fileId={key}
-                    collapsed={!singleFile && collapsedKeys.has(key)}
-                    diffStyle={diffStyle}
-                    themeType={resolved}
-                    // No fold control on a single file: it is the one
-                    // you asked for, and folding it away would leave
-                    // the pane blank with nothing to unfold it from.
-                    onToggle={singleFile ? undefined : setCollapsed}
-                  />
-                );
-              })}
+              <VirtualizerContext value={virtualizer}>
+                {allFiles.map((fileDiff) => {
+                  const key = fileKey(fileDiff);
+                  return (
+                    <DiffFileRow
+                      key={key}
+                      fileDiff={fileDiff}
+                      fileId={key}
+                      collapsed={!singleFile && collapsedKeys.has(key)}
+                      diffStyle={diffStyle}
+                      themeType={resolved}
+                      // No fold control on a single file: it is the one
+                      // you asked for, and folding it away would leave
+                      // the pane blank with nothing to unfold it from.
+                      onToggle={singleFile ? undefined : setCollapsed}
+                    />
+                  );
+                })}
+              </VirtualizerContext>
             </div>
           )}
         </div>
@@ -463,6 +517,7 @@ function DiffFileRow({
       <FileDiff
         fileDiff={fileDiff}
         options={{ ...DIFF_THEME, diffStyle, themeType, collapsed }}
+        metrics={DIFF_METRICS}
         renderHeaderPrefix={
           onToggle
             ? () => (

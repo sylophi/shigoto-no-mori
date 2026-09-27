@@ -12,11 +12,16 @@ export const CODE_THEME = {
   unsafeCSS: `:host { --diffs-bg: var(--background); }`,
 };
 
+// In pixels, and numbers rather than CSS because the diff pane's
+// virtualizer places undrawn rows by them too (DiffView's DIFF_METRICS).
+export const CODE_LINE_HEIGHT = 18;
+export const CODE_GAP_BLOCK = 4;
+
 // CSS custom properties inherit through the library's shadow DOM, so
 // setting them on a wrapper applies to every pierre child.
 export const CODE_STYLE = {
   "--diffs-font-size": "12px",
-  "--diffs-line-height": "1.45",
-  "--diffs-gap-block": "4px",
+  "--diffs-line-height": `${CODE_LINE_HEIGHT}px`,
+  "--diffs-gap-block": `${CODE_GAP_BLOCK}px`,
   "--diffs-gap-inline": "6px",
 } as React.CSSProperties;
