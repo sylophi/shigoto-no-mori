@@ -147,7 +147,8 @@ async function startListener(track, start = {}) {
   return {
     ...listener,
     url: `ws://127.0.0.1:${listener.port}`,
-    mint: (kind = "lan") => listener.tickets.mint(CLIENT, [kind])[0],
+    mint: (kind = "lan", deviceId = CLIENT) =>
+      listener.tickets.mint(deviceId, [kind])[0],
   };
 }
 
@@ -204,17 +205,22 @@ async function sendProvenHello(client, ticket, extra = {}) {
     appVersion: "1",
     nonce,
     proof: await handshakeProof(ticket, "client", challenge.nonce, nonce),
+    deflate: false,
     ...extra,
   });
   return handshakeProof(ticket, "host", challenge.nonce, nonce);
 }
 
+// `extra` rides on the hello, and a deviceId in it gets its own ticket.
 async function authenticate(listener, { headers, kind, extra } = {}) {
   const client = connect(listener.url, headers);
   await client.opened;
   const hostProof = await sendProvenHello(
     client,
-    listener.mint(kind ?? (headers === undefined ? "lan" : "tunnel")),
+    listener.mint(
+      kind ?? (headers === undefined ? "lan" : "tunnel"),
+      extra?.deviceId,
+    ),
     extra,
   );
   const welcome = await client.nextFrame();
@@ -373,6 +379,7 @@ async function main() {
             token: listener.mint(),
             deviceId: CLIENT,
             appVersion: "1",
+            deflate: false,
           });
         },
       ];
@@ -408,6 +415,7 @@ async function main() {
         t: "hello",
         deviceId: CLIENT,
         appVersion: "1",
+        deflate: false,
         nonce,
         proof: await handshakeProof(
           listener.mint(),
@@ -611,40 +619,46 @@ async function main() {
   );
 
   await check(
-    "liveness: the host answers pings and kills a heartbeating peer that falls silent, but never judges a peer that never pinged",
+    "liveness: the host answers pings, keeps a pinging peer, and kills any peer that falls silent past the timeout",
     async (track) => {
-      const listener = await startListener(track, { livenessTimeoutMs: 200 });
-      // A peer that pings once proves it heartbeats: it gets a pong,
-      // and going silent past the timeout then ends its socket.
+      const listener = await startListener(track, { livenessTimeoutMs: 400 });
+      // Three peers under their own deviceIds (a duplicate id would
+      // supersede): one pings, one only sends requests, one is silent.
       const { client } = await authenticate(listener);
-      client.send({ t: "ping" });
-      const pong = await client.nextFrame();
-      assert.equal(pong.t, "pong", "a ping must be answered with a pong");
-      const closed = await client.waitClose();
-      assert.equal(
-        closed.code,
-        CLOSE_GOING_AWAY,
-        "a silent heartbeating peer must be killed on the going-away code",
-      );
-      // A peer that never pinged (an older build) is left alone,
-      // however long it stays silent: the sweep judges only peers
-      // that proved they heartbeat.
-      const quiet = await authenticate(listener);
-      await delay(600);
-      assert.equal(
-        quiet.client.ws.readyState,
-        WebSocket.OPEN,
-        "a peer that never pinged must not be killed by the sweep",
-      );
-      quiet.client.send({
-        t: "req",
-        id: 1,
-        channel: "test:echo",
-        input: "still served",
+      const busy = await authenticate(listener, {
+        extra: { deviceId: "busy-device" },
       });
-      const res = await quiet.client.nextFrame();
-      assert.equal(res.result, "still served");
-      quiet.client.close();
+      // The silent one dies while the other two are paced along: every
+      // client heartbeats (wsClientTransport), so silence is death.
+      const quiet = await authenticate(listener, {
+        extra: { deviceId: "quiet-device" },
+      });
+      // Any inbound frame counts as life, not only a ping: five of
+      // each, paced at a quarter of the timeout (room for a stalled
+      // tick), carry both peers well past it.
+      for (let i = 0; i < 5; i++) {
+        // oxlint-disable-next-line no-await-in-loop -- frames are paced under the timeout on purpose
+        if (i > 0) await delay(100);
+        client.send({ t: "ping" });
+        busy.client.send({ t: "req", id: i, channel: "test:echo", input: i });
+        // oxlint-disable-next-line no-await-in-loop -- one answer per frame
+        const [pong, res] = await Promise.all([
+          client.nextFrame(),
+          busy.client.nextFrame(),
+        ]);
+        assert.equal(pong.t, "pong", "a ping must be answered with a pong");
+        assert.equal(res.result, i);
+      }
+      // Going silent past the timeout then ends each socket.
+      for (const peer of [client, busy.client, quiet.client]) {
+        // oxlint-disable-next-line no-await-in-loop -- one close at a time keeps the failure named
+        const closed = await peer.waitClose();
+        assert.equal(
+          closed.code,
+          CLOSE_GOING_AWAY,
+          "a silent peer must be killed on the going-away code",
+        );
+      }
     },
   );
 

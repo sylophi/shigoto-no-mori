@@ -35,9 +35,8 @@ export const PackageScriptsResultSchema = z.object({
   usage: z.record(z.string(), PackageScriptUsageSchema),
   // The scripts picked for the launch row under the "manual" sort,
   // project-wide (see readLaunchRow). Rides the listing rather than a
-  // call of its own so an older host, which sends none, reads as
-  // nothing picked instead of failing the read.
-  launchRow: z.array(z.string()).optional(),
+  // call of its own.
+  launchRow: z.array(z.string()),
 });
 export type PackageScriptsResult = z.infer<typeof PackageScriptsResultSchema>;
 

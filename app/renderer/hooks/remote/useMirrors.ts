@@ -106,8 +106,9 @@ export function useMirrorHereBlocker(peerLabel: string): string | undefined {
 // by the boot watchers. The broadcast carries the list, so it is
 // written with no round trip: a busy mirror fires several times a
 // second. An in-flight read is cancelled first, or its older answer
-// would land on top. An older host sends no list, and that one is
-// re-asked.
+// would land on top. A host sends none when it has no daemon yet or
+// its list failed to build or to validate (host/ipc/modules/mirror.ts
+// currentMirrorList, main/ipc/handlers.ts), and that one is re-asked.
 export function writeMirrorList(
   queryClient: QueryClient,
   deviceId: string,

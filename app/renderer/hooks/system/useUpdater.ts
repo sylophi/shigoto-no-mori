@@ -15,9 +15,8 @@ import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import { localDeviceId, queryKeysFor } from "@/lib/queryKeys";
 
 // One device's updater state, under that device's own key. Errors stay
-// silent: an older peer build without the channel answers no-handler,
-// and the Version section shows that as unavailable rather than
-// toasting on every visit.
+// silent: a peer out of reach answers nothing, and the Version section
+// shows that as unavailable rather than toasting on every visit.
 function updaterStateQueryOptions(deviceId: string, api: HostApi) {
   return queryOptions<UpdaterState>({
     queryKey: queryKeysFor(deviceId).updaterState(),
@@ -27,7 +26,7 @@ function updaterStateQueryOptions(deviceId: string, api: HostApi) {
     // is re-read whenever its session lands, which covers a restart
     // into the new build.
     staleTime: Number.POSITIVE_INFINITY,
-    // A focus has nothing to add to that, and an older peer build
+    // A focus has nothing to add to that, and an unreachable peer
     // (whose read never succeeds, so it is always stale) would
     // otherwise be re-asked, with retries, on every one.
     refetchOnWindowFocus: false,

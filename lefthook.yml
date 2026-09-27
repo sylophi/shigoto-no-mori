@@ -299,6 +299,20 @@ pre-commit:
           - name: clone
             glob: "{app/host/lib/git/clone.ts,app/shared/cloneUrl.ts,app/shared/schemas/project.ts,app/shared/git/repoIdentity.mts,app/test/clone.mjs,app/test/lib/checkKit.mjs}"
             run: pnpm -C app test clone
+          # Drives the changes page's git against a REAL repository: the
+          # status rows and counts, ticking files in and out of the index,
+          # commit and amend, undo and redo along HEAD's line with every
+          # refusal, and discard with its snapshot ref, the way back, the
+          # nested-repo refusal and the snapshot prune.
+          - name: git-changes
+            glob: "{app/host/lib/git/changes.ts,app/host/lib/git/core.ts,app/host/lib/git/refs.ts,app/host/lib/util/selfWrite.ts,app/shared/util/limit.ts,app/shared/schemas/changes.ts,app/shared/git/gitPaths.ts,app/test/git-changes.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test git-changes
+          # The bring rule's engine patterns: glob escaping, the marker that
+          # keeps an allowlist gitignore's own `!` pairs apart from the
+          # brought paths, and the caps.
+          - name: mirror-ignores
+            glob: "{app/shared/mirrorIgnores.ts,app/test/mirror-ignores.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test mirror-ignores
           # Drives auto-pull against a REAL repository with a remote: a clean,
           # strictly-behind worktree fast-forwards, and every state that would
           # make the pull anything else (a local commit, a modified or

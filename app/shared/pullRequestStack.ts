@@ -29,6 +29,8 @@ export interface PullRequestStack {
 
 // Cycles are impossible on GitHub, but the map is a snapshot of
 // possibly-stale rows, so the walks are bounded rather than trusted.
+// cli/stack.go walks down the same stacks for `sm merge --stack` and
+// `sm land --stack` under the same bound (maxStackDepth): change both.
 const MAX_DEPTH = 64;
 
 // The stack `branch` is part of, or null when its PR stands alone.
@@ -224,10 +226,10 @@ export function pullRequestStackPosition(
 }
 
 // The project's primary branch, off the listing it already carries:
-// the host resolves it once per listing (Worktree.primaryBranch). A
-// listing from an older host without it falls back to the primary
-// checkout's branch, which is right whenever that checkout is on the
-// primary branch.
+// the CLI resolves it once per listing (Worktree.primaryBranch) and
+// leaves it out when it cannot. A listing without it falls back to the
+// primary checkout's branch, which is right whenever that checkout is
+// on the primary branch.
 export function trunkOf(
   worktrees:
     | readonly Pick<Worktree, "branch" | "isPrimary" | "primaryBranch">[]

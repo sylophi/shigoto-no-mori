@@ -169,11 +169,13 @@ function peersOf(devices: DeviceInfo[], hereId: string): DeviceInfo[] {
   );
 }
 
-// Where each peer stands for one repo: the dialogs' three blocks in
-// the dialogs' order (renderer/components/shared/deviceTargets.ts),
-// the checkout read fresh off the peer and the command access off the
-// status snapshot. A read leaves the access out, since reads are
-// ungated.
+// Where each peer stands for one repo, in the dialogs' three blocks
+// (renderer/components/shared/deviceTargets.ts) but not their order:
+// standingOf puts command access first, since a send without a
+// checkout clones one. The checkout is read fresh off the peer and the
+// command access off the status snapshot. A read leaves the access
+// out, since reads are ungated. The wording is the CLI's, pinned by
+// test/control.mjs. The dialogs word the same blocks for their verbs.
 async function standingsOf(
   devices: DeviceInfo[],
   identity: string | null,
@@ -432,11 +434,10 @@ function peerMirrorApi(deviceId: string) {
 
 // The sessions peers run against this device's worktrees, found by
 // asking each connected peer of the registry for its list (a read,
-// ungated). A peer that does not answer in a probe's time, or an
-// older one without the call, holds nothing this device can drive
-// anyway. Signed out, the registry is empty, so the answer is empty
-// rather than a refusal: the device's own sessions were already
-// looked at.
+// ungated). A peer that does not answer in a probe's time, or whose
+// session drops mid-ask, holds nothing this device can drive anyway.
+// Signed out, the registry is empty, so the answer is empty rather
+// than a refusal: the device's own sessions were already looked at.
 async function peerMirrors(registry: DeviceInfo[]): Promise<PeerMirror[]> {
   const hereId = requireImpl().thisDeviceId();
   const direct = await requireImpl().directPeers();

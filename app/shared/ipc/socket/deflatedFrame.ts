@@ -8,9 +8,9 @@
 // listener never sees the offer), so the extension can never negotiate
 // on the one path that needs it. Hence app level, and opt-in per
 // connection: a client that can inflate says so in its hello
-// (`deflate`), and the host then deflates what is worth it. Additive
-// per the version-skew policy: an old client never asks and an old
-// host ignores the ask, and either way every frame stays text.
+// (`deflate`), and the host then deflates what is worth it. A client
+// that cannot (a browser without raw deflate) never asks, and every
+// frame to it stays text.
 //
 // Layout: 1 byte kind, then the raw-deflate stream of the frame's UTF-8
 // JSON text. The kind shares the first-byte space with the byte-channel

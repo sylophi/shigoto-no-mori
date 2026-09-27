@@ -59,7 +59,7 @@ export function useScriptLaunchCandidates(worktree: Worktree): {
   if (!enabled || !pkg) {
     return { candidates: [], loading: enabled && isPending, pinned: false };
   }
-  const pinned = pinnedEntries(sorted, sortMode, pkg.launchRow ?? []);
+  const pinned = pinnedEntries(sorted, sortMode, pkg.launchRow);
   return {
     candidates: pinned ?? sorted.slice(0, MAX_CANDIDATES),
     loading: false,

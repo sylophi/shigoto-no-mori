@@ -42,9 +42,8 @@ import { remoteDeviceStore } from "./devices";
 import { apiFor, onAccountLeft, onSessionLanded } from "./remoteDeviceSync";
 
 // Offers entries to every peer in reach. Best-effort by design (see the
-// header): a peer with no grant, an older build with no such channel
-// and a session that just dropped all refuse, and each is caught up by
-// a pull instead.
+// header): a peer with no grant and a session that just dropped both
+// refuse, and each is caught up by a pull instead.
 function offerToPeers(doc: SharedSettingsDoc): void {
   if (Object.keys(doc.entries).length === 0) return;
   for (const device of remoteDeviceStore.getSnapshot()) {

@@ -54,13 +54,11 @@ export const HEARTBEAT_INTERVAL_MS = 15_000;
 export const HEARTBEAT_TIMEOUT_MS = 40_000;
 export const PROBE_TIMEOUT_MS = 5_000;
 
-// The host side of the same rule: a peer that has proven it heartbeats
-// (sent at least one ping) and then falls silent for this long is
-// terminated, so a dead client socket does not sit in the authed set
-// forever. Generous next to the client's timeout on purpose: a hidden
-// browser tab pings once a minute under timer throttling and must not
-// be killed for it. A peer that never pinged (an older build) is never
-// judged, so a host can roll out ahead of its clients.
+// The host side of the same rule: a peer that falls silent for this
+// long is terminated, so a dead client socket does not sit in the
+// authed set forever. Generous next to the client's timeout on purpose:
+// a hidden browser tab pings once a minute under timer throttling and
+// must not be killed for it.
 export const HOST_LIVENESS_TIMEOUT_MS = 120_000;
 
 // Concurrent dispatched requests per connection, shared by the direct
@@ -129,9 +127,9 @@ const HelloFrameSchema = z.object({
   // The client's nonce, and its HMAC of both nonces under the ticket.
   nonce: z.string().regex(HANDSHAKE_NONCE_PATTERN).optional(),
   proof: z.string().optional(),
-  // The client can read deflated frames (deflatedFrame.ts), so the host
-  // may send them. Absent from an old client, ignored by an old host.
-  deflate: z.boolean().optional(),
+  // Whether the client can read deflated frames (deflatedFrame.ts), so
+  // the host may send them. False from a browser without raw deflate.
+  deflate: z.boolean(),
 });
 
 export const ReqFrameSchema = z.object({
@@ -147,12 +145,6 @@ export type ReqFrame = z.infer<typeof ReqFrameSchema>;
 // The liveness pair (see HEARTBEAT_INTERVAL_MS): the client sends
 // pings on its cadence and on a probe, the host only ever answers with
 // pongs, so each frame lives in exactly one direction's union.
-// Additive per the version-skew policy: an
-// old peer fails to parse a ping and drops it. An old client against a
-// new host is never judged (the host's sweep latches on the first
-// ping), while a new client against an old host sees no pongs and
-// redials it once a minute until that host updates, the soft
-// degradation the owner's own rollout accepts elsewhere.
 const PingFrameSchema = z.object({ t: z.literal("ping") });
 const PongFrameSchema = z.object({ t: z.literal("pong") });
 

@@ -357,6 +357,7 @@ function rawHeaderDial(port, ticket, cfConnectingIp) {
                 appVersion: "1.0.0",
                 nonce,
                 proof,
+                deflate: false,
               }),
             );
           },

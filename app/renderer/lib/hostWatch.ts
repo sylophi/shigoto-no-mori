@@ -130,8 +130,8 @@ export function watchHost(
         writeUpdaterState(queryClient, deviceId, state);
       }),
     ),
-    // Its mirrors moved, the list riding the push whole (an older peer
-    // sends none, and its list is re-asked). Always on, so the
+    // Its mirrors moved, the list riding the push whole (a host with
+    // no list to send omits it, and it is re-asked). Always on, so the
     // sidebar's folds and a far end's page follow a device whose pages
     // were never opened.
     api.mirror.onChanged(
