@@ -33,14 +33,14 @@ export const LIGHT_THEMES: readonly ThemeOption<LightTheme>[] = [
   { id: "meadow", label: "Meadow", blurb: "Mint all over, deeper on the rail" },
   { id: "cream", label: "Cream", blurb: "Warm paper and a mint rail" },
   { id: "sky", label: "Sky", blurb: "A clear morning, blue on white" },
-  { id: "sakura", label: "Sakura", blurb: "Blossom pink, leaf green to act" },
+  { id: "sakura", label: "Sakura", blurb: "Blossom pink all through" },
 ];
 
 export const DARK_THEMES: readonly ThemeOption<DarkTheme>[] = [
   { id: "charcoal", label: "Charcoal", blurb: "Near-black, a mossy rail" },
   { id: "forest", label: "Forest", blurb: "Deep green, night in the woods" },
   { id: "wood", label: "Wood", blurb: "The first night: cream, darkened" },
-  { id: "midnight", label: "Midnight", blurb: "Navy sky over a teal rail" },
+  { id: "midnight", label: "Midnight", blurb: "Navy sky, a moonlit aqua" },
   { id: "cocoa", label: "Cocoa", blurb: "Warm brown, lamplight" },
 ];
 

@@ -3,9 +3,9 @@ import type { DarkTheme, LightTheme, ThemeOption } from "@shared/themes";
 import { cn } from "@/lib/utils";
 
 // One row of the doubutsu palettes for an appearance: a swatch per
-// palette with its name, the chosen one wearing a leaf check. Pressed
-// buttons in a group, the segmented control's vocabulary, since every
-// swatch is its own tab stop. Two of
+// palette with its name, the chosen one wearing a check in its
+// accent. Pressed buttons in a group, the segmented control's
+// vocabulary, since every swatch is its own tab stop. Two of
 // these stack under the Doubutsu theme switch in Appearance, the light
 // list and the dark list, so either can be picked whatever the window
 // shows right now. Disabled with the switch off: the picks keep, and

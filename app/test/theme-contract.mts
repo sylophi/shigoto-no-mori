@@ -212,8 +212,9 @@ const indexCss = readFileSync(join(root, "renderer/index.css"), "utf8").replace(
 );
 // The doubutsu light block (:root.doubutsu) and dark block
 // (:root.doubutsu.dark): a remap present in only one of them leaves
-// the other mode on the raw hue. The palettes (palettes.css) remap
-// surfaces only, so the status steps stay these two blocks' to declare.
+// the other mode on the raw hue. The palettes (palettes.css) move a
+// few status steps with their accent, on top of these two blocks,
+// which still carry every step Clerk reads.
 // Found by the class pair, whatever :is() wraps it in.
 const doubutsuDarkStart = css.search(/\.doubutsu\.dark\s*\{/);
 if (doubutsuDarkStart < 0) {

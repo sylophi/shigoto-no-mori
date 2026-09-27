@@ -54,8 +54,8 @@ const APRON = tile(16, 16, `<rect width="5" height="16"/>`);
 // the list before they get paper of their own.
 const LEAVES: Stationery = {
   ...tile(48, 48, leaf(12, 12, 35) + leaf(36, 36, 35)),
-  color: "bg-emerald-500",
-  ink: "text-emerald-700 dark:text-emerald-300",
+  color: "bg-green-500",
+  ink: "text-green-700 dark:text-green-300",
 };
 
 const STATIONERY: Record<string, Stationery> = {
@@ -79,8 +79,8 @@ const STATIONERY: Record<string, Stationery> = {
   // The shop aprons' stripes, one twin in each color.
   timmy: {
     ...APRON,
-    color: "bg-emerald-400",
-    ink: "text-emerald-700 dark:text-emerald-300",
+    color: "bg-green-400",
+    ink: "text-green-700 dark:text-green-300",
   },
   tommy: {
     ...APRON,

@@ -1,5 +1,6 @@
-// emerald-500 / rose-500 read close to Pierre's dark/light addition
+// green-500 / rose-500 read close to Pierre's dark/light addition
 // and deletion hues without requiring shadow-DOM theme variables.
+// Green, not emerald, which follows the palette's accent.
 export function DiffStats({
   additions,
   deletions,
@@ -14,7 +15,7 @@ export function DiffStats({
       title={label}
       className="tabular inline-flex shrink-0 items-center gap-1.5 font-mono text-xs"
     >
-      <span className="text-emerald-500">+{additions}</span>
+      <span className="text-green-500">+{additions}</span>
       <span className="text-rose-500">−{deletions}</span>
     </span>
   );

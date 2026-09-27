@@ -10,9 +10,10 @@
 //
 // "Off" is deliberately not what an offline row reads: a machine that
 // is not running the app is the NORMAL state of a laptop in a bag, so
-// it gets amber (calm, "not right now") and the last-seen time as its
-// whole label -- "last seen 3h ago" already says offline -- never the
-// rose an error would earn.
+// it gets no color at all (slate) and the last-seen time as its whole
+// label -- "last seen 3h ago" already says offline -- never the rose
+// an error would earn. Amber is the dial in flight (connecting,
+// reconnecting), so a row wearing it is one that is trying.
 import type { HubStatus, TunnelState } from "@shared/ipc/modules/hub";
 import type { DeviceInfo } from "@shared/hub/protocol";
 import { TUNNEL_PROBE_DEADLINE_FRESH_MS } from "@shared/remote/supervisor";
@@ -88,7 +89,7 @@ export function deviceRowStatus(
   // off, not broken.
   if (hubDevice === undefined || hubDevice.status.phase === "stopped") {
     return {
-      tone: "amber",
+      tone: "slate",
       // lastSeenAt is null until a device first connects, and a device
       // that has never been seen has no elapsed time to report.
       label:

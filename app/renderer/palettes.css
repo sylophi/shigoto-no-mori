@@ -1,9 +1,19 @@
 /*
  * The doubutsu palettes beyond the two defaults. Each block remaps the
  * surface tokens doubutsu.css declares in its default blocks (cream for
- * light, charcoal for dark) and nothing else: the status families, the
- * diff tints, the radius, the font and every recipe keep flowing from
- * there. How a pick reaches here: DESIGN.md, "Theming".
+ * light, charcoal for dark), --primary and --ring among them, which
+ * carry the palette's accent to the switches and the loud button. The
+ * status families, the diff tints, the radius, the font and every
+ * recipe keep flowing from there. How a pick reaches here: DESIGN.md,
+ * "Theming".
+ *
+ * A palette whose accent leaves the leaf green also moves the positive
+ * status (emerald: the online dots, a device's tile) onto it, at the
+ * steps the status tones read (-500 and -600 in light, -400 and -500
+ * in dark). Where that lands on another status family's hue, it moves
+ * that family aside too, at every step the app reads (sky's info goes
+ * teal). The default blocks declare the emerald steps, and a swatch
+ * matches them itself, so a green palette leaves them out.
  *
  * A light block ties its default on specificity and wins on order
  * (index.css imports this file after doubutsu.css). A dark block
@@ -87,8 +97,9 @@
 
 /* --- Sakura ---
    Blossom season: a pink-tinted paper and a pink rail, with the
-   selection pillow pink too, while the loud action and the leaf
-   wallpaper keep their green so the two read as petals over leaves. */
+   selection pillow, the action and the positive status pink too. The
+   accent sits at hue 350, a blossom pink rather than the danger red
+   (hue 30), so an online dot never reads as an error. */
 :is(:root, [data-theme-scope]).doubutsu[data-palette="sakura"] {
   --background: oklch(0.975 0.013 10);
   --foreground: oklch(0.37 0.05 20);
@@ -96,7 +107,7 @@
   --card-foreground: oklch(0.37 0.05 20);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.37 0.05 20);
-  --primary: oklch(0.66 0.15 155);
+  --primary: oklch(0.64 0.16 350);
   --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.93 0.04 8);
   --secondary-foreground: oklch(0.37 0.05 20);
@@ -104,7 +115,9 @@
   --muted-foreground: oklch(0.54 0.04 15);
   --destructive: oklch(0.6 0.16 30);
   --input: oklch(0.92 0.03 10);
-  --ring: oklch(0.66 0.15 155);
+  --ring: oklch(0.64 0.16 350);
+  --color-emerald-500: oklch(0.6 0.16 350);
+  --color-emerald-600: oklch(0.53 0.15 350);
   --doubutsu-sidebar: oklch(0.93 0.045 5);
   --doubutsu-stripe: oklch(1 0 0 / 0.3);
   --doubutsu-watermark: oklch(0.7 0.14 5);
@@ -119,8 +132,10 @@
 
 /* --- Sky ---
    A clear morning: white with a wash of blue, a pale sky rail, slate
-   text, and the selection pillow in the same blue. The action and the
-   status greens keep the leaf, so the two hues read as sky over grass. */
+   text, and the selection pillow, the action and the positive status
+   in the same blue. That blue is where the info family sits in every
+   other palette, so here info moves to a teal, and a staged update or
+   a following mirror stays apart from a connected device. */
 :is(:root, [data-theme-scope]).doubutsu[data-palette="sky"] {
   --background: oklch(0.975 0.012 230);
   --foreground: oklch(0.34 0.04 245);
@@ -128,7 +143,7 @@
   --card-foreground: oklch(0.34 0.04 245);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.34 0.04 245);
-  --primary: oklch(0.64 0.15 155);
+  --primary: oklch(0.62 0.14 245);
   --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.93 0.035 228);
   --secondary-foreground: oklch(0.34 0.04 245);
@@ -136,7 +151,13 @@
   --muted-foreground: oklch(0.53 0.04 240);
   --destructive: oklch(0.6 0.16 30);
   --input: oklch(0.92 0.03 230);
-  --ring: oklch(0.64 0.15 155);
+  --ring: oklch(0.62 0.14 245);
+  --color-emerald-500: oklch(0.58 0.14 245);
+  --color-emerald-600: oklch(0.51 0.13 248);
+  --color-sky-400: oklch(0.7 0.09 195);
+  --color-sky-500: oklch(0.6 0.09 195);
+  --color-sky-600: oklch(0.52 0.085 200);
+  --color-sky-700: oklch(0.45 0.075 205);
   --doubutsu-sidebar: oklch(0.92 0.05 222);
   --doubutsu-stripe: oklch(1 0 0 / 0.3);
   --doubutsu-watermark: oklch(0.62 0.12 235);
@@ -151,8 +172,9 @@
 
 /* --- Midnight ---
    Night in Animal Crossing: a navy sky (hue 265) over a teal-lit rail
-   (235) a step lighter, slate outline buttons, and the leaf accent on
-   top, which is the night-time read of green on navy. */
+   (235) a step lighter, slate outline buttons, and a moonlit aqua
+   accent (185) on top, for the action, the positive status and the
+   wallpaper, far enough toward green to stay clear of info's blue. */
 :is(:root, [data-theme-scope]).doubutsu.dark[data-palette="midnight"] {
   --background: oklch(0.22 0.03 265);
   --foreground: oklch(0.95 0.012 90);
@@ -160,7 +182,7 @@
   --card-foreground: oklch(0.95 0.012 90);
   --popover: oklch(0.3 0.036 265);
   --popover-foreground: oklch(0.95 0.012 90);
-  --primary: oklch(0.76 0.17 152);
+  --primary: oklch(0.78 0.12 185);
   --primary-foreground: oklch(0.2 0.03 265);
   --secondary: oklch(0.355 0.048 262);
   --secondary-foreground: oklch(0.95 0.012 90);
@@ -168,15 +190,17 @@
   --muted-foreground: oklch(0.77 0.03 255);
   --destructive: oklch(0.72 0.15 30);
   --input: oklch(0.335 0.036 265);
-  --ring: oklch(0.76 0.17 152);
+  --ring: oklch(0.78 0.12 185);
+  --color-emerald-400: oklch(0.8 0.11 185);
+  --color-emerald-500: oklch(0.76 0.12 185);
   --doubutsu-sidebar: oklch(0.27 0.045 235);
   --doubutsu-stripe: oklch(1 0 0 / 0.1);
-  --doubutsu-watermark: oklch(0.74 0.15 160);
-  --doubutsu-pattern: oklch(0.74 0.15 160);
+  --doubutsu-watermark: oklch(0.72 0.11 190);
+  --doubutsu-pattern: oklch(0.72 0.11 190);
   --doubutsu-button-outline: oklch(0.395 0.042 262);
   --doubutsu-edge: oklch(0 0 0 / 0.45);
   --doubutsu-edge-line: oklch(1 0 0 / 0.07);
-  --doubutsu-accent: oklch(0.42 0.085 160);
+  --doubutsu-accent: oklch(0.42 0.07 195);
   --doubutsu-accent-foreground: oklch(0.97 0.012 90);
   --doubutsu-rail-muted-foreground: oklch(0.78 0.03 240);
   --doubutsu-modal-card: oklch(0.325 0.036 265);

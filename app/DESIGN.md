@@ -21,20 +21,26 @@ light one and a dark one, `lightTheme` / `darkTheme` beside `doubutsu`
 in client config, the catalog in `shared/themes.ts`). The pick lands
 as `data-palette` on `<html>`:
 `renderer/doubutsu.css` carries the defaults (cream, charcoal) and
-`renderer/palettes.css` the rest, each remapping only the surface
-tokens. A rule in doubutsu.css reaches every color through a token,
-never a literal, so a palette can move it. Settings paints its swatches
-with the same blocks (`[data-theme-scope]` beside `:root`), so a new
-palette is one CSS block plus a catalog entry.
+`renderer/palettes.css` the rest, each remapping the surface tokens
+and its accent: `--primary` and `--ring` (switches, the loud button)
+and the emerald steps, so the online dots, the device tiles and every
+other positive status wear the palette's hue. A rule in doubutsu.css
+reaches every color through a token, never a literal, so a palette can
+move it. Settings paints its swatches with the same blocks
+(`[data-theme-scope]` beside `:root`), so a new palette is one CSS
+block plus a catalog entry.
 
 Rules that keep both themes cheap to maintain:
 
 - **Colors come from theme tokens** (`bg-card`, `text-muted-foreground`,
   `--input`, …), never hardcoded values. For status/semantic color, use
-  only the four raw families already in use: `emerald` (success/add),
-  `rose` (danger/delete), `amber` (warning), `sky` (info/update). Those
-  four are exactly what doubutsu remaps via `--color-*`. A new raw
-  family needs a matching remap entry in doubutsu.css.
+  only the raw families already in use: `emerald` (success, which
+  follows the palette's accent), `rose` (danger/delete), `amber`
+  (warning), `sky` (info/update), and `green` for what is literally
+  green (a diff's additions, Nook's leaf), which no palette moves.
+  Those are what
+  doubutsu remaps via `--color-*`. A new raw family needs a matching
+  remap entry in doubutsu.css.
 - **Interactive primitives carry `data-slot`** (and `data-variant` where
   variants matter). Text fields use `ui/input.tsx` / `ui/textarea.tsx`,
   chips use `ui/chip-button.tsx`, few-way toggles use
