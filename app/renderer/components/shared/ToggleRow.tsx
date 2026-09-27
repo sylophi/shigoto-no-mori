@@ -21,8 +21,12 @@ export function ToggleRow({
   return (
     <label
       className={cn(
-        "flex items-start gap-3 rounded-md",
-        disabled ? "cursor-not-allowed" : "cursor-pointer",
+        "-m-1 flex items-start gap-3 rounded-md p-1",
+        // The row has no fill of its own, so the hover fill ghost
+        // buttons wear gives doubutsu's stripes something to sit on.
+        disabled
+          ? "cursor-not-allowed"
+          : "cursor-pointer hover:bg-muted dark:hover:bg-muted/50",
       )}
     >
       <span className={cn("mt-0.5", disabled && "opacity-50")}>

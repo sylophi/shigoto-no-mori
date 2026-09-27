@@ -1101,9 +1101,11 @@
    spells out what the grant covers, so hovering or holding the switch
    row stripes the whole panel instead of the row alone. The click
    target stays the row: a stray click in the list shouldn't flip the
-   app's most sensitive switch. */
+   app's most sensitive switch. The row drops its own hover fill too,
+   or it would sit as a block inside the striped panel. */
 .doubutsu [data-slot="accept-commands-panel"] {
   & label:active {
+    background-color: transparent;
     background-image: none;
     animation: none;
   }
@@ -1114,6 +1116,7 @@
   }
   @media (hover: hover) {
     & label:hover {
+      background-color: transparent;
       background-image: none;
       animation: none;
     }

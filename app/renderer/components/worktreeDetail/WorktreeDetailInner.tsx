@@ -224,7 +224,7 @@ export function WorktreeDetailInner({
           <button
             type="button"
             onClick={() => toProjectPage("configure", worktree.projectId)}
-            className="shrink-0 rounded transition-colors hover:text-foreground"
+            className="-mx-1 shrink-0 rounded px-1 transition-colors hover:bg-muted hover:text-foreground dark:hover:bg-muted/50"
             title={`Configure ${project.name}`}
           >
             {project.name}

@@ -63,12 +63,12 @@ export function DeviceIconPicker({
         aria-label={`${label} icon: ${DEVICE_ICON_LABELS[icon]}. Change`}
         title="Change icon"
         disabled={setDeviceIcon.isPending}
-        className="group relative shrink-0 rounded-lg focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60"
+        className="group relative -m-1 shrink-0 rounded-xl p-1 hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60 dark:hover:bg-muted/50"
       >
         <DeviceMark icon={icon} tone={tone} size="lg" />
         {/* A small cue that the mark opens something, kept off the
             marks that open nothing. */}
-        <span className="absolute -right-1 -bottom-1 flex size-3.5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground group-hover:text-foreground">
+        <span className="absolute right-0 bottom-0 flex size-3.5 items-center justify-center rounded-full border border-border bg-card text-muted-foreground group-hover:text-foreground">
           <ChevronDown aria-hidden className="size-2.5" />
         </span>
       </DropdownMenuTrigger>
