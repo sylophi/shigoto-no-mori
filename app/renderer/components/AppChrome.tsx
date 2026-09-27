@@ -48,7 +48,10 @@ const TOAST_CLASSES: ToastClassnames = {
   // Only the toasts sonner draws. A custom one (a villager's dialogue
   // box or letter) draws its own card.
   toast:
-    "data-[styled=true]:!bg-popover data-[styled=true]:!text-popover-foreground data-[styled=true]:!border data-[styled=true]:!border-border data-[styled=true]:!shadow-md",
+    "data-[styled=true]:!bg-popover data-[styled=true]:!text-popover-foreground data-[styled=true]:!border data-[styled=true]:!border-border",
+  // Free to shrink, so a line too long truncates rather than pushing
+  // what follows it off the card.
+  content: "min-w-0",
   title: "!select-text",
   description: "!text-muted-foreground !select-text",
   error: "!text-destructive",

@@ -15,6 +15,7 @@ import {
   villagerLine,
 } from "@/lib/villagerVoice";
 import { MovingBox } from "./MovingBox";
+import { NextArrow } from "./NextArrow";
 import { VillagerDialogue } from "./VillagerDialogue";
 import { VillagerLetter } from "./VillagerLetter";
 
@@ -27,13 +28,14 @@ const VILLAGE_TOASTER = "village";
 // the top corner, so a villager moving in never covers the toasts that
 // matter: an error, or an undo waiting on its button. It sits below the
 // title-bar drag strip (AppShell.tsx), which would swallow clicks on
-// its top edge and close buttons, and answers Alt+Shift+T, leaving
-// Alt+T to the everyday toasts.
+// its top edge, and answers Alt+Shift+T, leaving Alt+T to the everyday
+// toasts.
 //
 // News goes at a click anywhere on it, or Enter on it focused, the way
-// a villager's line goes at a press of A, unless that hit one of its
-// buttons or ended a drag that selected some of its words. It goes on
-// the first click, so its words are selected by dragging, not by
+// a villager's line goes at a press of A, so it wears no close button,
+// only the arrow a finished line waits on (NextArrow). A click that
+// ended a drag selecting some of its words keeps it up. It goes on the
+// first click, so its words are selected by dragging, not by
 // double-clicking. Each news toast carries its id as its test id, since
 // sonner puts no other on the card.
 export function VillageToaster({
@@ -60,7 +62,6 @@ export function VillageToaster({
         hotkey={["altKey", "shiftKey", "KeyT"]}
         position="top-right"
         offset={{ top: 40, right: 16 }}
-        closeButton
         toastOptions={{ className: "cursor-pointer", classNames }}
       />
     </div>
@@ -68,7 +69,7 @@ export function VillageToaster({
 }
 
 function dismissCard(target: EventTarget): void {
-  if (!(target instanceof Element) || target.closest("button, a")) return;
+  if (!(target instanceof Element)) return;
   const card = target.closest("[data-sonner-toast]");
   const id = card?.getAttribute("data-testid");
   if (!card || !id) return;
@@ -129,14 +130,7 @@ export function toastVillagerMove(news: MoveNews, id: string): void {
     const Moment =
       speaker.rarity === "legendary" ? VillagerLetter : VillagerDialogue;
     toast.custom(
-      (toastId) => (
-        <Moment
-          news={news}
-          speaker={speaker}
-          words={words}
-          onClose={() => toast.dismiss(toastId)}
-        />
-      ),
+      () => <Moment news={news} speaker={speaker} words={words} />,
       lane,
     );
     return;
@@ -149,6 +143,11 @@ export function toastVillagerMove(news: MoveNews, id: string): void {
       ...faceOptions(
         news.speakers,
         news.kind === "out" ? <MovingBoxBadge /> : <SuccessBadge />,
+      ),
+      // sonner draws an element given as the action as it is, at the
+      // end of the row.
+      action: (
+        <NextArrow className="mb-0.5 ml-auto self-end text-muted-foreground" />
       ),
       description: news.detail && (
         <span className="block truncate">

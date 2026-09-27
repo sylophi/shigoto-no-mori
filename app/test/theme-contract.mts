@@ -61,6 +61,9 @@ const RUNTIME_ATTRS = new Set([
   "data-sonner-toaster",
   // sonner's mark on the toasts it draws, as against a custom one.
   "data-styled",
+  // sonner's title and description lines in those.
+  "data-title",
+  "data-description",
 ]);
 // A prefix/suffix match ([data-size$="sm"]) names part of a value the
 // component computes, so it is held to the attribute being set at all.
@@ -140,6 +143,22 @@ const upstream = [
     pkg: "sonner",
     file: "node_modules/sonner/dist/index.mjs",
     needle: '"data-styled"',
+  },
+  {
+    pkg: "sonner",
+    file: "node_modules/sonner/dist/index.mjs",
+    needle: '"data-title"',
+  },
+  {
+    pkg: "sonner",
+    file: "node_modules/sonner/dist/index.mjs",
+    needle: '"data-description"',
+  },
+  {
+    pkg: "sonner",
+    file: "node_modules/sonner/dist/index.mjs",
+    // The toaster's corner radius, which doubutsu sets to its own.
+    needle: "--border-radius",
   },
 ];
 for (const { pkg, file, needle } of upstream) {

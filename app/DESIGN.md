@@ -50,6 +50,10 @@ Rules that keep both themes cheap to maintain:
   library attributes (Base UI `data-highlighted` etc.), and plain
   Tailwind utility names. Never a component's internal utility-class
   combination. That breaks silently when the component is restyled.
+- **No outlines in doubutsu.** No border, hairline or ring draws an
+  edge: fills set surfaces apart, and a floating one stands on a hard,
+  blur-less drop (`--doubutsu-sticker-shadow`). Keyboard focus rings
+  are the one exception.
 - The full dependency list lives in the CONTRACT header of
   `renderer/doubutsu.css`; `pnpm test theme-contract` (run by lefthook
   pre-commit) verifies every hook still exists. If it fails, either
@@ -197,8 +201,8 @@ signed "Your friend". In a crowd (a Tidy run) the rare and legendary keep
 their own moments, rarest on top, and the regulars share one toast.
 
 Everyday toasts (a commit) stay small for everyone: the face, and a
-common villager's catchphrase. No outlines in doubutsu: the dialogue
-box and the letter take its hard drop only. Under reduced motion every
+common villager's catchphrase. The dialogue box and the letter take
+doubutsu's hard drop, like any floating surface. Under reduced motion every
 moment is simply there, finished, and the drift holds while nobody is
 looking or the machine is on battery.
 

@@ -65,7 +65,9 @@
  * 4. Upstream library attributes (re-verify on upgrades; theme-contract
  *    greps the packages): Base UI's data-highlighted / data-disabled /
  *    data-popup-open / data-unchecked, cmdk's [cmdk-item] +
- *    aria-selected, sonner's [data-sonner-toast] (+ data-styled).
+ *    aria-selected, sonner's [data-sonner-toast] (+ data-styled),
+ *    [data-sonner-toaster], [data-title], [data-description] and its
+ *    --border-radius variable.
  *    Clerk's .cl-rootBox / .cl-modalBackdrop (the ambient-strip
  *    carve-outs below) are part of Clerk's documented appearance API
  *    but live in its runtime-loaded UI bundle, so theme-contract cannot
@@ -162,10 +164,9 @@
      drifting orange. */
   --doubutsu-button-outline: oklch(0.9 0.04 70);
   /* Chunky sticker edge for floating surfaces (see the elevation rule
-     below): a hard blur-less drop + faint solid outline stand in for
-     the soft shadow/ring stack that doubutsu strips. */
+     below): a hard blur-less drop stands in for the soft shadow/ring
+     stack that doubutsu strips. */
   --doubutsu-edge: oklch(0.39 0.045 74.1 / 0.14);
-  --doubutsu-edge-line: oklch(0.39 0.045 74.1 / 0.08);
 
   /* Two recipes that are geometry as much as color, so they travel as
      whole tokens rather than being retyped at each use: the sticker
@@ -175,8 +176,7 @@
      (scripts/dmg-background.html) renders against these too, which is
      what keeps its arrow and its cards on the same recipe as the app's
      hover stripes and floating surfaces. */
-  --doubutsu-sticker-shadow:
-    0 0 0 1px var(--doubutsu-edge-line), 0 5px 0 0 var(--doubutsu-edge);
+  --doubutsu-sticker-shadow: 0 5px 0 0 var(--doubutsu-edge);
   --doubutsu-stripe-image: linear-gradient(
     45deg,
     transparent 25%,
@@ -291,7 +291,6 @@
      blue. */
   --doubutsu-button-outline: oklch(0.385 0.012 250);
   --doubutsu-edge: oklch(0 0 0 / 0.45);
-  --doubutsu-edge-line: oklch(1 0 0 / 0.07);
   /* Surfaces inside a modal. Dark's card (0.275) sits a hair under
      the popover (0.29) and muted (0.305) a hair over it: fine for
      panels on the canvas, but a card or a muted row INSIDE a dialog
@@ -406,9 +405,10 @@
    Popovers, menus, modals, sheets, and toasts lost their soft shadow +
    hairline ring to the ambient-depth strip above, and the popover white
    alone can't define an edge against the card cream. Every floating
-   surface gets the AC sticker treatment instead: a faint solid outline
-   plus a hard, blur-less drop. Only the toasts sonner draws: a custom
-   one (a villager's dialogue box or letter) draws its own card. */
+   surface gets the AC sticker treatment instead: a hard, blur-less
+   drop, and no outline. Only the toasts sonner draws: a custom one (a
+   villager's dialogue box or letter, components/villagers) draws its
+   own card, listed here by its slots. */
 .doubutsu
   :is(
     [data-slot="dropdown-menu-content"],
@@ -416,22 +416,36 @@
     [data-slot="combobox-popup"],
     [data-slot="modal-shell"],
     [data-slot="sheet-content"],
-    [data-sonner-toast][data-styled="true"]
+    [data-sonner-toast][data-styled="true"],
+    [data-slot="villager-dialogue-box"],
+    [data-slot="villager-letter-paper"]
   ) {
   box-shadow: var(--doubutsu-sticker-shadow) !important;
 }
 
-/* A rare villager's dialogue box and a legendary one's letter
-   (components/villagers) are floating surfaces of their own. They take
-   the hard drop, not the outline, and the name plate stands on a small
-   one. */
-.doubutsu
-  :is(
-    [data-slot="villager-dialogue-box"],
-    [data-slot="villager-letter-paper"]
-  ) {
-  box-shadow: 0 5px 0 0 var(--doubutsu-edge);
+/* Keyboard focus keeps its ring, the one outline doubutsu draws. A
+   toast's is sonner's box-shadow, which the drop above replaces, so it
+   comes back beside the drop, in the app's ring. */
+.doubutsu [data-sonner-toast][data-styled="true"]:focus-visible {
+  box-shadow:
+    0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent),
+    var(--doubutsu-sticker-shadow) !important;
 }
+
+/* sonner sets a font, weights and a radius of its own, so its toasts
+   take the theme's, the way the rest of the app does. */
+.doubutsu [data-sonner-toaster] {
+  --border-radius: var(--radius);
+  font-family: inherit;
+}
+.doubutsu
+  [data-sonner-toast][data-styled="true"]
+  :is([data-title], [data-description]) {
+  font-weight: inherit;
+}
+
+/* A rare villager's name plate and a legendary one's photo stand on a
+   small drop of their own. */
 .doubutsu :is([data-slot="villager-nameplate"], [data-slot="villager-photo"]) {
   box-shadow: 0 2px 0 0 var(--doubutsu-edge);
 }
@@ -646,14 +660,13 @@
   padding-inline: calc(var(--spacing) * 3);
 }
 
-/* The phone layout's tab bar: a cream tray along the bottom edge, its
-   top a hard sticker line rather than the border v1 draws, with the
+/* The phone layout's tab bar: a cream tray along the bottom edge,
+   set off by its fill alone rather than the border v1 draws, with the
    current tab a leaf-green sticker slapped on at a tilt like the brand
    header's corner pills. The tray is a card, not the rail's mint, so
    it stays its own surface on the mint forest page too. */
 .doubutsu [data-slot="phone-tab-bar"] {
   background-color: var(--card);
-  box-shadow: 0 -1px 0 0 var(--doubutsu-edge-line);
 }
 .doubutsu [data-slot="phone-tab"] {
   color: var(--muted-foreground);
