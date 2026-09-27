@@ -6,17 +6,18 @@ import { CloseButton } from "./CloseButton";
 import { MovingBox } from "./MovingBox";
 import { TypedWords } from "./TypedWords";
 
-// The look a character's words take on screen, shared with their
-// birthday (BirthdayBanner): their color as --villager-ink (a face with
-// no clear one takes amber), the name plate in it, and the cream box.
+// The look a character's words take on screen: their color as
+// --villager-ink (a face with no clear one takes amber, and their
+// birthday's wash takes it too), the name plate in it, and the cream
+// box.
 export function villagerInk(color: string | null): CSSProperties {
   return {
     "--villager-ink": color ?? "var(--color-amber-600)",
   } as CSSProperties;
 }
-export const NAMEPLATE =
+const NAMEPLATE =
   "absolute -rotate-3 rounded-[10px] bg-(--villager-ink) py-0.5 font-bold text-white";
-export const DIALOGUE_BOX =
+const DIALOGUE_BOX =
   "relative bg-[color-mix(in_oklab,var(--color-amber-300)_22%,var(--popover))] dark:bg-[color-mix(in_oklab,var(--color-amber-400)_9%,var(--popover))]";
 
 // A rare character's news, the way Animal Crossing puts a character's

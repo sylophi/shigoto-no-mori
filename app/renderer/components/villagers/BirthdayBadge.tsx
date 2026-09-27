@@ -1,7 +1,7 @@
 import { Cake } from "lucide-react";
 import type { Worktree } from "@shared/schemas";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { useVillagerBirthday } from "@/hooks/villagers/useVillagerBirthday";
+import { useVillagerBirthday } from "@/hooks/villagers/useResident";
 import { BirthdayFace } from "./BirthdayFace";
 
 // The cake a worktree row wears on its villager's birthday, with their

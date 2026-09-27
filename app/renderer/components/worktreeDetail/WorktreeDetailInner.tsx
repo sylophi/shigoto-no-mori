@@ -27,7 +27,12 @@ import {
   useWorktreeCreatePhase,
 } from "@/store/worktreeLifecycle";
 import type { Project, Worktree } from "@shared/schemas";
-import { BirthdayBanner } from "@/components/villagers/BirthdayBanner";
+import {
+  BirthdayParty,
+  PARTY_HOST,
+} from "@/components/villagers/BirthdayParty";
+import { ResidentFace } from "@/components/villagers/ResidentFace";
+import { useResident } from "@/hooks/villagers/useResident";
 import { LaunchSection } from "./LaunchSection";
 import { LifecycleBanner } from "./LifecycleBanner";
 import { MirrorPill } from "./MirrorPill";
@@ -84,6 +89,7 @@ export function WorktreeDetailInner({
   // same rule PeerDeviceSettings and VersionSection follow).
   const { canCommand: granted } = useCommandAccess();
   const { data: runtime } = useRuntimeInfo();
+  const resident = useResident(worktree);
   const {
     deleteMutation,
     needsForce,
@@ -164,6 +170,12 @@ export function WorktreeDetailInner({
 
   const limboLabel = computeLimboLabel(teardownState, releaseState);
   const bannerLabel = inLimbo ? limboLabel : createLabel;
+  // The resident's birthday party, with their face to throw it, and
+  // never over a create or a removal.
+  const party =
+    resident?.birthday && resident.face !== null && bannerLabel === null
+      ? resident
+      : null;
   const cleanupCancelling = teardownState.cancelling || releaseState.cancelling;
 
   // Collapse the loose deletion flags into the footer's discriminated
@@ -204,8 +216,10 @@ export function WorktreeDetailInner({
           "flex flex-col gap-2 border-b border-border",
           PAGE_HEADER_PADDING,
           "pb-5 phone:pb-4",
+          party && PARTY_HOST,
         )}
       >
+        {party && <BirthdayParty villager={party} />}
         <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
           <button
             type="button"
@@ -235,6 +249,7 @@ export function WorktreeDetailInner({
           </span>
         </div>
         <div className="flex min-w-0 items-start gap-3">
+          <ResidentFace resident={resident} party={party !== null} />
           <div className="min-w-0 flex-1">
             <BranchTitle worktree={worktree} />
           </div>
@@ -243,11 +258,7 @@ export function WorktreeDetailInner({
         <MirrorPill worktree={worktree} />
       </header>
 
-      {bannerLabel ? (
-        <LifecycleBanner label={bannerLabel} />
-      ) : (
-        <BirthdayBanner worktree={worktree} />
-      )}
+      {bannerLabel && <LifecycleBanner label={bannerLabel} />}
 
       <div
         className={cn(

@@ -70,6 +70,16 @@ export function speakerFor(
   return { slug, profile, rarity: villagerRarity(slug, profile) };
 }
 
+// The character whose home a worktree is, as speakerFor gives them, or
+// null. Never the primary checkout: it is the project, not a villager's
+// home (worktreeMoves).
+export function residentOf(
+  worktree: Pick<Worktree, "name" | "isPrimary">,
+  profiles: VillagerProfiles,
+): Omit<Speaker, "face" | "color"> | null {
+  return worktree.isPrimary ? null : speakerFor(worktree.name, profiles);
+}
+
 // Letters from any script but Latin rule a phrase out. Punctuation and
 // spaces are fine (li'l one, bully, eh).
 const NON_LATIN_LETTER = /(?!\p{Script=Latin})\p{L}/u;

@@ -1,0 +1,71 @@
+import { cn } from "@/lib/utils";
+import { printStyle, stationeryFor } from "@/lib/villagers/stationery";
+import { useFaceColor } from "@/hooks/villagers/useFaceColor";
+import type { Resident } from "@/hooks/villagers/useResident";
+import { Balloons, Bunting } from "./Celebration";
+import { villagerInk } from "./VillagerDialogue";
+
+// The worktree page's header on its villager's birthday, behind the
+// breadcrumb and the title, whose face (ResidentFace) wears the
+// party hat. No words: the trimmings say it. The rarer the character,
+// the bigger the party (DESIGN.md, "Village life: rarity"): bunting for
+// a regular villager, bunting and a wash in their own color for a
+// special character, and for a household name their own stationery
+// drifting behind balloons. Fills its parent, under everything else in
+// it: the parent takes PARTY_HOST. The party clips itself, so the
+// face's confetti can still fall past the header.
+export const PARTY_HOST = "relative isolate";
+
+export function BirthdayParty({ villager }: { villager: Resident }) {
+  return (
+    <div
+      aria-hidden
+      data-slot="villager-birthday"
+      className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+    >
+      {villager.rarity === "legendary" ? (
+        <LegendaryTrimmings slug={villager.slug} />
+      ) : villager.rarity === "rare" ? (
+        <RareTrimmings face={villager.face} />
+      ) : (
+        <Bunting />
+      )}
+    </div>
+  );
+}
+
+// Their color read off their face (a face with no clear one takes
+// amber), washing in from the right under their own bunting.
+function RareTrimmings({ face }: { face: string | null }) {
+  const color = useFaceColor(face);
+  return (
+    <>
+      <div
+        style={villagerInk(color)}
+        className="absolute inset-0 bg-(--villager-ink) [mask-image:linear-gradient(to_left,black,transparent_70%)] opacity-10"
+      />
+      <Bunting color={color} />
+    </>
+  );
+}
+
+// Their stationery on the right, fading out before the title, with
+// balloons drifting up through it.
+function LegendaryTrimmings({ slug }: { slug: string }) {
+  const paper = stationeryFor(slug);
+  return (
+    <>
+      <div className="absolute inset-0 [mask-image:linear-gradient(to_left,black_20%,transparent_65%)]">
+        <div
+          style={printStyle(paper)}
+          className={cn(
+            "villager-paper-drift absolute right-0 bottom-0 opacity-25",
+            paper.color,
+          )}
+        />
+      </div>
+      <Balloons />
+      <Bunting count={30} />
+    </>
+  );
+}
