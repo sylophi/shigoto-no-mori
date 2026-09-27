@@ -2,7 +2,7 @@ import { type CSSProperties, useState } from "react";
 import { printStyle, stationeryFor } from "@/lib/villagers/stationery";
 import { cn } from "@/lib/utils";
 import type { MoveNews, Speaker } from "@/lib/villagerVoice";
-import { CloseButton } from "./CloseButton";
+import { NextArrow } from "./NextArrow";
 import { MoveCaption } from "./VillagerDialogue";
 import { TypedWords } from "./TypedWords";
 
@@ -26,12 +26,10 @@ export function VillagerLetter({
   news,
   speaker,
   words,
-  onClose,
 }: {
   news: MoveNews;
   speaker: Speaker;
   words: string;
-  onClose: () => void;
 }) {
   const paper = stationeryFor(speaker.slug);
   const [signed, setSigned] = useState(false);
@@ -74,6 +72,10 @@ export function VillagerLetter({
             farewell={farewell}
           />
         </div>
+        <NextArrow
+          shown={signed}
+          className={cn("absolute right-4 bottom-1", paper.ink)}
+        />
         {/* The envelope it came in, its flap swinging open. */}
         <div
           aria-hidden
@@ -89,7 +91,6 @@ export function VillagerLetter({
           <Stamp face={speaker.face} tint={paper.color} ink={paper.ink} />
         ))}
       <Sparkles />
-      <CloseButton onClose={onClose} className="top-4 left-2 bg-popover/80" />
     </div>
   );
 }

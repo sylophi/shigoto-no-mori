@@ -2,8 +2,8 @@ import { type CSSProperties, useState } from "react";
 import { VillagerFace } from "@/components/shared/VillagerSays";
 import { cn } from "@/lib/utils";
 import type { MoveNews, Speaker } from "@/lib/villagerVoice";
-import { CloseButton } from "./CloseButton";
 import { MovingBox } from "./MovingBox";
+import { NextArrow } from "./NextArrow";
 import { TypedWords } from "./TypedWords";
 
 // The look a character's words take on screen: their color as
@@ -30,12 +30,10 @@ export function VillagerDialogue({
   news,
   speaker,
   words,
-  onClose,
 }: {
   news: MoveNews;
   speaker: Speaker;
   words: string;
-  onClose: () => void;
 }) {
   const [done, setDone] = useState(false);
   return (
@@ -71,21 +69,10 @@ export function VillagerDialogue({
           </p>
           <MoveCaption news={news} ink="text-(--villager-ink)" />
         </div>
-        {/* The arrow a finished line waits on, bobbing. */}
-        <svg
-          aria-hidden
-          viewBox="0 0 12 9"
-          className={cn(
-            "absolute right-4 bottom-2.5 h-2 w-3 text-(--villager-ink) transition-opacity duration-200",
-            done ? "villager-bob opacity-100" : "opacity-0",
-          )}
-        >
-          <path
-            d="M1.5 1.5h9q1.5 0 .7 1.3L7 7.6q-1 1.4-2 0L.8 2.8q-.8-1.3.7-1.3Z"
-            fill="currentColor"
-          />
-        </svg>
-        <CloseButton onClose={onClose} className="top-1.5 right-1.5" />
+        <NextArrow
+          shown={done}
+          className="absolute right-4 bottom-2.5 text-(--villager-ink)"
+        />
       </div>
     </div>
   );
