@@ -14,6 +14,7 @@ import { reactCompiler } from "./vite.reactCompiler";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig, type HtmlTagDescriptor, type Plugin } from "vite";
 import { ACCOUNT_ENV_KEYS } from "./shared/account/serviceConfig";
+import { fixedDevServerPort } from "./scripts/lib/portsEnvFile.mts";
 
 function gitOutput(args: string): string | null {
   try {
@@ -144,8 +145,12 @@ export default defineConfig(({ mode }) => {
         "@shared": resolve(__dirname, "shared"),
       },
     },
-    // Distinct from the desktop renderer's dev server so both can run.
-    server: { port: 5190, strictPort: true },
+    // Distinct from the desktop renderer's dev server so both can run,
+    // and one per worktree (WEB_PORT in .env.ports).
+    server: {
+      port: fixedDevServerPort("WEB_PORT"),
+      strictPort: true,
+    },
     // web/public (the default under this root) carries the CSP-safe
     // external theme boot script, copied verbatim into dist-web. The
     // desktop's app-root public/ is outside this root, so its

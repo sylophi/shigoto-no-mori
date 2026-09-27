@@ -132,7 +132,11 @@ smd projects add <dir> --all --yes     # set SHIGOMORI_DATA_DIR if the data dir 
 
 1. Builds the dev CLI (`dist-cli/smd`).
 2. Fetches the pinned `cloudflared` binary.
-3. Allocates the renderer port (`PORT` in `.env.ports`, one per worktree).
+3. Allocates this worktree's dev server ports with port-pool (into
+   `.env.ports`): the renderer's `PORT`, plus `WEB_PORT`, `LAB_PORT` and
+   `LAB_WEB_PORT` for `pnpm web:dev`, `pnpm lab` and `pnpm lab:web`,
+   which run the same step. A checkout allocated before the pool gained
+   a port is released and allocated afresh, which can move its ports.
    An older `PORT` line in `.env.local` is no longer read and can be
    deleted.
 4. On macOS, clones Electron into a per-worktree bundle under
@@ -149,6 +153,8 @@ smd projects add <dir> --all --yes     # set SHIGOMORI_DATA_DIR if the data dir 
 | `SHIGOMORI_DEBUG_PORT`             | Opens Chromium's remote-debugging port on that window. Dev builds only.       |
 | `SHIGOMORI_DIAL_KINDS`             | Candidate kinds this device dials, e.g. `tunnel`. Dev builds only. See Rules. |
 | `PORT`                             | Renderer port, from `.env.ports`. A real env var overrides it.                |
+| `WEB_PORT`                         | Web client port (`pnpm web:dev`). Same source and override rule.              |
+| `LAB_PORT`, `LAB_WEB_PORT`         | UI lab ports (`pnpm lab`, `pnpm lab:web`). Same source and override rule.     |
 | `SM_DEVICE_HUB_URL`                | Device hub URL. Normally from `.env.local`; a real env var overrides it.      |
 | `SM_ACCOUNT_CLERK_PUBLISHABLE_KEY` | Clerk key. Same override rule.                                                |
 | `SM_ACCOUNT_WEB_ORIGIN`            | Web client origin the desktop admits. Same override rule.                     |
@@ -515,11 +521,12 @@ and assert through the bridge and the disk.
   the UI, not a real transfer. A video of the real two-device flow
   needs the profiles above and a screen recorder on the window, and
   `screencapture -v` needs a permission a remote session cannot grant.
-- **Web client** (`pnpm web:dev`, port 5190). A third device that
+- **Web client** (`pnpm web:dev`, port `WEB_PORT`). A third device that
   connects through the tunnel only, so it is the way to test the
   tunnel data path on one machine. Launch the desktop with
-  `SM_ACCOUNT_WEB_ORIGIN=http://localhost:5190` so it admits the web
-  client. The dev hub needs the tunnel secrets configured. The web
+  `SM_ACCOUNT_WEB_ORIGIN` set to the web client's origin so it admits
+  it:
+  `SM_ACCOUNT_WEB_ORIGIN=http://localhost:$(sed -n 's/^WEB_PORT=//p' .env.ports) pnpm dev`. The dev hub needs the tunnel secrets configured. The web
   client is a hostless controller: it is the desktop with no local
   projects, so anything a desktop can do to a peer (browse its
   worktrees, run and watch its scripts, change its settings) works

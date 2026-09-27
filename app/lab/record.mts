@@ -21,6 +21,7 @@ import { execFileSync } from "node:child_process";
 import { readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
+import { fixedDevServerPort } from "../scripts/lib/portsEnvFile.mts";
 
 type Action = {
   click?: string;
@@ -42,7 +43,9 @@ type Take = {
   actions?: Action[];
 };
 
-const ORIGIN = process.env.LAB_ORIGIN ?? "http://localhost:5191/";
+const ORIGIN =
+  process.env.LAB_ORIGIN ??
+  `http://localhost:${fixedDevServerPort("LAB_PORT")}/`;
 const [, , takesPath, outDir = "lab"] = process.argv;
 if (takesPath === undefined) {
   console.error("usage: node lab/record.mts <takes.json> [outDir]");

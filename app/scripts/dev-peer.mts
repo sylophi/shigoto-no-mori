@@ -61,7 +61,7 @@ try {
         "(`pnpm start`): the peer runs from its build and its vite server.",
     );
   }
-  const port = rendererDevServerPort(appRoot);
+  const port = rendererDevServerPort();
   if (port !== undefined) {
     const devServerUrl = `http://localhost:${port}`;
     if (!readFileSync(build, "utf8").includes(devServerUrl)) {

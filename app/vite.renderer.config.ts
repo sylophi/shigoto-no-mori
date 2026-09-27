@@ -35,7 +35,7 @@ function buildInfo(mode: string): { version: string; commit: string } {
 }
 
 export default defineConfig(({ mode }) => {
-  const envPort = rendererDevServerPort(__dirname);
+  const envPort = rendererDevServerPort();
   const port = envPort ? Number(envPort) : undefined;
   const { version, commit } = buildInfo(mode);
 

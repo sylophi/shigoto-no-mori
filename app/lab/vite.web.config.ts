@@ -28,7 +28,7 @@ function webHtmlFallback(): Plugin {
   };
 }
 
-const base = labBaseConfig({ port: 5192, entry: "web.html" });
+const base = labBaseConfig({ portKey: "LAB_WEB_PORT", entry: "web.html" });
 
 export default defineConfig({
   ...base,

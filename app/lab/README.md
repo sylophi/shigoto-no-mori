@@ -8,16 +8,19 @@ nothing here ships.
 
 Two flavors:
 
-- **Desktop shell**: `pnpm lab` (port 5191). Mounts the desktop
+- **Desktop shell**: `pnpm lab` (port `LAB_PORT`). Mounts the desktop
   renderer (`renderer/App.tsx`), with the lab page posing as "Studio
   Mac" over a local forest.
-- **Web shell**: `pnpm lab:web` (port 5192). Mounts the real web boot
+- **Web shell**: `pnpm lab:web` (port `LAB_WEB_PORT`). Mounts the real web boot
   (`web/boot`). The page poses as an enrolled browser device, and every
   machine forest (Studio Mac included) is a peer. Under 768px wide it
   renders the phone layout.
 
-Other sessions may hold those ports. Pass `--port <free port>` to
-either script to run beside them.
+Both ports come from port-pool, one pair per worktree, in
+`.env.ports` (both scripts run `port-pool ensure` first), so labs in
+different worktrees run side by side. Without port-pool, or in a
+checkout it hasn't provisioned, they fall back to 5191 and 5192. A real `LAB_PORT` / `LAB_WEB_PORT` env var, or
+`--port <port>` on either script, overrides the pooled port.
 
 Poses ride the URL:
 
@@ -89,20 +92,20 @@ Screenshots: `lab/shoot.mts` (playwright-core over system Chrome,
 headless). Use it rather than a browser preview in the chat thread:
 that browser runs on the viewer's machine and can't reach a dev server
 here over a remote connection. Run
-`node lab/shoot.mts shots.json outdir`, with `LAB_ORIGIN` pointing at
-the lab's origin when it isn't the desktop default
-(`http://localhost:5191/`). Each shot is
+`node lab/shoot.mts shots.json outdir`. It shoots this worktree's
+desktop lab (`LAB_PORT`). Point `LAB_ORIGIN` at any other lab origin,
+such as the web shell's. Each shot is
 `{ file, query, width?, height?, waitMs?, actions? }`, where the
 actions (click, press, evaluate, wait) run before the capture:
 
 ```sh
-pnpm lab --port 5291
+pnpm lab
 # in another terminal
 cat > /tmp/shots.json <<'JSON'
 [{ "file": "devices-dark", "query": "?theme=dark&to=/devices" },
  { "file": "phone", "query": "?theme=light", "width": 390, "height": 844 }]
 JSON
-LAB_ORIGIN=http://localhost:5291/ node lab/shoot.mts /tmp/shots.json /tmp
+node lab/shoot.mts /tmp/shots.json /tmp
 ```
 
 For anything the shot format can't express, a one-off script can
