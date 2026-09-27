@@ -105,7 +105,7 @@ const ControlTransferResultSchema = SyncPullWorktreeResultSchema.extend({
 });
 export type ControlTransferResult = z.infer<typeof ControlTransferResultSchema>;
 
-const ControlPeerWorktreeSchema = z.strictObject({
+export const ControlPeerWorktreeSchema = z.strictObject({
   device: z.strictObject({ deviceId: DeviceIdSchema, name: z.string() }),
   projectId: z.string(),
   worktree: WorktreeSchema,

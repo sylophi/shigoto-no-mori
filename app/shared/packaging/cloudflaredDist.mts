@@ -3,7 +3,7 @@
 // "needs cloudflared" must never mean "the user installs cloudflared":
 // the app carries the binary exactly as it carries the sm CLI
 // (forge.config.ts extraResource, resolved from Resources/ at runtime),
-// fetched by scripts/fetch-cloudflared.mjs from the release pinned
+// fetched by scripts/fetch-cloudflared.mts from the release pinned
 // here.
 //
 // One version and one sha256 per asset, committed, so a bump is a
@@ -12,7 +12,7 @@
 // no pinned asset ships no connector (the runner reports "no-binary"
 // and the Devices page says so).
 //
-// .mts with no imports, loadable by plain `node scripts/*.mjs` and by
+// .mts with no imports, loadable by plain `node scripts/*.mts` and by
 // main through the @shared alias. Never import this from the renderer.
 export const CLOUDFLARED_VERSION = "2026.8.3";
 

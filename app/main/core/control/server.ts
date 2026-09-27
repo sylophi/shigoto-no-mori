@@ -15,7 +15,7 @@
 // accounts on this machine can reach loopback, so the file carries a
 // token minted at bind and is written owner-only.
 //
-// Electron-free on purpose: test/control.mjs drives this exact server.
+// Electron-free on purpose: test/control.mts drives this exact server.
 import { createServer, type Server, type Socket } from "node:net";
 import { existsSync, rmSync } from "node:fs";
 import { dirname } from "node:path";

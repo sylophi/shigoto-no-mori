@@ -1,5 +1,5 @@
 // Resolves and spawns the bundled file-sync engine (file-sync/, built
-// by scripts/build-file-sync.mjs) for the host's spawn seam
+// by scripts/build-file-sync.mts) for the host's spawn seam
 // (host/fileSync/spawn.ts). Addressed directly like the CLI binary:
 // Resources/ when packaged, dist-file-sync/ in dev. Children register
 // with the CLI runner's reap so quitting the app never leaves a daemon

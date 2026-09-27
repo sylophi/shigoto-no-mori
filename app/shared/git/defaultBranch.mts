@@ -1,10 +1,10 @@
 // The default-ref half of repo identity (shared/git/repoIdentity.mts),
 // which peers compute for each other's repos: which branch keys the
 // identity's root commit. Pure module, the runner is injected, so the
-// parity harness (test/identity.mjs) runs it under its own scrubbed
+// parity harness (test/identity.mts) runs it under its own scrubbed
 // git. The CLI's resolver (pickDefaultRef in cli/gitx.go) makes the
 // same pick for identity and for the primary ref it measures rows
-// against, and test/identity.mjs pins the identities the two compute
+// against, and test/identity.mts pins the identities the two compute
 // against each other.
 
 // Runs git in `cwd`, resolves stdout, rejects on non-zero exit.

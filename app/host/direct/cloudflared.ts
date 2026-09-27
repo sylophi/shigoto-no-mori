@@ -220,18 +220,21 @@ export type TunnelChild = {
   pid?: number;
 };
 
+// What the hub Worker's provision call hands back for a listener port.
+export type TunnelProvision = {
+  hostname: string;
+  connectorToken: string;
+  // Absent from an older Worker: read as a reused tunnel.
+  dnsCreated?: boolean;
+};
+
 export type CloudflaredRunnerDeps = {
   // Resolves the usable binary, null when absent.
   resolveBinary(): Promise<string | null>;
   // The hub Worker's provision call for the given listener port.
   // Throws TunnelUnconfiguredError when the Worker has no tunnel env,
   // TunnelProvisionDeniedError on any other 4xx refusal.
-  provision(port: number): Promise<{
-    hostname: string;
-    connectorToken: string;
-    // Absent from an older Worker: read as a reused tunnel.
-    dnsCreated?: boolean;
-  }>;
+  provision(port: number): Promise<TunnelProvision>;
   // Test seam. The default spawns the real cloudflared with the token
   // in env only.
   spawnTunnel?: (binaryPath: string, connectorToken: string) => TunnelChild;

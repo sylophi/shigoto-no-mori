@@ -5,7 +5,7 @@
 // the build scripts, and forge.config.ts. A rename or relocation is
 // then a one-file change.
 //
-// .mts with node-builtin imports only: plain `node scripts/*.mjs` must
+// .mts with node-builtin imports only: plain `node scripts/*.mts` must
 // be able to load it without the CLI's loader shim or a bundler. Never
 // import this from the renderer.
 import { mkdirSync, renameSync, rmSync, symlinkSync } from "node:fs";
@@ -21,12 +21,12 @@ export type CliFlavor = "prod" | "dev";
 export const CLI_DIST_DIR = "dist-cli";
 
 // The packaged app's bundle id: forge.config.ts stamps it into the
-// bundle and build-cli.mjs injects it into the CLI (`sm app` opens the
+// bundle and build-cli.mts injects it into the CLI (`sm app` opens the
 // app by bundle id), so the two can never disagree.
 export const APP_BUNDLE_ID = "com.sylophi.shigomori";
 
 // GitHub repo the update feed serves releases from. The CLI owns the
-// whole update pipeline (cli/updater.go): build-cli.mjs injects this so
+// whole update pipeline (cli/updater.go): build-cli.mts injects this so
 // the feed can never point at a different repo than the app came from.
 export const UPDATE_FEED_OWNER = "sylophi";
 export const UPDATE_FEED_NAME = "shigoto-no-mori";

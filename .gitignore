@@ -26,7 +26,7 @@ dist/
 dist-web/
 
 # Synced from node_modules/material-icon-theme by
-# scripts/copy-material-icons.mjs (postinstall). Vite serves public/ as a
+# scripts/copy-material-icons.mts (postinstall). Vite serves public/ as a
 # static asset root, which avoids the 1238 per-icon ESM wrappers an eager
 # import.meta.glob would otherwise generate in dev.
 app/public/material-icons/
@@ -42,13 +42,13 @@ app/lab/villager-data/
 # App icon intermediates (icon.icns and icon.png are the committed sources)
 app/assets/icon.iconset/
 
-# sm CLI compiled binary (scripts/build-cli.mjs)
+# sm CLI compiled binary (scripts/build-cli.mts)
 dist-cli/
 
-# bundled cloudflared, fetched by scripts/fetch-cloudflared.mjs
+# bundled cloudflared, fetched by scripts/fetch-cloudflared.mts
 dist-cloudflared/
 
-# file-sync engine compiled binary (scripts/build-file-sync.mjs)
+# file-sync engine compiled binary (scripts/build-file-sync.mts)
 dist-file-sync/
 file-sync/file-sync
 file-sync/filesync

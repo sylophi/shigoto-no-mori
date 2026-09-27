@@ -10,7 +10,7 @@
 // caught in-process and would need an OS supervisor (macOS launchd
 // KeepAlive). That is out of scope here. The pruning and counting for
 // both crash guards is the pure module
-// main/core/liveness/rateLimit.ts, which test/liveness.mjs drives
+// main/core/liveness/rateLimit.ts, which test/liveness.mts drives
 // headlessly.
 import { keepReachableOn } from "@shared/schemas/config";
 import { app, type BrowserWindow } from "electron";

@@ -3,7 +3,7 @@
 // the New Worktree form's destination label, the convert-external
 // preview. A display-side mirror of resolveWorktreeBase in
 // cli/paths.go, which decides where a worktree actually lands;
-// test/cli-reads.mjs pins the two against each other for every layout.
+// test/cli-reads.mts pins the two against each other for every layout.
 //
 // Kept dependency-free so it can run in either environment.
 

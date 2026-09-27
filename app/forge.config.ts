@@ -149,24 +149,24 @@ const config: ForgeConfig = {
       : {}),
   },
   // node-pty ships Node-API prebuilds that work in Electron as-is
-  // (scripts/fix-node-pty-helper.mjs makes the helper executable, since
+  // (scripts/fix-node-pty-helper.mts makes the helper executable, since
   // install scripts are disabled). Skipping the rebuild keeps a compiler
   // toolchain out of the dev loop and makes dev and packaged builds run
   // the same binary.
   rebuildConfig: { ignoreModules: ["node-pty"] },
   hooks: {
     prePackage: async (_config, platform, arch) => {
-      execFileSync("node", ["scripts/generate-third-party-licenses.mjs"], {
+      execFileSync("node", ["scripts/generate-third-party-licenses.mts"], {
         cwd: import.meta.dirname,
         stdio: "inherit",
       });
       // Compile the CLI (requires Go on the build machine).
-      execFileSync("node", ["scripts/build-cli.mjs"], {
+      execFileSync("node", ["scripts/build-cli.mts"], {
         cwd: import.meta.dirname,
         stdio: "inherit",
       });
       // And the file-sync engine, the same way.
-      execFileSync("node", ["scripts/build-file-sync.mjs"], {
+      execFileSync("node", ["scripts/build-file-sync.mts"], {
         cwd: import.meta.dirname,
         stdio: "inherit",
       });
@@ -176,7 +176,7 @@ const config: ForgeConfig = {
       execFileSync(
         "node",
         [
-          "scripts/fetch-cloudflared.mjs",
+          "scripts/fetch-cloudflared.mts",
           "--platform",
           platform,
           "--arch",

@@ -22,7 +22,7 @@ It deploys as its own Vercel project with the Root Directory set to
   `src/components/`. `src/layouts/Page.astro` holds the head (title,
   description and link preview), the nav and the footer.
 - `src/pages/robots.txt.ts` and `src/pages/sitemap.xml.ts` build those
-  two files from the site URL in `astro.config.mjs`.
+  two files from the site URL in `astro.config.ts`.
 - `src/site.ts` holds the links more than one place uses.
 - `src/styles/global.css` is the one stylesheet.
 - `src/scripts/`:
@@ -34,7 +34,7 @@ It deploys as its own Vercel project with the Root Directory set to
 - `public/` is served as is: the icons, the wallpapers, the link
   preview image and the font license, which need fixed URLs.
 
-`astro.config.mjs` turns off asset inlining, so every script and asset
+`astro.config.ts` turns off asset inlining, so every script and asset
 is its own file. That keeps the page inside the strict CSP in
 `vercel.json`, and lets everything under `/_astro/` cache for a year.
 

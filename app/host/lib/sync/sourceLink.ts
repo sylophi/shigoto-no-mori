@@ -303,12 +303,13 @@ const RequestSchema = z.union([
   z.strictObject({ progress: ProgressFrameSchema }),
 ]);
 
+export const BundleAnswerSchema = z.strictObject({
+  bundle: z.strictObject({ bytes: z.number().int().nonnegative() }),
+});
 const AnswerSchema = z.union([
   z.strictObject({ ok: z.unknown() }),
   z.strictObject({ error: z.string() }),
-  z.strictObject({
-    bundle: z.strictObject({ bytes: z.number().int().nonnegative() }),
-  }),
+  BundleAnswerSchema,
 ]);
 const TipAnswerSchema = z.strictObject({
   commit: CommitHashSchema.nullable(),

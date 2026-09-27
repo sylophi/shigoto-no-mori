@@ -130,7 +130,7 @@ export function isTerminalDialError(error: unknown): boolean {
   );
 }
 
-type DirectDialerDeps = {
+export type DirectDialerDeps = {
   // Asks the peer for its connect info over the device hub (the hub
   // link's one ask), rejecting within timeoutMs. The whole reach this
   // dialer has into the device hub, so it cannot move contract traffic

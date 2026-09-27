@@ -89,7 +89,7 @@ func TestParseShelfSnapshot(t *testing.T) {
 }
 
 // The listing-side writes, against a sandbox registry with synthetic
-// rows (the probes themselves are the proof's, app/test/shelf.mjs).
+// rows (the probes themselves are the proof's, app/test/shelf.mts).
 func TestSettleShelves(t *testing.T) {
 	sandboxDataDir(t)
 	row := func(id string) worktreeJSON {

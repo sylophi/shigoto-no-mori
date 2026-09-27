@@ -50,7 +50,7 @@ type DirectPlaneConnection = {
   ): Promise<unknown>;
 };
 
-type DirectPlaneDeps = {
+export type DirectPlaneDeps = {
   // The hub connection, as a getter because the owner wires the
   // connection's own callbacks to the plane it creates first, so the
   // binding must resolve lazily.
@@ -89,7 +89,7 @@ type DirectPlaneDeps = {
   };
 };
 
-type DirectPlane = {
+export type DirectPlane = {
   // The renderer-facing hub bridge, for the contract registration.
   // Teardown is stop() below, not a call in here.
   handlers: HubHandlers;

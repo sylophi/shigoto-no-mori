@@ -85,11 +85,11 @@ flows show their outcome: a posed mirror session cycles every few
 seconds, keeps a history, and folds the peer's sidebar row into the
 local one.
 
-Screenshots: `lab/shoot.mjs` (playwright-core over system Chrome,
+Screenshots: `lab/shoot.mts` (playwright-core over system Chrome,
 headless). Use it rather than a browser preview in the chat thread:
 that browser runs on the viewer's machine and can't reach a dev server
 here over a remote connection. Run
-`node lab/shoot.mjs shots.json outdir`, with `LAB_ORIGIN` pointing at
+`node lab/shoot.mts shots.json outdir`, with `LAB_ORIGIN` pointing at
 the lab's origin when it isn't the desktop default
 (`http://localhost:5191/`). Each shot is
 `{ file, query, width?, height?, waitMs?, actions? }`, where the
@@ -102,17 +102,17 @@ cat > /tmp/shots.json <<'JSON'
 [{ "file": "devices-dark", "query": "?theme=dark&to=/devices" },
  { "file": "phone", "query": "?theme=light", "width": 390, "height": 844 }]
 JSON
-LAB_ORIGIN=http://localhost:5291/ node lab/shoot.mjs /tmp/shots.json /tmp
+LAB_ORIGIN=http://localhost:5291/ node lab/shoot.mts /tmp/shots.json /tmp
 ```
 
 For anything the shot format can't express, a one-off script can
 `import { chromium } from "playwright-core"` (a dev dependency) and
 launch `{ channel: "chrome", headless: true }`. Stop the lab when done.
 
-Videos: `lab/record.mjs`, the same harness recording a take instead of
+Videos: `lab/record.mts`, the same harness recording a take instead of
 taking a shot, with a drawn cursor so clicks are visible. Same
 prerequisites plus Playwright's own ffmpeg (`pnpm exec playwright-core
-install ffmpeg`, once). Run `node lab/record.mjs takes.json outdir`. Each take has
+install ffmpeg`, once). Run `node lab/record.mts takes.json outdir`. Each take has
 the shot shape, with `click` taking a Playwright locator, `type` and
 `paste` putting text into whatever has focus (keyed at a readable pace,
 or all at once as a clipboard would), and a `waitFor` action that

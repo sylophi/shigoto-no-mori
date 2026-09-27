@@ -12,7 +12,7 @@
  *
  * ============================= CONTRACT =============================
  * Everything this file hooks into, so refactors can't silently strip
- * the theme. `pnpm test theme-contract` (test/theme-contract.mjs, run
+ * the theme. `pnpm test theme-contract` (test/theme-contract.mts, run
  * in pre-commit) verifies each hook still exists.
  *
  * 1. Theme tokens (index.css / @theme): --background, --card, --popover,
