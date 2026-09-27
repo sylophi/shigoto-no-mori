@@ -76,7 +76,7 @@ try {
     assert.equal(
       LIGHT_THEME_IDS.length,
       DARK_THEME_IDS.length,
-      "the two lists are meant to be the same length",
+      "the two lists pair by index, so they are the same length",
     );
   });
   await proof.check(
