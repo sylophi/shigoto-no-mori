@@ -395,7 +395,8 @@ export function useIsDeletingWorktree(
 // instead of a refetch of the whole project's list (the handler
 // already returns the refreshed Worktree, so cache state stays
 // accurate without an N-git-call round trip), and a rollback to truth
-// on error.
+// on error. Optimistic writes change a row and never add or drop one:
+// the villager news reads those as moves (lib/villagers/moves.ts).
 function useSetWorktreeFlag<K extends "shelved" | "autoPull">(
   field: K,
   call: (
