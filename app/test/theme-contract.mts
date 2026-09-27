@@ -64,6 +64,11 @@ const RUNTIME_ATTRS = new Set([
   // sonner's title and description lines in those.
   "data-title",
   "data-description",
+  // sonner's kind of toast, its glyph, action and close buttons.
+  "data-type",
+  "data-icon",
+  "data-button",
+  "data-close-button",
 ]);
 // A prefix/suffix match ([data-size$="sm"]) names part of a value the
 // component computes, so it is held to the attribute being set at all.
@@ -133,27 +138,22 @@ const upstream = [
     file: "node_modules/sonner/dist/index.mjs",
     needle: "data-sonner-toast",
   },
-  {
+  // Quoted: bare, data-sonner-toaster would be satisfied by
+  // data-sonner-toast alone, and the rest by the attributes around them.
+  ...[
+    '"data-sonner-toaster"',
+    '"data-styled"',
+    '"data-title"',
+    '"data-description"',
+    '"data-type"',
+    '"data-icon"',
+    '"data-button"',
+    '"data-close-button"',
+  ].map((needle) => ({
     pkg: "sonner",
     file: "node_modules/sonner/dist/index.mjs",
-    // Quoted: bare, it would be satisfied by data-sonner-toast alone.
-    needle: '"data-sonner-toaster"',
-  },
-  {
-    pkg: "sonner",
-    file: "node_modules/sonner/dist/index.mjs",
-    needle: '"data-styled"',
-  },
-  {
-    pkg: "sonner",
-    file: "node_modules/sonner/dist/index.mjs",
-    needle: '"data-title"',
-  },
-  {
-    pkg: "sonner",
-    file: "node_modules/sonner/dist/index.mjs",
-    needle: '"data-description"',
-  },
+    needle,
+  })),
   {
     pkg: "sonner",
     file: "node_modules/sonner/dist/index.mjs",

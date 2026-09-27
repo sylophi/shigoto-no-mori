@@ -65,8 +65,9 @@
  * 4. Upstream library attributes (re-verify on upgrades; theme-contract
  *    greps the packages): Base UI's data-highlighted / data-disabled /
  *    data-popup-open / data-unchecked, cmdk's [cmdk-item] +
- *    aria-selected, sonner's [data-sonner-toast] (+ data-styled),
- *    [data-sonner-toaster], [data-title], [data-description] and its
+ *    aria-selected, sonner's [data-sonner-toast] (+ data-styled,
+ *    data-type), [data-sonner-toaster], [data-title], [data-description],
+ *    [data-icon], [data-button], [data-close-button] and its
  *    --border-radius variable.
  *    Clerk's .cl-rootBox / .cl-modalBackdrop (the ambient-strip
  *    carve-outs below) are part of Clerk's documented appearance API
@@ -177,6 +178,8 @@
      what keeps its arrow and its cards on the same recipe as the app's
      hover stripes and floating surfaces. */
   --doubutsu-sticker-shadow: 0 5px 0 0 var(--doubutsu-edge);
+  /* The small one, for a piece standing off a floating surface. */
+  --doubutsu-sticker-shadow-sm: 0 2px 0 0 var(--doubutsu-edge);
   --doubutsu-stripe-image: linear-gradient(
     45deg,
     transparent 25%,
@@ -437,6 +440,8 @@
 .doubutsu [data-sonner-toaster] {
   --border-radius: var(--radius);
   font-family: inherit;
+  /* The card's own fill, for a toast's wash to mix from (below). */
+  --doubutsu-toast-card: var(--popover);
 }
 .doubutsu
   [data-sonner-toast][data-styled="true"]
@@ -444,10 +449,113 @@
   font-weight: inherit;
 }
 
+/* --- Toasts speak doubutsu ---
+   sonner's own pieces are v1's (a small glyph in the text color, a
+   black action chip, a hairline close button) and sit outside our
+   component tree, so they are restyled here by sonner's attributes.
+   The kind of a toast wears its tone the way the rest of the app does,
+   through the status families, so a palette moves the success one:
+   the card takes a wash of it, and its glyph sits on a pastel tile of
+   the same hue, like an app on the phone's home screen. Only sonner's
+   glyph: a villager's faces take the icon slot too
+   (villagers/toasts.tsx), and keep their own look.
+
+   The toaster in the selector outranks sonner's own rules, which tie
+   with these otherwise (its close button's hover) and come later. */
+.doubutsu [data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
+  gap: calc(var(--spacing) * 2.5);
+  /* A toast with no tone (a plain one) mixes its card with itself. */
+  --popover: color-mix(
+    in oklab,
+    var(--doubutsu-toast-tone, var(--doubutsu-toast-card)) 7%,
+    var(--doubutsu-toast-card)
+  );
+  &[data-type="success"] {
+    --doubutsu-toast-tone: var(--color-emerald-500);
+  }
+  &[data-type="info"] {
+    --doubutsu-toast-tone: var(--color-sky-500);
+  }
+  &[data-type="warning"] {
+    --doubutsu-toast-tone: var(--color-amber-500);
+  }
+  &[data-type="error"] {
+    --doubutsu-toast-tone: var(--destructive);
+  }
+
+  & [data-icon]:has(> svg) {
+    --doubutsu-toast-ink: var(--doubutsu-toast-tone, var(--muted-foreground));
+    width: calc(var(--spacing) * 8);
+    height: calc(var(--spacing) * 8);
+    margin: 0;
+    justify-content: center;
+    border-radius: 9999px;
+    background-color: color-mix(
+      in oklab,
+      var(--doubutsu-toast-ink) 18%,
+      var(--popover)
+    );
+    color: var(--doubutsu-toast-ink);
+    & svg {
+      margin: 0;
+    }
+  }
+
+  /* The action (Undo, Redo) is the app's own loud button: the primary
+     fill at the small button's size (ui/button.tsx's sm). */
+  & [data-button] {
+    height: calc(var(--spacing) * 7);
+    padding-inline: calc(var(--spacing) * 2.5);
+    border-radius: min(var(--radius-md), 12px);
+    background-color: var(--primary);
+    color: var(--primary-foreground);
+    font-size: var(--button-sm-text, 0.8rem);
+    font-weight: inherit;
+  }
+
+  /* The close button hangs off the card's corner, so it is a floating
+     surface of its own: a sand disc on the small sticker drop, where v1
+     draws a hairline ring. Its fill and ink are the toaster's important
+     utilities (AppChrome.tsx), which outrank any rule here, so the
+     tokens they read are moved instead, its hover ones too: the stripes
+     are the hover signal, as on every other button. */
+  & [data-close-button] {
+    --popover: var(--secondary);
+    --accent: var(--secondary);
+    --muted-foreground: var(--secondary-foreground);
+    --foreground: var(--secondary-foreground);
+    box-shadow: var(--doubutsu-sticker-shadow-sm);
+    &:focus-visible {
+      box-shadow:
+        0 0 0 3px color-mix(in oklab, var(--ring) 50%, transparent),
+        var(--doubutsu-sticker-shadow-sm);
+    }
+  }
+
+  /* The pointer rule below stripes neither: sonner paints both with
+     the `background` shorthand, which wipes its stripes, and marks the
+     close button data-disabled="false", which it skips. A loading
+     toast's close button is the dead one, data-disabled="true". */
+  & :is([data-button], [data-close-button]):not([data-disabled="true"]) {
+    &:active {
+      background-image: var(--doubutsu-stripe-image);
+      background-size: 20px 20px;
+      animation: var(--doubutsu-stripe-animation);
+    }
+    @media (hover: hover) {
+      &:hover {
+        background-image: var(--doubutsu-stripe-image);
+        background-size: 20px 20px;
+        animation: var(--doubutsu-stripe-animation);
+      }
+    }
+  }
+}
+
 /* A rare villager's name plate and a legendary one's photo stand on a
    small drop of their own. */
 .doubutsu :is([data-slot="villager-nameplate"], [data-slot="villager-photo"]) {
-  box-shadow: 0 2px 0 0 var(--doubutsu-edge);
+  box-shadow: var(--doubutsu-sticker-shadow-sm);
 }
 
 /* Hairline separators inside those surfaces (the combobox search row,
