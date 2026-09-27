@@ -23,6 +23,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { z } from "zod";
 import { isValidWorktreeDirName } from "../shared/git/branches.ts";
 import { VillagerSlugSchema } from "../shared/schemas/villagers.ts";
 import {
@@ -52,13 +53,59 @@ interface Character {
   page: string;
 }
 
-async function api(params: Record<string, string>): Promise<any> {
+// The parts of the wiki's answers read below. Anything else in them is
+// dropped, and an answer missing one of these fails the run. A file
+// entry that isn't a whole image (a file page whose file is gone) reads
+// as no entry, the same as a missing page.
+const CategoryMembersSchema = z.object({
+  continue: z.record(z.string(), z.string()).optional(),
+  query: z.object({
+    categorymembers: z.array(z.object({ title: z.string() })),
+  }),
+});
+const ImageInfoSchema = z.object({
+  query: z.object({
+    normalized: z
+      .array(z.object({ from: z.string(), to: z.string() }))
+      .optional(),
+    pages: z.array(
+      z.object({
+        title: z.string(),
+        missing: z.boolean().optional(),
+        imageinfo: z
+          .array(
+            z
+              .object({
+                url: z.string(),
+                descriptionurl: z.string(),
+                size: z.number(),
+                sha1: z.string(),
+                width: z.number(),
+                height: z.number(),
+              })
+              .optional()
+              .catch(undefined),
+          )
+          .optional(),
+      }),
+    ),
+  }),
+});
+
+async function api<T>(
+  params: Record<string, string>,
+  schema: z.ZodType<T>,
+): Promise<T> {
   const url = `${WIKI_API}?${new URLSearchParams({ format: "json", formatversion: "2", ...params })}`;
   for (let attempt = 1; ; attempt++) {
     const response = await fetch(url, {
       headers: { "User-Agent": WIKI_USER_AGENT },
     });
-    if (response.ok) return response.json();
+    if (response.ok) {
+      const parsed = schema.safeParse(await response.json());
+      if (parsed.success) return parsed.data;
+      throw new Error(`Unexpected answer for ${url}: ${parsed.error.message}`);
+    }
     if (attempt >= 4) {
       throw new Error(`${response.status} ${response.statusText} for ${url}`);
     }
@@ -67,10 +114,13 @@ async function api(params: Record<string, string>): Promise<any> {
 }
 
 // Follows MediaWiki's `continue` tokens until the query is exhausted.
-async function* paged(params: Record<string, string>): AsyncGenerator<any> {
+async function* paged<T extends { continue?: Record<string, string> }>(
+  params: Record<string, string>,
+  schema: z.ZodType<T>,
+): AsyncGenerator<T> {
   let cont: Record<string, string> = {};
   for (;;) {
-    const data = await api({ ...params, ...cont });
+    const data = await api({ ...params, ...cont }, schema);
     yield data;
     if (!data.continue) return;
     cont = data.continue;
@@ -80,13 +130,16 @@ async function* paged(params: Record<string, string>): AsyncGenerator<any> {
 
 async function categoryPages(category: string): Promise<string[]> {
   const titles: string[] = [];
-  for await (const data of paged({
-    action: "query",
-    list: "categorymembers",
-    cmtitle: category,
-    cmtype: "page",
-    cmlimit: "500",
-  })) {
+  for await (const data of paged(
+    {
+      action: "query",
+      list: "categorymembers",
+      cmtitle: category,
+      cmtype: "page",
+      cmlimit: "500",
+    },
+    CategoryMembersSchema,
+  )) {
     for (const member of data.query.categorymembers) titles.push(member.title);
   }
   return titles;
@@ -212,12 +265,15 @@ async function resolveFaces(titles: string[]): Promise<Map<string, Icon>> {
   const found = new Map<string, Icon>();
   for (let i = 0; i < titles.length; i += 50) {
     const batch = titles.slice(i, i + 50);
-    const data = await api({
-      action: "query",
-      prop: "imageinfo",
-      iiprop: "url|sha1|size",
-      titles: batch.join("|"),
-    });
+    const data = await api(
+      {
+        action: "query",
+        prop: "imageinfo",
+        iiprop: "url|sha1|size",
+        titles: batch.join("|"),
+      },
+      ImageInfoSchema,
+    );
     const asked = new Map<string, string>();
     for (const { from, to } of data.query.normalized ?? []) asked.set(to, from);
     for (const page of data.query.pages) {

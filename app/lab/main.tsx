@@ -8,7 +8,7 @@ import { applyPose } from "./pose";
 // Diagnostics for driving the lab headlessly: every console.error/warn,
 // page error and unhandled rejection lands in window.smLabLog.
 const labLog: string[] = [];
-(window as any).smLabLog = labLog;
+window.smLabLog = labLog;
 const record = (kind: string, parts: unknown[]) => {
   labLog.push(
     `${kind}: ${parts.map((p) => (p instanceof Error ? p.stack : String(p))).join(" ")}`.slice(

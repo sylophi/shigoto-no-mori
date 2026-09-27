@@ -10,6 +10,7 @@
 // play out on it.
 import type { VillagerDataStatus, VillagerProfiles } from "@shared/schemas";
 import { villagerManifest } from "@shared/villagers/manifest";
+import type { AllChannelHandlers } from "@shared/ipc/client";
 
 const faces = import.meta.glob<string>("./villager-data/ready/faces/*.png", {
   query: "?inline",
@@ -60,7 +61,7 @@ function posedStatus(): VillagerDataStatus {
 }
 
 // One device's villager data channels, each device with its own status.
-export function villagerHandlersFor(): Record<string, (input: any) => unknown> {
+export function villagerHandlersFor(): AllChannelHandlers {
   let status = posedStatus();
   let timer: ReturnType<typeof setInterval> | undefined;
   const stop = () => {
@@ -92,7 +93,7 @@ export function villagerHandlersFor(): Record<string, (input: any) => unknown> {
     },
     "villagers:cancel": clear,
     "villagers:remove": clear,
-    "villagers:face": async ({ slug }: { slug: string }) => {
+    "villagers:face": async ({ slug }) => {
       const load = faces[`./villager-data/ready/faces/${slug}.png`];
       if (!shown() || load === undefined) return null;
       return (await load()).replace(/^data:image\/png;base64,/, "");

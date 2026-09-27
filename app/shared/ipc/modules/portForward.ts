@@ -43,6 +43,8 @@ const PortForwardSummarySchema = z.strictObject({
   connCount: z.number().int().min(0),
 });
 
+export type PortForwardSummary = z.infer<typeof PortForwardSummarySchema>;
+
 const PortForwardListResultSchema = z.strictObject({
   forwards: z.array(PortForwardSummarySchema),
 });

@@ -19,6 +19,7 @@ import {
   type forwardContract,
   isForwardConnectFailedError,
 } from "@shared/ipc/modules/forward";
+import type { PortForwardSummary } from "@shared/ipc/modules/portForward";
 import type { Client } from "@shared/ipc/types";
 import { mintHexId } from "@host/lib/hexId";
 import {
@@ -45,14 +46,6 @@ export const MAX_CONNS_PER_DEVICE = 16;
 // triggers a renderer list refetch, so burst members collapse into one
 // signal shortly after the first.
 export const CHANGE_COALESCE_MS = 150;
-
-export type PortForwardSummary = {
-  forwardId: string;
-  deviceId: string;
-  remotePort: number;
-  localPort: number;
-  connCount: number;
-};
 
 type Forward = {
   forwardId: string;

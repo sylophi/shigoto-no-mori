@@ -9,7 +9,8 @@
 // window.smLab carries the posing controls: flip a peer's presence,
 // change the socket phase, navigate the memory router.
 import type { DeviceIcon } from "@shared/account/deviceIcon";
-import { buildApi } from "@shared/ipc/client";
+import type { DeviceInfo } from "@shared/hub/protocol";
+import { buildApi, type AllChannelHandlers } from "@shared/ipc/client";
 import { stackCleanupForWorktree } from "@shared/pullRequestStack";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
 import {
@@ -38,6 +39,7 @@ import {
   MOVE_CANCELLED,
   pullBringsIgnoredFiles,
 } from "@shared/ipc/modules/sync";
+import type { PortForwardSummary } from "@shared/ipc/modules/portForward";
 import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
 import type {
   MirrorEvent,
@@ -70,8 +72,36 @@ import {
 } from "./fixtures";
 import { villagerHandlersFor } from "./villagerData";
 
-type FixtureHandler = (input: any) => unknown;
-type FixtureHandlers = Record<string, FixtureHandler>;
+// A fixture table: a handler for each channel it answers, typed by the
+// contract. A channel the table leaves out falls back to a
+// schema-derived stub.
+type FixtureHandlers = AllChannelHandlers;
+
+// The posing controls on window.smLab.
+interface LabControls {
+  setPeer(deviceId: string, state: "connected" | "online" | "offline"): void;
+  setSocket(phase: HubStatus["socket"]): void;
+  setMirrorConflicts(roots: string[]): void;
+  worktree(
+    deviceId: string,
+    action: "add" | "remove",
+    name: string,
+    options?: { projectId?: string; changedCount?: number },
+  ): void;
+  emitClient: FixtureWire["emit"];
+  emitHost: FixtureWire["emit"];
+  // Set by lab/boot.tsx once the memory router is up.
+  navigate?: (to: string) => void;
+}
+
+// Present only once the lab bridge is installed, so the renderer
+// cannot lean on them.
+declare global {
+  interface Window {
+    smLab?: LabControls;
+    smLabLog?: string[];
+  }
+}
 
 type FixtureWire = {
   transport: ClientTransport;
@@ -90,19 +120,26 @@ function createFixtureWire(
   const index = invokeIndexFor(scope);
   const emit: FixtureWire["emit"] = (channel, payload) =>
     registry.emit(channel, payload);
-  const handlers = handlersFor(emit);
+  // Read by channel name off the wire, which loses the link between a
+  // channel and its input type. The parse below restores it.
+  const handlers = handlersFor(emit) as Record<
+    string,
+    ((input: unknown) => unknown) | undefined
+  >;
   return {
     transport: {
       invoke(channel, input) {
-        const handler = handlers[channel];
-        if (handler !== undefined) {
-          return Promise.resolve().then(() => handler(input));
-        }
         const def = index.get(channel);
         if (def === undefined) {
           return Promise.reject(
             new Error(`[lab] no contract entry for ${channel}`),
           );
+        }
+        const handler = handlers[channel];
+        if (handler !== undefined) {
+          // Parsed the way the real registrar parses it, so a handler
+          // sees the contract's shape and a bad fixture call fails.
+          return Promise.resolve().then(() => handler(def.input.parse(input)));
         }
         const stub = stubValueFor(def.output, { fabricateArms: true });
         if (stub === NO_STRUCTURAL_STUB) {
@@ -292,7 +329,6 @@ function hostHandlersFor(
       projectIconFor(
         forest.projects.find((project) => project.id === projectId)?.name ?? "",
       ),
-    "projects:listIgnoredPaths": () => [".env.local", "node_modules"],
     "worktrees:list": ({ projectId }) => [
       ...(forest.worktrees[projectId] ?? []),
     ],
@@ -338,7 +374,7 @@ function hostHandlersFor(
     "worktrees:listCommits": ({ worktreeId, skip }) =>
       skip > 0 ? [] : (findWorktree(worktreeId)?.recentCommits ?? []),
     "worktrees:fileDiff": () => LAB_DIFF,
-    "worktrees:readFile": ({ path }: { path: string }) => labFile(path),
+    "worktrees:readFile": ({ path }) => labFile(path),
     // A worktree with changes lists two of them, and committing takes
     // them all, so the commit flow runs end to end.
     "worktrees:changeStatus": ({ worktreeId }) =>
@@ -347,13 +383,13 @@ function hostHandlersFor(
             {
               path: "renderer/lib/villagerVoice.ts",
               kind: "modified",
-              counts: { added: 12, deleted: 3 },
+              counts: { additions: 12, deletions: 3 },
               staged: "none",
             },
             {
               path: "renderer/lib/toast.tsx",
               kind: "modified",
-              counts: { added: 4, deleted: 1 },
+              counts: { additions: 4, deletions: 1 },
               staged: "none",
             },
           ]
@@ -407,7 +443,7 @@ function hostHandlersFor(
       stagedUpdates.delete(forest.deviceId);
       emit("updater:state", { kind: "idle" });
     },
-    "launchers:detect": () => LAB_DETECTED,
+    "launchers:detect": () => [...LAB_DETECTED],
     "launchers:forProject": () => ({
       entries: [
         ...LAB_DETECTED,
@@ -449,9 +485,7 @@ function hostHandlersFor(
       squash: true,
       rebase: true,
     }),
-    "sync:worktreeFolder": ({ relative }: { relative: string }) => [
-      ...(LAB_TREE[relative] ?? []),
-    ],
+    "sync:worktreeFolder": ({ relative }) => [...(LAB_TREE[relative] ?? [])],
     "sync:ignoredPaths": () => ({
       paths: [...LAB_IGNORED_PATHS],
       total: LAB_IGNORED_PATHS.length,
@@ -470,12 +504,12 @@ function hostHandlersFor(
         .filter((stream) => stream.deviceId === forest.deviceId)
         .map(({ deviceId: _device, ...stream }) => stream),
     }),
-    "mirror:history": ({ localWorktreeId }: { localWorktreeId: string }) => ({
+    "mirror:history": ({ localWorktreeId }) => ({
       events: [...(labMirrors.history[localWorktreeId] ?? [])],
     }),
     // The controls of a session this forest runs (the manage dialog
     // re-scopes to the runner).
-    "mirror:stop": ({ session }: { session: string }) => {
+    "mirror:stop": ({ session }) => {
       const entry = findLabSession(session);
       labMirrors.sessions = labMirrors.sessions.filter(
         (s) => s.session !== session,
@@ -499,10 +533,8 @@ function hostHandlersFor(
       }
       mirrorChanged();
     },
-    "mirror:pause": ({ session }: { session: string }) =>
-      setMirrorPaused(session, true),
-    "mirror:resume": ({ session }: { session: string }) =>
-      setMirrorPaused(session, false),
+    "mirror:pause": ({ session }) => setMirrorPaused(session, true),
+    "mirror:resume": ({ session }) => setMirrorPaused(session, false),
     "mirror:setIgnores": ({
       session,
       ignoreMode,
@@ -532,12 +564,12 @@ function hostHandlersFor(
     ...(forest.deviceId === LOCAL_DEVICE_ID
       ? {}
       : {
-          "mirror:startTo": (input: any) => labMirrorStartTo(forest, input),
+          "mirror:startTo": (input) => labMirrorStartTo(forest, input),
         }),
     // The cancel, on every forest: the local one for a pull or a send,
     // a peer for the mirror it runs towards here. The posed pull reads
     // the mark between its steps.
-    "sync:cancelMove": (input: any) => {
+    "sync:cancelMove": (input) => {
       const move = posedMoves.get(input.sourceWorktreeId);
       if (move !== undefined) move.cancelled = true;
       return { cancelled: move !== undefined };
@@ -547,8 +579,8 @@ function hostHandlersFor(
     // local project, and a teardown removes the source row.
     ...(forest.deviceId === LOCAL_DEVICE_ID
       ? {
-          "sync:pullWorktree": (input: any) => labSyncPull(forest, emit, input),
-          "sync:teardownSource": (input: any) => {
+          "sync:pullWorktree": (input) => labSyncPull(forest, emit, input),
+          "sync:teardownSource": (input) => {
             // The source is the peer's worktree after a pull, this
             // device's own after a send.
             const source =
@@ -1339,22 +1371,19 @@ export function installLabBridge(
     "local",
   );
 
+  const webDevice: DeviceInfo = {
+    deviceId: WEB_DEVICE_ID,
+    name: "Chrome on MacBook",
+    platform: WEB_PLATFORM,
+    icon: "browser",
+    createdAt: Date.now() - 2 * 24 * 3_600_000,
+    lastSeenAt: Date.now(),
+    online: true,
+  };
   const registryDevices = () =>
-    (WEB_SHELL
-      ? [
-          ...accountDevices,
-          {
-            deviceId: WEB_DEVICE_ID,
-            name: "Chrome on MacBook",
-            platform: WEB_PLATFORM,
-            icon: "browser",
-            createdAt: Date.now() - 2 * 24 * 3_600_000,
-            lastSeenAt: Date.now(),
-            online: true,
-          },
-        ]
-      : accountDevices
-    ).filter((device) => !revoked.has(device.deviceId));
+    (WEB_SHELL ? [...accountDevices, webDevice] : accountDevices).filter(
+      (device) => !revoked.has(device.deviceId),
+    );
 
   // ?signedOut=1 poses the desktop signed out (the web shell has no
   // signed-out window to show), for the settings that need an account.
@@ -1367,12 +1396,13 @@ export function installLabBridge(
     deviceName: WEB_SHELL ? "Chrome on MacBook" : deviceName,
     deviceIcon: deviceIcon ?? detectedIcon(),
     detectedDeviceIcon: detectedIcon(),
+    sharedSignIn: false,
   });
 
   // The engine's forward table, mutated by start/stop so the switches
   // on a remote worktree's ports really flip. One forward pre-posed so
   // the live state is visible without a click.
-  const forwards = new Map<string, any>([
+  const forwards = new Map<string, PortForwardSummary>([
     [
       "a3f19c2e77b04d5586e1f20c9ab34d61",
       {
@@ -1389,11 +1419,11 @@ export function installLabBridge(
     "account:status": accountStatus,
     "account:listDevices": () => registryDevices(),
     "account:acceptsCommands": () => acceptsCommands,
-    "account:setAcceptsCommands": (enabled: boolean) => {
+    "account:setAcceptsCommands": (enabled) => {
       acceptsCommands = enabled;
       client.emit("account:commandAccessChanged", enabled);
     },
-    "account:revokeDevice": (deviceId: string) => {
+    "account:revokeDevice": (deviceId) => {
       // Mirrors the real handler's registry effect: the device leaves
       // the account list and account:changed fans out the refetch.
       // Fixture presence is untouched, matching the device hub's lag.
@@ -1521,29 +1551,28 @@ export function installLabBridge(
     isElectron: !WEB_SHELL,
     ...buildApi({ host: localHost.transport, client: client.transport }),
   };
-  // The renderer's window.d.ts types window.api off the preload, and
-  // the lab bridge satisfies the same runtime surface.
-  (window as any).api = api;
+  // The renderer's window.d.ts types window.api off the preload, so
+  // this assignment is the proof the lab bridge has the same surface.
+  window.api = api;
 
   const pushHub = () => client.emit("hub:statusChanged", hubSnapshot());
 
-  (window as any).smLab = {
-    // "connected" | "online" | "offline"
-    setPeer(deviceId: string, state: "connected" | "online" | "offline") {
+  window.smLab = {
+    setPeer(deviceId, state) {
       roster.delete(deviceId);
       directSessions.delete(deviceId);
       if (state !== "offline") roster.add(deviceId);
       if (state === "connected") directSessions.add(deviceId);
       pushHub();
     },
-    setSocket(phase: HubStatus["socket"]) {
+    setSocket(phase) {
       socketPhase = phase;
       pushHub();
     },
     // Holds the given roots still on every posed mirror, each changed
     // on both sides, so the conflict chip and its list can be posed.
     // No roots clears them.
-    setMirrorConflicts(roots: string[]) {
+    setMirrorConflicts(roots) {
       for (const session of labMirrors.sessions) {
         session.conflicts = roots.map((root) => ({
           root,
@@ -1558,18 +1587,7 @@ export function installLabBridge(
     // it: the fixture world moves, then the host says so the way its fs
     // watcher would. `projectId` defaults to the device's first
     // project, and `changedCount` gives an added one changes to commit.
-    worktree(
-      deviceId: string,
-      action: "add" | "remove",
-      name: string,
-      {
-        projectId,
-        changedCount = 0,
-      }: {
-        projectId?: string;
-        changedCount?: number;
-      } = {},
-    ) {
+    worktree(deviceId, action, name, { projectId, changedCount = 0 } = {}) {
       const forest = forests[deviceId];
       const project =
         forest?.projects.find((p) => p.id === projectId) ?? forest?.projects[0];

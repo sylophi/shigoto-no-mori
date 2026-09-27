@@ -38,7 +38,7 @@ import {
 
 // Every worktree-scoped git mutation shares this contract; naming it
 // once means a new one can't silently miss tracksProjectUsage.
-const worktreeMutation = (channel: string) =>
+const worktreeMutation = <Ch extends string>(channel: Ch) =>
   invoke(channel, WorktreeScopedPayloadSchema, WorktreeSchema, {
     tracksProjectUsage: true,
     remote: true,

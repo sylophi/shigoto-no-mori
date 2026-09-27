@@ -20,6 +20,7 @@
       "error",
       { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }
     ],
+    "typescript/no-explicit-any": "error",
     "import/no-unassigned-import": ["error", { "allow": ["**/*.css"] }],
     "no-restricted-imports": [
       "error",
