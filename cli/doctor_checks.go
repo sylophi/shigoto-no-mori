@@ -493,6 +493,13 @@ func checkRegistryFile(report *doctorReport) {
 			"Repair the projects array in "+collapseHome(path)+".")
 		return
 	}
+	var order []string
+	if entry, ok := all[projectOrderKey]; ok && json.Unmarshal(entry, &order) != nil {
+		report.warn(groupState, "registry", registryFile,
+			"the projectOrder list has the wrong shape, so projects list in their default order and can't be reordered",
+			"Repair or delete the projectOrder key in "+collapseHome(path)+".")
+		return
+	}
 	malformed := 0
 	for _, p := range projects {
 		if p.ID == "" || p.Path == "" {

@@ -193,8 +193,9 @@ func mergeTerrierProjects(projects []project) []project {
 }
 
 // The pure half of the merge, split out for tests. Registry order
-// first (the sidebar's, see `projects reorder`), terrier extras after,
-// sorted by name then path (plain byte compare).
+// first, terrier extras after, sorted by name then path (plain byte
+// compare). This is only the default: the manual order
+// (orderProjects) goes over the merged list.
 func appendTerrierProjects(projects []project, listings []terrierListing) []project {
 	known := make(map[string]bool, len(projects))
 	for _, p := range projects {

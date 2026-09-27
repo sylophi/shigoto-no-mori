@@ -104,7 +104,7 @@ export function ProjectDevicePage({
           <>
             {/* A terrier-sourced project is otherwise indistinguishable
                 from a registered one, and the difference shows up in
-                what you can do to it (no remove, no reordering). */}
+                what you can do to it (no remove). */}
             {project.source === "terrier" && <TerrierPaw className="size-4" />}
             {/* With tabs they name the device. Without them the chip
                 does, for a peer's project (nothing locally). */}

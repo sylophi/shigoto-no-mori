@@ -30,7 +30,7 @@ interface ProjectHeaderProps {
   onContextMenu?: (event: React.MouseEvent) => void;
   arrangeMode?: boolean;
   // False for a row arrange mode renders but won't let you drag (a
-  // terrier project, whose order isn't ours to store).
+  // peer's project, whose order isn't this machine's to store).
   reorderable?: boolean;
 }
 

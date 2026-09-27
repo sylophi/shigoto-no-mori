@@ -240,13 +240,25 @@ func TestProjectsReorder(t *testing.T) {
 	sandboxDataDir(t)
 	seed := `{"projects":[` +
 		`{"id":"A","name":"a","path":"/a"},` +
-		`{"id":"B","name":"b","path":"/b","futureField":{"x":1}},` +
-		`{"id":"C","name":"c","path":"/c"}]}`
+		`{"id":"B","name":"b","path":"/b"}]}`
 	seedRegistry(t, seed)
+	// What the pre-dispatch load hands a command: the registry, a
+	// terrier-only project merged after it, and the stored order over
+	// both.
+	listed := func() []project {
+		t.Helper()
+		projects, order, err := loadProjectsAndOrder()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return orderProjects(appendTerrierProjects(projects, []terrierListing{{Path: "/t"}}), order)
+	}
+	tID := terrierProjectID("/t")
 	reorder := func(ids string) {
 		t.Helper()
+		ctx := cliContext{projects: listed()}
 		docs := captureJSON(t, func() {
-			if code, err := cmdProject(cliContext{}, []string{"reorder", "--ids", ids}); code != 0 || err != nil {
+			if code, err := cmdProject(ctx, []string{"reorder", "--ids", ids}); code != 0 || err != nil {
 				t.Fatalf("reorder %s: %d, %v", ids, code, err)
 			}
 		})
@@ -254,28 +266,86 @@ func TestProjectsReorder(t *testing.T) {
 			t.Fatalf("reorder answered %v", doc)
 		}
 	}
+	order := func() string {
+		return joinMapped(listed(), func(p project) string { return p.ID })
+	}
 
 	// Already in this order (unknown ids ignored): nothing is written.
-	reorder("A, B,terrier-only")
+	reorder("A, B,stale")
 	if got := readFileT(t, registryPath()); got != seed {
 		t.Fatalf("a no-op reorder rewrote the registry:\n%s", got)
 	}
 
-	reorder("C,stale,A")
-	projects, err := loadProjects()
-	if err != nil {
-		t.Fatal(err)
+	// The terrier-only project moves like any other, ahead of the
+	// registry entries, and the projects array itself stays put.
+	reorder(tID + ",stale,B")
+	if got, want := order(), tID+", B, A"; got != want {
+		t.Errorf("order = %s, want %s", got, want)
 	}
-	ids := joinMapped(projects, func(p project) string { return p.ID })
-	if ids != "C, A, B" {
-		t.Errorf("order = %s, want C, A, B", ids)
+	if projects, _ := loadProjects(); joinMapped(projects, func(p project) string { return p.ID }) != "A, B" {
+		t.Errorf("reorder rewrote the projects array: %v", projects)
 	}
-	if raw := readFileT(t, registryPath()); !strings.Contains(raw, `"futureField"`) {
-		t.Errorf("an unknown entry field was dropped:\n%s", raw)
+
+	// A project added since isn't in the stored order and lands last.
+	seedRegistry(t, `{"projectOrder":["/t","/b","/a"],"projects":[`+
+		`{"id":"A","name":"a","path":"/a"},`+
+		`{"id":"C","name":"c","path":"/c"},`+
+		`{"id":"B","name":"b","path":"/b"}]}`)
+	if got, want := order(), tID+", B, A, C"; got != want {
+		t.Errorf("order after an add = %s, want %s", got, want)
 	}
 
 	if code, _ := cmdProject(cliContext{}, []string{"reorder"}); code != 2 {
 		t.Errorf("reorder without --ids = exit %d, want 2", code)
+	}
+}
+
+// The order goes by path, so a project whose id changes (a registry
+// entry removed while terrier still lists the repo) keeps its place.
+func TestProjectOrderSurvivesAnIDChange(t *testing.T) {
+	order := []string{"/b", "/a"}
+	demoted := []project{
+		{ID: "A", Name: "a", Path: "/a"},
+		{ID: terrierProjectID("/b"), Name: "b", Path: "/b", Source: "terrier"},
+	}
+	if got := joinMapped(orderProjects(demoted, order), func(p project) string { return p.Name }); got != "b, a" {
+		t.Errorf("order = %s, want b, a", got)
+	}
+}
+
+// A path the list doesn't hold right now (terrier off or unreadable)
+// goes back in after the path it followed, and first when nothing came
+// before it.
+func TestKeepUnlisted(t *testing.T) {
+	got := keepUnlisted([]string{"/b", "/a", "/c"}, []string{"/x", "/a", "/t", "/b", "/c", "/u"})
+	want := []string{"/x", "/b", "/a", "/t", "/c", "/u"}
+	if !slices.Equal(got, want) {
+		t.Errorf("keepUnlisted = %v, want %v", got, want)
+	}
+}
+
+func TestDropFromProjectOrder(t *testing.T) {
+	sandboxDataDir(t)
+	seedRegistry(t, `{"projectOrder":["/a","/b"]}`)
+	dropFromProjectOrder("/a")
+	dropFromProjectOrder("/gone")
+	if _, order, err := loadProjectsAndOrder(); err != nil || !slices.Equal(order, []string{"/b"}) {
+		t.Errorf("order = %v, %v, want [/b]", order, err)
+	}
+}
+
+// A malformed stored order reads as absent rather than failing every
+// command, and the next reorder refuses to write over it.
+func TestMalformedProjectOrder(t *testing.T) {
+	sandboxDataDir(t)
+	seedRegistry(t, `{"projects":[{"id":"A","name":"a","path":"/a"}],"projectOrder":{"A":0}}`)
+	projects, order, err := loadProjectsAndOrder()
+	if err != nil || len(projects) != 1 || order != nil {
+		t.Fatalf("load = %v, %v, %v, want the project and no order", projects, order, err)
+	}
+	both := append(projects, project{ID: "B", Name: "b", Path: "/b"})
+	if err := storeProjectOrder(both, []string{"B"}); err == nil {
+		t.Error("a reorder wrote over a malformed projectOrder")
 	}
 }
 

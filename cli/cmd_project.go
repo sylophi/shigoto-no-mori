@@ -37,7 +37,7 @@ func cmdProject(ctx cliContext, args []string) (int, error) {
 	case "config":
 		return cmdConfig(ctx, args[1:])
 	case "reorder":
-		return cmdProjectReorder(args[1:])
+		return cmdProjectReorder(ctx, args[1:])
 	default:
 		return 2, usageErrf("Unknown subcommand %q. Usage: %s projects <list|add|remove|reorder|config|icon> [args]", args[0], binaryName)
 	}
@@ -167,11 +167,13 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 		}
 	} else {
 		_ = removeProjectState(proj.ID)
-		// The primary's marks and the icon cache entry are keyed by its
-		// path, not the project id, so they would outlive the state dir
-		// and greet a re-add.
+		// The primary's marks, the icon cache entry and the project's
+		// place in the manual order are keyed by its path, not the
+		// project id, so they would outlive the state dir and greet a
+		// re-add.
 		dropWorktreeMarks(worktreeIDFromPath(proj.Path))
 		forgetIconCacheEntry(proj.Path)
+		dropFromProjectOrder(proj.Path)
 	}
 
 	emitOrOut(map[string]any{"ok": true, "removed": proj.Name, "path": proj.Path},
@@ -180,13 +182,13 @@ func cmdProjectRemove(ctx cliContext, args []string) (int, error) {
 }
 
 // sm projects reorder --ids <id,...>: the sidebar's drag-to-reorder.
-// Under the registry lock, the listed ids move to the front in the given
-// order and every other entry follows in its current relative order, so
-// a project added concurrently lands last instead of being dropped. Ids
-// the registry doesn't hold (terrier-only projects, stale ids) are
-// ignored, and an unchanged order writes nothing. Entries are moved as
-// stored, fields this build doesn't know included.
-func cmdProjectReorder(args []string) (int, error) {
+// The listed ids move to the front in the given order and every other
+// project follows in its current relative order. The result is stored
+// whole under projectOrderKey (by path), terrier-only projects
+// included, and the projects array is left alone. Ids no listed
+// project has (stale ones) are ignored, and an unchanged order writes
+// nothing.
+func cmdProjectReorder(ctx cliContext, args []string) (int, error) {
 	parsed, err := parseCmdArgs(args, argSpec{strings: map[string][]string{"ids": {}}})
 	if err != nil {
 		return exitCodeOf(err), err
@@ -201,55 +203,107 @@ func cmdProjectReorder(args []string) (int, error) {
 			ids = append(ids, id)
 		}
 	}
-	if err := reorderRegistryProjects(ids); err != nil {
+	if err := storeProjectOrder(ctx.projects, ids); err != nil {
 		return exitCodeOf(err), err
 	}
 	emitOrOut(map[string]any{"ok": true}, "reordered projects")
 	return 0, nil
 }
 
-func reorderRegistryProjects(ids []string) error {
-	return updateRegistryKey(projectsKey, func(raw json.RawMessage) (any, error) {
-		var entries []json.RawMessage
-		if err := decodeKey(registryPath(), projectsKey, raw, &entries); err != nil {
+// projects is the list as it reads now (merged and ordered), and the
+// listed ids go over it by the same rule the listing applies, so what
+// is stored is what will list. A project added meanwhile isn't in it,
+// and lands last by being absent from what gets stored. The write
+// replaces the order whole, so of two reorders racing from different
+// processes the later one wins.
+func storeProjectOrder(projects []project, ids []string) error {
+	pathOf := make(map[string]string, len(projects))
+	for _, p := range projects {
+		pathOf[p.ID] = p.Path
+	}
+	var listed []string
+	for _, id := range ids {
+		if path, ok := pathOf[id]; ok {
+			listed = append(listed, path)
+		}
+	}
+	next := orderProjects(projects, listed)
+	if slices.EqualFunc(next, projects, func(a, b project) bool { return a.ID == b.ID }) {
+		return nil
+	}
+	order := make([]string, len(next))
+	for i, p := range next {
+		order[i] = p.Path
+	}
+	return updateRegistryKey(projectOrderKey, func(raw json.RawMessage) (any, error) {
+		// Strict here though the read is lenient: a value this build
+		// can't decode may be one a newer build wrote.
+		var stored []string
+		if err := decodeKey(registryPath(), projectOrderKey, raw, &stored); err != nil {
 			return nil, err
 		}
-		idOf := make([]string, len(entries))
-		for i, entry := range entries {
-			var head struct {
-				ID string `json:"id"`
-			}
-			if err := json.Unmarshal(entry, &head); err != nil {
-				return nil, malformedKeyErr(registryPath(), projectsKey, err)
-			}
-			idOf[i] = head.ID
+		return keepUnlisted(order, stored), nil
+	})
+}
+
+// The paths the stored order holds but the list doesn't right now
+// (terrier switched off or unreadable) keep their place: each goes back
+// in after the path it followed, so a reorder made meanwhile can't send
+// them to the bottom once they list again. `projects remove` drops a
+// path for good (dropFromProjectOrder).
+func keepUnlisted(order, stored []string) []string {
+	placed := make(map[string]bool, len(order)+len(stored))
+	for _, path := range order {
+		placed[path] = true
+	}
+	prev := ""
+	for _, path := range stored {
+		if !placed[path] {
+			// Index is -1 with no predecessor, so the path goes first.
+			order = slices.Insert(order, slices.Index(order, prev)+1, path)
+			placed[path] = true
 		}
-		placed := make([]bool, len(entries))
-		var order []int
-		for _, id := range ids {
-			for i := range entries {
-				if !placed[i] && idOf[i] == id {
-					placed[i] = true
-					order = append(order, i)
-					break
-				}
-			}
+		prev = path
+	}
+	return order
+}
+
+// Best-effort, like the rest of `projects remove`'s cleanup.
+func dropFromProjectOrder(path string) {
+	_ = updateRegistryKey(projectOrderKey, func(raw json.RawMessage) (any, error) {
+		var order []string
+		if err := decodeKey(registryPath(), projectOrderKey, raw, &order); err != nil {
+			return nil, err
 		}
-		for i := range entries {
-			if !placed[i] {
-				order = append(order, i)
-			}
-		}
-		changed := false
-		reordered := make([]json.RawMessage, len(order))
-		for pos, i := range order {
-			reordered[pos] = entries[i]
-			changed = changed || pos != i
-		}
-		if !changed {
+		i := slices.Index(order, path)
+		if i < 0 {
 			return nil, nil
 		}
-		return reordered, nil
+		return slices.Delete(order, i, i+1), nil
+	})
+}
+
+// The stored manual order over the merged list: the projects it names
+// first, in its order, then the rest in merge order (registry entries,
+// then terrier extras by name), so one added since lands last.
+func orderProjects(projects []project, order []string) []project {
+	if len(order) == 0 {
+		return projects
+	}
+	rank := make(map[string]int, len(order))
+	for i, path := range order {
+		if _, seen := rank[path]; !seen {
+			rank[path] = i
+		}
+	}
+	rankOf := func(p project) int {
+		if r, ok := rank[p.Path]; ok {
+			return r
+		}
+		return len(order)
+	}
+	return slices.SortedStableFunc(slices.Values(projects), func(a, b project) int {
+		return cmp.Compare(rankOf(a), rankOf(b))
 	})
 }
 
