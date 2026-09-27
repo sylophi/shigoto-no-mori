@@ -28,7 +28,10 @@ other positive status wear the palette's hue. A rule in doubutsu.css
 reaches every color through a token, never a literal, so a palette can
 move it. Settings paints its swatches with the same blocks
 (`[data-theme-scope]` beside `:root`), so a new palette is one CSS
-block plus a catalog entry.
+block plus a catalog entry. Palettes that differ in a detail (latte's
+greens) can wait as variants: ids of their own behind one swatch,
+left out of the picker and reached only by Ctrl+Alt+Shift+L
+(shared/themes.ts).
 
 Rules that keep both themes cheap to maintain:
 

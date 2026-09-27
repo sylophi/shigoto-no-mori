@@ -25,6 +25,7 @@ import { useDoctorWatch } from "@/hooks/cli/useDoctor";
 import { useSidebarView } from "@/hooks/projects/useSidebarView";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useResizableWidth } from "@/hooks/ui/useResizableWidth";
+import { usePaletteVariantHotkey } from "@/hooks/ui/usePaletteVariantHotkey";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { hasLocalHost } from "@/lib/localHost";
 import { cn, dragRegion } from "@/lib/utils";
@@ -42,6 +43,7 @@ export function AppShell() {
   const phone = usePhoneLayout();
   const { pathname } = useLocation();
   const navigate = useNavigate();
+  usePaletteVariantHotkey(!pathname.startsWith("/settings"));
   // The forest tab a stacked page returns to on a phone.
   const forestTab = forestTabFor(useSidebarView());
   const sidebar = useResizableWidth({

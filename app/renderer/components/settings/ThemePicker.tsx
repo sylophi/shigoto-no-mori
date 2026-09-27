@@ -1,5 +1,11 @@
 import { Check } from "lucide-react";
-import type { DarkTheme, LightTheme, ThemeOption } from "@shared/themes";
+import {
+  type DarkTheme,
+  type LightTheme,
+  optionHolds,
+  type ThemeOption,
+} from "@shared/themes";
+import { usePalette } from "@/hooks/ui/usePalette";
 import { cn } from "@/lib/utils";
 
 // One row of the doubutsu palettes for an appearance: a swatch per
@@ -13,7 +19,10 @@ import { cn } from "@/lib/utils";
 //
 // A swatch paints itself with the palette's own tokens through the
 // data-theme-scope hook (DESIGN.md, "Theming"), so the tile is the
-// real palette and never a copy of its colors kept here.
+// real palette and never a copy of its colors kept here. A swatch with
+// hidden variants stands for all of them: it wears the staged one, or
+// else the saved one, and a click on it picks what it wears, so a
+// variant survives a round trip through another swatch.
 export function ThemePicker<Id extends LightTheme | DarkTheme>({
   appearance,
   options,
@@ -27,6 +36,8 @@ export function ThemePicker<Id extends LightTheme | DarkTheme>({
   onChange: (next: Id) => void;
   disabled?: boolean;
 }) {
+  // The appearance's saved pick, for a swatch whose variant isn't staged.
+  const saved = usePalette().saved[appearance] as Id;
   return (
     <div
       role="group"
@@ -34,7 +45,12 @@ export function ThemePicker<Id extends LightTheme | DarkTheme>({
       className={cn("flex flex-wrap gap-2", disabled && "opacity-50")}
     >
       {options.map((option) => {
-        const selected = option.id === value;
+        const selected = optionHolds(option, value);
+        const shown = selected
+          ? value
+          : optionHolds(option, saved)
+            ? saved
+            : option.id;
         return (
           <button
             key={option.id}
@@ -42,14 +58,16 @@ export function ThemePicker<Id extends LightTheme | DarkTheme>({
             aria-pressed={selected}
             disabled={disabled}
             title={option.blurb}
-            onClick={() => onChange(option.id)}
+            onClick={() => {
+              if (!selected) onChange(shown);
+            }}
             data-slot="theme-swatch"
             className={cn(
               "group flex w-20 flex-col items-center gap-1.5 rounded-lg p-1.5 transition-colors",
               selected ? "bg-accent" : "hover:bg-accent/50",
             )}
           >
-            <ThemeSwatch appearance={appearance} id={option.id} />
+            <ThemeSwatch appearance={appearance} id={shown} />
             <span
               className={cn(
                 "text-2xs leading-none",

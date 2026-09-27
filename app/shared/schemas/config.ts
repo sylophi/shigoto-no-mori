@@ -8,15 +8,17 @@ import { ProjectSortModeSchema, SidebarViewSchema } from "./project";
 const ThemeSchema = z.enum(["light", "dark", "system"]);
 export type Theme = z.infer<typeof ThemeSchema>;
 
-// The doubutsu palettes, one list per appearance, paired by index so
-// the pickers stack each light over its dark twin (sakura and cocoa
-// are the odd pair). renderer/doubutsu.css carries the defaults (cream,
-// charcoal), renderer/palettes.css the rest. The catalog with their
-// names lives in shared/themes.ts.
+// The doubutsu palettes, one list per appearance. renderer/doubutsu.css
+// carries the defaults (cream, charcoal), renderer/palettes.css the
+// rest. The catalog in shared/themes.ts names them and pairs each light
+// over its dark twin.
 export const LIGHT_THEME_IDS = [
   "snow",
   "meadow",
   "cream",
+  "latte",
+  "latte-sage",
+  "latte-mocha",
   "sky",
   "sakura",
 ] as const;
@@ -24,8 +26,9 @@ export const DARK_THEME_IDS = [
   "charcoal",
   "forest",
   "wood",
-  "midnight",
   "cocoa",
+  "midnight",
+  "yozakura",
 ] as const;
 const LightThemeSchema = z.enum(LIGHT_THEME_IDS);
 const DarkThemeSchema = z.enum(DARK_THEME_IDS);
