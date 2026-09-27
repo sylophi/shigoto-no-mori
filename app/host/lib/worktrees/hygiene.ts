@@ -352,7 +352,8 @@ const diskWalks = createLimiter(3);
 // whose walk landed in the meantime returns from cache instead of
 // re-walking.
 const diskCache = ttlMapCache(60_000, (key: string) => {
-  const [root, ...excluded] = key.split("\u0000");
+  // split always answers at least one part, so the default never applies.
+  const [root = key, ...excluded] = key.split("\u0000");
   return measureDirectory(root, new Set(excluded));
 });
 

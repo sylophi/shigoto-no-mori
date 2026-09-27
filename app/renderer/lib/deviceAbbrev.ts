@@ -12,12 +12,11 @@ export function deviceAbbrev(label: string): string {
     .filter((word) => word.length > 0);
   // A label with no letters or digits at all (an emoji, a dash) keeps
   // its first two characters rather than vanishing.
-  if (words.length === 0) return label.trim().slice(0, 2).toUpperCase();
-  const first = words[0];
-  const second = words[1];
+  const [first, second] = words;
+  if (first === undefined) return label.trim().slice(0, 2).toUpperCase();
   const abbrev =
     second !== undefined
-      ? `${first[0] ?? ""}${second[0] ?? ""}`
+      ? `${first.charAt(0)}${second.charAt(0)}`
       : first.slice(0, 2);
   return abbrev.toUpperCase();
 }

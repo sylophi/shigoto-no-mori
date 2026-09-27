@@ -50,13 +50,16 @@ const star = (x: number, y: number, s: number) =>
 
 const APRON = tile(16, 16, `<rect width="5" height="16"/>`);
 
+// Nook Inc.'s leaf, and the paper of a legendary character added to
+// the list before they get paper of their own.
+const LEAVES: Stationery = {
+  ...tile(48, 48, leaf(12, 12, 35) + leaf(36, 36, 35)),
+  color: "bg-emerald-500",
+  ink: "text-emerald-700 dark:text-emerald-300",
+};
+
 const STATIONERY: Record<string, Stationery> = {
-  // Nook Inc.'s leaf.
-  "tom-nook": {
-    ...tile(48, 48, leaf(12, 12, 35) + leaf(36, 36, 35)),
-    color: "bg-emerald-500",
-    ink: "text-emerald-700 dark:text-emerald-300",
-  },
+  "tom-nook": LEAVES,
   // Gingham, like her Resident Services desk.
   isabelle: {
     ...tile(
@@ -140,10 +143,8 @@ const STATIONERY: Record<string, Stationery> = {
   },
 };
 
-// The leaves again, for a legendary character added to the list before
-// they get paper of their own.
 export function stationeryFor(slug: string): Stationery {
-  return STATIONERY[slug] ?? STATIONERY["tom-nook"];
+  return STATIONERY[slug] ?? LEAVES;
 }
 
 // The print laid over a card: `paper`'s tile as a mask, a tile further

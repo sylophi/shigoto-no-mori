@@ -50,11 +50,10 @@ export function useRepoListing(project: Project, relative: string) {
       meta: { silentError: true },
     })),
   });
-  const answered = listings.flatMap((listing, index) =>
-    listing.data === undefined
-      ? []
-      : [{ device: holders[index].label, entries: listing.data }],
-  );
+  const answered = holders.flatMap((holder, index) => {
+    const entries = listings[index]?.data;
+    return entries === undefined ? [] : [{ device: holder.label, entries }];
+  });
   // The rows show once one device has answered and the rest fold in as
   // they land: a call to a peer has no timeout, so waiting on every
   // device would leave one stalled peer holding the whole picker.

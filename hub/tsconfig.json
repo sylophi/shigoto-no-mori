@@ -9,6 +9,7 @@
       "@cloudflare/vitest-pool-workers/types"
     ],
     "strict": true,
+    "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,

@@ -865,7 +865,7 @@ export async function describeWorktreeViaCli(
     "sm worktrees list failed",
     { projectId, worktreeId },
   );
-  return z.array(WorktreeSchema).length(1).parse(doc)[0];
+  return z.tuple([WorktreeSchema]).parse(doc)[0];
 }
 
 // Identities without git probes (see WorktreeIdentitySchema): a

@@ -343,7 +343,8 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
           // credential from its temporary lockout.
           refusal ??= error;
         }
-        failures.push({ candidate: candidates[index], error });
+        const candidate = candidates[index];
+        if (candidate !== undefined) failures.push({ candidate, error });
         outstanding -= 1;
         if (outstanding === 0) {
           done = true;
@@ -355,8 +356,16 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
         if (done || helloIndex !== null) return;
         const index = ready.shift();
         if (index === undefined) return;
+        const handle = handles[index];
+        if (handle === undefined) {
+          // Not reachable (ready holds indexes of handles), but a
+          // silent return here would stall the race to its deadline.
+          failCandidate(index, new Error("a ready candidate has no handle"));
+          pump();
+          return;
+        }
         helloIndex = index;
-        handles[index].authenticate().then(
+        handle.authenticate().then(
           (connection) => {
             if (done) {
               connection.close();
@@ -366,8 +375,8 @@ export function createDirectDialer(deps: DirectDialerDeps): DirectDialer {
             winnerIndex = index;
             // The losers never sent a hello (serialization), so the
             // abandon is a pre-auth close the host never even logs.
-            handles.forEach((handle, i) => {
-              if (i !== index) handle.abandon();
+            handles.forEach((other, i) => {
+              if (i !== index) other.abandon();
             });
             resolve(connection);
           },

@@ -36,16 +36,16 @@ export async function listCarryOverCheckouts(
   const identities = await listWorktreeIdentities(projectId).catch(
     (): WorktreeIdentity[] => [],
   );
-  if (identities.length === 0) {
-    return [{ name: "primary", path: projectPath, isPrimary: true }];
-  }
   const checkouts = identities.toSorted(
     (a, b) =>
       Number(b.isPrimary) - Number(a.isPrimary) || a.name.localeCompare(b.name),
   );
-  return checkouts[0].isPrimary
-    ? checkouts
-    : [{ ...checkouts[0], isPrimary: true }, ...checkouts.slice(1)];
+  const [first, ...rest] = checkouts;
+  if (first === undefined) {
+    return [{ name: "primary", path: projectPath, isPrimary: true }];
+  }
+  if (first.isPrimary) return checkouts;
+  return [{ ...first, isPrimary: true }, ...rest];
 }
 
 // The picker re-lists on every folder step while the ignored set of a

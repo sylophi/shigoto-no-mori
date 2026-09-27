@@ -13,7 +13,8 @@ import {
   APP_BUNDLE_ID,
   CLI_DIST_DIR,
   cliBinaryName,
-  UPDATE_FEED_REPO,
+  UPDATE_FEED_NAME,
+  UPDATE_FEED_OWNER,
 } from "./shared/packaging/cliDist.mts";
 import { productName, version } from "./package.json";
 import {
@@ -62,8 +63,6 @@ const osxNotarizeConfig = process.env.APPLE_NOTARY_KEYCHAIN_PROFILE
 const signingIdentity = macSigningIdentity(process.env);
 const shouldSignMac = signingIdentity !== null;
 const shouldNotarizeMac = shouldSignMac && Boolean(osxNotarizeConfig);
-
-const [feedOwner, feedName] = UPDATE_FEED_REPO.split("/");
 
 // The dmg's volume name is what Finder prints in the window's title bar
 // while someone installs. It carries the full version, prerelease tag
@@ -239,7 +238,7 @@ const config: ForgeConfig = {
     new PublisherGithub({
       // Derived, not restated: publishing to a repo the CLI's updater
       // doesn't poll would look exactly like "no updates ever appear".
-      repository: { owner: feedOwner, name: feedName },
+      repository: { owner: UPDATE_FEED_OWNER, name: UPDATE_FEED_NAME },
       draft: false,
     }),
   ],

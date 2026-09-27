@@ -1361,13 +1361,15 @@ export function installLabBridge(
   // The web shell has no local forest: its host wire serves nothing, so
   // every host read falls back to the schema stubs (empty lists),
   // matching the real browser bridge's shape.
+  const localForest = forests[LOCAL_DEVICE_ID];
+  if (localForest === undefined) throw new Error("[lab] no local forest");
   const localHost = createFixtureWire(
     "host",
     (emit) =>
       WEB_SHELL
         ? // A browser still keeps its own copy of the shared settings.
           sharedSettingsHandlersFor(WEB_DEVICE_ID, emit)
-        : hostHandlersFor(forests[LOCAL_DEVICE_ID], emit),
+        : hostHandlersFor(localForest, emit),
     "local",
   );
 
@@ -1589,8 +1591,9 @@ export function installLabBridge(
     // project, and `changedCount` gives an added one changes to commit.
     worktree(deviceId, action, name, { projectId, changedCount = 0 } = {}) {
       const forest = forests[deviceId];
+      if (forest === undefined) throw new Error(`[lab] no device ${deviceId}`);
       const project =
-        forest?.projects.find((p) => p.id === projectId) ?? forest?.projects[0];
+        forest.projects.find((p) => p.id === projectId) ?? forest.projects[0];
       if (project === undefined) {
         throw new Error(`[lab] no project on ${deviceId} to put ${name} in`);
       }

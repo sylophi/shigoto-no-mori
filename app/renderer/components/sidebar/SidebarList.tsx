@@ -34,11 +34,15 @@ function matchWorktreeDetail(pathname: string): {
 } | null {
   const match = matchRoutePath(WORKTREE_ROUTE_PATHS.detail, pathname);
   if (!match) return null;
-  return {
-    deviceId: rowDeviceId(match.deviceId),
-    projectId: match.projectId,
-    worktreeId: match.worktreeId,
-  };
+  const { deviceId, projectId, worktreeId } = match;
+  if (
+    deviceId === undefined ||
+    projectId === undefined ||
+    worktreeId === undefined
+  ) {
+    return null;
+  }
+  return { deviceId: rowDeviceId(deviceId), projectId, worktreeId };
 }
 
 export function SidebarList({

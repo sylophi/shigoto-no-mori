@@ -96,8 +96,15 @@ export async function parseTicket(
 ): Promise<{ accountId: string; random: string } | null> {
   if (!ticket.startsWith(TICKET_PREFIX)) return null;
   const parts = ticket.slice(TICKET_PREFIX.length).split(".");
-  if (parts.length !== 3) return null;
-  const [encodedAccount, random, encodedSignature] = parts;
+  const [encodedAccount, random, encodedSignature] =
+    parts.length === 3 ? parts : [];
+  if (
+    encodedAccount === undefined ||
+    random === undefined ||
+    encodedSignature === undefined
+  ) {
+    return null;
+  }
   if (!TICKET_RANDOM_PATTERN.test(random)) return null;
   if (!TICKET_SIGNATURE_PATTERN.test(encodedSignature)) return null;
   if (

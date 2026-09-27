@@ -27,6 +27,8 @@ export interface StackCleanupDevice {
   // That device's checkout of the repo, and its worktrees that go.
   projectId: string;
   worktrees: Worktree[];
+  // The one of them the host runs the removal from.
+  target: Worktree;
   // The api to ask it through, undefined while it can't be commanded
   // (asleep, or not granting this device), with the reason.
   api: HostApi | undefined;
@@ -73,6 +75,7 @@ export function useStackCleanup(
         label: holder.label,
         isScoped,
         projectId: holder.project.id,
+        target: cleanup.target,
         worktrees: cleanup.worktrees,
         api: isScoped ? scope.api : holder.api,
         block: isScoped ? undefined : holder.block,

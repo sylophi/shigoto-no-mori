@@ -93,6 +93,9 @@ export function registerContract<M extends ContractModule>(
   for (const [key, def] of Object.entries(module.calls)) {
     if (def.kind !== "invoke") continue;
     const handler = byName[key];
+    if (handler === undefined) {
+      throw new Error(`registerContract: no handler for "${def.channel}"`);
+    }
     // The def's exposure decision rides to the transport so a composite
     // wire can withhold a non-remote channel from the socket entirely.
     const remote = def.remote === true;

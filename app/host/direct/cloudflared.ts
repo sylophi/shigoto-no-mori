@@ -51,7 +51,7 @@ const execFileP = promisify(execFile);
 // one extra top rung, so a persistently failing cloudflared never
 // re-spawns more than once a minute. Looked up through the
 // supervisor's shared backoffDelayMs.
-export const TUNNEL_BACKOFF_LADDER_MS: readonly number[] = [
+export const TUNNEL_BACKOFF_LADDER_MS: readonly [number, ...number[]] = [
   ...BACKOFF_LADDER_MS,
   60_000,
 ];
@@ -78,7 +78,9 @@ export const TUNNEL_STABLE_MS = STABLE_CONNECTION_MS;
 // would burn its keeper's backoff rungs against a not-yet-routable
 // advertisement (a transient failure, so it retries forever -- but
 // each wasted rung pushes the next attempt further out).
-export const TUNNEL_PROBE_DELAYS_MS: readonly number[] = [5_000, 8_000];
+export const TUNNEL_PROBE_DELAYS_MS: readonly [number, ...number[]] = [
+  5_000, 8_000,
+];
 // The ladder for a tunnel the Worker REUSED, which is every launch
 // after a device's first. Its hostname resolved before, so there is no
 // propagation to wait out and no negative answer to earn: all a probe
@@ -86,7 +88,7 @@ export const TUNNEL_PROBE_DELAYS_MS: readonly number[] = [5_000, 8_000];
 // Until it passes the device advertises no tunnel candidate, so on the
 // ladder above a web client (whose only candidate is the tunnel) could
 // not reach a freshly launched device for its first five seconds.
-export const TUNNEL_PROBE_DELAYS_REUSED_MS: readonly number[] = [
+export const TUNNEL_PROBE_DELAYS_REUSED_MS: readonly [number, ...number[]] = [
   1_000, 2_000, 4_000, 8_000,
 ];
 // Past this, one warning names the hostname that is still not

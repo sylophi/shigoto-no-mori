@@ -138,7 +138,7 @@ function clean(value: string): string {
   for (let previous = ""; previous !== text;) {
     previous = text;
     text = text.replace(/\{\{([^{}]*)\}\}/g, (_, inner: string) => {
-      const [name, ...args] = inner.split("|").map((s) => s.trim());
+      const [name = "", ...args] = inner.split("|").map((s) => s.trim());
       if (/^(note|efn|clear)$/i.test(name)) return "";
       const positional = args.find(
         (a) => !a.includes("=") && a !== "short" && a !== "nolink",
@@ -198,7 +198,7 @@ export function villagerProfile(slug: string, page: WikiPage): VillagerProfile {
     0,
     names.findIndex((name) => slugify(name) === slug),
   );
-  const name = names[index];
+  const name = names[index] ?? page.title;
   const box = infobox(page.wikitext);
   const own = (value: string | undefined): string | undefined => {
     if (value === undefined || names.length === 1) return value;

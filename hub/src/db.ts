@@ -163,7 +163,7 @@ export async function deleteDevice(
         .prepare("DELETE FROM revoked_credentials WHERE revoked_at < ?")
         .bind(now - REVOKED_CREDENTIAL_RETENTION_MS),
     ]);
-    return deleted.meta.changes > 0;
+    return (deleted?.meta.changes ?? 0) > 0;
   } catch {
     // A batch is all or nothing, so nothing has happened yet. A Worker
     // deployed ahead of the tombstone migration must still revoke:

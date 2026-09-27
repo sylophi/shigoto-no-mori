@@ -9,11 +9,13 @@
 // and browsers, so no Buffer is needed and the one implementation
 // serves both runtimes.
 export function deriveAccountId(token: string): string {
+  // header.payload.signature: the payload is the middle of exactly three.
   const parts = token.split(".");
-  if (parts.length !== 3) return "";
+  const encoded = parts.length === 3 ? parts[1] : undefined;
+  if (encoded === undefined) return "";
   try {
     // atob wants plain base64: undo the base64url alphabet and repad.
-    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
     const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
     const payload = JSON.parse(atob(padded)) as { sub?: unknown };
     return typeof payload.sub === "string" ? payload.sub : "";
