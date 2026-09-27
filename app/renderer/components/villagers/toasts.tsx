@@ -22,10 +22,6 @@ import { VillagerLetter } from "./VillagerLetter";
 
 const VILLAGE_TOASTER = "village";
 
-// How long a click waits before it dismisses, so a double-click
-// selecting a word gets to select it.
-const DOUBLE_CLICK_MS = 400;
-
 // The toaster village news goes to (toastVillagerMove), mounted beside
 // the everyday one (AppChrome.tsx) with its look. A lane of its own in
 // the top corner, so a villager moving in never covers the toasts that
@@ -36,8 +32,10 @@ const DOUBLE_CLICK_MS = 400;
 //
 // News goes at a click anywhere on it, or Enter on it focused, the way
 // a villager's line goes at a press of A, unless that hit one of its
-// buttons or selected some of its words. Each news toast carries its
-// id as its test id, since sonner puts no other on the card.
+// buttons or ended a drag that selected some of its words. It goes on
+// the first click, so its words are selected by dragging, not by
+// double-clicking. Each news toast carries its id as its test id, since
+// sonner puts no other on the card.
 export function VillageToaster({
   classNames,
 }: {
@@ -48,10 +46,12 @@ export function VillageToaster({
       role="presentation"
       className="contents"
       onClick={(event) => {
-        if (event.detail <= 1) dismissCard(event.target, DOUBLE_CLICK_MS);
+        // The rest of a double-click would go to the card sliding up
+        // into this one's place.
+        if (event.detail <= 1) dismissCard(event.target);
       }}
       onKeyDown={(event) => {
-        if (event.key === "Enter") dismissCard(event.target, 0);
+        if (event.key === "Enter") dismissCard(event.target);
       }}
     >
       <Toaster
@@ -67,11 +67,13 @@ export function VillageToaster({
   );
 }
 
-function dismissCard(target: EventTarget, wait: number): void {
+function dismissCard(target: EventTarget): void {
   if (!(target instanceof Element) || target.closest("button, a")) return;
   const card = target.closest("[data-sonner-toast]");
   const id = card?.getAttribute("data-testid");
   if (!card || !id) return;
+  // A click inside selected words clears them only once it's done, so
+  // the selection is read a task later. A drag's selection is still up.
   setTimeout(() => {
     const selection = window.getSelection();
     if (
@@ -81,7 +83,7 @@ function dismissCard(target: EventTarget, wait: number): void {
       return;
     }
     toast.dismiss(id);
-  }, wait);
+  });
 }
 
 // A success about one worktree, which its villager says when it has one
