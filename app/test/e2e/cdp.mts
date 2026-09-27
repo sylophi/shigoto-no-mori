@@ -12,7 +12,7 @@
 import { createRequire } from "node:module";
 import { errorMessageOf } from "../../shared/errors.ts";
 import { rendererSchemeName } from "../../shared/packaging/rendererScheme.mts";
-import { delay } from "../lib/checkKit.mjs";
+import { delay } from "../lib/checkKit.mts";
 
 const require = createRequire(import.meta.url);
 const { WebSocket } = require("ws") as typeof import("ws");

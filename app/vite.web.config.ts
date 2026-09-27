@@ -36,7 +36,7 @@ function buildInfo(mode: string): { version: string; commit: string } {
   return { version, commit };
 }
 
-// The material icons the file pickers show. scripts/copy-material-icons.mjs
+// The material icons the file pickers show. scripts/copy-material-icons.mts
 // stages them in the app-root public/ (with the bare-name aliases of
 // the package's .clone.svg files the manifest asks for), which this
 // build's web/ root never sees, and without them every icon request
@@ -70,7 +70,7 @@ function materialIcons(): Plugin {
     closeBundle() {
       if (!existsSync(source)) {
         throw new Error(
-          `no material icons at ${source}: run node scripts/copy-material-icons.mjs`,
+          `no material icons at ${source}: run node scripts/copy-material-icons.mts`,
         );
       }
       cpSync(source, join(outDir, "material-icons"), { recursive: true });

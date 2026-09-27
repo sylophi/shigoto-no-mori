@@ -136,7 +136,7 @@ export function devCliPath(): string {
 }
 
 export function buildDevCli(): void {
-  execFileSync("node", [join(appRoot, "scripts", "dev-cli.mjs")], {
+  execFileSync("node", [join(appRoot, "scripts", "dev-cli.mts")], {
     cwd: appRoot,
     stdio: "inherit",
   });

@@ -3,7 +3,7 @@ import { assertNever } from "@/lib/utils";
 
 // What the Village life row and the villager data control under it say
 // and offer (VillageLifeSetting.tsx, VillagerDataControl.tsx). Pure, so
-// every state's words are pinned by test/villager-data.mjs.
+// every state's words are pinned by test/villager-data.mts.
 
 // The Village life row opens once this window holds the villager data,
 // all of it. Its description always says what it is, and while locked,

@@ -1,6 +1,6 @@
 package main
 
-// Build-time identity, injected by scripts/build-cli.mjs via -ldflags
+// Build-time identity, injected by scripts/build-cli.mts via -ldflags
 // from the single-source policy in shared/packaging/cliDist.mts. The
 // defaults cover `go run ./cli` straight from the checkout, which, like
 // the dev binary, must only ever touch dev state.

@@ -1,7 +1,7 @@
 // Single source of truth for the dmg installer window: its geometry,
 // and which background art a given version ships with. The artwork
 // (scripts/dmg-background.html, rendered by
-// scripts/build-dmg-background.cjs) and the Finder icon placement
+// scripts/build-dmg-background.cts) and the Finder icon placement
 // (forge.config.ts -> maker-dmg) both read this, so the painted tiles
 // and the icons Finder drops on top can't drift apart, and the file
 // names can't disagree between the renderer and the maker.

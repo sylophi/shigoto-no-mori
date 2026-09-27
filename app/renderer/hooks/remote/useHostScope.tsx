@@ -33,7 +33,7 @@ import {
 // connected remote device's api both satisfy it, so one hook body
 // serves both. Client-scoped namespaces are excluded on purpose: a
 // hook that reaches for scope.api.dialog fails to compile instead of
-// rejecting at runtime on a remote device. test/host-boundary.mjs
+// rejecting at runtime on a remote device. test/host-boundary.mts
 // keeps this list equal to the host namespaces buildApi exposes.
 export type HostApi = Pick<
   RemoteDeviceApi,

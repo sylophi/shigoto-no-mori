@@ -7,7 +7,7 @@
 // the data directory on every spawn), so one binary serves both prod
 // and dev.
 //
-// .mts with no imports: plain `node scripts/*.mjs` must load it.
+// .mts with no imports: plain `node scripts/*.mts` must load it.
 
 // Repo-relative directory the compiled binary lands in (gitignored).
 export const FILE_SYNC_DIST_DIR = "dist-file-sync";

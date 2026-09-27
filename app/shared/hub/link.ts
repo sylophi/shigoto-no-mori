@@ -52,14 +52,14 @@ export const NO_LISTENER_CODE = "no-listener";
 // Bounded like every string a hostile hub could inflate.
 const AskNameSchema = z.string().max(64);
 
-const AskFrameSchema = z.object({
+export const AskFrameSchema = z.object({
   ask: AskNameSchema,
   id: z.number().int(),
   input: z.unknown().optional(),
 });
 type AskFrame = z.infer<typeof AskFrameSchema>;
 
-const AnswerFrameSchema = z.discriminatedUnion("ok", [
+export const AnswerFrameSchema = z.discriminatedUnion("ok", [
   z.object({
     answer: AskNameSchema,
     id: z.number().int(),

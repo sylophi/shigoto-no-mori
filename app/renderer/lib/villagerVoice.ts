@@ -16,7 +16,7 @@
 //   Special characters have no catchphrase, so a rare or legendary one
 //   speaks through their quote instead, and stays on screen longer.
 //
-// Pure, so test/villager-voice.mjs drives it under plain Node.
+// Pure, so test/villager-voice.mts drives it under plain Node.
 import type {
   VillagerProfile,
   VillagerProfiles,

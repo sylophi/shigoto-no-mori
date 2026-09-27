@@ -43,7 +43,7 @@ import {
   report,
   scrubbedGitEnv,
   waitFor,
-} from "../lib/checkKit.mjs";
+} from "../lib/checkKit.mts";
 import {
   buildDevCli,
   cloneDevLogin,

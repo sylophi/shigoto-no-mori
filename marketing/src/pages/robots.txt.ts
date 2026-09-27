@@ -1,5 +1,5 @@
 // robots.txt: every crawler is welcome, and the sitemap's address comes
-// from the site URL in astro.config.mjs.
+// from the site URL in astro.config.ts.
 import type { APIRoute } from "astro";
 
 export const GET: APIRoute = ({ site }) =>

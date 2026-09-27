@@ -91,7 +91,7 @@ export type CliRunOpts = {
   signal?: AbortSignal;
 };
 
-type CliRunnerImpl = {
+export type CliRunnerImpl = {
   runCli: (
     args: string[],
     onDoc?: (doc: CliDoc) => void,

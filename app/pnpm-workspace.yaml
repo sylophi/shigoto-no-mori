@@ -58,7 +58,7 @@ allowBuilds:
   # loads as-is, and forge.config.ts's rebuildConfig skips rebuilding it,
   # so its install-time node-gyp build is skipped too. Those scripts
   # would have made the bundled spawn-helper executable, and that is
-  # scripts/fix-node-pty-helper.mjs's job instead.
+  # scripts/fix-node-pty-helper.mts's job instead.
   node-pty: false
 # Force tar >= 7.5.10 to patch CVE-2026-29786 (GHSA-qffp-2rhf-9h96):
 # hardlink path traversal via drive-relative linkpath. Pulled in transitively

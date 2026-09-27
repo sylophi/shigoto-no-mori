@@ -175,7 +175,7 @@ function peersOf(devices: DeviceInfo[], hereId: string): DeviceInfo[] {
 // checkout clones one. The checkout is read fresh off the peer and the
 // command access off the status snapshot. A read leaves the access
 // out, since reads are ungated. The wording is the CLI's, pinned by
-// test/control.mjs. The dialogs word the same blocks for their verbs.
+// test/control.mts. The dialogs word the same blocks for their verbs.
 async function standingsOf(
   devices: DeviceInfo[],
   identity: string | null,

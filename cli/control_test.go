@@ -2,7 +2,7 @@ package main
 
 // The control wire's client against a scripted listener: what the CLI
 // makes of each way the app can answer (or fail to). The app's own
-// half, and both halves together, are test/control.mjs's.
+// half, and both halves together, are test/control.mts's.
 
 import (
 	"bufio"

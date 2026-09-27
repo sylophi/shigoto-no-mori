@@ -17,7 +17,7 @@ import {
   type SupervisorStatus,
 } from "@shared/remote/supervisor";
 
-type DirectPresenceDeps = {
+export type DirectPresenceDeps = {
   // Kill the host-side authed direct sockets whose peer deviceId is
   // not in the roster (the direct listener's targeted close).
   // Optional because a platform with no direct listener (the web
