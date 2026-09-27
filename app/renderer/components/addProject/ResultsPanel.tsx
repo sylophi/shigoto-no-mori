@@ -86,7 +86,10 @@ export function ResultsPanel(props: ResultsPanelProps) {
           )}
         </Command.List>
 
-        <div className="flex items-center justify-end gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+        <div
+          data-slot="footer-row"
+          className="flex items-center justify-end gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
+        >
           <button
             type="button"
             onClick={() => void props.onAdd()}

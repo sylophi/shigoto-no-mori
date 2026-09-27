@@ -81,7 +81,10 @@ export function CloningPanel({
             line has none to measure. */}
         <span className="font-mono text-xs">{dest}</span>
       </div>
-      <div className="border-t border-border px-4 py-2.5 text-xs text-muted-foreground/80">
+      <div
+        data-slot="footer-row"
+        className="border-t border-border px-4 py-2.5 text-xs text-muted-foreground/80"
+      >
         A big repository takes a while. Closing this leaves the clone running.
       </div>
     </div>

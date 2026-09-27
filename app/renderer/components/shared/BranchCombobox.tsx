@@ -142,7 +142,7 @@ export function BranchCombobox({
             className="flex max-h-72 w-(--anchor-width) flex-col overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-md"
           >
             <div
-              data-slot="combobox-search"
+              data-slot="search-row"
               className="flex items-center gap-2 border-b border-border px-3"
             >
               <Search

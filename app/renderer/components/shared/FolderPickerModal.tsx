@@ -133,7 +133,10 @@ export function FolderPickerModal({
         value={highlighted}
         onValueChange={setHighlighted}
       >
-        <div className="relative flex items-center gap-2 border-b border-border px-3 py-2">
+        <div
+          data-slot="search-row"
+          className="relative flex items-center gap-2 border-b border-border px-3 py-2"
+        >
           <Command.Input
             // oxlint-disable-next-line jsx-a11y/no-autofocus -- picker just opened
             autoFocus
@@ -206,7 +209,10 @@ export function FolderPickerModal({
           )}
         </Command.List>
 
-        <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+        <div
+          data-slot="footer-row"
+          className="flex items-center justify-between gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
+        >
           <div className="flex items-center gap-3">
             <BrowseKeyHints enterFolder={hasHighlighted} goUp={canBrowseUp} />
           </div>

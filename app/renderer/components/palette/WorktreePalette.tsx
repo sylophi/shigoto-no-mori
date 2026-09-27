@@ -394,7 +394,10 @@ function PaletteDialog({
         value={highlighted}
         onValueChange={setHighlighted}
       >
-        <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+        <div
+          data-slot="search-row"
+          className="flex items-center gap-2 border-b border-border px-3 py-2"
+        >
           {picked && <PickedChip row={picked.row} onBack={() => back()} />}
           {picked ? (
             <Command.Input
@@ -441,6 +444,7 @@ function PaletteDialog({
               )}
             </div>
             <div
+              data-slot="palette-verbs"
               className={cn(
                 "w-64 shrink-0 overflow-y-auto border-l border-border bg-muted/30 p-2 phone:w-auto phone:flex-1 phone:border-l-0",
                 !picked && "phone:hidden",
@@ -467,7 +471,10 @@ function PaletteDialog({
           </div>
         </Command.List>
 
-        <div className="flex items-center gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground">
+        <div
+          data-slot="footer-row"
+          className="flex items-center gap-3 border-t border-border px-4 py-2.5 text-xs text-muted-foreground"
+        >
           <KbdHint
             keys={[<ArrowUp key="up" />, <ArrowDown key="down" />]}
             label="Navigate"
