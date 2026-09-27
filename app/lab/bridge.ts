@@ -463,6 +463,7 @@ function hostHandlersFor(
         dev: { lastUsed: Date.now() - 12 * 60_000, recentCount: 9 },
         test: { lastUsed: Date.now() - 26 * 60_000, recentCount: 3 },
       },
+      launchRow: [],
     }),
     "packageScripts:getSort": () => "manifest",
     "packageScripts:getOrder": () => [],

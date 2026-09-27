@@ -46,9 +46,7 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
   const setSortMode = useSetPackageScriptSort(worktree.projectId);
   const setOrder = useSetPackageScriptOrder(worktree.projectId);
   const setLaunchRow = useSetLaunchRowScript(worktree.projectId);
-  // A host that predates pinning sends no launchRow, and gets no pins.
-  const launchRow = pkg.launchRow;
-  const pinnedOf = (name: string) => launchRow?.includes(name);
+  const pinnedOf = (name: string) => pkg.launchRow.includes(name);
   const names = sorted.map((e) => e.name);
   // Drags write the stored order, so arranging only lasts while the list
   // shows it: a refused or failed switch to "manual" (or another device
@@ -136,9 +134,8 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
       {expanded && arranging && (
         <>
           <p className="px-1 text-xs text-muted-foreground/70">
-            Drag scripts into the order you want.
-            {launchRow &&
-              " Pin the ones the Launch section should show, or none to show as many as fit on a line."}
+            Drag scripts into the order you want. Pin the ones the Launch
+            section should show, or none to show as many as fit on a line.
           </p>
           <DndContext
             sensors={sensors}

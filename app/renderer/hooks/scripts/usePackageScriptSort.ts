@@ -46,8 +46,7 @@ export function useSetPackageScriptSort(projectId: string | null) {
 export const NO_ORDER: readonly string[] = [];
 
 // The stored "manual" order, read only while the sort is manual: the
-// list reads it for nothing else, and a host too old to know the call
-// never reports a manual sort, so it's never asked.
+// list reads it for nothing else.
 export function usePackageScriptOrder(
   projectId: string | null,
   sortMode: PackageScriptSortMode,
@@ -118,10 +117,9 @@ export function useSetLaunchRowScript(projectId: string | null) {
         { queryKey },
         (pkg) => {
           if (!pkg) return pkg;
-          const launchRow = pkg.launchRow ?? [];
           return {
             ...pkg,
-            launchRow: withLaunchRowScript(launchRow, scriptName, onRow),
+            launchRow: withLaunchRowScript(pkg.launchRow, scriptName, onRow),
           };
         },
       );

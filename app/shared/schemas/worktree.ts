@@ -83,8 +83,9 @@ export const WorktreeSchema = z.object({
   primaryRef: z.string().optional(),
   // The primary branch's local name ("main" for a primaryRef of
   // "origin/main"), the branch a stack of pull requests lands on
-  // (shared/pullRequestStack.ts). Resolved by the host with the
-  // remote list in hand, so the renderer never has to split the ref.
+  // (shared/pullRequestStack.ts). Resolved by the CLI with the remote
+  // list in hand, so the renderer never has to split the ref, and left
+  // out when it cannot be.
   primaryBranch: z.string().optional(),
   // True when this branch's work is already in the primary branch. See
   // landedOnPrimary in cli/gitx.go for what does and doesn't count. Notably a local fast-forward merge doesn't, since
@@ -121,8 +122,8 @@ export const WorktreeSchema = z.object({
   // background fetches, as long as the worktree has no local commits,
   // no uncommitted or untracked changes and no app-started process.
   // Meant for the primary checkout and other branches only ever read
-  // here. Defaults so a row from an older peer or CLI still parses.
-  autoPull: z.boolean().default(false),
+  // here.
+  autoPull: z.boolean(),
 });
 export type Worktree = z.infer<typeof WorktreeSchema>;
 

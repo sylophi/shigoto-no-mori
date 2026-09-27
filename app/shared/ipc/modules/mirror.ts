@@ -532,8 +532,9 @@ export const mirrorContract = defineContract("host", {
   // devices viewing this one. It carries the list it announces: a busy
   // mirror fires this several times a second, and a viewer on another
   // device would otherwise answer each one with a list round trip.
-  // Optional for version skew: an older host sends none, and a reader
-  // without one re-asks, as every reader once did.
+  // Optional because the host may have none to send (no daemon yet, or
+  // a list that failed to build or to validate): it then announces the
+  // change bare, and a reader re-asks.
   changed: broadcast("mirror:changed", MirrorListResultSchema.optional(), {
     remote: true,
   }),

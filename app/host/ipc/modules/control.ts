@@ -430,11 +430,10 @@ function peerMirrorApi(deviceId: string) {
 
 // The sessions peers run against this device's worktrees, found by
 // asking each connected peer of the registry for its list (a read,
-// ungated). A peer that does not answer in a probe's time, or an
-// older one without the call, holds nothing this device can drive
-// anyway. Signed out, the registry is empty, so the answer is empty
-// rather than a refusal: the device's own sessions were already
-// looked at.
+// ungated). A peer that does not answer in a probe's time, or whose
+// session drops mid-ask, holds nothing this device can drive anyway.
+// Signed out, the registry is empty, so the answer is empty rather
+// than a refusal: the device's own sessions were already looked at.
 async function peerMirrors(registry: DeviceInfo[]): Promise<PeerMirror[]> {
   const hereId = requireImpl().thisDeviceId();
   const direct = await requireImpl().directPeers();

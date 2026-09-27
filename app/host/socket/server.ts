@@ -366,15 +366,12 @@ export function createWsServerBinding(
   const readOnlyChannels = new Set<string>();
   // Sockets past hello, each with its liveness record
   // (HOST_LIVENESS_TIMEOUT_MS in frames.ts): when its last frame
-  // arrived, whether it has ever pinged (only a peer that proved it
-  // heartbeats is judged, so an older client that never pings is left
-  // alone), and the kill that ends it. broadcastAll fans out to exactly
-  // this set, so an unauthenticated connection can never receive a
-  // push, and one timer per listener sweeps it so a dead client socket
-  // cannot sit here until the OS notices.
+  // arrived, and the kill that ends it. broadcastAll fans out to
+  // exactly this set, so an unauthenticated connection can never
+  // receive a push, and one timer per listener sweeps it so a dead
+  // client socket cannot sit here until the OS notices.
   type Liveness = {
     lastInboundAt: number;
-    heartbeats: boolean;
     kill(code: number, reason: string): void;
   };
   const authed = new Map<WebSocket, Liveness>();
@@ -770,11 +767,7 @@ export function createWsServerBinding(
             .get(callerDeviceId)
             ?.kill(CLOSE_GOING_AWAY, "superseded");
           authedByDevice.set(callerDeviceId, { socket, kill });
-          authed.set(socket, {
-            lastInboundAt: Date.now(),
-            heartbeats: false,
-            kill,
-          });
+          authed.set(socket, { lastInboundAt: Date.now(), kill });
           if (frame.deflate === true && arrivalKind === "tunnel") {
             deflatingWriters.set(socket, createDeflatingWriter(socket));
             console.info(
@@ -789,10 +782,9 @@ export function createWsServerBinding(
           });
           return;
         }
-        // The client's liveness ping (frames.ts): answer it, and note
-        // that this peer heartbeats so the sweep may judge it.
+        // The client's liveness ping (frames.ts): answer it. The
+        // arrival itself was noted above, which is what the sweep reads.
         if (frame !== null && frame.t === "ping") {
-          if (alive !== undefined) alive.heartbeats = true;
           send(socket, { t: "pong" });
           return;
         }
@@ -880,21 +872,17 @@ export function createWsServerBinding(
         });
         listener = { wss, opts, generation };
         // The liveness sweep, one timer per LIVE listener (armed here,
-        // after the bind, so a failed bind leaks none): a peer that
-        // proved it heartbeats and then fell silent past the timeout
-        // is killed like a roster drop. Quarter-period cadence keeps
-        // the worst-case delay past the timeout small without a busy
-        // loop.
+        // after the bind, so a failed bind leaks none): a peer silent
+        // past the timeout is killed like a roster drop. Quarter-period
+        // cadence keeps the worst-case delay past the timeout small
+        // without a busy loop.
         const livenessTimeoutMs =
           opts.livenessTimeoutMs ?? HOST_LIVENESS_TIMEOUT_MS;
         livenessTimer = setInterval(
           () => {
             const now = Date.now();
             for (const entry of authed.values()) {
-              if (
-                entry.heartbeats &&
-                now - entry.lastInboundAt > livenessTimeoutMs
-              ) {
+              if (now - entry.lastInboundAt > livenessTimeoutMs) {
                 entry.kill(CLOSE_GOING_AWAY, "heartbeat timeout");
               }
             }
