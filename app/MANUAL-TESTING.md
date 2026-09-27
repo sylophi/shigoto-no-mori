@@ -164,8 +164,9 @@ pass them to the command instead: `sm update --feed-url <url>` or
 ### Theme hotkeys
 
 In a dev build, `Ctrl+T` toggles light/dark, `Ctrl+D` toggles
-doubutsu, and `Ctrl+R` resets to the saved theme. These are previews
-and are not saved.
+doubutsu, `Ctrl+P` cycles the current appearance's doubutsu palette,
+and `Ctrl+R` resets to the saved theme. These are previews and are not
+saved.
 
 ## Dev profiles: two devices on one machine
 

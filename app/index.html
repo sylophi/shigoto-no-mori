@@ -20,6 +20,16 @@
           var html = document.documentElement;
           if (dark) html.classList.add("dark");
           html.style.colorScheme = dark ? "dark" : "light";
+          // The overlay and its palette, as web/public/boot-theme.js
+          // reads them: on unless opted out, wearing the saved pick for
+          // this appearance, else the list's default.
+          if (localStorage.getItem("shigomori.doubutsu") !== "false") {
+            html.classList.add("doubutsu");
+            html.dataset.palette =
+              localStorage.getItem(
+                dark ? "shigomori.darkTheme" : "shigomori.lightTheme",
+              ) || (dark ? "charcoal" : "cream");
+          }
         } catch (_) {
           // localStorage may be unavailable in some contexts; render light.
         }

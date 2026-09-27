@@ -9,11 +9,23 @@ render.
 The app ships two designs: **doubutsu** (default: Animal Crossing
 overlay, class `doubutsu` on `<html>`, orthogonal to light/dark) and
 **v1** (neutral shadcn-style, the opt-out via Settings → Appearance).
-There is ONE component tree: doubutsu is `renderer/doubutsu.css`
-remapping tokens and hooking stable attributes on top of the v1 base.
-Keep it that way; never fork a component per theme. Components are
-still written in v1's vocabulary (tokens, borders, shadows), and the
-overlay handles translation, so build in v1 terms and verify in both.
+There is ONE component tree: doubutsu is
+`renderer/doubutsu.css` remapping tokens and hooking stable attributes
+on top of the v1 base. Keep it that way; never fork a component per
+theme. Components are still written in v1's vocabulary (tokens,
+borders, shadows), and the overlay handles translation, so build in v1
+terms and verify in both.
+
+Doubutsu comes in palettes, picked per appearance under its switch (a
+light one and a dark one, `lightTheme` / `darkTheme` beside `doubutsu`
+in client config, the catalog in `shared/themes.ts`). The pick lands
+as `data-palette` on `<html>`:
+`renderer/doubutsu.css` carries the defaults (cream, charcoal) and
+`renderer/palettes.css` the rest, each remapping only the surface
+tokens. A rule in doubutsu.css reaches every color through a token,
+never a literal, so a palette can move it. Settings paints its swatches
+with the same blocks (`[data-theme-scope]` beside `:root`), so a new
+palette is one CSS block plus a catalog entry.
 
 Rules that keep both themes cheap to maintain:
 
@@ -37,8 +49,9 @@ Rules that keep both themes cheap to maintain:
   pre-commit) verifies every hook still exists. If it fails, either
   restore the hook or update the CSS + CONTRACT together.
 - When changing UI chrome (surfaces, borders, focus, hover), eyeball
-  all four modes. In dev builds: Ctrl+T toggles light/dark, Ctrl+D
-  toggles doubutsu, Ctrl+R resets to saved. These are non-persisted
+  all four modes, and a palette or two. In dev builds: Ctrl+T toggles
+  light/dark, Ctrl+D toggles doubutsu, Ctrl+P cycles its palette,
+  Ctrl+R resets to saved. These are non-persisted
   previews (components/DevThemeHotkeys.tsx), inactive while a text
   field has focus, except the script console's terminal, where they
   still win (there Ctrl+D would be EOF and end the running program).

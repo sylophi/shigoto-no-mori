@@ -17,7 +17,7 @@ export const clientConfigHandlers: Handlers<typeof clientConfigContract> = {
   write: async ({ config }) => {
     // keepReachable rides this store but drives the OS login item, so
     // capture the prior persisted value before the write and reconcile
-    // only when it actually changed. Unrelated writes (theme, doubutsu)
+    // only when it actually changed. Unrelated writes (theme, palettes)
     // then skip a redundant setLoginItemSettings syscall. reconcile is
     // still idempotent and never-throws, so gating is purely an
     // optimization, not a correctness requirement.

@@ -29,6 +29,9 @@ const css = readCss("renderer/doubutsu.css");
 const HOOKING_CSS = [
   { name: "doubutsu.css", source: css },
   { name: "phone.css", source: readCss("renderer/phone.css") },
+  // The other palettes select the same scope hook and data-palette,
+  // which the Settings picker's swatches set.
+  { name: "palettes.css", source: readCss("renderer/palettes.css") },
 ];
 
 let rendererSource = "";
@@ -209,10 +212,33 @@ const indexCss = readFileSync(join(root, "renderer/index.css"), "utf8").replace(
 );
 // The doubutsu light block (:root.doubutsu) and dark block
 // (:root.doubutsu.dark): a remap present in only one of them leaves
-// the other mode on the raw hue.
-const doubutsuDarkStart = css.indexOf(":root.doubutsu.dark");
-const doubutsuLight = css.slice(0, doubutsuDarkStart);
-const doubutsuDark = css.slice(doubutsuDarkStart);
+// the other mode on the raw hue. The palettes (palettes.css) remap
+// surfaces only, so the status steps stay these two blocks' to declare.
+// Found by the class pair, whatever :is() wraps it in.
+const doubutsuDarkStart = css.search(/\.doubutsu\.dark\s*\{/);
+if (doubutsuDarkStart < 0) {
+  failures.push("doubutsu.css lost its dark token block");
+}
+const doubutsuLight =
+  doubutsuDarkStart < 0 ? "" : css.slice(0, doubutsuDarkStart);
+const doubutsuDark = doubutsuDarkStart < 0 ? "" : css.slice(doubutsuDarkStart);
+// Every token block hangs off :root so it outranks index.css's, and
+// the Settings picker paints a swatch of any palette on an element of
+// its own, so each :root must be `:is(:root, [data-theme-scope])`: a
+// block that forgets the hook paints its swatch in whatever <html>
+// wears, and nothing else would notice.
+for (const { name, source } of HOOKING_CSS) {
+  if (name === "phone.css") continue;
+  for (const match of source.matchAll(/(?::is\()?:root\b[^{]*\{/g)) {
+    if (!match[0].startsWith(":is(:root, [data-theme-scope])")) {
+      failures.push(
+        `${name} declares a token block on ${match[0].trim()} without ` +
+          "the [data-theme-scope] hook beside :root, so the Settings " +
+          "picker's swatch of it paints in whatever <html> wears",
+      );
+    }
+  }
+}
 for (const [, name] of clerkSrc.matchAll(/var\((--[\w-]+)\)/g)) {
   if (name.startsWith("--color-")) {
     for (const [block, label] of [

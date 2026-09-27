@@ -171,8 +171,9 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
     observer.observe(host);
     void document.fonts.ready.then(refit);
 
-    // Theme classes live on <html> and flip after this component's
-    // own effects run, so watch the DOM rather than the theme hooks.
+    // Theme classes and the palette attribute live on <html> and flip
+    // after this component's own effects run, so watch the DOM rather
+    // than the theme hooks.
     // Only a changed palette is handed to xterm: it repaints everything
     // for any new theme object.
     const themeObserver = new MutationObserver(() => {
@@ -183,7 +184,7 @@ function ConsoleTerminal({ runKey, state }: Omit<ConsoleBodyProps, "onClear">) {
     });
     themeObserver.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ["class"],
+      attributeFilter: ["class", "data-palette"],
     });
 
     return () => {

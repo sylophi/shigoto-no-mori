@@ -8,6 +8,28 @@ import { ProjectSortModeSchema, SidebarViewSchema } from "./project";
 const ThemeSchema = z.enum(["light", "dark", "system"]);
 export type Theme = z.infer<typeof ThemeSchema>;
 
+// The doubutsu palettes, one list per appearance. renderer/doubutsu.css
+// carries the first of each list, renderer/palettes.css the rest. The
+// catalog with their names lives in shared/themes.ts.
+export const LIGHT_THEME_IDS = [
+  "cream",
+  "snow",
+  "meadow",
+  "sakura",
+  "sky",
+] as const;
+export const DARK_THEME_IDS = [
+  "charcoal",
+  "midnight",
+  "forest",
+  "cocoa",
+  "wood",
+] as const;
+const LightThemeSchema = z.enum(LIGHT_THEME_IDS);
+const DarkThemeSchema = z.enum(DARK_THEME_IDS);
+export type LightTheme = z.infer<typeof LightThemeSchema>;
+export type DarkTheme = z.infer<typeof DarkThemeSchema>;
+
 export const LauncherCommandSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
@@ -151,7 +173,7 @@ export type ShigomoriWorktreeData = z.infer<typeof ShigomoriWorktreeDataSchema>;
 // settings.
 // Device config only: every key here gates what this machine can do,
 // so both the host and the CLI read it. How the app instance looks
-// (theme, doubutsu) is client config and lives in ClientConfigSchema
+// (theme, palettes) is client config and lives in ClientConfigSchema
 // below.
 // Reads use the loose Stored variant below: pre-split installs can
 // still carry legacy client keys (and keys from newer builds) in
@@ -311,6 +333,13 @@ export const ClientConfigSchema = z.object({
   // `false` is the opt-out back to the v1 look. Mirrored to
   // localStorage so startup paints without a flash.
   doubutsu: z.boolean().optional(),
+  // Which doubutsu palette each appearance wears (shared/themes.ts),
+  // picked separately for light and dark the way most apps offer it.
+  // Absent is the default of each list, cream and charcoal. Kept while
+  // doubutsu is off, so switching it back on restores the picks.
+  // Mirrored to localStorage with the switch.
+  lightTheme: LightThemeSchema.optional(),
+  darkTheme: DarkThemeSchema.optional(),
   // Village life: the purely visual villager extras on worktrees named
   // after a character, on every device this window shows. Needs the
   // villager data, downloaded into this device's data dir

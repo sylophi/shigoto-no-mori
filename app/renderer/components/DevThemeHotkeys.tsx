@@ -1,13 +1,16 @@
 import { useEffect } from "react";
 import { isEditableTarget, isRawKeySurface } from "@/lib/dom";
-import { useDoubutsu } from "@/hooks/ui/useDoubutsu";
+import { usePalette } from "@/hooks/ui/usePalette";
 import { useTheme } from "@/hooks/ui/useTheme";
+import { DARK_THEME_IDS, LIGHT_THEME_IDS } from "@shared/themes";
 
-// Dev-only hotkeys for flipping through the four visual modes without
+// Dev-only hotkeys for flipping through the visual modes without
 // opening Settings:
 //   Ctrl+T  toggle light/dark
 //   Ctrl+D  toggle doubutsu
-//   Ctrl+R  drop both previews back to the saved appearance
+//   Ctrl+P  cycle the current appearance's doubutsu palette (and turn
+//           doubutsu on, so the cycle always shows)
+//   Ctrl+R  drop every preview back to the saved appearance
 // They stage the same non-persisted overrides the Settings page uses,
 // so nothing is written to clientConfig.json, and a window reload also
 // resets. Bare Ctrl (not Cmd) keeps clear of the real menu accelerators.
@@ -23,7 +26,12 @@ export function DevThemeHotkeys() {
   // must key off this build, never the host it talks to.
   const isDev = window.api.isDev;
   const { resolved, setOverride: setTheme } = useTheme();
-  const { applied: doubutsuApplied, setOverride: setDoubutsu } = useDoubutsu();
+  // The three primitives, not the picks object: a fresh object each
+  // render would re-subscribe the listener on every one.
+  const {
+    applied: { doubutsu, light, dark },
+    setOverride: setPalette,
+  } = usePalette();
 
   useEffect(() => {
     if (!isDev) return;
@@ -31,12 +39,15 @@ export function DevThemeHotkeys() {
       if (!e.ctrlKey || e.altKey || e.metaKey || e.shiftKey || e.repeat) {
         return;
       }
-      // Ctrl+T/D/R are Emacs-style edit bindings inside macOS text
-      // fields (transpose, delete-forward, ...), so those win. Raw-key
-      // surfaces are the exception (see above).
+      // Ctrl+T/D/P/R are Emacs-style edit bindings inside macOS text
+      // fields (transpose, delete-forward, previous line, ...), so
+      // those win. Raw-key surfaces are the exception (see above).
       const rawSurface = isRawKeySurface(e.target);
       if (isEditableTarget(e.target) && !rawSurface) return;
-      if (e.code !== "KeyT" && e.code !== "KeyD" && e.code !== "KeyR") return;
+      if (!["KeyT", "KeyD", "KeyP", "KeyR"].includes(e.code)) return;
+      // Ctrl+P is a shell's previous-history key, worth more in the
+      // console than a palette preview: there it goes to the program.
+      if (e.code === "KeyP" && rawSurface) return;
       e.preventDefault();
       // Only a raw-key surface would otherwise pass the key on to a
       // program. Everywhere else the event may keep bubbling.
@@ -44,15 +55,29 @@ export function DevThemeHotkeys() {
       if (e.code === "KeyT") {
         setTheme(resolved === "dark" ? "light" : "dark");
       } else if (e.code === "KeyD") {
-        setDoubutsu(!doubutsuApplied);
+        setPalette({ doubutsu: !doubutsu });
+      } else if (e.code === "KeyP") {
+        if (resolved === "dark") {
+          const i = DARK_THEME_IDS.indexOf(dark);
+          setPalette({
+            doubutsu: true,
+            dark: DARK_THEME_IDS[(i + 1) % DARK_THEME_IDS.length],
+          });
+        } else {
+          const i = LIGHT_THEME_IDS.indexOf(light);
+          setPalette({
+            doubutsu: true,
+            light: LIGHT_THEME_IDS[(i + 1) % LIGHT_THEME_IDS.length],
+          });
+        }
       } else {
         setTheme(null);
-        setDoubutsu(null);
+        setPalette(null);
       }
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [isDev, resolved, doubutsuApplied, setTheme, setDoubutsu]);
+  }, [isDev, resolved, doubutsu, light, dark, setTheme, setPalette]);
 
   return null;
 }

@@ -4,7 +4,7 @@ import { AppErrorFallback } from "@/components/AppChrome";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DevThemeHotkeys } from "@/components/DevThemeHotkeys";
 import { OverlaysProvider } from "@/hooks/ui/useOverlays";
-import { DoubutsuProvider } from "@/hooks/ui/useDoubutsu";
+import { PaletteProvider } from "@/hooks/ui/usePalette";
 import { ThemeProvider } from "@/hooks/ui/useTheme";
 import type { AppRouter } from "./router";
 
@@ -15,7 +15,7 @@ import type { AppRouter } from "./router";
 export function App({ router }: { router: AppRouter }) {
   return (
     <ThemeProvider>
-      <DoubutsuProvider>
+      <PaletteProvider>
         <ErrorBoundary FallbackComponent={AppErrorFallback}>
           <OverlaysProvider>
             <TooltipProvider>
@@ -24,7 +24,7 @@ export function App({ router }: { router: AppRouter }) {
             </TooltipProvider>
           </OverlaysProvider>
         </ErrorBoundary>
-      </DoubutsuProvider>
+      </PaletteProvider>
     </ThemeProvider>
   );
 }
