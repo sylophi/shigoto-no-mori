@@ -16,6 +16,6 @@
     "lab:web": "pnpm -C app lab:web",
     "package": "pnpm -C app package",
     "make": "pnpm -C app make",
-    "lefthook": "pnpm -C app exec lefthook"
+    "lefthook": "app/node_modules/.bin/lefthook"
   }
 }
