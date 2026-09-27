@@ -1,308 +1,326 @@
 pre-commit:
-  parallel: true
-  commands:
-    typecheck:
-      run: pnpm -C app run typecheck
-    lint:
-      run: pnpm -C app run lint
-    format:
-      run: pnpm -C app run format:check
-    theme-contract:
-      run: pnpm -C app test theme-contract
-    host-boundary:
-      glob: "{app/host/**,app/main/**,app/renderer/**,app/shared/**,app/web/**,app/test/host-boundary.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test host-boundary
-    dmg-art:
-      run: pnpm -C app test dmg-art
-    # Glob-gated: the identity test costs ~140 git spawns, so it should
-    # not run on unrelated commits. It holds the CLI's identity (the
-    # project rows' `identity`) to the same fixtures, so cli/ gates it
-    # too.
-    identity:
-      glob: "{cli/**,app/shared/git/repoIdentity.mts,app/shared/git/defaultBranch.mts,app/shared/fixtures/**,app/test/identity.mjs,app/test/lib/smBinary.mjs}"
-      run: pnpm -C app test identity
-    # The host reads the data model through the CLI: projects, rows,
-    # identities, the marks, relocate, reorder, config, launchers,
-    # package scripts and the doctor report answered by the real sm
-    # binary through the real handlers, plus the two rules the app
-    # still mirrors (the worktree id and the renderer's layout math)
-    # pinned against the CLI's own answers, and a forced removal
-    # running the teardown through sm rm.
-    cli-reads:
-      glob: "{cli/**,app/host/ipc/cliDelegate.ts,app/host/ipc/modules/cli.ts,app/shared/ipc/modules/cli.ts,app/host/ipc/modules/projects.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/modules/launchers.ts,app/host/ipc/modules/packageScripts.ts,app/host/ipc/modules/globalConfig.ts,app/host/ipc/modules/shigomori.ts,app/host/lib/projects/**,app/host/lib/git/worktrees.ts,app/host/lib/config/**,app/shared/schemas/**,app/shared/git/worktreeLayout.ts,app/test/cli-reads.mjs,app/test/lib/checkKit.mjs,app/test/lib/smBinary.mjs}"
-      run: pnpm -C app test cli-reads
-    go-test:
-      glob: "cli/**"
-      run: go test -C cli ./...
-    # The file-sync engine (continuous worktree mirroring) is its own
-    # Go module, tested on its own.
-    file-sync-test:
-      glob: "file-sync/**"
-      run: CGO_CFLAGS=-Wno-deprecated-declarations go test -C file-sync ./...
-    # Boots the real direct listener on an ephemeral port and asserts the
-    # ticket-proof handshake, the dispatch/broadcast/framing paths plus
-    # the hardening (terminate on bad proof, oversized-frame and Origin
-    # rejection, in-flight cap, generation guard, the command gate,
-    # liveness, deflated frames) and the explicit remote-tag contract.
-    # Gated to the socket surface plus the whole contract layer
-    # (shared/ipc/** and the shared/schemas the contracts are built
-    # from, which feed the invariant through allContractModules), so
-    # adding an untagged host invoke also trips it.
-    socket-host:
-      glob: "{app/host/socket/**,app/host/direct/tickets.ts,app/shared/packaging/rendererScheme.mts,app/host/ipc/modules/globalConfig.ts,app/shared/ipc/**,app/shared/schemas/**,app/shared/hub/protocol.ts,app/main/ipc/register.ts,app/test/socket-host.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
-      run: pnpm -C app test socket-host
-    # Typechecks the hub Worker package and runs its vitest suite
-    # inside workerd (real D1, Durable Object and websocket bindings)
-    # against the shared app-to-worker protocol, so enrollment, ticket,
-    # relaying, presence and revocation semantics cannot drift from
-    # shared/hub/protocol.ts. hub/ is a standalone pnpm project with
-    # its own lockfile, which the check installs first. One caveat: the
-    # shared files it imports (shared/hub/protocol.ts and the frames.ts
-    # it re-exports) live outside hub/, so their `zod` import resolves
-    # from app/node_modules, not hub/node_modules. The two installs pin
-    # the same zod, so an app/ install is a prerequisite for those
-    # shared files.
-    hub:
-      glob: "{hub/**,app/shared/hub/protocol.ts,app/shared/ipc/socket/frames.ts}"
-      run: pnpm -C hub install --frozen-lockfile --prefer-offline && pnpm -C hub run check
-    # Boots a stub Durable Object (a node ws server speaking the hub
-    # envelope protocol) and drives REAL hub connections through the
-    # real link, asserting the connectInfo ask/answer (one exchange, id
-    # correlation, the void-field framing invariant, message-only error
-    # serialization, unknown asks and listener-less devices refused),
-    # the local outbound size guard, offline nacks, the per-ask timeout,
-    # presence-driven and teardown rejection of pending asks, the
-    # off-roster gate, fresh-ticket redials, the revoked/superseded
-    # blocked verdicts, the version floor on both ends and the fail-fast
-    # against a build from before the ask in both directions. Gated to
-    # the hub transport surface plus the frame layer it reuses.
-    hub-link:
-      glob: "{app/shared/hub/**,app/shared/remote/**,app/host/hub/**,app/shared/ipc/socket/**,app/shared/util/limit.ts,app/test/hub-link.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test hub-link
-    # Durable proof for the direct data plane (supervised by the keeper): boots the stub Durable Object plus a REAL direct
-    # listener on an ephemeral loopback port, brokers connect tickets
-    # over the device hub with the connectInfo ask, and asserts the
-    # whole plane: roster-only brokering bound to the asking device, one
-    # ask and one answer per dial, ticket single-use, expiry and
-    # wrong-peer binding, the live grant gate on the direct wire,
-    # direct-or-nothing routing (sessionless invokes refuse without
-    # dialing) with cache drop on close, the keeper's supervision
-    # (presence-driven eager dials, the shared forever ladder, parking
-    # on terminal verdicts: a refused ticket, no listener, the version
-    # floor), invokes flowing with the device hub's forwardedCount flat,
-    # and pushes reaching a direct-connected client through the shared
-    # peerPush path. Gated to the direct surface plus the socket and hub
-    # layers it composes.
-    direct-plane:
-      glob: "{app/host/direct/**,app/shared/packaging/cloudflaredDist.mts,app/host/socket/**,app/host/lib/util/binaries.ts,app/host/lib/scripts/process.ts,app/shared/ipc/modules/direct.ts,app/shared/ipc/modules/account.ts,app/shared/ipc/modules/hub.ts,app/shared/ipc/socket/**,app/shared/ipc/transport.ts,app/shared/ipc/registerContract.ts,app/shared/hub/**,app/host/hub/**,app/shared/account/service.ts,app/shared/remote/supervisor.ts,app/test/direct-plane.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
-      run: pnpm -C app test direct-plane
-    # End-to-end proof for the device-sync transfer plumbing: builds the
-    # real sm binary, seeds fixture repos in a sandboxed SHIGOMORI_DATA_DIR,
-    # and moves a >1.5 MB git bundle between two REAL hub connections
-    # as chunked grant-gated invokes (real handlers, real CLI, real
-    # git), asserting grant refusal for ungranted peers, the
-    # refs/shigomori/-only landing namespace, byte-identical objects,
-    # transfer cleanup, and the coded corrupted-bundle error. Gated to
-    # the sync surface plus the CLI engine it shells.
-    sync-transfer:
-      glob: "{cli/**,app/shared/ipc/modules/sync.ts,app/shared/ipc/modules/worktrees.ts,app/shared/ipc/hexId.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/shared/ipc/socket/frames.ts,app/shared/hub/protocol.ts,app/host/ipc/modules/sync.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/peerSync.ts,app/host/ipc/cliDelegate.ts,app/host/hub/**,app/host/lib/sync/**,app/host/lib/hexId.ts,app/shared/ipc/socket/channels.ts,app/host/socket/channelStreams.ts,app/host/lib/git/**,app/host/lib/scripts/**,app/host/lib/util/paths.ts,app/test/sync-transfer.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs,app/host/lib/projects/**,app/test/lib/cliSandbox.mjs,app/test/lib/smBinary.mjs}"
-      run: pnpm -C app test sync-transfer
-    # End-to-end proof for the CLI's cross-device verbs: the real sm
-    # binary finds the real control server through control.json in a
-    # sandboxed data dir and drives `devices`, `send`, `bring`,
-    # `mirror`, `mirrors` and `unmirror` through the real control
-    # handlers, which run the real send and pull orchestrators over a
-    # real direct wire against real git. Asserts the hello gate and the
-    # owner-only token file, every app-not-running dead end, device and
-    # worktree resolution by code, streamed progress, the source fates,
-    # exit 3 on a caveat, and the mirror stop guard. Gated to the
-    # control surface plus the sync surface and CLI it rides.
-    control:
-      glob: "{cli/**,app/shared/ipc/modules/control.ts,app/shared/ipc/modules/sync.ts,app/shared/ipc/modules/mirror.ts,app/shared/ipc/modules/worktrees.ts,app/shared/ipc/modules/projects.ts,app/shared/ipc/modules/hub.ts,app/shared/leaveOutRule.ts,app/shared/sharedSettings.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/host/ipc/modules/control.ts,app/host/ipc/modules/sync.ts,app/host/ipc/modules/mirror.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/peerSync.ts,app/host/ipc/cliDelegate.ts,app/host/mirror/**,app/host/lib/sync/**,app/host/lib/hexId.ts,app/shared/ipc/socket/channels.ts,app/host/socket/channelStreams.ts,app/host/lib/git/**,app/host/lib/util/paths.ts,app/main/core/control/**,app/main/core/portForward/bridge.ts,app/test/control.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs,app/host/lib/projects/**,app/test/lib/cliSandbox.mjs,app/test/lib/smBinary.mjs}"
-      run: pnpm -C app test control
-    # End-to-end proof for the port-forward wire: drives the host-side
-    # forward verbs between two REAL hub connections against real
-    # loopback TCP fixture servers, asserting grant refusal before any
-    # dial, echo round trips, server-initiated bytes over the long-poll
-    # downlink, a ~1.5 MB transfer chunked under the hub frame cap,
-    # drain-then-eof on server close, the coded connect failure, and
-    # idempotent teardown. Slice B adds the client engine (local
-    # listeners, both pumps, eof propagation, stopForward teardown and
-    # the per-forward conn cap) driven over the same wire. Gated to the
-    # forward surface plus the stub device hub it rides.
-    port-forward:
-      glob: "{app/shared/ipc/modules/forward.ts,app/shared/ipc/hexId.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/shared/ipc/socket/**,app/shared/hub/protocol.ts,app/shared/hub/bridgeHandlers.ts,app/host/ipc/modules/forward.ts,app/host/socket/**,app/host/hub/**,app/host/lib/hexId.ts,app/host/lib/net.ts,app/main/core/portForward/**,app/test/port-forward.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
-      run: pnpm -C app test port-forward
-    # End-to-end proof for continuous worktree mirroring: builds the real
-    # file-sync engine (and the sm CLI for the fixture project), then
-    # runs a REAL `file-sync daemon` on device B behind the real
-    # gateway, dialing device A's real forward:openMirror over a real
-    # direct wire, which spawns a real `file-sync serve` for a real
-    # worktree. Asserts grant refusal surfaces as a create error,
-    # two-way convergence of plain and gitignored-style files with the
-    # .git pointer held back, the serving list on A, teardown of the
-    # serve child on terminate, and the device hub staying flat. Gated
-    # to the mirror surface plus the byte wire and CLI it rides.
-    mirror:
-      glob: "{file-sync/**,cli/**,app/host/fileSync/**,app/host/mirror/**,app/shared/packaging/fileSyncDist.mts,app/shared/ipc/modules/mirror.ts,app/shared/ipc/modules/forward.ts,app/shared/ipc/modules/sync.ts,app/host/ipc/modules/sync.ts,app/host/ipc/peerSync.ts,app/host/lib/sync/**,app/shared/ipc/hexId.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/shared/ipc/socket/frames.ts,app/shared/hub/protocol.ts,app/host/ipc/modules/forward.ts,app/host/ipc/modules/mirror.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/cliDelegate.ts,app/host/hub/**,app/host/lib/hexId.ts,app/host/lib/net.ts,app/host/lib/git/**,app/host/lib/util/paths.ts,app/main/core/portForward/bridge.ts,app/main/core/mirror/**,app/shared/ipc/socket/channels.ts,app/host/socket/channelStreams.ts,app/test/mirror.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs,app/host/lib/projects/**,app/test/lib/cliSandbox.mjs,app/test/lib/smBinary.mjs}"
-      run: pnpm -C app test mirror
-    # Proves the worktree port list's pure parts under plain Node: the
-    # port-pool state reader (XDG_DATA_HOME, declared order, malformed
-    # entries), the pool-then-custom merge with its shadowing rule, and
-    # the loopback probe and dial with the ::1 fallback. Gated to those
-    # modules plus the check itself.
-    worktree-ports:
-      glob: "{app/host/lib/portPool.ts,app/shared/ports/mergeWorktreePorts.ts,app/host/lib/net.ts,app/host/ipc/modules/ports.ts,app/shared/schemas/ports.ts,app/test/worktree-ports.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test worktree-ports
-    # Boots the same stub Durable Object and drives the BROWSER hub
-    # connection (web/hub/connection.ts, built on the global WebSocket)
-    # under node against a real node host peer, asserting connect, the
-    # connectInfo ask round trip, the version floor on its asks, its
-    # no-listener refusal of a peer's ask, presence, the
-    # revoked/superseded blocked verdicts, a fresh-ticket redial and the
-    # per-dial ticket mint. Gated to the browser connection plus the hub
-    # transport surface it drives.
-    web-hub:
-      glob: "{app/web/**,app/shared/hub/**,app/shared/remote/**,app/shared/util/limit.ts,app/host/hub/**,app/test/web-hub.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test web-hub
-    # Drives the web client's window.api bridge headlessly: the surface
-    # parity against buildApi (so renderer components mount unmodified),
-    # the localStorage-backed clientConfig and credential stores, the
-    # stable per-browser deviceId, the Clerk session-token enroll
-    # (platform "web") and the sign-out revoke, the schema-derived
-    # stubs for OS-bound channels, and the typed
-    # unconfigured/origin-blocked access states that keep a
-    # misconfigured deployment from looping the hub supervisor.
-    web-bridge:
-      glob: "{app/web/**,app/shared/account/**,app/shared/ipc/**,app/shared/hub/protocol.ts,app/test/web-bridge.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test web-bridge
-    # Drives the shared settings merge and both places a copy lives
-    # (the host's registry.json key, the browser's localStorage) through
-    # pairwise exchanges: no server holds the settings, so convergence
-    # rests on the merge being order-free, and on a no-op merge staying
-    # silent so two copies never announce at each other forever.
-    shared-settings:
-      glob: "{app/shared/sharedSettings.ts,app/shared/schemas/sharedSettings.ts,app/shared/ipc/modules/sharedSettings.ts,app/host/lib/sharedSettings/**,app/web/ipc/register.ts,app/test/shared-settings.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test shared-settings
-    # A never-used data dir is seeded with Doubutsu names on by the app
-    # or the CLI, whichever runs first, and an existing install is left
-    # alone, with both engines reading the same values.
-    fresh-install:
-      glob: "{cli/names.go,cli/cmd_config.go,cli/state.go,cli/main.go,app/shared/schemas/config.ts,app/host/lib/bootstrap.ts,app/host/lib/util/paths.ts,app/renderer/hooks/config/useSettingsSave.ts,app/test/fresh-install.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test fresh-install
-    # Village life (client config) and Doubutsu names (device config)
-    # each read off when unset, and the device patch never carries
-    # Village life.
-    village-life:
-      glob: "{app/shared/villageLife.ts,app/shared/schemas/config.ts,app/host/lib/bootstrap.ts,app/renderer/hooks/config/useSettingsSave.ts,app/test/village-life.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test village-life
-    # The villager manifest names a face for every doubutsu name, so the
-    # pool and the manifest agree one to one.
-    villager-manifest:
-      glob: "{app/shared/villagers/manifest.json,app/shared/villagers/rarity.ts,cli/embed/doubutsu-names.json,app/test/villager-manifest.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test villager-manifest
-    # What a villager says in a toast, and the news when they move in or
-    # out, by rarity.
-    villager-voice:
-      glob: "{app/renderer/lib/villagerVoice.ts,app/shared/villagers/rarity.ts,app/shared/schemas/villagers.ts,app/test/villager-voice.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test villager-voice
-    # The villager data download against a fake wiki: progress, the
-    # manifest's size and sha1 checks, cancel, resume, the finished
-    # download appearing whole, remove, and the Settings line for each
-    # state.
-    villager-data:
-      glob: "{app/host/lib/villagers.ts,app/host/lib/util/jsonFile.ts,app/shared/villagers/**,app/shared/schemas/villagers.ts,app/renderer/components/settings/villagerDataView.ts,app/test/villager-data.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test villager-data
-    # The one Nookipedia reader the name script and the download share,
-    # against wikitext fixtures.
-    villager-wiki:
-      glob: "{app/shared/villagers/wiki.ts,app/shared/schemas/villagers.ts,app/test/villager-wiki.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test villager-wiki
-    # The scripts' manual order is one per project across branches whose
-    # package.json differ, so the merge must keep another branch's.
-    # The launch row pins are per project too.
-    script-order:
-      glob: "{app/host/lib/scripts/packageScriptStats.ts,app/shared/launchRow.ts,app/renderer/components/worktreeDetail/scripts/sortPackageScripts.ts,app/host/lib/config/store.ts,app/test/script-order.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test script-order
-    # The tree's project group order is decided over every device, so
-    # the device filter drops groups without reordering the rest.
-    project-order:
-      glob: "{app/renderer/components/sidebar/buildSidebarRows.ts,app/renderer/lib/sortProjects.ts,app/test/project-order.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test project-order
-    # The ⌘K palette lists every device's worktrees once, visits first,
-    # and opens on the one before the page on screen.
-    worktree-palette:
-      glob: "{app/renderer/components/palette/buildPaletteEntries.ts,app/renderer/lib/fuzzyMatch.ts,app/renderer/components/sidebar/buildSidebarRows.ts,app/test/worktree-palette.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test worktree-palette
-    # The mirror's status line reads a cycle that moves no files as
-    # Live, so events on ignored paths do not flash Syncing.
-    mirror-status:
-      glob: "{app/renderer/components/worktreeDetail/mirror/mirrorStatus.ts,app/test/mirror-status.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test mirror-status
-    # Drives stack detection (shared/pullRequestStack.ts), the pure
-    # read behind the sidebar's stack pill, the worktree page's stack
-    # list and the stack merge button.
-    pull-request-stack:
-      glob: "{app/shared/pullRequestStack.ts,app/shared/schemas/pullRequest.ts,app/shared/schemas/worktree.ts,app/test/pull-request-stack.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test pull-request-stack
-    # Drives the pure liveness rate limiters (renderer crash-loop guard
-    # and fatal-relaunch guard) that decide recreate-vs-give-up and
-    # relaunch-vs-stand. Gated to the pure module plus the check itself,
-    # since the Electron wiring around them is a human-verify item.
-    liveness:
-      glob: "{app/main/core/liveness/**,app/test/liveness.mjs}"
-      run: pnpm -C app test liveness
-    # The Safe Storage reset contract, and on macOS the real
-    # `security` deletion of a probe item. That writes to the login
-    # keychain, so the job is gated to the keychain modules alone.
-    keychain:
-      glob: "{app/main/core/keychain/**,app/test/keychain.mjs}"
-      run: pnpm -C app test keychain
-    # Drives the per-project git-directory watcher against a REAL git
-    # repository with a linked worktree: a commit in the worktree, a
-    # checkout and a branch delete each land as one project-scoped
-    # change, while the churn the allowlist exists to ignore (objects,
-    # logs, index refreshes from `git status`, lock files, FETCH_HEAD)
-    # produces none. Loop-safety of the watcher rests on that
-    # allowlist, so it is pinned here.
-    git-watcher:
-      glob: "{app/main/core/gitWatcher.ts,app/test/git-watcher.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test git-watcher
-    # Clones a real sandbox repository through cloneRepo and walks the
-    # projects:clone payload's accept/reject table (remotes only, one
-    # folder segment), which is what a peer's clone request is held to.
-    clone:
-      glob: "{app/host/lib/git/clone.ts,app/shared/cloneUrl.ts,app/shared/schemas/project.ts,app/shared/git/repoIdentity.mts,app/test/clone.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test clone
-    # Drives auto-pull against a REAL repository with a remote: a clean,
-    # strictly-behind worktree fast-forwards, and every state that would
-    # make the pull anything else (a local commit, a modified or
-    # untracked file, a detached HEAD, no upstream, a running script)
-    # leaves it untouched. Also the sweep's marked-only selection and
-    # the mark's registry.json round trip, both through the CLI.
-    auto-pull:
-      glob: "{cli/**,app/host/lib/worktrees/autoPullSweep.ts,app/host/lib/git/sync.ts,app/host/lib/git/core.ts,app/host/lib/git/worktrees.ts,app/host/ipc/cliDelegate.ts,app/test/auto-pull.mjs,app/test/lib/checkKit.mjs,app/test/lib/smBinary.mjs}"
-      run: pnpm -C app test auto-pull
-    # Drives the shelf's auto-unshelve (cli/shelf.go, run by `sm
-    # worktrees list`) against a REAL repository through the host's
-    # listing: the first listing of a shelved worktree snapshots it,
-    # changes it was shelved with keep it shelved, and an edit, a
-    # commit or a deletion made since unshelves it. An auto-pull
-    # fast-forward doesn't, and a listing racing a reshelve can't undo
-    # it.
-    shelf:
-      glob: "{cli/**,app/host/lib/worktrees/autoPullSweep.ts,app/host/lib/git/sync.ts,app/host/lib/git/core.ts,app/host/ipc/cliDelegate.ts,app/test/shelf.mjs,app/test/lib/checkKit.mjs,app/test/lib/cliSandbox.mjs,app/test/lib/smBinary.mjs}"
-      run: pnpm -C app test shelf
-    # Drives the electron-free account layer (main/core/account/*,
-    # shared/account/*) end to end with stubs: the hub client's
-    # route/method/auth-tier discipline against the shared schemas
-    # (Clerk session token at enroll, device credential everywhere
-    # else), the credential store's encrypt and plaintext-fallback
-    # round trips, the grant store, and the config/env-file layering.
-    # Sign-in itself is Clerk's embedded UI, so it has no pure core to
-    # prove here. Gated to the account surface so it stays off
-    # unrelated commits. Proves enrollment and storage cannot drift
-    # from shared/hub/protocol.ts without electron or a browser.
-    account:
-      glob: "{app/main/core/account/**,app/shared/account/**,app/shared/ipc/modules/account.ts,app/shared/hub/protocol.ts,app/test/account.mjs,app/test/lib/checkKit.mjs}"
-      run: pnpm -C app test account
+  # Formatting runs alone first: it rewrites staged files, which every
+  # check below reads. stage_fixed re-stages what oxfmt changed, and
+  # lefthook holds back the unstaged hunks of a partly staged file
+  # while it does.
+  piped: true
+  jobs:
+    - name: format
+      run: app/node_modules/.bin/oxfmt --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+    - name: checks
+      group:
+        parallel: true
+        jobs:
+          - name: typecheck
+            run: pnpm -C app run typecheck
+          - name: lint
+            run: app/node_modules/.bin/oxlint --no-error-on-unmatched-pattern {staged_files}
+          # format and lint only see staged files, so a change to the
+          # tools' config (or their versions, pinned in app/package.json)
+          # reruns them over the whole repo.
+          - name: lint-all
+            glob: "{.oxlintrc.json,app/package.json}"
+            run: pnpm -C app run lint
+          - name: format-all
+            glob: "{.oxfmtrc.json,app/renderer/index.css,app/package.json}"
+            run: pnpm -C app run format:check
+          - name: theme-contract
+            run: pnpm -C app test theme-contract
+          - name: host-boundary
+            glob: "{app/host/**,app/main/**,app/renderer/**,app/shared/**,app/web/**,app/test/host-boundary.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test host-boundary
+          - name: dmg-art
+            run: pnpm -C app test dmg-art
+          # Glob-gated: the identity test costs ~140 git spawns, so it should
+          # not run on unrelated commits. It holds the CLI's identity (the
+          # project rows' `identity`) to the same fixtures, so cli/ gates it
+          # too.
+          - name: identity
+            glob: "{cli/**,app/shared/git/repoIdentity.mts,app/shared/git/defaultBranch.mts,app/shared/fixtures/**,app/test/identity.mjs,app/test/lib/smBinary.mjs}"
+            run: pnpm -C app test identity
+          # The host reads the data model through the CLI: projects, rows,
+          # identities, the marks, relocate, reorder, config, launchers,
+          # package scripts and the doctor report answered by the real sm
+          # binary through the real handlers, plus the two rules the app
+          # still mirrors (the worktree id and the renderer's layout math)
+          # pinned against the CLI's own answers, and a forced removal
+          # running the teardown through sm rm.
+          - name: cli-reads
+            glob: "{cli/**,app/host/ipc/cliDelegate.ts,app/host/ipc/modules/cli.ts,app/shared/ipc/modules/cli.ts,app/host/ipc/modules/projects.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/modules/launchers.ts,app/host/ipc/modules/packageScripts.ts,app/host/ipc/modules/globalConfig.ts,app/host/ipc/modules/shigomori.ts,app/host/lib/projects/**,app/host/lib/git/worktrees.ts,app/host/lib/config/**,app/shared/schemas/**,app/shared/git/worktreeLayout.ts,app/test/cli-reads.mjs,app/test/lib/checkKit.mjs,app/test/lib/smBinary.mjs}"
+            run: pnpm -C app test cli-reads
+          - name: go-test
+            glob: "cli/**"
+            run: go test -C cli ./...
+          # The file-sync engine (continuous worktree mirroring) is its own
+          # Go module, tested on its own.
+          - name: file-sync-test
+            glob: "file-sync/**"
+            run: CGO_CFLAGS=-Wno-deprecated-declarations go test -C file-sync ./...
+          # Boots the real direct listener on an ephemeral port and asserts the
+          # ticket-proof handshake, the dispatch/broadcast/framing paths plus
+          # the hardening (terminate on bad proof, oversized-frame and Origin
+          # rejection, in-flight cap, generation guard, the command gate,
+          # liveness, deflated frames) and the explicit remote-tag contract.
+          # Gated to the socket surface plus the whole contract layer
+          # (shared/ipc/** and the shared/schemas the contracts are built
+          # from, which feed the invariant through allContractModules), so
+          # adding an untagged host invoke also trips it.
+          - name: socket-host
+            glob: "{app/host/socket/**,app/host/direct/tickets.ts,app/shared/packaging/rendererScheme.mts,app/host/ipc/modules/globalConfig.ts,app/shared/ipc/**,app/shared/schemas/**,app/shared/hub/protocol.ts,app/main/ipc/register.ts,app/test/socket-host.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
+            run: pnpm -C app test socket-host
+          # Typechecks the hub Worker package and runs its vitest suite
+          # inside workerd (real D1, Durable Object and websocket bindings)
+          # against the shared app-to-worker protocol, so enrollment, ticket,
+          # relaying, presence and revocation semantics cannot drift from
+          # shared/hub/protocol.ts. hub/ is a standalone pnpm project with
+          # its own lockfile, which the check installs first. One caveat: the
+          # shared files it imports (shared/hub/protocol.ts and the frames.ts
+          # it re-exports) live outside hub/, so their `zod` import resolves
+          # from app/node_modules, not hub/node_modules. The two installs pin
+          # the same zod, so an app/ install is a prerequisite for those
+          # shared files.
+          - name: hub
+            glob: "{hub/**,app/shared/hub/protocol.ts,app/shared/ipc/socket/frames.ts}"
+            run: pnpm -C hub install --frozen-lockfile --prefer-offline && pnpm -C hub run check
+          # Boots a stub Durable Object (a node ws server speaking the hub
+          # envelope protocol) and drives REAL hub connections through the
+          # real link, asserting the connectInfo ask/answer (one exchange, id
+          # correlation, the void-field framing invariant, message-only error
+          # serialization, unknown asks and listener-less devices refused),
+          # the local outbound size guard, offline nacks, the per-ask timeout,
+          # presence-driven and teardown rejection of pending asks, the
+          # off-roster gate, fresh-ticket redials, the revoked/superseded
+          # blocked verdicts, the version floor on both ends and the fail-fast
+          # against a build from before the ask in both directions. Gated to
+          # the hub transport surface plus the frame layer it reuses.
+          - name: hub-link
+            glob: "{app/shared/hub/**,app/shared/remote/**,app/host/hub/**,app/shared/ipc/socket/**,app/shared/util/limit.ts,app/test/hub-link.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test hub-link
+          # Durable proof for the direct data plane (supervised by the keeper): boots the stub Durable Object plus a REAL direct
+          # listener on an ephemeral loopback port, brokers connect tickets
+          # over the device hub with the connectInfo ask, and asserts the
+          # whole plane: roster-only brokering bound to the asking device, one
+          # ask and one answer per dial, ticket single-use, expiry and
+          # wrong-peer binding, the live grant gate on the direct wire,
+          # direct-or-nothing routing (sessionless invokes refuse without
+          # dialing) with cache drop on close, the keeper's supervision
+          # (presence-driven eager dials, the shared forever ladder, parking
+          # on terminal verdicts: a refused ticket, no listener, the version
+          # floor), invokes flowing with the device hub's forwardedCount flat,
+          # and pushes reaching a direct-connected client through the shared
+          # peerPush path. Gated to the direct surface plus the socket and hub
+          # layers it composes.
+          - name: direct-plane
+            glob: "{app/host/direct/**,app/shared/packaging/cloudflaredDist.mts,app/host/socket/**,app/host/lib/util/binaries.ts,app/host/lib/scripts/process.ts,app/shared/ipc/modules/direct.ts,app/shared/ipc/modules/account.ts,app/shared/ipc/modules/hub.ts,app/shared/ipc/socket/**,app/shared/ipc/transport.ts,app/shared/ipc/registerContract.ts,app/shared/hub/**,app/host/hub/**,app/shared/account/service.ts,app/shared/remote/supervisor.ts,app/test/direct-plane.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
+            run: pnpm -C app test direct-plane
+          # End-to-end proof for the device-sync transfer plumbing: builds the
+          # real sm binary, seeds fixture repos in a sandboxed SHIGOMORI_DATA_DIR,
+          # and moves a >1.5 MB git bundle between two REAL hub connections
+          # as chunked grant-gated invokes (real handlers, real CLI, real
+          # git), asserting grant refusal for ungranted peers, the
+          # refs/shigomori/-only landing namespace, byte-identical objects,
+          # transfer cleanup, and the coded corrupted-bundle error. Gated to
+          # the sync surface plus the CLI engine it shells.
+          - name: sync-transfer
+            glob: "{cli/**,app/shared/ipc/modules/sync.ts,app/shared/ipc/modules/worktrees.ts,app/shared/ipc/hexId.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/shared/ipc/socket/frames.ts,app/shared/hub/protocol.ts,app/host/ipc/modules/sync.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/peerSync.ts,app/host/ipc/cliDelegate.ts,app/host/hub/**,app/host/lib/sync/**,app/host/lib/hexId.ts,app/shared/ipc/socket/channels.ts,app/host/socket/channelStreams.ts,app/host/lib/git/**,app/host/lib/scripts/**,app/host/lib/util/paths.ts,app/test/sync-transfer.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs,app/host/lib/projects/**,app/test/lib/cliSandbox.mjs,app/test/lib/smBinary.mjs}"
+            run: pnpm -C app test sync-transfer
+          # End-to-end proof for the CLI's cross-device verbs: the real sm
+          # binary finds the real control server through control.json in a
+          # sandboxed data dir and drives `devices`, `send`, `bring`,
+          # `mirror`, `mirrors` and `unmirror` through the real control
+          # handlers, which run the real send and pull orchestrators over a
+          # real direct wire against real git. Asserts the hello gate and the
+          # owner-only token file, every app-not-running dead end, device and
+          # worktree resolution by code, streamed progress, the source fates,
+          # exit 3 on a caveat, and the mirror stop guard. Gated to the
+          # control surface plus the sync surface and CLI it rides.
+          - name: control
+            glob: "{cli/**,app/shared/ipc/modules/control.ts,app/shared/ipc/modules/sync.ts,app/shared/ipc/modules/mirror.ts,app/shared/ipc/modules/worktrees.ts,app/shared/ipc/modules/projects.ts,app/shared/ipc/modules/hub.ts,app/shared/leaveOutRule.ts,app/shared/sharedSettings.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/host/ipc/modules/control.ts,app/host/ipc/modules/sync.ts,app/host/ipc/modules/mirror.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/peerSync.ts,app/host/ipc/cliDelegate.ts,app/host/mirror/**,app/host/lib/sync/**,app/host/lib/hexId.ts,app/shared/ipc/socket/channels.ts,app/host/socket/channelStreams.ts,app/host/lib/git/**,app/host/lib/util/paths.ts,app/main/core/control/**,app/main/core/portForward/bridge.ts,app/test/control.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs,app/host/lib/projects/**,app/test/lib/cliSandbox.mjs,app/test/lib/smBinary.mjs}"
+            run: pnpm -C app test control
+          # End-to-end proof for the port-forward wire: drives the host-side
+          # forward verbs between two REAL hub connections against real
+          # loopback TCP fixture servers, asserting grant refusal before any
+          # dial, echo round trips, server-initiated bytes over the long-poll
+          # downlink, a ~1.5 MB transfer chunked under the hub frame cap,
+          # drain-then-eof on server close, the coded connect failure, and
+          # idempotent teardown. Slice B adds the client engine (local
+          # listeners, both pumps, eof propagation, stopForward teardown and
+          # the per-forward conn cap) driven over the same wire. Gated to the
+          # forward surface plus the stub device hub it rides.
+          - name: port-forward
+            glob: "{app/shared/ipc/modules/forward.ts,app/shared/ipc/hexId.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/shared/ipc/socket/**,app/shared/hub/protocol.ts,app/shared/hub/bridgeHandlers.ts,app/host/ipc/modules/forward.ts,app/host/socket/**,app/host/hub/**,app/host/lib/hexId.ts,app/host/lib/net.ts,app/main/core/portForward/**,app/test/port-forward.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs}"
+            run: pnpm -C app test port-forward
+          # End-to-end proof for continuous worktree mirroring: builds the real
+          # file-sync engine (and the sm CLI for the fixture project), then
+          # runs a REAL `file-sync daemon` on device B behind the real
+          # gateway, dialing device A's real forward:openMirror over a real
+          # direct wire, which spawns a real `file-sync serve` for a real
+          # worktree. Asserts grant refusal surfaces as a create error,
+          # two-way convergence of plain and gitignored-style files with the
+          # .git pointer held back, the serving list on A, teardown of the
+          # serve child on terminate, and the device hub staying flat. Gated
+          # to the mirror surface plus the byte wire and CLI it rides.
+          - name: mirror
+            glob: "{file-sync/**,cli/**,app/host/fileSync/**,app/host/mirror/**,app/shared/packaging/fileSyncDist.mts,app/shared/ipc/modules/mirror.ts,app/shared/ipc/modules/forward.ts,app/shared/ipc/modules/sync.ts,app/host/ipc/modules/sync.ts,app/host/ipc/peerSync.ts,app/host/lib/sync/**,app/shared/ipc/hexId.ts,app/shared/ipc/buildClient.ts,app/shared/ipc/registerContract.ts,app/shared/ipc/socket/frames.ts,app/shared/hub/protocol.ts,app/host/ipc/modules/forward.ts,app/host/ipc/modules/mirror.ts,app/host/ipc/modules/worktrees.ts,app/host/ipc/cliDelegate.ts,app/host/hub/**,app/host/lib/hexId.ts,app/host/lib/net.ts,app/host/lib/git/**,app/host/lib/util/paths.ts,app/main/core/portForward/bridge.ts,app/main/core/mirror/**,app/shared/ipc/socket/channels.ts,app/host/socket/channelStreams.ts,app/test/mirror.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs,app/test/lib/directBoot.mjs,app/host/lib/projects/**,app/test/lib/cliSandbox.mjs,app/test/lib/smBinary.mjs}"
+            run: pnpm -C app test mirror
+          # Proves the worktree port list's pure parts under plain Node: the
+          # port-pool state reader (XDG_DATA_HOME, declared order, malformed
+          # entries), the pool-then-custom merge with its shadowing rule, and
+          # the loopback probe and dial with the ::1 fallback. Gated to those
+          # modules plus the check itself.
+          - name: worktree-ports
+            glob: "{app/host/lib/portPool.ts,app/shared/ports/mergeWorktreePorts.ts,app/host/lib/net.ts,app/host/ipc/modules/ports.ts,app/shared/schemas/ports.ts,app/test/worktree-ports.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test worktree-ports
+          # Boots the same stub Durable Object and drives the BROWSER hub
+          # connection (web/hub/connection.ts, built on the global WebSocket)
+          # under node against a real node host peer, asserting connect, the
+          # connectInfo ask round trip, the version floor on its asks, its
+          # no-listener refusal of a peer's ask, presence, the
+          # revoked/superseded blocked verdicts, a fresh-ticket redial and the
+          # per-dial ticket mint. Gated to the browser connection plus the hub
+          # transport surface it drives.
+          - name: web-hub
+            glob: "{app/web/**,app/shared/hub/**,app/shared/remote/**,app/shared/util/limit.ts,app/host/hub/**,app/test/web-hub.mjs,app/test/lib/hubStub.mjs,app/test/lib/hubBoot.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test web-hub
+          # Drives the web client's window.api bridge headlessly: the surface
+          # parity against buildApi (so renderer components mount unmodified),
+          # the localStorage-backed clientConfig and credential stores, the
+          # stable per-browser deviceId, the Clerk session-token enroll
+          # (platform "web") and the sign-out revoke, the schema-derived
+          # stubs for OS-bound channels, and the typed
+          # unconfigured/origin-blocked access states that keep a
+          # misconfigured deployment from looping the hub supervisor.
+          - name: web-bridge
+            glob: "{app/web/**,app/shared/account/**,app/shared/ipc/**,app/shared/hub/protocol.ts,app/test/web-bridge.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test web-bridge
+          # Drives the shared settings merge and both places a copy lives
+          # (the host's registry.json key, the browser's localStorage) through
+          # pairwise exchanges: no server holds the settings, so convergence
+          # rests on the merge being order-free, and on a no-op merge staying
+          # silent so two copies never announce at each other forever.
+          - name: shared-settings
+            glob: "{app/shared/sharedSettings.ts,app/shared/schemas/sharedSettings.ts,app/shared/ipc/modules/sharedSettings.ts,app/host/lib/sharedSettings/**,app/web/ipc/register.ts,app/test/shared-settings.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test shared-settings
+          # A never-used data dir is seeded with Doubutsu names on by the app
+          # or the CLI, whichever runs first, and an existing install is left
+          # alone, with both engines reading the same values.
+          - name: fresh-install
+            glob: "{cli/names.go,cli/cmd_config.go,cli/state.go,cli/main.go,app/shared/schemas/config.ts,app/host/lib/bootstrap.ts,app/host/lib/util/paths.ts,app/renderer/hooks/config/useSettingsSave.ts,app/test/fresh-install.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test fresh-install
+          # Village life (client config) and Doubutsu names (device config)
+          # each read off when unset, and the device patch never carries
+          # Village life.
+          - name: village-life
+            glob: "{app/shared/villageLife.ts,app/shared/schemas/config.ts,app/host/lib/bootstrap.ts,app/renderer/hooks/config/useSettingsSave.ts,app/test/village-life.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test village-life
+          # The villager manifest names a face for every doubutsu name, so the
+          # pool and the manifest agree one to one.
+          - name: villager-manifest
+            glob: "{app/shared/villagers/manifest.json,app/shared/villagers/rarity.ts,cli/embed/doubutsu-names.json,app/test/villager-manifest.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test villager-manifest
+          # What a villager says in a toast, and the news when they move in or
+          # out, by rarity.
+          - name: villager-voice
+            glob: "{app/renderer/lib/villagerVoice.ts,app/shared/villagers/rarity.ts,app/shared/schemas/villagers.ts,app/test/villager-voice.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test villager-voice
+          # The villager data download against a fake wiki: progress, the
+          # manifest's size and sha1 checks, cancel, resume, the finished
+          # download appearing whole, remove, and the Settings line for each
+          # state.
+          - name: villager-data
+            glob: "{app/host/lib/villagers.ts,app/host/lib/util/jsonFile.ts,app/shared/villagers/**,app/shared/schemas/villagers.ts,app/renderer/components/settings/villagerDataView.ts,app/test/villager-data.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test villager-data
+          # The one Nookipedia reader the name script and the download share,
+          # against wikitext fixtures.
+          - name: villager-wiki
+            glob: "{app/shared/villagers/wiki.ts,app/shared/schemas/villagers.ts,app/test/villager-wiki.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test villager-wiki
+          # The scripts' manual order is one per project across branches whose
+          # package.json differ, so the merge must keep another branch's.
+          # The launch row pins are per project too.
+          - name: script-order
+            glob: "{app/host/lib/scripts/packageScriptStats.ts,app/shared/launchRow.ts,app/renderer/components/worktreeDetail/scripts/sortPackageScripts.ts,app/host/lib/config/store.ts,app/test/script-order.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test script-order
+          # The tree's project group order is decided over every device, so
+          # the device filter drops groups without reordering the rest.
+          - name: project-order
+            glob: "{app/renderer/components/sidebar/buildSidebarRows.ts,app/renderer/lib/sortProjects.ts,app/test/project-order.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test project-order
+          # The ⌘K palette lists every device's worktrees once, visits first,
+          # and opens on the one before the page on screen.
+          - name: worktree-palette
+            glob: "{app/renderer/components/palette/buildPaletteEntries.ts,app/renderer/lib/fuzzyMatch.ts,app/renderer/components/sidebar/buildSidebarRows.ts,app/test/worktree-palette.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test worktree-palette
+          # The mirror's status line reads a cycle that moves no files as
+          # Live, so events on ignored paths do not flash Syncing.
+          - name: mirror-status
+            glob: "{app/renderer/components/worktreeDetail/mirror/mirrorStatus.ts,app/test/mirror-status.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test mirror-status
+          # Drives stack detection (shared/pullRequestStack.ts), the pure
+          # read behind the sidebar's stack pill, the worktree page's stack
+          # list and the stack merge button.
+          - name: pull-request-stack
+            glob: "{app/shared/pullRequestStack.ts,app/shared/schemas/pullRequest.ts,app/shared/schemas/worktree.ts,app/test/pull-request-stack.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test pull-request-stack
+          # Drives the pure liveness rate limiters (renderer crash-loop guard
+          # and fatal-relaunch guard) that decide recreate-vs-give-up and
+          # relaunch-vs-stand. Gated to the pure module plus the check itself,
+          # since the Electron wiring around them is a human-verify item.
+          - name: liveness
+            glob: "{app/main/core/liveness/**,app/test/liveness.mjs}"
+            run: pnpm -C app test liveness
+          # The Safe Storage reset contract, and on macOS the real
+          # `security` deletion of a probe item. That writes to the login
+          # keychain, so the job is gated to the keychain modules alone.
+          - name: keychain
+            glob: "{app/main/core/keychain/**,app/test/keychain.mjs}"
+            run: pnpm -C app test keychain
+          # Drives the per-project git-directory watcher against a REAL git
+          # repository with a linked worktree: a commit in the worktree, a
+          # checkout and a branch delete each land as one project-scoped
+          # change, while the churn the allowlist exists to ignore (objects,
+          # logs, index refreshes from `git status`, lock files, FETCH_HEAD)
+          # produces none. Loop-safety of the watcher rests on that
+          # allowlist, so it is pinned here.
+          - name: git-watcher
+            glob: "{app/main/core/gitWatcher.ts,app/test/git-watcher.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test git-watcher
+          # Clones a real sandbox repository through cloneRepo and walks the
+          # projects:clone payload's accept/reject table (remotes only, one
+          # folder segment), which is what a peer's clone request is held to.
+          - name: clone
+            glob: "{app/host/lib/git/clone.ts,app/shared/cloneUrl.ts,app/shared/schemas/project.ts,app/shared/git/repoIdentity.mts,app/test/clone.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test clone
+          # Drives auto-pull against a REAL repository with a remote: a clean,
+          # strictly-behind worktree fast-forwards, and every state that would
+          # make the pull anything else (a local commit, a modified or
+          # untracked file, a detached HEAD, no upstream, a running script)
+          # leaves it untouched. Also the sweep's marked-only selection and
+          # the mark's registry.json round trip, both through the CLI.
+          - name: auto-pull
+            glob: "{cli/**,app/host/lib/worktrees/autoPullSweep.ts,app/host/lib/git/sync.ts,app/host/lib/git/core.ts,app/host/lib/git/worktrees.ts,app/host/ipc/cliDelegate.ts,app/test/auto-pull.mjs,app/test/lib/checkKit.mjs,app/test/lib/smBinary.mjs}"
+            run: pnpm -C app test auto-pull
+          # Drives the shelf's auto-unshelve (cli/shelf.go, run by `sm
+          # worktrees list`) against a REAL repository through the host's
+          # listing: the first listing of a shelved worktree snapshots it,
+          # changes it was shelved with keep it shelved, and an edit, a
+          # commit or a deletion made since unshelves it. An auto-pull
+          # fast-forward doesn't, and a listing racing a reshelve can't undo
+          # it.
+          - name: shelf
+            glob: "{cli/**,app/host/lib/worktrees/autoPullSweep.ts,app/host/lib/git/sync.ts,app/host/lib/git/core.ts,app/host/ipc/cliDelegate.ts,app/test/shelf.mjs,app/test/lib/checkKit.mjs,app/test/lib/cliSandbox.mjs,app/test/lib/smBinary.mjs}"
+            run: pnpm -C app test shelf
+          # Drives the electron-free account layer (main/core/account/*,
+          # shared/account/*) end to end with stubs: the hub client's
+          # route/method/auth-tier discipline against the shared schemas
+          # (Clerk session token at enroll, device credential everywhere
+          # else), the credential store's encrypt and plaintext-fallback
+          # round trips, the grant store, and the config/env-file layering.
+          # Sign-in itself is Clerk's embedded UI, so it has no pure core to
+          # prove here. Gated to the account surface so it stays off
+          # unrelated commits. Proves enrollment and storage cannot drift
+          # from shared/hub/protocol.ts without electron or a browser.
+          - name: account
+            glob: "{app/main/core/account/**,app/shared/account/**,app/shared/ipc/modules/account.ts,app/shared/hub/protocol.ts,app/test/account.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test account
