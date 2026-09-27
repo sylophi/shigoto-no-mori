@@ -1,9 +1,10 @@
 // Screenshot harness for the UI lab. Usage:
 //   node lab/shoot.mts <shots.json> [outDir]
 // Needs system Chrome (playwright-core drives it, no browser download).
-// LAB_ORIGIN overrides the default desktop lab origin (set it to the
-// web flavor's port for web-shell shots, or to wherever `pnpm lab`
-// landed when it was given another port).
+// It shoots this worktree's desktop lab (LAB_PORT in .env.ports).
+// LAB_ORIGIN overrides that origin (set it to the web flavor's port
+// for web-shell shots, or to wherever `pnpm lab` landed when it was
+// given another port).
 // Each shot: { file, query, width?, height?, waitMs?, actions? }
 //   query: the lab pose querystring, e.g. "?theme=light&doubutsu=1&to=/devices"
 //   actions: [{ click: "css or text selector" } | { press: "Key" } | { waitMs: n } | { evaluate: "js" }]
@@ -12,6 +13,7 @@
 /* oxlint-disable no-await-in-loop -- shots run one at a time on purpose */
 import { readFileSync } from "node:fs";
 import { chromium } from "playwright-core";
+import { fixedDevServerPort } from "../scripts/lib/portsEnvFile.mts";
 
 type Action = {
   click?: string;
@@ -29,7 +31,9 @@ type Shot = {
   actions?: Action[];
 };
 
-const ORIGIN = process.env.LAB_ORIGIN ?? "http://localhost:5191/";
+const ORIGIN =
+  process.env.LAB_ORIGIN ??
+  `http://localhost:${fixedDevServerPort("LAB_PORT")}/`;
 const [, , shotsPath, outDir = "lab"] = process.argv;
 if (shotsPath === undefined) {
   console.error("usage: node lab/shoot.mts <shots.json> [outDir]");

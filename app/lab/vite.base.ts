@@ -8,11 +8,13 @@ import react from "@vitejs/plugin-react";
 import { reactCompiler } from "../vite.reactCompiler";
 import tailwindcss from "@tailwindcss/vite";
 import type { UserConfig } from "vite";
+import { fixedDevServerPort } from "../scripts/lib/portsEnvFile.mts";
 
 const appRoot = resolve(__dirname, "..");
 
 export function labBaseConfig(opts: {
-  port: number;
+  // Its port's key in .env.ports, so each worktree gets its own.
+  portKey: "LAB_PORT" | "LAB_WEB_PORT";
   // The HTML entry vite pre-bundles deps from: the desktop lab's
   // index.html, the web shell's web.html.
   entry: string;
@@ -30,7 +32,10 @@ export function labBaseConfig(opts: {
         "@shared": resolve(appRoot, "shared"),
       },
     },
-    server: { port: opts.port, strictPort: true },
+    server: {
+      port: fixedDevServerPort(opts.portKey),
+      strictPort: true,
+    },
     optimizeDeps: { entries: [opts.entry] },
     define: {
       __APP_VERSION__: JSON.stringify("2.0.3"),

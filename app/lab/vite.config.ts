@@ -10,4 +10,6 @@
 import { defineConfig } from "vite";
 import { labBaseConfig } from "./vite.base";
 
-export default defineConfig(labBaseConfig({ port: 5191, entry: "index.html" }));
+export default defineConfig(
+  labBaseConfig({ portKey: "LAB_PORT", entry: "index.html" }),
+);
