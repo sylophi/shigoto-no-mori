@@ -103,15 +103,15 @@
 /* Dark follows the system by default. theme.js turns that, or the
    toggle's choice, into data-theme before first paint. */
 :root[data-theme="dark"] {
-  --background: oklch(0.219 0.008 84.6);
-  --foreground: oklch(0.942 0.011 76.6);
-  --card: oklch(0.29 0.01 85);
-  --muted: oklch(0.325 0.011 67.4);
-  --muted-foreground: oklch(0.76 0.025 73.5);
-  --secondary: oklch(0.36 0.025 70);
-  --primary: oklch(0.7 0.17 155);
-  --primary-edge: oklch(0.52 0.14 155);
-  --primary-foreground: oklch(0.18 0.01 84.6);
+  --background: oklch(0.215 0.006 250);
+  --foreground: oklch(0.95 0.008 90);
+  --card: oklch(0.28 0.007 250);
+  --muted: oklch(0.305 0.008 250);
+  --muted-foreground: oklch(0.77 0.012 250);
+  --secondary: oklch(0.345 0.012 250);
+  --primary: oklch(0.76 0.16 152);
+  --primary-edge: oklch(0.55 0.14 152);
+  --primary-foreground: oklch(0.2 0.02 250);
   --edge: oklch(0 0 0 / 0.35);
   --edge-line: oklch(1 0 0 / 0.06);
   --window-ring: oklch(1 0 0 / 0.12);
@@ -119,10 +119,10 @@
   --float-shadow:
     0 32px 64px -24px var(--window-shadow),
     0 12px 24px -12px var(--window-shadow);
-  --terminal: oklch(0.17 0.008 84.6);
+  --terminal: oklch(0.17 0.006 250);
 
-  --tint-mint: oklch(0.272 0.025 162);
-  --tint-sand: oklch(0.26 0.02 70);
+  --tint-mint: oklch(0.258 0.03 172);
+  --tint-sand: oklch(0.26 0.014 75);
   --tint-amber: oklch(0.275 0.03 80);
   --tint-sky: oklch(0.265 0.028 235);
   --tint-pink: oklch(0.265 0.025 10);

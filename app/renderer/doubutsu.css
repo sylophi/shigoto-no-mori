@@ -213,55 +213,64 @@
 }
 
 :root.doubutsu.dark {
-  /* Same system, evening. The layered cream tints become warm wood
-     tints with the same lightness deltas between layers. Primary
-     lifts to a brighter leaf so the CTA still sings against the dark. */
-  --background: oklch(0.219 0.008 84.6);
-  --foreground: oklch(0.942 0.011 76.6);
-  --card: oklch(0.31 0.01 85);
-  --card-foreground: oklch(0.942 0.011 76.6);
-  --popover: oklch(0.3 0.012 80);
-  --popover-foreground: oklch(0.942 0.011 76.6);
-  --primary: oklch(0.7 0.17 155);
-  --primary-foreground: oklch(0.18 0.01 84.6);
-  --secondary: oklch(0.35 0.025 70);
-  --secondary-foreground: oklch(0.942 0.011 76.6);
-  --muted: oklch(0.325 0.011 67.4);
-  --muted-foreground: oklch(0.741 0.025 73.5);
-  --accent: oklch(0.4 0.07 155);
-  --accent-foreground: oklch(0.942 0.011 76.6);
-  --destructive: oklch(0.7 0.14 32);
+  /* Same system, night. Not the cream tints darkened: warm brown at
+     low lightness reads as khaki, and the leaf on top of it as olive.
+     Night is a near-neutral charcoal instead (a touch cool, hue 250 at
+     almost no chroma), and the colour moves to the rail: the sidebar
+     is a deep mossy teal a step lighter than the canvas, the way
+     light's mint rail sits a step under its cream canvas. The layers
+     stack the same way as light's, with wider steps: a lightness
+     step reads smaller on charcoal than on cream. Primary lifts to a
+     brighter leaf so the CTA sings against the dark, and the accent
+     pillow stays leaf. Text is cream, not white. */
+  --background: oklch(0.215 0.006 250);
+  --foreground: oklch(0.95 0.008 90);
+  --card: oklch(0.275 0.007 250);
+  --card-foreground: oklch(0.95 0.008 90);
+  --popover: oklch(0.29 0.008 250);
+  --popover-foreground: oklch(0.95 0.008 90);
+  --primary: oklch(0.76 0.16 152);
+  --primary-foreground: oklch(0.2 0.02 250);
+  --secondary: oklch(0.345 0.012 250);
+  --secondary-foreground: oklch(0.95 0.008 90);
+  --muted: oklch(0.305 0.008 250);
+  --muted-foreground: oklch(0.745 0.012 250);
+  --accent: oklch(0.4 0.07 158);
+  --accent-foreground: oklch(0.97 0.008 90);
+  --destructive: oklch(0.72 0.15 30);
   --border: transparent;
-  --input: oklch(0.34 0.012 70);
-  --ring: oklch(0.7 0.17 155);
+  --input: oklch(0.325 0.008 250);
+  --ring: oklch(0.76 0.16 152);
 
-  --doubutsu-sidebar: oklch(0.272 0.025 162);
+  --doubutsu-sidebar: oklch(0.258 0.03 172);
   --doubutsu-stripe: oklch(1 0 0 / 0.1);
-  --doubutsu-watermark: oklch(0.7 0.17 155);
-  --doubutsu-pattern: oklch(0.7 0.17 155);
-  /* Evening milk tea. Dark inverts the light relationship (the chip
-     sits ABOVE --card in lightness rather than below it), but it has
-     to travel just as far, or it lands a few percent off the card band
-     and reads as a failed match instead of a second material. So: the
-     same 0.09 gap from --card the light pair has (0.9 vs 0.992), which
-     also re-opens the gap to secondary's sand (0.35) that the old 0.34
-     had collapsed. Lightness carries that separation on its own, so the
-     chroma stays low. Dark surfaces read as saturated far sooner than
-     their light counterparts, and pushing the brown here just turns the
-     chip orange. */
-  --doubutsu-button-outline: oklch(0.4 0.022 65);
+  --doubutsu-watermark: oklch(0.72 0.14 155);
+  --doubutsu-pattern: oklch(0.72 0.14 155);
+  /* Graphite for outline buttons. Dark inverts the light relationship
+     (the chip sits ABOVE --card in lightness rather than below it),
+     but it has to travel just as far, or it lands a few percent off
+     the card band and reads as a failed match instead of a second
+     material. So: 0.11 above --card, a touch more than the light
+     pair's 0.09 (0.9 vs 0.992) since charcoal steps read smaller than
+     cream ones, which also keeps it off secondary (0.345). Lightness
+     carries that separation on its own, so the chroma stays as low as
+     the surfaces' (0.012). Dark surfaces read as saturated far sooner
+     than their light counterparts, and any push here turns the chip
+     blue. */
+  --doubutsu-button-outline: oklch(0.385 0.012 250);
   --doubutsu-edge: oklch(0 0 0 / 0.45);
   --doubutsu-edge-line: oklch(1 0 0 / 0.07);
-  /* Surfaces inside a modal. Dark's popover (0.30), card (0.31) and
-     muted (0.325) sit a hair apart: fine for panels on the canvas,
-     but a card or a muted row INSIDE a dialog vanishes into it. The
-     modal remaps the two tokens (below) to these: the card a real
-     step above the popover, the muted band high enough that its
-     usual 40% wash still lands a step above whichever it sits on. */
-  --doubutsu-modal-card: oklch(0.345 0.012 78);
-  --doubutsu-modal-muted: oklch(0.42 0.014 72);
+  /* Surfaces inside a modal. Dark's card (0.275) sits a hair under
+     the popover (0.29) and muted (0.305) a hair over it: fine for
+     panels on the canvas, but a card or a muted row INSIDE a dialog
+     vanishes into it. The modal remaps the two tokens (below) to
+     these: the card a real step above the popover, the muted band
+     high enough that its usual 40% wash still lands a step above
+     whichever it sits on. */
+  --doubutsu-modal-card: oklch(0.315 0.008 250);
+  --doubutsu-modal-muted: oklch(0.39 0.01 250);
 
-  /* Status families, evening variants (the amber pairs are theme-split
+  /* Status families, night variants (the amber pairs are theme-split
      in component code via dark: prefixes, so the light-block values
      already cover both). */
   --color-emerald-500: oklch(0.74 0.16 155);
@@ -437,13 +446,13 @@
   background-color: var(--muted);
 }
 
-/* --- Surfaces inside a modal, evening ---
+/* --- Surfaces inside a modal, night ---
    See --doubutsu-modal-card. A scoped token remap, the way the
    sidebar zone retints itself: every bg-card / bg-muted utility in
    the dialog (the cards the transplant and mirror dialogs are built
    on, the muted rows, stat tiles and bands on them) resolves to the
    lifted pair at whatever alpha it wears. Chips and segmented tracks
-   climb to the outline-button brown so they stand off either. Dark
+   climb to the outline-button graphite so they stand off either. Dark
    only: light's cream steps already separate. */
 .doubutsu.dark [data-slot="modal-shell"] {
   --card: var(--doubutsu-modal-card);
@@ -590,9 +599,9 @@
   --accent-foreground: oklch(0.39 0.045 74.1);
 }
 .doubutsu.dark [data-doubutsu-zone="sidebar"] {
-  --muted-foreground: oklch(0.741 0.025 73.5);
-  --accent: oklch(0.4 0.07 155);
-  --accent-foreground: oklch(0.942 0.011 76.6);
+  --muted-foreground: oklch(0.78 0.03 160);
+  --accent: oklch(0.4 0.07 158);
+  --accent-foreground: oklch(0.97 0.008 90);
 }
 
 /* The inbox's New worktree button is a filled surface sitting directly
