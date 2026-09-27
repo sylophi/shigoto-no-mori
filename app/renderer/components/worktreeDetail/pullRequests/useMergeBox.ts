@@ -1,8 +1,12 @@
 import { useState } from "react";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
+import { useDisablePullRequestAutoMerge } from "@/hooks/pullRequests/useDisablePullRequestAutoMerge";
 import { useMergePullRequest } from "@/hooks/pullRequests/useMergePullRequest";
 import { useSetPullRequestDraft } from "@/hooks/pullRequests/useSetPullRequestDraft";
 import {
+  armsAutoMerge,
+  autoMergeButtonLabel,
+  describeArmedAutoMerge,
   describeMergeState,
   MERGE_METHOD_LABEL,
   resolveMergeMethod,
@@ -26,6 +30,12 @@ interface UseMergeBoxArgs {
 // How far a stack merge reaches: the whole stack, or the bottom up to
 // and including this PR. The same thing on the stack's top.
 export type StackReach = "upTo" | "stack";
+
+// What the main button does. Merge now. Arm auto-merge, for a PR
+// waiting on its base branch's rules on a repo that allows it. Or,
+// with auto-merge armed already (here or on github.com), call it off,
+// since GitHub lands the PR on its own.
+export type MergeBoxMode = "merge" | "arm" | "armed";
 
 export const STACK_REACH_OPTIONS: readonly {
   value: StackReach;
@@ -95,9 +105,23 @@ export function useMergeBox({
 }: UseMergeBoxArgs) {
   const merge = useMergePullRequest();
   const setDraft = useSetPullRequestDraft();
+  const disableAutoMerge = useDisablePullRequestAutoMerge();
   const { armed, trigger, reset } = useConfirmTwice(CONFIRM_QUICK_MS);
   const { primary, allowed } = resolveMergeMethod(repoConfig, lastMergeMethod);
-  const mergeState = describeMergeState(pr.mergeState, pr.isDraft);
+  const armedWith = pr.autoMerge;
+  const mode: MergeBoxMode =
+    armedWith !== null
+      ? "armed"
+      : armsAutoMerge(repoConfig, pr, stack !== null)
+        ? "arm"
+        : "merge";
+  const mergeState = describeMergeState(
+    pr.mergeState,
+    pr.isDraft,
+    mode === "arm",
+  );
+  const status =
+    armedWith !== null ? describeArmedAutoMerge(armedWith) : mergeState;
   // The dropdown swaps the active method; null means "stick with whatever
   // the repo + saved preference resolve to". Kept local so picking a
   // method on one worktree doesn't bleed into another.
@@ -108,14 +132,16 @@ export function useMergeBox({
   const [pickedReach, setReach] = useState<StackReach>("upTo");
 
   const atTop = stack !== null && stack.index === stack.entries.length - 1;
-  const showReach = stack !== null && !atTop;
+  // Armed, the box has no merge to reach with or pick a method for.
+  const showReach = stack !== null && !atTop && mode !== "armed";
   const reach: StackReach = atTop ? "stack" : pickedReach;
   const plan = planFor(stack, pr, reach);
   const activeMethod =
     pickedMethod && allowed.includes(pickedMethod) ? pickedMethod : primary;
   const disabled =
     !mergeState.canMerge || plan.blocked !== null || merge.isPending;
-  const others = allowed.filter((m) => m !== activeMethod);
+  const others =
+    mode === "armed" ? [] : allowed.filter((m) => m !== activeMethod);
 
   const runMerge = (method: MergeMethod) => {
     merge.mutate(
@@ -151,27 +177,47 @@ export function useMergeBox({
     });
   };
 
+  const runDisableAutoMerge = () => {
+    disableAutoMerge.mutate({
+      projectId: worktree.projectId,
+      branch: worktree.branch,
+      number: pr.number,
+    });
+  };
+
   return {
     merge,
     setDraft,
+    disableAutoMerge,
     armed,
     trigger,
     primary,
     activeMethod,
-    mergeState,
+    mode,
+    status,
     disabled,
     others,
     blocked: plan.blocked,
-    label: activeMethod ? mergeLabel(activeMethod, reach, plan.count) : "",
+    label: activeMethod
+      ? mode === "arm"
+        ? autoMergeButtonLabel(activeMethod)
+        : mergeLabel(activeMethod, reach, plan.count)
+      : "",
     // More than this PR lands: the label says so, and the icon marks it.
     landsStack: plan.count > 1,
-    pendingLabel: plan.count > 1 ? "Merging stack…" : "Merging…",
+    pendingLabel:
+      mode === "arm"
+        ? "Enabling auto-merge…"
+        : plan.count > 1
+          ? "Merging stack…"
+          : "Merging…",
     reach,
     showReach,
     runMerge,
     pickMethod,
     pickReach,
     toggleDraft,
+    runDisableAutoMerge,
   };
 }
 

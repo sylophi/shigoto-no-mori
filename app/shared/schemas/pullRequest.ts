@@ -112,11 +112,17 @@ export function summarizeChecks(
   return summary;
 }
 
+export const MergeMethodSchema = z.enum(["merge", "squash", "rebase"]);
+export type MergeMethod = z.infer<typeof MergeMethodSchema>;
+
 // Rich projection of the open worktree's PR. Slim PullRequest is kept
 // for the project-wide sweep that feeds the sidebar dots, since the
 // extra fields make `gh pr list` materially slower.
 export const PullRequestDetailSchema = PullRequestSchema.extend({
   mergeState: PullRequestMergeStateSchema,
+  // The method auto-merge is armed with, or null when it isn't:
+  // GitHub merges the PR with it once the base branch's rules are met.
+  autoMerge: MergeMethodSchema.nullable(),
   // GitHub login of whoever opened the PR. Worktrees may be checked
   // out by teammates' branches, so the author isn't always the local user.
   authorLogin: z.string(),
@@ -130,18 +136,32 @@ export const PullRequestDetailSchema = PullRequestSchema.extend({
 });
 export type PullRequestDetail = z.infer<typeof PullRequestDetailSchema>;
 
-export const MergeMethodSchema = z.enum(["merge", "squash", "rebase"]);
-export type MergeMethod = z.infer<typeof MergeMethodSchema>;
-
-// Per-repo merge button settings from `gh repo view`. All three may be
+// Per-repo merge button settings from GitHub. All three methods may be
 // allowed, or only a subset (some teams squash-only). UI hides disabled
-// methods rather than disabling them.
+// methods rather than disabling them. autoMerge: the repo lets a PR
+// that is waiting on its base branch's rules be armed to merge on its
+// own once they are met, which is what the merge button offers then.
 export const RepoMergeConfigSchema = z.object({
   merge: z.boolean(),
   squash: z.boolean(),
   rebase: z.boolean(),
+  autoMerge: z.boolean(),
 });
 export type RepoMergeConfig = z.infer<typeof RepoMergeConfigSchema>;
+
+// What became of a merge (cli/cmd_merge.go mergeOutcome): the PR
+// landed, a merge queue took it, or auto-merge was armed and GitHub
+// lands it once its requirements are met. "merged" leads so a
+// schema-derived stub picks it.
+export const MergeOutcomeSchema = z.enum(["merged", "queued", "auto-merge"]);
+export type MergeOutcome = z.infer<typeof MergeOutcomeSchema>;
+
+export const MergePullRequestResultSchema = z.object({
+  outcome: MergeOutcomeSchema,
+});
+export type MergePullRequestResult = z.infer<
+  typeof MergePullRequestResultSchema
+>;
 
 export const GithubCliReadinessSchema = z.object({
   installed: z.boolean(),
@@ -251,4 +271,9 @@ export const SetPullRequestDraftPayloadSchema =
   ProjectScopedPayloadSchema.extend({
     number: z.number().int().positive(),
     draft: z.boolean(),
+  });
+
+export const DisablePullRequestAutoMergePayloadSchema =
+  ProjectScopedPayloadSchema.extend({
+    number: z.number().int().positive(),
   });

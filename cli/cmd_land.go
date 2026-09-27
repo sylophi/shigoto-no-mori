@@ -8,6 +8,12 @@ package main
 // skips straight to cleanup, so re-running after a partial failure
 // (say a teardown script) resumes where it left off.
 //
+// A PR that doesn't land on the spot (a merge queue took it, or, on a
+// repo that allows auto-merge, auto-merge was armed because its base
+// branch's rules aren't met yet) stops before the cleanup: nothing is
+// removed while the branch is still to be merged. Running land again
+// once GitHub has merged it does the rest.
+//
 // --stack lands a layer of a stack: the PR with every open PR under it
 // (the sm merge --stack flow), then the cleanup for every worktree
 // whose branch landed, the layers under this one included. Without
@@ -56,7 +62,7 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 		opts.preflighted = true
 	}
 
-	pr, allowed, err := resolveMergeTarget(proj.Path, id.Branch)
+	pr, settings, err := resolveMergeTarget(proj.Path, id.Branch)
 	if err != nil {
 		return 1, err
 	}
@@ -68,7 +74,7 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 			pr.Number, id.Branch, strings.ToLower(pr.State), binaryName, id.Name)
 	}
 	if parsed.bools["stack"] {
-		return landStack(proj, id, pr, methodFlag, allowed, opts)
+		return landStack(proj, id, pr, methodFlag, settings.allowed, opts)
 	}
 
 	// Resolved once for the guard below and the cleanup after. A
@@ -85,32 +91,33 @@ func cmdLand(ctx cliContext, args []string) (int, error) {
 				pr.Number, id.Branch, below.Number, below.HeadRefName, binaryName,
 				below.HeadRefName, binaryName, binaryName, id.Name)
 		}
-		var queued bool
-		method, queued, err = execMerge(proj, pr.Number, methodFlag, allowed)
+		o, err := execMerge(proj, pr, methodFlag, settings)
 		if err != nil {
 			return exitCodeOf(err), err
 		}
-		if queued {
-			return reportQueued(pr, id, method)
+		if o.pending() {
+			return reportPending(pr, id, o)
 		}
+		method = o.method
 	}
 	reportMerged(pr, method)
 	extra := map[string]any{"merged": mergeResultFields(pr, id.Branch, method)}
 	return landCleanup(proj, id, pr.BaseRefName, pt, ptErr, opts, extra)
 }
 
-// A merge queue took the PR: nothing has landed, so nothing is cleaned
-// up. Running land again once the queue is through does the rest (the
+// The PR hasn't landed: a merge queue took it, or auto-merge is armed
+// and GitHub merges it once its requirements are met. Nothing is
+// cleaned up. Running land again once it has merged does the rest (the
 // merged PR resumes with cleanup).
-func reportQueued(pr *prSummary, id worktreeIdentity, method string) (int, error) {
+func reportPending(pr *prSummary, id worktreeIdentity, o mergeOutcome) (int, error) {
 	if jsonMode {
-		doc := mergeResultFields(pr, id.Branch, method)
+		doc := mergeResultFields(pr, id.Branch, o.method)
 		doc["ok"] = true
-		doc["queued"] = true
+		o.addTo(doc)
 		emit(doc)
 	} else {
-		out(greenOut(fmt.Sprintf("queued PR #%d (%s): %s", pr.Number, method, pr.Title)))
-		note(dimErr(fmt.Sprintf("nothing removed yet. Run `%s land` again once the queue has merged it", binaryName)))
+		out(o.line(pr))
+		note(dimErr(fmt.Sprintf("nothing removed yet. Run `%s land` again once GitHub has merged it", binaryName)))
 	}
 	return 0, nil
 }
@@ -181,7 +188,7 @@ func landStack(proj project, id worktreeIdentity, pr *prSummary, methodFlag stri
 		}
 		persistMergeMethod(proj, method)
 		if queued {
-			return reportQueued(pr, id, method)
+			return reportPending(pr, id, mergeOutcome{method: method, outcome: outcomeQueued})
 		}
 	} else {
 		reportMerged(pr, "")

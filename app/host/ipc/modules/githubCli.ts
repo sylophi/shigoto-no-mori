@@ -1,6 +1,7 @@
 import { githubCliContract } from "@shared/ipc/modules/githubCli";
 import type { Handlers } from "@shared/ipc/types";
 import {
+  disablePullRequestAutoMerge,
   getPullRequestDiff,
   setPullRequestDraft,
 } from "@host/lib/githubCli/actions";
@@ -51,10 +52,13 @@ export const githubCliHandlers: Handlers<typeof githubCliContract> = {
   mergePullRequest: async ({ projectId, number, method, stack }) => {
     const project = await findProjectOrThrow(projectId);
     // The CLI runs the gh merge and persists lastMergeMethod itself.
-    await mergeViaCli(project, number, method, { stack });
-    // The merge changes upstream refs (and the sidebar PR cache). Evict
-    // so the next read sees the merged state.
-    evictProjectPullRequests(project.path);
+    const result = await mergeViaCli(project, number, method, { stack });
+    // A landed merge changes upstream refs and the sidebar PR cache:
+    // evict so the next read sees the merged state. An armed or queued
+    // PR is still open, and the slim map doesn't carry either flag, so
+    // the (slow, project-wide) sweep isn't repeated for it.
+    if (result.outcome === "merged") evictProjectPullRequests(project.path);
+    return result;
   },
 
   pullRequestDiff: async ({ projectId, number }) => {
@@ -65,5 +69,10 @@ export const githubCliHandlers: Handlers<typeof githubCliContract> = {
   setPullRequestDraft: async ({ projectId, number, draft }) => {
     const project = await findProjectOrThrow(projectId);
     await setPullRequestDraft({ cwd: project.path, number, draft });
+  },
+
+  disablePullRequestAutoMerge: async ({ projectId, number }) => {
+    const project = await findProjectOrThrow(projectId);
+    await disablePullRequestAutoMerge({ cwd: project.path, number });
   },
 };

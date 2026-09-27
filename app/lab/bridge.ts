@@ -46,6 +46,9 @@ import type { ClientTransport } from "@shared/ipc/transport";
 import { createSubscriberRegistry } from "@shared/ipc/socket/subscriberRegistry";
 import {
   LAB_DIFF,
+  LAB_REPO_MERGE_CONFIG,
+  labDisableAutoMerge,
+  labMergePullRequest,
   labPullRequestDetail,
   labPullRequests,
 } from "./pullRequestFixtures";
@@ -481,12 +484,11 @@ function hostHandlersFor(
       labPullRequests(projectId),
     "githubCli:worktreePullRequest": ({ branch }) =>
       labPullRequestDetail(branch),
-    // Every method allowed, so the merge button poses its dropdown.
-    "githubCli:repoMergeConfig": () => ({
-      merge: true,
-      squash: true,
-      rebase: true,
-    }),
+    "githubCli:repoMergeConfig": () => LAB_REPO_MERGE_CONFIG,
+    // The merge button's outcome, and the PR reading as armed or
+    // merged after it, so the flow can be walked in the lab.
+    "githubCli:mergePullRequest": ({ method }) => labMergePullRequest(method),
+    "githubCli:disablePullRequestAutoMerge": () => labDisableAutoMerge(),
     "sync:worktreeFolder": ({ relative }) => [...(LAB_TREE[relative] ?? [])],
     "sync:ignoredPaths": () => ({
       paths: [...LAB_IGNORED_PATHS],

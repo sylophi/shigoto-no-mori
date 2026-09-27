@@ -21,6 +21,9 @@ To land a worktree other than the one you are in, pass its name
 If there is no PR, `sm worktrees land` stops. Do not merge by other means: tell
 the user the branch needs a PR first.
 
+**Auto-merge.** If the repo has auto-merge enabled, the PR will not merge
+when CI fails.
+
 **Stacks.** To land a PR stack, run `sm worktrees land --stack` from the
 top layer's worktree. It lands every PR in the stack and removes their
 worktrees.

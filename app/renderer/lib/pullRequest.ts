@@ -117,15 +117,43 @@ export interface MergeStateDescriptor {
   canMerge: boolean;
 }
 
+// The verdicts auto-merge is for: the same two as the CLI's
+// autoMergeArms (cli/cmd_merge.go), which says why.
+export function autoMergeArms(state: PullRequestMergeState): boolean {
+  return state === "BLOCKED" || state === "BEHIND";
+}
+
+// Whether the merge button arms auto-merge instead of merging: the
+// repo allows it, the PR is neither a draft nor in a stack (a stack
+// lands one PR at a time or through GitHub's stack merge, and neither
+// arms it, cli/stack.go), and the verdict is one waiting fixes. The
+// CLI decides the same way from the same inputs (cli/cmd_merge.go
+// execMerge). This only shapes the button.
+export function armsAutoMerge(
+  config: RepoMergeConfig | null,
+  pr: PullRequestDetail,
+  stacked: boolean,
+): boolean {
+  return (
+    (config?.autoMerge ?? false) &&
+    !stacked &&
+    !pr.isDraft &&
+    autoMergeArms(pr.mergeState)
+  );
+}
+
 // Human-friendly reason text + a single "is the merge button live?" flag
 // per mergeStateStatus. `isDraft` overrides gh's mergeStateStatus
 // because gh often reports CLEAN for draft PRs (branches don't
 // conflict, even if the PR isn't ready for review). We let gh tell us
 // off if the user pushes through, but the obvious blockers (draft,
-// conflicts, blocked) are reflected in the disabled state.
+// conflicts, blocked) are reflected in the disabled state. With
+// `autoMerge` (armsAutoMerge) the waiting verdicts turn live: the
+// button arms auto-merge instead.
 export function describeMergeState(
   state: PullRequestMergeState,
   isDraft: boolean,
+  autoMerge = false,
 ): MergeStateDescriptor {
   if (isDraft) {
     return { label: "Draft", tone: "slate", canMerge: false };
@@ -142,16 +170,20 @@ export function describeMergeState(
       };
     case "BEHIND":
       return {
-        label: "Behind base, will update first",
+        label: autoMerge
+          ? "Behind base, waiting for an update"
+          : "Behind base, will update first",
         tone: "amber",
         canMerge: true,
       };
     case "BLOCKED":
-      return {
-        label: "Blocked by branch protections",
-        tone: "rose",
-        canMerge: false,
-      };
+      return autoMerge
+        ? { label: "Waiting on requirements", tone: "amber", canMerge: true }
+        : {
+            label: "Blocked by branch protections",
+            tone: "rose",
+            canMerge: false,
+          };
     case "DIRTY":
       return { label: "Conflicts with base", tone: "rose", canMerge: false };
     // DRAFT on a PR that isn't one is GitHub still recomputing the
@@ -257,6 +289,26 @@ export const MERGE_METHOD_LABEL: Record<MergeMethod, string> = {
   rebase: "Rebase and merge",
 };
 
+// The same labels when the button arms auto-merge instead: "Squash
+// and merge when ready", so the method reads the way it does on the
+// plain button.
+export function autoMergeButtonLabel(method: MergeMethod): string {
+  return `${MERGE_METHOD_LABEL[method]} when ready`;
+}
+
+// The status line while auto-merge is armed: GitHub merges the PR
+// with the method the moment its requirements are met, so the merge
+// button gives way to "Disable auto-merge".
+export function describeArmedAutoMerge(method: MergeMethod): {
+  label: string;
+  tone: PullRequestTone;
+} {
+  return {
+    label: `Will ${MERGE_METHOD_LABEL[method].toLowerCase()} when ready`,
+    tone: "amber",
+  };
+}
+
 // Picks the user's saved method when it's still allowed by the repo;
 // otherwise falls back to the first allowed method in the canonical
 // order. Returns null when nothing is allowed at all (degenerate repo
@@ -265,12 +317,15 @@ export function resolveMergeMethod(
   config: RepoMergeConfig | null,
   lastPicked: MergeMethod | undefined,
 ): { primary: MergeMethod | null; allowed: MergeMethod[] } {
-  // A null config means we couldn't read it. Assume everything's
-  // allowed so the user isn't blocked by our missing data.
+  // A null config means we couldn't read it. Assume every method is
+  // allowed so the user isn't blocked by our missing data, and no
+  // auto-merge, since GitHub refuses to arm it where the repo doesn't
+  // allow it (the CLI assumes the same, cli/cmd_merge.go).
   const allowedMap: RepoMergeConfig = config ?? {
     merge: true,
     squash: true,
     rebase: true,
+    autoMerge: false,
   };
   const allowed = MergeMethodSchema.options.filter((m) => allowedMap[m]);
   const [fallback] = allowed;

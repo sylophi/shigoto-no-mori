@@ -211,6 +211,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       mergePullRequest: githubCliClient.mergePullRequest,
       pullRequestDiff: githubCliClient.pullRequestDiff,
       setPullRequestDraft: githubCliClient.setPullRequestDraft,
+      disablePullRequestAutoMerge: githubCliClient.disablePullRequestAutoMerge,
       onProjectPullRequestsRefreshed:
         githubCliClient.projectPullRequestsRefreshed,
     },

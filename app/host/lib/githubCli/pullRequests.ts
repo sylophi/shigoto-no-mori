@@ -1,5 +1,7 @@
 import { z } from "zod";
 import {
+  type MergeMethod,
+  MergeMethodSchema,
   type PullRequest,
   type PullRequestCheck,
   type PullRequestCheckBucket,
@@ -157,6 +159,11 @@ const GhPrDetailSchema = z.object({
   state: PullRequestStateSchema,
   isDraft: z.boolean(),
   mergeStateStatus: PullRequestMergeStateSchema.catch("UNKNOWN"),
+  // GitHub's record of an armed auto-merge, null when there is none.
+  // Loose: it also carries who armed it and when, which nothing reads.
+  autoMergeRequest: z
+    .looseObject({ mergeMethod: z.string().optional() })
+    .nullish(),
   baseRefName: z.string(),
   author: z.looseObject({ login: z.string().optional() }).nullish(),
   updatedAt: z.string(),
@@ -214,6 +221,18 @@ function toCheckUrl(value: string | undefined): string | undefined {
   }
 }
 
+// GraphQL spells the armed method MERGE / SQUASH / REBASE. A spelling
+// this build doesn't know reads as "not armed" rather than failing
+// the whole PR.
+function autoMergeMethod(
+  request: { mergeMethod?: string } | null | undefined,
+): MergeMethod | null {
+  const parsed = MergeMethodSchema.safeParse(
+    request?.mergeMethod?.toLowerCase(),
+  );
+  return parsed.success ? parsed.data : null;
+}
+
 // Single-branch lookup for the currently open worktree page. Uncached,
 // since invalidations from focus / refs-changed must actually hit gh.
 // The --head filter is server-side so this stays cheap regardless of
@@ -250,7 +269,7 @@ async function runGhPrListDetail(
       "--limit",
       "1",
       "--json",
-      "number,url,title,state,isDraft,mergeStateStatus,baseRefName,author,updatedAt,additions,deletions,changedFiles,statusCheckRollup",
+      "number,url,title,state,isDraft,mergeStateStatus,autoMergeRequest,baseRefName,author,updatedAt,additions,deletions,changedFiles,statusCheckRollup",
     ],
     { cwd },
   );
@@ -275,6 +294,7 @@ async function runGhPrListDetail(
     state: first.state,
     isDraft: first.isDraft,
     mergeState: first.mergeStateStatus,
+    autoMerge: autoMergeMethod(first.autoMergeRequest),
     baseRefName: first.baseRefName,
     authorLogin: first.author?.login ?? "ghost",
     updatedAt: first.updatedAt,

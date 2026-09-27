@@ -4,11 +4,15 @@
 // and one diff for the diff pages. Pure data plus readers of
 // location.search, served by bridge.ts.
 import {
-  summarizeChecks,
+  type MergeMethod,
+  type MergePullRequestResult,
   type PullRequestCheck,
   type PullRequestCheckBucket,
   type PullRequestMergeState,
+  type RepoMergeConfig,
+  summarizeChecks,
 } from "@shared/schemas";
+import { armsAutoMerge } from "@/lib/pullRequest";
 
 const LAB_SM_PROJECT_IDS = new Set(["p_sm", "tp_sm", "mini_sm"]);
 
@@ -120,11 +124,16 @@ const labCiRun = (
 ];
 
 // ?checks=<variant> poses #148's CI rollup, paired with the merge state
-// GitHub would report beside it. Unknown or absent keeps the default
-// two passing checks.
+// GitHub would report beside it, and for `auto-merge` the auto-merge
+// armed while the checks run. Unknown or absent keeps the default two
+// passing checks.
 const LAB_CHECK_POSES: Record<
   string,
-  { mergeState: PullRequestMergeState; checkList: PullRequestCheck[] }
+  {
+    mergeState: PullRequestMergeState;
+    checkList: PullRequestCheck[];
+    autoMerge?: MergeMethod;
+  }
 > = {
   none: { mergeState: "CLEAN", checkList: [] },
   "single-passed": {
@@ -158,6 +167,14 @@ const LAB_CHECK_POSES: Record<
       "test (macos-latest)": "pending",
       "test (ubuntu-latest)": "pending",
       Vercel: "pending",
+    }),
+  },
+  "auto-merge": {
+    mergeState: "BLOCKED",
+    autoMerge: "squash",
+    checkList: labCiRun({
+      "test (macos-latest)": "pending",
+      "test (ubuntu-latest)": "pending",
     }),
   },
   failing: {
@@ -219,17 +236,58 @@ const LAB_CHECK_POSES: Record<
 function labPosedChecksDetail() {
   const variant = new URLSearchParams(location.search).get("checks");
   const pose = variant ? LAB_CHECK_POSES[variant] : undefined;
-  if (!pose) return LAB_PR_DETAIL;
+  const posed = pose
+    ? {
+        ...LAB_PR_DETAIL,
+        mergeState: pose.mergeState,
+        autoMerge: pose.autoMerge ?? null,
+        ...labChecks(pose.checkList),
+      }
+    : LAB_PR_DETAIL;
   return {
-    ...LAB_PR_DETAIL,
-    mergeState: pose.mergeState,
-    ...labChecks(pose.checkList),
+    ...posed,
+    state: labMerged ? ("MERGED" as const) : posed.state,
+    autoMerge: labAutoMerge ? labAutoMerge.method : posed.autoMerge,
   };
+}
+
+// Every method allowed, so the merge button poses its dropdown, and
+// auto-merge too, so a waiting PR (?checks=pending) poses the
+// auto-merge button.
+export const LAB_REPO_MERGE_CONFIG: RepoMergeConfig = {
+  merge: true,
+  squash: true,
+  rebase: true,
+  autoMerge: true,
+};
+
+// What the lab's merge button does, by the button's own rule: a PR it
+// would arm auto-merge for reads as armed with the method until
+// "Disable auto-merge". Anything else merges, and reads as merged.
+// Page state, so the flow can be posed and recorded. A reload starts
+// over.
+let labAutoMerge: { method: MergeMethod | null } | null = null;
+let labMerged = false;
+
+export function labMergePullRequest(
+  method: MergeMethod,
+): MergePullRequestResult {
+  if (armsAutoMerge(LAB_REPO_MERGE_CONFIG, labPosedChecksDetail(), false)) {
+    labAutoMerge = { method };
+    return { outcome: "auto-merge" };
+  }
+  labMerged = true;
+  return { outcome: "merged" };
+}
+
+export function labDisableAutoMerge(): void {
+  labAutoMerge = { method: null };
 }
 
 const LAB_PR_DETAIL = {
   ...LAB_PR_SLIM,
   mergeState: "CLEAN" as PullRequestMergeState,
+  autoMerge: null as MergeMethod | null,
   authorLogin: "sylophi",
   updatedAt: new Date(Date.now() - 40 * 60_000).toISOString(),
   additions: 412,
