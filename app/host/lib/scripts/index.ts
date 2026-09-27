@@ -539,15 +539,17 @@ export function startScript(args: RunArgs): string {
   // node-pty's own, so it sees the EAGAIN/EIO noise that one filters
   // as part of a normal PTY lifecycle and must skip it too. node-pty
   // closes the PTY first, so the exit event follows a real error.
-  (pty as unknown as NodeJS.EventEmitter).on(
-    "error",
-    (error: NodeJS.ErrnoException) => {
-      const code = error.code ?? "";
-      if (code.includes("EAGAIN") || code.includes("EIO")) return;
-      flushOutput();
-      args.notify({ runId, kind: "error", data: errorMessageOf(error) });
-    },
-  );
+  // node-pty's type leaves the emitter out (the terminal has one of
+  // its own, not node's), so the method is checked for, not assumed.
+  if (!("on" in pty) || typeof pty.on !== "function") {
+    throw new Error("node-pty's terminal no longer emits events");
+  }
+  pty.on("error", (error: NodeJS.ErrnoException) => {
+    const code = error.code ?? "";
+    if (code.includes("EAGAIN") || code.includes("EIO")) return;
+    flushOutput();
+    args.notify({ runId, kind: "error", data: errorMessageOf(error) });
+  });
 
   // node-pty reports exit only after the terminal stream has drained
   // (or a short grace period when a backgrounded grandchild still holds
