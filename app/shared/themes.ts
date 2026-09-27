@@ -25,23 +25,23 @@ export interface ThemeOption<Id extends string> {
 }
 
 export const LIGHT_THEMES: readonly ThemeOption<LightTheme>[] = [
-  { id: "cream", label: "Cream", blurb: "Warm paper and a mint rail" },
   {
     id: "snow",
     label: "Snow",
     blurb: "Cool white, the mint kept for the rail",
   },
   { id: "meadow", label: "Meadow", blurb: "Mint all over, deeper on the rail" },
-  { id: "sakura", label: "Sakura", blurb: "Blossom pink, leaf green to act" },
+  { id: "cream", label: "Cream", blurb: "Warm paper and a mint rail" },
   { id: "sky", label: "Sky", blurb: "A clear morning, blue on white" },
+  { id: "sakura", label: "Sakura", blurb: "Blossom pink, leaf green to act" },
 ];
 
 export const DARK_THEMES: readonly ThemeOption<DarkTheme>[] = [
   { id: "charcoal", label: "Charcoal", blurb: "Near-black, a mossy rail" },
-  { id: "midnight", label: "Midnight", blurb: "Navy sky over a teal rail" },
   { id: "forest", label: "Forest", blurb: "Deep green, night in the woods" },
-  { id: "cocoa", label: "Cocoa", blurb: "Warm brown, lamplight" },
   { id: "wood", label: "Wood", blurb: "The first night: cream, darkened" },
+  { id: "midnight", label: "Midnight", blurb: "Navy sky over a teal rail" },
+  { id: "cocoa", label: "Cocoa", blurb: "Warm brown, lamplight" },
 ];
 
 // The appearance settings the overlay reads: the switch, and the pick
