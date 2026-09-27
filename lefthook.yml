@@ -20,7 +20,7 @@ pre-commit:
           # tools' config (or their versions, pinned in app/package.json)
           # reruns them over the whole repo.
           - name: lint-all
-            glob: "{.oxlintrc.json,app/package.json}"
+            glob: "{.oxlintrc.json,lint/**,app/package.json}"
             run: pnpm -C app run lint
           - name: format-all
             glob: "{.oxfmtrc.json,app/renderer/index.css,app/package.json}"

@@ -179,6 +179,7 @@ export function makeHubHandlers(deps: HubHandlerDeps): HubHandlers {
     // typed (structural vs transient) and user-explainable, and there
     // is deliberately nothing to fall back to.
     const entry: PeerEntry = {
+      // oxlint-disable-next-line shigomori/no-double-cast -- the dial below fills this in, and refers to the entry, so the entry has to exist first
       promise: undefined as unknown as Promise<PeerConnection>,
       version: null,
       acceptsCommands: false,

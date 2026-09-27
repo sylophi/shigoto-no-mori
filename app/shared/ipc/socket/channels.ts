@@ -267,19 +267,8 @@ export function createChannelMux(deps: {
       if (channels.has(channelId)) {
         throw new Error(`channel ${channelId} is already attached`);
       }
-      const channel: Channel = {
-        endpoint,
-        handle: undefined as unknown as ChannelHandle,
-        credit: CHANNEL_WINDOW_BYTES,
-        queue: [],
-        paused: false,
-        ending: false,
-        sentEnd: false,
-        inFlight: 0,
-        receivedEnd: false,
-        gone: false,
-      };
-      channel.handle = {
+      // The handle's methods read the channel, which is built next.
+      const handle: ChannelHandle = {
         channelId,
         get open() {
           return !channel.gone;
@@ -304,6 +293,18 @@ export function createChannelMux(deps: {
           remove(channelId, channel);
           send(CHANNEL_FRAME_RESET, channelId);
         },
+      };
+      const channel: Channel = {
+        endpoint,
+        handle,
+        credit: CHANNEL_WINDOW_BYTES,
+        queue: [],
+        paused: false,
+        ending: false,
+        sentEnd: false,
+        inFlight: 0,
+        receivedEnd: false,
+        gone: false,
       };
       if (resetBeforeAttach.delete(channelId)) {
         // Already reset by the peer: hand back a closed handle and let

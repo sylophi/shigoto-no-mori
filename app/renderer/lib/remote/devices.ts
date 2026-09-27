@@ -99,12 +99,11 @@ const store = createExternalStore<readonly RemoteDevice[]>([]);
 // union is a flat object of primitives, which is what makes shallow
 // exact here.
 function sameStatus(a: RemoteDeviceStatus, b: RemoteDeviceStatus): boolean {
-  const left = a as unknown as Record<string, unknown>;
-  const right = b as unknown as Record<string, unknown>;
-  const keys = Object.keys(left);
+  const right = new Map<string, unknown>(Object.entries(b));
+  const left = Object.entries(a);
   return (
-    keys.length === Object.keys(right).length &&
-    keys.every((key) => left[key] === right[key])
+    left.length === right.size &&
+    left.every(([key, value]) => right.get(key) === value)
   );
 }
 

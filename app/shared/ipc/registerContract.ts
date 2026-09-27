@@ -82,14 +82,17 @@ export function registerContract<M extends ContractModule>(
       `registerContract: the module containing "${tracked.channel}" declares tracksProjectUsage but no onUsageTracked hook was passed`,
     );
   }
+  // The table is typed per call and read below by name, which loses
+  // the link between a call and its input type. Every call parses its
+  // input before the handler sees it, so nothing rides on the claim.
+  // oxlint-disable-next-line shigomori/no-double-cast -- the parse above each handler is the check
+  const byName = handlers as unknown as Record<
+    string,
+    (i: unknown, ctx: HandlerContext) => unknown
+  >;
   for (const [key, def] of Object.entries(module.calls)) {
     if (def.kind !== "invoke") continue;
-    const handler = (
-      handlers as unknown as Record<
-        string,
-        (i: unknown, ctx: HandlerContext) => unknown
-      >
-    )[key];
+    const handler = byName[key];
     // The def's exposure decision rides to the transport so a composite
     // wire can withhold a non-remote channel from the socket entirely.
     const remote = def.remote === true;
