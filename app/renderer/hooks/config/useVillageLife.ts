@@ -5,9 +5,9 @@ import { useClientConfig } from "./useClientConfig";
 // Whether villager extras show: true only while this window has Village
 // life on (villageLifeEnabled in shared/villageLife.ts) and this device
 // holds the villager data, downloaded from Settings. Every villager
-// extra (faces, catchphrases, anything purely visual that dresses up a
-// worktree named after a character) MUST gate on this hook, so one
-// switch in Settings turns them all off together.
+// extra (faces, catchphrases, birthdays, anything purely visual that
+// dresses up a worktree named after a character) MUST gate on this
+// hook, so one switch in Settings turns them all off together.
 // VillagerIcon and useVillagerProfiles already do.
 //
 // Client-scoped: the same answer for every device's worktrees this

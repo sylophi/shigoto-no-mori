@@ -4,6 +4,17 @@
 import { ClerkProvider } from "@clerk/electron/react";
 import { createMemoryHistory } from "@tanstack/react-router";
 import { bootApp } from "@/boot";
+import { poseToday } from "@/hooks/ui/useToday";
+
+// ?today=MM-DD (or YYYY-MM-DD): the calendar day the lab poses, for a
+// villager's birthday without touching the clock.
+const today = new URLSearchParams(location.search)
+  .get("today")
+  ?.match(/^(?:(\d{4})-)?(\d{2})-(\d{2})$/);
+if (today) {
+  const year = today[1] ? Number(today[1]) : new Date().getFullYear();
+  poseToday(new Date(year, Number(today[2]) - 1, Number(today[3]), 12));
+}
 
 const router = bootApp({
   ClerkProvider,

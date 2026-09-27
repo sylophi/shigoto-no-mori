@@ -87,6 +87,11 @@ function sayable(text: string | undefined): string | null {
   return said;
 }
 
+// A character's quote as this voice would say it, or null.
+export function villagerQuote(profile: VillagerProfile): string | null {
+  return sayable(profile.quote);
+}
+
 // `message` in the speaker's voice, or null when they have no
 // catchphrase to end it with.
 export function villagerLine(
