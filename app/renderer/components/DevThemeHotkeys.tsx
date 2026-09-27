@@ -2,7 +2,11 @@ import { useEffect } from "react";
 import { isEditableTarget, isRawKeySurface } from "@/lib/dom";
 import { usePalette } from "@/hooks/ui/usePalette";
 import { useTheme } from "@/hooks/ui/useTheme";
-import { DARK_THEME_IDS, LIGHT_THEME_IDS } from "@shared/themes";
+import { DARK_THEMES, LIGHT_THEMES } from "@shared/themes";
+
+// The swatches' own palettes, leaving hidden variants to their hotkey.
+const DARK_CYCLE = DARK_THEMES.map((option) => option.id);
+const LIGHT_CYCLE = LIGHT_THEMES.map((option) => option.id);
 
 // Dev-only hotkeys for flipping through the visual modes without
 // opening Settings:
@@ -58,16 +62,16 @@ export function DevThemeHotkeys() {
         setPalette({ doubutsu: !doubutsu });
       } else if (e.code === "KeyP") {
         if (resolved === "dark") {
-          const i = DARK_THEME_IDS.indexOf(dark);
+          const i = DARK_CYCLE.indexOf(dark);
           setPalette({
             doubutsu: true,
-            dark: DARK_THEME_IDS[(i + 1) % DARK_THEME_IDS.length],
+            dark: DARK_CYCLE[(i + 1) % DARK_CYCLE.length],
           });
         } else {
-          const i = LIGHT_THEME_IDS.indexOf(light);
+          const i = LIGHT_CYCLE.indexOf(light);
           setPalette({
             doubutsu: true,
-            light: LIGHT_THEME_IDS[(i + 1) % LIGHT_THEME_IDS.length],
+            light: LIGHT_CYCLE[(i + 1) % LIGHT_CYCLE.length],
           });
         }
       } else {

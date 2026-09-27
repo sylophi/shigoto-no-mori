@@ -12,12 +12,20 @@ import {
   DEFAULT_DARK_THEME,
   DEFAULT_LIGHT_THEME,
   LIGHT_THEMES,
+  nextVariant,
   resolveDoubutsuPicks,
   type DoubutsuPicks,
+  type ThemeOption,
 } from "@shared/themes";
 import { makeProof } from "./lib/checkKit.mts";
 
 const proof = makeProof("theme picks proof");
+
+// A catalog's ids, each swatch's variants after it, as the schema
+// lists them.
+function ids(options: readonly ThemeOption<string>[]): string[] {
+  return options.flatMap((o) => [o.id, ...(o.variants ?? [])]);
+}
 
 try {
   await proof.check(
@@ -74,20 +82,22 @@ try {
   });
 
   await proof.check("the catalog names every id once, in schema order", () => {
-    assert.deepEqual(
-      LIGHT_THEMES.map((t) => t.id),
-      [...LIGHT_THEME_IDS],
-    );
-    assert.deepEqual(
-      DARK_THEMES.map((t) => t.id),
-      [...DARK_THEME_IDS],
-    );
+    assert.deepEqual(ids(LIGHT_THEMES), [...LIGHT_THEME_IDS]);
+    assert.deepEqual(ids(DARK_THEMES), [...DARK_THEME_IDS]);
     assert.equal(
-      LIGHT_THEME_IDS.length,
-      DARK_THEME_IDS.length,
-      "the two lists pair by index, so they are the same length",
+      LIGHT_THEMES.length,
+      DARK_THEMES.length,
+      "the two catalogs pair by position, so they are the same length",
     );
   });
+
+  await proof.check("the hidden hotkey cycles a swatch's variants", () => {
+    assert.equal(nextVariant(LIGHT_THEMES, "latte"), "latte-sage");
+    assert.equal(nextVariant(LIGHT_THEMES, "latte-sage"), "latte-mocha");
+    assert.equal(nextVariant(LIGHT_THEMES, "latte-mocha"), "latte");
+    assert.equal(nextVariant(LIGHT_THEMES, "sky"), null);
+  });
+
   await proof.check(
     "both boot scripts paint the catalog's defaults and read its mirrors",
     () => {

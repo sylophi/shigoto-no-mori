@@ -27,7 +27,9 @@
  * --doubutsu-sidebar, -stripe, -watermark, -pattern, -button-outline,
  * -edge, -accent, -accent-foreground and
  * -rail-muted-foreground, and for a dark palette -modal-card and
- * -modal-muted as well.
+ * -modal-muted as well. A palette with variants declares that set once
+ * for all of them, and each variant's own block after it moves only
+ * what sets it apart.
  * The names are the catalog's (shared/themes.ts).
  */
 
@@ -166,6 +168,71 @@
   --doubutsu-rail-muted-foreground: oklch(0.52 0.05 235);
 }
 
+/* --- Latte ---
+   Cocoa by day: coffee with the milk in, a canvas held to low chroma
+   so it reads as brown and not as cream's yellow or a peach, lighter
+   cards on it, chocolate text, and the rail, the action and the
+   positive status a matcha green, greyed toward olive to sit on the
+   brown. Its hidden variants (shared/themes.ts) share this block and
+   move only their greens below: sage, a cooler grey-green, and mocha,
+   a brown rail with a sage action. */
+:is(:root, [data-theme-scope]).doubutsu:is(
+  [data-palette="latte"],
+  [data-palette="latte-sage"],
+  [data-palette="latte-mocha"]
+) {
+  --background: oklch(0.92 0.018 66);
+  --foreground: oklch(0.35 0.045 54);
+  --card: oklch(0.96 0.009 69);
+  --card-foreground: oklch(0.35 0.045 54);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.35 0.045 54);
+  --primary: oklch(0.56 0.1 132);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.87 0.031 64);
+  --secondary-foreground: oklch(0.35 0.045 54);
+  --muted: oklch(0.895 0.023 66);
+  --muted-foreground: oklch(0.51 0.04 60);
+  --destructive: oklch(0.6 0.16 30);
+  --input: oklch(0.885 0.024 66);
+  --ring: oklch(0.56 0.1 132);
+  --color-emerald-500: oklch(0.56 0.1 132);
+  --color-emerald-600: oklch(0.47 0.08 132);
+  --doubutsu-sidebar: oklch(0.89 0.045 128);
+  --doubutsu-stripe: oklch(1 0 0 / 0.3);
+  --doubutsu-watermark: oklch(0.56 0.1 132);
+  --doubutsu-pattern: oklch(0.56 0.1 132);
+  --doubutsu-button-outline: oklch(0.85 0.032 62);
+  --doubutsu-edge: oklch(0.35 0.045 54 / 0.15);
+  --doubutsu-accent: oklch(0.83 0.065 128);
+  --doubutsu-accent-foreground: oklch(0.35 0.045 54);
+  --doubutsu-rail-muted-foreground: oklch(0.48 0.04 128);
+}
+
+:is(:root, [data-theme-scope]).doubutsu[data-palette="latte-sage"] {
+  --primary: oklch(0.56 0.085 152);
+  --ring: oklch(0.56 0.085 152);
+  --color-emerald-500: oklch(0.56 0.085 152);
+  --color-emerald-600: oklch(0.47 0.08 152);
+  --doubutsu-sidebar: oklch(0.89 0.03 150);
+  --doubutsu-watermark: oklch(0.56 0.085 152);
+  --doubutsu-pattern: oklch(0.56 0.085 152);
+  --doubutsu-accent: oklch(0.83 0.045 150);
+  --doubutsu-rail-muted-foreground: oklch(0.48 0.03 150);
+}
+
+:is(:root, [data-theme-scope]).doubutsu[data-palette="latte-mocha"] {
+  --primary: oklch(0.5 0.075 150);
+  --ring: oklch(0.5 0.075 150);
+  --color-emerald-500: oklch(0.5 0.075 150);
+  --color-emerald-600: oklch(0.44 0.07 150);
+  --doubutsu-sidebar: oklch(0.87 0.028 62);
+  --doubutsu-watermark: oklch(0.6 0.05 55);
+  --doubutsu-pattern: oklch(0.6 0.05 55);
+  --doubutsu-accent: oklch(0.82 0.045 60);
+  --doubutsu-rail-muted-foreground: oklch(0.48 0.035 58);
+}
+
 /* --- Midnight ---
    Night in Animal Crossing: a navy sky (hue 265) over a teal-lit rail
    (235) a step lighter, slate outline buttons, and a moonlit aqua
@@ -200,6 +267,42 @@
   --doubutsu-rail-muted-foreground: oklch(0.78 0.03 240);
   --doubutsu-modal-card: oklch(0.325 0.036 265);
   --doubutsu-modal-muted: oklch(0.4 0.04 265);
+}
+
+/* --- Yozakura ---
+   Sakura at night, blossoms under lanterns: a plum-black canvas (hue
+   340), a rail of the same plum a step lighter and pinker, cream-pink
+   text, and the blossom pink (350) lit up for the action, the pillow
+   and the positive status, still clear of the danger red (30). */
+:is(:root, [data-theme-scope]).doubutsu.dark[data-palette="yozakura"] {
+  --background: oklch(0.22 0.028 340);
+  --foreground: oklch(0.95 0.015 20);
+  --card: oklch(0.285 0.032 340);
+  --card-foreground: oklch(0.95 0.015 20);
+  --popover: oklch(0.3 0.034 340);
+  --popover-foreground: oklch(0.95 0.015 20);
+  --primary: oklch(0.8 0.12 350);
+  --primary-foreground: oklch(0.22 0.04 345);
+  --secondary: oklch(0.36 0.05 345);
+  --secondary-foreground: oklch(0.95 0.015 20);
+  --muted: oklch(0.315 0.034 340);
+  --muted-foreground: oklch(0.78 0.035 350);
+  --destructive: oklch(0.72 0.15 30);
+  --input: oklch(0.335 0.034 340);
+  --ring: oklch(0.8 0.12 350);
+  --color-emerald-400: oklch(0.82 0.11 350);
+  --color-emerald-500: oklch(0.77 0.12 350);
+  --doubutsu-sidebar: oklch(0.275 0.05 350);
+  --doubutsu-stripe: oklch(1 0 0 / 0.1);
+  --doubutsu-watermark: oklch(0.74 0.12 355);
+  --doubutsu-pattern: oklch(0.74 0.12 355);
+  --doubutsu-button-outline: oklch(0.4 0.048 345);
+  --doubutsu-edge: oklch(0 0 0 / 0.45);
+  --doubutsu-accent: oklch(0.44 0.09 352);
+  --doubutsu-accent-foreground: oklch(0.97 0.015 20);
+  --doubutsu-rail-muted-foreground: oklch(0.8 0.035 355);
+  --doubutsu-modal-card: oklch(0.325 0.034 340);
+  --doubutsu-modal-muted: oklch(0.4 0.042 340);
 }
 
 /* --- Forest ---
