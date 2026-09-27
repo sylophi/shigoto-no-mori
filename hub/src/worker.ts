@@ -359,10 +359,11 @@ export function createWorker(deps: HubDeps): HubWorker {
       request.method === HUB_ROUTES.updateDevice.method
         ? DEVICE_PATH.exec(url.pathname)
         : null;
-    if (deviceMatch !== null) {
+    const encodedId = deviceMatch?.[1];
+    if (encodedId !== undefined) {
       let targetId: string;
       try {
-        targetId = decodeURIComponent(deviceMatch[1]);
+        targetId = decodeURIComponent(encodedId);
       } catch {
         // A malformed percent-escape (for example DELETE /devices/%,
         // reachable with no auth) throws URIError. Answer with the
@@ -492,11 +493,12 @@ export function createWorker(deps: HubDeps): HubWorker {
     // account's devices. An empty result means the credential matched
     // nothing.
     const rows = await listDevicesByCredentialHash(env.DB, hash);
-    if (rows.length === 0) return await refuseCredential(env, hash);
+    const [firstRow] = rows;
+    if (firstRow === undefined) return await refuseCredential(env, hash);
     // Every row shares the account, so the first row names the DO for
     // presence. Presence is advisory here, so a hub object hiccup
     // never blocks the device list. A failure defaults to all offline.
-    const online = await accountPresenceSafe(env, rows[0].account_id);
+    const online = await accountPresenceSafe(env, firstRow.account_id);
     const response = {
       devices: rows.map((row) => toDeviceInfo(row, online)),
     } satisfies DeviceListResponseWire;

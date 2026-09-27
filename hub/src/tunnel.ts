@@ -108,8 +108,8 @@ function cfApi(cf: TunnelEnv, cfFetch: typeof fetch) {
   // finders share (the query narrows to at most one match).
   async function findFirst<T>(path: string): Promise<T | null> {
     const result = await call<T[] | null>("GET", path);
-    if (!Array.isArray(result) || result.length === 0) return null;
-    return result[0];
+    if (!Array.isArray(result)) return null;
+    return result[0] ?? null;
   }
 
   return {

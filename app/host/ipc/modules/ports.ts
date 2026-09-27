@@ -2,6 +2,7 @@
 // allocation for the directory when the integration is on, then the
 // user-added entries from the worktree data file, each probed on this
 // machine's loopback.
+import { parseWorktreeKey, worktreeKey } from "@host/lib/config/project";
 import { portsContract } from "@shared/ipc/modules/ports";
 import type { Handlers } from "@shared/ipc/types";
 import { mergeWorktreePorts } from "@shared/ports/mergeWorktreePorts";
@@ -25,12 +26,8 @@ const PROBE_TIMEOUT_MS = 400;
 // new one), so the lookup is safe to hold for a while: a deleted
 // worktree's page is gone before the entry matters.
 const PATH_CACHE_TTL_MS = 60_000;
-const pathCache = ttlMapCache<string, string>(
-  PATH_CACHE_TTL_MS,
-  async (key) => {
-    const [projectId, worktreeId] = key.split(":") as [string, string];
-    return findWorktreePathOrThrow({ projectId, worktreeId });
-  },
+const pathCache = ttlMapCache<string, string>(PATH_CACHE_TTL_MS, async (key) =>
+  findWorktreePathOrThrow(parseWorktreeKey(key)),
 );
 
 export const portsHandlers: Handlers<typeof portsContract> = {
@@ -41,7 +38,7 @@ export const portsHandlers: Handlers<typeof portsContract> = {
     // data-file read rather than behind it.
     const [pool, data] = await Promise.all([
       pathCache
-        .get(`${projectId}:${worktreeId}`)
+        .get(worktreeKey(projectId, worktreeId))
         .then(async (path) =>
           (await isPortPoolActive(path)) ? poolPortsFor(path) : [],
         ),

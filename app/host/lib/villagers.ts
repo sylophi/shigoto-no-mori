@@ -73,6 +73,9 @@ const CONCURRENCY = 4;
 // A request that has not answered by then is given up on.
 const REQUEST_TIMEOUT_MS = 30_000;
 
+// One character as the manifest lists them, with their slug.
+type ManifestEntry = [slug: string, VillagerManifest["villagers"][string]];
+
 const MetaSchema = z.object({
   downloadedAt: z.string(),
   manifest: z.string(),
@@ -125,8 +128,9 @@ export function createVillagerData({
   manifest?: VillagerManifest;
   fetch?: typeof globalThis.fetch;
 }): VillagerData {
-  const slugs = Object.keys(manifest.villagers);
-  const total = slugs.length;
+  const entries: ManifestEntry[] = Object.entries(manifest.villagers);
+  const slugs = entries.map(([slug]) => slug);
+  const total = entries.length;
   const readyDir = () => join(dir(), "ready");
   const partialDir = () => join(dir(), "partial");
 
@@ -206,12 +210,10 @@ export function createVillagerData({
   // The profiles of `batch`, from one request for their pages (more
   // only if the API splits its answer).
   async function fetchProfiles(
-    batch: readonly string[],
+    batch: readonly ManifestEntry[],
     signal: AbortSignal,
   ): Promise<VillagerProfiles> {
-    const titles = [
-      ...new Set(batch.map((slug) => manifest.villagers[slug].page)),
-    ];
+    const titles = [...new Set(batch.map(([, entry]) => entry.page))];
     const pages = new Map<string, { wikitext: string; categories: string[] }>();
     const pageOf = (title: string) =>
       pages.get(title) ?? { wikitext: "", categories: [] };
@@ -266,8 +268,7 @@ export function createVillagerData({
       cont = data.continue;
     }
     const profiles: VillagerProfiles = {};
-    for (const slug of batch) {
-      const title = manifest.villagers[slug].page;
+    for (const [slug, { page: title }] of batch) {
       profiles[slug] = villagerProfile(slug, { title, ...pageOf(title) });
     }
     return profiles;
@@ -275,12 +276,12 @@ export function createVillagerData({
 
   // Downloads a face into `folder`, once it matches the manifest.
   async function fetchFace(
-    slug: string,
+    [slug, { icon }]: ManifestEntry,
     folder: string,
     signal: AbortSignal,
     name: string,
   ): Promise<void> {
-    const { image, bytes, sha1 } = manifest.villagers[slug].icon;
+    const { image, bytes, sha1 } = icon;
     const body = Buffer.from(await get(image, signal, (r) => r.arrayBuffer()));
     if (body.length !== bytes || sha1Of(body) !== sha1) {
       throw new VillagerDataError(
@@ -311,9 +312,13 @@ export function createVillagerData({
     await Promise.all(
       [...stored.faces].map(async (slug) => {
         const path = join(folder, "faces", `${slug}.png`);
+        // hasOwn, not a lookup: the slugs here are file names.
+        const entry = Object.hasOwn(manifest.villagers, slug)
+          ? manifest.villagers[slug]
+          : undefined;
         const held =
-          Object.hasOwn(manifest.villagers, slug) &&
-          sha1Of(await readFile(path)) === manifest.villagers[slug].icon.sha1;
+          entry !== undefined &&
+          sha1Of(await readFile(path)) === entry.icon.sha1;
         if (!held) {
           stored.faces.delete(slug);
           await rm(path, { force: true });
@@ -326,9 +331,9 @@ export function createVillagerData({
     };
     tally();
 
-    for (let i = 0; i < slugs.length; i += BATCH) {
-      const batch = slugs.slice(i, i + BATCH);
-      const unknown = batch.filter((slug) => !Object.hasOwn(profiles, slug));
+    for (let i = 0; i < entries.length; i += BATCH) {
+      const batch = entries.slice(i, i + BATCH);
+      const unknown = batch.filter(([slug]) => !Object.hasOwn(profiles, slug));
       if (unknown.length > 0) {
         // oxlint-disable-next-line no-await-in-loop -- a batch at a time, in order
         Object.assign(profiles, await fetchProfiles(unknown, signal));
@@ -340,10 +345,11 @@ export function createVillagerData({
       }
       // oxlint-disable-next-line no-await-in-loop -- a batch at a time, in order
       await eachLimited(
-        batch.filter((slug) => !faces.has(slug)),
+        batch.filter(([slug]) => !faces.has(slug)),
         current.abort,
-        async (slug) => {
-          await fetchFace(slug, folder, signal, profiles[slug]?.name ?? slug);
+        async (entry) => {
+          const [slug] = entry;
+          await fetchFace(entry, folder, signal, profiles[slug]?.name ?? slug);
           faces.add(slug);
           tally();
         },

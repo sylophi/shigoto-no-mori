@@ -387,7 +387,9 @@ function CliText({ text }: { text: string }) {
 // plain leading letter is raised: a command or a path is left exactly
 // as it would be pasted.
 function asSentence(text: string): string {
-  return /^[a-z]/.test(text) ? text[0].toUpperCase() + text.slice(1) : text;
+  return /^[a-z]/.test(text)
+    ? text.charAt(0).toUpperCase() + text.slice(1)
+    : text;
 }
 
 type Cluster = { title: string; findings: DoctorFinding[] };

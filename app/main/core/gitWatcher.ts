@@ -71,9 +71,8 @@ export function gitDirOf(projectPath: string): string | null {
   } catch {
     return null;
   }
-  const match = /^gitdir:\s*(.+)$/m.exec(text);
-  if (match === null) return null;
-  const pointed = match[1].trim();
+  const pointed = /^gitdir:\s*(.+)$/m.exec(text)?.[1]?.trim();
+  if (pointed === undefined) return null;
   const gitDir = isAbsolute(pointed) ? pointed : resolve(projectPath, pointed);
   // A linked worktree's git dir names its repository's common dir,
   // which is where the refs live.

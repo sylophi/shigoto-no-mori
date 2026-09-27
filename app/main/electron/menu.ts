@@ -34,10 +34,9 @@ function entriesEqual(
   b: LaunchToolMenuEntry[],
 ): boolean {
   if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i].id !== b[i].id || a[i].label !== b[i].label) return false;
-  }
-  return true;
+  return a.every(
+    (entry, i) => entry.id === b[i]?.id && entry.label === b[i]?.label,
+  );
 }
 
 export function setLaunchToolsEnabled(

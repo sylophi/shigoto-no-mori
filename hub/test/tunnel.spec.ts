@@ -5,6 +5,7 @@
 // Enrollment rides the shared helpers (D1 is shared across worker
 // instances), the tunnel calls ride a helper-made worker with the CF
 // stub injected.
+import { only } from "../../app/shared/util/only.ts";
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import {
@@ -95,7 +96,7 @@ function createCfStub(opts: { failDeletes?: boolean } = {}) {
     const tunnelMatch =
       /^\/accounts\/cf-test-account\/cfd_tunnel\/([^/]+)(\/.*)?$/.exec(path);
     if (tunnelMatch !== null) {
-      const [, id, rest] = tunnelMatch;
+      const [, id = "", rest] = tunnelMatch;
       if (method === "PUT" && rest === "/configurations") {
         configs.set(id, body);
         return ok(body);
@@ -129,13 +130,12 @@ function createCfStub(opts: { failDeletes?: boolean } = {}) {
     }
     const dnsMatch = /^\/zones\/cf-test-zone\/dns_records\/([^/]+)$/.exec(path);
     if (dnsMatch !== null) {
-      const index = dnsRecords.findIndex((record) => record.id === dnsMatch[1]);
+      const [, recordId = ""] = dnsMatch;
+      const index = dnsRecords.findIndex((record) => record.id === recordId);
       if (method === "PUT" && index >= 0) {
-        dnsRecords[index] = {
-          ...(body as StubDnsRecord),
-          id: dnsMatch[1],
-        };
-        return ok(dnsRecords[index]);
+        const updated = { ...(body as StubDnsRecord), id: recordId };
+        dnsRecords[index] = updated;
+        return ok(updated);
       }
       if (method === "DELETE" && index >= 0) {
         if (opts.failDeletes === true) {
@@ -177,8 +177,8 @@ describe("POST /tunnel", () => {
     const body = TunnelProvisionResponseSchema.parse(await response.json());
     // Deterministic name: sm- plus 32 hex under the configured domain.
     expect(body.hostname).toMatch(/^sm-[0-9a-f]{32}\.sm\.example\.test$/);
-    expect(stub.liveTunnels()).toHaveLength(1);
-    const tunnel = stub.liveTunnels()[0];
+    const tunnel = only(stub.liveTunnels());
+    if (tunnel === undefined) throw new Error("one live tunnel expected");
     expect(body.hostname).toBe(`${tunnel.name}.sm.example.test`);
     expect(body.connectorToken).toBe(`connector-token-for-${tunnel.id}`);
     // The remotely managed ingress fronts loopback ONLY, with the
@@ -229,7 +229,8 @@ describe("POST /tunnel", () => {
     expect(stub.liveTunnels()).toHaveLength(1);
     expect(stub.dnsRecords).toHaveLength(1);
     // The ingress now names the new port.
-    const tunnel = stub.liveTunnels()[0];
+    const tunnel = only(stub.liveTunnels());
+    if (tunnel === undefined) throw new Error("one live tunnel expected");
     expect(stub.configs.get(tunnel.id)).toEqual({
       config: {
         ingress: [

@@ -262,14 +262,14 @@ function useOtherHostMirrors<T>(
       }),
     ),
     combine: (results) =>
-      results.map((result, index) => {
-        const { deviceId, api } = candidates[index];
-        return {
-          deviceId,
-          api,
-          data: api === undefined ? undefined : (result.data as T | undefined),
-        };
-      }),
+      candidates.map(({ deviceId, api }, index) => ({
+        deviceId,
+        api,
+        data:
+          api === undefined
+            ? undefined
+            : (results[index]?.data as T | undefined),
+      })),
   });
 }
 

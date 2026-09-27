@@ -45,8 +45,9 @@ function mutatesRepo(args: string[]): boolean {
   // The subcommand is the first argument that is not a global option
   // (`-c key=value`, `-C dir`, `--no-pager`).
   let index = 0;
-  while (index < args.length) {
+  for (;;) {
     const arg = args[index];
+    if (arg === undefined) break;
     if (arg === "-c" || arg === "-C") {
       index += 2;
       continue;

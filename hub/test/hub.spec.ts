@@ -88,7 +88,7 @@ describe("GET /connect", () => {
     // under a genuine signature.
     const { credential } = await enroll("acct-forge-real", "dev-forge");
     const { ticket: genuine } = await mintTicket(credential);
-    const [, random, signature] = genuine.split(".");
+    const [, random = "", signature = ""] = genuine.split(".");
     const swapped = `${(await signedTicket("acct-forged-swap", random)).split(".")[0]}.${random}.${signature}`;
     const wrongKey = await buildTicket(
       "not-the-key",

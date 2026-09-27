@@ -7,6 +7,7 @@
 // A stack is linear: the chain from the trunk up. Where a PR has two
 // PRs based on it, each of those heads its own stack over the shared
 // ancestry, and walking up stops at the fork.
+import { only } from "./util/only";
 import type { PullRequest } from "./schemas/pullRequest";
 import type { Worktree } from "./schemas/worktree";
 
@@ -57,16 +58,18 @@ export function pullRequestStackFor(
   const above: PullRequestStackEntry[] = [];
   let top = branch;
   while (above.length < MAX_DEPTH) {
-    const children = childrenOf(prs, top).filter((c) => !visited.has(c.branch));
-    if (children.length !== 1) break;
-    const child = children[0];
+    const child = only(
+      childrenOf(prs, top).filter((c) => !visited.has(c.branch)),
+    );
+    if (child === undefined) break;
     visited.add(child.branch);
     above.push(child);
     top = child.branch;
   }
   if (below.length === 0 && above.length === 0) return null;
   const entries = [...below.toReversed(), { branch, pr: own }, ...above];
-  return { entries, base: entries[0].pr.baseRefName, index: below.length };
+  const base = (entries[0]?.pr ?? own).baseRefName;
+  return { entries, base, index: below.length };
 }
 
 function childrenOf(

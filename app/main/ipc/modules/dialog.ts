@@ -13,7 +13,7 @@ export const dialogHandlers: Handlers<typeof dialogContract> = {
       // sensible starting point when the caller has no better one.
       defaultPath: opts?.defaultPath ?? app.getPath("home"),
     });
-    if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0];
+    if (result.canceled) return null;
+    return result.filePaths[0] ?? null;
   },
 };

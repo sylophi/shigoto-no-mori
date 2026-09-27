@@ -43,7 +43,7 @@ const forestTab = (
   to: { to: "/forest/$view", params: { view } },
 });
 
-const TABS: readonly Tab[] = [
+const TABS: readonly [Tab, ...Tab[]] = [
   forestTab("inbox", "Inbox", Inbox),
   forestTab("projects", "Projects", TreeDeciduous),
   {

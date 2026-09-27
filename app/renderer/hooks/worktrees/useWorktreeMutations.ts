@@ -333,8 +333,7 @@ export function useDeleteStackWorktrees() {
           try {
             const result = await device.api.worktrees.deleteStack({
               projectId: device.projectId,
-              // Any worktree of the stack: the host picks where to run.
-              worktreeId: device.worktrees[0].id,
+              worktreeId: device.target.id,
               force,
               skipCleanup,
             });

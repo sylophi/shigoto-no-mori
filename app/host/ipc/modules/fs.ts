@@ -71,19 +71,17 @@ export const fsHandlers: Handlers<typeof fsContract> = {
     );
     // Async check in parallel beats `existsSync` per entry: same logic,
     // doesn't block the event loop on slow filesystems.
-    const isGitRepoFlags = await Promise.all(
+    const checked = await Promise.all(
       dirs.map(async (e) => {
         try {
           await access(join(absolute, e.name, ".git"));
-          return true;
+          return { name: e.name, isGitRepo: true };
         } catch {
-          return false;
+          return { name: e.name, isGitRepo: false };
         }
       }),
     );
-    const result = dirs
-      .map((e, i) => ({ name: e.name, isGitRepo: isGitRepoFlags[i] }))
-      .toSorted((a, b) => a.name.localeCompare(b.name));
+    const result = checked.toSorted((a, b) => a.name.localeCompare(b.name));
 
     return { path: absolute, entries: result };
   },

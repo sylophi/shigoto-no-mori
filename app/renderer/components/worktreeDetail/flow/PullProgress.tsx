@@ -256,7 +256,7 @@ function ProgressView({
       position: AFTER_PULL_POSITION + index,
     })),
   ];
-  const states = stepStates(rows, at);
+  const steps = stepStates(rows, at);
 
   return (
     <>
@@ -302,10 +302,10 @@ function ProgressView({
           </div>
 
           <ol className="space-y-1">
-            {rows.map((row, index) => (
+            {steps.map((row) => (
               <StepRow
                 key={row.title}
-                state={states[index]}
+                state={row.state}
                 ended={ended}
                 title={row.title}
                 detail={row.detail}

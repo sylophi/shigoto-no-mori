@@ -51,7 +51,10 @@ type Pending = {
 // locked data directory) settles into a slow retry instead of a hot
 // loop, while one that ran long enough to be healthy restarts from
 // the bottom.
-const RESTART_LADDER_MS: readonly number[] = [...BACKOFF_LADDER_MS, 30_000];
+const RESTART_LADDER_MS: readonly [number, ...number[]] = [
+  ...BACKOFF_LADDER_MS,
+  30_000,
+];
 const STABLE_RUN_MS = STABLE_CONNECTION_MS;
 // A create blocks on two endpoint connects (the peer side spawns a
 // process and Mutagen handshakes), so requests get a generous ceiling.

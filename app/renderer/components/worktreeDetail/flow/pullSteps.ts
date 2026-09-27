@@ -50,10 +50,10 @@ export function framePosition(
 // last one.
 export type StepState = "done" | "running" | "queued" | "skipped";
 const taken = (row: { skipped?: boolean }) => !row.skipped;
-export function stepStates(
-  rows: readonly { position: number; skipped?: boolean }[],
+export function stepStates<R extends { position: number; skipped?: boolean }>(
+  rows: readonly R[],
   at: number,
-): StepState[] {
+): (R & { state: StepState })[] {
   const onSkipped = rows.some((row) => row.skipped && row.position === at);
   const next = rows.findIndex((row) => taken(row) && row.position > at);
   const running = onSkipped
@@ -61,15 +61,16 @@ export function stepStates(
       ? rows.length
       : next
     : rows.findLastIndex((row) => taken(row) && row.position <= at);
-  return rows.map((row, index) =>
-    row.skipped
+  return rows.map((row, index) => ({
+    ...row,
+    state: row.skipped
       ? "skipped"
       : index > running
         ? "queued"
         : index === running
           ? "running"
           : "done",
-  );
+  }));
 }
 
 const CREATE_PHASE_SHARE: Record<CreatePhase, number> = {

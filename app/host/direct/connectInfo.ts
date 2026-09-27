@@ -90,13 +90,17 @@ export function makeConnectInfo(
       dialable.map((candidate) => candidate.kind),
     );
     if (tickets === null) return { available: false };
+    const candidates = dialable.flatMap((candidate, index) => {
+      const ticket = tickets[index];
+      return ticket === undefined
+        ? []
+        : [{ kind: candidate.kind, url: candidate.url, ticket }];
+    });
+    // One ticket per candidate, or nothing is offered.
+    if (candidates.length !== dialable.length) return { available: false };
     return {
       available: true,
-      candidates: dialable.map((candidate, index) => ({
-        kind: candidate.kind,
-        url: candidate.url,
-        ticket: tickets[index],
-      })),
+      candidates,
       acceptsCommands: deps.acceptsCommands(),
     };
   };

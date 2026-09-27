@@ -1,3 +1,4 @@
+import { only } from "@shared/util/only";
 import { Loader2 } from "lucide-react";
 import { useIsFetching } from "@tanstack/react-query";
 import { useHostScope } from "@/hooks/remote/useHostScope";
@@ -42,6 +43,5 @@ function useActivityLabel(worktree: Worktree): string | null {
   if (branchesFetching > 0) active.push("Refreshing branches…");
 
   if (active.length === 0) return null;
-  if (active.length === 1) return active[0] ?? null;
-  return "Refreshing…";
+  return only(active) ?? "Refreshing…";
 }

@@ -46,7 +46,7 @@ const configCache = ttlMapCache<string, ShigomoriConfig | null>(
 const worktreeCache = ttlMapCache<string, ShigomoriWorktreeData | null>(
   5_000,
   (key) => {
-    const [projectId, worktreeId] = key.split(":");
+    const { projectId, worktreeId } = parseWorktreeKey(key);
     return readJsonOrNull(
       worktreeDataPath(projectId, worktreeId),
       ShigomoriWorktreeDataSchema,
@@ -54,8 +54,20 @@ const worktreeCache = ttlMapCache<string, ShigomoriWorktreeData | null>(
   },
 );
 
-function worktreeKey(projectId: string, worktreeId: string): string {
+// A worktree's cache key, for the caches keyed by one.
+export function worktreeKey(projectId: string, worktreeId: string): string {
   return `${projectId}:${worktreeId}`;
+}
+
+export function parseWorktreeKey(key: string): {
+  projectId: string;
+  worktreeId: string;
+} {
+  const [projectId, worktreeId, ...extra] = key.split(":");
+  if (projectId === undefined || worktreeId === undefined || extra.length > 0) {
+    throw new Error(`worktree cache key ${key} is not projectId:worktreeId`);
+  }
+  return { projectId, worktreeId };
 }
 
 export async function readShigomoriConfig(

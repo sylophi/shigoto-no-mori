@@ -173,14 +173,23 @@ async function readProcessTable(
   for (const line of stdout.split("\n")) {
     const match = PS_LINE.exec(line);
     if (!match) continue;
-    const startedAt = Date.parse(match[3]);
+    const [, pidText, pgidText, startedText, command] = match;
+    if (
+      pidText === undefined ||
+      pgidText === undefined ||
+      startedText === undefined ||
+      command === undefined
+    ) {
+      continue;
+    }
+    const startedAt = Date.parse(startedText);
     if (Number.isNaN(startedAt)) continue;
-    const pid = Number(match[1]);
+    const pid = Number(pidText);
     table.set(pid, {
       pid,
-      pgid: Number(match[2]),
+      pgid: Number(pgidText),
       startedAt,
-      command: match[4].trim(),
+      command: command.trim(),
     });
   }
   return table;

@@ -25,7 +25,7 @@ import {
 
 // Backoff delays in milliseconds, capped at the last rung. Fixed and
 // jitter-free so a test asserts the exact sequence.
-export const BACKOFF_LADDER_MS: readonly number[] = [
+export const BACKOFF_LADDER_MS: readonly [number, ...number[]] = [
   1_000, 2_000, 4_000, 8_000, 16_000,
 ];
 
@@ -129,11 +129,11 @@ export type Supervisor = {
 // a parameter so other supervised children (the cloudflared runner)
 // share the one rule instead of copying it.
 export function backoffDelayMs(
-  ladder: readonly number[],
+  ladder: readonly [number, ...number[]],
   attempt: number,
 ): number {
   const index = Math.min(Math.max(attempt, 0), ladder.length - 1);
-  return ladder[index];
+  return ladder[index] ?? ladder[0];
 }
 
 export function createSupervisor(options: SupervisorOptions): Supervisor {

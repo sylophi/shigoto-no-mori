@@ -67,6 +67,7 @@ export function speakerFor(
   const slug = speakerSlug(worktreeName, profiles);
   if (slug === null) return null;
   const profile = profiles[slug];
+  if (profile === undefined) return null;
   return { slug, profile, rarity: villagerRarity(slug, profile) };
 }
 
@@ -201,7 +202,7 @@ export interface MoveNews {
   detail: string | null;
   // The branch named in `detail`, for one villager, set in mono.
   branch: string | null;
-  speakers: Speaker[];
+  speakers: [Speaker, ...Speaker[]];
   // The rarest among them, which sets how long the news stays.
   rarity: VillagerRarity;
 }
@@ -229,10 +230,12 @@ export const MOVE_TOAST_MS: Record<VillagerRarity, number> = {
 };
 
 function names(list: readonly string[]): string {
-  if (list.length === 1) return list[0];
-  if (list.length === 2) return `${list[0]} and ${list[1]}`;
-  if (list.length === 3) return `${list[0]}, ${list[1]} and ${list[2]}`;
-  return `${list[0]}, ${list[1]} and ${list.length - 2} others`;
+  const [first, second, third, fourth] = list;
+  if (first === undefined) return "";
+  if (second === undefined) return first;
+  if (third === undefined) return `${first} and ${second}`;
+  if (fourth === undefined) return `${first}, ${second} and ${third}`;
+  return `${first}, ${second} and ${list.length - 2} others`;
 }
 
 function landedSummary(worktrees: readonly MoveSubject[]): string | null {
@@ -261,11 +264,12 @@ export function moveNews(
     const speaker = speakers.get(w.id);
     return speaker === undefined ? [] : [{ ...w, speaker }];
   });
-  if (moving.length === 0) return null;
+  const [first] = moving;
+  if (first === undefined) return null;
   // sheldon and sheldon-2 are one villager moving twice.
-  const who = [
-    ...new Map(moving.map(({ speaker }) => [speaker.slug, speaker])).values(),
-  ];
+  const others = new Map(moving.map(({ speaker }) => [speaker.slug, speaker]));
+  others.delete(first.speaker.slug);
+  const who: [Speaker, ...Speaker[]] = [first.speaker, ...others.values()];
   const verb = kind === "in" ? "moved in" : "moved out";
   const where = device === undefined ? "" : ` on ${device}`;
   const title = `${names(who.map((s) => s.profile.name))} ${verb}${where}`;
@@ -291,8 +295,8 @@ export function moveNews(
   }
 
   // With twins, the branch named is the first one's.
-  const [worktree] = moving;
-  const [speaker] = who;
+  const worktree = first;
+  const { speaker } = first;
   return {
     ...shared,
     line: villagerLine(speaker, title),

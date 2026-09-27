@@ -33,29 +33,31 @@ async function read(face: string): Promise<string | null> {
 
   // Each hue bin weighs its pixels by how saturated they are, and keeps
   // a saturation sum to set the plate's.
-  const weight = new Float64Array(BINS);
-  const hueX = new Float64Array(BINS);
-  const hueY = new Float64Array(BINS);
-  const saturation = new Float64Array(BINS);
+  const bins = Array.from({ length: BINS }, () => ({
+    weight: 0,
+    hueX: 0,
+    hueY: 0,
+    saturation: 0,
+  }));
   for (let i = 0; i < data.length; i += 4) {
-    if (data[i + 3] < 200) continue;
-    const [h, s, l] = hsl(data[i], data[i + 1], data[i + 2]);
+    if ((data[i + 3] ?? 0) < 200) continue;
+    const [h, s, l] = hsl(data[i] ?? 0, data[i + 1] ?? 0, data[i + 2] ?? 0);
     // Outlines, highlights and greys say nothing about the character.
     if (s < 0.3 || l < 0.18 || l > 0.85) continue;
-    const bin = Math.floor((h / 360) * BINS) % BINS;
-    weight[bin] += s;
-    hueX[bin] += Math.cos((h * Math.PI) / 180) * s;
-    hueY[bin] += Math.sin((h * Math.PI) / 180) * s;
-    saturation[bin] += s * s;
+    const bin = bins[Math.floor((h / 360) * BINS) % BINS];
+    if (bin === undefined) continue;
+    bin.weight += s;
+    bin.hueX += Math.cos((h * Math.PI) / 180) * s;
+    bin.hueY += Math.sin((h * Math.PI) / 180) * s;
+    bin.saturation += s * s;
   }
-  let best = 0;
-  for (let bin = 1; bin < BINS; bin++) {
-    if (weight[bin] > weight[best]) best = bin;
-  }
+  const best = bins.reduce((held, bin) =>
+    bin.weight > held.weight ? bin : held,
+  );
   // Too little color to call it theirs.
-  if (weight[best] < SIDE * SIDE * 0.04) return null;
-  const hue = (Math.atan2(hueY[best], hueX[best]) * 180) / Math.PI;
-  const sat = Math.min(0.75, saturation[best] / weight[best]);
+  if (best.weight < SIDE * SIDE * 0.04) return null;
+  const hue = (Math.atan2(best.hueY, best.hueX) * 180) / Math.PI;
+  const sat = Math.min(0.75, best.saturation / best.weight);
   return `hsl(${Math.round((hue + 360) % 360)} ${Math.round(sat * 100)}% 42%)`;
 }
 

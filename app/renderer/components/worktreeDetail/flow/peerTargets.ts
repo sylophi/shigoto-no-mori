@@ -8,6 +8,7 @@
 // dialog opens on it, with several it opens on none and Start waits
 // for the pick. The handlers re-verify the identity match on the peer,
 // so this gate is UX.
+import { only } from "@shared/util/only";
 import { useState } from "react";
 import type { Project } from "@shared/schemas";
 import { useDeviceTabs } from "@/components/shared/DeviceTabs";
@@ -68,7 +69,7 @@ export function usePeerDestination(targets: PeerTarget[]): {
 } {
   const ready = targets.filter(isReadyTarget);
   const [picked, setPicked] = useState<ReadyPeerTarget | null>(
-    ready.length === 1 ? ready[0] : null,
+    only(ready) ?? null,
   );
   const onPick = (deviceId: string) =>
     setPicked(ready.find((target) => target.deviceId === deviceId) ?? null);

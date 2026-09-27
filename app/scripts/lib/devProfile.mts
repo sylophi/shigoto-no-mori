@@ -104,10 +104,10 @@ export function parseDevProfileArgs(argv: string[]): DevProfileArgs {
     cloneLogin: false,
     rest: [],
   };
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
+  const queue = [...argv];
+  for (let arg = queue.shift(); arg !== undefined; arg = queue.shift()) {
     if (arg === "--profile") {
-      out.profile = argv[++i] ?? "";
+      out.profile = queue.shift() ?? "";
     } else if (arg.startsWith("--profile=")) {
       out.profile = arg.slice("--profile=".length);
     } else if (arg === "--fresh") {

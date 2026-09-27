@@ -38,7 +38,7 @@ function toHex(color: string): string {
   scratch.clearRect(0, 0, 1, 1);
   scratch.fillStyle = color;
   scratch.fillRect(0, 0, 1, 1);
-  const [r, g, b, a] = scratch.getImageData(0, 0, 1, 1).data;
+  const [r = 0, g = 0, b = 0, a = 0] = scratch.getImageData(0, 0, 1, 1).data;
   const parts = a === 255 ? [r, g, b] : [r, g, b, a];
   return `#${parts.map((v) => v.toString(16).padStart(2, "0")).join("")}`;
 }
@@ -56,26 +56,26 @@ export function readTerminalTheme(host: HTMLElement): ITheme {
   ];
   for (const base of ANSI_BASES) {
     const bright =
-      `bright${base[0].toUpperCase()}${base.slice(1)}` as `bright${Capitalize<AnsiBase>}`;
+      `bright${base.charAt(0).toUpperCase()}${base.slice(1)}` as `bright${Capitalize<AnsiBase>}`;
     entries.push([base, `var(--ansi-${base})`]);
     entries.push([bright, `var(--ansi-bright-${base})`]);
   }
   // All probes go in before any is read: interleaving writes and
   // computed-style reads would force a style recalculation per color.
   const fragment = document.createDocumentFragment();
-  const probes = entries.map(([, expr]) => {
+  const probes = entries.map(([key, expr]) => {
     const probe = document.createElement("span");
     probe.style.display = "none";
     probe.style.color = expr;
     fragment.append(probe);
-    return probe;
+    return { key, probe };
   });
   host.append(fragment);
   const theme: ITheme = {};
-  entries.forEach(([key], i) => {
-    theme[key] = toHex(getComputedStyle(probes[i]).color);
-  });
-  for (const probe of probes) probe.remove();
+  for (const { key, probe } of probes) {
+    theme[key] = toHex(getComputedStyle(probe).color);
+  }
+  for (const { probe } of probes) probe.remove();
   return theme;
 }
 

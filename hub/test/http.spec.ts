@@ -166,12 +166,16 @@ describe("POST /devices/enroll", () => {
     // Re-enrolling is a rotation, not a new device, so nothing is
     // dropped for it.
     const rotated = await enroll("acct-cap", "dev-cap-1");
-    expect(rotated.credential).not.toBe(enrolled[1].credential);
-    expect((await call(listRequest(enrolled[0].credential))).status).toBe(200);
+    const [stalest, second] = enrolled;
+    if (stalest === undefined || second === undefined) {
+      throw new Error("the cap test enrolls at least two devices");
+    }
+    expect(rotated.credential).not.toBe(second.credential);
+    expect((await call(listRequest(stalest.credential))).status).toBe(200);
     // A new device over the cap takes the place of the stalest one,
     // whose credential dies with it (a revoke, so it reads as one).
     expect((await call(overCapRequest())).status).toBe(200);
-    expect((await call(listRequest(enrolled[0].credential))).status).toBe(403);
+    expect((await call(listRequest(stalest.credential))).status).toBe(403);
     const listed = await call(listRequest(rotated.credential));
     const { devices } = (await listed.json()) as { devices: unknown[] };
     expect(devices).toHaveLength(MAX_ACCOUNT_DEVICES);

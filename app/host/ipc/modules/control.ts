@@ -8,6 +8,7 @@
 // holding the original, so `mirror --from` asks the peer to run its
 // mirror:startTo into this device, and relays the peer's progress.
 // Nothing here moves a byte or touches git itself.
+import { only } from "@shared/util/only";
 import { homedir } from "node:os";
 import { buildClient } from "@shared/ipc/buildClient";
 import {
@@ -310,7 +311,8 @@ async function pickDevice(
     holding.length > 0
       ? holding
       : standings.filter((device) => device.block === "no-project");
-  if (ready.length === 1) return { identity, target: ready[0] };
+  const target = only(ready);
+  if (target !== undefined) return { identity, target };
   if (ready.length > 1) {
     throw new ControlError(
       "ambiguous-device",
@@ -568,10 +570,11 @@ export const controlHandlers: Handlers<typeof controlContract, HandlerContext> =
       );
       // A device asked for by name and not there is a refusal, not an
       // empty list.
-      if (device !== undefined && unreachable.length > 0) {
+      const [blocked] = unreachable;
+      if (device !== undefined && blocked !== undefined) {
         throw new ControlError(
           "device-blocked",
-          `"${unreachable[0].name}" ${BLOCK_REASON.offline}.`,
+          `"${blocked.name}" ${BLOCK_REASON.offline}.`,
         );
       }
       const { worktrees, unanswered } = await worktreesOn(standings);
@@ -866,8 +869,8 @@ async function alreadyMirrored(
     : peerMirrorView(running, names);
   if (device !== undefined) {
     // The same reading of a name a fresh start would make.
-    const named = matchDevices(registry, device);
-    if (named.length !== 1 || named[0].deviceId !== view.device.deviceId) {
+    const named = only(matchDevices(registry, device));
+    if (named === undefined || named.deviceId !== view.device.deviceId) {
       throw new ControlError(
         "device-blocked",
         `This worktree is already mirrored with "${view.device.name}", and a worktree holds one mirror. Stop that one first (sm worktrees unmirror).`,
@@ -1032,7 +1035,8 @@ function pickWorktree(
   unreachable: ControlDevice[],
 ): ControlPeerWorktree {
   const found = all.filter((entry) => matchesWorktree(entry.worktree, query));
-  if (found.length === 1) return found[0];
+  const one = only(found);
+  if (one !== undefined) return one;
   if (found.length > 1) {
     throw new ControlError(
       "ambiguous-worktree",
