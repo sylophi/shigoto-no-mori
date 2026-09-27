@@ -35,7 +35,8 @@ interface CreateWorktreeInput {
 // The callers route onto the row's page as soon as the mutation
 // resolves, and a list refetch (one `sm worktrees list` run) lands well
 // after that, so without the splice the page reads the stale list and
-// says "Worktree not found." until it does. The counterpart of
+// says "Worktree not found." until it does. The villager news reads
+// the new row as a move in (lib/villagers/moves.ts). The counterpart of
 // forgetDeletedWorktree.
 function spliceWorktree(
   queryClient: QueryClient,
@@ -213,7 +214,8 @@ export function isOwnDeletePending(
 // queries so nothing can refetch or replay them. Run by this window's
 // own delete on success, by a mirror stop, and for every removal a
 // host announces (boot's worktrees:removal follower), whoever asked
-// for it.
+// for it. The villager news reads the dropped row as a move out
+// (lib/villagers/moves.ts).
 export function forgetDeletedWorktree(
   queryClient: QueryClient,
   deviceId: string,

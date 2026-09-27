@@ -2,18 +2,20 @@
 // after a character appearing is them moving in, and one going is them
 // moving out, and the app says so (toastVillagerMove) however it
 // happened: from this app, from `sm` in a terminal, or from another
-// device. So rather than hooking the app's own create and remove, this
-// watches what every one of those ends in: a device's worktree list
-// coming back from the host different. The CLI's changes reach it
-// through the fs watcher's refetch, and another device's through the
-// peer push that invalidates its lists (lib/hostWatch.ts).
+// device. It watches what every one of those ends in: a device's
+// worktree list changing, the same list the sidebar shows, so the news
+// comes with the row. The app's own create and delete write their row
+// into the list the moment the host answers (useWorktreeMutations.ts),
+// the CLI's changes reach it through the fs watcher's refetch, and
+// another device's through the peer push that invalidates its lists
+// (lib/hostWatch.ts).
 //
-// It compares each list only against the last one fetched for the same
-// key, never against a write the app made to the cache itself (an
-// optimistic removal, or its rollback), so a move counts once it is on
-// the host. A list seen for the first time, or again after it failed or
-// left the cache, starts over without news: nothing moved that this
-// window saw.
+// Every write to a list counts, the app's own included, so the app
+// adds or drops a row only once the host has made or removed the
+// worktree, never optimistically. A re-key (a convert, a relocate) nets
+// out by name. A list seen for the first time, or again after it
+// failed or left the cache, starts over without news: nothing moved
+// that this window saw.
 //
 // Moves wait a moment before they are told, so several at once come
 // out together, and a hold (holdVillagerMoves) keeps them waiting for
@@ -34,14 +36,12 @@ import {
 } from "@/lib/villagerVoice";
 import { speakersFor } from "./speakers";
 
-// How long moves gather before they are told, and after a batch lets
-// go of its hold, long enough for its last step's list to come back.
-const SETTLE_MS = 800;
-const RELEASE_SETTLE_MS = 2_500;
+// Short enough not to read as late.
+const SETTLE_MS = 150;
 // How long a quieted worktree stays quiet: a transplant's whole dialog.
 const QUIET_MS = 5 * 60_000;
 
-// The last list fetched for each project, by query hash.
+// The last list seen for each project, by query hash.
 const lastSeen = new Map<string, Worktree[]>();
 // Moves not yet told, by device.
 const pending = new Map<string, { in: Worktree[]; out: Worktree[] }>();
@@ -68,7 +68,7 @@ export function startVillagerMoves(queryClient: QueryClient): void {
       lastSeen.delete(queryHash);
       return;
     }
-    if (action.type !== "success" || action.manual) return;
+    if (action.type !== "success") return;
     const list = event.query.state.data as Worktree[] | undefined;
     const before = lastSeen.get(queryHash);
     // Structural sharing hands back the same list when nothing changed.
@@ -96,9 +96,7 @@ export function holdVillagerMoves(): () => void {
     if (released) return;
     released = true;
     holds -= 1;
-    // Through a longer settle wait, so the refetch after the batch's
-    // last step still makes it in.
-    settle(RELEASE_SETTLE_MS);
+    settle();
   };
 }
 
@@ -116,11 +114,11 @@ function isQuiet(worktree: Worktree): boolean {
   );
 }
 
-function settle(ms = SETTLE_MS): void {
+function settle(): void {
   clearTimeout(timer);
   timer = setTimeout(() => {
     if (holds === 0 && client !== undefined) void tell(client);
-  }, ms);
+  }, SETTLE_MS);
 }
 
 function settled(moves: { in: Worktree[]; out: Worktree[] }) {
