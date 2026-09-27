@@ -1,6 +1,11 @@
 import { Check } from "lucide-react";
 import type { ReactNode } from "react";
-import { type ExternalToast, toast } from "sonner";
+import {
+  type ExternalToast,
+  type ToastClassnames,
+  Toaster,
+  toast,
+} from "sonner";
 import { VillagerFace, VillagerSays } from "@/components/shared/VillagerSays";
 import { cn } from "@/lib/utils";
 import {
@@ -14,6 +19,70 @@ import { VillagerDialogue } from "./VillagerDialogue";
 import { VillagerLetter } from "./VillagerLetter";
 
 // The toasts villagers speak in (DESIGN.md, "Village life: rarity").
+
+const VILLAGE_TOASTER = "village";
+
+// How long a click waits before it dismisses, so a double-click
+// selecting a word gets to select it.
+const DOUBLE_CLICK_MS = 400;
+
+// The toaster village news goes to (toastVillagerMove), mounted beside
+// the everyday one (AppChrome.tsx) with its look. A lane of its own in
+// the top corner, so a villager moving in never covers the toasts that
+// matter: an error, or an undo waiting on its button. It sits below the
+// title-bar drag strip (AppShell.tsx), which would swallow clicks on
+// its top edge and close buttons, and answers Alt+Shift+T, leaving
+// Alt+T to the everyday toasts.
+//
+// News goes at a click anywhere on it, or Enter on it focused, the way
+// a villager's line goes at a press of A, unless that hit one of its
+// buttons or selected some of its words. Each news toast carries its
+// id as its test id, since sonner puts no other on the card.
+export function VillageToaster({
+  classNames,
+}: {
+  classNames: ToastClassnames;
+}) {
+  return (
+    <div
+      role="presentation"
+      className="contents"
+      onClick={(event) => {
+        if (event.detail <= 1) dismissCard(event.target, DOUBLE_CLICK_MS);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") dismissCard(event.target, 0);
+      }}
+    >
+      <Toaster
+        id={VILLAGE_TOASTER}
+        containerAriaLabel="Village news"
+        hotkey={["altKey", "shiftKey", "KeyT"]}
+        position="top-right"
+        offset={{ top: 40, right: 16 }}
+        closeButton
+        toastOptions={{ className: "cursor-pointer", classNames }}
+      />
+    </div>
+  );
+}
+
+function dismissCard(target: EventTarget, wait: number): void {
+  if (!(target instanceof Element) || target.closest("button, a")) return;
+  const card = target.closest("[data-sonner-toast]");
+  const id = card?.getAttribute("data-testid");
+  if (!card || !id) return;
+  setTimeout(() => {
+    const selection = window.getSelection();
+    if (
+      selection?.isCollapsed === false &&
+      card.contains(selection.anchorNode)
+    ) {
+      return;
+    }
+    toast.dismiss(id);
+  }, wait);
+}
 
 // A success about one worktree, which its villager says when it has one
 // (lib/villagerVoice.ts): their catchphrase ends the title, and their
@@ -44,9 +113,14 @@ export function toastVillagerSuccess(
 // Animal Crossing comes with it (DESIGN.md, "Village life: rarity"): a
 // rare character speaks in a dialogue box, and a legendary one writes a
 // letter. Everyone else, and several at once, get a toast with their
-// faces.
+// faces. All of it goes to the village lane (VillageToaster).
 export function toastVillagerMove(news: MoveNews, id: string): void {
-  const duration = MOVE_TOAST_MS[news.rarity];
+  const lane = {
+    id,
+    toasterId: VILLAGE_TOASTER,
+    testId: id,
+    duration: MOVE_TOAST_MS[news.rarity],
+  };
   const [speaker] = news.speakers;
   if (news.words !== null) {
     const words = news.words;
@@ -61,15 +135,14 @@ export function toastVillagerMove(news: MoveNews, id: string): void {
           onClose={() => toast.dismiss(toastId)}
         />
       ),
-      { id, duration },
+      lane,
     );
     return;
   }
   toast.success(
     news.line === null ? news.title : <VillagerSays line={news.line} />,
     {
-      id,
-      duration,
+      ...lane,
       // Moving out, the front face wears a moving box, not the check.
       ...faceOptions(
         news.speakers,

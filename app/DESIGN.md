@@ -196,6 +196,11 @@ Rules that keep it consistent as features arrive:
   re-inlined at a call site: it comes from `components/villagers`.
 - **Only success speaks.** Warnings, errors and neutral notices stay
   plain.
+- **Village news keeps to its own lane.** Moving in and out goes to
+  its own toaster in the top-right corner (`VillageToaster`), never
+  the bottom-right one, so it can't cover an error or an undo, and a
+  click anywhere on it sends it away. A success said by a villager (a
+  commit) answers something you did, so it stays in the everyday lane.
 - **Anything that shows follows `useVillageLife`**, this window's
   switch, whichever device the worktree lives on, including toasts
   fired outside render (`lib/villagers/speakers.ts`). Nothing on a
