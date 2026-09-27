@@ -45,6 +45,8 @@ Poses ride the URL:
 - `?signedOut=1`: the desktop signed out of its account (the account
   status alone: the fixture peers stay), for the settings that need
   one.
+- `?today=MM-DD` (or `YYYY-MM-DD`): the calendar day, for a villager's
+  birthday (the sidebar cake and the worktree page's party).
 - `?villagers=absent|downloading|ready|failed`: the villager data
   status, for the control beside Village life in Settings. The
   default is ready when the lab holds a download (below), absent

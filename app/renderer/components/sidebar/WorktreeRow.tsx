@@ -5,6 +5,7 @@ import { BranchLabel } from "@/components/ui/branch-label";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { RowDeviceBadge, type SidebarDeviceBadge } from "./DeviceBadge";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
+import { BirthdayBadge } from "@/components/villagers/BirthdayBadge";
 import type { ScriptActivityKind } from "@/store/scriptRuns";
 import type { PullRequest, Worktree } from "@shared/schemas";
 import { ActivityIcon } from "./ActivityIcon";
@@ -66,6 +67,7 @@ function WorktreeRowLabel({
       </span>
       <span className="flex min-w-0 items-center gap-1 text-3xs text-muted-foreground">
         <span className="truncate">{worktree.name}</span>
+        <BirthdayBadge worktree={worktree} />
         {/* Pulled in vertically: the device tile stands taller than
             the name line, and letting it set the line's height would
             make a peer's row taller than a local one. */}

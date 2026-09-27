@@ -6,6 +6,19 @@ import { CloseButton } from "./CloseButton";
 import { MovingBox } from "./MovingBox";
 import { TypedWords } from "./TypedWords";
 
+// The look a character's words take on screen, shared with their
+// birthday (BirthdayBanner): their color as --villager-ink (a face with
+// no clear one takes amber), the name plate in it, and the cream box.
+export function villagerInk(color: string | null): CSSProperties {
+  return {
+    "--villager-ink": color ?? "var(--color-amber-600)",
+  } as CSSProperties;
+}
+export const NAMEPLATE =
+  "absolute -rotate-3 rounded-[10px] bg-(--villager-ink) py-0.5 font-bold text-white";
+export const DIALOGUE_BOX =
+  "relative bg-[color-mix(in_oklab,var(--color-amber-300)_22%,var(--popover))] dark:bg-[color-mix(in_oklab,var(--color-amber-400)_9%,var(--popover))]";
+
 // A rare character's news, the way Animal Crossing puts a character's
 // words on screen: a soft cream dialogue box, their name on a plate in
 // their own color leaning over its top edge, their words typed in a
@@ -24,26 +37,24 @@ export function VillagerDialogue({
   onClose: () => void;
 }) {
   const [done, setDone] = useState(false);
-  // Their color, for the plate, the arrow and the branch. A face with no
-  // clear one takes amber.
-  const ink = {
-    "--villager-ink": speaker.color ?? "var(--color-amber-600)",
-  } as CSSProperties;
   return (
     <div
       data-slot="villager-dialogue"
-      style={ink}
+      style={villagerInk(speaker.color)}
       className="relative w-[var(--width)] max-w-full pt-3.5 font-sans"
     >
       <span
         data-slot="villager-nameplate"
-        className="absolute top-0 left-6 z-10 -rotate-3 rounded-[10px] bg-(--villager-ink) px-3 py-0.5 text-sm font-bold text-white"
+        className={cn(NAMEPLATE, "top-0 left-6 z-10 px-3 text-sm")}
       >
         {speaker.profile.name}
       </span>
       <div
         data-slot="villager-dialogue-box"
-        className="relative flex gap-3 rounded-[28px_34px_30px_26px/26px_30px_34px_28px] bg-[color-mix(in_oklab,var(--color-amber-300)_22%,var(--popover))] px-4 pt-5 pb-4 text-popover-foreground shadow-md dark:bg-[color-mix(in_oklab,var(--color-amber-400)_9%,var(--popover))]"
+        className={cn(
+          DIALOGUE_BOX,
+          "flex gap-3 rounded-[28px_34px_30px_26px/26px_30px_34px_28px] px-4 pt-5 pb-4 text-popover-foreground shadow-md",
+        )}
       >
         {speaker.face && (
           <span className="relative size-11 shrink-0">
