@@ -37,7 +37,7 @@ Poses ride the URL:
   `happy-hummingbird`,
   `?to=/devices/dev_8f3ac2e1/projects/p_sm/worktrees/wt_sm_hum`), with
   the merge state GitHub would pair with it. Variants are the keys of
-  `LAB_CHECK_POSES` in `bridge.ts`: `none`, `single-passed`,
+  `LAB_CHECK_POSES` in `pullRequestFixtures.ts`: `none`, `single-passed`,
   `single-failing`, `passed`, `passed-some-skipped`, `all-skipped`,
   `pending`, `failing`, `failing-blocked`, `failing-and-pending`,
   `many`. Absent, it keeps two passing checks.
