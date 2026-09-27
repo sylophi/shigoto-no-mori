@@ -64,10 +64,18 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: cli/go.mod
-          cache-dependency-path: cli/go.sum
+          cache-dependency-path: |
+            cli/go.sum
+            file-sync/go.sum
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # The prePackage hook regenerates the third-party notices. Stale
+      # committed copies would ship a build reporting a "-dirty" commit,
+      # so refuse here, naming the fix, rather than build it.
+      - name: Require up-to-date third-party notices
+        run: pnpm run licenses:check
 
       # The shipped .app's Info.plist (CFBundleShortVersionString,
       # CFBundleVersion) and Electron's app.getVersion() both come from

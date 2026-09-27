@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+# A new push to a PR supersedes the run on the previous one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint-and-format:
     runs-on: ubuntu-latest
@@ -41,3 +46,43 @@ jobs:
 
       - name: Format
         run: pnpm run format:check
+
+  # The release build regenerates the third-party notices, so stale
+  # committed copies make every shipped build report a "-dirty" commit.
+  # The Go cache key matches release.yml's so the two share an entry.
+  # macOS arm64 like release.yml: pnpm installs only the host's platform
+  # packages, and the notices list the darwin-arm64 ones.
+  licenses:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        with:
+          package_json_file: app/package.json
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: app/pnpm-lock.yaml
+
+      # The notices also cover the Go modules linked into the bundled
+      # CLI and file-sync engine.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: cli/go.mod
+          cache-dependency-path: |
+            cli/go.sum
+            file-sync/go.sum
+
+      # license-checker only reads package metadata, so no install
+      # scripts.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Third-party notices are up to date
+        run: pnpm run licenses:check
