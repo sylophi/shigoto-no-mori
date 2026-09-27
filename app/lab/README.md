@@ -22,6 +22,9 @@ either script to run beside them.
 Poses ride the URL:
 
 - `?theme=light|dark`, `?doubutsu=0|1`: appearance, seeded pre-paint.
+  `?light=<id>` and `?dark=<id>` pick each appearance's doubutsu
+  palette (the ids in `shared/themes.ts`, default `cream` and
+  `charcoal`).
 - `?peers=sm:connected,tp:connected,mini:online,pc:offline`: presence
   per device key (`sm` Studio Mac, `tp` Thinkpad, `mini` Mini, `pc`
   Work PC). The desktop default is `tp:connected`, and the web
@@ -31,7 +34,8 @@ Poses ride the URL:
 - `?view=inbox`: open the sidebar in its inbox view (the toggle flips
   it in-session either way).
 - `?checks=<variant>`: the CI rollup on PR #148 (worktree
-  `happy-hummingbird`, `?to=/projects/p_sm/worktrees/wt_sm_hum`), with
+  `happy-hummingbird`,
+  `?to=/devices/dev_8f3ac2e1/projects/p_sm/worktrees/wt_sm_hum`), with
   the merge state GitHub would pair with it. Variants are the keys of
   `LAB_CHECK_POSES` in `bridge.ts`: `none`, `single-passed`,
   `single-failing`, `passed`, `passed-some-skipped`, `all-skipped`,

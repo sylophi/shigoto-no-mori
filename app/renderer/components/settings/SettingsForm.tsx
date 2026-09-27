@@ -16,11 +16,12 @@ import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
 import { useStagedUpdates } from "@/hooks/system/useUpdater";
 import { fieldSetter, useDirtyForm } from "@/hooks/ui/useDirtyForm";
-import { useDoubutsu } from "@/hooks/ui/useDoubutsu";
+import { usePalette } from "@/hooks/ui/usePalette";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { hasLocalHost } from "@/lib/localHost";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import type { ClientConfig, GlobalConfig, Theme } from "@shared/schemas";
+import type { DarkTheme, LightTheme } from "@shared/themes";
 import type { RemoteDevice } from "@/lib/remote/devices";
 import { AppearanceSection } from "./AppearanceSection";
 import { DeviceStatusPill } from "@/components/settings/DeviceStatusPill";
@@ -80,7 +81,7 @@ export function SettingsForm({
 }) {
   const save = useSettingsSave({ initialConfig, initialClientConfig });
   const { setOverride } = useTheme();
-  const { setOverride: setDoubutsuOverride } = useDoubutsu();
+  const { setOverride: setPaletteOverride } = usePalette();
   const devices = useHostDevices();
   const local = useLocalDevice();
   const { activeTab, peer } = useActiveSettingsTab(devices);
@@ -96,9 +97,9 @@ export function SettingsForm({
   useEffect(
     () => () => {
       setOverride(null);
-      setDoubutsuOverride(null);
+      setPaletteOverride(null);
     },
-    [setOverride, setDoubutsuOverride],
+    [setOverride, setPaletteOverride],
   );
 
   const handleSave = async () => {
@@ -117,6 +118,8 @@ export function SettingsForm({
           ...form,
           theme: prev.theme,
           doubutsu: prev.doubutsu,
+          lightTheme: prev.lightTheme,
+          darkTheme: prev.darkTheme,
           pauseAnimationsOnBattery: prev.pauseAnimationsOnBattery,
           villageLife: prev.villageLife,
           markTerrierProjects: prev.markTerrierProjects,
@@ -131,7 +134,7 @@ export function SettingsForm({
   const handleDiscard = () => {
     setForm(savedSnapshot);
     setOverride(null);
-    setDoubutsuOverride(null);
+    setPaletteOverride(null);
   };
 
   const pickTheme = (theme: Theme) => {
@@ -141,7 +144,19 @@ export function SettingsForm({
 
   const setDoubutsu = (next: boolean) => {
     setForm((prev) => ({ ...prev, doubutsu: next }));
-    setDoubutsuOverride(next);
+    setPaletteOverride({ doubutsu: next });
+  };
+
+  // A pick previews at once, like the appearance: the light one shows
+  // while the window is light, the dark one while it is dark, and
+  // the other waits for its appearance.
+  const pickLightTheme = (lightTheme: LightTheme) => {
+    setForm((prev) => ({ ...prev, lightTheme }));
+    setPaletteOverride({ light: lightTheme });
+  };
+  const pickDarkTheme = (darkTheme: DarkTheme) => {
+    setForm((prev) => ({ ...prev, darkTheme }));
+    setPaletteOverride({ dark: darkTheme });
   };
 
   // The peer forms, as the footer sees them.
@@ -199,6 +214,10 @@ export function SettingsForm({
               onPick={pickTheme}
               doubutsu={form.doubutsu}
               onDoubutsuChange={setDoubutsu}
+              lightTheme={form.lightTheme}
+              onLightThemeChange={pickLightTheme}
+              darkTheme={form.darkTheme}
+              onDarkThemeChange={pickDarkTheme}
               pauseAnimationsOnBattery={form.pauseAnimationsOnBattery}
               onPauseAnimationsOnBatteryChange={setField(
                 "pauseAnimationsOnBattery",

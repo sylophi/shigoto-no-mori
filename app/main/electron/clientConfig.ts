@@ -1,5 +1,5 @@
 // The client config store: clientConfig.json in Electron's userData.
-// Client config is how this app instance looks (theme, doubutsu).
+// Client config is how this app instance looks (theme, palettes).
 // Device config in the shigomori root gates what a machine can do and
 // stays with the host and the CLI. This file is owned by the main
 // process alone and the CLI never touches it. Seeding from the

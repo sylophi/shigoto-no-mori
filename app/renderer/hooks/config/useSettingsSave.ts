@@ -11,16 +11,25 @@ import {
   type LauncherCommand,
   type Theme,
 } from "@shared/schemas";
+import {
+  type DarkTheme,
+  DEFAULT_DARK_THEME,
+  DEFAULT_LIGHT_THEME,
+  type LightTheme,
+  resolveDoubutsuPicks,
+} from "@shared/themes";
 import { errorMessageOf } from "@shared/errors";
 import { queryKeys, type QueryKeyRegistry } from "@/lib/queryKeys";
 import { mergeClientConfigWrite } from "./mergeClientConfigWrite";
 
 // The settings form's staged state. One flat shape across both stores:
-// the first six fields are client config (appearance), the rest are
+// the first eight fields are client config (appearance), the rest are
 // device config.
 export interface SettingsFormState {
   theme: Theme;
   doubutsu: boolean;
+  lightTheme: LightTheme;
+  darkTheme: DarkTheme;
   pauseAnimationsOnBattery: boolean;
   // Whether villager extras show is villageLifeShows' call (the
   // villager data downloaded too), never this field alone.
@@ -48,9 +57,12 @@ export function fromConfig(
   config: GlobalConfig,
   clientConfig: ClientConfig,
 ): SettingsFormState {
+  const picks = resolveDoubutsuPicks(clientConfig);
   return {
     theme: clientConfig.theme ?? "system",
-    doubutsu: clientConfig.doubutsu ?? true,
+    doubutsu: picks.doubutsu,
+    lightTheme: picks.light,
+    darkTheme: picks.dark,
     pauseAnimationsOnBattery: clientConfig.pauseAnimationsOnBattery ?? true,
     villageLife: clientConfig.villageLife ?? false,
     markTerrierProjects: clientConfig.markTerrierProjects ?? false,
@@ -135,6 +147,12 @@ function toClientConfig(state: SettingsFormState): ClientConfig {
     // Default is on; omit when on, store explicit `false` when off so
     // the user's opt-out survives reads (same as deleteBranchOnRemove).
     doubutsu: state.doubutsu ? undefined : false,
+    // Each pick is omitted at its list's default, and kept while the
+    // switch is off so it comes back with it.
+    lightTheme:
+      state.lightTheme === DEFAULT_LIGHT_THEME ? undefined : state.lightTheme,
+    darkTheme:
+      state.darkTheme === DEFAULT_DARK_THEME ? undefined : state.darkTheme,
     // Default is on, with the same opt-out serialization as doubutsu.
     pauseAnimationsOnBattery: state.pauseAnimationsOnBattery
       ? undefined

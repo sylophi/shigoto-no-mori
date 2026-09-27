@@ -87,9 +87,18 @@
  * Token blocks below use `:root.doubutsu` (not `.doubutsu`) so they
  * outrank index.css's `:root` / `.dark` blocks by specificity. This
  * file is @imported before those rules, so order can't be relied on.
+ * `[data-theme-scope]` rides beside :root at the same specificity so
+ * the Settings picker can paint a swatch of any palette on an element
+ * of its own (settings/ThemePicker.tsx), whatever <html> wears.
+ *
+ * The two blocks here are the default palettes, cream and charcoal.
+ * The other picks (renderer/palettes.css) override the same tokens
+ * under `data-palette` on the same element. A rule elsewhere in this
+ * file must reach a color through a token, never a literal, or the
+ * picks can't move it.
  * ====================================================================
  */
-:root.doubutsu {
+:is(:root, [data-theme-scope]).doubutsu {
   /*
    * Palette designed as a layered system, not a swatch grab. Five
    * distinct cream tints + one mint family carry every surface in the
@@ -125,8 +134,14 @@
   --secondary-foreground: oklch(0.39 0.045 74.1);
   --muted: oklch(0.945 0.025 85);
   --muted-foreground: oklch(0.55 0.031 67.2);
-  --accent: oklch(0.88 0.07 155);
-  --accent-foreground: oklch(0.39 0.045 74.1);
+  /* The accent pillow is declared as its own token so the sidebar
+     zone can restore it after index.css's vibrancy override (see the
+     zone tints), and the rail's muted text beside it. */
+  --doubutsu-accent: oklch(0.88 0.07 155);
+  --doubutsu-accent-foreground: oklch(0.39 0.045 74.1);
+  --doubutsu-rail-muted-foreground: oklch(0.55 0.031 67.2);
+  --accent: var(--doubutsu-accent);
+  --accent-foreground: var(--doubutsu-accent-foreground);
   --destructive: oklch(0.6 0.16 30);
   /* See the universal `border-color: transparent` rule below. */
   --border: transparent;
@@ -212,7 +227,7 @@
   --diffs-bg-separator: var(--muted);
 }
 
-:root.doubutsu.dark {
+:is(:root, [data-theme-scope]).doubutsu.dark {
   /* Same system, night. Not the cream tints darkened: warm brown at
      low lightness reads as khaki, and the leaf on top of it as olive.
      Night is a near-neutral charcoal instead (a touch cool, hue 250 at
@@ -235,8 +250,11 @@
   --secondary-foreground: oklch(0.95 0.008 90);
   --muted: oklch(0.305 0.008 250);
   --muted-foreground: oklch(0.745 0.012 250);
-  --accent: oklch(0.4 0.07 158);
-  --accent-foreground: oklch(0.97 0.008 90);
+  --doubutsu-accent: oklch(0.4 0.07 158);
+  --doubutsu-accent-foreground: oklch(0.97 0.008 90);
+  --doubutsu-rail-muted-foreground: oklch(0.78 0.03 160);
+  --accent: var(--doubutsu-accent);
+  --accent-foreground: var(--doubutsu-accent-foreground);
   --destructive: oklch(0.72 0.15 30);
   --border: transparent;
   --input: oklch(0.325 0.008 250);
@@ -594,14 +612,9 @@
    doubutsu palette's own muted/accent pairings here. */
 .doubutsu [data-doubutsu-zone="sidebar"] {
   background-color: var(--doubutsu-sidebar);
-  --muted-foreground: oklch(0.55 0.031 67.2);
-  --accent: oklch(0.88 0.07 155);
-  --accent-foreground: oklch(0.39 0.045 74.1);
-}
-.doubutsu.dark [data-doubutsu-zone="sidebar"] {
-  --muted-foreground: oklch(0.78 0.03 160);
-  --accent: oklch(0.4 0.07 158);
-  --accent-foreground: oklch(0.97 0.008 90);
+  --muted-foreground: var(--doubutsu-rail-muted-foreground);
+  --accent: var(--doubutsu-accent);
+  --accent-foreground: var(--doubutsu-accent-foreground);
 }
 
 /* The inbox's New worktree button is a filled surface sitting directly

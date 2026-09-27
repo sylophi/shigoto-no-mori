@@ -4,8 +4,9 @@
 // pre-paint guarantee) rather than inline, so the deploy's
 // Content-Security-Policy can stay at script-src 'self' with no inline
 // allowance. Keys must match THEME_STORAGE_KEY in
-// renderer/hooks/ui/useTheme.tsx and DOUBUTSU_STORAGE_KEY in
-// renderer/hooks/ui/useDoubutsu.tsx.
+// renderer/hooks/ui/useTheme.tsx and STORAGE_KEYS in
+// renderer/hooks/ui/usePalette.tsx, and the palette defaults
+// shared/themes.ts.
 (function () {
   var html = document.documentElement;
   // The phone layout's marker, pre-paint for the same reason as the
@@ -25,9 +26,15 @@
     if (dark) html.classList.add("dark");
     html.style.colorScheme = dark ? "dark" : "light";
     // Doubutsu is on by default; only a saved opt-out disables the
-    // first paint's overlay, mirroring readBootHint.
+    // first paint's overlay, mirroring readBootHint. Its palette is
+    // the saved pick for the appearance being painted, else the
+    // list's default.
     if (localStorage.getItem("shigomori.doubutsu") !== "false") {
       html.classList.add("doubutsu");
+      html.dataset.palette =
+        localStorage.getItem(
+          dark ? "shigomori.darkTheme" : "shigomori.lightTheme",
+        ) || (dark ? "charcoal" : "cream");
     }
   } catch {
     // localStorage may be unavailable in some contexts; render light.

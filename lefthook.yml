@@ -208,6 +208,9 @@ pre-commit:
           - name: fresh-install
             glob: "{cli/names.go,cli/cmd_config.go,cli/state.go,cli/main.go,app/shared/schemas/config.ts,app/host/lib/bootstrap.ts,app/host/lib/util/paths.ts,app/renderer/hooks/config/useSettingsSave.ts,app/test/fresh-install.mjs,app/test/lib/checkKit.mjs}"
             run: pnpm -C app test fresh-install
+          - name: theme-picks
+            glob: "{app/shared/themes.ts,app/shared/schemas/config.ts,app/test/theme-picks.mjs,app/test/lib/checkKit.mjs}"
+            run: pnpm -C app test theme-picks
           # Village life (client config) and Doubutsu names (device config)
           # each read off when unset, and the device patch never carries
           # Village life.

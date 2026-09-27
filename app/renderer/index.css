@@ -19,6 +19,10 @@
    use :root.doubutsu so this early import position can't lose to the
    :root/.dark blocks below). */
 @import "./doubutsu.css";
+/* The other doubutsu palettes, picked by data-palette on <html>.
+   After doubutsu.css: a light pick ties its default block on
+   specificity and wins on order. */
+@import "./palettes.css";
 /* Everything the phone layout resizes: see the file's header. */
 @import "./phone.css";
 
@@ -42,7 +46,12 @@
   }
 }
 
-:root {
+/* [data-theme-scope] beside :root: the Settings picker paints its
+   swatches on elements of their own, and a light swatch inside a dark
+   window has to start from these, not from the dark tokens it would
+   inherit. */
+:root,
+[data-theme-scope] {
   --background: var(--color-white);
   --foreground: var(--color-neutral-950);
   --card: var(--color-white);

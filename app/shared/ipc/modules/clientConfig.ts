@@ -5,7 +5,7 @@ import {
   WriteClientConfigPayloadSchema,
 } from "@shared/schemas";
 
-// The client config store (theme, doubutsu) in the app instance's own
+// The client config store (theme, palettes) in the app instance's own
 // userData. Client-scoped because the store must stay on the machine
 // showing the window even once the host goes remote. Same shape as the
 // globalConfig module: read/write, loose on the way out, strict on the
