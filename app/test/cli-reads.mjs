@@ -303,9 +303,17 @@ async function main() {
         (await projectsHandlers.list()).map((p) => p.id),
         [before[1], before[0]],
       );
+      // Stored apart from the entries, which stay in the order added.
+      const registry = readJson(join(dataDir, "registry.json"));
       assert.deepEqual(
-        readJson(join(dataDir, "registry.json")).projects.map((p) => p.id),
-        [before[1], before[0]],
+        registry.projectOrder,
+        [before[1], before[0]].map(
+          (id) => registry.projects.find((p) => p.id === id).path,
+        ),
+      );
+      assert.deepEqual(
+        registry.projects.map((p) => p.id),
+        before,
       );
       assert.equal(await projectsHandlers.defaultBranch({ projectId }), "main");
       // A fresh data dir is seeded with Doubutsu names on (cli/state.go

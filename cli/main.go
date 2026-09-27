@@ -121,7 +121,7 @@ var worktreeItems = []helpItem{
 
 var projectItems = []helpItem{
 	{"projects list [--refresh-icons]", "List registered projects",
-		"Registry entries, then terrier-registered repos when that integration is on. --json prints one array of rows: id, name, path, source (\"terrier\" or absent), pathExists, identity (the cross-device repo key, or null), lastUsed and recentCount (the app's project use log), icon ({path, mime}, or null) and hue (the icon's OKLCH hue in degrees, or null when it has no color). Icons resolve through the shared icon cache; --refresh-icons re-scans projects it remembers as icon-less."},
+		"Registry entries and, when that integration is on, terrier-registered repos, in the sidebar's manual order (`projects reorder`). --json prints one array of rows: id, name, path, source (\"terrier\" or absent), pathExists, identity (the cross-device repo key, or null), lastUsed and recentCount (the app's project use log), icon ({path, mime}, or null) and hue (the icon's OKLCH hue in degrees, or null when it has no color). Icons resolve through the shared icon cache; --refresh-icons re-scans projects it remembers as icon-less."},
 	{"projects icon [<name>]", "Print a project's icon file",
 		"--json prints {mime, base64}, or null when the project has no icon."},
 	{"projects add [<path>] [--all]", "Register a repo",
@@ -130,8 +130,8 @@ var projectItems = []helpItem{
 		"Worktrees stay on disk. Prompts for confirmation (--yes skips). " +
 			"When two projects share a name, remove by path (which also " +
 			"reaches an entry whose repo has since moved away)."},
-	{"projects reorder --ids <id1,id2,...>", "Reorder registered projects",
-		"App plumbing for the sidebar's drag-to-reorder: the listed ids move to the front in that order, the rest keep their order after them. Ids that aren't registry entries (terrier-only projects, stale ids) are ignored, and an unchanged order writes nothing. --json prints {ok}."},
+	{"projects reorder --ids <id1,id2,...>", "Reorder projects",
+		"App plumbing for the sidebar's drag-to-reorder: the listed ids move to the front in that order, the rest keep their order after them. Terrier-only projects reorder like any other. Stale ids are ignored, and an unchanged order writes nothing. --json prints {ok}."},
 	{"projects config [<command>] [args]",
 		"Show or set per-project config",
 		"Bare: prints project.json. The global config's verbs work here too, scoped by -p: " +
@@ -728,15 +728,17 @@ func run() int {
 		// command that writes the registry would otherwise rebuild the
 		// file from that empty picture. This is also where an
 		// old-format data dir gets its registry drained out of state.json.
-		projects, err := loadProjects()
+		projects, order, err := loadProjectsAndOrder()
 		if err != nil {
 			reportError(err)
 			return 1
 		}
 		// Terrier-registered repos join the list here, so every resolver
-		// and command sees them as first-class projects. Registry writes
-		// are untouched: they re-read registry.json under its lock.
-		projects = mergeTerrierProjects(projects)
+		// and command sees them as first-class projects, and the manual
+		// order goes over the merged list so it can place them too.
+		// Registry writes are untouched: they re-read registry.json under
+		// its lock.
+		projects = orderProjects(mergeTerrierProjects(projects), order)
 		cwd, err := os.Getwd()
 		if err != nil {
 			cwd = "."

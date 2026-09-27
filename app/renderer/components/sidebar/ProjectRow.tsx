@@ -48,13 +48,10 @@ export function ProjectRow({
   arrangeMode,
   isHovered,
 }: ProjectRowProps) {
-  // Terrier-sourced projects have no registry entry, so there is no
-  // stored order to drag them within: they always trail the list. A
-  // peer's project has none here either.
-  const fromTerrier = project.source === "terrier";
-  // One flag behind both the drag and the affordance, so a row can't
-  // advertise a grab it will refuse.
-  const reorderable = arrangeMode && local && !fromTerrier;
+  // Only this machine's projects have a stored order to drag within, a
+  // peer's has none here. One flag behind both the drag and the
+  // affordance, so a row can't advertise a grab it will refuse.
+  const reorderable = arrangeMode && local;
   const {
     attributes,
     listeners,

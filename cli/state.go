@@ -404,6 +404,16 @@ const (
 	autoPullKey = "autoPullWorktrees"
 )
 
+// The sidebar's manual project order (`projects reorder`) as project
+// paths. Kept apart from the projects array because terrier-only
+// projects have no entry there whose position could hold their place.
+// Paths rather than ids because a project's path is the one thing that
+// survives its registry entry coming and going (terrier's id is minted
+// from it), so a project demoted to terrier keeps its place.
+// orderProjects applies it after the terrier merge, and a project it
+// doesn't name (added since, or never arranged) follows in merge order.
+const projectOrderKey = "projectOrder"
+
 // What each shelved worktree looked like when it went on the shelf
 // ({at, head, changed}, shelf.go), which the listing compares against
 // to unshelve a worktree that gets worked in. The full listing writes
@@ -637,11 +647,38 @@ func loadProjects() ([]project, error) {
 	if err != nil {
 		return nil, err
 	}
+	return projectsFrom(all)
+}
+
+func projectsFrom(all map[string]json.RawMessage) ([]project, error) {
 	var projects []project
 	if err := decodeKey(registryPath(), projectsKey, all[projectsKey], &projects); err != nil {
 		return nil, err
 	}
 	return projects, nil
+}
+
+// The registry entries and the stored manual order, for the
+// pre-dispatch load. Only the entries are strict: the order costs
+// nothing worse than the default sort when it can't be read, so a
+// malformed one is noted and read as absent (the next reorder refuses
+// to write over it, and doctor names it).
+func loadProjectsAndOrder() ([]project, []string, error) {
+	all, err := readRegistryFile()
+	if err != nil {
+		return nil, nil, err
+	}
+	projects, err := projectsFrom(all)
+	if err != nil {
+		return nil, nil, err
+	}
+	var order []string
+	if err := decodeKey(registryPath(), projectOrderKey, all[projectOrderKey], &order); err != nil {
+		noteFileTrouble(registryPath(),
+			"Projects are listed in their default order until the file is fixed.", err)
+		order = nil
+	}
+	return projects, order, nil
 }
 
 func readShelvedSet() map[string]bool {

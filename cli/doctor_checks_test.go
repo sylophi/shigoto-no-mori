@@ -122,6 +122,8 @@ func TestCheckRegistryFile(t *testing.T) {
 		{"invalid json", `{"projects": [`, true, statusFail},
 		{"projects wrong shape", `{"projects": {"a": 1}}`, true, statusFail},
 		{"entry missing path", `{"projects": [{"id":"A","name":"a"}]}`, true, statusWarn},
+		{"with an order", `{"projects": [], "projectOrder": ["/tmp/a"]}`, true, statusOK},
+		{"order wrong shape", `{"projects": [], "projectOrder": {"/tmp/a": 0}}`, true, statusWarn},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

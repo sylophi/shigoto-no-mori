@@ -11,6 +11,7 @@ import {
   findProjectOrThrow,
   listProjects,
   listProjectsWithStatus,
+  loadProjects,
   primaryRefOf,
   refreshProjects,
   registerProject,
@@ -32,6 +33,11 @@ import {
   reorderProjectsViaCli,
   worktreeDestinationViaCli,
 } from "../cliDelegate";
+
+// Moves run one at a time: each writes the whole order, so a second
+// drag computed before the first's refresh landed would put the first
+// one's project back.
+let reorderChain: Promise<void> = Promise.resolve();
 
 export const projectsHandlers: Handlers<typeof projectsContract> = {
   list: () => listProjectsWithStatus(),
@@ -99,17 +105,22 @@ export const projectsHandlers: Handlers<typeof projectsContract> = {
     }
   },
 
-  // Under the CLI's registry lock, which also keeps a project added
-  // meanwhile (it lands last). The terrier-only projects have no
-  // registry entry to move, as before.
-  reorder: async ({ draggedId, targetId, position }) => {
-    const registered = (await listProjects()).filter(
-      (p) => p.source !== "terrier",
-    );
-    const next = reorderProjects(registered, draggedId, targetId, position);
-    if (next === registered) return;
-    await reorderProjectsViaCli(next.map((p) => p.id));
-    await refreshProjects();
+  // Over the whole list, terrier-only projects included: the CLI stores
+  // the order apart from the registry entries, so any project can hold
+  // any place. Each move goes over the list the previous one left (see
+  // reorderChain), and the CLI checks the ids against its own read (one
+  // added meanwhile lands last, a stale id is ignored).
+  reorder: ({ draggedId, targetId, position }) => {
+    const run = reorderChain.then(async () => {
+      const current = loadProjects();
+      const next = reorderProjects(current, draggedId, targetId, position);
+      if (next === current) return;
+      await reorderProjectsViaCli(next.map((p) => p.id));
+      await refreshProjects();
+    });
+    // The chain outlives a failed move, and the caller still sees it fail.
+    reorderChain = run.catch(() => {});
+    return run;
   },
 
   // The primary ref every row is measured against, which the CLI
