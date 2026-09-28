@@ -423,10 +423,12 @@ function PaletteDialog({
         </div>
 
         {/* The panes scroll, not the list: cmdk's sizer (the list's one
-            child) is the row that holds them, shrunk to what fits. */}
+            child) is the row that holds them. A fixed height, so typing
+            and moving the highlight never resize the palette, and it
+            only gives way to a window too short for it. */}
         <Command.List
           onMouseDown={keepFocusInInput}
-          className="flex min-h-0 flex-col [&>[cmdk-list-sizer]]:flex [&>[cmdk-list-sizer]]:min-h-0"
+          className="flex min-h-0 flex-col [&>[cmdk-list-sizer]]:flex [&>[cmdk-list-sizer]]:h-96 [&>[cmdk-list-sizer]]:min-h-0"
         >
           <div
             className={cn(
