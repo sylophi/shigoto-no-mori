@@ -220,7 +220,7 @@ const createWindow = () => {
   applyThemeSource(readClientConfigSync().theme);
   mainWindow = new BrowserWindow({
     width: 920,
-    height: 600,
+    height: 720,
     minWidth: 640,
     minHeight: 420,
     // Inset traffic lights over a transparent shell so the
