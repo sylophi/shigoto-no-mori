@@ -143,7 +143,7 @@ function PaletteRow<Id extends LightTheme | DarkTheme>({
   disabled: boolean;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-1">
       <p
         className={cn(
           "text-xs text-muted-foreground",
