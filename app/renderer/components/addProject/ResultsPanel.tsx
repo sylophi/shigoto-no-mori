@@ -5,6 +5,7 @@ import { PathSpan } from "@/components/ui/path-span";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { ResultRow } from "./ResultRow";
 import { IconButton } from "@/components/ui/icon-button";
+import { MODAL_COMMAND_CLASS } from "@/components/ui/cmdk-classes";
 
 interface ResultsPanelProps {
   scanRoot: string;
@@ -28,13 +29,19 @@ export function ResultsPanel(props: ResultsPanelProps) {
 
   return (
     // oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- keyboard nav is delegated from the cmdk input; this wrapper only forwards it
-    <div onKeyDown={props.onKeyDown} role="group" aria-label="Scan results">
+    <div
+      onKeyDown={props.onKeyDown}
+      role="group"
+      aria-label="Scan results"
+      className="flex min-h-0 flex-col"
+    >
       <Command
         label="Scan results"
         loop
         shouldFilter={false}
         value={props.highlighted}
         onValueChange={props.onHighlightChange}
+        className={MODAL_COMMAND_CLASS}
       >
         <div className="flex items-center gap-2 border-b border-border px-3 py-2">
           <IconButton onClick={props.onBack} aria-label="Back">
@@ -67,7 +74,7 @@ export function ResultsPanel(props: ResultsPanelProps) {
           )}
         </div>
 
-        <Command.List className="max-h-96 overflow-y-auto p-2">
+        <Command.List className="overflow-y-auto p-2">
           {props.results.length === 0 ? (
             <div className="px-3 py-10 text-center text-sm text-muted-foreground">
               All git repos in this folder are already added.

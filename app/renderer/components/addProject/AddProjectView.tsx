@@ -41,7 +41,11 @@ import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { Kbd, KbdGroup, KbdHint } from "@/components/ui/kbd";
-import { ITEM_CLASS, keepFocusInInput } from "@/components/ui/cmdk-classes";
+import {
+  ITEM_CLASS,
+  keepFocusInInput,
+  MODAL_COMMAND_CLASS,
+} from "@/components/ui/cmdk-classes";
 import { CloneDestination, CloningPanel } from "./ClonePanel";
 import { defaultCloneParent } from "@shared/cloneDestination";
 import { ScanningPanel } from "./ScanningPanel";
@@ -441,6 +445,7 @@ export function AddProjectView({
         shouldFilter={false}
         value={highlighted}
         onValueChange={setHighlighted}
+        className={MODAL_COMMAND_CLASS}
       >
         <div
           data-slot="search-row"
@@ -494,7 +499,7 @@ export function AddProjectView({
         {/* Kept mounted (cmdk wants its list), just empty, in clone mode. */}
         <Command.List
           onMouseDown={keepFocusInInput}
-          className={cloneMode ? "hidden" : "max-h-96 overflow-y-auto p-2"}
+          className={cloneMode ? "hidden" : "overflow-y-auto p-2"}
         >
           {canBrowseUp && <BrowseUpItem onSelect={browseUp} />}
 

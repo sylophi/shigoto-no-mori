@@ -4,7 +4,10 @@ import { Command, useCommandState } from "cmdk";
 import { ArrowDown, ArrowUp, Folder } from "lucide-react";
 import { KbdHint } from "@/components/ui/kbd";
 import { ModalShell } from "@/components/ui/modal-shell";
-import { keepFocusInInput } from "@/components/ui/cmdk-classes";
+import {
+  keepFocusInInput,
+  MODAL_COMMAND_CLASS,
+} from "@/components/ui/cmdk-classes";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { DeviceBadge, useDeviceBadges } from "@/components/sidebar/DeviceBadge";
@@ -393,6 +396,7 @@ function PaletteDialog({
         shouldFilter={false}
         value={highlighted}
         onValueChange={setHighlighted}
+        className={MODAL_COMMAND_CLASS}
       >
         <div
           data-slot="search-row"
@@ -418,56 +422,59 @@ function PaletteDialog({
           )}
         </div>
 
-        <Command.List onMouseDown={keepFocusInInput}>
-          <div className="flex h-96">
-            <div
-              className={cn(
-                "min-w-0 flex-1 overflow-y-auto p-2",
-                picked && "opacity-60 phone:hidden",
+        {/* The panes scroll, not the list: cmdk's sizer (the list's one
+            child) is the row that holds them, shrunk to what fits. */}
+        <Command.List
+          onMouseDown={keepFocusInInput}
+          className="flex min-h-0 flex-col [&>[cmdk-list-sizer]]:flex [&>[cmdk-list-sizer]]:min-h-0"
+        >
+          <div
+            className={cn(
+              "min-w-0 flex-1 overflow-y-auto p-2",
+              picked && "opacity-60 phone:hidden",
+            )}
+          >
+            <PaneKeysProvider value={!picked}>
+              {groups.length > 1
+                ? groups.map((group) => (
+                    <PaletteGroup key={group.heading} heading={group.heading}>
+                      {listItems(group.rows)}
+                    </PaletteGroup>
+                  ))
+                : listItems(rows)}
+            </PaneKeysProvider>
+            {!picked && (
+              <Command.Empty className={EMPTY_CLASS}>
+                {entries.length === 0
+                  ? "No worktrees yet."
+                  : "No worktrees match."}
+              </Command.Empty>
+            )}
+          </div>
+          <div
+            data-slot="palette-verbs"
+            className={cn(
+              "w-64 shrink-0 overflow-y-auto border-l border-border bg-muted/30 p-2 phone:w-auto phone:flex-1 phone:border-l-0",
+              !picked && "phone:hidden",
+            )}
+          >
+            <PaneKeysProvider value={picked !== null}>
+              {paneRow && (
+                <PaletteVerbs
+                  key={paneRow.key}
+                  row={paneRow}
+                  query={picked ? query.trim() : ""}
+                  actions={actions}
+                  launchers={launchers}
+                  settled={paneSettled}
+                />
               )}
-            >
-              <PaneKeysProvider value={!picked}>
-                {groups.length > 1
-                  ? groups.map((group) => (
-                      <PaletteGroup key={group.heading} heading={group.heading}>
-                        {listItems(group.rows)}
-                      </PaletteGroup>
-                    ))
-                  : listItems(rows)}
-              </PaneKeysProvider>
-              {!picked && (
-                <Command.Empty className={EMPTY_CLASS}>
-                  {entries.length === 0
-                    ? "No worktrees yet."
-                    : "No worktrees match."}
-                </Command.Empty>
-              )}
-            </div>
-            <div
-              data-slot="palette-verbs"
-              className={cn(
-                "w-64 shrink-0 overflow-y-auto border-l border-border bg-muted/30 p-2 phone:w-auto phone:flex-1 phone:border-l-0",
-                !picked && "phone:hidden",
-              )}
-            >
-              <PaneKeysProvider value={picked !== null}>
-                {paneRow && (
-                  <PaletteVerbs
-                    key={paneRow.key}
-                    row={paneRow}
-                    query={picked ? query.trim() : ""}
-                    actions={actions}
-                    launchers={launchers}
-                    settled={paneSettled}
-                  />
-                )}
-              </PaneKeysProvider>
-              {picked && (
-                <Command.Empty className={EMPTY_CLASS}>
-                  No actions match.
-                </Command.Empty>
-              )}
-            </div>
+            </PaneKeysProvider>
+            {picked && (
+              <Command.Empty className={EMPTY_CLASS}>
+                No actions match.
+              </Command.Empty>
+            )}
           </div>
         </Command.List>
 

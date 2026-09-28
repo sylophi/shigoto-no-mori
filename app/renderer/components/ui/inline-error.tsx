@@ -79,14 +79,14 @@ export function ErrorDetailsHost() {
   const close = () => details.publish(null);
   return (
     <ModalShell onClose={close} popoverClassName="max-w-2xl">
-      <div className="flex flex-col gap-3 p-5">
+      <div className="flex min-h-0 flex-col gap-3 p-5">
         <div className="group/copy flex items-center gap-2">
           <h2 className="min-w-0 flex-1 text-base font-semibold">
             {current.title}
           </h2>
           <CopyButton value={current.message} label="Copy error" />
         </div>
-        <pre className="max-h-[60vh] overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs wrap-anywhere whitespace-pre-wrap select-text">
+        <pre className="overflow-auto rounded-md border border-border bg-muted/30 p-3 font-mono text-xs wrap-anywhere whitespace-pre-wrap select-text">
           {current.message}
         </pre>
         <div className="flex justify-end">

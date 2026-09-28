@@ -123,7 +123,7 @@ export function PathPickerModal<E extends PickerEntry>({
   };
 
   return (
-    <ModalShell onClose={onClose} popoverClassName="flex flex-col">
+    <ModalShell onClose={onClose}>
       <header className="flex items-center gap-2 border-b border-border px-3 py-2">
         {!atRoot && (
           <IconButton onClick={goUp} aria-label="Go up" title="Go up">
@@ -161,7 +161,7 @@ export function PathPickerModal<E extends PickerEntry>({
         />
       </div>
 
-      <div className="max-h-[60vh] min-h-[12rem] overflow-y-auto p-1">
+      <div className="min-h-[12rem] overflow-y-auto p-1">
         {!atRoot && (
           <button
             type="button"

@@ -33,7 +33,7 @@ export function TidyConfirm({
 
   return (
     <ModalShell onClose={onCancel} popoverClassName="max-w-lg">
-      <div className="p-5">
+      <div className="flex min-h-0 flex-col p-5">
         <h2 className="text-base font-semibold">
           Remove {count} {count === 1 ? "worktree" : "worktrees"}
           {/* Named up front: a selection reaching into several repos is a
@@ -48,7 +48,7 @@ export function TidyConfirm({
           cannot be undone.
         </p>
 
-        <ul className="mt-4 max-h-56 space-y-2 overflow-y-auto">
+        <ul className="mt-4 min-h-24 space-y-2 overflow-y-auto">
           {selected.map((entry) => (
             <li
               key={entry.worktree.id}

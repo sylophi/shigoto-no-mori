@@ -219,7 +219,7 @@ export function PullFlowFrame({
       // way out is the running view's Cancel, which ends the move.
       onClose={running ? () => {} : onClose}
       closeOnEscape={!running}
-      popoverClassName="flex max-h-[85vh] max-w-4xl flex-col"
+      popoverClassName="max-w-4xl"
     >
       <FlowHeader
         tint={look.tint}

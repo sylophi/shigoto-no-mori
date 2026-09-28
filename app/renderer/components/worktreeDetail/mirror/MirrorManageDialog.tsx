@@ -127,10 +127,7 @@ export function MirrorManageDialog({
     controls.resume.isPending ||
     controls.stop.isPending;
   return (
-    <ModalShell
-      onClose={onClose}
-      popoverClassName="flex max-h-[85vh] max-w-3xl flex-col"
-    >
+    <ModalShell onClose={onClose} popoverClassName="max-w-3xl">
       <FlowHeader
         tint={TONE_PILL[view.tone]}
         icon={RefreshCw}
