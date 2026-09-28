@@ -144,11 +144,26 @@
   * {
     @apply border-border outline-ring/50;
   }
+  /* The page's canvas is what shows past its edges: a trackpad's
+     rubber band, and on iOS the strips around Safari's toolbars, which
+     Safari 26 tints from the body's colour (it no longer reads
+     theme-color). Left transparent in a browser tab, that was white on
+     every theme. A phone's bottom edge is the tab bar, so there the
+     canvas continues its card. (Safari tints its top strip from that
+     same colour, a shade off the page's background up there.) */
   html,
   body {
-    /* Stays transparent so the BrowserWindow vibrancy material shows
-       through under the sidebar. The main detail pane paints its own
-       opaque `bg-background`. */
+    background-color: var(--background);
+  }
+  html[data-layout="phone"],
+  [data-layout="phone"] body {
+    background-color: var(--card);
+  }
+  /* The desktop window (index.html) stays transparent so the
+     BrowserWindow vibrancy material shows through under the sidebar.
+     The main detail pane paints its own opaque `bg-background`. */
+  html[data-shell="desktop"],
+  [data-shell="desktop"] body {
     background: transparent;
   }
   body {
