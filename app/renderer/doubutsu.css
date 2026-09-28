@@ -19,9 +19,7 @@
  *    --primary, --secondary, --muted, --accent, --destructive, --input,
  *    --ring, --radius, and the --color-{emerald,green,rose,amber,sky,
  *    violet,indigo}-* vars
- *    Tailwind emits for raw palette utilities, and the --scrollbar-*
- *    tokens ScrollArea's scrollbar reads (ui/scroll-area.tsx).
- *    This file also defines
+ *    Tailwind emits for raw palette utilities. This file also defines
  *    --doubutsu-* of its own, including the composed
  *    --doubutsu-sticker-shadow / --doubutsu-stripe-image recipes.
  *
@@ -1129,19 +1127,6 @@
       animation: var(--doubutsu-stripe-animation);
     }
   }
-}
-
-/* ScrollArea's scrollbar (ui/scroll-area.tsx draws the pill from
-   these): chunkier, in a recessed groove. It rests in the accent
-   pillow and, under the pointer or held, turns leaf and takes the
-   stripes, as a control does, though these hold still. */
-.doubutsu {
-  --scrollbar-size: 14px;
-  --scrollbar-track: color-mix(in oklab, var(--foreground) 7%, transparent);
-  --scrollbar-thumb: var(--accent);
-  --scrollbar-thumb-hover: var(--primary);
-  --scrollbar-thumb-hover-image: var(--doubutsu-stripe-image);
-  --scrollbar-inset-hover: var(--scrollbar-inset);
 }
 
 @media (prefers-reduced-motion: reduce) {

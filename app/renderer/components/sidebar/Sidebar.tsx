@@ -28,7 +28,6 @@ import { useMirrorLinks } from "@/hooks/remote/useMirrors";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useHiddenWorktreePrefixes } from "@/hooks/sharedSettings/useHiddenWorktreePrefixes";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { SettingsSidebarNav } from "@/components/settings/SettingsSidebarNav";
 import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
@@ -116,10 +115,8 @@ export function Sidebar({
 // them) stay mounted across the swap.
 function SettingsPane() {
   return (
-    <div className="min-h-0 flex-1">
-      <ScrollArea className="size-full">
-        <SettingsSidebarNav />
-      </ScrollArea>
+    <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
+      <SettingsSidebarNav />
     </div>
   );
 }
@@ -296,7 +293,7 @@ function Forest({
       remoteItems.filter((item) => item.worktreesError).length,
   );
 
-  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
 
   // distance: 5 lets a quick click still toggle expand; drag activates
   // only after the pointer moves 5px while held.
@@ -359,7 +356,7 @@ function Forest({
     <SidebarList
       rows={rows}
       revealKey={view.revealKey}
-      viewportRef={viewportRef}
+      scrollerRef={scrollerRef}
       handlers={{
         onToggle: toggleExpanded,
         onToggleShelved: toggleShelved,
@@ -405,34 +402,36 @@ function Forest({
           <DeviceFilterBar {...filter} />
         </>
       )}
-      <div className="min-h-0 flex-1">
-        <ScrollArea className="size-full" viewportRef={viewportRef}>
-          {/* Dragging reorders projects, which the inbox doesn't show, so
-              it doesn't mount the DnD context at all. */}
-          {inbox ? (
-            list
-          ) : (
-            <DndContext
-              sensors={sensors}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              onDragCancel={() => setActiveId(null)}
+      <div
+        ref={scrollerRef}
+        data-slot="sidebar-scroller"
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+      >
+        {/* Dragging reorders projects, which the inbox doesn't show, so
+            it doesn't mount the DnD context at all. */}
+        {inbox ? (
+          list
+        ) : (
+          <DndContext
+            sensors={sensors}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => setActiveId(null)}
+          >
+            <SortableContext
+              items={orderedProjects.map((p) => p.id)}
+              strategy={verticalListSortingStrategy}
             >
-              <SortableContext
-                items={orderedProjects.map((p) => p.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                {list}
-              </SortableContext>
-              <DragOverlay>
-                {activeProject ? (
-                  <ProjectDragPreview project={activeProject} />
-                ) : null}
-              </DragOverlay>
-            </DndContext>
-          )}
-          <SidebarEmptyState message={emptyMessage} />
-        </ScrollArea>
+              {list}
+            </SortableContext>
+            <DragOverlay>
+              {activeProject ? (
+                <ProjectDragPreview project={activeProject} />
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        )}
+        <SidebarEmptyState message={emptyMessage} />
       </div>
     </>
   );

@@ -17,7 +17,7 @@ import { isPhoneLayout } from "@/hooks/ui/useViewport";
 interface SidebarListProps {
   rows: SidebarRow[];
   revealKey: SidebarViewModel["revealKey"];
-  viewportRef: RefObject<HTMLDivElement | null>;
+  scrollerRef: RefObject<HTMLDivElement | null>;
   handlers: RowHandlers;
 }
 
@@ -48,7 +48,7 @@ function matchWorktreeDetail(pathname: string): {
 export function SidebarList({
   rows,
   revealKey,
-  viewportRef,
+  scrollerRef,
   handlers,
 }: SidebarListProps) {
   // Tracks the project the cursor is over (header row OR one of its
@@ -58,7 +58,7 @@ export function SidebarList({
 
   const virtualizer = useVirtualizer({
     count: rows.length,
-    getScrollElement: () => viewportRef.current,
+    getScrollElement: () => scrollerRef.current,
     estimateSize: (index) =>
       rowSizeHint(rows[index]?.kind ?? "worktree", isPhoneLayout()),
     overscan: 12,
@@ -66,7 +66,7 @@ export function SidebarList({
   });
 
   // The virtualizer reads its scroll element on every render, but the
-  // ref belongs to the ScrollArea viewport, an ancestor, and React
+  // ref belongs to the sidebar's scroller, an ancestor, and React
   // attaches an ancestor's ref after this component's layout effects:
   // on the mount pass the virtualizer sees null and lays out no rows.
   // A second render heals it, and on a cold cache the queries landing

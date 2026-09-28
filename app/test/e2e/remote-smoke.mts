@@ -2124,9 +2124,9 @@ async function main(): Promise<string[]> {
     // virtualized, so a row out of view is not in the DOM at all. Each
     // try that finds nothing pages the sidebar down, wrapping to the
     // top at the end, until the row is there to click.
-    const SIDEBAR_VIEWPORT = `[...document.querySelectorAll('[data-slot="scroll-area-viewport"]')].find((v) => v.getBoundingClientRect().left < 300 && v.scrollHeight > v.clientHeight)`;
+    const SIDEBAR_SCROLLER = `document.querySelector('[data-slot="sidebar-scroller"]')`;
     const seekRow = (text: string) =>
-      `(() => { const el = ${byText(text)}; if (el) return el; const v = ${SIDEBAR_VIEWPORT}; if (v) v.scrollTop = v.scrollTop + v.clientHeight >= v.scrollHeight ? 0 : v.scrollTop + v.clientHeight * 0.8; return null; })()`;
+      `(() => { const el = ${byText(text)}; if (el) return el; const v = ${SIDEBAR_SCROLLER}; if (v) v.scrollTop = v.scrollTop + v.clientHeight >= v.scrollHeight ? 0 : v.scrollTop + v.clientHeight * 0.8; return null; })()`;
     const clickRow = (what: string, text: string) => click(what, seekRow(text));
     const waitSwitch = (checked: boolean, why: string) =>
       a.waitFor(

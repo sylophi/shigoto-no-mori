@@ -181,9 +181,9 @@
      paints light under the pointer whatever the theme. A pointer
      device only: touch keeps its bars untouched. scrollbar-color
      inherits, into shadow DOM too, and Chromium drops every
-     ::-webkit-scrollbar rule on an element that has it, so anything
-     styling its own bar that way must set it back to auto, as the
-     diff viewer does (diff/codeTheme.ts). */
+     ::-webkit-scrollbar rule on an element that has it. That is how
+     the diff viewer's code blocks get the native bar in place of
+     their library's own, so nothing may set it back to auto. */
   @media (pointer: fine) {
     :root {
       scrollbar-color: color-mix(in oklab, var(--foreground) 40%, transparent)
@@ -191,22 +191,6 @@
     }
   }
 
-  /* ScrollArea's scrollbar (ui/scroll-area.tsx): a slim pill tinted
-     from the theme, a step wider and darker under the pointer.
-     doubutsu.css remaps these. */
-  :root {
-    --scrollbar-size: 12px;
-    --scrollbar-inset: 3px;
-    --scrollbar-inset-hover: 2px;
-    --scrollbar-track: transparent;
-    --scrollbar-thumb: color-mix(in oklab, var(--foreground) 22%, transparent);
-    --scrollbar-thumb-hover: color-mix(
-      in oklab,
-      var(--foreground) 40%,
-      transparent
-    );
-    --scrollbar-thumb-hover-image: none;
-  }
   /* The script console's terminal draws its own scrollbar, so its
      viewport's native one would only add a second bar. */
   .xterm .xterm-viewport {
