@@ -23,7 +23,6 @@ import { ActivityIcon } from "../ActivityIcon";
 import { RowDeviceBadge, type SidebarDeviceBadge } from "../DeviceBadge";
 import { MirrorBadge } from "../WorktreeRow";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
-import { TerrierMark } from "../TerrierMark";
 import { ProjectMenuItems, useProjectMenuRemoveArm } from "../ProjectMenuItems";
 import { PullRequestPill } from "../PullRequestPill";
 import type { StackPosition } from "@shared/pullRequestStack";
@@ -99,7 +98,6 @@ export function InboxRow({
           fallback={Folder}
         />
         <span className="min-w-0 truncate font-medium">{project.name}</span>
-        <TerrierMark terrier={project.source === "terrier"} />
         {device && <RowDeviceBadge badge={device} />}
         {mirror && <MirrorBadge mirror={mirror} />}
         <TrailingSlot
