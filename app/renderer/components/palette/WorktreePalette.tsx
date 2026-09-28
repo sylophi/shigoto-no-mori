@@ -385,7 +385,9 @@ function PaletteDialog({
     <ModalShell
       onClose={onClose}
       onEscape={onEscape}
-      popoverClassName="max-w-3xl"
+      // As tall as the window allows, and never resized by what it
+      // shows: typing and moving the highlight leave the frame still.
+      popoverClassName="h-full max-w-3xl"
     >
       {/* Keyed by stage: the pane holding the keys changes, and a fresh
           mount keeps the highlight it is handed. */}
@@ -396,7 +398,7 @@ function PaletteDialog({
         shouldFilter={false}
         value={highlighted}
         onValueChange={setHighlighted}
-        className={MODAL_COMMAND_CLASS}
+        className={cn(MODAL_COMMAND_CLASS, "flex-1")}
       >
         <div
           data-slot="search-row"
@@ -423,12 +425,10 @@ function PaletteDialog({
         </div>
 
         {/* The panes scroll, not the list: cmdk's sizer (the list's one
-            child) is the row that holds them. A fixed height, so typing
-            and moving the highlight never resize the palette, and it
-            only gives way to a window too short for it. */}
+            child) is the row that holds them, filling what's left. */}
         <Command.List
           onMouseDown={keepFocusInInput}
-          className="flex min-h-0 flex-col [&>[cmdk-list-sizer]]:flex [&>[cmdk-list-sizer]]:h-96 [&>[cmdk-list-sizer]]:min-h-0"
+          className="flex min-h-0 flex-1 flex-col [&>[cmdk-list-sizer]]:flex [&>[cmdk-list-sizer]]:min-h-0 [&>[cmdk-list-sizer]]:flex-1"
         >
           <div
             className={cn(
