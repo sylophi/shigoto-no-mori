@@ -8,8 +8,10 @@ export const CODE_THEME = {
   // cascades through the whole surface. Without this the code reads as
   // a pitch-black slab against the lifted neutral-900 main pane that
   // PR #59 introduced. `unsafeCSS` is the documented path for CSS
-  // overrides. See https://diffs.com/docs (Hunk Separators).
-  unsafeCSS: `:host { --diffs-bg: var(--background); }`,
+  // overrides. See https://diffs.com/docs (Hunk Separators). The app's
+  // scrollbar-color (index.css) would inherit in and switch off the
+  // library's own scrollbar styling, so it gets auto back.
+  unsafeCSS: `:host { --diffs-bg: var(--background); scrollbar-color: auto; }`,
 };
 
 // In pixels, and numbers rather than CSS because the diff pane's

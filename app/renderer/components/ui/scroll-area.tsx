@@ -42,10 +42,12 @@ function ScrollBar({
       data-slot="scroll-area-scrollbar"
       data-orientation={orientation}
       orientation={orientation}
-      // The native scrollbar's pill, drawn in the DOM from the same
-      // --scrollbar-* tokens (index.css).
+      // A pill drawn from the --scrollbar-* tokens (index.css). Like
+      // macOS's overlay bars it shows while the area scrolls or the
+      // pointer is on it, then fades: Base UI keeps data-scrolling
+      // 500ms past the last scroll, and the delay holds it 300ms more.
       className={cn(
-        "flex touch-none rounded-full bg-(--scrollbar-track) bg-clip-content p-(--scrollbar-inset) select-none data-[orientation=horizontal]:h-(--scrollbar-size) data-[orientation=horizontal]:flex-col data-[orientation=vertical]:h-full data-[orientation=vertical]:w-(--scrollbar-size)",
+        "flex touch-none rounded-full bg-(--scrollbar-track) bg-clip-content p-(--scrollbar-inset) opacity-0 transition-opacity delay-300 duration-300 select-none hover:opacity-100 hover:transition-none data-scrolling:opacity-100 data-scrolling:transition-none data-[orientation=horizontal]:h-(--scrollbar-size) data-[orientation=horizontal]:flex-col data-[orientation=vertical]:h-full data-[orientation=vertical]:w-(--scrollbar-size)",
         className,
       )}
       {...props}
