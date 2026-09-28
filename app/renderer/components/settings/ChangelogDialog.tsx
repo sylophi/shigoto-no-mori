@@ -97,6 +97,17 @@ export function ChangelogDialog({
         tint={TONE_PILL[news === null ? "slate" : "sky"]}
         icon={news === null ? ScrollText : Sparkles}
         title={news === null ? "Changelog" : "What's new"}
+        actions={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="All releases on GitHub"
+            title="All releases on GitHub"
+            onClick={() => openExternalUrl(RELEASES_PAGE_URL)}
+          >
+            <ExternalLink />
+          </Button>
+        }
         onClose={onClose}
       >
         <p>{subtitle(version, news, list?.length)}</p>
@@ -127,17 +138,7 @@ export function ChangelogDialog({
           <LoadingEntries />
         )}
       </FlowBody>
-      <FlowFooter>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => openExternalUrl(RELEASES_PAGE_URL)}
-        >
-          <ExternalLink />
-          All releases on GitHub
-        </Button>
-        {restartButton}
-      </FlowFooter>
+      {restartButton && <FlowFooter>{restartButton}</FlowFooter>}
     </ModalShell>
   );
 }

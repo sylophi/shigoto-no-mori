@@ -67,8 +67,8 @@ export function StepRail({
 }
 
 // The dialog's header: a tinted icon square, the title, one line
-// under it, and either the close button or (once the attempt runs)
-// its clock in the same corner.
+// under it, any actions of the dialog's own, and either the close
+// button or (once the attempt runs) its clock in the same corner.
 export function FlowHeader({
   tint,
   icon: Icon,
@@ -76,6 +76,7 @@ export function FlowHeader({
   title,
   children,
   elapsed,
+  actions,
   onClose,
 }: {
   tint: string;
@@ -84,6 +85,7 @@ export function FlowHeader({
   title: ReactNode;
   children: ReactNode;
   elapsed?: { ms: number; label: "elapsed" | "total" };
+  actions?: ReactNode;
   onClose: () => void;
 }) {
   return (
@@ -100,6 +102,7 @@ export function FlowHeader({
         <h2 className="text-base font-semibold">{title}</h2>
         <div className="text-xs text-muted-foreground">{children}</div>
       </div>
+      {actions}
       {elapsed === undefined ? (
         <Button
           variant="ghost"
