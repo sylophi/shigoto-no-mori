@@ -42,15 +42,20 @@ function ScrollBar({
       data-slot="scroll-area-scrollbar"
       data-orientation={orientation}
       orientation={orientation}
+      // The native scrollbar's pill, drawn in the DOM from the same
+      // --scrollbar-* tokens (index.css).
       className={cn(
-        "flex touch-none p-px transition-colors select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent",
+        "flex touch-none rounded-full bg-(--scrollbar-track) bg-clip-content p-(--scrollbar-inset) select-none data-[orientation=horizontal]:h-(--scrollbar-size) data-[orientation=horizontal]:flex-col data-[orientation=vertical]:h-full data-[orientation=vertical]:w-(--scrollbar-size)",
         className,
       )}
       {...props}
     >
       <ScrollAreaPrimitive.Thumb
         data-slot="scroll-area-thumb"
-        className="relative flex-1 rounded-full bg-border"
+        // Widens under the pointer by bleeding across the bar's inset
+        // rather than changing the bar's padding, which Base UI reads
+        // only on scroll to place the thumb.
+        className="relative flex-1 rounded-full bg-(--scrollbar-thumb) bg-size-[12px_12px] hover:bg-(--scrollbar-thumb-hover) hover:bg-(image:--scrollbar-thumb-hover-image) active:bg-(--scrollbar-thumb-hover) active:bg-(image:--scrollbar-thumb-hover-image) data-[orientation=horizontal]:[&:is(:hover,:active)]:my-[calc(var(--scrollbar-inset-hover)-var(--scrollbar-inset))] data-[orientation=vertical]:[&:is(:hover,:active)]:mx-[calc(var(--scrollbar-inset-hover)-var(--scrollbar-inset))]"
       />
     </ScrollAreaPrimitive.Scrollbar>
   );

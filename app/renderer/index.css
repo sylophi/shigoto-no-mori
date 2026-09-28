@@ -160,6 +160,66 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Scrollbars: a slim pill, a step wider and darker under the
+     pointer, instead of macOS's overlay bar (which paints a light
+     track on hover whatever the theme). A pointer device only: touch
+     keeps the platform's overlay bars, which take no width. It stays
+     up while there is overflow: Chromium doesn't repaint scrollbar
+     parts when only the scroller's :hover changes, so a
+     hover-revealed pill lags and sticks. Nothing may set
+     scrollbar-color or a scrollbar-width other than none: Chromium
+     then drops every ::-webkit-scrollbar rule on the element, and
+     scrollbar-color inherits (into the diff viewer's shadow DOM too,
+     undoing its own styling). ScrollArea (ui/scroll-area.tsx) draws
+     the same pill from the same tokens, and doubutsu.css remaps
+     them. */
+  :root {
+    --scrollbar-size: 12px;
+    --scrollbar-inset: 3px;
+    --scrollbar-inset-hover: 2px;
+    --scrollbar-track: transparent;
+    --scrollbar-thumb: color-mix(in oklab, var(--foreground) 22%, transparent);
+    --scrollbar-thumb-hover: color-mix(
+      in oklab,
+      var(--foreground) 40%,
+      transparent
+    );
+    --scrollbar-thumb-hover-image: none;
+  }
+  @media (pointer: fine) {
+    ::-webkit-scrollbar {
+      width: var(--scrollbar-size);
+      height: var(--scrollbar-size);
+    }
+    ::-webkit-scrollbar-track,
+    ::-webkit-scrollbar-thumb {
+      border: var(--scrollbar-inset) solid transparent;
+      border-radius: 9999px;
+      background-clip: padding-box;
+    }
+    ::-webkit-scrollbar-track {
+      background-color: var(--scrollbar-track);
+    }
+    ::-webkit-scrollbar-corner {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background-color: var(--scrollbar-thumb);
+    }
+    ::-webkit-scrollbar-thumb:hover,
+    ::-webkit-scrollbar-thumb:active {
+      border-width: var(--scrollbar-inset-hover);
+      background-color: var(--scrollbar-thumb-hover);
+      background-image: var(--scrollbar-thumb-hover-image);
+      background-size: 12px 12px;
+    }
+  }
+  /* The script console's terminal draws its own scrollbar, so its
+     viewport's native one would only add a second groove. */
+  .xterm .xterm-viewport {
+    scrollbar-width: none;
+  }
+
   /* Disabled controls show the not-allowed cursor. Only reaches elements
      that keep pointer events, so components must not pair disabled state
      with pointer-events-none (see button.tsx / dropdown-menu.tsx). */
