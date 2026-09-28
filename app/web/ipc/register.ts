@@ -7,9 +7,9 @@
 // isDev, isElectron) plus buildApi over one ClientTransport per scope.
 // The transports are in-page loopback wires (loopback.ts, the twin of
 // main/preloadTransport.ts) instead of the IPC bridge, with the
-// browser-servable client modules (clientConfig, account, hub, shell)
-// registered through the shared registrar and every OS-bound channel
-// answered by a typed stub default. Renderer components therefore
+// browser-servable client modules (clientConfig, account, hub, shell,
+// releases) registered through the shared registrar and every OS-bound
+// channel answered by a typed stub default. Renderer components therefore
 // mount unmodified: they cannot tell this bridge from the preload's.
 //
 // Every platform fact arrives through WebBridgeDeps rather than a
@@ -28,10 +28,12 @@ import { clientConfigContract } from "@shared/ipc/modules/clientConfig";
 import { withoutPeerState } from "@shared/schemas/config";
 import { hubContract } from "@shared/ipc/modules/hub";
 import { sharedSettingsContract } from "@shared/ipc/modules/sharedSettings";
+import { releasesContract } from "@shared/ipc/modules/releases";
 import { shellContract } from "@shared/ipc/modules/shell";
 import { broadcastAll, registerContract } from "@shared/ipc/registerContract";
 import type { Handlers } from "@shared/ipc/types";
 import { createDirectPlane } from "@shared/hub/directPlane";
+import { fetchReleases } from "@shared/releases";
 import {
   SharedSettingsDocSchema,
   StoredClientConfigSchema,
@@ -448,6 +450,12 @@ export function createWebBridge(deps: WebBridgeDeps): WebBridge {
   registerContract(
     shellContract,
     shellHandlers,
+    clientWire.server,
+    registrarOpts,
+  );
+  registerContract(
+    releasesContract,
+    { list: () => fetchReleases(deps.fetchImpl) },
     clientWire.server,
     registrarOpts,
   );

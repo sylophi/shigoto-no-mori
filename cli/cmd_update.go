@@ -125,11 +125,12 @@ const (
 
 // NDJSON phase events for --json consumers, pinned by
 // UpdateStageEventSchema (shared/schemas/runtime.ts). The app's
-// check parses these as they stream. A no-op for humans, whose
-// progress is the spinner.
-func emitEvent(name string) {
+// check parses these as they stream, and names the version it found
+// from the first one, before the download finishes. A no-op for
+// humans, whose progress is the spinner.
+func emitEvent(name, newVersion string) {
 	if jsonMode {
-		emit(map[string]any{"event": name})
+		emit(map[string]any{"event": name, "version": newVersion})
 	}
 }
 
@@ -213,7 +214,7 @@ func stageForCommand(spin *spinner) (*stagedManifest, string, error) {
 	spin.set("checking for updates")
 	man, err := stageUpdate(bundle, func(phase, newVersion string) {
 		spin.set(phase + " " + newVersion)
-		emitEvent(phase)
+		emitEvent(phase, newVersion)
 	})
 	return man, bundle, err
 }

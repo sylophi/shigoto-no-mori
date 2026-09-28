@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useState } from "react";
+import { ScrollText } from "lucide-react";
 import { EditorFooter } from "@/components/shared/EditorFooter";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ErrorBanner } from "@/components/ui/error-banner";
@@ -45,7 +46,8 @@ import {
   SettingsEditorRegistryProvider,
   useSettingsEditorRegistry,
 } from "./useSettingsEditors";
-import { BuildVersionLine } from "./VersionSection";
+import { ChangelogDialog } from "./ChangelogDialog";
+import { BuildVersionLine, ChangelogButton } from "./VersionSection";
 import { PAGE_BODY } from "@/components/shared/PageShell";
 
 // The Settings page: one panel per section, picked from the app
@@ -302,14 +304,30 @@ function useStagedUpdateLanding(
   }, [stagedOnArrival]);
 }
 
-// The build this hostless client runs.
+// The build this hostless client runs, and the changelog measured
+// against it.
 function ClientVersionSection() {
+  const [changelogOpen, setChangelogOpen] = useState(false);
   return (
     <section className="space-y-3">
       <SectionHeading className="mb-1">Web client</SectionHeading>
-      <div className="font-mono text-sm select-text">
-        <BuildVersionLine />
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="font-mono text-sm select-text">
+          <BuildVersionLine />
+        </div>
+        <ChangelogButton
+          icon={ScrollText}
+          label="Changelog"
+          onOpen={() => setChangelogOpen(true)}
+        />
       </div>
+      {changelogOpen && (
+        <ChangelogDialog
+          installed={__APP_VERSION__}
+          staged={null}
+          onClose={() => setChangelogOpen(false)}
+        />
+      )}
     </section>
   );
 }

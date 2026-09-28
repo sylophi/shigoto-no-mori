@@ -267,13 +267,14 @@ async function main() {
       // that device's update state), but its output is a discriminated
       // union, so the structural stubber refuses it rather than
       // fabricate an "idle" that would claim the browser is up to date.
-      // The two commands refuse like every other mutation.
+      // The commands refuse like every other mutation.
       await assert.rejects(
         bridge.api.updater.get(),
         /has no safe empty answer in the browser/,
       );
       await assert.rejects(bridge.api.updater.check(), refused);
       await assert.rejects(bridge.api.updater.install(), refused);
+      await assert.rejects(bridge.api.updater.update(), refused);
       // The villager data is local only (the desktop's own device), so
       // a tab refuses every call: it has no device to hold it.
       await Promise.all(

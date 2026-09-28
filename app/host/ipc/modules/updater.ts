@@ -15,6 +15,9 @@ type UpdaterImpl = {
   // refuse (the error rides back to the caller) instead of blocking
   // the call on a dialog no one will see.
   install: (unattended: boolean) => void | Promise<void>;
+  // Install the staged update, or, with none staged yet, fetch one and
+  // install it once it is. `unattended` as for install.
+  update: (unattended: boolean) => Promise<void>;
 };
 
 let impl: UpdaterImpl = {
@@ -23,6 +26,9 @@ let impl: UpdaterImpl = {
     throw new Error("updater handler invoked before electron registered impl");
   },
   install: () => {
+    throw new Error("updater handler invoked before electron registered impl");
+  },
+  update: () => {
     throw new Error("updater handler invoked before electron registered impl");
   },
 };
@@ -36,4 +42,5 @@ export const updaterHandlers: Handlers<typeof updaterContract, HandlerContext> =
     get: () => impl.getState(),
     check: () => impl.check(),
     install: (_input, ctx) => impl.install(isRemoteCaller(ctx)),
+    update: (_input, ctx) => impl.update(isRemoteCaller(ctx)),
   };

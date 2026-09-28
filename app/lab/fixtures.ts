@@ -8,6 +8,7 @@ import type {
   CustomPort,
   Project,
   ProjectIcon,
+  Release,
   Worktree,
 } from "@shared/schemas";
 
@@ -587,3 +588,74 @@ export const labCustomPorts: Record<string, CustomPort[]> = {
 };
 
 export const labListeningPorts = new Set([5731, 5173, 6006, 8787, 5182]);
+
+// ---- releases ----
+
+// The changelog's GitHub releases, newest first as the API lists
+// them: the staged 2.1.0 (?updates) with a screenshot, a beta that
+// only a device on a prerelease sees, the lab's own 2.0.3, and two
+// before it. The notes follow the real ones' shape.
+const RELEASES_URL = "https://github.com/sylophi/shigoto-no-mori/releases/tag";
+
+export const labReleases: Release[] = [
+  {
+    version: "2.1.0",
+    notes: [
+      "This release lets you do a lot more from ⌘K and lets PRs merge themselves once they're ready.",
+      "",
+      "**Do more from ⌘K** ([#417](https://github.com/sylophi/shigoto-no-mori/pull/417))",
+      "Next to the list, a new pane shows what you can do with the highlighted worktree: open it, see its changes or PR, launch tools, push or pull, run scripts, or copy its path.",
+      "",
+      '<img alt="⌘K with its action pane" src="https://github.com/user-attachments/assets/4b5f3740-c9fa-4111-a11c-6fbe377aeff5" width="640">',
+      "",
+      "**Merge when ready** ([#423](https://github.com/sylophi/shigoto-no-mori/pull/423))",
+      'On repos with auto-merge enabled, the button reads "Squash and merge when ready", and GitHub merges it once it can. `sm merge` and `sm land` do the same.',
+      "",
+      "**Smaller fixes**",
+      "- In light mode, hover stripes now show up on settings rows. ([#425](https://github.com/sylophi/shigoto-no-mori/pull/425))",
+      "- A device that's still connecting now shows amber, and an offline one shows gray. ([#419](https://github.com/sylophi/shigoto-no-mori/pull/419))",
+      "",
+      "**Full Changelog**: https://github.com/sylophi/shigoto-no-mori/compare/v2.0.3...v2.1.0",
+    ].join("\n"),
+    publishedAt: new Date(now - 2 * HOUR).toISOString(),
+    prerelease: false,
+    url: `${RELEASES_URL}/v2.1.0`,
+  },
+  {
+    version: "2.1.0-beta.1",
+    notes: "A first look at the new ⌘K pane.",
+    publishedAt: new Date(now - 2 * DAY).toISOString(),
+    prerelease: true,
+    url: `${RELEASES_URL}/v2.1.0-beta.1`,
+  },
+  {
+    version: "2.0.3",
+    notes: [
+      "**Toasts that match the theme** ([#422](https://github.com/sylophi/shigoto-no-mori/pull/422))",
+      "Each one is tinted by its tone, with the theme's buttons and font.",
+      "",
+      "### Under the hood",
+      "",
+      "- The web client and UI lab dev servers get their own ports per worktree. ([#426](https://github.com/sylophi/shigoto-no-mori/pull/426))",
+    ].join("\n"),
+    publishedAt: new Date(now - 3 * DAY).toISOString(),
+    prerelease: false,
+    url: `${RELEASES_URL}/v2.0.3`,
+  },
+  {
+    version: "2.0.2",
+    notes:
+      "- Village news cards dismiss with a click anywhere on them. ([#420](https://github.com/sylophi/shigoto-no-mori/pull/420))",
+    publishedAt: new Date(now - 5 * DAY).toISOString(),
+    prerelease: false,
+    url: `${RELEASES_URL}/v2.0.2`,
+  },
+  {
+    version: "2.0.1",
+    notes:
+      '- Release builds no longer report their commit as "dirty". ([#418](https://github.com/sylophi/shigoto-no-mori/pull/418))',
+    publishedAt: new Date(now - 6 * DAY).toISOString(),
+    prerelease: false,
+    url: `${RELEASES_URL}/v2.0.1`,
+  },
+];

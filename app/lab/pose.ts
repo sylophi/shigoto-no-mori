@@ -5,6 +5,7 @@
 //   ?light=<id>, ?dark=<id>  the doubutsu palette of each appearance
 //                            (the ids in shared/themes.ts, default
 //                            cream and charcoal)
+//   ?updatedFrom=<version>   the build the window last ran (below)
 // The other params are read where they are answered: ?peers by the
 // fixture bridge, ?to by the desktop entry's memory router.
 //
@@ -67,6 +68,14 @@ export function applyPose(): void {
       darkTheme: dark,
     }),
   );
+  // ?updatedFrom=<version>: the build this window last ran, as if the
+  // lab's own (LAB_APP_VERSION) had just updated from it, for the
+  // update toast (components/UpdateNews.tsx). Absent, the record is
+  // left alone, so the lab's own runs stay quiet.
+  const updatedFrom = pose.get("updatedFrom");
+  if (updatedFrom !== null) {
+    localStorage.setItem("shigomori.lastVersion", updatedFrom);
+  }
   const html = document.documentElement;
   html.classList.toggle("dark", theme === "dark");
   html.style.colorScheme = theme;

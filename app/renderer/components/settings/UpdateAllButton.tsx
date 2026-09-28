@@ -1,31 +1,28 @@
 import { Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChipButton } from "@/components/ui/chip-button";
-import { useUpdateAll } from "@/hooks/system/useUpdater";
+import { useOutdatedDevices, useUpdateAll } from "@/hooks/system/useUpdater";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 
-// Restarts every device holding a staged update, from the head of the
-// Settings page's device list: the rows under it carry the update dots
-// it acts on, and walking them one section at a time is the chore it
-// saves. Only there while two or more devices have one. It restarts
-// other machines, so it asks for the second click a single remote
-// restart does. `chip` draws it for the phone layout's chip row.
-export function UpdateAllButton({
-  updates,
-  chip = false,
-}: {
-  // useStagedUpdates' answer, read once by the caller for the page.
-  updates: Readonly<Record<string, string>>;
-  chip?: boolean;
-}) {
-  const install = useUpdateAll(updates);
+// Updates every device behind the newest release (useOutdatedDevices),
+// from the head of the Settings page's device list, the chore of
+// walking them one section at a time. Its count can pass the rows'
+// update dots, which mark staged updates only: a device that hasn't
+// fetched the release yet counts too, and fetches it and restarts once
+// it's staged. Only there while two or more
+// devices are behind. It restarts other machines, so it asks for the
+// second click a single remote restart does. `chip` draws it for the
+// phone layout's chip row.
+export function UpdateAllButton({ chip = false }: { chip?: boolean }) {
+  const { outdated } = useOutdatedDevices();
+  const install = useUpdateAll(outdated);
   const confirm = useConfirmTwice(CONFIRM_QUICK_MS);
-  const count = Object.keys(updates).length;
+  const count = Object.keys(outdated).length;
   if (count < 2) return null;
   const common = {
     disabled: install.isPending,
     "aria-pressed": confirm.armed,
-    title: `Restart ${count} devices into their updates`,
+    title: `Update ${count} devices, downloading the update first where needed`,
     onClick: () => confirm.trigger(() => install.mutate()),
     children: (
       <>

@@ -20,7 +20,10 @@ export function LocalDevicePanel({
 }) {
   return (
     <>
-      <VersionSection version={<BuildVersionLine />} />
+      <VersionSection
+        version={<BuildVersionLine />}
+        installed={__APP_VERSION__}
+      />
 
       <DoctorSection />
 

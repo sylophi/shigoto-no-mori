@@ -24,3 +24,4 @@ export * from "./runtime";
 export * from "./ports";
 export * from "./sharedSettings";
 export * from "./villagers";
+export * from "./releases";

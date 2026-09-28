@@ -33,9 +33,15 @@ Poses ride the URL:
   Work PC). The desktop default is `tp:connected`, and the web
   default adds `sm`.
 - `?updates=sm,tp,mini`: the devices holding a staged update, by the
-  same keys (default `tp`).
+  same keys (default `tp`). Every device runs 2.0.3 and the update is
+  2.1.0, so the others count as behind it (the update toast, Update
+  all).
+- `?downloading=sm,tp,mini`: the devices downloading the update.
 - `?view=inbox`: open the sidebar in its inbox view (the toggle flips
   it in-session either way).
+- `?updatedFrom=<version>`: the build this window last ran, so the lab's
+  own 2.0.3 boots as an update from it and shows the update toast
+  (e.g. `?updatedFrom=2.0.1`, whose "What's new" lists 2.0.2 and 2.0.3).
 - `?checks=<variant>`: the CI rollup on PR #148 (worktree
   `happy-hummingbird`,
   `?to=/devices/dev_8f3ac2e1/projects/p_sm/worktrees/wt_sm_hum`), with

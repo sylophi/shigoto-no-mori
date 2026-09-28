@@ -29,7 +29,10 @@ export function UpdaterStatusLine({ state }: { state: UpdaterState | null }) {
       </span>
     );
   }
-  const text = STATUS_TEXT[state.kind];
+  const text =
+    state.kind === "downloading" && state.version !== undefined
+      ? `Downloading v${state.version}…`
+      : STATUS_TEXT[state.kind];
   if (text === null) return null;
   return <span className="text-xs text-muted-foreground">{text}</span>;
 }

@@ -6,12 +6,19 @@ import {
   useQuery,
 } from "@tanstack/react-query";
 import { errorMessageOf } from "@shared/errors";
+import { noHandlerMessage } from "@shared/ipc/socket/frames";
 import type { UpdaterState } from "@shared/schemas";
 import { commandAccessOf } from "@/hooks/remote/useCommandAccess";
 import { type HostApi, useHostScope } from "@/hooks/remote/useHostScope";
 import { useHostDevices } from "@/hooks/remote/useRemoteDevices";
 import { hasLocalHost } from "@/lib/localHost";
+import {
+  findOutdated,
+  type KnownUpdates,
+  type OutdatedDevice,
+} from "@/lib/updates";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
+import { toast } from "@/lib/toast";
 import { localDeviceId, queryKeysFor } from "@/lib/queryKeys";
 
 // One device's updater state, under that device's own key. Errors stay
@@ -88,23 +95,45 @@ export function useUpdater() {
 // update behind a refused switch has no button to lead to). A peer is
 // asked only once its verdict has landed, not on the optimistic
 // in-flight reading the forms use: a dot that lights and then goes out
-// is worse than one that lights a moment later.
-function useUpdateTargets(): {
-  // This machine's updater, absent on a hostless client.
-  local: HostApi | undefined;
-  peers: { deviceId: string; label: string; api: HostApi }[];
-} {
+// is worse than one that lights a moment later. Each with its name and
+// the build it runs ("" while unknown).
+interface UpdateTarget {
+  deviceId: string;
+  label: string;
+  api: HostApi;
+  running: string;
+}
+
+function useUpdateTargets(): UpdateTarget[] {
   const reachable = useHostDevices().filter(
     (peer) => deviceStatusView(peer.status).reachable,
   );
-  return {
-    local: hasLocalHost ? window.api : undefined,
-    peers: reachable.flatMap((peer) =>
+  return [
+    // This machine's updater, absent on a hostless client.
+    ...(hasLocalHost
+      ? [
+          {
+            deviceId: localDeviceId,
+            // Mid-sentence in every line that names it.
+            label: "this device",
+            api: window.api,
+            running: __APP_VERSION__,
+          },
+        ]
+      : []),
+    ...reachable.flatMap((peer) =>
       peer.api !== undefined && commandAccessOf(peer.deviceId, peer).granted
-        ? [{ deviceId: peer.deviceId, label: peer.label, api: peer.api }]
+        ? [
+            {
+              deviceId: peer.deviceId,
+              label: peer.label,
+              api: peer.api,
+              running: peer.appVersion,
+            },
+          ]
         : [],
     ),
-  };
+  ];
 }
 
 // The updates this window could install right now, as deviceId to the
@@ -113,11 +142,7 @@ function useUpdateTargets(): {
 // react-query can hand back the same reference while the answer is
 // unchanged.
 export function useStagedUpdates(): Readonly<Record<string, string>> {
-  const { local, peers } = useUpdateTargets();
-  const targets = [
-    ...(local === undefined ? [] : [{ deviceId: localDeviceId, api: local }]),
-    ...peers,
-  ];
+  const targets = useUpdateTargets();
   return useQueries({
     queries: targets.map((target) =>
       updaterStateQueryOptions(target.deviceId, target.api),
@@ -133,45 +158,143 @@ export function useStagedUpdates(): Readonly<Record<string, string>> {
   });
 }
 
-// Restart every device holding a staged update into it, from one
-// button. `staged` is the caller's useStagedUpdates answer, which the
-// Settings page reads once and hands down. The peers go first and
-// together: each answers its install before it quits (updater.ts), so
-// a busy one's refusal comes back here. This machine goes last, and
-// only once every peer took its update, since restarting this window
-// would end the page that reports a refusal and hold the retry. Its
-// own install is attended, so a busy machine still gets the usual
-// dialog.
-export function useUpdateAll(staged: Readonly<Record<string, string>>) {
-  const { local, peers } = useUpdateTargets();
+// Every device this window could update that is behind the newest
+// release any of them has found (findOutdated). What the update toast
+// offers and Settings' Update all acts on (useUpdateAll).
+export function useOutdatedDevices(): KnownUpdates {
+  const targets = useUpdateTargets();
+  return useQueries({
+    queries: targets.map((target) =>
+      updaterStateQueryOptions(target.deviceId, target.api),
+    ),
+    combine: (results) =>
+      findOutdated(
+        targets.map((target, index) => ({
+          deviceId: target.deviceId,
+          running: target.running,
+          state: results[index]?.data,
+        })),
+      ),
+  });
+}
+
+// Update every device in `outdated` (useOutdatedDevices), from one
+// button: Settings' Update all and the update toast. A device with its
+// update staged restarts into it. One without is told to fetch it and
+// restart once it's staged (the host's updater:update), which answers
+// right away, so the button never waits on a download. The peers go
+// first and together: each answers before it quits or arms
+// (updater.ts), so a busy one's refusal comes back here. This machine
+// goes last, and only once every peer took its update, since
+// restarting this window would end the page that reports a refusal and
+// hold the retry. Its own install is attended, so a busy machine still
+// gets the usual dialog. Resolves with the devices left downloading,
+// by how they will finish (updateDevice).
+export function useUpdateAll(
+  outdated: Readonly<Record<string, OutdatedDevice>>,
+) {
+  const targets = useUpdateTargets();
 
   // react-doctor-disable-next-line react-doctor/query-mutation-missing-invalidation -- the updater:state broadcast is the single source of truth, and the boot-scope mirrors write each new state into the cache
   return useMutation({
     mutationFn: async () => {
-      const refused = (
-        await Promise.all(
-          peers
-            .filter((peer) => peer.deviceId in staged)
-            .map((peer) =>
-              peer.api.updater.install().then(
-                () => null,
-                (error: unknown) =>
-                  `${peer.label}: ${errorMessageOf(error).replace(/([^.!?])$/, "$1.")}`,
-              ),
+      const chosen = targets.flatMap((target) => {
+        const device = outdated[target.deviceId];
+        return device === undefined ? [] : [{ target, device }];
+      });
+      const local = chosen.find(
+        ({ target }) => target.deviceId === localDeviceId,
+      );
+      const outcomes = await Promise.all(
+        chosen
+          .filter((entry) => entry !== local)
+          .map(({ target, device }) =>
+            updateDevice(target, device).then(
+              (outcome) => ({ label: target.label, outcome }),
+              (error: unknown) => ({
+                label: target.label,
+                refusal: errorMessageOf(error).replace(/([^.!?])$/, "$1."),
+              }),
             ),
-        )
-      ).filter((reason) => reason !== null);
-      const restartLocal = local !== undefined && localDeviceId in staged;
+          ),
+      );
+      const refused = outcomes.flatMap((entry) =>
+        "refusal" in entry ? [`${entry.label}: ${entry.refusal}`] : [],
+      );
       if (refused.length > 0) {
         const reasons = refused.join(" ");
         throw new Error(
-          restartLocal
-            ? `${reasons} This device was not restarted, so you can try again.`
-            : reasons,
+          local === undefined
+            ? reasons
+            : `${reasons} This device was not updated, so you can try again.`,
         );
       }
-      if (restartLocal) await local.updater.install();
+      if (local !== undefined) {
+        outcomes.push({
+          label: local.target.label,
+          outcome: await updateDevice(local.target, local.device),
+        });
+      }
+      const labelsOf = (wanted: UpdateOutcome) =>
+        outcomes.flatMap((entry) =>
+          "outcome" in entry && entry.outcome === wanted ? [entry.label] : [],
+        );
+      return { armed: labelsOf("armed"), fetching: labelsOf("fetching") };
+    },
+    onSuccess: ({ armed, fetching }) => {
+      if (armed.length > 0) {
+        toast.success(
+          `${sentenceStart(names.format(armed))} ${
+            armed.length === 1
+              ? "restarts once its update downloads"
+              : "restart once their updates download"
+          }`,
+        );
+      }
+      if (fetching.length > 0) {
+        toast.success(
+          `${sentenceStart(names.format(fetching))} ${
+            fetching.length === 1 ? "is" : "are"
+          } downloading the update. Restart from Settings once it's ready.`,
+        );
+      }
     },
     meta: { errorTitle: "Couldn't update every device" },
   });
 }
+
+// How a device took its update: restarting into the staged one, armed
+// to restart once it has fetched it, or only fetching it.
+type UpdateOutcome = "installed" | "armed" | "fetching";
+
+// A staged update goes through install, which a peer on an older build
+// answers too. One not staged yet is armed with updater:update, which a
+// peer on a build from before it doesn't serve: that one is asked to
+// fetch it instead (a check), and restarting stays a click in its
+// Settings.
+async function updateDevice(
+  target: UpdateTarget,
+  device: OutdatedDevice,
+): Promise<UpdateOutcome> {
+  if (device.staged) {
+    await target.api.updater.install();
+    return "installed";
+  }
+  try {
+    await target.api.updater.update();
+    return "armed";
+  } catch (error) {
+    if (!errorMessageOf(error).includes(noHandlerMessage("updater:update"))) {
+      throw error;
+    }
+    await target.api.updater.check();
+    return "fetching";
+  }
+}
+
+// "this device and Thinkpad" as the start of a sentence.
+function sentenceStart(text: string): string {
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
+}
+
+const names = new Intl.ListFormat("en", { type: "conjunction" });
