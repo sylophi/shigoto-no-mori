@@ -19,7 +19,7 @@ interface ModalShellProps {
   // one hears the key wherever focus sits, document.body included.
   onEscape?: () => void;
   // Optional override for the popover's class list (sizing, layout).
-  // Defaults to the standard "centered max-w-xl" modal shape.
+  // Defaults to a max-w-xl column.
   popoverClassName?: string;
   children: ReactNode;
 }
@@ -66,12 +66,16 @@ export function ModalShell({
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="fixed inset-0 z-50 flex items-start justify-center bg-background/40 p-4 pt-[10vh] backdrop-blur-[2px]"
+      // The before: is the 10vh a short dialog hangs from, so it doesn't
+      // jump as it grows. A taller dialog eats that gap first, then caps
+      // at the window, where its scrolling body takes the rest (any
+      // wrappers above that body need min-h-0).
+      className="fixed inset-0 z-50 flex flex-col items-center bg-background/40 p-4 backdrop-blur-[2px] before:h-[calc(10vh-1rem)]"
     >
       <div
         data-slot="modal-shell"
         className={cn(
-          "w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/5",
+          "flex max-h-full w-full max-w-xl shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/5",
           popoverClassName,
         )}
       >

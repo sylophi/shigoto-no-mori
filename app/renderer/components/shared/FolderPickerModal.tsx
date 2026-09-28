@@ -9,7 +9,11 @@ import { ModalShell } from "@/components/ui/modal-shell";
 import { useBrowseListing } from "@/hooks/fs/useBrowseListing";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { notifyError } from "@/lib/toast";
-import { ITEM_CLASS, keepFocusInInput } from "@/components/ui/cmdk-classes";
+import {
+  ITEM_CLASS,
+  keepFocusInInput,
+  MODAL_COMMAND_CLASS,
+} from "@/components/ui/cmdk-classes";
 import {
   canNavigateUp,
   ensureTrailingSep,
@@ -132,6 +136,7 @@ export function FolderPickerModal({
         shouldFilter={false}
         value={highlighted}
         onValueChange={setHighlighted}
+        className={MODAL_COMMAND_CLASS}
       >
         <div
           data-slot="search-row"
@@ -170,7 +175,7 @@ export function FolderPickerModal({
 
         <Command.List
           onMouseDown={keepFocusInInput}
-          className="max-h-96 overflow-y-auto p-2"
+          className="overflow-y-auto p-2"
         >
           {canBrowseUp && <BrowseUpItem onSelect={browseUp} />}
 

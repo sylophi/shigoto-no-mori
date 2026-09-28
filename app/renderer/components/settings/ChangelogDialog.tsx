@@ -92,10 +92,7 @@ export function ChangelogDialog({
   const list = fallback ?? shown;
 
   return (
-    <ModalShell
-      onClose={onClose}
-      popoverClassName="flex max-h-[85vh] max-w-2xl flex-col"
-    >
+    <ModalShell onClose={onClose} popoverClassName="max-w-2xl">
       <FlowHeader
         tint={TONE_PILL[news === null ? "slate" : "sky"]}
         icon={news === null ? ScrollText : Sparkles}
