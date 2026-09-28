@@ -1,11 +1,18 @@
-import type { ReactNode } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { type ReactNode, useState } from "react";
+import {
+  Loader2,
+  type LucideIcon,
+  RefreshCw,
+  ScrollText,
+  Sparkles,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useUpdater } from "@/hooks/system/useUpdater";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
+import { ChangelogDialog } from "./ChangelogDialog";
 import { UpdaterStatusLine } from "./UpdaterStatusLine";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 
@@ -25,22 +32,26 @@ export function BuildVersionLine() {
 // action. One shape and one set of words on every device section. Only
 // the updater it talks to differs, through the surrounding host scope
 // (this window's own with no provider mounted, a peer's over its direct
-// session inside one). A remote restart is the one action here that
-// ends a session someone else may be using, so it asks for a second
-// click where the local one has the busy dialog.
+// session inside one). Under the status line, the changelog, measured
+// against the device's version, which previews a staged update.
 export function VersionSection({
   version,
+  installed,
 }: {
   // The mono version line: this build's version and commit for the
   // local device, the welcome-confirmed version for a peer.
   version: ReactNode;
+  // The same version as a string, which the changelog marks its
+  // releases against: this build's tag, a peer's reported version
+  // ("" before it reports one).
+  installed: string;
 }) {
-  const { remote } = useHostScope();
   // Checking and installing are commands, so on a peer both wait for
   // its grant.
   const { canCommand } = useCommandAccess();
-  const { state, check, install, isError, refetch } = useUpdater();
-  const confirm = useConfirmTwice(CONFIRM_QUICK_MS);
+  const { state, check, isError, refetch } = useUpdater();
+  // Which changelog is open: what the staged update brings, or all of it.
+  const [changelog, setChangelog] = useState<"news" | "all" | null>(null);
   const kind = state?.kind ?? "idle";
   const ready = state?.kind === "ready" ? state : null;
   const busy = kind === "checking" || kind === "downloading";
@@ -56,44 +67,48 @@ export function VersionSection({
       <div>
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <div className="font-mono text-sm select-text">{version}</div>
-          {kind === "unsupported" ? null : unavailable ? (
-            <Button variant="outline" size="sm" onClick={() => void refetch()}>
-              <RefreshCw />
-              Try again
-            </Button>
-          ) : ready ? (
-            <Button
-              size="sm"
-              disabled={install.isPending || !canCommand}
-              title={blockedTitle}
-              aria-pressed={remote ? confirm.armed : undefined}
-              onClick={() =>
-                remote
-                  ? confirm.trigger(() => install.mutate())
-                  : install.mutate()
-              }
-            >
-              <RefreshCw />
-              {confirm.armed
-                ? "Click again to confirm"
-                : `Restart to update to v${ready.version}`}
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy || !canCommand}
-              title={blockedTitle}
-              onClick={() => check.mutate()}
-            >
-              {busy ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-              {kind === "checking" ? "Checking…" : "Check for updates"}
-            </Button>
-          )}
+          {/* The changelog doors, then the update action. */}
+          <div className="flex flex-wrap items-center gap-2">
+            {ready && (
+              <ChangelogButton
+                icon={Sparkles}
+                label="See what's new"
+                onOpen={() => setChangelog("news")}
+              />
+            )}
+            <ChangelogButton
+              icon={ScrollText}
+              label="Changelog"
+              onOpen={() => setChangelog("all")}
+            />
+            {kind === "unsupported" ? null : unavailable ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void refetch()}
+              >
+                <RefreshCw />
+                Try again
+              </Button>
+            ) : ready ? (
+              <RestartToUpdateButton version={ready.version} />
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy || !canCommand}
+                title={blockedTitle}
+                onClick={() => check.mutate()}
+              >
+                {busy ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                {kind === "checking" ? "Checking…" : "Check for updates"}
+              </Button>
+            )}
+          </div>
         </div>
-        <div className="-mt-1 block">
+        <div className="-mt-1 flex flex-wrap items-baseline gap-x-2 text-xs">
           {unavailable ? (
-            <span className="text-xs text-muted-foreground">
+            <span className="text-muted-foreground">
               Couldn&apos;t read the update status.
             </span>
           ) : (
@@ -101,6 +116,64 @@ export function VersionSection({
           )}
         </div>
       </div>
+      {changelog !== null && (
+        <ChangelogDialog
+          installed={installed}
+          staged={changelog === "news" ? ready : null}
+          restartButton={
+            changelog === "news" &&
+            ready && <RestartToUpdateButton version={ready.version} />
+          }
+          onClose={() => setChangelog(null)}
+        />
+      )}
     </section>
+  );
+}
+
+// A door into the changelog, beside the update action: the whole
+// changelog, or what a staged update brings. Quiet, so the update
+// action stays the loud one.
+export function ChangelogButton({
+  icon: Icon,
+  label,
+  onOpen,
+}: {
+  icon: LucideIcon;
+  label: string;
+  onOpen: () => void;
+}) {
+  return (
+    <Button variant="ghost" size="sm" onClick={onOpen}>
+      <Icon />
+      {label}
+    </Button>
+  );
+}
+
+// Restarts the scoped device into its staged update, from its Version
+// section or the preview of that update. A remote restart is the one
+// action here that ends a session someone else may be using, so it
+// asks for a second click where the local one has the busy dialog.
+function RestartToUpdateButton({ version }: { version: string }) {
+  const { remote } = useHostScope();
+  const { canCommand } = useCommandAccess();
+  const { install } = useUpdater();
+  const confirm = useConfirmTwice(CONFIRM_QUICK_MS);
+  return (
+    <Button
+      size="sm"
+      disabled={install.isPending || !canCommand}
+      title={canCommand ? undefined : peerReadOnlyNote("this device")}
+      aria-pressed={remote ? confirm.armed : undefined}
+      onClick={() =>
+        remote ? confirm.trigger(() => install.mutate()) : install.mutate()
+      }
+    >
+      <RefreshCw />
+      {confirm.armed
+        ? "Click again to confirm"
+        : `Restart to update to v${version}`}
+    </Button>
   );
 }

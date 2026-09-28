@@ -68,7 +68,7 @@ export function SettingsSidebarNav() {
 
       <NavGroup
         label={solo ? "Device" : "Devices"}
-        action={<UpdateAllButton updates={updates} />}
+        action={<UpdateAllButton />}
       >
         {!hasLocalHost && devices.length === 0 && (
           <p className="px-2 py-1.5 text-xs text-muted-foreground/70">

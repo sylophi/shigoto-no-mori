@@ -261,6 +261,10 @@ function buildQueryKeys(deviceId: string) {
     // forward targets, so no host sentinel and no device id. One key
     // for the whole list, and the UI filters per device.
     portForwards: () => ["portForwards"] as const,
+
+    // Client-scoped: the app's GitHub releases, one list for every
+    // device, which the changelog measures each one's version against.
+    releases: () => ["releases"] as const,
   } as const;
 }
 

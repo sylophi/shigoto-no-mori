@@ -24,6 +24,7 @@ import {
 import type { RouterHistory } from "@tanstack/react-router";
 import { App } from "./App";
 import { AppToaster } from "./components/AppChrome";
+import { UpdateNews } from "./components/UpdateNews";
 import { ErrorDetailsHost } from "./components/ui/inline-error";
 import {
   ClerkGate,
@@ -157,6 +158,7 @@ export function bootApp({
           <App router={router} />
         </ClerkGate>
         <AppToaster />
+        <UpdateNews />
         <ErrorDetailsHost />
       </QueryClientProvider>
     </StrictMode>,

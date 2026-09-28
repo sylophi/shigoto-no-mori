@@ -58,7 +58,7 @@ export function SettingsSectionChips({
       className="flex shrink-0 [scrollbar-width:none] gap-1.5 overflow-x-auto border-b border-border px-4 py-2"
     >
       {sections.visual.map(chip)}
-      <UpdateAllButton updates={updates} chip />
+      <UpdateAllButton chip />
       {sections.devices.map(chip)}
     </nav>
   );

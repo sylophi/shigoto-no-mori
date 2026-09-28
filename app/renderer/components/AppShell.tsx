@@ -19,6 +19,7 @@ import {
   PhoneTabBar,
 } from "@/components/PhoneTabBar";
 import { Sidebar } from "@/components/sidebar/Sidebar";
+import { UpdateReadyToast } from "@/components/UpdateReadyToast";
 import { BackButton } from "@/components/ui/back-button";
 import { useWatchAccountChanges } from "@/hooks/account/useAccount";
 import { useDoctorWatch } from "@/hooks/cli/useDoctor";
@@ -103,6 +104,9 @@ export function AppShell() {
           </div>
         </>
       )}
+
+      {/* Updates found on this machine or a peer, announced once each. */}
+      <UpdateReadyToast />
 
       <div className="flex h-full min-w-0 flex-1 flex-col">
         {phone && !isTabRoute(pathname) && (

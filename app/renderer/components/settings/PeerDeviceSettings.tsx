@@ -92,6 +92,7 @@ function ReachablePeerSettings({
         <OfflineNote device={device} />
       ) : (
         <VersionSection
+          installed={device.appVersion}
           version={
             device.appVersion === "" ? (
               <span className="text-muted-foreground">Not reported yet</span>

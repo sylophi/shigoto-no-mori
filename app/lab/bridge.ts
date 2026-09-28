@@ -68,6 +68,7 @@ import {
   labCustomPorts,
   labDisks,
   labGlobalConfig,
+  labReleases,
   labListeningPorts,
   labPoolPorts,
   labRemoteUrls,
@@ -262,6 +263,12 @@ function hostHandlersFor(
       .filter((worktree) => !worktree.isPrimary && !worktree.detached)
       .map((worktree) => worktree.branch),
   ];
+  // Stands in for the restart into the staged build: the device
+  // reports up to date.
+  const restartIntoUpdate = () => {
+    stagedUpdates.delete(forest.deviceId);
+    emit("updater:state", { kind: "idle" });
+  };
   return {
     ...sharedSettingsHandlersFor(forest.deviceId, emit),
     ...villagerHandlersFor(),
@@ -436,16 +443,32 @@ function hostHandlersFor(
     "globalConfig:writeDeviceSettings": () => undefined,
     // The devices ?updates poses (Thinkpad alone by default) have an
     // update staged, so their Settings sections' restart-to-update
-    // buttons have something to show. Installing stands in for the
-    // restart into the new build: the device reports up to date.
+    // buttons have something to show, and the ones ?downloading poses
+    // are fetching it. Installing stands in for the restart into the
+    // new build: the device reports up to date. Updating one with
+    // nothing staged shows the download first.
     "updater:get": () =>
       stagedUpdates.has(forest.deviceId)
-        ? { kind: "ready", version: "2.1.0", releaseDate: null }
-        : { kind: "idle" },
+        ? { kind: "ready", version: LAB_UPDATE_VERSION, releaseDate: null }
+        : downloadingUpdates.has(forest.deviceId)
+          ? { kind: "downloading", version: LAB_UPDATE_VERSION }
+          : { kind: "idle" },
     "updater:check": () => undefined,
-    "updater:install": () => {
-      stagedUpdates.delete(forest.deviceId);
-      emit("updater:state", { kind: "idle" });
+    "updater:install": () => restartIntoUpdate(),
+    "updater:update": () => {
+      if (stagedUpdates.has(forest.deviceId)) {
+        restartIntoUpdate();
+        return;
+      }
+      downloadingUpdates.add(forest.deviceId);
+      emit("updater:state", {
+        kind: "downloading",
+        version: LAB_UPDATE_VERSION,
+      });
+      setTimeout(() => {
+        downloadingUpdates.delete(forest.deviceId);
+        emit("updater:state", { kind: "idle" });
+      }, 2_500);
     },
     "launchers:detect": () => [...LAB_DETECTED],
     "launchers:forProject": () => ({
@@ -1039,8 +1062,11 @@ const PEER_KEYS: Record<string, string> = {
 };
 const roster = new Set<string>();
 const directSessions = new Set<string>();
-// ?updates=sm,tp,mini: the devices holding a staged update.
+// ?updates=sm,tp,mini: the devices holding a staged update, and
+// ?downloading=sm,tp,mini the ones fetching it.
 const stagedUpdates = new Set<string>();
+const downloadingUpdates = new Set<string>();
+const LAB_UPDATE_VERSION = "2.1.0";
 
 function initPresence(): void {
   const pose = new URLSearchParams(location.search);
@@ -1055,9 +1081,15 @@ function initPresence(): void {
     if (state === "connected" || state === "online") roster.add(id);
     if (state === "connected") directSessions.add(id);
   }
-  for (const key of (pose.get("updates") ?? "tp").split(",")) {
+  posedDevices(pose.get("updates") ?? "tp", stagedUpdates);
+  posedDevices(pose.get("downloading") ?? "", downloadingUpdates);
+}
+
+// A pose's comma-separated device keys, into their ids.
+function posedDevices(keys: string, into: Set<string>): void {
+  for (const key of keys.split(",")) {
     const id = PEER_KEYS[key.trim()];
-    if (id !== undefined) stagedUpdates.add(id);
+    if (id !== undefined) into.add(id);
   }
 }
 let socketPhase: HubStatus["socket"] = {
@@ -1256,6 +1288,7 @@ export function installLabBridge(
       window.open(url, "_blank", "noopener,noreferrer");
     },
     "shell:showItemInFolder": () => undefined,
+    "releases:list": () => labReleases,
     "portForward:list": () => ({ forwards: [...forwards.values()] }),
     "portForward:start": async ({ deviceId, remotePort, localPort }) => {
       await sleep(500);

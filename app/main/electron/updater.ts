@@ -60,6 +60,12 @@ let installing = false;
 let checkInFlight = false;
 let failedChecks = 0;
 let nextAutoCheckAt = 0;
+// Armed by updateNow (whether the install is unattended), null when
+// not: the next check to finish installs what it staged.
+let installWhenStaged: boolean | null = null;
+// Set when that arm landed while a check was already running, which
+// may have asked before the release was out.
+let armedMidCheck = false;
 
 // The finish-install handoff calls app.quit(), which still emits
 // before-quit. The app-wide before-quit handler in index.ts intercepts
@@ -153,13 +159,10 @@ async function runCheck(): Promise<void> {
         (doc) => {
           // "verifying" arrives too, and the renderer's machine
           // collapses everything between "found one" and "staged" into
-          // downloading.
-          if (
-            shown === null &&
-            UpdateStageEventSchema.safeParse(doc).success &&
-            state.kind !== "downloading"
-          ) {
-            setState({ kind: "downloading" });
+          // downloading, which names the release from the first event.
+          const event = UpdateStageEventSchema.safeParse(doc);
+          if (shown === null && event.success && state.kind !== "downloading") {
+            setState({ kind: "downloading", version: event.data.version });
           }
         },
         undefined,
@@ -208,6 +211,21 @@ async function runCheck(): Promise<void> {
       ? Date.now() +
         Math.min(failedChecks + 1, MAX_BACKOFF_TICKS) * CHECK_INTERVAL_MS
       : 0;
+  }
+  // updateNow's arm (see there). One that landed mid-check gets one
+  // check of its own before a miss drops it.
+  const unattended = installWhenStaged;
+  if (unattended !== null && state.kind !== "ready" && armedMidCheck) {
+    armedMidCheck = false;
+    void runCheck();
+    return;
+  }
+  installWhenStaged = null;
+  armedMidCheck = false;
+  if (unattended !== null && state.kind === "ready") {
+    // Nobody waits on this call to hear a busy host's refusal, and the
+    // update stays staged behind the usual restart button.
+    installUpdate(unattended).catch(() => undefined);
   }
 }
 
@@ -281,11 +299,39 @@ async function installUpdate(unattended: boolean): Promise<void> {
   app.quit();
 }
 
+// Update this device, whether or not its update is here yet: Update
+// all and the update toast ask every device behind the newest release
+// they know of, and a device whose last check predates that release
+// has nothing staged. One that has it restarts into it now. One that
+// doesn't is armed to, and the check that stages it installs it once
+// staged (runCheck): one started here, or the one already running,
+// followed by one more if that one asked before the release was out. A check
+// that stages nothing drops the arm: the device is up to date on its
+// channel, or failed, which its Settings section says. An unattended
+// request is refused up front on a busy host, while the caller still
+// waits on the answer, and the install checks again when it comes.
+async function updateNow(unattended: boolean): Promise<void> {
+  if (installing) return;
+  if ((await readInstallableStaged()) !== null) {
+    await installUpdate(unattended);
+    return;
+  }
+  if (!started) throw new Error("This build doesn't update itself.");
+  if (unattended) {
+    const refusal = busyActionRemoteRefusal("restart");
+    if (refusal !== null) throw new Error(refusal);
+  }
+  installWhenStaged = unattended;
+  if (checkInFlight) armedMidCheck = true;
+  else void runCheck();
+}
+
 export function installUpdaterImpl(): void {
   setUpdaterImpl({
     getState: getUpdaterState,
     check: checkForUpdates,
     install: installUpdate,
+    update: updateNow,
   });
 }
 

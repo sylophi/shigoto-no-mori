@@ -249,6 +249,11 @@ pre-commit:
           - name: script-order
             glob: "{app/host/lib/scripts/packageScriptStats.ts,app/shared/launchRow.ts,app/renderer/components/worktreeDetail/scripts/sortPackageScripts.ts,app/host/lib/config/store.ts,app/test/script-order.mts,app/test/lib/checkKit.mts}"
             run: pnpm -C app test script-order
+          # Which devices the update toast and Update all act on: behind
+          # the newest release any device found, by the CLI's semver.
+          - name: app-updates
+            glob: "{app/renderer/lib/updates.ts,app/shared/releases.ts,app/shared/schemas/runtime.ts,app/test/app-updates.mts,app/test/lib/checkKit.mts}"
+            run: pnpm -C app test app-updates
           # The tree's project group order is decided over every device, so
           # the device filter drops groups without reordering the rest.
           - name: project-order
@@ -270,6 +275,12 @@ pre-commit:
           - name: pull-request-stack
             glob: "{app/shared/pullRequestStack.ts,app/shared/schemas/pullRequest.ts,app/shared/schemas/worktree.ts,app/test/pull-request-stack.mts,app/test/lib/checkKit.mts}"
             run: pnpm -C app test pull-request-stack
+          # Drives the changelog's read of the GitHub releases
+          # (shared/releases.ts): version order, what a device's staged
+          # update brings, and the fetch's refusals.
+          - name: changelog
+            glob: "{app/shared/releases.ts,app/shared/schemas/releases.ts,app/test/changelog.mts,app/test/lib/checkKit.mts}"
+            run: pnpm -C app test changelog
           # Drives the pure liveness rate limiters (renderer crash-loop guard
           # and fatal-relaunch guard) that decide recreate-vs-give-up and
           # relaunch-vs-stand. Gated to the pure module plus the check itself,

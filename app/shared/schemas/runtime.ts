@@ -50,7 +50,12 @@ export const UpdaterStateSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("unsupported") }),
   z.object({ kind: z.literal("idle") }),
   z.object({ kind: z.literal("checking") }),
-  z.object({ kind: z.literal("downloading") }),
+  z.object({
+    kind: z.literal("downloading"),
+    // The release being fetched. Absent from a build older than the
+    // CLI event that names it.
+    version: z.string().optional(),
+  }),
   z.object({
     kind: z.literal("ready"),
     version: z.string(),
@@ -109,6 +114,8 @@ export type StagedManifest = z.infer<typeof StagedManifestSchema>;
 // Go and TS sides fails loudly instead of degrading to a blank state.
 export const UpdateStageEventSchema = z.object({
   event: z.enum(["downloading", "verifying"]),
+  // The release the pipeline found. Absent from an older CLI.
+  version: z.string().optional(),
 });
 export const UpdateStageResultSchema = z.discriminatedUnion("status", [
   z.object({ status: z.literal("up-to-date"), version: z.string() }),

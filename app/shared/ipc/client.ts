@@ -21,6 +21,7 @@ import { portPoolContract } from "@shared/ipc/modules/portPool";
 import { portsContract } from "@shared/ipc/modules/ports";
 import { projectLauncherContract } from "@shared/ipc/modules/projectLauncher";
 import { projectsContract } from "@shared/ipc/modules/projects";
+import { releasesContract } from "@shared/ipc/modules/releases";
 import { hubContract } from "@shared/ipc/modules/hub";
 import { runtimeContract } from "@shared/ipc/modules/runtime";
 import { scriptsContract } from "@shared/ipc/modules/scripts";
@@ -75,6 +76,7 @@ export const allContractModules = [
   portsContract,
   projectLauncherContract,
   projectsContract,
+  releasesContract,
   hubContract,
   runtimeContract,
   scriptsContract,
@@ -125,6 +127,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const portsClient = c(portsContract);
   const projectLauncherClient = c(projectLauncherContract);
   const projectsClient = c(projectsContract);
+  const releasesClient = c(releasesContract);
   const hubClient = c(hubContract);
   const runtimeClient = c(runtimeContract);
   const scriptsClient = c(scriptsContract);
@@ -307,6 +310,8 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       icon: (projectId: string) => projectsClient.icon({ projectId }),
     },
 
+    releases: { ...releasesClient },
+
     hub: {
       status: hubClient.status,
       invokePeer: hubClient.invokePeer,
@@ -384,6 +389,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       get: updaterClient.get,
       check: updaterClient.check,
       install: updaterClient.install,
+      update: updaterClient.update,
       onState: updaterClient.state,
     },
 

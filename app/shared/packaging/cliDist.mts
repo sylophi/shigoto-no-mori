@@ -25,12 +25,13 @@ export const CLI_DIST_DIR = "dist-cli";
 // app by bundle id), so the two can never disagree.
 export const APP_BUNDLE_ID = "com.sylophi.shigomori";
 
-// GitHub repo the update feed serves releases from. The CLI owns the
-// whole update pipeline (cli/updater.go): build-cli.mts injects this so
-// the feed can never point at a different repo than the app came from.
-export const UPDATE_FEED_OWNER = "sylophi";
-export const UPDATE_FEED_NAME = "shigoto-no-mori";
-export const UPDATE_FEED_REPO = `${UPDATE_FEED_OWNER}/${UPDATE_FEED_NAME}`;
+// The update feed's repo, from its import-free home so the renderer
+// can read it too.
+export {
+  UPDATE_FEED_NAME,
+  UPDATE_FEED_OWNER,
+  UPDATE_FEED_REPO,
+} from "./updateFeed.mts";
 
 export function cliBinaryName(flavor: CliFlavor): string {
   return flavor === "prod" ? "sm" : "smd";
