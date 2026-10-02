@@ -6,9 +6,9 @@
 // worktrees it holds beside its primary checkouts: the ones it would
 // list once open, so shelved and hidden ones stay out, a peer's count,
 // and a mirrored pair counts once. No count while its listing is
-// loading. Inside a project the tree is that project's header and rows
-// and no other's, and an open project the build lacks reads as the
-// list. A worktree reveals nothing from the list or from inside another
+// loading. Inside a project the tree is that project's header, held
+// over the rows rather than among them, and its rows and no other's,
+// and an open project the build lacks reads as the list. A worktree reveals nothing from the list or from inside another
 // project, and its own row once its project is open. Inside a project
 // the worktrees follow its sort, every device's together, primaries
 // first.
@@ -22,6 +22,7 @@ import {
   remoteWorktreeKey,
   worktreeRowKey,
 } from "@/components/sidebar/buildSidebarRows";
+import type { SidebarRow } from "@/components/sidebar/sidebarRow";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { Project, Worktree, WorktreeSortMode } from "@shared/schemas";
 import { worktree as labWorktree } from "../lab/fixtures.ts";
@@ -127,16 +128,18 @@ const build = (open: Project | null, worktreeSort: WorktreeSortMode = "name") =>
     deviceBadges: new Map(),
   });
 
+const line = (row: SidebarRow) => {
+  if (row.kind === "project") {
+    return `${row.expanded ? "v" : ">"} ${row.project.name} ${row.branches ?? "-"}`;
+  }
+  if (row.kind === "worktree" || row.kind === "remote-worktree") {
+    return row.worktree.name;
+  }
+  return row.kind;
+};
+
 const drawn = (open: Project | null, worktreeSort?: WorktreeSortMode) =>
-  build(open, worktreeSort).rows.map((row) => {
-    if (row.kind === "project") {
-      return `${row.expanded ? "v" : ">"} ${row.project.name} ${row.branches ?? "-"}`;
-    }
-    if (row.kind === "worktree" || row.kind === "remote-worktree") {
-      return row.worktree.name;
-    }
-    return row.kind;
-  });
+  build(open, worktreeSort).rows.map(line);
 
 try {
   await proof.check("the list: a line per project, counted", () => {
@@ -151,8 +154,11 @@ try {
   });
 
   await proof.check("inside a project: its header and rows alone", () => {
+    const { pinned } = build(portPool);
+    // The header is held over the rows, not among them.
+    assert.equal(pinned && line(pinned), "v port-pool -");
+    assert.equal(build(null).pinned, undefined);
     assert.deepEqual(drawn(portPool), [
-      "v port-pool -",
       "main",
       "main",
       "lease-ttl",
@@ -164,10 +170,10 @@ try {
 
   await proof.check("inside a project: its sort, across devices", () => {
     const worktrees = (sort: WorktreeSortMode) =>
-      drawn(portPool, sort).slice(3);
+      drawn(portPool, sort).slice(2);
     // Primaries lead every sort, this machine's first.
-    assert.deepEqual(drawn(portPool, "created").slice(1, 3), ["main", "main"]);
-    assert.equal(build(portPool, "name").rows[1]?.kind, "worktree");
+    assert.deepEqual(drawn(portPool, "created").slice(0, 2), ["main", "main"]);
+    assert.equal(build(portPool, "name").rows[0]?.kind, "worktree");
     // The peer's quiet-quail is the newest, zebra's age unknown.
     assert.deepEqual(worktrees("created"), [
       "quiet-quail",

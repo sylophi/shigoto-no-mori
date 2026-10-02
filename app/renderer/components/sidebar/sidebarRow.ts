@@ -136,6 +136,9 @@ export type SidebarRow =
 // so the shell renders one of them without knowing which.
 export interface SidebarViewModel {
   rows: SidebarRow[];
+  // A row held still over the list rather than scrolled with it: the
+  // open project's header, naming whatever the rows are scrolled to.
+  pinned?: SidebarRow;
   // Where a view with levels is: null on the tree's list of projects,
   // the open project's group key inside one. Absent for a view with
   // none (the inbox, arranging).
