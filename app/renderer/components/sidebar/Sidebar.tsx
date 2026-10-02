@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
-import { Link, useLocation } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import type { SidebarView } from "@shared/schemas";
 import {
   DndContext,
@@ -28,7 +28,6 @@ import { useMirrorLinks } from "@/hooks/remote/useMirrors";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useHiddenWorktreePrefixes } from "@/hooks/sharedSettings/useHiddenWorktreePrefixes";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { SettingsSidebarNav } from "@/components/settings/SettingsSidebarNav";
 import { hasLocalHost } from "@/lib/localHost";
 import { localDeviceId } from "@/lib/queryKeys";
 import { useFanOutErrorToast } from "./useFanOutErrorToast";
@@ -52,16 +51,17 @@ import { SidebarToolbar } from "./SidebarToolbar";
 import { TidyButton } from "./TidyButton";
 import { sortProjects } from "@/lib/sortProjects";
 import { SidebarList } from "./SidebarList";
+import { SidebarTakeoverSlot, useSidebarTakenOver } from "./SidebarTakeover";
 import { withToggled } from "@/lib/toggleSet";
 
 // The app sidebar, one for both shells: the brand header, the forest
-// (or, while Settings is open, the page's section list), and the
-// footer. The forest is this machine's project tree with every peer's
-// forest merged in, in either of its two views. A hostless client (the
-// web shell) has no projects of its own, so its forest is the peers'
-// alone -- through the very same component, builders and list, so a
-// peer's worktree row looks the same wherever it is drawn and the
-// inbox files it beside a local one. The phone layout draws it as a
+// (or, while a page with a list of its own is open, that list:
+// SidebarTakeover), and the footer. The forest is this machine's
+// project tree with every peer's forest merged in, in either of its
+// two views. A hostless client (the web shell) has no projects of its
+// own, so its forest is the peers' alone -- through the very same
+// component, builders and list, so a peer's worktree row looks the
+// same wherever it is drawn and the inbox files it beside a local one. The phone layout draws it as a
 // page (ForestPage) and drops the footer, whose cluster the tab bar
 // carries there -- the two views included, each as a tab of its own,
 // so the page pins the view instead of reading the preference.
@@ -73,14 +73,11 @@ export function Sidebar({
   view?: SidebarView;
 }) {
   const [arrangeMode, setArrangeMode] = useState(false);
-  // While Settings is open the sidebar is its section list: the tree
-  // steps aside and comes back on the next route. The footer goes with
-  // it, since Settings is its own UI and none of the footer's actions
-  // belong there. The tree's queries never unmount, so the swap costs
-  // nothing.
-  const onSettings = useLocation({
-    select: (location) => location.pathname === "/settings",
-  });
+  // While a page holds the sidebar (Settings, the diff and files pages)
+  // the tree steps aside for its list and comes back when the page
+  // goes. The footer goes with it, since none of its actions belong to
+  // the page.
+  const takenOver = useSidebarTakenOver();
 
   return (
     // Both themes are fully transparent so the BrowserWindow vibrancy
@@ -95,12 +92,12 @@ export function Sidebar({
     >
       <SidebarHeader />
       <Forest
-        settingsOpen={onSettings}
         arrangeMode={arrangeMode}
         onArrange={() => setArrangeMode(true)}
         pinnedView={view}
       />
-      {footer && !onSettings && (
+      <SidebarTakeoverSlot />
+      {footer && !takenOver && (
         <SidebarFooter
           arrangeMode={arrangeMode}
           onToggleArrange={() => setArrangeMode((v) => !v)}
@@ -110,25 +107,12 @@ export function Sidebar({
   );
 }
 
-// The section list Settings puts in the tree's place. Rendered by the
-// forest rather than the frame so its hooks (and the queries behind
-// them) stay mounted across the swap.
-function SettingsPane() {
-  return (
-    <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
-      <SettingsSidebarNav />
-    </div>
-  );
-}
-
 // react-doctor-disable-next-line react-doctor/prefer-useReducer -- state fields are fully orthogonal UI concerns
 function Forest({
-  settingsOpen,
   arrangeMode,
   onArrange,
   pinnedView,
 }: {
-  settingsOpen: boolean;
   arrangeMode: boolean;
   onArrange: () => void;
   // Pins the view (a phone tab). Absent, the saved preference decides.
@@ -181,11 +165,11 @@ function Forest({
     () => new Set(),
   );
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Stepped aside for a page's list (SidebarTakeover).
+  const takenOver = useSidebarTakenOver();
   // The Tab flip only means something where the preference is what
   // shows. A pinned view has its tab bar.
-  useSidebarViewHotkey(
-    !arrangeMode && !settingsOpen && pinnedView === undefined,
-  );
+  useSidebarViewHotkey(!arrangeMode && !takenOver && pinnedView === undefined);
 
   const toggleExpanded = (groupId: string) => {
     toggleCollapsed(groupKeyOf(groupId));
@@ -335,7 +319,10 @@ function Forest({
     viewMessage: view.emptyMessage,
   });
 
-  if (settingsOpen) return <SettingsPane />;
+  // The list unmounts while a page holds the sidebar, rather than
+  // hiding: a hidden virtualizer would measure its rows at zero. The
+  // queries above stay subscribed, so the way back costs no refetch.
+  if (takenOver) return null;
   if (!signedIn) {
     // The phone layout lands a hostless client here (the inbox tab),
     // where the way in is the Devices page, so say so rather than

@@ -30,10 +30,10 @@ import {
 } from "./changesControls";
 import type { IndexEntry } from "@/lib/patchFiles";
 
-// The file rail beside a diff: every file in scroll order with its
+// The file list for a diff: every file in scroll order with its
 // change marker and +/- counts. Order is never re-ranked, which is why
 // the filter is a plain substring match and not lib/fuzzyMatch. The
-// rail is a map of the scroll area and has to keep its order.
+// list is a map of the scroll area and has to keep its order.
 //
 // With `changes` it is also the changes list: a checkbox per row for
 // the file's index state, a discard control on hover, a select-all box
@@ -52,7 +52,6 @@ export function DiffFileIndex({
   onToggleAll,
   changes,
   footer,
-  width,
   className,
 }: {
   entries: IndexEntry[];
@@ -63,15 +62,11 @@ export function DiffFileIndex({
   // Absent when the pane shows one file at a time: there is no combined
   // scroll to fold, so the header drops the control.
   onToggleAll?: () => void;
-  // Visibility only. The caller owns the "is there room for a rail"
-  // question because it owns the pane.
+  // Present on the changes page: makes this the changes list (above).
   changes?: DiffChangesControls;
   footer?: ReactNode;
-  // The box is the caller's too. Beside the diff it is a rail dragged
-  // by the caller's separator (`width`, which the rail only draws); in
-  // the phone layout's bottom sheet it fills the width and takes its
-  // height from `className` instead.
-  width?: number;
+  // The box is the caller's too: the app sidebar's slot on a wide
+  // viewport, the phone layout's bottom sheet otherwise.
   className?: string;
 }) {
   const [query, setQuery] = useState("");
@@ -85,7 +80,7 @@ export function DiffFileIndex({
       )
     : entries;
 
-  // Keep the highlighted row on screen. Past ~24 files the rail is taller
+  // Keep the highlighted row on screen. Past ~24 files the list is taller
   // than its own viewport, and a scroll-spy marker you can't see is no
   // marker at all. `nearest` is the minimum scroll that reveals the row,
   // so a row already in view doesn't move and reading down a patch
@@ -106,11 +101,7 @@ export function DiffFileIndex({
   );
 
   return (
-    <div
-      data-slot="diff-index"
-      style={width === undefined ? undefined : { width }}
-      className={cn("flex shrink-0 flex-col", className)}
-    >
+    <div data-slot="diff-index" className={cn("flex flex-col", className)}>
       <div
         data-slot="search-row"
         className="flex items-center gap-1.5 border-b border-border px-2.5 py-1.5"
@@ -352,7 +343,7 @@ function DiscardConfirmStrip({
 }
 
 // Its own component so moving the highlight re-renders two rows rather
-// than the whole rail.
+// than the whole list.
 function IndexRow({
   entry,
   active,

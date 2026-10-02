@@ -48,7 +48,7 @@ export function WorktreeDiff() {
   );
 }
 
-// The uncommitted-changes page: the diff, with the rail turned into a
+// The uncommitted-changes page: the diff, with the file list turned into a
 // GitHub-Desktop-style changes list (tick what goes in, discard what
 // doesn't) and the commit composer under it. Split from the route
 // component so the change hooks only mount once the worktree resolved.
@@ -80,7 +80,7 @@ function ChangesView({
     picked ? isUntracked(picked) : false,
   );
   // `mutate` is stable across renders. The result object is not, and it
-  // would reach every rail row as a new callback.
+  // would reach every list row as a new callback.
   const { mutate: stage } = useSetStaged();
   const commit = useCommitChanges();
   const { mutate: discardPaths, isPending: discarding } = useDiscardChanges();
@@ -191,7 +191,7 @@ function ChangesView({
           stage({ projectId, worktreeId, paths, staged }),
         onDiscard,
       }}
-      railFooter={
+      footer={
         <>
           {lastCommit && rewrite.canAmend && (
             <LastCommitStrip

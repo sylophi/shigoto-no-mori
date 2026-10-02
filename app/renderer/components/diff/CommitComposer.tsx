@@ -9,7 +9,7 @@ import { pluralize } from "@/lib/pluralize";
 import type { ChangedFile, Worktree } from "@shared/schemas";
 import { includedFiles } from "./changesControls";
 
-// The message box at the foot of the changes rail. Summary is the
+// The message box at the foot of the changes list. Summary is the
 // commit's first line. Description, when given, is its body. The draft
 // itself belongs to the page (lib/commitDraft), which also empties it
 // once the commit lands.

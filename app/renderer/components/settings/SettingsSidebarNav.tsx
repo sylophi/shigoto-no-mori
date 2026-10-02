@@ -1,6 +1,4 @@
-import { useNavigate, useRouter } from "@tanstack/react-router";
 import { WORKTREE_ROW_BUTTON } from "@/components/sidebar/WorktreeRow";
-import { BackButton } from "@/components/ui/back-button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusDot } from "@/components/ui/status-dot";
 import { DeviceLead } from "@/components/shared/DeviceGlyph";
@@ -19,8 +17,9 @@ import {
 } from "./settingsNav";
 import { UpdateAllButton } from "./UpdateAllButton";
 
-// The Settings page's navigation, rendered by the app sidebar in place
-// of the project tree while /settings is open. Two labelled groups:
+// The Settings page's navigation, drawn in the app sidebar in place of
+// the project tree while /settings is open (SidebarTakeover, which also
+// draws the Back row above it). Two labelled groups:
 // "Visual" holds what this window shows and nothing else ever sees;
 // "Devices" holds one row per machine on the account, this one first,
 // each with the status dot the rest of the app draws for it. The split
@@ -28,8 +27,6 @@ import { UpdateAllButton } from "./UpdateAllButton";
 // explaining it. The sections themselves come from settingsSections,
 // which the phone layout's chip row draws too.
 export function SettingsSidebarNav() {
-  const navigate = useNavigate();
-  const router = useRouter();
   const devices = useHostDevices();
   const { activeTab } = useActiveSettingsTab(devices);
   const local = useLocalDevice();
@@ -46,24 +43,6 @@ export function SettingsSidebarNav() {
 
   return (
     <nav aria-label="Settings sections" className="flex flex-col px-2 pb-2">
-      {/* The tree is gone while this list is up, so the way out is the
-          first row: back to wherever Settings was opened from. Switching
-          sections pushes no history, so one step always leaves the page.
-          A window that opened straight onto Settings has nothing behind
-          it and goes to "/", which lands on the first worktree, the same
-          place a fresh window opens. It spans the row like the rows
-          below it, so the whole width is the target and not just the
-          word. */}
-      <BackButton
-        label="Back"
-        className="mb-1 ml-0 w-full justify-start"
-        onClick={() =>
-          router.history.canGoBack()
-            ? router.history.back()
-            : void navigate({ to: "/" })
-        }
-      />
-
       <NavGroup label="Visual">{sections.visual.map(row)}</NavGroup>
 
       <NavGroup

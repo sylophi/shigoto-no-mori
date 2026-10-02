@@ -36,7 +36,7 @@
  *      palette-verbs             palette/WorktreePalette.tsx
  *      search-row, footer-row    popup search strips and footers: the
  *                                palette, the pickers, addProject/,
- *                                BranchCombobox, the diff rail's filter
+ *                                BranchCombobox, the diff file list's filter
  *      launcher                  launcher/ProjectLauncher.tsx
  *      launcher-tile             launcher/LauncherTile.tsx
  *      diff-view                 diff/DiffView.tsx
@@ -691,13 +691,16 @@
    outranks that utility and the pair stays in sync.
 
    The diff file index (and the files page's tree, the same kind of
-   rail) joins them rather than restating the recipe: it is bounded by
-   a border-r in v1, which goes transparent here, so the
-   rail wants the same band to read as its own panel. Keeping it on this
-   selector list means the alpha above stays the single knob. */
+   list) joins them rather than restating the recipe where the phone
+   layout draws it, in a bottom sheet or as the page itself: there it
+   wants the same band to read as its own panel. Keeping it on this
+   selector list means the alpha above stays the single knob. On a wide
+   viewport it is the app sidebar's list instead (SidebarTakeover), on
+   the mint like the tree it stands in for. */
 .doubutsu [data-doubutsu-zone="main"] :is(header, footer),
-.doubutsu [data-slot="diff-index"],
-.doubutsu [data-slot="file-tree"] {
+.doubutsu
+  :is([data-doubutsu-zone="main"], [data-slot="sheet-content"])
+  :is([data-slot="diff-index"], [data-slot="file-tree"]) {
   background-color: color-mix(in oklab, var(--card) 70%, transparent);
 }
 
@@ -1086,7 +1089,7 @@
   animation: var(--doubutsu-stripe-animation);
 }
 
-/* A diff rail row is hovered as one pill but built from three controls,
+/* A diff file list row is hovered as one pill but built from three controls,
    and the middle one (the jump button) is a <button>, so the rule
    above would stripe a band across the row's middle instead of the row.
    The row is on the list above. The jump button sits this one out, and

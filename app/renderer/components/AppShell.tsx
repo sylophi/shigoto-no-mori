@@ -52,7 +52,6 @@ export function AppShell() {
     min: SIDEBAR_MIN,
     max: SIDEBAR_MAX,
     fallback: SIDEBAR_DEFAULT,
-    leftEdge: () => 0,
   });
 
   // The layout rides <html> as a data attribute, like the theme
