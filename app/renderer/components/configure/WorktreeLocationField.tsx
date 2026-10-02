@@ -3,7 +3,7 @@ import { PathSpan } from "@/components/ui/path-span";
 import { LAYOUT_OPTIONS } from "@/components/worktreeLocation/layoutOptions";
 import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
-import { projectDriveBaseFor } from "@shared/git/worktreeLayout";
+import { managedDriveBaseFor } from "@shared/git/worktreeLayout";
 import type { ShigomoriConfig } from "@shared/schemas";
 
 // Which layout the project's worktrees use, as the saved config has it.
@@ -33,8 +33,8 @@ export function WorktreeLocationField({
   const customPath =
     layout === "custom" ? config?.customWorktreePath?.trim() : undefined;
   const drivePath =
-    layout === "managed-root" && device?.onProjectDrive
-      ? projectDriveBaseFor(projectPath, device)
+    layout === "managed-root" && device
+      ? managedDriveBaseFor(projectPath, device)
       : null;
   const shownPath = customPath || drivePath;
 

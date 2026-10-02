@@ -193,26 +193,28 @@ func resolveWorktreeBase(projectPath string, config *projectConfig) string {
 // touches directories shigomori owns (pruneEmptyManagedParents).
 func pruneEmptyManagedParents(oldWorktreePath, projectPath string) {
 	parent := filepath.Dir(oldWorktreePath)
-	managedRootBase := filepath.Join(dataDir(), "worktrees", filepath.Base(projectPath))
-	// os.Remove on a directory fails unless empty, exactly like rmdir.
-	if parent == managedRootBase {
-		_ = os.Remove(parent)
-		return
+	switch parent {
+	case filepath.Join(dataDir(), "worktrees", filepath.Base(projectPath)):
+		removeEmptyDirs(parent, 1)
+	case filepath.Join(projectPath, ".shigomori", "worktrees"):
+		removeEmptyDirs(parent, 2)
+	case projectDriveBase(projectPath):
+		// <volume>/<dataDirName>/worktrees/<project>: the folder on the
+		// project's drive goes whole once the last project leaves it,
+		// so nothing of ours stays behind on the drive.
+		removeEmptyDirs(parent, 3)
 	}
-	inProjectBase := filepath.Join(projectPath, ".shigomori", "worktrees")
-	if parent == inProjectBase {
-		if os.Remove(parent) == nil {
-			_ = os.Remove(filepath.Dir(parent))
+}
+
+// Removes dir and up to levels-1 of its parents, stopping at the first
+// one that isn't empty. os.Remove on a directory fails unless empty,
+// exactly like rmdir.
+func removeEmptyDirs(dir string, levels int) {
+	for range levels {
+		if os.Remove(dir) != nil {
+			return
 		}
-		return
-	}
-	// The folder on the project's drive goes whole once the last
-	// project leaves it, so nothing of ours stays behind on the drive.
-	if driveBase := projectDriveBase(projectPath); driveBase != "" && parent == driveBase {
-		worktreesDir := filepath.Dir(parent)
-		if os.Remove(parent) == nil && os.Remove(worktreesDir) == nil {
-			_ = os.Remove(filepath.Dir(worktreesDir))
-		}
+		dir = filepath.Dir(dir)
 	}
 }
 

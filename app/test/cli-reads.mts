@@ -218,8 +218,12 @@ async function main() {
       const onDrive = (
         projectPath: string,
         dir: string,
-        worktreeLayout: ShigomoriConfig["worktreeLayout"] = "managed-root",
-        onProjectDrive = true,
+        {
+          worktreeLayout = "managed-root",
+          onProjectDrive = true,
+        }: Pick<ShigomoriConfig, "worktreeLayout"> & {
+          onProjectDrive?: boolean;
+        } = {},
       ) =>
         worktreeBaseFor(
           layoutInputsFor({ worktreeLayout }, projectPath, {
@@ -233,7 +237,9 @@ async function main() {
         "/Volumes/Ext/.sm/worktrees/repo",
       );
       assert.equal(
-        onDrive("/Volumes/Ext/code/repo", "/Users/me/.sm", undefined, false),
+        onDrive("/Volumes/Ext/code/repo", "/Users/me/.sm", {
+          onProjectDrive: false,
+        }),
         "/Users/me/.sm/worktrees/repo",
         "setting off: under the data dir",
       );
@@ -252,7 +258,9 @@ async function main() {
         "/Volumes/Ext/.sm/worktrees/repo",
       );
       assert.equal(
-        onDrive("/Volumes/Ext/code/repo", "/Users/me/.sm", "in-project"),
+        onDrive("/Volumes/Ext/code/repo", "/Users/me/.sm", {
+          worktreeLayout: "in-project",
+        }),
         "/Volumes/Ext/code/repo/.shigomori/worktrees",
         "the setting belongs to the managed layout",
       );

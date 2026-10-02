@@ -18,10 +18,8 @@ package main
 // there first, like rm.
 
 import (
-	"cmp"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -83,18 +81,18 @@ func moveWorktree(proj project, id worktreeIdentity, dest string) (worktreeJSON,
 		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 			return worktreeJSON{}, err
 		}
-		if err := gitWorktreeMoveFn(proj.Path, id.Path, dest); err != nil {
-			if !isCrossDeviceError(err) {
-				return worktreeJSON{}, err
-			}
-			if err := moveAcrossVolumes(proj, id.Path, dest); err != nil {
-				return worktreeJSON{}, err
-			}
+		// The cross-volume path has already re-read git's list, so only
+		// git's own move leaves it stale.
+		if err := gitWorktreeMoveFn(proj.Path, id.Path, dest); err == nil {
+			invalidateWorktreeIdentities(proj.ID)
+		} else if !isCrossDeviceError(err) {
+			return worktreeJSON{}, err
+		} else if err := moveAcrossVolumes(proj, id.Path, dest); err != nil {
+			return worktreeJSON{}, err
 		}
 		// Sweep the old parent when it is a directory shigomori owns
 		// (the custom layout's is the user's, and stays).
 		pruneEmptyManagedParents(id.Path, proj.Path)
-		invalidateWorktreeIdentities(proj.ID)
 	}
 	moved, err := findMovedIdentity(proj, dest)
 	if err != nil {
@@ -157,17 +155,17 @@ func moveAcrossVolumes(proj project, from, dest string) error {
 
 // cp -p keeps the times and modes a move should keep. A filesystem that
 // can't hold some of them fails the whole cp, so the plain copy is the
-// second try.
+// second try. No clone attempt: clonefile can't cross volumes.
 func copyCheckout(src, dst string) error {
-	output, err := exec.Command("cp", "-R", "-P", "-p", src, dst).CombinedOutput()
+	err := cpTree(src, dst, "-p")
 	if err == nil {
 		return nil
 	}
-	vlog("[move] cp -p: %s", cmp.Or(strings.TrimSpace(string(output)), err.Error()))
+	vlog("[move] cp -p: %v", err)
 	if err := wipeDir(dst); err != nil {
 		return err
 	}
-	return copyTree(src, dst)
+	return cpTree(src, dst)
 }
 
 // The identity git now lists at dest. Its path is git's spelling,

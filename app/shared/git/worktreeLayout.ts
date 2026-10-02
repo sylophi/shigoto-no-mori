@@ -77,6 +77,18 @@ export function projectDriveBaseFor(
   );
 }
 
+// Where the device keeps this project's managed worktrees when its
+// managedOnProjectDrive setting moves them onto the project's drive.
+// Null while the setting is off, or with no such drive.
+export function managedDriveBaseFor(
+  projectPath: string,
+  device: DeviceLayoutInputs,
+): string | null {
+  return device.onProjectDrive
+    ? projectDriveBaseFor(projectPath, device)
+    : null;
+}
+
 function lastSegment(path: string): string {
   return path.split("/").findLast((s) => s.length > 0) ?? "";
 }
@@ -112,7 +124,7 @@ export function layoutInputsFor(
 }
 
 export function worktreeBaseFor(inputs: LayoutInputs): string {
-  const { layout, projectPath, dataDir, customPath, onProjectDrive } = inputs;
+  const { layout, projectPath, dataDir, customPath } = inputs;
   if (layout === "in-project") {
     return joinPath(projectPath, IN_PROJECT_SUBDIR);
   }
@@ -127,8 +139,8 @@ export function worktreeBaseFor(inputs: LayoutInputs): string {
       return stripped;
     }
   }
-  if (layout === "managed-root" && onProjectDrive) {
-    const driveBase = projectDriveBaseFor(projectPath, inputs);
+  if (layout === "managed-root") {
+    const driveBase = managedDriveBaseFor(projectPath, inputs);
     if (driveBase !== null) return driveBase;
   }
   return joinPath(dataDir, "worktrees", lastSegment(projectPath));

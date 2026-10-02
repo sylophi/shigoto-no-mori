@@ -4,6 +4,7 @@ import type { SettingsFormState } from "@/hooks/config/useSettingsSave";
 import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
 import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
+import { projectDriveBaseFor } from "@shared/git/worktreeLayout";
 import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
 import { ToggleRow } from "@/components/shared/ToggleRow";
 import { ExternalLink } from "@/components/ui/external-link";
@@ -39,11 +40,16 @@ export function DeviceToggleSections({
   const terrierInstalled = terrierReadiness?.installed ?? true;
   const terrierCompatible = terrierReadiness?.compatible ?? true;
   const terrierReady = terrierInstalled && terrierCompatible;
-  // The drive folder takes the scoped device's flavor name (".sm" for
-  // the app, ".smd" for dev builds), as cli/paths.go projectDriveBase
-  // spells it.
+  // The drive folder, spelled by the layout rule itself for a stand-in
+  // project, so it takes the scoped device's flavor name (".sm" for the
+  // app, ".smd" for dev builds). Null until its runtime info is read.
   const { data: runtime } = useRuntimeInfo();
-  const driveBase = `/Volumes/<drive>/${runtime?.canonicalDataDirName ?? ".sm"}/worktrees/<project>`;
+  const driveBase =
+    runtime &&
+    projectDriveBaseFor("/Volumes/<drive>/<project>", {
+      dataDir: runtime.dataDir,
+      canonicalDataDirName: runtime.canonicalDataDirName,
+    });
   const { data: githubCliReadiness } = useGithubCliReadiness();
   const ghInstalled = githubCliReadiness?.installed ?? true;
   const ghAuthed = githubCliReadiness?.authed ?? true;
@@ -101,12 +107,14 @@ export function DeviceToggleSections({
               project's Worktree location page.
               {/* The path is spelled like the Worktree location page's
                   previews. */}
-              <span className="mt-1 block">
-                Location:{" "}
-                <span className="font-mono text-foreground/70 select-text">
-                  {driveBase}/
+              {driveBase && (
+                <span className="mt-1 block">
+                  Location:{" "}
+                  <span className="font-mono text-foreground/70 select-text">
+                    {driveBase}/
+                  </span>
                 </span>
-              </span>
+              )}
             </>
           }
         />

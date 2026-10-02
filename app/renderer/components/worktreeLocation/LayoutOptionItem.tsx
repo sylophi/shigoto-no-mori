@@ -6,7 +6,7 @@ import type { WorktreeLayout } from "@shared/schemas";
 import type { DeviceLayout } from "@/hooks/config/useDeviceLayout";
 import type { LayoutOption } from "./layoutOptions";
 import {
-  projectDriveBaseFor,
+  managedDriveBaseFor,
   worktreeBaseFor,
 } from "@shared/git/worktreeLayout";
 
@@ -53,8 +53,7 @@ export function LayoutOptionItem({
   // external drive, and the description follows the preview there.
   const description =
     option.value === "managed-root" &&
-    device.onProjectDrive &&
-    projectDriveBaseFor(projectPath, device) !== null
+    managedDriveBaseFor(projectPath, device) !== null
       ? "Worktrees live in Shigomori's folder on the project's drive."
       : option.description;
   return (
