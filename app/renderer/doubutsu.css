@@ -784,7 +784,7 @@
 }
 
 /* The inbox's create buttons (New worktree, Add project) are filled
-   surfaces sitting directly under the banner card, and doubutsu's card
+   surfaces sitting just under the banner card, and doubutsu's card
    is inset at mx-3. At the px-2 the rows use, their fill visibly
    overhangs the card above it. Two stacked blocks that nearly line up read worse than two that
    either match or clearly don't. The rows underneath are text with only
@@ -829,7 +829,7 @@
 }
 
 /* The sidebar's New worktree and Add project buttons and the device
-   filter's row of outline buttons under them skip the peach outline
+   filter's row of outline buttons above them skip the peach outline
    fill above, so they read as one set of controls on the mint rail.
    The buttons fall back to their variant's own fills (plain --background, muted on
    hover), and the pills wear the same --background. The picked pill

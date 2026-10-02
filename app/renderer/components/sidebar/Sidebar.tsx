@@ -400,6 +400,10 @@ function Forest({
           sidebar, so neither shows. */}
       {arrangeMode ? null : (
         <>
+          {/* The device filter comes first, above each view's own
+              controls: which machine is showing frames everything
+              under it. Both views, one pick. */}
+          <DeviceFilterBar {...filter} />
           {inbox ? (
             // px-2 like the rows below it, which is where v1 wants it.
             // doubutsu pulls it in to its banner card, hence the slot.
@@ -421,9 +425,6 @@ function Forest({
               onBack={inProject ? () => goTo(null) : undefined}
             />
           )}
-          {/* The device filter sits under each view's own controls,
-              right above the list it narrows. Both views, one pick. */}
-          <DeviceFilterBar {...filter} />
         </>
       )}
       <div
