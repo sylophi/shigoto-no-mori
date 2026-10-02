@@ -263,27 +263,16 @@ moment too, on every device's worktrees alike.
 ### Visitors
 
 Every villager who moves in is a visit, and Visitors (a section of
-Settings, offered while Village life shows) collects them like
-stickers in an album.
+Settings while Village life shows) collects them like stickers in an
+album.
 
-- **`sm create` counts them** (`cli/visitors.go`), into `visits.json`
-  in each device's data dir, so a worktree made from the app, a
-  terminal or another device all count. A mirror's or a transplant's
-  copy (`--no-visit`) is the same visit, counted where it began. A data
-  dir that has never kept a tally starts it from the villagers living
-  there, once each.
-- **Every device adds up** (`hooks/villagers/useVisitors.ts`), and the
-  section says which ones it couldn't reach.
-- **Rarity scales the sticker** the same way it scales the news: a
-  regular villager's face on its tint, a special character's wash and
-  name plate in their own color, a legend on their stationery with
-  their face on a stamp. Every legend's slot shows from the start, as
-  a silhouette until they come, so the rarest are there to chase.
-- **Friendship comes and goes.** Five hearts read off a warmth that
-  each visit adds one to and that halves every 60 days without one
-  (`lib/villagers/visitors.ts`): hearts fill as a villager keeps
-  coming and empty again when they stop. Tiers run Acquaintance,
-  Neighbor, Friend, Good pal, Kindred spirit.
-- **There is one best friend**: the villager met most, of a tie the
-  closer now. Their sticker and the guest book's front page say so.
-  A sticker flips over to their card.
+- **Rarity scales the sticker** the way it scales the news: a regular
+  villager's face on its tint, a special character's wash and name
+  plate in their own color, a legend on their stationery with their
+  face on a stamp. Every legend's slot shows from the start, as a
+  silhouette, so the rarest are there to chase.
+- **Friendship comes and goes.** Hearts fill as a villager keeps
+  visiting and empty again when they stop, so the album reads as who
+  is close now, not only who came once.
+- **There is one best friend**, the villager met most, and only their
+  sticker and the guest book say so.
