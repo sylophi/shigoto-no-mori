@@ -49,6 +49,7 @@
  *      popover-content           ui/popover.tsx
  *      sidebar-project-row       sidebar/ProjectRow.tsx
  *      sidebar-project-pick      sidebar/ProjectHeader.tsx
+ *      project-tile              shared/ProjectIcon.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
  *      sidebar-device-filter     sidebar/DeviceFilterBar.tsx
  *      device-chip               shared/DeviceChip.tsx, shared/DeviceTabs.tsx
@@ -1091,6 +1092,14 @@
 .doubutsu [data-slot="sidebar-project-pick"]:is(:hover, :active) {
   background-image: none;
   animation: none;
+}
+
+/* The tile a project without a logo wears is a leaf here, two corners
+   pinched, standing on a sticker lip in a darker shade of its own
+   hue. */
+.doubutsu [data-slot="project-tile"] {
+  border-radius: 15% 65%;
+  box-shadow: 0 1.5px 0 0 oklch(var(--project-tile-edge) var(--project-hue));
 }
 
 /* The Allow control switch governs everything in its panel, which

@@ -4,8 +4,8 @@ import { useProjectIcon } from "@/hooks/projects/useProjectIcon";
 
 // A project's icon: the logo its repo carries, or, for a repo with none,
 // a tile with the name's initial in a hue drawn from the name. Keyed by
-// name, so the same repo wears the same tile on every device. The tile
-// is tinted rather than solid, so it never passes for a real logo.
+// name, so the same repo wears the same tile on every device. Its look
+// lives in index.css and doubutsu.css (the project-tile slot).
 //
 // Every project gets one, so the slot is held while the logo isn't
 // known yet (see useProjectIcon): an empty box of the same size rather
@@ -38,15 +38,15 @@ export function ProjectIcon({
         data-slot="project-tile"
         viewBox="0 0 16 16"
         style={{ "--project-hue": nameHue(name) } as CSSProperties}
-        className={cn(base, className)}
+        className={cn(base, "rounded-[32%]", className)}
       >
         <text
           x="8"
           y="8"
           dy="0.36em"
           textAnchor="middle"
-          fontSize="10.5"
-          fontWeight="700"
+          fontSize="10"
+          fontWeight="800"
         >
           {initialOf(name)}
         </text>

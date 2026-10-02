@@ -277,24 +277,25 @@
 }
 
 /*
- * The tile a project without a logo wears (shared/ProjectIcon.tsx).
- * The component sets only --project-hue, drawn from the name. The
- * lightness and chroma of the tint and the letter are tokens here, so
- * a theme can move them.
+ * The tile a project without a logo wears (shared/ProjectIcon.tsx): a
+ * white initial on a cheerful fill. The component sets only
+ * --project-hue, drawn from the name. The fill's lightness and chroma
+ * are tokens here, so a theme can move them, and so is the darker edge
+ * doubutsu cuts under it as a sticker lip (doubutsu.css).
  */
 :root,
 [data-theme-scope] {
-  --project-tile-bg: 0.9 0.06;
-  --project-tile-fg: 0.45 0.13;
+  --project-tile-bg: 0.72 0.13;
+  --project-tile-edge: 0.55 0.12;
 }
 .dark {
-  --project-tile-bg: 0.4 0.08;
-  --project-tile-fg: 0.9 0.08;
+  --project-tile-bg: 0.66 0.12;
+  --project-tile-edge: 0.42 0.1;
 }
 @layer components {
   [data-slot="project-tile"] {
     background-color: oklch(var(--project-tile-bg) var(--project-hue));
-    fill: oklch(var(--project-tile-fg) var(--project-hue));
+    fill: var(--color-white);
   }
 }
 
