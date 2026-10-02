@@ -344,7 +344,14 @@ func copyTree(src, dst string) error {
 	if err := os.RemoveAll(dst); err != nil {
 		return err
 	}
-	output, err := exec.Command("cp", "-R", "-P", src, dst).CombinedOutput()
+	return cpTree(src, dst)
+}
+
+// cp -R -P src to an absent dst, plus any extra flags, with cp's own
+// words as the error.
+func cpTree(src, dst string, flags ...string) error {
+	args := append([]string{"-R", "-P"}, flags...)
+	output, err := exec.Command("cp", append(args, src, dst)...).CombinedOutput()
 	if err != nil {
 		return errors.New(cmp.Or(strings.TrimSpace(string(output)), err.Error()))
 	}

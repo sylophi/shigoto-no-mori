@@ -111,7 +111,7 @@ var worktreeItems = []helpItem{
 	{"worktrees autopull [on|off] [<name>]", "Set or show the app's auto-pull mark",
 		"While on, the running app fast-forwards the worktree onto its upstream after each background fetch, as long as it has no local commits, changes or running scripts. Any checkout can carry it, the primary included. With no on/off it reports the state. --json prints {ok, worktree: <row>} (a `list` row)."},
 	{"worktrees move [<name>] <new-path>", "Move a worktree's checkout",
-		"git worktree move, then carries what is keyed by the worktree's path-derived id (shelf and auto-pull marks, its notes and ports, a pending dirty capture) over to the new id. Refuses the primary and an existing destination. Prints the new path; --json prints {ok, worktree: <row>, previousId}. Stop scripts the app runs there first."},
+		"git worktree move (a copy instead when the destination is on another volume), then carries what is keyed by the worktree's path-derived id (shelf and auto-pull marks, its notes and ports, a pending dirty capture) over to the new id. Refuses the primary and an existing destination. Prints the new path; --json prints {ok, worktree: <row>, previousId}. Stop scripts the app runs there first."},
 	{"worktrees rekey --project-id <id> --from-id <id> --to-path <path>", "Re-key a worktree ahead of a move",
 		"App plumbing for the data-folder move, run before the checkout moves (so the path needn't exist yet): carries the shelf and auto-pull marks, the per-worktree data file and a pending dirty capture from --from-id to the id --to-path will have. --json prints {ok, id}."},
 	{"worktrees open [<tool>] [<name>]", "Launch a launcher-row tool in a worktree",

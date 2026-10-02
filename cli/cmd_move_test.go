@@ -7,6 +7,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -82,6 +83,112 @@ func TestMoveRekeysEverythingKeyedByID(t *testing.T) {
 	}](t, onlyDoc(t, docs)).Worktree
 	if row.ID != wt.ID || row.IsExternal || !row.Shelved {
 		t.Errorf("moved back: %+v, want the original id, managed, shelved", row)
+	}
+}
+
+// What git answers when the destination is on another volume.
+func stubCrossDeviceMove(t *testing.T) {
+	t.Helper()
+	saved := gitWorktreeMoveFn
+	gitWorktreeMoveFn = func(_, from, dest string) error {
+		return &gitError{
+			args: []string{"worktree", "move", "--", from, dest},
+			msg:  "fatal: failed to move '" + from + "' to '" + dest + "': Cross-device link",
+		}
+	}
+	t.Cleanup(func() { gitWorktreeMoveFn = saved })
+}
+
+func TestMoveAcrossVolumesCopiesThenRepairs(t *testing.T) {
+	proj := autoPullSandbox(t)
+	wt := createViaCmd(t, proj, "fox")
+	// Uncommitted work of every kind rides along: an edit, an untracked
+	// file, a symlink, an executable.
+	writeFileT(t, filepath.Join(wt.Path, "untracked.txt"), "not committed\n")
+	writeFileT(t, filepath.Join(wt.Path, "run.sh"), "#!/bin/sh\n")
+	if err := os.Chmod(filepath.Join(wt.Path, "run.sh"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("untracked.txt", filepath.Join(wt.Path, "link")); err != nil {
+		t.Fatal(err)
+	}
+	if err := setRegistryMark(autoPullKey, wt.ID, true); err != nil {
+		t.Fatal(err)
+	}
+	statusBefore := gitOut(t, wt.Path, "status", "--porcelain")
+	stubCrossDeviceMove(t)
+
+	dest := filepath.Join(filepath.Dir(proj.Path), "other-volume", "fox")
+	ctx := cliContext{projects: []project{proj}}
+	if code, err := cmdMove(ctx, []string{"--project-id", proj.ID, "--worktree-id", wt.ID, dest}); code != 0 || err != nil {
+		t.Fatalf("move: %d, %v", code, err)
+	}
+
+	if _, err := os.Stat(wt.Path); !os.IsNotExist(err) {
+		t.Errorf("old checkout still there: %v", err)
+	}
+	identities, err := listWorktreeIdentities(proj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var listed []string
+	for _, identity := range identities {
+		listed = append(listed, identity.Path)
+	}
+	if want := []string{proj.Path, dest}; !slices.Equal(listed, want) {
+		t.Errorf("git lists %v, want %v", listed, want)
+	}
+	// Git works from the copy, on the same branch with the same changes.
+	if branch := strings.TrimSpace(gitOut(t, dest, "branch", "--show-current")); branch != "fox" {
+		t.Errorf("branch at the new path = %q, want fox", branch)
+	}
+	if status := gitOut(t, dest, "status", "--porcelain"); status != statusBefore {
+		t.Errorf("status after the move = %q, want %q", status, statusBefore)
+	}
+	if info, err := os.Stat(filepath.Join(dest, "run.sh")); err != nil || info.Mode().Perm()&0o100 == 0 {
+		t.Errorf("run.sh lost its executable bit: %v, %v", info, err)
+	}
+	if target, err := os.Readlink(filepath.Join(dest, "link")); err != nil || target != "untracked.txt" {
+		t.Errorf("link = %q, %v, want a symlink to untracked.txt", target, err)
+	}
+	if marks := readRegistryMarkSet(autoPullKey); marks[wt.ID] || !marks[worktreeIDFromPath(dest)] {
+		t.Errorf("auto-pull mark didn't follow the move: %v", marks)
+	}
+}
+
+// A copy that can't be made leaves the worktree where it was, still
+// git's, with nothing at the destination.
+func TestMoveAcrossVolumesFailureKeepsTheOriginal(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes through the read-only folder that fails the copy")
+	}
+	proj := autoPullSandbox(t)
+	wt := createViaCmd(t, proj, "fox")
+	stubCrossDeviceMove(t)
+	// A parent nothing can be written into fails the copy.
+	parent := filepath.Join(filepath.Dir(proj.Path), "sealed")
+	if err := os.MkdirAll(parent, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(parent, 0o755) })
+
+	dest := filepath.Join(parent, "fox")
+	ctx := cliContext{projects: []project{proj}}
+	if code, err := cmdMove(ctx, []string{"--project-id", proj.ID, "--worktree-id", wt.ID, dest}); code == 0 || err == nil {
+		t.Fatalf("move into a sealed folder = %d, %v, want a failure", code, err)
+	}
+	if _, err := os.Lstat(dest); !os.IsNotExist(err) {
+		t.Errorf("a failed move left something at the destination: %v", err)
+	}
+	if branch := strings.TrimSpace(gitOut(t, wt.Path, "branch", "--show-current")); branch != "fox" {
+		t.Errorf("the original stopped working: branch = %q", branch)
+	}
+	identities, err := listWorktreeIdentities(proj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(identities) != 2 || identities[1].Path != wt.Path {
+		t.Errorf("git lists %+v, want the worktree still at %s", identities, wt.Path)
 	}
 }
 

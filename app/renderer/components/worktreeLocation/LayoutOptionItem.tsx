@@ -3,15 +3,18 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { tildify } from "@shared/projectPaths";
 import type { WorktreeLayout } from "@shared/schemas";
+import type { DeviceLayout } from "@/hooks/config/useDeviceLayout";
 import type { LayoutOption } from "./layoutOptions";
-import { worktreeBaseFor } from "@shared/git/worktreeLayout";
+import {
+  managedDriveBaseFor,
+  worktreeBaseFor,
+} from "@shared/git/worktreeLayout";
 
 interface LayoutOptionItemProps {
   option: LayoutOption;
   checked: boolean;
   projectPath: string;
-  dataDir: string;
-  home: string;
+  device: DeviceLayout;
   customPath: string;
   customPathError: string | null;
   onSelect: (layout: WorktreeLayout) => void;
@@ -22,8 +25,7 @@ export function LayoutOptionItem({
   option,
   checked,
   projectPath,
-  dataDir,
-  home,
+  device,
   customPath,
   customPathError,
   onSelect,
@@ -38,14 +40,22 @@ export function LayoutOptionItem({
       ? null
       : `${tildify(
           worktreeBaseFor({
+            ...device,
             layout: option.value,
             projectPath,
-            dataDir,
             customPath:
               option.value === "custom" ? customPath.trim() || null : null,
           }),
-          home,
+          device.homedir,
         )}/`;
+  // The device's "Keep worktrees on the project's drive" setting takes
+  // the managed layout out of the data folder for a project on an
+  // external drive, and the description follows the preview there.
+  const description =
+    option.value === "managed-root" &&
+    managedDriveBaseFor(projectPath, device) !== null
+      ? "Worktrees live in Shigomori's folder on the project's drive."
+      : option.description;
   return (
     <label
       className={cn(
@@ -72,9 +82,9 @@ export function LayoutOptionItem({
             </span>
           )}
         </div>
-        {option.description && (
+        {description && (
           <p className="text-xs leading-relaxed text-muted-foreground">
-            {option.description}
+            {description}
           </p>
         )}
         {previewPath && (

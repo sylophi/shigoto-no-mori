@@ -4,6 +4,7 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
+import type { DeviceLayout } from "@/hooks/config/useDeviceLayout";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { useRelocateWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import {
@@ -22,8 +23,7 @@ import { tildify } from "@shared/projectPaths";
 interface LocationFormProps {
   projectId: string;
   projectPath: string;
-  dataDir: string;
-  home: string;
+  device: DeviceLayout;
   worktrees: Worktree[];
   config: ShigomoriConfig | null;
   resolvedDefaultBranch: string;
@@ -32,13 +32,13 @@ interface LocationFormProps {
 export function LocationForm({
   projectId,
   projectPath,
-  dataDir,
-  home,
+  device,
   worktrees,
   config,
   resolvedDefaultBranch,
   // react-doctor-disable-next-line react-doctor/prefer-useReducer -- per-field setters are simple; saved* mirrors track persisted state without coupling between fields
 }: LocationFormProps) {
+  const home = device.homedir;
   const { toProjectPage } = useProjectNav();
   const write = useShigomoriWrite();
   const relocate = useRelocateWorktree();
@@ -73,9 +73,9 @@ export function LocationForm({
   }, [configLayout, configCustomPath, batchRunning]);
 
   const layoutInputs = {
+    ...device,
     layout,
     projectPath,
-    dataDir,
     customPath: customPath.trim() || null,
   };
 
@@ -182,8 +182,7 @@ export function LocationForm({
             option={opt}
             checked={layout === opt.value}
             projectPath={projectPath}
-            dataDir={dataDir}
-            home={home}
+            device={device}
             customPath={customPath}
             customPathError={customPathError}
             onSelect={setLayout}

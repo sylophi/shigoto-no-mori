@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { tildify } from "@shared/projectPaths";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
-import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
+import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useConvertExternalWorktree } from "@/hooks/worktrees/useWorktreeMutations";
@@ -38,7 +38,7 @@ function ConvertExternalBody({ project }: { project: Project }) {
   // Scope-aware: a worktree converted on a peer opens under that
   // device's route, like every other link out of a scoped page.
   const { toWorktree } = useWorktreeNav();
-  const { data: runtime } = useRuntimeInfo();
+  const device = useDeviceLayout();
   const { data: worktrees = [], isLoading } = useWorktrees(project.id);
   const { data: config } = useShigomoriConfig(project.id);
   const convert = useConvertExternalWorktree();
@@ -48,17 +48,17 @@ function ConvertExternalBody({ project }: { project: Project }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const { status, batchRunning, runBatch } = useSequentialBatch();
 
-  const home = runtime?.homedir ?? null;
+  const home = device?.homedir ?? null;
 
   const proposedPath = (worktree: Worktree): string => {
-    if (!runtime) return "";
+    if (!device) return "";
     // A branch whose name sanitizes to nothing (reserved words like
     // root/primary, DOS device names) gets a generated folder name at
     // convert time; show that honestly instead of a path with an empty
     // leaf.
     return tildify(
       worktreePathFor(
-        layoutInputsFor(config ?? null, project.path, runtime.dataDir),
+        layoutInputsFor(config ?? null, project.path, device),
         proposedName(worktree) || "(generated name)",
       ),
       home,

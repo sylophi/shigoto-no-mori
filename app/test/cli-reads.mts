@@ -164,7 +164,11 @@ async function main() {
         // The renderer's inputs come off the same read it makes.
         // oxlint-disable-next-line no-await-in-loop -- see above
         const stored = await shigomoriHandlers.read({ projectId }, ctx);
-        const inputs = layoutInputsFor(stored, repo, dataDir);
+        const inputs = layoutInputsFor(stored, repo, {
+          dataDir,
+          canonicalDataDirName: ".smd",
+          onProjectDrive: false,
+        });
         // oxlint-disable-next-line no-await-in-loop -- see above
         const planned = await worktreeDestinationViaCli(projectId, "probe");
         const layout = config.worktreeLayout ?? "managed-root";
@@ -180,6 +184,86 @@ async function main() {
         );
         assert.equal(planned.taken, false);
       }
+      // The device's managedOnProjectDrive setting, on. This repo sits
+      // on no external drive, so both sides stay under the data dir.
+      // The write is the whole document, so the fresh install's seed
+      // rides along and is put back after.
+      const seeded = await globalConfigHandlers.read(undefined, ctx);
+      track(() =>
+        globalConfigWriteViaCli(seeded).then(invalidateGlobalConfigCache),
+      );
+      await globalConfigWriteViaCli({ ...seeded, managedOnProjectDrive: true });
+      invalidateGlobalConfigCache();
+      const settings = await globalConfigHandlers.read(undefined, ctx);
+      assert.equal(settings.managedOnProjectDrive, true);
+      await shigomoriWriteViaCli(projectId, { defaultBranch: "main" });
+      invalidateProjectConfigCache(projectId);
+      const planned = await worktreeDestinationViaCli(projectId, "probe");
+      assert.equal(
+        worktreePathFor(
+          layoutInputsFor(null, repo, {
+            dataDir,
+            canonicalDataDirName: ".smd",
+            onProjectDrive: true,
+          }),
+          "probe",
+        ),
+        planned.path,
+        "setting on, internal project: the preview and the CLI disagree",
+      );
+      // A repo on an external drive can't be staged in a sandbox, so
+      // the drive rule is pinned by value here and, spelled the same,
+      // in cli/paths_test.go. The drive's folder takes the flavor's
+      // name, which a data dir moved or named otherwise doesn't change.
+      const onDrive = (
+        projectPath: string,
+        dir: string,
+        {
+          worktreeLayout = "managed-root",
+          onProjectDrive = true,
+        }: Pick<ShigomoriConfig, "worktreeLayout"> & {
+          onProjectDrive?: boolean;
+        } = {},
+      ) =>
+        worktreeBaseFor(
+          layoutInputsFor({ worktreeLayout }, projectPath, {
+            dataDir: dir,
+            canonicalDataDirName: ".sm",
+            onProjectDrive,
+          }),
+        );
+      assert.equal(
+        onDrive("/Volumes/Ext/code/repo", "/Users/me/.sm"),
+        "/Volumes/Ext/.sm/worktrees/repo",
+      );
+      assert.equal(
+        onDrive("/Volumes/Ext/code/repo", "/Users/me/.sm", {
+          onProjectDrive: false,
+        }),
+        "/Users/me/.sm/worktrees/repo",
+        "setting off: under the data dir",
+      );
+      assert.equal(
+        onDrive("/Users/me/code/repo", "/Users/me/.sm"),
+        "/Users/me/.sm/worktrees/repo",
+        "a project on the internal drive stays under the data dir",
+      );
+      assert.equal(
+        onDrive("/Volumes/Ext/code/repo", "/Volumes/Ext/stash/.sm"),
+        "/Volumes/Ext/stash/.sm/worktrees/repo",
+        "a data dir on the project's drive is already there",
+      );
+      assert.equal(
+        onDrive("/Volumes/Ext/code/repo", "/Volumes/Other/data"),
+        "/Volumes/Ext/.sm/worktrees/repo",
+      );
+      assert.equal(
+        onDrive("/Volumes/Ext/code/repo", "/Users/me/.sm", {
+          worktreeLayout: "in-project",
+        }),
+        "/Volumes/Ext/code/repo/.shigomori/worktrees",
+        "the setting belongs to the managed layout",
+      );
     },
   );
 

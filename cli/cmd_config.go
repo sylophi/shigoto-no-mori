@@ -97,6 +97,8 @@ var globalConfigKeys = []configKey{
 		desc: "Name new worktrees after Animal Crossing characters (on for new installs)"},
 	{name: "codexWorktreeNames", kind: boolKind, def: false,
 		desc: "Name Codex-style <name>/<repo> worktrees by their parent folder"},
+	{name: "managedOnProjectDrive", kind: boolKind, def: false,
+		desc: "Keep managed worktrees on the project's drive when it is an external one"},
 	{name: "portPool", kind: boolKind, def: false,
 		desc: "Provision/release port-pool ports with worktrees"},
 	{name: "terrier", kind: boolKind, def: false,

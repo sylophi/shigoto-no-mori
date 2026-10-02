@@ -310,16 +310,17 @@ type carryOverEntry struct {
 }
 
 type globalConfig struct {
-	DeleteBranchOnRemove *bool             `json:"deleteBranchOnRemove"`
-	PortPool             *bool             `json:"portPool"`
-	Terrier              *bool             `json:"terrier"`
-	AutoPopulateInstall  *bool             `json:"autoPopulateInstall"`
-	AutoPullNew          *bool             `json:"autoPullNew"`
-	AutoPullPrimaryOnly  *bool             `json:"autoPullPrimaryOnly"`
-	DoubutsuNames        *bool             `json:"doubutsuNames"`
-	CodexWorktreeNames   *bool             `json:"codexWorktreeNames"`
-	Launchers            []launcherCommand `json:"launchers"`
-	HiddenLaunchers      []string          `json:"hiddenLaunchers"`
+	DeleteBranchOnRemove  *bool             `json:"deleteBranchOnRemove"`
+	PortPool              *bool             `json:"portPool"`
+	Terrier               *bool             `json:"terrier"`
+	AutoPopulateInstall   *bool             `json:"autoPopulateInstall"`
+	AutoPullNew           *bool             `json:"autoPullNew"`
+	AutoPullPrimaryOnly   *bool             `json:"autoPullPrimaryOnly"`
+	DoubutsuNames         *bool             `json:"doubutsuNames"`
+	CodexWorktreeNames    *bool             `json:"codexWorktreeNames"`
+	ManagedOnProjectDrive *bool             `json:"managedOnProjectDrive"`
+	Launchers             []launcherCommand `json:"launchers"`
+	HiddenLaunchers       []string          `json:"hiddenLaunchers"`
 }
 
 type launcherCommand struct {
