@@ -24,6 +24,7 @@ import { ToggleRow } from "@/components/shared/ToggleRow";
 import { CarryOverSection } from "./CarryOverSection";
 import { CustomLauncherInput } from "@/components/shared/CustomLauncherInput";
 import { ScriptField } from "./ScriptField";
+import { WorktreeLocationField } from "./WorktreeLocationField";
 import {
   LAUNCH_TAB,
   selectSettingsTab,
@@ -202,7 +203,7 @@ export function ConfigureForm({
             )}
           </section>
 
-          <section className="space-y-3">
+          <section className="space-y-4">
             <SectionIntro title="Worktrees">
               Settings for branches created inside this project.
             </SectionIntro>
@@ -228,6 +229,11 @@ export function ConfigureForm({
                 first local branch) when the branch you set here doesn't exist.
               </p>
             </div>
+            <WorktreeLocationField
+              projectId={projectId}
+              config={initialConfig}
+              home={home}
+            />
           </section>
 
           <section className="space-y-3">

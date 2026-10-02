@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
-import { Info } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { FolderPickerModal } from "@/components/shared/FolderPickerModal";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useShigomoriWrite } from "@/hooks/config/useShigomoriWrite";
+import { useProjectNav } from "@/hooks/projects/useProjectNav";
 import { useRelocateWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import {
   isManagedWorktree,
@@ -15,27 +14,10 @@ import {
 } from "@shared/schemas";
 import { worktreePathFor } from "@shared/git/worktreeLayout";
 import { pluralize } from "@/lib/pluralize";
-import { LayoutOptionItem, type LayoutOption } from "./LayoutOptionItem";
+import { LayoutOptionItem } from "./LayoutOptionItem";
+import { LAYOUT_OPTIONS } from "./layoutOptions";
 import { WorktreeMoveDetails } from "@/components/shared/WorktreeMoveDetails";
 import { tildify } from "@shared/projectPaths";
-
-const LAYOUT_OPTIONS: LayoutOption[] = [
-  {
-    value: "managed-root",
-    label: "Managed",
-    description: "Worktrees live in Shigomori's data folder.",
-    recommended: true,
-  },
-  {
-    value: "in-project",
-    label: "In project",
-    description: "Worktrees live inside the primary at .shigomori/worktrees/.",
-  },
-  {
-    value: "custom",
-    label: "Custom path",
-  },
-];
 
 interface LocationFormProps {
   projectId: string;
@@ -57,7 +39,7 @@ export function LocationForm({
   resolvedDefaultBranch,
   // react-doctor-disable-next-line react-doctor/prefer-useReducer -- per-field setters are simple; saved* mirrors track persisted state without coupling between fields
 }: LocationFormProps) {
-  const navigate = useNavigate();
+  const { toProjectPage } = useProjectNav();
   const write = useShigomoriWrite();
   const relocate = useRelocateWorktree();
 
@@ -182,7 +164,11 @@ export function LocationForm({
     );
   };
 
-  const submitLabel = batchRunning ? "Moving…" : "Move";
+  const submitLabel = batchRunning
+    ? "Moving…"
+    : toMove.length > 0
+      ? `Move ${pluralize(toMove.length, "worktree")}`
+      : "Save location";
 
   return (
     <>
@@ -246,19 +232,6 @@ export function LocationForm({
         </div>
       )}
 
-      {toMove.length === 0 && (
-        <div className="flex items-center gap-2 rounded-md border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
-          <Info aria-hidden className="size-4 shrink-0" />
-          <span>
-            {customMissing
-              ? "Pick a folder to continue."
-              : movable.length === 0
-                ? "No managed worktrees yet. The layout setting will apply to new ones."
-                : "All managed worktrees already live at this location."}
-          </span>
-        </div>
-      )}
-
       {write.error && (
         <ErrorBanner
           message={write.error.message}
@@ -271,7 +244,7 @@ export function LocationForm({
           type="button"
           variant="ghost"
           size="sm"
-          onClick={() => navigate({ to: "/" })}
+          onClick={() => toProjectPage("configure", projectId)}
           disabled={batchRunning}
         >
           Cancel

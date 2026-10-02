@@ -29,7 +29,8 @@ export const PROJECT_ROUTE_PATHS = {
   configure: "/devices/$deviceId/projects/$projectId/configure",
   branches: "/devices/$deviceId/projects/$projectId/branches",
   convertExternal: "/devices/$deviceId/projects/$projectId/convert-external",
-  worktreeLocation: "/devices/$deviceId/projects/$projectId/worktree-location",
+  worktreeLocation:
+    "/devices/$deviceId/projects/$projectId/configure/worktree-location",
 } as const;
 
 // The sidebar and the palette name this machine's rows with no device

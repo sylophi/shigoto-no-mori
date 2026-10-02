@@ -11,7 +11,10 @@ import { PAGE_BODY } from "@/components/shared/PageShell";
 
 export function WorktreeLocation() {
   return (
-    <ProjectDevicePage title="Worktree location">
+    <ProjectDevicePage
+      title="Worktree location"
+      parent={{ label: "Configure", page: "configure" }}
+    >
       {(scoped) => <LocationBody project={scoped} />}
     </ProjectDevicePage>
   );

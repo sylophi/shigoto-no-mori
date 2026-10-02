@@ -16,7 +16,11 @@ import { DeviceChip } from "@/components/shared/DeviceChip";
 import { TerrierPaw } from "@/components/shared/TerrierPaw";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { isHolder, useDeviceTargets } from "@/components/shared/deviceTargets";
-import { useScopedProjectParams } from "@/hooks/projects/useProjectNav";
+import {
+  useProjectNav,
+  useScopedProjectParams,
+  type ProjectPage,
+} from "@/hooks/projects/useProjectNav";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import type { Project } from "@shared/schemas";
@@ -31,10 +35,14 @@ import { PageHeader } from "./PageHeader";
 
 export function ProjectDevicePage({
   title,
+  parent,
   renderAllDevices,
   children,
 }: {
   title: string;
+  // The page this one is a subpage of, linked from the eyebrow after
+  // the project's name. The link keeps the picked device.
+  parent?: { label: string; page: ProjectPage };
   // The body of the "All devices" tab: what the page holds that is no
   // one device's copy (the project's shared settings). Given the routed
   // project, since it is about the repo and not a checkout. The tab
@@ -50,6 +58,7 @@ export function ProjectDevicePage({
   const { projectId } = useScopedProjectParams();
   const scope = useHostScope();
   const { data: projects = [] } = useProjects();
+  const { toProjectPage } = useProjectNav();
   const project = projects.find((p) => p.id === projectId);
   const holders = useDeviceTargets(project).filter(isHolder);
   // The tab the page opens on is the device the route named. A route
@@ -85,7 +94,27 @@ export function ProjectDevicePage({
   return (
     <div className="flex h-full flex-col">
       <PageHeader
-        eyebrow={project.name}
+        eyebrow={
+          parent ? (
+            <span className="flex items-center gap-1.5">
+              {project.name}
+              <span aria-hidden className="text-muted-foreground/40">
+                /
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  toProjectPage(parent.page, project.id, shown.deviceId)
+                }
+                className="-mx-1 rounded px-1 transition-colors hover:bg-muted hover:text-foreground dark:hover:bg-muted/50"
+              >
+                {parent.label}
+              </button>
+            </span>
+          ) : (
+            project.name
+          )
+        }
         title={title}
         tabs={
           tabbed ? (
