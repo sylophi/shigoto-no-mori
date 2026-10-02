@@ -45,11 +45,12 @@ import { buildInboxRows } from "./inbox/buildInboxRows";
 import { NewWorktreeButton } from "./inbox/NewWorktreeButton";
 import { setOpenProject, useOpenProject } from "./openProject";
 import { ProjectDragPreview } from "./ProjectDragPreview";
-import type {
-  GroupShelf,
-  InboxShelf,
-  SidebarRow,
-  SidebarViewModel,
+import {
+  ROW_LAYOUT,
+  type GroupShelf,
+  type InboxShelf,
+  type SidebarRow,
+  type SidebarViewModel,
 } from "./sidebarRow";
 import { ARRIVE_FROM } from "./sidebarChrome";
 import { SidebarFooter } from "./SidebarFooter";
@@ -59,6 +60,8 @@ import { AddProjectButton } from "./AddProjectButton";
 import { sortProjects } from "@/lib/sortProjects";
 import { useWorktreeSort } from "@/hooks/sharedSettings/useWorktreeSort";
 import { SidebarList } from "./SidebarList";
+import { RowContent } from "./RowContent";
+import type { RowHandlers } from "./VirtualRow";
 import { SidebarTakeoverSlot, useSidebarTakenOver } from "./SidebarTakeover";
 import { withToggled } from "@/lib/toggleSet";
 import { cn } from "@/lib/utils";
@@ -317,7 +320,7 @@ function Forest({
         mirrors,
         deviceBadges,
       });
-  const { rows, level } = view;
+  const { rows, pinned, level } = view;
   const inProject = typeof level === "string";
   // Failed listings, local or remote, surface here whether or not the
   // filter shows their rows -- without it a peer's project would
@@ -365,7 +368,7 @@ function Forest({
   const emptyMessage = emptyForestMessage({
     loading: isLoading || remoteLoading,
     narrowedTo: activeFilter?.label,
-    empty: rows.length === 0,
+    empty: rows.length === 0 && pinned === undefined,
     noProjects: projects.length === 0,
     viewMessage: view.emptyMessage,
   });
@@ -390,25 +393,45 @@ function Forest({
     );
   }
 
-  const list = (
-    <SidebarList
-      rows={rows}
-      revealKey={view.revealKey}
-      openFold={openFold}
-      foldsOpenedForRef={foldsOpenedForRef}
-      scrollerRef={scrollerRef}
-      // Not while the forest is still listing: the level it settles on
-      // is then where it starts, not a move from the list.
-      level={isLoading || remoteLoading ? undefined : level}
-      asked={askedLevel === level}
-      handlers={{
-        onToggle: goTo,
-        onToggleShelved: toggleShelved,
-        onToggleShelf: toggleShelf,
-        currentGroupKey: onScreenKey,
-        arrangeMode,
-      }}
-    />
+  const handlers: RowHandlers = {
+    onToggle: goTo,
+    onToggleShelved: toggleShelved,
+    onToggleShelf: toggleShelf,
+    currentGroupKey: onScreenKey,
+    arrangeMode,
+  };
+  // Over the scroller, so it stays put as the rows scroll. It has no
+  // hover to track: the open project's title wears its actions at rest.
+  // The gap under it keeps the rows scrolling up from being cut off
+  // flush against the name.
+  const pinnedRow = pinned && (
+    <div
+      data-slot="sidebar-row"
+      className={cn(ROW_LAYOUT[pinned.kind], "pb-1")}
+    >
+      <RowContent row={pinned} {...handlers} isHovered={false} />
+    </div>
+  );
+  const scroller = (
+    <div
+      ref={scrollerRef}
+      data-slot="sidebar-scroller"
+      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+    >
+      <SidebarList
+        rows={rows}
+        revealKey={view.revealKey}
+        openFold={openFold}
+        foldsOpenedForRef={foldsOpenedForRef}
+        scrollerRef={scrollerRef}
+        // Not while the forest is still listing: the level it settles on
+        // is then where it starts, not a move from the list.
+        level={isLoading || remoteLoading ? undefined : level}
+        asked={askedLevel === level}
+        handlers={handlers}
+      />
+      <SidebarEmptyState message={emptyMessage} />
+    </div>
   );
 
   return (
@@ -455,37 +478,32 @@ function Forest({
             }
           />
         )}
-        <div
-          ref={scrollerRef}
-          data-slot="sidebar-scroller"
-          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
-        >
-          {/* Dragging reorders projects, which the inbox doesn't show, so
-              it doesn't mount the DnD context at all. */}
-          {inbox ? (
-            list
-          ) : (
-            <DndContext
-              sensors={sensors}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-              onDragCancel={() => setActiveId(null)}
+        {/* Dragging reorders projects, which the inbox doesn't show, so
+            it doesn't mount the DnD context at all. The context holds the
+            pinned header too, since every project row is a sortable. */}
+        {inbox ? (
+          scroller
+        ) : (
+          <DndContext
+            sensors={sensors}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => setActiveId(null)}
+          >
+            <SortableContext
+              items={orderedProjects.map((p) => p.id)}
+              strategy={verticalListSortingStrategy}
             >
-              <SortableContext
-                items={orderedProjects.map((p) => p.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                {list}
-              </SortableContext>
-              <DragOverlay>
-                {activeProject ? (
-                  <ProjectDragPreview project={activeProject} />
-                ) : null}
-              </DragOverlay>
-            </DndContext>
-          )}
-          <SidebarEmptyState message={emptyMessage} />
-        </div>
+              {pinnedRow}
+              {scroller}
+            </SortableContext>
+            <DragOverlay>
+              {activeProject ? (
+                <ProjectDragPreview project={activeProject} />
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        )}
       </ViewPane>
     </>
   );

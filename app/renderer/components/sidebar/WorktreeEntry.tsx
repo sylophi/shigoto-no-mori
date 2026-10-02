@@ -14,6 +14,7 @@ import {
   type SidebarDeviceBadge,
 } from "./DeviceBadge";
 import { PullRequestPill } from "./PullRequestPill";
+import type { InboxShelf } from "./sidebarRow";
 import { ChangedFilesPill, RemoteSyncPill } from "./StatusIndicator";
 import { activityMark, type WorktreeRowState } from "./useWorktreeRowState";
 
@@ -26,6 +27,9 @@ interface WorktreeEntryProps extends ComponentProps<"button"> {
   device: SidebarDeviceBadge | undefined;
   mirror: SidebarDeviceBadge | undefined;
   state: WorktreeRowState;
+  // The fold or shelf the row was filed behind (sidebarRow), null for
+  // the open rows.
+  shelf: InboxShelf | null;
   // The inbox's line over the branch, naming the project and when the
   // worktree last moved, with the device marks and what's running.
   // Absent (the tree, which shows one project at a time), those marks
@@ -53,6 +57,7 @@ export function WorktreeEntry({
   device,
   mirror,
   state,
+  shelf,
   context,
   className,
   children,
@@ -80,12 +85,17 @@ export function WorktreeEntry({
         "hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-ring data-popup-open:bg-accent/60",
         isSelected && "bg-accent text-accent-foreground",
         // One fade, the strongest that applies: a delete in flight, then
-        // an unreachable device's last known state, then the shelf.
+        // an unreachable device's last known state, then a row the user
+        // filed away, shelved or behind a hidden prefix. Merged is git's
+        // call, not theirs, so it keeps full strength.
         isDeleting
           ? "opacity-50"
           : device && !device.reachable
             ? "opacity-60"
-            : worktree.shelved && !isSelected && "opacity-70",
+            : shelf !== null &&
+              shelf !== "merged" &&
+              !isSelected &&
+              "opacity-70",
         className,
       )}
     >
