@@ -51,6 +51,7 @@ export function RowContent({
           pr={row.pr}
           stack={row.stack}
           stackChild={row.stackChild}
+          shelf={row.shelf}
         />
       );
     case "remote-worktree":
@@ -61,6 +62,7 @@ export function RowContent({
           pr={row.pr}
           stack={row.stack}
           stackChild={row.stackChild}
+          shelf={row.shelf}
         />
       );
     case "inbox-worktree":
@@ -72,6 +74,7 @@ export function RowContent({
           stack={row.stack}
           device={row.device}
           mirror={row.mirror}
+          shelf={row.shelf}
         />
       );
     case "worktree-skeleton":
