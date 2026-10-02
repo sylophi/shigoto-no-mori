@@ -26,3 +26,13 @@ export const PROJECT_ACTION_HOOKS = {
   "data-icon-button": true,
   "data-size": "icon-sm",
 } as const;
+
+// Content arriving in the sidebar for a move between two of its places,
+// from the side it was gone to: deeper in (a project, a page's list, the
+// tree from the inbox) from the right, back out from the left. One short
+// slide wherever it plays, so every move reads as the same motion.
+export const ARRIVE_FROM = {
+  left: "animate-in duration-150 fade-in-0 slide-in-from-left-2 motion-reduce:animate-none",
+  right:
+    "animate-in duration-150 fade-in-0 slide-in-from-right-2 motion-reduce:animate-none",
+} as const;
