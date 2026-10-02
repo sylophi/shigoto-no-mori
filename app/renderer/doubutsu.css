@@ -1094,12 +1094,19 @@
   animation: none;
 }
 
-/* The tile a project without a logo wears is a leaf here, two corners
-   pinched, standing on a sticker lip in a darker shade of its own
-   hue. */
+/* The tile a project without a logo wears is a leaf here (its own
+   markup, picked by doubutsu-only), standing on a sticker lip in a
+   darker shade of its own hue. A drop-shadow rather than a box-shadow,
+   so the lip follows the leaf. The initial shrinks and moves over to
+   sit on the leaf's body, clear of the bite. */
 .doubutsu [data-slot="project-tile"] {
-  border-radius: 15% 65%;
-  box-shadow: 0 1.5px 0 0 oklch(var(--project-tile-edge) var(--project-hue));
+  filter: drop-shadow(
+    0 1.5px 0 oklch(var(--project-tile-edge) var(--project-hue))
+  );
+  & text {
+    font-size: 8.8px;
+    transform: translate(-1px, 0.5px);
+  }
 }
 
 /* The Allow control switch governs everything in its panel, which
