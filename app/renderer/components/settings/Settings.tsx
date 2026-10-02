@@ -17,8 +17,7 @@ export function Settings() {
   // Back to wherever Settings was opened from. Switching sections
   // pushes no history, so one step always leaves the page. A window
   // that opened straight onto Settings has nothing behind it and goes
-  // to "/", which lands on the first worktree, the same place a fresh
-  // window opens.
+  // to "/", the same place a fresh window opens.
   const back = () =>
     router.history.canGoBack()
       ? router.history.back()

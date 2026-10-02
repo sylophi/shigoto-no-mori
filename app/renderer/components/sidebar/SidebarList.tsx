@@ -119,7 +119,7 @@ export function SidebarList({
   }, [level]);
 
   // Reveal the selection when navigation comes from outside the sidebar
-  // (a ⌘K jump, empty-state redirect) by scrolling the virtualized
+  // (a ⌘K jump, a deep link) by scrolling the virtualized
   // list to whichever row the active view says stands for it. The row can
   // lag the route (worktree queries still loading), so this retries every
   // render until it exists; the ref stops repeat scrolls afterwards so

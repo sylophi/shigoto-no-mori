@@ -144,8 +144,8 @@ export interface SidebarViewModel {
   // row is behind a shut shelf, and null when the view can't place it
   // at all, or not yet: the tree opens the project of the page on
   // screen itself (Sidebar), and the row is revealed once it draws.
-  // No shelf is opened on the way: the empty-state redirect runs on
-  // every launch, and auto-expanding would undo the user's folding.
+  // No shelf is opened on the way, since auto-expanding would undo the
+  // user's folding.
   // A deviceId names a peer's worktree; absent, the worktree is this
   // machine's.
   revealKey: (

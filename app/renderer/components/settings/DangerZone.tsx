@@ -43,10 +43,8 @@ export function DangerZone() {
         // invalidateQueries() would refetch them all against the wiped
         // data dir and raise a burst of "Unknown project/worktree" toasts,
         // with retries landing even after the navigation below. Cancel
-        // in-flight fetches and drop the cache BEFORE navigating: the
-        // "/" route redirects to the first worktree it finds in cache
-        // (EmptyState's resolver), so navigating while pre-nuke data is
-        // still cached bounces straight back to a dead worktree view.
+        // in-flight fetches and drop the cache BEFORE navigating, so
+        // "/" never draws pre-nuke data.
         await queryClient.cancelQueries();
         queryClient.clear();
         // A data dir that boot adopted under its pre-2.0 name is gone

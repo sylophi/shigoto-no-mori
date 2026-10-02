@@ -34,11 +34,11 @@ const rootRoute = createRootRoute({
 });
 
 // "/" is where a fresh window opens and where leaving a worktree's
-// pages lands. With projects of its own the app resolves it to the
-// first worktree (or the first-run state). A hostless client has no
-// local forest, so its home is the account's devices (on a phone, the
-// inbox tab), redirected at load time (no frame rendered) and replaced
-// in history so Back never lands on the dispatcher again.
+// pages lands. With projects of its own the app waits there for a pick
+// from the sidebar (or shows the first-run state). A hostless
+// client has no local forest, so its home is the account's devices (on
+// a phone, the inbox tab), redirected at load time (no frame rendered)
+// and replaced in history so Back never lands on the dispatcher again.
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",

@@ -35,11 +35,11 @@ export function setOpenProject(groupKey: string | null): void {
 
 // The open project, following the page on screen: the project a page
 // belongs to opens on its own, wherever the page was opened from (⌘K,
-// the inbox, a fresh window). Once per page, so going back to the list,
+// the inbox, a web link). Once per page, so going back to the list,
 // or into another project, while the page stays up is not undone.
 //
 // The answer is worked out in render and the store catches up after, so
-// a window that opens on a worktree paints inside its project rather
+// a web page that loads on a worktree paints inside its project rather
 // than on the list for a frame. Whoever is mounted while a page is up
 // has to call this for the follow to happen: the forest itself on a
 // wide layout, and the phone layout's keepalive (AppShell), where the
