@@ -149,7 +149,7 @@ function homes(list: readonly Worktree[]): Map<string, Worktree> {
 }
 
 // A worktree's place in its project, which a relocate keeps.
-function keyOf(worktree: Worktree): string {
+export function keyOf(worktree: Worktree): string {
   return `${worktree.projectId}\u0000${worktree.name}`;
 }
 

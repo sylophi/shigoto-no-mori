@@ -15,6 +15,7 @@ import { useToday } from "@/hooks/ui/useToday";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
 import { villagerCatchphrase } from "@/lib/villagerVoice";
+import { birthdayLabel } from "@/lib/villagers/birthdays";
 import { stationeryFor } from "@/lib/villagers/stationery";
 import {
   type AlbumEntry,
@@ -51,7 +52,7 @@ export function VisitorSlot({
 }: {
   entry: AlbumEntry;
   index: number;
-  // The one villager met most (bestFriendOf), whose sticker says so.
+  // The one villager met most (Album.bestFriend), whose sticker says so.
   bestFriend: boolean;
 }) {
   // A face loads once its slot is scrolled near.
@@ -222,18 +223,6 @@ function StickerFront({
   );
 }
 
-const BIRTHDAY = new Intl.DateTimeFormat(undefined, {
-  month: "long",
-  day: "numeric",
-});
-
-// "September 25", for a profile's MM-DD.
-function birthdayOf(monthDay: string | undefined): string | null {
-  const [month, day] = monthDay?.split("-").map(Number) ?? [];
-  if (month === undefined || day === undefined) return null;
-  return BIRTHDAY.format(new Date(2000, month - 1, day));
-}
-
 // The back of the card: what the guest book knows of them, written on
 // lined paper.
 function StickerBack({
@@ -249,7 +238,7 @@ function StickerBack({
   const now = useNow();
   const ink = rarity === "legendary" ? stationeryFor(slug).ink : "";
   const catchphrase = villagerCatchphrase(profile);
-  const birthday = birthdayOf(profile.birthday);
+  const birthday = birthdayLabel(profile.birthday);
   // Key, label, value.
   const rows: [string, string, string][] = [
     ["visits", "Visits", String(visits.count)],
@@ -303,7 +292,6 @@ function EmptySlot({
   const hint = entry.rarity === "common" ? entry.profile.species : undefined;
   return (
     <div
-      data-slot="visitor-slot"
       style={style}
       aria-label="Hasn't visited yet"
       role="img"

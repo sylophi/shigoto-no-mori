@@ -4,9 +4,10 @@
 // app keeps it on its own (localStorage), and nothing on a device knows
 // about it.
 //
-// A worktree counts once, keyed by its device, its id and when it was
-// made, so seeing a list again changes nothing and a worktree made
-// again in the same place is a new visit. Residents count the first
+// A worktree counts once, keyed by its device, its place (project and
+// name, keyOf: a relocate changes its id but not the visit) and when it
+// was made, so seeing a list again changes nothing and a worktree made
+// again under the same name is a new visit. Residents count the first
 // time the app sees them, so the album starts from whoever lives here
 // now, and a villager who moved in while the app was closed counts once
 // it opens, as long as they still live there. A copy a mirror or a
@@ -16,7 +17,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { Worktree } from "@shared/schemas";
 import { readStoredJson, writeStored } from "@/lib/localStorage";
 import { hostKeyDeviceId, isWorktreeListKey } from "@/lib/queryKeys";
-import { speakerSlug } from "@/lib/villagerVoice";
+import { keyOf, residentOf } from "@/lib/villagerVoice";
 import { createExternalStore, useExternalStore } from "@/store/externalStore";
 import { villageProfiles } from "./speakers";
 
@@ -60,10 +61,9 @@ export async function recordVisits(
   const held = log.get();
   let next: Record<string, VisitEntry> | undefined;
   for (const worktree of worktrees) {
-    if (worktree.isPrimary) continue;
-    const slug = speakerSlug(worktree.name, profiles);
-    if (slug === null) continue;
-    const key = `${deviceId}:${worktree.id}:${worktree.createdAt ?? ""}`;
+    const slug = residentOf(worktree, profiles)?.slug;
+    if (slug === undefined) continue;
+    const key = `${deviceId}:${keyOf(worktree)}:${worktree.createdAt ?? ""}`;
     if (Object.hasOwn(held, key)) continue;
     next ??= { ...held };
     next[key] = isCopy(worktree)
@@ -75,16 +75,16 @@ export async function recordVisits(
   log.publish(next);
 }
 
-// Every worktree list the window holds, for when Village life comes on
-// or the album opens: the lists may not change again for a while.
+// Every worktree list the window holds, for when the album opens: the
+// lists may not change again for a while.
 export async function recordCachedVisits(
   queryClient: QueryClient,
 ): Promise<void> {
   const lists = queryClient
     .getQueryCache()
     .findAll({ predicate: (query) => isWorktreeListKey(query.queryKey) });
-  // Each one reads the log and writes it back with nothing awaited in
-  // between, so they can run together.
+  // Each one reads the log and writes it back in one step, after its
+  // await, so they can run together.
   await Promise.all(
     lists.map((query) => {
       const list = query.state.data as Worktree[] | undefined;

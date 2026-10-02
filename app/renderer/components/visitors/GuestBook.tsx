@@ -15,7 +15,7 @@ import { villagerCatchphrase } from "@/lib/villagerVoice";
 import { stationeryFor } from "@/lib/villagers/stationery";
 import {
   type Album,
-  type AlbumEntry,
+  type VisitedEntry,
   visitDate,
   visitedTimes,
 } from "@/lib/villagers/visitors";
@@ -27,7 +27,7 @@ import { AlbumProgress } from "./AlbumProgress";
 // of the album is filled, postmarked with the totals, and the newest
 // face.
 export function GuestBook({ album }: { album: Album }) {
-  const { bestFriend, newest } = album;
+  const { bestFriend } = album;
   return (
     <section
       data-slot="visitor-guest-book"
@@ -36,7 +36,7 @@ export function GuestBook({ album }: { album: Album }) {
     >
       <div className="grid @2xl:grid-cols-2">
         {bestFriend !== null && <BestFriend entry={bestFriend} />}
-        <Collection album={album} newest={newest} />
+        <Collection album={album} />
       </div>
       <Binding />
     </section>
@@ -68,12 +68,11 @@ function PageEyebrow({ children }: { children: React.ReactNode }) {
   );
 }
 
-function BestFriend({ entry }: { entry: AlbumEntry }) {
+function BestFriend({ entry }: { entry: VisitedEntry }) {
   const face = useVillagerFace(entry.slug);
   const color = useFaceColor(face);
   const paper = stationeryFor(entry.slug);
-  const visits = entry.visits;
-  if (visits === null) return null;
+  const { visits } = entry;
   const catchphrase = villagerCatchphrase(entry.profile);
   return (
     <div
@@ -125,14 +124,8 @@ function BestFriend({ entry }: { entry: AlbumEntry }) {
   );
 }
 
-function Collection({
-  album,
-  newest,
-}: {
-  album: Album;
-  newest: AlbumEntry | null;
-}) {
-  const met = album.visited.length;
+function Collection({ album }: { album: Album }) {
+  const { metTotal: met, newest } = album;
   return (
     <div className="relative flex flex-col px-6 py-5 @2xl:pl-10">
       <PageEyebrow>Guest book</PageEyebrow>
@@ -232,10 +225,9 @@ function Postmark({
   );
 }
 
-function NewestFace({ entry }: { entry: AlbumEntry }) {
+function NewestFace({ entry }: { entry: VisitedEntry }) {
   const face = useVillagerFace(entry.slug);
   const now = useNow();
-  if (entry.visits === null) return null;
   return (
     <div className="mt-auto flex items-center gap-2.5 pt-4">
       <span className="text-xs font-medium text-muted-foreground">

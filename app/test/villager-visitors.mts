@@ -11,12 +11,7 @@
 // Runs under test/lib/register-ts-alias.mts. Run: pnpm test villager-visitors.
 import assert from "node:assert/strict";
 import type { VillagerProfiles } from "@shared/schemas";
-import {
-  bestFriendOf,
-  buildAlbum,
-  sortAlbum,
-  tallyVisits,
-} from "@/lib/villagers/visitors";
+import { buildAlbum, sortAlbum, tallyVisits } from "@/lib/villagers/visitors";
 import { makeProof } from "./lib/checkKit.mts";
 
 const proof = makeProof("villager-visitors proof");
@@ -67,7 +62,7 @@ try {
     );
     assert.equal(album.sections.common.length, 3);
     // ghost has no profile: no slot, and its visits don't count.
-    assert.equal(album.visited.length, 3);
+    assert.equal(album.metTotal, 3);
     assert.equal(album.visits, 5);
     assert.deepEqual(album.met, { legendary: 1, rare: 0, common: 2 });
   });
@@ -83,7 +78,7 @@ try {
   await proof.check("one best friend, the villager met most", () => {
     assert.equal(album.bestFriend?.slug, "raymond");
     assert.equal(album.newest?.slug, "ace");
-    assert.equal(bestFriendOf([]), null);
+    assert.equal(buildAlbum(profiles, new Map()).bestFriend, null);
     // Met as often: the one seen last.
     const tied = buildAlbum(
       profiles,

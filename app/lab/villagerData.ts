@@ -105,7 +105,7 @@ export function villagerHandlersFor(): AllChannelHandlers {
 
 // The Visitors album's log (renderer/lib/villagers/visitLog.ts), kept
 // in localStorage, posed fresh on every load, before the renderer reads
-// it: a spread of visits across the fixture devices, or none with
+// it: a spread of visits, or none with
 // ?visits=none. Slug, times, and the days ago of the first and last.
 const DAY = 24 * 60 * 60_000;
 const LAB_VISITS: [string, number, number, number][] = [

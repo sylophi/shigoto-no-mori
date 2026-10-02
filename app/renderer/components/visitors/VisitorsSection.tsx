@@ -55,7 +55,7 @@ export function VisitorsSection() {
   const album = buildAlbum(profiles, visits);
   return (
     <div className="flex flex-col gap-8">
-      {album.visited.length === 0 ? <NobodyYet /> : <GuestBook album={album} />}
+      {album.metTotal === 0 ? <NobodyYet /> : <GuestBook album={album} />}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SegmentedControl
           aria-label="Sort"

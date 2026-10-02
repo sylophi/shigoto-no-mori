@@ -62,16 +62,19 @@ export function sortAlbum(
   });
 }
 
+// An album slot someone has filled.
+export type VisitedEntry = AlbumEntry & { visits: Visits };
+
 export interface Album {
   // Rarest first, the order the page shows them.
   sections: Record<VillagerRarity, AlbumEntry[]>;
-  // How many of each section have visited.
+  // How many of each section have visited, and of everyone.
   met: Record<VillagerRarity, number>;
-  // Everyone who has visited, for the guest book.
-  visited: AlbumEntry[];
-  // The one met most (bestFriendOf), and the newest face.
-  bestFriend: AlbumEntry | null;
-  newest: AlbumEntry | null;
+  metTotal: number;
+  // The one met most, and of two met as often the one seen last, and
+  // the newest face (whoever first came last). Null while nobody has.
+  bestFriend: VisitedEntry | null;
+  newest: VisitedEntry | null;
   total: number;
   visits: number;
 }
@@ -81,69 +84,48 @@ export interface Album {
 // face, nothing to show.
 export function buildAlbum(
   profiles: VillagerProfiles,
-  merged: ReadonlyMap<string, Visits>,
+  tally: ReadonlyMap<string, Visits>,
 ): Album {
   const sections: Album["sections"] = { legendary: [], rare: [], common: [] };
   const met: Album["met"] = { legendary: 0, rare: 0, common: 0 };
-  const visited: AlbumEntry[] = [];
+  let bestFriend: VisitedEntry | null = null;
+  let newest: VisitedEntry | null = null;
+  let metTotal = 0;
   let visits = 0;
   for (const [slug, profile] of Object.entries(profiles)) {
     const entry: AlbumEntry = {
       slug,
       profile,
       rarity: villagerRarity(slug, profile),
-      visits: merged.get(slug) ?? null,
+      visits: tally.get(slug) ?? null,
     };
     sections[entry.rarity].push(entry);
-    if (entry.visits !== null) {
-      met[entry.rarity] += 1;
-      visited.push(entry);
-      visits += entry.visits.count;
+    if (entry.visits === null) continue;
+    const visited = entry as VisitedEntry;
+    met[entry.rarity] += 1;
+    metTotal += 1;
+    visits += visited.visits.count;
+    const best = bestFriend?.visits;
+    if (
+      best === undefined ||
+      visited.visits.count > best.count ||
+      (visited.visits.count === best.count && visited.visits.last > best.last)
+    ) {
+      bestFriend = visited;
+    }
+    if (newest === null || visited.visits.first > newest.visits.first) {
+      newest = visited;
     }
   }
   return {
     sections,
     met,
-    visited,
-    bestFriend: bestFriendOf(visited),
-    newest: newestOf(visited),
+    metTotal,
+    bestFriend,
+    newest,
     total: Object.keys(profiles).length,
     visits,
   };
-}
-
-// The best friend: the one villager met most, and of two met as often,
-// the one seen last. Null while nobody has come.
-export function bestFriendOf(
-  visited: readonly AlbumEntry[],
-): AlbumEntry | null {
-  let best: AlbumEntry | null = null;
-  for (const entry of visited) {
-    const visits = entry.visits;
-    const held = best?.visits;
-    if (visits === null) continue;
-    if (
-      held == null ||
-      visits.count > held.count ||
-      (visits.count === held.count && visits.last > held.last)
-    ) {
-      best = entry;
-    }
-  }
-  return best;
-}
-
-// The newest face: whoever first came last.
-export function newestOf(visited: readonly AlbumEntry[]): AlbumEntry | null {
-  let newest: AlbumEntry | null = null;
-  for (const entry of visited) {
-    const first = entry.visits?.first;
-    const latest = newest?.visits?.first;
-    if (first !== undefined && (latest === undefined || first > latest)) {
-      newest = entry;
-    }
-  }
-  return newest;
 }
 
 // How long a first visit stays news: the sticker wears "New!".
