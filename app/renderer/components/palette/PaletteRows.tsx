@@ -1,5 +1,5 @@
 import { Fragment, type ReactNode } from "react";
-import { Folder, Loader2, Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
@@ -75,8 +75,8 @@ function WorktreeRow({
       icon={
         <ProjectIcon
           projectId={worktree.projectId}
+          name={project.name}
           deviceId={device?.deviceId}
-          fallback={Folder}
         />
       }
       title={
@@ -113,8 +113,8 @@ function ProjectRow({ item, query }: { item: PaletteProject; query: string }) {
       icon={
         <ProjectIcon
           projectId={lead.project.id}
+          name={lead.project.name}
           deviceId={lead.device?.deviceId}
-          fallback={Folder}
         />
       }
       title={<Highlight text={lead.project.name} query={query} />}

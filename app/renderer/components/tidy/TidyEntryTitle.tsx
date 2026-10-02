@@ -1,4 +1,3 @@
-import { Folder } from "lucide-react";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { cn } from "@/lib/utils";
 import type { TidyEntry } from "./tidyModel";
@@ -27,14 +26,11 @@ export function TidyEntryTitle({
   return (
     <div className="flex min-w-0 items-center gap-2 phone:flex-wrap phone:gap-y-1">
       <div className="flex min-w-0 items-center gap-1.5">
-        {/* Fallback icon rather than nothing, for the same reason the
-            inbox uses one: this list mixes projects, so a missing icon
-            would ragged-edge every row around it. */}
         {showProject && (
           <ProjectIcon
             projectId={project.id}
+            name={project.name}
             className="size-3"
-            fallback={Folder}
           />
         )}
         <span

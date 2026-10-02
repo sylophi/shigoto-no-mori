@@ -1,4 +1,4 @@
-import { AlertTriangle, Folder } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
 import {
@@ -71,13 +71,10 @@ export function ProjectHeader({
   const lead = missing ? (
     <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
   ) : (
-    // The projects are a list to pick a name out of, so one without an
-    // icon keeps the slot rather than pull its name out of line with
-    // the rest.
     <ProjectIcon
       projectId={iconFrom?.projectId ?? project.id}
+      name={project.name}
       deviceId={iconFrom?.deviceId}
-      fallback={Folder}
     />
   );
   const name = (

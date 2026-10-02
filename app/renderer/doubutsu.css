@@ -49,6 +49,7 @@
  *      popover-content           ui/popover.tsx
  *      sidebar-project-row       sidebar/ProjectRow.tsx
  *      sidebar-project-pick      sidebar/ProjectHeader.tsx
+ *      project-tile              shared/ProjectIcon.tsx
  *      sidebar-inbox-create      sidebar/Sidebar.tsx
  *      sidebar-device-filter     sidebar/DeviceFilterBar.tsx
  *      device-chip               shared/DeviceChip.tsx, shared/DeviceTabs.tsx
@@ -245,6 +246,9 @@
   --diffs-bg-deletion-emphasis: oklch(0.88 0.13 30);
   --diffs-deletion-color: oklch(0.5 0.18 30);
   --diffs-bg-separator: var(--muted);
+  /* The sticker lip under a project's leaf tile: lightness and chroma,
+     the tile's own hue added where it's drawn. */
+  --doubutsu-project-tile-edge: 0.55 0.12;
 }
 
 :is(:root, [data-theme-scope]).doubutsu.dark {
@@ -330,6 +334,7 @@
   --diffs-bg-deletion-emphasis: oklch(0.42 0.12 30);
   --diffs-deletion-color: oklch(0.85 0.13 30);
   --diffs-bg-separator: var(--muted);
+  --doubutsu-project-tile-edge: 0.42 0.1;
 }
 
 /* --- Strip ambient depth ---
@@ -1091,6 +1096,16 @@
 .doubutsu [data-slot="sidebar-project-pick"]:is(:hover, :active) {
   background-image: none;
   animation: none;
+}
+
+/* The tile a project without a logo wears is a leaf here (its own
+   markup, picked by doubutsu-only), standing on a sticker lip in a
+   darker shade of its own hue. A drop-shadow rather than a box-shadow,
+   so the lip follows the leaf. */
+.doubutsu [data-slot="project-tile"] {
+  filter: drop-shadow(
+    0 1.5px 0 oklch(var(--doubutsu-project-tile-edge) var(--project-hue))
+  );
 }
 
 /* The Allow control switch governs everything in its panel, which

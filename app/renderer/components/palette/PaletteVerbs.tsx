@@ -489,7 +489,7 @@ function CreateVerbs({
           (project): Verb => ({
             key: `create:${project.id}`,
             label: `In ${project.name}`,
-            icon: <ProjectIcon projectId={project.id} fallback={Folder} />,
+            icon: <ProjectIcon projectId={project.id} name={project.name} />,
             listKeys: project === first ? "↩" : undefined,
             run: () => actions.create(project.id, row.branch),
           }),
