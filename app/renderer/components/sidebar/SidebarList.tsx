@@ -18,6 +18,13 @@ import { cn } from "@/lib/utils";
 interface SidebarListProps {
   rows: SidebarRow[];
   revealKey: SidebarViewModel["revealKey"];
+  // Opens the shut shelf a row stands for, saying whether it did.
+  openFold: (row: SidebarRow) => boolean;
+  // The worktree the last shelf was opened for. Owned by the forest,
+  // which outlives this list while a page takes the sidebar over, so
+  // a shelf the user folds again stays folded when they come back to
+  // the worktree's page.
+  foldsOpenedForRef: RefObject<string | null>;
   scrollerRef: RefObject<HTMLDivElement | null>;
   handlers: RowHandlers;
   level: Level;
@@ -57,6 +64,8 @@ function matchWorktreeDetail(pathname: string): {
 export function SidebarList({
   rows,
   revealKey,
+  openFold,
+  foldsOpenedForRef,
   scrollerRef,
   handlers,
   level,
@@ -124,7 +133,7 @@ export function SidebarList({
   // behind a shut shelf opens the shelf first. The row can
   // lag the route (worktree queries still loading), so this retries every
   // render until it exists; the ref stops repeat scrolls afterwards so
-  // the user can still scroll away freely, and fold the shelf again.
+  // the user can still scroll away freely.
   // Any device's detail page, so a peer's worktree is revealed too.
   const { pathname } = useLocation();
   const open = matchWorktreeDetail(pathname);
@@ -142,17 +151,12 @@ export function SidebarList({
     const index = rows.findIndex((r) => r.key === key);
     const row = rows[index];
     if (!row) return;
-    // The shelf's toggle stood in for the row. Only a shut one opens,
-    // so a row the open shelf still lacks settles for its toggle.
-    if (row.kind === "shelved-toggle" && !row.expanded) {
-      handlers.onToggleShelved(row.groupId, row.shelf);
-      return;
-    }
-    if (row.kind === "inbox-shelf" && !row.expanded) {
-      handlers.onToggleShelf(row.shelf);
-      return;
-    }
+    // The shelf's toggle stood in for the row: open it, and reveal the
+    // row once it draws. Only a shut one opens, so a row the open shelf
+    // still lacks settles for its toggle, and once per worktree.
+    if (foldsOpenedForRef.current !== revealed && openFold(row)) return;
     lastRevealedRef.current = revealed;
+    foldsOpenedForRef.current = revealed;
     virtualizer.scrollToIndex(index, { align: "auto" });
   });
 

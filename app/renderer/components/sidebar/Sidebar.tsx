@@ -44,7 +44,12 @@ import { buildInboxRows } from "./inbox/buildInboxRows";
 import { NewWorktreeButton } from "./inbox/NewWorktreeButton";
 import { setOpenProject, useOpenProject } from "./openProject";
 import { ProjectDragPreview } from "./ProjectDragPreview";
-import type { GroupShelf, InboxShelf, SidebarViewModel } from "./sidebarRow";
+import type {
+  GroupShelf,
+  InboxShelf,
+  SidebarRow,
+  SidebarViewModel,
+} from "./sidebarRow";
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarToolbar } from "./SidebarToolbar";
@@ -176,6 +181,27 @@ function Forest({
   const toggleShelf = (shelf: InboxShelf) => {
     setOpenShelves(withToggled(shelf));
   };
+
+  // For revealing a worktree behind a shut shelf (SidebarList). Adds
+  // rather than toggles, so a second call before the first lands is
+  // harmless.
+  const openFold = (row: SidebarRow): boolean => {
+    if (row.kind === "shelved-toggle" && !row.expanded) {
+      const key = groupKeyOf(row.groupId);
+      setShelfOpenKeys((prev) => ({
+        ...prev,
+        [row.shelf]: new Set(prev[row.shelf]).add(key),
+      }));
+      return true;
+    }
+    if (row.kind === "inbox-shelf" && !row.expanded) {
+      setOpenShelves((prev) => new Set(prev).add(row.shelf));
+      return true;
+    }
+    return false;
+  };
+  // SidebarList's, kept here so a takeover's unmount doesn't reset it.
+  const foldsOpenedForRef = useRef<string | null>(null);
 
   // The inbox's and the queries' order (the tree re-sorts its groups
   // with projectGroupOrder). Drag-reorder still operates on the stored order
@@ -346,6 +372,8 @@ function Forest({
     <SidebarList
       rows={rows}
       revealKey={view.revealKey}
+      openFold={openFold}
+      foldsOpenedForRef={foldsOpenedForRef}
       scrollerRef={scrollerRef}
       // Not while the forest is still listing: the level it settles on
       // is then where it starts, not a move from the list.

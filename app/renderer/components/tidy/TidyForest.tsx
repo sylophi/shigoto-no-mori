@@ -100,7 +100,6 @@ export function TidyForest() {
 
 // The forest of whichever device the surrounding scope names.
 function TidyBody() {
-  const goBack = useGoBack();
   const queryClient = useQueryClient();
   const { keys } = useHostScope();
   const { data: allProjects = [], isLoading: projectsLoading } = useProjects();
@@ -139,6 +138,8 @@ function TidyBody() {
   const [picked, setPicked] = useState<Set<string> | null>(null);
   const [confirming, setConfirming] = useState(false);
   const { status, batchRunning, runBatch } = useSequentialBatch();
+  // Once a batch has run, the page behind may be one it removed.
+  const goBack = useGoBack({ home: status.size > 0 });
   const deleteWorktree = useDeleteWorktree();
 
   const entries = buildTidyEntries(

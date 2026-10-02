@@ -34,7 +34,6 @@ export function ConvertExternalWorktrees() {
 
 // The externals of whichever device the surrounding scope names.
 function ConvertExternalBody({ project }: { project: Project }) {
-  const goBack = useGoBack();
   // Scope-aware: a worktree converted on a peer opens under that
   // device's route, like every other link out of a scoped page.
   const { toWorktree } = useWorktreeNav();
@@ -47,6 +46,8 @@ function ConvertExternalBody({ project }: { project: Project }) {
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const { status, batchRunning, runBatch } = useSequentialBatch();
+  // Once a batch has run, the page behind may be one it removed.
+  const goBack = useGoBack({ home: status.size > 0 });
 
   const home = device?.homedir ?? null;
 
