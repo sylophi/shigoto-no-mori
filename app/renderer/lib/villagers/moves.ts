@@ -111,7 +111,9 @@ export function quietVillagerMoves(keys: readonly string[]): void {
   for (const key of keys) quiet.set(key, until);
 }
 
-function isQuiet(worktree: Worktree): boolean {
+// Whether a worktree's moves are someone else's news right now
+// (quietVillagerMoves). The visit log (visitLog.ts) reads it too.
+export function isQuiet(worktree: Worktree): boolean {
   const now = Date.now();
   return [worktree.id, worktree.name].some(
     (key) => (quiet.get(key) ?? 0) > now,

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { isQuiet } from "@/lib/villagers/moves";
 import { recordCachedVisits, useVisitLog } from "@/lib/villagers/visitLog";
 import { tallyVisits } from "@/lib/villagers/visitors";
 
@@ -10,7 +11,7 @@ import { tallyVisits } from "@/lib/villagers/visitors";
 export function useVisitors() {
   const queryClient = useQueryClient();
   useEffect(() => {
-    void recordCachedVisits(queryClient);
+    void recordCachedVisits(queryClient, isQuiet);
   }, [queryClient]);
   return tallyVisits(useVisitLog());
 }
