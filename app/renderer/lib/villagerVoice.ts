@@ -103,6 +103,11 @@ export function villagerQuote(profile: VillagerProfile): string | null {
   return sayable(profile.quote);
 }
 
+// A character's catchphrase as this voice would say it, or null.
+export function villagerCatchphrase(profile: VillagerProfile): string | null {
+  return sayable(profile.catchphrase);
+}
+
 // `message` in the speaker's voice, or null when they have no
 // catchphrase to end it with.
 export function villagerLine(
@@ -144,7 +149,7 @@ function homes(list: readonly Worktree[]): Map<string, Worktree> {
 }
 
 // A worktree's place in its project, which a relocate keeps.
-function keyOf(worktree: Worktree): string {
+export function keyOf(worktree: Worktree): string {
   return `${worktree.projectId}\u0000${worktree.name}`;
 }
 

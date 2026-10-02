@@ -70,6 +70,8 @@ Poses ride the URL:
   status, for the control beside Village life in Settings. The
   default is ready when the lab holds a download (below), absent
   otherwise.
+- `?visits=none`: an empty Visitors album (Settings, with Village
+  life on). Without it the album is posed with a spread of visits.
 
 Runtime controls on `window.smLab`: `setPeer(deviceId, "connected" |
 "online" | "offline")`, `setSocket(phase)`, `navigate(to)` (desktop),

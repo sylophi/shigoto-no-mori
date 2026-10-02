@@ -1,8 +1,8 @@
-import { cn } from "@/lib/utils";
-import { printStyle, stationeryFor } from "@/lib/villagers/stationery";
+import { stationeryFor } from "@/lib/villagers/stationery";
 import { useFaceColor } from "@/hooks/villagers/useFaceColor";
 import type { Resident } from "@/hooks/villagers/useResident";
 import { Balloons, Bunting } from "./Celebration";
+import { StationeryPrint } from "./StationeryPrint";
 import { villagerInk } from "./VillagerDialogue";
 
 // The worktree page's header on its villager's birthday, behind the
@@ -56,13 +56,7 @@ function LegendaryTrimmings({ slug }: { slug: string }) {
   return (
     <>
       <div className="absolute inset-0 [mask-image:linear-gradient(to_left,black_20%,transparent_65%)]">
-        <div
-          style={printStyle(paper)}
-          className={cn(
-            "villager-paper-drift absolute right-0 bottom-0 opacity-25",
-            paper.color,
-          )}
-        />
+        <StationeryPrint paper={paper} className="opacity-25" />
       </div>
       <Balloons />
       <Bunting count={30} />

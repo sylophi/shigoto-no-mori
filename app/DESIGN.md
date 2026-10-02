@@ -260,3 +260,16 @@ moment too, on every device's worktrees alike.
   and for a legend balloons (one carrying a present), a bigger burst
   and their stationery.
 
+### Visitors
+
+Every villager who moves in is a visit, and Visitors (a section of
+Settings while Village life shows) collects them like stickers in an
+album.
+
+- **Rarity scales the sticker** the way it scales the news: a regular
+  villager's face on its tint, a special character's wash and name
+  plate in their own color, a legend on their stationery with their
+  face on a stamp. Every legend's slot shows from the start, as a
+  silhouette, so the rarest are there to chase.
+- **There is one best friend**, the villager met most, and only their
+  sticker and the guest book say so.

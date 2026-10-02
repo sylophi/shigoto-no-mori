@@ -1,5 +1,6 @@
 import { type CSSProperties, useState } from "react";
-import { printStyle, stationeryFor } from "@/lib/villagers/stationery";
+import { stationeryFor } from "@/lib/villagers/stationery";
+import { StationeryPrint } from "./StationeryPrint";
 import { cn } from "@/lib/utils";
 import type { MoveNews, Speaker } from "@/lib/villagerVoice";
 import { NextArrow } from "./NextArrow";
@@ -45,14 +46,7 @@ export function VillagerLetter({
       >
         {/* The stationery's print, over the paper and under the page
             written on. */}
-        <div
-          aria-hidden
-          style={printStyle(paper)}
-          className={cn(
-            "villager-paper-drift absolute right-0 bottom-0 opacity-55",
-            paper.color,
-          )}
-        />
+        <StationeryPrint paper={paper} className="opacity-55" />
         <div className="villager-rise relative rounded-xl bg-popover/90 px-4 pt-3 pb-2.5">
           <div className="pr-14">
             <MoveCaption news={news} ink={paper.ink} />
@@ -146,6 +140,25 @@ function Signature({
   );
 }
 
+// Their face on a postage stamp with perforated edges, over a wash of
+// their stationery's color (`tint`). Size, lean and placement are the
+// caller's, and so is the stamp's paper (a background utility).
+export function FaceStamp({
+  face,
+  tint,
+  className,
+}: {
+  face: string;
+  tint: string;
+  className: string;
+}) {
+  return (
+    <span style={PERFORATED} className={cn("flex p-1", className)}>
+      <FacePrint face={face} tint={tint} className="size-full rounded-[3px]" />
+    </span>
+  );
+}
+
 // Their face as printed on a stamp or a photo: over a wash of the
 // stationery's color.
 function FacePrint({
@@ -196,14 +209,9 @@ function Stamp({
       <span
         data-slot="villager-stamp"
         aria-hidden
-        style={PERFORATED}
-        className="villager-stamp-drop absolute top-0 right-0 z-10 flex size-14 rotate-6 bg-popover p-1"
+        className="villager-stamp-drop absolute top-0 right-0 z-10 rotate-6"
       >
-        <FacePrint
-          face={face}
-          tint={tint}
-          className="size-full rounded-[3px]"
-        />
+        <FaceStamp face={face} tint={tint} className="size-14 bg-popover" />
       </span>
       <svg
         aria-hidden
