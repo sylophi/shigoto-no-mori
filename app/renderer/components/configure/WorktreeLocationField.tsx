@@ -11,10 +11,14 @@ export function WorktreeLocationField({
   projectId,
   config,
   home,
+  blocked,
 }: {
   projectId: string;
   config: ShigomoriConfig | null;
   home: string | null;
+  // The form around it has unsaved edits, which leaving for the
+  // subpage would throw away.
+  blocked: boolean;
 }) {
   const { toProjectPage } = useProjectNav();
   const layout = config?.worktreeLayout ?? "managed-root";
@@ -46,6 +50,8 @@ export function WorktreeLocationField({
         <Button
           variant="outline"
           size="sm"
+          disabled={blocked}
+          title={blocked ? "Save or discard your changes first" : undefined}
           onClick={() => toProjectPage("worktreeLocation", projectId)}
         >
           Change…

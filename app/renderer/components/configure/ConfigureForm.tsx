@@ -233,6 +233,7 @@ export function ConfigureForm({
               projectId={projectId}
               config={initialConfig}
               home={home}
+              blocked={isDirty}
             />
           </section>
 

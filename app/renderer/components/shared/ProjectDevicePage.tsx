@@ -96,21 +96,27 @@ export function ProjectDevicePage({
       <PageHeader
         eyebrow={
           parent ? (
-            <span className="flex items-center gap-1.5">
+            <>
               {project.name}
-              <span aria-hidden className="text-muted-foreground/40">
+              <span aria-hidden className="mx-1.5 text-muted-foreground/40">
                 /
               </span>
+              {/* Each device's copy of the project has an id of its own,
+                  so the link takes the picked copy's with its device. */}
               <button
                 type="button"
                 onClick={() =>
-                  toProjectPage(parent.page, project.id, shown.deviceId)
+                  toProjectPage(
+                    parent.page,
+                    tabbed ? picked.project.id : project.id,
+                    shown.deviceId,
+                  )
                 }
                 className="-mx-1 rounded px-1 transition-colors hover:bg-muted hover:text-foreground dark:hover:bg-muted/50"
               >
                 {parent.label}
               </button>
-            </span>
+            </>
           ) : (
             project.name
           )

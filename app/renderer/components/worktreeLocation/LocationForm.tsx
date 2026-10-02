@@ -165,7 +165,9 @@ export function LocationForm({
   };
 
   const submitLabel = batchRunning
-    ? "Moving…"
+    ? toMove.length > 0
+      ? "Moving…"
+      : "Saving…"
     : toMove.length > 0
       ? `Move ${pluralize(toMove.length, "worktree")}`
       : "Save location";
@@ -247,7 +249,7 @@ export function LocationForm({
           onClick={() => toProjectPage("configure", projectId)}
           disabled={batchRunning}
         >
-          Cancel
+          {canSubmit ? "Cancel" : "Back"}
         </Button>
         <Button
           type="button"
