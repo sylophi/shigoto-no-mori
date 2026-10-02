@@ -48,7 +48,7 @@ import type { GroupShelf, InboxShelf, SidebarViewModel } from "./sidebarRow";
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarToolbar } from "./SidebarToolbar";
-import { TidyButton } from "./TidyButton";
+import { AddProjectButton } from "./AddProjectButton";
 import { sortProjects } from "@/lib/sortProjects";
 import { SidebarList } from "./SidebarList";
 import { SidebarTakeoverSlot, useSidebarTakenOver } from "./SidebarTakeover";
@@ -366,10 +366,10 @@ function Forest({
       {/* Each view puts what it actually needs above its list. The inbox
           has no project headers to hang a + off, so creating lives here;
           the tree instead gets the controls that only apply to it: the
-          way back out of a project, and the rest, which are about this
-          machine's own projects, so a hostless client's tree shows
-          none of those. Arranging takes over the whole sidebar, so
-          neither shows. */}
+          way back out of a project and sorting, which is about this
+          machine's own projects, so a hostless client's tree skips it.
+          Both end in add project. Arranging takes over the whole
+          sidebar, so neither shows. */}
       {arrangeMode ? null : (
         <>
           {inbox ? (
@@ -385,10 +385,7 @@ function Forest({
                   remote={remoteItems}
                 />
               </div>
-              {/* The tidy page has no other way in, so it can't live
-                  only in the tree's toolbar. It spans this machine's
-                  projects, so a hostless client has none to tidy. */}
-              {hasLocalHost && <TidyButton />}
+              <AddProjectButton outline />
             </div>
           ) : (
             <SidebarToolbar
