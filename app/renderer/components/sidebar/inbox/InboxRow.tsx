@@ -28,6 +28,7 @@ import {
   type WorktreeRowState,
 } from "../useWorktreeRowState";
 import { WorktreeEntry } from "../WorktreeEntry";
+import type { InboxShelf } from "../sidebarRow";
 
 interface InboxRowProps {
   worktree: Worktree;
@@ -37,6 +38,7 @@ interface InboxRowProps {
   // The peer this worktree lives on, or undefined for this machine's own.
   device: SidebarDeviceBadge | undefined;
   mirror?: SidebarDeviceBadge;
+  shelf: InboxShelf | null;
 }
 
 // The inbox row answers a different question from the tree row. In the
@@ -64,6 +66,7 @@ export function InboxRow({
   stack,
   device,
   mirror,
+  shelf,
 }: InboxRowProps) {
   const state = useWorktreeRowState(worktree, device?.deviceId);
   const { removeArm, onOpenChange } = useProjectMenuRemoveArm();
@@ -78,6 +81,7 @@ export function InboxRow({
       device={device}
       mirror={mirror}
       state={state}
+      shelf={shelf}
       context={
         <div className="flex min-w-0 items-center gap-1.5 text-3xs text-muted-foreground">
           <ProjectIcon

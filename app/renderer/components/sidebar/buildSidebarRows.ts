@@ -186,6 +186,7 @@ export function buildSidebarRows({
   const localRows = (
     trees: Worktree[],
     pullRequests: Record<string, PullRequest> | undefined,
+    shelf: GroupShelf | null,
   ): LocalRow[] =>
     trees.map((worktree) => ({
       kind: "worktree",
@@ -194,6 +195,7 @@ export function buildSidebarRows({
       mirror: mirrorBadgeFor(worktree),
       pr: pullRequests?.[worktree.branch],
       stack: null,
+      shelf,
     }));
 
   if (arrangeMode) {
@@ -276,11 +278,17 @@ export function buildSidebarRows({
     // client) can still reach them.
     const remoteVisible: RemoteRow[] = [];
     const remoteShelves = emptyShelves<RemoteRow>();
-    const folded = (peerKey: string, worktree: Worktree) =>
-      foldedInto(peerKey, groupShelfOf(worktree, hiddenPrefixes), groupId);
+    const folded = (peerKey: string, shelf: GroupShelf | null) =>
+      foldedInto(peerKey, shelf, groupId);
     for (const item of group.remote) {
-      for (const row of remoteWorktreeRows(item, groupId, folded)) {
-        const shelf = groupShelfOf(row.worktree, hiddenPrefixes);
+      const peerRows = remoteWorktreeRows(
+        item,
+        groupId,
+        hiddenPrefixes,
+        folded,
+      );
+      for (const row of peerRows) {
+        const { shelf } = row;
         (shelf === null ? remoteVisible : remoteShelves[shelf]).push(row);
       }
     }
@@ -334,10 +342,14 @@ export function buildSidebarRows({
     const trunk =
       trunkOf(query?.data as Worktree[] | undefined) ??
       trunkOf(group.remote[0]?.worktrees);
-    const placed = (local: Worktree[], peers: RemoteRow[]): SidebarRow[] =>
+    const placed = (
+      local: Worktree[],
+      peers: RemoteRow[],
+      shelf: GroupShelf | null,
+    ): SidebarRow[] =>
       placeByStack(
         sortWorktrees(
-          [...localRows(local, group.pullRequests), ...peers],
+          [...localRows(local, group.pullRequests, shelf), ...peers],
           worktreeSort,
           (row) => row.worktree,
         ),
@@ -350,14 +362,14 @@ export function buildSidebarRows({
         item.stackChild = child;
         return item;
       });
-    rows.push(...placed(localVisible, remoteVisible));
+    rows.push(...placed(localVisible, remoteVisible, null));
     for (const shelf of GROUP_SHELVES) {
       const count = localShelves[shelf].length + remoteShelves[shelf].length;
       if (count === 0) continue;
       const shelfOpen = openShelves[shelf].has(groupId);
       const toggleKey = `${shelf}:${groupId}`;
       if (shelfOpen) {
-        rows.push(...placed(localShelves[shelf], remoteShelves[shelf]));
+        rows.push(...placed(localShelves[shelf], remoteShelves[shelf], shelf));
       } else {
         for (const worktree of localShelves[shelf]) {
           shutFoldRows.set(worktreeRowKey(undefined, worktree.id), toggleKey);
@@ -613,13 +625,15 @@ type RemoteRow = Extract<SidebarRow, { kind: "remote-worktree" }>;
 function remoteWorktreeRows(
   item: RemoteForestItem,
   groupId: string,
-  folded: (peerKey: string, worktree: Worktree) => boolean,
+  hiddenPrefixes: readonly string[],
+  folded: (peerKey: string, shelf: GroupShelf | null) => boolean,
 ): RemoteRow[] {
   const rows: RemoteRow[] = [];
   for (const worktree of item.worktrees) {
     const key = remoteWorktreeKey(item.deviceId, worktree.id);
+    const shelf = groupShelfOf(worktree, hiddenPrefixes);
     // The local row of a mirrored pair stands for both copies.
-    if (folded(key, worktree)) continue;
+    if (folded(key, shelf)) continue;
     rows.push({
       kind: "remote-worktree",
       key,
@@ -627,6 +641,7 @@ function remoteWorktreeRows(
       device: deviceBadgeOf(item),
       pr: item.pullRequests[worktree.branch],
       stack: null,
+      shelf,
       groupId,
     });
   }
