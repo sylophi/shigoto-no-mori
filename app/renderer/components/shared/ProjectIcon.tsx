@@ -52,9 +52,9 @@ export function ProjectIcon({
         <g className="doubutsu-only">
           <path d={LEAF} fill="currentColor" />
           <path
-            d="M11.4 3.6L12.7 1.5"
+            d="M12.2 4.5L13.6 1.7"
             stroke="currentColor"
-            strokeWidth="1.4"
+            strokeWidth="1.05"
             strokeLinecap="round"
           />
         </g>
@@ -81,12 +81,14 @@ export function ProjectIcon({
   );
 }
 
-// Animal Crossing's leaf, pared down to what still reads at 14px: two
-// lobes, the tip down at the left, a small round bite out of the bottom
-// right corner. The body is kept full so the initial sits centered on
-// it. The stem is its own stroke beside it.
+// Animal Crossing's leaf, kept to the silhouette that makes it that
+// leaf: the swept tip down at the left, the big upper lobe, the notch
+// the stem grows from, and the bite curling into its hook at the bottom
+// right. The bite is a little smaller than the original's and the stem
+// finer, which leaves the upper lobe open for the initial. The stem is
+// its own stroke beside it.
 const LEAF =
-  "M0.5 15.2C0.8 11.5 1.2 6.8 3.2 4.6C5.2 2.4 8.8 1.9 11.4 3.6C14.4 3.6 15.8 6.4 15.8 9.6C15.8 11.6 15.6 12.8 15.2 13.6A1.6 1.6 0 1 0 12.6 15.5C8.6 15.9 4.2 15.8 0.5 15.2Z";
+  "M0.2 13.6C0.9 12.4 1.2 10.6 1.6 8.9C2.1 6.5 2.7 5.2 3.3 4.3C3.3 4.3 4.7 1.9 7.8 1.9C10.5 1.95 11.5 3.7 11.7 4.1L12.5 4.7C13.6 4.7 16.1 6 16 9C15.9 12.3 13.7 13.4 13.3 13.6A2 2 0 1 0 9.6 12.8C9.6 14.1 10.7 14.8 11.5 14.75C10.7 15.1 9.6 15.2 7.5 15.2C3.6 15.2 0.7 14 0.2 13.6Z";
 
 // The name's first letter or digit, so ".dotfiles" reads as D rather
 // than punctuation. Uppercased without the locale, so every device
