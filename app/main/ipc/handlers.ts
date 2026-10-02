@@ -69,6 +69,7 @@ import {
 } from "@host/ipc/modules/mirror";
 import {
   endLegacyMirrors,
+  endMirrorsOnPeerRemoval,
   endMirrorsWithPeers,
   isOrphanedTransfer,
   mirrorSessions,
@@ -623,7 +624,8 @@ export function registerIpcHandlers(): void {
     broadcastAll(mirrorContract, "gitChanged", change),
   );
   // The follower's peer-side signals: a peer's git state moved (its
-  // git-directory watcher) or a served worktree's index did.
+  // git-directory watcher) or a served worktree's index did. And a
+  // peer's worktree gone, which ends the mirrors into it running here.
   onPeerPush((push) => {
     if (push.channel === "git:projectChanged") {
       const parsed = ProjectScopedPayloadSchema.safeParse(push.payload);
@@ -639,6 +641,8 @@ export function registerIpcHandlers(): void {
           parsed.data.worktreeId,
         );
       }
+    } else if (push.channel === "worktrees:removal") {
+      void endMirrorsOnPeerRemoval(push.deviceId, push.payload);
     }
   });
   registerContract(mirrorContract, mirrorHandlers);

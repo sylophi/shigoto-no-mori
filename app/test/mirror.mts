@@ -38,7 +38,8 @@
 //     both ways, and A's own main never moves.
 // And the legacy sweep: a session an older build started from the
 // copy's device is hidden from the mirror surfaces and ended once,
-// its thread told why, with nothing deleted.
+// its thread told why, with nothing deleted. And a peer's removed
+// worktree (worktrees:removal) ends only the sessions into that copy.
 //
 // Both "devices" share one node process and one sandboxed
 // SHIGOMORI_DATA_DIR. What separates them is the direct wire between them,
@@ -78,7 +79,9 @@ import { syncHandlers } from "@host/ipc/modules/sync";
 import { worktreesHandlers } from "@host/ipc/modules/worktrees";
 import { createGitFollower } from "@host/mirror/gitFollow";
 import {
+  COPY_GONE_DETAIL,
   endLegacyMirrors,
+  endMirrorsOnPeerRemoval,
   endMirrorsWithPeers,
   LEGACY_MIRROR_DETAIL,
   MIRROR_LABEL_LOCAL_WORKTREE,
@@ -980,6 +983,67 @@ async function main() {
     }
     ok(
       "a mirror started from the copy's device by an older build is hidden, ended once on sight with a halted note, and nothing is deleted",
+    );
+
+    // (6e) A copy deleted on its own device: that device announces
+    // the removal (worktrees:removal) and this one, which runs the
+    // session, ends it once the removal is done. Only the sessions into
+    // the announced copy end, each original's thread says why, and
+    // nothing is deleted. Another device's worktree of the same id
+    // stays.
+    {
+      const into = (
+        id: string,
+        deviceId: string,
+        worktreeId: string,
+        original: string,
+      ) =>
+        fakeSession({
+          session: id,
+          deviceId,
+          projectId: "p",
+          worktreeId,
+          labels: {
+            [MIRROR_LABEL_LOCAL_WORKTREE]: original,
+            [MIRROR_LABEL_COPY_SIDE]: "remote",
+          },
+        });
+      const live = new Map(
+        [
+          into("s-into-a", "A", "wt-copy", "wt-original"),
+          into("s-into-a-other", "A", "wt-other", "wt-original-2"),
+          into("s-into-c", "C", "wt-copy", "wt-original-3"),
+        ].map((raw): [string, MirrorSessionRaw] => [raw.session, raw]),
+      );
+      const noted: Parameters<MirrorImpl["noteEvent"]>[] = [];
+      setMirrorImpl({
+        ...daemon,
+        status: () => "running",
+        sessions: () => [...live.values()],
+        terminate: async (id) => {
+          live.delete(id);
+        },
+        recreate: () => Promise.reject(new Error("not in this check")),
+        gitStatus: () => undefined,
+        history: () => [],
+        noteEvent: (worktreeId, kind, detail) =>
+          noted.push([worktreeId, kind, detail]),
+        forgetHistory: () => {},
+      });
+      const copy = { projectId: "p", worktreeId: "wt-copy" };
+      await endMirrorsOnPeerRemoval("A", { ...copy, state: "removing" });
+      await endMirrorsOnPeerRemoval("A", { ...copy, state: "kept" });
+      assert.equal(live.size, 3, "a removal not yet done ended a mirror");
+      await endMirrorsOnPeerRemoval("A", { ...copy, state: "removed" });
+      assert.deepEqual([...live.keys()], ["s-into-a-other", "s-into-c"]);
+      assert.deepEqual(noted, [["wt-original", "stopped", COPY_GONE_DETAIL]]);
+      // Announced twice (the stop's own end, then the announcement), it
+      // ends nothing more.
+      await endMirrorsOnPeerRemoval("A", { ...copy, state: "removed" });
+      assert.equal(noted.length, 1);
+    }
+    ok(
+      "a peer's removed worktree ends only the mirrors into that copy, nothing deleted",
     );
 
     // (7) Stopping the daemon ends it cleanly.
