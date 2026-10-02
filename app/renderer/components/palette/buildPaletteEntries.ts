@@ -195,8 +195,7 @@ export interface PaletteProject {
   // Where ↩ goes: its worktree the list would put first. Undefined
   // for a project with none, whose ↩ is its new-worktree page.
   lead: PaletteEntry | undefined;
-  // This device's checkout, when it has one and its folder is there:
-  // where a quick create goes.
+  // This device's checkout, when it has one: where a quick create goes.
   localProject: Project | undefined;
   worktreeCount: number;
   deviceCount: number;
@@ -204,7 +203,8 @@ export interface PaletteProject {
 
 // The few projects the query names by name, best first. Every project
 // on every device, the ones with no worktrees too, since the sidebar's
-// list of projects is the other way to them. Only for a query:
+// list of projects is the other way to them. Not one whose folder is
+// gone, which the sidebar won't open either. Only for a query:
 // unasked, the worktree list already leads with their work.
 export function rankPaletteProjects(
   query: string,
@@ -223,28 +223,41 @@ export function rankPaletteProjects(
     }
   >();
   // This device's projects first, so a group names its local checkout.
+  // A repo only peers hold is named by a reachable one, where its
+  // pages open.
   const join = (project: Project, device: SidebarDeviceBadge | undefined) => {
     const key = projectGroupKey(project, device?.deviceId);
-    let group = groups.get(key);
+    const group = groups.get(key);
     if (!group) {
-      group = { project, device, trees: [], devices: new Set() };
-      groups.set(key, group);
+      groups.set(key, {
+        project,
+        device,
+        trees: [],
+        devices: new Set([device?.deviceId]),
+      });
+      return;
     }
     group.devices.add(device?.deviceId);
-    return group;
+    if (group.device && !group.device.reachable && device?.reachable) {
+      group.project = project;
+      group.device = device;
+    }
   };
-  for (const project of projects) join(project, undefined);
+  for (const project of projects) {
+    if (project.pathExists !== false) join(project, undefined);
+  }
   for (const item of remote) join(item.project, deviceBadgeOf(item));
-  for (const entry of entries)
-    join(entry.project, entry.device).trees.push(entry);
+  for (const entry of entries) {
+    const key = projectGroupKey(entry.project, entry.device?.deviceId);
+    groups.get(key)?.trees.push(entry);
+  }
   const items = [...groups].map(
     ([key, { project, device, trees, devices }]): PaletteProject => ({
       key: `project:${key}`,
       project,
       device,
       lead: trees.find((t) => !t.sunk && !t.hidden) ?? trees[0],
-      localProject:
-        !device && project.pathExists !== false ? project : undefined,
+      localProject: device ? undefined : project,
       worktreeCount: trees.length,
       deviceCount: devices.size,
     }),

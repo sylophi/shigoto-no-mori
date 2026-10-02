@@ -330,7 +330,24 @@ try {
       [{ ...project("gone"), pathExists: false }],
       [],
     );
-    assert.equal(gone?.localProject, undefined, "no folder, no quick create");
+    assert.equal(gone, undefined, "no folder, nothing to open");
+    const offline: RemoteForestItem = {
+      ...peerReed,
+      deviceId: "offline-device",
+      reachable: false,
+    };
+    const [reachable] = rankPaletteProjects(
+      "reed",
+      [],
+      [],
+      [offline, peerReed],
+    );
+    assert.equal(
+      reachable?.device?.deviceId,
+      PEER,
+      "named by a reachable peer",
+    );
+    assert.equal(reachable?.deviceCount, 2);
     const [there] = rankPaletteProjects("reed", entries(), projects, remote);
     assert.equal(there?.project.id, reed.id);
     assert.equal(there?.device?.deviceId, PEER, "only the peer holds it");
