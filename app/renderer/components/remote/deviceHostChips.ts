@@ -48,11 +48,7 @@ export function useHostChipIndex(localDeviceId: string): HostChipIndex {
   const localProjects: Project[] = projectsQuery.data ?? [];
   // Positionally aligned with localProjects, which is the contract
   // useAllProjectWorktrees documents.
-  const localWorktrees = useAllProjectWorktrees(
-    localProjects,
-    true,
-    CALM_REFETCH,
-  );
+  const localWorktrees = useAllProjectWorktrees(localProjects, CALM_REFETCH);
   const forests = useRemoteForests();
 
   const byDevice = new Map<string, HostChip[]>();

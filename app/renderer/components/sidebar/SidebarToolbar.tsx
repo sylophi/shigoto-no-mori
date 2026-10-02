@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { ArrowUpDown, Check, LayoutGrid } from "lucide-react";
+import { ArrowUpDown, Check } from "lucide-react";
 import type { ProjectSortMode } from "@shared/schemas";
+import { BackButton } from "@/components/ui/back-button";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -16,7 +17,7 @@ import {
   useProjectSort,
   useSetProjectSort,
 } from "@/hooks/projects/useProjectSort";
-import { useOverlays } from "@/hooks/ui/useOverlays";
+import { hasLocalHost } from "@/lib/localHost";
 import { SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
 import { TidyButton } from "./TidyButton";
 
@@ -24,6 +25,9 @@ interface SidebarToolbarProps {
   // Enter-only: the footer owns "Done arranging", so this never toggles
   // back out.
   onArrange: () => void;
+  // Inside a project: the way back to the list of projects. Absent on
+  // the list itself.
+  onBack: (() => void) | undefined;
 }
 
 const SORT_OPTIONS: ReadonlyArray<{ value: ProjectSortMode; label: string }> = [
@@ -34,12 +38,38 @@ const SORT_OPTIONS: ReadonlyArray<{ value: ProjectSortMode; label: string }> = [
 ];
 
 // Controls that only mean something to the project tree: ordering the
-// projects, and hopping between them. Neither has an answer in the inbox
-// (it's one list in one fixed order), so they live above the tree
+// projects, and getting back to them. Neither has an answer in the
+// inbox (it's one list in one fixed order), so they live above the tree
 // rather than in the footer, where they'd have to blink in and out as
 // the view changes. The footer keeps what both views share.
-export function SidebarToolbar({ onArrange }: SidebarToolbarProps) {
-  const { toggleLauncher } = useOverlays();
+//
+// The left end is the tree's own level: the list of projects is what
+// gets sorted, so inside a project the sort gives its place to the way
+// back to that list, in the corner a back button is looked for (the
+// one a page that takes the sidebar over puts there too,
+// SidebarTakeover). The rest is about this machine's own projects, so
+// a hostless client's toolbar is the way back alone, and nothing on
+// the list.
+export function SidebarToolbar({ onArrange, onBack }: SidebarToolbarProps) {
+  if (!hasLocalHost && !onBack) return null;
+
+  return (
+    // Same left/right split as the footer below it: the control that
+    // changes what the list shows sits left, the one that navigates
+    // away sits right.
+    <div className="flex items-center gap-1 px-2 pb-1">
+      {onBack ? (
+        <BackButton label="Projects" onClick={onBack} className="ml-0" />
+      ) : (
+        <SortMenu onArrange={onArrange} />
+      )}
+      <div className="flex-1" />
+      {hasLocalHost && <TidyButton />}
+    </div>
+  );
+}
+
+function SortMenu({ onArrange }: { onArrange: () => void }) {
   const sortMode = useProjectSort();
   const setSortMode = useSetProjectSort();
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
@@ -53,79 +83,52 @@ export function SidebarToolbar({ onArrange }: SidebarToolbarProps) {
   };
 
   return (
-    // Same left/right split as the footer below it: the control that
-    // changes how the list reads sits left, the one that navigates away
-    // sits right.
-    <div className="flex items-center gap-1 px-2 pb-1">
-      <DropdownMenu open={sortMenuOpen} onOpenChange={setSortMenuOpen}>
-        {/* The tooltip hangs on a wrapper span, not the trigger button:
-            merged onto the button, the tooltip would put
-            data-popup-open next to aria-haspopup, which doubutsu
-            styles as "menu open". Disabled while the menu is open so
-            the tip can't cover the popup. */}
-        <SimpleTooltip tip="Sort projects" disabled={sortMenuOpen}>
-          <span className="inline-flex">
-            <DropdownMenuTrigger
-              render={
-                <button
-                  type="button"
-                  aria-label="Sort projects"
-                  className={SIDEBAR_ICON_BUTTON}
-                >
-                  <ArrowUpDown className="size-3.5" />
-                </button>
-              }
-            />
-          </span>
-        </SimpleTooltip>
-        {/* Anchored under the trigger now that it sits at the top of the
-            sidebar rather than the bottom. */}
-        <DropdownMenuContent align="end" side="bottom" sideOffset={2}>
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>Sort by</DropdownMenuLabel>
-            {SORT_OPTIONS.map((option) => (
-              <DropdownMenuItem
-                key={option.value}
-                onClick={() => setSortMode.mutate(option.value)}
+    <DropdownMenu open={sortMenuOpen} onOpenChange={setSortMenuOpen}>
+      {/* The tooltip hangs on a wrapper span, not the trigger button:
+          merged onto the button, the tooltip would put
+          data-popup-open next to aria-haspopup, which doubutsu
+          styles as "menu open". Disabled while the menu is open so
+          the tip can't cover the popup. */}
+      <SimpleTooltip tip="Sort projects" disabled={sortMenuOpen}>
+        <span className="inline-flex">
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                aria-label="Sort projects"
+                className={SIDEBAR_ICON_BUTTON}
               >
-                <Check
-                  className={cn(
-                    "size-3.5",
-                    sortMode === option.value ? "opacity-100" : "opacity-0",
-                  )}
-                />
-                {option.label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuGroup>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={arrangeManually}>
-            Set manual order
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <div className="flex-1" />
-      <TidyButton />
-      <SimpleTooltip
-        // The backtick renders in the mono font: the rounded doubutsu
-        // fonts draw U+0060 as a narrow accent whose ink overhangs the
-        // following space.
-        tip={
-          <>
-            Project launcher (<span className="font-mono">`</span> or ⌘⇧P)
-          </>
-        }
-      >
-        <button
-          type="button"
-          onClick={toggleLauncher}
-          aria-label="Project launcher"
-          aria-keyshortcuts="` Meta+Shift+P"
-          className={SIDEBAR_ICON_BUTTON}
-        >
-          <LayoutGrid className="size-3.5" />
-        </button>
+                <ArrowUpDown className="size-3.5" />
+              </button>
+            }
+          />
+        </span>
       </SimpleTooltip>
-    </div>
+      {/* Anchored under the trigger now that it sits at the top of the
+          sidebar rather than the bottom. */}
+      <DropdownMenuContent align="end" side="bottom" sideOffset={2}>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+          {SORT_OPTIONS.map((option) => (
+            <DropdownMenuItem
+              key={option.value}
+              onClick={() => setSortMode.mutate(option.value)}
+            >
+              <Check
+                className={cn(
+                  "size-3.5",
+                  sortMode === option.value ? "opacity-100" : "opacity-0",
+                )}
+              />
+              {option.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={arrangeManually}>
+          Set manual order
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

@@ -259,6 +259,11 @@ pre-commit:
           - name: project-order
             glob: "{app/renderer/components/sidebar/buildSidebarRows.ts,app/renderer/lib/sortProjects.ts,app/test/project-order.mts,app/test/lib/checkKit.mts}"
             run: pnpm -C app test project-order
+          # The tree is the list of projects, each its header and a count,
+          # or one project's rows on their own.
+          - name: project-fold
+            glob: "{app/renderer/components/sidebar/buildSidebarRows.ts,app/renderer/components/sidebar/sidebarRow.ts,app/test/project-fold.mts,app/lab/fixtures.ts,app/test/lib/checkKit.mts}"
+            run: pnpm -C app test project-fold
           # The ⌘K palette lists every device's worktrees once, visits first,
           # and opens on the one before the page on screen.
           - name: worktree-palette

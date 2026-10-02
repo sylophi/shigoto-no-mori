@@ -14,7 +14,6 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { useCollapsedProjects } from "@/hooks/projects/useCollapsedProjects";
 import { useAccountStatus } from "@/hooks/account/useAccount";
 import { useAllProjectShigomoriConfigs } from "@/hooks/config/useShigomoriConfig";
 import { useAllProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
@@ -43,6 +42,7 @@ import { useDeviceFilter } from "./deviceFilter";
 import { DeviceFilterBar } from "./DeviceFilterBar";
 import { buildInboxRows } from "./inbox/buildInboxRows";
 import { NewWorktreeButton } from "./inbox/NewWorktreeButton";
+import { setOpenProject, useOpenProject } from "./openProject";
 import { ProjectDragPreview } from "./ProjectDragPreview";
 import type { GroupShelf, InboxShelf, SidebarViewModel } from "./sidebarRow";
 import { SidebarFooter } from "./SidebarFooter";
@@ -128,10 +128,10 @@ function Forest({
   const preferredView = useSidebarView();
   const inbox = (pinnedView ?? preferredView) === "inbox";
   const reorderProjects = useReorderProjects();
-  // Folds and shelf reveals are kept by group key (projectGroupKey),
-  // one per repo: narrowed to a peer, a repo this machine also holds is
-  // drawn as that peer's group, and it still reads and writes the one
-  // key the local project's group goes by.
+  // The open project and the shelf reveals are kept by group key
+  // (projectGroupKey), one per repo: narrowed to a peer, a repo this
+  // machine also holds is drawn as that peer's group, and it still
+  // reads and writes the one key the local project's group goes by.
   const localGroupKeys = new Map(
     projects.map((project) => [
       project.id,
@@ -143,11 +143,6 @@ function Forest({
   const byGroupKey = (keys: ReadonlySet<string>): GroupIdSet => ({
     has: (groupId) => keys.has(groupKeyOf(groupId)),
   });
-  // Absence == expanded, so new projects default open. Kept in this
-  // window's client config so a relaunch keeps the tree the way the
-  // user pruned it.
-  const { collapsedKeys, toggleCollapsed } = useCollapsedProjects();
-  const collapsed = byGroupKey(collapsedKeys);
   // Per-group "Show shelved" and "Show hidden" reveals. Transient on
   // purpose, since the whole point of both is to keep the noise down on
   // a fresh window.
@@ -170,10 +165,6 @@ function Forest({
   // The Tab flip only means something where the preference is what
   // shows. A pinned view has its tab bar.
   useSidebarViewHotkey(!arrangeMode && !takenOver && pinnedView === undefined);
-
-  const toggleExpanded = (groupId: string) => {
-    toggleCollapsed(groupKeyOf(groupId));
-  };
 
   const toggleShelved = (groupId: string, shelf: GroupShelf) => {
     setShelfOpenKeys((prev) => ({
@@ -205,6 +196,17 @@ function Forest({
     inboxFacts: inbox,
   });
   const configQueries = useAllProjectShigomoriConfigs(orderedProjects);
+  // The tree shows the list of projects or one project on its own, and
+  // goes into the project of the page on screen (openProject.ts).
+  const { openKey, onScreenKey } = useOpenProject(projects, remoteItems);
+  // The level last asked for here, by picking a project or going back,
+  // as opposed to one the tree reached by following the page: only the
+  // first is a move made in the sidebar, for the list to play.
+  const [askedLevel, setAskedLevel] = useState<string | null>();
+  const goTo = (groupKey: string | null) => {
+    setAskedLevel(groupKey);
+    setOpenProject(groupKey);
+  };
   // This device's mirrored pairs, so a pair reads as one row.
   const mirrors = useMirrorLinks();
   // Off the registry, not the rows: a local row mirrored with a peer
@@ -252,7 +254,7 @@ function Forest({
       })
     : buildSidebarRows({
         ...local,
-        collapsed,
+        openKey,
         // Over every device's projects, not the filtered ones, so a
         // pick narrows the tree without reordering it.
         order: projectGroupOrder({
@@ -267,7 +269,8 @@ function Forest({
         mirrors,
         deviceBadges,
       });
-  const { rows } = view;
+  const { rows, level } = view;
+  const inProject = typeof level === "string";
   // Failed listings, local or remote, surface here whether or not the
   // filter shows their rows -- without it a peer's project would
   // silently vanish from the tree, and a narrowed forest must not also
@@ -344,10 +347,15 @@ function Forest({
       rows={rows}
       revealKey={view.revealKey}
       scrollerRef={scrollerRef}
+      // Not while the forest is still listing: the level it settles on
+      // is then where it starts, not a move from the list.
+      level={isLoading || remoteLoading ? undefined : level}
+      asked={askedLevel === level}
       handlers={{
-        onToggle: toggleExpanded,
+        onToggle: goTo,
         onToggleShelved: toggleShelved,
         onToggleShelf: toggleShelf,
+        currentGroupKey: onScreenKey,
         arrangeMode,
       }}
     />
@@ -357,10 +365,11 @@ function Forest({
     <>
       {/* Each view puts what it actually needs above its list. The inbox
           has no project headers to hang a + off, so creating lives here;
-          the tree instead gets the controls that only apply to it --
-          which are all about this machine's own projects, so a hostless
-          client's tree has nothing to show there. Arranging takes over
-          the whole sidebar, so neither shows. */}
+          the tree instead gets the controls that only apply to it: the
+          way back out of a project, and the rest, which are about this
+          machine's own projects, so a hostless client's tree shows
+          none of those. Arranging takes over the whole sidebar, so
+          neither shows. */}
       {arrangeMode ? null : (
         <>
           {inbox ? (
@@ -381,9 +390,12 @@ function Forest({
                   projects, so a hostless client has none to tidy. */}
               {hasLocalHost && <TidyButton />}
             </div>
-          ) : hasLocalHost ? (
-            <SidebarToolbar onArrange={onArrange} />
-          ) : null}
+          ) : (
+            <SidebarToolbar
+              onArrange={onArrange}
+              onBack={inProject ? () => goTo(null) : undefined}
+            />
+          )}
           {/* The device filter sits under each view's own controls,
               right above the list it narrows. Both views, one pick. */}
           <DeviceFilterBar {...filter} />

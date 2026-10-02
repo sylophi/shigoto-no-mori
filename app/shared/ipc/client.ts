@@ -19,7 +19,6 @@ import { packageScriptsContract } from "@shared/ipc/modules/packageScripts";
 import { portForwardContract } from "@shared/ipc/modules/portForward";
 import { portPoolContract } from "@shared/ipc/modules/portPool";
 import { portsContract } from "@shared/ipc/modules/ports";
-import { projectLauncherContract } from "@shared/ipc/modules/projectLauncher";
 import { projectsContract } from "@shared/ipc/modules/projects";
 import { releasesContract } from "@shared/ipc/modules/releases";
 import { hubContract } from "@shared/ipc/modules/hub";
@@ -74,7 +73,6 @@ export const allContractModules = [
   portForwardContract,
   portPoolContract,
   portsContract,
-  projectLauncherContract,
   projectsContract,
   releasesContract,
   hubContract,
@@ -125,7 +123,6 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
   const portForwardClient = c(portForwardContract);
   const portPoolClient = c(portPoolContract);
   const portsClient = c(portsContract);
-  const projectLauncherClient = c(projectLauncherContract);
   const projectsClient = c(projectsContract);
   const releasesClient = c(releasesContract);
   const hubClient = c(hubContract);
@@ -248,6 +245,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
 
     nav: {
       onOpenSettings: navClient.openSettings,
+      onAddProject: navClient.addProject,
       onLaunchById: navClient.launchById,
     },
 
@@ -279,11 +277,6 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
     },
 
     portPool: { ...portPoolClient },
-
-    projectLauncher: {
-      onToggle: projectLauncherClient.toggle,
-      onAddProject: projectLauncherClient.addProject,
-    },
 
     projects: {
       list: projectsClient.list,

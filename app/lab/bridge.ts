@@ -1085,6 +1085,73 @@ function initPresence(): void {
   posedDevices(pose.get("downloading") ?? "", downloadingUpdates);
 }
 
+// ?crowd=<n>: that many more projects on Studio Mac, for the forest at
+// the size where finding a project gets hard. Most hold their primary
+// checkout alone, the way most real ones do, and every fourth has a
+// worktree or two in flight.
+const CROWD_NAMES = [
+  "lichen",
+  "terrier",
+  "whatagain",
+  "dropcube",
+  "headroom",
+  "songloupe",
+  "picto-place",
+  "leatcer",
+  "mise-en-scene",
+  "rm-to-trash",
+  "daramdrop",
+  "agent-snippets",
+  "celery",
+  "lookout",
+  "previewer",
+  "powder-game",
+  "website",
+  "skills",
+  "tuneloupe",
+  "fileatlas",
+];
+const CROWD_ANIMALS = ["sly-stoat", "plain-plover"];
+
+function initCrowd(): void {
+  const posed = Number(new URLSearchParams(location.search).get("crowd"));
+  const local = forests[LOCAL_DEVICE_ID];
+  if (!Number.isInteger(posed) || posed <= 0 || local === undefined) return;
+  CROWD_NAMES.slice(0, posed).forEach((name, i) => {
+    const id = `p_crowd_${i}`;
+    const path = `/Users/rin/dev/${name}`;
+    local.projects.push({
+      id,
+      name,
+      path,
+      pathExists: true,
+      identity: null,
+      lastUsed: Date.now() - (i + 6) * 86_400_000,
+      recentCount: 1,
+    });
+    local.worktrees[id] = [
+      worktreeFixture({
+        id: `wt_crowd_${i}`,
+        projectId: id,
+        name,
+        branch: "main",
+        path,
+        isPrimary: true,
+      }),
+      ...CROWD_ANIMALS.slice(0, i % 8 === 0 ? 1 : i % 4 === 0 ? 2 : 0).map(
+        (animal, n) =>
+          worktreeFixture({
+            id: `wt_crowd_${i}_${n}`,
+            projectId: id,
+            name: animal,
+            branch: n === 0 ? "fix-flaky-sync" : "exp/redo-cache",
+            path: `/Users/rin/.sm/worktrees/${name}/${animal}`,
+          }),
+      ),
+    ];
+  });
+}
+
 // A pose's comma-separated device keys, into their ids.
 function posedDevices(keys: string, into: Set<string>): void {
   for (const key of keys.split(",")) {
@@ -1122,6 +1189,7 @@ export function installLabBridge(
     opts.villageLife ??
     new URLSearchParams(location.search).get("villageLife") === "1";
   initPresence();
+  initCrowd();
   // Remote hosts: one fixture wire per device, reached only through
   // hub:invokePeer exactly like the real hub bridge, and broadcasting
   // the way it delivers a peer's: as a peer push on the client wire.

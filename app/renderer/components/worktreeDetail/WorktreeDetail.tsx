@@ -8,7 +8,6 @@ import { CenteredMessage } from "@/components/ui/centered-message";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { recordRecentWorktree } from "@/lib/recentWorktrees";
 import { WorktreeDetailInner } from "./WorktreeDetailInner";
 
 export function WorktreeDetail() {
@@ -45,13 +44,12 @@ export function WorktreeDetail() {
   }, [worktree, worktreesPending, worktreesError, key, nav]);
 
   useEffect(() => {
-    // Local-only page-open work: refreshProject is a mutating invoke
-    // (an ungranted peer would refuse it, and push invalidation plus
-    // the sweep requests already keep a peer fresh), and the
-    // recent-worktrees list is this window's own quick-switcher.
+    // Local-only page-open work, once per worktree page opened:
+    // refreshProject is a mutating invoke (an ungranted peer would
+    // refuse it, and push invalidation plus the sweep requests already
+    // keep a peer fresh).
     if (remote) return;
     void window.api.git.refreshProject(projectId);
-    recordRecentWorktree(projectId, worktreeId);
   }, [projectId, worktreeId, remote]);
 
   if (!worktree || !project) {

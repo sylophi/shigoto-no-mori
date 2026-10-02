@@ -48,9 +48,9 @@ import { PaletteVerbs, type GoTo, type PaletteActions } from "./PaletteVerbs";
 // changes, ⌘1..⌘9 open it in a launch tool, and ⇥ (or → at the end of
 // the query) hands the keys to the rest: its pages, tools, git move and
 // package scripts. A query also finds the projects it names, and
-// offers a worktree on a branch of that name. The project launcher (`,
-// ⌘⇧P) picks a project; this picks the worktree itself, so a peer's is
-// one keystroke away like a local one and drawn the same, its device a
+// offers a worktree on a branch of that name. The sidebar's list picks
+// a project. This picks the worktree itself, so a peer's is one
+// keystroke away like a local one and drawn the same, its device a
 // badge on the row.
 export function WorktreePalette() {
   const { paletteOpen: open, setPaletteOpen: setOpen } = useOverlays();
@@ -84,11 +84,10 @@ export function WorktreePalette() {
     if (previous instanceof HTMLElement) previous.focus();
   }, [open]);
 
-  // On window, like the launcher's backtick, so it works wherever focus
-  // sits. ⌘K fires from text fields too. Ctrl+K doesn't: in a text
-  // field it is kill-line (macOS's text system, and the running
-  // program's in the console's terminal), so there it only closes the
-  // palette. Opening waits for any other overlay to close, and closing
+  // On window, so it works wherever focus sits. ⌘K fires from text
+  // fields too. Ctrl+K doesn't: in a text field it is kill-line
+  // (macOS's text system, and the running program's in the console's
+  // terminal), so there it only closes the palette. Opening waits for any other overlay to close, and closing
   // is the palette's own toggle.
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
@@ -154,7 +153,7 @@ function PaletteDialog({
   // and push invalidation keep the worktree lists fresh, so opening
   // doesn't re-list every project's worktrees in git.
   const { data: projects = [] } = useProjects();
-  const worktreeQueries = useAllProjectWorktrees(projects, true, {
+  const worktreeQueries = useAllProjectWorktrees(projects, {
     refetchOnMount: false,
   });
   const pullRequestQueries = useAllProjectPullRequests(projects);

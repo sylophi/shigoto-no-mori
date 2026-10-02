@@ -117,10 +117,9 @@ function BetweenWorktrees() {
           Pick a worktree from the sidebar, or press{" "}
           <KbdGroup className="mx-0.5 inline-flex">
             <Kbd>⌘</Kbd>
-            <Kbd>⇧</Kbd>
-            <Kbd>P</Kbd>
+            <Kbd>K</Kbd>
           </KbdGroup>{" "}
-          for the project launcher.
+          to search them all.
         </p>
       </div>
     </div>

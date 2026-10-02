@@ -54,12 +54,10 @@ export async function seedClientConfigFromLegacy(): Promise<void> {
 }
 
 // The sidebar's sort and fold, from when they lived in the host's
-// state.json. They are the window's now (projectsSort and
-// collapsedProjects in the client config). The sort moves over as it
-// is. The fold does not: it was kept by local project id and is now
-// kept by group key, the repo identity for most projects, which takes a
-// git probe per project to learn, too much for a boot, so the folds
-// reset once. Both old keys are drained after, which is what makes this
+// state.json. The sort is the window's now (projectsSort in the client
+// config) and moves over as it is. The fold has nowhere to go: the
+// tree shows one project at a time and saves none of it. Both old
+// keys are drained after, which is what makes this
 // run once: a later boot finds nothing to move. Runs after
 // seedClientConfigFromLegacy and only once the store exists, so a
 // failed appearance seed is never mistaken for done by that seed's

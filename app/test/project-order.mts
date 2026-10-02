@@ -107,7 +107,7 @@ function headerRows(
       isPending: false,
       error: null,
     })),
-    collapsed: new Set(),
+    openKey: null,
     order,
     openShelves: noShelves(),
     hiddenPrefixes: [],

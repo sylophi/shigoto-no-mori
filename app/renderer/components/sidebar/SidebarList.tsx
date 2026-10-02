@@ -13,13 +13,22 @@ import {
 } from "./sidebarRow";
 import { VirtualRow, type RowHandlers } from "./VirtualRow";
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
+import { cn } from "@/lib/utils";
 
 interface SidebarListProps {
   rows: SidebarRow[];
   revealKey: SidebarViewModel["revealKey"];
   scrollerRef: RefObject<HTMLDivElement | null>;
   handlers: RowHandlers;
+  level: Level;
+  // The level was asked for in the sidebar (a project picked, the way
+  // back taken) rather than reached by following the page on screen.
+  asked: boolean;
 }
+
+// The view's level (SidebarViewModel): the open project's group key,
+// null on the list of projects, undefined for a view with no levels.
+type Level = SidebarViewModel["level"];
 
 // Owns the virtualizer, and only the virtualizer: useVirtualizer opts
 // its enclosing component out of React Compiler memoization and
@@ -50,6 +59,8 @@ export function SidebarList({
   revealKey,
   scrollerRef,
   handlers,
+  level,
+  asked,
 }: SidebarListProps) {
   // Tracks the project the cursor is over (header row OR one of its
   // children) so ProjectRow keeps its actions visible. Lives here, not in
@@ -77,8 +88,38 @@ export function SidebarList({
   const [, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
+  // The level on screen and the one it was reached from, for the two
+  // things a change of level does. Tracked in render, so both read the
+  // same answer.
+  const [shown, setShown] = useState<{ level: Level; left?: Level }>({
+    level,
+  });
+  if (shown.level !== level) setShown({ level, left: shown.level });
+  // A move between the tree's two levels, as opposed to the first
+  // paint or a flip to or from the inbox.
+  const moved = shown.left !== undefined && level !== undefined;
+  // It starts the scroll over: a project opens at its top, and the list
+  // comes back with the project just left in view, so the place the
+  // list was read from is found again. Before the selection's reveal
+  // below, which then has the last word on a worktree opened from
+  // outside the sidebar.
+  useEffect(() => {
+    if (!moved) return;
+    if (level !== null) {
+      scrollerRef.current?.scrollTo({ top: 0 });
+      return;
+    }
+    const index = rows.findIndex(
+      (row) => row.kind === "project" && row.groupKey === shown.left,
+    );
+    if (index >= 0) virtualizer.scrollToIndex(index, { align: "auto" });
+    // Keyed on the level alone: the rows and the virtualizer are new
+    // every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [level]);
+
   // Reveal the selection when navigation comes from outside the sidebar
-  // (launcher jump, empty-state redirect) by scrolling the virtualized
+  // (a ⌘K jump, empty-state redirect) by scrolling the virtualized
   // list to whichever row the active view says stands for it. The row can
   // lag the route (worktree queries still loading), so this retries every
   // render until it exists; the ref stops repeat scrolls afterwards so
@@ -105,7 +146,24 @@ export function SidebarList({
 
   return (
     <div
-      className="relative"
+      // Remounted per level so the arrival plays again: going into a
+      // project and back out in the sidebar is a move between two
+      // places, so the rows arrive from the side they were gone to, a
+      // project from the right and the list from the left. A level the
+      // tree only followed the page to (a launch, a ⌘K jump) arrives
+      // plainly: the move was made somewhere else.
+      key={
+        level === undefined ? "flat" : level === null ? "list" : `in:${level}`
+      }
+      className={cn(
+        "relative",
+        moved &&
+          asked &&
+          "animate-in duration-150 fade-in-0 motion-reduce:animate-none",
+        moved &&
+          asked &&
+          (level === null ? "slide-in-from-left-2" : "slide-in-from-right-2"),
+      )}
       style={{ height: `${virtualizer.getTotalSize()}px` }}
     >
       {virtualizer.getVirtualItems().map((vi) => {

@@ -51,7 +51,7 @@ export function worktreesQueryOptions(
     // fetches and the page renders its connecting or blocked state.
     enabled: projectId !== null && api !== undefined && deviceId !== "",
     // Four components observe this key and listing costs ~4 git subprocesses
-    // per worktree. Without a window, opening the launcher re-lists every
+    // per worktree. Without a window, opening the ⌘K palette re-lists every
     // project for data the sidebar just fetched. Short enough that focus
     // refetches and invalidations still behave as before.
     staleTime: 3_000,
@@ -84,7 +84,6 @@ export function useWorktrees(projectId: string | null) {
 }
 
 // One query per project, sharing the per-project cache key with useWorktrees.
-// `enabled` toggles them all off when the consumer isn't visible (launcher).
 // Skip projects whose path is gone, since git would just ENOENT.
 // Without a `combine`, useQueries hands back a fresh array of fresh
 // objects every render, so nothing downstream can stay memoized.
@@ -101,7 +100,6 @@ export type WorktreeFanOutRefetch = {
 
 export function useAllProjectWorktrees(
   projects: Project[],
-  enabled = true,
   refetch: WorktreeFanOutRefetch = {},
 ) {
   const scope = useHostScope();
@@ -109,7 +107,7 @@ export function useAllProjectWorktrees(
     queries: projects.map((project) => ({
       ...worktreesQueryOptions(project.id, scope),
       ...refetch,
-      enabled: enabled && project.pathExists !== false,
+      enabled: project.pathExists !== false,
     })),
     combine: combineFanOut,
   });
