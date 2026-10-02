@@ -1,4 +1,5 @@
 import { SectionHeading } from "@/components/ui/section-heading";
+import { useVillageLife } from "@/hooks/config/useVillageLife";
 import { StatusDot } from "@/components/ui/status-dot";
 import { DeviceLead } from "@/components/shared/DeviceGlyph";
 import { useLocalDevice } from "@/hooks/account/useAccount";
@@ -31,7 +32,8 @@ export function SettingsSidebarNav() {
   const local = useLocalDevice();
   const solo = isSolo(devices);
   const updates = useStagedUpdates();
-  const sections = settingsSections(devices, local, updates);
+  const villageLife = useVillageLife();
+  const sections = settingsSections(devices, local, updates, villageLife);
   const row = (section: SettingsSection) => (
     <NavRow
       key={section.id}

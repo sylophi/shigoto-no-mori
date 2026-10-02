@@ -35,6 +35,7 @@ import {
   worktreeMoves,
 } from "@/lib/villagerVoice";
 import { speakersFor } from "./speakers";
+import { recordVisits } from "./visitLog";
 
 // Short enough not to read as late.
 const SETTLE_MS = 150;
@@ -74,10 +75,13 @@ export function startVillagerMoves(queryClient: QueryClient): void {
     // Structural sharing hands back the same list when nothing changed.
     if (list === undefined || list === before) return;
     lastSeen.set(queryHash, list);
+    const deviceId = String(hostKeyDeviceId(queryKey));
+    // The album counts every villager it sees, a list's first reading
+    // included (visitLog.ts).
+    void recordVisits(queryClient, deviceId, list, isQuiet);
     if (before === undefined) return;
     const { movedIn, movedOut } = worktreeMoves(before, list);
     if (movedIn.length === 0 && movedOut.length === 0) return;
-    const deviceId = String(hostKeyDeviceId(queryKey));
     const moves = pending.get(deviceId) ?? { in: [], out: [] };
     moves.in.push(...movedIn);
     moves.out.push(...movedOut);
@@ -107,7 +111,9 @@ export function quietVillagerMoves(keys: readonly string[]): void {
   for (const key of keys) quiet.set(key, until);
 }
 
-function isQuiet(worktree: Worktree): boolean {
+// Whether a worktree's moves are someone else's news right now
+// (quietVillagerMoves). The visit log (visitLog.ts) reads it too.
+export function isQuiet(worktree: Worktree): boolean {
   const now = Date.now();
   return [worktree.id, worktree.name].some(
     (key) => (quiet.get(key) ?? 0) > now,

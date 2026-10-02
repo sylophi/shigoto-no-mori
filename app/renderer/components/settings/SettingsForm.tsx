@@ -41,7 +41,10 @@ import {
   LOCAL_DEVICE_TAB,
   settingsPanelId,
   useActiveSettingsTab,
+  VISITORS_TAB,
 } from "./settingsNav";
+import { VisitorsSection } from "@/components/visitors/VisitorsSection";
+import { useVillageLife } from "@/hooks/config/useVillageLife";
 import {
   SettingsEditorRegistryProvider,
   useSettingsEditorRegistry,
@@ -87,6 +90,7 @@ export function SettingsForm({
   const devices = useHostDevices();
   const local = useLocalDevice();
   const { activeTab, peer } = useActiveSettingsTab(devices);
+  const villageLife = useVillageLife();
 
   const { form, setForm, savedSnapshot, setSavedSnapshot, isDirty } =
     useDirtyForm<SettingsFormState>(
@@ -191,12 +195,16 @@ export function SettingsForm({
 
   return (
     // The page marker picks the settings wallpaper (doubutsu.css), the
-    // same one the loading skeleton in Settings.tsx wears.
-    <div data-doubutsu-page="settings" className="flex h-full flex-col">
+    // same one the loading skeleton in Settings.tsx wears. Visitors
+    // wears its own.
+    <div
+      data-doubutsu-page={heading.page ?? "settings"}
+      className="flex h-full flex-col"
+    >
       <PageHeader
         eyebrow={heading.eyebrow}
         title={heading.title}
-        watermark="設定"
+        watermark={heading.watermark ?? "設定"}
       />
       <SettingsSectionChips
         devices={devices}
@@ -239,6 +247,15 @@ export function SettingsForm({
           {hasLocalHost && (
             <SettingsPanel id={LAUNCH_TAB} active={activeTab === LAUNCH_TAB}>
               <LaunchToolsPanel form={form} setForm={setForm} />
+            </SettingsPanel>
+          )}
+
+          {villageLife && (
+            <SettingsPanel
+              id={VISITORS_TAB}
+              active={activeTab === VISITORS_TAB}
+            >
+              <VisitorsSection />
             </SettingsPanel>
           )}
 
@@ -336,6 +353,9 @@ function ClientVersionSection() {
 // sidebar-driven settings window does, so the pane never has to repeat
 // the list. A device's title leads with its glyph and carries its state
 // pill: the one fact about a machine worth showing above its settings.
+// A section that is a room of its own (Visitors) also names the
+// watermark and the wallpaper (data-doubutsu-page) it wears in place of
+// the settings ones.
 function headingFor(
   activeTab: string,
   peer: RemoteDevice | undefined,
@@ -343,12 +363,25 @@ function headingFor(
   // One machine on the account: no roster to place it in, so its
   // title carries neither the device eyebrow nor a presence pill.
   solo: boolean,
-): { eyebrow: string; title: ReactNode } {
+): {
+  eyebrow: string;
+  title: ReactNode;
+  watermark?: string;
+  page?: string;
+} {
   if (activeTab === APPEARANCE_TAB) {
     return { eyebrow: "Settings", title: "Appearance" };
   }
   if (activeTab === LAUNCH_TAB) {
     return { eyebrow: "Settings", title: "Launch tools" };
+  }
+  if (activeTab === VISITORS_TAB) {
+    return {
+      eyebrow: "Village life",
+      title: "Visitors",
+      watermark: "来客",
+      page: "visitors",
+    };
   }
   if (solo) return { eyebrow: "Settings", title: local.name };
   return {

@@ -1,4 +1,4 @@
-import { type CSSProperties, useState } from "react";
+import { type CSSProperties, type ReactNode, useState } from "react";
 import { VillagerFace } from "@/components/shared/VillagerSays";
 import { cn } from "@/lib/utils";
 import type { MoveNews, Speaker } from "@/lib/villagerVoice";
@@ -15,10 +15,67 @@ export function villagerInk(color: string | null): CSSProperties {
     "--villager-ink": color ?? "var(--color-amber-600)",
   } as CSSProperties;
 }
-const NAMEPLATE =
-  "absolute -rotate-3 rounded-[10px] bg-(--villager-ink) py-0.5 font-bold text-white";
 const DIALOGUE_BOX =
   "relative bg-[color-mix(in_oklab,var(--color-amber-300)_22%,var(--popover))] dark:bg-[color-mix(in_oklab,var(--color-amber-400)_9%,var(--popover))]";
+
+// A character's name on a plate in their own color (--villager-ink),
+// leaning. The caller places and sizes it.
+export function Nameplate({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <span
+      data-slot="villager-nameplate"
+      className={cn(
+        "-rotate-3 rounded-[10px] bg-(--villager-ink) py-0.5 font-bold text-white",
+        className,
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+// The dialogue box itself: the cream box in the character's color,
+// their name plate leaning over its top edge, and their face and words
+// inside, laid out by the caller. VillagerDialogue's, and anywhere else
+// a character speaks in their own box.
+export function DialogueFrame({
+  name,
+  color,
+  className,
+  children,
+}: {
+  name: string;
+  color: string | null;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      data-slot="villager-dialogue"
+      style={villagerInk(color)}
+      className={cn("relative max-w-full pt-3.5 font-sans", className)}
+    >
+      <Nameplate className="absolute top-0 left-6 z-10 px-3 text-sm">
+        {name}
+      </Nameplate>
+      <div
+        data-slot="villager-dialogue-box"
+        className={cn(
+          DIALOGUE_BOX,
+          "flex gap-3 rounded-[28px_34px_30px_26px/26px_30px_34px_28px] px-4 pt-5 pb-4 text-popover-foreground shadow-md",
+        )}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
 
 // A rare character's news, the way Animal Crossing puts a character's
 // words on screen: a soft cream dialogue box, their name on a plate in
@@ -37,44 +94,30 @@ export function VillagerDialogue({
 }) {
   const [done, setDone] = useState(false);
   return (
-    <div
-      data-slot="villager-dialogue"
-      style={villagerInk(speaker.color)}
-      className="relative w-[var(--width)] max-w-full pt-3.5 font-sans"
+    <DialogueFrame
+      name={speaker.profile.name}
+      color={speaker.color}
+      className="w-[var(--width)]"
     >
-      <span
-        data-slot="villager-nameplate"
-        className={cn(NAMEPLATE, "top-0 left-6 z-10 px-3 text-sm")}
-      >
-        {speaker.profile.name}
-      </span>
-      <div
-        data-slot="villager-dialogue-box"
-        className={cn(
-          DIALOGUE_BOX,
-          "flex gap-3 rounded-[28px_34px_30px_26px/26px_30px_34px_28px] px-4 pt-5 pb-4 text-popover-foreground shadow-md",
-        )}
-      >
-        {speaker.face && (
-          <span className="relative size-11 shrink-0">
-            <VillagerFace face={speaker.face} className="size-11" />
-            {news.kind === "out" && (
-              <MovingBox className="villager-pack absolute -bottom-2 left-1/2 w-10 -translate-x-1/2" />
-            )}
-          </span>
-        )}
-        <div className="min-w-0 flex-1 pr-3">
-          <p className="text-[15px] leading-snug font-medium select-text">
-            <TypedWords words={words} onDone={() => setDone(true)} />
-          </p>
-          <MoveCaption news={news} ink="text-(--villager-ink)" />
-        </div>
-        <NextArrow
-          shown={done}
-          className="absolute right-4 bottom-2.5 text-(--villager-ink)"
-        />
+      {speaker.face && (
+        <span className="relative size-11 shrink-0">
+          <VillagerFace face={speaker.face} className="size-11" />
+          {news.kind === "out" && (
+            <MovingBox className="villager-pack absolute -bottom-2 left-1/2 w-10 -translate-x-1/2" />
+          )}
+        </span>
+      )}
+      <div className="min-w-0 flex-1 pr-3">
+        <p className="text-[15px] leading-snug font-medium select-text">
+          <TypedWords words={words} onDone={() => setDone(true)} />
+        </p>
+        <MoveCaption news={news} ink="text-(--villager-ink)" />
       </div>
-    </div>
+      <NextArrow
+        shown={done}
+        className="absolute right-4 bottom-2.5 text-(--villager-ink)"
+      />
+    </DialogueFrame>
   );
 }
 

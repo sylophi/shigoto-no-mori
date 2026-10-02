@@ -512,6 +512,55 @@
     villager-balloon-sway 2.4s ease-in-out infinite;
 }
 
+/* The Visitors album (components/visitors): each sticker pops into its
+   slot with a little overshoot, the progress fills from empty, the best
+   friend's stamp drops onto the guest book and the totals press on
+   after it, like the letter's postmark. */
+@keyframes visitor-pop {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.86);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.03);
+  }
+}
+.visitor-pop {
+  animation: visitor-pop 0.45s cubic-bezier(0.3, 1.2, 0.5, 1) both;
+}
+@keyframes visitor-fill {
+  from {
+    transform: scaleX(0);
+  }
+}
+.visitor-fill {
+  transform-origin: left;
+  animation: visitor-fill 0.9s cubic-bezier(0.2, 0.8, 0.3, 1) 0.2s both;
+}
+@keyframes visitor-stamp {
+  0% {
+    transform: translateY(-14px) rotate(-10deg) scale(1.5);
+    opacity: 0;
+  }
+  60% {
+    transform: rotate(4deg) scale(0.92);
+    opacity: 1;
+  }
+}
+.visitor-stamp {
+  animation: visitor-stamp 0.5s cubic-bezier(0.3, 1.4, 0.5, 1) 0.15s both;
+}
+.visitor-postmark {
+  animation: villager-postmark 0.25s ease-out 0.45s both;
+}
+.visitor-postmark:nth-child(2) {
+  animation-delay: 0.6s;
+}
+.visitor-postmark:nth-child(3) {
+  animation-delay: 0.75s;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .villager-balloon {
     animation: none;
@@ -527,7 +576,11 @@
     .villager-postmark,
     .villager-sign,
     .villager-swash,
-    .villager-paper-drift
+    .villager-paper-drift,
+    .visitor-pop,
+    .visitor-fill,
+    .visitor-stamp,
+    .visitor-postmark
   ) {
     animation: none;
   }

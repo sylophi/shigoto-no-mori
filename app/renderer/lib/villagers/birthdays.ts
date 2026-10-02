@@ -32,3 +32,16 @@ export function isBirthdayOn(
     birthday === "02-29" && today === "02-28" && !isLeapYear(date.getFullYear())
   );
 }
+
+const BIRTHDAY = new Intl.DateTimeFormat(undefined, {
+  month: "long",
+  day: "numeric",
+});
+
+// A "MM-DD" birthday as people say it ("September 25"), or null without
+// one.
+export function birthdayLabel(birthday: string | undefined): string | null {
+  const [month, day] = birthday?.split("-").map(Number) ?? [];
+  if (month === undefined || day === undefined) return null;
+  return BIRTHDAY.format(new Date(2000, month - 1, day));
+}
