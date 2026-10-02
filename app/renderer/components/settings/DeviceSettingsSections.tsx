@@ -45,11 +45,7 @@ export function DeviceToggleSections({
   // app, ".smd" for dev builds). Null until its runtime info is read.
   const { data: runtime } = useRuntimeInfo();
   const driveBase =
-    runtime &&
-    projectDriveBaseFor("/Volumes/<drive>/<project>", {
-      dataDir: runtime.dataDir,
-      canonicalDataDirName: runtime.canonicalDataDirName,
-    });
+    runtime && projectDriveBaseFor("/Volumes/<drive>/<project>", runtime);
   const { data: githubCliReadiness } = useGithubCliReadiness();
   const ghInstalled = githubCliReadiness?.installed ?? true;
   const ghAuthed = githubCliReadiness?.authed ?? true;

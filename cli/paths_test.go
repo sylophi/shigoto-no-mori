@@ -94,19 +94,23 @@ func TestResolveWorktreeBaseOnProjectDrive(t *testing.T) {
 	}
 }
 
-// Turning the setting off again must not turn the worktrees already on
-// the drive external, so the drive base counts as managed whatever the
-// setting says.
+// Turning the setting off again, or moving the data dir onto the
+// project's drive, must not turn the worktrees already on the drive
+// external, so the drive base counts as managed whatever the setting
+// says and wherever the data dir is.
 func TestManagedBasesIncludeProjectDrive(t *testing.T) {
-	pinDataDir(t, "/Users/me/.sm")
 	driveBase := "/Volumes/Ext/" + dataDirName + "/worktrees/repo"
-	bases := managedBasesFor("/Volumes/Ext/code/repo", nil)
-	if !slices.Contains(bases, driveBase) {
-		t.Errorf("bases %v miss the drive base", bases)
+	for _, dir := range []string{"/Users/me/.sm", "/Volumes/Ext/stash/.sm"} {
+		pinDataDir(t, dir)
+		bases := managedBasesFor("/Volumes/Ext/code/repo", nil)
+		if !slices.Contains(bases, driveBase) {
+			t.Errorf("data dir %s: bases %v miss the drive base", dir, bases)
+		}
+		if !isManagedPath(driveBase+"/otter", bases) {
+			t.Errorf("data dir %s: a worktree on the drive base reads as external", dir)
+		}
 	}
-	if !isManagedPath(driveBase+"/otter", bases) {
-		t.Error("a worktree on the drive base reads as external")
-	}
+	pinDataDir(t, "/Users/me/.sm")
 	if bases := managedBasesFor("/Users/me/code/repo", nil); len(bases) != 2 {
 		t.Errorf("internal project grew a drive base: %v", bases)
 	}

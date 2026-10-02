@@ -83,11 +83,16 @@ func moveWorktree(proj project, id worktreeIdentity, dest string) (worktreeJSON,
 		}
 		// The cross-volume path has already re-read git's list, so only
 		// git's own move leaves it stale.
-		if err := gitWorktreeMoveFn(proj.Path, id.Path, dest); err == nil {
+		err := gitWorktreeMoveFn(proj.Path, id.Path, dest)
+		if err == nil {
 			invalidateWorktreeIdentities(proj.ID)
-		} else if !isCrossDeviceError(err) {
-			return worktreeJSON{}, err
-		} else if err := moveAcrossVolumes(proj, id.Path, dest); err != nil {
+		} else if isCrossDeviceError(err) {
+			err = moveAcrossVolumes(proj, id.Path, dest)
+		}
+		if err != nil {
+			// The folders made for dest above go again when they are
+			// shigomori's and empty.
+			pruneEmptyManagedParents(dest, proj.Path)
 			return worktreeJSON{}, err
 		}
 		// Sweep the old parent when it is a directory shigomori owns

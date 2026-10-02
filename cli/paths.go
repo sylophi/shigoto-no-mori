@@ -109,14 +109,25 @@ func externalVolumeRoot(path string) string {
 // The managed root's shape on the project's own external drive:
 // <volume>/<dataDirName>/worktrees/<project>, under the flavor's own
 // folder name wherever the data dir itself happens to be. "" when the
-// project isn't on an external drive, or when the data dir sits on that
-// same drive and the managed root is on it already.
-func projectDriveBase(projectPath string) string {
+// project isn't on an external drive. Always managed (managedBasesFor),
+// so worktrees placed there stay ours whatever happens to the setting
+// or the data dir later.
+func driveBaseOf(projectPath string) string {
 	volume := externalVolumeRoot(projectPath)
-	if volume == "" || strings.HasPrefix(dataDir(), volume+"/") {
+	if volume == "" {
 		return ""
 	}
 	return filepath.Join(volume, dataDirName, "worktrees", filepath.Base(projectPath))
+}
+
+// driveBaseOf as a destination for new worktrees: "" as well when the
+// data dir sits on the project's drive, where the managed root already
+// is.
+func projectDriveBase(projectPath string) string {
+	if volume := externalVolumeRoot(projectPath); volume != "" && strings.HasPrefix(dataDir(), volume+"/") {
+		return ""
+	}
+	return driveBaseOf(projectPath)
 }
 
 func managedOnProjectDriveEnabled(global globalConfig) bool {
@@ -131,7 +142,7 @@ func managedBasesFor(projectPath string, config *projectConfig) []string {
 		filepath.Join(dataDir(), "worktrees", filepath.Base(projectPath)),
 		filepath.Join(projectPath, ".shigomori", "worktrees"),
 	}
-	if driveBase := projectDriveBase(projectPath); driveBase != "" {
+	if driveBase := driveBaseOf(projectPath); driveBase != "" {
 		bases = append(bases, driveBase)
 	}
 	if config != nil {
@@ -198,7 +209,7 @@ func pruneEmptyManagedParents(oldWorktreePath, projectPath string) {
 		removeEmptyDirs(parent, 1)
 	case filepath.Join(projectPath, ".shigomori", "worktrees"):
 		removeEmptyDirs(parent, 2)
-	case projectDriveBase(projectPath):
+	case driveBaseOf(projectPath):
 		// <volume>/<dataDirName>/worktrees/<project>: the folder on the
 		// project's drive goes whole once the last project leaves it,
 		// so nothing of ours stays behind on the drive.

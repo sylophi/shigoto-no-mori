@@ -159,6 +159,9 @@ func TestMoveAcrossVolumesCopiesThenRepairs(t *testing.T) {
 // A copy that can't be made leaves the worktree where it was, still
 // git's, with nothing at the destination.
 func TestMoveAcrossVolumesFailureKeepsTheOriginal(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes through the read-only folder that fails the copy")
+	}
 	proj := autoPullSandbox(t)
 	wt := createViaCmd(t, proj, "fox")
 	stubCrossDeviceMove(t)
