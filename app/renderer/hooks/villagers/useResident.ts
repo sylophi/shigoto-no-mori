@@ -8,12 +8,12 @@ import { useVillagerFace, useVillagerProfiles } from "./useVillagers";
 // and whether today (local date) is their birthday.
 export type Resident = Omit<Speaker, "color"> & { birthday: boolean };
 
-// A worktree's resident, or null. For the worktree page, which shows
-// their face every day. `everyDay: false` reads the face only on their
-// birthday, for a sidebar row (useVillagerBirthday). Under this
-// window's Village life, like every villager extra. Re-renders at
-// midnight, so a window left open all night brings the party out, and
-// puts it away, on the right day.
+// A worktree's resident, or null. For the worktree page and the inbox
+// row, which show their face every day. `everyDay: false` reads the
+// face only on their birthday, for the cake on a sidebar row
+// (useVillagerBirthday). Under this window's Village life, like every
+// villager extra. Re-renders at midnight, so a window left open all
+// night brings the party out, and puts it away, on the right day.
 export function useResident(
   worktree: Pick<Worktree, "name" | "isPrimary">,
   { everyDay = true }: { everyDay?: boolean } = {},

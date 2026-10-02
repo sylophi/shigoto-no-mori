@@ -6,11 +6,13 @@ import {
   ContextMenuContent,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { VillagerFace } from "@/components/shared/VillagerSays";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
 import { BirthdayBadge } from "@/components/villagers/BirthdayBadge";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
 import { useNow } from "@/hooks/ui/useNow";
+import { useResident } from "@/hooks/villagers/useResident";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import type { ScriptActivityKind } from "@/store/scriptRuns";
 import {
@@ -72,6 +74,7 @@ export function InboxRow({
   );
   const { removeArm, onOpenChange } = useProjectMenuRemoveArm();
   const peerApi = useRemoteDeviceApi(device?.deviceId);
+  const resident = useResident(worktree);
 
   // An element for the trigger to `render`, so it wraps no extra div.
   const row = (
@@ -132,10 +135,20 @@ export function InboxRow({
           would restate the shelf header the row is already under. The
           primary's house glyph stays. When it's opted into the inbox
           it's the only thing telling the root apart from a worktree
-          named after the project. */}
+          named after the project. Under Village life, the villager
+          whose home this is sits beside the name, as their face sits
+          beside the title on the worktree page. Here it's decoration,
+          so it stays out of the row's label and hover title. */}
       <span className="flex min-w-0 items-center gap-1 text-3xs text-muted-foreground/70">
         {!worktree.shelved && (
           <WorktreeKindIcon worktree={worktree} showTooltip={false} />
+        )}
+        {resident?.face && (
+          <VillagerFace
+            face={resident.face}
+            tint={false}
+            className="-my-0.5 size-3.5"
+          />
         )}
         <span className="min-w-0 truncate">{worktree.name}</span>
         <BirthdayBadge worktree={worktree} />
