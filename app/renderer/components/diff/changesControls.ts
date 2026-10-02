@@ -1,7 +1,7 @@
 import type { ChangedFile } from "@shared/schemas";
 
 // What turns the read-only diff view into the changes page: the status
-// rows the rail draws, which of them is in the pane, and the actions
+// rows the file list draws, which of them is in the pane, and the actions
 // the rows fire. Data and stable callbacks only. The composer rides in
 // as its own prop, so typing a message never changes this object's
 // identity.

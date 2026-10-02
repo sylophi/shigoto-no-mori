@@ -16,7 +16,7 @@ interface TreeCtx {
   onSelectFile: (path: string) => void;
 }
 
-// The files page's rail: the worktree as a folder tree, read one folder
+// The files page's list: the worktree as a folder tree, read one folder
 // at a time (sync:worktreeFolder) as folders are opened, so a
 // node_modules costs nothing until someone opens it. Ignored entries
 // are dimmed, which is the one thing the tree says about git.
@@ -24,13 +24,11 @@ interface TreeCtx {
 // Rows are one flat run of buttons in document order, whatever their
 // depth, which is what keeps the arrow keys a sibling query away.
 export function FileTree({
-  width,
   className,
   ...ctx
 }: TreeCtx & {
-  // Beside the viewer it is a rail the caller's separator drags. In the
-  // phone layout's sheet it fills the width and `className` sizes it.
-  width?: number;
+  // The box is the caller's: the app sidebar's slot on a wide viewport,
+  // the page itself or its sheet on a phone.
   className?: string;
 }) {
   const { expanded, onToggleFolder, selectedPath } = ctx;
@@ -91,8 +89,7 @@ export function FileTree({
       // The rows take the tab stop (see tabIndex on the row).
       tabIndex={-1}
       onKeyDown={onKeyDown}
-      style={width === undefined ? undefined : { width }}
-      className={cn("flex shrink-0 flex-col overflow-y-auto p-1", className)}
+      className={cn("flex flex-col overflow-y-auto p-1", className)}
     >
       <FolderRows ctx={{ ...ctx, tabStop }} relative="" depth={0} />
     </div>

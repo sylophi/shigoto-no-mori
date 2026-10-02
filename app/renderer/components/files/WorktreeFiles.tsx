@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
 import { Files, RotateCw } from "lucide-react";
 import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeader";
+import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
 import { WorktreeMissing } from "@/components/shared/WorktreeMissing";
 import { BackButton } from "@/components/ui/back-button";
 import { CenteredMessage } from "@/components/ui/centered-message";
@@ -10,8 +11,6 @@ import { ChipButton } from "@/components/ui/chip-button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
-import { useElementWidth } from "@/hooks/ui/useElementWidth";
-import { useResizableWidth } from "@/hooks/ui/useResizableWidth";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { useRouteWorktree } from "@/hooks/worktrees/useRouteWorktree";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
@@ -21,13 +20,6 @@ import type { Worktree } from "@shared/schemas";
 import { ancestorsOf, FileTree } from "./FileTree";
 import { FileViewer } from "./FileViewer";
 
-// The rail is dragged between these. The upper one is lowered further
-// by the pane, so the viewer always keeps VIEWER_MIN beside it.
-const RAIL_MIN = 200;
-const RAIL_MAX = 560;
-const RAIL_DEFAULT = 280;
-const VIEWER_MIN = 320;
-
 export function WorktreeFiles() {
   const { worktree, goBack, missing } = useRouteWorktree();
   if (!worktree) {
@@ -36,9 +28,10 @@ export function WorktreeFiles() {
   return <FilesView worktree={worktree} onBack={goBack} />;
 }
 
-// A worktree's files, browsed read-only: the folder tree on the left,
-// the picked file on the right. The pick lives in the route's search
-// (`path`), so a link can open the page on a file.
+// A worktree's files, browsed read-only: the folder tree in the app
+// sidebar (SidebarTakeover), the picked file filling the page. The
+// pick lives in the route's search (`path`), so a link can open the
+// page on a file.
 function FilesView({
   worktree,
   onBack,
@@ -61,19 +54,8 @@ function FilesView({
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(
     () => new Set(selected === null ? [] : ancestorsOf(selected)),
   );
-  const [paneRef, paneWidth] = useElementWidth<HTMLDivElement>();
   const phone = usePhoneLayout();
   const [treeSheetOpen, setTreeSheetOpen] = useState(false);
-  const rail = useResizableWidth({
-    storageKey: "files.railWidth",
-    min: RAIL_MIN,
-    max:
-      paneWidth === null
-        ? RAIL_MAX
-        : Math.max(RAIL_MIN, Math.min(RAIL_MAX, paneWidth - VIEWER_MIN)),
-    fallback: RAIL_DEFAULT,
-    leftEdge: () => paneRef.current?.getBoundingClientRect().left ?? 0,
-  });
 
   const toggleFolder = (folder: string, open: boolean) =>
     setExpanded((prev) => withMember(prev, folder, open));
@@ -111,11 +93,15 @@ function FilesView({
   );
 
   return (
-    <div ref={paneRef} className="flex h-full flex-col">
+    <div className="flex h-full flex-col">
+      <SidebarTakeover back={{ label: worktree.branch, onClick: onBack }}>
+        {canCommand && <FileTree {...treeProps} className="min-h-0 flex-1" />}
+      </SidebarTakeover>
       <header
         className={`flex flex-col gap-3 border-b border-border ${PAGE_HEADER_PADDING}`}
       >
-        <BackButton onClick={onBack} label={worktree.branch} />
+        {/* A wide viewport's way back is the sidebar's first row. */}
+        {phone && <BackButton onClick={onBack} label={worktree.branch} />}
         <div className="flex items-start justify-between gap-6">
           <div className="min-w-0 flex-1 space-y-1">
             <h1 className="truncate text-xl font-medium tracking-tight phone:text-lg">
@@ -159,24 +145,11 @@ function FilesView({
         // until a file is picked, and a sheet after.
         viewer || <FileTree {...treeProps} className="min-h-0 w-full flex-1" />
       ) : (
-        <div className="flex min-h-0 flex-1">
-          <FileTree {...treeProps} width={rail.width} />
-          <div
-            onMouseDown={rail.onMouseDown}
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize file tree"
-            tabIndex={-1}
-            className="relative w-px shrink-0 cursor-col-resize bg-border"
-          >
-            <div className="absolute inset-y-0 -left-1 w-2" />
-          </div>
-          {viewer || (
-            <CenteredMessage className="min-w-0 flex-1 bg-background px-6">
-              Pick a file to view it.
-            </CenteredMessage>
-          )}
-        </div>
+        viewer || (
+          <CenteredMessage className="min-h-0 flex-1 bg-background px-6">
+            Pick a file to view it.
+          </CenteredMessage>
+        )
       )}
 
       {phone && (

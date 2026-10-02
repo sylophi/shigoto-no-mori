@@ -299,9 +299,9 @@ const LAB_PR_DETAIL = {
   ]),
 };
 
-// Three files, so the diff pages pose their file index too (the rail
-// beside a wide diff, the bottom sheet on a phone), which needs a
-// patch of at least DiffView's INDEX_MIN_FILES.
+// Three files, so the diff pages pose a real file index (the list in
+// the sidebar on a wide viewport) and the phone's sheet, which needs a
+// patch of at least DiffView's SHEET_MIN_FILES.
 export const LAB_DIFF = `diff --git a/renderer/components/sidebar/RowContent.tsx b/renderer/components/sidebar/RowContent.tsx
 index 4f2c9d1..a91f3c7 100644
 --- a/renderer/components/sidebar/RowContent.tsx

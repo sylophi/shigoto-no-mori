@@ -12,12 +12,11 @@ import {
 } from "@pierre/diffs";
 import { FileDiff, VirtualizerContext } from "@pierre/diffs/react";
 import { flushSync } from "react-dom";
-import { ChevronDown, Files, Loader2, PanelLeft } from "lucide-react";
-import { useElementWidth } from "@/hooks/ui/useElementWidth";
-import { useResizableWidth } from "@/hooks/ui/useResizableWidth";
+import { ChevronDown, Files, Loader2 } from "lucide-react";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeader";
+import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
 import { BackButton } from "@/components/ui/back-button";
 import { ChipButton } from "@/components/ui/chip-button";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -34,7 +33,6 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { changeEntries, fileKey, patchEntries } from "@/lib/patchFiles";
 import { useFileScrollSpy } from "./useFileScrollSpy";
 import { CenteredMessage } from "@/components/ui/centered-message";
-import { readStored, writeStored } from "@/lib/localStorage";
 import { withMember } from "@/lib/toggleSet";
 
 type DiffStyle = "unified" | "split";
@@ -67,27 +65,14 @@ const DIFF_METRICS: VirtualFileMetrics = {
   spacing: CODE_GAP_BLOCK,
 };
 
-// Below this a patch is its own table of contents: two files scroll past
-// in one flick, and a rail would cost more width than it saves.
-const INDEX_MIN_FILES = 3;
-// The rail is dragged between these and starts at 288. The upper one is
-// a flat ceiling that the pane lowers further (see railMax).
-const RAIL_MIN = 220;
-const RAIL_MAX = 600;
-const RAIL_DEFAULT = 288;
-// Below MIN the diff beside the rail is too narrow to read a hunk
-// without wrapping, so the rail isn't offered at all. Between MIN and
-// AMPLE it's offered but stays shut unless asked for. At AMPLE the diff
-// keeps a width that fits a wide unified hunk. Both are measured as
-// what the diff would keep with the rail out, so a wider rail asks for
-// a wider pane. MIN doubles as the rail's drag ceiling, since dragging
-// into it is the one way an open rail could stop fitting.
-const DIFF_MIN_BESIDE_RAIL = 384;
-const DIFF_AMPLE_BESIDE_RAIL = 736;
+// Below this a patch is its own table of contents on a phone: two files
+// scroll past in one flick, so the header offers no sheet for them. The
+// sidebar's list costs the diff no width, so a wide viewport always has
+// it.
+const SHEET_MIN_FILES = 3;
 // Matches the scroll area's p-2, so a jumped-to file lands where it
 // would sit if you had scrolled it to the top yourself.
 const JUMP_GAP = 8;
-const INDEX_KEY = "diff.fileIndex";
 
 function scrollToFile(container: HTMLElement, target: HTMLElement): void {
   container.scrollTop +=
@@ -138,14 +123,6 @@ function usePatchFiles(patch: string | undefined): FileDiffMetadata[] {
     .toSorted((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
-// Three states, not two: null means the user has never said, and the
-// pane width decides. Storing a default up-front would freeze whichever
-// width the diff happened to be opened at first.
-function readStoredIndexPref(): boolean | null {
-  const stored = readStored(INDEX_KEY);
-  return stored === null ? null : stored !== "0";
-}
-
 export function DiffView({
   diff,
   onBack,
@@ -154,7 +131,7 @@ export function DiffView({
   subtitle,
   emptyMessage,
   changes,
-  railFooter,
+  footer,
 }: {
   // The patch's read, whichever of the three pages asked for it.
   diff: UseQueryResult<string>;
@@ -163,17 +140,16 @@ export function DiffView({
   title: ReactNode;
   subtitle: ReactNode;
   emptyMessage: ReactNode;
-  // Present on the uncommitted-changes page only. Turns the rail into a
-  // tick list with the commit composer under it, and keeps the rail on
-  // screen regardless of file count or pane width, since there is
-  // nowhere else to commit from.
+  // Present on the uncommitted-changes page only. Turns the file list into a
+  // tick list with the commit composer under it, and keeps the list up
+  // on a clean tree too, since amending and undoing the last commit
+  // live there.
   changes?: DiffChangesControls;
-  // Mounted at the foot of the rail: the commit composer.
-  railFooter?: ReactNode;
+  // Mounted at the foot of the file list: the commit composer.
+  footer?: ReactNode;
 }) {
   const { data: patch, isLoading, error } = diff;
   const [diffStyle, setDiffStyle] = useState<DiffStyle>("unified");
-  const [indexPref, setIndexPref] = useState(readStoredIndexPref);
   const [collapsedKeys, setCollapsedKeys] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -195,40 +171,20 @@ export function DiffView({
     if (list && scroller) virtualizer.setup(scroller, list);
     else virtualizer.cleanUp();
   };
-  const [paneRef, paneWidth] = useElementWidth<HTMLDivElement>();
-  // A phone has no width to spare beside the diff, so the rail is
-  // never offered there (indexAvailable). The same list opens as a
-  // bottom sheet instead.
+  // The file list lives in the app sidebar (SidebarTakeover), which a
+  // phone doesn't have. The same list opens as a bottom sheet there instead.
   const phone = usePhoneLayout();
   const [fileSheetOpen, setFileSheetOpen] = useState(false);
-  // The drag stops where the diff's own minimum starts. Without this
-  // ceiling a drag past it fails the availability check below and the
-  // rail closes under the pointer. An unmeasured pane (first frame)
-  // gets the flat ceiling, and the measurement follows.
-  const railMax =
-    paneWidth === null
-      ? RAIL_MAX
-      : Math.max(
-          RAIL_MIN,
-          Math.min(RAIL_MAX, paneWidth - DIFF_MIN_BESIDE_RAIL),
-        );
-  const rail = useResizableWidth({
-    storageKey: "diff.railWidth",
-    min: RAIL_MIN,
-    max: railMax,
-    fallback: RAIL_DEFAULT,
-    leftEdge: () => paneRef.current?.getBoundingClientRect().left ?? 0,
-  });
   // Pierre's library picks between the `dark`/`light` entries off the
   // shadow root's `color-scheme`, which defaults to the OS preference.
   // Force it to follow the in-app theme instead.
   const { resolved } = useTheme();
 
   // Which of the two views this is. The changes page hands over one
-  // file's diff, the one its rail picked, so the pane draws what it was
+  // file's diff, the one its list picked, so the pane draws what it was
   // given, holds no fold state and needs no scroll spy. A commit or PR
-  // diff hands over the whole patch, reads as one scroll, and its rail
-  // is optional.
+  // diff hands over the whole patch, reads as one scroll, and its list
+  // is a map of that scroll.
   const singleFile = changes !== undefined;
   const filesLabel = singleFile ? "Changed files" : "Files in this patch";
 
@@ -249,30 +205,16 @@ export function DiffView({
     if (collapsedKeys.size > 0) setCollapsedKeys(new Set());
   }
 
-  // Unmeasured (null) counts as too narrow, so the rail can't flash in
-  // and back out on the first frame of a diff opened in a narrow pane.
-  // The changes page skips all of this: its rail is the page, and it
-  // stays up on a clean tree too, since amending and undoing the last
-  // commit live there. The phone gate comes before both: a landscape
-  // phone can clear the pane minimum, but there is no width beside the
-  // diff for a rail, so the sheet is the phone's one path to the list
-  // (the changes list and its composer included).
-  const indexAvailable =
-    !phone &&
-    !singleFile &&
-    allFiles.length >= INDEX_MIN_FILES &&
-    paneWidth !== null &&
-    paneWidth >= rail.width + DIFF_MIN_BESIDE_RAIL;
-  const showIndex =
-    (singleFile && !phone) ||
-    (indexAvailable &&
-      (indexPref ?? paneWidth >= rail.width + DIFF_AMPLE_BESIDE_RAIL));
+  // A read-only patch lists its files once there are some. Until then
+  // the pane says why there aren't, and the sidebar holds just the way
+  // back rather than an empty list that would read as a clean patch.
+  const showIndex = singleFile || allFiles.length > 0;
   const allCollapsed =
     allFiles.length > 0 && collapsedKeys.size >= allFiles.length;
   const toggleAll = () =>
     setCollapsedKeys(allCollapsed ? new Set() : new Set(allFiles.map(fileKey)));
 
-  // What the rail lists: the patch's files on a read-only diff, git
+  // What the file list holds: the patch's files on a read-only diff, git
   // status on the changes page.
   const indexEntries = changes
     ? changeEntries(changes.files)
@@ -283,15 +225,6 @@ export function DiffView({
   useEffect(() => {
     if (singleFile) scrollRef.current?.scrollTo({ top: 0 });
   }, [singleFile, patch]);
-
-  // Toggles against what's on screen, not against the stored preference:
-  // in the auto state those differ, and a chip that needs two clicks to
-  // do anything the first time reads as broken.
-  const toggleIndex = () => {
-    const next = !showIndex;
-    setIndexPref(next);
-    writeStored(INDEX_KEY, next ? "1" : "0");
-  };
 
   const setCollapsed = (key: string, collapsed: boolean) =>
     setCollapsedKeys((prev) => withMember(prev, key, collapsed));
@@ -306,10 +239,10 @@ export function DiffView({
     const container = scrollRef.current;
     if (container) jumpToFile(container, key, setCollapsedKeys, setActiveKey);
   };
-  // Which row the rail marks: the picked path, or whatever the scroll
+  // Which row the list marks: the picked path, or whatever the scroll
   // has reached in a combined read.
   const currentKey = changes ? changes.selectedKey : activeKey;
-  // What the rail and the phone's sheet both list.
+  // What the sidebar's list and the phone's sheet both draw.
   const indexProps = {
     entries: indexEntries,
     activeKey: currentKey,
@@ -320,21 +253,28 @@ export function DiffView({
     // control with its handler.
     onToggleAll: singleFile ? undefined : toggleAll,
     changes,
-    footer: railFooter,
+    footer,
   };
 
   return (
-    // Measured rather than left to a container query: the chip has to
-    // know whether the rail is currently on screen to toggle the right
-    // way. (Why the pane and not the window: see useElementWidth.)
-    <div ref={paneRef} className="flex h-full flex-col">
+    <div className="flex h-full flex-col">
+      <SidebarTakeover back={{ label: backLabel, onClick: onBack }}>
+        {showIndex && (
+          <DiffFileIndex
+            {...indexProps}
+            onSelect={selectFile}
+            className="min-h-0 flex-1"
+          />
+        )}
+      </SidebarTakeover>
       <header
         className={cn(
           "flex flex-col gap-3 border-b border-border",
           PAGE_HEADER_PADDING,
         )}
       >
-        <BackButton onClick={onBack} label={backLabel} />
+        {/* A wide viewport's way back is the sidebar's first row. */}
+        {phone && <BackButton onClick={onBack} label={backLabel} />}
         <div className="flex items-start justify-between gap-6">
           <div className="min-w-0 flex-1 space-y-1">
             {/* A phone's header row is shared with the chips, so the
@@ -347,7 +287,7 @@ export function DiffView({
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2 self-center">
-            {phone && (singleFile || allFiles.length >= INDEX_MIN_FILES) && (
+            {phone && (singleFile || allFiles.length >= SHEET_MIN_FILES) && (
               <ChipButton
                 onClick={() => setFileSheetOpen(true)}
                 title={filesLabel}
@@ -356,17 +296,6 @@ export function DiffView({
               >
                 <Files aria-hidden className="size-3.5" />
                 <span className="tabular">{indexEntries.length}</span>
-              </ChipButton>
-            )}
-            {indexAvailable && (
-              <ChipButton
-                onClick={toggleIndex}
-                aria-pressed={showIndex}
-                title={showIndex ? "Hide file index" : "Show file index"}
-                aria-label={showIndex ? "Hide file index" : "Show file index"}
-                className={cn("py-1.5", showIndex && "text-foreground")}
-              >
-                <PanelLeft aria-hidden className="size-3.5" />
               </ChipButton>
             )}
             <SegmentedControl
@@ -381,83 +310,61 @@ export function DiffView({
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        {showIndex && (
-          <DiffFileIndex
-            {...indexProps}
-            onSelect={selectFile}
-            width={rail.width}
-          />
-        )}
-        {showIndex && (
-          <div
-            onMouseDown={rail.onMouseDown}
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize file list"
-            tabIndex={-1}
-            className="relative w-px shrink-0 cursor-col-resize bg-border"
-          >
-            <div className="absolute inset-y-0 -left-1 w-2" />
-          </div>
-        )}
-
-        <div
-          ref={scrollRef}
-          className="min-h-0 min-w-0 flex-1 overflow-auto bg-background"
-        >
-          {isLoading ? (
-            <CenteredMessage>
-              <Loader2 aria-hidden className="mr-2 size-3.5 animate-spin" />
-              Computing diff…
-            </CenteredMessage>
-          ) : error ? (
-            <CenteredMessage className="px-6">
-              Couldn't compute diff.
-            </CenteredMessage>
-          ) : allFiles.length === 0 ? (
-            <CenteredMessage className="px-6 text-center">
-              {/* A picked file with no patch of its own (a mode change,
+      <div
+        ref={scrollRef}
+        className="min-h-0 min-w-0 flex-1 overflow-auto bg-background"
+      >
+        {isLoading ? (
+          <CenteredMessage>
+            <Loader2 aria-hidden className="mr-2 size-3.5 animate-spin" />
+            Computing diff…
+          </CenteredMessage>
+        ) : error ? (
+          <CenteredMessage className="px-6">
+            Couldn't compute diff.
+          </CenteredMessage>
+        ) : allFiles.length === 0 ? (
+          <CenteredMessage className="px-6 text-center">
+            {/* A picked file with no patch of its own (a mode change,
                   or content git won't diff) is not a clean tree and
                   mustn't borrow its wording. */}
-              {singleFile && changes.files.length > 0
-                ? "No text changes to show for this file."
-                : emptyMessage}
-            </CenteredMessage>
-          ) : (
-            <div
-              ref={listRef}
-              data-slot="diff-view"
-              className="flex flex-col gap-2 p-2 select-text"
-              style={CODE_STYLE}
-            >
-              <VirtualizerContext value={virtualizer}>
-                {allFiles.map((fileDiff) => {
-                  const key = fileKey(fileDiff);
-                  return (
-                    <DiffFileRow
-                      key={key}
-                      fileDiff={fileDiff}
-                      fileId={key}
-                      collapsed={!singleFile && collapsedKeys.has(key)}
-                      diffStyle={diffStyle}
-                      themeType={resolved}
-                      // No fold control on a single file: it is the one
-                      // you asked for, and folding it away would leave
-                      // the pane blank with nothing to unfold it from.
-                      onToggle={singleFile ? undefined : setCollapsed}
-                    />
-                  );
-                })}
-              </VirtualizerContext>
-            </div>
-          )}
-        </div>
+            {singleFile && changes.files.length > 0
+              ? "No text changes to show for this file."
+              : emptyMessage}
+          </CenteredMessage>
+        ) : (
+          <div
+            ref={listRef}
+            data-slot="diff-view"
+            className="flex flex-col gap-2 p-2 select-text"
+            style={CODE_STYLE}
+          >
+            <VirtualizerContext value={virtualizer}>
+              {allFiles.map((fileDiff) => {
+                const key = fileKey(fileDiff);
+                return (
+                  <DiffFileRow
+                    key={key}
+                    fileDiff={fileDiff}
+                    fileId={key}
+                    collapsed={!singleFile && collapsedKeys.has(key)}
+                    diffStyle={diffStyle}
+                    themeType={resolved}
+                    // No fold control on a single file: it is the one
+                    // you asked for, and folding it away would leave
+                    // the pane blank with nothing to unfold it from.
+                    onToggle={singleFile ? undefined : setCollapsed}
+                  />
+                );
+              })}
+            </VirtualizerContext>
+          </div>
+        )}
       </div>
 
       {phone && (
         <Sheet open={fileSheetOpen} onOpenChange={setFileSheetOpen}>
-          {/* The rail as a bottom sheet: a patch is still easier to
+          {/* The file list as a bottom sheet: a patch is still easier to
               read with its map to hand. Picking a file closes the
               sheet and jumps, so the tap lands on the file itself. */}
           <SheetContent
