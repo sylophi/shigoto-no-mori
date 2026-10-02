@@ -18,8 +18,8 @@ import {
   useSetProjectSort,
 } from "@/hooks/projects/useProjectSort";
 import { hasLocalHost } from "@/lib/localHost";
+import { AddProjectButton } from "./AddProjectButton";
 import { SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
-import { TidyButton } from "./TidyButton";
 
 interface SidebarToolbarProps {
   // Enter-only: the footer owns "Done arranging", so this never toggles
@@ -47,24 +47,22 @@ const SORT_OPTIONS: ReadonlyArray<{ value: ProjectSortMode; label: string }> = [
 // gets sorted, so inside a project the sort gives its place to the way
 // back to that list, in the corner a back button is looked for (the
 // one a page that takes the sidebar over puts there too,
-// SidebarTakeover). The rest is about this machine's own projects, so
-// a hostless client's toolbar is the way back alone, and nothing on
-// the list.
+// SidebarTakeover). Sorting is about this machine's own projects, so a
+// hostless client's list leaves that corner empty. Add project sits at
+// the right end in every case: it adds to the list of projects, and a
+// hostless client adds onto one of its peers.
 export function SidebarToolbar({ onArrange, onBack }: SidebarToolbarProps) {
-  if (!hasLocalHost && !onBack) return null;
-
   return (
     // Same left/right split as the footer below it: the control that
-    // changes what the list shows sits left, the one that navigates
-    // away sits right.
+    // changes what the list shows sits left, the action sits right.
     <div className="flex items-center gap-1 px-2 pb-1">
       {onBack ? (
         <BackButton label="Projects" onClick={onBack} className="ml-0" />
       ) : (
-        <SortMenu onArrange={onArrange} />
+        hasLocalHost && <SortMenu onArrange={onArrange} />
       )}
       <div className="flex-1" />
-      {hasLocalHost && <TidyButton />}
+      <AddProjectButton />
     </div>
   );
 }

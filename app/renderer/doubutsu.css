@@ -778,10 +778,10 @@
   --accent-foreground: var(--doubutsu-accent-foreground);
 }
 
-/* The inbox's New worktree button is a filled surface sitting directly
-   under the banner card, and doubutsu's card is inset at mx-3. At the
-   px-2 the rows use, the button's fill visibly overhangs the card above
-   it. Two stacked blocks that nearly line up read worse than two that
+/* The inbox's create buttons (New worktree, Add project) are filled
+   surfaces sitting directly under the banner card, and doubutsu's card
+   is inset at mx-3. At the px-2 the rows use, their fill visibly
+   overhangs the card above it. Two stacked blocks that nearly line up read worse than two that
    either match or clearly don't. The rows underneath are text with only
    a hover fill, so they can run full width without the same clash.
    v1 has no card, so it keeps the px-2. The device filter's pills are
@@ -823,10 +823,10 @@
   background-color: var(--muted);
 }
 
-/* The sidebar's New worktree button and the device filter's row of
-   outline buttons under it skip the peach outline fill above, so the
-   two read as one set of controls on the mint rail. The button falls
-   back to its variant's own fills (plain --background, muted on
+/* The sidebar's New worktree and Add project buttons and the device
+   filter's row of outline buttons under them skip the peach outline
+   fill above, so they read as one set of controls on the mint rail.
+   The buttons fall back to their variant's own fills (plain --background, muted on
    hover), and the pills wear the same --background. The picked pill
    keeps the accent every selection here wears. All unlayered, like
    the outline fill they outrank. */
