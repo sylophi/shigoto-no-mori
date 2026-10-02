@@ -17,6 +17,7 @@ import type {
   Project,
   SharedSettingsDoc,
   ShigomoriWorktreeData,
+  Worktree,
 } from "@shared/schemas";
 import { repoNameFromUrl } from "@shared/cloneUrl";
 import { normalizeRemoteUrl } from "@shared/git/repoIdentity.mts";
@@ -1088,7 +1089,10 @@ function initPresence(): void {
 // ?crowd=<n>: that many more projects on Studio Mac, for the forest at
 // the size where finding a project gets hard. Most hold their primary
 // checkout alone, the way most real ones do, and every fourth has a
-// worktree or two in flight.
+// worktree or two in flight. With ?crowdShared=1 terrier lists them
+// all and most are cloned on the Thinkpad too, the way a registry kept
+// on every machine fills the list: nearly every project then carries a
+// paw and a device, which the open project's header shows.
 const CROWD_NAMES = [
   "lichen",
   "terrier",
@@ -1114,31 +1118,46 @@ const CROWD_NAMES = [
 const CROWD_ANIMALS = ["sly-stoat", "plain-plover"];
 
 function initCrowd(): void {
-  const posed = Number(new URLSearchParams(location.search).get("crowd"));
+  const pose = new URLSearchParams(location.search);
+  const posed = Number(pose.get("crowd"));
   const local = forests[LOCAL_DEVICE_ID];
   if (!Number.isInteger(posed) || posed <= 0 || local === undefined) return;
+  const thinkpad =
+    pose.get("crowdShared") === "1" ? forests[THINKPAD_ID] : undefined;
+  const shared = thinkpad !== undefined;
   CROWD_NAMES.slice(0, posed).forEach((name, i) => {
-    const id = `p_crowd_${i}`;
-    const path = `/Users/rin/dev/${name}`;
-    local.projects.push({
-      id,
-      name,
-      path,
-      pathExists: true,
-      identity: null,
-      lastUsed: Date.now() - (i + 6) * 86_400_000,
-      recentCount: 1,
-    });
-    local.worktrees[id] = [
-      worktreeFixture({
-        id: `wt_crowd_${i}`,
-        projectId: id,
+    // One checkout of the crowd's project on a device, its primary
+    // worktree first and the given ones after it.
+    const checkout = (
+      forest: DeviceForest,
+      id: string,
+      path: string,
+      extra: (id: string) => Worktree[] = () => [],
+    ) => {
+      forest.projects.push({
+        id,
         name,
-        branch: "main",
         path,
-        isPrimary: true,
-      }),
-      ...CROWD_ANIMALS.slice(0, i % 8 === 0 ? 1 : i % 4 === 0 ? 2 : 0).map(
+        pathExists: true,
+        identity: shared ? `root:crowd${String(i).padStart(12, "0")}` : null,
+        source: shared ? "terrier" : undefined,
+        lastUsed: Date.now() - (i + 6) * 86_400_000,
+        recentCount: 1,
+      });
+      forest.worktrees[id] = [
+        worktreeFixture({
+          id: `wt_${id}`,
+          projectId: id,
+          name,
+          branch: "main",
+          path,
+          isPrimary: true,
+        }),
+        ...extra(id),
+      ];
+    };
+    checkout(local, `p_crowd_${i}`, `/Users/rin/dev/${name}`, (id) =>
+      CROWD_ANIMALS.slice(0, i % 8 === 0 ? 1 : i % 4 === 0 ? 2 : 0).map(
         (animal, n) =>
           worktreeFixture({
             id: `wt_crowd_${i}_${n}`,
@@ -1148,7 +1167,11 @@ function initCrowd(): void {
             path: `/Users/rin/.sm/worktrees/${name}/${animal}`,
           }),
       ),
-    ];
+    );
+    // Every fifth stays on this machine alone, so the projects differ.
+    if (shared && i % 5 !== 4) {
+      checkout(thinkpad, `tp_crowd_${i}`, `/home/rin/dev/${name}`);
+    }
   });
 }
 

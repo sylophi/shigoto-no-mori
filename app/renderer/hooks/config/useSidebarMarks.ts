@@ -6,7 +6,7 @@ import { useLocalGlobalConfig } from "./useGlobalConfig";
 
 // The sidebar's optional marks, read off this window's client config
 // (Settings, Appearance), so they hold for every device's rows the
-// window shows. Selected down to one flag each: every sidebar row reads
+// window shows. Selected down to one flag each: the sidebar's rows read
 // them, and folding a project writes the same doc. False until the
 // config has loaded, so a mark switched off never flashes in.
 function useClientFlag(select: (config: ClientConfig) => boolean): boolean {
@@ -39,15 +39,14 @@ export function terrierMarksHere(terrier: boolean): boolean {
   return !hasLocalHost || terrier;
 }
 
-// terrierMarksHere over this machine's saved config, for the paw.
-// Mounted only where a paw would show, so the rows that never wear one
-// never read the device config.
+// terrierMarksHere over this machine's saved config, for the paw on
+// the open project's header.
 export function useTerrierMarksHere(): boolean {
   const { data: config } = useLocalGlobalConfig();
   return terrierMarksHere(config?.terrier === true);
 }
 
-// The device badges on project headers and worktree rows. On unless
+// The device badges on the open project's header and worktree rows. On unless
 // switched off.
 export function useShowDeviceBadges(): boolean {
   return useClientFlag(showDeviceBadges);
