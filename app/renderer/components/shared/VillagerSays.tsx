@@ -26,14 +26,18 @@ export function VillagerSays({ line }: { line: VillagerLine }) {
 
 // The speaker's face (a data URL) on a soft round tint, so a near-white
 // villager (Bianca, Rolf) keeps an edge on a white or dark surface.
-// `badge` sits on the bottom corner, which the faces leave empty. Size
-// it with `className` (a size-* utility).
+// `tint={false}` leaves the face bare, for a glyph-sized face in a line
+// of bare icons on a colored surface (an inbox row), where the tint
+// reads as a smudge. `badge` sits on the bottom corner, which the faces
+// leave empty. Size it with `className` (a size-* utility).
 export function VillagerFace({
   face,
+  tint = true,
   badge,
   className,
 }: {
   face: string;
+  tint?: boolean;
   badge?: ReactNode;
   className?: string;
 }) {
@@ -41,7 +45,8 @@ export function VillagerFace({
     <span
       data-slot="villager-face"
       className={cn(
-        "relative inline-flex shrink-0 rounded-full bg-emerald-500/15",
+        "relative inline-flex shrink-0",
+        tint && "rounded-full bg-emerald-500/15",
         className,
       )}
     >
@@ -50,7 +55,10 @@ export function VillagerFace({
         alt=""
         draggable={false}
         decoding="async"
-        className="size-full rounded-full object-contain select-none"
+        className={cn(
+          "size-full object-contain select-none",
+          tint && "rounded-full",
+        )}
       />
       {badge}
     </span>
