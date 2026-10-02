@@ -1,4 +1,3 @@
-import { WORKTREE_ROW_BUTTON } from "@/components/sidebar/WorktreeRow";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { StatusDot } from "@/components/ui/status-dot";
 import { DeviceLead } from "@/components/shared/DeviceGlyph";
@@ -110,8 +109,8 @@ function NavGroup({
   );
 }
 
-// One row, on the worktree rows' own class and selection fill, so the
-// list reads as the sidebar's rather than a foreign widget dropped in.
+// One row, with the sidebar rows' selection fill, so the list reads as
+// the sidebar's rather than a foreign widget dropped in.
 function NavRow({
   section,
   active,
@@ -127,8 +126,7 @@ function NavRow({
       title={section.title}
       onClick={() => selectSettingsTab(section.id)}
       className={cn(
-        WORKTREE_ROW_BUTTON,
-        "min-w-0 py-1.5",
+        "flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent/60",
         active
           ? "bg-accent font-medium text-accent-foreground"
           : "text-muted-foreground hover:text-foreground",

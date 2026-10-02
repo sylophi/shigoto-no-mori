@@ -4,6 +4,7 @@
 // its connection tone (shared/DeviceGlyph.tsx DeviceMark), the same
 // tile its row wears on the devices page, so a badge and a dot can
 // never disagree about a machine, and the name rides the tooltip.
+import { RefreshCw } from "lucide-react";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import { DeviceMark } from "@/components/shared/DeviceGlyph";
 import type { StatusTone } from "@/components/ui/status-dot";
@@ -61,6 +62,23 @@ export function DeviceBadge({ badge }: { badge: SidebarDeviceBadge }) {
 export function RowDeviceBadge({ badge }: { badge: SidebarDeviceBadge }) {
   const show = useShowDeviceBadges();
   return show ? <DeviceBadge badge={badge} /> : null;
+}
+
+// The mark a local worktree wears for the peer it is mirrored with: the
+// mirror glyph and the peer's badge. Worn in the sidebar's rows and the
+// palette's.
+export function MirrorBadge({ mirror }: { mirror: SidebarDeviceBadge }) {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1">
+      <SimpleTooltip tip={`Mirrored with ${mirror.label}`}>
+        <RefreshCw
+          aria-label={`Mirrored with ${mirror.label}`}
+          className="size-3 text-emerald-600 dark:text-emerald-400"
+        />
+      </SimpleTooltip>
+      <RowDeviceBadge badge={mirror} />
+    </span>
+  );
 }
 
 // The project-header cluster: one badge per contributing peer device,
