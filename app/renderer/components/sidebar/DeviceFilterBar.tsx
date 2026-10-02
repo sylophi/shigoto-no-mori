@@ -3,7 +3,7 @@
 // that machine's worktrees. It draws only while there is more than one
 // machine to choose from. A forest with nothing to narrow has no bar.
 //
-// Each pill is the outline button the New worktree button above it is,
+// Each pill is the outline button the New worktree button below it is,
 // so the row reads as one set of controls with it rather than a second
 // kind of chip. Each pill leads with the device's dot and glyph like
 // every device row, then its two-letter mark (deviceAbbrev), so the
