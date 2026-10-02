@@ -55,6 +55,7 @@ import { SidebarHeader } from "./SidebarHeader";
 import { SidebarToolbar } from "./SidebarToolbar";
 import { AddProjectButton } from "./AddProjectButton";
 import { sortProjects } from "@/lib/sortProjects";
+import { useWorktreeSort } from "@/hooks/sharedSettings/useWorktreeSort";
 import { SidebarList } from "./SidebarList";
 import { SidebarTakeoverSlot, useSidebarTakenOver } from "./SidebarTakeover";
 import { withToggled } from "@/lib/toggleSet";
@@ -225,6 +226,7 @@ function Forest({
   // The tree shows the list of projects or one project on its own, and
   // goes into the project of the page on screen (openProject.ts).
   const { openKey, onScreenKey } = useOpenProject(projects, remoteItems);
+  const worktreeSort = useWorktreeSort(openKey);
   // The level last asked for here, by picking a project or going back,
   // as opposed to one the tree reached by following the page: only the
   // first is a move made in the sidebar, for the list to play.
@@ -281,6 +283,7 @@ function Forest({
     : buildSidebarRows({
         ...local,
         openKey,
+        worktreeSort,
         // Over every device's projects, not the filtered ones, so a
         // pick narrows the tree without reordering it.
         order: projectGroupOrder({
@@ -394,8 +397,9 @@ function Forest({
       {/* Each view puts what it actually needs above its list. The inbox
           has no project headers to hang a + off, so creating lives here;
           the tree instead gets the controls that only apply to it: the
-          way back out of a project and sorting, which is about this
-          machine's own projects, so a hostless client's tree skips it.
+          way back out of a project and sorting its worktrees, or, on
+          the list, sorting this machine's own projects, which a
+          hostless client's tree skips.
           Both end in add project. Arranging takes over the whole
           sidebar, so neither shows. */}
       {arrangeMode ? null : (
@@ -422,7 +426,15 @@ function Forest({
           ) : (
             <SidebarToolbar
               onArrange={onArrange}
-              onBack={inProject ? () => goTo(null) : undefined}
+              open={
+                inProject
+                  ? {
+                      groupKey: level,
+                      sort: worktreeSort,
+                      onBack: () => goTo(null),
+                    }
+                  : undefined
+              }
             />
           )}
         </>

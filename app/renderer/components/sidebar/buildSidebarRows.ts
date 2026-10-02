@@ -11,6 +11,7 @@ import type {
   ProjectSortMode,
   PullRequest,
   Worktree,
+  WorktreeSortMode,
 } from "@shared/schemas";
 import type { SidebarDeviceBadge } from "./DeviceBadge";
 import {
@@ -21,6 +22,7 @@ import {
   type SidebarViewModel,
 } from "./sidebarRow";
 import { sortByProject } from "@/lib/sortProjects";
+import { sortWorktrees } from "@/lib/sortWorktrees";
 
 // A set of group ids as the builder asks it: only whether one is in.
 // The shell keeps the open project and the shelf reveals by group key
@@ -42,6 +44,8 @@ interface BuildSidebarRowsArgs {
   // Where each group sits (projectGroupOrder), decided over every
   // device's projects so the device filter never reorders the groups.
   order: ProjectGroupOrder;
+  // How the open project's worktrees are ordered (useWorktreeSort).
+  worktreeSort: WorktreeSortMode;
   // The groups whose shelf is open, per shelf.
   openShelves: Record<GroupShelf, GroupIdSet>;
   // Worktrees starting with one of these fold away like shelved ones.
@@ -130,6 +134,7 @@ export function buildSidebarRows({
   pullRequestQueries,
   openKey,
   order,
+  worktreeSort,
   openShelves,
   hiddenPrefixes,
   arrangeMode,
@@ -261,14 +266,14 @@ export function buildSidebarRows({
     const { groupId, project, query } = group;
     // What the group lists, worked out the same way at both levels, so
     // the list's count is the rows the project draws once opened.
-    // Peers' worktrees of this same repo render after the local rows so
-    // the local work stays where the eye expects it -- and on EVERY
-    // path below: a claimed group that then skipped rendering (local
-    // listing still loading, or errored) would vanish from the tree
-    // entirely, hiding the peer's perfectly healthy worktrees behind a
-    // local-only failure. Their shelved and hidden ones share the
-    // group's folds with the local ones, so a device showing only
-    // peers' work (the web client) can still reach them.
+    // Peers' worktrees of this same repo sort in among the local rows
+    // (sortWorktrees) -- and render on EVERY path below: a claimed
+    // group that then skipped rendering (local listing still loading,
+    // or errored) would vanish from the tree entirely, hiding the
+    // peer's perfectly healthy worktrees behind a local-only failure.
+    // Their shelved and hidden ones share the group's folds with the
+    // local ones, so a device showing only peers' work (the web
+    // client) can still reach them.
     const remoteVisible: RemoteRow[] = [];
     const remoteShelves = emptyShelves<RemoteRow>();
     const folded = (peerKey: string, worktree: Worktree) =>
@@ -322,16 +327,20 @@ export function buildSidebarRows({
         projectId: project.id,
       });
     }
-    // A stack's rows sit together as a tree, bottom layer first,
-    // wherever its layers are checked out: a peer's row moves up
-    // beside the local ones it stacks with. The trunk comes off
+    // In the project's sort, then a stack's rows sit together as a
+    // tree, bottom layer first, wherever its layers are checked out:
+    // gathered at its first layer's place. The trunk comes off
     // whichever listing the group has.
     const trunk =
       trunkOf(query?.data as Worktree[] | undefined) ??
       trunkOf(group.remote[0]?.worktrees);
     const placed = (local: Worktree[], peers: RemoteRow[]): SidebarRow[] =>
       placeByStack(
-        [...localRows(local, group.pullRequests), ...peers],
+        sortWorktrees(
+          [...localRows(local, group.pullRequests), ...peers],
+          worktreeSort,
+          (row) => row.worktree,
+        ),
         (row) => row.worktree.branch,
         group.pullRequests,
         trunk,

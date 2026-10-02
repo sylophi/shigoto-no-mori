@@ -9,7 +9,9 @@
 // loading. Inside a project the tree is that project's header and rows
 // and no other's, and an open project the build lacks reads as the
 // list. A worktree reveals nothing from the list or from inside another
-// project, and its own row once its project is open.
+// project, and its own row once its project is open. Inside a project
+// the worktrees follow its sort, every device's together, primaries
+// first.
 //
 // Runs under test/lib/register-ts-alias.mts. Run: pnpm test project-fold.
 import assert from "node:assert/strict";
@@ -21,7 +23,7 @@ import {
   worktreeRowKey,
 } from "@/components/sidebar/buildSidebarRows";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
-import type { Project, Worktree } from "@shared/schemas";
+import type { Project, Worktree, WorktreeSortMode } from "@shared/schemas";
 import { worktree as labWorktree } from "../lab/fixtures.ts";
 import { makeProof } from "./lib/checkKit.mts";
 
@@ -75,7 +77,7 @@ const remote: RemoteForestItem[] = [
     project: portPool,
     worktrees: [
       worktree(portPool, "main", { isPrimary: true }),
-      worktree(portPool, "quiet-quail"),
+      worktree(portPool, "quiet-quail", { createdAt: 300, lastChangeAt: 100 }),
       worktree(portPool, "lease-ttl-copy"),
     ],
     pullRequests: {},
@@ -84,7 +86,7 @@ const remote: RemoteForestItem[] = [
   },
 ];
 
-const build = (open: Project | null) =>
+const build = (open: Project | null, worktreeSort: WorktreeSortMode = "name") =>
   buildSidebarRows({
     projects,
     worktreeQueries: [
@@ -96,7 +98,8 @@ const build = (open: Project | null) =>
       ]),
       listed([
         worktree(portPool, "main", { isPrimary: true }),
-        worktree(portPool, "lease-ttl"),
+        worktree(portPool, "zebra"),
+        worktree(portPool, "lease-ttl", { createdAt: 200, lastChangeAt: 200 }),
       ]),
       // Still loading.
       listed(undefined),
@@ -109,6 +112,7 @@ const build = (open: Project | null) =>
     })),
     openKey: open && projectGroupKey(open, undefined),
     order: projectGroupOrder({ projects, remote, sortMode: "manual" }),
+    worktreeSort,
     openShelves: { shelved: new Set(), hidden: new Set() },
     hiddenPrefixes: ["exp/"],
     arrangeMode: false,
@@ -123,8 +127,8 @@ const build = (open: Project | null) =>
     deviceBadges: new Map(),
   });
 
-const drawn = (open: Project | null) =>
-  build(open).rows.map((row) => {
+const drawn = (open: Project | null, worktreeSort?: WorktreeSortMode) =>
+  build(open, worktreeSort).rows.map((row) => {
     if (row.kind === "project") {
       return `${row.expanded ? "v" : ">"} ${row.project.name} ${row.branches ?? "-"}`;
     }
@@ -140,8 +144,8 @@ try {
       // brave-badger. Not the primary, the shelved or the hidden one.
       "> lichen 1",
       // lease-ttl (its mirrored copy on the peer folded into it) and
-      // the peer's quiet-quail.
-      "> port-pool 2",
+      // the peer's quiet-quail, and zebra.
+      "> port-pool 3",
       "> terrier -",
     ]);
   });
@@ -150,11 +154,32 @@ try {
     assert.deepEqual(drawn(portPool), [
       "v port-pool -",
       "main",
-      "lease-ttl",
       "main",
+      "lease-ttl",
       "quiet-quail",
+      "zebra",
     ]);
     assert.equal(build(portPool).level, projectGroupKey(portPool, undefined));
+  });
+
+  await proof.check("inside a project: its sort, across devices", () => {
+    const worktrees = (sort: WorktreeSortMode) =>
+      drawn(portPool, sort).slice(3);
+    // Primaries lead every sort, this machine's first.
+    assert.deepEqual(drawn(portPool, "created").slice(1, 3), ["main", "main"]);
+    assert.equal(build(portPool, "name").rows[1]?.kind, "worktree");
+    // The peer's quiet-quail is the newest, zebra's age unknown.
+    assert.deepEqual(worktrees("created"), [
+      "quiet-quail",
+      "lease-ttl",
+      "zebra",
+    ]);
+    // lease-ttl was edited after quiet-quail, zebra never touched.
+    assert.deepEqual(worktrees("recent"), [
+      "lease-ttl",
+      "quiet-quail",
+      "zebra",
+    ]);
   });
 
   await proof.check("an open project the build lacks reads as the list", () => {

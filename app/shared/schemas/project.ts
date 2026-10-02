@@ -72,6 +72,12 @@ export const ProjectSortModeSchema = z.enum([
 ]);
 export type ProjectSortMode = z.infer<typeof ProjectSortModeSchema>;
 
+// How the tree orders an open project's worktrees, picked per project.
+// `name` is the default. `recent` puts the most recently active first
+// (worktreeLastActivityAt), `created` the most recently added.
+export const WorktreeSortModeSchema = z.enum(["name", "recent", "created"]);
+export type WorktreeSortMode = z.infer<typeof WorktreeSortModeSchema>;
+
 // Which sidebar layout the user picked. "projects" is the classic tree
 // grouped by project. "inbox" is the flat, cross-project list split into
 // active / shelved / merged boxes, newest work first. "projects" is the

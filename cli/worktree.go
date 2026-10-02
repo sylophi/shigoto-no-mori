@@ -38,6 +38,7 @@ type worktreeJSON struct {
 	MergedIntoPrimary bool            `json:"mergedIntoPrimary"`
 	ChangedCount      int             `json:"changedCount"`
 	LastChangeAt      int64           `json:"lastChangeAt,omitempty"`
+	CreatedAt         int64           `json:"createdAt,omitempty"`
 	RecentCommits     []commitSummary `json:"recentCommits"`
 	IsPrimary         bool            `json:"isPrimary"`
 	IsExternal        bool            `json:"isExternal"`
@@ -188,6 +189,7 @@ func probeWorktree(proj project, id worktreeIdentity, ctx buildContext) (worktre
 		MergedIntoPrimary: primary.mergedIntoPrimary,
 		ChangedCount:      changes.count,
 		LastChangeAt:      changes.lastChangeAt,
+		CreatedAt:         worktreeCreatedAt(id),
 		RecentCommits:     commits,
 		IsPrimary:         id.IsPrimary,
 		IsExternal:        id.IsExternal,
@@ -416,6 +418,24 @@ func worktreeAdminDir(worktreePath string) string {
 		dir = filepath.Join(worktreePath, dir)
 	}
 	return dir
+}
+
+// When the linked worktree was added, epoch ms: the mtime of its admin
+// dir's commondir file, which `git worktree add` writes once and nothing
+// rewrites (repair and move touch gitdir instead). Zero for the primary
+// checkout, whose .git is a directory and names no admin dir, and when
+// the file can't be read.
+func worktreeCreatedAt(id worktreeIdentity) int64 {
+	adminDir := worktreeAdminDir(id.Path)
+	if adminDir == "" {
+		return 0
+	}
+	info, err := os.Stat(filepath.Join(adminDir, "commondir"))
+	if err != nil {
+		return 0
+	}
+	// The app's schema reads a negative time as a broken listing.
+	return max(info.ModTime().UnixMilli(), 0)
 }
 
 // Only a definite "not there" counts: an unreadable admin dir must not

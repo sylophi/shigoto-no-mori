@@ -108,6 +108,7 @@ function headerRows(
       error: null,
     })),
     openKey: null,
+    worktreeSort: "name",
     order,
     openShelves: noShelves(),
     hiddenPrefixes: [],

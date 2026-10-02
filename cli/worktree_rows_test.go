@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // Runs fn in --json mode and returns every NDJSON document it printed
@@ -118,6 +119,13 @@ func TestListRowsCarryAutoPullAndPrimaryBranch(t *testing.T) {
 	}
 	if _, ok := raw[1]["autoPull"]; !ok {
 		t.Errorf("an unmarked row omits autoPull: %v", raw[1])
+	}
+	// A linked worktree says when it was added, the primary doesn't.
+	if _, ok := raw[0]["createdAt"]; ok {
+		t.Errorf("the primary carries createdAt: %v", raw[0])
+	}
+	if age := time.Since(time.UnixMilli(rows[1].CreatedAt)); age < 0 || age > time.Minute {
+		t.Errorf("fox createdAt = %d, want about now", rows[1].CreatedAt)
 	}
 
 	// -p takes the path or the id just as well, from outside.

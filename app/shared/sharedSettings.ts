@@ -33,6 +33,10 @@ export const sharedSettingKeys = {
   // like every other key, so the rule's paths never spend the
   // document's entry budget, and a pick replaces the rule whole.
   leaveOutPreset: (identity: string) => `leaveOutPreset/${identity}`,
+  // How the tree orders a project's worktrees, by the project's group
+  // key (projectGroupKey: the repo identity, or the project's own key
+  // when it has none). The value is a WorktreeSortMode.
+  worktreeSort: (groupKey: string) => `worktreeSort/${groupKey}`,
   // The worktrees the sidebar hides the way it hides shelved ones, in
   // every project. The value is the prefixes, one per line
   // (hiddenPrefixesValue).
