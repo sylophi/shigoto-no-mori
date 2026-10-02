@@ -23,7 +23,7 @@ export function WorktreeLocationField({
   const { toProjectPage } = useProjectNav();
   const layout = config?.worktreeLayout ?? "managed-root";
   const option = LAYOUT_OPTIONS.find((o) => o.value === layout);
-  // A custom layout has no description; its folder says more.
+  // A custom layout has no description. Its folder says more.
   const customPath =
     layout === "custom" ? config?.customWorktreePath?.trim() : undefined;
 
