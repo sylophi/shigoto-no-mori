@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
-import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { tildify } from "@shared/projectPaths";
+import { useGoBack } from "@/hooks/ui/useGoBack";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
@@ -34,7 +34,7 @@ export function ConvertExternalWorktrees() {
 
 // The externals of whichever device the surrounding scope names.
 function ConvertExternalBody({ project }: { project: Project }) {
-  const navigate = useNavigate();
+  const goBack = useGoBack();
   // Scope-aware: a worktree converted on a peer opens under that
   // device's route, like every other link out of a scoped page.
   const { toWorktree } = useWorktreeNav();
@@ -165,7 +165,7 @@ function ConvertExternalBody({ project }: { project: Project }) {
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => navigate({ to: "/" })}
+                onClick={goBack}
                 disabled={batchRunning}
               >
                 {batchRunning ? "Working…" : "Cancel"}

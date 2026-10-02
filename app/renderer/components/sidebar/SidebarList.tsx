@@ -120,10 +120,11 @@ export function SidebarList({
 
   // Reveal the selection when navigation comes from outside the sidebar
   // (a ⌘K jump, a deep link) by scrolling the virtualized
-  // list to whichever row the active view says stands for it. The row can
+  // list to whichever row the active view says stands for it. A row
+  // behind a shut shelf opens the shelf first. The row can
   // lag the route (worktree queries still loading), so this retries every
   // render until it exists; the ref stops repeat scrolls afterwards so
-  // the user can still scroll away freely.
+  // the user can still scroll away freely, and fold the shelf again.
   // Any device's detail page, so a peer's worktree is revealed too.
   const { pathname } = useLocation();
   const open = matchWorktreeDetail(pathname);
@@ -139,7 +140,18 @@ export function SidebarList({
     const key = revealKey(projectId, worktreeId, deviceId);
     if (!key) return;
     const index = rows.findIndex((r) => r.key === key);
-    if (index < 0) return;
+    const row = rows[index];
+    if (!row) return;
+    // The shelf's toggle stood in for the row. Only a shut one opens,
+    // so a row the open shelf still lacks settles for its toggle.
+    if (row.kind === "shelved-toggle" && !row.expanded) {
+      handlers.onToggleShelved(row.groupId, row.shelf);
+      return;
+    }
+    if (row.kind === "inbox-shelf" && !row.expanded) {
+      handlers.onToggleShelf(row.shelf);
+      return;
+    }
     lastRevealedRef.current = revealed;
     virtualizer.scrollToIndex(index, { align: "auto" });
   });

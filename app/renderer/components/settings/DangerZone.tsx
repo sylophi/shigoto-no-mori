@@ -6,6 +6,7 @@ import type { NukeProgress } from "@shared/schemas";
 import { BlockingOverlay } from "@/components/ui/blocking-overlay";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/ui/section-heading";
+import { setOpenProject } from "@/components/sidebar/openProject";
 import {
   CONFIRM_DESTRUCTIVE_MS,
   useConfirmTwice,
@@ -47,6 +48,9 @@ export function DangerZone() {
         // "/" never draws pre-nuke data.
         await queryClient.cancelQueries();
         queryClient.clear();
+        // The sidebar's open project is kept outside the cache, and a
+        // repo added back would open inside it. Back to the list.
+        setOpenProject(null);
         // A data dir that boot adopted under its pre-2.0 name is gone
         // for good: the fresh install was seeded at the default
         // location, which only a relaunch can pick up.
