@@ -1097,15 +1097,15 @@
 /* The tile a project without a logo wears is a leaf here (its own
    markup, picked by doubutsu-only), standing on a sticker lip in a
    darker shade of its own hue. A drop-shadow rather than a box-shadow,
-   so the lip follows the leaf. The initial shrinks and moves over to
-   sit on the leaf's body, clear of the bite. */
+   so the lip follows the leaf. The initial moves down onto the middle
+   of the leaf's body. */
 .doubutsu [data-slot="project-tile"] {
   filter: drop-shadow(
     0 1.5px 0 oklch(var(--project-tile-edge) var(--project-hue))
   );
   & text {
-    font-size: 8.8px;
-    transform: translate(-1px, 0.5px);
+    font-size: 9.6px;
+    transform: translate(0.2px, 1.1px);
   }
 }
 
