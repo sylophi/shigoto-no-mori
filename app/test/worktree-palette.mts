@@ -11,7 +11,9 @@
 // live work that matches as well, and a hidden-prefix worktree shows
 // only for one. The palette opens highlighting the worktree before the
 // one on screen, a mirrored peer's page counting as its local row. A
-// query names projects once across devices, turns into a branch name
+// query names projects once across devices, those with no worktrees and
+// those only a peer holds too, and they go above the worktrees when the
+// query names a project best. A query turns into a branch name
 // git takes (a pasted path or URL never does), and a new worktree goes to
 // the project on screen first. The matched letters are the ones the
 // ranking matched.
@@ -24,6 +26,7 @@ import {
   initialPaletteKey,
   isProjectSource,
   newBranchName,
+  leadingProjectCount,
   rankPaletteEntries,
   rankPaletteProjects,
   type PaletteEntry,
@@ -285,14 +288,92 @@ try {
   });
 
   await proof.check("a project is one row across its devices", () => {
-    const [row, ...rest] = rankPaletteProjects("forest", entries());
+    const [row, ...rest] = rankPaletteProjects(
+      "forest",
+      entries(),
+      [forest, lantern],
+      [peerForest],
+    );
     assert.ok(row);
     assert.equal(rest.length, 0);
+    assert.equal(row.project.id, forest.id, "named for its local checkout");
+    assert.equal(row.device, undefined);
     assert.equal(row.worktreeCount, 4, "oak, moss here; fern, pine there");
     assert.equal(row.deviceCount, 2);
-    assert.equal(row.lead.key, onPeer("pine"), "↩ goes where the list leads");
+    assert.equal(row.lead?.key, onPeer("pine"), "↩ goes where the list leads");
     assert.equal(row.localProject?.id, forest.id);
-    assert.deepEqual(rankPaletteProjects("", entries()), [], "only asked");
+    assert.deepEqual(
+      rankPaletteProjects("", entries(), [forest, lantern], [peerForest]),
+      [],
+      "only asked",
+    );
+  });
+
+  await proof.check("a project with no worktrees is found too", () => {
+    const meadow = project("meadow");
+    const reed = project("reed");
+    const peerReed: RemoteForestItem = {
+      ...peerForest,
+      project: reed,
+      worktrees: [],
+    };
+    const projects = [forest, lantern, meadow];
+    const remote = [peerForest, peerReed];
+    const [here] = rankPaletteProjects("meadow", entries(), projects, remote);
+    assert.equal(here?.project.id, meadow.id);
+    assert.equal(here?.lead, undefined, "↩ opens its new-worktree page");
+    assert.equal(here?.worktreeCount, 0);
+    assert.equal(here?.localProject?.id, meadow.id);
+    const [gone] = rankPaletteProjects(
+      "gone",
+      entries(),
+      [{ ...project("gone"), pathExists: false }],
+      [],
+    );
+    assert.equal(gone, undefined, "no folder, nothing to open");
+    const offline: RemoteForestItem = {
+      ...peerReed,
+      deviceId: "offline-device",
+      reachable: false,
+    };
+    const [reachable] = rankPaletteProjects(
+      "reed",
+      [],
+      [],
+      [offline, peerReed],
+    );
+    assert.equal(
+      reachable?.device?.deviceId,
+      PEER,
+      "named by a reachable peer",
+    );
+    assert.equal(reachable?.deviceCount, 2);
+    const [there] = rankPaletteProjects("reed", entries(), projects, remote);
+    assert.equal(there?.project.id, reed.id);
+    assert.equal(there?.device?.deviceId, PEER, "only the peer holds it");
+    assert.equal(there?.localProject, undefined);
+    assert.equal(there?.deviceCount, 1);
+  });
+
+  await proof.check("projects lead when the query names one best", () => {
+    const list = entries();
+    const leading = (query: string, projects = [forest, lantern]) =>
+      leadingProjectCount(
+        query,
+        rankPaletteProjects(query, list, projects, [peerForest]),
+        rankPaletteEntries(query, list),
+      );
+    assert.equal(leading("forest"), 1, "its name");
+    assert.equal(leading("lant"), 1, "the start of it");
+    assert.equal(leading("oak"), 0, "a branch");
+    assert.equal(leading("forest oak"), 0, "a project's branch");
+    assert.equal(leading("thinkpad"), 0, "a device, no project");
+    assert.equal(leading("zzz", [project("zzz")]), 1, "no worktree matches");
+    assert.equal(
+      leading("fern", [project("fern"), project("f-e-r-n")]),
+      1,
+      "letters scattered through a name trail a worktree that spells them",
+    );
   });
 
   await proof.check("a query as a new branch", () => {

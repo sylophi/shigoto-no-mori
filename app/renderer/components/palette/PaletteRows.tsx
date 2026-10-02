@@ -107,24 +107,29 @@ function WorktreeRow({
 }
 
 function ProjectRow({ item, query }: { item: PaletteProject; query: string }) {
-  const { lead, worktreeCount, deviceCount } = item;
+  const { project, device, worktreeCount, deviceCount } = item;
   return (
     <RowLayout
+      dim={device !== undefined && !device.reachable}
       icon={
         <ProjectIcon
-          projectId={lead.project.id}
-          name={lead.project.name}
-          deviceId={lead.device?.deviceId}
+          projectId={project.id}
+          name={project.name}
+          deviceId={device?.deviceId}
         />
       }
-      title={<Highlight text={lead.project.name} query={query} />}
+      title={<Highlight text={project.name} query={query} />}
       detail={
         <>
-          {pluralize(worktreeCount, "worktree")}
+          {worktreeCount > 0
+            ? pluralize(worktreeCount, "worktree")
+            : "No worktrees"}
           {deviceCount > 1 && ` on ${deviceCount} devices`}
         </>
       }
-    />
+    >
+      {device && <DeviceBadge badge={device} />}
+    </RowLayout>
   );
 }
 

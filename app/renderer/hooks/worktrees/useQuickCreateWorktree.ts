@@ -51,8 +51,10 @@ export function useQuickCreateWorktree() {
     }
   };
 
-  const openCreateForm = (projectId: string) => {
-    toProjectPage("new", projectId);
+  // On the device `onDevice` names (a route device id), else the
+  // scope's.
+  const openCreateForm = (projectId: string, onDevice?: string) => {
+    toProjectPage("new", projectId, onDevice);
   };
 
   // The click rule every create entry point shares: plain creates

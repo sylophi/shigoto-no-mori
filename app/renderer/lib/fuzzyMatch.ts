@@ -55,6 +55,15 @@ export function matchPositions(query: string, target: string): number[] | null {
   return words.size > 0 ? [...words].toSorted((a, b) => a - b) : null;
 }
 
+// scoreMatch over several fields: the best one's.
+export function scoreFields(
+  query: string,
+  fields: string | readonly string[],
+): number {
+  if (typeof fields === "string") return scoreMatch(query, fields);
+  return Math.max(0, ...fields.map((field) => scoreMatch(query, field)));
+}
+
 // Filter + rank items by scoreMatch, best match first. An empty query
 // returns the list as-is so callers keep their existing order (matches
 // scoreMatch's "empty query = stable sort" contract). An item offering
@@ -70,12 +79,7 @@ export function rankByScore<T>(
   if (!query) return items;
   const scored: { item: T; score: number }[] = [];
   for (const item of items) {
-    const fields = text(item);
-    const score =
-      (typeof fields === "string"
-        ? scoreMatch(query, fields)
-        : Math.max(0, ...fields.map((field) => scoreMatch(query, field)))) *
-      (weight?.(item) ?? 1);
+    const score = scoreFields(query, text(item)) * (weight?.(item) ?? 1);
     if (score > 0) scored.push({ item, score });
   }
   scored.sort((a, b) => b.score - a.score);
