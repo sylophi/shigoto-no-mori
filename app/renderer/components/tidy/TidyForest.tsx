@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Worktree } from "@shared/schemas";
 import type { RowStatus } from "@/components/ui/row-status";
@@ -20,6 +19,7 @@ import {
   useWorktreeDiskUsage,
 } from "@/hooks/hygiene/useWorktreeHygiene";
 import { useProjects } from "@/hooks/projects/useProjects";
+import { useGoBack } from "@/hooks/ui/useGoBack";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useDeleteWorktree } from "@/hooks/worktrees/useWorktreeMutations";
 import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
@@ -100,7 +100,6 @@ export function TidyForest() {
 
 // The forest of whichever device the surrounding scope names.
 function TidyBody() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { keys } = useHostScope();
   const { data: allProjects = [], isLoading: projectsLoading } = useProjects();
@@ -139,6 +138,8 @@ function TidyBody() {
   const [picked, setPicked] = useState<Set<string> | null>(null);
   const [confirming, setConfirming] = useState(false);
   const { status, batchRunning, runBatch } = useSequentialBatch();
+  // Once a batch has run, the page behind may be one it removed.
+  const goBack = useGoBack({ home: status.size > 0 });
   const deleteWorktree = useDeleteWorktree();
 
   const entries = buildTidyEntries(
@@ -343,7 +344,7 @@ function TidyBody() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => navigate({ to: "/" })}
+                    onClick={goBack}
                     disabled={batchRunning}
                   >
                     {batchRunning ? "Working…" : "Cancel"}

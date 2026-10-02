@@ -1,63 +1,20 @@
-import { useEffect } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { TreeDeciduous } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useProjects } from "@/hooks/projects/useProjects";
-import { useAllProjectWorktrees } from "@/hooks/worktrees/useWorktrees";
-import { localDeviceId } from "@/lib/queryKeys";
-import { WORKTREE_ROUTE_PATHS } from "@/lib/routePaths";
 
+// "/" and a fresh window land here, waiting for a pick. No worktree
+// opens on its own, since the sidebar would follow it into its project
+// (openProject.ts) and skip the list of projects.
 export function EmptyState() {
   const { data: projects = [], isLoading: projectsLoading } = useProjects();
   const { openAddProject } = useOverlays();
-  const navigate = useNavigate();
-  const worktreeQueries = useAllProjectWorktrees(projects);
-
-  // Walk projects in order so we redirect to the first worktree the user
-  // would see in the sidebar. Wait on in-flight queries for an earlier
-  // project rather than skipping past it. Otherwise a slow first project
-  // would lose its turn to a later one.
-  let redirectProjectId: string | null = null;
-  let redirectWorktreeId: string | null = null;
-  let waitingForQuery = false;
-  for (let i = 0; i < projects.length; i++) {
-    const project = projects[i];
-    if (!project || project.pathExists === false) continue;
-    const query = worktreeQueries[i];
-    if (!query) continue;
-    if (query.isLoading) {
-      waitingForQuery = true;
-      break;
-    }
-    const first = (query.data ?? [])[0];
-    if (first) {
-      redirectProjectId = project.id;
-      redirectWorktreeId = first.id;
-      break;
-    }
-  }
-
-  useEffect(() => {
-    if (!redirectProjectId || !redirectWorktreeId) return;
-    void navigate({
-      to: WORKTREE_ROUTE_PATHS.detail,
-      params: {
-        deviceId: localDeviceId,
-        projectId: redirectProjectId,
-        worktreeId: redirectWorktreeId,
-      },
-      replace: true,
-    });
-  }, [redirectProjectId, redirectWorktreeId, navigate]);
 
   if (projectsLoading) return null;
   if (projects.length === 0) {
     return <FirstRun onAdd={() => openAddProject()} />;
   }
-  // Suppress BetweenWorktrees while a redirect is pending or still resolvable.
-  if (redirectProjectId || waitingForQuery) return null;
   return <BetweenWorktrees />;
 }
 
@@ -114,12 +71,12 @@ function BetweenWorktrees() {
       <div className="max-w-sm space-y-3 text-center">
         <p className="text-sm text-muted-foreground">Nothing selected.</p>
         <p className="text-xs text-muted-foreground/70">
-          Pick a worktree from the sidebar, or press{" "}
+          Pick from the sidebar, or press{" "}
           <KbdGroup className="mx-0.5 inline-flex">
             <Kbd>⌘</Kbd>
             <Kbd>K</Kbd>
           </KbdGroup>{" "}
-          to search them all.
+          to search every worktree.
         </p>
       </div>
     </div>

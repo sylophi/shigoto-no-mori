@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
-import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { tildify } from "@shared/projectPaths";
+import { useGoBack } from "@/hooks/ui/useGoBack";
 import { useSequentialBatch } from "@/hooks/ui/useSequentialBatch";
 import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
@@ -34,7 +34,6 @@ export function ConvertExternalWorktrees() {
 
 // The externals of whichever device the surrounding scope names.
 function ConvertExternalBody({ project }: { project: Project }) {
-  const navigate = useNavigate();
   // Scope-aware: a worktree converted on a peer opens under that
   // device's route, like every other link out of a scoped page.
   const { toWorktree } = useWorktreeNav();
@@ -47,6 +46,8 @@ function ConvertExternalBody({ project }: { project: Project }) {
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const { status, batchRunning, runBatch } = useSequentialBatch();
+  // Once a batch has run, the page behind may be one it removed.
+  const goBack = useGoBack({ home: status.size > 0 });
 
   const home = device?.homedir ?? null;
 
@@ -165,7 +166,7 @@ function ConvertExternalBody({ project }: { project: Project }) {
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={() => navigate({ to: "/" })}
+                onClick={goBack}
                 disabled={batchRunning}
               >
                 {batchRunning ? "Working…" : "Cancel"}

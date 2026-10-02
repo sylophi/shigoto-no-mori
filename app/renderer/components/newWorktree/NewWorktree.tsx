@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { BranchCombobox } from "@/components/shared/BranchCombobox";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,6 +12,7 @@ import {
 } from "@/components/ui/segmented-control";
 import { useWorktreeBaseLabel } from "@/hooks/config/useWorktreeBaseLabel";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
+import { useGoBack } from "@/hooks/ui/useGoBack";
 import { usePickedWorktreeName } from "@/hooks/worktrees/usePickedWorktreeName";
 import { useBranches } from "@/hooks/git/useBranches";
 import { usePullRequestCandidates } from "@/hooks/githubCli/usePullRequestCandidates";
@@ -116,7 +116,7 @@ function NewWorktreeForm({
   // button. Undefined when the page offers no choice.
   deviceLabel: string | undefined;
 }) {
-  const navigate = useNavigate();
+  const goBack = useGoBack();
   // Scope-aware: under a peer's provider its toWorktree lands on that
   // device's detail page, where the new worktree lives.
   const { toWorktree } = useWorktreeNav();
@@ -517,7 +517,7 @@ function NewWorktreeForm({
           type="button"
           variant="ghost"
           size="sm"
-          onClick={() => navigate({ to: "/" })}
+          onClick={goBack}
           disabled={busy}
         >
           Cancel

@@ -141,11 +141,10 @@ export interface SidebarViewModel {
   emptyMessage: string | null;
   // Which row to scroll to when navigation lands on a worktree from
   // outside the sidebar. Falls back to the fold's toggle when its own
-  // row is behind a shut shelf, and null when the view can't place it
-  // at all, or not yet: the tree opens the project of the page on
-  // screen itself (Sidebar), and the row is revealed once it draws.
-  // No shelf is opened on the way: the empty-state redirect runs on
-  // every launch, and auto-expanding would undo the user's folding.
+  // row is behind a shut shelf (the list opens it, SidebarList), and
+  // null when the view can't place it at all, or not yet: the tree
+  // opens the project of the page on screen itself (Sidebar), and the
+  // row is revealed once it draws.
   // A deviceId names a peer's worktree; absent, the worktree is this
   // machine's.
   revealKey: (
