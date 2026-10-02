@@ -1,4 +1,4 @@
-// How the sidebar and the launcher order this machine's projects. A
+// How the sidebar orders this machine's projects. A
 // preference of the window, kept in its client config like the sidebar
 // view, so a peer has no say in it. Resolved, not the raw doc: an
 // absent key reads as the manual order, in one place, and the manual

@@ -25,14 +25,11 @@ export function isRawKeySurface(target: EventTarget | null): boolean {
 }
 
 // True while something is layered over the page and owns the keyboard:
-// the launcher, a modal shell, a sheet, an open menu, popover or
-// combobox popup, or the blocking veil. None of them trap focus (they
-// mount as siblings of the router, and the popups portal out), so a
-// bare-key shortcut in the page underneath still fires unless it asks.
-// Distinct from the launcher's own narrower check, which asks only "is
-// a modal up" to decide whether it may open on top.
+// a modal shell, a sheet, an open menu, popover or combobox popup, or
+// the blocking veil. None of them trap focus (they mount as siblings of
+// the router, and the popups portal out), so a bare-key shortcut in the
+// page underneath still fires unless it asks.
 const OVERLAY_SLOTS = [
-  "launcher",
   "modal-shell",
   "sheet-content",
   "dropdown-menu-content",
@@ -52,8 +49,7 @@ export function isOverlayOpen(): boolean {
 // covering the page. Composed here rather than at each listener so the
 // guard set stays uniform. Adding a condition later is one edit, not an
 // audit of every hotkey. Shortcuts that deliberately want a narrower
-// rule (the launcher's backtick closes even from its own search field)
-// keep their own check and say why.
+// rule keep their own check and say why.
 export function isBareKeyEvent(e: KeyboardEvent): boolean {
   if (e.repeat || e.isComposing) return false;
   if (e.shiftKey || e.ctrlKey || e.altKey || e.metaKey) return false;

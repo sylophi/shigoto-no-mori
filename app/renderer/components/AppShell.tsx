@@ -11,7 +11,6 @@
 import { useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { AddProjectModal } from "@/components/AddProjectModal";
-import { ProjectLauncher } from "@/components/launcher/ProjectLauncher";
 import { WorktreePalette } from "@/components/palette/WorktreePalette";
 import {
   forestTabFor,
@@ -24,6 +23,8 @@ import { BackButton } from "@/components/ui/back-button";
 import { useWatchAccountChanges } from "@/hooks/account/useAccount";
 import { useDoctorWatch } from "@/hooks/cli/useDoctor";
 import { useSidebarView } from "@/hooks/projects/useSidebarView";
+import { useOpenProject } from "@/components/sidebar/openProject";
+import { useProjects } from "@/hooks/projects/useProjects";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
 import { useResizableWidth } from "@/hooks/ui/useResizableWidth";
 import { usePaletteVariantHotkey } from "@/hooks/ui/usePaletteVariantHotkey";
@@ -146,11 +147,9 @@ export function AppShell() {
       {phone && <ForestKeepalive />}
 
       {/* The app-wide overlays. They live here, under the router, so
-          their navigation is plain useNavigate. The project launcher
-          acts on local projects, so it mounts only where there are some.
-          The ⌘K worktree palette spans every device, and add project
-          picks its device, so a hostless client has both. */}
-      {hasLocalHost && <ProjectLauncher />}
+          their navigation is plain useNavigate. The ⌘K worktree palette
+          spans every device, and add project picks its device, so a
+          hostless client has both. */}
       <WorktreePalette />
       <AddProjectModal />
     </div>
@@ -161,8 +160,13 @@ export function AppShell() {
 // listing fresh. The phone layout's forest is a page that unmounts on
 // every tab switch. One calm observer here keeps the cache warm, so
 // coming back to the forest paints from it instead of from "Loading
-// forests…" while every peer is re-listed.
+// forests…" while every peer is re-listed. It stands in for the
+// forest's other standing job too: opening the project of the page on
+// screen (openProject.ts), so the Projects tab comes back inside the
+// project just visited.
 function ForestKeepalive() {
-  useRemoteForests();
+  const { items } = useRemoteForests();
+  const { data: projects = [] } = useProjects();
+  useOpenProject(projects, items);
   return null;
 }

@@ -24,9 +24,10 @@ export type SidebarRow =
   // A project header, for one repo wherever it is checked out: on this
   // machine with any peers' checkouts merged in, or on peers alone.
   // `project` is this machine's checkout when `local`, else the first
-  // peer's, standing in for the group. `groupId` is what the fold is
-  // kept under and what the group's rows report their hover to: the
-  // local project's id, or a peer-only group's (remoteGroupId).
+  // peer's, standing in for the group. `groupId` is what a pick off
+  // the list names and what the group's rows report their hover to:
+  // the local project's id, or a peer-only group's (remoteGroupId).
+  // `expanded` is the open project, heading the tree on its own.
   // `devices` lists the peer devices in the group (empty for a purely
   // local project), for the header's badge cluster, and `members` the
   // same peers' checkouts, for the header's actions. A peer-only group
@@ -35,9 +36,16 @@ export type SidebarRow =
       kind: "project";
       key: string;
       groupId: string;
+      // What the shell keeps the open project by (projectGroupKey):
+      // the same for a repo however the device filter draws its group.
+      groupKey: string;
       project: Project;
       local: boolean;
       expanded: boolean;
+      // On the list of projects, the worktrees the group holds beside
+      // its primary checkouts. Undefined on the open project, while
+      // arranging, and while its listing is loading or failed.
+      branches?: number;
       devices: readonly SidebarDeviceBadge[];
       members: readonly RemoteProjectMember[];
     }
@@ -122,16 +130,21 @@ export type SidebarRow =
 // so the shell renders one of them without knowing which.
 export interface SidebarViewModel {
   rows: SidebarRow[];
+  // Where a view with levels is: null on the tree's list of projects,
+  // the open project's group key inside one. Absent for a view with
+  // none (the inbox, arranging).
+  level?: string | null;
   // Shown instead of the list when the view has nothing to render and
   // isn't merely still resolving. Null means "say nothing". That
   // includes the loading case, since a flash of "nothing here" while the
   // answer is still in flight is worse than a beat of blank space.
   emptyMessage: string | null;
   // Which row to scroll to when navigation lands on a worktree from
-  // outside the sidebar. Falls back to whatever contains it when its own
-  // row isn't rendered (a folded project in the tree, a folded shelf in
-  // the inbox), and null when the view can't place it at all. Neither
-  // view unfolds anything on the way: the empty-state redirect runs on
+  // outside the sidebar. Falls back to the fold's toggle when its own
+  // row is behind a shut shelf, and null when the view can't place it
+  // at all, or not yet: the tree opens the project of the page on
+  // screen itself (Sidebar), and the row is revealed once it draws.
+  // No shelf is opened on the way: the empty-state redirect runs on
   // every launch, and auto-expanding would undo the user's folding.
   // A deviceId names a peer's worktree; absent, the worktree is this
   // machine's.
@@ -169,22 +182,23 @@ export function rowSizeHint(kind: SidebarRow["kind"], phone: boolean): number {
 // handed down from the view, so the virtualizer never has to be told
 // which layout it is drawing.
 //
-// The tree insets its child rows under a project header and packs them
-// tight: they are one line each, and the indent already says where a
-// group starts and stops. The inbox has neither, so its rows keep a gap
-// under them. Three-line rows butted together read as one block of text
-// with nothing for the eye to break on.
+// The tree packs its rows tight and flush with the project's name over
+// them: only one project's rows ever show, so there is no group for an
+// indent to mark off, and the width goes to the branch names instead.
+// The inbox's rows keep a gap under them. Three-line rows butted
+// together read as one block of text with nothing for the eye to break
+// on.
 //
 // Padding, not margin: the virtualizer sizes each row from offsetHeight,
 // which counts the one and ignores the other, so a margin would let the
 // next row overlap instead of parting them.
 export const ROW_LAYOUT: Record<SidebarRow["kind"], string> = {
   project: "px-2",
-  worktree: "px-2 pl-5",
-  "worktree-skeleton": "px-2 pl-5",
-  "worktree-error": "px-2 pl-5",
-  "shelved-toggle": "px-2 pl-5",
+  worktree: "px-2",
+  "worktree-skeleton": "px-2",
+  "worktree-error": "px-2",
+  "shelved-toggle": "px-2",
   "inbox-worktree": "px-2 pb-1",
   "inbox-shelf": "px-2 pb-1",
-  "remote-worktree": "px-2 pl-5",
+  "remote-worktree": "px-2",
 };

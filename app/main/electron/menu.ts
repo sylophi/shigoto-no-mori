@@ -10,7 +10,6 @@ import {
 } from "electron";
 import type { ContractModule } from "@shared/ipc/contract";
 import { navContract } from "@shared/ipc/modules/nav";
-import { projectLauncherContract } from "@shared/ipc/modules/projectLauncher";
 import type {
   BroadcastKeys,
   BroadcastProducerPayload,
@@ -94,13 +93,15 @@ function launchToolMenuItems(): MenuItemConstructorOptions[] {
 
 // Reload and devtools are developer tooling. A packaged build has no use
 // for them, and ⌘R in prod throws away the renderer's state (mirrors the
-// dev-only "Inspect Element" in the context menu).
-function devViewMenuItems(): MenuItemConstructorOptions[] {
+// dev-only "Inspect Element" in the context menu). They are all the
+// View menu holds, so a packaged build has no View menu.
+function devViewMenu(): MenuItemConstructorOptions[] {
   if (app.isPackaged) return [];
   return [
-    { type: "separator" },
-    { role: "reload" },
-    { role: "toggleDevTools" },
+    {
+      label: "View",
+      submenu: [{ role: "reload" }, { role: "toggleDevTools" }],
+    },
   ];
 }
 
@@ -132,11 +133,7 @@ export function buildAppMenu(): void {
         {
           label: "Add project…",
           accelerator: "Cmd+N",
-          click: clickBroadcast(
-            projectLauncherContract,
-            "addProject",
-            undefined,
-          ),
+          click: clickBroadcast(navContract, "addProject", undefined),
         },
         ...launchToolMenuItems(),
       ],
@@ -153,17 +150,7 @@ export function buildAppMenu(): void {
         { role: "selectAll" },
       ],
     },
-    {
-      label: "View",
-      submenu: [
-        {
-          label: "Project launcher",
-          accelerator: "Cmd+Shift+P",
-          click: clickBroadcast(projectLauncherContract, "toggle", undefined),
-        },
-        ...devViewMenuItems(),
-      ],
-    },
+    ...devViewMenu(),
     {
       label: "Window",
       submenu: [

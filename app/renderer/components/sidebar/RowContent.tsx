@@ -9,9 +9,10 @@ import type { GroupShelf, InboxShelf, SidebarRow } from "./sidebarRow";
 
 interface RowContentProps {
   row: SidebarRow;
-  onToggle: (groupId: string) => void;
+  onToggle: (groupKey: string) => void;
   onToggleShelved: (groupId: string, shelf: GroupShelf) => void;
   onToggleShelf: (shelf: InboxShelf) => void;
+  currentGroupKey: string | undefined;
   arrangeMode: boolean;
   isHovered: boolean;
 }
@@ -21,6 +22,7 @@ export function RowContent({
   onToggle,
   onToggleShelved,
   onToggleShelf,
+  currentGroupKey,
   arrangeMode,
   isHovered,
 }: RowContentProps) {
@@ -32,9 +34,11 @@ export function RowContent({
           local={row.local}
           groupId={row.groupId}
           expanded={row.expanded}
+          current={row.groupKey === currentGroupKey}
+          branches={row.branches}
           devices={row.devices}
           members={row.members}
-          onToggle={() => onToggle(row.groupId)}
+          onToggle={() => onToggle(row.groupKey)}
           arrangeMode={arrangeMode}
           isHovered={isHovered}
         />

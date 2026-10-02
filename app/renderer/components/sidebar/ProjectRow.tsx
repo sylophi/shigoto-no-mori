@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { pluralize } from "@/lib/pluralize";
 import { cn } from "@/lib/utils";
 import type { Project } from "@shared/schemas";
 import { DeviceBadgeCluster, type SidebarDeviceBadge } from "./DeviceBadge";
@@ -23,7 +24,14 @@ interface ProjectRowProps {
   // (ids derive from the checkout path), so this is what stays unique
   // across the list.
   groupId: string;
+  // The open project, alone in the tree: the row is its title. Else
+  // the row is one of the list, to be picked.
   expanded: boolean;
+  // The page on screen belongs to this project.
+  current: boolean;
+  // On the list, the worktrees the project holds beside its primary
+  // checkouts.
+  branches: number | undefined;
   // Peer devices whose worktrees merged into this project's group, and
   // their checkouts: the header's badges, and the extra devices its
   // actions can reach.
@@ -42,6 +50,8 @@ export function ProjectRow({
   local,
   groupId,
   expanded,
+  current,
+  branches,
   devices,
   members,
   onToggle,
@@ -65,6 +75,8 @@ export function ProjectRow({
     transition,
   };
   const missing = project.pathExists === false;
+  // One of the list, to go into.
+  const pickable = !arrangeMode && !expanded && !missing;
   // This machine first, then every peer holding the same repo.
   const group = useGroupMembers(members, local ? project : undefined);
   const iconMember = useIconMember(group, local);
@@ -92,9 +104,25 @@ export function ProjectRow({
       ref={setNodeRef}
       style={sortableStyle}
       className={cn("relative rounded-md", isDragging && "opacity-0")}
-      {...attributes}
+      // The sortable's marks belong to arranging alone. Outside it the
+      // sortable is off, and its aria-disabled would put the
+      // not-allowed cursor (index.css) on a row that is only a title,
+      // and a tab stop on a wrapper with nothing to do.
+      {...(arrangeMode ? attributes : undefined)}
     >
-      <div className="flex items-center gap-0.5 py-0.5">
+      <div
+        // A row of the list is picked as one pill, though the click
+        // target is the name's button beside the row's own actions:
+        // the slot has doubutsu stripe the row rather than a band of it.
+        data-slot={pickable ? "sidebar-project-row" : undefined}
+        className={cn(
+          "group/project relative flex items-center gap-0.5 rounded-md py-0.5 transition-colors",
+          // It fills like the worktree rows it leads to: under the
+          // pointer, and for the project the page on screen belongs
+          // to, which is where the list was left from.
+          pickable && (current ? "bg-accent" : "hover:bg-accent/60"),
+        )}
+      >
         <ProjectHeader
           project={project}
           iconFrom={
@@ -107,18 +135,42 @@ export function ProjectRow({
           terrier={terrierInGroup}
           missing={missing}
           expanded={expanded}
+          current={current}
           onToggle={onToggle}
           listeners={listeners}
           onContextMenu={onHeaderContextMenu}
           arrangeMode={arrangeMode}
           reorderable={reorderable}
         />
+        {!arrangeMode &&
+          branches !== undefined &&
+          branches > 0 && (
+            // On the list a project says how much work it holds. The number
+            // sits where the `+` and `…` come up and gives way to them,
+            // so the line has one right edge. A phone shows the actions
+            // at rest, so there it takes a place of its own before them.
+            <span
+              aria-label={pluralize(branches, "worktree")}
+              title={pluralize(branches, "worktree")}
+              className={cn(
+                "pointer-events-none absolute right-2 text-3xs text-muted-foreground tabular-nums transition-opacity phone:static phone:px-1",
+                // The actions also come up for an open menu and for
+                // keyboard focus, with no hover to go by.
+                "group-has-[[data-icon-button]:focus-visible]/project:opacity-0 group-has-[[data-icon-button][aria-expanded=true]]/project:opacity-0",
+                isHovered && "opacity-0 phone:opacity-100",
+              )}
+            >
+              {branches}
+            </span>
+          )}
         {!arrangeMode && (
           <ProjectGroupActions
             name={project.name}
             identity={project.identity}
             members={group}
-            isHovered={isHovered}
+            // The open project's row is the tree's title, and wears
+            // its actions at rest.
+            isHovered={isHovered || expanded}
             triggerRef={triggerRef}
           />
         )}

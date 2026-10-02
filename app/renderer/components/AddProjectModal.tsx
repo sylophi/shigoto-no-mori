@@ -19,7 +19,7 @@ export function AddProjectModal() {
   const { addProjectOpen, addProjectRequest, openAddProject } = useOverlays();
 
   useEffect(
-    () => window.api.projectLauncher.onAddProject(() => openAddProject()),
+    () => window.api.nav.onAddProject(() => openAddProject()),
     [openAddProject],
   );
 

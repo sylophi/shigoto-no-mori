@@ -37,6 +37,9 @@ Poses ride the URL:
   2.1.0, so the others count as behind it (the update toast, Update
   all).
 - `?downloading=sm,tp,mini`: the devices downloading the update.
+- `?crowd=<n>`: up to 20 more projects on Studio Mac, most holding
+  their primary checkout alone, for the forest at the size where
+  finding a project gets hard.
 - `?view=inbox`: open the sidebar in its inbox view (the toggle flips
   it in-session either way).
 - `?updatedFrom=<version>`: the build this window last ran, so the lab's

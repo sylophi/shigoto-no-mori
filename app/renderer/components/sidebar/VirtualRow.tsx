@@ -11,9 +11,12 @@ import {
 // What a row needs from the sidebar but this wrapper only forwards,
 // grouped so VirtualRow's own props stay about positioning and hover.
 export interface RowHandlers {
-  onToggle: (groupId: string) => void;
+  // A project picked off the list, by group key.
+  onToggle: (groupKey: string) => void;
   onToggleShelved: (groupId: string, shelf: GroupShelf) => void;
   onToggleShelf: (shelf: InboxShelf) => void;
+  // The group key of the project the page on screen belongs to.
+  currentGroupKey: string | undefined;
   arrangeMode: boolean;
 }
 

@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronRight } from "lucide-react";
+import { AlertTriangle, Folder } from "lucide-react";
 import type { DraggableSyntheticListeners } from "@dnd-kit/core";
 import { cn } from "@/lib/utils";
 import {
@@ -23,7 +23,12 @@ interface ProjectHeaderProps {
   // the paw after the name while Mark terrier projects is on, in every
   // branch, the missing one included.
   terrier?: boolean;
+  // The open project, heading the tree on its own: a title, with
+  // nothing left for it to open.
   expanded?: boolean;
+  // On the list: the page on screen belongs to this project.
+  current?: boolean;
+  // Picked off the list.
   onToggle?: () => void;
   missing?: boolean;
   listeners?: DraggableSyntheticListeners;
@@ -47,6 +52,7 @@ export function ProjectHeader({
   badges,
   terrier = false,
   expanded,
+  current,
   onToggle,
   missing,
   listeners,
@@ -57,16 +63,20 @@ export function ProjectHeader({
   // Keyed on what swaps or refills the name span, which a ResizeObserver
   // on the old span would miss.
   const [nameRef, isTruncated] = useIsTruncated<HTMLSpanElement>(
-    `${arrangeMode}:${missing}:${project.name}`,
+    `${arrangeMode}:${missing}:${expanded}:${project.name}`,
   );
   // The same lead and name in every branch; only one branch mounts, so
   // the ref lands once.
   const lead = missing ? (
     <AlertTriangle className="size-3 shrink-0 text-destructive/70" />
   ) : (
+    // The projects are a list to pick a name out of, so one without an
+    // icon keeps the slot rather than pull its name out of line with
+    // the rest.
     <ProjectIcon
       projectId={iconFrom?.projectId ?? project.id}
       deviceId={iconFrom?.deviceId}
+      fallback={Folder}
     />
   );
   const name = (
@@ -107,22 +117,35 @@ export function ProjectHeader({
         missing
       </span>
     </div>
+  ) : expanded ? (
+    <div
+      onContextMenu={onContextMenu}
+      className={cn(baseClass, "font-semibold text-foreground")}
+    >
+      {lead}
+      {name}
+      {mark}
+      {badges}
+    </div>
   ) : (
+    // No disclosure arrow: picking a project goes into it, and an
+    // arrow here would promise it opens in place. The row's fill
+    // (ProjectRow) is what says it can be picked.
     <button
       type="button"
       onClick={onToggle}
       onContextMenu={onContextMenu}
+      // doubutsu stripes the row as one pill and has this sit it out.
+      data-slot="sidebar-project-pick"
+      aria-current={current ? "true" : undefined}
       className={cn(
         baseClass,
-        "text-muted-foreground transition-colors hover:text-foreground",
+        "transition-colors",
+        current
+          ? "text-accent-foreground"
+          : "text-muted-foreground group-hover/project:text-foreground",
       )}
     >
-      <ChevronRight
-        className={cn(
-          "size-3 shrink-0 transition-transform",
-          expanded && "rotate-90",
-        )}
-      />
       {lead}
       {name}
       {mark}

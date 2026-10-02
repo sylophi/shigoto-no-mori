@@ -416,13 +416,10 @@ export const ClientConfigSchema = z.object({
   // (renderer/hooks/projects/useProjectSort.ts is the only reader and
   // writer, and stores the default as nothing).
   projectsSort: ProjectSortModeSchema.optional(),
-  // The sidebar's folded projects, by group key (projectGroupKey in
-  // renderer/components/sidebar/buildSidebarRows.ts): the repo identity
-  // when the project has one, so a repo held here and on peers is one
-  // fold; peerProjectKey for a peer's project with no identity; the
-  // project id for such a local one. Absence == expanded
-  // (renderer/hooks/projects/useCollapsedProjects.ts is the only reader
-  // and writer).
+  // Legacy: the sidebar's folded projects, by group key, from when its
+  // tree folded project by project. Nothing reads it. Still modeled
+  // because a doc can carry it and its keys name peers and repos, so
+  // withoutPeerState has to be able to see it to drop it.
   collapsedProjects: z.array(z.string()).optional(),
 });
 export type ClientConfig = z.infer<typeof ClientConfigSchema>;
@@ -431,43 +428,24 @@ export type ClientConfig = z.infer<typeof ClientConfigSchema>;
 // group with itself, so it is named by its device and its id. The
 // prefix sets it apart from a repo identity (`root:` or `remote:`,
 // shared/git/repoIdentity.mts) and from a local project id (a folder
-// name, never holding a `/`), which is what lets withoutPeerState find
-// it by shape alone.
-const PEER_PROJECT_KEY_PREFIX = "device:";
+// name, never holding a `/`).
 export const peerProjectKey = (deviceId: string, projectId: string) =>
-  `${PEER_PROJECT_KEY_PREFIX}${deviceId}/${projectId}`;
+  `device:${deviceId}/${projectId}`;
 
 // The client config without what was keyed by the account's peers:
 // a device leaving the account (a sign-out, a sign-in under another)
 // leaves the local port picks, the legacy create-device picks and the
-// folds of peers' identity-less projects behind, since every one of
-// them names a device of the account that is gone, and a device of a
-// later account with the same id must not inherit them. On a machine
-// with projects of its own (`hostsProjects`) the rest of the fold list
-// stays: a local project id is this machine's own, and a repo identity
-// names a repository, not a device, so it can't land on the wrong
-// machine. That holds for an identity only peers hold too, which is
-// kept rather than told apart from a local one: this runs where the
-// project list isn't at hand (the main process's sign-out), and a
-// leftover fold of a repo nobody lists costs nothing. A hostless
-// client (the browser) has no projects of its own, so every fold it
-// keeps is a peer's and all of them go, the repo names with them.
-export function withoutPeerState(
-  config: ClientConfig,
-  hostsProjects = true,
-): ClientConfig {
+// legacy fold list behind, since all three name devices or repos of
+// the account that is gone, and a later account on this machine or
+// browser must not inherit them.
+export function withoutPeerState(config: ClientConfig): ClientConfig {
   const {
     forwardLocalPorts: _forwardLocalPorts,
     quickCreateDevices: _quickCreateDevices,
-    collapsedProjects,
+    collapsedProjects: _collapsedProjects,
     ...rest
   } = config;
-  const kept = collapsedProjects?.filter(
-    (key) => hostsProjects && !key.startsWith(PEER_PROJECT_KEY_PREFIX),
-  );
-  return kept !== undefined && kept.length > 0
-    ? { ...rest, collapsedProjects: kept }
-    : rest;
+  return rest;
 }
 
 // The one reading of keepReachable: on unless switched off. Every

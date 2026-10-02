@@ -7,7 +7,7 @@
 //
 // Three categories deliberately do NOT route through here:
 // - Client-scoped calls (dialog, shell, menu, nav, window, account,
-//   hub, clientConfig, projectLauncher, portForward): they
+//   hub, clientConfig, portForward): they
 //   belong to the machine the window runs on, so their call sites keep
 //   window.api and HostApi excludes them.
 // - Host broadcast subscriptions: they are boot-scoped, one watchHost

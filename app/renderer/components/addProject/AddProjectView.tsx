@@ -611,7 +611,7 @@ function openProject(
   worktrees: readonly Worktree[],
 ) {
   // A bare repo registers fine but has no primary checkout, so offer
-  // worktree creation instead (same fallback as ProjectLauncher).
+  // worktree creation instead.
   const primary = worktrees.find((w) => w.isPrimary);
   if (primary) worktreeNav.toWorktree(projectId, primary.id);
   else projectNav.toProjectPage("new", projectId);
