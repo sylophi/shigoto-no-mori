@@ -18,19 +18,15 @@ export interface DeviceTally {
 }
 
 // A villager's visits on every device together. `first` and `last` are
-// epoch ms, `warmth` the friendship as it stood when read (each device
-// reports its own cooled to then). `byDevice` names where they came,
-// most visits first.
+// epoch ms. `byDevice` names where they came, most visits first.
 export interface Visits {
   count: number;
   first: number;
   last: number;
-  warmth: number;
   byDevice: { deviceId: string; label: string; count: number }[];
 }
 
-// Every device's tally added up. Warmth adds up too: a visit warms the
-// friendship wherever it happened.
+// Every device's tally added up.
 export function mergeTallies(tallies: readonly DeviceTally[]) {
   const merged = new Map<string, Visits>();
   for (const { deviceId, label, tally } of tallies) {
@@ -44,7 +40,6 @@ export function mergeTallies(tallies: readonly DeviceTally[]) {
       held.count += visits.count;
       held.first = Math.min(held.first, visits.first);
       held.last = Math.max(held.last, visits.last);
-      held.warmth += visits.warmth;
       held.byDevice.push(here);
     }
   }
@@ -52,30 +47,6 @@ export function mergeTallies(tallies: readonly DeviceTally[]) {
     visits.byDevice.sort((a, b) => b.count - a.count);
   }
   return merged;
-}
-
-// How close a villager is now: five hearts, read off their warmth,
-// which each visit adds one to and which halves every 60 days without
-// one (cli/visitors.go). A heart comes with the first visit, more fill
-// as they keep coming, and they empty again as the friendship cools:
-// one visit alone fades out in about three and a half months.
-export const FRIENDSHIP = [
-  { from: 0.3, title: "Acquaintance" },
-  { from: 1.5, title: "Neighbor" },
-  { from: 2.5, title: "Friend" },
-  { from: 4, title: "Good pal" },
-  { from: 6, title: "Kindred spirit" },
-] as const;
-
-export function friendshipOf(warmth: number): {
-  hearts: number;
-  title: string;
-} {
-  let hearts = 0;
-  for (const [index, level] of FRIENDSHIP.entries()) {
-    if (warmth >= level.from) hearts = index + 1;
-  }
-  return { hearts, title: FRIENDSHIP[hearts - 1]?.title ?? "Drifted apart" };
 }
 
 // A slot in the album: every character has one, filled once they have
@@ -87,7 +58,7 @@ export interface AlbumEntry {
   visits: Visits | null;
 }
 
-export type VisitorSort = "closest" | "visits" | "recent" | "name";
+export type VisitorSort = "visits" | "recent" | "name";
 
 const NAMES = new Intl.Collator();
 const byName = (a: AlbumEntry, b: AlbumEntry) =>
@@ -102,9 +73,6 @@ export function sortAlbum(
     if (a.visits === null || b.visits === null) {
       if (a.visits !== b.visits) return a.visits === null ? 1 : -1;
       return byName(a, b);
-    }
-    if (sort === "closest") {
-      return b.visits.warmth - a.visits.warmth || byName(a, b);
     }
     if (sort === "visits") {
       return b.visits.count - a.visits.count || byName(a, b);
@@ -165,7 +133,7 @@ export function buildAlbum(
 }
 
 // The best friend: the one villager met most, and of two met as often,
-// the closer now, then the one seen last. Null while nobody has come.
+// the one seen last. Null while nobody has come.
 export function bestFriendOf(
   visited: readonly AlbumEntry[],
 ): AlbumEntry | null {
@@ -177,9 +145,7 @@ export function bestFriendOf(
     if (
       held == null ||
       visits.count > held.count ||
-      (visits.count === held.count &&
-        (visits.warmth > held.warmth ||
-          (visits.warmth === held.warmth && visits.last > held.last)))
+      (visits.count === held.count && visits.last > held.last)
     ) {
       best = entry;
     }

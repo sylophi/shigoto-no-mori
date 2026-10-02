@@ -26,7 +26,6 @@ import { GuestBook } from "./GuestBook";
 import { ALBUM_GRID, ALBUM_SLOT, VisitorSlot } from "./VisitorSticker";
 
 const SORT_OPTIONS = [
-  { value: "closest", label: "Closest" },
   { value: "visits", label: "Most visits" },
   { value: "recent", label: "Recent" },
   { value: "name", label: "Name" },

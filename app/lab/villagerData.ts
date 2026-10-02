@@ -69,8 +69,6 @@ function posedStatus(): VillagerDataStatus {
 }
 
 const DAY = 24 * 60 * 60_000;
-// The friendship's half-life in days, as cli/visitors.go cools it.
-const HALF_LIFE_DAYS = 60;
 
 // Who has visited each device: slug, times, and the days ago of the
 // first and the last visit.
@@ -115,18 +113,10 @@ function visitsOf(deviceId: string): VisitorTally {
   }
   const now = Date.now();
   return Object.fromEntries(
-    (VISITS[deviceId] ?? []).map(([slug, count, firstAgo, lastAgo]) => {
-      const first = now - firstAgo * DAY;
-      const last = now - lastAgo * DAY;
-      // The visits spread evenly between the first and the last, each
-      // as warm as it still is now, the way `sm visitors` reports them.
-      const step = count > 1 ? (firstAgo - lastAgo) / (count - 1) : 0;
-      let warmth = 0;
-      for (let i = 0; i < count; i++) {
-        warmth += 0.5 ** ((lastAgo + i * step) / HALF_LIFE_DAYS);
-      }
-      return [slug, { count, first, last, warmth }];
-    }),
+    (VISITS[deviceId] ?? []).map(([slug, count, first, last]) => [
+      slug,
+      { count, first: now - first * DAY, last: now - last * DAY },
+    ]),
   );
 }
 

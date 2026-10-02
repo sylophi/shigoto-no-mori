@@ -16,12 +16,10 @@ import { stationeryFor } from "@/lib/villagers/stationery";
 import {
   type Album,
   type AlbumEntry,
-  friendshipOf,
   visitDate,
   visitedTimes,
 } from "@/lib/villagers/visitors";
 import { AlbumProgress } from "./AlbumProgress";
-import { Hearts } from "./Hearts";
 
 // The Visitors section's front page, drawn as a ring-bound guest book
 // lying open. The left page holds the best friend, on their own
@@ -76,7 +74,6 @@ function BestFriend({ entry }: { entry: AlbumEntry }) {
   const paper = stationeryFor(entry.slug);
   const visits = entry.visits;
   if (visits === null) return null;
-  const { hearts, title } = friendshipOf(visits.warmth);
   const catchphrase = villagerCatchphrase(entry.profile);
   return (
     <div
@@ -108,10 +105,6 @@ function BestFriend({ entry }: { entry: AlbumEntry }) {
             </Nameplate>
             <span className="text-sm font-medium">
               Visited {visitedTimes(visits.count)}
-            </span>
-            <span className="flex items-center gap-2">
-              <Hearts filled={hearts} />
-              <span className="text-xs font-medium text-rose-500">{title}</span>
             </span>
             <span className="text-xs text-muted-foreground">
               Since {visitDate(visits.first)}

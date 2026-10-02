@@ -226,7 +226,7 @@ pre-commit:
           - name: villager-birthdays
             glob: "{app/renderer/lib/villagers/birthdays.ts,app/test/villager-birthdays.mts,app/test/lib/checkKit.mts}"
             run: pnpm -C app test villager-birthdays
-          # The Visitors album: every device's tally added up, the hearts,
+          # The Visitors album: every device's tally added up, the best friend,
           # the slots and the guest book's front page.
           - name: villager-visitors
             glob: "{app/renderer/lib/villagers/visitors.ts,app/shared/villagers/rarity.ts,app/shared/schemas/villagers.ts,app/test/villager-visitors.mts,app/test/lib/checkKit.mts}"

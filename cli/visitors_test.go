@@ -7,10 +7,8 @@ package main
 
 import (
 	"encoding/json"
-	"math"
 	"os"
 	"testing"
-	"time"
 )
 
 func TestVisitorSlug(t *testing.T) {
@@ -28,26 +26,6 @@ func TestVisitorSlug(t *testing.T) {
 		if got := visitorSlug(name); got != want {
 			t.Errorf("visitorSlug(%q) = %q, want %q", name, got, want)
 		}
-	}
-}
-
-func TestVisitWarmth(t *testing.T) {
-	day := int64(24 * 60 * 60 * 1000)
-	var v villagerVisits
-	v = v.plus(100 * day)
-	if v.Warmth != 1 {
-		t.Fatalf("first visit warmth = %v, want 1", v.Warmth)
-	}
-	// A half-life later, the first visit has cooled to a half.
-	v = v.plus(160 * day)
-	if math.Abs(v.Warmth-1.5) > 1e-9 || v.Last != 160*day {
-		t.Fatalf("after a half-life = %+v, want warmth 1.5 at day 160", v)
-	}
-	// An older visit, added late (the seed's order), adds what is left
-	// of it by the last visit.
-	v = v.plus(40 * day)
-	if math.Abs(v.Warmth-1.75) > 1e-9 || v.First != 40*day || v.Count != 3 {
-		t.Fatalf("after an older visit = %+v, want warmth 1.75 from day 40", v)
 	}
 }
 
@@ -135,29 +113,5 @@ func createWorktreeT(t *testing.T, proj project, name string) {
 	t.Helper()
 	if _, err := createWorktree(proj, name, "", "", false); err != nil {
 		t.Fatalf("createWorktree %s: %v", name, err)
-	}
-}
-
-// The app reads warmth cooled to the moment of the read, so the decay
-// lives in the CLI alone.
-func TestVisitorsJSONCoolsWarmth(t *testing.T) {
-	proj := autoPullSandbox(t)
-	last := time.Now().UnixMilli() - friendshipHalfLife
-	stored := map[string]villagerVisits{"sheldon": {Count: 2, First: last, Last: last, Warmth: 2}}
-	if err := updateFileKey(visitsPath(), villagersKey, func(json.RawMessage) (any, error) {
-		return stored, nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	docs := captureJSON(t, func() {
-		if code, err := cmdVisitors(cliContext{projects: []project{proj}}, nil); code != 0 || err != nil {
-			t.Fatalf("visitors: %d, %v", code, err)
-		}
-	})
-	got := decodeT[struct {
-		Villagers map[string]villagerVisits `json:"villagers"`
-	}](t, onlyDoc(t, docs)).Villagers["sheldon"]
-	if math.Abs(got.Warmth-1) > 0.01 || got.Count != 2 {
-		t.Fatalf("reported %+v, want warmth about 1 a half-life on", got)
 	}
 }

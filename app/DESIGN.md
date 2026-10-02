@@ -271,8 +271,5 @@ album.
   plate in their own color, a legend on their stationery with their
   face on a stamp. Every legend's slot shows from the start, as a
   silhouette, so the rarest are there to chase.
-- **Friendship comes and goes.** Hearts fill as a villager keeps
-  visiting and empty again when they stop, so the album reads as who
-  is close now, not only who came once.
 - **There is one best friend**, the villager met most, and only their
   sticker and the guest book say so.

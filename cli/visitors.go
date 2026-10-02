@@ -10,21 +10,15 @@ package main
 // where it began.
 //
 // The tally lives in visits.json in the data dir, one key:
-//   villagers: { <slug>: { count, first, last, warmth } }
-// with first and last in epoch milliseconds. Warmth is how close the
-// villager is as of their last visit: each visit adds one, and it
-// halves every friendshipHalfLife without one, so a friendship grows
-// with visits and fades without them. `sm visitors --json` reports it
-// cooled to the moment it is read, and the app reads hearts off that
-// (friendshipOf in renderer/lib/villagers/visitors.ts). A data dir that
-// has never had a tally starts one at its first create, from the
+//   villagers: { <slug>: { count, first, last } }
+// with first and last in epoch milliseconds. A data dir that has never
+// had a tally starts one at its first create, from the
 // villagers living there at the time, so the residents from before the
 // tally existed count once each. A read before then shows the same.
 
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -41,18 +35,9 @@ const (
 func visitsPath() string { return filepath.Join(dataDir(), visitsFile) }
 
 type villagerVisits struct {
-	Count  int     `json:"count"`
-	First  int64   `json:"first"`
-	Last   int64   `json:"last"`
-	Warmth float64 `json:"warmth"`
-}
-
-// How long a friendship takes to cool to half without a visit, in ms.
-const friendshipHalfLife = 60 * 24 * 60 * 60 * 1000
-
-// What warmth is left of one visit `ago` ms after it.
-func cooled(ago int64) float64 {
-	return math.Pow(0.5, float64(ago)/friendshipHalfLife)
+	Count int   `json:"count"`
+	First int64 `json:"first"`
+	Last  int64 `json:"last"`
 }
 
 var doubutsuNameSet = sync.OnceValue(func() map[string]bool {
@@ -79,20 +64,13 @@ func visitorSlug(name string) string {
 	return ""
 }
 
-// One more visit, at `at`. Warmth is kept as of the last visit, so a
-// visit older than that (the seed adds them in any order) adds what is
-// left of it by then.
+// One more visit, at `at`. The seed adds them in any order.
 func (v villagerVisits) plus(at int64) villagerVisits {
-	switch {
-	case v.Count == 0:
-		v.First, v.Last, v.Warmth = at, at, 1
-	case at >= v.Last:
-		v.Warmth = v.Warmth*cooled(at-v.Last) + 1
-		v.Last = at
-	default:
-		v.Warmth += cooled(v.Last - at)
+	if v.Count == 0 {
+		v.First, v.Last = at, at
 	}
 	v.First = min(v.First, at)
+	v.Last = max(v.Last, at)
 	v.Count++
 	return v
 }
@@ -185,15 +163,7 @@ func cmdVisitors(ctx cliContext, args []string) (int, error) {
 		return exitCodeOf(err), err
 	}
 	if jsonMode {
-		// Warmth as it stands now, so the app only adds the devices up
-		// and the decay lives here alone.
-		now := time.Now().UnixMilli()
-		cooledNow := make(map[string]villagerVisits, len(tally))
-		for slug, visits := range tally {
-			visits.Warmth *= cooled(max(now-visits.Last, 0))
-			cooledNow[slug] = visits
-		}
-		emit(map[string]any{villagersKey: cooledNow})
+		emit(map[string]any{villagersKey: tally})
 		return 0, nil
 	}
 	if len(tally) == 0 {

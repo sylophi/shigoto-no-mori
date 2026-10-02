@@ -2,8 +2,7 @@
 // (renderer/lib/villagers/visitors.ts).
 //
 // Asserts:
-// - every device's tally adds up into one, by villager, warmth too
-// - friendship fills a heart per level of warmth
+// - every device's tally adds up into one, by villager
 // - the album holds a slot for every character, by rarity, and leaves
 //   out a tally entry no profile knows
 // - visited come first in the sort's order, the empty slots after
@@ -15,7 +14,6 @@ import type { VillagerProfiles } from "@shared/schemas";
 import {
   bestFriendOf,
   buildAlbum,
-  friendshipOf,
   mergeTallies,
   sortAlbum,
 } from "@/lib/villagers/visitors";
@@ -44,17 +42,17 @@ const merged = mergeTallies([
     deviceId: "a",
     label: "Studio Mac",
     tally: {
-      raymond: { count: 3, first: 100, last: now - 500, warmth: 1 },
-      ace: { count: 1, first: now, last: now, warmth: 1 },
-      ghost: { count: 9, first: 1, last: 2, warmth: 9 },
+      raymond: { count: 3, first: 100, last: now - 500 },
+      ace: { count: 1, first: now, last: now },
+      ghost: { count: 9, first: 1, last: 2 },
     },
   },
   {
     deviceId: "b",
     label: "Thinkpad",
     tally: {
-      raymond: { count: 5, first: 50, last: now, warmth: 3 },
-      "tom-nook": { count: 1, first: 300, last: 300, warmth: 1 },
+      raymond: { count: 5, first: 50, last: now },
+      "tom-nook": { count: 1, first: 300, last: 300 },
     },
   },
 ]);
@@ -65,24 +63,12 @@ try {
       count: 8,
       first: 50,
       last: now,
-      warmth: 4,
       byDevice: [
         { deviceId: "b", label: "Thinkpad", count: 5 },
         { deviceId: "a", label: "Studio Mac", count: 3 },
       ],
     });
     assert.equal(merged.get("ace")?.byDevice.length, 1);
-  });
-
-  await proof.check("friendship fills a heart per level of warmth", () => {
-    assert.deepEqual(friendshipOf(0), { hearts: 0, title: "Drifted apart" });
-    // One visit just now is one heart.
-    assert.deepEqual(friendshipOf(1), { hearts: 1, title: "Acquaintance" });
-    assert.equal(friendshipOf(4).hearts, 4);
-    assert.deepEqual(friendshipOf(6), { hearts: 5, title: "Kindred spirit" });
-    // A kindred spirit cooled two half-lives (cli/visitors.go) is a
-    // neighbor.
-    assert.equal(friendshipOf(6 / 4).hearts, 2);
   });
 
   const album = buildAlbum(profiles, merged);
@@ -104,9 +90,8 @@ try {
   });
 
   await proof.check("visited come first, in the sort's order", () => {
-    const order = (sort: "closest" | "visits" | "recent" | "name") =>
+    const order = (sort: "visits" | "recent" | "name") =>
       sortAlbum(album.sections.common, sort).map((entry) => entry.slug);
-    assert.deepEqual(order("closest"), ["raymond", "ace", "bob"]);
     assert.deepEqual(order("visits"), ["raymond", "ace", "bob"]);
     assert.deepEqual(order("name"), ["ace", "raymond", "bob"]);
   });
@@ -116,7 +101,7 @@ try {
     assert.equal(album.newest?.slug, "ace");
     assert.deepEqual(album.met, { legendary: 1, rare: 0, common: 2 });
     assert.equal(bestFriendOf([]), null);
-    // Met as often: the closer one now.
+    // Met as often: the one seen last.
     const tied = buildAlbum(
       profiles,
       mergeTallies([
@@ -124,8 +109,8 @@ try {
           deviceId: "a",
           label: "a",
           tally: {
-            ace: { count: 2, first: 0, last: now, warmth: 1 },
-            bob: { count: 2, first: 0, last: 0, warmth: 2 },
+            ace: { count: 2, first: 0, last: 0 },
+            bob: { count: 2, first: 0, last: now },
           },
         },
       ]),

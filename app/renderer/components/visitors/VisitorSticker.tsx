@@ -18,18 +18,16 @@ import { villagerCatchphrase } from "@/lib/villagerVoice";
 import { stationeryFor } from "@/lib/villagers/stationery";
 import {
   type AlbumEntry,
-  friendshipOf,
   isNewVisitor,
   stickerTilt,
   visitDate,
   visitedTimes,
   type Visits,
 } from "@/lib/villagers/visitors";
-import { Hearts } from "./Hearts";
 
 // One slot in the Visitors album. A villager who has visited is a
-// sticker stuck in at a slight lean: their face, their name and a heart
-// for each step of friendship. Pressed, it flips over to their card.
+// sticker stuck in at a slight lean: their face, their name and how
+// often they have come. Pressed, it flips over to their card.
 // One who hasn't is an empty slot holding their silhouette. The rarer
 // the character, the more the sticker carries (DESIGN.md, "Village
 // life: rarity"): a regular villager's is plain, a special character's
@@ -151,7 +149,6 @@ function StickerFront({
   const color = useFaceColor(rarity === "rare" ? face : null);
   const paper = stationeryFor(slug);
   const today = useToday();
-  const { hearts } = friendshipOf(visits.warmth);
   // "Smug cat", or whichever half the profile has.
   const kind = [profile.personality, profile.species?.toLowerCase()]
     .filter(Boolean)
@@ -218,7 +215,9 @@ function StickerFront({
       <span className="relative mt-0.5 h-4 max-w-full truncate text-2xs text-muted-foreground">
         {about}
       </span>
-      <Hearts filled={hearts} className="relative mt-auto" />
+      <span className="relative mt-auto text-xs font-medium text-muted-foreground">
+        Visited {visitedTimes(visits.count)}
+      </span>
     </span>
   );
 }
@@ -248,7 +247,6 @@ function StickerBack({
 }) {
   const { slug, profile, rarity } = entry;
   const now = useNow();
-  const { title } = friendshipOf(visits.warmth);
   const ink = rarity === "legendary" ? stationeryFor(slug).ink : "";
   const catchphrase = villagerCatchphrase(profile);
   const birthday = birthdayOf(profile.birthday);
@@ -275,13 +273,8 @@ function StickerBack({
     >
       <span className="flex items-center gap-2">
         {face !== null && <VillagerFace face={face} className="size-8" />}
-        <span className="flex min-w-0 flex-col">
-          <span className={cn("truncate text-sm font-bold", ink)}>
-            {profile.name}
-          </span>
-          <span className="truncate text-2xs font-medium text-rose-500">
-            {title}
-          </span>
+        <span className={cn("min-w-0 truncate text-sm font-bold", ink)}>
+          {profile.name}
         </span>
       </span>
       <span className="mt-2 flex flex-col bg-[linear-gradient(transparent_calc(100%-1px),color-mix(in_oklab,var(--color-amber-400)_40%,transparent)_0)] bg-size-[100%_1.25rem] text-2xs leading-5">
