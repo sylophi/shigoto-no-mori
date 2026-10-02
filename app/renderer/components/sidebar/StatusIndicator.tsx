@@ -14,10 +14,9 @@ interface StatusIndicatorProps {
   worktree: Worktree;
 }
 
-// The classic sidebar row has room for one pill, so uncommitted work wins
-// and the remote state waits its turn. The inbox row is taller and asks a
-// different question ("what is going on here" rather than "which row is
-// this"), so it renders both pills itself.
+// The palette's row has room for one pill, so uncommitted work wins and
+// the remote state waits its turn. The sidebar's rows have the room for
+// both, and render them side by side (WorktreeEntry).
 export function StatusIndicator({ worktree }: StatusIndicatorProps) {
   return worktree.changedCount > 0 ? (
     <ChangedFilesPill worktree={worktree} />
@@ -26,7 +25,7 @@ export function StatusIndicator({ worktree }: StatusIndicatorProps) {
   );
 }
 
-// Renders nothing on a clean tree, so the inbox row can place it
+// Renders nothing on a clean tree, so the sidebar's rows can place it
 // unconditionally alongside the remote pill.
 export function ChangedFilesPill({ worktree }: StatusIndicatorProps) {
   if (worktree.changedCount === 0) return null;

@@ -156,13 +156,13 @@ export interface SidebarViewModel {
 
 export const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
   project: 28,
-  worktree: 40,
+  worktree: 49,
   "worktree-skeleton": 36,
   "worktree-error": 24,
   "shelved-toggle": 24,
   "inbox-worktree": 66,
   "inbox-shelf": 36,
-  "remote-worktree": 40,
+  "remote-worktree": 49,
 };
 
 // The phone layout draws the same rows on a larger scale, and never
@@ -181,23 +181,29 @@ export function rowSizeHint(kind: SidebarRow["kind"], phone: boolean): number {
 // handed down from the view, so the virtualizer never has to be told
 // which layout it is drawing.
 //
-// The tree packs its rows tight and flush with the project's name over
-// them: only one project's rows ever show, so there is no group for an
-// indent to mark off, and the width goes to the branch names instead.
-// The inbox's rows keep a gap under them. Three-line rows butted
-// together read as one block of text with nothing for the eye to break
-// on.
+// The tree's rows sit flush with the project's name over them: only one
+// project's rows ever show, so there is no group for an indent to mark
+// off, and the width goes to the branch names instead. Worktree rows,
+// the tree's and the inbox's alike, keep a gap under them. Rows of
+// several lines butted together read as one block of text with nothing
+// for the eye to break on.
+//
+// Worktree rows set their gap as --row-gap, which the tree's stack
+// connectors read to reach across it (WorktreeRow).
 //
 // Padding, not margin: the virtualizer sizes each row from offsetHeight,
 // which counts the one and ignores the other, so a margin would let the
 // next row overlap instead of parting them.
+// The gap under every worktree row, the tree's and the inbox's alike.
+const WORKTREE_ROW_GAP = "px-2 pb-(--row-gap) [--row-gap:--spacing(1)]";
+
 export const ROW_LAYOUT: Record<SidebarRow["kind"], string> = {
   project: "px-2",
-  worktree: "px-2",
+  worktree: WORKTREE_ROW_GAP,
   "worktree-skeleton": "px-2",
   "worktree-error": "px-2",
   "shelved-toggle": "px-2",
-  "inbox-worktree": "px-2 pb-1",
+  "inbox-worktree": WORKTREE_ROW_GAP,
   "inbox-shelf": "px-2 pb-1",
-  "remote-worktree": "px-2",
+  "remote-worktree": WORKTREE_ROW_GAP,
 };
