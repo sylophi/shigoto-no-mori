@@ -55,7 +55,8 @@ export interface PaletteActions {
   // A worktree off the project's default branch, on `branch` when the
   // query named one. The palette stays up until it lands.
   create: (projectId: string, branch?: string) => void;
-  openCreateForm: (projectId: string) => void;
+  // The new-worktree form, on the peer `deviceId` names, else here.
+  openCreateForm: (projectId: string, deviceId?: string) => void;
 }
 
 // The highlighted row's verbs: a preview beside the list, where a click
@@ -439,33 +440,35 @@ function ProjectVerbs({
   query: string;
   actions: PaletteActions;
 }) {
-  const { lead, localProject } = item;
-  const verbs: Verb[] = [
-    {
+  const { project, device, lead, localProject } = item;
+  const verbs: Verb[] = [];
+  if (lead) {
+    verbs.push({
       key: "go",
       label: `Open ${lead.worktree.branch}`,
       icon: iconOf(Folder),
       listKeys: "↩",
       run: () => actions.go(lead, "detail"),
-    },
-  ];
-  if (localProject) {
-    verbs.push(
-      {
-        key: "create",
-        label: "New worktree",
-        icon: iconOf(Plus),
-        run: () => actions.create(localProject.id),
-      },
-      {
-        key: "form",
-        label: "New worktree from…",
-        icon: iconOf(SquarePen),
-        run: () => actions.openCreateForm(localProject.id),
-      },
-    );
+    });
   }
-  return <VerbGroup heading={lead.project.name} query={query} verbs={verbs} />;
+  if (localProject) {
+    verbs.push({
+      key: "create",
+      label: "New worktree",
+      icon: iconOf(Plus),
+      run: () => actions.create(localProject.id),
+    });
+  }
+  // With no worktree to open, ↩ opens the form, on the device that
+  // holds the project.
+  verbs.push({
+    key: "form",
+    label: "New worktree from…",
+    icon: iconOf(SquarePen),
+    listKeys: lead ? undefined : "↩",
+    run: () => actions.openCreateForm(project.id, device?.deviceId),
+  });
+  return <VerbGroup heading={project.name} query={query} verbs={verbs} />;
 }
 
 // Which project the new worktree goes into: the likeliest is ↩, the

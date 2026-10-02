@@ -2,7 +2,7 @@ import type { MirrorLink } from "@/hooks/remote/useMirrors";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import type { ProjectPullRequestQueries } from "@/hooks/projects/useProjectPullRequests";
 import type { ProjectWorktreeQueries } from "@/hooks/worktrees/useWorktrees";
-import { rankByScore } from "@/lib/fuzzyMatch";
+import { rankByScore, scoreFields, scoreMatch } from "@/lib/fuzzyMatch";
 import { isCloneableRemote } from "@shared/cloneUrl";
 import { sanitizeBranchName } from "@shared/git/branches";
 import { isAnchoredPath } from "@shared/projectPaths";
@@ -170,59 +170,106 @@ export function rankPaletteEntries(
   entries: readonly PaletteEntry[],
 ): readonly PaletteEntry[] {
   if (!query) return entries.filter((entry) => !entry.hidden);
-  return rankByScore(
-    query,
-    entries,
-    ({ worktree, project, device, pr }) => [
-      worktree.branch,
-      worktree.name,
-      `${project.name} ${worktree.branch}`,
-      device?.label ?? "",
-      pr ? `#${pr.number}` : "",
-      pr?.title ?? "",
-    ],
-    (entry) => (entry.sunk ? 0.5 : 1),
-  );
+  return rankByScore(query, entries, entryFields, entryWeight);
 }
+
+const entryFields = ({ worktree, project, device, pr }: PaletteEntry) => [
+  worktree.branch,
+  worktree.name,
+  `${project.name} ${worktree.branch}`,
+  device?.label ?? "",
+  pr ? `#${pr.number}` : "",
+  pr?.title ?? "",
+];
+
+const entryWeight = (entry: PaletteEntry) => (entry.sunk ? 0.5 : 1);
 
 // A project the query names, standing for its checkouts on every
 // device: one row per sidebar group, however many machines hold it.
 export interface PaletteProject {
   key: string;
-  // Where ↩ goes: its worktree the list would put first.
-  lead: PaletteEntry;
-  // This device's checkout, when it has one: where a quick create goes.
+  // The checkout the row names: this device's when it has one.
+  project: Project;
+  // The peer that checkout is on. Undefined for this machine's own.
+  device: SidebarDeviceBadge | undefined;
+  // Where ↩ goes: its worktree the list would put first. Undefined
+  // for a project with none, whose ↩ is its new-worktree page.
+  lead: PaletteEntry | undefined;
+  // This device's checkout, when it has one and its folder is there:
+  // where a quick create goes.
   localProject: Project | undefined;
   worktreeCount: number;
   deviceCount: number;
 }
 
-// The few projects the query names by name, best first. Only for a
-// query: unasked, the worktree list already leads with their work.
+// The few projects the query names by name, best first. Every project
+// on every device, the ones with no worktrees too, since the sidebar's
+// list of projects is the other way to them. Only for a query:
+// unasked, the worktree list already leads with their work.
 export function rankPaletteProjects(
   query: string,
   entries: readonly PaletteEntry[],
+  projects: readonly Project[],
+  remote: readonly RemoteForestItem[],
 ): PaletteProject[] {
   if (!query) return [];
-  const byKey = new Map<string, PaletteEntry[]>();
-  for (const entry of entries) {
-    const key = projectGroupKey(entry.project, entry.device?.deviceId);
-    const group = byKey.get(key);
-    if (group) group.push(entry);
-    else byKey.set(key, [entry]);
-  }
-  const projects = [...byKey].map(([key, trees]): PaletteProject => {
-    const [first] = trees as [PaletteEntry, ...PaletteEntry[]];
-    const lead = trees.find((t) => !t.sunk && !t.hidden) ?? first;
-    return {
+  const groups = new Map<
+    string,
+    {
+      project: Project;
+      device: SidebarDeviceBadge | undefined;
+      trees: PaletteEntry[];
+      devices: Set<string | undefined>;
+    }
+  >();
+  // This device's projects first, so a group names its local checkout.
+  const join = (project: Project, device: SidebarDeviceBadge | undefined) => {
+    const key = projectGroupKey(project, device?.deviceId);
+    let group = groups.get(key);
+    if (!group) {
+      group = { project, device, trees: [], devices: new Set() };
+      groups.set(key, group);
+    }
+    group.devices.add(device?.deviceId);
+    return group;
+  };
+  for (const project of projects) join(project, undefined);
+  for (const item of remote) join(item.project, deviceBadgeOf(item));
+  for (const entry of entries)
+    join(entry.project, entry.device).trees.push(entry);
+  const items = [...groups].map(
+    ([key, { project, device, trees, devices }]): PaletteProject => ({
       key: `project:${key}`,
-      lead,
-      localProject: trees.find((t) => !t.device)?.project,
+      project,
+      device,
+      lead: trees.find((t) => !t.sunk && !t.hidden) ?? trees[0],
+      localProject:
+        !device && project.pathExists !== false ? project : undefined,
       worktreeCount: trees.length,
-      deviceCount: new Set(trees.map((t) => t.device?.deviceId)).size,
-    };
-  });
-  return rankByScore(query, projects, (p) => p.lead.project.name).slice(0, 3);
+      deviceCount: devices.size,
+    }),
+  );
+  return rankByScore(query, items, (p) => p.project.name).slice(0, 3);
+}
+
+// How many of the ranked projects go above the worktrees: those the
+// query names at least as well as the top worktree, so typing a
+// project's name finds the project, not its first worktree, and a
+// project the letters only scatter through stays under a worktree that
+// spells them. A worktree's "project branch" field is the longer, so a
+// project name matching in both leads.
+export function leadingProjectCount(
+  query: string,
+  projects: readonly PaletteProject[],
+  shown: readonly PaletteEntry[],
+): number {
+  const [entry] = shown;
+  if (!entry) return projects.length;
+  const top = scoreFields(query, entryFields(entry)) * entryWeight(entry);
+  const trailing = projects.findIndex(
+    (p) => scoreMatch(query, p.project.name) < top,
+  );
+  return trailing < 0 ? projects.length : trailing;
 }
 
 // A query as the branch a new worktree would take: the branch inputs'
