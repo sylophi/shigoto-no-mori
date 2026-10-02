@@ -1,7 +1,9 @@
 package main
 
 // sm worktrees move [<name>] <new-path>: relocate a worktree's
-// checkout. `git worktree move` does the disk and git's own metadata.
+// checkout. `git worktree move` does the disk and git's own metadata,
+// and a move to another volume, which git can't make, is copied across
+// instead (moveAcrossVolumes).
 // A worktree's id is derived from its path, so the move changes it,
 // and everything shigomori keys by the old id is carried to the new
 // one: the registry marks (shelf, auto-pull), the per-worktree data
@@ -16,8 +18,10 @@ package main
 // there first, like rm.
 
 import (
+	"cmp"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -79,8 +83,13 @@ func moveWorktree(proj project, id worktreeIdentity, dest string) (worktreeJSON,
 		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 			return worktreeJSON{}, err
 		}
-		if _, err := runGit(proj.Path, "worktree", "move", "--", id.Path, dest); err != nil {
-			return worktreeJSON{}, err
+		if err := gitWorktreeMoveFn(proj.Path, id.Path, dest); err != nil {
+			if !isCrossDeviceError(err) {
+				return worktreeJSON{}, err
+			}
+			if err := moveAcrossVolumes(proj, id.Path, dest); err != nil {
+				return worktreeJSON{}, err
+			}
 		}
 		// Sweep the old parent when it is a directory shigomori owns
 		// (the custom layout's is the user's, and stays).
@@ -95,6 +104,70 @@ func moveWorktree(proj project, id worktreeIdentity, dest string) (worktreeJSON,
 		rekeyWorktree(proj, id.ID, moved.ID)
 	}
 	return buildWorktree(proj, moved, loadBuildContext(proj)), nil
+}
+
+// Test seam: a second volume is nothing a test can count on, so tests
+// stub git's refusal to cross one.
+var gitWorktreeMoveFn = func(projectPath, from, dest string) error {
+	_, err := runGit(projectPath, "worktree", "move", "--", from, dest)
+	return err
+}
+
+// Whether a failed `git worktree move` is rename(2) refusing to leave
+// its volume (EXDEV, in the C locale every git spawn here runs under).
+// Git checks everything else first (the worktree is unlocked, has no
+// submodules, the destination is free), so this error means a move git
+// was otherwise willing to make.
+func isCrossDeviceError(err error) bool {
+	var gitErr *gitError
+	return errors.As(err, &gitErr) && strings.Contains(strings.ToLower(gitErr.msg), "cross-device link")
+}
+
+// The move git can't make: the checkout is copied to the other volume,
+// git is pointed at the copy (`git worktree repair`, its own answer to
+// a checkout moved by hand), and the original goes only once git lists
+// the worktree at its new path. A failure before that leaves the
+// original as it was and takes the copy back out.
+func moveAcrossVolumes(proj project, from, dest string) error {
+	undo := func() {
+		_ = wipeDir(dest)
+		_, _ = runGit(proj.Path, "worktree", "repair", "--", from)
+		invalidateWorktreeIdentities(proj.ID)
+	}
+	if err := copyCheckout(from, dest); err != nil {
+		undo()
+		return errf("Couldn't copy the worktree to %s: %v", dest, err)
+	}
+	if _, err := runGit(proj.Path, "worktree", "repair", "--", dest); err != nil {
+		undo()
+		return err
+	}
+	invalidateWorktreeIdentities(proj.ID)
+	if _, err := findMovedIdentity(proj, dest); err != nil {
+		undo()
+		return err
+	}
+	// The move is done as far as git goes. A leftover original is a
+	// stray folder, not a reason to report the move as failed.
+	if err := wipeDir(from); err != nil {
+		note("warning: the worktree moved, but its old folder couldn't be deleted: " + err.Error())
+	}
+	return nil
+}
+
+// cp -p keeps the times and modes a move should keep. A filesystem that
+// can't hold some of them fails the whole cp, so the plain copy is the
+// second try.
+func copyCheckout(src, dst string) error {
+	output, err := exec.Command("cp", "-R", "-P", "-p", src, dst).CombinedOutput()
+	if err == nil {
+		return nil
+	}
+	vlog("[move] cp -p: %s", cmp.Or(strings.TrimSpace(string(output)), err.Error()))
+	if err := wipeDir(dst); err != nil {
+		return err
+	}
+	return copyTree(src, dst)
 }
 
 // The identity git now lists at dest. Its path is git's spelling,

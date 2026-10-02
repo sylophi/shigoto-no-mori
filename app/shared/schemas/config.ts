@@ -55,7 +55,9 @@ export type CarryOverEntry = z.infer<typeof CarryOverEntrySchema>;
 
 // Where shigomori's managed worktrees for this project live on disk.
 // - managed-root: <dataDir>/worktrees/<projectName>/<worktreeName>
-//   (default; one place for every project's worktrees, easy to nuke)
+//   (default; one place for every project's worktrees, easy to nuke.
+//   The device's managedOnProjectDrive setting moves it onto the
+//   drive of a project that sits on an external one)
 // - in-project: <projectPath>/.shigomori/worktrees/<worktreeName>
 //   (sits inside the primary; lets tools that walk up to a workspace
 //   root, like Turbopack, accept symlinked node_modules from carry-over)
@@ -233,6 +235,16 @@ export const GlobalConfigSchema = z.object({
   // name would take whatever folder it sits in. Applied wherever the
   // CLI lists worktrees (cli/gitx.go), the app's rows included.
   codexWorktreeNames: z.boolean().optional(),
+  // When true, a project on an external drive keeps its managed-layout
+  // worktrees on that drive
+  // (<volume>/<dataDirName>/worktrees/<projectName>/<worktreeName>)
+  // instead of under the data dir. Nothing changes for a project on the
+  // internal drive, one whose drive already holds the data dir, or one
+  // on another layout. Decided by the CLI wherever it places a worktree
+  // (cli/paths.go resolveWorktreeBase). Worktrees made before the
+  // switch stay where they are until the project's Worktree location
+  // page moves them. Off by default.
+  managedOnProjectDrive: z.boolean().optional(),
   // When true, projects with a valid port-pool.config.json run
   // `port-pool provision` after setup at create and
   // `port-pool release` before teardown at delete.
@@ -290,6 +302,7 @@ export const DeviceSettingsPatchSchema = z.strictObject(
     autoPullPrimaryOnly: true,
     doubutsuNames: true,
     codexWorktreeNames: true,
+    managedOnProjectDrive: true,
     portPool: true,
     terrier: true,
     githubCli: true,
@@ -318,6 +331,7 @@ export const DEVICE_SETTINGS_DEFAULTS: Required<DeviceSettingsPatch> = {
   autoPullPrimaryOnly: false,
   doubutsuNames: false,
   codexWorktreeNames: false,
+  managedOnProjectDrive: false,
   portPool: false,
   terrier: false,
   githubCli: true,

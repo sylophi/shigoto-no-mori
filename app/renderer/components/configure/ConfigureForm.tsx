@@ -231,6 +231,7 @@ export function ConfigureForm({
             </div>
             <WorktreeLocationField
               projectId={projectId}
+              projectPath={projectPath}
               config={initialConfig}
               home={home}
               blocked={isDirty}

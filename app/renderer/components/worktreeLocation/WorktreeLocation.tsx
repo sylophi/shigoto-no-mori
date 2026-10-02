@@ -3,7 +3,7 @@ import { ProjectDevicePage } from "@/components/shared/ProjectDevicePage";
 import { LoadFailure } from "@/components/ui/load-failure";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProjectConfigSeed } from "@/hooks/config/useProjectConfigSeed";
-import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
+import { useDeviceLayout } from "@/hooks/config/useDeviceLayout";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import type { Project } from "@shared/schemas";
 import { LocationForm } from "./LocationForm";
@@ -23,7 +23,7 @@ export function WorktreeLocation() {
 // The layout form of whichever device the surrounding scope names.
 function LocationBody({ project }: { project: Project }) {
   const projectId = project.id;
-  const { data: runtime } = useRuntimeInfo();
+  const device = useDeviceLayout();
   const { data: worktrees = [], isLoading: worktreesLoading } =
     useWorktrees(projectId);
   const seed = useProjectConfigSeed(projectId);
@@ -34,7 +34,7 @@ function LocationBody({ project }: { project: Project }) {
       </LocationPane>
     );
   }
-  if (seed.state === "loading" || runtime === undefined || worktreesLoading) {
+  if (seed.state === "loading" || device === null || worktreesLoading) {
     return (
       <LocationPane>
         <LocationSkeleton />
@@ -46,8 +46,7 @@ function LocationBody({ project }: { project: Project }) {
       <LocationForm
         projectId={projectId}
         projectPath={project.path}
-        dataDir={runtime.dataDir}
-        home={runtime.homedir}
+        device={device}
         worktrees={worktrees}
         config={seed.config}
         resolvedDefaultBranch={seed.resolvedDefaultBranch}

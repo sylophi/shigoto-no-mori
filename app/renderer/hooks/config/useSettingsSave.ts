@@ -45,6 +45,7 @@ export interface SettingsFormState {
   autoPullPrimaryOnly: boolean;
   doubutsuNames: boolean;
   codexWorktreeNames: boolean;
+  managedOnProjectDrive: boolean;
   portPool: boolean;
   terrier: boolean;
   githubCli: boolean;
@@ -84,6 +85,8 @@ export function fromConfig(
     doubutsuNames: config.doubutsuNames ?? DEFAULTS.doubutsuNames,
     codexWorktreeNames:
       config.codexWorktreeNames ?? DEFAULTS.codexWorktreeNames,
+    managedOnProjectDrive:
+      config.managedOnProjectDrive ?? DEFAULTS.managedOnProjectDrive,
     portPool: config.portPool ?? DEFAULTS.portPool,
     terrier: config.terrier ?? DEFAULTS.terrier,
     githubCli: config.githubCli ?? DEFAULTS.githubCli,
@@ -118,6 +121,7 @@ export function toDeviceSettingsPatch(
     autoPullPrimaryOnly: state.autoPullPrimaryOnly,
     doubutsuNames: state.doubutsuNames,
     codexWorktreeNames: state.codexWorktreeNames,
+    managedOnProjectDrive: state.managedOnProjectDrive,
     portPool: state.portPool,
     terrier: state.terrier,
     githubCli: state.githubCli,

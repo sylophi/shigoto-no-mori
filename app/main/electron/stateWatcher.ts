@@ -159,8 +159,9 @@ export function startStateWatcher(poke: () => void): void {
   // state file at all. The only observable change is the new checkout
   // directory two levels down (worktrees/<project>/<name>), which a
   // non-recursive top-level watch never sees. (In-project and custom
-  // layouts sit outside the data dir and aren't covered. The
-  // managed-root default is.)
+  // layouts, and a managed root kept on the project's drive, sit
+  // outside the data dir and aren't covered. The managed-root default
+  // is.)
   watchDir(dataDir(), false);
   watchDir(join(dataDir(), "projects"), true);
   const worktreesDir = join(dataDir(), "worktrees");

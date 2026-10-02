@@ -7,7 +7,7 @@
 //
 // Kept dependency-free so it can run in either environment.
 
-import type { WorktreeLayout } from "../schemas";
+import type { RuntimeInfo, WorktreeLayout } from "../schemas";
 
 // Project-relative directory used by the "in-project" layout. Top-level
 // component (`.shigomori`) is also the path appended to the primary's
@@ -37,10 +37,53 @@ function joinPath(base: string, ...segments: string[]): string {
   return out;
 }
 
-interface LayoutInputs {
+// The external drive a path sits on: /Volumes/<name> for anything below
+// a mounted volume, null otherwise. Mirrors externalVolumeRoot in
+// cli/paths.go.
+function externalVolumeRoot(path: string): string | null {
+  const match = /^(\/Volumes\/[^/]+)\/+[^/]/.exec(path);
+  return match?.[1] ?? null;
+}
+
+// What the layouts need to know of the device: where its data dir is,
+// the flavor's own name for it (".sm" / ".smd"), and whether its
+// managedOnProjectDrive setting is on.
+export interface DeviceLayoutInputs extends Pick<
+  RuntimeInfo,
+  "dataDir" | "canonicalDataDirName"
+> {
+  onProjectDrive: boolean;
+}
+
+// The managed root's shape on the project's own external drive, which
+// the managed layout uses while the device's setting is on. Null when there is
+// no such place: the project is on the internal drive, or the data dir
+// sits on the project's drive and the managed root is on it already.
+// Mirrors projectDriveBase in cli/paths.go.
+export function projectDriveBaseFor(
+  projectPath: string,
+  {
+    dataDir,
+    canonicalDataDirName,
+  }: Pick<DeviceLayoutInputs, "dataDir" | "canonicalDataDirName">,
+): string | null {
+  const volume = externalVolumeRoot(projectPath);
+  if (volume === null || dataDir.startsWith(`${volume}/`)) return null;
+  return joinPath(
+    volume,
+    canonicalDataDirName,
+    "worktrees",
+    lastSegment(projectPath),
+  );
+}
+
+function lastSegment(path: string): string {
+  return path.split("/").findLast((s) => s.length > 0) ?? "";
+}
+
+interface LayoutInputs extends DeviceLayoutInputs {
   layout: WorktreeLayout;
   projectPath: string;
-  dataDir: string;
   customPath: string | null;
 }
 
@@ -56,18 +99,20 @@ export function layoutInputsFor(
     customWorktreePath?: string | null;
   } | null,
   projectPath: string,
-  dataDir: string,
+  { dataDir, canonicalDataDirName, onProjectDrive }: DeviceLayoutInputs,
 ): LayoutInputs {
   return {
     layout: config?.worktreeLayout ?? "managed-root",
     projectPath,
     dataDir,
+    canonicalDataDirName,
+    onProjectDrive,
     customPath: config?.customWorktreePath?.trim() || null,
   };
 }
 
 export function worktreeBaseFor(inputs: LayoutInputs): string {
-  const { layout, projectPath, dataDir, customPath } = inputs;
+  const { layout, projectPath, dataDir, customPath, onProjectDrive } = inputs;
   if (layout === "in-project") {
     return joinPath(projectPath, IN_PROJECT_SUBDIR);
   }
@@ -82,9 +127,11 @@ export function worktreeBaseFor(inputs: LayoutInputs): string {
       return stripped;
     }
   }
-  const segments = projectPath.split("/");
-  const projectName = segments.findLast((s) => s.length > 0) ?? "";
-  return joinPath(dataDir, "worktrees", projectName);
+  if (layout === "managed-root" && onProjectDrive) {
+    const driveBase = projectDriveBaseFor(projectPath, inputs);
+    if (driveBase !== null) return driveBase;
+  }
+  return joinPath(dataDir, "worktrees", lastSegment(projectPath));
 }
 
 // Full destination path for a single worktree under the given layout.

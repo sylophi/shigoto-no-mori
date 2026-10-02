@@ -556,6 +556,7 @@ export const labGlobalConfig = {
   // A fresh install's seed: names on, Village life unset (off).
   doubutsuNames: true,
   codexWorktreeNames: false,
+  managedOnProjectDrive: false,
   portPool: true,
   terrier: true,
   githubCli: true,

@@ -3,6 +3,7 @@ import { SectionHeading } from "@/components/ui/section-heading";
 import type { SettingsFormState } from "@/hooks/config/useSettingsSave";
 import { useGithubCliReadiness } from "@/hooks/githubCli/useGithubCliReadiness";
 import { usePortPoolInstalled } from "@/hooks/ports/usePortPoolInstalled";
+import { useRuntimeInfo } from "@/hooks/system/useRuntimeInfo";
 import { useTerrierReadiness } from "@/hooks/terrier/useTerrierReadiness";
 import { ToggleRow } from "@/components/shared/ToggleRow";
 import { ExternalLink } from "@/components/ui/external-link";
@@ -38,6 +39,11 @@ export function DeviceToggleSections({
   const terrierInstalled = terrierReadiness?.installed ?? true;
   const terrierCompatible = terrierReadiness?.compatible ?? true;
   const terrierReady = terrierInstalled && terrierCompatible;
+  // The drive folder takes the scoped device's flavor name (".sm" for
+  // the app, ".smd" for dev builds), as cli/paths.go projectDriveBase
+  // spells it.
+  const { data: runtime } = useRuntimeInfo();
+  const driveBase = `/Volumes/<drive>/${runtime?.canonicalDataDirName ?? ".sm"}/worktrees/<project>`;
   const { data: githubCliReadiness } = useGithubCliReadiness();
   const ghInstalled = githubCliReadiness?.installed ?? true;
   const ghAuthed = githubCliReadiness?.authed ?? true;
@@ -83,6 +89,26 @@ export function DeviceToggleSections({
           onCheckedChange={setField("codexWorktreeNames")}
           label="Name Codex-style worktrees by their parent folder"
           description="Codex and some other tools create worktrees as worktree-name/repo-name. When an external worktree's folder is just the repo's name, show the folder above it instead."
+        />
+        <ToggleRow
+          checked={form.managedOnProjectDrive}
+          onCheckedChange={setField("managedOnProjectDrive")}
+          label="Keep worktrees on the project's drive"
+          description={
+            <>
+              Projects on an external drive keep their Managed worktrees on that
+              drive instead of the data folder. Move existing ones from the
+              project's Worktree location page.
+              {/* The path is spelled like the Worktree location page's
+                  previews. */}
+              <span className="mt-1 block">
+                Location:{" "}
+                <span className="font-mono text-foreground/70 select-text">
+                  {driveBase}/
+                </span>
+              </span>
+            </>
+          }
         />
       </section>
 

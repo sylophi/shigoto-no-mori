@@ -89,6 +89,40 @@ func cwdInside(dir string) bool {
 	return cwd == dirTrimmed || strings.HasPrefix(cwd, dirTrimmed+"/")
 }
 
+// The external drive a path sits on: /Volumes/<name> for anything below
+// a mounted volume, "" otherwise. Path math on purpose, with no stat,
+// so shared/git/worktreeLayout.ts can mirror it. macOS mounts every
+// drive but the boot one there, and the app ships for macOS alone.
+func externalVolumeRoot(path string) string {
+	const mounts = "/Volumes/"
+	if !strings.HasPrefix(path, mounts) {
+		return ""
+	}
+	rest := path[len(mounts):]
+	cut := strings.Index(rest, "/")
+	if cut <= 0 || strings.Trim(rest[cut:], "/") == "" {
+		return ""
+	}
+	return mounts + rest[:cut]
+}
+
+// The managed root's shape on the project's own external drive:
+// <volume>/<dataDirName>/worktrees/<project>, under the flavor's own
+// folder name wherever the data dir itself happens to be. "" when the
+// project isn't on an external drive, or when the data dir sits on that
+// same drive and the managed root is on it already.
+func projectDriveBase(projectPath string) string {
+	volume := externalVolumeRoot(projectPath)
+	if volume == "" || strings.HasPrefix(dataDir(), volume+"/") {
+		return ""
+	}
+	return filepath.Join(volume, dataDirName, "worktrees", filepath.Base(projectPath))
+}
+
+func managedOnProjectDriveEnabled(global globalConfig) bool {
+	return global.ManagedOnProjectDrive != nil && *global.ManagedOnProjectDrive
+}
+
 // Every base directory whose direct children count as "managed" for a
 // project; all layouts included unconditionally, so switching layouts
 // doesn't turn existing worktrees external.
@@ -96,6 +130,9 @@ func managedBasesFor(projectPath string, config *projectConfig) []string {
 	bases := []string{
 		filepath.Join(dataDir(), "worktrees", filepath.Base(projectPath)),
 		filepath.Join(projectPath, ".shigomori", "worktrees"),
+	}
+	if driveBase := projectDriveBase(projectPath); driveBase != "" {
+		bases = append(bases, driveBase)
 	}
 	if config != nil {
 		custom := strings.TrimSpace(config.CustomWorktreePath)
@@ -124,7 +161,9 @@ func isManagedPath(worktreePath string, bases []string) bool {
 }
 
 // Where new worktrees go for this project. Custom without a path falls
-// back to the managed root.
+// back to the managed root, and the device's managedOnProjectDrive
+// setting moves the managed root onto the project's external drive
+// when it is on one.
 func resolveWorktreeBase(projectPath string, config *projectConfig) string {
 	layout := "managed-root"
 	if config != nil && config.WorktreeLayout != "" {
@@ -139,6 +178,12 @@ func resolveWorktreeBase(projectPath string, config *projectConfig) string {
 			if custom != "" {
 				return strings.TrimRight(custom, "/")
 			}
+		}
+	case "managed-root":
+		// The setting is read only for a project that has a drive to use.
+		if driveBase := projectDriveBase(projectPath); driveBase != "" &&
+			managedOnProjectDriveEnabled(readGlobalConfigHints()) {
+			return driveBase
 		}
 	}
 	return filepath.Join(dataDir(), "worktrees", filepath.Base(projectPath))
@@ -158,6 +203,15 @@ func pruneEmptyManagedParents(oldWorktreePath, projectPath string) {
 	if parent == inProjectBase {
 		if os.Remove(parent) == nil {
 			_ = os.Remove(filepath.Dir(parent))
+		}
+		return
+	}
+	// The folder on the project's drive goes whole once the last
+	// project leaves it, so nothing of ours stays behind on the drive.
+	if driveBase := projectDriveBase(projectPath); driveBase != "" && parent == driveBase {
+		worktreesDir := filepath.Dir(parent)
+		if os.Remove(parent) == nil && os.Remove(worktreesDir) == nil {
+			_ = os.Remove(filepath.Dir(worktreesDir))
 		}
 	}
 }
