@@ -277,6 +277,28 @@
 }
 
 /*
+ * The tile a project without a logo wears (shared/ProjectIcon.tsx).
+ * The component sets only --project-hue, drawn from the name. The
+ * lightness and chroma of the tint and the letter are tokens here, so
+ * a theme can move them.
+ */
+:root,
+[data-theme-scope] {
+  --project-tile-bg: 0.9 0.06;
+  --project-tile-fg: 0.45 0.13;
+}
+.dark {
+  --project-tile-bg: 0.4 0.08;
+  --project-tile-fg: 0.9 0.08;
+}
+@layer components {
+  [data-slot="project-tile"] {
+    background-color: oklch(var(--project-tile-bg) var(--project-hue));
+    fill: oklch(var(--project-tile-fg) var(--project-hue));
+  }
+}
+
+/*
  * The villager moments' motion (components/villagers). A rare one's
  * dialogue box bobs its arrow once the line is out. A legendary one's
  * letter arrives as a scene, once the toast has slid in: the flap opens

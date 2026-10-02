@@ -1,4 +1,3 @@
-import { Folder } from "lucide-react";
 import type { Project } from "@shared/schemas";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { SectionHeading } from "@/components/ui/section-heading";
@@ -25,8 +24,8 @@ export function TidyGroupHeading({
       <div className="flex min-w-0 items-center gap-1.5">
         <ProjectIcon
           projectId={project.id}
+          name={project.name}
           className="size-3"
-          fallback={Folder}
         />
         <SectionHeading className="truncate">{project.name}</SectionHeading>
       </div>
