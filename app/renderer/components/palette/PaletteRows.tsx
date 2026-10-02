@@ -3,10 +3,9 @@ import { Loader2, Plus } from "lucide-react";
 import { BranchLabel } from "@/components/ui/branch-label";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
-import { DeviceBadge } from "@/components/sidebar/DeviceBadge";
+import { DeviceBadge, MirrorBadge } from "@/components/sidebar/DeviceBadge";
 import { PullRequestPill } from "@/components/sidebar/PullRequestPill";
 import { StatusIndicator } from "@/components/sidebar/StatusIndicator";
-import { MirrorBadge } from "@/components/sidebar/WorktreeRow";
 import { useDefaultBranch } from "@/hooks/git/useDefaultBranch";
 import { matchPositions } from "@/lib/fuzzyMatch";
 import { formatRelativeTime } from "@/lib/relativeTime";
@@ -50,9 +49,10 @@ export function PaletteRowView({
 }
 
 // The sidebar's reading of a worktree: project and folder under the
-// branch with its last activity, the tree row's trailing marks, and the
-// device badge a peer's row wears (or the mirror badge a local pair
-// wears). The letters the query matched are marked.
+// branch with its last activity, its one most pressing status (the
+// sidebar's rows have the room for both), and the device badge a peer's
+// row wears (or the mirror badge a local pair wears). The letters the
+// query matched are marked.
 function WorktreeRow({
   entry,
   query,
@@ -97,7 +97,7 @@ function WorktreeRow({
         </>
       }
     >
-      <PullRequestPill pr={pr} showNumber />
+      <PullRequestPill pr={pr} />
       <StatusIndicator worktree={worktree} />
       <WorktreeKindIcon worktree={worktree} showTooltip={false} />
       {device && <DeviceBadge badge={device} />}

@@ -1,18 +1,10 @@
-import { RefreshCw } from "lucide-react";
 import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
-import { BranchLabel } from "@/components/ui/branch-label";
-import { SimpleTooltip } from "@/components/ui/tooltip";
-import { RowDeviceBadge, type SidebarDeviceBadge } from "./DeviceBadge";
-import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
-import { BirthdayBadge } from "@/components/villagers/BirthdayBadge";
-import type { ScriptActivityKind } from "@/store/scriptRuns";
+import type { SidebarDeviceBadge } from "./DeviceBadge";
 import type { PullRequest, Worktree } from "@shared/schemas";
-import { ActivityIcon } from "./ActivityIcon";
-import { PullRequestPill } from "./PullRequestPill";
-import { StatusIndicator } from "./StatusIndicator";
 import type { StackChild, StackPosition } from "@shared/pullRequestStack";
 import { useWorktreeRowState } from "./useWorktreeRowState";
+import { WorktreeEntry } from "./WorktreeEntry";
 
 interface WorktreeRowProps {
   worktree: Worktree;
@@ -29,68 +21,14 @@ interface WorktreeRowProps {
   stackChild?: StackChild;
 }
 
-// The row button's shell, worn by this machine's worktrees and a peer's
-// alike so a peer's worktree reads as a sibling of a local one -- and
-// stays one through the next restyle.
-export const WORKTREE_ROW_BUTTON =
-  "group relative flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-accent/60";
-
-// The two-line branch-over-name block both row flavors lead with, faded
-// back for a shelved worktree. `device` names the peer a remote row's
-// worktree lives on and `mirror` the peer a local one is mirrored
-// with. Both "where is this" marks (the kind glyph, then the device)
-// trail the name as one cluster, so the branch keeps its line's full
-// width and the trailing cluster stays status and PR alone.
-function WorktreeRowLabel({
-  worktree,
-  emphasized = false,
-  device,
-  mirror,
-}: {
-  worktree: Worktree;
-  emphasized?: boolean;
-  device?: SidebarDeviceBadge;
-  mirror?: SidebarDeviceBadge;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex min-w-0 flex-1 flex-col",
-        worktree.shelved && "opacity-60",
-      )}
-    >
-      <span
-        className={cn("truncate font-mono", emphasized && "font-medium")}
-        title={worktree.detached ? "Detached HEAD (commit hash)" : undefined}
-      >
-        <BranchLabel branch={worktree.branch} detached={worktree.detached} />
-      </span>
-      <span className="flex min-w-0 items-center gap-1 text-3xs text-muted-foreground">
-        <span className="truncate">{worktree.name}</span>
-        <BirthdayBadge worktree={worktree} />
-        {/* Pulled in vertically: the device tile stands taller than
-            the name line, and letting it set the line's height would
-            make a peer's row taller than a local one. */}
-        <span className="-my-1 inline-flex shrink-0 items-center gap-1">
-          {/* Shelved is left out, as in the inbox: the row already
-              sits under its project's shelved fold. */}
-          {!worktree.shelved && (
-            <WorktreeKindIcon worktree={worktree} showTooltip={false} />
-          )}
-          {mirror && <MirrorBadge mirror={mirror} />}
-          {device && <RowDeviceBadge badge={device} />}
-        </span>
-      </span>
-    </div>
-  );
-}
-
 // A stack's rows draw as a file tree: the lowest layer is the parent
 // and every layer built on it a child one step in, hung on the same
 // connectors a file tree uses (a tee, the last child a corner). The
 // connector is filled strips rather than a bordered box: doubutsu
 // clears every border color, and a connector that vanishes with the
-// theme would leave the indent unexplained.
+// theme would leave the indent unexplained. Its upright reaches up
+// across the gap over the row (--row-gap, ROW_LAYOUT) to meet the one
+// above.
 const STACK_CHILD_INSET_PX = 12;
 
 function stackIndentStyle(
@@ -109,8 +47,8 @@ function StackConnector({ child }: { child: StackChild | undefined }) {
     <span aria-hidden className="absolute inset-y-0 -left-2 w-1.5">
       <span
         className={cn(
-          "absolute top-0 left-0 w-px bg-muted-foreground/40",
-          child === "last" ? "h-1/2" : "bottom-0",
+          "absolute top-[calc(var(--row-gap,0px)*-1)] left-0 w-px bg-muted-foreground/40",
+          child === "last" ? "h-[calc(50%+var(--row-gap,0px))]" : "bottom-0",
         )}
       />
       <span className="absolute inset-x-0 top-1/2 h-px bg-muted-foreground/40" />
@@ -118,15 +56,12 @@ function StackConnector({ child }: { child: StackChild | undefined }) {
   );
 }
 
-// A worktree in the sidebar tree, this machine's or a peer device's. A
-// peer's row keeps the local layout (branch over name, trailing status
-// cluster) plus a device badge beside the worktree's name. Everything
-// else reads as local: the PR pill off the peer's own map, a delete
-// dispatched to the peer from here off that device's mutation, script
-// activity off its run store. It opens the worktree's own detail page
-// under its device's route, exactly like clicking a local row. An
-// unreachable device's rows fade back: last known state, not
-// an error.
+// A worktree in the sidebar tree, this machine's or a peer device's:
+// the inbox's row without its context line of project and time, since
+// the tree shows one project at a time (WorktreeEntry). A peer's row is
+// the same row plus its device badge. Everything else reads as local:
+// the PR off the peer's own map, script activity off its run store,
+// and a click opens the worktree's page under its device's route.
 export function WorktreeRow({
   worktree,
   device,
@@ -137,93 +72,18 @@ export function WorktreeRow({
 }: WorktreeRowProps) {
   // A peer's row takes the local row's own rule, scoped to the device:
   // the open remote worktree reads as selected like a local one.
-  const { isSelected, open, activity, isDeleting, title } = useWorktreeRowState(
-    worktree,
-    device?.deviceId,
-  );
-
+  const state = useWorktreeRowState(worktree, device?.deviceId);
   return (
-    <button
-      type="button"
-      onClick={open}
-      title={title}
-      className={cn(
-        WORKTREE_ROW_BUTTON,
-        isSelected && "bg-accent text-accent-foreground",
-        device
-          ? (isDeleting || !device.reachable) && "opacity-60"
-          : isDeleting && "opacity-50",
-      )}
+    <WorktreeEntry
+      worktree={worktree}
+      pr={pr}
+      stack={stack}
+      device={device}
+      mirror={mirror}
+      state={state}
       style={stackIndentStyle(stackChild)}
     >
       <StackConnector child={stackChild} />
-      <WorktreeRowLabel
-        worktree={worktree}
-        emphasized={isSelected}
-        device={device}
-        mirror={mirror}
-      />
-      <RowTrailing
-        worktree={worktree}
-        activity={activity}
-        isDeleting={isDeleting}
-        pr={pr}
-        stack={stack}
-      />
-    </button>
-  );
-}
-
-// The mark a local row wears for the peer it is mirrored with: the
-// mirror glyph and the peer's badge. Shared with the inbox row.
-export function MirrorBadge({ mirror }: { mirror: SidebarDeviceBadge }) {
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1">
-      <SimpleTooltip tip={`Mirrored with ${mirror.label}`}>
-        <RefreshCw
-          aria-label={`Mirrored with ${mirror.label}`}
-          className="size-3 text-emerald-600 dark:text-emerald-400"
-        />
-      </SimpleTooltip>
-      <RowDeviceBadge badge={mirror} />
-    </span>
-  );
-}
-
-interface RowTrailingProps {
-  worktree: Worktree;
-  activity: ScriptActivityKind | null;
-  isDeleting: boolean;
-  // Resolved by the tree builder: the local one off its project's map,
-  // a peer's off the map that came with its forest.
-  pr: PullRequest | undefined;
-  // The PR's place in its stack, off the same map.
-  stack?: StackPosition | null;
-}
-
-// The right-edge cluster, the same for a peer's row so it keeps the
-// same marks through the next restyle. Deletion takes the
-// whole row (the worktree is going away, so the trash standing alone
-// reads as "destroying"); a running script just adds a leading activity
-// icon to the normal cluster so status / PR stay visible.
-function RowTrailing({
-  worktree,
-  activity,
-  isDeleting,
-  pr,
-  stack,
-}: RowTrailingProps) {
-  // Deletion spans cleanup scripts + the final git remove; the script
-  // activity covers only cleanup, so keep the trash pulsing for the
-  // whole mutation regardless of which phase is active.
-  if (isDeleting) {
-    return <ActivityIcon kind="teardown" />;
-  }
-  return (
-    <>
-      {activity && <ActivityIcon kind={activity} />}
-      <StatusIndicator worktree={worktree} />
-      <PullRequestPill pr={pr} stack={stack} />
-    </>
+    </WorktreeEntry>
   );
 }

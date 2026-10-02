@@ -19,11 +19,11 @@ export interface WorktreeRowState {
   title: string | undefined;
 }
 
-// What the two sidebar row layouts share. They look nothing alike (one
-// line of chrome in the tree, three in the inbox), but "am I the open
-// one", "what's running here", "where does a click go" and "what do I
-// say on hover" have the same answers in both, and answering them twice
-// is how the two silently drift.
+// What the two sidebar rows share in behaviour (their shared look is
+// WorktreeEntry): "am I the open one", "what's running here", "where
+// does a click go" and "what do I say on hover" have the same answers
+// in the tree and the inbox, and answering them twice is how the two
+// silently drift.
 // `deviceId` names the peer a remote row belongs to. Absent, the row
 // is this machine's.
 export function useWorktreeRowState(
@@ -71,4 +71,14 @@ function describeRow(
   if (activity === "failed") return "A script failed here";
   if (shelved) return "Shelved";
   return undefined;
+}
+
+// What is happening in a worktree right now, if anything. A delete in
+// flight outranks a running script: it spans the cleanup scripts and
+// the final git remove, while the script activity covers only cleanup,
+// so the trash stays up for the whole mutation.
+export function activityMark(
+  state: Pick<WorktreeRowState, "activity" | "isDeleting">,
+): ScriptActivityKind | null {
+  return state.isDeleting ? "teardown" : state.activity;
 }

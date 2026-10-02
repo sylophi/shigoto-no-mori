@@ -1,19 +1,12 @@
-import { cn } from "@/lib/utils";
-import { BranchLabel } from "@/components/ui/branch-label";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { VillagerFace } from "@/components/shared/VillagerSays";
-import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
-import { BirthdayBadge } from "@/components/villagers/BirthdayBadge";
 import { MaybeHostScope } from "@/hooks/remote/useHostScope";
 import { useRemoteDeviceApi } from "@/hooks/remote/useRemoteDevices";
 import { useNow } from "@/hooks/ui/useNow";
-import { useResident } from "@/hooks/villagers/useResident";
 import { formatRelativeTime } from "@/lib/relativeTime";
-import type { ScriptActivityKind } from "@/store/scriptRuns";
 import {
   worktreeLastActivityAt,
   type Project,
@@ -21,14 +14,20 @@ import {
   type Worktree,
 } from "@shared/schemas";
 import { ActivityIcon } from "../ActivityIcon";
-import { RowDeviceBadge, type SidebarDeviceBadge } from "../DeviceBadge";
-import { MirrorBadge } from "../WorktreeRow";
+import {
+  MirrorBadge,
+  RowDeviceBadge,
+  type SidebarDeviceBadge,
+} from "../DeviceBadge";
 import { ProjectIcon } from "@/components/shared/ProjectIcon";
 import { ProjectMenuItems, useProjectMenuRemoveArm } from "../ProjectMenuItems";
-import { PullRequestPill } from "../PullRequestPill";
 import type { StackPosition } from "@shared/pullRequestStack";
-import { ChangedFilesPill, RemoteSyncPill } from "../StatusIndicator";
-import { useWorktreeRowState } from "../useWorktreeRowState";
+import {
+  activityMark,
+  useWorktreeRowState,
+  type WorktreeRowState,
+} from "../useWorktreeRowState";
+import { WorktreeEntry } from "../WorktreeEntry";
 
 interface InboxRowProps {
   worktree: Worktree;
@@ -41,12 +40,11 @@ interface InboxRowProps {
 }
 
 // The inbox row answers a different question from the tree row. In the
-// tree you already know the project and you're picking a branch out of
-// a short list, so one line of chrome is enough. Here every row comes
-// from somewhere else and you're triaging: which repo, which branch,
-// what state it's in, and when it last moved. That's three lines, and
-// it's why this isn't WorktreeRow with a prop. The behaviour the two do
-// share lives in useWorktreeRowState.
+// tree you already know the project, so its row is this one without
+// the project line. Here every row comes from somewhere else and you're
+// triaging: which repo, which branch, what state it's in, and when it
+// last moved. The row itself is the tree's (WorktreeEntry), with the
+// project and the time over it.
 //
 //   [icon] project                                  14m ago
 //   feat/the-branch                            ±3  ↑2  #142
@@ -67,92 +65,34 @@ export function InboxRow({
   device,
   mirror,
 }: InboxRowProps) {
-  const { isSelected, open, activity, isDeleting, title } = useWorktreeRowState(
-    worktree,
-    device?.deviceId,
-  );
+  const state = useWorktreeRowState(worktree, device?.deviceId);
   const { removeArm, onOpenChange } = useProjectMenuRemoveArm();
   const peerApi = useRemoteDeviceApi(device?.deviceId);
-  const resident = useResident(worktree);
 
   // An element for the trigger to `render`, so it wraps no extra div.
   const row = (
-    <button
-      type="button"
-      onClick={open}
-      title={title}
-      className={cn(
-        "flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors outline-none",
-        // data-popup-open is Base UI's mark on a trigger whose menu is
-        // up: keep the row lit so it's clear whose menu this is.
-        "hover:bg-accent/60 focus-visible:bg-accent/60 data-popup-open:bg-accent/60",
-        isSelected && "bg-accent text-accent-foreground",
-        isDeleting && "opacity-50",
-        worktree.shelved && !isSelected && "opacity-70",
-        device && !device.reachable && "opacity-60",
-      )}
-    >
-      <div className="flex min-w-0 items-center gap-1.5 text-3xs text-muted-foreground">
-        <ProjectIcon
-          projectId={worktree.projectId}
-          name={project.name}
-          deviceId={device?.deviceId}
-          className="size-3"
-        />
-        <span className="min-w-0 truncate font-medium">{project.name}</span>
-        {device && <RowDeviceBadge badge={device} />}
-        {mirror && <MirrorBadge mirror={mirror} />}
-        <TrailingSlot
-          worktree={worktree}
-          activity={activity}
-          isDeleting={isDeleting}
-        />
-      </div>
-
-      <div className="flex min-w-0 items-center gap-1.5">
-        <span
-          className={cn(
-            "min-w-0 flex-1 truncate font-mono text-xs",
-            // Weight is reserved for "this is the one you have open",
-            // same as the tree row. Bolding every branch spends the
-            // page's only emphasis on the thing every row has.
-            isSelected && "font-medium",
-          )}
-        >
-          <BranchLabel branch={worktree.branch} detached={worktree.detached} />
-        </span>
-        <ChangedFilesPill worktree={worktree} />
-        <RemoteSyncPill worktree={worktree} />
-        <PullRequestPill pr={pr} showNumber stack={stack} />
-      </div>
-
-      {/* The worktree's own name gets a line to itself rather than
-          sharing one with the project: they're both "where is this",
-          and side by side the longer one just eats the other.
-          The kind glyph leads it, since it describes this worktree and
-          not the project above. Shelved is the one kind left out: it
-          would restate the shelf header the row is already under. The
-          primary's house glyph stays. When it's opted into the inbox
-          it's the only thing telling the root apart from a worktree
-          named after the project. Under Village life, the villager
-          whose home this is sits beside the name, as their face sits
-          beside the title on the worktree page. Here it's decoration,
-          so it stays out of the row's label and hover title. */}
-      <span className="flex min-w-0 items-center gap-1 text-3xs text-muted-foreground/70">
-        {!worktree.shelved && (
-          <WorktreeKindIcon worktree={worktree} showTooltip={false} />
-        )}
-        {resident?.face && (
-          <VillagerFace
-            face={resident.face}
-            tint={false}
-            className="-my-0.5 size-3.5"
+    <WorktreeEntry
+      worktree={worktree}
+      pr={pr}
+      stack={stack}
+      device={device}
+      mirror={mirror}
+      state={state}
+      context={
+        <div className="flex min-w-0 items-center gap-1.5 text-3xs text-muted-foreground">
+          <ProjectIcon
+            projectId={worktree.projectId}
+            name={project.name}
+            deviceId={device?.deviceId}
+            className="size-3"
           />
-        )}
-        <span className="min-w-0 truncate">{worktree.name}</span>
-        <BirthdayBadge worktree={worktree} />
-      </span>
-    </button>
+          <span className="min-w-0 truncate font-medium">{project.name}</span>
+          {device && <RowDeviceBadge badge={device} />}
+          {mirror && <MirrorBadge mirror={mirror} />}
+          <TrailingSlot worktree={worktree} state={state} />
+        </div>
+      }
+    />
   );
 
   if (device !== undefined && peerApi === undefined) return row;
@@ -178,22 +118,19 @@ export function InboxRow({
 // timestamp.
 function TrailingSlot({
   worktree,
-  activity,
-  isDeleting,
+  state,
 }: {
   worktree: Worktree;
-  activity: ScriptActivityKind | null;
-  isDeleting: boolean;
+  state: WorktreeRowState;
 }) {
+  const mark = activityMark(state);
   const activityAt = worktreeLastActivityAt(worktree);
   const now = useNow();
 
   return (
     <span className="ml-auto flex shrink-0 items-center">
-      {isDeleting ? (
-        <ActivityIcon kind="teardown" />
-      ) : activity ? (
-        <ActivityIcon kind={activity} />
+      {mark ? (
+        <ActivityIcon kind={mark} />
       ) : (
         <span className="tabular">
           {activityAt > 0 ? formatRelativeTime(activityAt, now) : "no activity"}
