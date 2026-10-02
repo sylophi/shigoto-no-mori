@@ -19,15 +19,15 @@ purify.addHook("afterSanitizeAttributes", (node) => {
 // Written in v1's vocabulary like any component: tokens only, so the
 // doubutsu overlay and the palettes carry over.
 const PROSE = cn(
-  "text-sm leading-relaxed break-words select-text",
+  "text-xs leading-relaxed break-words select-text",
   "[&>:first-child]:mt-0 [&>:last-child]:mb-0",
   "[&_p]:my-2",
   "[&_:is(h1,h2,h3,h4)]:mt-4 [&_:is(h1,h2,h3,h4)]:mb-1.5 [&_:is(h1,h2,h3,h4)]:font-semibold [&_:is(h1,h2,h3,h4)]:text-foreground",
-  "[&_h1]:text-base [&_h2]:text-base [&_:is(h3,h4)]:text-sm",
+  "[&_h1]:text-sm [&_h2]:text-sm [&_:is(h3,h4)]:text-xs",
   "[&_strong]:font-semibold [&_strong]:text-foreground",
   "[&_a]:underline [&_a]:underline-offset-2 [&_a:hover]:text-foreground",
   "[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5",
-  "[&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-xs",
+  "[&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-2xs",
   "[&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0",
   "[&_img]:my-2 [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded-lg",
   "[&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground",
