@@ -115,7 +115,7 @@ export function ChangelogDialog({
       <FlowBody>
         {list !== undefined ? (
           list.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               No release notes to show.
             </p>
           ) : (
