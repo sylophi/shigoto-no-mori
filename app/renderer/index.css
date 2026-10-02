@@ -281,21 +281,18 @@
  * white initial on a cheerful shape (a rounded square, or doubutsu's
  * leaf), which paints in currentColor. The component sets only
  * --project-hue, drawn from the name. The fill's lightness and chroma
- * are tokens here, so a theme can move them, and so is the darker edge
- * doubutsu draws under it as a sticker lip (doubutsu.css).
+ * are tokens here, so a theme can move them.
  */
 :root,
 [data-theme-scope] {
-  --project-tile-bg: 0.72 0.13;
-  --project-tile-edge: 0.55 0.12;
+  --project-tile-fill: 0.72 0.13;
 }
 .dark {
-  --project-tile-bg: 0.66 0.12;
-  --project-tile-edge: 0.42 0.1;
+  --project-tile-fill: 0.66 0.12;
 }
 @layer components {
   [data-slot="project-tile"] {
-    color: oklch(var(--project-tile-bg) var(--project-hue));
+    color: oklch(var(--project-tile-fill) var(--project-hue));
     & text {
       fill: var(--color-white);
     }

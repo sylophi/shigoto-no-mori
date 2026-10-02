@@ -29,26 +29,27 @@ export function ProjectIcon({
   const src = useProjectIcon(projectId, deviceId);
   // `className` stays last in every branch so a caller can still
   // override the defaults.
-  const base = "size-3.5 shrink-0 select-none rounded-sm";
+  const base = "size-3.5 shrink-0 select-none";
   if (src === undefined) {
     return <span aria-hidden className={cn(base, className)} />;
   }
   if (src === null) {
+    const initial = initialOf(name);
+    // Each shape carries its own initial, sized and placed for it: the
+    // leaf's sits in the open middle of its upper lobe, clear of the
+    // bite.
     return (
       <svg
         aria-hidden
         data-slot="project-tile"
         viewBox="0 0 16 16"
         style={{ "--project-hue": nameHue(name) } as CSSProperties}
-        className={cn(base, "overflow-visible", className)}
+        className={cn(base, className)}
       >
-        <rect
-          className="v1-only"
-          width="16"
-          height="16"
-          rx="5"
-          fill="currentColor"
-        />
+        <g className="v1-only">
+          <rect width="16" height="16" rx="5" fill="currentColor" />
+          <TileInitial x={8} y={8} size={10} initial={initial} />
+        </g>
         <g className="doubutsu-only">
           <path d={LEAF} fill="currentColor" />
           <path
@@ -57,17 +58,8 @@ export function ProjectIcon({
             strokeWidth="1.05"
             strokeLinecap="round"
           />
+          <TileInitial x={6.7} y={7.9} size={8.2} initial={initial} />
         </g>
-        <text
-          x="8"
-          y="8"
-          dy="0.36em"
-          textAnchor="middle"
-          fontSize="10"
-          fontWeight="800"
-        >
-          {initialOf(name)}
-        </text>
       </svg>
     );
   }
@@ -76,8 +68,33 @@ export function ProjectIcon({
       src={src}
       alt=""
       draggable={false}
-      className={cn(base, "object-contain", className)}
+      className={cn(base, "rounded-sm object-contain", className)}
     />
+  );
+}
+
+function TileInitial({
+  x,
+  y,
+  size,
+  initial,
+}: {
+  x: number;
+  y: number;
+  size: number;
+  initial: string;
+}) {
+  return (
+    <text
+      x={x}
+      y={y}
+      dy="0.36em"
+      textAnchor="middle"
+      fontSize={size}
+      fontWeight="800"
+    >
+      {initial}
+    </text>
   );
 }
 
