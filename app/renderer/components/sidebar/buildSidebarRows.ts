@@ -251,6 +251,7 @@ export function buildSidebarRows({
   }
 
   const rows: SidebarRow[] = [];
+  let pinned: SidebarRow | undefined;
   // The toggle each row behind a shut fold stands behind, for
   // revealKey.
   const shutFoldRows = new Map<string, string>();
@@ -306,7 +307,7 @@ export function buildSidebarRows({
       }
     }
     const missing = project.pathExists === false;
-    rows.push({
+    const header: SidebarRow = {
       kind: "project",
       key: `p:${groupId}`,
       groupId,
@@ -326,7 +327,12 @@ export function buildSidebarRows({
             remoteVisible.filter((row) => !row.worktree.isPrimary).length,
       devices: deviceBadgesOf(group.remote),
       members: membersOf(group.remote),
-    });
+    };
+    // The open project's header stands over its rows rather than among
+    // them. A repo registered twice opens as both its groups, and those
+    // keep their headers in the rows, each over its own.
+    if (inProject && open.length === 1) pinned = header;
+    else rows.push(header);
     if (missing || !inProject) continue;
     if (unlisted !== null) {
       rows.push({
@@ -394,6 +400,7 @@ export function buildSidebarRows({
 
   return {
     rows,
+    pinned,
     level: inProject ? openKey : null,
     // Every project renders a header, so "no rows" here only ever means
     // "no projects", which the shell already has its own answer for.
