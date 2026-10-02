@@ -40,8 +40,6 @@ import {
   ScriptEventSchema,
   type ShigomoriConfig,
   StoredGlobalConfigSchema,
-  type VisitorTally,
-  VisitorTallySchema,
   StoredShigomoriConfigSchema,
   type Worktree,
   type WorktreeCarryOverComplete,
@@ -308,9 +306,6 @@ export function createViaCli(
     // provision still run): a mirror or transplant told not to set
     // the copy up.
     skipSetup?: boolean;
-    // Leave its villager uncounted (cli/visitors.go): a mirror's or a
-    // transplant's copy, whose visit was counted where it began.
-    noVisit?: boolean;
   },
   notify: WorktreeOperationNotifiers,
   opts: { resolveOn?: "created" | "exit"; signal?: AbortSignal } = {},
@@ -320,7 +315,6 @@ export function createViaCli(
   if (input.base) args.push("--base", input.base);
   if (input.checkout) args.push("--checkout");
   if (input.skipSetup) args.push("--no-setup");
-  if (input.noVisit) args.push("--no-visit");
   // End-of-options terminator before the caller-influenced worktree name
   // so a flag-shaped name can never be read as an option. Pushed last,
   // after every flag, because `--` makes the parser treat the rest as
@@ -904,12 +898,6 @@ export async function listWorktreeIdentitiesViaCli(
   if (opts.primaryRef) args.push("--primary-ref");
   const doc = await readDoc(args, "sm worktrees list failed", scope);
   return z.array(WorktreeIdentitySchema).parse(doc);
-}
-
-// The villagers who have visited this device (cli/visitors.go).
-export async function visitorsViaCli(): Promise<VisitorTally> {
-  const doc = await readDoc(["visitors"], "sm visitors failed");
-  return z.object({ villagers: VisitorTallySchema }).parse(doc).villagers;
 }
 
 // Every registered project, terrier's merged in, decorated for the

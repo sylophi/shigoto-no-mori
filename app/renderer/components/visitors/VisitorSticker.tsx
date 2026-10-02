@@ -250,19 +250,13 @@ function StickerBack({
   const ink = rarity === "legendary" ? stationeryFor(slug).ink : "";
   const catchphrase = villagerCatchphrase(profile);
   const birthday = birthdayOf(profile.birthday);
-  // Key, label, value: the visits, then where they came when that was
-  // more than one device.
+  // Key, label, value.
   const rows: [string, string, string][] = [
     ["visits", "Visits", String(visits.count)],
     ["first", "First came", visitDate(visits.first)],
     ["last", "Last came", formatRelativeTime(visits.last, now)],
   ];
   if (birthday !== null) rows.push(["birthday", "Birthday", birthday]);
-  if (visits.byDevice.length > 1) {
-    for (const device of visits.byDevice) {
-      rows.push([device.deviceId, `On ${device.label}`, `×${device.count}`]);
-    }
-  }
   return (
     <span
       data-slot="visitor-sticker"

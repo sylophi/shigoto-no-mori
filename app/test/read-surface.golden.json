@@ -33,7 +33,6 @@
   "shigomori:read",
   "terrier:readiness",
   "updater:get",
-  "villagers:visits",
   "worktreeData:read",
   "worktrees:changeStatus",
   "worktrees:commitDiff",

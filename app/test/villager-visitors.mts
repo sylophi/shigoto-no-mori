@@ -2,9 +2,9 @@
 // (renderer/lib/villagers/visitors.ts).
 //
 // Asserts:
-// - every device's tally adds up into one, by villager
+// - the visit log tallies by villager, leaving out a mirror's copy
 // - the album holds a slot for every character, by rarity, and leaves
-//   out a tally entry no profile knows
+//   out a visit by a name no profile knows
 // - visited come first in the sort's order, the empty slots after
 // - one best friend, the villager met most, and the newest face
 //
@@ -14,15 +14,13 @@ import type { VillagerProfiles } from "@shared/schemas";
 import {
   bestFriendOf,
   buildAlbum,
-  mergeTallies,
   sortAlbum,
+  tallyVisits,
 } from "@/lib/villagers/visitors";
 import { makeProof } from "./lib/checkKit.mts";
 
 const proof = makeProof("villager-visitors proof");
 console.log("villager-visitors proof\n");
-
-const now = 1_000_000;
 
 const profile = (name: string, kind: "villager" | "special" = "villager") => ({
   name,
@@ -37,41 +35,25 @@ const profiles: VillagerProfiles = {
   "tom-nook": profile("Tom Nook", "special"),
 };
 
-const merged = mergeTallies([
-  {
-    deviceId: "a",
-    label: "Studio Mac",
-    tally: {
-      raymond: { count: 3, first: 100, last: now - 500 },
-      ace: { count: 1, first: now, last: now },
-      ghost: { count: 9, first: 1, last: 2 },
-    },
-  },
-  {
-    deviceId: "b",
-    label: "Thinkpad",
-    tally: {
-      raymond: { count: 5, first: 50, last: now },
-      "tom-nook": { count: 1, first: 300, last: 300 },
-    },
-  },
-]);
+const tally = tallyVisits({
+  "mac:w1:100": { slug: "raymond", at: 100 },
+  "mac:w2:500": { slug: "raymond", at: 500 },
+  "pad:w3:300": { slug: "raymond", at: 300 },
+  // A transplant's copy: seen, not a visit.
+  "pad:w4:600": null,
+  "mac:w5:900": { slug: "ace", at: 900 },
+  "mac:w6:200": { slug: "tom-nook", at: 200 },
+  "mac:w7:50": { slug: "ghost", at: 50 },
+});
 
 try {
-  await proof.check("tallies add up across devices", () => {
-    assert.deepEqual(merged.get("raymond"), {
-      count: 8,
-      first: 50,
-      last: now,
-      byDevice: [
-        { deviceId: "b", label: "Thinkpad", count: 5 },
-        { deviceId: "a", label: "Studio Mac", count: 3 },
-      ],
-    });
-    assert.equal(merged.get("ace")?.byDevice.length, 1);
+  await proof.check("the log tallies by villager", () => {
+    assert.deepEqual(tally.get("raymond"), { count: 3, first: 100, last: 500 });
+    assert.deepEqual(tally.get("ace"), { count: 1, first: 900, last: 900 });
+    assert.equal(tally.size, 4);
   });
 
-  const album = buildAlbum(profiles, merged);
+  const album = buildAlbum(profiles, tally);
 
   await proof.check("the album has a slot for every character", () => {
     assert.equal(album.total, 5);
@@ -86,34 +68,29 @@ try {
     assert.equal(album.sections.common.length, 3);
     // ghost has no profile: no slot, and its visits don't count.
     assert.equal(album.visited.length, 3);
-    assert.equal(album.visits, 10);
+    assert.equal(album.visits, 5);
+    assert.deepEqual(album.met, { legendary: 1, rare: 0, common: 2 });
   });
 
   await proof.check("visited come first, in the sort's order", () => {
     const order = (sort: "visits" | "recent" | "name") =>
       sortAlbum(album.sections.common, sort).map((entry) => entry.slug);
     assert.deepEqual(order("visits"), ["raymond", "ace", "bob"]);
+    assert.deepEqual(order("recent"), ["ace", "raymond", "bob"]);
     assert.deepEqual(order("name"), ["ace", "raymond", "bob"]);
   });
 
   await proof.check("one best friend, the villager met most", () => {
     assert.equal(album.bestFriend?.slug, "raymond");
     assert.equal(album.newest?.slug, "ace");
-    assert.deepEqual(album.met, { legendary: 1, rare: 0, common: 2 });
     assert.equal(bestFriendOf([]), null);
     // Met as often: the one seen last.
     const tied = buildAlbum(
       profiles,
-      mergeTallies([
-        {
-          deviceId: "a",
-          label: "a",
-          tally: {
-            ace: { count: 2, first: 0, last: 0 },
-            bob: { count: 2, first: 0, last: now },
-          },
-        },
-      ]),
+      tallyVisits({
+        a: { slug: "ace", at: 1 },
+        b: { slug: "bob", at: 2 },
+      }),
     );
     assert.equal(tied.bestFriend?.slug, "bob");
   });

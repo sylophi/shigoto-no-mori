@@ -1,52 +1,32 @@
-// The Visitors section's model: every device's tally of who has visited
-// (cli/visitors.go) added up into one guest book, and the album it
-// fills, a slot for every character and a sticker in it once they
-// have come by. Pure, so test/villager-visitors.mts drives it under
-// plain Node.
-import type {
-  VillagerProfile,
-  VillagerProfiles,
-  VisitorTally,
-} from "@shared/schemas";
+// The Visitors section's model: the visit log (visitLog.ts) tallied by
+// villager, and the album it fills, a slot for every character and a
+// sticker in it once they have come by. Pure, so
+// test/villager-visitors.mts drives it under plain Node.
+import type { VillagerProfile, VillagerProfiles } from "@shared/schemas";
 import { type VillagerRarity, villagerRarity } from "@shared/villagers/rarity";
+import type { VisitLog } from "./visitLog";
 
-// One device's tally, as read off it.
-export interface DeviceTally {
-  deviceId: string;
-  label: string;
-  tally: VisitorTally;
-}
-
-// A villager's visits on every device together. `first` and `last` are
-// epoch ms. `byDevice` names where they came, most visits first.
+// A villager's visits: how many, and the first and last (epoch ms).
 export interface Visits {
   count: number;
   first: number;
   last: number;
-  byDevice: { deviceId: string; label: string; count: number }[];
 }
 
-// Every device's tally added up.
-export function mergeTallies(tallies: readonly DeviceTally[]) {
-  const merged = new Map<string, Visits>();
-  for (const { deviceId, label, tally } of tallies) {
-    for (const [slug, visits] of Object.entries(tally)) {
-      const held = merged.get(slug);
-      const here = { deviceId, label, count: visits.count };
-      if (held === undefined) {
-        merged.set(slug, { ...visits, byDevice: [here] });
-        continue;
-      }
-      held.count += visits.count;
-      held.first = Math.min(held.first, visits.first);
-      held.last = Math.max(held.last, visits.last);
-      held.byDevice.push(here);
+export function tallyVisits(log: VisitLog): Map<string, Visits> {
+  const tally = new Map<string, Visits>();
+  for (const visit of Object.values(log)) {
+    if (visit === null) continue;
+    const held = tally.get(visit.slug);
+    if (held === undefined) {
+      tally.set(visit.slug, { count: 1, first: visit.at, last: visit.at });
+      continue;
     }
+    held.count += 1;
+    held.first = Math.min(held.first, visit.at);
+    held.last = Math.max(held.last, visit.at);
   }
-  for (const visits of merged.values()) {
-    visits.byDevice.sort((a, b) => b.count - a.count);
-  }
-  return merged;
+  return tally;
 }
 
 // A slot in the album: every character has one, filled once they have

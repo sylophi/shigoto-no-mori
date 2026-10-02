@@ -272,7 +272,7 @@ function hostHandlersFor(
   };
   return {
     ...sharedSettingsHandlersFor(forest.deviceId, emit),
-    ...villagerHandlersFor(forest.deviceId),
+    ...villagerHandlersFor(),
     // A copy, as a wire would hand over: projects:add and projects:clone
     // push onto the list, and the same array back would read as "nothing
     // changed" to the query cache's structural sharing.

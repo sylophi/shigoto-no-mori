@@ -7,18 +7,10 @@
 //
 // ?villagers=absent|downloading|ready|failed poses the status (default:
 // ready with the folder, absent without). Download, cancel and remove
-// play out on it.
-//
-// Each device has its own visitor tally (villagers:visits, the Visitors
-// section in Settings), and ?visits=none empties every one.
-import type {
-  VillagerDataStatus,
-  VillagerProfiles,
-  VisitorTally,
-} from "@shared/schemas";
+// play out on it. ?visits=none empties the Visitors album (below).
+import type { VillagerDataStatus, VillagerProfiles } from "@shared/schemas";
 import { villagerManifest } from "@shared/villagers/manifest";
 import type { AllChannelHandlers } from "@shared/ipc/client";
-import { LOCAL_DEVICE_ID, MINI_ID, THINKPAD_ID } from "./fixtures";
 
 const faces = import.meta.glob<string>("./villager-data/ready/faces/*.png", {
   query: "?inline",
@@ -68,60 +60,8 @@ function posedStatus(): VillagerDataStatus {
   );
 }
 
-const DAY = 24 * 60 * 60_000;
-
-// Who has visited each device: slug, times, and the days ago of the
-// first and the last visit.
-const VISITS: Record<string, [string, number, number, number][]> = {
-  [LOCAL_DEVICE_ID]: [
-    ["raymond", 14, 200, 1],
-    ["marshal", 6, 150, 9],
-    ["judy", 4, 120, 30],
-    ["sherb", 3, 90, 12],
-    ["ankha", 2, 80, 40],
-    ["bob", 1, 2, 2],
-    ["audie", 1, 60, 60],
-    ["zucker", 2, 75, 5],
-    ["lolly", 1, 4, 4],
-    ["maple", 1, 200, 200],
-    ["stitches", 3, 140, 22],
-    ["sheldon", 5, 170, 3],
-    ["tom-nook", 2, 180, 20],
-    ["isabelle", 3, 160, 7],
-    ["katrina", 1, 45, 45],
-    ["pascal", 1, 6, 6],
-    ["leif", 2, 100, 14],
-  ],
-  [THINKPAD_ID]: [
-    ["raymond", 3, 110, 8],
-    ["fauna", 2, 64, 21],
-    ["ketchup", 1, 11, 11],
-    ["molly", 1, 25, 25],
-    ["kk-slider", 1, 3, 3],
-    ["celeste", 1, 50, 50],
-    ["daisy-mae", 2, 70, 16],
-  ],
-  [MINI_ID]: [
-    ["ace", 1, 1, 1],
-    ["dom", 2, 90, 30],
-  ],
-};
-
-function visitsOf(deviceId: string): VisitorTally {
-  if (new URLSearchParams(location.search).get("visits") === "none") {
-    return {};
-  }
-  const now = Date.now();
-  return Object.fromEntries(
-    (VISITS[deviceId] ?? []).map(([slug, count, first, last]) => [
-      slug,
-      { count, first: now - first * DAY, last: now - last * DAY },
-    ]),
-  );
-}
-
 // One device's villager data channels, each device with its own status.
-export function villagerHandlersFor(deviceId: string): AllChannelHandlers {
+export function villagerHandlersFor(): AllChannelHandlers {
   let status = posedStatus();
   let timer: ReturnType<typeof setInterval> | undefined;
   const stop = () => {
@@ -160,6 +100,55 @@ export function villagerHandlersFor(deviceId: string): AllChannelHandlers {
     },
     "villagers:profiles": async () =>
       shown() && loadProfiles !== undefined ? loadProfiles() : null,
-    "villagers:visits": () => visitsOf(deviceId),
   };
 }
+
+// The Visitors album's log (renderer/lib/villagers/visitLog.ts), kept
+// in localStorage, posed fresh on every load, before the renderer reads
+// it: a spread of visits across the fixture devices, or none with
+// ?visits=none. Slug, times, and the days ago of the first and last.
+const DAY = 24 * 60 * 60_000;
+const LAB_VISITS: [string, number, number, number][] = [
+  ["raymond", 17, 200, 1],
+  ["marshal", 6, 150, 9],
+  ["judy", 4, 120, 30],
+  ["sherb", 3, 90, 12],
+  ["stitches", 3, 140, 22],
+  ["sheldon", 5, 170, 3],
+  ["ankha", 2, 80, 40],
+  ["zucker", 2, 75, 5],
+  ["dom", 2, 90, 30],
+  ["fauna", 2, 64, 21],
+  ["bob", 1, 2, 2],
+  ["audie", 1, 60, 60],
+  ["lolly", 1, 4, 4],
+  ["maple", 1, 200, 200],
+  ["ketchup", 1, 11, 11],
+  ["molly", 1, 25, 25],
+  ["ace", 1, 1, 1],
+  ["tom-nook", 2, 180, 20],
+  ["isabelle", 3, 160, 7],
+  ["kk-slider", 1, 3, 3],
+  ["celeste", 1, 50, 50],
+  ["pascal", 1, 6, 6],
+  ["katrina", 1, 45, 45],
+  ["leif", 2, 100, 14],
+  ["daisy-mae", 2, 70, 16],
+];
+
+function poseLabVisits(): void {
+  const none = new URLSearchParams(location.search).get("visits") === "none";
+  const now = Date.now();
+  const log: Record<string, { slug: string; at: number }> = {};
+  if (!none) {
+    for (const [slug, count, first, last] of LAB_VISITS) {
+      const step = count > 1 ? (first - last) / (count - 1) : 0;
+      for (let i = 0; i < count; i++) {
+        const at = now - (last + i * step) * DAY;
+        log[`lab:${slug}-${i}:${at}`] = { slug, at };
+      }
+    }
+  }
+  localStorage.setItem("villagers.visits", JSON.stringify(log));
+}
+poseLabVisits();

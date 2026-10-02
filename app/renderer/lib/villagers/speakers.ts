@@ -17,8 +17,8 @@ import { faceColor } from "./faceColor";
 // rarely waits on a read.
 
 // The villager profiles while this window's Village life shows, or
-// null.
-async function village(
+// null. The visit log (visitLog.ts) records under the same gate.
+export async function villageProfiles(
   queryClient: QueryClient,
 ): Promise<VillagerProfiles | null> {
   // No retries: a read that fails leaves the toast plain, now, rather
@@ -49,7 +49,7 @@ export async function speakersFor(
   { withColor = false }: { withColor?: boolean } = {},
 ): Promise<Map<string, Speaker>> {
   const speakers = new Map<string, Speaker>();
-  const profiles = await village(queryClient).catch(() => null);
+  const profiles = await villageProfiles(queryClient).catch(() => null);
   if (profiles === null) return speakers;
   await Promise.all(
     worktrees.map(async ({ id, name }) => {

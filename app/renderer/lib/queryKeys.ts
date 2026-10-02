@@ -159,9 +159,6 @@ function buildQueryKeys(deviceId: string) {
     villagerData: () => host("villagers", "status"),
     villagerProfiles: () => host("villagers", "profiles"),
     villagerFace: (slug: string) => host("villagers", "face", slug),
-    // Who has visited, the one villager read every device answers (the
-    // Visitors section adds them up).
-    villagerVisits: () => host("villagers", "visits"),
     cli: () => host("cli"),
     cliShell: () => host("cliShell"),
     doctor: () => host("doctor"),
