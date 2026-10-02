@@ -22,6 +22,7 @@ import { useProjectSort } from "@/hooks/projects/useProjectSort";
 import {
   useSidebarView,
   useSidebarViewHotkey,
+  useSidebarViewSettled,
 } from "@/hooks/projects/useSidebarView";
 import { useMirrorLinks } from "@/hooks/remote/useMirrors";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
@@ -50,6 +51,7 @@ import type {
   SidebarRow,
   SidebarViewModel,
 } from "./sidebarRow";
+import { ARRIVE_FROM } from "./sidebarChrome";
 import { SidebarFooter } from "./SidebarFooter";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarToolbar } from "./SidebarToolbar";
@@ -59,6 +61,7 @@ import { useWorktreeSort } from "@/hooks/sharedSettings/useWorktreeSort";
 import { SidebarList } from "./SidebarList";
 import { SidebarTakeoverSlot, useSidebarTakenOver } from "./SidebarTakeover";
 import { withToggled } from "@/lib/toggleSet";
+import { cn } from "@/lib/utils";
 
 // The app sidebar, one for both shells: the brand header, the forest
 // (or, while a page with a list of its own is open, that list:
@@ -84,6 +87,10 @@ export function Sidebar({
   // goes. The footer goes with it, since none of its actions belong to
   // the page.
   const takenOver = useSidebarTakenOver();
+  // Whether a page has held the sidebar yet, so the tree and the footer
+  // arrive back from it but not on the first paint.
+  const [handedOver, setHandedOver] = useState(false);
+  if (takenOver && !handedOver) setHandedOver(true);
 
   return (
     // Both themes are fully transparent so the BrowserWindow vibrancy
@@ -97,18 +104,29 @@ export function Sidebar({
       className="flex h-full flex-col"
     >
       <SidebarHeader />
-      <Forest
-        arrangeMode={arrangeMode}
-        onArrange={() => setArrangeMode(true)}
-        pinnedView={view}
-      />
-      <SidebarTakeoverSlot />
-      {footer && !takenOver && (
-        <SidebarFooter
+      {/* Hidden rather than unmounted while a page holds the sidebar,
+          so the forest keeps its place (the open project, the shelves)
+          for the way back. Showing it again replays the arrival. */}
+      <div
+        className={
+          takenOver
+            ? "hidden"
+            : cn("flex min-h-0 flex-1 flex-col", handedOver && ARRIVE_FROM.left)
+        }
+      >
+        <Forest
           arrangeMode={arrangeMode}
-          onToggleArrange={() => setArrangeMode((v) => !v)}
+          onArrange={() => setArrangeMode(true)}
+          pinnedView={view}
         />
-      )}
+        {footer && !takenOver && (
+          <SidebarFooter
+            arrangeMode={arrangeMode}
+            onToggleArrange={() => setArrangeMode((v) => !v)}
+          />
+        )}
+      </div>
+      <SidebarTakeoverSlot />
     </aside>
   );
 }
@@ -133,6 +151,7 @@ function Forest({
   const sortMode = useProjectSort();
   const preferredView = useSidebarView();
   const inbox = (pinnedView ?? preferredView) === "inbox";
+  const viewSettled = useSidebarViewSettled() || pinnedView !== undefined;
   const reorderProjects = useReorderProjects();
   // The open project and the shelf reveals are kept by group key
   // (projectGroupKey), one per repo: narrowed to a peer, a repo this
@@ -394,83 +413,116 @@ function Forest({
 
   return (
     <>
-      {/* Each view puts what it actually needs above its list. The inbox
-          has no project headers to hang a + off, so creating lives here;
-          the tree instead gets the controls that only apply to it: the
-          way back out of a project and sorting its worktrees, or, on
-          the list, sorting this machine's own projects, which a
-          hostless client's tree skips.
-          Both end in add project. Arranging takes over the whole
-          sidebar, so neither shows. */}
-      {arrangeMode ? null : (
-        <>
-          {/* The device filter comes first, above each view's own
-              controls: which machine is showing frames everything
-              under it. Both views, one pick. */}
-          <DeviceFilterBar {...filter} />
-          {inbox ? (
-            // px-2 like the rows below it, which is where v1 wants it.
-            // doubutsu pulls it in to its banner card, hence the slot.
-            <div
-              data-slot="sidebar-inbox-create"
-              className="flex items-center gap-1 px-2 pb-1.5"
-            >
-              <div className="min-w-0 flex-1">
-                <NewWorktreeButton
-                  projects={orderedProjects}
-                  remote={remoteItems}
-                />
-              </div>
-              <AddProjectButton outline />
-            </div>
-          ) : (
-            <SidebarToolbar
-              onArrange={onArrange}
-              open={
-                inProject
-                  ? {
-                      groupKey: level,
-                      sort: worktreeSort,
-                      onBack: () => goTo(null),
-                    }
-                  : undefined
-              }
-            />
-          )}
-        </>
-      )}
-      <div
-        ref={scrollerRef}
-        data-slot="sidebar-scroller"
-        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
-      >
-        {/* Dragging reorders projects, which the inbox doesn't show, so
-            it doesn't mount the DnD context at all. */}
-        {inbox ? (
-          list
-        ) : (
-          <DndContext
-            sensors={sensors}
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
-            onDragCancel={() => setActiveId(null)}
+      {/* The device filter comes first, above each view's own controls:
+          which machine is showing frames everything under it. Both
+          views, one pick. */}
+      {!arrangeMode && <DeviceFilterBar {...filter} />}
+      <ViewPane inbox={inbox} settled={viewSettled}>
+        {/* Each view puts what it actually needs above its list. The inbox
+            has no project headers to hang a + off, so creating lives here;
+            the tree instead gets the controls that only apply to it: the
+            way back out of a project and sorting its worktrees, or, on
+            the list, sorting this machine's own projects, which a
+            hostless client's tree skips.
+            Both end in add project. Arranging takes over the whole
+            sidebar, so neither shows. */}
+        {arrangeMode ? null : inbox ? (
+          // px-2 like the rows below it, which is where v1 wants it.
+          // doubutsu pulls it in to its banner card, hence the slot.
+          <div
+            data-slot="sidebar-inbox-create"
+            className="flex items-center gap-1 px-2 pb-1.5"
           >
-            <SortableContext
-              items={orderedProjects.map((p) => p.id)}
-              strategy={verticalListSortingStrategy}
-            >
-              {list}
-            </SortableContext>
-            <DragOverlay>
-              {activeProject ? (
-                <ProjectDragPreview project={activeProject} />
-              ) : null}
-            </DragOverlay>
-          </DndContext>
+            <div className="min-w-0 flex-1">
+              <NewWorktreeButton
+                projects={orderedProjects}
+                remote={remoteItems}
+              />
+            </div>
+            <AddProjectButton outline />
+          </div>
+        ) : (
+          <SidebarToolbar
+            onArrange={onArrange}
+            open={
+              inProject
+                ? {
+                    groupKey: level,
+                    sort: worktreeSort,
+                    onBack: () => goTo(null),
+                  }
+                : undefined
+            }
+          />
         )}
-        <SidebarEmptyState message={emptyMessage} />
-      </div>
+        <div
+          ref={scrollerRef}
+          data-slot="sidebar-scroller"
+          className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
+        >
+          {/* Dragging reorders projects, which the inbox doesn't show, so
+              it doesn't mount the DnD context at all. */}
+          {inbox ? (
+            list
+          ) : (
+            <DndContext
+              sensors={sensors}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onDragCancel={() => setActiveId(null)}
+            >
+              <SortableContext
+                items={orderedProjects.map((p) => p.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {list}
+              </SortableContext>
+              <DragOverlay>
+                {activeProject ? (
+                  <ProjectDragPreview project={activeProject} />
+                ) : null}
+              </DragOverlay>
+            </DndContext>
+          )}
+          <SidebarEmptyState message={emptyMessage} />
+        </div>
+      </ViewPane>
     </>
+  );
+}
+
+// The view's own part of the forest, below the filter both views
+// share. A flip plays across it, the tree being the inbox's right-hand
+// neighbour as on the toggle. Only once the view is settled, so the
+// saved one replacing the default after the first paint is no flip.
+// Tracked here rather than in Forest, whose rows would build twice.
+function ViewPane({
+  inbox,
+  settled,
+  children,
+}: {
+  inbox: boolean;
+  settled: boolean;
+  children: ReactNode;
+}) {
+  const [shown, setShown] = useState({
+    inbox: settled ? inbox : null,
+    flipped: false,
+  });
+  if (settled && shown.inbox !== inbox) {
+    setShown({ inbox, flipped: shown.inbox !== null });
+  }
+  return (
+    <div
+      // Remounted per view so a flip plays.
+      key={inbox ? "inbox" : "projects"}
+      className={cn(
+        "flex min-h-0 flex-1 flex-col",
+        shown.flipped && ARRIVE_FROM[inbox ? "left" : "right"],
+      )}
+    >
+      {children}
+    </div>
   );
 }
 
