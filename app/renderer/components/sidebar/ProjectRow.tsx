@@ -33,8 +33,8 @@ interface ProjectRowProps {
   // checkouts.
   branches: number | undefined;
   // Peer devices whose worktrees merged into this project's group, and
-  // their checkouts: the header's badges, and the extra devices its
-  // actions can reach.
+  // their checkouts: the open header's badges, and the extra devices
+  // its actions can reach.
   devices: readonly SidebarDeviceBadge[];
   members: readonly RemoteProjectMember[];
   onToggle: () => void;
@@ -82,9 +82,9 @@ export function ProjectRow({
   const iconMember = useIconMember(group, local);
   // The header stands for the repo on every device, and terrier lists
   // it per device, so any checkout of it being terrier's marks it.
-  const terrierInGroup = group.some(
-    (member) => member.project.source === "terrier",
-  );
+  // Only the open project wears the paw, so only it looks.
+  const terrierInGroup =
+    expanded && group.some((member) => member.project.source === "terrier");
   // Right-clicking the header pops the same dropdown anchored to the
   // `…` button. Synthesizing a click on the trigger reuses base-ui's
   // normal open flow, which avoids the stray-pointer behavior we'd get

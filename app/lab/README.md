@@ -39,7 +39,10 @@ Poses ride the URL:
 - `?downloading=sm,tp,mini`: the devices downloading the update.
 - `?crowd=<n>`: up to 20 more projects on Studio Mac, most holding
   their primary checkout alone, for the forest at the size where
-  finding a project gets hard.
+  finding a project gets hard. Add `&crowdShared=1` to have terrier
+  list them all and the Thinkpad hold most of them too, so nearly
+  every project is terrier's and on a second device (the open
+  project's header shows the paw and its devices).
 - `?view=inbox`: open the sidebar in its inbox view (the toggle flips
   it in-session either way).
 - `?updatedFrom=<version>`: the build this window last ran, so the lab's

@@ -212,7 +212,7 @@ export function ProjectGroupActions({
 // header spanning devices it opens onto the pick itself: every member
 // by name, each a two-step remove of that device's copy. A member with
 // no session stays listed but inert, so the list always matches the
-// header's badges, which already say it is away. Leaving the submenu
+// open header's badges, which already say it is away. Leaving the submenu
 // drops a half-confirmed remove, the same as closing the menu.
 function RemoveSubmenu({
   members,

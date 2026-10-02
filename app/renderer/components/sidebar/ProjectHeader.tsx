@@ -16,12 +16,13 @@ interface ProjectHeaderProps {
   // Whose icon to show when it isn't this scope's own `project`: a
   // project only peers hold reads it off one of them.
   iconFrom?: { projectId: string; deviceId: string };
-  // The merged tree's device badge cluster, rendered after the name on
-  // the healthy branch only (arrange and missing rows stay quiet).
+  // The merged tree's device badge cluster, rendered after the name of
+  // the open project only: the list's rows are names alone, since every
+  // row wearing them made the list a wall of icons.
   badges?: React.ReactNode;
   // Some checkout in the header's group is terrier-sourced, which puts
-  // the paw after the name while Mark terrier projects is on, in every
-  // branch, the missing one included.
+  // the paw after the open project's name while Mark terrier projects
+  // is on.
   terrier?: boolean;
   // The open project, heading the tree on its own: a title, with
   // nothing left for it to open.
@@ -87,7 +88,6 @@ export function ProjectHeader({
       {project.name}
     </span>
   );
-  const mark = <TerrierMark terrier={terrier} />;
   const trigger = arrangeMode ? (
     <div
       {...listeners}
@@ -103,7 +103,6 @@ export function ProjectHeader({
     >
       {lead}
       {name}
-      {mark}
     </div>
   ) : missing ? (
     <div
@@ -112,7 +111,6 @@ export function ProjectHeader({
     >
       {lead}
       {name}
-      {mark}
       <span className="shrink-0 text-3xs font-medium tracking-normal text-muted-foreground/60 normal-case">
         missing
       </span>
@@ -124,7 +122,7 @@ export function ProjectHeader({
     >
       {lead}
       {name}
-      {mark}
+      <TerrierMark terrier={terrier} />
       {badges}
     </div>
   ) : (
@@ -148,8 +146,6 @@ export function ProjectHeader({
     >
       {lead}
       {name}
-      {mark}
-      {badges}
     </button>
   );
 

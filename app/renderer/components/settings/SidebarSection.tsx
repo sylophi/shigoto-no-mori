@@ -37,8 +37,8 @@ export function SidebarSection({
         label="Show device icons"
         description={
           signedIn
-            ? "Badges each project and worktree with the devices it lives on. Turn off for quieter rows. The device filter still narrows the list."
-            : "Sign in to bring in your other devices. Each project and worktree is then badged with the devices it lives on."
+            ? "Badges the open project and each worktree with the devices they live on. Turn off for quieter rows. The device filter still narrows the list."
+            : "Sign in to bring in your other devices. The open project and each worktree are then badged with the devices they live on."
         }
       />
       <ToggleRow
@@ -48,7 +48,7 @@ export function SidebarSection({
         label="Mark terrier projects"
         description={
           terrierOn
-            ? "Shows a paw beside the projects that come from the terrier registry, so they stand apart from the ones added here."
+            ? "Shows a paw beside the open project's name when it comes from the terrier registry, so it stands apart from the ones added here."
             : "Turn on Automatically use terrier in this device's settings to list terrier's projects, then mark them here."
         }
       />
