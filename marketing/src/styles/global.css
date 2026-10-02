@@ -350,10 +350,11 @@ code {
 }
 [data-wall="apple"] {
   --wall: url("/img/apple.svg");
-  --wall-size: 120px 120px;
+  --wall-size: 78px 78px;
   --dx: 0px;
-  --dy: 120px;
-  --wall-time: 26s;
+  --dy: 78px;
+  --wall-time: 16.5s;
+  --wall-opacity: 0.06;
 }
 [data-wall="square"] {
   --wall: url("/img/square.svg");
