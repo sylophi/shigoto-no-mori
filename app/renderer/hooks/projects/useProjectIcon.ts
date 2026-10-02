@@ -27,7 +27,11 @@ export function projectIconQueryOptions(
   });
 }
 
-// A project's icon as a data URL, or null for an icon-less project.
+// A project's icon as a data URL, null for an icon-less project, or
+// undefined while that isn't known yet: the first fetch is out, the
+// device can't be asked (a peer not connected, with nothing cached),
+// or the fetch failed. Unknown is not icon-less, so a repo with a logo
+// never shows the generated tile on its way there.
 // With no deviceId it rides the surrounding host scope (a device-scoped
 // page, or the local default). With one it names another machine, and
 // the api comes from the remote device store through a selector, so
@@ -38,7 +42,7 @@ export function projectIconQueryOptions(
 export function useProjectIcon(
   projectId: string,
   deviceId?: string,
-): string | null {
+): string | null | undefined {
   const scope = useHostScope();
   const targetId = deviceId ?? scope.deviceId;
   // The store never lists this machine, so naming it explicitly from
@@ -54,5 +58,5 @@ export function useProjectIcon(
   const { data } = useQuery(
     projectIconQueryOptions(projectId, { deviceId: targetId, api }),
   );
-  return data ? `data:${data.mime};base64,${data.base64}` : null;
+  return data ? `data:${data.mime};base64,${data.base64}` : data;
 }

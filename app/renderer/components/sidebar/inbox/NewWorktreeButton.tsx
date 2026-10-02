@@ -1,4 +1,4 @@
-import { Folder, Loader2, Plus } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -163,13 +163,10 @@ function TargetItem({ target }: { target: CreateTarget }) {
       disabled={isPending}
       onClick={(event) => createFrom(event, target.project.id)}
     >
-      {/* Fallback so every row is icon-then-name: without it the
-          projects with no detected icon start at a different x
-          and the menu reads as two ragged columns. */}
       <ProjectIcon
         projectId={target.project.id}
+        name={target.project.name}
         deviceId={target.peer?.badge.deviceId}
-        fallback={Folder}
       />
       {target.project.name}
       {target.peer && <DeviceBadge badge={target.peer.badge} />}

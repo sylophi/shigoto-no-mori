@@ -28,7 +28,7 @@ const DAY = 24 * HOUR;
 // the surfaces that draw project icons (sidebar headers, the device
 // chips on /devices) show one without a real repo behind them. Keyed by
 // name, so the same repo wears the same icon on every device. t3code is
-// left out on purpose to pose the icon-less case beside the others.
+// left out on purpose to pose the generated tile beside the others.
 const ICON_HUE: Record<string, number> = {
   "shigoto-no-mori": 155,
   "port-pool": 235,

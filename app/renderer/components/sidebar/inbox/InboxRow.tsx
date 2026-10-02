@@ -1,4 +1,3 @@
-import { Folder } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BranchLabel } from "@/components/ui/branch-label";
 import {
@@ -96,9 +95,9 @@ export function InboxRow({
       <div className="flex min-w-0 items-center gap-1.5 text-3xs text-muted-foreground">
         <ProjectIcon
           projectId={worktree.projectId}
+          name={project.name}
           deviceId={device?.deviceId}
           className="size-3"
-          fallback={Folder}
         />
         <span className="min-w-0 truncate font-medium">{project.name}</span>
         {device && <RowDeviceBadge badge={device} />}

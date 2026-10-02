@@ -5,9 +5,10 @@
 // place of a word, the same way the port-forward strip below it leads
 // with a cable, so the two sub-strips of a row line up.
 //
-// Icons are the repo's own, read through the same ProjectIcon the
-// sidebar draws, named by device so the fetch rides that machine's api
-// and an offline peer keeps whatever icon its last session cached.
+// Icons are the repo's own (or the tile drawn from its name when it
+// has none), read through the same ProjectIcon the sidebar draws,
+// named by device so the fetch rides that machine's api and an
+// offline peer keeps whatever icon its last session cached.
 //
 // A disconnected peer keeps whatever its last session cached (that is
 // react-query's ordinary staleness contract, not a snapshot this file
@@ -63,6 +64,7 @@ export function DeviceHosts({
           <Chip key={chip.projectId} className="text-muted-foreground/90">
             <ProjectIcon
               projectId={chip.projectId}
+              name={chip.name}
               deviceId={deviceId}
               className="size-3"
             />

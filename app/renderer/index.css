@@ -277,6 +277,34 @@
 }
 
 /*
+ * The tile a project without a logo wears (shared/ProjectIcon.tsx): an
+ * initial in --project-tile-ink on a cheerful shape (a rounded square,
+ * or doubutsu's leaf), which paints in currentColor. The component sets
+ * only --project-hue, drawn from the name. The fill's lightness and
+ * chroma are tokens here, so a theme can move them. The color is set
+ * on every shape, outside any layer, on purpose: menus recolor every
+ * descendant on focus (dropdown-menu's `focus:**:text-accent-foreground`),
+ * and that utility would otherwise repaint the tile.
+ */
+:root,
+[data-theme-scope] {
+  --project-tile-fill: 0.72 0.13;
+  --project-tile-ink: var(--color-white);
+}
+.dark {
+  --project-tile-fill: 0.66 0.12;
+}
+[data-slot="project-tile"] {
+  &,
+  & * {
+    color: oklch(var(--project-tile-fill) var(--project-hue));
+  }
+  & text {
+    fill: var(--project-tile-ink);
+  }
+}
+
+/*
  * The villager moments' motion (components/villagers). A rare one's
  * dialogue box bobs its arrow once the line is out. A legendary one's
  * letter arrives as a scene, once the toast has slid in: the flap opens

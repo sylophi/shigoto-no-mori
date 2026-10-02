@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { useParams } from "@tanstack/react-router";
 import { Command, useCommandState } from "cmdk";
-import { ArrowDown, ArrowUp, Folder } from "lucide-react";
+import { ArrowDown, ArrowUp } from "lucide-react";
 import { KbdHint } from "@/components/ui/kbd";
 import { ModalShell } from "@/components/ui/modal-shell";
 import {
@@ -566,14 +566,14 @@ function PickedChip({ row, onBack }: { row: PaletteRow; onBack: () => void }) {
 function PickedLabel({ row }: { row: PaletteRow }) {
   switch (row.kind) {
     case "worktree": {
-      const { worktree, device } = row.entry;
+      const { worktree, project, device } = row.entry;
       return (
         <>
           <ProjectIcon
             projectId={worktree.projectId}
+            name={project.name}
             deviceId={device?.deviceId}
             className="size-3"
-            fallback={Folder}
           />
           <span className="truncate font-mono">
             <BranchLabel
