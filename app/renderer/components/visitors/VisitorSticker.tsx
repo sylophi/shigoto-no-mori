@@ -1,5 +1,5 @@
 import { type CSSProperties, useState } from "react";
-import { Heart, Star } from "lucide-react";
+import { Heart } from "lucide-react";
 import { VillagerFace } from "@/components/shared/VillagerSays";
 import { StationeryPrint } from "@/components/villagers/StationeryPrint";
 import { FaceStamp } from "@/components/villagers/VillagerLetter";
@@ -279,7 +279,6 @@ function StickerBack({
 
 // A slot nobody has filled yet: their silhouette and a question mark,
 // and for a regular villager what kind of animal they are, for a hint.
-// A legend's slot wears a star, so the rarest finds are there to chase.
 function EmptySlot({
   entry,
   face,
@@ -297,12 +296,6 @@ function EmptySlot({
       role="img"
       className="visitor-pop relative flex size-full flex-col items-center justify-center rounded-2xl bg-muted/60 px-3"
     >
-      {entry.rarity === "legendary" && (
-        <Star
-          aria-hidden
-          className="absolute top-3 right-3 size-4 fill-amber-400 text-amber-400"
-        />
-      )}
       <span className="flex size-20 items-center justify-center">
         {face !== null && (
           <VillagerFace
