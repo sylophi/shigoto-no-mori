@@ -22,12 +22,13 @@ export function useProjectNav() {
   const { deviceId } = useHostScope();
 
   return {
-    // One of the project pages, on the device this scope names. Same
-    // single cast as useWorktreeNav's `goOn`, for the same reason.
-    toProjectPage(page: ProjectPage, projectId: string) {
+    // One of the project pages, on the device this scope names unless
+    // told another. Same single cast as useWorktreeNav's `goOn`, for the
+    // same reason.
+    toProjectPage(page: ProjectPage, projectId: string, onDevice = deviceId) {
       void navigate({
         to: PROJECT_ROUTE_PATHS[page],
-        params: { deviceId, projectId },
+        params: { deviceId: onDevice, projectId },
       } as never);
     },
   };

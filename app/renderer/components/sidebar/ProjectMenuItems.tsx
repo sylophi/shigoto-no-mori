@@ -106,9 +106,6 @@ export function ProjectPageMenuItems({
       <DropdownMenuItem onClick={() => goTo("convertExternal")}>
         Convert external worktrees
       </DropdownMenuItem>
-      <DropdownMenuItem onClick={() => goTo("worktreeLocation")}>
-        Set worktree location
-      </DropdownMenuItem>
       <DropdownMenuItem onClick={() => goTo("branches")}>
         Manage branches
       </DropdownMenuItem>

@@ -3,14 +3,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { tildify } from "@shared/projectPaths";
 import type { WorktreeLayout } from "@shared/schemas";
+import type { LayoutOption } from "./layoutOptions";
 import { worktreeBaseFor } from "@shared/git/worktreeLayout";
-
-export interface LayoutOption {
-  value: WorktreeLayout;
-  label: string;
-  description?: string;
-  recommended?: boolean;
-}
 
 interface LayoutOptionItemProps {
   option: LayoutOption;
