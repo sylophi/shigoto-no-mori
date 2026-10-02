@@ -1,5 +1,6 @@
 import { createExternalStore, useExternalStore } from "@/store/externalStore";
-import { Palette, Rocket, type LucideIcon } from "lucide-react";
+import { BookHeart, Palette, Rocket, type LucideIcon } from "lucide-react";
+import { useVillageLife } from "@/hooks/config/useVillageLife";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
 import type { StatusTone } from "@/components/ui/status-dot";
 import type { RemoteDevice } from "@/lib/remote/devices";
@@ -17,6 +18,9 @@ import { localDeviceId } from "@/lib/queryKeys";
 
 export const APPEARANCE_TAB = "appearance";
 export const LAUNCH_TAB = "launch";
+// Who has visited (components/visitors), offered while this window's
+// Village life shows.
+export const VISITORS_TAB = "visitors";
 
 export function deviceTab(deviceId: string): string {
   return `device:${deviceId}`;
@@ -68,11 +72,13 @@ export function useActiveSettingsTab(devices: readonly RemoteDevice[]): {
   peer: RemoteDevice | undefined;
 } {
   const selected = useSelectedSettingsTab();
+  const villageLife = useVillageLife();
   const peer = devices.find(
     (device) => deviceTab(device.deviceId) === selected,
   );
   const known =
     selected === APPEARANCE_TAB ||
+    (selected === VISITORS_TAB && villageLife) ||
     (hasLocalHost &&
       (selected === LAUNCH_TAB || selected === LOCAL_DEVICE_TAB)) ||
     peer !== undefined;
@@ -123,11 +129,15 @@ export interface SettingsSection {
 // this window shows, "devices" is one section per machine, this one
 // first. A hostless client has no machine behind the window, so its
 // visual group is Appearance alone and its devices are all peers.
+// Visitors joins the visual group while Village life shows, which it
+// never does on a hostless client.
 export function settingsSections(
   devices: readonly RemoteDevice[],
   local: { name: string; icon: DeviceIcon },
   // useStagedUpdates' answer: deviceId to the version staged there.
   updates: Readonly<Record<string, string>>,
+  // useVillageLife's answer.
+  villageLife: boolean,
 ): { visual: SettingsSection[]; devices: SettingsSection[] } {
   const solo = isSolo(devices);
   const visual: SettingsSection[] = [
@@ -135,6 +145,9 @@ export function settingsSections(
   ];
   if (hasLocalHost) {
     visual.push({ id: LAUNCH_TAB, label: "Launch tools", icon: Rocket });
+  }
+  if (villageLife) {
+    visual.push({ id: VISITORS_TAB, label: "Visitors", icon: BookHeart });
   }
   const deviceRows: SettingsSection[] = [];
   if (hasLocalHost) {

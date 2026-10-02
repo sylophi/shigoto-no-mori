@@ -16,6 +16,7 @@ import {
   type SettingsSection,
 } from "./settingsNav";
 import { UpdateAllButton } from "./UpdateAllButton";
+import { useVillageLife } from "@/hooks/config/useVillageLife";
 
 export function SettingsSectionChips({
   devices,
@@ -29,8 +30,9 @@ export function SettingsSectionChips({
 }) {
   const phone = usePhoneLayout();
   const local = useLocalDevice();
+  const villageLife = useVillageLife();
   if (!phone) return null;
-  const sections = settingsSections(devices, local, updates);
+  const sections = settingsSections(devices, local, updates, villageLife);
   const chip = (section: SettingsSection) => {
     const active = activeTab === section.id;
     return (

@@ -647,6 +647,7 @@ async function landIncoming(
       base: input.incomingRef,
       worktreeName: input.worktreeName,
       skipSetup: input.runSetup === false,
+      noVisit: true,
     },
     {
       ...notify,

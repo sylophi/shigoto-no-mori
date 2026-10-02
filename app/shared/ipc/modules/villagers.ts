@@ -4,13 +4,16 @@ import {
   VillagerDataStatusSchema,
   VillagerProfilesSchema,
   VillagerSlugSchema,
+  VisitorTallySchema,
 } from "@shared/schemas";
 
 // The villager data, downloaded to and served from this device's data
 // dir (host/lib/villagers.ts) for Village life, a setting of the
 // desktop window (Settings, Appearance). Local only: no peer reads or
 // manages another device's copy, and a web client, which has no device
-// of its own, offers no Village life.
+// of its own, offers no Village life. The one exception is who has
+// visited (cli/visitors.go), which Settings' Visitors section reads
+// off every device and adds up.
 export const villagersContract = defineContract("host", {
   status: invoke("villagers:status", z.void(), VillagerDataStatusSchema, {
     remote: false,
@@ -40,4 +43,10 @@ export const villagersContract = defineContract("host", {
     VillagerProfilesSchema.nullable(),
     { remote: false },
   ),
+  // The villagers who have visited this device, by slug. A read of the
+  // same names the worktree lists already show a peer.
+  visits: invoke("villagers:visits", z.void(), VisitorTallySchema, {
+    remote: true,
+    gated: false,
+  }),
 });

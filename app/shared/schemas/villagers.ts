@@ -71,6 +71,23 @@ export const VillagerProfileSchema = z.object({
 });
 export type VillagerProfile = z.infer<typeof VillagerProfileSchema>;
 
+// Who has visited a device: each villager whose home a worktree there
+// has been, how many times, when first and last (epoch ms), and how
+// warm the friendship is as it is read, as `sm create` counted them
+// (cli/visitors.go).
+export const VillagerVisitsSchema = z.object({
+  count: z.number().int().positive(),
+  first: z.number().int().nonnegative(),
+  last: z.number().int().nonnegative(),
+  warmth: z.number().nonnegative(),
+});
+
+export const VisitorTallySchema = z.record(
+  VillagerSlugSchema,
+  VillagerVisitsSchema,
+);
+export type VisitorTally = z.infer<typeof VisitorTallySchema>;
+
 export const VillagerProfilesSchema = z.record(
   VillagerSlugSchema,
   VillagerProfileSchema,

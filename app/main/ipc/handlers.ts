@@ -689,6 +689,7 @@ export function registerIpcHandlers(): void {
   // state and, when granted, checks or restarts into an update here.
   registerContract(updaterContract, updaterHandlers);
   // Local only: the villager data in this device's data dir, for its
-  // own window's Village life.
+  // own window's Village life. Its visitor tally is the one call a peer
+  // reads too.
   registerContract(villagersContract, villagersHandlers);
 }

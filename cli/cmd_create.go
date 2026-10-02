@@ -36,7 +36,10 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 		// no-setup: skip the project's setup script (carry-over and port
 		// provision still run). The app passes it when a mirror or
 		// transplant was told not to set the copy up.
-		bools: map[string][]string{"checkout": {}, "no-cd": {}, "no-setup": {}},
+		// no-visit: leave the worktree's villager uncounted
+		// (visitors.go). The app passes it for a mirror's or a
+		// transplant's copy, whose visit was counted where it began.
+		bools: map[string][]string{"checkout": {}, "no-cd": {}, "no-setup": {}, "no-visit": {}},
 	})
 	if err != nil {
 		return exitCodeOf(err), err
@@ -68,6 +71,9 @@ func cmdCreate(ctx cliContext, args []string) (int, error) {
 	// The row was built before the mark existed, so it's set on it here.
 	if markAutoPullIfNew(readGlobalConfigHints(), worktree.ID, false) {
 		worktree.AutoPull = true
+	}
+	if !parsed.bools["no-visit"] {
+		recordVisit(ctx.projects, worktree.Name)
 	}
 	emitScriptEvent(map[string]any{"event": "created", "worktree": worktree},
 		"created "+cyanErr(worktree.Name)+" (branch "+cyanErr(worktree.Branch)+")")

@@ -1,6 +1,7 @@
 import { villagersContract } from "@shared/ipc/modules/villagers";
 import type { Handlers } from "@shared/ipc/types";
 import { villagerData } from "@host/lib/villagers";
+import { visitorsViaCli } from "../cliDelegate";
 
 export const villagersHandlers: Handlers<typeof villagersContract> = {
   status: () => villagerData().status(),
@@ -9,4 +10,5 @@ export const villagersHandlers: Handlers<typeof villagersContract> = {
   remove: () => villagerData().remove(),
   face: ({ slug }) => villagerData().face(slug),
   profiles: () => villagerData().profiles(),
+  visits: () => visitorsViaCli(),
 };

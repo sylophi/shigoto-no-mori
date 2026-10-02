@@ -469,6 +469,9 @@ var commands = []command{
 	{name: "unshelve", worktree: true,
 		run: func(ctx cliContext, args []string) (int, error) { return cmdShelve(ctx, args, false) }},
 	{name: "run", run: cmdRun},
+	// The villagers who have visited, which the app's Visitors section
+	// reads. Hidden from the help catalog like the other plumbing.
+	{name: "visitors", run: cmdVisitors},
 	// Handler assigned in init(): cmdWorktrees dispatches back through
 	// this table, and a direct reference here would be an
 	// initialization cycle.

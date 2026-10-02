@@ -26,7 +26,11 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { Worktree } from "@shared/schemas";
 import { toastVillagerMove } from "@/components/villagers/toasts";
 import { hostScopeOf } from "@/hooks/remote/useHostScope";
-import { hostKeyDeviceId, isWorktreeListKey } from "@/lib/queryKeys";
+import {
+  hostKeyDeviceId,
+  isWorktreeListKey,
+  queryKeysFor,
+} from "@/lib/queryKeys";
 import { remoteDeviceById } from "@/lib/remote/devices";
 import {
   type MoveKind,
@@ -78,6 +82,13 @@ export function startVillagerMoves(queryClient: QueryClient): void {
     const { movedIn, movedOut } = worktreeMoves(before, list);
     if (movedIn.length === 0 && movedOut.length === 0) return;
     const deviceId = String(hostKeyDeviceId(queryKey));
+    // `sm create` counted whoever moved in (cli/visitors.go), so the
+    // Visitors section, if it is open, reads the device's tally again.
+    if (movedIn.length > 0) {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeysFor(deviceId).villagerVisits(),
+      });
+    }
     const moves = pending.get(deviceId) ?? { in: [], out: [] };
     moves.in.push(...movedIn);
     moves.out.push(...movedOut);

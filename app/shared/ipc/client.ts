@@ -393,6 +393,7 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       remove: villagersClient.remove,
       face: (slug: string) => villagersClient.face({ slug }),
       profiles: villagersClient.profiles,
+      visits: villagersClient.visits,
     },
 
     window: {

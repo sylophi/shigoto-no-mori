@@ -58,11 +58,15 @@
  *        villager-letter-paper, villager-photo
  *                                villagers/VillagerDialogue.tsx,
  *                                villagers/VillagerLetter.tsx
+ *      visitor-guest-book, visitor-sticker
+ *                                visitors/GuestBook.tsx,
+ *                                visitors/VisitorSticker.tsx
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
  *    sidebar/Sidebar.tsx), data-doubutsu-page="settings|tidy|devices|
- *    forest" picking the canvas wallpaper (settings/Settings,
- *    tidy/TidyForest, remote/DevicesPage, ForestPage), the
+ *    forest|visitors" picking the canvas wallpaper (settings/Settings,
+ *    tidy/TidyForest, remote/DevicesPage, ForestPage,
+ *    Settings' Visitors section), the
  *    `doubutsu-only` / `v1-only` classes
  *    (per-theme markup shipped side by side), li[data-row-idx]
  *    (shared/PickerRow.tsx).
@@ -561,9 +565,18 @@
 }
 
 /* A rare villager's name plate and a legendary one's photo stand on a
-   small drop of their own. */
-.doubutsu :is([data-slot="villager-nameplate"], [data-slot="villager-photo"]) {
+   small drop of their own, and so do the Visitors album's stickers.
+   The guest book they sit under is a floating surface of its own. */
+.doubutsu
+  :is(
+    [data-slot="villager-nameplate"],
+    [data-slot="villager-photo"],
+    [data-slot="visitor-sticker"]
+  ) {
   box-shadow: var(--doubutsu-sticker-shadow-sm);
+}
+.doubutsu [data-slot="visitor-guest-book"] {
+  box-shadow: var(--doubutsu-sticker-shadow);
 }
 
 /* --- Text fields read as inset trays ---
@@ -872,7 +885,7 @@
    converted the absolutely-positioned title-bar drag strip into a 28px
    flex row and pushed every page down).
 
-   One recipe, five wallpapers. A host declares six --doubutsu-wallpaper
+   One recipe, six wallpapers. A host declares six --doubutsu-wallpaper
    / -drift values and nothing else. The shared ::before below turns
    them into a layer. Canvas pages pick their set by marking themselves
    with data-doubutsu-page and letting :has() match, so a page carries a
@@ -887,7 +900,7 @@
    last frame is pixel-identical to its first. And none of them can go
    much slower: these all sit under 13% opacity, where below a few px/s
    the eye has nothing to lock onto and the pattern just looks static.
-   All five drift at the same ~4.7px/s down five different vectors:
+   All six drift at the same ~4.7px/s along six different vectors:
    related rooms, not copies. */
 @keyframes ac-wallpaper-drift {
   from {
@@ -952,6 +965,18 @@
   --doubutsu-drift-x: 120px;
   --doubutsu-drift-y: 120px;
   --doubutsu-drift-time: 36s;
+}
+
+/* Visitors: sparse AC ground confetti, the scattered triangles of a
+   plaza after a party, drifting up-right. The 160px tile goes at its
+   own pace to the same px/s as the rest (226px of diagonal travel). */
+.doubutsu [data-doubutsu-zone="main"]:has([data-doubutsu-page="visitors"]) {
+  --doubutsu-wallpaper: url("data:image/svg+xml,%3Csvg%20width%3D%22160%22%20height%3D%22160%22%20viewBox%3D%220%200%20160%20160%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cdefs%3E%3Cpath%20id%3D%22t%22%20d%3D%22M0%20-5.2L4.5%202.6L-4.5%202.6Z%22%20fill%3D%22%23000%22%20stroke%3D%22%23000%22%20stroke-width%3D%223%22%20stroke-linejoin%3D%22round%22%2F%3E%3C%2Fdefs%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%2824%2018%29%20rotate%2825%29%20scale%281.4%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%2892%2012%29%20rotate%28210%29%20scale%280.7%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%28140%2038%29%20rotate%28130%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%2858%2066%29%20rotate%28305%29%20scale%280.85%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%2814%20108%29%20rotate%28170%29%20scale%281.15%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%28108%2096%29%20rotate%2855%29%20scale%280.6%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%2874%20138%29%20rotate%28250%29%22%2F%3E%3Cuse%20href%3D%22%23t%22%20transform%3D%22translate%28142%20132%29%20rotate%28340%29%20scale%280.8%29%22%2F%3E%3C%2Fsvg%3E");
+  --doubutsu-wallpaper-size: 160px 160px;
+  --doubutsu-wallpaper-opacity: 0.12;
+  --doubutsu-drift-x: 160px;
+  --doubutsu-drift-y: -160px;
+  --doubutsu-drift-time: 48s;
 }
 
 /* The forest as a page (the phone layout's home, ForestPage): the
