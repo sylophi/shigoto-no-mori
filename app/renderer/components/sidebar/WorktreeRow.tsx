@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 import type { SidebarDeviceBadge } from "./DeviceBadge";
+import type { GroupShelf } from "./sidebarRow";
 import type { PullRequest, Worktree } from "@shared/schemas";
 import type { StackChild, StackPosition } from "@shared/pullRequestStack";
 import { useWorktreeRowState } from "./useWorktreeRowState";
@@ -19,6 +20,7 @@ interface WorktreeRowProps {
   // stack once (buildSidebarRows).
   stack: StackPosition | null;
   stackChild?: StackChild;
+  shelf: GroupShelf | null;
 }
 
 // A stack's rows draw as a file tree: the lowest layer is the parent
@@ -69,6 +71,7 @@ export function WorktreeRow({
   pr,
   stack,
   stackChild,
+  shelf,
 }: WorktreeRowProps) {
   // A peer's row takes the local row's own rule, scoped to the device:
   // the open remote worktree reads as selected like a local one.
@@ -81,6 +84,7 @@ export function WorktreeRow({
       device={device}
       mirror={mirror}
       state={state}
+      shelf={shelf}
       style={stackIndentStyle(stackChild)}
     >
       <StackConnector child={stackChild} />

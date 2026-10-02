@@ -65,6 +65,9 @@ export type SidebarRow =
       // (shared/pullRequestStack.ts).
       stack: StackPosition | null;
       stackChild?: StackChild;
+      // The fold the row was filed behind, null for the group's open
+      // rows. The row fades by it (WorktreeEntry).
+      shelf: GroupShelf | null;
     }
   // The inbox's own row: taller, cross-project, and built to be triaged
   // rather than picked out of a short list. See InboxRow. The project
@@ -85,6 +88,8 @@ export type SidebarRow =
       // The peer a local row is mirrored with, when it is (the tree's
       // worktree row wears the same).
       mirror?: SidebarDeviceBadge;
+      // The shelf the row was filed on, null for live work.
+      shelf: InboxShelf | null;
     }
   | { kind: "worktree-skeleton"; key: string; projectId: string }
   | { kind: "worktree-error"; key: string; projectId: string }
@@ -106,6 +111,7 @@ export type SidebarRow =
       pr: PullRequest | undefined;
       stack: StackPosition | null;
       stackChild?: StackChild;
+      shelf: GroupShelf | null;
       groupId: string;
     }
   | {
