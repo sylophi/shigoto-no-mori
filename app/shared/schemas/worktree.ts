@@ -98,6 +98,10 @@ export const WorktreeSchema = z.object({
   // anything). Exists so "recently worked in" can account for edits that
   // were never committed, not just the commit log.
   lastChangeAt: z.number().int().nonnegative().optional(),
+  // When the worktree was added, epoch ms (the CLI's
+  // worktreeCreatedAt). Absent for the primary checkout, which has no
+  // such record, and from builds older than the field.
+  createdAt: z.number().int().nonnegative().optional(),
   // Most-recent first. Empty when the worktree has no commits yet.
   // Bounded by the backend (currently 4) so the IPC payload stays
   // small: 3 for the teaser plus 1 extra to signal "more available".
