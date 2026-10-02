@@ -55,6 +55,7 @@ import { spawnFileSync } from "@host/fileSync/spawn";
 import {
   peerMirrorApiFor,
   peerSyncApiFor,
+  peerWorktreeOrUndefined,
   peerWorktreesApiFor,
   thisDeviceId,
 } from "@host/ipc/peerSync";
@@ -70,6 +71,7 @@ import {
   watchIndexFile,
 } from "@host/mirror/gitState";
 import {
+  endMirrorsIntoGoneCopy,
   engine,
   engineOrNull,
   findSession,
@@ -229,12 +231,18 @@ async function stopAndRemoveCopy(
       worktreeId: raw.worktreeId,
       force: true,
     })
-    .then((result) => {
-      const removed = DeleteWorktreeResultSchema.parse(result);
-      return removed.ok
-        ? null
-        : `its ${removed.cleanupError.phase} step failed`;
-    }, errorMessageOf);
+    .then(
+      (result) => {
+        const removed = DeleteWorktreeResultSchema.parse(result);
+        return removed.ok
+          ? null
+          : `its ${removed.cleanupError.phase} step failed`;
+      },
+      // A forced stop of a copy that was already gone has nothing left
+      // to remove.
+      async (error: unknown) =>
+        (await copyIsGone(raw)) ? null : errorMessageOf(error),
+    );
   daemon.noteEvent(
     localWorktreeIdOf(raw),
     "stopped",
@@ -245,6 +253,25 @@ async function stopAndRemoveCopy(
       `${MIRROR_COPY_STAYED} on the other device stayed: ${stayed}. Delete it from its page.`,
     );
   }
+}
+
+// Whether the peer answers, within a few seconds, that it no longer
+// lists the session's copy. A peer that fails or stalls is no answer.
+// A folder deleted by hand still lists until git prunes it.
+const COPY_PROBE_MS = 5_000;
+function copyIsGone(raw: MirrorSessionRaw): Promise<boolean> {
+  const listed = peerWorktreeOrUndefined(
+    raw.deviceId,
+    raw.projectId,
+    raw.worktreeId,
+  ).then(
+    (copy) => copy === undefined,
+    () => false,
+  );
+  const stalled = new Promise<boolean>((resolve) => {
+    setTimeout(resolve, COPY_PROBE_MS, false).unref?.();
+  });
+  return Promise.race([listed, stalled]);
 }
 
 export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
@@ -401,6 +428,17 @@ export const mirrorHandlers: Handlers<typeof mirrorContract, HandlerContext> = {
     // computed against a live peer. So anything but "synced" refuses.
     const git = daemon.gitStatus(session)?.status;
     if (force !== true && !mirrorStopIsSafe(git)) {
+      // A copy the peer no longer lists (deleted while this device
+      // missed the announcement, or moved) holds nothing to protect
+      // and nothing to remove, so the session just ends.
+      if (await copyIsGone(raw)) {
+        await endMirrorsIntoGoneCopy(
+          raw.deviceId,
+          raw.projectId,
+          raw.worktreeId,
+        );
+        return;
+      }
       throw new Error(
         `${MIRROR_STOP_UNCONFIRMED} (${git ?? "starting"}), so it may hold commits that exist nowhere else. Resume or reconnect the mirror to let it catch up, or stop it anyway to discard them.`,
       );

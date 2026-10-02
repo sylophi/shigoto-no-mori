@@ -868,6 +868,31 @@ async function main() {
       "mirror: sends the worktree and opens a session whose copy is the peer's, a repeat answers with the running one, and unmirror is refused until synced, then removes only the copy",
     );
 
+    // ---- (7a) A copy deleted on the peer outside a stop: the pair can
+    // no longer read as synced, but the peer answers without the copy,
+    // so the unforced unmirror ends the session with nothing to remove.
+    engine.state.git = "following";
+    const gone = transferDoc(
+      await sm("worktrees", "mirror", "wt-mirror", "-p", "source"),
+    );
+    const removed = await buildClient(
+      worktreesContract,
+      peerA.transport,
+    ).delete({
+      projectId: gone.worktree.projectId,
+      worktreeId: gone.worktree.id,
+      force: true,
+    });
+    assert.ok(typeof gone.session === "string");
+    assert.equal(removed.ok, true);
+    assert.equal(existsSync(gone.worktree.path), false);
+    stopDoc(await sm("worktrees", "unmirror", "wt-mirror", "-p", "source"));
+    assert.equal(engine.state.terminated.includes(gone.session), true);
+    assert.equal(existsSync(mirrorPath), true, "the original stays");
+    ok(
+      "unmirror of a mirror whose copy was already deleted on the peer ends the session unforced",
+    );
+
     // ---- (7b) mirror --from: the peer holds the original, so the peer
     // runs the mirror (its mirror:startTo, on its own engine) and sends
     // the copy HERE, which lands through the ask's invitation. unmirror

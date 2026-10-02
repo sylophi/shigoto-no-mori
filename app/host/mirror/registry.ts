@@ -20,6 +20,7 @@ import {
   mirrorEngineBlocker,
 } from "@shared/ipc/modules/mirror";
 import { errorMessageOf } from "@shared/errors";
+import { WorktreeRemovalSchema } from "@shared/schemas/worktree";
 import { implSlot } from "@host/lib/util/implSlot";
 import {
   dropMirrorInvitesWithPeers,
@@ -282,14 +283,74 @@ export async function endMirrorsWithPeers(
   const candidates = opts.transfers
     ? daemon.sessions()
     : mirrorSessions(daemon);
-  const doomed = candidates.filter((raw) => !stillOnAccount(raw.deviceId));
+  await endSessions(
+    daemon,
+    candidates.filter((raw) => !stillOnAccount(raw.deviceId)),
+    "a mirror with a device that left the account",
+    detail,
+  );
+}
+
+export const COPY_GONE_DETAIL =
+  "The copy on the other device was deleted or moved";
+
+// A peer's announcement that one of its worktrees is gone
+// (worktrees:removal). A mirror runs on the device holding the
+// original, so a copy deleted on its own device leaves its session
+// here, halted on a far root that no longer exists.
+export function endMirrorsOnPeerRemoval(
+  deviceId: string,
+  payload: unknown,
+): Promise<void> {
+  const removal = WorktreeRemovalSchema.safeParse(payload);
+  if (!removal.success || removal.data.state !== "removed") {
+    return Promise.resolve();
+  }
+  return endMirrorsIntoGoneCopy(
+    deviceId,
+    removal.data.projectId,
+    removal.data.worktreeId,
+  );
+}
+
+// The sessions into one of a peer's worktrees, known to be gone, end,
+// and each original's thread says why. Already ended (the stop and the
+// peer's announcement both get here), there is nothing to do.
+export async function endMirrorsIntoGoneCopy(
+  deviceId: string,
+  projectId: string,
+  worktreeId: string,
+): Promise<void> {
+  const daemon = engineOrNull();
+  if (daemon === null || daemon.status() !== "running") return;
+  await endSessions(
+    daemon,
+    mirrorSessions(daemon).filter(
+      (raw) =>
+        raw.deviceId === deviceId &&
+        raw.projectId === projectId &&
+        raw.worktreeId === worktreeId,
+    ),
+    "a mirror whose copy is gone",
+    COPY_GONE_DETAIL,
+  );
+}
+
+// Each session ended, then noted "stopped" on its original's thread. A
+// session that refuses to end is logged, not thrown.
+async function endSessions(
+  daemon: MirrorImpl,
+  doomed: readonly MirrorSessionRaw[],
+  what: string,
+  detail: string,
+): Promise<void> {
   await Promise.all(
     doomed.map(async (raw) => {
       try {
         await daemon.terminate(raw.session);
       } catch (error) {
         console.warn(
-          `[mirror] could not end a mirror with a device that left the account: ${errorMessageOf(error)}`,
+          `[mirror] could not end ${what}: ${errorMessageOf(error)}`,
         );
         return;
       }
