@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import { BackButton } from "@/components/ui/back-button";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { createExternalStore, useExternalStore } from "@/store/externalStore";
+import { cn } from "@/lib/utils";
+import { ARRIVE_FROM } from "./sidebarChrome";
 
 // A page's own navigation, drawn in the app sidebar in the project
 // tree's place: Settings' section list, the diff pages' file list (with
@@ -42,7 +44,9 @@ export function SidebarTakeoverSlot() {
 
 // The page's half. The tree is gone while this is up, so the way out
 // is the first row. It spans the row like the rows below it, so the
-// whole width is the target and not just the word.
+// whole width is the target and not just the word. The list arrives
+// from the right, a step in. Its box passes the slot's flex column on,
+// so a list sized with flex-1 still fills it.
 export function SidebarTakeover({
   back,
   children,
@@ -59,7 +63,7 @@ export function SidebarTakeover({
   const target = useExternalStore(slot);
   if (phone || !target) return null;
   return createPortal(
-    <>
+    <div className={cn("flex min-h-0 flex-1 flex-col", ARRIVE_FROM.right)}>
       <div className="px-2 pb-1">
         <BackButton
           label={back.label}
@@ -68,7 +72,7 @@ export function SidebarTakeover({
         />
       </div>
       {children}
-    </>,
+    </div>,
     target,
   );
 }

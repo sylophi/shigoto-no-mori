@@ -15,6 +15,12 @@ export function useSidebarView(): SidebarView {
   return config?.sidebarView ?? "projects";
 }
 
+// Whether the view above is the saved one yet rather than the default
+// standing in for it while the config loads.
+export function useSidebarViewSettled(): boolean {
+  return !useClientConfig().isPending;
+}
+
 // Optimistic through the patch hook: the whole sidebar re-lays-out on
 // this value, so waiting a round trip to redraw would read as a hang.
 export function useSetSidebarView() {

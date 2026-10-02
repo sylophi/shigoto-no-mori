@@ -12,6 +12,7 @@ import {
   type SidebarViewModel,
 } from "./sidebarRow";
 import { VirtualRow, type RowHandlers } from "./VirtualRow";
+import { ARRIVE_FROM } from "./sidebarChrome";
 import { isPhoneLayout } from "@/hooks/ui/useViewport";
 import { cn } from "@/lib/utils";
 
@@ -173,12 +174,7 @@ export function SidebarList({
       }
       className={cn(
         "relative",
-        moved &&
-          asked &&
-          "animate-in duration-150 fade-in-0 motion-reduce:animate-none",
-        moved &&
-          asked &&
-          (level === null ? "slide-in-from-left-2" : "slide-in-from-right-2"),
+        moved && asked && ARRIVE_FROM[level === null ? "left" : "right"],
       )}
       style={{ height: `${virtualizer.getTotalSize()}px` }}
     >
