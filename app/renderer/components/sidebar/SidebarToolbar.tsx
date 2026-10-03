@@ -14,7 +14,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import {
+  useGroupProjectsByOwner,
   useProjectSort,
+  useSetGroupProjectsByOwner,
   useSetProjectSort,
 } from "@/hooks/projects/useProjectSort";
 import { useSetWorktreeSort } from "@/hooks/sharedSettings/useWorktreeSort";
@@ -57,7 +59,8 @@ const WORKTREE_SORT_OPTIONS: ReadonlyArray<SortOption<WorktreeSortMode>> = [
 //
 // The left end is the tree's own level. On the list of projects it
 // sorts them. Sorting is about this machine's own projects, so a
-// hostless client's list leaves that corner empty. Inside a project
+// hostless client's menu there offers only the grouping by owner,
+// which splits any device's projects the same. Inside a project
 // the corner holds the way back to that list, where a back button is
 // looked for (the one a page that takes the sidebar over puts there
 // too, SidebarTakeover). The project's own worktree sort goes to the
@@ -74,7 +77,7 @@ export function SidebarToolbar({ onArrange, open }: SidebarToolbarProps) {
       {open ? (
         <BackButton label="Projects" onClick={open.onBack} className="ml-0" />
       ) : (
-        hasLocalHost && <ProjectSortMenu onArrange={onArrange} />
+        <ProjectSortMenu onArrange={onArrange} />
       )}
       <div className="flex-1" />
       {open && <WorktreeSortMenu groupKey={open.groupKey} sort={open.sort} />}
@@ -86,6 +89,8 @@ export function SidebarToolbar({ onArrange, open }: SidebarToolbarProps) {
 function ProjectSortMenu({ onArrange }: { onArrange: () => void }) {
   const sortMode = useProjectSort();
   const setSortMode = useSetProjectSort();
+  const groupByOwner = useGroupProjectsByOwner();
+  const setGroupByOwner = useSetGroupProjectsByOwner();
 
   // Dragging only reorders coherently when the displayed order matches the
   // stored order, so arranging forces the manual sort before entering the
@@ -96,17 +101,32 @@ function ProjectSortMenu({ onArrange }: { onArrange: () => void }) {
   };
 
   return (
-    <SortMenu
-      tip="Sort projects"
-      options={PROJECT_SORT_OPTIONS}
-      value={sortMode}
-      onPick={(mode) => setSortMode.mutate(mode)}
-    >
-      <DropdownMenuSeparator />
-      <DropdownMenuItem onClick={arrangeManually}>
-        Set manual order
-      </DropdownMenuItem>
-    </SortMenu>
+    <ListMenu tip={hasLocalHost ? "Sort projects" : "Group projects"}>
+      {hasLocalHost && (
+        <>
+          <SortOptions
+            options={PROJECT_SORT_OPTIONS}
+            value={sortMode}
+            onPick={(mode) => setSortMode.mutate(mode)}
+          />
+          <DropdownMenuSeparator />
+        </>
+      )}
+      <CheckItem
+        checked={groupByOwner}
+        onClick={() => setGroupByOwner.mutate(!groupByOwner)}
+      >
+        Group by owner
+      </CheckItem>
+      {hasLocalHost && (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={arrangeManually}>
+            Set manual order
+          </DropdownMenuItem>
+        </>
+      )}
+    </ListMenu>
   );
 }
 
@@ -118,29 +138,25 @@ function WorktreeSortMenu({
   sort: WorktreeSortMode;
 }) {
   return (
-    <SortMenu
-      tip="Sort worktrees"
-      options={WORKTREE_SORT_OPTIONS}
-      value={sort}
-      onPick={useSetWorktreeSort(groupKey)}
-    />
+    <ListMenu tip="Sort worktrees">
+      <SortOptions
+        options={WORKTREE_SORT_OPTIONS}
+        value={sort}
+        onPick={useSetWorktreeSort(groupKey)}
+      />
+    </ListMenu>
   );
 }
 
-function SortMenu<T extends string>({
+// The toolbar's menu of how a list shows: the trigger and its popup,
+// holding whatever the list offers.
+function ListMenu({
   tip,
-  options,
-  value,
-  onPick,
   children,
 }: {
   // The trigger's tooltip and accessible name.
   tip: string;
-  options: ReadonlyArray<SortOption<T>>;
-  value: T;
-  onPick: (value: T) => void;
-  // Anything the menu offers below the orders.
-  children?: ReactNode;
+  children: ReactNode;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   return (
@@ -168,25 +184,54 @@ function SortMenu<T extends string>({
       {/* Anchored under the trigger now that it sits at the top of the
           sidebar rather than the bottom. */}
       <DropdownMenuContent align="end" side="bottom" sideOffset={2}>
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Sort by</DropdownMenuLabel>
-          {options.map((option) => (
-            <DropdownMenuItem
-              key={option.value}
-              onClick={() => onPick(option.value)}
-            >
-              <Check
-                className={cn(
-                  "size-3.5",
-                  value === option.value ? "opacity-100" : "opacity-0",
-                )}
-              />
-              {option.label}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuGroup>
         {children}
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+function SortOptions<T extends string>({
+  options,
+  value,
+  onPick,
+}: {
+  options: ReadonlyArray<SortOption<T>>;
+  value: T;
+  onPick: (value: T) => void;
+}) {
+  return (
+    <DropdownMenuGroup>
+      <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+      {options.map((option) => (
+        <CheckItem
+          key={option.value}
+          checked={value === option.value}
+          onClick={() => onPick(option.value)}
+        >
+          {option.label}
+        </CheckItem>
+      ))}
+    </DropdownMenuGroup>
+  );
+}
+
+// A menu item with the check mark's room kept whether or not it is
+// checked, so the labels line up.
+function CheckItem({
+  checked,
+  onClick,
+  children,
+}: {
+  checked: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <DropdownMenuItem onClick={onClick}>
+      <Check
+        className={cn("size-3.5", checked ? "opacity-100" : "opacity-0")}
+      />
+      {children}
+    </DropdownMenuItem>
   );
 }

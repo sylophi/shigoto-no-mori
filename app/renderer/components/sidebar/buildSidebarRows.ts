@@ -51,6 +51,11 @@ interface BuildSidebarRowsArgs {
   // Worktrees starting with one of these fold away like shelved ones.
   hiddenPrefixes: readonly string[];
   arrangeMode: boolean;
+  // Splits the list of projects under a header per owner (ownerOf),
+  // the owners where `order` puts them, the ones in `shut` drawn as
+  // their header alone. Null lists the projects as one run, and so
+  // does a list with a single owner, which a header would only repeat.
+  byOwner: { shut: ReadonlySet<string> } | null;
   // Peer devices' forests, merged into the tree: a remote project
   // sharing a local project's repo identity contributes its worktrees
   // to that group (marked per row), the rest gather under project
@@ -138,6 +143,7 @@ export function buildSidebarRows({
   openShelves,
   hiddenPrefixes,
   arrangeMode,
+  byOwner,
   remote,
   mirrors,
   deviceBadges,
@@ -258,7 +264,7 @@ export function buildSidebarRows({
   // Every group is in the order, which was built over a superset of
   // these inputs. The fallback only keeps the comparator total.
   const rankOf = (group: ProjectGroup) =>
-    order.get(group.groupId) ?? order.size;
+    order.groups.get(group.groupId) ?? order.groups.size;
   const sorted = groups.toSorted((a, b) => rankOf(a) - rankOf(b));
   // The tree draws one level: the open project on its own, or the list
   // of projects, a header each. (A repo registered twice here is two
@@ -398,8 +404,14 @@ export function buildSidebarRows({
     }
   }
 
+  // The list split by owner files the headers drawn above under them.
+  const drawn =
+    inProject || byOwner === null
+      ? rows
+      : ownerSections(rows, order.owners, byOwner.shut);
+
   return {
-    rows,
+    rows: drawn,
     pinned,
     level: inProject ? openKey : null,
     // Every project renders a header, so "no rows" here only ever means
@@ -409,7 +421,7 @@ export function buildSidebarRows({
       // A row behind a shut shelved or hidden fold: its toggle
       // stands in for it.
       const shown = (key: string) =>
-        rows.some((r) => r.key === key) ? key : shutFoldRows.get(key);
+        drawn.some((r) => r.key === key) ? key : shutFoldRows.get(key);
       // A peer's row is device-qualified (remoteWorktreeRows). It
       // is absent while its listing is in flight or the tree is not
       // inside its project, which reveals nothing: the shell opens the
@@ -458,6 +470,65 @@ interface ProjectGroup {
   local: boolean;
   remote: RemoteForestItem[];
 }
+
+// Who a project belongs to, off its remote's `host/owner/repo`: the
+// org or user account, keyed by host too (one name on two hosts is two
+// owners) and case-folded (hosts treat owner names that way). The host
+// is left off the label for github.com, where nearly every remote is.
+// Null when the project has no network remote, or its path has no
+// owner segment.
+export function ownerOf(
+  project: Project,
+): { key: string; label: string } | null {
+  const [host, owner, ...repo] = project.remote?.split("/") ?? [];
+  if (!host || !owner || repo.length === 0) return null;
+  return {
+    key: `${host}/${owner}`.toLowerCase(),
+    label: host === "github.com" ? owner : `${host}/${owner}`,
+  };
+}
+
+// The list of projects' rows under a header per owner, the owners in
+// `order`. Projects with no owner trail the rest under a header of
+// their own, as the order leaves them out. All of one owner (or none),
+// there is nothing to tell apart, so the list stays one run with no
+// header.
+function ownerSections(
+  rows: SidebarRow[],
+  order: ReadonlyMap<string, number>,
+  shut: ReadonlySet<string>,
+): SidebarRow[] {
+  const sections = new Map<string, { label: string; rows: SidebarRow[] }>();
+  for (const row of rows) {
+    const owner = row.kind === "project" ? ownerOf(row.project) : null;
+    const key = owner?.key ?? NO_OWNER_KEY;
+    const section = sections.get(key);
+    if (section) section.rows.push(row);
+    else sections.set(key, { label: owner?.label ?? "No remote", rows: [row] });
+  }
+  if (sections.size < 2) return rows;
+  const rankOf = (key: string) => order.get(key) ?? order.size;
+  const drawn: SidebarRow[] = [];
+  for (const [ownerKey, section] of [...sections].toSorted(
+    ([a], [b]) => rankOf(a) - rankOf(b),
+  )) {
+    const expanded = !shut.has(ownerKey);
+    drawn.push({
+      kind: "owner-header",
+      key: `o:${ownerKey}`,
+      ownerKey,
+      label: section.label,
+      count: section.rows.length,
+      expanded,
+    });
+    if (expanded) drawn.push(...section.rows);
+  }
+  return drawn;
+}
+
+// The section of the projects with no owner. Not a valid owner key
+// (those always hold a slash), so no owner can take it.
+const NO_OWNER_KEY = "none";
 
 // Whether a local project takes the peers' checkouts of its repo.
 // Claimed by identity even while still loading, so the project's
@@ -522,8 +593,12 @@ function claimRemote(
 
 // Group rank by group id. A repo this machine holds is also ranked
 // under the peer-only id it would have, so narrowed to a peer that
-// holds it too, the peer's group keeps the local project's place.
-export type ProjectGroupOrder = ReadonlyMap<string, number>;
+// holds it too, the peer's group keeps the local project's place. And
+// owner rank by owner key (ownerOf), for the list split by owner.
+export interface ProjectGroupOrder {
+  groups: ReadonlyMap<string, number>;
+  owners: ReadonlyMap<string, number>;
+}
 
 // Where each group sits in the tree, decided over every device's
 // projects before the device filter narrows them, so picking a device
@@ -531,7 +606,10 @@ export type ProjectGroupOrder = ReadonlyMap<string, number>;
 // several devices sorts as one project: its newest use on any of them,
 // and its uses on all of them summed. The manual sort has only this
 // machine's arranged order to go by, so the repos only peers hold
-// trail it in the order they were merged.
+// trail it in the order they were merged. An owner sits where its
+// best-ranked project does, so a usage sort puts the owner of the
+// project worked on most first, except under the alphabetical sort,
+// where the owners go by name.
 export function projectGroupOrder({
   projects,
   remote,
@@ -558,14 +636,26 @@ export function projectGroupOrder({
       project: withMergedUsage(first.project, rest),
     });
   }
-  const order = new Map<string, number>();
+  const groups = new Map<string, number>();
+  // Owner labels by key, in the order their projects lead them in.
+  const owners = new Map<string, string>();
   sortByProject(entries, sortMode, (entry) => entry.project).forEach(
     (entry, rank) => {
       // A repo registered twice here keeps its first project's place.
-      for (const id of entry.groupIds) if (!order.has(id)) order.set(id, rank);
+      for (const id of entry.groupIds)
+        if (!groups.has(id)) groups.set(id, rank);
+      const owner = ownerOf(entry.project);
+      if (owner && !owners.has(owner.key)) owners.set(owner.key, owner.label);
     },
   );
-  return order;
+  const ranked =
+    sortMode === "alphabetical"
+      ? [...owners].toSorted(([, a], [, b]) => a.localeCompare(b))
+      : [...owners];
+  return {
+    groups,
+    owners: new Map(ranked.map(([key], rank) => [key, rank])),
+  };
 }
 
 // One project's usage with every other checkout of it folded in: the
