@@ -247,6 +247,8 @@ export function buildApi(transports: Record<ContractScope, ClientTransport>) {
       onOpenSettings: navClient.openSettings,
       onAddProject: navClient.addProject,
       onLaunchById: navClient.launchById,
+      onDeepLink: navClient.deepLink,
+      takeDeepLink: navClient.takeDeepLink,
     },
 
     packageScripts: {

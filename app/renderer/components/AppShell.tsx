@@ -26,6 +26,7 @@ import { useSidebarView } from "@/hooks/projects/useSidebarView";
 import { useOpenProject } from "@/components/sidebar/openProject";
 import { useProjects } from "@/hooks/projects/useProjects";
 import { useRemoteForests } from "@/hooks/remote/useRemoteForests";
+import { useDeepLinks } from "@/hooks/ui/useDeepLinks";
 import { useResizableWidth } from "@/hooks/ui/useResizableWidth";
 import { usePaletteVariantHotkey } from "@/hooks/ui/usePaletteVariantHotkey";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
@@ -73,6 +74,8 @@ export function AppShell() {
       }),
     [navigate],
   );
+
+  useDeepLinks();
 
   return (
     <div

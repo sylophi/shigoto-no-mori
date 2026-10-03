@@ -24,6 +24,11 @@ import {
   DEVICE_ID_FLAG,
 } from "./argFlags";
 import { attachContextMenu } from "./electron/contextMenu";
+import {
+  deepLinkRoute,
+  deepLinkRouteInArgv,
+  receiveDeepLink,
+} from "./electron/deepLink";
 import { resetSafeStorageItemOnce } from "./electron/keychain";
 import { enableDevCdpPort } from "./electron/devCdp";
 import { devProfileSuffix, initDevProfile } from "./electron/devProfile";
@@ -358,13 +363,13 @@ const showCrashGiveUpDialog = () => {
   );
 };
 
-// Launching the app again while a copy runs is a request to see it, so
-// surface the window we already have. It can be missing if the user
-// closed it and then cancelled the quit that followed. Before the first
-// boot-time createWindow() call, do nothing beyond the focus below: that
-// call is already on its way, and racing it here would leave two windows
-// open instead of one.
-app.on("second-instance", () => {
+// Launching the app again while a copy runs is a request to see it, and
+// so is a deep link, so surface the window we already have. It can be
+// missing if the user closed it and then cancelled the quit that
+// followed. Before the first boot-time createWindow() call, do nothing
+// beyond the focus below: that call is already on its way, and racing
+// it here would leave two windows open instead of one.
+function surfaceMainWindow(): void {
   // After the crash-loop guard gave up, or if the renderer has crashed,
   // mainWindow is a live handle to a dead shell: isDestroyed() is false
   // but its renderer is gone, so show()/focus() would raise an empty
@@ -387,6 +392,36 @@ app.on("second-instance", () => {
   // macOS won't raise a background app just because one of its windows
   // asked for focus, and the launch the user just made is already gone.
   app.focus({ steal: true });
+}
+
+// Hands a deep link's route to the renderer (main/electron/deepLink.ts)
+// and raises the window it will open in. Before "ready" (a link that
+// launched the app) there is nothing to raise yet: the boot-time window
+// is on its way and takes the link.
+function openDeepLink(route: string): void {
+  if (app.isReady()) surfaceMainWindow();
+  const live = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  receiveDeepLink(route, live?.webContents);
+}
+
+// Windows and Linux pass a deep link in a launch's argv: this
+// process's own when the link started the app, the second instance's
+// otherwise. macOS sends open-url, registered here before "ready" so a
+// link that launched the app is not missed.
+const launchRoute = deepLinkRouteInArgv(process.argv);
+if (launchRoute) receiveDeepLink(launchRoute, undefined);
+
+app.on("second-instance", (_event, argv) => {
+  const route = deepLinkRouteInArgv(argv);
+  if (route) openDeepLink(route);
+  else surfaceMainWindow();
+});
+
+app.on("open-url", (event, url) => {
+  const route = deepLinkRoute(url);
+  if (route === null) return;
+  event.preventDefault();
+  openDeepLink(route);
 });
 
 app.on("ready", async () => {
