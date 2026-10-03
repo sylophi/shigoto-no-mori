@@ -1,21 +1,18 @@
 // The modal shell's look: a backdrop over the window and the dialog's
 // box hung from near its top. ModalShell (modal-shell.tsx) portals it
-// over the app with its keys and clicks. A scene (lab/scenes) draws it
-// as is, `contained` within its own box rather than over the viewport,
-// since a scene is a picture of a window, not one.
+// over the app with its keys and clicks. A scene (lab/scenes) draws the
+// box alone (ModalShellBox).
 import type { ComponentProps, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export function ModalShellView({
   popoverClassName,
-  contained,
   children,
   ...backdrop
 }: ComponentProps<"div"> & {
   // Optional override for the popover's class list (sizing, layout).
   // Defaults to a max-w-xl column.
   popoverClassName?: string;
-  contained?: boolean;
 }) {
   return (
     <div
@@ -24,10 +21,7 @@ export function ModalShellView({
       // jump as it grows. A taller dialog eats that gap first, then caps
       // at the window, where its scrolling body takes the rest (any
       // wrappers above that body need min-h-0).
-      className={cn(
-        "inset-0 z-50 flex flex-col items-center bg-background/40 p-4 backdrop-blur-[2px] before:h-[calc(10vh-1rem)]",
-        contained ? "absolute" : "fixed",
-      )}
+      className="fixed inset-0 z-50 flex flex-col items-center bg-background/40 p-4 backdrop-blur-[2px] before:h-[calc(10vh-1rem)]"
       {...backdrop}
     >
       <ModalShellBox popoverClassName={popoverClassName}>

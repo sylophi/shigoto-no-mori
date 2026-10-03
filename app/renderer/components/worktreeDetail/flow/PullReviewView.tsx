@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Fragment, type ReactNode } from "react";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
+import { pullWorktreeName } from "@shared/git/branches";
 import type { Project, Worktree } from "@shared/schemas";
 import { DeviceGlyph } from "@/components/shared/DeviceGlyph";
 import { Button } from "@/components/ui/button";
@@ -162,18 +163,21 @@ export function DestinationRowView({
   worktree,
   icon,
   thisDeviceLabel,
-  holds,
+  landing,
   collision,
-  tag,
+  toPeer,
 }: {
   worktree: Worktree;
   icon: DeviceIcon;
   thisDeviceLabel: string;
-  // "has <project>", or "gets <project>" for a clone.
-  holds: string;
+  // The project the copy lands in there, or the one the clone makes.
+  landing: { has: string } | { gets: string };
   collision: DestinationRowCollision;
-  tag: string;
+  // The flow goes to a peer, so the landing device is not this one.
+  toPeer: boolean;
 }) {
+  const holds =
+    "has" in landing ? `has ${landing.has}` : `gets ${landing.gets}`;
   const { landingBranch, held, holderName } = collision;
   return (
     <DeviceRow
@@ -214,7 +218,11 @@ export function DestinationRowView({
       trailing={
         <StatusDot
           tone={held ? "amber" : "emerald"}
-          label={<span className="text-xs">{tag}</span>}
+          label={
+            <span className="text-xs">
+              {toPeer ? "destination" : "this device"}
+            </span>
+          }
         />
       }
     />
@@ -502,13 +510,15 @@ export function SourceCardView({
 export function DestinationFolderView({
   thisDeviceLabel,
   base,
-  name,
+  worktree,
 }: {
   thisDeviceLabel: string;
   // The base folder as shown (tildified), null until it is read.
   base: string | null;
-  name: string | undefined;
+  // The worktree being pulled, whose folder name the copy takes.
+  worktree: Parameters<typeof pullWorktreeName>[0];
 }) {
+  const name = pullWorktreeName(worktree);
   // Plain text on purpose: a measured PathSpan would abbreviate the
   // base folder to make room for the placeholder beside it.
   const shownName = name ?? "‹new name›";

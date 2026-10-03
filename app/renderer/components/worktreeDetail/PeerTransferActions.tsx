@@ -5,17 +5,19 @@
 // remote pair waits on (a real branch of its own, a repo identity) and
 // on another device that hosts projects (one without the repo clones
 // it first). Which peer is the dialog's question (flow/peerTargets.ts),
-// so the buttons only open it. The primary
-// checkout can be mirrored but not transplanted: it is the project
-// itself and cannot be torn down.
+// so the buttons only open it.
 import { useState } from "react";
-import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
+import type { Project, Worktree } from "@shared/schemas";
 import {
   useLocalMirrorBlocker,
   useWorktreeMirrorLinks,
 } from "@/hooks/remote/useMirrors";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
-import { FooterLeadingVerbView } from "./FooterLeadingVerbView";
+import {
+  canTransplantAway,
+  FooterLeadingVerbView,
+  transferIdentity,
+} from "./FooterLeadingVerbView";
 import { usePeerTargets } from "./flow/peerTargets";
 import { MirrorToDialog } from "./mirror/MirrorDialog";
 import { TransplantToDialog } from "./transplant/TransplantDialog";
@@ -27,18 +29,13 @@ export function PeerTransferActions({
   worktree: Worktree;
   project: Project;
 }) {
-  if (
-    worktree.detached ||
-    !isRealBranch(worktree.branch) ||
-    project.identity == null
-  ) {
-    return null;
-  }
+  const sourceIdentity = transferIdentity(worktree, project);
+  if (sourceIdentity === null) return null;
   return (
     <TransferButtons
       worktree={worktree}
       project={project}
-      sourceIdentity={project.identity}
+      sourceIdentity={sourceIdentity}
     />
   );
 }
@@ -81,7 +78,7 @@ function TransferButtons({
           onClick={() => setOpen("mirror")}
         />
       )}
-      {canOpen && !worktree.isPrimary && (
+      {canOpen && canTransplantAway(worktree) && (
         <FooterLeadingVerbView
           verb={{ kind: "transplantTo" }}
           onClick={() => setOpen("transplant")}

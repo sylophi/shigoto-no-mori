@@ -163,19 +163,31 @@ over the lab's fixtures into one of the site's pictures.
 - Menus and dialogs a scene shows open are drawn inline, without their
   portals: `ui/menu-view.tsx` and `ui/modal-shell-view.tsx` carry the
   live ones' slots and classes.
-- **A scene** lives in `lab/scenes/`, builds its props from the
-  fixtures through `lab/scenes/world.ts`, and is listed in
-  `lab/scenes/index.ts`. `pnpm test scenes` renders every one in Node,
-  where anything that reaches for the app fails, and the marketing
-  site renders them the same way.
-- A whole window is composed rather than drawn: `AppWindowScene`
-  (lab/scenes/AppWindowScene.tsx) is the shell (AppShellView) around a
-  `sidebar` and a page, and `LabSidebar` (lab/scenes/SidebarScenes.tsx)
-  is the sidebar over the fixtures in either shell and view, with a
-  selected worktree.
+- **A scene** is one picture: a component that takes no props, listed
+  in `lab/scenes/index.ts` with the size it lays out at and, for a
+  whole window, which window it is (the desktop app's or the web app on
+  a phone). `pnpm test scenes` renders every one in Node, where
+  anything that reaches for the app fails, and the marketing site
+  renders them the same way.
+- The scenes are put together from the lab's parts, which are the
+  app's views over the fixtures: `LabWindow` (the shell, AppShellView,
+  around a `sidebar` and a page), `LabSidebar` (either shell, either
+  view, with a selected worktree), `WorktreeDetailPane` and
+  `DevicesPane`. Where the live app fills a view's slot with a
+  component that reads the app, a part fills it with that component's
+  view.
+- The parts read the fixtures through `lab/scenes/world/`: `index.ts`
+  for what every scene reads, and a file per part of the app. Each is
+  plain functions over the fixtures that hand them to the app's own
+  pure builders (`buildInboxRows`, `mergeBoxState`,
+  `pullLandingCollision`, ...). A rule the app applies (which rows
+  the inbox holds, when a pull would collide) belongs in such a
+  builder, called by the component and the scene alike, and never
+  written a second time here.
 
 A view should draw exactly what its component drew. To check, shoot
 the lab before and after (`lab/shoot.mts`) and compare the images.
 To see a scene beside the live app, the lab serves a viewer at
-`/scenes.html?scene=<name>` (lab/scenes/viewer.tsx), which takes the
-lab's appearance poses and shoots like any other.
+`/scenes.html?scene=<name>` (lab/scenes/viewer.tsx), which draws it at
+its size and takes the lab's appearance poses. A scene poses as a
+release build, so it lacks the dev marks the lab's brand header wears.

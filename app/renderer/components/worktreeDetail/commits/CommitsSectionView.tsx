@@ -1,19 +1,16 @@
 // The Branch section as drawn (CommitsSection.tsx feeds it): the
 // heading with the uncommitted changes or the sync pill
-// (WorktreeSyncPillView) beside it, the newest commits
-// (CommitRowView), and under them the catch-up pill
+// (WorktreeSyncPillView) beside it, the newest commits, and under them the catch-up pill
 // (WorktreePrimarySyncPillView) and Show all.
 import type { ReactNode } from "react";
 import { ChevronRight, FileDiff, History } from "lucide-react";
 import { SectionHeading } from "@/components/ui/section-heading";
 import type { CommitSummary } from "@shared/schemas";
-import { CommitRowView } from "./CommitRowView";
 
 export function CommitsSectionView({
   changedCount,
   syncPill,
   commits,
-  now,
   renderCommit,
   primarySync,
   showAll = false,
@@ -26,11 +23,8 @@ export function CommitsSectionView({
   syncPill?: ReactNode;
   // The teaser's commits, newest first.
   commits: CommitSummary[];
-  // The time the commits' ages count back from, for the rows drawn
-  // here (renderCommit not given).
-  now?: number;
-  // A live row per commit. CommitRowView when not given.
-  renderCommit?: (commit: CommitSummary, index: number) => ReactNode;
+  // A commit's row: CommitRow, or CommitRowView for a picture of it.
+  renderCommit: (commit: CommitSummary, index: number) => ReactNode;
   primarySync?: ReactNode;
   // More commits than the teaser shows.
   showAll?: boolean;
@@ -65,13 +59,7 @@ export function CommitsSectionView({
       ) : (
         <ul className="space-y-2">
           {commits.map((commit, index) => (
-            <li key={commit.hash}>
-              {renderCommit ? (
-                renderCommit(commit, index)
-              ) : (
-                <CommitRowView commit={commit} now={now ?? 0} />
-              )}
-            </li>
+            <li key={commit.hash}>{renderCommit(commit, index)}</li>
           ))}
         </ul>
       )}

@@ -33,7 +33,7 @@ export function DeviceBadge({ badge }: { badge: SidebarDeviceBadge }) {
 
 // The mark a local worktree wears for the peer it is mirrored with: the
 // mirror glyph and the peer's badge, the badge only while the window
-// shows device badges (RowDeviceBadge). Worn in the sidebar's rows and
+// shows device badges. Worn in the sidebar's rows and
 // the palette's.
 export function MirrorBadgeView({
   mirror,

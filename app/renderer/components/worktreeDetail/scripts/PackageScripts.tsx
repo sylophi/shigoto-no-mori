@@ -95,37 +95,41 @@ export function PackageScripts({ worktree, pkg }: PackageScriptsProps) {
           command={entry.command}
         />
       )}
-      arranging={arranging}
       arrangeList={
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={({ active }: DragStartEvent) =>
-            setDragging(String(active.id))
-          }
-          onDragEnd={handleDragEnd}
-          onDragCancel={() => setDragging(null)}
-        >
-          <SortableContext items={names} strategy={rectSortingStrategy}>
-            <ScriptList>
-              {names.map((name) => (
-                <ArrangeScriptRow
-                  key={name}
-                  name={name}
-                  pinned={pinnedOf(name)}
-                  onPin={(onRow) =>
-                    setLaunchRow.mutate({ scriptName: name, onRow })
-                  }
+        arranging ? (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={({ active }: DragStartEvent) =>
+              setDragging(String(active.id))
+            }
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => setDragging(null)}
+          >
+            <SortableContext items={names} strategy={rectSortingStrategy}>
+              <ScriptList>
+                {names.map((name) => (
+                  <ArrangeScriptRow
+                    key={name}
+                    name={name}
+                    pinned={pinnedOf(name)}
+                    onPin={(onRow) =>
+                      setLaunchRow.mutate({ scriptName: name, onRow })
+                    }
+                  />
+                ))}
+              </ScriptList>
+            </SortableContext>
+            <DragOverlay>
+              {dragging !== null && (
+                <ScriptDragPreview
+                  name={dragging}
+                  pinned={pinnedOf(dragging)}
                 />
-              ))}
-            </ScriptList>
-          </SortableContext>
-          <DragOverlay>
-            {dragging !== null && (
-              <ScriptDragPreview name={dragging} pinned={pinnedOf(dragging)} />
-            )}
-          </DragOverlay>
-        </DndContext>
+              )}
+            </DragOverlay>
+          </DndContext>
+        ) : undefined
       }
       onToggleExpanded={() => {
         setExpanded(!expanded);

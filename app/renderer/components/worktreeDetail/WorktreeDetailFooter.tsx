@@ -1,36 +1,21 @@
-import { type ReactNode, useRef } from "react";
+import { useRef } from "react";
 import {
   useSetAutoPull,
   useSetShelved,
 } from "@/hooks/worktrees/useWorktreeMutations";
-import type { Worktree } from "@shared/schemas";
 import { useFittedLabels } from "./footerFit";
 import {
   type WorktreeFooterActions,
-  type WorktreeFooterState,
   WorktreeDetailFooterView,
-} from "./WorktreeDetailFooterView";
-
-export type {
-  WorktreeFooterActions,
-  WorktreeFooterState,
+  type WorktreeDetailFooterViewProps,
 } from "./WorktreeDetailFooterView";
 
 // The worktree page's footer (WorktreeDetailFooterView), with the quiet
 // state's toggles and its labels fitted to the pane.
-interface WorktreeDetailFooterProps {
-  worktree: Worktree;
-  state: WorktreeFooterState;
-  actions: WorktreeFooterActions;
-  // The scope's own verbs (ports, mirror, transplant), rendered as a
-  // leading row in the quiet state only: the deletion state machine
-  // keeps the whole footer once it engages.
-  leading?: ReactNode;
-  // False when a remote host has not granted this client command
-  // access: the mutating affordances (shelve, delete) stay off, the
-  // rest of the page is the read-only mirror.
-  canMutate?: boolean;
-}
+type WorktreeDetailFooterProps = Pick<
+  WorktreeDetailFooterViewProps,
+  "worktree" | "state" | "leading" | "canMutate"
+> & { actions: WorktreeFooterActions };
 
 export function WorktreeDetailFooter({
   worktree,

@@ -11,12 +11,7 @@ import type {
   Worktree,
 } from "@shared/schemas";
 import { mergeBoxState, type StackReach } from "./mergeBoxState";
-
-export {
-  type MergeBoxMode,
-  STACK_REACH_OPTIONS,
-  type StackReach,
-} from "./mergeBoxState";
+import type { MergeBoxViewProps } from "./MergeBoxView";
 
 interface UseMergeBoxArgs {
   worktree: Worktree;
@@ -26,28 +21,24 @@ interface UseMergeBoxArgs {
   stack: PullRequestStack | null;
 }
 
-// The merge box's state (mergeBoxState.ts) with the picks it is
-// worked out from and the mutations its buttons run.
+// What the merge box draws (MergeBoxView): its state (mergeBoxState.ts)
+// over the picks made here, and the mutations its buttons run.
 export function useMergeBox({
   worktree,
   pr,
   repoConfig,
   lastMergeMethod,
   stack,
-}: UseMergeBoxArgs) {
+}: UseMergeBoxArgs): MergeBoxViewProps {
   const merge = useMergePullRequest();
   const setDraft = useSetPullRequestDraft();
   const disableAutoMerge = useDisablePullRequestAutoMerge();
   const { armed, trigger, reset } = useConfirmTwice(CONFIRM_QUICK_MS);
-  // The dropdown swaps the active method; null means "stick with whatever
-  // the repo + saved preference resolve to". Kept local so picking a
-  // method on one worktree doesn't bleed into another.
+  // Kept local so picking a method on one worktree doesn't bleed into
+  // another.
   const [pickedMethod, setPickedMethod] = useState<MergeMethod | null>(null);
-  // Up to here by default: landing more than the page you are on says
-  // is the surprise to avoid. On the stack's top both reaches agree,
-  // so the toggle stays hidden and the reach reads as the whole stack.
   const [pickedReach, setReach] = useState<StackReach>("upTo");
-  const { plan, ...state } = mergeBoxState({
+  const state = mergeBoxState({
     pr,
     repoConfig,
     lastMergeMethod,
@@ -62,7 +53,7 @@ export function useMergeBox({
       {
         projectId: worktree.projectId,
         branch: worktree.branch,
-        number: plan.number,
+        number: state.mergeNumber,
         method,
         stack: stack !== null,
       },
@@ -99,17 +90,23 @@ export function useMergeBox({
     });
   };
 
+  const { activeMethod } = state;
   return {
-    merge,
-    setDraft,
-    disableAutoMerge,
+    pr,
+    state,
     armed,
-    trigger,
-    ...state,
-    runMerge,
-    pickMethod,
-    pickReach,
-    toggleDraft,
-    runDisableAutoMerge,
+    mergePending: merge.isPending,
+    setDraftPending: setDraft.isPending,
+    disablePending: disableAutoMerge.isPending,
+    mergeError: merge.error?.message,
+    setDraftError: setDraft.error?.message,
+    disableError: disableAutoMerge.error?.message,
+    onMerge: () => {
+      if (activeMethod) trigger(() => runMerge(activeMethod));
+    },
+    onPickMethod: pickMethod,
+    onPickReach: pickReach,
+    onToggleDraft: toggleDraft,
+    onDisableAutoMerge: runDisableAutoMerge,
   };
 }

@@ -5,7 +5,8 @@
 // parts that save something (the icon picker, the name field, the
 // switches, the forwards) come in as slots, so the live row fills them
 // with the components that call the hooks and a scene with their
-// views.
+// views. A slot that names the machine or depends on its state is a
+// function of what the row worked out, so the two agree.
 import type { ReactNode } from "react";
 import { AlertTriangle, Trash2 } from "lucide-react";
 import type { TunnelState } from "@shared/ipc/modules/hub";
@@ -20,9 +21,8 @@ import { cn } from "@/lib/utils";
 import { DeviceRenameButton } from "./DeviceNameFieldView";
 import { tunnelNote, type DeviceRowStatus } from "./deviceRegistryStatus";
 
-// What a row calls its machine and what it shows, worked out once for
-// the row and for whoever fills its slots, so the two agree.
-export function deviceRowFacts({
+// What a row calls its machine and what it shows.
+function deviceRowFacts({
   deviceId,
   platform,
   isThisDevice,
@@ -73,15 +73,14 @@ export function DeviceRegistryRowView({
   tunnel,
   access,
   canForwardPorts,
-  renaming,
+  renaming = false,
   onRename,
-  confirming,
-  revokePending,
+  removal = "idle",
   onRemove,
   onCancelRemove,
-  iconPicker,
-  nameField,
-  hosts,
+  renderIconPicker,
+  renderNameField,
+  renderHosts,
   switches,
   portForwards,
 }: {
@@ -104,26 +103,27 @@ export function DeviceRegistryRowView({
   // browser cannot).
   canForwardPorts: boolean;
   // The name is open for editing, which hides the tag and the actions.
-  renaming: boolean;
+  renaming?: boolean;
   onRename?: () => void;
-  // Remove is armed (or running), so the banner takes the controls'
-  // place.
-  confirming: boolean;
-  revokePending: boolean;
+  // Where removing the device stands. Armed or running, the banner
+  // takes the controls' place.
+  removal?: "idle" | "armed" | "removing";
   onRemove?: () => void;
   onCancelRemove?: () => void;
-  // The row's mark, which opens the icon picker.
-  iconPicker: ReactNode;
-  // The name, as text or as its editor.
-  nameField: ReactNode;
-  // The project strip, drawn for a machine that hosts projects.
-  hosts: ReactNode;
+  // The row's mark, which opens the icon picker, given what the row's
+  // controls call the machine.
+  renderIconPicker: (label: string) => ReactNode;
+  // The name, as text or as its editor, given the same.
+  renderNameField: (label: string) => ReactNode;
+  // The project strip, drawn for a machine that hosts projects, given
+  // whether its chips are its last session's.
+  renderHosts: (cached: boolean) => ReactNode;
   // This device's two switches, drawn for a machine others can reach.
   switches: ReactNode;
   // A peer's forwards, drawn where this client can forward to it.
   portForwards: ReactNode;
 }) {
-  const { traits, namedDevice, controlLabel } = deviceRowFacts({
+  const { traits, namedDevice, controlLabel, hostsCached } = deviceRowFacts({
     deviceId,
     platform,
     isThisDevice,
@@ -131,6 +131,8 @@ export function DeviceRegistryRowView({
     showId,
     status,
   });
+  const confirming = removal !== "idle";
+  const removing = removal === "removing";
   // A peer that is up and has SAID "no" is read-only from here.
   // Nothing is said before its session reports, when the peer is
   // unreachable (it cannot run anything anyway), or for a browser,
@@ -160,12 +162,12 @@ export function DeviceRegistryRowView({
     // the sake of a column it does not belong to.
     <li className="flex flex-col gap-3 py-5 first:pt-1 last:pb-1">
       <div className="flex gap-3.5">
-        {iconPicker}
+        {renderIconPicker(controlLabel)}
 
         <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-3 gap-y-2">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-              {nameField}
+              {renderNameField(controlLabel)}
               {isThisDevice && !renaming && <RowTag>{traits.selfLabel}</RowTag>}
               {showId && (
                 <span
@@ -230,7 +232,7 @@ export function DeviceRegistryRowView({
 
       {note !== null && <p className="text-xs text-muted-foreground">{note}</p>}
 
-      {traits.hostsProjects && hosts}
+      {traits.hostsProjects && renderHosts(hostsCached)}
 
       {confirming ? (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-xs text-rose-700 dark:text-rose-300">
@@ -247,7 +249,7 @@ export function DeviceRegistryRowView({
             <Button
               variant="ghost"
               size="xs"
-              disabled={revokePending}
+              disabled={removing}
               onClick={() => onCancelRemove?.()}
             >
               Cancel
@@ -255,10 +257,10 @@ export function DeviceRegistryRowView({
             <Button
               variant="destructive"
               size="xs"
-              disabled={revokePending}
+              disabled={removing}
               onClick={() => onRemove?.()}
             >
-              {revokePending ? "Removing…" : "Remove device"}
+              {removing ? "Removing…" : "Remove device"}
             </Button>
           </div>
         </div>

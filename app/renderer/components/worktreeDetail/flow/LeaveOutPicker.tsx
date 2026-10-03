@@ -21,15 +21,12 @@ import type { PickerEntry } from "@/components/shared/PickerRow";
 import { Button } from "@/components/ui/button";
 import { MaterialIcon } from "@/components/ui/material-icon";
 import { useWorktreeFolder } from "@/hooks/remote/useWorktreeFolder";
-import { withToggled } from "@/lib/toggleSet";
-import {
-  exceptionsOf,
-  IGNORE_BASE_COPY,
-  type IgnoreSelection,
-} from "./ignoreChoice";
+import { IGNORE_BASE_COPY } from "./ignoreBaseCopy";
+import { exceptionsOf, type IgnoreSelection } from "./ignoreChoice";
 import {
   type IgnoredPathsState,
   LeaveOutPickerView,
+  withExceptionToggled,
 } from "./LeaveOutPickerView";
 
 // What the picker browses: the folder browser's own props, less the
@@ -86,11 +83,7 @@ export function LeaveOutPicker<E extends PickerEntry>({
   const [picking, setPicking] = useState(false);
   const bringing = value.base === "gitignored";
   const excepted = exceptionsOf(value);
-  const toggle = (path: string) =>
-    onChange({
-      ...value,
-      [bringing ? "brought" : "leftOut"]: withToggled(path)(new Set(excepted)),
-    });
+  const toggle = (path: string) => onChange(withExceptionToggled(value, path));
   const copy = IGNORE_BASE_COPY[value.base];
   // Each brought path costs the gitignore rules two patterns of room.
   const full = bringing && excepted.size >= BRING_PATHS_LIMIT;

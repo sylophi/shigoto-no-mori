@@ -2,7 +2,7 @@ import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { useDelayedFlag } from "@/hooks/ui/useDelayedFlag";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import type { Worktree } from "@shared/schemas";
-import { PullRequestRefreshButtonView } from "./PullRequestSectionView";
+import { PullRequestRefreshButtonView } from "./PullRequestRefreshButtonView";
 
 // Re-asks gh for this worktree's PR. The page refetches on its own when
 // the window regains focus, refs move, or the sweep sees the PR change,

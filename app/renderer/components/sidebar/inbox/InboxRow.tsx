@@ -13,7 +13,6 @@ import type { SidebarDeviceBadge } from "../DeviceBadge";
 import { ProjectMenuItems, useProjectMenuRemoveArm } from "../ProjectMenuItems";
 import type { InboxShelf } from "../sidebarRow";
 import { useWorktreeEntry } from "../useWorktreeEntry";
-import { useWorktreeRowState } from "../useWorktreeRowState";
 import { InboxRowView } from "./InboxRowView";
 
 interface InboxRowProps {
@@ -44,7 +43,6 @@ export function InboxRow({
   mirror,
   shelf,
 }: InboxRowProps) {
-  const state = useWorktreeRowState(worktree, device?.deviceId);
   const entry = useWorktreeEntry(worktree, device?.deviceId);
   const projectIconSrc = useProjectIcon(worktree.projectId, device?.deviceId);
   const now = useNow();
@@ -62,9 +60,7 @@ export function InboxRow({
       stack={stack}
       device={device}
       mirror={mirror}
-      look={state}
       shelf={shelf}
-      onClick={state.open}
       {...entry}
     />
   );

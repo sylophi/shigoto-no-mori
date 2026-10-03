@@ -149,8 +149,7 @@ export function SidebarNavActionsView({
 }
 
 // One shape for the sidebar's route buttons (tidy, devices, settings):
-// tooltip, icon, active highlight. NavIconButton works out whether its
-// route is the one on screen.
+// tooltip, icon, active highlight.
 export function NavIconButtonView({
   tip,
   label,

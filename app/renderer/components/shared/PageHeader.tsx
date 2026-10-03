@@ -8,7 +8,7 @@ import type React from "react";
 import { hasLocalHost } from "@/lib/localHost";
 import { PageHeaderView } from "./PageHeaderView";
 
-export { PAGE_HEADER_PADDING } from "./PageHeaderView";
+export { PAGE_HEADER_PADDING } from "./pageInsets";
 
 // The header (PageHeaderView), told whether the window has a local
 // host for its tab bar.

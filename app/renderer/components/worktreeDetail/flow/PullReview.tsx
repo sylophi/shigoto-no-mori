@@ -6,13 +6,9 @@
 // `localProject` and `thisDeviceLabel` name the landing side, whichever
 // machine that is. What each piece reads is here, and how it looks is
 // PullReviewView.tsx.
-import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
 import type { ReactNode } from "react";
 import type { Project, Worktree } from "@shared/schemas";
-import {
-  pullBranchCollision,
-  pullFolderCollision,
-} from "@shared/pullCollision";
+import { pullLandingCollision } from "@shared/pullCollision";
 import { useWorktreeBaseLabel } from "@/hooks/config/useWorktreeBaseLabel";
 import { useBranches } from "@/hooks/git/useBranches";
 import {
@@ -57,53 +53,26 @@ export type DestinationPick = {
   onPick: (deviceId: string) => void;
 };
 
-// Where the pull would refuse at step 2 (host/ipc/modules/sync.ts
-// runPullWorktree): the landing device already has the branch, checked
-// out in a worktree or merely existing, or already has a worktree
-// under the folder name the copy would take. Read under
+// The landing device's side of the collision check
+// (pullLandingCollision), over its cached lists. Read under
 // DestinationScope. Both lists are the ordinary cached ones, so the
 // row and the footer asking the same question cost one read between
-// them. The disk half of the folder rule (a stray folder that is no
-// worktree) is the host's alone. With no landing project yet (a flow
-// to a peer before its pick) nothing is read and nothing refuses. The
-// branch asked about is the one the copy lands on (pullLandingBranch).
+// them.
 function useLocalCollision(
   localProject: Project | undefined,
   worktree: Worktree,
   landing: Landing = LANDS_HERE,
-): {
-  // The branch the copy lands on.
-  landingBranch: string;
-  held: boolean;
-  holder: Worktree | undefined;
-  // The refusal the footer shows and Start waits on, or null.
-  refusal: string | null;
-} {
+) {
   const { data: branches } = useBranches(localProject?.id ?? null);
   const { data: worktrees } = useWorktrees(localProject?.id ?? null);
-  const landingBranch = pullLandingBranch(worktree);
-  const held = branches?.local.includes(landingBranch) ?? false;
-  const holder = held
-    ? worktrees?.find((entry) => entry.branch === landingBranch)
-    : undefined;
-  const name = pullWorktreeName(worktree);
-  const taken =
-    name !== undefined &&
-    (worktrees?.some(
-      (entry) => entry.name.toLowerCase() === name.toLowerCase(),
-    ) ??
-      false);
-  // A peer's refusal names the peer. This device's keeps its own words.
-  const where = landing.onPeer ? landing.on : undefined;
-  const refusal =
-    localProject === undefined
-      ? null
-      : held
-        ? pullBranchCollision(landingBranch, holder?.path, where)
-        : taken
-          ? pullFolderCollision(name, `${localProject.name}/${name}`, where)
-          : null;
-  return { landingBranch, held, holder, refusal };
+  return pullLandingCollision({
+    worktree,
+    projectName: localProject?.name,
+    localBranches: branches?.local,
+    worktrees,
+    // A peer's refusal names the peer.
+    where: landing.onPeer ? landing.on : undefined,
+  });
 }
 
 // The landing device, filled (DestinationRowView), with its device and
@@ -112,12 +81,12 @@ function DestinationRow({
   worktree,
   target,
   thisDeviceLabel,
-  tag,
+  toPeer,
 }: {
   worktree: Worktree;
   target: LandingTarget;
   thisDeviceLabel: string;
-  tag: string;
+  toPeer: boolean;
 }) {
   // The destination as the devices column names it: this machine, or
   // the peer a flow to a peer picked (DestinationProvider).
@@ -131,13 +100,13 @@ function DestinationRow({
       worktree={worktree}
       icon={destinationIcon}
       thisDeviceLabel={thisDeviceLabel}
-      holds={
+      landing={
         target.project
-          ? `has ${target.project.name}`
-          : `gets ${target.clone.projectName}`
+          ? { has: target.project.name }
+          : { gets: target.clone.projectName }
       }
       collision={{ landingBranch, held, holderName: holder?.name }}
-      tag={tag}
+      toPeer={toPeer}
     />
   );
 }
@@ -197,7 +166,7 @@ export function ReviewDevicesColumn({
               worktree={worktree}
               target={target}
               thisDeviceLabel={thisDeviceLabel}
-              tag={toPeer ? "destination" : "this device"}
+              toPeer={toPeer !== undefined}
             />
           )
         }
@@ -209,7 +178,7 @@ export function ReviewDevicesColumn({
             <DestinationFolder
               localProject={target.project}
               thisDeviceLabel={thisDeviceLabel}
-              name={pullWorktreeName(worktree)}
+              worktree={worktree}
             />
 
             <SetupToggle
@@ -414,22 +383,22 @@ export function SourceCard({
   );
 }
 
-// Where the worktree lands (DestinationFolderView): the local layout's
-// base folder plus the source's own folder name (pullWorktreeName).
+// Where the worktree lands (DestinationFolderView): under the local
+// layout's base folder.
 function DestinationFolder({
   localProject,
   thisDeviceLabel,
-  name,
+  worktree,
 }: {
   localProject: Project;
   thisDeviceLabel: string;
-  name: string | undefined;
+  worktree: Worktree;
 }) {
   return (
     <DestinationFolderView
       thisDeviceLabel={thisDeviceLabel}
       base={useWorktreeBaseLabel(localProject)}
-      name={name}
+      worktree={worktree}
     />
   );
 }

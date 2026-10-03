@@ -8,23 +8,9 @@ import AppFrame from "../components/AppFrame.astro";
 import Page from "../layouts/Page.astro";
 import { WEB_APP } from "../site";
 
-// The app's own views over its lab's fixtures (the app's lab/scenes),
-// which the frames below render at build time.
-import { LaunchRowScene } from "../../../app/lab/scenes/DetailScene";
-import { RowScene } from "../../../app/lab/scenes/RowScene";
-import { TransplantScene } from "../../../app/lab/scenes/TransplantScene";
-import {
-  CreateWindowScene,
-  DevicesWindowScene,
-  HeroWindowScene,
-  PhoneWindowScene,
-  StackWindowScene,
-} from "../../../app/lab/scenes/WindowScenes";
-
-// The desktop window's size, which the window scenes lay out at.
-const WINDOW: [number, number] = [1280, 800];
-// The sidebar row's, at the sidebar's width.
-const ROW: [number, number] = [240, 63];
+// The app's own views over its lab's fixtures, which the frames below
+// render at build time.
+import { scenes } from "../../../app/lab/scenes";
 
 // The numbered pins over the sidebar row, in the order the legend lists
 // them: each on the part of the row its selector finds, at that side
@@ -59,24 +45,16 @@ const PINS = [
       <AppFrame
         frame="window"
         class="stage-main"
-        size={WINDOW}
-        desktop
+        scene={scenes.heroWindow}
         label="The app's window: a mint sidebar listing worktrees across projects, each with its changed files, commits ahead and pull request number. The open worktree shows launcher buttons, its pull request with checks passed and a Merge button, and its recent commits."
-      >
-        <HeroWindowScene />
-      </AppFrame>
-      <AppFrame frame="framed" class="stage-row" size={ROW} label="">
-        <RowScene />
-      </AppFrame>
+      />
+      <AppFrame frame="framed" class="stage-row" scene={scenes.row} label="" />
       <AppFrame
         frame="phone"
         class="stage-phone"
-        size={[390, 844]}
-        phone
+        scene={scenes.phoneWindow}
         label="The same worktrees in the web app on a phone."
-      >
-        <PhoneWindowScene />
-      </AppFrame>
+      />
     </div>
   </Band>
 
@@ -111,13 +89,10 @@ const PINS = [
         <p class="compare-label">In Shigoto no Mori</p>
         <AppFrame
           frame="card-shot"
-          size={WINDOW}
+          scene={scenes.createWindow}
           crop={[550, 432]}
-          desktop
           label="The New worktree button with a menu under it listing projects to create the worktree in."
-        >
-          <CreateWindowScene />
-        </AppFrame>
+        />
         <ol class="steps">
           <li>Click <b>New worktree</b></li>
           <li>Pick the project</li>
@@ -175,19 +150,16 @@ const PINS = [
         <AppFrame
           frame="framed"
           class="anatomy-row"
-          size={ROW}
+          scene={scenes.row}
           label="One sidebar row: project shigoto-no-mori, a laptop badge, 40m ago, branch exp/terrier-sync, 7 changed files, 1 commit ahead, pull request #151 as 2 of 3, folder gentle-gecko."
         >
-          <RowScene />
-          <Fragment slot="over">
-            {
-              PINS.map((pin, i) => (
-                <span class="pin" data-pin={pin.on} data-side={pin.side}>
-                  {i + 1}
-                </span>
-              ))
-            }
-          </Fragment>
+          {
+            PINS.map((pin, i) => (
+              <span class="pin" data-pin={pin.on} data-side={pin.side}>
+                {i + 1}
+              </span>
+            ))
+          }
         </AppFrame>
         <ol class="legend">
           {PINS.map((pin) => <li>{pin.part}</li>)}
@@ -196,12 +168,9 @@ const PINS = [
       <div class="split">
         <AppFrame
           frame="window"
-          size={WINDOW}
-          desktop
+          scene={scenes.stackWindow}
           label="A worktree whose pull request is the first of a stack of three, marked Merged, with the other two listed above it and 'lands on main' below."
-        >
-          <StackWindowScene />
-        </AppFrame>
+        />
         <div class="points">
           <div class="point">
             <Icon name="file-diff" class="chip mint" />
@@ -249,11 +218,9 @@ const PINS = [
       <AppFrame
         frame="card-shot"
         class="launch"
-        size={[600, 140]}
+        scene={scenes.launchRow}
         label="A worktree's launch row: buttons with app icons for VS Code, Terminal, Finder, Claude Code and GitHub, and under them the project's package.json scripts."
-      >
-        <LaunchRowScene />
-      </AppFrame>
+      />
       <div class="launch-notes">
         <div class="keys" role="img" aria-label="Command 1 to Command 9">
           <kbd>⌘1</kbd><kbd>⌘2</kbd><kbd>⌘3</kbd><span>…</span><kbd>⌘9</kbd>
@@ -307,20 +274,15 @@ const PINS = [
         <AppFrame
           frame="window"
           class="machines-main"
-          size={WINDOW}
-          desktop
+          scene={scenes.devicesWindow}
           label="The Devices page listing Studio Mac, Thinkpad and Mini with their connection state, their projects, and a port forwarded from Thinkpad."
-        >
-          <DevicesWindowScene />
-        </AppFrame>
+        />
         <AppFrame
           frame="floating"
           class="machines-dialog"
-          size={[896, 633]}
+          scene={scenes.transplant}
           label="The Transplant worktree dialog, moving fix-stale-locks from Studio Mac to Thinkpad with its carry-over files. A note says nothing on Studio Mac is deleted until the last step."
-        >
-          <TransplantScene />
-        </AppFrame>
+        />
       </div>
       <div class="cards two">
         <Card icon="smartphone" chip="sky" title="From a browser, or your phone" row>
@@ -391,23 +353,17 @@ const PINS = [
         <AppFrame
           frame="window"
           class="looks-back"
-          size={WINDOW}
-          desktop
+          scene={scenes.stackWindow}
           doubutsu={false}
           label="The neutral theme in light mode."
-        >
-          <StackWindowScene />
-        </AppFrame>
+        />
         <AppFrame
           frame="window"
           class="looks-front"
-          size={WINDOW}
-          desktop
+          scene={scenes.heroWindow}
           theme="dark"
           label="The default theme in dark mode."
-        >
-          <HeroWindowScene />
-        </AppFrame>
+        />
       </div>
     </div>
   </Band>

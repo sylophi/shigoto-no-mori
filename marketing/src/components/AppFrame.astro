@@ -1,28 +1,27 @@
 ---
 // The app in one of the page's frames, where a screenshot would be: a
-// scene of the app's own views (the app's lab/scenes), put in as
-// children, rendered at build time into an AppSurface. The scene lays
-// out at its natural size, the size of the window it draws, and
-// scripts/frames.ts scales it to the frame. A crop shows the scene's
-// top-left corner only, at that size.
+// scene of the app's own views (the app's lab/scenes), rendered at
+// build time into an AppSurface. The scene lays out at its own size,
+// the size of the window it draws, and scripts/frames.ts scales it to
+// the frame. A crop shows the scene's top-left corner only, at that
+// size.
 //
 // It reads as a picture: one stop for a screen reader, described by
 // `label`, and nothing in it takes a click or the keyboard.
+import type { Scene } from "../../../app/lab/scenes";
 import AppSurface from "./AppSurface.astro";
 
 interface Props {
+  scene: Scene;
   // What the frame shows, for screen readers. Empty for a decorative
   // frame, which is then hidden from them.
   label: string;
   frame: "window" | "phone" | "floating" | "card-shot" | "framed";
-  // The scene's natural size in CSS pixels, and the part of it the
-  // frame shows, from its top-left corner, if not all of it.
-  size: [number, number];
-  crop?: [number, number];
+  // The part of the scene the frame shows, from its top-left corner,
+  // if not all of it.
+  crop?: readonly [number, number];
   theme?: "light" | "dark";
   doubutsu?: boolean;
-  phone?: boolean;
-  desktop?: boolean;
   class?: string;
 }
 // macOS's window buttons, where trafficLightPosition puts the real
@@ -35,17 +34,10 @@ const LIGHT =
   "width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 0.12);";
 const LIGHT_COLORS = ["#ff5f57", "#febc2e", "#28c840"];
 
-const {
-  label,
-  frame,
-  size: [width, height],
-  crop: [cropWidth, cropHeight] = [width, height],
-  theme,
-  doubutsu,
-  phone,
-  desktop,
-  class: className,
-} = Astro.props;
+const { scene, label, frame, theme, doubutsu, class: className } = Astro.props;
+const { Scene, window } = scene;
+const [width, height] = scene.size;
+const [cropWidth, cropHeight] = Astro.props.crop ?? scene.size;
 ---
 
 <figure
@@ -62,14 +54,13 @@ const {
     <AppSurface
       theme={theme}
       doubutsu={doubutsu}
-      phone={phone}
-      desktop={desktop}
+      window={window}
       width={width}
       height={height}
     >
-      <slot />
+      <Scene />
       {
-        desktop && (
+        window === "desktop" && (
           <div aria-hidden="true" style={LIGHTS}>
             {LIGHT_COLORS.map((color) => (
               <span style={`${LIGHT} background: ${color}`} />
@@ -79,5 +70,5 @@ const {
       }
     </AppSurface>
   </div>
-  <slot name="over" />
+  <slot />
 </figure>

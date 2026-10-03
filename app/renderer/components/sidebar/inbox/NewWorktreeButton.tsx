@@ -11,8 +11,7 @@ import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
 import type { Project } from "@shared/schemas";
-import { deviceBadgeOf } from "../buildSidebarRows";
-import type { SidebarDeviceBadge } from "../DeviceBadge";
+import { type CreateTarget, createTargets } from "./createTargets";
 import { useProjectIcon } from "@/hooks/projects/useProjectIcon";
 import {
   NEW_WORKTREE_MENU_LABEL,
@@ -27,45 +26,20 @@ interface NewWorktreeButtonProps {
   remote: RemoteForestItem[];
 }
 
-// Somewhere a worktree can be created: this machine's project, or a
-// peer's, carrying the scope its create runs under.
-interface CreateTarget {
-  key: string;
-  project: Project;
-  // Absent for a local project.
-  peer: { api: HostApi; badge: SidebarDeviceBadge } | undefined;
-}
+type Target = CreateTarget<HostApi>;
 
 // The inbox view's create affordance. Classic view hangs a + off each
 // project header. The inbox has none, so the destination has to be
 // picked here: one target means there's nothing to pick and the button
 // creates outright, several open a menu. A peer's project is a target
-// like a local one, badged with its device. A peer that is asleep or
-// has not granted this device control is left out, since its create
-// would only be refused. Either way a
-// modified click lands on the full form instead of quick-creating,
+// like a local one, badged with its device (createTargets). Either way
+// a modified click lands on the full form instead of quick-creating,
 // matching the project row's + button.
 export function NewWorktreeButton({
   projects,
   remote,
 }: NewWorktreeButtonProps) {
-  const commandableApi = useCommandableApi();
-  const targets: CreateTarget[] = [
-    ...projects
-      .filter((project) => project.pathExists !== false)
-      .map((project) => ({ key: project.id, project, peer: undefined })),
-    ...remote.flatMap((item) => {
-      const api = commandableApi(item.deviceId);
-      if (api === undefined) return [];
-      return [
-        {
-          key: `${item.deviceId}/${item.project.id}`,
-          project: item.project,
-          peer: { api, badge: deviceBadgeOf(item) },
-        },
-      ];
-    }),
-  ];
+  const targets = createTargets(projects, remote, useCommandableApi());
 
   // Nothing to pick between: create outright, or sit disabled with no
   // menu behind it when there's nowhere to create at all.
@@ -114,7 +88,7 @@ export function NewWorktreeButton({
   );
 }
 
-function SingleTargetButton({ target }: { target: CreateTarget }) {
+function SingleTargetButton({ target }: { target: Target }) {
   const { createFrom, isPending } = useQuickCreateWorktree();
   const where = target.peer
     ? `${target.project.name} on ${target.peer.badge.label}`
@@ -132,7 +106,7 @@ function SingleTargetButton({ target }: { target: CreateTarget }) {
 
 // One per target: each sits under its own scope, so each needs the
 // create hook bound to that scope.
-function TargetItem({ target }: { target: CreateTarget }) {
+function TargetItem({ target }: { target: Target }) {
   const { createFrom, isPending } = useQuickCreateWorktree();
   const iconSrc = useProjectIcon(
     target.project.id,

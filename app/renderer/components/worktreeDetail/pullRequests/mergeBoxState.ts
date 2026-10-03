@@ -97,7 +97,9 @@ export interface MergeBoxState {
   // The methods the menu beside the button offers.
   others: MergeMethod[];
   blocked: string | null;
-  plan: MergePlan;
+  // The PR the merge runs on: this one, or the stack's top when the
+  // reach takes the whole stack.
+  mergeNumber: number;
   label: string;
   // More than this PR lands: the label says so, and the icon marks it.
   landsStack: boolean;
@@ -163,7 +165,7 @@ export function mergeBoxState({
     disabled,
     others,
     blocked: plan.blocked,
-    plan,
+    mergeNumber: plan.number,
     label: activeMethod
       ? mode === "arm"
         ? autoMergeButtonLabel(activeMethod)

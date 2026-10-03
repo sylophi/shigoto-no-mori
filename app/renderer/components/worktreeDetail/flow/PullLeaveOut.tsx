@@ -5,7 +5,7 @@
 // agree.
 import type { PullChoiceState } from "./ignoreChoice";
 import { browseWorktree, LeaveOutPicker } from "./LeaveOutPicker";
-import { SaveAsPresetButton } from "./PullLeaveOutView";
+import { SaveAsPresetButton } from "./LeaveOutPickerView";
 
 export function PullLeaveOut({
   pull,

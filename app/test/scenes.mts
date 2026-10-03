@@ -34,10 +34,10 @@ const vite = await createServer({
 });
 try {
   const { scenes } = (await vite.ssrLoadModule("/scenes/index.ts")) as {
-    scenes: Record<string, ComponentType>;
+    scenes: Record<string, { Scene: ComponentType }>;
   };
   assert.ok(Object.keys(scenes).length > 0, "no scenes");
-  for (const [name, Scene] of Object.entries(scenes)) {
+  for (const [name, { Scene }] of Object.entries(scenes)) {
     const html = renderToStaticMarkup(createElement(Scene));
     assert.ok(html.length > 0, `${name} rendered nothing`);
     assert.ok(!html.includes("NaN"), `${name} rendered a NaN`);

@@ -34,24 +34,16 @@ export function useDeviceBadges(): ReadonlyMap<string, SidebarDeviceBadge> {
   return badges;
 }
 
-// A sidebar row's badge: the same badge, while this window has Show
-// device icons on (Settings, Appearance). The palette and the inbox's
-// create target draw DeviceBadge bare, since there the device is the
-// choice being made rather than a decoration.
-export function RowDeviceBadge({ badge }: { badge: SidebarDeviceBadge }) {
-  const show = useShowDeviceBadges();
-  return show ? <DeviceBadge badge={badge} /> : null;
-}
-
 // The mark a local worktree wears for the peer it is mirrored with
-// (MirrorBadgeView), its badge gated like RowDeviceBadge.
+// (MirrorBadgeView), its badge shown while this window has Show device
+// icons on (Settings, Appearance).
 export function MirrorBadge({ mirror }: { mirror: SidebarDeviceBadge }) {
   const show = useShowDeviceBadges();
   return <MirrorBadgeView mirror={mirror} showBadge={show} />;
 }
 
 // The project-header cluster: one badge per contributing peer device,
-// order preserved from the merge. Gated like RowDeviceBadge.
+// order preserved from the merge. Gated like MirrorBadge's.
 export function DeviceBadgeCluster({
   devices,
 }: {

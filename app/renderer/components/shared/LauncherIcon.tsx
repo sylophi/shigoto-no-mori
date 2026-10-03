@@ -23,7 +23,7 @@ import ghosttyIconUrl from "@/app-icons/ghostty.png?url";
 import githubDesktopIconUrl from "@/app-icons/github-desktop.png?url";
 import itermIconUrl from "@/app-icons/iterm.png?url";
 import sublimeIconUrl from "@/app-icons/sublime.png?url";
-import t3codeIconUrl from "@/app-icons/t3code.png";
+import t3codeIconUrl from "@/app-icons/t3code.png?url";
 import terminalIconUrl from "@/app-icons/terminal.png?url";
 import vscodeIconUrl from "@/app-icons/vscode.png?url";
 import vscodeInsidersIconUrl from "@/app-icons/vscode-insiders.png?url";

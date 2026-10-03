@@ -17,8 +17,13 @@ function placePins(figure: HTMLElement, surface: HTMLElement): void {
   if (!root || !view) return;
   const box = view.getBoundingClientRect();
   for (const pin of figure.querySelectorAll<HTMLElement>("[data-pin]")) {
-    const target = root.querySelector(pin.dataset["pin"] ?? "");
-    if (!target) continue;
+    const selector = pin.dataset["pin"] ?? "";
+    const target = root.querySelector(selector);
+    if (!target) {
+      // Left hidden (global.css). The app's row no longer has the part.
+      console.warn(`[frames] no part of the scene matches ${selector}`);
+      continue;
+    }
     const rect = target.getBoundingClientRect();
     const side = (pin.dataset["side"] ?? "top") as Side;
     const x =

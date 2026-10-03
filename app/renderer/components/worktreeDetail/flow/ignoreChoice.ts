@@ -49,10 +49,6 @@ export {
   selectionOfPreset,
 };
 
-// The words each base goes by (ignoreBaseCopy.ts), apart so the views
-// can take them without the hooks here.
-export { IGNORE_BASE_COPY } from "./ignoreBaseCopy";
-
 // The review state a pull dialog (transplant or mirror) keeps: the
 // leave-out rule, the ignored list the gitignored rule resolves over
 // (read only once that rule is picked, since it walks the checkout

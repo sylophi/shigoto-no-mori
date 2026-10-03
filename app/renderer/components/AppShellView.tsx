@@ -10,7 +10,7 @@ export const SIDEBAR_MIN = 200;
 export const SIDEBAR_MAX = 400;
 export const SIDEBAR_DEFAULT = 240;
 
-export interface AppShellViewProps {
+interface AppShellViewProps {
   // The phone layout (usePhoneLayout), which the shell can't read for
   // itself where there is no viewport.
   phone: boolean;

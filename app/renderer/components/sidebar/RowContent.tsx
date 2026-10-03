@@ -1,8 +1,8 @@
-import { Skeleton } from "@/components/ui/skeleton";
 import { assertNever } from "@/lib/utils";
 import { InboxRow } from "./inbox/InboxRow";
 import { InboxShelfRow } from "./inbox/InboxShelfRow";
 import { ProjectRow } from "./ProjectRow";
+import { WorktreeErrorRow, WorktreeSkeletonRow } from "./RowContentView";
 import { ShelvedToggleRow } from "./ShelvedToggleRow";
 import { WorktreeRow } from "./WorktreeRow";
 import type { GroupShelf, InboxShelf, SidebarRow } from "./sidebarRow";
@@ -78,12 +78,7 @@ export function RowContent({
         />
       );
     case "worktree-skeleton":
-      return (
-        <div className="space-y-1 px-2 py-1.5" aria-label="Loading worktrees">
-          <Skeleton className="h-4 w-32" />
-          <Skeleton className="h-4 w-24" />
-        </div>
-      );
+      return <WorktreeSkeletonRow />;
     case "shelved-toggle":
       return (
         <ShelvedToggleRow
@@ -103,11 +98,7 @@ export function RowContent({
         />
       );
     case "worktree-error":
-      return (
-        <div className="px-2 py-1 text-xs text-muted-foreground">
-          Couldn't load worktrees.
-        </div>
-      );
+      return <WorktreeErrorRow />;
     default:
       return assertNever(row);
   }

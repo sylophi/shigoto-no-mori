@@ -37,22 +37,17 @@ export function MenuLabelView({ className, ...props }: ComponentProps<"div">) {
   );
 }
 
-export function MenuItemView({
-  className,
-  variant = "default",
-  highlighted,
-  ...props
-}: ComponentProps<"div"> & {
-  variant?: "default" | "destructive";
-  // The item under the pointer, as Base UI marks it.
-  highlighted?: boolean;
-}) {
+// The group a label names its items in (Base UI wires the two).
+export function MenuGroupView(props: ComponentProps<"div">) {
+  return <div role="group" data-slot="dropdown-menu-group" {...props} />;
+}
+
+export function MenuItemView({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       role="menuitem"
       data-slot="dropdown-menu-item"
-      data-variant={variant}
-      data-highlighted={highlighted ? "" : undefined}
+      data-variant="default"
       className={cn(MENU_ITEM_CLASS, className)}
       {...props}
     />

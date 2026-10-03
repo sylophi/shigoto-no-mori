@@ -6,8 +6,6 @@ import type React from "react";
 import { cn } from "@/lib/utils";
 import { PAGE_HEADER_PADDING } from "./pageInsets";
 
-export { PAGE_HEADER_PADDING };
-
 export function PageHeaderView({
   eyebrow,
   title,

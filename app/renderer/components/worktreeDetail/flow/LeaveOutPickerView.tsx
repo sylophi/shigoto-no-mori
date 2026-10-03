@@ -3,7 +3,7 @@
 // one line, what git ignores there when that is the base, the chosen
 // exceptions as rows, and the button that opens the browser.
 import type { ReactNode } from "react";
-import { Plus, X } from "lucide-react";
+import { Bookmark, Plus, X } from "lucide-react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { normalizeRelPath } from "@shared/git/gitPaths";
 import {
@@ -41,6 +41,20 @@ export type IgnoredPathsState = Pick<
 // app's icon holds while its manifest loads.
 const NO_ICON = () => <span aria-hidden className="size-4 shrink-0" />;
 
+// The selection with `path` added to, or taken out of, the exceptions
+// to its base.
+export function withExceptionToggled(
+  value: IgnoreSelection,
+  path: string,
+): IgnoreSelection {
+  return {
+    ...value,
+    [value.base === "gitignored" ? "brought" : "leftOut"]: withToggled(path)(
+      new Set(exceptionsOf(value)),
+    ),
+  };
+}
+
 export function LeaveOutPickerView({
   value,
   onChange,
@@ -67,11 +81,7 @@ export function LeaveOutPickerView({
 }) {
   const bringing = value.base === "gitignored";
   const excepted = exceptionsOf(value);
-  const remove = (path: string) =>
-    onChange({
-      ...value,
-      [bringing ? "brought" : "leftOut"]: withToggled(path)(new Set(excepted)),
-    });
+  const remove = (path: string) => onChange(withExceptionToggled(value, path));
   const chosen = [...excepted].toSorted();
   const copy = IGNORE_BASE_COPY[value.base];
   return (
@@ -219,5 +229,22 @@ function ChosenRow({
         </IconButton>
       )}
     </div>
+  );
+}
+
+// Under a pull dialog's rule while it differs from the project's
+// preset: the way to keep it as that preset, so the next pull of the
+// repo, on any device, opens on it.
+export function SaveAsPresetButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      title="Start from this rule whenever you mirror or transplant this project's worktrees, on any device. You can change it under Configure."
+      onClick={onClick}
+    >
+      <Bookmark />
+      Save as project default
+    </Button>
   );
 }

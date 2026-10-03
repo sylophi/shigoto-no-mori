@@ -1,5 +1,5 @@
 // The phone layout's primary navigation (PhoneTabBarView). A tab
-// lights on its page exactly (the rule NavIconButton follows: a
+// lights on its page exactly (the rule SidebarNavActions follows: a
 // worktree under /devices/$deviceId is ordinary work, not a device
 // page), and for everything else the forest tab the layout preference
 // names lights, since every other page is reached from one of them
@@ -8,8 +8,6 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useSidebarView } from "@/hooks/projects/useSidebarView";
 import { useStagedUpdates } from "@/hooks/system/useUpdater";
 import { forestTabFor, PhoneTabBarView, TABS } from "./PhoneTabBarView";
-
-export { forestTabFor, isTabRoute } from "./PhoneTabBarView";
 
 export function PhoneTabBar() {
   const navigate = useNavigate();

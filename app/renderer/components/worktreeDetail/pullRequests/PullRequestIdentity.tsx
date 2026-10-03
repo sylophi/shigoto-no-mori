@@ -4,8 +4,6 @@ import { useNow } from "@/hooks/ui/useNow";
 import type { PullRequestDetail, Worktree } from "@shared/schemas";
 import { PullRequestIdentityView } from "./PullRequestIdentityView";
 
-export { PullRequestTitleLink } from "./PullRequestIdentityView";
-
 // The PR's identity (PullRequestIdentityView), with the clock, the way
 // to its diff, and the measuring: the view draws a hidden
 // natural-width copy of the meta row, and if that doesn't fit, the

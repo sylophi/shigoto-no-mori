@@ -6,6 +6,7 @@ import { ProjectIconView } from "@/components/shared/ProjectIconView";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
+  MenuGroupView,
   MenuItemView,
   MenuLabelView,
   MenuSurfaceView,
@@ -84,14 +85,14 @@ export function NewWorktreeMenuView({
 }) {
   return (
     <MenuSurfaceView className={className} style={style}>
-      <div role="group" data-slot="dropdown-menu-group">
+      <MenuGroupView>
         <MenuLabelView>{NEW_WORKTREE_MENU_LABEL}</MenuLabelView>
         {targets.map((target) => (
           <MenuItemView key={target.key}>
             <NewWorktreeTargetContent target={target} />
           </MenuItemView>
         ))}
-      </div>
+      </MenuGroupView>
     </MenuSurfaceView>
   );
 }

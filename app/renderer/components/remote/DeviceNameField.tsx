@@ -13,8 +13,6 @@
 import { useSetDeviceName } from "@/hooks/account/useAccount";
 import { DeviceNameFieldView } from "./DeviceNameFieldView";
 
-export { DeviceRenameButton } from "./DeviceNameFieldView";
-
 export function DeviceNameField({
   deviceId,
   deviceName,

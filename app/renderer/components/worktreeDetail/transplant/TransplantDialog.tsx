@@ -34,7 +34,7 @@ import {
   TRANSPLANT_STEPS_LABEL,
   TRANSPLANT_TITLES,
   TransplantReviewHeadline,
-} from "./TransplantDialogView";
+} from "./transplantCopy";
 import { TransplantFinish } from "./TransplantFinish";
 import { TransplantReview } from "./TransplantReview";
 import { type Landing, LANDS_HERE, stepHeadline } from "../flow/pullSteps";

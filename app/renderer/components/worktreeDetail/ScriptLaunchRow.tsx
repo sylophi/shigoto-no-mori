@@ -84,19 +84,22 @@ export function ScriptLaunchRow({
       <ScriptLaunchRowView
         scripts={candidates}
         pinned
-        renderPill={(entry) => (
-          <ScriptLaunchButton
-            key={entry.name}
-            worktree={worktree}
-            name={entry.name}
-            command={entry.command}
-          />
-        )}
+        renderPill={launchButtonIn(worktree)}
       />
     );
   }
   return <FittedScriptRow worktree={worktree} candidates={candidates} />;
 }
+
+// A live pill per script of a worktree.
+const launchButtonIn = (worktree: Worktree) => (entry: SortableEntry) => (
+  <ScriptLaunchButton
+    key={entry.name}
+    worktree={worktree}
+    name={entry.name}
+    command={entry.command}
+  />
+);
 
 function FittedScriptRow({
   worktree,
@@ -139,14 +142,7 @@ function FittedScriptRow({
   return (
     <ScriptLaunchRowView
       scripts={candidates.slice(0, fitCount)}
-      renderPill={(entry) => (
-        <ScriptLaunchButton
-          key={entry.name}
-          worktree={worktree}
-          name={entry.name}
-          command={entry.command}
-        />
-      )}
+      renderPill={launchButtonIn(worktree)}
       containerRef={containerRef}
       measurer={
         // inert keeps the natural-width copy out of the tab order and the
@@ -211,8 +207,6 @@ function ScriptLaunchButton({
     worktree,
     slot,
   );
-  const actionLabel = busy ? `Stop ${name}` : `Run ${name}`;
-
   // Cmd-click detours to the script's console instead of toggling the
   // run. Cmd is the modifier the tooltip advertises.
   const handleClick = (e: React.MouseEvent) => {
@@ -226,13 +220,11 @@ function ScriptLaunchButton({
   return (
     <ScriptPill
       name={name}
+      command={command}
       busy={busy}
       disabled={state.cancelling || !canRun}
+      disabledReason={disabledReason}
       onClick={handleClick}
-      aria-label={actionLabel}
-      title={
-        disabledReason ?? `${actionLabel}\n${command}\n⌘click to view output`
-      }
     />
   );
 }

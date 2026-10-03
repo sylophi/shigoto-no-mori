@@ -1,5 +1,5 @@
 import { AccountSection } from "./AccountSection";
-import { DevicesPageShell } from "./DevicesPageView";
+import { DevicesPageView } from "./DevicesPageView";
 
 // "/devices": the account's machines, on their own page. The account
 // (sign in, the device registry and its removals) is a fact about the
@@ -10,8 +10,8 @@ import { DevicesPageShell } from "./DevicesPageView";
 // own row instead of in a section of their own.
 export function DevicesPage() {
   return (
-    <DevicesPageShell>
+    <DevicesPageView>
       <AccountSection />
-    </DevicesPageShell>
+    </DevicesPageView>
   );
 }

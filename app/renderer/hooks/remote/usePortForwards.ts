@@ -20,6 +20,7 @@ import type {
 } from "@shared/ipc/modules/portForward";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import { queryKeys } from "@/lib/queryKeys";
+import { worktreeForwardTip } from "@/lib/remote/forwardTip";
 import { notifyError } from "@/lib/toast";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { hasLocalHost } from "@/lib/localHost";
@@ -122,27 +123,15 @@ export function usePortForwards(deviceId: string) {
   };
 }
 
-// What the marks on a peer's worktree (the sidebar row, the Ports
-// button) say while this machine forwards its ports, matched on the
-// worktree each forward was switched on from (the note on the
-// contract's worktree field). Undefined while nothing is forwarded.
+// The forward tip of a peer's worktree (lib/remote/forwardTip.ts), off
+// the live list.
 export function useWorktreeForwardTip(
   deviceId: string,
   worktree: { projectId: string; id: string },
 ): string | undefined {
-  const { data } = usePortForwardList((list) => {
-    const pairs = list.forwards
-      .filter(
-        (forward) =>
-          forward.deviceId === deviceId &&
-          forward.worktree?.projectId === worktree.projectId &&
-          forward.worktree.worktreeId === worktree.id,
-      )
-      .map(
-        (forward) => `${forward.remotePort} to localhost:${forward.localPort}`,
-      );
-    return pairs.length > 0 ? `Forwarding ${pairs.join(", ")}` : undefined;
-  });
+  const { data } = usePortForwardList((list) =>
+    worktreeForwardTip(list.forwards, deviceId, worktree),
+  );
   return data;
 }
 

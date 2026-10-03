@@ -35,9 +35,9 @@ export interface WorktreeDetailViewProps {
   // The branch title, BranchTitleView over the worktree's branch when
   // not given.
   title?: ReactNode;
-  // Beside the title: WorktreeActivityIndicatorView.
+  // Beside the title: WorktreeActivityIndicator.
   activity?: ReactNode;
-  // Under the title: MirrorPillView.
+  // Under the title: MirrorPill.
   mirror?: ReactNode;
   // A create or removal under way, which may lock the page.
   banner?: string | null;

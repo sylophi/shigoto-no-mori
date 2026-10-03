@@ -10,7 +10,7 @@ import {
   type WorktreeEntryViewProps,
 } from "../WorktreeEntryView";
 
-export type InboxRowViewProps = Omit<WorktreeEntryViewProps, "context"> & {
+type InboxRowViewProps = Omit<WorktreeEntryViewProps, "context"> & {
   project: Project;
   // The project's logo, as ProjectIconView takes it.
   projectIconSrc: string | null | undefined;

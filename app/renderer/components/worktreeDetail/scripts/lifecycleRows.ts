@@ -2,6 +2,18 @@
 // setup script, the port pool's provision and release, the teardown
 // script. Pure, so the section can be drawn without the app.
 import type { ScriptSlot } from "@/store/scriptRuns";
+import type { ShigomoriConfig } from "@shared/schemas";
+
+type LifecycleScripts = ShigomoriConfig["scripts"];
+
+// A lifecycle script's command, "" when the project has none (or its
+// config has not loaded).
+export function lifecycleCommand(
+  scripts: LifecycleScripts | undefined,
+  kind: "setup" | "teardown",
+): string {
+  return scripts?.[kind]?.trim() ?? "";
+}
 
 export interface LifecycleRow {
   slot: ScriptSlot;
@@ -10,17 +22,18 @@ export interface LifecycleRow {
 }
 
 export function lifecycleRowsOf({
-  setupCommand,
-  teardownCommand,
+  scripts,
   portPoolActive,
   path,
 }: {
-  setupCommand: string;
-  teardownCommand: string;
+  // The project's lifecycle scripts (its config's `scripts`).
+  scripts: LifecycleScripts | undefined;
   portPoolActive: boolean;
   // The worktree's path, which the port pool's commands name.
   path: string;
 }): LifecycleRow[] {
+  const setupCommand = lifecycleCommand(scripts, "setup");
+  const teardownCommand = lifecycleCommand(scripts, "teardown");
   const rows: LifecycleRow[] = [];
   if (setupCommand) {
     rows.push({

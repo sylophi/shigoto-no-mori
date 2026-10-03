@@ -13,12 +13,8 @@ import {
   SidebarViewToggleView,
 } from "./SidebarFooterView";
 import { SidebarHeaderView } from "./SidebarHeaderView";
-import {
-  PinnedRowView,
-  RowContentView,
-  SidebarListView,
-  type SidebarRowLookups,
-} from "./SidebarListView";
+import { RowContentView, type SidebarRowLookups } from "./RowContentView";
+import { PinnedRowView, SidebarListView } from "./SidebarListView";
 import type { SidebarRow } from "./sidebarRow";
 
 // Both themes are fully transparent so the BrowserWindow vibrancy
@@ -96,12 +92,10 @@ export function SidebarEmptyStateView({
   );
 }
 
-export interface SidebarViewProps {
+interface SidebarViewProps {
   // The desktop window (a machine of its own, a title bar) or a browser
   // tab (hostless, every forest a peer's).
   shell: "desktop" | "web";
-  // A dev build's marks on the brand header.
-  showDevStyle: boolean;
   // Which view the forest is in: what the footer's toggle shows picked.
   view: SidebarViewKind;
   // The device filter's machines and pick (DeviceFilterBarView).
@@ -116,16 +110,17 @@ export interface SidebarViewProps {
   lookups: SidebarRowLookups;
   // Shown under the rows when there are none worth showing.
   emptyMessage?: string | null;
-  // The footer's facts, or false for none (the phone layout, whose tab
-  // bar carries its cluster).
-  footer: { updateReady: boolean; activePath?: string } | false;
+  // The footer, with the route on screen for the button it lights, or
+  // false for none (the phone layout, whose tab bar carries its
+  // cluster).
+  footer: { activePath?: string } | false;
 }
 
-// The sidebar as Sidebar draws it once settled: the brand header, the
-// device filter, the view's own controls and rows, and the footer.
+// The sidebar as a release build's Sidebar draws it once settled, with
+// no update waiting: the brand header, the device filter, the view's
+// own controls and rows, and the footer.
 export function SidebarView({
   shell,
-  showDevStyle,
   view,
   filter,
   top,
@@ -139,10 +134,7 @@ export function SidebarView({
   const row = (r: SidebarRow) => <RowContentView row={r} lookups={lookups} />;
   return (
     <SidebarAsideView>
-      <SidebarHeaderView
-        hasLocalHost={hasLocalHost}
-        showDevStyle={showDevStyle}
-      />
+      <SidebarHeaderView hasLocalHost={hasLocalHost} showDevStyle={false} />
       <div className="flex min-h-0 flex-1 flex-col">
         <DeviceFilterBarView {...filter} />
         <div className="flex min-h-0 flex-1 flex-col">
@@ -161,7 +153,7 @@ export function SidebarView({
             actions={
               <SidebarNavActionsView
                 hasLocalHost={hasLocalHost}
-                updateReady={footer.updateReady}
+                updateReady={false}
                 activePath={footer.activePath}
               />
             }

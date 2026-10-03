@@ -69,6 +69,8 @@ import {
   labCustomPorts,
   labDetectedLaunchers,
   labDisks,
+  labForwards,
+  labLocalBranches,
   labGlobalConfig,
   labLauncherEntries,
   labPackageScriptSort,
@@ -264,12 +266,6 @@ function hostHandlersFor(
   const allWorktrees = () => Object.values(forest.worktrees).flat();
   const findWorktree = (worktreeId: string) =>
     allWorktrees().find((worktree) => worktree.id === worktreeId);
-  const branchesOf = () => [
-    "main",
-    ...allWorktrees()
-      .filter((worktree) => !worktree.isPrimary && !worktree.detached)
-      .map((worktree) => worktree.branch),
-  ];
   // Stands in for the restart into the staged build: the device
   // reports up to date.
   const restartIntoUpdate = () => {
@@ -339,7 +335,7 @@ function hostHandlersFor(
     },
     "projects:defaultBranch": () => "main",
     "projects:listBranches": () => ({
-      local: branchesOf(),
+      local: labLocalBranches(forest),
       remote: ["origin/main"],
     }),
     "projects:pickWorktreeName": () => "tender-tanuki",
@@ -1266,21 +1262,11 @@ export function installLabBridge(
   });
 
   // The engine's forward table, mutated by start/stop so the switches
-  // on a remote worktree's ports really flip. One forward pre-posed so
-  // the live state is visible without a click.
-  const forwards = new Map<string, PortForwardSummary>([
-    [
-      "a3f19c2e77b04d5586e1f20c9ab34d61",
-      {
-        forwardId: "a3f19c2e77b04d5586e1f20c9ab34d61",
-        deviceId: THINKPAD_ID,
-        remotePort: 5173,
-        localPort: 5173,
-        connCount: 2,
-        worktree: { projectId: "tp_sm", worktreeId: "a1b2c3d4e5f6" },
-      },
-    ],
-  ]);
+  // on a remote worktree's ports really flip. It opens with the fixtures' one
+  // (labForwards).
+  const forwards = new Map<string, PortForwardSummary>(
+    labForwards.map((forward) => [forward.forwardId, forward]),
+  );
 
   const clientHandlers: FixtureHandlers = {
     "account:status": accountStatus,

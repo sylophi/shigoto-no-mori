@@ -54,8 +54,9 @@ ships none of their code. The app keeps them as views (components that
 take their data as props) and composes them into scenes over its UI
 lab's fixtures: four devices, their projects, worktrees and pull
 requests (the app's `lab/README.md`, "Views and scenes"). The page
-imports the scenes from `../app/lab/scenes/` and puts each in an
-`<AppFrame>`, so a change to the app shows up here on the next build.
+takes the scenes from the catalog in `../app/lab/scenes/` and gives
+each to an `<AppFrame scene={...}>`, so a change to the app shows up
+here on the next build.
 
 - `AppSurface.astro` renders a scene into a shadow root declared in
   the HTML, with the app's stylesheet inside it, so the app's styles
@@ -69,14 +70,17 @@ imports the scenes from `../app/lab/scenes/` and puts each in an
   desktop window keeps its layout on a phone), and its faces move out
   to the page (`src/styles/app-fonts.css`), where Chrome looks for
   them.
-- `AppFrame.astro` lays a scene out at its natural size (a 1280x800
-  window, a 390x844 phone), or crops one to its top-left corner, and
-  `scripts/frames.ts` zooms it to the frame's width. Desktop windows
-  get their traffic lights where the real window draws them.
+- `AppFrame.astro` lays a scene out at the size its catalog entry
+  names (a 1280x800 window, a 390x844 phone), or crops one to its
+  top-left corner, and `scripts/frames.ts` zooms it to the frame's
+  width. Desktop windows get their traffic lights where the real
+  window draws them.
 - A frame reads as a picture: one stop for a screen reader, with its
   description, and nothing inside takes a click or the keyboard.
-- The pins over the sidebar row find their parts by the `row-*` slots
-  the app's row sets on them.
+- The pins over the sidebar row find their parts by selector (the
+  `row-*` slots the app's row sets, and its accessible labels). A pin
+  whose part is gone stays hidden and `frames.ts` warns in the console,
+  so look there after changing the row.
 
 `astro.config.ts` points the app's import aliases at `../app` and keeps
 one React for both. The app's test `pnpm test scenes` renders every

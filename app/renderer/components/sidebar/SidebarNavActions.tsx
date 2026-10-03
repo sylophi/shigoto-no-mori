@@ -1,6 +1,5 @@
 // The footer's page-nav cluster (SidebarNavActionsView), lit by the
-// route on screen (exactly, as NavIconButton matches) and dotted while
-// an update waits.
+// route on screen and dotted while an update waits.
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useStagedUpdates } from "@/hooks/system/useUpdater";
 import { hasLocalHost } from "@/lib/localHost";

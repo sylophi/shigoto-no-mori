@@ -31,11 +31,11 @@ import { PortsButton } from "./ports/PortsButton";
 import { RemoteTransferActions } from "./RemoteWorktreeActions";
 import { PullRequestSection } from "./pullRequests/PullRequestSection";
 import { ScriptsSection } from "./scripts/ScriptsSection";
-import {
-  WorktreeDetailFooter,
-  type WorktreeFooterActions,
-  type WorktreeFooterState,
-} from "./WorktreeDetailFooter";
+import { WorktreeDetailFooter } from "./WorktreeDetailFooter";
+import type {
+  WorktreeFooterActions,
+  WorktreeFooterState,
+} from "./WorktreeDetailFooterView";
 import { BranchTitle } from "./branch/BranchTitle";
 import { WorktreeActivityIndicator } from "./WorktreeActivityIndicator";
 import { CommitsSection } from "./commits/CommitsSection";
@@ -162,9 +162,9 @@ export function WorktreeDetailInner({
   // The resident's birthday party, with their face to throw it, and
   // never over a create or a removal.
   const party =
-    resident?.birthday && resident.face !== null && bannerLabel === null
-      ? resident
-      : null;
+    resident?.birthday === true &&
+    resident.face !== null &&
+    bannerLabel === null;
   const cleanupCancelling = teardownState.cancelling || releaseState.cancelling;
 
   // Collapse the loose deletion flags into the footer's discriminated
@@ -206,7 +206,7 @@ export function WorktreeDetailInner({
       onOpenProject={() => toProjectPage("configure", worktree.projectId)}
       deviceChip={<DeviceChip />}
       resident={resident}
-      party={party !== null}
+      party={party}
       title={<BranchTitle worktree={worktree} />}
       activity={<WorktreeActivityIndicator worktree={worktree} />}
       mirror={<MirrorPill worktree={worktree} />}

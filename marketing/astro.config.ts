@@ -55,11 +55,6 @@ export default defineConfig({
       // otherwise reach the app's own copy from where they live.
       dedupe: ["react", "react-dom"],
     },
-    // What the app's build defines, for the views that read them.
-    define: {
-      __APP_VERSION__: JSON.stringify("2.0.3"),
-      __APP_COMMIT__: JSON.stringify("marketing"),
-    },
     server: { fs: { allow: [".", app("")] } },
   },
 });

@@ -2,7 +2,7 @@
 // name (changeable on every row, a peer's included, since both live on
 // the device hub: the mark opens the icon picker, Rename the name),
 // one line saying what state it is in and what it runs, the projects
-// it hosts, and -- on THIS device's row -- the two things it
+// it renderHosts, and -- on THIS device's row -- the two things it
 // exposes to the others: whether they may control it and whether it
 // stays reachable to them. A peer's row makes no decision about the
 // peer: what a machine allows is decided on that machine, so a peer
@@ -29,7 +29,7 @@ import { AcceptCommandsToggle } from "./AcceptCommandsToggle";
 import { DeviceHosts } from "./DeviceHosts";
 import { DeviceIconPicker } from "./DeviceIconPicker";
 import { DeviceNameField } from "./DeviceNameField";
-import { DeviceRegistryRowView, deviceRowFacts } from "./DeviceRegistryRowView";
+import { DeviceRegistryRowView } from "./DeviceRegistryRowView";
 import { KeepReachableToggle } from "./KeepReachableToggle";
 import { PortForwardSection } from "./PortForwardSection";
 import type { HostChip } from "./deviceHostChips";
@@ -89,14 +89,6 @@ export function DeviceRegistryRow({
   // can sit in the row's action column while the editor opens on the
   // name itself.
   const [renaming, setRenaming] = useState(false);
-  const { controlLabel, hostsCached } = deviceRowFacts({
-    deviceId: device.deviceId,
-    platform: device.platform,
-    isThisDevice,
-    name,
-    showId,
-    status,
-  });
 
   return (
     <DeviceRegistryRowView
@@ -115,37 +107,36 @@ export function DeviceRegistryRow({
       // The banner outlives the arming while the removal is in flight,
       // so the row shows "Removing…" where the confirm button was
       // instead of snapping back to its controls.
-      confirming={revoke.armed || revokePending}
-      revokePending={revokePending}
+      removal={revokePending ? "removing" : revoke.armed ? "armed" : "idle"}
       onRemove={() => revoke.trigger(onRevokeDevice)}
       onCancelRemove={revoke.reset}
-      iconPicker={
+      renderIconPicker={(label) => (
         <DeviceIconPicker
           deviceId={device.deviceId}
           isThisDevice={isThisDevice}
           icon={icon}
           tone={status.tone}
-          label={controlLabel}
+          label={label}
         />
-      }
-      nameField={
+      )}
+      renderNameField={(label) => (
         <DeviceNameField
           deviceId={device.deviceId}
           deviceName={name}
-          label={controlLabel}
+          label={label}
           editing={renaming}
           onEditingChange={setRenaming}
           className="text-base"
         />
-      }
-      hosts={
+      )}
+      renderHosts={(cached) => (
         <DeviceHosts
           deviceId={device.deviceId}
           chips={chips}
           loading={chipsLoading}
-          cached={hostsCached}
+          cached={cached}
         />
-      }
+      )}
       switches={
         <>
           <AcceptCommandsToggle />

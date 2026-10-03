@@ -29,7 +29,7 @@ const noop = () => undefined;
 
 export interface MergeBoxViewProps {
   pr: PullRequestDetail;
-  state: Omit<MergeBoxState, "plan">;
+  state: MergeBoxState;
   // The merge button waits for its second click.
   armed?: boolean;
   mergePending?: boolean;

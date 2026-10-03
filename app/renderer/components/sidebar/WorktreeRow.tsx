@@ -3,7 +3,6 @@ import type { GroupShelf } from "./sidebarRow";
 import type { PullRequest, Worktree } from "@shared/schemas";
 import type { StackChild, StackPosition } from "@shared/pullRequestStack";
 import { useWorktreeEntry } from "./useWorktreeEntry";
-import { useWorktreeRowState } from "./useWorktreeRowState";
 import { WorktreeRowView } from "./WorktreeRowView";
 
 interface WorktreeRowProps {
@@ -35,7 +34,6 @@ export function WorktreeRow({
 }: WorktreeRowProps) {
   // A peer's row takes the local row's own rule, scoped to the device:
   // the open remote worktree reads as selected like a local one.
-  const state = useWorktreeRowState(worktree, device?.deviceId);
   const entry = useWorktreeEntry(worktree, device?.deviceId);
   return (
     <WorktreeRowView
@@ -45,9 +43,7 @@ export function WorktreeRow({
       stackChild={stackChild}
       device={device}
       mirror={mirror}
-      look={state}
       shelf={shelf}
-      onClick={state.open}
       {...entry}
     />
   );

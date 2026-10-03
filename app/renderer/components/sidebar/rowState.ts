@@ -1,5 +1,5 @@
 // What a sidebar row shows of its worktree's state, which
-// useWorktreeRowState works out. Its own module, apart from the router
+// useWorktreeEntry works out. Its own module, apart from the router
 // and the run store that hook reads, so the row's view
 // (WorktreeEntryView) renders without the app.
 import type { ScriptActivityKind } from "@/store/scriptRuns";
@@ -21,4 +21,19 @@ export function activityMark(
   look: Pick<WorktreeRowLook, "activity" | "isDeleting">,
 ): ScriptActivityKind | null {
   return look.isDeleting ? "teardown" : look.activity;
+}
+
+// What a row says on hover, or undefined in no state worth naming.
+export function rowTitle(
+  activity: ScriptActivityKind | null,
+  isDeleting: boolean,
+  shelved: boolean,
+): string | undefined {
+  if (isDeleting) return "Deleting worktree";
+  if (activity === "setup") return "Running setup";
+  if (activity === "teardown") return "Running teardown";
+  if (activity === "package") return "Running a script";
+  if (activity === "failed") return "A script failed here";
+  if (shelved) return "Shelved";
+  return undefined;
 }

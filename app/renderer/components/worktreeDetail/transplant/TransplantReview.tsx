@@ -12,10 +12,10 @@ import { DestinationScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeChanges } from "@/hooks/worktrees/useWorktreeChanges";
 import { useCarryOverRows } from "../flow/createPlan";
 import { type PullReviewProps, PullReviewStep } from "../flow/PullReview";
+import { TRANSPLANT_REVIEW } from "./transplantCopy";
 import {
   CarryOverListView,
   ChangedFilesView,
-  TRANSPLANT_REVIEW,
   UncommittedChangesView,
 } from "./TransplantReviewView";
 

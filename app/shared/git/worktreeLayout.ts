@@ -7,6 +7,7 @@
 //
 // Kept dependency-free so it can run in either environment.
 
+import { tildify } from "../projectPaths";
 import type { RuntimeInfo, WorktreeLayout } from "../schemas";
 
 // Project-relative directory used by the "in-project" layout. Top-level
@@ -144,6 +145,19 @@ export function worktreeBaseFor(inputs: LayoutInputs): string {
     if (driveBase !== null) return driveBase;
   }
   return joinPath(dataDir, "worktrees", lastSegment(projectPath));
+}
+
+// Where a project's new worktrees land on a device, as shown: its
+// layout's base folder, tildified against that device's home.
+export function worktreeBaseLabel(
+  config: Parameters<typeof layoutInputsFor>[0],
+  projectPath: string,
+  device: DeviceLayoutInputs & { homedir: string },
+): string {
+  return tildify(
+    worktreeBaseFor(layoutInputsFor(config, projectPath, device)),
+    device.homedir,
+  );
 }
 
 // Full destination path for a single worktree under the given layout.

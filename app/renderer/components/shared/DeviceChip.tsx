@@ -7,8 +7,6 @@ import { useRemoteDevice } from "@/hooks/remote/useRemoteDevices";
 import { deviceStatusView, deviceTitle } from "@/lib/remote/deviceStatus";
 import { DeviceChipView } from "./DeviceChipView";
 
-export { DEVICE_PILL_CLASS } from "./DeviceChipView";
-
 export function DeviceChip() {
   const { deviceId, remote } = useHostScope();
   const device = useRemoteDevice(deviceId);

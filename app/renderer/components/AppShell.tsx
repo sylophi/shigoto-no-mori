@@ -12,11 +12,8 @@ import { useEffect } from "react";
 import { Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import { AddProjectModal } from "@/components/AddProjectModal";
 import { WorktreePalette } from "@/components/palette/WorktreePalette";
-import {
-  forestTabFor,
-  isTabRoute,
-  PhoneTabBar,
-} from "@/components/PhoneTabBar";
+import { PhoneTabBar } from "@/components/PhoneTabBar";
+import { forestTabFor, isTabRoute } from "@/components/PhoneTabBarView";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { UpdateReadyToast } from "@/components/UpdateReadyToast";
 import { useWatchAccountChanges } from "@/hooks/account/useAccount";

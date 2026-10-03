@@ -31,7 +31,6 @@ export function PackageScriptsView({
   query = "",
   scripts,
   renderScript = idleScriptRow,
-  arranging = false,
   arrangeList,
   onToggleExpanded,
   onSort = noop,
@@ -46,8 +45,8 @@ export function PackageScriptsView({
   scripts: readonly SortableEntry[];
   // A live row per script. An idle ScriptRowView when not given.
   renderScript?: (entry: SortableEntry) => ReactNode;
-  arranging?: boolean;
-  // The draggable list while arranging.
+  // The draggable list, while arranging: it takes the search and the
+  // grid's place.
   arrangeList?: ReactNode;
   onToggleExpanded?: () => void;
   onSort?: (mode: PackageScriptSortMode) => void;
@@ -55,6 +54,7 @@ export function PackageScriptsView({
   onDoneArranging?: () => void;
   onQuery?: (query: string) => void;
 }) {
+  const arranging = arrangeList !== undefined;
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-1.5 text-xs">

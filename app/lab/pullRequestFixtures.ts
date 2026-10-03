@@ -74,44 +74,46 @@ const LAB_PRS_MERGED = Object.fromEntries(
   ]),
 );
 
-function labPosedPullRequests(): Record<string, typeof LAB_PR_SLIM> {
+type LabPullRequests = Record<string, typeof LAB_PR_SLIM>;
+
+function labPosedPullRequests(): LabPullRequests {
   const merged = new URLSearchParams(location.search).get("stack") === "merged";
   return merged ? LAB_PRS_MERGED : LAB_PRS;
 }
 
-export function labPullRequests(projectId: string) {
+export function labPullRequests(projectId: string): LabPullRequests {
   return LAB_SM_PROJECT_IDS.has(projectId) ? labPosedPullRequests() : {};
 }
 
-// The same, posed by argument rather than by the URL, for the scenes
-// (lab/scenes), which render where there is no URL to read.
-export function labPullRequestsFor(projectId: string, merged = false) {
-  if (!LAB_SM_PROJECT_IDS.has(projectId)) return {};
-  return merged ? LAB_PRS_MERGED : LAB_PRS;
+// The same with nothing posed, for the scenes (lab/scenes), which
+// render where there is no URL to read.
+export function labUnposedPullRequests(projectId: string): LabPullRequests {
+  return LAB_SM_PROJECT_IDS.has(projectId) ? LAB_PRS : {};
 }
 
-// The stacked PRs carry no checks, so the stack poses with and without
-// the checks chip. #148 carries whatever ?checks= poses.
-export function labPullRequestDetail(branch: string) {
-  const slim = labPosedPullRequests()[branch];
-  if (!slim) return null;
-  if (slim === LAB_PR_SLIM) return labPosedChecksDetail();
-  return { ...LAB_PR_DETAIL, ...slim, ...labChecks([]) };
-}
-
-// The same, posed by argument for the scenes: #148 with its default two
-// passing checks, the stacked PRs with none.
-export function labPullRequestDetailFor(
-  projectId: string,
-  branch: string,
-  merged = false,
+// A branch's PR in full. The stacked PRs carry no checks, so the stack
+// poses with and without the checks chip. #148 carries `own`.
+function labDetailOf(
+  slim: typeof LAB_PR_SLIM | undefined,
+  own: () => typeof LAB_PR_DETAIL,
 ) {
-  const slim = (
-    labPullRequestsFor(projectId, merged) as Record<string, typeof LAB_PR_SLIM>
-  )[branch];
   if (!slim) return null;
-  if (slim === LAB_PR_SLIM) return LAB_PR_DETAIL;
+  if (slim === LAB_PR_SLIM) return own();
   return { ...LAB_PR_DETAIL, ...slim, ...labChecks([]) };
+}
+
+// #148 carries whatever ?checks= poses.
+export function labPullRequestDetail(branch: string) {
+  return labDetailOf(labPosedPullRequests()[branch], labPosedChecksDetail);
+}
+
+// The same with nothing posed: #148 with its default two passing
+// checks.
+export function labUnposedPullRequestDetail(projectId: string, branch: string) {
+  return labDetailOf(
+    labUnposedPullRequests(projectId)[branch],
+    () => LAB_PR_DETAIL,
+  );
 }
 
 const labCheck = (

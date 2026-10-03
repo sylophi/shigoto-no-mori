@@ -11,8 +11,9 @@ export interface LaunchScript {
   command: string;
 }
 
+// A pill as it sits before a run.
 function idlePill(script: LaunchScript) {
-  return <IdleScriptPill key={script.name} {...script} />;
+  return <ScriptPill key={script.name} {...script} busy={false} />;
 }
 
 export function ScriptLaunchRowView({
@@ -50,35 +51,35 @@ export function ScriptLaunchRowView({
   );
 }
 
-// A pill as it sits before a run: its title says what it runs.
-function IdleScriptPill({ name, command }: LaunchScript) {
-  const actionLabel = `Run ${name}`;
-  return (
-    <ScriptPill
-      name={name}
-      busy={false}
-      aria-label={actionLabel}
-      title={`${actionLabel}\n${command}\n⌘click to view output`}
-    />
-  );
-}
-
 // Presentational half, shared by the visible row and the measurer so the two
 // can't drift apart. Both icons render at the same size, so a running script
 // occupies exactly the width it was measured at.
 export function ScriptPill({
   name,
+  command,
   busy,
+  disabledReason,
   ...props
 }: {
   name: string;
+  // What it runs, which its title says. The measurer's copies name
+  // none, and say nothing.
+  command?: string;
   busy: boolean;
+  // Why it cannot run, which the title says instead.
+  disabledReason?: string;
 } & ComponentProps<typeof Button>) {
+  const actionLabel = busy ? `Stop ${name}` : `Run ${name}`;
+  const said = command !== undefined && {
+    "aria-label": actionLabel,
+    title:
+      disabledReason ?? `${actionLabel}\n${command}\n⌘click to view output`,
+  };
   // Pill height tracks the launcher row above it, but the glyph and label
   // inside are the Scripts section's (size-3 icon, text-xs mono). These are
   // scripts, and reading them at the launcher's weight overstates them.
   return (
-    <Button variant="outline" size="sm" {...props}>
+    <Button variant="outline" size="sm" {...said} {...props}>
       {busy ? (
         <Square aria-hidden className="size-3 text-destructive" />
       ) : (

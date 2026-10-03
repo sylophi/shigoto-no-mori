@@ -32,8 +32,7 @@ export function ScriptsSection({ worktree }: ScriptsSectionProps) {
   );
 
   const lifecycle = lifecycleRowsOf({
-    setupCommand: config?.scripts?.setup?.trim() ?? "",
-    teardownCommand: config?.scripts?.teardown?.trim() ?? "",
+    scripts: config?.scripts,
     portPoolActive,
     path: worktree.path,
   });

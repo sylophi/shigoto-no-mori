@@ -3,6 +3,7 @@
 // with a direct session, Mini and Work PC offline. Pure data, served
 // over fixture transports by the bridge (lab/bridge.ts).
 import type { DeviceInfo } from "@shared/hub/protocol";
+import type { PortForwardSummary } from "@shared/ipc/modules/portForward";
 import type {
   CommitSummary,
   CustomPort,
@@ -23,6 +24,15 @@ export const LOCAL_DEVICE_ID = "dev_8f3ac2e1";
 export const THINKPAD_ID = "dev_1c94b0da";
 export const MINI_ID = "dev_5b0e77aa";
 export const WORKPC_ID = "dev_a02f61c3";
+
+// The worktrees the poses and the scenes (lab/scenes) name: Studio
+// Mac's main checkout of shigoto-no-mori and two of its worktrees, and
+// the Thinkpad's gentle-gecko. Ids are 12 hex digits, as the host makes
+// them (WorktreeIdSchema): the invoke contracts reject anything else.
+export const MAIN_CHECKOUT_ID = "5a0000000001";
+export const HAPPY_HUMMINGBIRD_ID = "5a0000000002";
+export const BRAVE_BADGER_ID = "5a0000000003";
+export const GENTLE_GECKO_ID = "a1b2c3d4e5f6";
 
 const now = Date.now();
 const HOUR = 3_600_000;
@@ -179,14 +189,12 @@ const localProjects: Project[] = [
   },
 ];
 
-// Worktree ids are 12 hex digits, as the host makes them
-// (WorktreeIdSchema): the invoke contracts reject anything else. These
-// start with a digit pair per project (5a shigoto-no-mori, 9b
-// port-pool, 7c t3code) and count up from there.
+// This machine's worktree ids start with a digit pair per project (5a
+// shigoto-no-mori, 9b port-pool, 7c t3code) and count up from there.
 const localWorktrees: Record<string, Worktree[]> = {
   p_sm: [
     worktree({
-      id: "5a0000000001",
+      id: MAIN_CHECKOUT_ID,
       projectId: "p_sm",
       name: "shigoto-no-mori",
       branch: "main",
@@ -210,7 +218,7 @@ const localWorktrees: Record<string, Worktree[]> = {
       ],
     }),
     worktree({
-      id: "5a0000000002",
+      id: HAPPY_HUMMINGBIRD_ID,
       projectId: "p_sm",
       name: "happy-hummingbird",
       branch: "v2-exp/remote-ui-flows",
@@ -237,7 +245,7 @@ const localWorktrees: Record<string, Worktree[]> = {
       ],
     }),
     worktree({
-      id: "5a0000000003",
+      id: BRAVE_BADGER_ID,
       projectId: "p_sm",
       name: "brave-badger",
       branch: "fix-stale-locks",
@@ -373,7 +381,7 @@ const thinkpadWorktrees: Record<string, Worktree[]> = {
       ],
     }),
     worktree({
-      id: "a1b2c3d4e5f6",
+      id: GENTLE_GECKO_ID,
       projectId: "tp_sm",
       name: "gentle-gecko",
       branch: "exp/terrier-sync",
@@ -561,6 +569,18 @@ export const forests: Record<string, DeviceForest> = {
   },
 };
 
+// The local branches a device's repos hold, the same list for each of
+// its projects: main, and every worktree's own.
+export function labLocalBranches(forest: DeviceForest): string[] {
+  return [
+    "main",
+    ...Object.values(forest.worktrees)
+      .flat()
+      .filter((entry) => !entry.isPrimary && !entry.detached)
+      .map((entry) => entry.branch),
+  ];
+}
+
 export const labGlobalConfig = {
   launchScripts: true,
   deleteBranchOnRemove: true,
@@ -629,27 +649,41 @@ export const labPortPoolActive = true;
 
 // ---- ports ----
 
+// The one port forward the lab opens with, so the live state shows
+// without a click: gentle-gecko's dev server on the Thinkpad, with two
+// connections open.
+export const labForwards: PortForwardSummary[] = [
+  {
+    forwardId: "a3f19c2e77b04d5586e1f20c9ab34d61",
+    deviceId: THINKPAD_ID,
+    remotePort: 5173,
+    localPort: 5173,
+    connCount: 2,
+    worktree: { projectId: "tp_sm", worktreeId: GENTLE_GECKO_ID },
+  },
+];
+
 // port-pool's allocations by worktree id, in the project's declared
 // order, and the user-added ports (what the worktree data file holds).
 // Which numbers have a server behind them is a flat set: the lab poses
 // liveness, it does not run servers.
 export const labPoolPorts: Record<string, { name: string; port: number }[]> = {
-  "5a0000000003": [{ name: "renderer", port: 5731 }],
-  "5a0000000002": [{ name: "renderer", port: 5741 }],
+  [BRAVE_BADGER_ID]: [{ name: "renderer", port: 5731 }],
+  [HAPPY_HUMMINGBIRD_ID]: [{ name: "renderer", port: 5741 }],
   aa11bb22cc33: [{ name: "renderer", port: 5174 }],
   ba9876543210: [
     { name: "renderer", port: 5182 },
     { name: "api", port: 5183 },
   ],
-  a1b2c3d4e5f6: [
+  [GENTLE_GECKO_ID]: [
     { name: "renderer", port: 5173 },
     { name: "storybook", port: 6006 },
   ],
 };
 
 export const labCustomPorts: Record<string, CustomPort[]> = {
-  "5a0000000003": [{ port: 5732, label: "api" }],
-  a1b2c3d4e5f6: [{ port: 8787, label: "api" }, { port: 5555 }],
+  [BRAVE_BADGER_ID]: [{ port: 5732, label: "api" }],
+  [GENTLE_GECKO_ID]: [{ port: 8787, label: "api" }, { port: 5555 }],
 };
 
 export const labListeningPorts = new Set([5731, 5173, 6006, 8787, 5182]);
