@@ -19,6 +19,7 @@ import { globalConfigContract } from "@shared/ipc/modules/globalConfig";
 import { hygieneContract } from "@shared/ipc/modules/hygiene";
 import { launchersContract } from "@shared/ipc/modules/launchers";
 import { menuContract } from "@shared/ipc/modules/menu";
+import { navContract } from "@shared/ipc/modules/nav";
 import { z } from "zod";
 import { coalesce } from "@host/lib/util/coalesce";
 import {
@@ -103,6 +104,7 @@ import { syncHandlers } from "@host/ipc/modules/sync";
 import { updaterHandlers } from "@host/ipc/modules/updater";
 import { villagersHandlers } from "@host/ipc/modules/villagers";
 import { windowHandlers } from "./modules/window";
+import { navHandlers } from "./modules/nav";
 import {
   setWorktreeRemovalBroadcaster,
   worktreesHandlers,
@@ -647,6 +649,7 @@ export function registerIpcHandlers(): void {
   });
   registerContract(mirrorContract, mirrorHandlers);
   registerContract(windowContract, windowHandlers);
+  registerContract(navContract, navHandlers);
   registerContract(projectsContract, projectsHandlers);
   registerContract(dialogContract, dialogHandlers);
   registerContract(runtimeContract, runtimeHandlers);
