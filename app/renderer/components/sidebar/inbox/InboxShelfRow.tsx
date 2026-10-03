@@ -1,10 +1,10 @@
-import { Archive, ChevronDown, EyeOff, GitMerge } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Archive, EyeOff, GitMerge, type LucideIcon } from "lucide-react";
+import { FoldHeader } from "../FoldHeader";
 import type { InboxShelf } from "../sidebarRow";
 
 const SHELVES: Record<
   InboxShelf,
-  { label: string; Icon: typeof Archive; hint: string }
+  { label: string; Icon: LucideIcon; hint: string }
 > = {
   shelved: {
     label: "Shelved",
@@ -30,9 +30,9 @@ interface InboxShelfRowProps {
   onToggle: () => void;
 }
 
-// A shelf header: label, hairline rule, chevron. Collapsed, the count is
-// the shelf's whole footprint. That's the point, since every shelf
-// holds work the user has already decided not to look at.
+// A shelf header. Collapsed, the count is the shelf's whole footprint.
+// That's the point, since every shelf holds work the user has already
+// decided not to look at.
 export function InboxShelfRow({
   shelf,
   count,
@@ -41,25 +41,13 @@ export function InboxShelfRow({
 }: InboxShelfRowProps) {
   const { label, Icon, hint } = SHELVES[shelf];
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={expanded}
-      title={hint}
-      className="mt-2 flex w-full items-center gap-2 px-2 py-1 text-left text-muted-foreground transition-colors hover:text-foreground"
-    >
-      <Icon aria-hidden className="size-3 shrink-0" />
-      <span className="text-2xs font-medium">
-        {expanded ? label : `${label} (${count})`}
-      </span>
-      <span aria-hidden className="h-px flex-1 bg-border" />
-      <ChevronDown
-        aria-hidden
-        className={cn(
-          "size-3 shrink-0 transition-transform",
-          !expanded && "-rotate-90",
-        )}
-      />
-    </button>
+    <FoldHeader
+      label={label}
+      count={count}
+      expanded={expanded}
+      onToggle={onToggle}
+      Icon={Icon}
+      hint={hint}
+    />
   );
 }

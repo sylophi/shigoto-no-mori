@@ -93,6 +93,7 @@ export async function listProjectsWithStatus(): Promise<Project[]> {
       lastUsed: row.lastUsed,
       recentCount: row.recentCount,
       identity: row.identity,
+      remote: row.remote,
     }),
   );
 }

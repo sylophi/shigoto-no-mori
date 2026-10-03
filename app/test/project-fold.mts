@@ -117,6 +117,7 @@ const build = (open: Project | null, worktreeSort: WorktreeSortMode = "name") =>
     openShelves: { shelved: new Set(), hidden: new Set() },
     hiddenPrefixes: ["exp/"],
     arrangeMode: false,
+    byOwner: null,
     remote,
     mirrors: [
       {

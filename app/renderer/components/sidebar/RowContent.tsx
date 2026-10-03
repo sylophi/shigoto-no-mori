@@ -2,6 +2,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { assertNever } from "@/lib/utils";
 import { InboxRow } from "./inbox/InboxRow";
 import { InboxShelfRow } from "./inbox/InboxShelfRow";
+import { FoldHeader } from "./FoldHeader";
 import { ProjectRow } from "./ProjectRow";
 import { ShelvedToggleRow } from "./ShelvedToggleRow";
 import { WorktreeRow } from "./WorktreeRow";
@@ -12,6 +13,7 @@ interface RowContentProps {
   onToggle: (groupKey: string) => void;
   onToggleShelved: (groupId: string, shelf: GroupShelf) => void;
   onToggleShelf: (shelf: InboxShelf) => void;
+  onToggleOwner: (ownerKey: string) => void;
   currentGroupKey: string | undefined;
   arrangeMode: boolean;
   isHovered: boolean;
@@ -22,6 +24,7 @@ export function RowContent({
   onToggle,
   onToggleShelved,
   onToggleShelf,
+  onToggleOwner,
   currentGroupKey,
   arrangeMode,
   isHovered,
@@ -41,6 +44,15 @@ export function RowContent({
           onToggle={() => onToggle(row.groupKey)}
           arrangeMode={arrangeMode}
           isHovered={isHovered}
+        />
+      );
+    case "owner-header":
+      return (
+        <FoldHeader
+          label={row.label}
+          count={row.count}
+          expanded={row.expanded}
+          onToggle={() => onToggleOwner(row.ownerKey)}
         />
       );
     case "worktree":

@@ -19,13 +19,22 @@ import (
 // "" when the repo has no identity or a git probe failed. The app's
 // list treats both as null (never matches across devices).
 func repoIdentity(projectPath string) string {
+	return repoIdentityFrom(projectPath, func() string { return primaryRemote(projectPath) })
+}
+
+// repoIdentity with the primary remote (primaryRemote) handed in, asked
+// for only when the root commit can't decide: `remote:<host/owner/repo>`
+// then. For a caller that probes the remote anyway (the project rows).
+func repoIdentityFrom(projectPath string, remote func() string) string {
 	if key, ok := rootCommitKey(projectPath); !ok {
 		return ""
 	} else if key != "" {
 		return key
 	}
-	key, _ := remoteIdentityKey(projectPath)
-	return key
+	if url := remote(); url != "" {
+		return "remote:" + url
+	}
+	return ""
 }
 
 // `root:<sha>` of the parentless commit reachable from the DEFAULT ref
@@ -69,13 +78,15 @@ func rootCommitKey(projectPath string) (string, bool) {
 
 var remoteFetchLineRe = regexp.MustCompile(`^(\S+)\s+(\S+)\s+\(fetch\)`)
 
-// `remote:<host/owner/repo>` from the primary fetch remote (upstream,
-// then origin, then the alphabetically first: orderRemotesByPrecedence),
-// considering only remotes whose URL normalizes.
-func remoteIdentityKey(projectPath string) (string, bool) {
+// The primary fetch remote's URL as `host/owner/repo` (upstream, then
+// origin, then the alphabetically first: orderRemotesByPrecedence),
+// considering only remotes whose URL normalizes. "" when none does or
+// the probe failed. Also the project row's `remote`, which the app
+// groups projects by owner off.
+func primaryRemote(projectPath string) string {
 	stdout, err := runGit(projectPath, "remote", "-v")
 	if err != nil {
-		return "", false
+		return ""
 	}
 	usable := map[string]string{}
 	var names []string
@@ -94,9 +105,9 @@ func remoteIdentityKey(projectPath string) (string, bool) {
 	}
 	ordered := orderRemotesByPrecedence(names)
 	if len(ordered) == 0 {
-		return "", true
+		return ""
 	}
-	return "remote:" + usable[ordered[0]], true
+	return usable[ordered[0]]
 }
 
 var (

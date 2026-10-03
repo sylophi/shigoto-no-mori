@@ -1116,6 +1116,7 @@ const CROWD_NAMES = [
   "fileatlas",
 ];
 const CROWD_ANIMALS = ["sly-stoat", "plain-plover"];
+const CROWD_OWNERS = ["sylophi", "rin", "kaiju-labs"];
 
 function initCrowd(): void {
   const pose = new URLSearchParams(location.search);
@@ -1140,6 +1141,9 @@ function initCrowd(): void {
         path,
         pathExists: true,
         identity: shared ? `root:crowd${String(i).padStart(12, "0")}` : null,
+        // A few owners to group by, and every seventh with no remote.
+        remote:
+          i % 7 === 6 ? null : `github.com/${CROWD_OWNERS[i % 3]}/${name}`,
         source: shared ? "terrier" : undefined,
         lastUsed: Date.now() - (i + 6) * 86_400_000,
         recentCount: 1,

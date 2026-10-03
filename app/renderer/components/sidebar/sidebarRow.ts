@@ -114,6 +114,18 @@ export type SidebarRow =
       shelf: GroupShelf | null;
       groupId: string;
     }
+  // The head of an owner's run on the list of projects, when it is
+  // split by owner (buildSidebarRows, ownerOf): the org or user the
+  // projects below belong to. Shut, the projects are left out and
+  // `count` stands for them.
+  | {
+      kind: "owner-header";
+      key: string;
+      ownerKey: string;
+      label: string;
+      count: number;
+      expanded: boolean;
+    }
   | {
       kind: "shelved-toggle";
       key: string;
@@ -165,6 +177,7 @@ export interface SidebarViewModel {
 
 export const ROW_SIZE_HINTS: Record<SidebarRow["kind"], number> = {
   project: 28,
+  "owner-header": 32,
   worktree: 49,
   "worktree-skeleton": 36,
   "worktree-error": 24,
@@ -208,6 +221,7 @@ const WORKTREE_ROW_GAP = "px-2 pb-(--row-gap) [--row-gap:--spacing(1)]";
 
 export const ROW_LAYOUT: Record<SidebarRow["kind"], string> = {
   project: "px-2",
+  "owner-header": "px-2",
   worktree: WORKTREE_ROW_GAP,
   "worktree-skeleton": "px-2",
   "worktree-error": "px-2",

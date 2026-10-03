@@ -60,6 +60,9 @@ func TestRepoIdentity(t *testing.T) {
 	if got := repoIdentity(bare); got != "remote:github.com/them/repo" {
 		t.Errorf("remote identity = %q, want remote:github.com/them/repo", got)
 	}
+	if got := primaryRemote(bare); got != "github.com/them/repo" {
+		t.Errorf("primary remote = %q, want github.com/them/repo", got)
+	}
 	// Machine-local remotes never identify.
 	local := filepath.Join(root, "local")
 	runGitT(t, root, "init", "-q", "-b", "main", local)
@@ -87,6 +90,7 @@ func TestProjectListRows(t *testing.T) {
 	withIcon := seedRepo(t, root, "withicon")
 	writeFileT(t, filepath.Join(withIcon, "favicon.svg"), redIconSVG)
 	bare := seedRepo(t, root, "plain")
+	runGitT(t, withIcon, "remote", "add", "origin", "git@github.com:acme/withicon.git")
 	projects := []project{
 		{ID: "P1", Name: "withicon", Path: withIcon},
 		{ID: "P2", Name: "plain", Path: bare},
@@ -123,13 +127,16 @@ func TestProjectListRows(t *testing.T) {
 	if id, _ := rows[0]["identity"].(string); !strings.HasPrefix(id, "root:") || rows[0]["pathExists"] != true {
 		t.Errorf("identity %v pathExists %v", rows[0]["identity"], rows[0]["pathExists"])
 	}
+	if rows[0]["remote"] != "github.com/acme/withicon" || rows[1]["remote"] != nil {
+		t.Errorf("remotes = %v/%v, want github.com/acme/withicon/null", rows[0]["remote"], rows[1]["remote"])
+	}
 	if rows[1]["icon"] != nil || rows[1]["hue"] != nil || rows[1]["lastUsed"] != float64(0) {
 		t.Errorf("plain row = %v, want null icon and hue, never used", rows[1])
 	}
 	if _, has := rows[1]["source"]; has {
 		t.Errorf("a registry row carries source: %v", rows[1])
 	}
-	if rows[2]["pathExists"] != false || rows[2]["identity"] != nil || rows[2]["source"] != "terrier" {
+	if rows[2]["pathExists"] != false || rows[2]["identity"] != nil || rows[2]["remote"] != nil || rows[2]["source"] != "terrier" {
 		t.Errorf("missing-path row = %v", rows[2])
 	}
 

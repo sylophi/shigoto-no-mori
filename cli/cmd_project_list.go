@@ -26,6 +26,9 @@ type projectRowJSON struct {
 	// Repo identity (repoidentity.go), null when the repo has none or
 	// the path is gone.
 	Identity *string `json:"identity"`
+	// The primary remote as `host/owner/repo` (primaryRemote), null
+	// when the repo has no network remote or the path is gone.
+	Remote *string `json:"remote"`
 	// Project use log (state.json projectUseLog): newest use, epoch ms
 	// (0 = never), and uses within the rolling 14-day window. The app
 	// records the uses; the CLI's own verbs don't count as one.
@@ -63,7 +66,11 @@ func buildProjectRows(projects []project, rescanIconMisses bool) []projectRowJSO
 			}
 			if info, err := os.Stat(p.Path); err == nil && info.IsDir() {
 				row.PathExists = true
-				if identity := repoIdentity(p.Path); identity != "" {
+				remote := primaryRemote(p.Path)
+				if remote != "" {
+					row.Remote = &remote
+				}
+				if identity := repoIdentityFrom(p.Path, func() string { return remote }); identity != "" {
 					row.Identity = &identity
 				}
 				if entry, ok := projectIcon(p, rescanIconMisses); ok {

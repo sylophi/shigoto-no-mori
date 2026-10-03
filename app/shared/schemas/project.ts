@@ -32,6 +32,11 @@ export const ProjectSchema = z.object({
   // only. `null` means the repo has none (or the probe failed), so it
   // never matches across devices. Other handlers don't set it.
   identity: z.string().nullable().optional(),
+  // The primary remote as `host/owner/repo` (cli/repoidentity.go,
+  // primaryRemote), populated by ProjectsList only, for grouping the
+  // sidebar's projects by owner. `null` means the repo has no network
+  // remote. Absent from a peer on an older build.
+  remote: z.string().nullable().optional(),
   // Usage stats, populated by ProjectsList only, feeding the sidebar
   // "most recently used" / "most used" sorts. `lastUsed` is the newest
   // action timestamp (0 if never); `recentCount` is the rolling-window
@@ -54,6 +59,7 @@ export type Project = z.infer<typeof ProjectSchema>;
 export const ProjectRowSchema = ProjectSchema.extend({
   pathExists: z.boolean(),
   identity: z.string().nullable(),
+  remote: z.string().nullable(),
   lastUsed: z.number().int().nonnegative(),
   recentCount: z.number().int().nonnegative(),
   icon: z.object({ path: z.string(), mime: z.string() }).nullable(),
