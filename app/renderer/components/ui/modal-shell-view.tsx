@@ -3,7 +3,7 @@
 // over the app with its keys and clicks. A scene (lab/scenes) draws it
 // as is, `contained` within its own box rather than over the viewport,
 // since a scene is a picture of a window, not one.
-import type { ComponentProps } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export function ModalShellView({
@@ -30,15 +30,31 @@ export function ModalShellView({
       )}
       {...backdrop}
     >
-      <div
-        data-slot="modal-shell"
-        className={cn(
-          "flex max-h-full w-full max-w-xl shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/5",
-          popoverClassName,
-        )}
-      >
+      <ModalShellBox popoverClassName={popoverClassName}>
         {children}
-      </div>
+      </ModalShellBox>
+    </div>
+  );
+}
+
+// The dialog's box alone, without the backdrop, for a scene that
+// pictures the dialog itself rather than the window under it.
+export function ModalShellBox({
+  popoverClassName,
+  children,
+}: {
+  popoverClassName?: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div
+      data-slot="modal-shell"
+      className={cn(
+        "flex max-h-full w-full max-w-xl shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground shadow-2xl ring-1 ring-foreground/5",
+        popoverClassName,
+      )}
+    >
+      {children}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import {
   LaunchRowScene,
 } from "./DetailScene";
 import { RowScene } from "./RowScene";
+import { TransplantScene } from "./TransplantScene";
 
 export const scenes = {
   row: RowScene,
@@ -14,4 +15,5 @@ export const scenes = {
   detailHummingbird: DetailHummingbirdScene,
   detailBadger: DetailBadgerScene,
   launchRow: LaunchRowScene,
+  transplant: TransplantScene,
 };

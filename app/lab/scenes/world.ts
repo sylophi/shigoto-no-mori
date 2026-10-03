@@ -3,6 +3,25 @@
 // a scene renders in Node (test/scenes.mts) and into the marketing site
 // at build time, so nothing here may reach window, the router or a
 // query.
+import type { ComponentProps } from "react";
+import { pullLandingBranch, pullWorktreeName } from "@shared/git/branches";
+import { layoutInputsFor, worktreeBaseFor } from "@shared/git/worktreeLayout";
+import { selectionOfPreset, setupDefaultFor } from "@shared/leaveOutRule";
+import { tildify } from "@shared/projectPaths";
+import {
+  pullBranchCollision,
+  pullFolderCollision,
+} from "@shared/pullCollision";
+import { parseLeaveOutPreset } from "@shared/sharedSettings";
+import type {
+  DestinationRowCollision,
+  PeerTargetRowData,
+} from "@/components/worktreeDetail/flow/PullReviewView";
+import {
+  type Landing,
+  landsOnPeer,
+} from "@/components/worktreeDetail/flow/pullSteps";
+import type { TransplantDialogView } from "@/components/worktreeDetail/transplant/TransplantDialogView";
 import type { DevicesPageRow } from "@/components/remote/DevicesPageView";
 import { deviceRowStatus } from "@/components/remote/deviceRegistryStatus";
 import type { DeviceInfo } from "@shared/hub/protocol";
@@ -43,6 +62,7 @@ import {
   accountDevices,
   forests,
   labDisks,
+  labGlobalConfig,
   labPackageScriptSort,
   labPackageScripts,
   labPortPoolActive,
@@ -333,4 +353,168 @@ function chipsOf(deviceId: string): DevicesPageRow["chips"] {
     worktrees: forest.worktrees[project.id]?.length ?? 0,
     iconSrc: iconSrcOf(project.name),
   }));
+}
+
+// ---- the transplant dialog (TransplantScene) ----
+
+// A device of the account, by id.
+function deviceOf(deviceId: string): DeviceInfo {
+  const device = accountDevices.find((d) => d.deviceId === deviceId);
+  if (!device) throw new Error(`[scenes] no device ${deviceId}`);
+  return device;
+}
+
+// A device's checkout of a repo, by the identity every checkout shares.
+function checkoutOn(
+  deviceId: string,
+  identity: string | null | undefined,
+): Project | undefined {
+  if (identity == null) return undefined;
+  return forests[deviceId]?.projects.find((p) => p.identity === identity);
+}
+
+// The devices a local worktree could go to, as the review's column
+// lists them (flow/peerTargets.ts): every other device of the account,
+// in the account's order. An online one is reachable with its checkout
+// of the repo, and one asleep is listed off with its checkout unknown,
+// as the lab's default pose has Mini and Work PC.
+export function peerTargetsOf(
+  project: Project,
+  localDeviceId: string,
+): PeerTargetRowData[] {
+  return accountDevices
+    .filter((device) => device.deviceId !== localDeviceId)
+    .map((device) => ({
+      deviceId: device.deviceId,
+      label: device.name,
+      icon: device.icon ?? "laptop",
+      project: device.online
+        ? checkoutOn(device.deviceId, project.identity)
+        : undefined,
+      block: device.online ? undefined : ("offline" as const),
+      ready: device.online,
+    }));
+}
+
+// Where the copy would collide on the landing device (PullReview.tsx
+// useLocalCollision), over the branches the lab says it holds: main and
+// every other checked-out worktree's (lab/bridge.ts listBranches).
+function landingCollisionOf(
+  deviceId: string,
+  landingProject: Project,
+  worktree: Worktree,
+  landing: Landing,
+): { collision: DestinationRowCollision; refusal: string | null } {
+  const forest = forests[deviceId];
+  const all = forest ? Object.values(forest.worktrees).flat() : [];
+  const branches = [
+    "main",
+    ...all.filter((w) => !w.isPrimary && !w.detached).map((w) => w.branch),
+  ];
+  const worktrees = forest?.worktrees[landingProject.id] ?? [];
+  const landingBranch = pullLandingBranch(worktree);
+  const held = branches.includes(landingBranch);
+  const holder = held
+    ? worktrees.find((entry) => entry.branch === landingBranch)
+    : undefined;
+  const name = pullWorktreeName(worktree);
+  const taken =
+    name !== undefined &&
+    worktrees.some((entry) => entry.name.toLowerCase() === name.toLowerCase());
+  const where = landing.onPeer ? landing.on : undefined;
+  return {
+    collision: { landingBranch, held, holderName: holder?.name },
+    refusal: held
+      ? pullBranchCollision(landingBranch, holder?.path, where)
+      : taken
+        ? pullFolderCollision(name, `${landingProject.name}/${name}`, where)
+        : null,
+  };
+}
+
+// Where a project's worktrees land on a device, tildified, as the
+// review's folder card spells it (hooks/config/useWorktreeBaseLabel):
+// the lab's config names no layout, so the managed root under the
+// device's data dir (lab/bridge.ts runtime:info).
+function worktreeBaseOn(deviceId: string, project: Project): string {
+  const home = labDisks[deviceId]?.home ?? "/home/rin";
+  return tildify(
+    worktreeBaseFor(
+      layoutInputsFor(labShigomoriConfig, project.path, {
+        dataDir: `${home}/.sm`,
+        canonicalDataDirName: ".sm",
+        onProjectDrive: labGlobalConfig.managedOnProjectDrive,
+      }),
+    ),
+    home,
+  );
+}
+
+// The transplant dialog's review for a local worktree sent to a peer
+// (TransplantToDialog, opened from "Transplant to..."): the source
+// card, the rule the dialog opens on (the project's preset, none set
+// in the lab), and the picked peer's carry-over, folder, setup script
+// and collision check.
+export function transplantReviewOf(
+  worktreeId: string,
+  toDeviceId: string,
+): ComponentProps<typeof TransplantDialogView> {
+  const { worktree, project, deviceId } = worktreeById(worktreeId);
+  const source = deviceOf(deviceId);
+  const destination = deviceOf(toDeviceId);
+  const landing = landsOnPeer(destination.name);
+  const landingProject = checkoutOn(toDeviceId, project.identity);
+  if (!landingProject) {
+    throw new Error(`[scenes] ${destination.name} has no ${project.name}`);
+  }
+  const selection = selectionOfPreset(parseLeaveOutPreset(undefined));
+  const config = labShigomoriConfig;
+  const { collision, refusal } = landingCollisionOf(
+    toDeviceId,
+    landingProject,
+    worktree,
+    landing,
+  );
+  const sourceIcon = source.icon ?? "laptop";
+  return {
+    worktree,
+    project,
+    sourceDeviceLabel: source.name,
+    thisDeviceLabel: destination.name,
+    landing,
+    source: {
+      icon: sourceIcon,
+      // This device's own card names no status.
+      status: null,
+      home: labDisks[deviceId]?.home ?? null,
+      pr: pullRequestOf(project.id, worktree.branch).pr ?? null,
+      prPending: false,
+    },
+    leaveOut: {
+      selection,
+      ignored: { data: undefined, isPending: false, isError: false },
+      presetDiffers: false,
+    },
+    destination: {
+      project: landingProject,
+      icon: destination.icon ?? "laptop",
+      collision,
+      carryOver: {
+        rows: (config.carryOver ?? []).map((entry) => ({
+          path: entry.path,
+          tag: entry.mode,
+        })),
+        isPending: false,
+      },
+      folderBase: worktreeBaseOn(toDeviceId, landingProject),
+      setupCommand: config.scripts?.setup?.trim() ?? "",
+    },
+    sourceIcon,
+    toPeer: {
+      targets: peerTargetsOf(project, deviceId),
+      pickedId: toDeviceId,
+    },
+    runSetup: setupDefaultFor(selection),
+    footer: { refusal, waiting: false, blocked: null },
+  };
 }

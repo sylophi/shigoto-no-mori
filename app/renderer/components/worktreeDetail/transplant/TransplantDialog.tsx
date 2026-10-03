@@ -26,26 +26,18 @@ import {
 } from "@/hooks/remote/useMoveWorktree";
 import { DestinationProvider } from "@/hooks/remote/useHostScope";
 import { modeOf, selectionSummary } from "../flow/ignoreChoice";
-import { type FlowStage, PullFlowFrame, usePullFlow } from "../flow/PullFlow";
+import { PullFlowFrame, usePullFlow } from "../flow/PullFlow";
 import type { DestinationPick } from "../flow/PullReview";
 import { type PeerTarget, usePeerDestination } from "../flow/peerTargets";
+import {
+  TRANSPLANT_STEPS,
+  TRANSPLANT_STEPS_LABEL,
+  TRANSPLANT_TITLES,
+  TransplantReviewHeadline,
+} from "./TransplantDialogView";
 import { TransplantFinish } from "./TransplantFinish";
 import { TransplantReview } from "./TransplantReview";
 import { type Landing, LANDS_HERE, stepHeadline } from "../flow/pullSteps";
-
-const STEPS = [
-  "Review & destination",
-  "Transplant",
-  "Finish up source",
-] as const;
-
-const TITLES: Record<FlowStage, string> = {
-  review: "Transplant worktree",
-  running: "Transplanting",
-  failed: "Transplant stopped",
-  cancelled: "Transplant cancelled",
-  done: "Transplant complete",
-};
 
 export function TransplantDialog({
   worktree,
@@ -181,12 +173,12 @@ function TransplantFlow({
       flow={flow}
       worktree={worktree}
       reviewIcon={ArrowRight}
-      titles={TITLES}
+      titles={TRANSPLANT_TITLES}
       sourceDeviceLabel={sourceDeviceLabel}
       thisDeviceLabel={thisDeviceLabel}
       landing={landing}
-      steps={STEPS}
-      stepsLabel="Transplant steps"
+      steps={TRANSPLANT_STEPS}
+      stepsLabel={TRANSPLANT_STEPS_LABEL}
       progressExtras={{
         failedNote: landing.onPeer
           ? `The copy here is untouched. If the worktree already landed ${landing.on}, open it from the sidebar instead of retrying.`
@@ -202,11 +194,11 @@ function TransplantFlow({
       headline={
         <>
           {stage === "review" && (
-            <>
-              Move <span className="font-mono">{worktree.branch}</span>{" "}
-              {landing.onPeer ? landing.to : `off ${sourceDeviceLabel}`},
-              uncommitted work included.
-            </>
+            <TransplantReviewHeadline
+              branch={worktree.branch}
+              landing={landing}
+              sourceDeviceLabel={sourceDeviceLabel}
+            />
           )}
           {stage === "running" &&
             `${stepHeadline(progress.frame, sourceDeviceLabel, landing)}.`}
