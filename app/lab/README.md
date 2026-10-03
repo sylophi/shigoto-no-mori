@@ -3,8 +3,9 @@
 Design-exploration harness: the real app UI mounted in a browser over
 a fixture `window.api` (four devices, mixed presence, shared and
 remote-only projects, two of them terrier-sourced), so every multi-device surface can be posed and
-screenshotted without a device hub, a second machine, or Clerk. Dev-only;
-nothing here ships.
+screenshotted without a device hub, a second machine, or Clerk. Nothing
+here ships in the app. The marketing site does run it, though: its
+frames of the app are this lab (see Marketing frames below).
 
 Two flavors:
 
@@ -50,7 +51,7 @@ Poses ride the URL:
   (e.g. `?updatedFrom=2.0.1`, whose "What's new" lists 2.0.2 and 2.0.3).
 - `?checks=<variant>`: the CI rollup on PR #148 (worktree
   `happy-hummingbird`,
-  `?to=/devices/dev_8f3ac2e1/projects/p_sm/worktrees/wt_sm_hum`), with
+  `?to=/devices/dev_8f3ac2e1/projects/p_sm/worktrees/5a0000000002`), with
   the merge state GitHub would pair with it. Variants are the keys of
   `LAB_CHECK_POSES` in `pullRequestFixtures.ts`: `none`, `single-passed`,
   `single-failing`, `passed`, `passed-some-skipped`, `all-skipped`, `auto-merge`,
@@ -137,3 +138,15 @@ blocks on visible text, which is how a take waits out a posed
 transfer. Output is webm; set `FFMPEG` to a binary to get an mp4
 beside it. The sync verbs are posed, so a recording shows the UI of a
 flow, not a transfer.
+
+## Marketing frames
+
+shigomori.com shows the app by running this lab in iframes
+(`marketing/README.md`). `lab/demo/` is its entry: the lab's boot on
+the same fixtures and poses, plus `?shell=web` for the web shell (the
+phone layout under 768px), with storage kept per frame, no focus
+taken until a visitor clicks in, and the traffic lights drawn on the
+desktop window. `pnpm lab:demo --outDir <dir>` builds it to be served
+from `/demo/`, which the marketing build does for itself. So the
+fixtures are public: keep them fictional, and check the site's frames
+after changing what they show.

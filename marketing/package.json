@@ -3,9 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "astro dev",
+    "demo": "pnpm -C ../app lab:demo --outDir \"$PWD/public/demo\"",
+    "dev": "node ../app/scripts/ensure-ports.mts && pnpm demo && astro dev",
     "check": "astro check",
-    "build": "astro check && astro build",
+    "build": "pnpm demo && astro check && astro build",
     "preview": "astro preview"
   },
   "dependencies": {
@@ -15,6 +16,7 @@
   "packageManager": "pnpm@12.4.1",
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
+    "@types/node": "^24.19.0",
     "typescript": "^6.0.3"
   }
 }

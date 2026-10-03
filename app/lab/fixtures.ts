@@ -175,10 +175,14 @@ const localProjects: Project[] = [
   },
 ];
 
+// Worktree ids are 12 hex digits, as the host makes them
+// (WorktreeIdSchema): the invoke contracts reject anything else. These
+// start with a digit pair per project (5a shigoto-no-mori, 9b
+// port-pool, 7c t3code) and count up from there.
 const localWorktrees: Record<string, Worktree[]> = {
   p_sm: [
     worktree({
-      id: "wt_sm_main",
+      id: "5a0000000001",
       projectId: "p_sm",
       name: "shigoto-no-mori",
       branch: "main",
@@ -202,7 +206,7 @@ const localWorktrees: Record<string, Worktree[]> = {
       ],
     }),
     worktree({
-      id: "wt_sm_hum",
+      id: "5a0000000002",
       projectId: "p_sm",
       name: "happy-hummingbird",
       branch: "v2-exp/remote-ui-flows",
@@ -229,7 +233,7 @@ const localWorktrees: Record<string, Worktree[]> = {
       ],
     }),
     worktree({
-      id: "wt_sm_badger",
+      id: "5a0000000003",
       projectId: "p_sm",
       name: "brave-badger",
       branch: "fix-stale-locks",
@@ -248,7 +252,7 @@ const localWorktrees: Record<string, Worktree[]> = {
       ],
     }),
     worktree({
-      id: "wt_sm_quail",
+      id: "5a0000000004",
       projectId: "p_sm",
       name: "quiet-quail",
       branch: "port-pool-retry",
@@ -268,7 +272,7 @@ const localWorktrees: Record<string, Worktree[]> = {
       ],
     }),
     worktree({
-      id: "wt_sm_owl",
+      id: "5a0000000005",
       projectId: "p_sm",
       name: "odd-owl",
       branch: "exp/tray-menu",
@@ -284,7 +288,7 @@ const localWorktrees: Record<string, Worktree[]> = {
   ],
   p_pp: [
     worktree({
-      id: "wt_pp_main",
+      id: "9b0000000001",
       projectId: "p_pp",
       name: "port-pool",
       branch: "main",
@@ -295,7 +299,7 @@ const localWorktrees: Record<string, Worktree[]> = {
       ],
     }),
     worktree({
-      id: "wt_pp_marmot",
+      id: "9b0000000002",
       projectId: "p_pp",
       name: "merry-marmot",
       branch: "lease-ttl",
@@ -308,7 +312,7 @@ const localWorktrees: Record<string, Worktree[]> = {
   ],
   p_t3: [
     worktree({
-      id: "wt_t3_main",
+      id: "7c0000000001",
       projectId: "p_t3",
       name: "t3code",
       branch: "main",
@@ -576,8 +580,8 @@ export const labGlobalConfig = {
 // Which numbers have a server behind them is a flat set: the lab poses
 // liveness, it does not run servers.
 export const labPoolPorts: Record<string, { name: string; port: number }[]> = {
-  wt_sm_badger: [{ name: "renderer", port: 5731 }],
-  wt_sm_hum: [{ name: "renderer", port: 5741 }],
+  "5a0000000003": [{ name: "renderer", port: 5731 }],
+  "5a0000000002": [{ name: "renderer", port: 5741 }],
   aa11bb22cc33: [{ name: "renderer", port: 5174 }],
   ba9876543210: [
     { name: "renderer", port: 5182 },
@@ -590,7 +594,7 @@ export const labPoolPorts: Record<string, { name: string; port: number }[]> = {
 };
 
 export const labCustomPorts: Record<string, CustomPort[]> = {
-  wt_sm_badger: [{ port: 5732, label: "api" }],
+  "5a0000000003": [{ port: 5732, label: "api" }],
   a1b2c3d4e5f6: [{ port: 8787, label: "api" }, { port: 5555 }],
 };
 

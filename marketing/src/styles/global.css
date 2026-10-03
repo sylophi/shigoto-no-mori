@@ -593,7 +593,7 @@ code {
     0 11px 0 0 var(--edge);
 }
 
-/* A macOS window: the capture already carries its traffic lights. */
+/* A macOS window: the demo draws its traffic lights. */
 .window,
 .floating {
   border-radius: clamp(8px, 1vw, 14px);
@@ -614,13 +614,44 @@ code {
     0 0 0 1px oklch(1 0 0 / 0.08) inset,
     var(--float-shadow);
 }
-.phone img {
+.phone .live-view {
   border-radius: 1.95rem;
 }
 .card-shot {
   border-radius: var(--radius);
   overflow: hidden;
   --lift: 6px;
+}
+
+/* A live app frame (components/LiveApp.astro): the window drawn at its
+   own size, scaled to the frame by scripts/live.ts, and shown once it
+   has drawn and been posed. Until then the frame is a blank card. */
+.live-view {
+  position: relative;
+  aspect-ratio: var(--live-w) / var(--live-h);
+  overflow: hidden;
+  border-radius: inherit;
+  background: var(--card);
+}
+.live-view iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 0;
+  transform-origin: 0 0;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+.live-ready iframe {
+  opacity: 1;
+}
+/* A whole window can be clicked around in, where there is a pointer. On
+   a touchscreen it stays a picture, so a swipe over it scrolls the page. */
+@media (hover: hover) {
+  .live-interactive.live-ready iframe {
+    pointer-events: auto;
+  }
 }
 
 .card {
@@ -755,7 +786,7 @@ code {
   border-radius: 1.1rem;
   transform: rotate(-4deg);
 }
-.stage-row img {
+.stage-row .live-view {
   border-radius: 1.1rem;
 }
 .stage-phone {
@@ -882,7 +913,7 @@ code {
   position: relative;
   border-radius: var(--radius);
 }
-.anatomy-row img {
+.anatomy-row .live-view {
   border-radius: var(--radius);
 }
 .pin {
@@ -891,6 +922,10 @@ code {
   top: var(--y);
   translate: -50% -50%;
   box-shadow: 0 0 0 3px var(--card);
+}
+/* Placed by scripts/live.ts once the row has drawn. */
+.live:not(.live-ready) .pin {
+  visibility: hidden;
 }
 .legend {
   list-style: none;

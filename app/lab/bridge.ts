@@ -1117,6 +1117,13 @@ const CROWD_NAMES = [
 ];
 const CROWD_ANIMALS = ["sly-stoat", "plain-plover"];
 
+// A crowd worktree's id, 12 hex digits as WorktreeIdSchema wants: c,
+// the kind (1 a primary here, 2 one on the Thinkpad, 3 another
+// worktree), the crowd index and the worktree's number.
+function crowdWorktreeId(kind: 1 | 2 | 3, i: number, n = 0): string {
+  return `c${kind}${i.toString(16).padStart(8, "0")}${n.toString(16).padStart(2, "0")}`;
+}
+
 function initCrowd(): void {
   const pose = new URLSearchParams(location.search);
   const posed = Number(pose.get("crowd"));
@@ -1146,7 +1153,7 @@ function initCrowd(): void {
       });
       forest.worktrees[id] = [
         worktreeFixture({
-          id: `wt_${id}`,
+          id: crowdWorktreeId(forest === local ? 1 : 2, i),
           projectId: id,
           name,
           branch: "main",
@@ -1160,7 +1167,7 @@ function initCrowd(): void {
       CROWD_ANIMALS.slice(0, i % 8 === 0 ? 1 : i % 4 === 0 ? 2 : 0).map(
         (animal, n) =>
           worktreeFixture({
-            id: `wt_crowd_${i}_${n}`,
+            id: crowdWorktreeId(3, i, n),
             projectId: id,
             name: animal,
             branch: n === 0 ? "fix-flaky-sync" : "exp/redo-cache",
@@ -1205,7 +1212,13 @@ function hubSnapshot(): HubStatus {
 }
 
 export function installLabBridge(
-  opts: { webShell?: boolean; villageLife?: boolean } = {},
+  opts: {
+    webShell?: boolean;
+    villageLife?: boolean;
+    // A dev build, as the lab is: the dev sticker on the brand header
+    // and the theme hotkeys. The marketing frames pose as a release.
+    isDev?: boolean;
+  } = {},
 ) {
   WEB_SHELL = opts.webShell === true;
   villageLife =
@@ -1441,7 +1454,7 @@ export function installLabBridge(
     deviceId: selfDeviceId,
     appVersion: LAB_APP_VERSION,
     clerkPublishableKey: "pk_test_lab",
-    isDev: true,
+    isDev: opts.isDev ?? true,
     isElectron: !WEB_SHELL,
     ...buildApi({ host: localHost.transport, client: client.transport }),
   };
