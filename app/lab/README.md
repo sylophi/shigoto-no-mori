@@ -181,6 +181,11 @@ over the lab's fixtures into one of the site's pictures.
   `lab/scenes/index.ts`. `pnpm test scenes` renders every one in Node,
   where anything that reaches for the app fails, and the marketing
   site renders them the same way.
+- A whole window is composed rather than drawn: `AppWindowScene`
+  (lab/scenes/AppWindowScene.tsx) is the shell (AppShellView) around a
+  `sidebar` and a page, and `LabSidebar` (lab/scenes/SidebarScenes.tsx)
+  is the sidebar over the fixtures in either shell and view, with a
+  selected worktree.
 
 A view should draw exactly what its component drew. To check, shoot
 the lab before and after (`lab/shoot.mts`) and compare the images.
