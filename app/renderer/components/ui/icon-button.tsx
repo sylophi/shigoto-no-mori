@@ -12,6 +12,7 @@ const TONE_CLASS = {
 // data-icon-button is the phone layout's hook for a resting fill, since
 // nothing hovers there (phone.css). An attribute of its own rather than
 // a data-slot, which a menu trigger rendering this would overwrite.
+// As a toggle (aria-pressed), the on state keeps the fill at rest.
 export function IconButton({
   tone = "default",
   className,
@@ -24,7 +25,7 @@ export function IconButton({
       type="button"
       data-icon-button
       className={cn(
-        "rounded-md p-1 text-muted-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        "rounded-md p-1 text-muted-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-50 aria-pressed:bg-accent aria-pressed:text-accent-foreground",
         TONE_CLASS[tone],
         className,
       )}

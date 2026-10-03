@@ -12,13 +12,15 @@ import {
 } from "@pierre/diffs";
 import { FileDiff, VirtualizerContext } from "@pierre/diffs/react";
 import { flushSync } from "react-dom";
-import { ChevronDown, Files, Loader2 } from "lucide-react";
+import { ChevronDown, Files, Loader2, WrapText } from "lucide-react";
 import { useTheme } from "@/hooks/ui/useTheme";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeader";
 import { SidebarTakeover } from "@/components/sidebar/SidebarTakeover";
 import { BackButton } from "@/components/ui/back-button";
 import { ChipButton } from "@/components/ui/chip-button";
+import { IconButton } from "@/components/ui/icon-button";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { DiffChangesControls } from "./changesControls";
@@ -34,8 +36,13 @@ import { changeEntries, fileKey, patchEntries } from "@/lib/patchFiles";
 import { useFileScrollSpy } from "./useFileScrollSpy";
 import { CenteredMessage } from "@/components/ui/centered-message";
 import { withMember } from "@/lib/toggleSet";
+import { readStored, writeStored } from "@/lib/localStorage";
 
 type DiffStyle = "unified" | "split";
+
+// Kept across diffs and launches: whether long lines fit the pane is a
+// reading habit, not a property of one patch.
+const WRAP_STORAGE_KEY = "diff.wrapLines";
 
 const DIFF_STYLE_OPTIONS = [
   { value: "unified", label: "Unified" },
@@ -150,6 +157,14 @@ export function DiffView({
 }) {
   const { data: patch, isLoading, error } = diff;
   const [diffStyle, setDiffStyle] = useState<DiffStyle>("unified");
+  const [wrapLines, setWrapLines] = useState(
+    () => readStored(WRAP_STORAGE_KEY) === "true",
+  );
+  const toggleWrap = () => {
+    const next = !wrapLines;
+    setWrapLines(next);
+    writeStored(WRAP_STORAGE_KEY, String(next));
+  };
   const [collapsedKeys, setCollapsedKeys] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -297,6 +312,15 @@ export function DiffView({
                 <span className="tabular">{indexEntries.length}</span>
               </ChipButton>
             )}
+            <SimpleTooltip tip="Wrap long lines">
+              <IconButton
+                onClick={toggleWrap}
+                aria-pressed={wrapLines}
+                aria-label="Wrap long lines"
+              >
+                <WrapText aria-hidden className="size-4" />
+              </IconButton>
+            </SimpleTooltip>
             <SegmentedControl
               aria-label="Diff layout"
               className="self-center"
@@ -348,6 +372,7 @@ export function DiffView({
                     fileId={key}
                     collapsed={!singleFile && collapsedKeys.has(key)}
                     diffStyle={diffStyle}
+                    wrapLines={wrapLines}
                     themeType={resolved}
                     // No fold control on a single file: it is the one
                     // you asked for, and folding it away would leave
@@ -403,6 +428,7 @@ function DiffFileRow({
   fileId,
   collapsed,
   diffStyle,
+  wrapLines,
   themeType,
   onToggle,
 }: {
@@ -410,6 +436,11 @@ function DiffFileRow({
   fileId: string;
   collapsed: boolean;
   diffStyle: DiffStyle;
+  // Wrapped rows run past CODE_LINE_HEIGHT, so DIFF_METRICS no longer
+  // places them exactly. Pierre measures each wrapped row as it draws
+  // and corrects the file's height, so a long file's scrollbar settles
+  // as you read rather than up front.
+  wrapLines: boolean;
   themeType: "light" | "dark";
   // Absent when the pane shows one picked file, where there is nothing
   // to fold away. The header prefix goes with it.
@@ -422,7 +453,13 @@ function DiffFileRow({
           file per the library's recommended pattern. */}
       <FileDiff
         fileDiff={fileDiff}
-        options={{ ...DIFF_THEME, diffStyle, themeType, collapsed }}
+        options={{
+          ...DIFF_THEME,
+          diffStyle,
+          overflow: wrapLines ? "wrap" : "scroll",
+          themeType,
+          collapsed,
+        }}
         metrics={DIFF_METRICS}
         renderHeaderPrefix={
           onToggle
