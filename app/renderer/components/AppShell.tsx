@@ -19,7 +19,6 @@ import {
 } from "@/components/PhoneTabBar";
 import { Sidebar } from "@/components/sidebar/Sidebar";
 import { UpdateReadyToast } from "@/components/UpdateReadyToast";
-import { BackButton } from "@/components/ui/back-button";
 import { useWatchAccountChanges } from "@/hooks/account/useAccount";
 import { useDoctorWatch } from "@/hooks/cli/useDoctor";
 import { useSidebarView } from "@/hooks/projects/useSidebarView";
@@ -30,11 +29,13 @@ import { useResizableWidth } from "@/hooks/ui/useResizableWidth";
 import { usePaletteVariantHotkey } from "@/hooks/ui/usePaletteVariantHotkey";
 import { usePhoneLayout } from "@/hooks/ui/useViewport";
 import { hasLocalHost } from "@/lib/localHost";
-import { cn, dragRegion } from "@/lib/utils";
-
-const SIDEBAR_MIN = 200;
-const SIDEBAR_MAX = 400;
-const SIDEBAR_DEFAULT = 240;
+import {
+  AppShellView,
+  PhoneBackBarView,
+  SIDEBAR_DEFAULT,
+  SIDEBAR_MAX,
+  SIDEBAR_MIN,
+} from "@/components/AppShellView";
 
 export function AppShell() {
   // The always-mounted account watch, keeping every staleTime-Infinity
@@ -75,84 +76,37 @@ export function AppShell() {
   );
 
   return (
-    <div
-      className={cn(
-        "flex h-dvh overflow-hidden text-foreground",
-        // The desktop window is transparent so the sidebar's vibrancy
-        // material shows through, and the main pane paints its own
-        // background. A browser tab has no material, so the root paints.
-        !hasLocalHost && "bg-background",
-        // A notched phone draws under its status bar (viewport-fit=cover
-        // in the page's meta), so the frame steps down past it.
-        phone && "pt-[env(safe-area-inset-top)]",
-      )}
-    >
-      {!phone && (
+    <AppShellView
+      phone={phone}
+      hasLocalHost={hasLocalHost}
+      sidebar={<Sidebar />}
+      sidebarWidth={sidebar.width}
+      onResizeStart={sidebar.onMouseDown}
+      // Updates found on this machine or a peer, announced once each.
+      toasts={<UpdateReadyToast />}
+      backBar={
+        !isTabRoute(pathname) && (
+          <PhoneBackBarView
+            label={forestTab.label}
+            onBack={() => void navigate(forestTab.to)}
+          />
+        )
+      }
+      tabBar={<PhoneTabBar />}
+      overlays={
+        // The app-wide overlays. They live here, under the router, so
+        // their navigation is plain useNavigate. The ⌘K worktree palette
+        // spans every device, and add project picks its device, so a
+        // hostless client has both.
         <>
-          <div style={{ width: sidebar.width }} className="shrink-0">
-            <Sidebar />
-          </div>
-          <div
-            onMouseDown={sidebar.onMouseDown}
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize sidebar"
-            tabIndex={-1}
-            className="relative w-px shrink-0 cursor-col-resize bg-border"
-          >
-            <div className="absolute inset-y-0 -left-1 w-2" />
-          </div>
+          {phone && <ForestKeepalive />}
+          <WorktreePalette />
+          <AddProjectModal />
         </>
-      )}
-
-      {/* Updates found on this machine or a peer, announced once each. */}
-      <UpdateReadyToast />
-
-      <div className="flex h-full min-w-0 flex-1 flex-col">
-        {phone && !isTabRoute(pathname) && (
-          /* A page stacked over the forest: the way back to it, where a
-             wide viewport keeps the sidebar. Its full touch height is
-             drawn, not left to the hit-area net: the page body under
-             the bar is later in the document and would win the overhang. */
-          <header className="flex shrink-0 items-center border-b border-border bg-card px-4 py-1">
-            <BackButton
-              label={forestTab.label}
-              onClick={() => void navigate(forestTab.to)}
-              className="min-h-10 text-sm"
-            />
-          </header>
-        )}
-        <main
-          data-doubutsu-zone="main"
-          className="relative flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-background"
-        >
-          {/* The window's title-bar drag strip over the page. Only
-              where there is a title bar: in a browser the strip would
-              be an invisible layer swallowing taps along the top. The
-              drag region is the OS's, so the page's own hit testing
-              passes through to a no-drag control under it (the device
-              tabs, which sit on the traffic-light line). */}
-          {hasLocalHost && (
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-x-0 top-0 z-30 h-7"
-              style={dragRegion("drag")}
-            />
-          )}
-          <Outlet />
-        </main>
-        {phone && <PhoneTabBar />}
-      </div>
-
-      {phone && <ForestKeepalive />}
-
-      {/* The app-wide overlays. They live here, under the router, so
-          their navigation is plain useNavigate. The ⌘K worktree palette
-          spans every device, and add project picks its device, so a
-          hostless client has both. */}
-      <WorktreePalette />
-      <AddProjectModal />
-    </div>
+      }
+    >
+      <Outlet />
+    </AppShellView>
   );
 }
 

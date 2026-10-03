@@ -1,5 +1,3 @@
-import { Loader2, Plus } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,8 +12,13 @@ import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
 import type { Project } from "@shared/schemas";
 import { deviceBadgeOf } from "../buildSidebarRows";
-import { DeviceBadge, type SidebarDeviceBadge } from "../DeviceBadge";
-import { ProjectIcon } from "@/components/shared/ProjectIcon";
+import type { SidebarDeviceBadge } from "../DeviceBadge";
+import { useProjectIcon } from "@/hooks/projects/useProjectIcon";
+import {
+  NEW_WORKTREE_MENU_LABEL,
+  NewWorktreeButtonView,
+  NewWorktreeTargetContent,
+} from "./NewWorktreeButtonView";
 
 interface NewWorktreeButtonProps {
   projects: Project[];
@@ -70,16 +73,10 @@ export function NewWorktreeButton({
     const only = targets[0];
     if (only === undefined) {
       return (
-        <Button
-          variant="outline"
-          size="sm"
+        <NewWorktreeButtonView
           disabled
           title="Nowhere to create a worktree yet"
-          className="w-full"
-        >
-          <Plus aria-hidden />
-          New worktree
-        </Button>
+        />
       );
     }
     return (
@@ -95,25 +92,13 @@ export function NewWorktreeButton({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={
-          <Button
-            variant="outline"
-            size="sm"
-            aria-label="New worktree"
-            className="w-full"
-          >
-            <Plus aria-hidden />
-            New worktree
-          </Button>
-        }
+        render={<NewWorktreeButtonView aria-label="New worktree" />}
       />
       <DropdownMenuContent align="start" sideOffset={4}>
         {/* GroupLabel throws outside a Group, since Base UI reads the group
             context to wire the label to the items it names. */}
         <DropdownMenuGroup>
-          <DropdownMenuLabel>
-            New worktree in… (⇧ to pick a base)
-          </DropdownMenuLabel>
+          <DropdownMenuLabel>{NEW_WORKTREE_MENU_LABEL}</DropdownMenuLabel>
           {targets.map((target) => (
             <MaybeHostScope
               key={target.key}
@@ -135,22 +120,13 @@ function SingleTargetButton({ target }: { target: CreateTarget }) {
     ? `${target.project.name} on ${target.peer.badge.label}`
     : target.project.name;
   return (
-    <Button
-      variant="outline"
-      size="sm"
+    <NewWorktreeButtonView
+      pending={isPending}
       disabled={isPending}
       aria-busy={isPending}
       title={`New worktree in ${where} (hold ⇧ to pick a base)`}
       onClick={(event) => createFrom(event, target.project.id)}
-      className="w-full"
-    >
-      {isPending ? (
-        <Loader2 aria-hidden className="animate-spin" />
-      ) : (
-        <Plus aria-hidden />
-      )}
-      {isPending ? "Creating worktree…" : "New worktree"}
-    </Button>
+    />
   );
 }
 
@@ -158,18 +134,22 @@ function SingleTargetButton({ target }: { target: CreateTarget }) {
 // create hook bound to that scope.
 function TargetItem({ target }: { target: CreateTarget }) {
   const { createFrom, isPending } = useQuickCreateWorktree();
+  const iconSrc = useProjectIcon(
+    target.project.id,
+    target.peer?.badge.deviceId,
+  );
   return (
     <DropdownMenuItem
       disabled={isPending}
       onClick={(event) => createFrom(event, target.project.id)}
     >
-      <ProjectIcon
-        projectId={target.project.id}
-        name={target.project.name}
-        deviceId={target.peer?.badge.deviceId}
+      <NewWorktreeTargetContent
+        target={{
+          name: target.project.name,
+          iconSrc,
+          device: target.peer?.badge,
+        }}
       />
-      {target.project.name}
-      {target.peer && <DeviceBadge badge={target.peer.badge} />}
     </DropdownMenuItem>
   );
 }

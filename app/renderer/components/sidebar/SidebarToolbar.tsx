@@ -1,7 +1,6 @@
 import { type ReactNode, useState } from "react";
-import { ArrowUpDown, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import type { ProjectSortMode, WorktreeSortMode } from "@shared/schemas";
-import { BackButton } from "@/components/ui/back-button";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -20,7 +19,7 @@ import {
 import { useSetWorktreeSort } from "@/hooks/sharedSettings/useWorktreeSort";
 import { hasLocalHost } from "@/lib/localHost";
 import { AddProjectButton } from "./AddProjectButton";
-import { SIDEBAR_ICON_BUTTON } from "./sidebarChrome";
+import { SidebarToolbarView, SortTriggerButton } from "./SidebarToolbarView";
 
 interface SidebarToolbarProps {
   // Enter-only: the footer owns "Done arranging", so this never toggles
@@ -68,18 +67,17 @@ const WORKTREE_SORT_OPTIONS: ReadonlyArray<SortOption<WorktreeSortMode>> = [
 // peers.
 export function SidebarToolbar({ onArrange, open }: SidebarToolbarProps) {
   return (
-    // Same left/right split as the footer below it: the control that
-    // changes what the list shows sits left, the action sits right.
-    <div className="flex items-center gap-1 px-2 pb-1">
-      {open ? (
-        <BackButton label="Projects" onClick={open.onBack} className="ml-0" />
-      ) : (
-        hasLocalHost && <ProjectSortMenu onArrange={onArrange} />
-      )}
-      <div className="flex-1" />
-      {open && <WorktreeSortMenu groupKey={open.groupKey} sort={open.sort} />}
-      <AddProjectButton />
-    </div>
+    <SidebarToolbarView
+      back={open && { onBack: open.onBack }}
+      sort={
+        open ? (
+          <WorktreeSortMenu groupKey={open.groupKey} sort={open.sort} />
+        ) : (
+          hasLocalHost && <ProjectSortMenu onArrange={onArrange} />
+        )
+      }
+      addProject={<AddProjectButton />}
+    />
   );
 }
 
@@ -152,17 +150,7 @@ function SortMenu<T extends string>({
           the tip can't cover the popup. */}
       <SimpleTooltip tip={tip} disabled={menuOpen}>
         <span className="inline-flex">
-          <DropdownMenuTrigger
-            render={
-              <button
-                type="button"
-                aria-label={tip}
-                className={SIDEBAR_ICON_BUTTON}
-              >
-                <ArrowUpDown className="size-3.5" />
-              </button>
-            }
-          />
+          <DropdownMenuTrigger render={<SortTriggerButton tip={tip} />} />
         </span>
       </SimpleTooltip>
       {/* Anchored under the trigger now that it sits at the top of the

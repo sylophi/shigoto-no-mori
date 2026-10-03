@@ -1,8 +1,7 @@
 import { hasLocalHost } from "@/lib/localHost";
+import { SidebarFooterView } from "./SidebarFooterView";
 import { SidebarNavActions } from "./SidebarNavActions";
 import { SidebarViewToggle } from "./SidebarViewToggle";
-import { SIDEBAR_FOOTER_BAR } from "./sidebarChrome";
-import { cn } from "@/lib/utils";
 
 interface SidebarFooterProps {
   arrangeMode: boolean;
@@ -18,24 +17,13 @@ export function SidebarFooter({
   arrangeMode,
   onToggleArrange,
 }: SidebarFooterProps) {
-  if (hasLocalHost && arrangeMode) {
-    return (
-      <div className={cn(SIDEBAR_FOOTER_BAR, "justify-end")}>
-        <button
-          type="button"
-          onClick={onToggleArrange}
-          className="rounded-md px-2 py-1 text-2xs font-semibold tracking-wide text-foreground uppercase transition-colors hover:bg-accent"
-        >
-          Done arranging
-        </button>
-      </div>
-    );
-  }
   return (
-    <div className={SIDEBAR_FOOTER_BAR}>
-      <SidebarViewToggle />
-      <div className="flex-1" />
-      <SidebarNavActions />
-    </div>
+    <SidebarFooterView
+      onDoneArranging={
+        hasLocalHost && arrangeMode ? onToggleArrange : undefined
+      }
+      toggle={<SidebarViewToggle />}
+      actions={<SidebarNavActions />}
+    />
   );
 }

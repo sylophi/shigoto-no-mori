@@ -54,3 +54,23 @@ export function MirrorBadgeView({
     </span>
   );
 }
+
+// The project-header cluster: one badge per contributing peer device,
+// order preserved from the merge, while the window shows device badges
+// (DeviceBadgeCluster reads that).
+export function DeviceBadgeClusterView({
+  devices,
+  show,
+}: {
+  devices: readonly SidebarDeviceBadge[];
+  show: boolean;
+}) {
+  if (!show || devices.length === 0) return null;
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1">
+      {devices.map((badge) => (
+        <DeviceBadge key={badge.deviceId} badge={badge} />
+      ))}
+    </span>
+  );
+}
