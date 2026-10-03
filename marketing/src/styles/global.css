@@ -923,8 +923,9 @@ code {
   translate: -50% -50%;
   box-shadow: 0 0 0 3px var(--card);
 }
-/* Placed by scripts/live.ts once the row has drawn. */
-.live:not(.live-ready) .pin {
+/* Placed by scripts/live.ts once the row has drawn. A pin it can't
+   find a place for stays hidden rather than pointing at nothing. */
+.live .pin:not(.pin-placed) {
   visibility: hidden;
 }
 .legend {

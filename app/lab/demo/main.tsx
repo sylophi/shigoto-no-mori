@@ -6,50 +6,16 @@
 //                layout. Absent, the desktop window.
 //
 // Every frame on the page is its own window but shares one origin, so
-// the lab's usual habits would leak between them. This entry keeps
-// each frame to itself before the lab boots.
+// the lab's usual habits would leak between them: isolate.ts keeps each
+// frame to itself, before any lab module loads.
+// oxlint-disable-next-line import/no-unassigned-import -- its body must run before any lab module loads, so it can't wait to be called
+import "./isolate";
 import { installLabBridge } from "../bridge";
 import { applyPose } from "../pose";
 import "./demo.css";
 
 const pose = new URLSearchParams(location.search);
 const webShell = pose.get("shell") === "web";
-
-// Storage per frame: the pose writes the theme to localStorage, and a
-// dark frame's write would otherwise reach the light frame beside it
-// (and a visitor's own clicks would outlive a reload).
-const items = new Map<string, string>();
-const memoryStorage: Storage = {
-  get length() {
-    return items.size;
-  },
-  key: (index) => [...items.keys()][index] ?? null,
-  getItem: (key) => items.get(key) ?? null,
-  setItem: (key, value) => void items.set(key, String(value)),
-  removeItem: (key) => void items.delete(key),
-  clear: () => items.clear(),
-};
-Object.defineProperty(window, "localStorage", { value: memoryStorage });
-
-// No focus until the visitor reaches into the frame. A dialog or field
-// that focuses itself on mount would otherwise take the keyboard from
-// the page around it, and scroll the page to this frame. The page's own
-// posing clicks (marketing/src/scripts/live.ts) are untrusted events,
-// so they don't count.
-let touched = false;
-for (const kind of ["pointerdown", "keydown"] as const) {
-  addEventListener(
-    kind,
-    (event) => {
-      if (event.isTrusted) touched = true;
-    },
-    { capture: true },
-  );
-}
-const focus = HTMLElement.prototype.focus;
-HTMLElement.prototype.focus = function (this: HTMLElement, options) {
-  if (touched) focus.call(this, options);
-};
 
 applyPose();
 

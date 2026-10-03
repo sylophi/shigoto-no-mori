@@ -48,8 +48,8 @@ function query(root: Document | Element, selector: string): Element | null {
   }
   const hasText = /^(.*):has-text\("(.*)"\)$/.exec(selector);
   if (hasText) {
-    const [, css = "*", words = ""] = hasText;
-    for (const el of root.querySelectorAll(css)) {
+    const [, css, words = ""] = hasText;
+    for (const el of root.querySelectorAll(css || "*")) {
       if (el.textContent?.includes(words)) return el;
     }
     return null;
@@ -107,20 +107,27 @@ async function pose(doc: Document, clicks: string[]): Promise<void> {
   }
 }
 
+// The frame's document once the demo has loaded in it. Before that a
+// frame holds about:blank, which some browsers announce with a load of
+// its own.
 function loaded(frame: HTMLIFrameElement): Promise<Document> {
-  const doc = frame.contentDocument;
-  if (doc && doc.readyState === "complete" && doc.URL !== "about:blank") {
-    return Promise.resolve(doc);
-  }
-  return new Promise((done) =>
-    frame.addEventListener(
-      "load",
-      () => {
-        if (frame.contentDocument) done(frame.contentDocument);
-      },
-      { once: true },
-    ),
-  );
+  const demo = () => {
+    const doc = frame.contentDocument;
+    return doc && doc.readyState === "complete" && doc.URL !== "about:blank"
+      ? doc
+      : null;
+  };
+  return new Promise((done) => {
+    const doc = demo();
+    if (doc) return done(doc);
+    const onLoad = () => {
+      const ready = demo();
+      if (!ready) return;
+      frame.removeEventListener("load", onLoad);
+      done(ready);
+    };
+    frame.addEventListener("load", onLoad);
+  });
 }
 
 async function start(figure: HTMLElement): Promise<void> {
@@ -163,12 +170,35 @@ async function start(figure: HTMLElement): Promise<void> {
           : rect.bottom + PIN_GAP;
     pin.style.setProperty("--x", `${((px - origin.x - x) / width) * 100}%`);
     pin.style.setProperty("--y", `${((py - origin.y - y) / height) * 100}%`);
+    pin.classList.add("pin-placed");
   }
   figure.classList.add("live-ready");
 }
 
+// Points a frame at the demo, which starts the app in it.
+function load(figure: Element): void {
+  const frame = figure.querySelector("iframe");
+  if (frame?.dataset["src"]) frame.src = frame.dataset["src"];
+}
+
 export function startLiveFrames(): void {
+  // Each frame boots a whole copy of the app, so it waits until it
+  // nears the screen. This rather than the iframe's loading="lazy",
+  // which browsers ignore for a hidden frame (the hero's row, on a
+  // phone), loading it anyway.
+  const nearing = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        nearing.unobserve(entry.target);
+        load(entry.target);
+      }
+    },
+    { rootMargin: "800px 0px" },
+  );
   for (const figure of document.querySelectorAll<HTMLElement>(".live")) {
+    if (figure.dataset["eager"] === undefined) nearing.observe(figure);
+    else load(figure);
     start(figure).catch((error: unknown) => {
       // A pose that no longer matches the app leaves the frame as it
       // drew, unposed, rather than blank.

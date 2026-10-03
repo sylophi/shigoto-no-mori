@@ -63,7 +63,8 @@ where the real window has them.
 A frame shows either a whole window, scaled to fit, which a visitor
 with a pointer can click around in, or a region of one, which is only
 shown. A region can count from an element (`anchor`), so it follows
-that element when the app's layout moves. A frame's `clicks` pose it
+that element when a change to the app moves it (it is measured once,
+when the frame is posed). A frame's `clicks` pose it
 further once it has drawn, like opening a menu. Their selectors are
 CSS, or `text=` and `:has-text()`, simpler cousins of Playwright's
 (`scripts/live.ts` says how they match). The pins over the sidebar row
@@ -72,7 +73,7 @@ them. A pose that stops matching the app leaves its
 frame unposed and warns in the console, so check the frames after
 changing what they show.
 
-Frames load lazily, as they near the screen. They share one build, which
+Frames load as they near the screen, and hidden ones not at all. They share one build, which
 the browser fetches once: about 380 KB of compressed script.
 
 ## Where the pieces come from

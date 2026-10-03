@@ -3,7 +3,12 @@
 // be: the app's UI lab, its fixture world posed by URL (the app's
 // lab/README.md), built into /demo/ and running in an iframe. A whole
 // window can be clicked around in. A region of one is only shown.
-// scripts/live.ts scales the window to the frame and runs the pose.
+// scripts/live.ts loads the window as it nears the screen, scales it to
+// the frame and runs the pose.
+//
+// To a screen reader or the keyboard a frame is a picture, as the
+// screenshots were: one stop, described by its title, rather than a
+// whole app's worth of controls to get through on the way down.
 interface Props {
   // The lab's pose parameters, as a query string without the "?".
   pose: string;
@@ -43,18 +48,21 @@ const interactive = region === undefined && title !== "";
 
 <figure
   class:list={[frame, "live", { "live-interactive": interactive }, className]}
+  role={title === "" ? undefined : "img"}
+  aria-label={title || undefined}
   aria-hidden={title === "" ? "true" : undefined}
   data-region={JSON.stringify({ rect, anchor })}
   data-clicks={JSON.stringify(clicks)}
+  data-eager={eager ? "" : undefined}
 >
   <div class="live-view" style={`--live-w: ${rect[2]}; --live-h: ${rect[3]}`}>
     <iframe
-      src={`/demo/?${pose}`}
+      data-src={`/demo/?${pose}`}
       title={title || undefined}
       width={width}
       height={height}
-      loading={eager ? "eager" : "lazy"}
-      tabindex={interactive ? undefined : -1}></iframe>
+      aria-hidden="true"
+      tabindex="-1"></iframe>
   </div>
   <slot />
 </figure>
