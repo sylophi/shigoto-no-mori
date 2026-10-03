@@ -28,8 +28,9 @@
 // exercises the full chain: a plain local TCP client -> engine
 // listener -> channel -> host handler -> loopback fixture. Asserts:
 //   - a local dial round-trips an echo through the whole chain, and a
-//     duplicate startForward returns the existing forward, while one
-//     naming a different local port moves the listener,
+//     duplicate startForward returns the existing forward (taking on
+//     the worktree it names), while one naming a different local port
+//     moves the listener and keeps that worktree,
 //   - a ~1.5 MB local transfer lands byte-identical,
 //   - the fixture server closing its socket ends the local client
 //     socket (end propagation),
@@ -404,13 +405,19 @@ async function main() {
       remotePort: echo.port,
     });
     assert.match(started.forwardId, /^[0-9a-f]{32}$/);
+    // The duplicate comes from a worktree's Ports dialog, which claims
+    // the untagged forward for that worktree.
+    const fromWorktree = { projectId: "p1", worktreeId: "w1" };
+    assert.equal(engine.listForwards()[0]?.worktree, undefined);
     const dup = await engine.startForward({
       deviceId: "A",
       remotePort: echo.port,
+      worktree: fromWorktree,
     });
     assert.equal(dup.forwardId, started.forwardId);
     assert.equal(dup.localPort, started.localPort);
     assert.equal(engine.listForwards().length, 1);
+    assert.deepEqual(engine.listForwards()[0]?.worktree, fromWorktree);
     const enginePing = await dialAndCollect(
       started.localPort,
       Buffer.from("engine ping"),
@@ -448,6 +455,9 @@ async function main() {
     });
     assert.equal(started.localPort, before);
     assert.equal(engine.listForwards().length, 1);
+    // Moves that name no worktree keep the one the forward was tagged
+    // with.
+    assert.deepEqual(engine.listForwards()[0]?.worktree, fromWorktree);
     ok("engine: a start naming another local port moves the listener");
 
     // (10) A ~1.5 MB transfer through the local listener, chunked by

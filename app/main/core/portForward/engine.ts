@@ -19,7 +19,10 @@ import {
   type forwardContract,
   isForwardConnectFailedError,
 } from "@shared/ipc/modules/forward";
-import type { PortForwardSummary } from "@shared/ipc/modules/portForward";
+import type {
+  PortForwardSummary,
+  PortForwardWorktree,
+} from "@shared/ipc/modules/portForward";
 import type { Client } from "@shared/ipc/types";
 import { mintHexId } from "@host/lib/hexId";
 import {
@@ -52,6 +55,8 @@ type Forward = {
   deviceId: string;
   remotePort: number;
   localPort: number;
+  // The worktree it was switched on from, the last one to ask for it.
+  worktree: PortForwardWorktree | undefined;
   server: Server;
   // Every accepted socket, for the cap and teardown.
   conns: Set<BridgedConn>;
@@ -114,10 +119,26 @@ export function createPortForwardEngine(deps: {
     forward.conns.add(conn);
   }
 
+  // A start answered by a forward already held, whether found up front
+  // or bound by a concurrent twin. A worktree's start claims it (from
+  // the devices page, or another worktree listing the same port), so
+  // the worktree that last asked is the one marked as forwarding.
+  function reuse(
+    forward: Forward,
+    worktree: PortForwardWorktree | undefined,
+  ): { forwardId: string; localPort: number } {
+    if (worktree !== undefined) {
+      forward.worktree = worktree;
+      changed();
+    }
+    return { forwardId: forward.forwardId, localPort: forward.localPort };
+  }
+
   async function startForward(input: {
     deviceId: string;
     remotePort: number;
     localPort?: number;
+    worktree?: PortForwardWorktree;
   }): Promise<{ forwardId: string; localPort: number }> {
     // One forward per (deviceId, remotePort): starting an existing pair
     // returns it unchanged, unless the caller names a different local
@@ -131,7 +152,7 @@ export function createPortForwardEngine(deps: {
       existing !== undefined &&
       (input.localPort === undefined || input.localPort === existing.localPort)
     ) {
-      return { forwardId: existing.forwardId, localPort: existing.localPort };
+      return reuse(existing, input.worktree);
     }
     const api = deps.forwardApiFor(input.deviceId);
     const channels = deps.channelsFor(input.deviceId);
@@ -173,7 +194,7 @@ export function createPortForwardEngine(deps: {
     const twin = findForward(input.deviceId, input.remotePort);
     if (twin !== undefined && twin !== existing) {
       server.close();
-      return { forwardId: twin.forwardId, localPort: twin.localPort };
+      return reuse(twin, input.worktree);
     }
     if (existing !== undefined) stopForward(existing.forwardId);
     const forward: Forward = {
@@ -181,6 +202,7 @@ export function createPortForwardEngine(deps: {
       deviceId: input.deviceId,
       remotePort: input.remotePort,
       localPort,
+      worktree: input.worktree ?? existing?.worktree,
       server,
       conns: new Set(),
       opened: new Set(),
@@ -216,6 +238,7 @@ export function createPortForwardEngine(deps: {
       remotePort: forward.remotePort,
       localPort: forward.localPort,
       connCount: forward.opened.size,
+      worktree: forward.worktree,
     }));
   }
 

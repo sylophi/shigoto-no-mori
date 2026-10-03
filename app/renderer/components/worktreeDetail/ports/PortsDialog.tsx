@@ -54,6 +54,10 @@ export function PortsDialog({
   const customPorts = useCustomPortsWrite(worktree);
   const [adding, setAdding] = useState(false);
   const ports = portsQuery.data?.ports ?? [];
+  const forwardFrom = {
+    projectId: worktree.projectId,
+    worktreeId: worktree.id,
+  };
   // The cap is on the stored list, which the merged one under-counts:
   // a custom entry on a number port-pool later allocated is shadowed
   // by the pool row and shows nowhere, but still occupies a slot.
@@ -94,6 +98,7 @@ export function PortsDialog({
                   entry={entry}
                   taken={ports}
                   deviceId={deviceId}
+                  worktree={forwardFrom}
                   remote={remote}
                   granted={granted}
                   onUpdate={
@@ -132,6 +137,7 @@ export function PortsDialog({
         {remote && canForwardPorts && (
           <ForwardAllButton
             deviceId={deviceId}
+            worktree={forwardFrom}
             ports={ports}
             granted={granted}
           />
