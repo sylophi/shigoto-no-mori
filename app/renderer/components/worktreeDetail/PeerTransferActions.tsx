@@ -5,21 +5,18 @@
 // remote pair waits on (a real branch of its own, a repo identity) and
 // on another device that hosts projects (one without the repo clones
 // it first). Which peer is the dialog's question (flow/peerTargets.ts),
-// so the buttons only open it. The primary
-// checkout can be mirrored but not transplanted: it is the project
-// itself and cannot be torn down.
+// so the buttons only open it.
 import { useState } from "react";
-import { RefreshCw, Shovel } from "lucide-react";
-import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
+import type { Project, Worktree } from "@shared/schemas";
 import {
   useLocalMirrorBlocker,
   useWorktreeMirrorLinks,
 } from "@/hooks/remote/useMirrors";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
-import { FooterActionButton } from "./FooterActionButton";
-import { LABEL_RANK } from "./footerFit";
+import { FooterLeadingVerbView } from "./FooterLeadingVerbView";
 import { usePeerTargets } from "./flow/peerTargets";
 import { MirrorToDialog } from "./mirror/MirrorDialog";
+import { transferIdentity, transferVerbs } from "./transferVerbs";
 import { TransplantToDialog } from "./transplant/TransplantDialog";
 
 export function PeerTransferActions({
@@ -29,18 +26,13 @@ export function PeerTransferActions({
   worktree: Worktree;
   project: Project;
 }) {
-  if (
-    worktree.detached ||
-    !isRealBranch(worktree.branch) ||
-    project.identity == null
-  ) {
-    return null;
-  }
+  const sourceIdentity = transferIdentity(worktree, project);
+  if (sourceIdentity === null) return null;
   return (
     <TransferButtons
       worktree={worktree}
       project={project}
-      sourceIdentity={project.identity}
+      sourceIdentity={sourceIdentity}
     />
   );
 }
@@ -74,28 +66,25 @@ function TransferButtons({
     targets,
     onClose: () => setOpen(null),
   };
+  const verbs = transferVerbs({
+    worktree,
+    project,
+    hasTargets: canOpen,
+    // App only, like "Mirror here": the daemon lives in main.
+    canMirror: canForwardPorts && !mirrored,
+    mirrorBlocker,
+  });
   return (
     <>
-      {/* App only, like "Mirror here": the daemon lives in main. */}
-      {canOpen && canForwardPorts && !mirrored && (
-        <FooterActionButton
-          rank={LABEL_RANK.mirrorTo}
-          icon={<RefreshCw />}
-          label="Mirror to…"
-          title="Keep a live copy of this worktree on another device"
-          disabledReason={mirrorBlocker}
-          onClick={() => setOpen("mirror")}
+      {verbs.map((verb) => (
+        <FooterLeadingVerbView
+          key={verb.kind}
+          verb={verb}
+          onClick={() =>
+            setOpen(verb.kind === "mirrorTo" ? "mirror" : "transplant")
+          }
         />
-      )}
-      {canOpen && !worktree.isPrimary && (
-        <FooterActionButton
-          rank={LABEL_RANK.transplant}
-          icon={<Shovel />}
-          label="Transplant to…"
-          title="Move this worktree to another device"
-          onClick={() => setOpen("transplant")}
-        />
-      )}
+      ))}
       {open === "mirror" && <MirrorToDialog {...dialog} />}
       {open === "transplant" && <TransplantToDialog {...dialog} />}
     </>

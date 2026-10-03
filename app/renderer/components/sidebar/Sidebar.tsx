@@ -46,7 +46,6 @@ import { NewWorktreeButton } from "./inbox/NewWorktreeButton";
 import { setOpenProject, useOpenProject } from "./openProject";
 import { ProjectDragPreview } from "./ProjectDragPreview";
 import {
-  ROW_LAYOUT,
   type GroupShelf,
   type InboxShelf,
   type SidebarRow,
@@ -60,6 +59,13 @@ import { AddProjectButton } from "./AddProjectButton";
 import { sortProjects } from "@/lib/sortProjects";
 import { useWorktreeSort } from "@/hooks/sharedSettings/useWorktreeSort";
 import { SidebarList } from "./SidebarList";
+import {
+  InboxCreateRowView,
+  PinnedRowView,
+  SidebarAsideView,
+  SidebarEmptyStateView,
+  SidebarScrollerView,
+} from "./SidebarFrameView";
 import { RowContent } from "./RowContent";
 import type { RowHandlers } from "./VirtualRow";
 import { SidebarTakeoverSlot, useSidebarTakenOver } from "./SidebarTakeover";
@@ -96,16 +102,7 @@ export function Sidebar({
   if (takenOver && !handedOver) setHandedOver(true);
 
   return (
-    // Both themes are fully transparent so the BrowserWindow vibrancy
-    // material shows through. A heavy white wash in light mode washes
-    // out the chroma, so we let the "sidebar" material do its job on
-    // its own. The `data-sidebar` attribute scopes the token overrides
-    // in index.css to this surface only.
-    <aside
-      data-sidebar
-      data-doubutsu-zone="sidebar"
-      className="flex h-full flex-col"
-    >
+    <SidebarAsideView>
       <SidebarHeader />
       {/* Hidden rather than unmounted while a page holds the sidebar,
           so the forest keeps its place (the open project, the shelves)
@@ -130,7 +127,7 @@ export function Sidebar({
         )}
       </div>
       <SidebarTakeoverSlot />
-    </aside>
+    </SidebarAsideView>
   );
 }
 
@@ -382,14 +379,14 @@ function Forest({
     // where the way in is the Devices page, so say so rather than
     // leaving a sentence with nothing to press.
     return (
-      <SidebarEmptyState message="Sign in to reach this account's devices.">
+      <SidebarEmptyStateView message="Sign in to reach this account's devices.">
         <Link
           to="/devices"
           className="text-primary underline-offset-2 hover:underline"
         >
           Open Devices
         </Link>
-      </SidebarEmptyState>
+      </SidebarEmptyStateView>
     );
   }
 
@@ -400,24 +397,14 @@ function Forest({
     currentGroupKey: onScreenKey,
     arrangeMode,
   };
-  // Over the scroller, so it stays put as the rows scroll. It has no
-  // hover to track: the open project's title wears its actions at rest.
-  // The gap under it keeps the rows scrolling up from being cut off
-  // flush against the name.
+  // Over the scroller (PinnedRowView).
   const pinnedRow = pinned && (
-    <div
-      data-slot="sidebar-row"
-      className={cn(ROW_LAYOUT[pinned.kind], "pb-1")}
-    >
+    <PinnedRowView kind={pinned.kind}>
       <RowContent row={pinned} {...handlers} isHovered={false} />
-    </div>
+    </PinnedRowView>
   );
   const scroller = (
-    <div
-      ref={scrollerRef}
-      data-slot="sidebar-scroller"
-      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
-    >
+    <SidebarScrollerView ref={scrollerRef}>
       <SidebarList
         rows={rows}
         revealKey={view.revealKey}
@@ -430,8 +417,8 @@ function Forest({
         asked={askedLevel === level}
         handlers={handlers}
       />
-      <SidebarEmptyState message={emptyMessage} />
-    </div>
+      <SidebarEmptyStateView message={emptyMessage} />
+    </SidebarScrollerView>
   );
 
   return (
@@ -450,20 +437,15 @@ function Forest({
             Both end in add project. Arranging takes over the whole
             sidebar, so neither shows. */}
         {arrangeMode ? null : inbox ? (
-          // px-2 like the rows below it, which is where v1 wants it.
-          // doubutsu pulls it in to its banner card, hence the slot.
-          <div
-            data-slot="sidebar-inbox-create"
-            className="flex items-center gap-1 px-2 pb-1.5"
-          >
-            <div className="min-w-0 flex-1">
+          <InboxCreateRowView
+            button={
               <NewWorktreeButton
                 projects={orderedProjects}
                 remote={remoteItems}
               />
-            </div>
-            <AddProjectButton outline />
-          </div>
+            }
+            addProject={<AddProjectButton outline />}
+          />
         ) : (
           <SidebarToolbar
             onArrange={onArrange}
@@ -574,20 +556,4 @@ function emptyForestMessage({
       : "No reachable devices with projects yet. Open the Devices page to see this account's machines.";
   }
   return viewMessage;
-}
-
-function SidebarEmptyState({
-  message,
-  children,
-}: {
-  message: string | null;
-  children?: ReactNode;
-}) {
-  if (!message) return null;
-  return (
-    <div className="flex flex-col items-center gap-2 px-3 py-6 text-center text-xs text-muted-foreground">
-      {message}
-      {children}
-    </div>
-  );
 }

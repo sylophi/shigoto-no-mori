@@ -14,6 +14,8 @@
     "web:build": "pnpm -C app web:build",
     "lab": "pnpm -C app lab",
     "lab:web": "pnpm -C app lab:web",
+    "marketing:dev": "pnpm -C marketing dev",
+    "marketing:build": "pnpm -C marketing build",
     "package": "pnpm -C app package",
     "make": "pnpm -C app make",
     "lefthook": "app/node_modules/.bin/lefthook"

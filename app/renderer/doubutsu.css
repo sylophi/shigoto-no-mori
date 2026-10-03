@@ -47,13 +47,13 @@
  *      dropdown-menu-content/-item/-separator   ui/dropdown-menu.tsx
  *      dropdown-menu-sub-trigger (+ data-variant)   ui/dropdown-menu.tsx
  *      popover-content           ui/popover.tsx
- *      sidebar-project-row       sidebar/ProjectRow.tsx
- *      sidebar-project-pick      sidebar/ProjectHeader.tsx
- *      project-tile              shared/ProjectIcon.tsx
- *      sidebar-inbox-create      sidebar/Sidebar.tsx
- *      sidebar-device-filter     sidebar/DeviceFilterBar.tsx
+ *      sidebar-project-row       sidebar/ProjectRowView.tsx
+ *      sidebar-project-pick      sidebar/ProjectHeaderView.tsx
+ *      project-tile              shared/ProjectIconView.tsx
+ *      sidebar-inbox-create      sidebar/SidebarFrameView.tsx
+ *      sidebar-device-filter     sidebar/DeviceFilterBarView.tsx
  *      device-chip               shared/DeviceChip.tsx, shared/DeviceTabs.tsx
- *      phone-tab-bar/-tab/-tab-pill   PhoneTabBar.tsx
+ *      phone-tab-bar/-tab/-tab-pill   PhoneTabBarView.tsx
  *      villager-dialogue-box, villager-nameplate,
  *        villager-letter-paper, villager-photo
  *                                villagers/VillagerDialogue.tsx,
@@ -62,10 +62,10 @@
  *                                visitors/GuestBook.tsx,
  *                                visitors/VisitorSticker.tsx
  *
- * 3. App-level markers: data-doubutsu-zone="main|sidebar" (router.tsx,
- *    sidebar/Sidebar.tsx), data-doubutsu-page="settings|tidy|devices|
+ * 3. App-level markers: data-doubutsu-zone="main|sidebar" (AppShellView,
+ *    sidebar/SidebarFrameView.tsx), data-doubutsu-page="settings|tidy|devices|
  *    forest|visitors" picking the canvas wallpaper (settings/Settings,
- *    tidy/TidyForest, remote/DevicesPage, ForestPage,
+ *    tidy/TidyForest, remote/DevicesPage, ForestPageView,
  *    Settings' Visitors section), the
  *    `doubutsu-only` / `v1-only` classes
  *    (per-theme markup shipped side by side), li[data-row-idx]

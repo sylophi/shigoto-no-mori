@@ -50,7 +50,7 @@ Poses ride the URL:
   (e.g. `?updatedFrom=2.0.1`, whose "What's new" lists 2.0.2 and 2.0.3).
 - `?checks=<variant>`: the CI rollup on PR #148 (worktree
   `happy-hummingbird`,
-  `?to=/devices/dev_8f3ac2e1/projects/p_sm/worktrees/wt_sm_hum`), with
+  `?to=/devices/dev_8f3ac2e1/projects/p_sm/worktrees/5a0000000002`), with
   the merge state GitHub would pair with it. Variants are the keys of
   `LAB_CHECK_POSES` in `pullRequestFixtures.ts`: `none`, `single-passed`,
   `single-failing`, `passed`, `passed-some-skipped`, `all-skipped`, `auto-merge`,
@@ -137,3 +137,57 @@ blocks on visible text, which is how a take waits out a posed
 transfer. Output is webm; set `FFMPEG` to a binary to get an mp4
 beside it. The sync verbs are posed, so a recording shows the UI of a
 flow, not a transfer.
+
+## Views and scenes
+
+The marketing site shows the app by rendering its React components at
+build time, with no app running. That works for components that take
+their data as props, which this calls views. A scene composes views
+over the lab's fixtures into one of the site's pictures.
+
+- **A view** is `FooView` in its own `FooView.tsx`, beside the component
+  that feeds it. It takes plain data as props and renders it. It
+  calls no hook that reads a query, the router, a store or `window`,
+  and it imports no module that reads `window` or `window.api` as it
+  loads (`lib/queryKeys`, `lib/localHost`, `hooks/remote/useHostScope`,
+  the run and lifecycle stores, and anything that imports them). Type
+  imports are fine, since they leave nothing behind. Pure leaves
+  (`components/ui/*`'s primitives, `lib/*` helpers) are fine too.
+- **The component that feeds it** keeps its name, props and behaviour.
+  It calls the hooks and renders the view, so nothing changes for the
+  rest of the app (sidebar/inbox/InboxRow.tsx and InboxRowView.tsx are
+  the pattern).
+- What used to be read inline becomes a prop: whether there is a local
+  host (`hasLocalHost`), a dev build, the phone layout, the time
+  (`now`, so "14m ago" holds still), a looked-up icon.
+- Menus and dialogs a scene shows open are drawn inline, without their
+  portals: `ui/menu-view.tsx` and `ui/modal-shell-view.tsx` carry the
+  live ones' slots and classes.
+- **A scene** is one picture: a component that takes no props, listed
+  in `lab/scenes/index.ts` with the size it lays out at and, for a
+  whole window, which window it is (the desktop app's or the web app on
+  a phone). `pnpm test scenes` renders every one in Node, where
+  anything that reaches for the app fails, and the marketing site
+  renders them the same way.
+- The scenes are put together from the lab's parts, which are the
+  app's views over the fixtures: `LabWindow` (the shell, AppShellView,
+  around a `sidebar` and a page), `LabSidebar` (either shell, either
+  view, with a selected worktree), `WorktreeDetailPane` and
+  `DevicesPane`. Where the live app fills a view's slot with a
+  component that reads the app, a part fills it with that component's
+  view.
+- The parts read the fixtures through `lab/scenes/world/`: `index.ts`
+  for what every scene reads, and a file per part of the app. Each is
+  plain functions over the fixtures that hand them to the app's own
+  pure builders (`buildInboxRows`, `mergeBoxState`,
+  `pullLandingCollision`, ...). A rule the app applies (which rows
+  the inbox holds, when a pull would collide) belongs in such a
+  builder, called by the component and the scene alike, and never
+  written a second time here.
+
+A view should draw exactly what its component drew. To check, shoot
+the lab before and after (`lab/shoot.mts`) and compare the images.
+To see a scene beside the live app, the lab serves a viewer at
+`/scenes.html?scene=<name>` (lab/scenes/viewer.tsx), which draws it at
+its size and takes the lab's appearance poses. A scene poses as a
+release build, so it lacks the dev marks the lab's brand header wears.

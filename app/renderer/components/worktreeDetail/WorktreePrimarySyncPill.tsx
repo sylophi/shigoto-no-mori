@@ -1,22 +1,17 @@
-import { ArrowDown } from "lucide-react";
 import { useSyncWithPrimaryWorktree } from "@/hooks/worktrees/useWorktreeSync";
-import { pluralize } from "@/lib/pluralize";
 import type { Worktree } from "@shared/schemas";
-import { SyncActionButton } from "./SyncActionButton";
+import { WorktreePrimarySyncPillView } from "./WorktreePrimarySyncPillView";
 
 // Precondition: caller has verified the worktree is eligible
-// (non-primary, non-detached, behindPrimary > 0). The label still falls
+// (commitsTeaser's showPrimarySync). The label still falls
 // back to "primary" defensively in case the primary ref couldn't be
 // resolved on the backend.
 export function WorktreePrimarySyncPill({ worktree }: { worktree: Worktree }) {
   const sync = useSyncWithPrimaryWorktree();
-  const branchName = worktree.primaryRef ?? "primary";
   return (
-    <SyncActionButton
-      tone="sky"
-      icon={ArrowDown}
-      label={`Sync ${pluralize(worktree.behindPrimary, "commit")} from ${branchName}`}
-      title={`git fetch && git rebase ${branchName}, falling back to a merge on conflict`}
+    <WorktreePrimarySyncPillView
+      behindPrimary={worktree.behindPrimary}
+      primaryRef={worktree.primaryRef}
       pending={sync.isPending}
       onClick={() =>
         sync.mutate({

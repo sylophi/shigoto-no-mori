@@ -1,1 +1,11 @@
-{ "extends": "astro/tsconfigs/strict" }
+{
+  "extends": "astro/tsconfigs/strict",
+  "compilerOptions": {
+    // The app's import aliases (astro.config.ts), for its views.
+    "paths": {
+      "@/*": ["../app/renderer/*"],
+      "@shared/*": ["../app/shared/*"]
+    }
+  },
+  "exclude": ["dist"]
+}

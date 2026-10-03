@@ -17,7 +17,6 @@ trustPolicyExclude:
   - chokidar@4.0.3
 # Per-package build-script trust. esbuild (Astro's bundler, through
 # vite) validates its platform binary in a postinstall, the binary
-# itself arriving as an optional dependency. sharp needs no script: its
-# prebuilt binary is an optional dependency too.
+# itself arriving as an optional dependency.
 allowBuilds:
   esbuild: true

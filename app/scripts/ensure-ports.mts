@@ -1,5 +1,6 @@
 // `port-pool ensure` for this worktree, run ahead of every dev server
-// (`pnpm start`, `web:dev`, `lab`, `lab:web`) so each one finds its
+// (`pnpm start`, `web:dev`, `lab`, `lab:web`, and the marketing
+// site's `dev`) so each one finds its
 // port in .env.ports. Best-effort when port-pool isn't installed: the
 // servers then fall back to their defaults (scripts/lib/portsEnvFile.mts).
 //

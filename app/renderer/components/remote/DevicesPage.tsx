@@ -1,5 +1,5 @@
-import { PageShell } from "@/components/shared/PageShell";
 import { AccountSection } from "./AccountSection";
+import { DevicesPageView } from "./DevicesPageView";
 
 // "/devices": the account's machines, on their own page. The account
 // (sign in, the device registry and its removals) is a fact about the
@@ -10,13 +10,8 @@ import { AccountSection } from "./AccountSection";
 // own row instead of in a section of their own.
 export function DevicesPage() {
   return (
-    <PageShell
-      page="devices"
-      eyebrow="Shigoto no Mori"
-      title="Devices"
-      watermark="機器"
-    >
+    <DevicesPageView>
       <AccountSection />
-    </PageShell>
+    </DevicesPageView>
   );
 }

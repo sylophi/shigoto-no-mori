@@ -9,7 +9,6 @@
 // session is not in hand or whose runner has no session up: nothing
 // to drive it through.
 import { type ReactNode, useState } from "react";
-import { RefreshCw } from "lucide-react";
 import type { MirrorSession } from "@shared/ipc/modules/mirror";
 import type { Worktree } from "@shared/schemas";
 import {
@@ -25,8 +24,7 @@ import {
 import { useDeviceName } from "@/hooks/remote/useRemoteDevices";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import { localDeviceId } from "@/lib/queryKeys";
-import { FooterActionButton } from "../FooterActionButton";
-import { LABEL_RANK } from "../footerFit";
+import { FooterLeadingVerbView } from "../FooterLeadingVerbView";
 import { MirrorManageDialog } from "./MirrorManageDialog";
 
 export function MirrorAction({ worktree }: { worktree: Worktree }) {
@@ -68,10 +66,8 @@ function MirrorLinkAction({
     session.deviceId === pageDeviceId && session.worktreeId === worktree.id;
   return (
     <>
-      <FooterActionButton
-        rank={LABEL_RANK.mirror}
-        icon={<RefreshCw />}
-        label={`Mirror with ${other}`}
+      <FooterLeadingVerbView
+        verb={{ kind: "mirror", other }}
         onClick={() => setOpenFor(session.session)}
       />
       {openFor === session.session && (

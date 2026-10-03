@@ -67,12 +67,20 @@ import {
   accountDevices,
   forests,
   labCustomPorts,
+  labDetectedLaunchers,
   labDisks,
+  labForwards,
+  labLocalBranches,
   labGlobalConfig,
+  labLauncherEntries,
+  labPackageScriptSort,
+  labPackageScripts,
+  labPortPoolActive,
   labReleases,
   labListeningPorts,
   labPoolPorts,
   labRemoteUrls,
+  labShigomoriConfig,
   projectIconFor,
   worktree as worktreeFixture,
 } from "./fixtures";
@@ -258,12 +266,6 @@ function hostHandlersFor(
   const allWorktrees = () => Object.values(forest.worktrees).flat();
   const findWorktree = (worktreeId: string) =>
     allWorktrees().find((worktree) => worktree.id === worktreeId);
-  const branchesOf = () => [
-    "main",
-    ...allWorktrees()
-      .filter((worktree) => !worktree.isPrimary && !worktree.detached)
-      .map((worktree) => worktree.branch),
-  ];
   // Stands in for the restart into the staged build: the device
   // reports up to date.
   const restartIntoUpdate = () => {
@@ -333,7 +335,7 @@ function hostHandlersFor(
     },
     "projects:defaultBranch": () => "main",
     "projects:listBranches": () => ({
-      local: branchesOf(),
+      local: labLocalBranches(forest),
       remote: ["origin/main"],
     }),
     "projects:pickWorktreeName": () => "tender-tanuki",
@@ -430,16 +432,8 @@ function hostHandlersFor(
     // The stub's shape with a full create lifecycle on it (carry-over,
     // a setup script, and ports below), so the pull dialogs' setup
     // switch and their running steps have every phase to name.
-    "shigomori:read": () => ({
-      defaultBranch: "main",
-      scripts: { setup: "pnpm install" },
-      carryOver: [
-        { path: ".env.local", mode: "copy" },
-        { path: ".claude/settings.local.json", mode: "symlink" },
-      ],
-      launchers: [],
-    }),
-    "portPool:isActive": () => true,
+    "shigomori:read": () => labShigomoriConfig,
+    "portPool:isActive": () => labPortPoolActive,
     "globalConfig:read": () => labGlobalConfig,
     "globalConfig:writeDeviceSettings": () => undefined,
     // The devices ?updates poses (Thinkpad alone by default) have an
@@ -471,29 +465,13 @@ function hostHandlersFor(
         emit("updater:state", { kind: "idle" });
       }, 2_500);
     },
-    "launchers:detect": () => [...LAB_DETECTED],
+    "launchers:detect": () => [...labDetectedLaunchers],
     "launchers:forProject": () => ({
-      entries: [
-        ...LAB_DETECTED,
-        { kind: "custom", id: "claude", label: "Claude Code" },
-        { kind: "web", id: "web:github", label: "GitHub" },
-      ],
+      entries: labLauncherEntries,
       hiddenCount: 0,
     }),
-    "packageScripts:list": () => ({
-      scripts: {
-        dev: "vite dev --port 5173",
-        test: "vitest run",
-        "theme:check": "node scripts/check-theme-contract.mjs",
-      },
-      packageManager: "pnpm",
-      usage: {
-        dev: { lastUsed: Date.now() - 12 * 60_000, recentCount: 9 },
-        test: { lastUsed: Date.now() - 26 * 60_000, recentCount: 3 },
-      },
-      launchRow: [],
-    }),
-    "packageScripts:getSort": () => "manifest",
+    "packageScripts:list": () => labPackageScripts,
+    "packageScripts:getSort": () => labPackageScriptSort,
     "packageScripts:getOrder": () => [],
     "githubCli:readiness": () => ({ installed: true, authed: true }),
     "terrier:readiness": () => ({
@@ -1014,12 +992,6 @@ async function labSyncPull(
   };
 }
 
-const LAB_DETECTED = [
-  { kind: "detected", id: "vscode", label: "VS Code", available: true },
-  { kind: "detected", id: "terminal", label: "Terminal", available: true },
-  { kind: "detected", id: "finder", label: "Finder", available: true },
-] as const;
-
 // ---- lab-mutable account/presence state ----
 
 // Whether Studio Mac accepts commands from the account's other devices
@@ -1117,6 +1089,13 @@ const CROWD_NAMES = [
 ];
 const CROWD_ANIMALS = ["sly-stoat", "plain-plover"];
 
+// A crowd worktree's id, 12 hex digits as WorktreeIdSchema wants: c,
+// the kind (1 a primary here, 2 one on the Thinkpad, 3 another
+// worktree), the crowd index and the worktree's number.
+function crowdWorktreeId(kind: 1 | 2 | 3, i: number, n = 0): string {
+  return `c${kind}${i.toString(16).padStart(8, "0")}${n.toString(16).padStart(2, "0")}`;
+}
+
 function initCrowd(): void {
   const pose = new URLSearchParams(location.search);
   const posed = Number(pose.get("crowd"));
@@ -1146,7 +1125,7 @@ function initCrowd(): void {
       });
       forest.worktrees[id] = [
         worktreeFixture({
-          id: `wt_${id}`,
+          id: crowdWorktreeId(forest === local ? 1 : 2, i),
           projectId: id,
           name,
           branch: "main",
@@ -1160,7 +1139,7 @@ function initCrowd(): void {
       CROWD_ANIMALS.slice(0, i % 8 === 0 ? 1 : i % 4 === 0 ? 2 : 0).map(
         (animal, n) =>
           worktreeFixture({
-            id: `wt_crowd_${i}_${n}`,
+            id: crowdWorktreeId(3, i, n),
             projectId: id,
             name: animal,
             branch: n === 0 ? "fix-flaky-sync" : "exp/redo-cache",
@@ -1205,7 +1184,10 @@ function hubSnapshot(): HubStatus {
 }
 
 export function installLabBridge(
-  opts: { webShell?: boolean; villageLife?: boolean } = {},
+  opts: {
+    webShell?: boolean;
+    villageLife?: boolean;
+  } = {},
 ) {
   WEB_SHELL = opts.webShell === true;
   villageLife =
@@ -1280,21 +1262,11 @@ export function installLabBridge(
   });
 
   // The engine's forward table, mutated by start/stop so the switches
-  // on a remote worktree's ports really flip. One forward pre-posed so
-  // the live state is visible without a click.
-  const forwards = new Map<string, PortForwardSummary>([
-    [
-      "a3f19c2e77b04d5586e1f20c9ab34d61",
-      {
-        forwardId: "a3f19c2e77b04d5586e1f20c9ab34d61",
-        deviceId: THINKPAD_ID,
-        remotePort: 5173,
-        localPort: 5173,
-        connCount: 2,
-        worktree: { projectId: "tp_sm", worktreeId: "a1b2c3d4e5f6" },
-      },
-    ],
-  ]);
+  // on a remote worktree's ports really flip. It opens with the fixtures' one
+  // (labForwards).
+  const forwards = new Map<string, PortForwardSummary>(
+    labForwards.map((forward) => [forward.forwardId, forward]),
+  );
 
   const clientHandlers: FixtureHandlers = {
     "account:status": accountStatus,

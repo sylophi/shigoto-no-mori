@@ -1,0 +1,7 @@
+/* The app's own stylesheet, for its views on this page: compiled by
+   Tailwind as the app's build compiles it, then moved into the shadow
+   root each surface renders into (plugins/shadowAppCss.ts). */
+@import "../../../app/renderer/index.css";
+/* The scenes' own classes (the lab's parts around the views), which the
+   app's stylesheet doesn't scan for. */
+@source "../../../app/lab/scenes";

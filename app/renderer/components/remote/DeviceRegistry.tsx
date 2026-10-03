@@ -34,10 +34,15 @@ import {
   useTunnelState,
 } from "@/hooks/remote/useHubStatus";
 import { useNow } from "@/hooks/ui/useNow";
-import { abbreviateId } from "@/lib/abbreviateId";
 import { localDeviceId } from "@/lib/queryKeys";
 import { ClerkSignInButton } from "@/components/account/ClerkSignInButton";
 import { DeviceRegistryRow } from "./DeviceRegistryRow";
+import {
+  AccountIdentityView,
+  DEVICE_REGISTRY_SIGN_OUT_CLASS,
+  DeviceListView,
+  DeviceRegistryView,
+} from "./DeviceRegistryView";
 import { useHostChipIndex } from "./deviceHostChips";
 import { deviceRowStatus } from "./deviceRegistryStatus";
 
@@ -111,30 +116,26 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
   }
 
   return (
-    <section className="flex flex-col gap-5">
-      {/* The account is one thin line -- who is signed in -- and the
-          sign-out sits with it: ending the session is what removes THIS
-          machine from the account (see the Remove button's note in the
-          row). A hub account has no other properties, and the rows say
-          everything about its devices, so no headcount repeats them. */}
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <AccountIdentity accountId={accountId} />
-        <ClerkSignOutButton className="-my-1 text-muted-foreground" />
-      </div>
-
-      {/* One slot for what is wrong with this device's sign-in, and
-          the way back sits in it because that is where the bad news
-          is. Blocked outranks a missing session: a device removed
-          from the account has nothing left to keep. */}
-      {blockedMessage !== null ? (
-        // The button re-enrolls this machine (the Clerk session
-        // outlives a revoked device credential), which is the way back
-        // if the automatic sign-out did not land.
-        <SignInBanner>{blockedMessage}</SignInBanner>
-      ) : (
-        <SessionMissingBanner />
-      )}
-
+    <DeviceRegistryView
+      identity={<AccountIdentity accountId={accountId} />}
+      signOut={
+        <ClerkSignOutButton className={DEVICE_REGISTRY_SIGN_OUT_CLASS} />
+      }
+      // One slot for what is wrong with this device's sign-in, and the
+      // way back sits in it because that is where the bad news is.
+      // Blocked outranks a missing session: a device removed from the
+      // account has nothing left to keep.
+      banner={
+        blockedMessage !== null ? (
+          // The button re-enrolls this machine (the Clerk session
+          // outlives a revoked device credential), which is the way
+          // back if the automatic sign-out did not land.
+          <SignInBanner>{blockedMessage}</SignInBanner>
+        ) : (
+          <SessionMissingBanner />
+        )
+      }
+    >
       {devicesQuery.isLoading ? (
         <p className="text-xs text-muted-foreground/70">
           Loading devices&hellip;
@@ -150,7 +151,7 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
       ) : rows.length === 0 ? (
         <p className="text-xs text-muted-foreground/70">No devices yet.</p>
       ) : (
-        <ul className="divide-y divide-border">
+        <DeviceListView>
           {rows.map((row) => (
             <DeviceRegistryRow
               key={row.device.deviceId}
@@ -174,9 +175,9 @@ export function DeviceRegistry({ accountId }: { accountId: string }) {
               tunnel={row.isThisDevice ? tunnel : undefined}
             />
           ))}
-        </ul>
+        </DeviceListView>
       )}
-    </section>
+    </DeviceRegistryView>
   );
 }
 
@@ -198,23 +199,12 @@ function describeListError(error: unknown): string {
   return `Couldn't load the device list: ${errorMessageOf(error)}`;
 }
 
-// The person, not the account's key: the hub keys on the Clerk user
-// id, but nobody recognises that string as themselves, so the line
-// reads the email (or name) Clerk knows. With no profile to read (still
-// loading, or no session at all) the line names the account by its
-// abbreviated id and does not call that "signed in". A leaf, like the
-// sign-out button beside it, so Clerk's session churn re-renders one
-// span and not the registry.
+// Who is signed in (AccountIdentityView), as Clerk knows them. A leaf,
+// like the sign-out button beside it, so Clerk's session churn
+// re-renders one span and not the registry.
 function AccountIdentity({ accountId }: { accountId: string }) {
   const person = useAccountIdentity();
-  return (
-    <p className="text-xs text-muted-foreground">
-      {person === null ? "Account" : "Signed in as"}{" "}
-      <span className="font-medium text-foreground select-text">
-        {person ?? abbreviateId(accountId)}
-      </span>
-    </p>
-  );
+  return <AccountIdentityView person={person} accountId={accountId} />;
 }
 
 // The Clerk session is gone while the device credential, independent

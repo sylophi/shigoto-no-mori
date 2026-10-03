@@ -1,0 +1,74 @@
+---
+// The app in one of the page's frames, where a screenshot would be: a
+// scene of the app's own views (the app's lab/scenes), rendered at
+// build time into an AppSurface. The scene lays out at its own size,
+// the size of the window it draws, and scripts/frames.ts scales it to
+// the frame. A crop shows the scene's top-left corner only, at that
+// size.
+//
+// It reads as a picture: one stop for a screen reader, described by
+// `label`, and nothing in it takes a click or the keyboard.
+import type { Scene } from "../../../app/lab/scenes";
+import AppSurface from "./AppSurface.astro";
+
+interface Props {
+  scene: Scene;
+  // What the frame shows, for screen readers. Empty for a decorative
+  // frame, which is then hidden from them.
+  label: string;
+  frame: "window" | "phone" | "floating" | "card-shot" | "framed";
+  // The part of the scene the frame shows, from its top-left corner,
+  // if not all of it.
+  crop?: readonly [number, number];
+  theme?: "light" | "dark";
+  doubutsu?: boolean;
+  class?: string;
+}
+// macOS's window buttons, where trafficLightPosition puts the real
+// ones (the app's main/index.ts), over a desktop window's sidebar.
+// Styled inline: they sit in the surface's shadow root, which only the
+// app's stylesheet reaches.
+const LIGHTS =
+  "position: absolute; top: 16px; left: 16px; z-index: 50; display: flex; gap: 8px";
+const LIGHT =
+  "width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 0.5px rgb(0 0 0 / 0.12);";
+const LIGHT_COLORS = ["#ff5f57", "#febc2e", "#28c840"];
+
+const { scene, label, frame, theme, doubutsu, class: className } = Astro.props;
+const { Scene, window } = scene;
+const [width, height] = scene.size;
+const [cropWidth, cropHeight] = Astro.props.crop ?? scene.size;
+---
+
+<figure
+  class:list={[frame, "app-frame", className]}
+  role={label === "" ? undefined : "img"}
+  aria-label={label || undefined}
+  aria-hidden={label === "" ? "true" : undefined}
+  data-width={cropWidth}
+>
+  <div
+    class="app-frame-view"
+    style={`--frame-w: ${cropWidth}; --frame-h: ${cropHeight}`}
+  >
+    <AppSurface
+      theme={theme}
+      doubutsu={doubutsu}
+      window={window}
+      width={width}
+      height={height}
+    >
+      <Scene />
+      {
+        window === "desktop" && (
+          <div aria-hidden="true" style={LIGHTS}>
+            {LIGHT_COLORS.map((color) => (
+              <span style={`${LIGHT} background: ${color}`} />
+            ))}
+          </div>
+        )
+      }
+    </AppSurface>
+  </div>
+  <slot />
+</figure>

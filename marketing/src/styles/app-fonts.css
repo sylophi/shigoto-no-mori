@@ -1,0 +1,11 @@
+/* The app's faces, declared on the page: Chrome ignores @font-face
+   inside a shadow root, where the app's views render
+   (plugins/shadowAppCss.ts drops them there). The same packages and
+   weights as the app's renderer/index.css and renderer/fonts.css.
+   Each face is split by unicode range, so a browser fetches only the
+   subsets the page's text uses. */
+@import "@fontsource-variable/geist";
+@import "@fontsource/zen-maru-gothic/400.css";
+@import "@fontsource/zen-maru-gothic/500.css";
+@import "@fontsource/zen-maru-gothic/700.css";
+@import "@fontsource/zen-maru-gothic/900.css";

@@ -1,20 +1,17 @@
-import { Loader2 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   useLaunch,
   useLauncherForProject,
 } from "@/hooks/launchers/useLaunchers";
-import { LauncherIcon } from "@/components/shared/LauncherIcon";
 import { useLaunchShortcuts } from "@/hooks/launchers/useLaunchShortcuts";
 import { useOverlays } from "@/hooks/ui/useOverlays";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
-import type { LauncherEntry, Worktree } from "@shared/schemas";
+import type { Worktree } from "@shared/schemas";
 import {
   LAUNCH_TAB,
   selectSettingsTab,
 } from "@/components/settings/settingsNav";
+import { LauncherRowView } from "./LauncherRowView";
 
 interface LauncherRowProps {
   worktree: Worktree;
@@ -32,87 +29,24 @@ export function LauncherRow({ worktree }: LauncherRowProps) {
   const { paletteOpen } = useOverlays();
   useLaunchShortcuts(paletteOpen ? undefined : worktree, data?.entries);
 
-  if (isLoading) {
-    return (
-      <div
-        className="flex flex-wrap items-center gap-2"
-        aria-label="Detecting launchers"
-      >
-        <Skeleton className="h-8 w-28" />
-        <Skeleton className="h-8 w-24" />
-        <Skeleton className="h-8 w-24" />
-      </div>
-    );
-  }
-
-  // Everything the user could launch is switched off in Settings, so point
-  // there rather than at project Configure, which has no visibility toggles.
-  if (entries.length === 0 && (data?.hiddenCount ?? 0) > 0) {
-    return (
-      <div className="space-y-2">
-        <p className="text-sm text-muted-foreground">
-          Every launch tool is hidden.
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            selectSettingsTab(LAUNCH_TAB);
-            void navigate({ to: "/settings" });
-          }}
-        >
-          Choose tools
-        </Button>
-      </div>
-    );
-  }
-
-  if (entries.length === 0) {
-    return (
-      <div className="space-y-2">
-        <p className="text-sm text-muted-foreground">
-          No tools detected and no custom tools configured.
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => toProjectPage("configure", worktree.projectId)}
-        >
-          Configure tools
-        </Button>
-      </div>
-    );
-  }
-
-  const run = (entry: LauncherEntry) => {
-    launch.mutate({
-      projectId: worktree.projectId,
-      worktreeId: worktree.id,
-      launcherId: entry.id,
-    });
-  };
-
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {entries.map((entry) => {
-        const pending =
-          launch.isPending && launch.variables?.launcherId === entry.id;
-        return (
-          <Button
-            key={entry.id}
-            variant="outline"
-            size="sm"
-            onClick={() => run(entry)}
-          >
-            {pending ? (
-              <Loader2 className="animate-spin" />
-            ) : (
-              <LauncherIcon entry={entry} />
-            )}
-            <span>{entry.label}</span>
-          </Button>
-        );
-      })}
-    </div>
+    <LauncherRowView
+      entries={entries}
+      loading={isLoading}
+      hiddenCount={data?.hiddenCount ?? 0}
+      pendingId={launch.isPending ? launch.variables?.launcherId : undefined}
+      onLaunch={(entry) =>
+        launch.mutate({
+          projectId: worktree.projectId,
+          worktreeId: worktree.id,
+          launcherId: entry.id,
+        })
+      }
+      onChooseTools={() => {
+        selectSettingsTab(LAUNCH_TAB);
+        void navigate({ to: "/settings" });
+      }}
+      onConfigureTools={() => toProjectPage("configure", worktree.projectId)}
+    />
   );
 }

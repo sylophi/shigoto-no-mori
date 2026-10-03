@@ -66,7 +66,7 @@ export type SidebarRow =
       stack: StackPosition | null;
       stackChild?: StackChild;
       // The fold the row was filed behind, null for the group's open
-      // rows. The row fades by it (WorktreeEntry).
+      // rows. The row fades by it (WorktreeEntryView).
       shelf: GroupShelf | null;
     }
   // The inbox's own row: taller, cross-project, and built to be triaged

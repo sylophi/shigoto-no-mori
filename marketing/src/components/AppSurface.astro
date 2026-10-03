@@ -1,0 +1,68 @@
+---
+// A piece of the app on the page: the app's own React views, put in
+// as children and rendered to HTML at build time, with no app running.
+// They render into a shadow root (declared in the HTML, so no script
+// makes it) holding the app's stylesheet, so the app's styles and the
+// page's never meet. Inside, the two elements the app styles as <html>
+// and <body> (plugins/shadowAppCss.ts) wear the theme the app would
+// put on <html>.
+//
+// The views are a picture of the app, not a working one, so the
+// surface is inert: nothing in it takes a click or the keyboard, and a
+// screen reader reads the figure's description in its place.
+import { DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from "@shared/themes";
+import {
+  type SceneWindow,
+  windowAttributes,
+} from "../../../app/lab/scenes";
+import appCss from "../styles/app.css?url";
+
+interface Props {
+  theme?: "light" | "dark";
+  // The Animal Crossing look, the app's default. Off is the neutral one.
+  doubutsu?: boolean;
+  // A doubutsu palette (the app's shared/themes.ts), else the default
+  // for the theme.
+  palette?: string;
+  // The window the views draw a whole one of, if they do (the app's
+  // lab/scenes): the web app's phone layout, or the desktop window,
+  // whose page is transparent under the sidebar.
+  window?: SceneWindow;
+  // The size the views lay out at, in CSS pixels. Unset, they size the
+  // surface themselves.
+  width?: number;
+  height?: number;
+  class?: string;
+}
+const {
+  theme = "light",
+  doubutsu = true,
+  palette,
+  window,
+  width,
+  height,
+  class: className,
+} = Astro.props;
+const dark = theme === "dark";
+---
+
+<div
+  class:list={["app-surface", className]}
+  style={width && height ? `width: ${width}px; height: ${height}px` : undefined}
+  inert
+>
+  <template shadowrootmode="open">
+    <link rel="stylesheet" href={appCss} />
+    <div
+      class:list={["app-html", { dark, doubutsu }]}
+      style={`color-scheme: ${theme}; height: 100%`}
+      data-theme-scope
+      data-palette={doubutsu
+        ? (palette ?? (dark ? DEFAULT_DARK_THEME : DEFAULT_LIGHT_THEME))
+        : undefined}
+      {...windowAttributes(window)}
+    >
+      <div class="app-body" style="height: 100%"><slot /></div>
+    </div>
+  </template>
+</div>

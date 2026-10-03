@@ -1,5 +1,6 @@
 {
   "framework": "astro",
+  "installCommand": "pnpm -C ../app install --frozen-lockfile --ignore-scripts && pnpm install --frozen-lockfile",
   "headers": [
     {
       "source": "/_astro/(.*)",
@@ -24,7 +25,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'; font-src 'self'; connect-src 'self' https://api.github.com; frame-ancestors 'none'; base-uri 'self'; form-action 'none'"
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://api.github.com; frame-ancestors 'none'; base-uri 'self'; form-action 'none'"
         },
         {
           "key": "Strict-Transport-Security",

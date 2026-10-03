@@ -12,23 +12,25 @@ import { Pycharm } from "@/components/ui/svgs/pycharm";
 import { Rider } from "@/components/ui/svgs/rider";
 import { Rubymine } from "@/components/ui/svgs/rubymine";
 import { Webstorm } from "@/components/ui/svgs/webstorm";
-import antigravityIconUrl from "@/app-icons/antigravity.png";
-import chatgptIconUrl from "@/app-icons/chatgpt.png";
-import claudeIconUrl from "@/app-icons/claude.png";
-import cmuxIconUrl from "@/app-icons/cmux.png";
-import cursorIconUrl from "@/app-icons/cursor.png";
-import ghosttyIconUrl from "@/app-icons/ghostty.png";
-import githubDesktopIconUrl from "@/app-icons/github-desktop.png";
-import itermIconUrl from "@/app-icons/iterm.png";
-import sublimeIconUrl from "@/app-icons/sublime.png";
-import t3codeIconUrl from "@/app-icons/t3code.png";
-import terminalIconUrl from "@/app-icons/terminal.png";
-import vscodeIconUrl from "@/app-icons/vscode.png";
-import vscodeInsidersIconUrl from "@/app-icons/vscode-insiders.png";
-import vscodiumIconUrl from "@/app-icons/vscodium.png";
-import windsurfIconUrl from "@/app-icons/windsurf.png";
-import xcodeIconUrl from "@/app-icons/xcode.png";
-import zedIconUrl from "@/app-icons/zed.png";
+// The icons come in as ?url, a URL string under any bundler: the
+// marketing site's Astro hands a plain image import over as metadata.
+import antigravityIconUrl from "@/app-icons/antigravity.png?url";
+import chatgptIconUrl from "@/app-icons/chatgpt.png?url";
+import claudeIconUrl from "@/app-icons/claude.png?url";
+import cmuxIconUrl from "@/app-icons/cmux.png?url";
+import cursorIconUrl from "@/app-icons/cursor.png?url";
+import ghosttyIconUrl from "@/app-icons/ghostty.png?url";
+import githubDesktopIconUrl from "@/app-icons/github-desktop.png?url";
+import itermIconUrl from "@/app-icons/iterm.png?url";
+import sublimeIconUrl from "@/app-icons/sublime.png?url";
+import t3codeIconUrl from "@/app-icons/t3code.png?url";
+import terminalIconUrl from "@/app-icons/terminal.png?url";
+import vscodeIconUrl from "@/app-icons/vscode.png?url";
+import vscodeInsidersIconUrl from "@/app-icons/vscode-insiders.png?url";
+import vscodiumIconUrl from "@/app-icons/vscodium.png?url";
+import windsurfIconUrl from "@/app-icons/windsurf.png?url";
+import xcodeIconUrl from "@/app-icons/xcode.png?url";
+import zedIconUrl from "@/app-icons/zed.png?url";
 import {
   parseLauncherId,
   WEB_GITHUB_ID,

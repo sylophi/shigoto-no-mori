@@ -14,33 +14,26 @@
 // the machine it applies to. Removing a peer is the row's only loud
 // act, and it is armed inline: the sentence names the machine and the
 // row is right there to check it against, which a dialog covering the
-// list cannot offer.
+// list cannot offer. DeviceRegistryRowView draws the row.
 import { useState } from "react";
-import { AlertTriangle, Trash2 } from "lucide-react";
 import type { TunnelState } from "@shared/ipc/modules/hub";
 import type { DeviceInfo } from "@shared/hub/protocol";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
-import { Button } from "@/components/ui/button";
-import { RowTag } from "@/components/ui/row-tag";
-import { StatusDot, TONE_TEXT } from "@/components/ui/status-dot";
 import type { CommandAccess } from "@/hooks/remote/useCommandAccess";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
 import {
   CONFIRM_DESTRUCTIVE_MS,
   useConfirmTwice,
 } from "@/hooks/ui/useConfirmTwice";
-import { abbreviateId } from "@/lib/abbreviateId";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
-import { cn } from "@/lib/utils";
 import { AcceptCommandsToggle } from "./AcceptCommandsToggle";
 import { DeviceHosts } from "./DeviceHosts";
 import { DeviceIconPicker } from "./DeviceIconPicker";
-import { DeviceNameField, DeviceRenameButton } from "./DeviceNameField";
+import { DeviceNameField } from "./DeviceNameField";
+import { DeviceRegistryRowView } from "./DeviceRegistryRowView";
 import { KeepReachableToggle } from "./KeepReachableToggle";
 import { PortForwardSection } from "./PortForwardSection";
 import type { HostChip } from "./deviceHostChips";
-import { tunnelNote, type DeviceRowStatus } from "./deviceRegistryStatus";
-import { deviceTraits } from "@/lib/remote/deviceTraits";
+import type { DeviceRowStatus } from "./deviceRegistryStatus";
 
 export function DeviceRegistryRow({
   device,
@@ -92,205 +85,72 @@ export function DeviceRegistryRow({
   // The shared two-step confirm carries the armed flag, so an untouched
   // banner disarms itself.
   const revoke = useConfirmTwice(CONFIRM_DESTRUCTIVE_MS);
-  // The banner outlives the arming while the removal is in flight, so
-  // the row shows "Removing…" where the confirm button was instead of
-  // snapping back to its controls.
-  const confirming = revoke.armed || revokePending;
   // Held here rather than inside the name field so the Rename trigger
   // can sit in the row's action column while the editor opens on the
   // name itself.
   const [renaming, setRenaming] = useState(false);
-  const traits = deviceTraits(device.platform);
-  // What to CALL the machine where the name alone cannot pick it out:
-  // the same id fragment the header shows joins it, so the Remove
-  // button a screen reader announces and the confirm sentence name one
-  // machine rather than two identical ones.
-  const namedDevice = showId
-    ? `${name} ${abbreviateId(device.deviceId)}`
-    : name;
-  // What the row's controls call the machine: this one by its role, a
-  // peer by name.
-  const controlLabel = isThisDevice ? traits.selfLabel : namedDevice;
-  // A peer that is up and has SAID "no" is read-only from here.
-  // Nothing is said before its session reports, when the peer is
-  // unreachable (it cannot run anything anyway), or for a browser,
-  // which has no switch to point at.
-  const readOnlyHere =
-    !isThisDevice &&
-    traits.exposable &&
-    status.reachable &&
-    !access.isLoading &&
-    !access.granted;
-  const note = isThisDevice
-    ? tunnelNote(tunnel)
-    : readOnlyHere
-      ? peerReadOnlyNote(name)
-      : null;
-  // The tunnel being up is part of what "online" means for this
-  // machine, so it joins the state phrase rather than trailing it.
-  const stateLabel =
-    isThisDevice && tunnel === "up"
-      ? `${status.label}, reachable from anywhere`
-      : status.label;
 
   return (
-    // The mark hangs beside the header only. Everything under it (the
-    // note, the project strip, the switches or forwards, the armed
-    // banner) runs the row's full width, so nothing is indented for
-    // the sake of a column it does not belong to.
-    <li className="flex flex-col gap-3 py-5 first:pt-1 last:pb-1">
-      <div className="flex gap-3.5">
+    <DeviceRegistryRowView
+      deviceId={device.deviceId}
+      platform={device.platform}
+      isThisDevice={isThisDevice}
+      name={name}
+      showId={showId}
+      status={status}
+      appVersion={appVersion}
+      tunnel={tunnel}
+      access={access}
+      canForwardPorts={canForwardPorts}
+      renaming={renaming}
+      onRename={() => setRenaming(true)}
+      // The banner outlives the arming while the removal is in flight,
+      // so the row shows "Removing…" where the confirm button was
+      // instead of snapping back to its controls.
+      removal={revokePending ? "removing" : revoke.armed ? "armed" : "idle"}
+      onRemove={() => revoke.trigger(onRevokeDevice)}
+      onCancelRemove={revoke.reset}
+      renderIconPicker={(label) => (
         <DeviceIconPicker
           deviceId={device.deviceId}
           isThisDevice={isThisDevice}
           icon={icon}
           tone={status.tone}
-          label={controlLabel}
+          label={label}
         />
-
-        <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-3 gap-y-2">
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-              <DeviceNameField
-                deviceId={device.deviceId}
-                deviceName={name}
-                label={controlLabel}
-                editing={renaming}
-                onEditingChange={setRenaming}
-                className="text-base"
-              />
-              {isThisDevice && !renaming && <RowTag>{traits.selfLabel}</RowTag>}
-              {showId && (
-                <span
-                  title={device.deviceId}
-                  className="font-mono text-2xs text-muted-foreground/70 select-text"
-                >
-                  {abbreviateId(device.deviceId)}
-                </span>
-              )}
-            </div>
-
-            {/* Two facts, each in its own place: the state, which the
-                dot colours, and what the machine runs. */}
-            <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <StatusDot
-                tone={status.tone}
-                label={
-                  <span
-                    className={cn(
-                      "text-xs font-medium",
-                      TONE_TEXT[status.tone],
-                    )}
-                  >
-                    {stateLabel}
-                  </span>
-                }
-              />
-              <span>{traits.spec(appVersion)}</span>
-            </p>
-          </div>
-
-          {!confirming && !renaming && (
-            <div className="flex shrink-0 items-center gap-1">
-              <DeviceRenameButton
-                label={isThisDevice ? controlLabel.toLowerCase() : controlLabel}
-                onClick={() => setRenaming(true)}
-              />
-              {!isThisDevice && (
-                <Button
-                  // Muted until hovered: a rose "Remove" on every peer
-                  // row would make the page's rarest act its loudest.
-                  // The armed banner below spells out what it does.
-                  // (Self-removal is not offered: it would invalidate
-                  // this app's own credential, and with the Clerk
-                  // session still live ClerkAccountSync would re-enroll
-                  // the machine straight back. Sign out, on the
-                  // account line above, is the honest version.)
-                  variant="ghost-destructive"
-                  size="xs"
-                  className="text-muted-foreground"
-                  aria-label={`Remove ${namedDevice} from account`}
-                  onClick={() => revoke.trigger(onRevokeDevice)}
-                >
-                  <Trash2 />
-                  Remove
-                </Button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {note !== null && <p className="text-xs text-muted-foreground">{note}</p>}
-
-      {traits.hostsProjects && (
+      )}
+      renderNameField={(label) => (
+        <DeviceNameField
+          deviceId={device.deviceId}
+          deviceName={name}
+          label={label}
+          editing={renaming}
+          onEditingChange={setRenaming}
+          className="text-base"
+        />
+      )}
+      renderHosts={(cached) => (
         <DeviceHosts
           deviceId={device.deviceId}
           chips={chips}
           loading={chipsLoading}
-          // A peer that is not reachable cannot be listing anything
-          // right now, so whatever chips it has are its last session's,
-          // and the strip says so instead of implying the counts are
-          // current. This device's chips are local and always live,
-          // whatever its hub socket is doing.
-          cached={!isThisDevice && !status.reachable}
+          cached={cached}
         />
       )}
-
-      {confirming ? (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-rose-500/30 bg-rose-500/10 px-3 py-2.5 text-xs text-rose-700 dark:text-rose-300">
-          <AlertTriangle aria-hidden className="size-4 shrink-0" />
-          <p className="min-w-0 flex-1 basis-64">
-            <span className="font-medium">
-              Remove {namedDevice} from your account?
-            </span>{" "}
-            It loses access the moment it next connects, and its projects
-            disappear from your sidebar. Worktrees and files on the machine
-            itself are left alone. Pair again to undo.
-          </p>
-          <div className="ml-auto flex shrink-0 items-center gap-1.5">
-            <Button
-              variant="ghost"
-              size="xs"
-              disabled={revokePending}
-              onClick={revoke.reset}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              size="xs"
-              disabled={revokePending}
-              onClick={() => revoke.trigger(onRevokeDevice)}
-            >
-              {revokePending ? "Removing…" : "Remove device"}
-            </Button>
-          </div>
-        </div>
-      ) : isThisDevice ? (
-        // What this machine exposes to the account's other devices,
-        // in the order a person asks: may they drive it, and will it
-        // be there when they try. A browser exposes neither.
-        traits.exposable && (
-          <div className="flex flex-col gap-3">
-            <AcceptCommandsToggle />
-            <KeepReachableToggle />
-          </div>
-        )
-      ) : (
-        // Forwarding binds a real listener on THIS machine, so it is
-        // app-only, and against a machine that serves calls, so never a
-        // browser. Whether the peer will ACCEPT a new forward is its
-        // switch (`access.granted`). The strip renders itself away
-        // when it can neither start one nor show a live one.
-        canForwardPorts &&
-        traits.exposable && (
-          <PortForwardSection
-            deviceId={device.deviceId}
-            canStart={access.granted}
-          />
-        )
-      )}
-    </li>
+      switches={
+        <>
+          <AcceptCommandsToggle />
+          <KeepReachableToggle />
+        </>
+      }
+      // Whether the peer will ACCEPT a new forward is its switch
+      // (`access.granted`).
+      portForwards={
+        <PortForwardSection
+          deviceId={device.deviceId}
+          canStart={access.granted}
+        />
+      }
+    />
   );
 }

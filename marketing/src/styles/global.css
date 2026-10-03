@@ -593,7 +593,7 @@ code {
     0 11px 0 0 var(--edge);
 }
 
-/* A macOS window: the capture already carries its traffic lights. */
+/* A macOS window: AppFrame draws its traffic lights. */
 .window,
 .floating {
   border-radius: clamp(8px, 1vw, 14px);
@@ -614,13 +614,22 @@ code {
     0 0 0 1px oklch(1 0 0 / 0.08) inset,
     var(--float-shadow);
 }
-.phone img {
+.phone .app-frame-view {
   border-radius: 1.95rem;
 }
 .card-shot {
   border-radius: var(--radius);
   overflow: hidden;
   --lift: 6px;
+}
+
+/* An app frame (components/AppFrame.astro): the scene at its natural
+   size, which scripts/frames.ts zooms to the frame's width. */
+.app-frame-view {
+  position: relative;
+  aspect-ratio: var(--frame-w) / var(--frame-h);
+  overflow: hidden;
+  border-radius: inherit;
 }
 
 .card {
@@ -755,7 +764,7 @@ code {
   border-radius: 1.1rem;
   transform: rotate(-4deg);
 }
-.stage-row img {
+.stage-row .app-frame-view {
   border-radius: 1.1rem;
 }
 .stage-phone {
@@ -882,7 +891,7 @@ code {
   position: relative;
   border-radius: var(--radius);
 }
-.anatomy-row img {
+.anatomy-row .app-frame-view {
   border-radius: var(--radius);
 }
 .pin {
@@ -891,6 +900,11 @@ code {
   top: var(--y);
   translate: -50% -50%;
   box-shadow: 0 0 0 3px var(--card);
+}
+/* Placed by scripts/frames.ts on the row's parts. A pin it can't find
+   a place for stays hidden rather than pointing at nothing. */
+.app-frame .pin:not(.pin-placed) {
+  visibility: hidden;
 }
 .legend {
   list-style: none;
@@ -1108,4 +1122,16 @@ code {
 .footer nav {
   display: flex;
   gap: 1.25rem;
+}
+
+/* --- The app's views (components/AppSurface.astro) ------------------ */
+
+/* Hidden until the app's stylesheet, inside the surface, shows it.
+   Nothing of the page's is inherited into it (its type size and
+   weight, say): the app's views start from a document's defaults, as
+   they do in the app. */
+.app-surface {
+  all: initial;
+  display: block;
+  visibility: hidden;
 }

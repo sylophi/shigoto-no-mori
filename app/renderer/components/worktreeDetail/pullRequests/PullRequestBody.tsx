@@ -9,6 +9,7 @@ import { ClosedPullRequestBox } from "./ClosedPullRequestBox";
 import { MergedPrimaryBranchBox } from "./MergedPrimaryBranchBox";
 import { MergeBox } from "./MergeBox";
 import { PullRequestIdentity } from "./PullRequestIdentity";
+import { pullRequestFollowUp } from "./pullRequestFollowUp";
 import { StackList } from "./StackList";
 
 export function PullRequestBody({
@@ -22,14 +23,14 @@ export function PullRequestBody({
   repoConfig: RepoMergeConfig | null;
   lastMergeMethod: MergeMethod | undefined;
 }) {
-  const isOpen = pr.state === "OPEN";
+  const followUp = pullRequestFollowUp(pr, worktree);
   const stack = usePullRequestStack(worktree.projectId, worktree.branch);
 
   return (
-    <div className="space-y-4">
+    <>
       <PullRequestIdentity worktree={worktree} pr={pr} />
       {stack && <StackList worktree={worktree} stack={stack} />}
-      {isOpen && (
+      {followUp === "merge" && (
         <MergeBox
           worktree={worktree}
           pr={pr}
@@ -38,12 +39,12 @@ export function PullRequestBody({
           stack={stack}
         />
       )}
-      {!isOpen && !worktree.isPrimary && (
+      {followUp === "cleanUp" && (
         <ClosedPullRequestBox worktree={worktree} stack={stack} />
       )}
-      {pr.state === "MERGED" && worktree.isPrimary && (
+      {followUp === "catchUpPrimary" && (
         <MergedPrimaryBranchBox worktree={worktree} />
       )}
-    </div>
+    </>
   );
 }

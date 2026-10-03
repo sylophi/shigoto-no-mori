@@ -1,12 +1,15 @@
 {
   "schemaVersion": 1,
-  "portNames": ["renderer", "web", "lab", "labWeb"],
+  "portNames": ["renderer", "web", "lab", "labWeb", "marketing"],
   "envFiles": {
     "app/.env.ports": {
       "PORT": "${renderer}",
       "WEB_PORT": "${web}",
       "LAB_PORT": "${lab}",
       "LAB_WEB_PORT": "${labWeb}"
+    },
+    "marketing/.env.ports": {
+      "MARKETING_PORT": "${marketing}"
     }
   }
 }

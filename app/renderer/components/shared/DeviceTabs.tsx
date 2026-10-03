@@ -14,7 +14,7 @@
 import { useState, type ReactNode } from "react";
 import { MonitorSmartphone } from "lucide-react";
 import type { DeviceIcon } from "@shared/account/deviceIcon";
-import { DEVICE_PILL_CLASS } from "@/components/shared/DeviceChip";
+import { DEVICE_PILL_CLASS } from "@/components/shared/DeviceChipView";
 import { DeviceLead } from "@/components/shared/DeviceGlyph";
 import { EmptyPanel } from "@/components/ui/empty-panel";
 import { useLocalDevice } from "@/hooks/account/useAccount";

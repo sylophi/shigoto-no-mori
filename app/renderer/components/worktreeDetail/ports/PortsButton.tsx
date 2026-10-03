@@ -5,13 +5,10 @@
 // whose ports this machine forwards, the glyph takes the live tone,
 // which still shows once the label folds, and the title lists them.
 import { useState } from "react";
-import { Cable } from "lucide-react";
 import type { Worktree } from "@shared/schemas";
-import { TONE_TEXT } from "@/components/ui/status-dot";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useWorktreeForwardTip } from "@/hooks/remote/usePortForwards";
-import { FooterActionButton } from "../FooterActionButton";
-import { LABEL_RANK } from "../footerFit";
+import { FooterLeadingVerbView } from "../FooterLeadingVerbView";
 import { PortsDialog } from "./PortsDialog";
 
 export function PortsButton({ worktree }: { worktree: Worktree }) {
@@ -22,15 +19,8 @@ export function PortsButton({ worktree }: { worktree: Worktree }) {
   const forwardTip = useWorktreeForwardTip(deviceId, worktree);
   return (
     <>
-      <FooterActionButton
-        rank={LABEL_RANK.ports}
-        icon={
-          <Cable
-            className={forwardTip !== undefined ? TONE_TEXT.emerald : undefined}
-          />
-        }
-        label="Ports"
-        title={forwardTip ?? "See this worktree's ports"}
+      <FooterLeadingVerbView
+        verb={{ kind: "ports", forwardTip }}
         onClick={() => setOpen(true)}
       />
       {open && (

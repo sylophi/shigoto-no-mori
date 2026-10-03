@@ -5,7 +5,11 @@
 // rule, so the Configure page and the transplant review agree on what
 // a new worktree gets.
 import { normalizeRelPath } from "@shared/git/gitPaths";
-import type { CarryOverEntry, WorktreeIncludeStatus } from "@shared/schemas";
+import type {
+  CarryOverEntry,
+  ShigomoriConfig,
+  WorktreeIncludeStatus,
+} from "@shared/schemas";
 
 export function worktreeIncludeExtras(
   entries: CarryOverEntry[],
@@ -18,4 +22,25 @@ export function worktreeIncludeExtras(
     const p = normalizeRelPath(raw);
     return manualPaths.has(p) ? [] : [p];
   });
+}
+
+// One carry-over path and how it travels (copy, symlink, include).
+export type CarryOverItem = { path: string; tag: string };
+
+// A project's carry-over as a create lists it: the manual entries, then
+// the .worktreeinclude matches that join them.
+export function carryOverItems(
+  config: Pick<ShigomoriConfig, "carryOver" | "useWorktreeInclude"> | null,
+  include: WorktreeIncludeStatus | null | undefined,
+): CarryOverItem[] {
+  const manual = config?.carryOver ?? [];
+  const included = worktreeIncludeExtras(
+    manual,
+    config?.useWorktreeInclude !== false,
+    include,
+  );
+  return [
+    ...manual.map((entry) => ({ path: entry.path, tag: entry.mode as string })),
+    ...included.map((path) => ({ path, tag: "include" })),
+  ];
 }

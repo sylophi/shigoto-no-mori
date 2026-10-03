@@ -1,4 +1,3 @@
-import { ArrowDown, ArrowUp, CloudUpload } from "lucide-react";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import {
   useOverwriteWorktree,
@@ -8,9 +7,8 @@ import {
   usePushForceWorktree,
   usePushWorktree,
 } from "@/hooks/worktrees/useWorktreeSync";
-import { pluralize } from "@/lib/pluralize";
 import { deriveRemoteSyncState, type Worktree } from "@shared/schemas";
-import { SyncActionButton } from "./SyncActionButton";
+import { WorktreeSyncPillView } from "./WorktreeSyncPillView";
 
 interface WorktreeSyncPillProps {
   worktree: Worktree;
@@ -37,112 +35,36 @@ export function WorktreeSyncPill({ worktree }: WorktreeSyncPillProps) {
   const confirmPushForce = useConfirmTwice(CONFIRM_QUICK_MS);
   const confirmOverwrite = useConfirmTwice(CONFIRM_QUICK_MS);
 
-  if (state.kind === "detached" || state.kind === "synced") return null;
-
-  if (state.kind === "publish") {
-    return (
-      <SyncActionButton
-        tone="violet"
-        icon={CloudUpload}
-        label="Publish branch"
-        title={
-          state.canPublish
-            ? "Push branch to remote with upstream tracking"
-            : "No git remote is configured for this project"
-        }
-        disabled={!state.canPublish}
-        pending={publish.isPending}
-        onClick={() => publish.mutate(input)}
-      />
-    );
-  }
-
-  if (state.kind === "ahead") {
-    return (
-      <SyncActionButton
-        tone="emerald"
-        icon={ArrowUp}
-        label={`Push ${pluralize(state.ahead, "commit")}`}
-        title="git push"
-        pending={push.isPending}
-        onClick={() => push.mutate(input)}
-      />
-    );
-  }
-
-  if (state.kind === "behind") {
-    return (
-      <SyncActionButton
-        tone="sky"
-        icon={ArrowDown}
-        label={`Pull ${pluralize(state.behind, "commit")}`}
-        title={
-          worktree.autoPull
-            ? "git pull --ff-only. Auto-pull is on: the app fast-forwards after its next fetch, as long as the worktree has no uncommitted changes or running script."
-            : "git pull --ff-only"
-        }
-        pending={pull.isPending}
-        onClick={() => pull.mutate(input)}
-      />
-    );
-  }
-
-  if (state.kind === "pullAndPush") {
-    return (
-      <SyncActionButton
-        tone="indigo"
-        label={`Pull and push ↑${state.ahead}↓${state.behind}`}
-        title="git pull --rebase, falling back to a merge on conflict, then git push"
-        pending={pullAndPush.isPending}
-        onClick={() => pullAndPush.mutate(input)}
-      />
-    );
-  }
-
-  // Histories have truly diverged. The only moves left are "overwrite the
-  // remote" (force-push) or "overwrite local" (reset hard), both behind a
-  // two-step confirm.
-  // pull --rebase would almost certainly fail mid-flight here, so we don't
-  // offer it. The user picks which side wins.
-  const busy = pushForce.isPending || overwrite.isPending;
   return (
-    <span
-      title={`Diverged: ${state.ahead} local, ${state.behind} remote. History has split. Pick which side wins.`}
-      className="inline-flex shrink-0 items-center gap-1 self-center text-xs"
-    >
-      <span className="px-1.5 text-rose-500">Overwrite:</span>
-      <SyncActionButton
-        tone="rose"
-        icon={ArrowUp}
-        label={confirmPushForce.armed ? "Confirm?" : `Push ${state.ahead}`}
-        title={
-          confirmPushForce.armed
-            ? "Click again to confirm"
-            : "git push --force-with-lease (overwrites the remote)"
-        }
-        pending={pushForce.isPending}
-        disabled={busy}
-        onClick={() => {
+    <WorktreeSyncPillView
+      state={state}
+      autoPull={worktree.autoPull}
+      pending={{
+        publish: publish.isPending,
+        push: push.isPending,
+        pull: pull.isPending,
+        pullAndPush: pullAndPush.isPending,
+        pushForce: pushForce.isPending,
+        overwrite: overwrite.isPending,
+      }}
+      armed={{
+        pushForce: confirmPushForce.armed,
+        overwrite: confirmOverwrite.armed,
+      }}
+      on={{
+        publish: () => publish.mutate(input),
+        push: () => push.mutate(input),
+        pull: () => pull.mutate(input),
+        pullAndPush: () => pullAndPush.mutate(input),
+        pushForce: () => {
           confirmOverwrite.reset();
           confirmPushForce.trigger(() => pushForce.mutate(input));
-        }}
-      />
-      <SyncActionButton
-        tone="rose"
-        icon={ArrowDown}
-        label={confirmOverwrite.armed ? "Confirm?" : `Pull ${state.behind}`}
-        title={
-          confirmOverwrite.armed
-            ? "Click again to confirm"
-            : "git fetch && git reset --hard @{u} (overwrites local)"
-        }
-        pending={overwrite.isPending}
-        disabled={busy}
-        onClick={() => {
+        },
+        overwrite: () => {
           confirmPushForce.reset();
           confirmOverwrite.trigger(() => overwrite.mutate(input));
-        }}
-      />
-    </span>
+        },
+      }}
+    />
   );
 }

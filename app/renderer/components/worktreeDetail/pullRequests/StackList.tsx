@@ -9,7 +9,7 @@ import { describePullRequest } from "@/lib/pullRequest";
 import { cn } from "@/lib/utils";
 import type { PullRequestStack } from "@shared/pullRequestStack";
 import type { Worktree } from "@shared/schemas";
-import { PullRequestTitleLink } from "./PullRequestIdentity";
+import { PullRequestTitleLink } from "./PullRequestIdentityView";
 import { TONE_TEXT } from "./pullRequestShared";
 
 export function StackList({

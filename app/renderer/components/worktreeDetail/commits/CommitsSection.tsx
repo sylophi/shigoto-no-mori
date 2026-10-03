@@ -1,6 +1,4 @@
 import { useState } from "react";
-import { ChevronRight, FileDiff, History } from "lucide-react";
-import { SectionHeading } from "@/components/ui/section-heading";
 import { useUndoCommits } from "@/hooks/worktrees/useUndoCommits";
 import { commitRewriteAt } from "@/lib/commitRewrite";
 import type { Worktree } from "@shared/schemas";
@@ -9,89 +7,41 @@ import { WorktreePrimarySyncPill } from "../WorktreePrimarySyncPill";
 import { WorktreeSyncPill } from "../WorktreeSyncPill";
 import { BranchHistoryDrawer } from "../branch/BranchHistoryDrawer";
 import { CommitRow } from "./CommitRow";
+import { CommitsSectionView } from "./CommitsSectionView";
+import { commitsTeaser } from "./commitsTeaser";
 
 export function CommitsSection({ worktree }: { worktree: Worktree }) {
   const nav = useWorktreeNav();
-  // The backend hands back up to 4 rows: 3 for the teaser plus 1 extra
-  // we use as the "more available" probe. Slicing here keeps the
-  // teaser's visible shape decoupled from that probe.
-  const commits = worktree.recentCommits.slice(0, 3);
-  const showAll = worktree.recentCommits.length > 3;
-  // Mirror the upstream-sync pill's dirty-state gate: rebase/merge
-  // needs a clean tree, so hide the affordance instead of surfacing a
-  // git failure after the click.
-  const showPrimarySync =
-    !worktree.isPrimary &&
-    !worktree.detached &&
-    worktree.changedCount === 0 &&
-    worktree.behindPrimary > 0;
+  const { commits, showAll, showPrimarySync } = commitsTeaser(worktree);
   const [historyOpen, setHistoryOpen] = useState(false);
   const undo = useUndoCommits(worktree);
   return (
-    <section className="space-y-3">
-      {/* Held at the heading's height: the sync and changes buttons
-          overhang it, so the commits don't shift when one appears. */}
-      <div className="flex h-4 items-center justify-between gap-2">
-        <SectionHeading>Branch</SectionHeading>
-        {worktree.changedCount > 0 ? (
-          <button
-            type="button"
-            onClick={() => nav.toDiff(worktree.projectId, worktree.id)}
-            title="Review, commit or discard the uncommitted changes"
-            className="tabular inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-1 text-xs text-amber-500 transition-colors hover:bg-amber-500/10 focus-visible:outline-2 focus-visible:outline-amber-500"
-          >
-            <FileDiff aria-hidden className="size-3.5" />
-            {worktree.changedCount}{" "}
-            {worktree.changedCount === 1 ? "file" : "files"} changed
-            <ChevronRight aria-hidden className="size-3.5 opacity-60" />
-          </button>
-        ) : (
-          <WorktreeSyncPill worktree={worktree} />
-        )}
-      </div>
-      {commits.length === 0 ? (
-        <div className="text-sm text-muted-foreground">No commits yet.</div>
-      ) : (
-        <ul className="space-y-2">
-          {commits.map((commit, index) => (
-            <li key={commit.hash}>
-              <CommitRow
-                worktree={worktree}
-                commit={commit}
-                rewrite={commitRewriteAt(
-                  worktree,
-                  worktree.recentCommits,
-                  index,
-                )}
-                onUndo={undo.undoTo}
-                undoPending={undo.pending}
-              />
-            </li>
-          ))}
-        </ul>
+    <CommitsSectionView
+      changedCount={worktree.changedCount}
+      onOpenChanges={() => nav.toDiff(worktree.projectId, worktree.id)}
+      syncPill={<WorktreeSyncPill worktree={worktree} />}
+      commits={commits}
+      renderCommit={(commit, index) => (
+        <CommitRow
+          worktree={worktree}
+          commit={commit}
+          rewrite={commitRewriteAt(worktree, worktree.recentCommits, index)}
+          onUndo={undo.undoTo}
+          undoPending={undo.pending}
+        />
       )}
-      {(showPrimarySync || showAll) && (
-        <div className="flex items-center gap-2">
-          {showPrimarySync && <WorktreePrimarySyncPill worktree={worktree} />}
-          {showAll && (
-            <button
-              type="button"
-              onClick={() => setHistoryOpen(true)}
-              title="Browse full branch history"
-              className="ml-auto inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-            >
-              <History aria-hidden className="size-3.5" />
-              Show all
-              <ChevronRight aria-hidden className="size-3.5 opacity-60" />
-            </button>
-          )}
-        </div>
-      )}
-      <BranchHistoryDrawer
-        worktree={worktree}
-        open={historyOpen}
-        onClose={() => setHistoryOpen(false)}
-      />
-    </section>
+      primarySync={
+        showPrimarySync && <WorktreePrimarySyncPill worktree={worktree} />
+      }
+      showAll={showAll}
+      onShowAll={() => setHistoryOpen(true)}
+      drawer={
+        <BranchHistoryDrawer
+          worktree={worktree}
+          open={historyOpen}
+          onClose={() => setHistoryOpen(false)}
+        />
+      }
+    />
   );
 }

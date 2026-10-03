@@ -27,7 +27,7 @@ interface InboxShelfRowProps {
   shelf: InboxShelf;
   count: number;
   expanded: boolean;
-  onToggle: () => void;
+  onToggle?: () => void;
 }
 
 // A shelf header: label, hairline rule, chevron. Collapsed, the count is

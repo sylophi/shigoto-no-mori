@@ -7,6 +7,7 @@
 //
 // Kept dependency-free so it can run in either environment.
 
+import { tildify } from "../projectPaths";
 import type { RuntimeInfo, WorktreeLayout } from "../schemas";
 
 // Project-relative directory used by the "in-project" layout. Top-level
@@ -99,6 +100,12 @@ interface LayoutInputs extends DeviceLayoutInputs {
   customPath: string | null;
 }
 
+// What a project's config says of where its worktrees go.
+type LayoutConfig = {
+  worktreeLayout?: WorktreeLayout;
+  customWorktreePath?: string | null;
+};
+
 // Directory new worktrees should live under for the given layout. Custom
 // without a path falls back to the managed root rather than producing an
 // invalid path; the UI prevents saving an empty custom path.
@@ -106,10 +113,7 @@ interface LayoutInputs extends DeviceLayoutInputs {
 // host and the renderer alike (a trailing space in a custom path is
 // noise, never a different folder).
 export function layoutInputsFor(
-  config: {
-    worktreeLayout?: WorktreeLayout;
-    customWorktreePath?: string | null;
-  } | null,
+  config: LayoutConfig | null,
   projectPath: string,
   { dataDir, canonicalDataDirName, onProjectDrive }: DeviceLayoutInputs,
 ): LayoutInputs {
@@ -144,6 +148,19 @@ export function worktreeBaseFor(inputs: LayoutInputs): string {
     if (driveBase !== null) return driveBase;
   }
   return joinPath(dataDir, "worktrees", lastSegment(projectPath));
+}
+
+// Where a project's new worktrees land on a device, as shown: its
+// layout's base folder, tildified against that device's home.
+export function worktreeBaseLabel(
+  config: LayoutConfig | null,
+  projectPath: string,
+  device: DeviceLayoutInputs & { homedir: string },
+): string {
+  return tildify(
+    worktreeBaseFor(layoutInputsFor(config, projectPath, device)),
+    device.homedir,
+  );
 }
 
 // Full destination path for a single worktree under the given layout.

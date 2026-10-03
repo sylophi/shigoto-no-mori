@@ -4,35 +4,26 @@ import Card from "../components/Card.astro";
 import DownloadButtons from "../components/DownloadButtons.astro";
 import Icon from "../components/Icon.astro";
 import SectionHead from "../components/SectionHead.astro";
-import Shot from "../components/Shot.astro";
+import AppFrame from "../components/AppFrame.astro";
 import Page from "../layouts/Page.astro";
 import { WEB_APP } from "../site";
 
-import create from "../assets/create.webp";
-import dark from "../assets/dark.webp";
-import devices from "../assets/devices.webp";
-import hero from "../assets/hero.webp";
-import launch from "../assets/launch.webp";
-import phone from "../assets/phone.webp";
-import plain from "../assets/plain.webp";
-import row from "../assets/row.webp";
-import stack from "../assets/stack.webp";
-import transplant from "../assets/transplant.webp";
+// The app's own views over its lab's fixtures, which the frames below
+// render at build time.
+import { scenes } from "../../../app/lab/scenes";
 
-// Widths the layout gives a full-width block on a phone.
-const PHONE = "(max-width: 760px) calc(100vw - 2.5rem)";
-
-// The numbered pins over the sidebar row, placed on the image in
-// percent, in the order the legend lists them.
+// The numbered pins over the sidebar row, in the order the legend lists
+// them: each on the part of the row its selector finds, at that side
+// of it (scripts/frames.ts).
 const PINS = [
-  { x: "28%", y: "11%", part: "The project" },
-  { x: "57.5%", y: "13%", part: "The Mac it lives on, when that's not this one" },
-  { x: "86%", y: "11%", part: "Last activity" },
-  { x: "2.6%", y: "51%", part: "The branch" },
-  { x: "56.5%", y: "72%", part: "Files with uncommitted changes" },
-  { x: "66.5%", y: "72%", part: "Commits not pushed yet" },
-  { x: "84%", y: "72%", part: "Its pull request, and its place in a stack" },
-  { x: "37.5%", y: "76%", part: "The folder" },
+  { on: "[data-slot=row-project]", side: "top", part: "The project" },
+  { on: '[aria-label^="On "]', side: "top", part: "The Mac it lives on, when that's not this one" },
+  { on: "[data-slot=row-activity]", side: "top", part: "Last activity" },
+  { on: "[data-slot=row-branch]", side: "left", part: "The branch" },
+  { on: '[aria-label$="files changed"]', side: "bottom", part: "Files with uncommitted changes" },
+  { on: '[aria-label$="ahead"]', side: "bottom", part: "Commits not pushed yet" },
+  { on: '[aria-label*="PR #"]', side: "bottom", part: "Its pull request, and its place in a stack" },
+  { on: "[data-slot=row-name]", side: "bottom", part: "The folder" },
 ];
 ---
 
@@ -51,28 +42,18 @@ const PINS = [
       </p>
     </div>
     <div class="wrap wide stage">
-      <Shot
-        src={hero}
+      <AppFrame
         frame="window"
         class="stage-main"
-        priority
-        sizes={`${PHONE}, min(1075px, 84vw - 2.1rem)`}
-        alt="The app's window: a mint sidebar listing worktrees across projects, each with its changed files, commits ahead and pull request number. The open worktree shows launcher buttons, its pull request with checks passed and a Merge button, and its recent commits."
+        scene={scenes.heroWindow}
+        label="The app's window: a mint sidebar listing worktrees across projects, each with its changed files, commits ahead and pull request number. The open worktree shows launcher buttons, its pull request with checks passed and a Merge button, and its recent commits."
       />
-      <Shot
-        src={row}
-        frame="framed"
-        class="stage-row"
-        sizes="min(310px, 24vw)"
-        alt=""
-      />
-      <Shot
-        src={phone}
+      <AppFrame frame="framed" class="stage-row" scene={scenes.row} label="" />
+      <AppFrame
         frame="phone"
         class="stage-phone"
-        eager
-        sizes="(max-width: 760px) calc(34vw - 1.85rem), min(240px, 20vw - 1.5rem)"
-        alt="The same worktrees in the web app on a phone."
+        scene={scenes.phoneWindow}
+        label="The same worktrees in the web app on a phone."
       />
     </div>
   </Band>
@@ -106,11 +87,11 @@ const PINS = [
       </div>
       <div>
         <p class="compare-label">In Shigoto no Mori</p>
-        <Shot
-          src={create}
+        <AppFrame
           frame="card-shot"
-          sizes="(max-width: 900px) calc(100vw - 2.5rem), 540px"
-          alt="The New worktree button with a menu under it listing projects to create the worktree in."
+          scene={scenes.createWindow}
+          crop={[550, 432]}
+          label="The New worktree button with a menu under it listing projects to create the worktree in."
         />
         <ol class="steps">
           <li>Click <b>New worktree</b></li>
@@ -166,31 +147,29 @@ const PINS = [
         without opening anything.
       </SectionHead>
       <div class="anatomy">
-        <Shot
-          src={row}
+        <AppFrame
           frame="framed"
           class="anatomy-row"
-          sizes="(max-width: 900px) calc(100vw - 2.5rem), 620px"
-          alt="One sidebar row: project shigoto-no-mori, a laptop badge, 40m ago, branch exp/terrier-sync, 7 changed files, 1 commit ahead, pull request #151 as 2 of 3, folder gentle-gecko."
+          scene={scenes.row}
+          label="One sidebar row: project shigoto-no-mori, a laptop badge, 40m ago, branch exp/terrier-sync, 7 changed files, 1 commit ahead, pull request #151 as 2 of 3, folder gentle-gecko."
         >
           {
             PINS.map((pin, i) => (
-              <span class="pin" style={`--x: ${pin.x}; --y: ${pin.y}`}>
+              <span class="pin" data-pin={pin.on} data-side={pin.side}>
                 {i + 1}
               </span>
             ))
           }
-        </Shot>
+        </AppFrame>
         <ol class="legend">
           {PINS.map((pin) => <li>{pin.part}</li>)}
         </ol>
       </div>
       <div class="split">
-        <Shot
-          src={stack}
+        <AppFrame
           frame="window"
-          sizes="(max-width: 900px) calc(100vw - 2.5rem), 650px"
-          alt="A worktree whose pull request is the first of a stack of three, marked Merged, with the other two listed above it and 'lands on main' below."
+          scene={scenes.stackWindow}
+          label="A worktree whose pull request is the first of a stack of three, marked Merged, with the other two listed above it and 'lands on main' below."
         />
         <div class="points">
           <div class="point">
@@ -236,12 +215,11 @@ const PINS = [
         per project or for all of them, like starting an agent CLI in that
         folder.
       </SectionHead>
-      <Shot
-        src={launch}
+      <AppFrame
         frame="card-shot"
         class="launch"
-        sizes={`${PHONE}, 720px`}
-        alt="A worktree's launch row: buttons with app icons for cmux, Cursor, Finder, Ghostty, GitHub, GitHub Desktop, Rider, Terminal, VS Code, Xcode and Zed, and under them the project's package.json scripts."
+        scene={scenes.launchRow}
+        label="A worktree's launch row: buttons with app icons for VS Code, Terminal, Finder, Claude Code and GitHub, and under them the project's package.json scripts."
       />
       <div class="launch-notes">
         <div class="keys" role="img" aria-label="Command 1 to Command 9">
@@ -293,19 +271,17 @@ const PINS = [
         </Card>
       </div>
       <div class="machines-stage">
-        <Shot
-          src={devices}
+        <AppFrame
           frame="window"
           class="machines-main"
-          sizes={`${PHONE}, min(905px, 78vw - 1.95rem)`}
-          alt="The Devices page listing Studio Mac, Thinkpad and Mini with their connection state, their projects, and a port forwarded from Thinkpad."
+          scene={scenes.devicesWindow}
+          label="The Devices page listing Studio Mac, Thinkpad and Mini with their connection state, their projects, and a port forwarded from Thinkpad."
         />
-        <Shot
-          src={transplant}
+        <AppFrame
           frame="floating"
           class="machines-dialog"
-          sizes="(max-width: 760px) calc(92vw - 2.3rem), min(535px, 46vw - 1.15rem)"
-          alt="The Transplant worktree dialog, moving fix-stale-locks from Studio Mac to Thinkpad with its carry-over files. A note says nothing on Studio Mac is deleted until the last step."
+          scene={scenes.transplant}
+          label="The Transplant worktree dialog, moving fix-stale-locks from Studio Mac to Thinkpad with its carry-over files. A note says nothing on Studio Mac is deleted until the last step."
         />
       </div>
       <div class="cards two">
@@ -374,19 +350,19 @@ const PINS = [
         you, a neutral theme is one setting away. Both come in light and dark.
       </SectionHead>
       <div class="looks">
-        <Shot
-          src={plain}
+        <AppFrame
           frame="window"
           class="looks-back"
-          sizes="min(870px, 75vw - 1.875rem)"
-          alt="The neutral theme in light mode."
+          scene={scenes.stackWindow}
+          doubutsu={false}
+          label="The neutral theme in light mode."
         />
-        <Shot
-          src={dark}
+        <AppFrame
           frame="window"
           class="looks-front"
-          sizes="min(870px, 75vw - 1.875rem)"
-          alt="The default theme in dark mode."
+          scene={scenes.heroWindow}
+          theme="dark"
+          label="The default theme in dark mode."
         />
       </div>
     </div>

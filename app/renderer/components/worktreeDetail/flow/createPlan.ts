@@ -9,15 +9,16 @@
 import type { Project } from "@shared/schemas";
 import { useShigomoriConfig } from "@/hooks/config/useShigomoriConfig";
 import { usePortPoolActive } from "@/hooks/ports/usePortPoolActive";
-import { worktreeIncludeExtras } from "@/lib/carryOverPaths";
+import { type CarryOverItem, carryOverItems } from "@/lib/carryOverPaths";
 import { useWorktreeIncludeStatus } from "@/hooks/projects/useWorktreeIncludeStatus";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
+import { lifecycleCommand } from "../scripts/lifecycleRows";
 
 // The local project's setup command, "" when none is configured (or
 // the config has not loaded yet).
 function useSetupScript(localProject: Project | undefined): string {
   const { data: config } = useShigomoriConfig(localProject?.id ?? null);
-  return config?.scripts?.setup?.trim() ?? "";
+  return lifecycleCommand(config?.scripts, "setup");
 }
 
 // The local project's carry-over: manual entries plus the repo's
@@ -26,26 +27,14 @@ function useSetupScript(localProject: Project | undefined): string {
 // does) so the two requests run side by side instead of the second
 // waiting on the config.
 export function useCarryOverRows(localProject: Project | undefined): {
-  rows: { path: string; tag: string }[];
+  rows: CarryOverItem[];
   isPending: boolean;
 } {
   const { data: config, isPending } = useShigomoriConfig(
     localProject?.id ?? null,
   );
   const { data: include } = useWorktreeIncludeStatus(localProject?.id ?? null);
-  const manual = config?.carryOver ?? [];
-  const included = worktreeIncludeExtras(
-    manual,
-    config?.useWorktreeInclude !== false,
-    include,
-  );
-  return {
-    rows: [
-      ...manual.map((e) => ({ path: e.path, tag: e.mode as string })),
-      ...included.map((path) => ({ path, tag: "include" })),
-    ],
-    isPending,
-  };
+  return { rows: carryOverItems(config ?? null, include), isPending };
 }
 
 // Whether the create provisions ports. The new worktree does not exist

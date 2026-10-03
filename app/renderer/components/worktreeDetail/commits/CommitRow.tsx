@@ -1,4 +1,4 @@
-import { ChevronRight, Copy, PencilLine, Undo2 } from "lucide-react";
+import { Copy, PencilLine, Undo2 } from "lucide-react";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -8,12 +8,12 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { DiffStats } from "@/components/ui/diff-stats";
 import { RelativeDate } from "@/components/ui/relative-date";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { CommitRewrite } from "@/lib/commitRewrite";
 import { pluralize } from "@/lib/pluralize";
 import type { CommitSummary, Worktree } from "@shared/schemas";
+import { CommitRowView } from "./CommitRowView";
 
 interface CommitRowProps {
   worktree: Worktree;
@@ -43,34 +43,11 @@ export function CommitRow({
   };
 
   const row = (
-    <button
-      type="button"
+    <CommitRowView
+      commit={commit}
+      age={<RelativeDate date={commit.date} />}
       onClick={onClick}
-      title="View this commit's diff"
-      className="-mx-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-accent/60 focus-visible:outline-2 focus-visible:outline-ring"
-    >
-      <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
-        <div className="w-full truncate text-sm">{commit.subject}</div>
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          <span className="font-mono">{commit.hash}</span>
-          <span aria-hidden className="text-muted-foreground/40">
-            ·
-          </span>
-          <span>{commit.author}</span>
-          <span aria-hidden className="text-muted-foreground/40">
-            ·
-          </span>
-          <RelativeDate date={commit.date} />
-        </div>
-      </div>
-      {(commit.additions > 0 || commit.deletions > 0) && (
-        <DiffStats additions={commit.additions} deletions={commit.deletions} />
-      )}
-      <ChevronRight
-        aria-hidden
-        className="size-3.5 shrink-0 text-muted-foreground/40"
-      />
-    </button>
+    />
   );
 
   // Rewriting is only offered for commits no remote has: HEAD can be

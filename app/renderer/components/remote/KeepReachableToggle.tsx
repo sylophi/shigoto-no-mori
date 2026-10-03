@@ -6,11 +6,11 @@
 // ("applies to this machine only") when the control floats free.
 //
 // Written immediately through the client store, never staged in a form:
-// flipping it is the whole action.
+// flipping it is the whole action. KeepReachableToggleView draws it.
 import { keepReachableOn } from "@shared/schemas/config";
-import { ToggleRow } from "@/components/shared/ToggleRow";
 import { useClientConfig } from "@/hooks/config/useClientConfig";
 import { useKeepReachableUpdate } from "@/hooks/config/useKeepReachableUpdate";
+import { KeepReachableToggleView } from "./KeepReachableToggleView";
 
 // Launch-at-login via setLoginItemSettings only takes on macOS and
 // Windows. It is a no-op on Linux in Electron. The crash-recovery half
@@ -23,19 +23,12 @@ const launchAtLoginSupported =
 export function KeepReachableToggle() {
   const { data: clientConfig } = useClientConfig();
   const keepReachableUpdate = useKeepReachableUpdate();
-  const keepReachable = keepReachableOn(clientConfig ?? {});
-
   return (
-    <ToggleRow
-      checked={keepReachable}
-      onCheckedChange={(next) => keepReachableUpdate.mutate(next)}
-      disabled={keepReachableUpdate.isPending}
-      label="Keep this device reachable"
-      description={
-        launchAtLoginSupported
-          ? "Starts Shigoto no Mori when you log in and relaunches it after a recoverable crash, so this machine stays available to your account."
-          : "Relaunches Shigoto no Mori after a recoverable crash so this machine stays available to your account. Starting automatically at login isn't supported on this platform."
-      }
+    <KeepReachableToggleView
+      checked={keepReachableOn(clientConfig ?? {})}
+      pending={keepReachableUpdate.isPending}
+      launchAtLoginSupported={launchAtLoginSupported}
+      onChange={(next) => keepReachableUpdate.mutate(next)}
     />
   );
 }

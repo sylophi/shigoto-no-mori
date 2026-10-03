@@ -3,10 +3,9 @@
 // screen as the project's preset, so the next pull of the repo, on any
 // device, opens on it. The row stays out of the way while the two
 // agree.
-import { Bookmark } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import type { PullChoiceState } from "./ignoreChoice";
 import { browseWorktree, LeaveOutPicker } from "./LeaveOutPicker";
+import { SaveAsPresetButton } from "./LeaveOutPickerView";
 
 export function PullLeaveOut({
   pull,
@@ -23,17 +22,7 @@ export function PullLeaveOut({
       ignored={pull.ignored}
       browse={browseWorktree(worktree)}
     >
-      {pull.presetDiffers && (
-        <Button
-          variant="ghost"
-          size="sm"
-          title="Start from this rule whenever you mirror or transplant this project's worktrees, on any device. You can change it under Configure."
-          onClick={pull.saveAsPreset}
-        >
-          <Bookmark />
-          Save as project default
-        </Button>
-      )}
+      {pull.presetDiffers && <SaveAsPresetButton onClick={pull.saveAsPreset} />}
     </LeaveOutPicker>
   );
 }

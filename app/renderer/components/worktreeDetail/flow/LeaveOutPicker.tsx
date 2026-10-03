@@ -9,17 +9,10 @@
 // is the caller's: one worktree under the surrounding scope for a pull
 // (the source's copy in the dialog, the local copy on the mirror's own
 // page), since only what the source holds can cross, and the repo as
-// every device holds it for the project's preset.
+// every device holds it for the project's preset. The section's look
+// is LeaveOutPickerView.tsx.
 import { useState } from "react";
-import { Plus, X } from "lucide-react";
-import type { UseQueryResult } from "@tanstack/react-query";
-import { normalizeRelPath } from "@shared/git/gitPaths";
-import {
-  BRING_PATHS_LIMIT,
-  bringRulesRoom,
-  MIRROR_IGNORES_LIMIT,
-} from "@shared/ipc/modules/mirror";
-import type { SyncIgnoredPathsResult } from "@shared/ipc/modules/sync";
+import { BRING_PATHS_LIMIT } from "@shared/ipc/modules/mirror";
 import {
   PathPickerModal,
   type PathPickerModalProps,
@@ -27,25 +20,14 @@ import {
 import type { PickerEntry } from "@/components/shared/PickerRow";
 import { Button } from "@/components/ui/button";
 import { MaterialIcon } from "@/components/ui/material-icon";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { SegmentedControl } from "@/components/ui/segmented-control";
 import { useWorktreeFolder } from "@/hooks/remote/useWorktreeFolder";
-import { withToggled } from "@/lib/toggleSet";
-import { cn } from "@/lib/utils";
-import { CARD, CARD_NOTE, CardSkeleton } from "./FlowChrome";
+import { IGNORE_BASE_COPY } from "./ignoreBaseCopy";
+import { withExceptionToggled } from "@shared/leaveOutRule";
+import { exceptionsOf, type IgnoreSelection } from "./ignoreChoice";
 import {
-  exceptionsOf,
-  IGNORE_BASE_COPY,
-  type IgnoreBase,
-  type IgnoreSelection,
-} from "./ignoreChoice";
-import { IconButton } from "@/components/ui/icon-button";
-
-const OPTIONS = (Object.keys(IGNORE_BASE_COPY) as IgnoreBase[]).map((base) => ({
-  value: base,
-  label: IGNORE_BASE_COPY[base].label,
-  title: IGNORE_BASE_COPY[base].title,
-}));
+  type IgnoredPathsState,
+  LeaveOutPickerView,
+} from "./LeaveOutPickerView";
 
 // What the picker browses: the folder browser's own props, less the
 // row control and the close, which are the picker's.
@@ -68,6 +50,11 @@ export function browseWorktree(worktree: {
   };
 }
 
+// A chosen path's icon, the file browser's own.
+function fileIcon(name: string) {
+  return <MaterialIcon kind="file" name={name} className="size-4" />;
+}
+
 export function LeaveOutPicker<E extends PickerEntry>({
   value,
   onChange,
@@ -79,10 +66,7 @@ export function LeaveOutPicker<E extends PickerEntry>({
 }: {
   value: IgnoreSelection;
   onChange: (next: IgnoreSelection) => void;
-  ignored: Pick<
-    UseQueryResult<SyncIgnoredPathsResult>,
-    "data" | "isPending" | "isError"
-  >;
+  ignored: IgnoredPathsState;
   // What the custom picker browses.
   browse: LeaveOutBrowse<E>;
   // Read-only: the rule shows, nothing changes it.
@@ -99,58 +83,20 @@ export function LeaveOutPicker<E extends PickerEntry>({
   const [picking, setPicking] = useState(false);
   const bringing = value.base === "gitignored";
   const excepted = exceptionsOf(value);
-  const toggle = (path: string) =>
-    onChange({
-      ...value,
-      [bringing ? "brought" : "leftOut"]: withToggled(path)(new Set(excepted)),
-    });
-  const chosen = [...excepted].toSorted();
+  const toggle = (path: string) => onChange(withExceptionToggled(value, path));
   const copy = IGNORE_BASE_COPY[value.base];
   // Each brought path costs the gitignore rules two patterns of room.
   const full = bringing && excepted.size >= BRING_PATHS_LIMIT;
   return (
-    <section className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <SectionHeading>Leave out</SectionHeading>
-        <SegmentedControl
-          aria-label="What the mirror leaves out"
-          value={value.base}
-          onChange={(base) => onChange({ ...value, base })}
-          disabled={disabled}
-          options={OPTIONS}
-          optionClassName="px-2.5 py-0.5 text-2xs"
-        />
-      </div>
-      {note !== undefined && (
-        <p className="text-xs text-muted-foreground">{note}</p>
-      )}
-      {bringing && <IgnoredList ignored={ignored} brought={excepted} />}
-      {(chosen.length > 0 || !disabled) && (
-        <div className="space-y-1.5">
-          {chosen.length > 0 && (
-            <p className="text-xs text-muted-foreground">{copy.lead}</p>
-          )}
-          {chosen.map((path) => (
-            <ChosenRow
-              key={path}
-              path={path}
-              disabled={disabled}
-              onRemove={() => toggle(path)}
-            />
-          ))}
-          {!disabled && (
-            <Button
-              variant="ghost"
-              size="sm"
-              title={copy.hint}
-              onClick={() => setPicking(true)}
-            >
-              <Plus />
-              {copy.add}
-            </Button>
-          )}
-        </div>
-      )}
+    <LeaveOutPickerView
+      value={value}
+      onChange={onChange}
+      ignored={ignored}
+      disabled={disabled}
+      note={note}
+      fileIcon={fileIcon}
+      onAdd={() => setPicking(true)}
+    >
       {children}
       {picking && (
         <PathPickerModal
@@ -170,7 +116,7 @@ export function LeaveOutPicker<E extends PickerEntry>({
           onClose={() => setPicking(false)}
         />
       )}
-    </section>
+    </LeaveOutPickerView>
   );
 }
 
@@ -230,112 +176,6 @@ function Trailing({
       <Button type="button" variant="outline" size="xs" onClick={onPick}>
         {copy.action}
       </Button>
-    </div>
-  );
-}
-
-// What git ignores on the worktree today, the list the gitignored
-// rule leaves out, less the paths brought anyway. A brought path is a
-// topmost ignored entry, so it is one line of git's list (a folder's
-// ends in a slash) whether or not it made the capped page.
-function IgnoredList({
-  ignored,
-  brought,
-}: {
-  ignored: Pick<
-    UseQueryResult<SyncIgnoredPathsResult>,
-    "data" | "isPending" | "isError"
-  >;
-  brought: ReadonlySet<string>;
-}) {
-  if (ignored.isPending) return <CardSkeleton />;
-  if (ignored.isError) {
-    return <p className={CARD_NOTE}>Couldn't list the ignored files.</p>;
-  }
-  const listed = ignored.data?.paths ?? [];
-  const paths = listed.filter((path) => !brought.has(normalizeRelPath(path)));
-  // How many of the brought paths are ignored here. A path picked in
-  // this worktree always is, but a project preset's may not be, so
-  // they are counted off the list while it is whole. Past the cap the
-  // list cannot say, and every brought path is taken to be one.
-  const allListed = (ignored.data?.total ?? 0) <= listed.length;
-  const broughtHere = allListed ? listed.length - paths.length : brought.size;
-  const total = Math.max(0, (ignored.data?.total ?? 0) - broughtHere);
-  const rules = ignored.data?.patterns.length ?? 0;
-  // The rules that fit: all the cap holds, less what the brought paths
-  // take. At the cap itself the wire may have cut the list already.
-  const room = bringRulesRoom(brought.size);
-  const cut = brought.size > 0 ? rules > room : rules >= MIRROR_IGNORES_LIMIT;
-  // Every path the wire carries, flowed into as many columns as the
-  // card fits: the rule is judged by seeing what it covers. A column
-  // is as wide as the longest path, so short names pack side by side,
-  // up to a cap: one deep path truncates instead of costing every
-  // other row its columns.
-  const longest = Math.min(
-    28,
-    Math.max(12, ...paths.map((path) => path.length)),
-  );
-  return (
-    <>
-      {total === 0 ? (
-        <p className={CARD_NOTE}>
-          {broughtHere > 0
-            ? "Every ignored path is being brought."
-            : "No ignored files here yet."}
-        </p>
-      ) : (
-        <ul
-          className={cn(CARD, "gap-x-4 font-mono text-xs")}
-          style={{ columnWidth: `${longest}ch` }}
-        >
-          {paths.map((path) => (
-            <li key={path} className="truncate py-0.5" title={path}>
-              {path}
-            </li>
-          ))}
-          {total > paths.length && (
-            <li className="py-0.5 text-muted-foreground [column-span:all]">
-              and {total - paths.length} more
-            </li>
-          )}
-        </ul>
-      )}
-      {cut && (
-        <p className="text-xs text-muted-foreground">
-          Only the first {Math.min(room, MIRROR_IGNORES_LIMIT)} gitignore rules
-          apply.
-        </p>
-      )}
-    </>
-  );
-}
-
-// A chosen path, the carry-over row's shape without the mode.
-function ChosenRow({
-  path,
-  disabled,
-  onRemove,
-}: {
-  path: string;
-  disabled: boolean;
-  onRemove: () => void;
-}) {
-  const basename = path.split("/").pop() ?? path;
-  return (
-    <div className="flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5">
-      <MaterialIcon kind="file" name={basename} className="size-4" />
-      <span className="min-w-0 flex-1 truncate font-mono text-xs" title={path}>
-        {path}
-      </span>
-      {!disabled && (
-        <IconButton
-          onClick={onRemove}
-          aria-label={`Remove ${path}`}
-          tone="destructive"
-        >
-          <X className="size-3.5" />
-        </IconButton>
-      )}
     </div>
   );
 }

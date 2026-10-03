@@ -1,10 +1,9 @@
-import { ChevronRight, Play, Square } from "lucide-react";
 import { useScriptRunner } from "@/hooks/scripts/useScriptRunner";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
-import { cn } from "@/lib/utils";
 import type { ScriptSlot } from "@/store/scriptRuns";
 import type { Worktree } from "@shared/schemas";
 import { ScriptStatusBadge } from "@/components/shared/ScriptStatusBadge";
+import { ScriptRowView } from "./ScriptRowView";
 
 interface ScriptRowProps {
   worktree: Worktree;
@@ -25,51 +24,16 @@ export function ScriptRow({ worktree, slot, label, command }: ScriptRowProps) {
   // right-side "view output" affordance only appears once a run lands.
   const hasHistory = state.status !== "idle";
 
-  const openConsole = () => toScript(worktree.projectId, worktree.id, slot);
-
-  const actionLabel = busy ? `Stop ${label}` : `Run ${label}`;
-
   return (
-    <div className={cn("flex items-stretch text-xs")}>
-      <button
-        type="button"
-        onClick={busy ? stop : start}
-        disabled={state.cancelling || !canRun}
-        aria-label={actionLabel}
-        title={
-          disabledReason ??
-          (command ? `${actionLabel}\n${command}` : actionLabel)
-        }
-        className={cn(
-          "flex min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-          busy ? "text-destructive hover:bg-destructive/10" : "hover:bg-accent",
-        )}
-      >
-        {busy ? (
-          <Square aria-hidden className="size-3 shrink-0" />
-        ) : (
-          <Play aria-hidden className="size-3 shrink-0 text-muted-foreground" />
-        )}
-        <span className="min-w-0 flex-1 truncate font-mono">{label}</span>
-      </button>
-
-      {/* Capped at half the row so a long status (a failed run's exit
-          code and age) in a narrow grid column truncates instead of
-          squeezing the script's name out. */}
-      {hasHistory && (
-        <button
-          type="button"
-          onClick={openConsole}
-          aria-label={`View ${label} output`}
-          title="View output"
-          className="flex max-w-1/2 min-w-0 items-center gap-2 border-l border-border px-2.5 py-1.5 text-muted-foreground/60 transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <span className="min-w-0 truncate">
-            <ScriptStatusBadge state={state} />
-          </span>
-          <ChevronRight aria-hidden className="size-3 shrink-0" />
-        </button>
-      )}
-    </div>
+    <ScriptRowView
+      label={label}
+      command={command}
+      busy={busy}
+      disabled={state.cancelling || !canRun}
+      disabledReason={disabledReason}
+      status={hasHistory ? <ScriptStatusBadge state={state} /> : null}
+      onToggle={busy ? stop : start}
+      onOpenConsole={() => toScript(worktree.projectId, worktree.id, slot)}
+    />
   );
 }

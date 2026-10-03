@@ -1,8 +1,6 @@
 import { useRef, useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { pluralize } from "@/lib/pluralize";
-import { cn } from "@/lib/utils";
 import type { Project } from "@shared/schemas";
 import { DeviceBadgeCluster, type SidebarDeviceBadge } from "./DeviceBadge";
 import {
@@ -11,6 +9,7 @@ import {
   type GroupMember,
 } from "./ProjectGroupActions";
 import { ProjectHeader } from "./ProjectHeader";
+import { ProjectRowView } from "./ProjectRowView";
 import type { RemoteProjectMember } from "./sidebarRow";
 
 interface ProjectRowProps {
@@ -100,29 +99,23 @@ export function ProjectRow({
   };
 
   return (
-    <div
-      ref={setNodeRef}
-      style={sortableStyle}
-      className={cn("relative rounded-md", isDragging && "opacity-0")}
-      // The sortable's marks belong to arranging alone. Outside it the
-      // sortable is off, and its aria-disabled would put the
-      // not-allowed cursor (index.css) on a row that is only a title,
-      // and a tab stop on a wrapper with nothing to do.
-      {...(arrangeMode ? attributes : undefined)}
-    >
-      <div
-        // A row of the list is picked as one pill, though the click
-        // target is the name's button beside the row's own actions:
-        // the slot has doubutsu stripe the row rather than a band of it.
-        data-slot={pickable ? "sidebar-project-row" : undefined}
-        className={cn(
-          "group/project relative flex items-center gap-0.5 rounded-md py-0.5 transition-colors",
-          // It fills like the worktree rows it leads to: under the
-          // pointer, and for the project the page on screen belongs
-          // to, which is where the list was left from.
-          pickable && (current ? "bg-accent" : "hover:bg-accent/60"),
-        )}
-      >
+    <ProjectRowView
+      sortable={{
+        ref: setNodeRef,
+        style: sortableStyle,
+        // The sortable's marks belong to arranging alone. Outside it the
+        // sortable is off, and its aria-disabled would put the
+        // not-allowed cursor (index.css) on a row that is only a title,
+        // and a tab stop on a wrapper with nothing to do.
+        attributes: arrangeMode ? attributes : undefined,
+        isDragging,
+      }}
+      pickable={pickable}
+      current={current}
+      branches={branches}
+      isHovered={isHovered}
+      arrangeMode={arrangeMode}
+      header={
         <ProjectHeader
           project={project}
           iconFrom={
@@ -142,40 +135,19 @@ export function ProjectRow({
           arrangeMode={arrangeMode}
           reorderable={reorderable}
         />
-        {!arrangeMode &&
-          branches !== undefined &&
-          branches > 0 && (
-            // On the list a project says how much work it holds. The number
-            // sits where the `+` and `…` come up and gives way to them,
-            // so the line has one right edge. A phone shows the actions
-            // at rest, so there it takes a place of its own before them.
-            <span
-              aria-label={pluralize(branches, "worktree")}
-              title={pluralize(branches, "worktree")}
-              className={cn(
-                "pointer-events-none absolute right-2 text-3xs text-muted-foreground tabular-nums transition-opacity phone:static phone:px-1",
-                // The actions also come up for an open menu and for
-                // keyboard focus, with no hover to go by.
-                "group-has-[[data-icon-button]:focus-visible]/project:opacity-0 group-has-[[data-icon-button][aria-expanded=true]]/project:opacity-0",
-                isHovered && "opacity-0 phone:opacity-100",
-              )}
-            >
-              {branches}
-            </span>
-          )}
-        {!arrangeMode && (
-          <ProjectGroupActions
-            name={project.name}
-            identity={project.identity}
-            members={group}
-            // The open project's row is the tree's title, and wears
-            // its actions at rest.
-            isHovered={isHovered || expanded}
-            triggerRef={triggerRef}
-          />
-        )}
-      </div>
-    </div>
+      }
+      actions={
+        <ProjectGroupActions
+          name={project.name}
+          identity={project.identity}
+          members={group}
+          // The open project's row is the tree's title, and wears
+          // its actions at rest.
+          isHovered={isHovered || expanded}
+          triggerRef={triggerRef}
+        />
+      }
+    />
   );
 }
 
