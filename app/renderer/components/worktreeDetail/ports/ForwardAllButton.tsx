@@ -12,6 +12,7 @@ import type { ReactNode } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Loader2, Power, PowerOff } from "lucide-react";
 import { errorMessageOf } from "@shared/errors";
+import type { PortForwardWorktree } from "@shared/ipc/modules/portForward";
 import { isCommandRefusedError } from "@shared/ipc/socket/frames";
 import type { WorktreePort } from "@shared/schemas";
 import { Button } from "@/components/ui/button";
@@ -35,10 +36,12 @@ const MODE_FACE: Record<Mode, { icon: ReactNode; label: string }> = {
 
 export function ForwardAllButton({
   deviceId,
+  worktree,
   ports,
   granted,
 }: {
   deviceId: string;
+  worktree: PortForwardWorktree;
   ports: readonly WorktreePort[];
   granted: boolean;
 }) {
@@ -64,7 +67,11 @@ export function ForwardAllButton({
           };
           try {
             // oxlint-disable-next-line no-await-in-loop -- one probe channel at a time, in list order (see the header).
-            await window.api.portForward.start({ deviceId, ...target });
+            await window.api.portForward.start({
+              deviceId,
+              worktree,
+              ...target,
+            });
           } catch (error) {
             // A refusal already surfaces centrally.
             if (!isCommandRefusedError(error)) {

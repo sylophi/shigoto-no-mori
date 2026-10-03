@@ -1291,6 +1291,7 @@ export function installLabBridge(
         remotePort: 5173,
         localPort: 5173,
         connCount: 2,
+        worktree: { projectId: "tp_sm", worktreeId: "a1b2c3d4e5f6" },
       },
     ],
   ]);
@@ -1381,7 +1382,12 @@ export function installLabBridge(
     "shell:showItemInFolder": () => undefined,
     "releases:list": () => labReleases,
     "portForward:list": () => ({ forwards: [...forwards.values()] }),
-    "portForward:start": async ({ deviceId, remotePort, localPort }) => {
+    "portForward:start": async ({
+      deviceId,
+      remotePort,
+      localPort,
+      worktree,
+    }) => {
       await sleep(500);
       const bound = localPort ?? remotePort;
       // One local port posed as taken, so the inline bind error can be
@@ -1392,14 +1398,20 @@ export function installLabBridge(
         );
       }
       // The engine's rule: one forward per (device, remote port), and a
-      // start naming another local port moves it.
+      // start naming another local port moves it. Either way the
+      // worktree asking claims it.
+      let claimed = worktree;
       for (const [id, forward] of forwards) {
         if (
           forward.deviceId === deviceId &&
           forward.remotePort === remotePort
         ) {
-          if (forward.localPort === bound)
+          claimed ??= forward.worktree;
+          if (forward.localPort === bound) {
+            forward.worktree = claimed;
+            client.emit("portForward:changed", undefined);
             return { forwardId: id, localPort: bound };
+          }
           forwards.delete(id);
         }
       }
@@ -1410,6 +1422,7 @@ export function installLabBridge(
         remotePort,
         localPort: bound,
         connCount: 0,
+        worktree: claimed,
       });
       client.emit("portForward:changed", undefined);
       return { forwardId, localPort: bound };
