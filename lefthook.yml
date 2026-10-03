@@ -37,6 +37,9 @@ pre-commit:
             run: pnpm -C app test host-boundary
           - name: dmg-art
             run: pnpm -C app test dmg-art
+          - name: shell-env
+            glob: "{app/main/core/shellEnv.ts,app/test/shell-env.mts,app/test/lib/checkKit.mts}"
+            run: pnpm -C app test shell-env
           # Glob-gated: the identity test costs ~140 git spawns, so it should
           # not run on unrelated commits. It holds the CLI's identity (the
           # project rows' `identity`) to the same fixtures, so cli/ gates it
