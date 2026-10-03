@@ -1,6 +1,6 @@
-// PATH probe for a CLI. The main process patches PATH from the login
-// shell profile at startup (shellPath.ts), so anything installed for the
-// user's terminal is found here too.
+// PATH probe for a CLI. The main process takes PATH from the login
+// shell profile at startup (main/core/shellEnv.ts), so anything installed
+// for the user's terminal is found here too.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
