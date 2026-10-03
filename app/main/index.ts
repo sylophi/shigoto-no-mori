@@ -70,7 +70,7 @@ import { reapScriptsForRemovedWorktrees } from "@host/lib/scripts/removedWorktre
 import { dataDir, dataDirPointerRead, initDataDir } from "@host/lib/util/paths";
 import { repairCliLinks } from "./electron/cliInstall";
 import { killAllCli, cliChildCount } from "./electron/cliRunner";
-import { applyUserShellPath } from "./core/shellPath";
+import { applyUserShellEnv } from "./core/shellEnv";
 import { startStateWatcher } from "./electron/stateWatcher";
 import {
   gitDirOf,
@@ -152,6 +152,20 @@ if (!app.requestSingleInstanceLock()) {
   app.exit(0);
 }
 
+// A packaged launch starts from its launcher's environment, Finder's
+// stripped one or a terminal's (or an agent's) whole one: rebuild it
+// from the login shell, see core/shellEnv.ts. Started here, after the
+// lock (a losing second instance must not run the user's startup
+// files for nothing) and before Chromium's own startup, which the
+// shell then runs alongside. Awaited before anything spawns on the
+// user's behalf (the mirror daemon below, the ready handler). A dev
+// launch starts from the developer's terminal and keeps it. macOS
+// only: the base it rebuilds from is launchd's.
+const shellEnvReady =
+  app.isPackaged && platform() === "darwin"
+    ? applyUserShellEnv()
+    : Promise.resolve();
+
 // The macOS keychain policy. Only a Developer-ID-signed packaged
 // build gets the real keychain, after making sure the Safe Storage
 // item is its own. Every other flavor (the ad-hoc per-worktree dev
@@ -191,8 +205,9 @@ registerIpcHandlers();
 // The mirror daemon resumes persisted sessions the moment it is up, so
 // it starts with the app rather than with the first mirror the user
 // asks for. A gateway that fails to bind is retried inside. Nothing
-// here is fatal, the app works without mirroring.
-void startMirrorEngine().catch((error: unknown) => {
+// here is fatal, the app works without mirroring. After the
+// environment rebuild: the daemon it spawns inherits process.env.
+void shellEnvReady.then(startMirrorEngine).catch((error: unknown) => {
   console.warn("[mirror] engine failed to start:", errorMessageOf(error));
 });
 
@@ -395,9 +410,8 @@ app.on("ready", async () => {
           ),
         },
   );
-  // Packaged launches inherit launchd's stripped PATH; dev launches start
-  // from the user's terminal and already have the right one.
-  if (app.isPackaged) await applyUserShellPath();
+  // The rebuilt environment (module top), before the first spawn.
+  await shellEnvReady;
   try {
     await ensureDataDir();
     deviceId = getDeviceId();
@@ -537,8 +551,8 @@ app.on("ready", async () => {
   onHostMutationSettled(reconcileGitWatchers);
   // Installing the CLI link is a Settings action; launch only repairs
   // an already-installed link whose target moved (app update, other
-  // checkout). After applyUserShellPath so PATH checks see the login
-  // shell's PATH.
+  // checkout). After the environment rebuild so PATH checks see the
+  // login shell's PATH.
   void repairCliLinks();
 });
 

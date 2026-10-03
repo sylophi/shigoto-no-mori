@@ -10,9 +10,14 @@ import (
 
 // Launch (or activate) the installed app by bundle id, so a renamed or
 // moved bundle still resolves. (The update installer relaunches by
-// path instead. See cmdUpdateFinishInstall.)
+// path instead. See cmdUpdateFinishInstall.) `open` hands a cold
+// launch our whole environment. The app rebuilds its own at startup
+// (app/main/core/shellEnv.ts), and the shell wrapper's cd-directive
+// file stays out of it here like it does for every launcher.
 func openAppBundle() error {
-	if err := exec.Command("open", "-b", appBundleID).Run(); err != nil {
+	cmd := exec.Command("open", "-b", appBundleID)
+	cmd.Env = envWithoutCdFile()
+	if err := cmd.Run(); err != nil {
 		return errf("Couldn't open Shigoto no Mori. Is the app installed?")
 	}
 	return nil

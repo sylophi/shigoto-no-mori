@@ -10,13 +10,13 @@
 // Finder-launched app inherits launchd's environment, where $SHELL is
 // unreliable, so os.userInfo() reads the user database instead.
 import { execFile } from "node:child_process";
-import { userInfo } from "node:os";
 import { promisify } from "node:util";
 import type {
   ShellHookState,
   ShellIntegrationStatus,
 } from "@shared/ipc/modules/cli";
 import { ShellHookStateSchema } from "@shared/ipc/modules/cli";
+import { CAPTURE_TIMEOUT_MS, loginShell } from "../core/shellEnv";
 import { cliFailureMessage, runCli } from "./cliRunner";
 
 const execFileP = promisify(execFile);
@@ -25,15 +25,18 @@ const execFileP = promisify(execFile);
 // a Finder-launched app doesn't have (launchd sources no shell
 // profile). Without them the hook could land in a file the user's
 // shell never reads while Settings reports success. Capture them from
-// the user's login shell once (the applyUserShellPath trick) and
-// overlay them onto every shell-subcommand spawn, so the app targets
-// the same file a terminal-run `sm shell install` would.
+// the user's login shell once and overlay them onto every
+// shell-subcommand spawn, so the app targets the same file a
+// terminal-run `sm shell install` would. Its own probe rather than the
+// startup rebuild's (main/core/shellEnv.ts): that one sees exports
+// only, and a ZDOTDIR a .zshenv sets without exporting still names
+// the rc file.
 const SENTINEL = "__SHIGOMORI_HOOK_ENV__";
 let hookEnvPromise: Promise<Record<string, string>> | null = null;
 
 async function captureHookPathEnv(): Promise<Record<string, string>> {
-  const shell = userInfo().shell ?? process.env.SHELL ?? "";
-  if (shell === "") return {};
+  const shell = loginShell(process.env);
+  if (shell === null) return {};
   try {
     const { stdout } = await execFileP(
       shell,
@@ -41,7 +44,7 @@ async function captureHookPathEnv(): Promise<Record<string, string>> {
         "-ilc",
         `printf '%s%s\x1f%s' '${SENTINEL}' "$ZDOTDIR" "$XDG_CONFIG_HOME"`,
       ],
-      { timeout: 5000, maxBuffer: 1024 * 1024 },
+      { timeout: CAPTURE_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
     );
     const idx = stdout.lastIndexOf(SENTINEL);
     if (idx < 0) return {};
@@ -68,14 +71,7 @@ function runShellCli(
 }
 
 function loginShellBase(): string | null {
-  let shell = "";
-  try {
-    shell = userInfo().shell ?? "";
-  } catch {
-    // Fall through to $SHELL.
-  }
-  if (shell === "") shell = process.env.SHELL ?? "";
-  const base = shell.split("/").pop() ?? "";
+  const base = loginShell(process.env)?.split("/").pop() ?? "";
   return base === "" ? null : base;
 }
 
@@ -92,9 +88,9 @@ function shellsFromDocs(docs: { [key: string]: unknown }[]): ShellHookState[] {
 // shell is "supported" iff it appears there.
 function statusFrom(shells: ShellHookState[]): ShellIntegrationStatus {
   const base = loginShellBase();
-  const loginShell =
+  const supported =
     base !== null && shells.some((s) => s.shell === base) ? base : null;
-  return { loginShell, shells };
+  return { loginShell: supported, shells };
 }
 
 // The status a shell subcommand answers with, or the failure it names.
