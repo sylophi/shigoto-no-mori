@@ -33,11 +33,10 @@ const VILLAGE_TOASTER = "village";
 //
 // News goes at a click anywhere on it, or Enter on it focused, the way
 // a villager's line goes at a press of A, so it wears no close button,
-// only the arrow a finished line waits on (NextArrow). A click that
-// ended a drag selecting some of its words keeps it up. It goes on the
-// first click, so its words are selected by dragging, not by
-// double-clicking. Each news toast carries its id as its test id, since
-// sonner puts no other on the card.
+// only the arrow a finished line waits on (NextArrow). Its words can't
+// be selected, unlike the everyday toasts', so a click meant to send it
+// off never lands in a selection instead. Each news toast carries its
+// id as its test id, since sonner puts no other on the card.
 export function VillageToaster({
   classNames,
 }: {
@@ -62,7 +61,14 @@ export function VillageToaster({
         hotkey={["altKey", "shiftKey", "KeyT"]}
         position="top-right"
         offset={{ top: 40, right: 16 }}
-        toastOptions={{ className: "cursor-pointer", classNames }}
+        toastOptions={{
+          className: "cursor-pointer",
+          classNames: {
+            ...classNames,
+            title: cn(classNames.title, "!select-none"),
+            description: cn(classNames.description, "!select-none"),
+          },
+        }}
       />
     </div>
   );
@@ -72,19 +78,7 @@ function dismissCard(target: EventTarget): void {
   if (!(target instanceof Element)) return;
   const card = target.closest("[data-sonner-toast]");
   const id = card?.getAttribute("data-testid");
-  if (!card || !id) return;
-  // A click inside selected words clears them only once it's done, so
-  // the selection is read a task later. A drag's selection is still up.
-  setTimeout(() => {
-    const selection = window.getSelection();
-    if (
-      selection?.isCollapsed === false &&
-      card.contains(selection.anchorNode)
-    ) {
-      return;
-    }
-    toast.dismiss(id);
-  });
+  if (id) toast.dismiss(id);
 }
 
 // A success about one worktree, which its villager says when it has one
