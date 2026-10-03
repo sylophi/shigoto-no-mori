@@ -124,7 +124,10 @@ export function toastVillagerMove(
     id,
     toasterId: VILLAGE_TOASTER,
     testId: id,
-    duration: MOVE_TOAST_MS[news.rarity],
+    // sonner starts a toast's time over only when its duration changes,
+    // a hover having paused it or not, so news that grows lasts a
+    // millisecond longer for each worktree in it.
+    duration: MOVE_TOAST_MS[news.rarity] + news.worktreeIds.length,
     onDismiss: onClose,
     onAutoClose: onClose,
   };
