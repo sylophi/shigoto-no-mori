@@ -1,38 +1,60 @@
-// Each sidebar row drawn from its SidebarRow alone, for a picture of
-// the sidebar (lab/scenes). The live rows (RowContent) look their state
-// up for themselves and act. Here everything a row looks up comes in
-// as SidebarRowLookups, and nothing acts.
-import { Skeleton } from "@/components/ui/skeleton";
-import { assertNever } from "@/lib/utils";
-import type { Project, Worktree } from "@shared/schemas";
-import { DeviceBadgeClusterView } from "./DeviceBadgeView";
-import { InboxRowView } from "./inbox/InboxRowView";
-import { InboxShelfRow } from "./inbox/InboxShelfRow";
+// The sidebar's rows drawn from their SidebarRow alone, as a plain
+// stacked list, for LabSidebar. The live list (SidebarList) virtualizes
+// the same rows in the same wrappers (VirtualRow), and its rows
+// (RowContent) look their state up for themselves and act. Here
+// everything a row looks up comes in as SidebarRowLookups, and nothing
+// acts.
+import { DeviceBadgeClusterView } from "@/components/sidebar/DeviceBadgeView";
+import { InboxRowView } from "@/components/sidebar/inbox/InboxRowView";
+import { InboxShelfRow } from "@/components/sidebar/inbox/InboxShelfRow";
 import {
   ProjectGroupActionsView,
   quickCreateLabel,
-} from "./ProjectGroupActionsView";
-import { ProjectHeaderView } from "./ProjectHeaderView";
-import { ProjectRowView } from "./ProjectRowView";
-import type { WorktreeRowLook } from "./rowState";
-import { ShelvedToggleRow } from "./ShelvedToggleRow";
-import type { SidebarRow } from "./sidebarRow";
-import { WorktreeRowView } from "./WorktreeRowView";
+} from "@/components/sidebar/ProjectGroupActionsView";
+import { ProjectHeaderView } from "@/components/sidebar/ProjectHeaderView";
+import { ProjectRowView } from "@/components/sidebar/ProjectRowView";
+import type { WorktreeRowLook } from "@/components/sidebar/rowState";
+import { ShelvedToggleRow } from "@/components/sidebar/ShelvedToggleRow";
+import {
+  WorktreeErrorRow,
+  WorktreeSkeletonRow,
+} from "@/components/sidebar/SidebarFrameView";
+import { ROW_LAYOUT, type SidebarRow } from "@/components/sidebar/sidebarRow";
+import { WorktreeRowView } from "@/components/sidebar/WorktreeRowView";
+import { assertNever, cn } from "@/lib/utils";
+import type { Project, Worktree } from "@shared/schemas";
 
-// A project's worktrees while their listing loads, and when it failed.
-export function WorktreeSkeletonRow() {
-  return (
-    <div className="space-y-1 px-2 py-1.5" aria-label="Loading worktrees">
-      <Skeleton className="h-4 w-32" />
-      <Skeleton className="h-4 w-24" />
-    </div>
-  );
-}
+// Stacked in order, each in the wrapper a virtual row wears (its slot
+// and ROW_LAYOUT), so the rows sit where the live list puts them. A
+// column of flex items, so a row's top margin (a shelf's) stays inside
+// its wrapper as it does in the live list's absolutely placed ones.
+// The virtualizer steps each row down by the whole-pixel height it
+// measured the one above at, so a row of fractional height (the
+// phone's) overhangs the next by the fraction. Each row sits in a box
+// rounded the same way, where the browser can (calc-size), and keeps
+// its own height inside it.
+const ROW_STEP = { height: "calc-size(auto, round(size, 1px))" };
 
-export function WorktreeErrorRow() {
+export function SidebarRows({
+  rows,
+  lookups,
+}: {
+  rows: readonly SidebarRow[];
+  lookups: SidebarRowLookups;
+}) {
   return (
-    <div className="px-2 py-1 text-xs text-muted-foreground">
-      Couldn't load worktrees.
+    <div className="relative flex flex-col">
+      {rows.map((row, index) => (
+        <div key={row.key} className="min-h-0" style={ROW_STEP}>
+          <div
+            data-index={index}
+            data-slot="sidebar-row"
+            className={cn("w-full", ROW_LAYOUT[row.kind])}
+          >
+            <SidebarRowContent row={row} lookups={lookups} />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -51,16 +73,16 @@ export interface SidebarRowLookups {
   // A project's logo (ProjectIconView's `src`).
   iconSrcOf: (project: Project, deviceId: string | undefined) => string | null;
   // The ports this machine forwards from a peer's worktree.
-  forwardTipOf?: (worktree: Worktree, deviceId: string) => string | undefined;
+  forwardTipOf: (worktree: Worktree, deviceId: string) => string | undefined;
   // The group key of the project the page on screen belongs to.
-  currentGroupKey?: string;
+  currentGroupKey: string | undefined;
   // This machine's name, for a quick create that names its device.
-  localDeviceLabel?: string;
+  localDeviceLabel: string | undefined;
 }
 
 // One row, drawn at rest: nothing hovered, nothing being arranged, no
 // villager living in it.
-export function RowContentView({
+export function SidebarRowContent({
   row,
   lookups,
 }: {
@@ -73,7 +95,7 @@ export function RowContentView({
     forwardTip:
       deviceId === undefined
         ? undefined
-        : lookups.forwardTipOf?.(worktree, deviceId),
+        : lookups.forwardTipOf(worktree, deviceId),
     showDeviceBadges: lookups.showDeviceBadges,
   });
   switch (row.kind) {
@@ -83,11 +105,12 @@ export function RowContentView({
       const creatorLabel = row.local
         ? lookups.localDeviceLabel
         : row.members[0]?.deviceLabel;
+      const current = row.groupKey === lookups.currentGroupKey;
       const iconDevice = row.local ? undefined : row.members[0]?.deviceId;
       return (
         <ProjectRowView
           pickable={!row.expanded && !missing}
-          current={row.groupKey === lookups.currentGroupKey}
+          current={current}
           branches={row.branches}
           isHovered={false}
           arrangeMode={false}
@@ -104,7 +127,7 @@ export function RowContentView({
               showTerrierPaw={false}
               missing={missing}
               expanded={row.expanded}
-              current={row.groupKey === lookups.currentGroupKey}
+              current={current}
             />
           }
           actions={

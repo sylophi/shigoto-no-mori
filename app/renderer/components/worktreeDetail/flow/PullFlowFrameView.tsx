@@ -1,7 +1,7 @@
 // The pull dialogs' frame as a plain view (PullFlow.tsx walks it
 // through a run): the header in the stage's tint and words, the step
 // rail, and the stage's body under them. The shell around it is the
-// caller's, ModalShell live and ModalShellView in a scene.
+// caller's, ModalShell live and ModalShellBox in a scene.
 import type { ReactNode } from "react";
 import { Ban, Check, Loader2, X, type LucideIcon } from "lucide-react";
 import { TONE_PILL } from "@/components/ui/status-dot";

@@ -16,7 +16,7 @@ export interface CreateTarget<Api> {
 // that are still on disk, then those of every peer `apiOf` answers
 // for. A peer that is asleep or has not granted this device control is
 // left out, since its create would only be refused.
-export function createTargets<Api>(
+export function inboxCreateTargets<Api>(
   projects: readonly Project[],
   remote: readonly RemoteForestItem[],
   apiOf: (deviceId: string) => Api | undefined,

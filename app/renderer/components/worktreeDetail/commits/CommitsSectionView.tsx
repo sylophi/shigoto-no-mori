@@ -1,7 +1,7 @@
 // The Branch section as drawn (CommitsSection.tsx feeds it): the
 // heading with the uncommitted changes or the sync pill
-// (WorktreeSyncPillView) beside it, the newest commits, and under them the catch-up pill
-// (WorktreePrimarySyncPillView) and Show all.
+// (WorktreeSyncPillView) beside it, the newest commits, and under them
+// the catch-up pill (WorktreePrimarySyncPillView) and Show all.
 import type { ReactNode } from "react";
 import { ChevronRight, FileDiff, History } from "lucide-react";
 import { SectionHeading } from "@/components/ui/section-heading";

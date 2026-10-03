@@ -15,12 +15,12 @@ import {
   exceptionsOf,
   type IgnoreBase,
   type IgnoreSelection,
+  withExceptionToggled,
 } from "@shared/leaveOutRule";
 import { Button } from "@/components/ui/button";
 import { IconButton } from "@/components/ui/icon-button";
 import { SectionHeading } from "@/components/ui/section-heading";
 import { SegmentedControl } from "@/components/ui/segmented-control";
-import { withToggled } from "@/lib/toggleSet";
 import { cn } from "@/lib/utils";
 import { CARD, CARD_NOTE, CardSkeleton } from "./FlowChromeView";
 import { IGNORE_BASE_COPY } from "./ignoreBaseCopy";
@@ -40,20 +40,6 @@ export type IgnoredPathsState = Pick<
 // A chosen row's file icon until one is handed in: the empty box the
 // app's icon holds while its manifest loads.
 const NO_ICON = () => <span aria-hidden className="size-4 shrink-0" />;
-
-// The selection with `path` added to, or taken out of, the exceptions
-// to its base.
-export function withExceptionToggled(
-  value: IgnoreSelection,
-  path: string,
-): IgnoreSelection {
-  return {
-    ...value,
-    [value.base === "gitignored" ? "brought" : "leftOut"]: withToggled(path)(
-      new Set(exceptionsOf(value)),
-    ),
-  };
-}
 
 export function LeaveOutPickerView({
   value,

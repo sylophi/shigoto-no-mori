@@ -11,7 +11,7 @@ import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import { useCommandableApi } from "@/hooks/remote/useCommandAccess";
 import { useQuickCreateWorktree } from "@/hooks/worktrees/useQuickCreateWorktree";
 import type { Project } from "@shared/schemas";
-import { type CreateTarget, createTargets } from "./createTargets";
+import { type CreateTarget, inboxCreateTargets } from "./createTargets";
 import { useProjectIcon } from "@/hooks/projects/useProjectIcon";
 import {
   NEW_WORKTREE_MENU_LABEL,
@@ -32,14 +32,14 @@ type Target = CreateTarget<HostApi>;
 // project header. The inbox has none, so the destination has to be
 // picked here: one target means there's nothing to pick and the button
 // creates outright, several open a menu. A peer's project is a target
-// like a local one, badged with its device (createTargets). Either way
+// like a local one, badged with its device (inboxCreateTargets). Either way
 // a modified click lands on the full form instead of quick-creating,
 // matching the project row's + button.
 export function NewWorktreeButton({
   projects,
   remote,
 }: NewWorktreeButtonProps) {
-  const targets = createTargets(projects, remote, useCommandableApi());
+  const targets = inboxCreateTargets(projects, remote, useCommandableApi());
 
   // Nothing to pick between: create outright, or sit disabled with no
   // menu behind it when there's nowhere to create at all.

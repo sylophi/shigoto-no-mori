@@ -8,9 +8,8 @@ import {
 import type { SidebarDeviceBadge } from "@/components/sidebar/DeviceBadgeView";
 import type { DeviceFilterChoice } from "@/components/sidebar/DeviceFilterBarView";
 import { buildInboxRows } from "@/components/sidebar/inbox/buildInboxRows";
-import { createTargets } from "@/components/sidebar/inbox/createTargets";
+import { inboxCreateTargets } from "@/components/sidebar/inbox/createTargets";
 import type { NewWorktreeTargetLook } from "@/components/sidebar/inbox/NewWorktreeButtonView";
-import type { SidebarRowLookups } from "@/components/sidebar/RowContentView";
 import { rowTitle } from "@/components/sidebar/rowState";
 import type { SidebarViewModel } from "@/components/sidebar/sidebarRow";
 import type { ProjectShigomoriConfigQueries } from "@/hooks/config/useShigomoriConfig";
@@ -38,6 +37,7 @@ import {
   pullRequestsOf,
   worktreeById,
 } from "./index";
+import type { SidebarRowLookups } from "../SidebarRows";
 
 // The lab's default presence: the Thinkpad connected and the rest off,
 // and on the web Studio Mac connected too.
@@ -229,10 +229,10 @@ export function rowLookups(
   };
 }
 
-// Where the inbox's New worktree can create (createTargets): a peer
+// Where the inbox's New worktree can create (inboxCreateTargets): a peer
 // takes it when it lets this device control it.
 export function newWorktreeTargets(shell: LabShell): NewWorktreeTargetLook[] {
-  return createTargets(
+  return inboxCreateTargets(
     localInputs(shell).projects,
     remoteForests(shell),
     (deviceId) => (forests[deviceId]?.grantsCaller ? true : undefined),

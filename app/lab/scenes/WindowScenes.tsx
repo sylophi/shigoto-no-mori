@@ -63,7 +63,7 @@ export function DevicesWindowScene() {
 // browser, over the tab bar.
 export function PhoneWindowScene() {
   return (
-    <LabWindow shell="web" phone>
+    <LabWindow window="phone">
       <ForestPageView>
         <LabSidebar shell="web" view="inbox" footer={false} />
       </ForestPageView>

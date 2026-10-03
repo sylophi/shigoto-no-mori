@@ -22,11 +22,11 @@ import { Button } from "@/components/ui/button";
 import { MaterialIcon } from "@/components/ui/material-icon";
 import { useWorktreeFolder } from "@/hooks/remote/useWorktreeFolder";
 import { IGNORE_BASE_COPY } from "./ignoreBaseCopy";
+import { withExceptionToggled } from "@shared/leaveOutRule";
 import { exceptionsOf, type IgnoreSelection } from "./ignoreChoice";
 import {
   type IgnoredPathsState,
   LeaveOutPickerView,
-  withExceptionToggled,
 } from "./LeaveOutPickerView";
 
 // What the picker browses: the folder browser's own props, less the

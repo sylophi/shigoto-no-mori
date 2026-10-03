@@ -100,6 +100,12 @@ interface LayoutInputs extends DeviceLayoutInputs {
   customPath: string | null;
 }
 
+// What a project's config says of where its worktrees go.
+type LayoutConfig = {
+  worktreeLayout?: WorktreeLayout;
+  customWorktreePath?: string | null;
+};
+
 // Directory new worktrees should live under for the given layout. Custom
 // without a path falls back to the managed root rather than producing an
 // invalid path; the UI prevents saving an empty custom path.
@@ -107,10 +113,7 @@ interface LayoutInputs extends DeviceLayoutInputs {
 // host and the renderer alike (a trailing space in a custom path is
 // noise, never a different folder).
 export function layoutInputsFor(
-  config: {
-    worktreeLayout?: WorktreeLayout;
-    customWorktreePath?: string | null;
-  } | null,
+  config: LayoutConfig | null,
   projectPath: string,
   { dataDir, canonicalDataDirName, onProjectDrive }: DeviceLayoutInputs,
 ): LayoutInputs {
@@ -150,7 +153,7 @@ export function worktreeBaseFor(inputs: LayoutInputs): string {
 // Where a project's new worktrees land on a device, as shown: its
 // layout's base folder, tildified against that device's home.
 export function worktreeBaseLabel(
-  config: Parameters<typeof layoutInputsFor>[0],
+  config: LayoutConfig | null,
   projectPath: string,
   device: DeviceLayoutInputs & { homedir: string },
 ): string {

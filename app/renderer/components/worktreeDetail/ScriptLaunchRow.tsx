@@ -164,7 +164,7 @@ function FittedScriptRow({
             className="flex w-max items-center gap-2 whitespace-nowrap"
           >
             {candidates.map((entry) => (
-              <ScriptPill key={entry.name} name={entry.name} busy={false} />
+              <ScriptPill key={entry.name} {...entry} busy={false} />
             ))}
           </div>
         </div>

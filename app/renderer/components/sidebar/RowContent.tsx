@@ -2,7 +2,7 @@ import { assertNever } from "@/lib/utils";
 import { InboxRow } from "./inbox/InboxRow";
 import { InboxShelfRow } from "./inbox/InboxShelfRow";
 import { ProjectRow } from "./ProjectRow";
-import { WorktreeErrorRow, WorktreeSkeletonRow } from "./RowContentView";
+import { WorktreeErrorRow, WorktreeSkeletonRow } from "./SidebarFrameView";
 import { ShelvedToggleRow } from "./ShelvedToggleRow";
 import { WorktreeRow } from "./WorktreeRow";
 import type { GroupShelf, InboxShelf, SidebarRow } from "./sidebarRow";

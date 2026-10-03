@@ -1,8 +1,13 @@
-// The sidebar over the lab's fixtures, as a release build draws it at
-// the lab's default pose (nothing running, no update waiting), for
-// composing a window (LabWindow).
+// The sidebar over the lab's fixtures, as a release build's Sidebar
+// draws it once settled at the lab's default pose (nothing running, no
+// update waiting), for composing a window (LabWindow): the brand
+// header, the device filter, the view's own controls and rows, and the
+// footer.
 import { AddProjectButtonView } from "@/components/sidebar/AddProjectButtonView";
-import { ALL_DEVICES } from "@/components/sidebar/DeviceFilterBarView";
+import {
+  ALL_DEVICES,
+  DeviceFilterBarView,
+} from "@/components/sidebar/DeviceFilterBarView";
 import {
   NewWorktreeButtonView,
   NewWorktreeMenuView,
@@ -12,10 +17,20 @@ import {
   SortTriggerView,
 } from "@/components/sidebar/SidebarToolbarView";
 import {
+  SidebarFooterView,
+  SidebarNavActionsView,
+  SidebarViewToggleView,
+} from "@/components/sidebar/SidebarFooterView";
+import {
   InboxCreateRowView,
-  SidebarView,
-} from "@/components/sidebar/SidebarView";
+  PinnedRowView,
+  SidebarAsideView,
+  SidebarEmptyStateView,
+  SidebarScrollerView,
+} from "@/components/sidebar/SidebarFrameView";
+import { SidebarHeaderView } from "@/components/sidebar/SidebarHeaderView";
 import type { SidebarView as SidebarViewKind } from "@shared/schemas";
+import { SidebarRowContent, SidebarRows } from "./SidebarRows";
 import type { LabShell } from "./world";
 import {
   deviceFilterChoices,
@@ -83,18 +98,42 @@ export function LabSidebar({
       addProject={<AddProjectButtonView hasLocalHost={hasLocalHost} />}
     />
   );
+  const lookups = rowLookups(shell, selected);
   return (
-    <SidebarView
-      shell={shell}
-      view={view}
-      filter={{ choices: deviceFilterChoices(shell), selectedId: ALL_DEVICES }}
-      top={top}
-      rows={model.rows}
-      pinned={model.pinned}
-      lookups={rowLookups(shell, selected)}
-      emptyMessage={model.emptyMessage}
-      footer={footer && { activePath }}
-    />
+    <SidebarAsideView>
+      {/* A release build's header, without a dev build's marks. */}
+      <SidebarHeaderView hasLocalHost={hasLocalHost} showDevStyle={false} />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <DeviceFilterBarView
+          choices={deviceFilterChoices(shell)}
+          selectedId={ALL_DEVICES}
+        />
+        <div className="flex min-h-0 flex-1 flex-col">
+          {top}
+          {model.pinned && (
+            <PinnedRowView kind={model.pinned.kind}>
+              <SidebarRowContent row={model.pinned} lookups={lookups} />
+            </PinnedRowView>
+          )}
+          <SidebarScrollerView>
+            <SidebarRows rows={model.rows} lookups={lookups} />
+            <SidebarEmptyStateView message={model.emptyMessage ?? null} />
+          </SidebarScrollerView>
+        </div>
+        {footer && (
+          <SidebarFooterView
+            toggle={<SidebarViewToggleView view={view} />}
+            actions={
+              <SidebarNavActionsView
+                hasLocalHost={hasLocalHost}
+                updateReady={false}
+                activePath={activePath}
+              />
+            }
+          />
+        )}
+      </div>
+    </SidebarAsideView>
   );
 }
 

@@ -1,7 +1,7 @@
 import { MergeBoxView } from "./MergeBoxView";
-import { useMergeBox } from "./useMergeBox";
+import { type UseMergeBoxArgs, useMergeBox } from "./useMergeBox";
 
 // The merge box (MergeBoxView), with its mutations and picks.
-export function MergeBox(props: Parameters<typeof useMergeBox>[0]) {
+export function MergeBox(props: UseMergeBoxArgs) {
   return <MergeBoxView {...useMergeBox(props)} />;
 }

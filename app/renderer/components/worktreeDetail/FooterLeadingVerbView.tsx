@@ -5,29 +5,10 @@
 // handle the click.
 import { Cable, FolderSearch, RefreshCw, Shovel } from "lucide-react";
 import { TONE_TEXT } from "@/components/ui/status-dot";
-import { isRealBranch, type Project, type Worktree } from "@shared/schemas";
 import { FooterActionButton } from "./FooterActionButton";
 import { LABEL_RANK } from "./footerFit";
 
 const noop = () => undefined;
-
-// The repo identity a worktree travels under to another device (Mirror
-// to…, Transplant to…), or null when it cannot: it needs a real branch
-// of its own and a repo the other device can recognise.
-export function transferIdentity(
-  worktree: Pick<Worktree, "detached" | "branch">,
-  project: Pick<Project, "identity">,
-): string | null {
-  if (worktree.detached || !isRealBranch(worktree.branch)) return null;
-  return project.identity ?? null;
-}
-
-// Whether a worktree can be transplanted away: every one but the
-// primary checkout, which is the project itself and cannot be torn
-// down.
-export function canTransplantAway(worktree: Pick<Worktree, "isPrimary">) {
-  return !worktree.isPrimary;
-}
 
 export type FooterLeadingVerb =
   | { kind: "files" }

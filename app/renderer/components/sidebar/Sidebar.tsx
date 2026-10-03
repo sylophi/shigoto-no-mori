@@ -59,13 +59,13 @@ import { AddProjectButton } from "./AddProjectButton";
 import { sortProjects } from "@/lib/sortProjects";
 import { useWorktreeSort } from "@/hooks/sharedSettings/useWorktreeSort";
 import { SidebarList } from "./SidebarList";
-import { PinnedRowView } from "./SidebarListView";
 import {
   InboxCreateRowView,
+  PinnedRowView,
   SidebarAsideView,
   SidebarEmptyStateView,
   SidebarScrollerView,
-} from "./SidebarView";
+} from "./SidebarFrameView";
 import { RowContent } from "./RowContent";
 import type { RowHandlers } from "./VirtualRow";
 import { SidebarTakeoverSlot, useSidebarTakenOver } from "./SidebarTakeover";

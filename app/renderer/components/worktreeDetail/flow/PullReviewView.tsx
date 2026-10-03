@@ -516,7 +516,7 @@ export function DestinationFolderView({
   // The base folder as shown (tildified), null until it is read.
   base: string | null;
   // The worktree being pulled, whose folder name the copy takes.
-  worktree: Parameters<typeof pullWorktreeName>[0];
+  worktree: Worktree;
 }) {
   const name = pullWorktreeName(worktree);
   // Plain text on purpose: a measured PathSpan would abbreviate the

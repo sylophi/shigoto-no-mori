@@ -8,7 +8,7 @@ import { createRoot } from "react-dom/client";
 import "@/index.css";
 import "@/fonts.css";
 import { applyPose } from "../pose";
-import { type Scene, scenes } from "./index";
+import { type Scene, scenes, windowAttributes } from "./index";
 
 applyPose();
 const name = new URLSearchParams(location.search).get("scene");
@@ -19,9 +19,11 @@ const root = document.getElementById("root");
 if (!root) throw new Error("#root missing from scenes.html");
 
 if (scene) {
-  const html = document.documentElement;
-  if (scene.window === "phone") html.dataset["layout"] = "phone";
-  if (scene.window === "desktop") html.dataset["shell"] = "desktop";
+  for (const [attribute, value] of Object.entries(
+    windowAttributes(scene.window),
+  )) {
+    document.documentElement.setAttribute(attribute, value);
+  }
   const [width, height] = scene.size;
   root.style.width = `${width}px`;
   root.style.height = `${height}px`;

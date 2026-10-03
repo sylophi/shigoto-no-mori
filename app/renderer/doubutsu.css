@@ -50,7 +50,7 @@
  *      sidebar-project-row       sidebar/ProjectRowView.tsx
  *      sidebar-project-pick      sidebar/ProjectHeaderView.tsx
  *      project-tile              shared/ProjectIconView.tsx
- *      sidebar-inbox-create      sidebar/SidebarView.tsx
+ *      sidebar-inbox-create      sidebar/SidebarFrameView.tsx
  *      sidebar-device-filter     sidebar/DeviceFilterBarView.tsx
  *      device-chip               shared/DeviceChip.tsx, shared/DeviceTabs.tsx
  *      phone-tab-bar/-tab/-tab-pill   PhoneTabBarView.tsx
@@ -63,7 +63,7 @@
  *                                visitors/VisitorSticker.tsx
  *
  * 3. App-level markers: data-doubutsu-zone="main|sidebar" (AppShellView,
- *    sidebar/SidebarView.tsx), data-doubutsu-page="settings|tidy|devices|
+ *    sidebar/SidebarFrameView.tsx), data-doubutsu-page="settings|tidy|devices|
  *    forest|visitors" picking the canvas wallpaper (settings/Settings,
  *    tidy/TidyForest, remote/DevicesPage, ForestPageView,
  *    Settings' Visitors section), the

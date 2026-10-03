@@ -13,7 +13,7 @@ import type {
 import { mergeBoxState, type StackReach } from "./mergeBoxState";
 import type { MergeBoxViewProps } from "./MergeBoxView";
 
-interface UseMergeBoxArgs {
+export interface UseMergeBoxArgs {
   worktree: Worktree;
   pr: PullRequestDetail;
   repoConfig: RepoMergeConfig | null;

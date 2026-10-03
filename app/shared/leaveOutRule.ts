@@ -58,6 +58,20 @@ export function exceptionsOf(selection: IgnoreSelection): ReadonlySet<string> {
     : selection.brought;
 }
 
+// The selection with `path` added to, or taken out of, the exceptions
+// to its base.
+export function withExceptionToggled(
+  selection: IgnoreSelection,
+  path: string,
+): IgnoreSelection {
+  const excepted = new Set(exceptionsOf(selection));
+  if (!excepted.delete(path)) excepted.add(path);
+  return {
+    ...selection,
+    [selection.base === "everything" ? "leftOut" : "brought"]: excepted,
+  };
+}
+
 // The rule the selection comes to. A base with no exceptions is the
 // plain rule.
 export function modeOf(selection: IgnoreSelection): MirrorIgnoreMode {

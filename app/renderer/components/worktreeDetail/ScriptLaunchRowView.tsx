@@ -62,24 +62,26 @@ export function ScriptPill({
   ...props
 }: {
   name: string;
-  // What it runs, which its title says. The measurer's copies name
-  // none, and say nothing.
-  command?: string;
+  // What it runs, which its title says.
+  command: string;
   busy: boolean;
   // Why it cannot run, which the title says instead.
   disabledReason?: string;
 } & ComponentProps<typeof Button>) {
   const actionLabel = busy ? `Stop ${name}` : `Run ${name}`;
-  const said = command !== undefined && {
-    "aria-label": actionLabel,
-    title:
-      disabledReason ?? `${actionLabel}\n${command}\n⌘click to view output`,
-  };
   // Pill height tracks the launcher row above it, but the glyph and label
   // inside are the Scripts section's (size-3 icon, text-xs mono). These are
   // scripts, and reading them at the launcher's weight overstates them.
   return (
-    <Button variant="outline" size="sm" {...said} {...props}>
+    <Button
+      variant="outline"
+      size="sm"
+      aria-label={actionLabel}
+      title={
+        disabledReason ?? `${actionLabel}\n${command}\n⌘click to view output`
+      }
+      {...props}
+    >
       {busy ? (
         <Square aria-hidden className="size-3 text-destructive" />
       ) : (

@@ -1,9 +1,6 @@
 // The worktree page's data (../WorktreeDetailPane.tsx).
-import {
-  type FooterLeadingVerb,
-  canTransplantAway,
-  transferIdentity,
-} from "@/components/worktreeDetail/FooterLeadingVerbView";
+import type { FooterLeadingVerb } from "@/components/worktreeDetail/FooterLeadingVerbView";
+import { transferVerbs } from "@/components/worktreeDetail/transferVerbs";
 import {
   type LifecycleRow,
   lifecycleRowsOf,
@@ -112,12 +109,16 @@ export function footerVerbsOf(
   worktree: Worktree,
   project: Project,
 ): FooterLeadingVerb[] {
-  const verbs: FooterLeadingVerb[] = [{ kind: "files" }, { kind: "ports" }];
-  if (transferIdentity(worktree, project) === null) return verbs;
-  verbs.push({
-    kind: "mirrorTo",
-    disabledReason: mirrorEngineBlocker("stopped"),
-  });
-  if (canTransplantAway(worktree)) verbs.push({ kind: "transplantTo" });
-  return verbs;
+  return [
+    { kind: "files" },
+    { kind: "ports" },
+    ...transferVerbs({
+      worktree,
+      project,
+      // The Thinkpad is connected, and nothing is mirrored yet.
+      hasTargets: true,
+      canMirror: true,
+      mirrorBlocker: mirrorEngineBlocker("stopped"),
+    }),
+  ];
 }

@@ -11,6 +11,10 @@
 // surface is inert: nothing in it takes a click or the keyboard, and a
 // screen reader reads the figure's description in its place.
 import { DEFAULT_DARK_THEME, DEFAULT_LIGHT_THEME } from "@shared/themes";
+import {
+  type SceneWindow,
+  windowAttributes,
+} from "../../../app/lab/scenes";
 import appCss from "../styles/app.css?url";
 
 interface Props {
@@ -23,7 +27,7 @@ interface Props {
   // The window the views draw a whole one of, if they do (the app's
   // lab/scenes): the web app's phone layout, or the desktop window,
   // whose page is transparent under the sidebar.
-  window?: "desktop" | "phone";
+  window?: SceneWindow;
   // The size the views lay out at, in CSS pixels. Unset, they size the
   // surface themselves.
   width?: number;
@@ -56,8 +60,7 @@ const dark = theme === "dark";
       data-palette={doubutsu
         ? (palette ?? (dark ? DEFAULT_DARK_THEME : DEFAULT_LIGHT_THEME))
         : undefined}
-      data-layout={window === "phone" ? "phone" : undefined}
-      data-shell={window === "desktop" ? "desktop" : undefined}
+      {...windowAttributes(window)}
     >
       <div class="app-body" style="height: 100%"><slot /></div>
     </div>

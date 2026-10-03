@@ -2,7 +2,7 @@
 // name (changeable on every row, a peer's included, since both live on
 // the device hub: the mark opens the icon picker, Rename the name),
 // one line saying what state it is in and what it runs, the projects
-// it renderHosts, and -- on THIS device's row -- the two things it
+// it hosts, and -- on THIS device's row -- the two things it
 // exposes to the others: whether they may control it and whether it
 // stays reachable to them. A peer's row makes no decision about the
 // peer: what a machine allows is decided on that machine, so a peer

@@ -13,13 +13,10 @@ import {
   useWorktreeMirrorLinks,
 } from "@/hooks/remote/useMirrors";
 import { canForwardPorts } from "@/hooks/remote/usePortForwards";
-import {
-  canTransplantAway,
-  FooterLeadingVerbView,
-  transferIdentity,
-} from "./FooterLeadingVerbView";
+import { FooterLeadingVerbView } from "./FooterLeadingVerbView";
 import { usePeerTargets } from "./flow/peerTargets";
 import { MirrorToDialog } from "./mirror/MirrorDialog";
+import { transferIdentity, transferVerbs } from "./transferVerbs";
 import { TransplantToDialog } from "./transplant/TransplantDialog";
 
 export function PeerTransferActions({
@@ -69,21 +66,25 @@ function TransferButtons({
     targets,
     onClose: () => setOpen(null),
   };
+  const verbs = transferVerbs({
+    worktree,
+    project,
+    hasTargets: canOpen,
+    // App only, like "Mirror here": the daemon lives in main.
+    canMirror: canForwardPorts && !mirrored,
+    mirrorBlocker,
+  });
   return (
     <>
-      {/* App only, like "Mirror here": the daemon lives in main. */}
-      {canOpen && canForwardPorts && !mirrored && (
+      {verbs.map((verb) => (
         <FooterLeadingVerbView
-          verb={{ kind: "mirrorTo", disabledReason: mirrorBlocker }}
-          onClick={() => setOpen("mirror")}
+          key={verb.kind}
+          verb={verb}
+          onClick={() =>
+            setOpen(verb.kind === "mirrorTo" ? "mirror" : "transplant")
+          }
         />
-      )}
-      {canOpen && canTransplantAway(worktree) && (
-        <FooterLeadingVerbView
-          verb={{ kind: "transplantTo" }}
-          onClick={() => setOpen("transplant")}
-        />
-      )}
+      ))}
       {open === "mirror" && <MirrorToDialog {...dialog} />}
       {open === "transplant" && <TransplantToDialog {...dialog} />}
     </>

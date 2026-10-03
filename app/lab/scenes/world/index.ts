@@ -9,7 +9,10 @@ import type { SidebarDeviceBadge } from "@/components/sidebar/DeviceBadgeView";
 import type { WorktreeRowLook } from "@/components/sidebar/rowState";
 import { deviceStatusView } from "@/lib/remote/deviceStatus";
 import type { RemoteDeviceStatus } from "@/lib/remote/devices";
-import type { DeviceIcon } from "@shared/account/deviceIcon";
+import {
+  type DeviceIcon,
+  MACHINE_FALLBACK_ICON,
+} from "@shared/account/deviceIcon";
 import type { DeviceInfo } from "@shared/hub/protocol";
 import { pullRequestStackPosition } from "@shared/pullRequestStack";
 import type { Project, PullRequest, Worktree } from "@shared/schemas";
@@ -65,9 +68,10 @@ export function deviceById(id: string): DeviceInfo {
   return device;
 }
 
-// The icon a device wears: its own, or a laptop until it picks one.
+// The icon a device wears: its own, or the app's stand-in until it
+// picks one.
 export function deviceIconOf(device: DeviceInfo): DeviceIcon {
-  return device.icon ?? "laptop";
+  return device.icon ?? MACHINE_FALLBACK_ICON;
 }
 
 // The folder a device's paths shorten against (~/...).
