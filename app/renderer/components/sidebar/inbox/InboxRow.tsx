@@ -90,7 +90,14 @@ export function InboxRow({
             deviceId={device?.deviceId}
             className="size-3"
           />
-          <span className="min-w-0 truncate font-medium">{project.name}</span>
+          {/* The row-* slots name a row's parts for the marketing
+              site, whose pins point at them (marketing/src/pages). */}
+          <span
+            data-slot="row-project"
+            className="min-w-0 truncate font-medium"
+          >
+            {project.name}
+          </span>
           {device && <RowDeviceBadge badge={device} />}
           {mirror && <MirrorBadge mirror={mirror} />}
           <TrailingSlot worktree={worktree} state={state} />
@@ -132,7 +139,10 @@ function TrailingSlot({
   const now = useNow();
 
   return (
-    <span className="ml-auto flex shrink-0 items-center">
+    <span
+      data-slot="row-activity"
+      className="ml-auto flex shrink-0 items-center"
+    >
       {mark ? (
         <ActivityIcon kind={mark} />
       ) : (

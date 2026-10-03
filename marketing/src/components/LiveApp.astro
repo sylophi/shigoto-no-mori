@@ -4,8 +4,6 @@
 // lab/README.md), built into /demo/ and running in an iframe. A whole
 // window can be clicked around in. A region of one is only shown.
 // scripts/live.ts scales the window to the frame and runs the pose.
-import type { Action } from "../scripts/live";
-
 interface Props {
   // The lab's pose parameters, as a query string without the "?".
   pose: string;
@@ -21,8 +19,9 @@ interface Props {
   // window's, so the region follows it when the layout moves.
   region?: [number, number, number, number];
   anchor?: string;
-  // Clicks and waits that pose it further, like opening a menu.
-  actions?: Action[];
+  // Controls to press, in order, to pose it further, like opening a
+  // menu: selectors as scripts/live.ts finds them.
+  clicks?: string[];
   // On the first screen: loaded right away, not lazily.
   eager?: boolean;
 }
@@ -34,7 +33,7 @@ const {
   size = [1280, 800],
   region,
   anchor,
-  actions = [],
+  clicks = [],
   eager,
 } = Astro.props;
 const [width, height] = size;
@@ -45,9 +44,8 @@ const interactive = region === undefined && title !== "";
 <figure
   class:list={[frame, "live", { "live-interactive": interactive }, className]}
   aria-hidden={title === "" ? "true" : undefined}
-  data-live
   data-region={JSON.stringify({ rect, anchor })}
-  data-actions={JSON.stringify(actions)}
+  data-clicks={JSON.stringify(clicks)}
 >
   <div class="live-view" style={`--live-w: ${rect[2]}; --live-h: ${rect[3]}`}>
     <iframe

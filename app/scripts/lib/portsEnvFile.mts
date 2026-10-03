@@ -5,7 +5,9 @@
 // checkout's ports into another. Every dev server pins its port from
 // here (the renderer, the web client, both UI lab flavors), and
 // scripts/dev-peer.mts and the lab's shoot/record harnesses find those
-// servers through it, so all of them read through this module.
+// servers through it, so all of them read through this module. The
+// marketing site, a project of its own, reads its port the same way in
+// marketing/astro.config.ts.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 // Node's own dotenv parser rather than shared/account's parseDotenv:

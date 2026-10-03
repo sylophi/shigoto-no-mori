@@ -17,21 +17,23 @@ const HAPPY_HUMMINGBIRD = `${WORKTREES}/5a0000000002`;
 const BRAVE_BADGER = `${WORKTREES}/5a0000000003`;
 const QUIET = "updates=";
 const HERO = `${QUIET}&view=inbox&to=${HAPPY_HUMMINGBIRD}`;
-// The sidebar row the page singles out, in the hero's inbox.
+// The sidebar row the page singles out, in the hero's inbox, and the
+// region of the window around it.
 const ROW = '[data-slot=sidebar-row]:has-text("gentle-gecko")';
+const ROW_REGION: [number, number, number, number] = [0, 0, 240, 66];
 
 // The numbered pins over the sidebar row, in the order the legend lists
 // them: each on the part of the live row its selector finds, at that
 // side of it (scripts/live.ts).
 const PINS = [
-  { on: 'span.truncate:has-text("shigoto-no-mori")', side: "top", part: "The project" },
+  { on: "[data-slot=row-project]", side: "top", part: "The project" },
   { on: '[aria-label^="On "]', side: "top", part: "The Mac it lives on, when that's not this one" },
-  { on: 'span:has-text(" ago")', side: "top", part: "Last activity" },
-  { on: ".font-mono", side: "left", part: "The branch" },
+  { on: "[data-slot=row-activity]", side: "top", part: "Last activity" },
+  { on: "[data-slot=row-branch]", side: "left", part: "The branch" },
   { on: '[aria-label$="files changed"]', side: "bottom", part: "Files with uncommitted changes" },
   { on: '[aria-label$="ahead"]', side: "bottom", part: "Commits not pushed yet" },
   { on: '[aria-label*="PR #"]', side: "bottom", part: "Its pull request, and its place in a stack" },
-  { on: 'span.truncate:has-text("gentle-gecko")', side: "bottom", part: "The folder" },
+  { on: "[data-slot=row-name]", side: "bottom", part: "The folder" },
 ];
 ---
 
@@ -61,7 +63,7 @@ const PINS = [
         pose={HERO}
         frame="framed"
         class="stage-row"
-        region={[0, 0, 240, 66]}
+        region={ROW_REGION}
         anchor={ROW}
         title=""
       />
@@ -109,7 +111,7 @@ const PINS = [
           pose={`${QUIET}&view=inbox&to=${MAIN}`}
           frame="card-shot"
           region={[0, 0, 550, 432]}
-          actions={[{ click: "text=New worktree" }]}
+          clicks={["text=New worktree"]}
           title="The New worktree button with a menu under it listing projects to create the worktree in."
         />
         <ol class="steps">
@@ -170,7 +172,7 @@ const PINS = [
           pose={HERO}
           frame="framed"
           class="anatomy-row"
-          region={[0, 0, 240, 66]}
+          region={ROW_REGION}
           anchor={ROW}
           title="One sidebar row: project shigoto-no-mori, a laptop badge, 40m ago, branch exp/terrier-sync, 7 changed files, 1 commit ahead, pull request #151 as 2 of 3, folder gentle-gecko."
         >
@@ -306,7 +308,7 @@ const PINS = [
           class="machines-dialog"
           region={[0, 0, 896, 633]}
           anchor="[data-slot=modal-shell]"
-          actions={[{ click: "text=Transplant to" }]}
+          clicks={["text=Transplant to"]}
           title="The Transplant worktree dialog, moving fix-stale-locks from Studio Mac to Thinkpad with its carry-over files. A note says nothing on Studio Mac is deleted until the last step."
         />
       </div>

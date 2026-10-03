@@ -63,11 +63,12 @@ where the real window has them.
 A frame shows either a whole window, scaled to fit, which a visitor
 with a pointer can click around in, or a region of one, which is only
 shown. A region can count from an element (`anchor`), so it follows
-that element when the app's layout moves. A frame's `actions` pose it
-further once it has drawn, like opening a menu, with selectors in a
-small subset of Playwright's (`text=` and `:has-text()`), as the lab's
-shots use. The pins over the sidebar row work the same way: each finds
-its part of the live row. A pose that stops matching the app leaves its
+that element when the app's layout moves. A frame's `clicks` pose it
+further once it has drawn, like opening a menu. Their selectors are
+CSS, or `text=` and `:has-text()`, simpler cousins of Playwright's
+(`scripts/live.ts` says how they match). The pins over the sidebar row
+find their parts of the live row by the `row-*` slots the app sets on
+them. A pose that stops matching the app leaves its
 frame unposed and warns in the console, so check the frames after
 changing what they show.
 

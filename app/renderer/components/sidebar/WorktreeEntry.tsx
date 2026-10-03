@@ -107,6 +107,7 @@ export function WorktreeEntry({
             Bolding every branch spends the page's only emphasis on the
             thing every row has. */}
         <span
+          data-slot="row-branch"
           className={cn(
             "min-w-0 flex-1 truncate font-mono text-xs",
             isSelected && "font-medium",
@@ -167,7 +168,9 @@ function EntryName({ worktree }: { worktree: Worktree }) {
           className="-my-0.5 size-3.5"
         />
       )}
-      <span className="min-w-0 truncate">{worktree.name}</span>
+      <span data-slot="row-name" className="min-w-0 truncate">
+        {worktree.name}
+      </span>
       <BirthdayBadge resident={resident} />
     </>
   );

@@ -3,14 +3,6 @@
 // drawn. The frames are this site's own pages, so this reaches into
 // them directly. Without this script a frame stays at its placeholder.
 
-// One step of a frame's pose, run in order once the app has drawn:
-// press a control, wait for something to show, or just wait. Elements
-// are found by selector (see query).
-export type Action =
-  | { click: string }
-  | { waitFor: string }
-  | { waitMs: number };
-
 // What a frame shows: the part of the window (x, y, width, height), and
 // the element x and y count from, if any.
 type Region = { rect: [number, number, number, number]; anchor?: string };
@@ -37,17 +29,16 @@ async function find(
   return find(root, selector, deadline);
 }
 
-// A CSS selector, or two of Playwright's forms (the lab's shots use
-// Playwright): `text=Label`, the innermost element whose text starts
-// with Label, and `css:has-text("words")`, the first match of css with
-// those words in it.
+// A CSS selector, or one of two text forms named after Playwright's
+// (which the lab's shots use) but simpler: `text=Label`, the innermost
+// element whose text starts with Label, and `css:has-text("words")`,
+// the first match of css with those words anywhere in it.
 function query(root: Document | Element, selector: string): Element | null {
   if (selector.startsWith("text=")) {
     const label = selector.slice("text=".length);
     const starts = (el: Element) =>
       el.textContent?.trim().startsWith(label) === true;
-    const first = [...root.querySelectorAll("*")].find(starts);
-    let el = first;
+    let el = [...root.querySelectorAll("*")].find(starts);
     while (el) {
       const inner: Element | undefined = [...el.children].find(starts);
       if (!inner) return el;
@@ -97,24 +88,22 @@ function press(el: Element): void {
   }
 }
 
-async function step(doc: Document, action: Action): Promise<void> {
-  if ("click" in action) {
-    const target = await find(doc, action.click);
-    press(
-      target.closest("button, a, [role=menuitem], [role=option]") ?? target,
-    );
-  } else if ("waitFor" in action) await find(doc, action.waitFor);
-  else await sleep(action.waitMs);
+// Presses the control a selector finds, once it shows, and gives the
+// app a moment to answer.
+async function click(doc: Document, selector: string): Promise<void> {
+  const target = await find(doc, selector);
+  press(target.closest("button, a, [role=menuitem], [role=option]") ?? target);
   await sleep(150);
 }
 
-async function pose(doc: Document, actions: Action[]): Promise<void> {
+// Waits for the app to draw, then makes the frame's clicks in order.
+async function pose(doc: Document, clicks: string[]): Promise<void> {
   // The app has drawn once its sidebar or page is in.
   await find(doc, "#root > *");
   await sleep(300);
-  for (const action of actions) {
-    // oxlint-disable-next-line no-await-in-loop -- each step poses on the one before it
-    await step(doc, action);
+  for (const selector of clicks) {
+    // oxlint-disable-next-line no-await-in-loop -- each click poses on the one before it
+    await click(doc, selector);
   }
 }
 
@@ -139,7 +128,7 @@ async function start(figure: HTMLElement): Promise<void> {
   const frame = figure.querySelector("iframe");
   if (!view || !frame) return;
   const region = JSON.parse(figure.dataset["region"] ?? "{}") as Region;
-  const [x, y, width] = region.rect;
+  const [x, y, width, height] = region.rect;
   let origin = { x: 0, y: 0 };
 
   const place = () => {
@@ -149,8 +138,7 @@ async function start(figure: HTMLElement): Promise<void> {
   new ResizeObserver(place).observe(view);
 
   const doc = await loaded(frame);
-  const actions = JSON.parse(figure.dataset["actions"] ?? "[]") as Action[];
-  await pose(doc, actions);
+  await pose(doc, JSON.parse(figure.dataset["clicks"] ?? "[]") as string[]);
   const anchor = region.anchor ? await find(doc, region.anchor) : undefined;
   if (anchor) {
     const rect = anchor.getBoundingClientRect();
@@ -174,16 +162,13 @@ async function start(figure: HTMLElement): Promise<void> {
           ? rect.top - PIN_GAP
           : rect.bottom + PIN_GAP;
     pin.style.setProperty("--x", `${((px - origin.x - x) / width) * 100}%`);
-    pin.style.setProperty(
-      "--y",
-      `${((py - origin.y - y) / region.rect[3]) * 100}%`,
-    );
+    pin.style.setProperty("--y", `${((py - origin.y - y) / height) * 100}%`);
   }
   figure.classList.add("live-ready");
 }
 
 export function startLiveFrames(): void {
-  for (const figure of document.querySelectorAll<HTMLElement>("[data-live]")) {
+  for (const figure of document.querySelectorAll<HTMLElement>(".live")) {
     start(figure).catch((error: unknown) => {
       // A pose that no longer matches the app leaves the frame as it
       // drew, unposed, rather than blank.

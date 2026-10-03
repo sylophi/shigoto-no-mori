@@ -56,7 +56,8 @@ applyPose();
 const html = document.documentElement;
 if (webShell) {
   // What web/public/boot-theme.js stamps pre-paint, by the same
-  // breakpoint. AppShell keeps it in step from here.
+  // breakpoint (renderer/hooks/ui/useViewport.ts's). AppShell keeps it
+  // in step from here.
   if (!matchMedia("(min-width: 48rem)").matches) html.dataset.layout = "phone";
 } else {
   // The desktop window: transparent under the sidebar, as in the real
