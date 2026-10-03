@@ -9,6 +9,11 @@
 // several devices as one project: its newest use on any of them, its
 // uses on all of them summed. Under every sort, each device's filtered
 // tree is the unfiltered one with the other devices' groups taken out.
+// Split by owner, the owners come in the order their projects lead
+// them in over every device, so the filter never reorders them either
+// (by name under the alphabetical sort), the projects with no
+// remote last, a shut owner is its header alone, and a list of one
+// owner draws no header at all.
 //
 // Runs under test/lib/register-ts-alias.mts. Run: pnpm test project-order.
 import assert from "node:assert/strict";
@@ -16,6 +21,7 @@ import {
   buildSidebarRows,
   projectGroupOrder,
 } from "@/components/sidebar/buildSidebarRows";
+import type { SidebarRow } from "@/components/sidebar/sidebarRow";
 import { sortProjects } from "@/lib/sortProjects";
 import type { RemoteForestItem } from "@/hooks/remote/useRemoteForests";
 import {
@@ -74,23 +80,34 @@ const remote = [
   project("alder", "repo/alder", 10, 4),
 ].map(onPeer);
 
+// The project with its remote (Project.remote), for the owner checks.
+const owned = (p: Project, remoteUrl: string | null): Project => ({
+  ...p,
+  remote: remoteUrl,
+});
+
 const noShelves = () => ({ shelved: new Set(), hidden: new Set() });
 
-// The group header rows the tree draws, the way Sidebar calls the
-// builder: this machine's projects pre-sorted, the order over every
-// device, the rows over the filter's pick.
-function headerRows(
-  sortMode: ProjectSortMode,
-  filter?: string,
+// The rows the tree draws, the way Sidebar calls the builder: this
+// machine's projects pre-sorted, the order over every device, the rows
+// over the filter's pick. `shut` splits the list by owner, with those
+// owners shut.
+function treeRows({
+  sortMode,
+  filter,
   stored = local,
   peers = remote,
-) {
+  shut,
+  openKey = null,
+}: {
+  sortMode: ProjectSortMode;
+  filter?: string;
+  stored?: Project[];
+  peers?: RemoteForestItem[];
+  shut?: ReadonlySet<string>;
+  openKey?: string | null;
+}) {
   const ordered = sortProjects(stored, sortMode);
-  const order = projectGroupOrder({
-    projects: ordered,
-    remote: peers,
-    sortMode,
-  });
   const showLocal = filter === undefined || filter === "local";
   const projects = showLocal ? ordered : [];
   const { rows } = buildSidebarRows({
@@ -107,18 +124,42 @@ function headerRows(
       isPending: false,
       error: null,
     })),
-    openKey: null,
+    openKey,
     worktreeSort: "name",
-    order,
+    order: projectGroupOrder({ projects: ordered, remote: peers, sortMode }),
     openShelves: noShelves(),
     hiddenPrefixes: [],
     arrangeMode: false,
+    byOwner: shut ? { shut } : null,
     remote: filter === undefined || filter === PEER ? peers : [],
     mirrors: [],
     deviceBadges: new Map(),
   });
-  return rows.filter((r) => r.kind === "project");
+  return rows;
 }
+
+// The group header rows alone.
+const headerRows = (
+  sortMode: ProjectSortMode,
+  filter?: string,
+  stored = local,
+  peers = remote,
+) =>
+  treeRows({ sortMode, filter, stored, peers }).filter(
+    (r) => r.kind === "project",
+  );
+
+// The rows as one line each: an owner's header as `# label`, with its
+// count when shut, a project header as its name, any other row as its
+// kind.
+const outline = (rows: SidebarRow[]) =>
+  rows.map((r) =>
+    r.kind === "owner-header"
+      ? `# ${r.label}${r.expanded ? "" : ` (${r.count})`}`
+      : r.kind === "project"
+        ? r.project.name
+        : r.kind,
+  );
 
 const headers = (sortMode: ProjectSortMode, filter?: string) =>
   headerRows(sortMode, filter).map((r) => r.project.name);
@@ -198,6 +239,128 @@ try {
         project("alder", "repo/alder", 950, 1),
       ].map(onPeer),
     );
+  });
+
+  // Grouped by owner: alder and birch are acme's (birch through
+  // GitHub's case-insensitive owner), dogwood is a user's on another
+  // host, cedar has no remote.
+  const [alder, birch, cedar] = local as [Project, Project, Project];
+  const ownedLocal = [
+    owned(alder, "github.com/acme/alder"),
+    owned(birch, "github.com/ACME/birch"),
+    owned(cedar, null),
+  ];
+  const ownedRemote = [
+    owned(
+      project("dogwood", "repo/dogwood", 1000, 2),
+      "gitlab.com/zed/dogwood",
+    ),
+  ].map(onPeer);
+  const ownerOutline = (
+    sortMode: ProjectSortMode,
+    shut: ReadonlySet<string> = new Set(),
+  ) =>
+    outline(
+      treeRows({ sortMode, stored: ownedLocal, peers: ownedRemote, shut }),
+    );
+
+  await proof.check("by owner: owners in the projects' sort", () => {
+    assert.deepEqual(ownerOutline("manual"), [
+      "# acme",
+      "alder",
+      "birch",
+      "# gitlab.com/zed",
+      "dogwood",
+      "# No remote",
+      "cedar",
+    ]);
+  });
+
+  await proof.check("by owner: alphabetical goes by owner name", () => {
+    // dogwood is the most recently used, so its owner leads the recent
+    // sort, and the alphabetical one puts it back by name.
+    assert.deepEqual(ownerOutline("recent"), [
+      "# gitlab.com/zed",
+      "dogwood",
+      "# acme",
+      "alder",
+      "birch",
+      "# No remote",
+      "cedar",
+    ]);
+    assert.deepEqual(ownerOutline("alphabetical"), [
+      "# acme",
+      "alder",
+      "birch",
+      "# gitlab.com/zed",
+      "dogwood",
+      "# No remote",
+      "cedar",
+    ]);
+  });
+
+  await proof.check("by owner: a shut owner is its header alone", () => {
+    assert.deepEqual(ownerOutline("manual", new Set(["github.com/acme"])), [
+      "# acme (2)",
+      "# gitlab.com/zed",
+      "dogwood",
+      "# No remote",
+      "cedar",
+    ]);
+  });
+
+  await proof.check("by owner: the filter drops owners, never reorders", () => {
+    // acme leads on alder here, beta on birch at the peer, and acme's
+    // other project trails birch there. Narrowed to the peer, acme
+    // keeps the place alder gave it.
+    const stored = [owned(alder, "github.com/acme/alder")];
+    const peers = [
+      owned(project("birch", "repo/birch", 200, 1), "github.com/beta/birch"),
+      owned(project("elm", "repo/elm", 100, 1), "github.com/acme/elm"),
+    ].map(onPeer);
+    const narrowed = (filter?: string) =>
+      outline(
+        treeRows({
+          sortMode: "recent",
+          filter,
+          stored,
+          peers,
+          shut: new Set(),
+        }),
+      );
+    assert.deepEqual(narrowed(), ["# acme", "alder", "elm", "# beta", "birch"]);
+    assert.deepEqual(narrowed(PEER), ["# acme", "elm", "# beta", "birch"]);
+  });
+
+  await proof.check("by owner: a single owner draws no header", () => {
+    const only = (stored: Project[]) =>
+      outline(
+        treeRows({
+          sortMode: "manual",
+          stored,
+          peers: [],
+          shut: new Set(["github.com/acme"]),
+        }),
+      );
+    // All acme's, even shut: one run, nothing folded away.
+    assert.deepEqual(only(ownedLocal.slice(0, 2)), ["alder", "birch"]);
+    // None with a remote: one run too.
+    assert.deepEqual(only([owned(cedar, null)]), ["cedar"]);
+    // One owner beside the projects with none is two sections.
+    assert.deepEqual(only(ownedLocal), ["# acme (2)", "# No remote", "cedar"]);
+  });
+
+  await proof.check("by owner: an open project draws no owners", () => {
+    const rows = treeRows({
+      sortMode: "manual",
+      stored: ownedLocal,
+      peers: ownedRemote,
+      shut: new Set(),
+      openKey: "repo/alder",
+    });
+    // Its header pins over the rows, and it holds no worktrees here:
+    // nothing at all, owner headers included.
+    assert.deepEqual(outline(rows), []);
   });
 
   proof.done();

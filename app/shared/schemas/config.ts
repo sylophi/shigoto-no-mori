@@ -416,6 +416,11 @@ export const ClientConfigSchema = z.object({
   // (renderer/hooks/projects/useProjectSort.ts is the only reader and
   // writer, and stores the default as nothing).
   projectsSort: ProjectSortModeSchema.optional(),
+  // Whether the sidebar's list of projects is split under a header per
+  // owner (the org or user of each project's remote, Project.remote).
+  // Kept like the sort above. On by default (absent = on), explicit
+  // `false` is the opt-out (renderer/hooks/projects/useProjectSort.ts).
+  groupProjectsByOwner: z.boolean().optional(),
   // Legacy: the sidebar's folded projects, by group key, from when its
   // tree folded project by project. Nothing reads it. Still modeled
   // because a doc can carry it and its keys name peers and repos, so

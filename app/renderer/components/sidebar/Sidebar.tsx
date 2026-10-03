@@ -18,7 +18,10 @@ import { useAccountStatus } from "@/hooks/account/useAccount";
 import { useAllProjectShigomoriConfigs } from "@/hooks/config/useShigomoriConfig";
 import { useAllProjectPullRequests } from "@/hooks/projects/useProjectPullRequests";
 import { useProjects, useReorderProjects } from "@/hooks/projects/useProjects";
-import { useProjectSort } from "@/hooks/projects/useProjectSort";
+import {
+  useGroupProjectsByOwner,
+  useProjectSort,
+} from "@/hooks/projects/useProjectSort";
 import {
   useSidebarView,
   useSidebarViewHotkey,
@@ -152,6 +155,7 @@ function Forest({
   const signedIn = hasLocalHost || status?.signedIn === true;
   const { data: projects = [], isLoading } = useProjects();
   const sortMode = useProjectSort();
+  const groupByOwner = useGroupProjectsByOwner();
   const preferredView = useSidebarView();
   const inbox = (pinnedView ?? preferredView) === "inbox";
   const viewSettled = useSidebarViewSettled() || pinnedView !== undefined;
@@ -187,6 +191,9 @@ function Forest({
   const [openShelves, setOpenShelves] = useState<Set<InboxShelf>>(
     () => new Set(),
   );
+  // The owners shut on the list of projects split by owner, by owner
+  // key (ownerOf). Transient like the shelves: every owner starts open.
+  const [shutOwners, setShutOwners] = useState<Set<string>>(() => new Set());
   const [activeId, setActiveId] = useState<string | null>(null);
   // Stepped aside for a page's list (SidebarTakeover).
   const takenOver = useSidebarTakenOver();
@@ -316,6 +323,7 @@ function Forest({
         openShelves: groupShelvesOpen,
         hiddenPrefixes,
         arrangeMode,
+        byOwner: groupByOwner ? { shut: shutOwners } : null,
         remote: shownRemote,
         mirrors,
         deviceBadges,
@@ -397,6 +405,7 @@ function Forest({
     onToggle: goTo,
     onToggleShelved: toggleShelved,
     onToggleShelf: toggleShelf,
+    onToggleOwner: (ownerKey) => setShutOwners(withToggled(ownerKey)),
     currentGroupKey: onScreenKey,
     arrangeMode,
   };
