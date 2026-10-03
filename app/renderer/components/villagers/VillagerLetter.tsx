@@ -51,7 +51,7 @@ export function VillagerLetter({
           <div className="pr-14">
             <MoveCaption news={news} ink={paper.ink} />
           </div>
-          <p className="mt-1 bg-[linear-gradient(transparent_calc(100%-1px),color-mix(in_oklab,var(--color-amber-400)_40%,transparent)_0)] bg-size-[100%_1.75rem] text-[15px] leading-7 font-medium select-text">
+          <p className="mt-1 bg-[linear-gradient(transparent_calc(100%-1px),color-mix(in_oklab,var(--color-amber-400)_40%,transparent)_0)] bg-size-[100%_1.75rem] text-[15px] leading-7 font-medium">
             <TypedWords
               words={words}
               delayMs={WORDS_AT}

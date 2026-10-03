@@ -108,7 +108,7 @@ export function VillagerDialogue({
         </span>
       )}
       <div className="min-w-0 flex-1 pr-3">
-        <p className="text-[15px] leading-snug font-medium select-text">
+        <p className="text-[15px] leading-snug font-medium">
           <TypedWords words={words} onDone={() => setDone(true)} />
         </p>
         <MoveCaption news={news} ink="text-(--villager-ink)" />
@@ -127,7 +127,7 @@ export function MoveCaption({ news, ink }: { news: MoveNews; ink: string }) {
   const verb = news.kind === "in" ? "Moved in" : "Moved out";
   const where = news.device === null ? "" : ` on ${news.device}`;
   return (
-    <p className="mt-1.5 truncate text-xs text-muted-foreground select-text">
+    <p className="mt-1.5 truncate text-xs text-muted-foreground">
       {verb}
       {where}
       {news.detail && news.branch && (
