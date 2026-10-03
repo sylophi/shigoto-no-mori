@@ -3,23 +3,18 @@
 // Reading a peer's files rides its command grant (worktrees:readFile),
 // so a read-only peer's footer leaves it out rather than offer a page
 // that could only say no.
-import { FolderSearch } from "lucide-react";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useWorktreeNav } from "@/hooks/worktrees/useWorktreeNav";
 import type { Worktree } from "@shared/schemas";
-import { FooterActionButton } from "./FooterActionButton";
-import { LABEL_RANK } from "./footerFit";
+import { FooterLeadingVerbView } from "./FooterLeadingVerbView";
 
 export function FilesButton({ worktree }: { worktree: Worktree }) {
   const { toFiles } = useWorktreeNav();
   const { canCommand } = useCommandAccess();
   if (!canCommand) return null;
   return (
-    <FooterActionButton
-      rank={LABEL_RANK.files}
-      icon={<FolderSearch />}
-      label="Files"
-      title="Browse this worktree's files"
+    <FooterLeadingVerbView
+      verb={{ kind: "files" }}
       onClick={() => toFiles(worktree.projectId, worktree.id)}
     />
   );

@@ -1,9 +1,8 @@
-import { SectionHeading } from "@/components/ui/section-heading";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import type { Worktree } from "@shared/schemas";
 import { LauncherRow } from "./LauncherRow";
+import { LaunchSectionView } from "./LaunchSectionView";
 import { ScriptLaunchRow, useScriptLaunchCandidates } from "./ScriptLaunchRow";
 
 interface LaunchSectionProps {
@@ -26,27 +25,16 @@ export function LaunchSection({ worktree }: LaunchSectionProps) {
   }
 
   return (
-    <section className="space-y-3">
-      <SectionHeading>Launch</SectionHeading>
-      {/* The two rows are one wrapping group of pills, so they sit a
-          pill-gap apart, not the section's heading-to-content gap. */}
-      <div className="space-y-2">
-        {!remote && <LauncherRow worktree={worktree} />}
-        {/* Only a peer's page waits on the scripts: holding the heading
-            there keeps the section from popping in above the rest. */}
-        {remote && loading ? (
-          <div className="flex items-center gap-2" aria-label="Loading scripts">
-            <Skeleton className="h-8 w-20" />
-            <Skeleton className="h-8 w-20" />
-          </div>
-        ) : (
-          <ScriptLaunchRow
-            worktree={worktree}
-            candidates={candidates}
-            pinned={pinned}
-          />
-        )}
-      </div>
-    </section>
+    <LaunchSectionView
+      launchers={!remote && <LauncherRow worktree={worktree} />}
+      scriptsLoading={remote && loading}
+      scripts={
+        <ScriptLaunchRow
+          worktree={worktree}
+          candidates={candidates}
+          pinned={pinned}
+        />
+      }
+    />
   );
 }

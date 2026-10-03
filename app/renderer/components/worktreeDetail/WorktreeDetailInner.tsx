@@ -1,10 +1,4 @@
 import { DeviceChip } from "@/components/shared/DeviceChip";
-import { PAGE_HEADER_PADDING } from "@/components/shared/PageHeader";
-import { PAGE_BODY } from "@/components/shared/PageShell";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { PathSpan } from "@/components/ui/path-span";
-import { WorktreeKindIcon } from "@/components/shared/WorktreeKindIcon";
-import { cn } from "@/lib/utils";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import { useProjectNav } from "@/hooks/projects/useProjectNav";
@@ -27,14 +21,8 @@ import {
   useWorktreeCreatePhase,
 } from "@/store/worktreeLifecycle";
 import type { Project, Worktree } from "@shared/schemas";
-import {
-  BirthdayParty,
-  PARTY_HOST,
-} from "@/components/villagers/BirthdayParty";
-import { ResidentFace } from "@/components/villagers/ResidentFace";
 import { useResident } from "@/hooks/villagers/useResident";
 import { LaunchSection } from "./LaunchSection";
-import { LifecycleBanner } from "./LifecycleBanner";
 import { MirrorPill } from "./MirrorPill";
 import { MirrorAction } from "./mirror/MirrorAction";
 import { PeerTransferActions } from "./PeerTransferActions";
@@ -52,6 +40,7 @@ import { BranchTitle } from "./branch/BranchTitle";
 import { WorktreeActivityIndicator } from "./WorktreeActivityIndicator";
 import { CommitsSection } from "./commits/CommitsSection";
 import { NotesSection } from "./NotesSection";
+import { WorktreeDetailView } from "./WorktreeDetailView";
 
 // A cleanup script still in flight.
 const live = (state: ScriptRunState) =>
@@ -210,104 +199,51 @@ export function WorktreeDetailInner({
   };
 
   return (
-    <div className="flex h-full flex-col">
-      <header
-        className={cn(
-          "flex flex-col gap-2 border-b border-border",
-          PAGE_HEADER_PADDING,
-          "pb-5 phone:pb-4",
-          party && PARTY_HOST,
-        )}
-      >
-        {party && <BirthdayParty villager={party} />}
-        <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-          <button
-            type="button"
-            onClick={() => toProjectPage("configure", worktree.projectId)}
-            className="-mx-1 shrink-0 rounded px-1 transition-colors hover:bg-muted hover:text-foreground dark:hover:bg-muted/50"
-            title={`Configure ${project.name}`}
-          >
-            {project.name}
-          </button>
-          {/* A phone has no room for the path (it shortens to noise
-              at that width), so the breadcrumb stops at the project
-              and the trailing marks push themselves to the edge. */}
-          <span aria-hidden className="text-muted-foreground/40 phone:hidden">
-            /
-          </span>
-          <PathSpan
-            path={worktree.path}
-            home={home}
-            className="min-w-0 flex-1 font-mono phone:hidden"
-            copyable
-          />
-          {/* Held at the text line's height: the device chip overhangs
-              it, so a peer's header is as tall as a local one. */}
-          <span className="flex h-4 shrink-0 items-center gap-1.5 phone:ml-auto">
-            <WorktreeKindIcon worktree={worktree} />
-            <DeviceChip />
-          </span>
-        </div>
-        <div className="flex min-w-0 items-start gap-3">
-          <ResidentFace resident={resident} party={party !== null} />
-          <div className="min-w-0 flex-1">
-            <BranchTitle worktree={worktree} />
-          </div>
-          <WorktreeActivityIndicator worktree={worktree} />
-        </div>
-        <MirrorPill worktree={worktree} />
-      </header>
-
-      {bannerLabel && <LifecycleBanner label={bannerLabel} />}
-
-      <div
-        className={cn(
-          PAGE_BODY,
-          "phone:py-5",
-          locked && "pointer-events-none opacity-50",
-        )}
-        aria-disabled={locked}
-      >
-        <div className="flex flex-col gap-10 phone:gap-8">
-          <LaunchSection worktree={worktree} />
-
-          <PullRequestSection worktree={worktree} />
-
-          <CommitsSection worktree={worktree} />
-
-          <section className="space-y-3">
-            <SectionHeading>Scripts</SectionHeading>
-            <ScriptsSection worktree={worktree} />
-          </section>
-
-          <NotesSection worktree={worktree} />
-        </div>
-      </div>
-
-      <WorktreeDetailFooter
-        worktree={worktree}
-        state={footerState}
-        actions={footerActions}
-        canMutate={granted}
-        leading={
-          <>
-            {/* The same leading verbs on either page: Ports and the
-                running mirror's button, then the transfers. This
-                device's own worktree footer verbs (PeerTransferActions)
-                sit in the spots the remote footer gives its Ports,
-                Mirror and Transplant buttons. */}
-            <FilesButton worktree={worktree} />
-            <PortsButton worktree={worktree} />
-            <MirrorAction worktree={worktree} />
-            {remote ? (
-              <RemoteTransferActions worktree={worktree} project={project} />
-            ) : (
-              <PeerTransferActions worktree={worktree} project={project} />
-            )}
-          </>
-        }
-      />
-    </div>
+    <WorktreeDetailView
+      worktree={worktree}
+      projectName={project.name}
+      home={home}
+      onOpenProject={() => toProjectPage("configure", worktree.projectId)}
+      deviceChip={<DeviceChip />}
+      resident={resident}
+      party={party !== null}
+      title={<BranchTitle worktree={worktree} />}
+      activity={<WorktreeActivityIndicator worktree={worktree} />}
+      mirror={<MirrorPill worktree={worktree} />}
+      banner={bannerLabel}
+      locked={locked}
+      launch={<LaunchSection worktree={worktree} />}
+      pullRequest={<PullRequestSection worktree={worktree} />}
+      commits={<CommitsSection worktree={worktree} />}
+      scripts={<ScriptsSection worktree={worktree} />}
+      notes={<NotesSection worktree={worktree} />}
+      footer={
+        <WorktreeDetailFooter
+          worktree={worktree}
+          state={footerState}
+          actions={footerActions}
+          canMutate={granted}
+          leading={
+            <>
+              {/* The same leading verbs on either page: Ports and the
+                  running mirror's button, then the transfers. This
+                  device's own worktree footer verbs
+                  (PeerTransferActions) sit in the spots the remote
+                  footer gives its Ports, Mirror and Transplant
+                  buttons. */}
+              <FilesButton worktree={worktree} />
+              <PortsButton worktree={worktree} />
+              <MirrorAction worktree={worktree} />
+              {remote ? (
+                <RemoteTransferActions worktree={worktree} project={project} />
+              ) : (
+                <PeerTransferActions worktree={worktree} project={project} />
+              )}
+            </>
+          }
+        />
+      }
+    />
   );
 }
 

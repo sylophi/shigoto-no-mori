@@ -1,13 +1,12 @@
 import { useRef, useState } from "react";
-import { Check, Pencil, X } from "lucide-react";
-import { BranchLabel } from "@/components/ui/branch-label";
-import { CopyButton } from "@/components/ui/copy-button";
+import { Check, X } from "lucide-react";
 import { InlineError } from "@/components/ui/inline-error";
 import { Input } from "@/components/ui/input";
 import { useRenameBranch } from "@/hooks/worktrees/useWorktreeBranchOps";
 import { sanitizeBranchName } from "@shared/git/branches";
 import type { Worktree } from "@shared/schemas";
 import { BranchSwitcher } from "./BranchSwitcher";
+import { BranchTitleView } from "./BranchTitleView";
 import { IconButton } from "@/components/ui/icon-button";
 
 export function BranchTitle({ worktree }: { worktree: Worktree }) {
@@ -93,35 +92,12 @@ export function BranchTitle({ worktree }: { worktree: Worktree }) {
   }
 
   return (
-    <div className="group/copy flex min-w-0 items-center gap-1.5">
-      <h1
-        ref={titleRef}
-        className="min-w-0 truncate font-mono text-2xl font-medium tracking-tight"
-        title={worktree.detached ? "Detached HEAD (commit hash)" : undefined}
-      >
-        <BranchLabel
-          branch={worktree.branch}
-          detached={worktree.detached}
-          suffixClassName="text-base tracking-normal"
-        />
-      </h1>
-      {!worktree.detached && (
-        <button
-          type="button"
-          onClick={begin}
-          aria-label="Rename branch"
-          title="Rename branch"
-          data-icon-button
-          className="rounded-md p-1 text-muted-foreground/50 opacity-0 transition-opacity group-hover/copy:opacity-100 hover:bg-accent hover:text-foreground focus-visible:opacity-100 phone:opacity-100"
-        >
-          <Pencil className="size-3.5" />
-        </button>
-      )}
-      <BranchSwitcher worktree={worktree} anchorRef={titleRef} />
-      <CopyButton
-        value={worktree.branch}
-        label={worktree.detached ? "Copy commit hash" : "Copy branch name"}
-      />
-    </div>
+    <BranchTitleView
+      branch={worktree.branch}
+      detached={worktree.detached}
+      onRename={begin}
+      switcher={<BranchSwitcher worktree={worktree} anchorRef={titleRef} />}
+      titleRef={titleRef}
+    />
   );
 }

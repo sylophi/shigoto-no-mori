@@ -4,11 +4,9 @@
 // the page's full width. A prose-shaped page caps its own content.
 import type React from "react";
 import { PageHeader } from "./PageHeader";
+import { PAGE_BODY } from "./pageInsets";
 
-// The scroll region under a page's header, exported for the pages that
-// build their own column (tabs between header and body, a footer under
-// it) and still want the same inset, the phone's narrower one included.
-export const PAGE_BODY = "min-h-0 flex-1 overflow-y-auto p-6 phone:p-4";
+export { PAGE_BODY };
 
 export function PageShell({
   page,

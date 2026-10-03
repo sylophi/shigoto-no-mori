@@ -1,13 +1,11 @@
 import { useState } from "react";
-import { SectionHeading } from "@/components/ui/section-heading";
-import { Textarea } from "@/components/ui/textarea";
 import { useCommandAccess } from "@/hooks/remote/useCommandAccess";
 import {
   useWorktreeData,
   useWorktreeDataWrite,
 } from "@/hooks/worktrees/useWorktreeData";
 import { hasWorktreeData, type Worktree } from "@shared/schemas";
-import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
+import { NotesSectionView } from "./NotesSectionView";
 
 export function NotesSection({ worktree }: { worktree: Worktree }) {
   if (!hasWorktreeData(worktree)) return null;
@@ -62,20 +60,12 @@ function NotesSectionInner({
       : "";
 
   return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <SectionHeading>Notes</SectionHeading>
-        <span className="text-xs text-muted-foreground/60">{status}</span>
-      </div>
-      <Textarea
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        rows={3}
-        readOnly={!granted}
-        title={!granted ? peerReadOnlyNote() : undefined}
-        className="w-full resize-y px-3 py-2 text-sm read-only:opacity-60"
-      />
-    </section>
+    <NotesSectionView
+      notes={draft}
+      status={status}
+      readOnly={!granted}
+      onChange={setDraft}
+      onBlur={commit}
+    />
   );
 }

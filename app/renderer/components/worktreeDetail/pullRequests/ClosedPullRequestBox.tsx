@@ -1,22 +1,19 @@
 import { useState } from "react";
-import { ErrorBanner } from "@/components/ui/error-banner";
-import { Button } from "@/components/ui/button";
 import { CONFIRM_QUICK_MS, useConfirmTwice } from "@/hooks/ui/useConfirmTwice";
 import { useStackCleanup } from "@/hooks/pullRequests/useStackCleanup";
 import { useDeleteAndNavigate } from "@/hooks/worktrees/useDeleteAndNavigate";
-import {
-  type StackCleanupFailure,
-  useDeleteStackWorktrees,
-} from "@/hooks/worktrees/useWorktreeMutations";
+import { useDeleteStackWorktrees } from "@/hooks/worktrees/useWorktreeMutations";
 import { useWorktrees } from "@/hooks/worktrees/useWorktrees";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { peerReadOnlyNote } from "@/lib/commandAccessCopy";
 import { notifyError } from "@/lib/toast";
 import type { PullRequestStack } from "@shared/pullRequestStack";
 import type { Worktree } from "@shared/schemas";
-import { ConfirmDestructiveButton } from "@/components/ui/confirm-destructive-button";
-
-const STACK_ERROR_TITLE = "Couldn't delete the stack's worktrees";
+import {
+  ClosedPullRequestBoxView,
+  STACK_ERROR_TITLE,
+  type StackCleanupError,
+} from "./ClosedPullRequestBoxView";
 
 // The cleanup after a PR closed: this worktree goes, or, for a stack
 // with landed layers, all of their worktrees together, on every device
@@ -41,17 +38,13 @@ export function ClosedPullRequestBox({
   // dirty worktree), a retry or skipping the scripts for a cleanup
   // script that failed, nothing but the message for a peer that will
   // not run commands from here.
-  const [stackError, setStackError] = useState<{
-    message: string;
-    kind: StackCleanupFailure["kind"];
-  } | null>(null);
+  const [stackError, setStackError] = useState<StackCleanupError | null>(null);
   const { armed, trigger } = useConfirmTwice(CONFIRM_QUICK_MS);
   const { armed: stackArmed, trigger: stackTrigger } =
     useConfirmTwice(CONFIRM_QUICK_MS);
   const cleanup = useStackCleanup(worktree, stack);
   const count = cleanup?.count ?? 0;
   const stackPending = stackMutation.isPending;
-  const pending = stackPending || deleteMutation.isPending;
 
   // A failure shows here while the page is still this worktree's, and
   // as a toast once the removal took the page's own worktree with it.
@@ -91,92 +84,32 @@ export function ClosedPullRequestBox({
   };
 
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap justify-end gap-2">
-        {count > 1 &&
-          (stackError && stackError.kind !== "refused" ? (
-            <>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => setStackError(null)}
-              >
-                Cancel
-              </Button>
-              {stackError.kind === "cleanup" ? (
-                <>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={pending}
-                    onClick={() => runStack()}
-                  >
-                    Retry
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="destructive"
-                    disabled={pending}
-                    onClick={() => runStack({ skipCleanup: true })}
-                  >
-                    Skip cleanup scripts
-                  </Button>
-                </>
-              ) : (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="destructive"
-                  disabled={pending}
-                  onClick={() => runStack({ force: true })}
-                >
-                  Delete {count} stack worktrees anyway
-                </Button>
-              )}
-            </>
-          ) : (
-            <ConfirmDestructiveButton
-              armed={stackArmed}
-              pending={stackPending}
-              disabled={deleteMutation.isPending}
-              pendingLabel="Deleting stack…"
-              idleLabel={`Delete ${count} stack worktrees`}
-              onClick={() => stackTrigger(() => runStack())}
-            />
-          ))}
-        <ConfirmDestructiveButton
-          armed={armed}
-          pending={deleteMutation.isPending}
-          disabled={stackPending}
-          pendingLabel="Deleting…"
-          idleLabel="Delete worktree"
-          onClick={() => trigger(() => runDelete())}
-          disabledReason={deleteBlockedReason}
-        />
-      </div>
-      {cleanup && cleanup.blocked.length > 0 && (
-        <p className="text-right text-xs text-muted-foreground">
-          {cleanup.blocked
-            .map((device) =>
-              device.block === "offline"
-                ? `${device.worktrees.length} more on ${device.label}, which is offline.`
-                : `${device.worktrees.length} more on ${device.label}. ${peerReadOnlyNote(device.label)}`,
-            )
-            .join(" ")}
-        </p>
-      )}
-      {stackError && (
-        <ErrorBanner message={stackError.message} title={STACK_ERROR_TITLE} />
-      )}
-      {deleteMutation.error && (
-        <ErrorBanner
-          message={deleteMutation.error.message}
-          title="Couldn't delete the worktree"
-        />
-      )}
-    </div>
+    <ClosedPullRequestBoxView
+      stackCount={count}
+      armed={armed}
+      stackArmed={stackArmed}
+      pending={deleteMutation.isPending}
+      stackPending={stackPending}
+      deleteBlockedReason={deleteBlockedReason}
+      blockedNote={
+        cleanup && cleanup.blocked.length > 0
+          ? cleanup.blocked
+              .map((device) =>
+                device.block === "offline"
+                  ? `${device.worktrees.length} more on ${device.label}, which is offline.`
+                  : `${device.worktrees.length} more on ${device.label}. ${peerReadOnlyNote(device.label)}`,
+              )
+              .join(" ")
+          : undefined
+      }
+      stackError={stackError}
+      deleteError={deleteMutation.error?.message}
+      onDelete={() => trigger(() => runDelete())}
+      onDeleteStack={() => stackTrigger(() => runStack())}
+      onCancelStackError={() => setStackError(null)}
+      onRetryStack={() => runStack()}
+      onSkipStackCleanup={() => runStack({ skipCleanup: true })}
+      onForceStack={() => runStack({ force: true })}
+    />
   );
 }

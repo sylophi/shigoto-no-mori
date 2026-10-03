@@ -1,10 +1,10 @@
 import { only } from "@shared/util/only";
-import { Loader2 } from "lucide-react";
 import { useIsFetching } from "@tanstack/react-query";
 import { useHostScope } from "@/hooks/remote/useHostScope";
 import { useDelayedFlag } from "@/hooks/ui/useDelayedFlag";
 import { useProjectGitFetching } from "@/hooks/git/useProjectGitFetching";
 import type { Worktree } from "@shared/schemas";
+import { WorktreeActivityIndicatorView } from "./WorktreeActivityIndicatorView";
 
 export function WorktreeActivityIndicator({
   worktree,
@@ -13,13 +13,7 @@ export function WorktreeActivityIndicator({
 }) {
   const label = useActivityLabel(worktree);
   const visible = useDelayedFlag(label !== null);
-  if (!visible || label === null) return null;
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 self-center text-xs text-muted-foreground/70 italic">
-      <Loader2 aria-hidden className="size-3 animate-spin" />
-      {label}
-    </span>
-  );
+  return <WorktreeActivityIndicatorView label={visible ? label : null} />;
 }
 
 function useActivityLabel(worktree: Worktree): string | null {
